@@ -15,7 +15,7 @@ import { buildFanModel, buildFanPosterSvg, fanPosterGeometry } from '../fan-char
 import { computeTimelineModel } from '../timeline.js';
 import { buildTimelinePosterSvg, timelinePosterGeometry } from '../timeline-chart.js';
 import { uiModule } from './module.js';
-import { DEFAULT_LAYOUT_CONFIG, LayoutConfig, StromData, ViewMode, personCardHeight } from '../types.js';
+import { LayoutConfig, StromData, TreeSpacing, ViewMode, layoutConfigFor, personCardHeight } from '../types.js';
 import { applyLivingPrivacy, PrivacyMode, presumedDeceasedSet } from '../privacy.js';
 import { classifyBranches } from '../branch-colors.js';
 import { computeIndirectIds } from '../indirect.js';
@@ -124,7 +124,8 @@ interface PosterBuild {
  * draw the cards the layout was made for. `data` is the (privacy-filtered)
  * data the cards are drawn from.
  */
-export function treeCardDrawing(data: StromData, layout: ReturnType<typeof TreeRenderer.getPosterLayout>): {
+export function treeCardDrawing(data: StromData, layout: ReturnType<typeof TreeRenderer.getPosterLayout>,
+    spacing: TreeSpacing = TreeRenderer.getLayoutSpacing()): {
     cardConfig: LayoutConfig; drawing: PosterOptions;
 } {
     const mode = TreeRenderer.getViewMode();
@@ -146,8 +147,10 @@ export function treeCardDrawing(data: StromData, layout: ReturnType<typeof TreeR
     // 150x44, the measured size of a card of details): drawing the default
     // 188x64 card on a layout made for another size overlaps the cards and
     // runs the lines through them (N16). Without the room the screen keeps
-    // for pills on a card's bottom edge (no pills are drawn here).
-    const cardConfig: LayoutConfig = { ...DEFAULT_LAYOUT_CONFIG, ...TreeRenderer.getPosterCardBox() };
+    // for pills on a card's bottom edge (no pills are drawn here). The
+    // spacing the layout was made with (`dense`: the marriage-order pills on
+    // the card's edge only, spec 069 §4).
+    const cardConfig: LayoutConfig = { ...layoutConfigFor(spacing), ...TreeRenderer.getPosterCardBox(spacing) };
     const fields = fieldCards ?? SettingsManager.getCardFields();
     const cardLinesMap = custom
         ? new Map([...layout.positions.keys()].map(id => {
@@ -182,13 +185,13 @@ export function treeCardDrawing(data: StromData, layout: ReturnType<typeof TreeR
             : unionOrderBadges(data, layout).size > 0 ? [...POSTER_SERIF_FACES, PILL_FACE] : POSTER_SERIF_FACES),
         ...(custom ? {
             cardLines: cardLinesMap,
-            cardDateColumn: TreeRenderer.getPosterCardMetrics()?.dateColumn ?? 0,
+            cardDateColumn: TreeRenderer.getPosterCardMetrics(spacing)?.dateColumn ?? 0,
             // The rows a detail takes, wrapped as on screen (same function, same measure).
             cardValueLines: fields.lines,
             // The name's rows: the Detailed card's whole name, the others' two at most (T40).
             cardNameMaxRows: cardNameMaxRows(density),
             cardStyle: fields.style,
-            cardLabelColumn: TreeRenderer.getPosterCardMetrics()?.labelColumn ?? 0,
+            cardLabelColumn: TreeRenderer.getPosterCardMetrics(spacing)?.labelColumn ?? 0,
             ...(cardYearsMap ? { cardYears: cardYearsMap } : {}),
             measureCardTexts,
         } : {}),
@@ -205,12 +208,8 @@ export function treeCardDrawing(data: StromData, layout: ReturnType<typeof TreeR
  * like in the book/GEDCOM exports (audit K2: it used to export raw full names
  * of living people with no option at all).
  */
-function buildCurrentPoster(): PosterBuild | null {
-    const mode = TreeRenderer.getViewMode();
-    if (mode === 'map' || mode === 'table') return null; // not printable
-
-    const data = applyLivingPrivacy(DataManager.getData(), posterPrivacyMode());
-    const meta: PosterFooterMeta = {
+function posterFooterMeta(mode: ViewMode, data: StromData): PosterFooterMeta {
+    return {
         treeName: TreeManager.getActiveTreeMetadata()?.name,
         // Footer leaves the house — build the label from the SAME privacy-
         // filtered data as the cards, so a living focus person is not named in
@@ -220,6 +219,92 @@ function buildCurrentPoster(): PosterBuild | null {
         // Wrapped within the image's width by the texts' widths in its fonts.
         measureFooterTexts: measureCardTexts,
     };
+}
+
+/** True for the views the poster lays out as the tree of cards (their spacing is the export's choice). */
+function isTreePosterView(mode: ViewMode): boolean {
+    return mode === 'family' || mode === 'descendants';
+}
+
+/**
+ * The size of the tree poster laid out with `spacing` and which of its parts
+ * hold anything (cards + footer strip): sheets that intersect nothing are
+ * skipped, so a sparse tree corner prints no near-blank paper.
+ */
+function treePosterGeometry(spacing: TreeSpacing, meta: PosterFooterMeta): Omit<PosterBuild, 'svg'> | null {
+    const layout = TreeRenderer.getPosterLayout({ spacing });
+    if (layout.positions.size === 0) return null;
+    const cfg: LayoutConfig = { ...layoutConfigFor(spacing), ...TreeRenderer.getPosterCardBox(spacing) };
+    const bounds = computeBounds(layout, cfg);
+    const widthPx = bounds.width + POSTER_PADDING * 2;
+    const footerPx = posterFooterHeight(meta, widthPx);
+    const heightPx = bounds.height + POSTER_PADDING * 2 + footerPx;
+    const occupied: Array<{ x: number; y: number; w: number; h: number }> = [];
+    for (const [id, pos] of layout.positions) {
+        occupied.push({
+            x: pos.x - bounds.minX + POSTER_PADDING,
+            y: pos.y - bounds.minY + POSTER_PADDING,
+            w: cfg.cardWidth,
+            h: personCardHeight(cfg, id),
+        });
+    }
+    occupied.push({ x: POSTER_PADDING, y: heightPx - footerPx, w: 420, h: footerPx });
+    const hasContent = (x: number, y: number, w: number, h: number): boolean =>
+        occupied.some(o => o.x < x + w && o.x + o.w > x && o.y < y + h && o.y + o.h > y);
+    return { widthPx, heightPx, hasContent };
+}
+
+/** How a poster tiles onto sheets of the chosen paper: the grid, and how many sheets hold anything. */
+interface SheetPlan {
+    contentW: number; contentH: number; stepX: number; stepY: number;
+    posterWmm: number; posterHmm: number; rows: number; cols: number;
+    /** Sheets that print (the grid less the blank ones): the guide's count. */
+    printedSheets: number;
+    /** Whether the sheet at this offset (mm) holds anything. */
+    tileHasContent: (offX: number, offY: number) => boolean;
+}
+
+function sheetPlan(poster: Omit<PosterBuild, 'svg'>, format: string, orientation: string): SheetPlan {
+    const paper = PAPER[format] || PAPER.A4;
+    const pageW = orientation === 'landscape' ? paper.h : paper.w;
+    const pageH = orientation === 'landscape' ? paper.w : paper.h;
+    const contentW = pageW - PAGE_MARGIN_MM * 2;
+    const contentH = pageH - PAGE_MARGIN_MM * 2;
+    const posterWmm = poster.widthPx * MM_PER_PX;
+    const posterHmm = poster.heightPx * MM_PER_PX;
+    const stepX = contentW - PAGE_OVERLAP_MM;
+    const stepY = contentH - PAGE_OVERLAP_MM;
+    const cols = Math.max(1, Math.ceil((posterWmm - PAGE_OVERLAP_MM) / stepX));
+    const rows = Math.max(1, Math.ceil((posterHmm - PAGE_OVERLAP_MM) / stepY));
+    // A sheet is printed only when it intersects drawn content — the poster
+    // knows its own occupancy (card rects for the tree, the semicircle for
+    // the fan), so sparse corners no longer print near-blank paper. Tiles
+    // are mm-space; the predicate is px-space, so convert with MM_PER_PX.
+    const tileHasContent = (offX: number, offY: number): boolean =>
+        poster.hasContent(offX / MM_PER_PX, offY / MM_PER_PX, contentW / MM_PER_PX, contentH / MM_PER_PX);
+    let printedSheets = 0;
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            if (tileHasContent(c * stepX, r * stepY)) printedSheets++;
+        }
+    }
+    return { contentW, contentH, stepX, stepY, posterWmm, posterHmm, rows, cols, printedSheets, tileHasContent };
+}
+
+/** The paper format and orientation chosen in the dialog. */
+function posterPaper(): { format: string; orientation: string } {
+    return {
+        format: (document.getElementById('poster-format') as HTMLSelectElement | null)?.value || 'A4',
+        orientation: (document.getElementById('poster-orientation') as HTMLSelectElement | null)?.value || 'portrait',
+    };
+}
+
+function buildCurrentPoster(): PosterBuild | null {
+    const mode = TreeRenderer.getViewMode();
+    if (mode === 'map' || mode === 'table') return null; // not printable
+
+    const data = applyLivingPrivacy(DataManager.getData(), posterPrivacyMode());
+    const meta = posterFooterMeta(mode, data);
 
     if (mode === 'timeline') {
         // Persons = the SAME pipeline selection the on-screen timeline draws
@@ -266,10 +351,12 @@ function buildCurrentPoster(): PosterBuild | null {
         return { svg, widthPx: geom.width, heightPx: geom.height, hasContent: geom.hasContent };
     }
 
-    // Tree / descendants: the card layout as currently laid out.
-    const layout = TreeRenderer.getPosterLayout();
+    // Tree / descendants: the card layout as currently laid out, or laid out
+    // again with the export's own spacing when it is not the view's (spec 069 §4).
+    const spacing = SettingsManager.getPosterSpacing();
+    const layout = TreeRenderer.getPosterLayout({ spacing });
     if (layout.positions.size === 0) return null;
-    const { cardConfig, drawing } = treeCardDrawing(data, layout);
+    const { drawing } = treeCardDrawing(data, layout, spacing);
     // Marriage-order pills numbered as on screen, from the unfiltered data (T13).
     // The status mark and the story's fold as the cards show them (spec 066 P4 §7), from the app's own data;
     // under a living-privacy mode only for the people it leaves as they are (the presumed deceased).
@@ -279,28 +366,8 @@ function buildCurrentPoster(): PosterBuild | null {
     const options: PosterOptions = { ...meta, ...drawing, orderData: DataManager.getData(),
         cardMarks: TreeRenderer.posterCardMarks(markIds) };
     const svg = buildTreeSvg(data, layout, options);
-
-    // Occupied rectangles in poster-px space (cards + footer strip). Sheets
-    // that intersect NOTHING are skipped, so a sparse tree corner no longer
-    // prints near-blank paper.
-    const bounds = computeBounds(layout, cardConfig);
-    const cfg = cardConfig;
-    const widthPx = bounds.width + POSTER_PADDING * 2;
-    const footerPx = posterFooterHeight(meta, widthPx);
-    const heightPx = bounds.height + POSTER_PADDING * 2 + footerPx;
-    const occupied: Array<{ x: number; y: number; w: number; h: number }> = [];
-    for (const [id, pos] of layout.positions) {
-        occupied.push({
-            x: pos.x - bounds.minX + POSTER_PADDING,
-            y: pos.y - bounds.minY + POSTER_PADDING,
-            w: cfg.cardWidth,
-            h: personCardHeight(cfg, id),
-        });
-    }
-    occupied.push({ x: POSTER_PADDING, y: heightPx - footerPx, w: 420, h: footerPx });
-    const hasContent = (x: number, y: number, w: number, h: number): boolean =>
-        occupied.some(o => o.x < x + w && o.x + o.w > x && o.y < y + h && o.y + o.h > y);
-    return { svg, widthPx, heightPx, hasContent };
+    const geom = treePosterGeometry(spacing, meta);
+    return geom ? { svg, ...geom } : null;
 }
 
 function downloadBlob(content: string, type: string, filename: string): void {
@@ -343,6 +410,44 @@ export const exportImageMethods = uiModule({
         document.querySelectorAll<HTMLButtonElement>('#poster-modal .menu-option').forEach(btn => {
             btn.disabled = info.blocked;
             btn.classList.toggle('disabled', info.blocked);
+        });
+        // Spacing: only for the tree of cards (the fan and the timeline have their own layout).
+        const spacingRow = document.getElementById('poster-spacing');
+        if (spacingRow) spacingRow.hidden = !isTreePosterView(TreeRenderer.getViewMode());
+        const current = SettingsManager.getPosterSpacing();
+        document.querySelectorAll<HTMLInputElement>('input[name="poster-spacing"]').forEach(radio => {
+            radio.checked = radio.value === current;
+        });
+        this.updatePosterSheets();
+    },
+
+    /** The export's spacing (spec 069 §4): remembered on this device at once; the screen stays as it is. */
+    setPosterSpacing(spacing: string): void {
+        SettingsManager.setPosterSpacing(spacing === 'dense' ? 'dense' : 'normal');
+    },
+
+    /**
+     * Under each spacing the sheets its poster prints on in the chosen format
+     * and orientation (the guide page's count); none when both print on as many.
+     */
+    updatePosterSheets(): void {
+        const labels = document.querySelectorAll<HTMLElement>('#poster-spacing .poster-sheets');
+        const mode = TreeRenderer.getViewMode();
+        const counts = new Map<TreeSpacing, number>();
+        if (isTreePosterView(mode)) {
+            const meta = posterFooterMeta(mode, applyLivingPrivacy(DataManager.getData(), posterPrivacyMode()));
+            const { format, orientation } = posterPaper();
+            for (const spacing of ['normal', 'dense'] as const) {
+                const geom = treePosterGeometry(spacing, meta);
+                if (geom) counts.set(spacing, sheetPlan(geom, format, orientation).printedSheets);
+            }
+        }
+        const differ = counts.size === 2 && counts.get('normal') !== counts.get('dense');
+        const format = posterPaper().format;
+        labels.forEach(el => {
+            const n = counts.get(el.dataset.spacing as TreeSpacing);
+            el.hidden = !differ || n === undefined;
+            el.textContent = differ && n !== undefined ? strings.poster.sheetsCount(n, format) : '';
         });
     },
 
@@ -427,40 +532,16 @@ export const exportImageMethods = uiModule({
             return;
         }
         const svg = poster.svg;
-        const format = (document.getElementById('poster-format') as HTMLSelectElement)?.value || 'A4';
-        const orientation = (document.getElementById('poster-orientation') as HTMLSelectElement)?.value || 'portrait';
-        const paper = PAPER[format] || PAPER.A4;
-        const pageW = orientation === 'landscape' ? paper.h : paper.w;
-        const pageH = orientation === 'landscape' ? paper.w : paper.h;
-        const contentW = pageW - PAGE_MARGIN_MM * 2;
-        const contentH = pageH - PAGE_MARGIN_MM * 2;
-
-        const posterWmm = poster.widthPx * MM_PER_PX;
-        const posterHmm = poster.heightPx * MM_PER_PX;
-
-        const stepX = contentW - PAGE_OVERLAP_MM;
-        const stepY = contentH - PAGE_OVERLAP_MM;
-        const cols = Math.max(1, Math.ceil((posterWmm - PAGE_OVERLAP_MM) / stepX));
-        const rows = Math.max(1, Math.ceil((posterHmm - PAGE_OVERLAP_MM) / stepY));
-
-        // A sheet is printed only when it intersects drawn content — the poster
-        // knows its own occupancy (card rects for the tree, the semicircle for
-        // the fan), so sparse corners no longer print near-blank paper. Tiles
-        // are mm-space; the predicate is px-space, so convert with MM_PER_PX.
-        const tileHasContent = (offX: number, offY: number): boolean =>
-            poster.hasContent(offX / MM_PER_PX, offY / MM_PER_PX, contentW / MM_PER_PX, contentH / MM_PER_PX);
+        const { format, orientation } = posterPaper();
+        const {
+            contentW, contentH, stepX, stepY, posterWmm, posterHmm, rows, cols, printedSheets, tileHasContent,
+        } = sheetPlan(poster, format, orientation);
 
         const dataUrl = svgDataUrl(svg);
         const pages: string[] = [];
 
         // Optional first page: the whole poster in miniature with the sheet
         // grid + labels overlaid, so the person gluing knows what goes where.
-        let printedSheets = 0;
-        for (let r = 0; r < rows; r++) {
-            for (let c = 0; c < cols; c++) {
-                if (tileHasContent(c * stepX, r * stepY)) printedSheets++;
-            }
-        }
 
         const wantGuide = (document.getElementById('poster-guide-page') as HTMLInputElement | null)?.checked ?? true;
         if (wantGuide && rows * cols > 1) {

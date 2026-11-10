@@ -418,3 +418,62 @@ for (const width of [1440, 1024, 390]) {
         }
     });
 }
+
+// The image export dialog's Spacing (spec 069 §4): after the format and the
+// orientation, before the guide page; its options with their sheet counts
+// fit in every language at the three widths, and on a phone the options are
+// 48px and the fields 44px tall.
+for (const width of [1440, 1024, 390]) {
+    test(`${width}px: the export dialog's Spacing row sits under the paper, its options fit in en/cs/de/pl`, async ({ page }) => {
+        await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+        await openApp(page);
+        await page.getByRole('button', { name: 'Try a sample tree' }).click();
+        await expect(page.locator('.person-card').first()).toBeVisible();
+        let counted = 0;
+        for (const lang of ['en', 'cs', 'de', 'pl'] as const) {
+            await page.evaluate((l) => window.Strom.UI.setLanguage(l as never), lang);
+            await page.evaluate(() => window.Strom.UI.showPosterDialog());
+            const modal = page.locator('#poster-modal');
+            const row = modal.locator('.poster-spacing');
+            await expect(row).toBeVisible();
+            for (const format of ['A4', 'A3']) {
+                for (const orientation of ['portrait', 'landscape']) {
+                    await modal.locator('#poster-format').selectOption(format);
+                    await modal.locator('#poster-orientation').selectOption(orientation);
+                    const m = await row.evaluate((el) => {
+                        const seg = el.querySelector('.tree-spacing-options') as HTMLElement;
+                        const opts = [...seg.querySelectorAll<HTMLElement>('.settings-radio')];
+                        const dialog = el.closest('.modal') as HTMLElement;
+                        const inside = (e: HTMLElement) => e.getBoundingClientRect().right <= e.closest('.settings-radio')!.getBoundingClientRect().right + 0.5;
+                        const texts = [...seg.querySelectorAll<HTMLElement>('.spacing-opt-label, .poster-sheets')].filter(t => !t.hidden);
+                        return {
+                            prev: el.previousElementSibling?.className,
+                            next: el.nextElementSibling?.querySelector('#poster-guide-page') ? 'guide' : null,
+                            segFits: seg.scrollWidth <= seg.clientWidth,
+                            rowInModal: el.getBoundingClientRect().right <= dialog.getBoundingClientRect().right + 0.5,
+                            textsFit: texts.every(t => t.scrollWidth <= t.clientWidth + 0.5 && inside(t)),
+                            counts: el.querySelectorAll('.poster-sheets:not([hidden])').length,
+                            glyphs: [...seg.querySelectorAll<HTMLElement>('.spacing-glyph')].map(g => `${g.offsetWidth}x${g.offsetHeight}`),
+                            minHeight: Math.min(...opts.map(o => o.getBoundingClientRect().height)),
+                            fields: Math.min(...[...dialog.querySelectorAll<HTMLElement>('select')].map(s => s.getBoundingClientRect().height)),
+                            dialogScroll: dialog.scrollWidth > dialog.clientWidth,
+                            pageScroll: document.documentElement.scrollWidth > window.innerWidth,
+                        };
+                    });
+                    const where = `${lang} ${format} ${orientation}`;
+                    expect(m, where).toEqual({
+                        prev: 'form-row', next: 'guide', segFits: true, rowInModal: true, textsFit: true,
+                        counts: m.counts, glyphs: ['30x14', '30x14'], minHeight: m.minHeight, fields: m.fields,
+                        dialogScroll: false, pageScroll: false,
+                    });
+                    expect([0, 2], where).toContain(m.counts);
+                    counted += m.counts;
+                    expect(m.minHeight, where).toBeGreaterThanOrEqual(width === 390 ? 48 : 42);
+                    if (width === 390) expect(m.fields, where).toBeGreaterThanOrEqual(44);
+                }
+            }
+            await page.evaluate(() => window.Strom.UI.closePosterDialog());
+        }
+        expect(counted, 'the sheet counts showed in some format').toBeGreaterThan(0);
+    });
+}

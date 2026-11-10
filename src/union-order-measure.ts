@@ -598,8 +598,8 @@ export function applyUnionOrderGlyphLift(): void {
 }
 
 /** One pill measured (see measureUnionOrderPills). */
-export function measureUnionOrderPill(ordinal: string, year: string, glyph = true): PillMetrics {
-    return measureUnionOrderPills([{ ordinal, year, glyph }]).get(pillKey(ordinal, year, glyph))!;
+export function measureUnionOrderPill(ordinal: string, year: string, glyph = true, short = false): PillMetrics {
+    return measureUnionOrderPills([{ ordinal, year, glyph, short }]).get(pillKey(ordinal, year, glyph, short))!;
 }
 
 /** The key of a pill in measureUnionOrderPills' result. */

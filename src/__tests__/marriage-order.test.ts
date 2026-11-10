@@ -5,11 +5,11 @@
  */
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { marriagesInOrder, unionOrderBadges, compareMarriages, unionSummaries } from '../marriage-order.js';
+import { marriagesInOrder, unionOrderBadges, compareMarriages, unionSummaries, viewLineSegments } from '../marriage-order.js';
 import { buildTreeSvg } from '../export-image.js';
 import { runLayoutPipeline } from '../layout/pipeline/index.js';
 import { setLanguage, strings } from '../strings.js';
-import { StromData, Person, PersonId, PartnershipId, Partnership, DEFAULT_LAYOUT_CONFIG } from '../types.js';
+import { StromData, Person, PersonId, PartnershipId, Partnership, DEFAULT_LAYOUT_CONFIG, DENSE_LAYOUT_CONFIG, LayoutConfig } from '../types.js';
 
 const P = (id: string) => id as PersonId;
 
@@ -238,6 +238,68 @@ describe('the image export draws the pills', () => {
         const card = result.positions.get(P('W1'))!;
         const left = x - 0.5, right = left + 44, mid = card.x + 75;
         expect(right <= mid - 4 + 0.01 || left >= mid + 4 - 0.01).toBe(true);
+    });
+});
+
+describe('the image export of the dense spacing draws the pills as its screen does (spec 069 §4, D1)', () => {
+    const denseLayout = (data: StromData, config: LayoutConfig) => runLayoutPipeline({
+        data, focusPersonId: P('H'), config, ancestorDepth: 3, descendantDepth: 3,
+        includeSpouseAncestors: true, includeParentSiblings: true, includeParentSiblingDescendants: true,
+        displayPolicy: { mode: 'standard', autoExpand: true },
+    });
+    const pillsOf = (svg: string) => [...svg.matchAll(/<g class="union-order-pill" data-union-order="(\d+)" data-person="([^"]+)"([^>]*)>(.*?)<\/g>/g)]
+        .map(m => {
+            const [, x, y, w] = /<rect x="([^"]+)" y="([^"]+)" width="([^"]+)"/.exec(m[4])!.map(Number);
+            return { n: m[1], person: m[2], attrs: m[3], body: m[4], x: x - 0.5, y: y - 0.5, w: w + 1 };
+        });
+
+    it('the short "∞ N" on the card\'s top edge, no year, never a bus through it', () => {
+        setLanguage('cs');
+        const data = family();
+        const result = denseLayout(data, DENSE_LAYOUT_CONFIG);
+        const svg = buildTreeSvg(data, result, { config: DENSE_LAYOUT_CONFIG });
+        const pills = pillsOf(svg);
+        expect(pills.map(p => `${p.person}:${p.n}`).sort()).toEqual(['W1:1', 'W2:3', 'W3:2']);
+        const buses = viewLineSegments(result).filter(l => Math.abs(l.y1 - l.y2) < 0.5);
+        for (const p of pills) {
+            expect(p.attrs).toContain('data-label="short"');
+            // Its texts: the ∞ and the number, no ordinal ("1.") and no year.
+            expect([...p.body.matchAll(/>([^<]*)<\/text>/g)].map(m => m[1]).sort()).toEqual([p.n, '∞'].sort());
+            // On the edge (its top 9px above the card's), never in the row above it.
+            const card = result.positions.get(P(p.person))!;
+            expect(p.y).toBeCloseTo(card.y - 9, 1);
+            for (const l of buses) {
+                const crosses = l.y1 > p.y && l.y1 < p.y + 18
+                    && Math.max(l.x1, l.x2) > p.x && Math.min(l.x1, l.x2) < p.x + p.w;
+                expect(crosses, `${p.person}'s pill and the line at y ${l.y1}`).toBe(false);
+            }
+        }
+        // The normal spacing's image keeps the whole pill ("1. ∞ 1866").
+        const normal = buildTreeSvg(data, layout(data, 'H', true));
+        expect(pillsOf(normal).find(p => p.person === 'W1')!.body).toContain('>1866</text>');
+        expect(normal).not.toContain('data-label="short"');
+    });
+
+    it('on a narrow card it stays on the edge where the normal spacing lifts the pill above it', () => {
+        const data = family();
+        const config: LayoutConfig = { ...DENSE_LAYOUT_CONFIG, cardWidth: 150, cardHeight: 44 };
+        const result = denseLayout(data, config);
+        // The measure the screen gives: the whole pill 78px (wider than the half), the short one 34px.
+        const measure = (_o: string, year: string, glyph = true, short = false) => short
+            ? { width: 34, numX: 20, glyphX: 12.5, yearX: 0 }
+            : !glyph ? { width: 30, numX: 8, glyphX: 0, yearX: 0 }
+                : year ? { width: 78, numX: 8, glyphX: 30, yearX: 40 } : { width: 44, numX: 8, glyphX: 30, yearX: 0 };
+        const svg = buildTreeSvg(data, result, { config, cardDensity: 'compact', measureUnionOrderPill: measure });
+        const w1 = pillsOf(svg).find(p => p.person === 'W1')!;
+        const card = result.positions.get(P('W1'))!;
+        expect(w1.attrs).toContain('data-label="short"');
+        expect(w1.w).toBeCloseTo(34, 2);
+        expect(w1.y).toBeCloseTo(card.y - 9, 1);
+        // Its parts where the measure puts them: the ∞ first, then the number.
+        expect(w1.body).toContain(`<text x="${(w1.x + 20).toFixed(2)}"`);
+        expect(w1.body).toContain('>1</text>');
+        const mid = card.x + 75;
+        expect(w1.x + w1.w <= mid - 4 + 0.01 || w1.x >= mid + 4 - 0.01).toBe(true);
     });
 });
 

@@ -6392,6 +6392,8 @@ const stringsEN = {
         guideTitle: 'Assembly guide',
         guideInfo: (pages: number, rows: number, cols: number, overlap: number) =>
             `${nEn(pages, 'sheet', 'sheets')} (${rows} × ${cols}), ${overlap} mm overlap — glue by the grid below.`,
+        /** The sheets a spacing prints on (under its option in the dialog, spec 069 §4): "26 A4 sheets". */
+        sheetsCount: (n: number, format: string) => `${n} ${format} ${plural('en', n, 'sheet', 'sheets')}`,
         emptySheet: 'empty — not printed'
     },
 
@@ -14716,6 +14718,7 @@ const stringsCZ: StringsType = {
         guideTitle: 'Návod na slepení',
         guideInfo: (pages: number, rows: number, cols: number, overlap: number) =>
             `${nCs(pages, 'list', 'listy', 'listů')} (${rows} × ${cols}), přesah ${overlap} mm — lepí se podle mřížky níže.`,
+        sheetsCount: (n: number, format: string) => `${nCs(n, 'list', 'listy', 'listů')} ${format}`,
         emptySheet: 'prázdný — netiskne se'
     },
 
@@ -22935,6 +22938,7 @@ const stringsDE: StringsType = {
         guideTitle: 'Zusammenbau-Anleitung',
         guideInfo: (pages: number, rows: number, cols: number, overlap: number) =>
             `${nDe(pages, 'Blatt', 'Blätter')} (${rows} × ${cols}), ${overlap} mm Überlappung — nach dem Raster unten zusammenkleben.`,
+        sheetsCount: (n: number, format: string) => `${nDe(n, 'Blatt', 'Blätter')} ${format}`,
         emptySheet: 'leer — nicht gedruckt'
     },
 

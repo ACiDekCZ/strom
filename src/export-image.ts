@@ -25,7 +25,8 @@ import { strings } from './strings.js';
 import { unionOrderGlyphLift } from './union-order-measure.js';
 import { isClusterBoundary } from './ged-exporter.js';
 import {
-    unionOrderBadges, UnionOrderBadge, PillMetrics, estimatePillMetrics, placeUnionOrderPill, viewLineSegments,
+    unionOrderBadges, UnionOrderBadge, PillMetrics, estimatePillMetrics, estimateShortPillMetrics, placeUnionOrderPill, viewLineSegments,
+    shortPillLabelForm, shortPillNumber, PILL_HEIGHT,
     segmentsNearCard, EDGE_INSET, PillLabel, pillLabelForms, pillLabelWidths, PillSegment, EDGE_GAP, lineLinksOf, lineLinkTabs, LineLinkTab,
 } from './marriage-order.js';
 
@@ -249,10 +250,12 @@ export function fitBirthRow(birth: string, maxW: number, width: (text: string) =
  * "1. ∞ 1866" in an 18px pill — the screen's .union-order-pill (its parts
  * where the screen's measure puts them, a 1px hairline), without its shadow;
  * with the shorter `label` the screen shows where the whole does not fit in
- * its half of the card ("2nd ∞", "2nd").
+ * its half of the card ("2nd ∞", "2nd"), or the dense spacing's short
+ * one ("∞ 2", its parts placed by `m` in the order of its text).
  */
 export function unionOrderPillSvg(b: UnionOrderBadge, m: PillMetrics, x: number, y: number, dimmed = false, label: PillLabel = 'full'): string {
-    const num = strings.focus.unionOrdinal(b.number);
+    // The dense spacing's short pill ("∞ 2"): its number, the ∞ drawn as the glyph.
+    const num = label === 'short' ? shortPillNumber(strings.marriageOrder.short(b.number)) : strings.focus.unionOrdinal(b.number);
     const base = (y + 12.5).toFixed(1);
     const font = `${LINE_FONT} font-size="10" font-weight="600" fill="${COLORS.textLight}"`;
     const parts = [
@@ -380,9 +383,10 @@ export interface PosterOptions extends PosterFooterMeta {
     focusId?: string | null;
     /**
      * The pill measured as the screen draws it (src/union-order-measure.ts);
-     * estimated when absent. `glyph` false: the ordinal alone.
+     * estimated when absent. `glyph` false: the ordinal alone; `short`: the
+     * dense spacing's short pill ("∞ 2", its whole text in `ordinal`).
      */
-    measureUnionOrderPill?: (ordinal: string, year: string, glyph?: boolean) => PillMetrics;
+    measureUnionOrderPill?: (ordinal: string, year: string, glyph?: boolean, short?: boolean) => PillMetrics;
     /**
      * The card marks the image carries (spec 066 P4 §7), per person as the
      * screen shows them: the status mark of sources and reliability and the
@@ -1008,23 +1012,30 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
 
     // --- Marriage-order pills (T13): always whole, the screen's size,
     //     colours and place (placeUnionOrderPill; the image draws no tabs),
-    //     no shadow; above the cards they straddle ---
+    //     no shadow; above the cards they straddle. The dense spacing (D1,
+    //     spec 069 §4): as on its screen, the short "∞ 2" on the card's edge
+    //     only, never in the row above it, which would reach the bus ---
     const badges = unionOrderBadges(data, result, options.orderData ?? data, (options.focusId ?? null) as PersonId | null);
     if (badges.size > 0) {
-        const measure = options.measureUnionOrderPill ?? estimatePillMetrics;
+        const dense = !!config.dense;
+        const measure = (ordinal: string, year: string, glyph: boolean, short: boolean): PillMetrics =>
+            options.measureUnionOrderPill ? options.measureUnionOrderPill(ordinal, year, glyph, short)
+                : short ? estimateShortPillMetrics(ordinal) : estimatePillMetrics(ordinal, year, glyph);
         const segments = viewLineSegments(result);
         out.push('<g class="union-order-pills">');
         for (const [personId, b] of [...badges.entries()].sort((a, b) => String(a[0]).localeCompare(String(b[0])))) {
             const pos = result.positions.get(personId);
             if (!pos) continue;
             // Each label measured: the shorter one where the whole does not fit in its half.
-            const forms = pillLabelForms(strings.focus.unionOrdinal(b.number), b.year);
-            const metrics = forms.map(f => measure(f.ordinal, f.year, f.glyph));
+            const forms = dense ? [shortPillLabelForm(strings.marriageOrder.short(b.number))]
+                : pillLabelForms(strings.focus.unionOrdinal(b.number), b.year);
+            const metrics = forms.map(f => measure(f.ordinal, f.year, f.glyph, !!f.short));
             // The card's 1px border: the screen's corner groups stand 12px inside it.
             const slot = placeUnionOrderPill({
                 cardWidth: cw, side: b.side, ...pillLabelWidths(forms, metrics.map(m => m.width)), leftTabs: 0, rightTabs: 0,
                 leftInset: 1 + EDGE_INSET, rightInset: 1 + EDGE_INSET,
                 segments: segmentsNearCard(segments, pos.x, pos.y, cw),
+                edgeOnly: dense,
             });
             if (!slot) continue;
             const m = metrics[forms.findIndex(f => f.label === slot.label)];
@@ -1050,11 +1061,19 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
             const texts = kinds.map(k => lineLinkLabel(k, (k === 'linkParents' ? link.parentIds : link.childIds).map(nameOf), budget - 16));
             const widths = texts.map(t => estWidth(t, 10, true) + 16);
             const rowW = widths.reduce((a, w) => a + w, 0) + EDGE_GAP * (kinds.length - 1);
-            const y = pos.y + heightOf(personId) + 3;
+            const below = pos.y + heightOf(personId) + 3;
             // Left, centred or right under the card: the first clear of the lines
             const starts = [pos.x + inset, pos.x + (cw - rowW) / 2, pos.x + cw - inset - rowW];
-            const x0 = starts.find(x => !pillHitsLine(x, y, rowW, 18, segments)) ?? starts[0];
-            let x = x0;
+            // The dense spacing's bus may run 16px under the card (a lane toward
+            // it): with no place clear there, the row sits on the card's bottom
+            // edge, as the screen's tabs do, before it would cross the line.
+            const rows = config.dense ? [below, pos.y + heightOf(personId) - PILL_HEIGHT / 2] : [below];
+            let x = starts[0], y = below;
+            found: for (const ry of rows) {
+                for (const sx of starts) {
+                    if (!pillHitsLine(sx, ry, rowW, 18, segments)) { x = sx; y = ry; break found; }
+                }
+            }
             texts.forEach((t, i) => {
                 out.push(lineLinkPillSvg(t, personId, x, y, !!options.dimmedIds?.has(personId)).svg);
                 x += widths[i] + EDGE_GAP;

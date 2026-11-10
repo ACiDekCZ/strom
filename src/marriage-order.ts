@@ -951,6 +951,19 @@ export function pillLabelForms(ordinal: string, year: string): PillLabelForm[] {
     return out;
 }
 
+/** The dense spacing's short pill as its one label form: `text` is strings.marriageOrder.short ("∞ 2"). */
+export function shortPillLabelForm(text: string): PillLabelForm {
+    return { label: 'short', ordinal: text, year: '', glyph: true, short: true };
+}
+
+/**
+ * The short pill's text without its ∞ ("2" of "∞ 2"): what the image writes
+ * as its number, the ∞ drawn as the pill's glyph.
+ */
+export function shortPillNumber(text: string): string {
+    return text.replace('∞', ' ').replace(/\s+/g, ' ').trim();
+}
+
 /** The widths placeUnionOrderPill takes, from the labels (pillLabelForms) and their measures, in that order. */
 export function pillLabelWidths(forms: ReadonlyArray<PillLabelForm>, widths: ReadonlyArray<number>):
     Pick<PillPlacementInput, 'pillWidth' | 'pillLabel' | 'shorter'> {
@@ -1171,6 +1184,21 @@ export function estimatePillTextWidth(text: string): number {
     let w = 0;
     for (const c of text) w += /[0-9~<>]/.test(c) ? 6 : c === '.' ? 2.8 : c === ' ' ? 2.6 : 5.6;
     return w;
+}
+
+/**
+ * The dense spacing's short pill ("∞ 2", strings.marriageOrder.short)
+ * measured without a browser: its parts in the order of its text.
+ */
+export function estimateShortPillMetrics(text: string): PillMetrics {
+    const at = text.indexOf('∞');
+    // The ∞ after the number: laid out as the whole pill without a year.
+    if (at < 0 || text.slice(0, at).trim()) return estimatePillMetrics(shortPillNumber(text), '', at >= 0);
+    // The ∞ first ("∞ 2"): the glyph, 3px, the number.
+    const glyphW = 9;
+    const glyphX = 8 + glyphW / 2;
+    const numX = 8 + glyphW + 3;
+    return { width: numX + estimatePillTextWidth(shortPillNumber(text)) + 8, numX, glyphX, yearX: 0 };
 }
 
 /**

@@ -392,6 +392,7 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         guideTitle: 'Instrukcja sklejania',
         guideInfo: (pages: number, rows: number, cols: number, overlap: number) =>
             `${nPl(pages, 'arkusz', 'arkusze', 'arkuszy')} (${rows} × ${cols}), zakładka ${overlap} mm – skleja się według siatki poniżej.`,
+        sheetsCount: (n: number, format: string) => `${nPl(n, 'arkusz', 'arkusze', 'arkuszy')} ${format}`,
         emptySheet: 'pusty – nie jest drukowany'
     },
 

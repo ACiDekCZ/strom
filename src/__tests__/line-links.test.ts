@@ -11,7 +11,8 @@ import { tabLabel, branchTabRestHtml, measureTabRows, rowKey } from '../union-or
 import { buildTreeSvg, lineLinkLabel, PosterLayout } from '../export-image.js';
 import { setLanguage, strings } from '../strings.js';
 import { OmittedEdge, UnionId } from '../layout/pipeline/types.js';
-import { Person, PersonId, PartnershipId, Position, StromData } from '../types.js';
+import { Person, PersonId, PartnershipId, Position, StromData, DEFAULT_LAYOUT_CONFIG, DENSE_LAYOUT_CONFIG } from '../types.js';
+import type { Connection } from '../layout/pipeline/types.js';
 
 const P = (id: string) => id as PersonId;
 const edge = (unionId: string, childId: string, parentIds: string[]): OmittedEdge =>
@@ -87,6 +88,24 @@ describe('the image export labels the cards of a left-out line', () => {
         expect(svg).toContain('>rodiče: Jan Novák<');
         expect(svg).toContain('>dítě: Petr Novák<');
         expect(svg).not.toContain('↗');
+    });
+
+    it('in the dense spacing a bus 16px under the card puts the label on the card\'s bottom edge, not across the bus (spec 069 §4)', () => {
+        // Another family's bus in a lane toward the cards: 16px under dad's card, the whole card wide.
+        const bus: Connection = {
+            unionId: 'u9' as UnionId, stemX: 300, stemTopY: 20, stemBottomY: 80, branchY: 80, branchLeftX: -60, branchRightX: 300,
+            connectorFromX: 300, connectorToX: 300, connectorY: 80, drops: [],
+        };
+        const withBus: PosterLayout = { ...layout([edge('u1', 'kid', ['dad'])]), connections: [bus] };
+        const rectY = (svg: string) => Number(/<g class="line-link-pill" data-person="dad"[^>]*><rect x="[^"]+" y="([^"]+)"/.exec(svg)![1]) - 0.5;
+        // Dense: on the edge (its middle on the card's bottom, 64), clear of the bus at 80.
+        const dense = rectY(buildTreeSvg(data, withBus, { config: DENSE_LAYOUT_CONFIG }));
+        expect(dense).toBeCloseTo(64 - 9, 1);
+        expect(dense + 18).toBeLessThan(80);
+        // The normal spacing keeps the label under the card as before.
+        expect(rectY(buildTreeSvg(data, withBus, { config: DEFAULT_LAYOUT_CONFIG }))).toBeCloseTo(67, 1);
+        // Dense with no line under the card: under it, as in the normal spacing.
+        expect(rectY(buildTreeSvg(data, layout([edge('u1', 'kid', ['dad'])]), { config: DENSE_LAYOUT_CONFIG }))).toBeCloseTo(67, 1);
     });
 
     it('no left-out line, no label', () => {

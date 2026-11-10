@@ -16,6 +16,7 @@ import {
     DEFAULT_LAYOUT_CONFIG,
     LayoutConfig,
     layoutConfigFor,
+    TreeSpacing,
     TreeId,
     StromData,
     personCardHeight
@@ -161,6 +162,19 @@ interface CustomCardsMeasure {
  * longest text of those people, not of a shown family's), without the room
  * the screen keeps for the pills on a card's bottom edge.
  */
+/**
+ * A layout configuration with another spacing's gaps (layoutConfigFor), its
+ * card sizes, partner line and card heights kept.
+ */
+function withSpacing(config: LayoutConfig, spacing: TreeSpacing): LayoutConfig {
+    const { dense: _dense, ...rest } = config;
+    const gaps = layoutConfigFor(spacing);
+    return {
+        ...rest, horizontalGap: gaps.horizontalGap, verticalGap: gaps.verticalGap, partnerGap: gaps.partnerGap,
+        ...(gaps.dense ? { dense: true } : {}),
+    };
+}
+
 interface OutputLayout {
     positions: Map<PersonId, Position>;
     connections: Connection[];
@@ -398,8 +412,12 @@ class TreeRendererClass {
     private viewLayer: LayoutViewLayer | null = null;
     /** The live bridge the tree follows, for whether the view links are available (null: from the data alone). */
     private viewLinksBridge: (() => { features: readonly string[] | null } | null) | null = null;
-    /** The current render's layout without the view links (outputs, the people of the view), made when first asked. */
-    private outputLayoutCache: { seq: number; output: OutputLayout } | null = null;
+    /**
+     * The current render's layout without the view links (outputs, the people
+     * of the view), per spacing (the image export may take the other one),
+     * made when first asked.
+     */
+    private outputLayoutCache = new Map<TreeSpacing, { seq: number; output: OutputLayout }>();
     /** The browser prints the tree: laid out without the view links until it is done (setPrinting). */
     private printing = false;
     /** The focus depth before the print, given back after it. */
@@ -725,7 +743,7 @@ class TreeRendererClass {
         this.layoutBands = [];
         this.layoutGapExtra = null;
         this.viewLayer = null;
-        this.outputLayoutCache = null;
+        this.outputLayoutCache.clear();
 
         const persons = DataManager.getAllPersons();
         // The first render knows whether the tree is empty: the welcome may show now.
@@ -1305,21 +1323,29 @@ class TreeRendererClass {
      * out (the screen's is as wide as a shown family's longest text too), as
      * the screen would measure it without the links.
      */
-    private outputLayout(): OutputLayout {
-        if (!this.viewLayer || !this.focusPersonId) {
+    private outputLayout(spacing: TreeSpacing = this.getLayoutSpacing()): OutputLayout {
+        const own = spacing === this.getLayoutSpacing();
+        if (!this.focusPersonId || this.positions.size === 0 || (own && !this.viewLayer)) {
             return {
                 positions: this.positions, connections: this.withoutEdgeRoom(this.connections, this.edgeRoomIds),
                 spouseLines: this.spouseLines, omittedEdges: this.omittedEdges,
                 box: this.posterBox(this.config, this.edgeRoomIds), custom: this.customMetrics,
             };
         }
-        if (this.outputLayoutCache?.seq === this.renderSeq) return this.outputLayoutCache.output;
+        const cached = this.outputLayoutCache.get(spacing);
+        if (cached?.seq === this.renderSeq) return cached.output;
         const descendantsOnly = this.viewMode === 'descendants';
-        let config = this.config;
+        // Another spacing (the image export's own, spec 069 §4): the same
+        // people at the same card sizes, laid out with that spacing's gaps.
+        let config = own ? this.config : withSpacing(this.config, spacing);
         let result = this.computeTreeLayout(descendantsOnly, [], false, config);
         let custom: CustomCardMetrics | null = null;
         let edgeRoomIds = new Set<PersonId>();
-        if (this.customMetrics) {
+        if (!this.viewLayer) {
+            // No view link: the screen's people, their cards as the screen measured them.
+            custom = this.customMetrics;
+            edgeRoomIds = new Set(this.edgeRoomIds);
+        } else if (this.customMetrics) {
             const measured = this.customCardsOf(result.positions);
             const next: LayoutConfig = {
                 ...config, cardWidth: measured.metrics.cardWidth, cardHeight: measured.metrics.cardHeight,
@@ -1335,7 +1361,7 @@ class TreeRendererClass {
             positions: result.positions, connections: this.withoutEdgeRoom(result.connections, edgeRoomIds),
             spouseLines: result.spouseLines, omittedEdges: result.omittedEdges ?? [], box: this.posterBox(config, edgeRoomIds), custom,
         };
-        this.outputLayoutCache = { seq: this.renderSeq, output };
+        this.outputLayoutCache.set(spacing, { seq: this.renderSeq, output });
         return output;
     }
 
@@ -1532,13 +1558,18 @@ class TreeRendererClass {
      * (outputLayout: the screen's when no link is shown), without the room a
      * card measured with pills on its bottom edge keeps (no pills there).
      */
-    getPosterCardBox(): CardBox {
-        return this.outputLayout().box;
+    getPosterCardBox(spacing?: TreeSpacing): CardBox {
+        return this.outputLayout(spacing).box;
     }
 
     /** The custom card's width and columns the image export and the book draw (null in other densities). */
-    getPosterCardMetrics(): CustomCardMetrics | null {
-        return this.outputLayout().custom;
+    getPosterCardMetrics(spacing?: TreeSpacing): CustomCardMetrics | null {
+        return this.outputLayout(spacing).custom;
+    }
+
+    /** The spacing the current view is laid out with (Settings → Spacing; the fan, timeline and map: normal). */
+    getLayoutSpacing(): TreeSpacing {
+        return this.config.dense ? 'dense' : 'normal';
     }
 
     /** A drawn person's card height: its own ("by content"), else the view's. */
@@ -4298,13 +4329,14 @@ class TreeRendererClass {
      * poster export, the book and the minimap. Empty when nothing is rendered.
      * The outputs lay out WITHOUT the links "linked in the view only" (their
      * own layout of the view; `includeView: true` — the minimap — takes the
-     * screen's, ghosts and all).
+     * screen's, ghosts and all). `spacing`: laid out with that spacing (the
+     * image export's own, spec 069 §4); the view's when absent.
      */
-    getPosterLayout(opts: { includeView?: boolean } = {}): {
+    getPosterLayout(opts: { includeView?: boolean; spacing?: TreeSpacing } = {}): {
         positions: Map<PersonId, Position>; connections: Connection[]; spouseLines: SpouseLine[]; omittedEdges: OmittedEdge[];
     } {
         if (!opts.includeView) {
-            const { positions, connections, spouseLines, omittedEdges } = this.outputLayout();
+            const { positions, connections, spouseLines, omittedEdges } = this.outputLayout(opts.spacing);
             return { positions, connections, spouseLines, omittedEdges };
         }
         return {

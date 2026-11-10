@@ -269,3 +269,141 @@ test('tiled print fires only after the tile image is decoded, adds an assembly g
     expect(state.tiles).toBe(state.clips);
     expect(state.tiles).toBeLessThanOrEqual(state.cells);
 });
+
+/**
+ * Spacing in the export dialog (spec 069 §4): its own choice, remembered on
+ * this device at once, the screen left as it is; under each option the
+ * sheets it prints on (the guide page's count) when the two differ.
+ */
+test.describe('poster spacing (1110)', () => {
+    const svgHeight = (svg: string): number => Number(/<svg[^>]* height="(\d+)"/.exec(svg)![1]);
+
+    async function downloadSvg(page: import('@playwright/test').Page): Promise<string> {
+        const [download] = await Promise.all([
+            page.waitForEvent('download'),
+            page.locator('#poster-modal .menu-option', { hasText: 'SVG' }).click(),
+        ]);
+        return readFileSync(await download.path(), 'utf-8');
+    }
+
+    test('remembered at once, the screen untouched, a dense image lower than a normal one', async ({ page }) => {
+        await openApp(page);
+        await page.getByRole('button', { name: 'Try a sample tree' }).click();
+        await expect(card(page, 'Johan')).toBeVisible();
+        const gens = await page.evaluate(() => new Set([...window.Strom.TreeRenderer.getPosterLayout().positions.values()].map(p => p.y)).size);
+        expect(gens).toBeGreaterThanOrEqual(3);
+        const screenBefore = await page.evaluate(() => [...window.Strom.TreeRenderer.getPosterLayout().positions.entries()]);
+
+        await page.evaluate(() => window.Strom.UI.showPosterDialog());
+        const row = page.locator('#poster-modal .poster-spacing');
+        await expect(row).toBeVisible();
+        await expect(row.locator('#poster-spacing-label')).toHaveText('Spacing');
+        await expect(row.getByRole('radio', { name: 'Normal' })).toBeChecked();
+        await expect(row.locator('.poster-spacing-desc')).toHaveText(
+            'Smaller gaps between cards and generations; more people fit on the screen. Applies to image export, poster and PDF print.');
+        expect(await page.evaluate(() => window.Strom.SettingsManager.getPosterSpacing())).toBe('normal');
+        const normal = await downloadSvg(page);
+
+        await page.evaluate(() => window.Strom.UI.showPosterDialog());
+        await row.getByRole('radio', { name: 'Dense' }).check();
+        // Stored at once, before any export; the screen's own spacing is another setting.
+        expect(await page.evaluate(() => JSON.parse(localStorage.getItem('strom-settings')!).posterSpacing)).toBe('dense');
+        expect(await page.evaluate(() => window.Strom.SettingsManager.getTreeSpacing())).toBe('normal');
+        await page.evaluate(() => window.Strom.UI.closePosterDialog());
+        await page.evaluate(() => window.Strom.UI.showPosterDialog());
+        await expect(row.getByRole('radio', { name: 'Dense' })).toBeChecked();
+        const dense = await downloadSvg(page);
+
+        expect(svgHeight(dense)).toBeLessThan(svgHeight(normal));
+        // The screen keeps its layout and its spacing.
+        await expect(page.locator('#tree-canvas')).not.toHaveClass(/tree-dense/);
+        expect(await page.evaluate(() => [...window.Strom.TreeRenderer.getPosterLayout().positions.entries()])).toEqual(screenBefore);
+
+        // Remembered across a reload.
+        await page.reload();
+        await expect(card(page, 'Johan')).toBeVisible();
+        await page.evaluate(() => window.Strom.UI.showPosterDialog());
+        await expect(page.locator('#poster-modal .poster-spacing').getByRole('radio', { name: 'Dense' })).toBeChecked();
+    });
+
+    test('each option names the sheets its print takes, as the guide page counts them; none when both take as many', async ({ page }) => {
+        await openApp(page);
+        await page.getByRole('button', { name: 'Try a sample tree' }).click();
+        await expect(card(page, 'Johan')).toBeVisible();
+        await page.evaluate(() => window.Strom.UI.showPosterDialog());
+        const modal = page.locator('#poster-modal');
+        const sheets = (s: 'normal' | 'dense') => modal.locator(`.poster-sheets[data-spacing="${s}"]`);
+
+        // Every format and orientation: the counts follow the choice at once.
+        let differing: { format: string; orientation: string; normal: string; dense: string } | null = null;
+        for (const format of ['A4', 'A3']) {
+            for (const orientation of ['portrait', 'landscape']) {
+                await modal.locator('#poster-format').selectOption(format);
+                await modal.locator('#poster-orientation').selectOption(orientation);
+                if (await sheets('normal').isHidden()) {
+                    await expect(sheets('dense')).toBeHidden();
+                    continue;
+                }
+                const n = (await sheets('normal').textContent())!, d = (await sheets('dense').textContent())!;
+                expect(n).toMatch(new RegExp(`^\\d+ ${format} sheets?$`));
+                expect(d).toMatch(new RegExp(`^\\d+ ${format} sheets?$`));
+                expect(n).not.toBe(d);
+                differing ??= { format, orientation, normal: n, dense: d };
+            }
+        }
+        expect(differing, 'the sample tree takes fewer sheets in the dense spacing in some format').not.toBeNull();
+
+        // The PDF's guide page counts the same sheets, in either spacing.
+        for (const spacing of ['normal', 'dense'] as const) {
+            await page.evaluate(() => {
+                (window as unknown as { __guide?: string | null }).__guide = null;
+                (window as unknown as { print: () => void }).print = () => {
+                    (window as unknown as { __guide?: string | null }).__guide =
+                        document.querySelector('#poster-print .poster-guide-head span')?.textContent ?? '';
+                };
+            });
+            await page.evaluate(() => window.Strom.UI.showPosterDialog());
+            await modal.locator('#poster-format').selectOption(differing!.format);
+            await modal.locator('#poster-orientation').selectOption(differing!.orientation);
+            await modal.locator('.poster-spacing').getByRole('radio', { name: spacing === 'normal' ? 'Normal' : 'Dense' }).check();
+            await page.evaluate(() => window.Strom.UI.printPosterPdf());
+            await expect.poll(() => page.evaluate(() => (window as unknown as { __guide?: string | null }).__guide)).not.toBeNull();
+            const guide = await page.evaluate(() => (window as unknown as { __guide: string }).__guide);
+            const count = Number(/^(\d+)/.exec(spacing === 'normal' ? differing!.normal : differing!.dense)![1]);
+            expect(guide).toMatch(new RegExp(`^${count} sheets? \\(`));
+            await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+        }
+    });
+
+    test('a tree on one sheet either way shows no counts', async ({ page }) => {
+        await openApp(page);
+        await createFirstPerson(page, 'Jan', 'Novak');
+        await page.evaluate(() => window.Strom.UI.showPosterDialog());
+        const row = page.locator('#poster-modal .poster-spacing');
+        await expect(row).toBeVisible();
+        await expect(row.locator('.poster-sheets')).toHaveCount(2);
+        for (const el of await row.locator('.poster-sheets').all()) await expect(el).toBeHidden();
+    });
+
+    test('the fan and the timeline lay out their own way: no spacing row', async ({ page }) => {
+        await openApp(page);
+        await page.getByRole('button', { name: 'Try a sample tree' }).click();
+        await expect(card(page, 'Johan')).toBeVisible();
+        await page.locator('#view-mode-fan').click();
+        await expect(page.locator('#fan-container .fan-svg')).toBeVisible();
+        await page.evaluate(() => window.Strom.UI.showPosterDialog());
+        await expect(page.locator('#poster-modal')).toBeVisible();
+        await expect(page.locator('#poster-modal .poster-spacing')).toBeHidden();
+        await page.evaluate(() => window.Strom.UI.closePosterDialog());
+
+        await page.evaluate(() => window.Strom.UI.setDisplayViewMode('timeline'));
+        await expect(page.locator('.timeline-svg')).toBeVisible();
+        await page.evaluate(() => window.Strom.UI.showPosterDialog());
+        await expect(page.locator('#poster-modal .poster-spacing')).toBeHidden();
+        await page.evaluate(() => window.Strom.UI.closePosterDialog());
+
+        await page.evaluate(() => window.Strom.UI.setDisplayViewMode('family'));
+        await page.evaluate(() => window.Strom.UI.showPosterDialog());
+        await expect(page.locator('#poster-modal .poster-spacing')).toBeVisible();
+    });
+});

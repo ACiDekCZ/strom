@@ -2439,6 +2439,29 @@
         .spacing-glyph-dense i:nth-child(5) { left: 21px; top: 9px; }
         .tree-spacing-options .spacing-opt-label { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .tree-spacing-hint { display: none; font-size: 12px; line-height: 1.4; color: var(--text-light); }
+        /* Spacing in the image export dialog (spec 069 §4): the same segment, under each
+           option's label the sheets it prints on (when the two differ). */
+        .poster-spacing .spacing-opt-text { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; line-height: 1.25; text-align: left; }
+        .poster-spacing .spacing-opt-label { max-width: 100%; }
+        .settings-segment .settings-radio span.poster-sheets {
+            font-size: 11.5px; font-weight: 400; color: var(--text-faint); white-space: nowrap; font-variant-numeric: tabular-nums;
+        }
+        .settings-segment .settings-radio:has(input:checked) span.poster-sheets { color: rgba(255, 255, 255, 0.85); font-weight: 400; }
+        .poster-spacing .poster-sheets[hidden] { display: none; }
+        .poster-spacing .tree-spacing-options .settings-radio { min-height: 42px; }
+        .poster-spacing .poster-spacing-desc { margin: 6px 0 0; }
+        @media (max-width: 640px) {
+            .poster-spacing .tree-spacing-options .settings-radio { min-height: 48px; }
+            #poster-modal select { min-height: 44px; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .poster-spacing .tree-spacing-options .settings-radio { min-height: 48px; }
+            #poster-modal select { min-height: 44px; }
+        }
+        @media (pointer: coarse) {
+            .poster-spacing .tree-spacing-options .settings-radio { min-height: 48px; }
+            #poster-modal select { min-height: 44px; }
+        }
         @media (max-width: 640px) {
             .tree-spacing-options .settings-radio { min-height: 44px; }
             .tree-spacing-hint:not([hidden]) { display: block; }
@@ -27896,7 +27919,7 @@
             <p class="poster-view-line" id="poster-view-label"></p>
             <div class="form-group">
                 <label for="poster-privacy-mode" data-i18n="privacy.label"></label>
-                <select id="poster-privacy-mode">
+                <select id="poster-privacy-mode" onchange="window.Strom.UI.updatePosterSheets()">
                     <option value="full" data-i18n="privacy.modeFull"></option>
                     <option value="initials" data-i18n="privacy.modeInitials"></option>
                     <option value="anonymous" data-i18n="privacy.modeAnonymous"></option>
@@ -27906,18 +27929,42 @@
             <div class="form-row">
                 <div class="form-group half">
                     <label for="poster-format" data-i18n="poster.format"></label>
-                    <select id="poster-format">
+                    <select id="poster-format" onchange="window.Strom.UI.updatePosterSheets()">
                         <option value="A4">A4</option>
                         <option value="A3">A3</option>
                     </select>
                 </div>
                 <div class="form-group half">
                     <label for="poster-orientation" data-i18n="poster.orientation"></label>
-                    <select id="poster-orientation">
+                    <select id="poster-orientation" onchange="window.Strom.UI.updatePosterSheets()">
                         <option value="portrait" data-i18n="poster.portrait"></option>
                         <option value="landscape" data-i18n="poster.landscape"></option>
                     </select>
                 </div>
+            </div>
+            <!-- Spacing of the exported tree: Normal / Dense, its own choice remembered on this device; under each
+                 option the sheets it prints on when the two differ; hidden in the views with their own layout (spec 069 §4). -->
+            <div class="form-group poster-spacing" id="poster-spacing">
+                <label id="poster-spacing-label" data-i18n="spacing.label"></label>
+                <div class="settings-options settings-segment tree-spacing-options" role="radiogroup" aria-labelledby="poster-spacing-label" aria-describedby="poster-spacing-desc">
+                    <label class="settings-radio">
+                        <input type="radio" name="poster-spacing" value="normal" onchange="window.Strom.UI.setPosterSpacing('normal')">
+                        <span class="spacing-glyph spacing-glyph-normal" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+                        <span class="spacing-opt-text">
+                            <span class="spacing-opt-label" data-i18n="spacing.normal"></span>
+                            <span class="poster-sheets" data-spacing="normal" hidden></span>
+                        </span>
+                    </label>
+                    <label class="settings-radio">
+                        <input type="radio" name="poster-spacing" value="dense" onchange="window.Strom.UI.setPosterSpacing('dense')">
+                        <span class="spacing-glyph spacing-glyph-dense" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+                        <span class="spacing-opt-text">
+                            <span class="spacing-opt-label" data-i18n="spacing.dense"></span>
+                            <span class="poster-sheets" data-spacing="dense" hidden></span>
+                        </span>
+                    </label>
+                </div>
+                <p class="settings-desc poster-spacing-desc" id="poster-spacing-desc"><span data-i18n="spacing.desc"></span> <span data-i18n="spacing.scopeExport"></span></p>
             </div>
             <div class="form-group">
                 <label class="settings-checkbox">
