@@ -45,6 +45,7 @@ import { lineCell, lineKey, lineLevel, plainLines, type GridLine } from './table
 import type { CoverageCell } from './table-coverage.js';
 import { highlightHtml } from './table-filter.js';
 import { shownNameOrEmpty as personName } from '../../person-name.js';
+import { AGENT_SPIN_MS, sharedPhaseDelay } from '../../card-signals.js';
 
 export interface GridInput {
     model: TableModel;
@@ -92,6 +93,8 @@ export interface GridInput {
     actions?: { edit: boolean } | null;
     /** Live-only research columns while the research is not followed (§16.2: the head's dashed "live" tag). */
     liveOff?: ReadonlySet<string>;
+    /** An open research conflict on a fact's cell (§16.3): ≠ before its value; null: none. */
+    conflictAt?: (line: GridLine, col: ColumnDef, value: CellValue) => CellConflictMark | null;
 }
 
 /** A row's action (§10.1): show in the tree, open the person, edit. */
@@ -99,6 +102,11 @@ export type RowAction = 'tree' | 'open' | 'edit';
 
 /** How long a changed row stays lit (§10.3). */
 export const FLASH_MS = 1200;
+
+/** A research conflict's ≠ on a cell (§16.3): its name for a screen reader ("1890, sources disagree: birth"). */
+export interface CellConflictMark {
+    label: string;
+}
 
 /** A finding's mark in a cell: its level (or `unusual`) and the finding's title (for the mark's name). */
 export interface CellIssueMark {
@@ -140,6 +148,8 @@ export interface GridHandlers {
     onMoveColumn?(colId: string, offset: number): void;
     /** A group's drawn columns [start, end] move before drawn position `before` (drag or Alt+←/→ on its cell). */
     onMoveGroup?(start: number, end: number, before: number): void;
+    /** The ≠ of a research conflict on a cell was clicked (§16.3): its line, its drawn column, the mark. */
+    onConflict?(line: GridLine, col: number, mark: HTMLElement): void;
     /** A cell with a finding was clicked or Enter was pressed on it (§7.4): its line, its drawn column, the cell. */
     onIssue?(line: GridLine, col: number, cell: HTMLElement): void;
     /** A tap on a completeness cell (§6.2): true when its bubble opened (touch; a mouse has the title). */
@@ -183,7 +193,7 @@ export function markHtml(severity: CellSeverity, label?: string): string {
 }
 
 /** The classes of a cell for its value (§5: computed, n/a, uncertain, substitute; §7.3: a finding). */
-export function cellClasses(value: CellValue, col: ColumnDef, issue: CellSeverity | null = null): string {
+export function cellClasses(value: CellValue, col: ColumnDef, issue: CellSeverity | null = null, conflict = false): string {
     let cls = 'tv-cell';
     if (col.align === 'right') cls += ' tv-right';
     if (col.id === 'name' || col.id === 'p1' || col.id === 'p2' || col.id === 'evWho') cls += ' tv-name';
@@ -195,6 +205,7 @@ export function cellClasses(value: CellValue, col: ColumnDef, issue: CellSeverit
     if (value.subst) cls += ' tv-cell--subst';
     if (value.ghost) cls += ' tv-cell--ghost';
     if (issue) cls += ` tv-cell--${issue} has-issue`;
+    if (conflict) cls += ' has-conf';
     return cls;
 }
 
@@ -211,11 +222,23 @@ const COMP_BAR = 30;
  * A cell's inner HTML (§5, §6.2): a substitute's label before the value in
  * italics, a date qualifier's word, a completeness percentage with its bar.
  */
-export function cellInner(value: CellValue, col: ColumnDef, issue: CellIssueMark | null = null, hit = ''): string {
-    if (issue) return cellValueHtml(value, col, hit) + markHtml(issue.severity, issue.label);
-    if (!value.mark) return cellValueHtml(value, col, hit);
+export function cellInner(value: CellValue, col: ColumnDef, issue: CellIssueMark | null = null, hit = '', conflict: CellConflictMark | null = null): string {
+    // A research conflict's ≠ stands before the value, a finding's mark stays after it (§16.3).
+    const conf = conflict ? conflictMarkHtml(conflict) : '';
+    if (issue) return conf + cellValueHtml(value, col, hit) + markHtml(issue.severity, issue.label);
+    if (!value.mark) return conf + cellValueHtml(value, col, hit);
     // A level beside a value (Findings: after the number; Highest level: before its word).
     return col.align === 'right' ? cellValueHtml(value, col, hit) + markHtml(value.mark) : markHtml(value.mark) + cellValueHtml(value, col, hit);
+}
+
+/**
+ * The ≠ of a research conflict on a fact's cell (§16.3): the research's
+ * mark with its rim, a button that opens the conflicts (out of the tab
+ * order until its cell is the active one, `syncNameTabs`).
+ */
+export function conflictMarkHtml(conflict: CellConflictMark): string {
+    return `<button type="button" class="tv-rmark tv-rmark--conf tv-conf" tabindex="-1" aria-haspopup="dialog"`
+        + ` aria-label="${esc(conflict.label)}" title="${esc(conflict.label)}">${RESEARCH_GLYPH.conf}</button>`;
 }
 
 function cellValueHtml(value: CellValue, col: ColumnDef, hit = ''): string {
@@ -232,7 +255,19 @@ export function moreCitesHtml(n: number): string {
 }
 
 /** A research mark's glyph (§16.3; its look and legend: the marks' own styles). */
-const RESEARCH_GLYPH: Record<ResearchMark, string> = { wait: '!', ext: '!', conf: '≠', q: '?', agent: '◔', done: '✓', queue: '·', new: '•' };
+const RESEARCH_GLYPH: Record<ResearchMark, string> = { wait: '!', ext: '!', conf: '≠', q: '?', agent: '', done: '✓', queue: '·', new: '•' };
+
+/**
+ * A research mark (§16.3): the card's marks with a rim (wait, conf, q), the
+ * hollow "!" of a wait on others, the agent's arc (turning in step with
+ * every other arc, as on the cards), ✓ done.
+ */
+export function researchMarkHtml(mark: ResearchMark): string {
+    const spin = mark === 'agent'
+        ? ` style="animation-delay:${sharedPhaseDelay(AGENT_SPIN_MS, (typeof document !== 'undefined' ? document.timeline?.currentTime as number | undefined : undefined) ?? performance.now())}"`
+        : '';
+    return `<span class="tv-rmark tv-rmark--${mark}" aria-hidden="true"${spin}>${RESEARCH_GLYPH[mark]}</span>`;
+}
 
 /**
  * A research cell (§16.2, §16.9, §16.10): its mark, the count (600), "+n"
@@ -240,7 +275,7 @@ const RESEARCH_GLYPH: Record<ResearchMark, string> = { wait: '!', ext: '!', conf
  */
 export function researchHtml(d: ResearchCellDetail, hit = ''): string {
     const text = (t: string): string => (hit ? highlightHtml(t, hit) : esc(t));
-    let html = d.mark ? `<span class="tv-rmark tv-rmark--${d.mark}" aria-hidden="true">${RESEARCH_GLYPH[d.mark]}</span>` : '';
+    let html = d.mark ? researchMarkHtml(d.mark) : '';
     if (d.count !== undefined) html += `<span class="tv-rcount">${d.count}</span>`;
     if (d.more) html += `<span class="tv-rmore">+${d.more}</span>`;
     for (const part of d.parts) {
@@ -383,6 +418,12 @@ export class TableGrid {
             if (more && cellEl && this.moreCitesAt(line, cellEl, more)) return;
             // A web address opens its own window (§14.2); the row stays as it is.
             if (t.closest('a.tv-link')) return;
+            const conf = t.closest<HTMLElement>('.tv-conf');
+            if (conf && cellEl && this.handlers.onConflict) {
+                this.select(line);
+                this.handlers.onConflict(line, Number(cellEl.getAttribute('aria-colindex')) - 1, conf);
+                return;
+            }
             const act = t.closest<HTMLElement>('.tv-act[data-act]');
             if (act) {
                 this.select(line);
@@ -400,7 +441,7 @@ export class TableGrid {
         // A double click edits (§10.1); the ▾/▸, the count pill and the icons are their own.
         this.body.addEventListener('dblclick', (e) => {
             const t = e.target as Element;
-            if (t.closest('.tv-toggle, .tv-unions-pill, .tv-act, .tv-more-btn, .tv-nm, .tv-link, .tv-cites-more')) return;
+            if (t.closest('.tv-toggle, .tv-unions-pill, .tv-act, .tv-more-btn, .tv-nm, .tv-link, .tv-cites-more, .tv-conf')) return;
             const line = this.lineOf(t);
             if (!line || line.kind === 'more') return;
             this.handlers.onRowAction?.('edit', line);
@@ -468,7 +509,7 @@ export class TableGrid {
 
     /** The names of the active cell (the one with the body's tab stop) in the tab order, the others out (§14.1). */
     private syncNameTabs(): void {
-        for (const b of this.body.querySelectorAll<HTMLElement>('.tv-nm[data-ni], .tv-link, .tv-cites-more')) {
+        for (const b of this.body.querySelectorAll<HTMLElement>('.tv-nm[data-ni], .tv-link, .tv-cites-more, .tv-conf')) {
             b.tabIndex = b.closest('[aria-colindex]')?.getAttribute('tabindex') === '0' ? 0 : -1;
         }
     }
@@ -1099,10 +1140,11 @@ export class TableGrid {
                 }
                 const value = lineCell(input.model, line, col);
                 const issue = line.kind === 'more' ? null : input.issueAt?.(line, col, value) ?? null;
+                const conflict = line.kind === 'more' ? null : input.conflictAt?.(line, col, value) ?? null;
                 const substTip = value.subst ? (value.subst === 'bap' ? strings.table.subst.bap : strings.table.subst.bur) : '';
                 const title = value.title ?? (substTip || (value.text.length > 24 ? value.text : ''));
-                html += `<div class="${cellClasses(value, col, issue?.severity ?? null)}${this.pinClass(i, input)}" role="gridcell" aria-colindex="${i + 1}" tabindex="${tab}"`
-                    + ` style="${this.pinStyle(i, input)}"${title ? ` title="${esc(title)}"` : ''}>${cellInner(value, col, issue, line.kind === 'more' ? '' : input.hit ?? '')}`
+                html += `<div class="${cellClasses(value, col, issue?.severity ?? null, !!conflict)}${this.pinClass(i, input)}" role="gridcell" aria-colindex="${i + 1}" tabindex="${tab}"`
+                    + ` style="${this.pinStyle(i, input)}"${title ? ` title="${esc(title)}"` : ''}>${cellInner(value, col, issue, line.kind === 'more' ? '' : input.hit ?? '', conflict)}`
                     + `${i === tailAt ? this.rowTail(input, line) : ''}</div>`;
             }
             html += this.spacer(cw.after) + '</div>';
@@ -1162,15 +1204,16 @@ export class TableGrid {
         const value = lineCell(input.model, line, col);
         const name = cellText(value);
         const issue = input.issueAt?.(line, col, value) ?? null;
+        const conflict = input.conflictAt?.(line, col, value) ?? null;
         const toggle = line.expanded === null
             ? '<span class="tv-toggle tv-toggle--none" aria-hidden="true"></span>'
             : `<span class="tv-toggle" aria-hidden="true" title="${esc(line.expanded ? `${t.collapseAll} (←)` : `${t.expandAll} (→)`)}">${line.expanded ? '▾' : '▸'}</span>`;
         const pill = line.expanded === false ? `<span class="tv-unions-pill" aria-hidden="true">${esc(t.unionsN(line.n))}</span>` : '';
         const head = issue
-            ? `<div class="tv-cell tv-name tv-cell--${issue.severity} has-issue${this.pinClass(i, input)}" role="gridcell" aria-colindex="${i + 1}" tabindex="${tab}" style="${this.pinStyle(i, input)}"`
-            : open;
+            ? `<div class="tv-cell tv-name tv-cell--${issue.severity} has-issue${conflict ? ' has-conf' : ''}${this.pinClass(i, input)}" role="gridcell" aria-colindex="${i + 1}" tabindex="${tab}" style="${this.pinStyle(i, input)}"`
+            : conflict ? open.replace('class="tv-cell tv-name', 'class="tv-cell tv-name has-conf') : open;
         const nameHtml = input.hit ? highlightHtml(name, input.hit) : esc(name);
-        return `${head}${name.length > 24 ? ` title="${esc(name)}"` : ''}>${toggle}<span class="tv-cell-text">${nameHtml}</span>${pill}`
+        return `${head}${name.length > 24 ? ` title="${esc(name)}"` : ''}>${toggle}${conflict ? conflictMarkHtml(conflict) : ''}<span class="tv-cell-text">${nameHtml}</span>${pill}`
             + `${issue ? markHtml(issue.severity, issue.label) : ''}${tail}</div>`;
     }
 
@@ -1231,7 +1274,7 @@ export class TableGrid {
         if (!input || !this.lines.length) return;
         if (e.altKey) return;
         // A name in a cell (§14.1) is a button: Enter and Space are its own.
-        if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.tv-nm, .tv-link, .tv-cites-more')) return;
+        if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.tv-nm, .tv-link, .tv-cites-more, .tv-conf')) return;
         const at = this.activeLineIndex();
         const line = this.lines[at];
         const col = Math.min(this.activeCol, input.columns.length - 1);

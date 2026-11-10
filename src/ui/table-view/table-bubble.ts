@@ -12,8 +12,8 @@
  */
 
 import { strings } from '../../strings.js';
-import { markHtml } from './table-grid.js';
-import type { CellSeverity } from './table-model.js';
+import { markHtml, researchMarkHtml } from './table-grid.js';
+import type { CellSeverity, ResearchMark } from './table-model.js';
 
 /** One finding as the bubble shows it. */
 export interface BubbleFinding {
@@ -67,8 +67,13 @@ export function bubbleHtml(findings: readonly BubbleFinding[], readOnly: boolean
     }).join('');
 }
 
-/** The legend's rows (§7.3: the four marks and what else a cell can show, none of them a finding). */
-export function legendHtml(): string {
+/**
+ * The legend's rows (§7.3: the four marks and what else a cell can show,
+ * none of them a finding). A research tree adds the block Research at the
+ * end (§16.3, 16i); an archive or a read-only copy only its marks that come
+ * from the data (conflict, question).
+ */
+export function legendHtml(research: 'full' | 'data' | null = null): string {
     const t = strings.table;
     const marks: CellSeverity[] = ['error', 'warning', 'info', 'unusual'];
     let html = '';
@@ -78,7 +83,8 @@ export function legendHtml(): string {
     }
     const others: [keyof typeof t.legendKind, string][] = [
         ['uncertain', '<span class="tv-leg-sample tv-cell--uncertain"><span class="tv-cell-text">1890–1892</span></span>'],
-        ['reliability', '<span class="tv-leg-sample tv-leg-pill" aria-hidden="true">✓</span>'],
+        // As the cell shows it: the step's word (spec 066), dimmed like a computed value.
+        ['reliability', `<span class="tv-leg-sample tv-leg-computed" aria-hidden="true">${esc(strings.reliability.human)}</span>`],
         ['subst', `<span class="tv-leg-sample"><span class="tv-subst" aria-hidden="true">${esc(t.subst.bapShort)}</span></span>`],
         ['computed', '<span class="tv-leg-sample tv-leg-computed" aria-hidden="true">≈ 67</span>'],
         ['na', '<span class="tv-leg-sample tv-leg-computed" aria-hidden="true">–</span>'],
@@ -88,7 +94,22 @@ export function legendHtml(): string {
         html += `<div class="tv-leg-row"><span class="tv-leg-sym">${sym}</span>`
             + `<span class="tv-leg-name">${esc(t.legendKind[k])}</span><span class="tv-leg-text">${esc(t.legendText[k])}</span></div>`;
     }
+    if (research) html += researchLegendHtml(research === 'full');
     return html;
+}
+
+/** The legend's block Research (§16.3, 16i): the research's marks with their rim, then the sentence under them. */
+function researchLegendHtml(full: boolean): string {
+    const r = strings.table.res;
+    const marks: ResearchMark[] = full ? ['wait', 'ext', 'conf', 'q', 'agent', 'done'] : ['conf', 'q'];
+    let html = `<div class="tv-bub-sep" role="separator"></div><div class="tv-leg-head">${esc(r.block)}</div>`;
+    for (const m of marks) {
+        const name = r.legendName[m as keyof typeof r.legendName];
+        const text = r.legendText[m as keyof typeof r.legendText];
+        html += `<div class="tv-leg-row tv-leg-row--res"><span class="tv-leg-sym">${researchMarkHtml(m)}</span>`
+            + `<span class="tv-leg-name">${esc(name)}</span><span class="tv-leg-text">${esc(text)}</span></div>`;
+    }
+    return html + `<div class="tv-leg-note">${esc(r.legendNote)}</div>`;
 }
 
 /** One further citation of a cell (§14.3) as its bubble lists it. */

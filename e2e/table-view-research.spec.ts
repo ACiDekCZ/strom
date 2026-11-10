@@ -8,13 +8,31 @@ import { openApp, seedTree, card, type SeedPerson } from './helpers.js';
  * as it does without research); "all" in the Columns panel shows its default
  * set and the view is changed; the cells and their sorting; the research ids
  * of unions and sources; a tree without research has no such group and an
- * archive has no waiting, tasks or agent. Invented data
+ * archive has no waiting, tasks or agent; ≠ on the cells of a conflict's
+ * fact and the legend's block Research (§16.3). Invented data
  * (e2e/fixtures/research-table.ged).
  */
 
 const GED = readFileSync('e2e/fixtures/research-table.ged', 'utf8');
 /** The same research as an archive (its file says so). */
 const ARCHIVE_GED = GED.replace('1 _STROM_ASOF 2026-11-10\n', '1 _STROM_ASOF 2026-11-10\n1 _STROM_LINKS send open live app setup\n1 _STROM_MODE archive\n');
+
+/**
+ * Marks (§16.3, 16f, 16h): Vendelín has two dated marriages and two open
+ * conflicts of his marriage, one fitting his marriage of 1845, one fitting
+ * none (it stands on Partner); Marie's conflict of her birth stays.
+ */
+const MARKS_GED = (() => {
+    const at = GED.indexOf('0 @I2@ INDI\n');
+    const fams = GED.indexOf('1 FAMS @F0004@\n', at) + '1 FAMS @F0004@\n'.length;
+    const vendelin = '1 FAMS @F0005@\n'
+        + '1 _STROM_CONFLICT X0002\n2 TYPE MARR\n2 TITL Rok sňatku Vendelína\n2 STAT open\n2 VAL 1845\n2 VAL 1846\n3 SOUR @S0014@\n'
+        + '1 _STROM_CONFLICT X0003\n2 TYPE MARR\n2 TITL Sňatek Vendelína v Rebarborově\n2 STAT open\n2 VAL 1850\n2 VAL 1851\n3 SOUR @S0014@\n';
+    let ged = GED.slice(0, fams) + vendelin + GED.slice(fams);
+    ged = ged.replace('0 @I10@ INDI\n', '0 @I10@ INDI\n1 FAMS @F0005@\n');
+    ged = ged.replace('1 WIFE @I12@\n', '1 WIFE @I12@\n1 MARR\n2 DATE 1845\n2 PLAC Rebarborov\n');
+    return ged.replace('0 TRLR', '0 @F0005@ FAM\n1 HUSB @I2@\n1 WIFE @I10@\n1 MARR\n2 DATE 1862\n1 REFN F0005\n0 TRLR');
+})();
 
 const OVERVIEW = ['name', 'bDate', 'bPlace', 'dDate', 'dAge', 'partner', 'wDate', 'wAge', 'nFind', 'comp'];
 const RESEARCH_DEFAULT = ['rSum', 'rWait', 'rConf', 'rHyp', 'rAgent'];
@@ -162,6 +180,93 @@ test.describe('desktop (1440)', () => {
         expect((await headOrder(page)).slice(0, 2)).toEqual(['srcTitle', 'srcResearchId']);
         await expect(head(page, 'srcImage')).toHaveCount(1);
         expect(await columnTexts(page, 'srcResearchId', 's:')).toEqual(['S0014']);
+    });
+});
+
+test.describe('marks and the legend (§16.3)', () => {
+    test.use({ viewport: { width: 1440, height: 900 } });
+
+    /** A person's id by the research's id. */
+    const idOf = (page: Page, refn: string) => page.evaluate(r => window.Strom.DataManager.getAllPersons().find(p => p.refn === r)!.id, refn);
+    /** A line's cell of a column (the line's key: p:<id>, p:<id>#u1). */
+    async function cellAt(page: Page, key: string, col: string) {
+        const index = await head(page, col).getAttribute('aria-colindex');
+        return page.locator(`#table-container .tv-body .tv-row[data-key="${key}"] [aria-colindex="${index}"]`);
+    }
+
+    test('≠ on the birth, on the marriage’s union and on Partner; before the value, no tint; a click opens the conflict', async ({ page }) => {
+        await openResearchTable(page, MARKS_GED);
+        // The default view, as without research, but for ≠.
+        expect(await headOrder(page)).toEqual(OVERVIEW);
+        await expect(changed(page)).toBeHidden();
+
+        // Marie's birth: ≠ before the year, named for a screen reader, the cell without a tint.
+        const marie = `p:${await idOf(page, 'P0006')}`;
+        const birth = await cellAt(page, marie, 'bDate');
+        const mark = birth.locator('.tv-conf');
+        await expect(mark).toHaveText('≠');
+        await expect(mark).toHaveAttribute('aria-label', '1853, sources disagree: birth');
+        expect(await birth.evaluate(el => (el.firstElementChild as HTMLElement).classList.contains('tv-conf'))).toBe(true);
+        await expect(birth).toHaveClass(/has-conf/);
+        await expect(birth).not.toHaveClass(/tv-cell--(error|warning)/);
+        expect(await birth.evaluate(el => getComputedStyle(el).backgroundColor))
+            .toBe(await (await cellAt(page, marie, 'bPlace')).evaluate(el => getComputedStyle(el).backgroundColor));
+        // The rim: the card's amber circle with a ring in the surface's colour.
+        expect(await mark.evaluate(el => getComputedStyle(el).boxShadow)).toMatch(/0px 0px 0px 1\.5px.*0px 0px 0px 2\.5px/);
+        // The other cells of Marie and the rows without a conflict carry none.
+        await expect((await cellAt(page, marie, 'bPlace')).locator('.tv-conf')).toHaveCount(0);
+        await expect((await cellAt(page, `p:${await idOf(page, 'P0001')}`, 'bDate')).locator('.tv-conf')).toHaveCount(0);
+
+        // Vendelín (two unions, expanded): the conflict that fits 1845 on that sub-row's marriage date,
+        // the one that fits no union on Partner of his row ("2 unions").
+        const vendelin = `p:${await idOf(page, 'P0002')}`;
+        await expect(page.locator(`#table-container .tv-row[data-key="${vendelin}#u2"]`)).toBeVisible();
+        await expect((await cellAt(page, `${vendelin}#u1`, 'wDate')).locator('.tv-conf')).toHaveAttribute('aria-label', '1845, sources disagree: marriage');
+        await expect((await cellAt(page, `${vendelin}#u2`, 'wDate')).locator('.tv-conf')).toHaveCount(0);
+        await expect((await cellAt(page, `${vendelin}#u1`, 'partner')).locator('.tv-conf')).toHaveCount(0);
+        const partner = await cellAt(page, vendelin, 'partner');
+        await expect(partner).toContainText('2 unions');
+        await expect(partner.locator('.tv-conf')).toHaveAttribute('aria-label', '2 unions, sources disagree: marriage');
+        // Collapsed: the union's ≠ joins Partner's, which stays where it was.
+        await page.locator(`#table-container .tv-row[data-key="${vendelin}"] .tv-toggle`).click();
+        await expect(page.locator(`#table-container .tv-row[data-key="${vendelin}#u1"]`)).toHaveCount(0);
+        await expect((await cellAt(page, vendelin, 'partner')).locator('.tv-conf')).toHaveCount(1);
+
+        // The Unions table: the marriage's ≠ on that union's row.
+        await page.locator('#table-container .tv-rowtype [data-rowtype="unions"]').click();
+        await expect(page.locator('#table-container')).toHaveAttribute('data-rowtype', 'unions');
+        const unionId = await page.evaluate(() => Object.values(window.Strom.DataManager.getData().partnerships).find(u => u.researchId === 'F0004')!.id);
+        await expect((await cellAt(page, `u:${unionId}`, 'wDate')).locator('.tv-conf')).toHaveCount(1);
+        await page.locator('#table-container .tv-rowtype [data-rowtype="persons"]').click();
+
+        // A click on ≠: the conflict opens (the person's research dialog until the table's own bubble).
+        await (await cellAt(page, marie, 'bDate')).locator('.tv-conf').click();
+        await expect(page.locator('#person-research-modal')).toBeVisible();
+    });
+
+    test('the legend ends with the block Research in a research tree only', async ({ page }) => {
+        await openResearchTable(page);
+        await page.locator('#table-container .tv-legend-btn').click();
+        const legend = page.locator('.tv-bubble--legend');
+        await expect(legend).toBeVisible();
+        // The rows as before, then the block: six research marks and the sentence under them.
+        await expect(legend.locator('.tv-leg-row:not(.tv-leg-row--res)')).toHaveCount(9);
+        await expect(legend.locator('.tv-leg-head')).toHaveText('Research');
+        await expect(legend.locator('.tv-leg-row--res .tv-leg-name')).toHaveText(['waiting', 'waiting on others', 'conflict', 'question', 'agent', 'done']);
+        await expect(legend.locator('.tv-leg-note')).toHaveText('A circle with a rim means research. The research’s ! and ? stand only in the Research columns; a fact’s cell carries only ≠.');
+        const order = await legend.locator('.tv-leg-row, .tv-leg-head, .tv-leg-note').evaluateAll(els => els.map(el => el.className));
+        expect(order.slice(0, 9).every(c => c === 'tv-leg-row')).toBe(true);
+        expect(order[order.length - 1]).toBe('tv-leg-note');
+        await page.keyboard.press('Escape');
+
+        // A tree without research: the legend as before.
+        await openApp(page);
+        await seedTree(page, PLAIN, 'Kvelden', 'a');
+        await openTable(page);
+        await page.locator('#table-container .tv-legend-btn').click();
+        await expect(legend).toBeVisible();
+        await expect(legend.locator('.tv-leg-row')).toHaveCount(9);
+        await expect(legend.locator('.tv-leg-head, .tv-leg-row--res, .tv-leg-note')).toHaveCount(0);
     });
 });
 

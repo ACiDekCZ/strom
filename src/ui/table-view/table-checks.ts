@@ -17,7 +17,7 @@ import { qualityFinding, qualityFindingKey } from '../../validation.js';
 import { dismissedKeys } from '../../quality-dismiss.js';
 import { placeKey } from '../../places.js';
 import { participantName } from '../../godparents.js';
-import { parentSlots, type ParticipantRole, type Partnership, type Person, type StromData } from '../../types.js';
+import { parentSlots, type ParticipantRole, type Partnership, type PartnershipId, type Person, type ResearchConflict, type StromData } from '../../types.js';
 import type { CellSeverity, EventRow, PersonRow, TableModel, TableRow } from './table-model.js';
 import { personGodparents } from './table-events.js';
 
@@ -386,4 +386,100 @@ export function bandSeverity(index: CheckIndex | null, row: TableRow, colIds: re
 
 export function isPlaceColumn(colId: string): boolean {
     return PLACE_COLUMNS.has(colId);
+}
+
+// ==================== RESEARCH CONFLICTS ON THE CELLS (§16.3) ====================
+
+/** What of its fact a conflict is about (ConflictScope of research-conflict-card): its date, its place or value, or both. */
+export type ConflictCellScope = 'date' | 'place' | 'fact';
+
+/** One cell an open research conflict stands on: ≠ before its value (§16.3). */
+export interface ConflictCell {
+    /** The People table's column. */
+    col: string;
+    /** A union column: the one union the conflict fits; none: the person's own cell (Partner for a couple's fact). */
+    union?: PartnershipId;
+    conflict: ResearchConflict;
+}
+
+/** A person's fact → its date and place columns. */
+const PERSON_FACT_COLUMNS: Readonly<Record<string, readonly [string, string]>> = {
+    BIRT: ['bDate', 'bPlace'], CHR: ['bapDate', 'bapPlace'], DEAT: ['dDate', 'dPlace'], BURI: ['burDate', 'burPlace'],
+};
+/** A couple's fact → its union's date and place columns. */
+const COUPLE_FACT_COLUMNS: Readonly<Record<string, readonly [string, string]>> = {
+    MARR: ['wDate', 'wPlace'], DIV: ['divDate', 'divPlace'],
+};
+/** Facts with one column of their own. */
+const WHOLE_FACT_COLUMNS: Readonly<Record<string, string>> = { NAME: 'name', NPFX: 'titles', NSFX: 'titles', SEX: 'gender' };
+
+const firstLifeEvent = (p: Person, type: 'baptism' | 'burial') => (p.events ?? []).find(e => e.type === type);
+
+/** The first year (3–4 digits) a date says, in any form ("12 MAY 1890", "1890-05-12", "ABT 1890"). */
+function yearOf(text: string | undefined): string {
+    return /(?:^|\D)(\d{3,4})(?!\d)/.exec(text ?? '')?.[1] ?? '';
+}
+
+function looseText(text: string | undefined): string {
+    return (text ?? '').toLocaleLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * The union's value fits one of the conflict's values: the same year for a
+ * date, a place one names the other for a place, either for the whole fact.
+ */
+function unionFits(c: ResearchConflict, scope: ConflictCellScope, date: string | undefined, place: string | undefined): boolean {
+    const year = yearOf(date);
+    const where = looseText(place);
+    return c.values.some(v => {
+        const said = looseText(v.value);
+        const byDate = !!year && yearOf(v.value) === year;
+        const byPlace = where.length > 1 && said.length > 1 && (said.includes(where) || where.includes(said));
+        return scope === 'date' ? byDate : scope === 'place' ? byPlace : byDate || byPlace;
+    });
+}
+
+/**
+ * The cells an open conflict of a person stands on (§16.3): a person's
+ * fact on its date and/or place by the conflict's scope (and on the birth's
+ * or the death's cell where that shows the baptism or the burial instead);
+ * the name, the titles, the sex on theirs; a marriage or a divorce on its
+ * union's cell when its values fit exactly one of the person's unions, else
+ * on the Partner cell. Other facts (EVEN, unknown) have no cell, only the
+ * Conflicts column.
+ */
+export function conflictCells(person: Person, conflicts: readonly ResearchConflict[], unions: readonly Partnership[],
+    scopeOf: (c: ResearchConflict) => ConflictCellScope): ConflictCell[] {
+    const out: ConflictCell[] = [];
+    for (const c of conflicts) {
+        if (c.status === 'decided') continue;
+        const fact = c.fact.trim().toUpperCase();
+        const whole = WHOLE_FACT_COLUMNS[fact];
+        if (whole) { out.push({ col: whole, conflict: c }); continue; }
+        const scope = scopeOf(c);
+        const onDate = scope !== 'place';
+        const onPlace = scope !== 'date';
+        const own = PERSON_FACT_COLUMNS[fact];
+        if (own) {
+            if (onDate) out.push({ col: own[0], conflict: c });
+            if (onPlace) out.push({ col: own[1], conflict: c });
+            // The birth's (death's) cell shows the baptism (burial) when it has no value of its own.
+            const sub = fact === 'CHR' ? { ev: firstLifeEvent(person, 'baptism'), date: person.birthDate, place: person.birthPlace, cols: PERSON_FACT_COLUMNS.BIRT }
+                : fact === 'BURI' ? { ev: firstLifeEvent(person, 'burial'), date: person.deathDate, place: person.deathPlace, cols: PERSON_FACT_COLUMNS.DEAT }
+                : null;
+            if (sub?.ev) {
+                if (onDate && !sub.date && sub.ev.date) out.push({ col: sub.cols[0], conflict: c });
+                if (onPlace && !sub.place?.trim() && sub.ev.place?.trim()) out.push({ col: sub.cols[1], conflict: c });
+            }
+            continue;
+        }
+        const couple = COUPLE_FACT_COLUMNS[fact];
+        if (!couple) continue;
+        const end = fact === 'DIV';
+        const fits = unions.filter(u => unionFits(c, scope, end ? u.endDate : u.startDate, end ? u.endPlace : u.startPlace));
+        if (fits.length !== 1) { out.push({ col: 'partner', conflict: c }); continue; }
+        if (onDate) out.push({ col: couple[0], union: fits[0].id, conflict: c });
+        if (onPlace) out.push({ col: couple[1], union: fits[0].id, conflict: c });
+    }
+    return out;
 }

@@ -290,6 +290,16 @@ function openConflicts(env: ResearchTableEnv, p: Person): ResearchConflict[] {
     return (env.input.conflictsOf?.(p.id) ?? p.research?.conflicts ?? []).filter(c => c.status !== 'decided');
 }
 
+/** A person's open conflicts as the research has them now (§16.3: the ≠ on the cells; one decided in the app is gone at once). */
+export function researchOpenConflicts(env: ResearchTableEnv, p: Person): ResearchConflict[] {
+    return openConflicts(env, p);
+}
+
+/** What a conflict is about in words (§16.3, the ≠'s name): its fact's word, else its title. */
+export function researchConflictWhat(c: ResearchConflict): string {
+    return factWord(c.fact.trim().toUpperCase(), c.title);
+}
+
 /** What waits outside: the live items sent out, and the file's sent waits not said live (by id). */
 function externalWaits(env: ResearchTableEnv, p: Person): { text: string; id: string }[] {
     const out: { text: string; id: string }[] = [];

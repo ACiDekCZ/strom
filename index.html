@@ -9900,9 +9900,35 @@
         /* §16.2 a research cell: mark, count, "+n", then its parts in their tones; a live-only head's dashed tag. */
         .tv-rcell { display: inline-flex; align-items: baseline; gap: 4px; }
         .tv-rmark { flex: none; font-weight: 700; color: var(--accent-text); }
-        .tv-rmark--conf { color: var(--warning-text); }
-        .tv-rmark--agent, .tv-rmark--done, .tv-rmark--new { color: var(--primary); }
+        .tv-rmark--new { color: var(--primary); }
         .tv-rmark--queue { color: var(--text-faint); }
+        /* §16.3 the research's marks: the card's marks (amber circle, --signal-warn) with a rim in the table, so
+           without colour a rimmed circle is the research, a plain circle an error, a square one to check. */
+        .tv-rmark--wait, .tv-rmark--conf, .tv-rmark--q, .tv-rmark--ext {
+            display: inline-flex; align-items: center; justify-content: center; align-self: center; box-sizing: border-box;
+            width: 16px; height: 16px; margin: 0 3px; padding: 0; border: none; border-radius: 50%;
+            background: var(--signal-warn); color: var(--on-signal-warn);
+            font: 700 11px/1 var(--font-sans, system-ui, sans-serif);
+            box-shadow: 0 0 0 1.5px var(--surface), 0 0 0 2.5px var(--signal-warn);
+        }
+        .tv-rmark--conf { font-size: 12px; }
+        /* Waiting on others: a hollow ring with "!" (nothing to decide). */
+        .tv-rmark--ext { background: transparent; border: 1.5px solid var(--signal-warn); color: var(--signal-warn); box-shadow: none; }
+        /* The agent at work: the card's arc, 14 px, in step with every arc (the delay is set when drawn). */
+        .tv-rmark--agent {
+            display: inline-block; align-self: center; box-sizing: border-box; width: 14px; height: 14px; border-radius: 50%;
+            border: 2px solid color-mix(in srgb, var(--primary) 18%, transparent);
+            border-top-color: var(--primary); border-right-color: var(--primary);
+            animation: agSpin 1.4s linear infinite;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .tv-rmark--agent { animation: none; }
+        }
+        .tv-rmark--done { color: var(--primary); font-size: 13px; }
+        /* ≠ on a fact's cell: before the value, no tint; a button that opens the conflicts. */
+        .tv-conf { cursor: pointer; margin: 0 6px 0 3px; }
+        .tv-conf:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+        .tv-cell.has-conf:not(.has-issue) { cursor: default; }
         .tv-rcount { flex: none; font-weight: 600; font-variant-numeric: tabular-nums; }
         .tv-rmore { flex: none; font-size: 12px; font-weight: 600; color: var(--text-light); }
         .tv-rpart { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -9964,9 +9990,12 @@
         .tv-leg-sym { grid-row: span 2; display: flex; align-items: center; min-height: 18px; }
         .tv-leg-name { font-size: 12.5px; font-weight: 600; }
         .tv-leg-text { font-size: 12px; color: var(--text-light); line-height: 1.4; }
+        /* §16.3 the legend's block Research (16i): its heading, rows and the sentence under them. */
+        .tv-leg-head { padding: 2px 14px 2px; font-size: 11.5px; font-weight: 600; color: var(--text-faint); }
+        .tv-leg-row--res .tv-leg-sym { padding-left: 3px; }
+        .tv-leg-note { padding: 2px 14px 6px; font-size: 11.5px; color: var(--text-faint); line-height: 1.45; }
         .tv-leg-sample { font-size: 12px; white-space: nowrap; }
         .tv-leg-computed { color: var(--text-light); }
-        .tv-leg-pill { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border: 1.5px solid var(--primary); border-radius: 999px; color: var(--primary); font-size: 11px; }
         .tv-bubble.tv-bubble--sheet {
             position: relative; width: 100%; max-width: 560px; border: none; border-radius: 16px 16px 0 0;
             padding: 0 0 env(safe-area-inset-bottom, 0px); max-height: 85vh; overflow-y: auto; font-size: 15px;
@@ -10079,6 +10108,9 @@
             /* The pill stays 18 px tall; its target reaches 44 px into the row. */
             .tv-cites-more { position: relative; }
             .tv-cites-more::after { content: ''; position: absolute; inset: -13px -6px; }
+            /* ≠ on a cell (§16.3): a 44 px target around the 16 px mark. */
+            .tv-conf { position: relative; }
+            .tv-conf::after { content: ''; position: absolute; inset: -14px; }
             .tv-search-q { height: 44px; font-size: 16px; }
             .tv-chips { min-height: 52px; }
             .tv-chip { height: 36px; position: relative; }

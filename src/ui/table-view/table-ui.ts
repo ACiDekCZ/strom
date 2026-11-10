@@ -28,7 +28,8 @@ import { strings, getCurrentLanguage, type Language } from '../../strings.js';
 import { uiModule } from '../module.js';
 import { cellOf, columnById, columnLabel, columnNote, dateCell, eventPersons, eventTypeLabel, setResearchOffer, type SortSpec } from './table-columns.js';
 import {
-    applyResearch, researchColumnLiveOff, researchOffer, researchTableEnv, type ResearchColumnId, type ResearchTableEnv, type ResearchTableInput,
+    applyResearch, researchColumnLiveOff, researchConflictWhat, researchOffer, researchOpenConflicts, researchTableEnv,
+    type ResearchColumnId, type ResearchTableEnv, type ResearchTableInput,
 } from './table-research.js';
 import { researchTableLive } from '../research-ui.js';
 import { materialsCountNow, researchConflictsNow } from '../../card-signals.js';
@@ -44,7 +45,7 @@ import {
 } from './table-filterbar.js';
 import {
     buildTableModel, modelIsCurrent, ROW_KEY, ROW_TYPES, rowCounts, rowKey, rowPersonId, rowsOf,
-    type CellName, type EventRow, type RowType, type SourceRow, type TableModel, type TableRow,
+    type CellName, type CellValue, type EventRow, type RowType, type SourceRow, type TableModel, type TableRow,
 } from './table-model.js';
 import { eventEditTarget } from './table-events.js';
 import { TableGrid, type RowAction } from './table-grid.js';
@@ -72,9 +73,10 @@ import {
 import { exportDownloadLabel, exportForm, ViewBar, viewNameForm, type ExportFormat, type ExportSummary } from './table-viewbar.js';
 import { buildTableCsv, exportColumnCount, tableCsvFileName, type TableCsvInput } from './table-export.js';
 import { buildTableXlsx } from './table-xlsx.js';
-import { applyChecks, bandSeverity, CHECK_COLUMNS, CheckIndex, isPlaceColumn, type CellFinding } from './table-checks.js';
+import { applyChecks, bandSeverity, CHECK_COLUMNS, CheckIndex, conflictCells, isPlaceColumn, type CellFinding, type ConflictCell } from './table-checks.js';
+import { conflictScope } from '../person-research-ui.js';
 import { lineCell, lineKey, type GridLine } from './table-subrows.js';
-import { markHtml, type CellIssueMark } from './table-grid.js';
+import { cellText, markHtml, type CellConflictMark, type CellIssueMark } from './table-grid.js';
 import { bubbleHeading, bubbleHtml, citesHtml, closeTableBubble, legendHtml, openBubblePanel, sheetElement, type BubbleCite } from './table-bubble.js';
 import { bridgeChanges, changedKeys, familyKeys, keepOrder, namesList, rowKeysFor, watchEdit } from './table-refresh.js';
 import type { DataChangedDetail } from '../../data.js';
@@ -213,6 +215,75 @@ function redrawTable(draw: (el: HTMLElement) => void): void {
 function lineUnion(line: GridLine): Partnership | null {
     if (line.kind === 'more' || line.row.kind !== 'person' || line.union === null) return null;
     return line.row.unions[line.union] ?? null;
+}
+
+/** The ≠ cells of each person for one research environment (§16.3), worked out when a row is drawn. */
+const conflictCellsMemo = new WeakMap<ResearchTableEnv, Map<string, ConflictCell[]>>();
+
+function personConflictCells(env: ResearchTableEnv, m: TableModel, id: PersonId): ConflictCell[] {
+    let byPerson = conflictCellsMemo.get(env);
+    if (!byPerson) conflictCellsMemo.set(env, byPerson = new Map());
+    let cells = byPerson.get(id);
+    if (!cells) {
+        const row = m.personRows.get(id);
+        const open = row ? researchOpenConflicts(env, row.person) : [];
+        cells = row && open.length ? conflictCells(row.person, open, row.unions, conflictScope) : [];
+        byPerson.set(id, cells);
+    }
+    return cells;
+}
+
+/** The union columns a couple's conflict can stand on (§16.3), in both tables. */
+const CONFLICT_UNION_COLUMNS: ReadonlySet<string> = new Set(['wDate', 'wPlace', 'divDate', 'divPlace']);
+
+/**
+ * The ≠ of a line's cell (§16.3): a person's own fact on the person's row;
+ * a couple's fact on its union's cell (the sub-row, or the row of a person
+ * with one union; the Unions table's row), else on the Partner cell of the
+ * person's row, where a collapsed person's union conflicts stand too.
+ */
+function conflictMarkAt(env: ResearchTableEnv, m: TableModel, line: GridLine, col: ColumnDef, value: CellValue): CellConflictMark | null {
+    if (line.kind === 'more') return null;
+    const row = line.row;
+    let hits: ConflictCell[] = [];
+    if (row.kind === 'person') {
+        const cells = personConflictCells(env, m, row.id);
+        if (!cells.length) return null;
+        if (col.id === 'partner') {
+            if (line.kind !== 'row') return null;
+            hits = cells.filter(c => c.col === 'partner' || (line.union === null && line.expanded === false && !!c.union));
+        } else if (col.unionScoped) {
+            const u = lineUnion(line);
+            hits = u ? cells.filter(c => c.col === col.id && c.union === u.id) : [];
+        } else if (line.kind === 'row') {
+            hits = cells.filter(c => c.col === col.id && !c.union);
+        }
+    } else if (row.kind === 'union' && CONFLICT_UNION_COLUMNS.has(col.id)) {
+        for (const p of [row.union.person1Id, row.union.person2Id]) {
+            hits.push(...personConflictCells(env, m, p).filter(c => c.col === col.id && c.union === row.union.id));
+        }
+    }
+    if (!hits.length) return null;
+    const what = [...new Set(hits.map(h => researchConflictWhat(h.conflict)))].join(', ');
+    return { label: strings.table.res.conflictAria(value.na ? '' : cellText(value), what) };
+}
+
+/** The open conflicts a ≠ of a line's cell stands for (§16.3), the first of them first. */
+function conflictsAt(env: ResearchTableEnv, m: TableModel, line: GridLine, col: ColumnDef): { personId: PersonId; conflictId: string }[] {
+    if (line.kind === 'more') return [];
+    const row = line.row;
+    const ids = row.kind === 'person' ? [row.id] : row.kind === 'union' ? [row.union.person1Id, row.union.person2Id] : [];
+    const out: { personId: PersonId; conflictId: string }[] = [];
+    for (const id of ids) {
+        for (const c of personConflictCells(env, m, id)) {
+            const here = row.kind === 'union' ? c.col === col.id && c.union === row.union.id
+                : col.id === 'partner' ? c.col === 'partner' || !!c.union
+                : col.unionScoped ? c.col === col.id && c.union === lineUnion(line)?.id
+                : c.col === col.id && !c.union;
+            if (here && !out.some(o => o.conflictId === c.conflict.id)) out.push({ personId: id, conflictId: c.conflict.id });
+        }
+    }
+    return out;
 }
 
 /** The findings of a line's cell: its union for a union column of the People table, the value of a place cell. */
@@ -443,6 +514,7 @@ export const tableMethods = uiModule({
                 onMoreCites: (_line, _col, ids, anchor) => this.showTableCites(ids, anchor),
                 onRowMenu: (line, anchor) => this.showTableRowMenu(line, anchor),
                 onIssue: (line, col, cell) => this.showTableFinding(line, col, cell),
+                onConflict: (line, col, mark) => this.showTableConflict(line, col, mark),
                 onToggleUnions: (personId, expand) => this.changeTableColumns(st => setExpanded(st.unions, personId, expand)),
                 onAllUnions: (expand) => this.changeTableColumns(st => setAllExpanded(st.unions, expand)),
                 onRevealUnions: (personId) => this.changeTableColumns(st => {
@@ -601,6 +673,7 @@ export const tableMethods = uiModule({
             coverage: st.coverageRow ? (col) => coverageOf(m, type, rows, col, pass) : undefined,
             selected: st.selected,
             label: `${strings.viewModeSwitch.table} – ${strings.table.rows[type]}`,
+            conflictAt: research ? (line, col, value) => conflictMarkAt(research, m, line, col, value) : undefined,
             issueAt: index ? (line, col): CellIssueMark | null => {
                 const f = cellFindings(index, m, line, col)[0];
                 return f ? { severity: f.severity, label: translateValidationType(f.issue.type) } : null;
@@ -673,6 +746,19 @@ export const tableMethods = uiModule({
             checks = { ...checks, rev: DataManager.getRevision(), index, running: false };
         }
         redrawTable(el => this.renderTableView(el));
+    },
+
+    /**
+     * The ≠ of a research conflict on a cell was clicked (§16.3). Until the
+     * table's own Conflicts bubble (§16.4) takes this over, the person's
+     * "What the research knows" dialog opens on the conflict.
+     */
+    showTableConflict(line: GridLine, colPos: number, _mark: HTMLElement): void {
+        const col = mounted?.display?.columns[colPos];
+        const env = researchMemo?.env;
+        if (!col || !env || !model) return;
+        const at = conflictsAt(env, model, line, col)[0];
+        if (at) this.showPersonResearchDialog(at.personId, { conflict: at.conflictId });
     },
 
     /** A finding's cell was clicked or Enter pressed on it (§7.4): the row selected, the bubble opened. */
@@ -761,13 +847,16 @@ export const tableMethods = uiModule({
     /** "Marks ⓘ" in the status line (§7.3): what each mark and the other cell states mean. */
     showTableLegend(btn: HTMLElement): void {
         const title = strings.table.legendTitle;
+        // §16.3: a research tree's legend ends with the block Research (an archive, a read-only copy: its marks from the data).
+        const env = researchMemo?.env ?? null;
+        const research = !env ? null : env.input.kind === 'research' && !env.input.readOnly ? 'full' : 'data';
         if (isPhoneBar()) {
-            this.showTableSheet(sheetElement(title, legendHtml(), 'legend', () => this.hideBottomSheet()));
+            this.showTableSheet(sheetElement(title, legendHtml(research), 'legend', () => this.hideBottomSheet()));
             return;
         }
         openBubblePanel({
             rect: btn.getBoundingClientRect(), label: title, kind: 'legend', focusBack: () => btn,
-            html: `<div class="tv-bub-title">${title}</div>${legendHtml()}`,
+            html: `<div class="tv-bub-title">${title}</div>${legendHtml(research)}`,
         });
     },
 
