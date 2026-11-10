@@ -3,17 +3,26 @@
  * Smart heuristics to detect genealogical inconsistencies and data errors
  */
 
-import { StromData, Person, Partnership, PersonId, PartnershipId, Source, personSourceIds, partnershipSourceIds, partnershipParticipants, gendersCompatible } from './types.js';
-import { parseFlexDate, FlexDate } from './dates.js';
+import { StromData, Person, Partnership, PersonId, PartnershipId, Source, LifeEventType, personSourceIds, partnershipSourceIds, partnershipParticipants, gendersCompatible } from './types.js';
+import { parseFlexDate, FlexDate, ageRangeBetween, approxAgeBetween } from './dates.js';
 import { collectPlaces } from './places.js';
 import { godparentLeads } from './godparents.js';
 import { strings } from './strings.js';
 import { shownNameOrEmpty } from './person-name.js';
-import { readRecordedAge } from './recorded-age.js';
+import { readRecordedAge, recordedAgeGap } from './recorded-age.js';
 
 // ==================== ISSUE TYPES ====================
 
 export type IssueSeverity = 'error' | 'warning' | 'info';
+
+/**
+ * Which fact of the person a finding is about, where its type does not say
+ * it (spec 073 §7.1): the recorded age at the birth, the wedding or the
+ * death (recordedAgeMismatch), the wedding of an age finding, the event of
+ * an event finding (its LifeEventType). The Table view puts the finding's
+ * mark on that fact's cells.
+ */
+export type IssueField = 'birth' | 'death' | 'wedding' | LifeEventType;
 
 export interface ValidationIssue {
     id: string;
@@ -35,6 +44,8 @@ export interface ValidationIssue {
      * year its date can mean. Part of the finding's key (qualityFinding).
      */
     year?: number;
+    /** The fact the finding is about where the type does not say it (IssueField). */
+    field?: IssueField;
 }
 
 export interface ValidationResult {
@@ -64,7 +75,7 @@ export function validateTreeData(data: StromData): ValidationResult {
         partnershipIds?: PartnershipId[],
         detail?: string,
         subject?: string,
-        extra?: Pick<ValidationIssue, 'year'>
+        extra?: Pick<ValidationIssue, 'year' | 'field'>
     ) => {
         issues.push({
             id: `issue_${++issueId}`,
@@ -75,7 +86,8 @@ export function validateTreeData(data: StromData): ValidationResult {
             partnershipIds,
             ...(detail ? { detail } : {}),
             ...(subject ? { subject } : {}),
-            ...(extra?.year !== undefined ? { year: extra.year } : {})
+            ...(extra?.year !== undefined ? { year: extra.year } : {}),
+            ...(extra?.field ? { field: extra.field } : {})
         });
     };
 
@@ -88,6 +100,7 @@ export function validateTreeData(data: StromData): ValidationResult {
     checkOrphanedReferences(data, addIssue);
     checkParentCount(data, addIssue);
     checkAgePlausibility(data, addIssue);
+    checkRecordedAges(data, addIssue);
     checkGenerationConsistency(data, addIssue);
     checkCrossbranchAnomalies(data, addIssue);
     checkLifeEvents(data, addIssue);
@@ -488,12 +501,42 @@ function checkParentCount(
 // ==================== CHECK: AGE PLAUSIBILITY ====================
 
 /**
- * Check birth dates for plausibility (parent should be older than child)
+ * The years an age between two dates can be (spec 073 §7.6): the exact range
+ * on day, month or year dates; an estimate (~) on either side gives the
+ * difference of the years as one value; a "before" or "after" date gives no
+ * age to judge. Null without both dates or with the end before the start.
  */
-function checkAgePlausibility(
-    data: StromData,
-    addIssue: (s: IssueSeverity, t: string, m: string, p?: PersonId[], pp?: PartnershipId[]) => void
-): void {
+function ageSpan(from: FlexDate, to: FlexDate, fromText: string | undefined, toText: string | undefined): { min: number; max: number } | null {
+    if (from.qualifier === '<' || from.qualifier === '>' || to.qualifier === '<' || to.qualifier === '>') return null;
+    const range = ageRangeBetween(fromText, toText);
+    if (range) return range;
+    const approx = approxAgeBetween(fromText, toText);
+    return approx === null ? null : { min: approx, max: approx };
+}
+
+/** "15", "15–16": an age span as the detail line writes it. */
+function spanText(span: { min: number; max: number }): string {
+    return span.min === span.max ? String(span.min) : `${span.min}–${span.max}`;
+}
+
+/** The milder age limits of a mother and a father at a child's birth (spec 073 §7.6). */
+const MOTHER_MIN_AGE = 16;
+const MOTHER_MAX_AGE = 45;
+const FATHER_MIN_AGE = 18;
+const FATHER_MAX_AGE = 60;
+
+/**
+ * Check birth dates for plausibility (parent should be older than child).
+ *
+ * Beside the hard limits (a parent under 12 or over 80, only when CERTAIN),
+ * a mother under 16 or over 45 and a father under 18 or over 60 are to be
+ * checked (spec 073 §7.6, warnings): a biological parent of known sex, the
+ * age from both birth dates, reported when at least one end of its range
+ * crosses the limit ("15–16" is under 16). A pair already reported by a
+ * stricter type (younger than the child, under 12, over 80) gets no milder
+ * finding: one mark per cell.
+ */
+function checkAgePlausibility(data: StromData, addIssue: AddIssue): void {
     const MIN_PARENT_AGE = 12; // Minimum age to be a parent
     const MAX_PARENT_AGE = 80; // Maximum plausible age to have a child
 
@@ -540,7 +583,68 @@ function checkAgePlausibility(
                     `${getPersonName(parent)} was ${ageAtBirth} when ${getPersonName(person)} was born`,
                     [parentId, personId]
                 );
+            } else {
+                checkParentAgeLimits(person, parent, parentDate, childDate, addIssue);
             }
+        }
+    }
+}
+
+/** The milder limits of checkAgePlausibility for one parent and child. */
+function checkParentAgeLimits(child: Person, parent: Person, parentDate: FlexDate, childDate: FlexDate, addIssue: AddIssue): void {
+    if (parent.gender !== 'female' && parent.gender !== 'male') return;
+    if ((child.parentRelTypes?.[parent.id] ?? 'biological') !== 'biological') return;
+    const span = ageSpan(parentDate, childDate, parent.birthDate, child.birthDate);
+    if (!span) return;
+    const mother = parent.gender === 'female';
+    const min = mother ? MOTHER_MIN_AGE : FATHER_MIN_AGE;
+    const max = mother ? MOTHER_MAX_AGE : FATHER_MAX_AGE;
+    let type: string | null = null;
+    let message = '';
+    if (span.min < min) {
+        type = mother ? 'motherTooYoung16' : 'fatherTooYoung18';
+        message = `${getPersonName(parent)} was under ${min} when ${getPersonName(child)} was born`;
+    } else if (span.max > max) {
+        type = mother ? 'motherTooOld45' : 'fatherTooOld60';
+        message = `${getPersonName(parent)} was over ${max} when ${getPersonName(child)} was born`;
+    }
+    if (!type) return;
+    addIssue('warning', type, message, [parent.id, child.id], undefined,
+        `* ${parent.birthDate} → * ${child.birthDate}: ${spanText(span)}`, undefined, { field: 'birth' });
+}
+
+/**
+ * A recorded age more than two years off the one the dates give (spec 073
+ * §7.6, a warning): the age at the wedding (Partnership.ages), at the death
+ * (deathAge) and at the birth (birthAge), each against the birth date.
+ * A word ("infant"), an age with a qualifier or one that cannot be read is
+ * not compared (recordedAgeGap).
+ */
+function checkRecordedAges(data: StromData, addIssue: AddIssue): void {
+    const SLACK_YEARS = 2;
+    const report = (p: Person, field: 'birth' | 'death' | 'wedding', recorded: string, event: string,
+        mark: string, partnershipId?: PartnershipId) => {
+        const gap = recordedAgeGap(recorded, p.birthDate, event);
+        if (gap === null || gap <= SLACK_YEARS) return;
+        const span = ageRangeBetween(p.birthDate, event)!;
+        const eventDate = parseFlexDate(event);
+        addIssue('warning', 'recordedAgeMismatch',
+            `${getPersonName(p)}: the recorded age differs by ${gap} years from the dates`,
+            [p.id], partnershipId ? [partnershipId] : undefined,
+            `${mark} ${event}: ${recorded.trim()} ≠ ${spanText(span)}`, undefined,
+            { field, ...(field === 'wedding' && eventDate ? { year: earliestYear(eventDate) } : {}) });
+    };
+    for (const p of Object.values(data.persons)) {
+        if (!p.birthDate) continue;
+        if (p.birthAge) report(p, 'birth', p.birthAge, p.birthDate, '*');
+        if (p.deathAge && p.deathDate) report(p, 'death', p.deathAge, p.deathDate, '†');
+    }
+    for (const [partnershipId, u] of Object.entries(data.partnerships) as [PartnershipId, Partnership][]) {
+        if (!u.ages || !u.startDate) continue;
+        for (const id of [u.person1Id, u.person2Id]) {
+            const p = data.persons[id];
+            const recorded = u.ages[id];
+            if (p?.birthDate && recorded) report(p, 'wedding', recorded, u.startDate, '⚭', partnershipId);
         }
     }
 }
@@ -810,7 +914,7 @@ function checkPhotoData(data: StromData, addIssue: AddIssue): void {
 type AddIssue = (
     s: IssueSeverity, t: string, m: string,
     p?: PersonId[], pp?: PartnershipId[], detail?: string, subject?: string,
-    extra?: Pick<ValidationIssue, 'year'>
+    extra?: Pick<ValidationIssue, 'year' | 'field'>
 ) => void;
 
 /**
@@ -863,6 +967,7 @@ function earliestYear(d: FlexDate): number {
 function checkDateConsistency(data: StromData, addIssue: AddIssue): void {
     const MAX_LIFESPAN_YEARS = 115;
     const CHILD_MARRIAGE_YEARS = 14;
+    const MARRIAGE_MIN_YEARS = 16;
     const PARTNER_AGE_GAP_YEARS = 40;
     const POSTHUMOUS_FATHER_MONTHS = 10; // conception before death + gestation
 
@@ -888,14 +993,14 @@ function checkDateConsistency(data: StromData, addIssue: AddIssue): void {
             const label = ev.type === 'custom' ? (ev.customLabel?.trim() || 'custom') : ev.type;
             if (certainlyBefore(evDate, birth)) {
                 addIssue('warning', 'eventBeforeBirth', `${name}: event dated before birth`,
-                    [personId], undefined, `${label} ${ev.date} < * ${person.birthDate}`);
+                    [personId], undefined, `${label} ${ev.date} < * ${person.birthDate}`, undefined, { field: ev.type });
             }
             // Burial, cremation, probate and a will's reading naturally come
             // after death; anything else is suspicious.
             if (!AFTER_DEATH_EVENT_TYPES.has(ev.type) && certainlyBefore(death, evDate)) {
                 addIssue('warning', 'eventAfterDeath', `${name}: event dated after death`,
                     [personId], undefined, `${label} ${ev.date} > † ${person.deathDate}`,
-                    undefined, { year: earliestYear(evDate) });
+                    undefined, { year: earliestYear(evDate), field: ev.type });
             }
         }
 
@@ -939,20 +1044,29 @@ function checkDateConsistency(data: StromData, addIssue: AddIssue): void {
                 if (certainlyBefore(wedding, birth)) {
                     addIssue('error', 'weddingBeforeBirth',
                         `${getPersonName(p)}: wedding dated before birth`,
-                        [p.id], [partnershipId], `⚭ ${partnership.startDate} < * ${p.birthDate}`);
+                        [p.id], [partnershipId], `⚭ ${partnership.startDate} < * ${p.birthDate}`,
+                        undefined, { field: 'wedding' });
                 } else if (birth) {
                     const maxAgeYears = (monthRange(wedding).max - monthRange(birth).min) / 12;
+                    const span = ageSpan(birth, wedding, p.birthDate, partnership.startDate);
                     if (maxAgeYears < CHILD_MARRIAGE_YEARS) {
                         addIssue('warning', 'childMarriage',
                             `${getPersonName(p)}: married before the age of ${CHILD_MARRIAGE_YEARS}`,
-                            [p.id], [partnershipId], `⚭ ${partnership.startDate}, * ${p.birthDate}`);
+                            [p.id], [partnershipId], `⚭ ${partnership.startDate}, * ${p.birthDate}`,
+                            undefined, { field: 'wedding' });
+                    } else if (span && span.min < MARRIAGE_MIN_YEARS) {
+                        // The milder limit (spec 073 §7.6): one end of the age's range is enough.
+                        addIssue('warning', 'marriageUnder16',
+                            `${getPersonName(p)}: married under the age of ${MARRIAGE_MIN_YEARS}`,
+                            [p.id], [partnershipId], `⚭ ${partnership.startDate}, * ${p.birthDate}: ${spanText(span)}`,
+                            undefined, { year: earliestYear(wedding), field: 'wedding' });
                     }
                 }
                 if (certainlyBefore(death, wedding)) {
                     addIssue('warning', 'weddingAfterDeath',
                         `${getPersonName(p)}: wedding dated after death`,
                         [p.id], [partnershipId], `⚭ ${partnership.startDate} > † ${p.deathDate}`,
-                        undefined, { year: earliestYear(wedding) });
+                        undefined, { year: earliestYear(wedding), field: 'wedding' });
                 }
             }
         }
@@ -1302,6 +1416,12 @@ const VALIDATION_TYPE_KEYS: Record<string, string> = {
     'weddingBeforeBirth': 'valWeddingBeforeBirth',
     'weddingAfterDeath': 'valWeddingAfterDeath',
     'childMarriage': 'valChildMarriage',
+    'marriageUnder16': 'valMarriageUnder16',
+    'motherTooYoung16': 'valMotherTooYoung16',
+    'motherTooOld45': 'valMotherTooOld45',
+    'fatherTooYoung18': 'valFatherTooYoung18',
+    'fatherTooOld60': 'valFatherTooOld60',
+    'recordedAgeMismatch': 'valRecordedAgeMismatch',
     'childAfterMotherDeath': 'valChildAfterMotherDeath',
     'childAfterFatherDeath': 'valChildAfterFatherDeath',
     'childAfterParentDeath': 'valChildAfterParentDeath',
@@ -1409,14 +1529,19 @@ export function validationCounts(issues: readonly ValidationIssue[]): { errors: 
  * ZADANI_VYZKUM "Reakce aplikace" (3)): the type, the sorted ids of its
  * people, and the subject where the type has one — the year of the event or
  * the wedding after death (four digits), the godparent's name (NFC, trimmed);
- * none for a possible duplicate. A finding marked "not an error" is matched by
+ * none for a possible duplicate. The app's own types (spec 073 §7.6) name the
+ * wedding's year of a marriage under 16, and the fact (and the wedding's year)
+ * of a recorded age that differs. A finding marked "not an error" is matched by
  * this, so the same finding found again stays hidden.
  */
 export function qualityFinding(issue: ValidationIssue): { kind: string; persons: string[]; subject?: string } {
     const persons = [...new Set((issue.personIds ?? []).map(String))].sort();
     let subject: string | undefined;
-    if (issue.type === 'eventAfterDeath' || issue.type === 'weddingAfterDeath') {
+    if (issue.type === 'eventAfterDeath' || issue.type === 'weddingAfterDeath' || issue.type === 'marriageUnder16') {
         subject = issue.year !== undefined ? String(issue.year).padStart(4, '0') : undefined;
+    } else if (issue.type === 'recordedAgeMismatch') {
+        // The fact, and the wedding's year: a person's ages at two weddings and at the death are three findings.
+        subject = [issue.field ?? '', issue.year !== undefined ? String(issue.year).padStart(4, '0') : ''].filter(Boolean).join(' ') || undefined;
     } else if (issue.type !== 'possibleDuplicate') {
         subject = issue.subject?.normalize('NFC').trim() || undefined;
     }

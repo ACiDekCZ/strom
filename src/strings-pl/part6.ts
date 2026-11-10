@@ -296,7 +296,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         postImportReview: 'Pokaż',
         validationPassed: 'Nie znaleziono problemów',
         validationErrors: 'błędy',
-        validationWarnings: 'ostrzeżenia',
+        validationWarnings: 'do sprawdzenia',
         validationInfos: 'informacje',
         // Tree validation messages
         valCycle: 'Wykryto cykl przodków',
@@ -326,6 +326,12 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         valWeddingBeforeBirth: 'Ślub datowany przed urodzeniem partnera',
         valWeddingAfterDeath: 'Ślub datowany po zgonie partnera',
         valChildMarriage: 'Ślub w wieku dziecięcym',
+        valMotherTooYoung16: 'Matka przy urodzeniu poniżej 16 lat',
+        valMotherTooOld45: 'Matka przy urodzeniu powyżej 45 lat',
+        valFatherTooYoung18: 'Ojciec przy urodzeniu poniżej 18 lat',
+        valFatherTooOld60: 'Ojciec przy urodzeniu powyżej 60 lat',
+        valMarriageUnder16: 'Ślub w wieku poniżej 16 lat',
+        valRecordedAgeMismatch: 'Zapisany wiek różni się o więcej niż 2 lata',
         valChildAfterMotherDeath: 'Dziecko urodzone po śmierci matki',
         valChildAfterFatherDeath: 'Dziecko urodzone długo po śmierci ojca',
         valChildAfterParentDeath: 'Dziecko urodzone długo po śmierci rodzica',
@@ -349,11 +355,11 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         // Problems and leads, "Not an error" (spec 021 K1.4, K1.5)
         summaryErrors: (e: number, w: number, l: number) => [
             e ? nPl(e, 'błąd', 'błędy', 'błędów') : '',
-            w ? nPl(w, 'ostrzeżenie', 'ostrzeżenia', 'ostrzeżeń') : '',
+            w ? `${w} do sprawdzenia` : '',
             l ? nPl(l, 'wskazówka', 'wskazówki', 'wskazówek') : '',
         ].filter(Boolean).join(', ') + '.',
         summaryNoErrors: (w: number, l: number) => 'Bez błędów. ' + [
-            w ? nPl(w, 'ostrzeżenie', 'ostrzeżenia', 'ostrzeżeń') : '',
+            w ? `${w} do sprawdzenia` : '',
             l ? nPl(l, 'wskazówka', 'wskazówki', 'wskazówek') : '',
         ].filter(Boolean).join(', ') + '.',
         summaryLeadsOnly: (l: number) => `Bez problemów. ${nPl(l, 'wskazówka', 'wskazówki', 'wskazówek')}.`,

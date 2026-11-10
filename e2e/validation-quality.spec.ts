@@ -82,7 +82,7 @@ test.describe('validation: Problems and Leads', () => {
         const treeId = await importTree(page, lhotak());
         const modal = await openValidation(page, treeId);
 
-        await expect(modal.locator('.vq-summary-text')).toHaveText('1 error, 1 warning, 2 leads.');
+        await expect(modal.locator('.vq-summary-text')).toHaveText('1 error, 1 to check, 2 leads.');
         // Problems: errors and warnings; the error's group open, the warning's closed.
         await expect(sectionHead(modal, 'problem')).toHaveAttribute('aria-expanded', 'true');
         await expect(sectionHead(modal, 'problem').locator('.vq-section-count')).toHaveText('2');
@@ -171,7 +171,7 @@ test.describe('validation: Problems and Leads', () => {
         // Restore: back in its group, the list gone; undoable as an edit, so the mark is out of the data.
         await row.locator('.vq-restore').click();
         await expect(group(modal, 'eventAfterDeath').locator('.vq-group-count')).toHaveText('1');
-        await expect(modal.locator('.vq-summary-text')).toHaveText('1 error, 1 warning, 2 leads.');
+        await expect(modal.locator('.vq-summary-text')).toHaveText('1 error, 1 to check, 2 leads.');
         await expect(modal.locator('.vq-dismissed')).toHaveCount(0);
         expect(await marks(page)).toEqual([]);
     });
@@ -181,13 +181,13 @@ test.describe('validation: Problems and Leads', () => {
         const modal = await openValidation(page, treeId);
         await group(modal, 'deathBeforeBirth').locator('.vq-dismiss').click();
         await expect(group(modal, 'deathBeforeBirth')).toHaveCount(0);
-        await expect(modal.locator('.vq-summary-text')).toHaveText('No errors. 1 warning, 2 leads.');
+        await expect(modal.locator('.vq-summary-text')).toHaveText('No errors. 1 to check, 2 leads.');
 
         // The toast stands above the dialog's overlay: its Undo takes a click.
         const toast = page.locator('.toast', { hasText: 'This finding will not be reported again.' });
         await toast.locator('.toast-action', { hasText: 'Undo' }).click({ timeout: 5000 });
         await expect(group(modal, 'deathBeforeBirth').locator('.vq-row')).toHaveCount(1);
-        await expect(modal.locator('.vq-summary-text')).toHaveText('1 error, 1 warning, 2 leads.');
+        await expect(modal.locator('.vq-summary-text')).toHaveText('1 error, 1 to check, 2 leads.');
         await expect(modal.locator('.vq-dismissed')).toHaveCount(0);
         expect(await marks(page)).toEqual([]);
     });
@@ -205,7 +205,7 @@ test.describe('validation: Problems and Leads', () => {
 
         await expect(page.locator('.toast', { hasText: 'This pair will not be reported again.' })).toBeVisible();
         await expect(group(modal, 'possibleDuplicate')).toHaveCount(0);
-        await expect(modal.locator('.vq-summary-text')).toHaveText('1 error, 1 warning, 1 lead.');
+        await expect(modal.locator('.vq-summary-text')).toHaveText('1 error, 1 to check, 1 lead.');
         expect(await marks(page)).toEqual([expect.objectContaining({ kind: 'possibleDuplicate', persons: ['jan1', 'jan2'] })]);
         await modal.locator('.vq-dismissed-head').click();
         const row = modal.locator('.vq-dismissed-row');
@@ -240,7 +240,7 @@ test.describe('validation: Problems and Leads', () => {
         await page.evaluate((id) => window.Strom.UI.showTreeOverview(id, { section: 'quality' }), treeId);
         const quality = page.locator('#tree-overview-modal .tov-sec[data-section="quality"]');
         await expect(quality).toHaveAttribute('data-ready', 'true');
-        await expect(quality.locator('.tov-summary')).toHaveText('1 error, 1 warning, 2 leads.');
+        await expect(quality.locator('.tov-summary')).toHaveText('1 error, 1 to check, 2 leads.');
         await expect(quality.locator('.tov-finding')).toHaveCount(2);
         await expect(quality.locator('.tov-finding').first()).toHaveClass(/tov-finding--error/);
         await expect(quality.locator('.tov-leads')).toHaveText('2 leads ›');

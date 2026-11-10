@@ -527,11 +527,11 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
         // Data quality
         consistencyTitle: 'Spójność',
         countErrors: (n: number) => nPl(n, 'błąd', 'błędy', 'błędów'),
-        countWarnings: (n: number) => nPl(n, 'ostrzeżenie', 'ostrzeżenia', 'ostrzeżeń'),
+        countWarnings: (n: number) => `${n} do sprawdzenia`,
         countNotes: (n: number) => nPl(n, 'uwaga', 'uwagi', 'uwag'),
         noErrors: (w: number, p: number) => w === 0 && p === 0
-            ? 'Bez błędów, ostrzeżeń i uwag.'
-            : `Bez błędów. ${[w ? nPl(w, 'ostrzeżenie', 'ostrzeżenia', 'ostrzeżeń') : '', p ? nPl(p, 'uwaga', 'uwagi', 'uwag') : ''].filter(Boolean).join(', ')}.`,
+            ? 'Bez błędów, ustaleń do sprawdzenia i uwag.'
+            : `Bez błędów. ${[w ? `${w} do sprawdzenia` : '', p ? nPl(p, 'uwaga', 'uwagi', 'uwag') : ''].filter(Boolean).join(', ')}.`,
         moreIssues: (n: number) => `i jeszcze ${n}…`,
         findingGodparent: (name: string) => `Rodzic chrzestny: ${name}`,
         findingPlace: (place: string) => `Miejsce: ${place}`,
