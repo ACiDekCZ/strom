@@ -155,14 +155,15 @@ describe('DataManager: saving and deleting a view', () => {
 
 describe('views and a row type\'s state (§9.2–§9.4)', () => {
     it('the built-in views in their order, with their row types', () => {
-        expect(builtinViews().map(v => v.name)).toEqual(['Overview', 'Births and parents', 'Marriages', 'Deaths', 'Sources and citations', 'Gaps', 'Checks']);
-        expect(builtinViews().map(v => v.rowType)).toEqual(['persons', 'persons', 'unions', 'persons', 'persons', 'persons', 'persons']);
+        expect(builtinViews().map(v => v.name)).toEqual(['Overview', 'Births and parents', 'Marriages', 'Deaths', 'Sources and citations', 'Gaps', 'Checks', 'All events']);
+        expect(builtinViews().map(v => v.rowType)).toEqual(['persons', 'persons', 'unions', 'persons', 'persons', 'persons', 'persons', 'events']);
         expect(BUILTIN_VIEWS.every(n => isBuiltinId(builtinView(n).id))).toBe(true);
         expect(builtinView('deaths').filter.items).toEqual([{ chip: 'deceased' }]);
         expect(builtinView('checks').sort).toEqual([{ col: 'topSev', dir: -1 }, { col: 'nFind', dir: -1 }]);
         expect(builtinView('gaps').unions).toEqual({ collapsed: true, except: [] });
         expect(defaultViewId('persons')).toBe(builtinView('overview').id);
         expect(defaultViewId('unions')).toBe(builtinView('marriages').id);
+        expect(defaultViewId('events')).toBe(builtinView('events').id);
     });
 
     it('the default state is the default view, unchanged', () => {
@@ -229,9 +230,10 @@ describe('views and a row type\'s state (§9.2–§9.4)', () => {
     });
 
     it('custom views alphabetically, without row types the table does not show', () => {
-        const list = [saved('tv-2', 'Úmrtí v Brně'), saved('tv-1', 'Antonínové'), saved('tv-3', 'Události', { rowType: 'events' })];
-        expect(customViews(list).map(v => v.id)).toEqual(['tv-1', 'tv-2']);
-        expect(findView('tv-3', list)).toBeNull();
+        const list = [saved('tv-2', 'Úmrtí v Brně'), saved('tv-1', 'Antonínové'), saved('tv-3', 'Události', { rowType: 'events' }), saved('tv-4', 'Prameny', { rowType: 'sources' })];
+        expect(customViews(list).map(v => v.id)).toEqual(['tv-1', 'tv-3', 'tv-2']);
+        expect(findView('tv-3', list)?.rowType).toBe('events');
+        expect(findView('tv-4', list)).toBeNull();
         expect(findView(builtinView('gaps').id, list)?.name).toBe('Gaps');
     });
 
@@ -268,7 +270,7 @@ describe('the working state in localStorage (§9.1)', () => {
     it('ignores what it cannot read and survives blocked storage', () => {
         store.set(workStorageKey('t1'), '{not json');
         expect(readTableWork('t1')).toBeNull();
-        store.set(workStorageKey('t1'), JSON.stringify({ rowType: 'events', open: { persons: 5 }, work: { persons: { rowType: 'unions' } } }));
+        store.set(workStorageKey('t1'), JSON.stringify({ rowType: 'sources', open: { persons: 5 }, work: { persons: { rowType: 'unions' } } }));
         expect(readTableWork('t1')).toEqual({ rowType: 'persons', open: {}, work: {} });
         vi.stubGlobal('localStorage', {
             getItem: () => { throw new Error('blocked'); },
@@ -284,9 +286,9 @@ describe('opening, switching and keeping views in the table state (§9.2, §9.3)
         const state = defaultTableState();
         restoreTableState(state, null, undefined);
         expect(state.restored).toBe(true);
-        expect(state.open).toEqual({ persons: 'b:overview', unions: 'b:marriages' });
+        expect(state.open).toEqual({ persons: 'b:overview', unions: 'b:marriages', events: 'b:events' });
         expect(viewChanged(openViewOf(state, 'persons', undefined), state.types.persons)).toBe(false);
-        expect(tableWorkOf(state, undefined)).toEqual({ rowType: 'persons', open: { persons: 'b:overview', unions: 'b:marriages' }, work: {} });
+        expect(tableWorkOf(state, undefined)).toEqual({ rowType: 'persons', open: { persons: 'b:overview', unions: 'b:marriages', events: 'b:events' }, work: {} });
     });
 
     it('switching keeps the changes of the view left until it is chosen again, and switches the row type', () => {

@@ -13,7 +13,7 @@
  */
 
 import type { Person, PersonId, Partnership, PartnershipId, StromData } from '../../types.js';
-import { rowKey, type RowType, type TableModel, type TableRow } from './table-model.js';
+import { rowKey, sameRow, type RowType, type TableModel, type TableRow } from './table-model.js';
 
 /** The rows in their kept order and those of them that no longer pass (their row keys). */
 export interface KeptRows {
@@ -34,7 +34,7 @@ export function keepOrder(m: TableModel, previous: readonly TableRow[], fresh: r
     const out = new Set<string>();
     for (const old of previous) {
         const key = rowKey(old);
-        const row = old.kind === 'person' ? m.personRows.get(old.id) : m.unionRows.get(old.id);
+        const row = sameRow(m, old);
         if (!row || seen.has(key)) continue;
         seen.add(key);
         rows.push(row);

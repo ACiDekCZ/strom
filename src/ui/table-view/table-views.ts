@@ -22,7 +22,7 @@ import {
     applyColumnSetup, columnSetupOf, defaultTypeState, type ColumnSetup, type RowTypeState, type TableState,
 } from './table-state.js';
 
-export const BUILTIN_VIEWS = ['overview', 'births', 'marriages', 'deaths', 'sources', 'gaps', 'checks'] as const;
+export const BUILTIN_VIEWS = ['overview', 'births', 'marriages', 'deaths', 'sources', 'gaps', 'checks', 'events'] as const;
 export type BuiltinViewName = typeof BUILTIN_VIEWS[number];
 
 const BUILTIN_PREFIX = 'b:';
@@ -68,6 +68,10 @@ const BUILTIN_DEFS: Record<BuiltinViewName, BuiltinDef> = {
         rowType: 'persons', pinned: 1, sort: [{ col: 'topSev', dir: 'desc' }, { col: 'nFind', dir: 'desc' }], chips: ['finding'],
         columns: ['name', 'topSev', 'nFind', 'bDate', 'dDate', 'fAge', 'mAge', 'partner', 'wDate', 'wAge', 'wAgeRec'],
     },
+    events: {
+        rowType: 'events', columns: DEFAULT_VIEWS.events.columns, widths: DEFAULT_VIEWS.events.widths,
+        pinned: DEFAULT_VIEWS.events.pinned, sort: DEFAULT_VIEWS.events.sort,
+    },
 };
 
 export function builtinId(name: BuiltinViewName): string {
@@ -78,9 +82,9 @@ export function isBuiltinId(id: string): boolean {
     return id.startsWith(BUILTIN_PREFIX) && (BUILTIN_VIEWS as readonly string[]).includes(id.slice(BUILTIN_PREFIX.length));
 }
 
-/** The view a row type opens with (§2: Overview for people, Marriages for unions). */
+/** The view a row type opens with (§2: Overview for people, Marriages for unions, All events for events). */
 export function defaultViewId(type: RowType): string {
-    return builtinId(type === 'persons' ? 'overview' : 'marriages');
+    return builtinId(type === 'persons' ? 'overview' : type === 'unions' ? 'marriages' : 'events');
 }
 
 /** A built-in view as a `TableView` (its name in the current language). */
@@ -105,7 +109,7 @@ export function builtinViews(): TableView[] {
     return BUILTIN_VIEWS.map(builtinView);
 }
 
-/** A row type the table shows (P1: people and unions; §9.1 also names events and sources). */
+/** A row type the table shows (people, unions, events; §9.1 also names sources). */
 export function isShownRowType(type: TableViewRowType): type is RowType {
     return (ROW_TYPES as readonly string[]).includes(type);
 }

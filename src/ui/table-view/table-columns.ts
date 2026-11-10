@@ -8,24 +8,26 @@
  * the main row reads the first, the union sub-rows each their own — §3).
  */
 
-import type { LifeEvent, LifeEventType, Partnership, Person, PersonId } from '../../types.js';
+import type { EventParticipant, LifeEvent, LifeEventType, ParticipantRole, Partnership, Person, PersonId } from '../../types.js';
 import { parentSlots, partnershipSourceIds, personSourceIds } from '../../types.js';
 import { ageRangeBetween, approxAgeBetween, flexDateParts, parseFlexDate, type DateQualifier } from '../../dates.js';
 import { recordedAgeGap } from '../../recorded-age.js';
 import { shownNameOrEmpty } from '../../person-name.js';
 import { findRelationship } from '../../kinship.js';
 import { rodOf, siblingsOf, sortByBirth } from '../../lineage.js';
-import { sortLifeEvents, eventValueIsOnTag } from '../../events.js';
+import { sortLifeEvents, eventValueIsOnTag, coupleEventLabel } from '../../events.js';
+import { lifeEventLabel } from '../../person-sources.js';
 import { factReliability, type ReliabilityStepName } from '../../reliability.js';
 import { strings, type StringsType } from '../../strings.js';
-import { dateNumber, type CellValue, type PersonRow, type RowType, type TableContext, type TableModel, type TableRow, type UnionRow } from './table-model.js';
+import { dateNumber, type CellName, type CellValue, type EventRow, type PersonRow, type RowType, type TableContext, type TableModel, type TableRow, type UnionRow } from './table-model.js';
 
 export type ColumnKind = 'text' | 'date' | 'age' | 'number' | 'percent' | 'pill' | 'link';
 
 /** Column groups in their order (People first, then the Unions table's own). */
 export const PERSON_GROUPS = ['person', 'birth', 'parents', 'union', 'divorce', 'death', 'events', 'sources', 'rel', 'checks'] as const;
 export const UNION_GROUPS = ['pair', 'wed', 'divorce', 'uextra'] as const;
-export type ColumnGroup = typeof PERSON_GROUPS[number] | typeof UNION_GROUPS[number];
+export const EVENT_GROUPS = ['event', 'participants', 'source'] as const;
+export type ColumnGroup = typeof PERSON_GROUPS[number] | typeof UNION_GROUPS[number] | typeof EVENT_GROUPS[number];
 
 export type ColumnLabelKey = keyof StringsType['table']['col'];
 
@@ -598,13 +600,162 @@ export const UNION_COLUMNS: readonly ColumnDef[] = cols('unions', [
     { id: 'uComp', group: 'uextra', label: 'uComp', width: 124, kind: 'percent', computed: true, get: (c, r) => unionComp(asUnion(r).union, unionPartners(c, asUnion(r)).p2) },
 ]);
 
+// ---------------------------------------------------------------------------
+// Events (§14.1)
+
+const asEvent = (row: TableRow): EventRow => row as EventRow;
+
+/** An event's people as the cell lists them: a union's blood relative first (as Partner 1, §2b). */
+export function eventPersons(ctx: TableContext, row: EventRow): Person[] {
+    const list = row.persons;
+    if (list.length === 2 && row.union) {
+        const blood = ctx.blood();
+        if (!blood.has(list[0].id) && blood.has(list[1].id)) return [list[1], list[0]];
+    }
+    return list;
+}
+
+/** The type of an event as its row shows it (the app's names; a custom event its own label). */
+export function eventTypeLabel(row: EventRow): string {
+    const k = strings.table.evKind;
+    switch (row.source) {
+        case 'birth': return strings.events.types.birth;
+        case 'death': return strings.events.types.death;
+        case 'marriage': return row.type === 'marriage' ? k.marriage : k.partnersStart;
+        case 'divorce': return row.type === 'divorce' ? k.divorce : k.partnersEnd;
+        case 'couple': return row.event ? coupleEventLabel(row.event as Parameters<typeof coupleEventLabel>[0]) : '';
+        case 'life': return row.event ? lifeEventLabel(row.event as LifeEvent) : '';
+    }
+}
+
+/** A cell listing names (§14.1): the text joined by ", ", each name with its tree person when it is one. */
+function namesCell(names: CellName[], sortKey?: string): CellValue {
+    const shown = names.filter(n => n.text);
+    if (!shown.length) return emptyCell();
+    const text = shown.map(n => n.text).join(', ');
+    return { ...EMPTY, text, sortKey: sortKey ?? text.toLocaleLowerCase(), empty: false, names: shown };
+}
+
+/** A participant's name: the tree's person when linked (not a placeholder), else the name as written. */
+export function participantCellName(ctx: TableContext, x: EventParticipant): CellName {
+    const p = x.personId ? ctx.person(x.personId) : null;
+    if (p) return { text: shownNameOrEmpty(p) || (x.name ?? '').trim(), personId: p.id, role: x.role };
+    return { text: (x.name ?? '').trim(), role: x.role };
+}
+
+function participantsCell(ctx: TableContext, row: TableRow, role: ParticipantRole): CellValue {
+    return namesCell(asEvent(row).participants.filter(x => x.role === role).map(x => participantCellName(ctx, x)));
+}
+
+function whoCell(ctx: TableContext, row: TableRow): CellValue {
+    const persons = eventPersons(ctx, asEvent(row));
+    const first = persons[0];
+    const key = first ? `${(first.lastName ?? '').toLocaleLowerCase()}\u0000${(first.firstName ?? '').toLocaleLowerCase()}` : undefined;
+    return namesCell(persons.map(p => ({ text: shownNameOrEmpty(p), personId: p.id })), key);
+}
+
+const DAY = 86_400_000;
+
+/** Days between two exact day dates (no qualifier, no range); null otherwise. */
+function daysBetween(from: string | undefined, to: string | undefined): number | null {
+    const a = parseFlexDate(from);
+    const b = parseFlexDate(to);
+    if (!a || !b || a.qualifier || b.qualifier || a.end || b.end || !a.month || !a.day || !b.month || !b.day) return null;
+    const n = Math.round((Date.UTC(b.year, b.month - 1, b.day) - Date.UTC(a.year, a.month - 1, a.day)) / DAY);
+    return n >= 0 ? n : null;
+}
+
+/** One person's age at an event: years as elsewhere (§5.1); under a year from exact days, the days ("12 d"). */
+function eventAge(p: Person, date: string | undefined): CellValue {
+    const cell = ageAt(p, date);
+    if (cell.sortKey === 0 && p.birthDate) {
+        const days = daysBetween(p.birthDate, date);
+        if (days !== null && days < 366) return { ...cell, text: strings.table.ageDays(days), sortKey: days / 366 };
+    }
+    return cell;
+}
+
+/** Age at the event (§14.1): of its person; of several, each in the order of the names ("–" unknown). */
+function eventAgeCell(ctx: TableContext, row: TableRow): CellValue {
+    const r = asEvent(row);
+    if (r.source === 'birth') return naCell('', true);
+    if (!r.date) return emptyCell(true);
+    const persons = eventPersons(ctx, r);
+    if (persons.length === 1) return eventAge(persons[0], r.date);
+    const cells = persons.map(p => eventAge(p, r.date));
+    const known = cells.filter(c => !c.empty);
+    if (!known.length) return emptyCell(true);
+    return {
+        ...EMPTY, text: cells.map(c => c.empty ? '–' : c.text).join(', '), sortKey: known[0].sortKey, empty: false,
+        computed: true, approx: known.some(c => c.approx),
+    };
+}
+
+/** What an event says besides its date and place: an occupation, a title (the value), else the cause. */
+function eventValueCell(row: TableRow): CellValue {
+    const r = asEvent(row);
+    if (r.source === 'death') return textCell(r.persons[0]?.deathCause);
+    const e = r.event;
+    if (!e) return emptyCell();
+    if (r.source === 'life' && eventValueIsOnTag((e as LifeEvent).type)) return textCell(e.note);
+    return textCell(e.cause);
+}
+
+/** The sources cited on the event: "title, reference", several joined by "; " (§14.1). */
+function eventSourceCell(ctx: TableContext, row: TableRow): CellValue {
+    const out: string[] = [];
+    for (const id of asEvent(row).sourceIds) {
+        const src = ctx.data.sources?.[id];
+        if (!src) continue;
+        const text = [src.title?.trim(), src.reference?.trim()].filter(Boolean).join(', ');
+        if (text && !out.includes(text)) out.push(text);
+    }
+    return textCell(out.join('; '));
+}
+
+/** The reliability pill of the event's fact (§4.1 Reliability): the person's, the union's. */
+function eventPill(ctx: TableContext, row: TableRow): CellValue {
+    const r = asEvent(row);
+    switch (r.source) {
+        case 'birth': return pillCell(ctx, r.persons[0] ?? null, 'birth');
+        case 'death': return pillCell(ctx, r.persons[0] ?? null, 'death');
+        case 'life': return pillCell(ctx, r.persons[0] ?? null, `event:${r.refs[0]?.eventId ?? ''}`);
+        case 'marriage': return pillCell(ctx, r.union, 'marriage');
+        case 'divorce': return pillCell(ctx, r.union, 'divorce');
+        case 'couple': return pillCell(ctx, r.union, `event:${r.event?.id ?? ''}`);
+    }
+}
+
+export const EVENT_COLUMNS: readonly ColumnDef[] = cols('events', [
+    {
+        id: 'evType', group: 'event', label: 'evType', width: 130, get: (_c, r) => textCell(eventTypeLabel(asEvent(r))),
+    },
+    { id: 'evWho', group: 'event', label: 'evWho', width: 210, get: (c, r) => whoCell(c, r) },
+    { id: 'evDate', group: 'event', label: 'evDate', width: 120, kind: 'date', get: (c, r) => dateCell(c, asEvent(r).date) },
+    { id: 'evPlace', group: 'event', label: 'evPlace', width: 210, get: (_c, r) => textCell(asEvent(r).place) },
+    { id: 'evAge', group: 'event', label: 'evAge', width: 90, kind: 'age', computed: true, get: (c, r) => eventAgeCell(c, r) },
+    { id: 'evValue', group: 'event', label: 'evValue', width: 180, get: (_c, r) => eventValueCell(r) },
+    { id: 'godparents', group: 'participants', label: 'godparents', width: 250, get: (c, r) => participantsCell(c, r, 'godparent') },
+    { id: 'witnesses', group: 'participants', label: 'witnesses', width: 200, get: (c, r) => participantsCell(c, r, 'witness') },
+    { id: 'officiants', group: 'participants', label: 'officiants', width: 170, get: (c, r) => participantsCell(c, r, 'officiant') },
+    { id: 'others', group: 'participants', label: 'others', width: 200, get: (c, r) => participantsCell(c, r, 'other') },
+    { id: 'evSource', group: 'source', label: 'evSource', width: 300, get: (c, r) => eventSourceCell(c, r) },
+    { id: 'evRel', group: 'source', label: 'evRel', width: 150, kind: 'pill', computed: true, get: (c, r) => eventPill(c, r) },
+]);
+
+/** The participants' columns by role (§14.1: the participant filter, the recurring godparent). */
+export const PARTICIPANT_COLUMNS: Readonly<Record<ParticipantRole, string>> = {
+    godparent: 'godparents', witness: 'witnesses', officiant: 'officiants', other: 'others',
+};
+
 const BY_TYPE: Record<RowType, ReadonlyMap<string, ColumnDef>> = {
     persons: new Map(PERSON_COLUMNS.map(c => [c.id, c])),
     unions: new Map(UNION_COLUMNS.map(c => [c.id, c])),
+    events: new Map(EVENT_COLUMNS.map(c => [c.id, c])),
 };
 
 export function columnsOf(type: RowType): readonly ColumnDef[] {
-    return type === 'persons' ? PERSON_COLUMNS : UNION_COLUMNS;
+    return type === 'persons' ? PERSON_COLUMNS : type === 'unions' ? UNION_COLUMNS : EVENT_COLUMNS;
 }
 
 export function columnById(type: RowType, id: string): ColumnDef | undefined {
@@ -638,7 +789,7 @@ function noteWhat(col: ColumnDef): string {
         case 'comp': return s.compList.all;
         case 'age1': case 'age2': return f.pAge;
         case 'srcCount': return col.rowType === 'unions' ? f.uSrcCount : f.srcCount;
-        case 'relN': case 'relB': case 'relD': case 'relW': return f.rel;
+        case 'relN': case 'relB': case 'relD': case 'relW': case 'evRel': return f.rel;
         case 'nFind': case 'topSev': case 'unusual': return f.checks;
     }
     return (f as Record<string, string>)[col.id] ?? '';
@@ -685,11 +836,19 @@ export const DEFAULT_VIEWS: Record<RowType, DefaultView> = {
         pinned: 2,
         sort: [{ col: 'wDate', dir: 'asc' }],
     },
+    events: {
+        columns: ['evType', 'evWho', 'evDate', 'evPlace', 'evAge', 'godparents', 'witnesses', 'officiants', 'evSource'],
+        widths: { evType: 120, evWho: 210, evDate: 110, evPlace: 210, evAge: 80, godparents: 250, witnesses: 170, officiants: 170, evSource: 300 },
+        pinned: 2,
+        sort: [{ col: 'evDate', dir: 'asc' }],
+    },
 };
 
 /** Phone (≤ 640): the name column pinned at 156 px, the others at 0.8 of their width (min 70; §1.4). */
 export function phoneWidth(col: ColumnDef, width: number, pinned: boolean): number {
     if (pinned && (col.id === 'name' || col.id === 'p1')) return 156;
+    if (pinned && col.id === 'evType') return 96;
+    if (pinned && col.id === 'evWho') return 140;
     return Math.max(70, Math.round(width * 0.8));
 }
 

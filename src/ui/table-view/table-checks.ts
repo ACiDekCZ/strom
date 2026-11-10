@@ -16,13 +16,14 @@ import type { ValidationIssue } from '../../validation.js';
 import { qualityFinding, qualityFindingKey } from '../../validation.js';
 import { dismissedKeys } from '../../quality-dismiss.js';
 import { placeKey } from '../../places.js';
-import { parentSlots, type Partnership, type Person, type StromData } from '../../types.js';
-import type { CellSeverity, TableModel, TableRow } from './table-model.js';
+import { participantName } from '../../godparents.js';
+import { parentSlots, type ParticipantRole, type Partnership, type Person, type StromData } from '../../types.js';
+import type { CellSeverity, EventRow, TableModel, TableRow } from './table-model.js';
 
-/** One cell a finding is about: a row of People or Unions, a column, the union of a union column. */
+/** One cell a finding is about: a row of People, Unions or Events, a column, the union of a union column. */
 export interface CheckTarget {
-    rows: 'persons' | 'unions';
-    /** The person's or the union's id. */
+    rows: 'persons' | 'unions' | 'events';
+    /** The person's or the union's id; an event row's: `l:<person>:<event>` (a person's event). */
     id: string;
     /**
      * The column id; in the Unions table a partner's column is `age@<person>`,
@@ -67,7 +68,12 @@ const EVENT_COLUMNS: Readonly<Record<string, string>> = {
 };
 
 /** Place columns (§7.2 placeSpelling): every place cell whose value is the place. */
-const PLACE_COLUMNS: ReadonlySet<string> = new Set(['bPlace', 'bapPlace', 'wPlace', 'divPlace', 'dPlace', 'burPlace']);
+const PLACE_COLUMNS: ReadonlySet<string> = new Set(['bPlace', 'bapPlace', 'wPlace', 'divPlace', 'dPlace', 'burPlace', 'evPlace']);
+
+/** The Events table's participant columns and their roles (§14.1, recurringGodparent). */
+const PARTICIPANT_ROLE: Readonly<Record<string, ParticipantRole>> = {
+    godparents: 'godparent', witnesses: 'witness', officiants: 'officiant', others: 'other',
+};
 
 /** The types about a parent's age at a child's birth: the mark goes on the child's Father's / Mother's age. */
 const PARENT_AGE_TYPES: ReadonlySet<string> = new Set([
@@ -135,7 +141,7 @@ export function issueTargets(issue: ValidationIssue, data: StromData): CheckTarg
         return [...P(p, 'wAgeRec', uid), ...P(p, 'wAgeDiff', uid), ...P(q, 'pAgeRec', uid), ...P(q, 'pAgeDiff', uid), ...U(`rec@${p}`)];
     }
     if (t === 'eventBeforeBirth' || t === 'eventAfterDeath') {
-        return P(ids[0], issue.field ? EVENT_COLUMNS[issue.field] ?? null : null);
+        return [...P(ids[0], issue.field ? EVENT_COLUMNS[issue.field] ?? null : null), ...eventTargets(issue, data)];
     }
     if (t === 'partnerAgeGap') {
         if (!uid) return [];
@@ -145,8 +151,52 @@ export function issueTargets(issue: ValidationIssue, data: StromData): CheckTarg
     return [];
 }
 
-function cellKey(rows: 'persons' | 'unions', id: string, col: string, union?: string | null): string {
-    return `${rows === 'persons' ? 'p' : 'u'}|${id}|${col}|${union ?? ''}`;
+/**
+ * The Events table's date cell of a person's event out of the lifespan: the
+ * events of the finding's type whose date the finding's detail names
+ * (validation writes "<type> <date> < * …" / "> † …").
+ */
+function eventTargets(issue: ValidationIssue, data: StromData): CheckTarget[] {
+    const pid = issue.personIds?.[0];
+    const person = pid ? data.persons[pid] : undefined;
+    if (!person || !issue.field) return [];
+    const detail = issue.detail ?? '';
+    return (person.events ?? [])
+        .filter(ev => ev.type === issue.field && ev.date
+            && detail.startsWith(`${ev.type === 'custom' ? (ev.customLabel?.trim() || 'custom') : ev.type} ${ev.date} `))
+        .map(ev => ({ rows: 'events' as const, id: `l:${person.id}:${ev.id}`, col: 'evDate' }));
+}
+
+function cellKey(rows: 'persons' | 'unions' | 'events', id: string, col: string, union?: string | null): string {
+    return `${rows === 'persons' ? 'p' : rows === 'unions' ? 'u' : 'e'}|${id}|${col}|${union ?? ''}`;
+}
+
+/**
+ * The cells of the People and Unions tables an event row's cell stands for
+ * (§14.1: the findings of the facts it shows), and its own cells.
+ */
+function eventCellKeys(row: EventRow, colId: string): string[] {
+    const pid = row.persons[0]?.id;
+    const uid = row.union?.id;
+    if (colId === 'evDate') {
+        if (row.source === 'birth' && pid) return [cellKey('persons', pid, 'bDate')];
+        if (row.source === 'death' && pid) return [cellKey('persons', pid, 'dDate')];
+        if (row.source === 'marriage' && uid) return [cellKey('unions', uid, 'wDate')];
+        if (row.source === 'life') return row.refs.map(r => cellKey('events', `l:${r.personId}:${r.eventId}`, 'evDate'));
+    }
+    if (colId === 'evAge') {
+        if (row.source === 'death' && pid) return [cellKey('persons', pid, 'dAge')];
+        if (row.source === 'marriage' && uid) return row.persons.map(p => cellKey('unions', uid, `age@${p.id}`));
+    }
+    return [];
+}
+
+/** A participant's name as recurringGodparent names it: a linked person's full name, else the written name's key. */
+function participantKeys(data: StromData, x: { personId?: string; name?: string }): string[] {
+    const p = x.personId ? data.persons[x.personId as Person['id']] : undefined;
+    if (p) return [`p:${`${p.firstName} ${p.lastName}`.trim()}`];
+    const key = participantName(x.name ?? '').key;
+    return key ? [`n:${key}`] : [];
 }
 
 /** The Unions table's per-partner columns: the slot and which partner of the row. */
@@ -175,6 +225,8 @@ export class CheckIndex {
     private readonly people = new Map<string, PersonFindings>();
     /** placeSpelling: the place's key → its findings. */
     private readonly places = new Map<string, CellFinding[]>();
+    /** recurringGodparent: the participant's name key (`p:` linked, `n:` written) → its findings. */
+    private readonly recurring = new Map<string, CellFinding[]>();
     private readonly dismissed: ReadonlySet<string>;
 
     constructor(private readonly data: StromData) {
@@ -191,6 +243,10 @@ export class CheckIndex {
             if (issue.type === 'placeSpelling' && issue.subject) {
                 const k = placeKey(issue.subject);
                 if (k) (this.places.get(k) ?? this.places.set(k, []).get(k)!).push(f);
+            }
+            if (issue.type === 'recurringGodparent' && issue.subject) {
+                const keys = new Set([`p:${issue.subject.trim()}`, ...participantKeys(this.data, { name: issue.subject })]);
+                for (const k of keys) (this.recurring.get(k) ?? this.recurring.set(k, []).get(k)!).push(f);
             }
             for (const t of issueTargets(issue, this.data)) {
                 const k = cellKey(t.rows, t.id, t.col, t.union);
@@ -224,6 +280,8 @@ export class CheckIndex {
         let list: CellFinding[] | undefined;
         if (row.kind === 'person') {
             list = this.cells.get(cellKey('persons', row.id, colId, union?.id));
+        } else if (row.kind === 'event') {
+            list = this.eventFindings(row, colId);
         } else {
             const partner = UNION_PARTNER_COLUMNS[colId];
             const p = partner ? (partner[1] === 1 ? row.p1 : row.p2) : null;
@@ -242,6 +300,7 @@ export class CheckIndex {
     cellAll(row: TableRow, colId: string, union: Partnership | null, text = ''): CellFinding[] {
         const out: CellFinding[] = [];
         if (row.kind === 'person') out.push(...(this.cells.get(cellKey('persons', row.id, colId, union?.id)) ?? []));
+        else if (row.kind === 'event') out.push(...this.eventFindings(row, colId));
         else {
             const partner = UNION_PARTNER_COLUMNS[colId];
             const p = partner ? (partner[1] === 1 ? row.p1 : row.p2) : null;
@@ -250,6 +309,28 @@ export class CheckIndex {
         }
         if (PLACE_COLUMNS.has(colId) && text) out.push(...(this.places.get(placeKey(text)) ?? []));
         return out.sort((a, b) => RANK[b.severity] - RANK[a.severity]);
+    }
+
+    /**
+     * The findings of an event row's cell (§14.1): those of the facts it
+     * shows (the birth's, the wedding's… cells), a person's event out of the
+     * lifespan on its date, a recurring godparent on the participant's name
+     * in the participants' column of the role. Each finding once.
+     */
+    private eventFindings(row: EventRow, colId: string): CellFinding[] {
+        const out: CellFinding[] = [];
+        const push = (list: readonly CellFinding[] | undefined) => {
+            for (const f of list ?? []) if (!out.includes(f)) out.push(f);
+        };
+        for (const k of eventCellKeys(row, colId)) push(this.cells.get(k));
+        const role = PARTICIPANT_ROLE[colId];
+        if (role && this.recurring.size) {
+            for (const x of row.participants) {
+                if (x.role !== role) continue;
+                for (const k of participantKeys(this.data, x)) push(this.recurring.get(k));
+            }
+        }
+        return out;
     }
 }
 

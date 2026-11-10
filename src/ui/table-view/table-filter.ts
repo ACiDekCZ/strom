@@ -13,27 +13,48 @@
  */
 
 import { cellOf, columnById, columnLabel, type ColumnDef, type ColumnKind, type SortSpec } from './table-columns.js';
-import type { CellValue, PersonRow, RowType, TableModel, TableRow } from './table-model.js';
+import { rowsOf, type CellValue, type EventCategory, type EventRow, type PersonRow, type RowType, type TableModel, type TableRow } from './table-model.js';
 import { cellFilled } from './table-coverage.js';
 import { personPassesUnions, type UnionPredicate } from './table-subrows.js';
 import { rodOf, type RodId } from '../../lineage.js';
 import { RELIABILITY_ORDER } from '../../reliability.js';
 import { strings } from '../../strings.js';
-import type { PersonId } from '../../types.js';
+import type { EventParticipant, ParticipantRole, PersonId } from '../../types.js';
+import { shownNameOrEmpty } from '../../person-name.js';
 
 // ---------------------------------------------------------------------------
 // The filter's shape (§8.2, §9.1). Part D stores it in `TableView.filter`.
 
 /** The quick chips (§8.1), in their fixed order. */
 export const CHIP_ORDER = ['living', 'deceased', 'blood', 'rod', 'gen', 'multiU', 'noBirth', 'uncertain', 'noSource', 'finding', 'unusual', 'unconfirmed'] as const;
-export type ChipId = typeof CHIP_ORDER[number];
 
-/** A quick chip. Family line: the chosen lines (`values`, RodIds); Generation: the range `from`–`to` (1-based). */
+/** The Events table's quick chips (§14.1), in their fixed order. */
+export const EVENT_CHIP_ORDER = ['evBirth', 'evMarriage', 'evDeath', 'evOther', 'noSource'] as const;
+
+/**
+ * Every chip: the quick ones of both row types and the participant filter
+ * (§14.1 "Godparent: {name} ×"), which is set from a participant's name in
+ * a cell and is not in the quick row.
+ */
+export type ChipId = typeof CHIP_ORDER[number] | typeof EVENT_CHIP_ORDER[number] | 'participant';
+
+/** The event chips that exclude each other (one family of events at a time). */
+const EVENT_KIND_CHIPS: Readonly<Record<string, EventCategory>> = { evBirth: 'birth', evMarriage: 'marriage', evDeath: 'death', evOther: 'other' };
+
+/**
+ * A quick chip. Family line: the chosen lines (`values`, RodIds); Generation:
+ * the range `from`–`to` (1-based). Participant: the `role` and the tree's
+ * person (`personId`) or the name as written (`name`; with a person, the name
+ * it had when chosen).
+ */
 export interface ChipFilter {
     chip: ChipId;
     values?: string[];
     from?: number;
     to?: number;
+    role?: ParticipantRole;
+    personId?: string;
+    name?: string;
 }
 
 /**
@@ -111,9 +132,10 @@ export function setChip(filter: TableFilter, chip: ChipId, on: boolean, choice: 
         if (JSON.stringify(filter.items[at]) === JSON.stringify(item)) return false;
         filter.items[at] = item;
     } else {
-        // Living and deceased exclude each other: the other goes off.
+        // Living and deceased exclude each other: the other goes off; so do the event families.
         const other = chip === 'living' ? 'deceased' : chip === 'deceased' ? 'living' : null;
         if (other) setChip(filter, other, false);
+        if (chip in EVENT_KIND_CHIPS) for (const c of Object.keys(EVENT_KIND_CHIPS)) if (c !== chip) setChip(filter, c as ChipId, false);
         filter.items.push(item);
     }
     return true;
@@ -155,14 +177,16 @@ export function clearFilter(filter: TableFilter): boolean {
 
 /** Whether a chip applies to a row type and tree (§8.1: "Unconfirmed research" only in a research tree). */
 export function chipAvailable(model: TableModel, type: RowType, chip: ChipId): boolean {
-    if (type !== 'persons') return false;
+    if (type === 'events') return chip === 'participant' || (EVENT_CHIP_ORDER as readonly string[]).includes(chip);
+    if (type !== 'persons' || !(CHIP_ORDER as readonly string[]).includes(chip)) return false;
     if (chip === 'unconfirmed') return model.ctx.reliability.researchTree;
     return true;
 }
 
-/** The chips a row type offers, in their fixed order. */
+/** The quick chips a row type offers, in their fixed order (the participant filter is not one). */
 export function availableChips(model: TableModel, type: RowType): ChipId[] {
-    return CHIP_ORDER.filter(c => chipAvailable(model, type, c));
+    const order: readonly ChipId[] = type === 'events' ? EVENT_CHIP_ORDER : CHIP_ORDER;
+    return order.filter(c => chipAvailable(model, type, c));
 }
 
 /** Chips that wait for the checks (§13i: disabled until the findings are computed). */
@@ -172,6 +196,50 @@ const UNCONFIRMED_STEPS: ReadonlySet<string> = new Set(RELIABILITY_ORDER.slice(R
 
 function col(type: RowType, id: string): ColumnDef {
     return columnById(type, id)!;
+}
+
+/** A participant's name for the participant filter: the tree person's shown name, else as written. */
+function participantText(model: TableModel, x: EventParticipant): string {
+    const p = x.personId ? model.ctx.person(x.personId) : null;
+    return (p ? shownNameOrEmpty(p) : '') || (x.name ?? '');
+}
+
+const foldName = (text: string): string => foldText(text).replace(/\s+/g, ' ').trim();
+
+/**
+ * The participant filter of a participant (§14.1: "Godparent: {name}"): the
+ * role and the tree's person, or for a name only the name as written.
+ */
+export function participantChip(model: TableModel, x: EventParticipant): Omit<ChipFilter, 'chip'> {
+    const p = x.personId ? model.ctx.person(x.personId) : null;
+    const name = participantText(model, x).trim();
+    return p ? { role: x.role, personId: p.id, name } : { role: x.role, name };
+}
+
+/**
+ * Whether an event has the participant of a participant filter in its role:
+ * the tree's person by id; a name only by its letters (case, diacritics and
+ * spaces aside), linked participants by their shown name.
+ */
+export function eventHasParticipant(model: TableModel, row: EventRow, item: ChipFilter): boolean {
+    if (!item.role) return true;
+    const want = item.personId ? null : foldName(item.name ?? '');
+    if (want === '') return true;
+    return row.participants.some(x => x.role === item.role
+        && (item.personId ? x.personId === item.personId : foldName(participantText(model, x)) === want));
+}
+
+/** Filter the events by a participant (§14.1: "Godparent: {name} ×"); replaces the participant filter there was. */
+export function setParticipantFilter(filter: TableFilter, model: TableModel, x: EventParticipant): boolean {
+    return setChip(filter, 'participant', true, participantChip(model, x));
+}
+
+/** Whether an event passes one chip (§14.1). */
+export function eventPassesChip(model: TableModel, row: EventRow, item: ChipFilter): boolean {
+    if (item.chip === 'participant') return eventHasParticipant(model, row, item);
+    if (item.chip === 'noSource') return row.sourceIds.length === 0;
+    const cat = EVENT_KIND_CHIPS[item.chip];
+    return cat ? row.category === cat : true;
 }
 
 /** Whether a person passes one chip. Chips on findings pass everyone while the checks run. */
@@ -208,6 +276,7 @@ export function personPassesChip(model: TableModel, row: PersonRow, item: ChipFi
                 const pill = cellOf(model, row, col('persons', id)).pill;
                 return !!pill && UNCONFIRMED_STEPS.has(pill);
             });
+        default: return true;
     }
 }
 
@@ -301,7 +370,7 @@ export function columnValues(model: TableModel, type: RowType, column: ColumnDef
         const key = enumValueOf(v);
         if (!seen.has(key)) seen.set(key, { label: v.text, key: v.sortKey });
     };
-    for (const row of type === 'persons' ? model.persons : model.unions) {
+    for (const row of rowsOf(model, type)) {
         if (column.unionScoped && row.kind === 'person') row.unions.forEach((_u, i) => add(cellOf(model, row, column, i)));
         else add(cellOf(model, row, column));
     }
@@ -363,6 +432,8 @@ export function filterRows(
         if (row.kind === 'person') {
             for (const c of chips) if (!personPassesChip(model, row, c)) return false;
             if (!personPassesUnions(row, pass)) return false;
+        } else if (row.kind === 'event') {
+            for (const c of chips) if (!eventPassesChip(model, row, c)) return false;
         }
         for (const x of rowCols) if (!cellPasses(cellOf(model, row, x.col), x.item, x.kind)) return false;
         if (q && !rowMatches(model, row, search!.columns, q)) return false;
@@ -386,6 +457,10 @@ function num(n: number): string {
 /** A chip's label (§8.1): active Family line and Generation say their choice. */
 export function chipLabel(model: TableModel | null, item: ChipFilter | null, chip: ChipId): string {
     const t = strings.table;
+    if (chip === 'participant' && item?.role) {
+        const p = item.personId && model ? model.ctx.person(item.personId as PersonId) : null;
+        return t.chipParticipant[item.role]((p ? shownNameOrEmpty(p) : '') || item.name || '');
+    }
     if (chip === 'rod' && item?.values?.length && model) {
         const labels = model.ctx.lineage().labels;
         const names = item.values.map(v => labels.get(v as RodId)).filter((x): x is string => !!x);

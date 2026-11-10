@@ -12,7 +12,7 @@
 
 import { strings } from '../../strings.js';
 import { columnLabel, type ColumnDef } from './table-columns.js';
-import type { RowType, TableModel } from './table-model.js';
+import { ROW_KEY, type RowType, type TableModel } from './table-model.js';
 import {
     activeFilterCount, availableChips, CHECK_CHIPS, chipItem, chipLabel, columnItemLabel, columnItems, columnValues, filterKindOf,
     generationSpan, rodChoices, type ChipFilter, type ChipId, type ColumnFilter, type TableFilter,
@@ -532,7 +532,7 @@ export class FilterSheet {
 
     private foot(): void {
         const st = this.state!;
-        this.show.textContent = strings.table.showN[st.type === 'persons' ? 'p' : 'u'](st.shown);
+        this.show.textContent = strings.table.showN[ROW_KEY[st.type]](st.shown);
         this.clear.hidden = !activeFilterCount(st.model, st.type, st.filter);
     }
 

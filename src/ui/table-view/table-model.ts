@@ -8,7 +8,7 @@
  * in node and measured with the perf budget.
  */
 
-import type { Partnership, PartnershipId, Person, PersonId, StromData } from '../../types.js';
+import type { CoupleEvent, EventParticipant, LifeEvent, ParticipantRole, Partnership, PartnershipId, Person, PersonId, StromData } from '../../types.js';
 import { parseFlexDate } from '../../dates.js';
 import { assignGenerations } from '../../generations.js';
 import { inferBirthUpperBounds, isLivingPerson } from '../../privacy.js';
@@ -16,10 +16,11 @@ import { buildLineages, rodLabels, type LineageIndex, type RodId } from '../../l
 import type { ReliabilityOptions } from '../../reliability.js';
 import type { Language } from '../../strings.js';
 import type { CheckIndex } from './table-checks.js';
+import { buildEventRows } from './table-events.js';
 
-/** What the rows of a table are. P2 adds events and sources, P3 places. */
-export type RowType = 'persons' | 'unions';
-export const ROW_TYPES: readonly RowType[] = ['persons', 'unions'];
+/** What the rows of a table are. P2 adds events (and sources), P3 places. */
+export type RowType = 'persons' | 'unions' | 'events';
+export const ROW_TYPES: readonly RowType[] = ['persons', 'unions', 'events'];
 
 /** A cell's mark (§7.3): a finding's level, or `unusual` for one marked "Not an error". */
 export type CellSeverity = 'error' | 'warning' | 'info' | 'unusual';
@@ -73,6 +74,22 @@ export interface CellValue {
      * the Partner cell of a person whose unions are sub-rows).
      */
     aggregate?: boolean;
+    /**
+     * The names the text lists (§14.1: the person or couple of an event, its
+     * participants): each with the tree's person it is, when it is one (a
+     * link), and the participant's role. The text is these names joined by
+     * ", ".
+     */
+    names?: CellName[];
+}
+
+/** One name of a cell that lists people (§14.1). */
+export interface CellName {
+    text: string;
+    /** The tree's person (not a placeholder) the name is; none: only a name as written. */
+    personId?: PersonId;
+    /** A participant's role (the participants' columns). */
+    role?: ParticipantRole;
 }
 
 export interface PersonRow {
@@ -94,7 +111,50 @@ export interface UnionRow {
     cache: Map<string, CellValue>;
 }
 
-export type TableRow = PersonRow | UnionRow;
+/** Where an event row comes from (§14.1): a person's own field, a person's event, a union's field or event. */
+export type EventSource = 'birth' | 'death' | 'life' | 'marriage' | 'divorce' | 'couple';
+
+/** The quick chips' families of events (§14.1: births and baptisms, marriages, deaths and burials, other). */
+export type EventCategory = 'birth' | 'marriage' | 'death' | 'other';
+
+/** One copy of a person's event that an event row stands for (§14.1: one event of several people). */
+export interface EventRef {
+    personId: PersonId;
+    eventId: string;
+}
+
+/**
+ * One event (§14.1): a person's event of any type, the birth and the death,
+ * a union's wedding and divorce (both partners) and a couple's events. The
+ * same event recorded at several people (spec 053: a census of a household)
+ * is one row, its people in `persons`.
+ */
+export interface EventRow {
+    kind: 'event';
+    /** Stable key: `b:` / `d:` + person, `l:` + person + `:` + event, `w:` / `v:` + union, `c:` + union + `:` + event. */
+    id: string;
+    source: EventSource;
+    /** The event's type: a LifeEventType, a CoupleEventType, or `marriage` / `divorce`. */
+    type: string;
+    category: EventCategory;
+    /** Whose event it is (real people only), in data order; a union's: its partners. */
+    persons: Person[];
+    /** The union of a wedding, a divorce or a couple's event. */
+    union: Partnership | null;
+    /** The event itself (a person's or a couple's); for several people the first copy. */
+    event: LifeEvent | CoupleEvent | null;
+    /** Each person's copy of a person's event (one for one person). */
+    refs: EventRef[];
+    date?: string;
+    place?: string;
+    /** The sources cited on the event. */
+    sourceIds: string[];
+    /** Godparents, witnesses, the officiant and others (of all copies, each once). */
+    participants: EventParticipant[];
+    cache: Map<string, CellValue>;
+}
+
+export type TableRow = PersonRow | UnionRow | EventRow;
 
 /** Everything the columns compute from; the heavy indexes are built on first use. */
 export interface TableContext {
@@ -126,6 +186,9 @@ export interface TableModel {
     readonly unions: UnionRow[];
     readonly personRows: Map<PersonId, PersonRow>;
     readonly unionRows: Map<PartnershipId, UnionRow>;
+    /** The event rows (§14.1), built on first use. */
+    readonly events: EventRow[];
+    readonly eventRows: Map<string, EventRow>;
 }
 
 export interface BuildOptions {
@@ -237,7 +300,13 @@ export function buildTableModel(data: StromData, opts: BuildOptions): TableModel
         persons.push(row);
         personRows.set(p.id, row);
     }
-    return { data, rev: opts.rev, ctx, persons, unions, personRows, unionRows };
+    let events: { rows: EventRow[]; byId: Map<string, EventRow> } | null = null;
+    const ev = () => events ??= buildEventRows(data);
+    return {
+        data, rev: opts.rev, ctx, persons, unions, personRows, unionRows,
+        get events() { return ev().rows; },
+        get eventRows() { return ev().byId; },
+    };
 }
 
 /** Whether a model still matches the data (same object, same revision). */
@@ -246,10 +315,32 @@ export function modelIsCurrent(model: TableModel | null, data: StromData, rev: n
 }
 
 export function rowsOf(model: TableModel, type: RowType): TableRow[] {
-    return type === 'persons' ? model.persons : model.unions;
+    return type === 'persons' ? model.persons : type === 'unions' ? model.unions : model.events;
+}
+
+/** A row type's key of the count texts (`strings.table.countOf.p|u|e`, `showN`, the export's). */
+export const ROW_KEY: Readonly<Record<RowType, 'p' | 'u' | 'e'>> = { persons: 'p', unions: 'u', events: 'e' };
+
+/** The number of rows of each type (§2: the Rows switch). */
+export function rowCounts(model: TableModel | null): Record<RowType, number> {
+    return { persons: model?.persons.length ?? 0, unions: model?.unions.length ?? 0, events: model?.events.length ?? 0 };
 }
 
 /** A row's stable key (selection, DOM). */
 export function rowKey(row: TableRow): string {
-    return row.kind === 'person' ? `p:${row.id}` : `u:${row.id}`;
+    return row.kind === 'person' ? `p:${row.id}` : row.kind === 'union' ? `u:${row.id}` : `e:${row.id}`;
+}
+
+/** The same row in another model (by its kind and id); null when it is gone. */
+export function sameRow(model: TableModel, row: TableRow): TableRow | null {
+    if (row.kind === 'person') return model.personRows.get(row.id) ?? null;
+    if (row.kind === 'union') return model.unionRows.get(row.id) ?? null;
+    return model.eventRows.get(row.id) ?? null;
+}
+
+/** The person a row is about: the person; a union's first partner; an event's first person. */
+export function rowPersonId(row: TableRow): PersonId | null {
+    if (row.kind === 'person') return row.id;
+    if (row.kind === 'union') return row.p1?.id ?? row.p2?.id ?? null;
+    return row.persons[0]?.id ?? null;
 }

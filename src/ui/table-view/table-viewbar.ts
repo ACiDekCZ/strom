@@ -12,6 +12,7 @@
  */
 
 import { strings } from '../../strings.js';
+import { ROW_KEY, type RowType } from './table-model.js';
 
 export interface ViewBarState {
     name: string;
@@ -119,9 +120,9 @@ export interface ExportSummary {
 }
 
 /** The Export form (11a): the format, the rows, the file name and what goes in (P1: CSV of everything shown). */
-export function exportForm(type: 'persons' | 'unions', sum: ExportSummary): HTMLElement {
+export function exportForm(type: RowType, sum: ExportSummary): HTMLElement {
     const t = strings.table;
-    const k = type === 'persons' ? 'p' : 'u';
+    const k = ROW_KEY[type];
     const el = document.createElement('div');
     el.className = 'tv-xform';
     const opt = (label: string): string => '<div class="tv-xopt" role="radio" aria-checked="true">'

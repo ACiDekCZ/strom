@@ -34,7 +34,7 @@ import {
 import {
     chipChoiceForm, closeFilterPanel, columnFilterForm, FilterBar, FilterSheet, openFilterPanel, type FilterBarState, type PanelOptions,
 } from './table-filterbar.js';
-import { buildTableModel, modelIsCurrent, ROW_TYPES, rowKey, rowsOf, type RowType, type TableModel, type TableRow } from './table-model.js';
+import { buildTableModel, modelIsCurrent, ROW_KEY, ROW_TYPES, rowCounts, rowKey, rowPersonId, rowsOf, type RowType, type TableModel, type TableRow } from './table-model.js';
 import { TableGrid, type RowAction } from './table-grid.js';
 import { createBar, createStatus, updateBar, updateStatus } from './table-bar.js';
 import {
@@ -240,8 +240,7 @@ function viewRows(
 
 /** The row's person (a union row: its first partner). */
 function personOfRow(row: TableRow): PersonId | null {
-    if (row.kind === 'person') return row.id;
-    return row.p1?.id ?? row.p2?.id ?? null;
+    return rowPersonId(row);
 }
 
 /** The union a line stands for, when its edit is the relationships panel (§10.1): a sub-row's, a union row's. */
@@ -412,7 +411,7 @@ export const tableMethods = uiModule({
             };
         }
 
-        const counts = { persons: m.persons.length, unions: m.unions.length } as Record<RowType, number>;
+        const counts = rowCounts(m);
         const phone = isPhoneBar();
         normalizeColumns(type, st);
         const display = displayColumns(type, st, phone);
@@ -1269,7 +1268,7 @@ export const tableMethods = uiModule({
         a.click();
         a.remove();
         setTimeout(() => URL.revokeObjectURL(url), 0);
-        const k = now.type === 'persons' ? 'p' : 'u';
+        const k = ROW_KEY[now.type];
         this.showToast(strings.table.exportedToast[k](now.file, now.csv.items, now.csv.lines, now.csv.columns), 5000);
     },
 
@@ -1363,7 +1362,7 @@ export const tableMethods = uiModule({
     /** The phone's row-type sheet (§2): the types with their counts and a note. */
     showTableRowTypeSheet(): void {
         const state = stateOf(treeKey());
-        const counts: Record<RowType, number> = { persons: model?.persons.length ?? 0, unions: model?.unions.length ?? 0 };
+        const counts = rowCounts(model);
         this.noteBottomSheetTrigger();
         this.hideBottomSheet();
         this.presentMenuSheet(strings.table.rowType, [{

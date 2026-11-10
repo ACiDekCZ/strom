@@ -11,7 +11,7 @@
 
 import { strings } from '../../strings.js';
 import { columnById, columnLabel, type SortSpec } from './table-columns.js';
-import { ROW_TYPES, type RowType } from './table-model.js';
+import { ROW_KEY, ROW_TYPES, type RowType } from './table-model.js';
 
 export interface BarHandlers {
     /** A row type was chosen (segment or sheet). */
@@ -26,11 +26,10 @@ function esc(text: string): string {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-const COUNT_KEY: Record<RowType, 'p' | 'u'> = { persons: 'p', unions: 'u' };
 
 /** "12 of 38 people" for a row type. */
 export function countText(type: RowType, shown: number, total: number): string {
-    return strings.table.countOf[COUNT_KEY[type]](shown, total);
+    return strings.table.countOf[ROW_KEY[type]](shown, total);
 }
 
 /** "Sort: Birth date ↑, Name ↓" (empty without a sort). */
