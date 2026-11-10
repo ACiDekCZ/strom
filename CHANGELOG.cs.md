@@ -6,14 +6,14 @@
 
 *Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
 
-- **Pořadí manželství a sourozenců**: manželství bez data sňatku se řadí podle nejpozdějšího možného data sňatku: rozvodu (rozvod „před 1982“ je před sňatkem „kolem 1982“) nebo narození prvního dítěte; sňatek „před 1982“ je před sňatkem v roce 1982. Tomuto pořadí odpovídají čísla manželství na kartách, partneři na jedné straně osoby i bubliny. Bubliny sourozenců a dětí uvádějí jména podle narození, bez data narození na konci.
-- **Import GEDCOM: měsíc a rok číslicemi**: datum zapsané jako měsíc a rok číslicemi, např. „07/1987“, „7/1987“ nebo „07.1987“, se čte jako ten měsíc, i s „kolem“, „před“ nebo „po“ v klíčových slovech GEDCOMu i v místních slovech („Cca 07/1987“ je kolem července 1987). Dosud zůstala jen poznámka „Datum v záznamu: …“ a datum prázdné. Číslo, které není měsíc („13/1987“), zůstává v poznámce jako dosud.
-- **Tečka výročí**: tečka u *Akce* (na telefonu a v úzkém okně u *Více*) po otevření *Výročí* zhasne, i po znovunačtení. Rozsvítí se znovu další den nebo když se výročí v příštích 7 dnech změní (nové výročí, změněné datum). Číslo u *Výročí* v nabídce zůstává; tečky za Strom Research se to netýká.
-- **Přečíst dokument, *Navrhnout do stromu***: osoba, jejíž shoda s osobou ve stromu stojí jen na nejistě přečteném jméně (příjmení nebo křestní jméno označené „?“), je předvybraná na *Ne* místo *Spojit*; *Spojit* dál nabízí nalezenou osobu. Shoda, kterou podpírá i datum, rodiče, partner nebo dítě, se spojuje jako dosud.
-- **Dlouhá jména na kartách**: na kartě *Normální* a *Podrobná* se dlouhé jméno už nezkracuje „…“; zalomí se na tolik řádků, kolik potřebuje, a karta je vyšší, ve všech pohledech, v tisku a PDF i v exportovaném obrázku. Karta *Kompaktní* zůstává zkrácená, celé jméno je v bublině.
-- **GEDCOM: sloučení a *Zpět do …***: fotka rodiny ze souboru jiného programu (vložená, nebo odkaz na záznam média) se vrátí v *Zpět do {programu}* tak, jak ji soubor napsal, a souhrn importu ji uvádí jako zachovanou; ruční sloučení dvou osob zachová poznámky obou osob i obou spojovaných rodin, každou část jednou; ID ze souboru (třeba _UID z MyHeritage), které ve stromu nese víc osob, už samo žádnou z nich nespáruje, shoda se jen nabídne.
-- **Patička exportovaného obrázku**: dlouhý popis pohledu v patičce exportovaného obrázku (název stromu · pohled · datum) už nepřetéká okraj obrázku; zalomí se na druhý řádek a jen velmi úzký obrázek ho zkrátí „…“, ve stromu, vějíři i časové ose.
-- **Drobnosti**: na telefonu drží dlaždice v *Více* své názvy uvnitř, dlouhý název (němčina, polština) se zalomí v dlaždici; *Kvalita dat* v nabídce stromu má stejnou barvu jako řádky kolem; ∞ ve značce sňatku stojí v jedné výšce s čísly vedle, na obrazovce i v exportovaném obrázku.
+- **Pořadí manželství a sourozenců**: manželství bez data sňatku se řadí podle nejpozdějšího možného data sňatku: rozvodu nebo narození prvního dítěte; sňatek „před 1982“ je před sňatkem v roce 1982. Tomuto pořadí odpovídají čísla manželství na kartách, partneři vedle osoby i bubliny; bubliny sourozenců a dětí uvádějí jména podle narození.
+- **Import GEDCOM: měsíc a rok číslicemi**: datum jako „07/1987“, „7/1987“ nebo „07.1987“, i s „kolem“, „před“ nebo „po“, se čte jako ten měsíc a nezůstává jen v poznámce.
+- **Tečka výročí**: tečka u *Akce* (u *Více* na telefonu a v úzkém okně) po otevření *Výročí* zhasne, i po znovunačtení, a rozsvítí se znovu další den nebo když se výročí v příštích 7 dnech změní.
+- **Přečíst dokument, *Navrhnout do stromu***: osoba, jejíž shoda stojí jen na nejistě přečteném jméně (označeném „?“), je předvybraná na *Ne* místo *Spojit*.
+- **Dlouhá jména na kartách**: na kartě *Normální* a *Podrobná* se dlouhé jméno zalomí na více řádků místo zkrácení „…“, na obrazovce, v tisku a PDF i v exportovaném obrázku; karta *Kompaktní* zůstává zkrácená.
+- **GEDCOM: sloučení a *Zpět do …***: fotka rodiny ze souboru jiného programu se vrátí v *Zpět do {programu}* tak, jak ji soubor měl; ruční sloučení dvou osob zachová poznámky obou osob i obou rodin; ID ze souboru (třeba _UID z MyHeritage), které nese víc osob, shodu jen nabídne.
+- **Patička exportovaného obrázku**: dlouhý popis pohledu se zalomí na druhý řádek uvnitř obrázku místo přetečení přes okraj, ve stromu, vějíři i časové ose.
+- **Drobnosti**: na telefonu drží dlaždice v *Více* své názvy uvnitř; *Kvalita dat* v nabídce stromu má barvu okolních řádků; ∞ ve značce sňatku stojí v jedné výšce s čísly vedle.
 
 ## 3.26.0
 
