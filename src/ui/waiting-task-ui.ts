@@ -216,6 +216,33 @@ export const waitingTaskMethods = uiModule({
         return null;
     },
 
+    /**
+     * The answer's control of one waiting item, as its row in the panel
+     * Awaiting decision draws it (the Table view's bubble, §16.4): while
+     * following, the item's main action; a question about a place, its card;
+     * else the task in the research by its link. Null: nothing answers it here.
+     */
+    waitingAnswerControl(w: LiveWaiting): HTMLElement | null {
+        const s = liveSession();
+        if (s && !s.ended) {
+            const phone = isPhone();
+            const views = waitingActions(w, { writes: this.liveWaitingWrites(s), links: !phone && this.researchLinkAvailable('task'), phone });
+            if (views) return views[0] ? this.panelWaitingAction(s, w, views[0]) : null;
+        }
+        if (w.kind === 'place' && this.waitingPlacesAccess().canAnswer) {
+            const place = el('button', 'live-waiting-answer', strings.places.waiting.answer);
+            place.type = 'button';
+            place.dataset.action = 'place';
+            place.onclick = () => this.showWaitingPlaces(w.place ?? w.id);
+            return place;
+        }
+        if (!this.canAnswerResearchWaiting(w)) return null;
+        const answer = setResearchActionLabel(el('button', 'live-waiting-answer'), strings.research.answer, researchLinkMark('task'));
+        answer.type = 'button';
+        answer.onclick = () => this.answerResearchTask(w);
+        return answer;
+    },
+
     panelWaitingAction(s: LiveSession, w: LiveWaiting, v: WaitActionView): HTMLElement | null {
         const T = strings.live.waitingTask;
         const cls = 'live-waiting-answer waiting-panel-action';

@@ -14,6 +14,11 @@
 import { strings } from '../../strings.js';
 import { markHtml, researchMarkHtml } from './table-grid.js';
 import type { CellSeverity, ResearchSignal } from './table-model.js';
+import { researchActionLabel } from '../research-open-mark.js';
+import { researchBubbleActions, type ResearchBubble, type ResearchBubbleAction } from './table-research-bubble.js';
+
+/** What a bubble shows (its class `tv-bubble--<kind>`). */
+export type BubbleKind = 'finding' | 'legend' | 'cites' | 'research';
 
 /** One finding as the bubble shows it. */
 export interface BubbleFinding {
@@ -130,6 +135,59 @@ export function citesHtml(cites: readonly BubbleCite[]): string {
     return html + '</div>';
 }
 
+/**
+ * A research bubble's content (§16.4, 16j–16m, 16w, 16y, 16zf, 16zl): the
+ * head (name and research id; on a phone the sheet's title says them), then
+ * each section under a divider with its mark and title, its items (title,
+ * research id, lighter lines, the item's own actions) and the section's
+ * actions under them; a read-only copy's sentence at the end.
+ *
+ * Each action is drawn by how it runs: a waiting item's answer is a slot the
+ * waiting panel's own control fills (`data-witem`), a website a link in a new
+ * window with ↗, any other a button (`data-act="r"`, `data-i` its index in
+ * researchBubbleActions) with the mark of its research link's group, none for
+ * one that stays in the app or goes through the bridge. `shown` leaves out the
+ * actions that cannot run here (a link the research did not announce).
+ */
+export function researchBubbleHtml(b: ResearchBubble, sheet: boolean, shown: (a: ResearchBubbleAction) => boolean = () => true): string {
+    const all = researchBubbleActions(b);
+    const actionHtml = (a: ResearchBubbleAction, section: boolean): string => {
+        const i = all.indexOf(a);
+        if (a.via === 'item') return `<span class="tv-rbub-slot" data-witem="${i}"></span>`;
+        const cls = `tv-rbub-act${section ? ' tv-rbub-act--sec' : ''}`;
+        if (a.via === 'web') {
+            if (!a.url) return '';
+            return `<a class="${cls} tv-rbub-act--web" href="${esc(a.url)}" target="_blank" rel="noopener noreferrer" data-web="${i}">${esc(a.label)}<span class="tv-rbub-ext" aria-hidden="true">↗</span></a>`;
+        }
+        const label = a.mark ? researchActionLabel(a.label, a.mark) : esc(a.label);
+        return `<button type="button" class="${cls}" data-act="r" data-i="${i}" data-rid="${a.id}">${label}</button>`;
+    };
+    const actionsHtml = (list: readonly ResearchBubbleAction[], section: boolean): string => {
+        const drawn = list.filter(shown).map(a => actionHtml(a, section)).filter(Boolean);
+        return drawn.length ? `<div class="tv-rbub-acts${section ? ' tv-rbub-acts--sec' : ''}">${drawn.join('')}</div>` : '';
+    };
+    let html = sheet ? '' : `<div class="tv-rbub-head"><span class="tv-rbub-name">${esc(b.name)}</span>`
+        + `${b.refn ? `<span class="tv-rbub-refn">${esc(b.refn)}</span>` : ''}</div>`;
+    for (const s of b.sections) {
+        html += `<section class="tv-rbub-sec" data-sec="${s.id}"><div class="tv-rbub-sec-head">`
+            + `${s.signal ? researchMarkHtml(s.signal) : ''}<span class="tv-rbub-sec-title">${esc(s.title)}</span></div>`;
+        for (const it of s.items) {
+            html += `<div class="tv-rbub-item${it.fromOutside ? ' is-outside' : ''}"><div class="tv-rbub-item-title">${esc(it.title)}`
+                + `${it.ref ? ` <span class="tv-rbub-ref">${esc(it.ref)}</span>` : ''}</div>`
+                + it.lines.map(l => `<div class="tv-rbub-line">${esc(l)}</div>`).join('')
+                + actionsHtml(it.actions, false) + '</div>';
+        }
+        html += actionsHtml(s.actions, true) + '</section>';
+    }
+    if (b.note) html += `<div class="tv-rbub-note">${esc(b.note)}</div>`;
+    return html;
+}
+
+/** A research bubble's name for a screen reader and a phone's sheet: the name and the research id. */
+export function researchBubbleTitle(b: ResearchBubble): string {
+    return b.refn ? `${b.name} · ${b.refn}` : b.name;
+}
+
 let open: { el: HTMLElement; close(focusBack: boolean): void } | null = null;
 
 export function closeTableBubble(focusBack = false): void {
@@ -146,9 +204,11 @@ export function isTableBubbleOpen(): boolean {
  * `scroller` closes it when it scrolls.
  */
 export function openBubblePanel(opts: {
-    rect: DOMRect; label: string; html: string; kind: 'finding' | 'legend' | 'cites';
+    rect: DOMRect; label: string; html: string; kind: BubbleKind;
     focusBack: () => HTMLElement | null; scroller?: HTMLElement | null;
     onAction?: (act: string, index: number) => void;
+    /** Fills the content before it is measured (controls built in the DOM). */
+    fill?: (el: HTMLElement) => void;
 }): HTMLElement {
     closeTableBubble(false);
     const el = document.createElement('div');
@@ -157,6 +217,7 @@ export function openBubblePanel(opts: {
     el.setAttribute('aria-label', opts.label);
     el.tabIndex = -1;
     el.innerHTML = opts.html;
+    opts.fill?.(el);
     document.body.appendChild(el);
 
     const r = opts.rect;
@@ -194,7 +255,7 @@ export function openBubblePanel(opts: {
         }
         if (e.key !== 'Tab') return;
         // The focus stays in the bubble while it is open.
-        const items = [...el.querySelectorAll<HTMLElement>('button')];
+        const items = [...el.querySelectorAll<HTMLElement>('button, a[href]')];
         if (!items.length) { e.preventDefault(); return; }
         const at = items.indexOf(document.activeElement as HTMLElement);
         const next = e.shiftKey ? (at <= 0 ? items.length - 1 : at - 1) : (at + 1) % items.length;
@@ -205,12 +266,12 @@ export function openBubblePanel(opts: {
     window.addEventListener('resize', onResize);
     opts.scroller?.addEventListener('scroll', onResize, { passive: true });
     open = { el, close };
-    (el.querySelector<HTMLElement>('button') ?? el).focus({ preventScroll: true });
+    (el.querySelector<HTMLElement>('button, a[href]') ?? el).focus({ preventScroll: true });
     return el;
 }
 
 /** The phone's sheet content: a title row with ×, then the bubble's content. */
-export function sheetElement(title: string, html: string, kind: 'finding' | 'legend' | 'cites', onClose: () => void,
+export function sheetElement(title: string, html: string, kind: BubbleKind, onClose: () => void,
     onAction?: (act: string, index: number) => void): HTMLElement {
     const el = document.createElement('div');
     el.className = `bottom-sheet tv-bubble tv-bubble--sheet tv-bubble--${kind}`;

@@ -10026,6 +10026,39 @@
             border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text-light);
             font: inherit; font-size: 20px; line-height: 1; cursor: pointer;
         }
+        /* §16.4 the research bubble (16j–16m, 16w, 16zf, 16zl): 400 px, the head, sections under a divider; a sheet on a phone (16y). */
+        .tv-bubble--research { width: 400px; max-height: min(70vh, 560px); overflow-y: auto; padding-bottom: 8px; }
+        .tv-rbub-head { display: flex; align-items: baseline; gap: 8px; padding: 10px 14px 8px; border-bottom: 1px solid var(--divider); }
+        .tv-rbub-name { min-width: 0; font-family: var(--font-serif); font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+        .tv-rbub-refn { flex: none; font-size: 12px; color: var(--text-faint); }
+        .tv-rbub-sec + .tv-rbub-sec { margin-top: 6px; border-top: 1px solid var(--divider); }
+        .tv-rbub-sec-head { display: flex; align-items: center; gap: 8px; padding: 10px 14px 2px; }
+        .tv-rbub-sec-title { font-size: 12.5px; font-weight: 600; color: var(--text-light); }
+        .tv-rbub-item { padding: 2px 0; }
+        .tv-rbub-item-title { padding: 2px 14px; font-size: 13px; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
+        .tv-rbub-item.is-outside .tv-rbub-item-title { font-weight: 500; color: var(--text-light); }
+        .tv-rbub-ref { font-size: 12px; font-weight: 400; color: var(--text-faint); }
+        .tv-rbub-line { padding: 1px 14px; font-size: 12px; color: var(--text-light); line-height: 1.4; overflow-wrap: anywhere; }
+        .tv-rbub-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 4px 14px; }
+        .tv-rbub-act, .tv-rbub-slot > button, .tv-rbub-slot > a {
+            display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 10px; box-sizing: border-box;
+            border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text);
+            font: inherit; font-size: 13px; font-weight: 500; text-decoration: none; cursor: pointer;
+        }
+        .tv-rbub-act--sec { border-color: transparent; background: none; padding: 0 4px; color: var(--primary); font-weight: 600; }
+        .tv-rbub-ext { font-size: 12px; }
+        .tv-rbub-act:focus-visible, .tv-rbub-slot > :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .tv-rbub-note { padding: 8px 14px 0; font-size: 12px; color: var(--text-faint); line-height: 1.45; }
+        .tv-bubble--sheet.tv-bubble--research { width: 100%; max-height: 85vh; padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
+        .tv-bubble--sheet .tv-rbub-sec-head { padding: 12px 20px 4px; }
+        .tv-bubble--sheet .tv-rbub-sec-title { font-size: 14px; }
+        .tv-bubble--sheet .tv-rbub-item-title { padding: 2px 20px; font-size: 14.5px; }
+        .tv-bubble--sheet .tv-rbub-line { padding: 1px 20px; font-size: 13.5px; }
+        .tv-bubble--sheet .tv-rbub-note { padding: 10px 20px 0; font-size: 13.5px; }
+        .tv-bubble--sheet .tv-rbub-acts { flex-direction: column; align-items: stretch; padding: 4px 16px; }
+        .tv-bubble--sheet .tv-rbub-act, .tv-bubble--sheet .tv-rbub-slot > button, .tv-bubble--sheet .tv-rbub-slot > a { width: 100%; min-height: 44px; padding: 0 12px; font-size: 15px; }
+        .tv-bubble--sheet .tv-rbub-act--sec { padding: 0 4px; }
+        .tv-cell.has-res { cursor: pointer; }
         /* §6.2 a completeness bubble by touch. */
         .tv-bub-comp { display: flex; flex-direction: column; gap: 4px; padding-top: 6px; }
         /* §13 a state in place of the grid (13a, 13e–13g); 13j the read-only sentence in the status line. */
@@ -10087,6 +10120,8 @@
             .tv-link:hover { color: var(--primary-dark); }
             .tv-cites-more:hover { border-color: var(--primary); color: var(--text); }
             .tv-bub-cite:hover { background: var(--surface-2); }
+            .tv-rbub-act:hover, .tv-rbub-slot > button:hover { border-color: var(--primary); }
+            .tv-rbub-act--sec:hover { border-color: transparent; text-decoration: underline; }
             .tv-bub-cite:hover .tv-bub-cite-title { text-decoration: underline; }
             .tv-chips-clear:hover { color: var(--primary-dark); }
             .tv-fpanel-cancel:hover { border-color: var(--primary); }
@@ -10115,6 +10150,7 @@
             .tv-head-all { height: 100%; }
             .tv-bub-btn, .tv-bub-link { height: 44px; }
             .tv-bub-cite { min-height: 44px; }
+            .tv-rbub-act, .tv-rbub-slot > button, .tv-rbub-slot > a { min-height: 44px; }
             /* The pill stays 18 px tall; its target reaches 44 px into the row. */
             .tv-cites-more { position: relative; }
             .tv-cites-more::after { content: ''; position: absolute; inset: -13px -6px; }
@@ -10185,6 +10221,10 @@
             .tv-slot-more { order: 4; }
             .tv-status { height: 26px; }
             .tv-empty { padding: 16px; }
+            /* §16.4 a research bubble's sheet on a phone held sideways: taller, the actions side by side. */
+            .tv-bubble--sheet.tv-bubble--research { max-height: 92vh; }
+            .tv-bubble--sheet .tv-rbub-acts { flex-direction: row; flex-wrap: wrap; }
+            .tv-bubble--sheet .tv-rbub-act, .tv-bubble--sheet .tv-rbub-slot > button, .tv-bubble--sheet .tv-rbub-slot > a { width: auto; }
         }
         .map-canvas { position: absolute; inset: 0; }
         .map-tiles, .map-markers, .map-lines { position: absolute; inset: 0; }

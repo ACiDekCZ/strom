@@ -239,8 +239,14 @@ test.describe('marks and the legend (§16.3)', () => {
         await expect((await cellAt(page, `u:${unionId}`, 'wDate')).locator('.tv-conf')).toHaveCount(1);
         await page.locator('#table-container .tv-rowtype [data-rowtype="persons"]').click();
 
-        // A click on ≠: the conflict opens (the person's research dialog until the table's own bubble).
+        // A click on ≠: the bubble Conflicts (§16.4), its Decide › opens the conflict in What the research knows.
         await (await cellAt(page, marie, 'bDate')).locator('.tv-conf').click();
+        const bubble = page.getByRole('dialog', { name: 'Marie Pivoňkovská · P0006' });
+        await expect(bubble).toBeVisible();
+        await expect(bubble.locator('.tv-rbub-sec')).toHaveCount(1);
+        await expect(bubble.locator('.tv-rbub-sec[data-sec="conf"] .tv-rbub-sec-title')).toHaveText('Source conflicts · 1');
+        await bubble.getByRole('button', { name: 'Decide ›' }).click();
+        await expect(bubble).toBeHidden();
         await expect(page.locator('#person-research-modal')).toBeVisible();
     });
 
@@ -267,6 +273,180 @@ test.describe('marks and the legend (§16.3)', () => {
         await expect(legend).toBeVisible();
         await expect(legend.locator('.tv-leg-row')).toHaveCount(9);
         await expect(legend.locator('.tv-leg-head, .tv-leg-row--res, .tv-leg-note')).toHaveCount(0);
+    });
+});
+
+
+/** The Research group's default columns shown, then `more` columns by their names in the Columns panel. */
+async function showResearchColumns(page: Page, more: string[] = []): Promise<void> {
+    const panel = await openPanel(page);
+    const group = panel.locator('.tv-cp-group[data-group="research"]');
+    await group.locator('.tv-cp-gtoggle').click();
+    await group.getByRole('button', { name: 'All columns: Research' }).click();
+    for (const name of more) {
+        await panel.locator('.tv-cp-q').fill(name);
+        await panel.getByRole('checkbox', { name, exact: true }).check();
+    }
+    await page.keyboard.press('Escape');
+    await expect(panel).toBeHidden();
+}
+
+test.describe('research bubbles (§16.4)', () => {
+    test.use({ viewport: { width: 1440, height: 900 } });
+
+    const idOf = (page: Page, refn: string) => page.evaluate(r => window.Strom.DataManager.getAllPersons().find(p => p.refn === r)!.id, refn);
+    async function cellOf(page: Page, refn: string, col: string) {
+        const index = await head(page, col).getAttribute('aria-colindex');
+        return page.locator(`#table-container .tv-body .tv-row[data-key="p:${await idOf(page, refn)}"] [aria-colindex="${index}"]`);
+    }
+    const bubble = (page: Page) => page.locator('.tv-bubble--research');
+
+    test('a click on a research cell: 400 px, the head, the section; a research link with its mark launches it', async ({ page }) => {
+        await openResearchTable(page);
+        await page.evaluate(() => {
+            // The research on this computer announced its links (a decision of a hypothesis to review among them).
+            localStorage.setItem('strom-research-links', JSON.stringify({ actions: ['send', 'open', 'live', 'app', 'setup', 'hypothesis', 'task'], at: '2026-11-10T11:00:00Z' }));
+            (window as unknown as { launched: string[] }).launched = [];
+            window.Strom.UI.handOverResearchLink = (url: string) => { (window as unknown as { launched: string[] }).launched.push(url); };
+        });
+        await showResearchColumns(page);
+        const cell = await cellOf(page, 'P0011', 'rHyp');
+        await expect(cell).toHaveClass(/has-res/);
+        await expect(cell).toHaveAttribute('aria-haspopup', 'dialog');
+        // A cell with nothing in it opens nothing.
+        await expect(await cellOf(page, 'P0011', 'rConf')).not.toHaveClass(/has-res/);
+        await cell.click();
+        const b = page.getByRole('dialog', { name: 'Barbora Zábrdlová · P0011' });
+        await expect(b).toBeVisible();
+        expect(await b.evaluate(el => el.getBoundingClientRect().width)).toBe(400);
+        await expect(b.locator('.tv-rbub-name')).toHaveText('Barbora Zábrdlová');
+        await expect(b.locator('.tv-rbub-refn')).toHaveText('P0011');
+        await expect(b.locator('.tv-rbub-sec')).toHaveCount(1);
+        expect(await b.locator('.tv-rbub-sec').evaluate(el => getComputedStyle(el.previousElementSibling!).borderBottomWidth)).toBe('1px');
+        // The review goes to the research's terminal: its mark; What the research knows stays in the app: none; no ↗.
+        const review = b.locator('[data-rid="reviewHypothesis"]');
+        await expect(review).toContainText('Review the decision in the research');
+        await expect(review.locator('.research-open-mark')).toHaveCount(1);
+        await expect(review.locator('.research-ai-badge')).toHaveCount(0);
+        await expect(b.locator('[data-rid="knows"] .research-open-mark')).toHaveCount(0);
+        await expect(b).not.toContainText('↗');
+        await review.click();
+        await expect(b).toBeHidden();
+        expect(await page.evaluate(() => (window as unknown as { launched: string[] }).launched)).toEqual([expect.stringMatching(/hypothesis.*H0002/)]);
+    });
+
+    test('without the research’s link the action is left out; What the research knows › opens its dialog', async ({ page }) => {
+        await openResearchTable(page);
+        await showResearchColumns(page);
+        await (await cellOf(page, 'P0011', 'rHyp')).click();
+        const b = bubble(page);
+        await expect(b).toBeVisible();
+        await expect(b.locator('[data-rid="reviewHypothesis"]')).toHaveCount(0);
+        await b.locator('[data-rid="knows"]').click();
+        await expect(b).toBeHidden();
+        await expect(page.locator('#person-research-modal')).toBeVisible();
+    });
+
+    test('by keyboard: Enter and Space open the bubble, Escape closes it and the focus goes back to the cell', async ({ page }) => {
+        await openResearchTable(page);
+        await showResearchColumns(page);
+        const cell = await cellOf(page, 'P0006', 'rConf');
+        await cell.click();
+        await expect(bubble(page)).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(bubble(page)).toBeHidden();
+        await expect(cell).toBeFocused();
+        await page.keyboard.press('Enter');
+        await expect(bubble(page)).toBeVisible();
+        // The focus is in the bubble, on its first action.
+        await expect(bubble(page).locator('[data-rid="decide"]')).toBeFocused();
+        await page.keyboard.press('Escape');
+        await expect(bubble(page)).toBeHidden();
+        await expect(cell).toBeFocused();
+        await page.keyboard.press(' ');
+        await expect(bubble(page)).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(bubble(page)).toBeHidden();
+        await expect(cell).toBeFocused();
+    });
+
+    test('the line’s bubble shows the line in the tree; a change’s source opens the source', async ({ page }) => {
+        await openResearchTable(page);
+        await showResearchColumns(page, ['Line', 'Originally in the family tree']);
+        await (await cellOf(page, 'P0001', 'rLine')).click();
+        const b = bubble(page);
+        await expect(b.locator('.tv-rbub-sec[data-sec="line"] .tv-rbub-item-title').first()).toHaveText('G0001 Předci Karla Pivoňkovského');
+        // Not followed live: no change in the research from here.
+        await expect(b.locator('[data-rid="changeInResearch"]')).toHaveCount(0);
+        await (await cellOf(page, 'P0005', 'rOrig')).click();
+        await expect(b.locator('.tv-rbub-sec[data-sec="orig"]')).toBeVisible();
+        // The bridge does not answer: no restoring; the source opens in the Sources.
+        await expect(b.locator('[data-rid="revert"]')).toHaveCount(0);
+        await b.locator('[data-rid="source"]').click();
+        await expect(b).toBeHidden();
+        const sources = page.getByRole('heading', { name: 'Sources', level: 2 });
+        await expect(sources).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(sources).toBeHidden();
+
+        await (await cellOf(page, 'P0001', 'rLine')).click();
+        await b.locator('[data-rid="showLine"]').click();
+        await expect(page.locator('#table-container')).toBeHidden();
+        await expect(page.locator('#evidence-pill')).toContainText('G0001 Předci Karla Pivoňkovského');
+    });
+
+    test('read-only: the bubble has no actions and says why', async ({ page }) => {
+        await openResearchTable(page);
+        await showResearchColumns(page);
+        await page.evaluate(() => { window.Strom.DataManager.isReadOnly = () => true; });
+        // Drawn again with the read-only state (the unions' table and back).
+        await page.locator('#table-container .tv-rowtype [data-rowtype="unions"]').click();
+        await page.locator('#table-container .tv-rowtype [data-rowtype="persons"]').click();
+        await (await cellOf(page, 'P0006', 'rConf')).click();
+        const b = bubble(page);
+        await expect(b).toBeVisible();
+        await expect(b.locator('button, a[href]')).toHaveCount(0);
+        await expect(b.locator('.tv-rbub-note')).toHaveText('Read-only: conflicts cannot be decided here.');
+        await page.keyboard.press('Escape');
+        await expect(b).toBeHidden();
+    });
+
+    test('a tree without research has no research cell and no bubble', async ({ page }) => {
+        await openApp(page);
+        await seedTree(page, PLAIN, 'Kvelden', 'a');
+        await openTable(page);
+        await expect(page.locator('#table-container .tv-body .has-res')).toHaveCount(0);
+        await expect(page.locator('#table-container .tv-body .tv-conf')).toHaveCount(0);
+        await page.locator('#table-container .tv-body .tv-row .tv-cell').nth(1).click();
+        await expect(bubble(page)).toHaveCount(0);
+    });
+});
+
+test.describe('research bubbles on a phone (16y)', () => {
+    test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+    test('a tap on ≠ opens the sheet with the name and research id, 44 px actions; Decide › opens the conflict', async ({ page }) => {
+        await page.clock.setFixedTime(new Date('2026-11-10T12:00:00Z'));
+        await openApp(page);
+        await dropGed(page, GED);
+        await expect(card(page, 'Karel')).toBeVisible();
+        await page.locator('#bb-view-more').tap();
+        await page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: 'Table' }).tap();
+        await expect(page.locator('#table-container .tv-grid[role="treegrid"]')).toBeVisible();
+        const id = await page.evaluate(() => window.Strom.DataManager.getAllPersons().find(p => p.refn === 'P0006')!.id);
+        const mark = page.locator(`#table-container .tv-body .tv-row[data-key="p:${id}"] .tv-conf`).first();
+        await mark.tap();
+        const sheet = page.locator('.tv-bubble--sheet.tv-bubble--research');
+        await expect(sheet).toBeVisible();
+        await expect(sheet.locator('.tv-bub-sheet-title')).toHaveText('Marie Pivoňkovská · P0006');
+        await expect(sheet.locator('.tv-rbub-head')).toHaveCount(0);
+        const decide = sheet.locator('[data-rid="decide"]');
+        expect(await decide.evaluate(el => el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+        const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+        expect(over).toBeLessThanOrEqual(0);
+        await decide.tap();
+        await expect(sheet).toHaveCount(0);
+        await expect(page.locator('#person-research-modal')).toBeVisible();
     });
 });
 

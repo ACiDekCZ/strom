@@ -31,7 +31,8 @@ import {
     applyResearch, isResearchChipId, researchChipCounts, researchChipOffer, researchColumnLiveOff, researchConflictWhat, researchOffer,
     researchOpenConflicts, researchTableEnv, type ResearchChipId, type ResearchColumnId, type ResearchNewWindow, type ResearchTableEnv, type ResearchTableInput,
 } from './table-research.js';
-import { researchTableLive } from '../research-ui.js';
+import { onComputer, researchTableLive } from '../research-ui.js';
+import { researchBubble, researchConflictBubble, type ResearchBubble } from './table-research-bubble.js';
 import { materialsCountNow, researchConflictsNow } from '../../card-signals.js';
 import { directionPlacesKept, onDirectionPlaces } from '../../research-directions-write.js';
 import { findCrossTreeMatches, getTreesDataForMatching, type CrossTreeMatch } from '../../cross-tree.js';
@@ -320,6 +321,33 @@ function conflictsAt(env: ResearchTableEnv, m: TableModel, line: GridLine, col: 
     return out;
 }
 
+/**
+ * The conflicts a ≠ opens (§16.3 → §16.4 Conflicts): those it stands for,
+ * and on Partner or a union's cell of the People table also the partner's
+ * conflicts of the same union (the Unions table names both partners already).
+ */
+function conflictsOpened(env: ResearchTableEnv, m: TableModel, line: GridLine, col: ColumnDef): { personId: PersonId; conflictId: string }[] {
+    const out = conflictsAt(env, m, line, col);
+    if (line.kind === 'more' || line.row.kind !== 'person' || (col.id !== 'partner' && !col.unionScoped)) return out;
+    const row = line.row;
+    const unions = col.id === 'partner' ? row.unions : [lineUnion(line)].filter((u): u is Partnership => !!u);
+    for (const u of unions) {
+        const other = u.person1Id === row.id ? u.person2Id : u.person1Id;
+        for (const c of personConflictCells(env, m, other)) {
+            const here = c.union === u.id && (col.id === 'partner' || c.col === col.id);
+            if (here && !out.some(o => o.conflictId === c.conflict.id && o.personId === other)) out.push({ personId: other, conflictId: c.conflict.id });
+        }
+    }
+    return out;
+}
+
+/** A research cell of a person's row that opens its bubble (§16.4): something drawn, not a live-only "–". */
+function researchCellOpens(line: GridLine, col: ColumnDef, value: CellValue): boolean {
+    if (line.kind !== 'row' || line.row.kind !== 'person' || col.group !== 'research') return false;
+    const r = value.research;
+    return !!r && !value.na && !r.liveOff && (r.parts.length > 0 || r.count !== undefined || !!r.signal);
+}
+
 /** The findings of a line's cell: its union for a union column of the People table, the value of a place cell. */
 function cellFindings(index: CheckIndex, m: TableModel, line: GridLine, col: ColumnDef): CellFinding[] {
     if (line.kind === 'more') return [];
@@ -559,6 +587,7 @@ export const tableMethods = uiModule({
                 onRowMenu: (line, anchor) => this.showTableRowMenu(line, anchor),
                 onIssue: (line, col, cell) => this.showTableFinding(line, col, cell),
                 onConflict: (line, col, mark) => this.showTableConflict(line, col, mark),
+                onResearch: (line, col, cell) => this.showTableResearch(line, col, cell),
                 onToggleUnions: (personId, expand) => this.changeTableColumns(st => setExpanded(st.unions, personId, expand)),
                 onAllUnions: (expand) => this.changeTableColumns(st => setAllExpanded(st.unions, expand)),
                 onRevealUnions: (personId) => this.changeTableColumns(st => {
@@ -722,6 +751,7 @@ export const tableMethods = uiModule({
             selected: st.selected,
             label: `${strings.viewModeSwitch.table} – ${strings.table.rows[type]}`,
             conflictAt: research ? (line, col, value) => conflictMarkAt(research, m, line, col, value) : undefined,
+            researchAt: research ? researchCellOpens : undefined,
             issueAt: index ? (line, col): CellIssueMark | null => {
                 const f = cellFindings(index, m, line, col)[0];
                 return f ? { severity: f.severity, label: translateValidationType(f.issue.type) } : null;
@@ -797,16 +827,59 @@ export const tableMethods = uiModule({
     },
 
     /**
-     * The ≠ of a research conflict on a cell was clicked (§16.3). Until the
-     * table's own Conflicts bubble (§16.4) takes this over, the person's
-     * "What the research knows" dialog opens on the conflict.
+     * The ≠ of a research conflict on a cell was clicked (§16.3): the bubble
+     * Conflicts (§16.4) of the conflicts it stands for, a partner's of the
+     * same union too, each with its Decide ›.
      */
-    showTableConflict(line: GridLine, colPos: number, _mark: HTMLElement): void {
+    showTableConflict(line: GridLine, colPos: number, mark: HTMLElement): void {
         const col = mounted?.display?.columns[colPos];
         const env = researchMemo?.env;
-        if (!col || !env || !model) return;
-        const at = conflictsAt(env, model, line, col)[0];
-        if (at) this.showPersonResearchDialog(at.personId, { conflict: at.conflictId });
+        if (!col || !env || !model || !mounted || line.kind === 'more') return;
+        const row = line.row;
+        const rowPerson = row.kind === 'person' ? row.person
+            : row.kind === 'union' ? row.p1 ?? env.data.persons[row.union.person1Id] : undefined;
+        if (!rowPerson) return;
+        const b = researchConflictBubble(env, rowPerson, conflictsOpened(env, model, line, col));
+        if (!b) return;
+        this.openTableResearchAt(env, b, line, colPos, () => (mark.isConnected ? mark : null), '.tv-conf');
+    },
+
+    /** A research cell was clicked, or Enter or Space pressed on it (§16.4): its bubble, the row selected. */
+    showTableResearch(line: GridLine, colPos: number, cellEl: HTMLElement): void {
+        const col = mounted?.display?.columns[colPos];
+        const env = researchMemo?.env;
+        if (!col || !env || !mounted || line.kind === 'more' || line.row.kind !== 'person') return;
+        const b = researchBubble(env, line.row.person, col.id as ResearchColumnId, {
+            onComputer: onComputer(), bridgeLive: this.researchOriginBridge() === 'live',
+        });
+        if (!b) return;
+        this.openTableResearchAt(env, b, line, colPos, () => (cellEl.isConnected ? cellEl : null));
+    },
+
+    /**
+     * A research bubble opened under its cell once the frame is drawn: the
+     * click selects the row, and the grid drawn again for it may scroll, which
+     * would close a bubble opened at once. The cell (or its mark) is found
+     * anew, as the grid draws it then.
+     */
+    openTableResearchAt(env: ResearchTableEnv, b: ResearchBubble, line: GridLine, colPos: number,
+        clicked: () => HTMLElement | null, part?: string): void {
+        const cell = this.tableCellFinder(line, colPos);
+        requestAnimationFrame(() => {
+            if (!mounted?.container.isConnected) return;
+            const now = cell();
+            const at = clicked() ?? (part ? now?.querySelector<HTMLElement>(part) : null) ?? now;
+            if (!at) return;
+            this.openTableResearchBubble(env, b, { rect: at.getBoundingClientRect(), focusBack: cell, scroller: mounted.grid.el });
+        });
+    },
+
+    /** A line's cell as the grid draws it now (it may have drawn again since it was clicked). */
+    tableCellFinder(line: GridLine, colPos: number): () => HTMLElement | null {
+        const grid = mounted?.grid;
+        const key = lineKey(line);
+        return () => (grid ? [...grid.el.querySelectorAll<HTMLElement>('.tv-row[data-key]')]
+            .find(r => r.dataset.key === key)?.querySelector<HTMLElement>(`[aria-colindex="${colPos + 1}"]`) ?? null : null);
     },
 
     /** A finding's cell was clicked or Enter pressed on it (§7.4): the row selected, the bubble opened. */

@@ -95,6 +95,8 @@ export interface GridInput {
     liveOff?: ReadonlySet<string>;
     /** An open research conflict on a fact's cell (§16.3): ≠ before its value; null: none. */
     conflictAt?: (line: GridLine, col: ColumnDef, value: CellValue) => CellConflictMark | null;
+    /** A research cell that opens its bubble (§16.4): a click, Enter or Space on it asks for it (`onResearch`). */
+    researchAt?: (line: GridLine, col: ColumnDef, value: CellValue) => boolean;
 }
 
 /** A row's action (§10.1): show in the tree, open the person, edit. */
@@ -150,6 +152,8 @@ export interface GridHandlers {
     onMoveGroup?(start: number, end: number, before: number): void;
     /** The ≠ of a research conflict on a cell was clicked (§16.3): its line, its drawn column, the mark. */
     onConflict?(line: GridLine, col: number, mark: HTMLElement): void;
+    /** A research cell was clicked, or Enter or Space pressed on it (§16.4): its line, its drawn column, the cell. */
+    onResearch?(line: GridLine, col: number, cell: HTMLElement): void;
     /** A cell with a finding was clicked or Enter was pressed on it (§7.4): its line, its drawn column, the cell. */
     onIssue?(line: GridLine, col: number, cell: HTMLElement): void;
     /** A tap on a completeness cell (§6.2): true when its bubble opened (touch; a mouse has the title). */
@@ -432,6 +436,11 @@ export class TableGrid {
             }
             if (cellEl?.classList.contains('has-issue') && this.handlers.onIssue) {
                 this.handlers.onIssue(line, Number(cellEl.getAttribute('aria-colindex')) - 1, cellEl);
+                return;
+            }
+            if (cellEl?.classList.contains('has-res') && this.handlers.onResearch) {
+                this.select(line);
+                this.handlers.onResearch(line, Number(cellEl.getAttribute('aria-colindex')) - 1, cellEl);
                 return;
             }
             this.select(line);
@@ -1143,7 +1152,9 @@ export class TableGrid {
                 const conflict = line.kind === 'more' ? null : input.conflictAt?.(line, col, value) ?? null;
                 const substTip = value.subst ? (value.subst === 'bap' ? strings.table.subst.bap : strings.table.subst.bur) : '';
                 const title = value.title ?? (substTip || (value.text.length > 24 ? value.text : ''));
-                html += `<div class="${cellClasses(value, col, issue?.severity ?? null, !!conflict)}${this.pinClass(i, input)}" role="gridcell" aria-colindex="${i + 1}" tabindex="${tab}"`
+                const res = line.kind !== 'more' && !issue && !!input.researchAt?.(line, col, value);
+                html += `<div class="${cellClasses(value, col, issue?.severity ?? null, !!conflict)}${res ? ' has-res' : ''}${this.pinClass(i, input)}" role="gridcell" aria-colindex="${i + 1}" tabindex="${tab}"`
+                    + (res ? ' aria-haspopup="dialog"' : '')
                     + ` style="${this.pinStyle(i, input)}"${title ? ` title="${esc(title)}"` : ''}>${cellInner(value, col, issue, line.kind === 'more' ? '' : input.hit ?? '', conflict)}`
                     + `${i === tailAt ? this.rowTail(input, line) : ''}</div>`;
             }
@@ -1332,6 +1343,11 @@ export class TableGrid {
                 const cellEl = (e.target as Element).closest<HTMLElement>('[aria-colindex]');
                 if (e.key === 'Enter' && line.kind !== 'more' && cellEl?.classList.contains('has-issue') && this.handlers.onIssue) {
                     this.handlers.onIssue(line, col, cellEl);
+                    return;
+                }
+                if (line.kind !== 'more' && cellEl?.classList.contains('has-res') && this.handlers.onResearch) {
+                    this.select(line);
+                    this.handlers.onResearch(line, col, cellEl);
                     return;
                 }
                 if (line.kind === 'more') { this.handlers.onRevealUnions?.(line.row.id); return; }
