@@ -15,7 +15,7 @@
 import { strings } from '../../strings.js';
 import { neutralizeFormula } from '../../csv-export.js';
 import { cellOf, cellPlainText, columnLabel, type ColumnDef } from './table-columns.js';
-import type { RowType, TableModel, TableRow } from './table-model.js';
+import type { CellValue, RowType, TableModel, TableRow } from './table-model.js';
 import { passingUnions, type UnionPredicate } from './table-subrows.js';
 
 const SEP = ';';
@@ -49,35 +49,79 @@ export interface TableCsv {
     columns: number;
 }
 
-/** The CSV of the table as shown (§11.2). */
-export function buildTableCsv(input: TableCsvInput): TableCsv {
+/** One written line of the export: a row, or a further union of a person (a continuation row). */
+export interface ExportLine {
+    row: TableRow;
+    /** The union the union columns read (People), null otherwise. */
+    union: number | null;
+    /** A continuation row (§11.2): only its union's cells are written. */
+    continuation: boolean;
+    /** Per written column: the cell (null where nothing is written: a continuation row's person cells, the "Union" column). */
+    cells: (CellValue | null)[];
+    /** Per written column: the text as the table shows it. */
+    texts: string[];
+}
+
+/** What an export writes (§11.2): the head, its columns and the lines, as CSV and XLSX share them. */
+export interface ExportTable {
+    head: string[];
+    /** Per written column its definition; null for the "Union" column. */
+    columns: (ColumnDef | null)[];
+    /** Where the "Union" column is (−1: none). */
+    unionAt: number;
+    lines: ExportLine[];
+    /** People or unions written. */
+    items: number;
+}
+
+/** The lines of the table as shown (§11.2), the "Union" column after the name when a person has 2+ passing unions. */
+export function buildExportTable(input: TableCsvInput): ExportTable {
     const { model, type, rows, columns } = input;
     const persons = type === 'persons';
     const unionsOf = (row: TableRow): number[] => (row.kind === 'person' ? passingUnions(row, input.pass) : []);
     const unionCol = persons && rows.some(r => r.kind === 'person' && r.unions.length > 1 && unionsOf(r).length > 0);
     const nameAt = columns.findIndex(c => c.id === 'name');
     const head = columns.map(c => columnLabel(c));
-    if (unionCol) head.splice(nameAt + 1, 0, strings.table.csvUnionCol);
-    const out: string[][] = [head];
+    const cols: (ColumnDef | null)[] = [...columns];
+    const unionAt = unionCol ? nameAt + 1 : -1;
+    if (unionCol) {
+        head.splice(unionAt, 0, strings.table.csvUnionCol);
+        cols.splice(unionAt, 0, null);
+    }
+    const lines: ExportLine[] = [];
+    const push = (row: TableRow, union: number | null, continuation: boolean, cells: (CellValue | null)[], unionText: string): void => {
+        const texts = cells.map(v => (v ? cellPlainText(v) : ''));
+        if (unionCol) {
+            cells.splice(unionAt, 0, null);
+            texts.splice(unionAt, 0, unionText);
+        }
+        lines.push({ row, union, continuation, cells, texts });
+    };
     for (const row of rows) {
         const unions = unionsOf(row);
         const multi = row.kind === 'person' && row.unions.length > 1;
         const first = unions[0] ?? 0;
-        const line = columns.map(c => cellPlainText(cellOf(model, row, c, c.unionScoped ? first : undefined)));
-        if (unionCol) line.splice(nameAt + 1, 0, multi && unions.length ? strings.table.csvUnionOf(first + 1, row.kind === 'person' ? row.unions.length : 0) : '');
-        out.push(line);
+        const n = row.kind === 'person' ? row.unions.length : 0;
+        push(row, row.kind === 'person' ? first : null, false,
+            columns.map(c => cellOf(model, row, c, c.unionScoped ? first : undefined)),
+            multi && unions.length ? strings.table.csvUnionOf(first + 1, n) : '');
         if (!multi || row.kind !== 'person') continue;
         for (const u of unions.slice(1)) {
-            const more = columns.map(c => (c.unionScoped ? cellPlainText(cellOf(model, row, c, u)) : ''));
-            if (unionCol) more.splice(nameAt + 1, 0, strings.table.csvUnionOf(u + 1, row.unions.length));
-            out.push(more);
+            push(row, u, true, columns.map(c => (c.unionScoped ? cellOf(model, row, c, u) : null)), strings.table.csvUnionOf(u + 1, n));
         }
     }
+    return { head, columns: cols, unionAt, lines, items: rows.length };
+}
+
+/** The CSV of the table as shown (§11.2). */
+export function buildTableCsv(input: TableCsvInput): TableCsv {
+    const t = buildExportTable(input);
+    const out = [t.head, ...t.lines.map(l => l.texts)];
     return {
         csv: BOM + out.map(r => r.map(tableCsvField).join(SEP)).join('\r\n') + '\r\n',
-        items: rows.length,
-        lines: out.length - 1,
-        columns: head.length,
+        items: t.items,
+        lines: t.lines.length,
+        columns: t.head.length,
     };
 }
 
@@ -97,8 +141,8 @@ export function fileNamePart(text: string): string {
         .replace(/^-+|-+$/g, '');
 }
 
-/** `{tree}_{view}_{YYYY-MM-DD}.csv` (§11.1), the date in local time. */
-export function tableCsvFileName(tree: string, view: string, now: Date): string {
+/** `{tree}_{view}_{YYYY-MM-DD}.csv` (§11.1; `.xlsx` for §11.3), the date in local time. */
+export function tableCsvFileName(tree: string, view: string, now: Date, ext: 'csv' | 'xlsx' = 'csv'): string {
     const day = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    return `${fileNamePart(tree) || 'family-tree'}_${fileNamePart(view) || 'table'}_${day}.csv`;
+    return `${fileNamePart(tree) || 'family-tree'}_${fileNamePart(view) || 'table'}_${day}.${ext}`;
 }
