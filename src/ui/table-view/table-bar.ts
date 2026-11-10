@@ -101,6 +101,7 @@ export function createStatus(): HTMLElement {
     el.innerHTML = '<span class="tv-status-count" aria-live="polite"></span>'
         + '<span class="tv-status-sort"></span>'
         + '<span class="tv-status-right">'
+        + '<span class="tv-status-res" hidden></span>'
         + `<span class="tv-status-checks" role="status" hidden><span class="tv-checks-ring" aria-hidden="true">◌</span> ${esc(strings.table.checksRunning)}</span>`
         + `<span class="tv-status-ro" title="${esc(strings.table.readOnly)}" hidden><span class="tv-ro-long">${esc(strings.table.readOnly)}</span>`
         + `<span class="tv-ro-short">${esc(strings.table.readOnlyShort)}</span></span>`
@@ -118,4 +119,17 @@ export function updateStatus(el: HTMLElement, type: RowType, shown: number, tota
     el.querySelector('.tv-status-count')!.textContent = countText(type, shown, total);
     el.querySelector('.tv-status-sort')!.textContent = sortText(type, sort);
     el.querySelector<HTMLElement>('.tv-status-checks')!.hidden = !checking;
+}
+
+/**
+ * The research's state in the status line (§16.2), only while a research
+ * column is shown: "● Following the research live", else "Research: as of
+ * {when}" (the state the cells come from); nothing otherwise.
+ */
+export function updateResearchStatus(el: HTMLElement, state: { live: true } | { live: false; when: string } | null): void {
+    const res = el.querySelector<HTMLElement>('.tv-status-res')!;
+    const text = !state ? '' : state.live ? strings.table.res.following : state.when ? strings.table.res.stale(state.when) : '';
+    res.hidden = !text;
+    res.textContent = text;
+    res.classList.toggle('is-following', !!state?.live);
 }

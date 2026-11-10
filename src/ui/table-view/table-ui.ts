@@ -26,7 +26,15 @@ import { TreeRenderer } from '../../renderer.js';
 import { isPhoneBar } from '../../breakpoints.js';
 import { strings, getCurrentLanguage, type Language } from '../../strings.js';
 import { uiModule } from '../module.js';
-import { cellOf, columnById, columnLabel, columnNote, dateCell, eventPersons, eventTypeLabel, type SortSpec } from './table-columns.js';
+import { cellOf, columnById, columnLabel, columnNote, dateCell, eventPersons, eventTypeLabel, setResearchOffer, type SortSpec } from './table-columns.js';
+import {
+    applyResearch, researchColumnLiveOff, researchOffer, researchTableEnv, type ResearchColumnId, type ResearchTableEnv, type ResearchTableInput,
+} from './table-research.js';
+import { researchTableLive } from '../research-ui.js';
+import { materialsCountNow, researchConflictsNow } from '../../card-signals.js';
+import { directionPlacesKept, onDirectionPlaces } from '../../research-directions-write.js';
+import { findCrossTreeMatches, getTreesDataForMatching, type CrossTreeMatch } from '../../cross-tree.js';
+import type { ChangeKind, PersonChange } from '../../research-changes.js';
 import {
     CHECK_CHIPS, chipItem, clearFilter, columnItem, filterRows, filterSummary, isChipItem, removeColumnFilter, searchQuery, setChip, setParticipantFilter,
     setColumnFilter, setEmptyFilter, sortRows, columnItemActive, type ChipId, type FilterResult, type TableFilter,
@@ -40,7 +48,7 @@ import {
 } from './table-model.js';
 import { eventEditTarget } from './table-events.js';
 import { TableGrid, type RowAction } from './table-grid.js';
-import { createBar, createStatus, updateBar, updateStatus } from './table-bar.js';
+import { createBar, createStatus, updateBar, updateResearchStatus, updateStatus } from './table-bar.js';
 import {
     canMoveColumn, canPinColumn, catalogColumns, displayColumns, hideColumn, lockedColumn, moveColumnBy, moveColumnRun, moveColumnTo,
     filterChanged, normalizeColumns, pinColumn, resetColumns, setColumnWidth, setGroupCollapsed, setGroupShown, showColumn, sortAdd, sortClick,
@@ -56,7 +64,7 @@ import { closeHeadMenu, headMenuItems, openHeadMenu, SEP, type HeadMenuItem, typ
 import { issueCategory, translateValidationType, validateTreeData, type ValidationIssue } from '../../validation.js';
 import { dismissalFor, dismissalKey } from '../../quality-dismiss.js';
 import { QUALITY_CHANGED_EVENT } from '../quality-ui.js';
-import type { Partnership, PartnershipId, PersonId, StromData, TableView, TreeId } from '../../types.js';
+import type { Partnership, PartnershipId, Person, PersonId, StromData, TableView, TreeId } from '../../types.js';
 import {
     discardViewChanges, dropMissingViews, isBuiltinId, newViewId, openViewOf, readTableWork, restoreTableState, switchView,
     tableWorkOf, takenViewNames, uniqueViewName, viewChanged, viewFromState, viewList, writeTableWork,
@@ -144,6 +152,8 @@ let coverage: { rows: readonly TableRow[]; cells: Map<string, CoverageCell> } | 
 
 function coverageOf(m: TableModel, type: RowType, rows: readonly TableRow[], col: ColumnDef, pass: UnionPredicate | null): CoverageCell {
     if (col.id === lockedColumn(type)) return coverageLabel();
+    // §16.2: the research's signals are not facts to fill in.
+    if (col.group === 'research') return { text: '–', low: false, title: strings.table.na };
     if (!coverage || coverage.rows !== rows) coverage = { rows, cells: new Map() };
     let cell = coverage.cells.get(col.id);
     if (!cell) {
@@ -285,12 +295,95 @@ function escHtml(text: string): string {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+/** The research's environment last given to the cells (§16) and what it was built from. */
+let researchMemo: { key: readonly unknown[]; env: ResearchTableEnv } | null = null;
+
+function sameKey(a: readonly unknown[], b: readonly unknown[]): boolean {
+    return a.length === b.length && a.every((x, i) => x === b[i]);
+}
+
+/** What changed in the app and was not sent, per person: worked out only when a cell asks (rSync). */
+class LazyUnsent extends Map<PersonId, readonly ChangeKind[]> {
+    private filled = false;
+    constructor(private readonly load: () => PersonChange[] | null) { super(); }
+    private fill(): void {
+        if (this.filled) return;
+        this.filled = true;
+        for (const c of this.load() ?? []) if (!c.deleted && c.kinds.length) super.set(c.personId, c.kinds);
+    }
+    override get(id: PersonId): readonly ChangeKind[] | undefined { this.fill(); return super.get(id); }
+    override has(id: PersonId): boolean { this.fill(); return super.has(id); }
+    override get size(): number { this.fill(); return super.size; }
+}
+
+/** The other trees read for ⇄ In another tree (§16), for a tree and revision; and the read under way. */
+let crossTrees: { key: string; match: ((p: Person) => readonly CrossTreeMatch[]) | null } | null = null;
+let crossTreesLoading: string | null = null;
+
 /** No edits here (13j): a read-only page or a locked tree. */
 function tableReadOnly(): boolean {
     return DataManager.isReadOnly() || DataManager.isTreeLocked();
 }
 
 export const tableMethods = uiModule({
+    /**
+     * The research's environment for the cells (§16; null: no research tree):
+     * the tree's kind, the live state, the lines' places, the unsent changes
+     * (worked out when a cell asks). Built again only when one of them changed.
+     */
+    tableResearchEnv(data: StromData, rev: number, m: TableModel): ResearchTableEnv | null {
+        if (!m.ctx.reliability.researchTree) { researchMemo = null; return null; }
+        const kind = this.activeResearchArchive() ? 'archive' : 'research';
+        const readOnly = DataManager.isReadOnly();
+        const now = researchTableLive();
+        const places = now.base ? directionPlacesKept(now.base) : null;
+        const b = this.researchChangesBase();
+        const key = [
+            data, rev, m, kind, readOnly, now.live, now.waiting, now.working, now.queue, [...now.done].join(';'), places,
+            b && b !== 'same' ? b.base : b, b && b !== 'same' ? b.key : '',
+        ];
+        if (researchMemo && sameKey(researchMemo.key, key)) return researchMemo.env;
+        const input: ResearchTableInput = {
+            kind, readOnly, live: now.live, waiting: now.waiting, working: now.working, queue: now.queue, done: new Map(now.done),
+            livePlaces: places, unsent: new LazyUnsent(() => this.researchChangesNow()),
+            conflictsOf: researchConflictsNow, materialsOf: materialsCountNow,
+            generationOf: id => m.ctx.generations().get(id), now: Date.now(),
+        };
+        const env = researchTableEnv(data, input);
+        researchMemo = { key, env };
+        return env;
+    },
+
+    /** When the research's state the cells show was taken (§16.2 "Research: as of …"): the tree's last load from it. */
+    tableResearchWhen(tree: string): string {
+        const at = Date.parse(TreeManager.getTreeMetadata(tree as TreeId)?.research?.syncedAt ?? '');
+        if (!Number.isFinite(at)) return '';
+        return new Date(at).toLocaleString(getCurrentLanguage(), { day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    },
+
+    /**
+     * ⇄ In another tree (§16): the other trees are read (cached by their
+     * change stamps) when the column is shown, and the table drawn again when
+     * they are; until then the cells are empty.
+     */
+    tableCrossTrees(tree: string, m: TableModel, shown: boolean): void {
+        if (!shown || !tree || DataManager.isViewMode()) return;
+        const key = `${tree}|${m.rev}|${m.data === DataManager.getData() ? 1 : 0}`;
+        if (crossTrees?.key !== key && crossTreesLoading !== key) {
+            crossTreesLoading = key;
+            void getTreesDataForMatching(TreeManager).then(trees => {
+                if (crossTreesLoading !== key) return;
+                crossTreesLoading = null;
+                crossTrees = { key, match: trees ? (p: Person) => findCrossTreeMatches(tree as TreeId, p, trees) : null };
+                redrawTable(el => this.renderTableView(el));
+            }, () => { if (crossTreesLoading === key) crossTreesLoading = null; });
+        }
+        const match = crossTrees?.key.startsWith(`${tree}|`) ? crossTrees.match : null;
+        if (m.ctx.crossTree === match) return;
+        m.ctx.crossTree = match;
+        for (const row of m.persons) row.cache.delete('crossTree');
+    },
+
     /** Draw the Table view into its container. Called by the renderer whenever the table is on. */
     renderTableView(container: HTMLElement): void {
         const data = DataManager.getData();
@@ -304,6 +397,10 @@ export const tableMethods = uiModule({
         const tree = treeKey();
         const index = this.tableChecksFor(tree, data, rev);
         applyChecks(m, index);
+        // §16.1: the research columns the tree offers, before its state is read (a column not offered is not in the catalog).
+        const research = this.tableResearchEnv(data, rev, m);
+        applyResearch(m, research);
+        setResearchOffer(research ? researchOffer(research) : {});
         const state = stateOf(tree);
         // An undo or a delete took the open view away: back to the default one (§9.3).
         dropMissingViews(state, data.tableViews);
@@ -380,6 +477,8 @@ export const tableMethods = uiModule({
                     redrawFrame = requestAnimationFrame(() => { redrawFrame = 0; redrawTable(el => this.renderTableView(el)); });
                 };
                 window.addEventListener(QUALITY_CHANGED_EVENT, later);
+                // Who stands where in the lines, read anew through the bridge (§16.9).
+                onDirectionPlaces(later);
                 window.addEventListener('strom:user-change', () => {
                     this.tableEditSaved();
                     later();
@@ -449,6 +548,7 @@ export const tableMethods = uiModule({
         normalizeColumns(type, st);
         const display = displayColumns(type, st, phone);
         mounted.display = display;
+        this.tableCrossTrees(tree, m, type === 'persons' && display.columns.some(c => c.id === 'crossTree'));
         const { rows, pass, stale } = viewRows(tree, m, type, st.filter, st.search, st.sort, display.columns);
         const persons = type === 'persons';
         const lines = persons ? buildLines(rows, { collapse: st.unions, pass, revealed: new Set(st.revealedUnions) }) : undefined;
@@ -467,6 +567,9 @@ export const tableMethods = uiModule({
         container.dataset.rowtype = type;
         updateBar(mounted.bar, type, counts);
         updateStatus(mounted.status, type, rows.length, counts[type], st.sort, !!checks?.running, tableReadOnly());
+        const researchShown = !!research && display.columns.some(c => c.group === 'research');
+        updateResearchStatus(mounted.status, !research || !researchShown ? null
+            : research.input.live ? { live: true } : { live: false, when: this.tableResearchWhen(tree) });
         mounted.unionsButton = unionsButton;
         const openView = openViewOf(state, type, data.tableViews);
         this.drawTableEmpty(tableEmptyState({
@@ -492,6 +595,9 @@ export const tableMethods = uiModule({
                 : null,
             lines, subRows: persons, unionsButton, stale,
             actions: phone ? null : { edit: !tableReadOnly() },
+            liveOff: research ? new Set(display.columns
+                .filter(c => c.group === 'research' && (c.id === 'rTasks' || c.id === 'rAgent') && researchColumnLiveOff(research, c.id as ResearchColumnId))
+                .map(c => c.id)) : undefined,
             coverage: st.coverageRow ? (col) => coverageOf(m, type, rows, col, pass) : undefined,
             selected: st.selected,
             label: `${strings.viewModeSwitch.table} – ${strings.table.rows[type]}`,

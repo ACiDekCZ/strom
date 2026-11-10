@@ -15,7 +15,7 @@
 import { strings } from '../../strings.js';
 import { columnLabel, groupLabel, type ColumnDef, type ColumnGroup } from './table-columns.js';
 import type { RowType } from './table-model.js';
-import { canMoveColumn, catalogColumns, lockedColumn, type RowTypeState } from './table-state.js';
+import { canMoveColumn, catalogColumns, groupAllColumns, lockedColumn, type RowTypeState } from './table-state.js';
 
 export interface ColumnPanelHandlers {
     onShow(id: string, on: boolean): void;
@@ -173,7 +173,8 @@ export class ColumnPanel {
         for (const g of groups) {
             const label = groupLabel(g.group);
             const open = !!query || this.open.has(g.group);
-            const allOn = g.shown === g.total;
+            // "all" is pressed when what it shows is shown (the research group: its default set, §16.2).
+            const allOn = g.group === 'research' && type === 'persons' ? groupAllColumns(type, g.group).every(c => shown.has(c.id)) : g.shown === g.total;
             const collapsed = st.collapsedGroups.includes(g.group);
             const listId = `${this.uid}-${g.group}`;
             html += `<section class="tv-cp-group${open ? ' is-open' : ''}" data-group="${esc(g.group)}">`

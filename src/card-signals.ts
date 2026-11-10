@@ -64,6 +64,11 @@ export function setResearchConflictsProvider(provider: ((id: PersonId) => Resear
     researchConflictsProvider = provider;
 }
 
+/** The research's conflicts of a person as the cards read them (null: the tree's own). */
+export function researchConflictsNow(id: PersonId): ResearchConflict[] | null {
+    return researchConflictsProvider?.(id) ?? null;
+}
+
 /**
  * Materials of a person in a tree linked to a research that lists them (spec 017):
  * the tooltip says "Materials N" instead of attachments. Null: not offered here.
@@ -72,6 +77,11 @@ let materialsCountProvider: ((p: Person) => number | null) | null = null;
 
 export function setMaterialsCountProvider(provider: ((p: Person) => number | null) | null): void {
     materialsCountProvider = provider;
+}
+
+/** Materials of a person as the cards read them (null: not offered here). */
+export function materialsCountNow(p: Person): number | null {
+    return materialsCountProvider?.(p) ?? null;
 }
 
 /** Everything evaluated once per render and shared by all cards. */

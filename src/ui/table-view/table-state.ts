@@ -5,7 +5,8 @@
  * operations of §4.3–§4.6 (show, order, width, pin, collapse). No DOM here.
  */
 
-import { columnById, columnsOf, DEFAULT_VIEWS, phoneWidth, type ColumnDef, type ColumnGroup, type SortSpec } from './table-columns.js';
+import { columnById, columnOffered, columnsOf, DEFAULT_VIEWS, phoneWidth, type ColumnDef, type ColumnGroup, type SortSpec } from './table-columns.js';
+import { RESEARCH_DEFAULT_COLUMNS } from './table-research.js';
 import type { RowType } from './table-model.js';
 import type { TableView } from '../../types.js';
 import { defaultUnionCollapse, type UnionCollapse } from './table-subrows.js';
@@ -80,7 +81,7 @@ export function tableStateFor(treeKey: string): TableState {
 
 /** The columns of a state that the catalog knows, with their widths (a phone narrows them, §1.4). */
 export function shownColumns(type: RowType, st: RowTypeState, phone: boolean): { columns: ColumnDef[]; widths: number[]; pinned: number } {
-    const columns = st.columns.map(id => columnById(type, id)).filter((c): c is ColumnDef => !!c && c.phase === 1);
+    const columns = st.columns.map(id => columnById(type, id)).filter((c): c is ColumnDef => !!c && c.phase === 1 && columnOffered(c));
     const pinned = Math.min(st.pinned, columns.length);
     const widths = columns.map((c, i) => {
         const w = st.widths[c.id] ?? c.width;
@@ -105,9 +106,9 @@ export function lockedColumn(type: RowType): string {
     return type === 'persons' ? 'name' : type === 'unions' ? 'p1' : type === 'events' ? 'evType' : 'srcTitle';
 }
 
-/** The catalog's P1 columns of a row type (the Columns panel lists these). */
+/** The catalog's P1 columns of a row type the tree offers (the Columns panel lists these; §16.1). */
 export function catalogColumns(type: RowType): ColumnDef[] {
-    return columnsOf(type).filter(c => c.phase === 1);
+    return columnsOf(type).filter(c => c.phase === 1 && columnOffered(c));
 }
 
 function catalogIndex(type: RowType): Map<string, number> {
@@ -215,10 +216,20 @@ export function hideColumn(type: RowType, st: RowTypeState, id: string): boolean
     return true;
 }
 
-/** "all" in a group of the Columns panel: show or hide every column of the group. */
+/**
+ * The columns "all" shows in a group: every column, but in the People's
+ * research group only its default set (§16.2: rSum, rWait, rConf, rHyp, rAgent).
+ */
+export function groupAllColumns(type: RowType, group: string): ColumnDef[] {
+    const cols = catalogColumns(type).filter(c => c.group === group);
+    if (type !== 'persons' || group !== 'research') return cols;
+    return cols.filter(c => (RESEARCH_DEFAULT_COLUMNS as readonly string[]).includes(c.id));
+}
+
+/** "all" in a group of the Columns panel: show every column of the group (the research group: its default set, §16.2) or hide them all. */
 export function setGroupShown(type: RowType, st: RowTypeState, group: string, on: boolean): boolean {
     let changed = false;
-    for (const c of catalogColumns(type)) {
+    for (const c of on ? groupAllColumns(type, group) : catalogColumns(type)) {
         if (c.group !== group) continue;
         changed = (on ? showColumn(type, st, c.id) : hideColumn(type, st, c.id)) || changed;
     }

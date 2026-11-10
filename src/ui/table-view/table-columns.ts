@@ -17,20 +17,24 @@ import { findRelationship } from '../../kinship.js';
 import { rodOf, siblingsOf, sortByBirth } from '../../lineage.js';
 import { sortLifeEvents, eventValueIsOnTag, coupleEventLabel } from '../../events.js';
 import { lifeEventLabel } from '../../person-sources.js';
-import { factReliability, type ReliabilityStepName } from '../../reliability.js';
+import { CARD_STATUS_CLASSES, cardStatus, factReliability, type ReliabilityStepName } from '../../reliability.js';
+import { cardStatusLabel } from '../fact-status.js';
 import { strings, type StringsType } from '../../strings.js';
 import { safeHttpUrl } from '../../validation.js';
 import { factCitations, sourceReaders, type CitedSource } from './table-sources.js';
 import { personGodparents } from './table-events.js';
+import {
+    researchCell, sourceImageCell, sourceResearchIdCell, unionResearchCell, unionResearchIdCell, type ResearchColumnId, type UnionResearchColumnId,
+} from './table-research.js';
 import { dateNumber, type CellName, type CellValue, type EventRow, type PersonRow, type RowType, type SourceRow, type TableContext, type TableModel, type TableRow, type UnionRow } from './table-model.js';
 
 export type ColumnKind = 'text' | 'date' | 'age' | 'number' | 'percent' | 'pill' | 'link';
 
 /** Column groups in their order (People first, then the Unions table's own). */
-export const PERSON_GROUPS = ['person', 'birth', 'parents', 'union', 'divorce', 'death', 'events', 'sources', 'rel', 'checks'] as const;
-export const UNION_GROUPS = ['pair', 'wed', 'divorce', 'uextra'] as const;
+export const PERSON_GROUPS = ['person', 'birth', 'parents', 'union', 'divorce', 'death', 'events', 'sources', 'rel', 'research', 'checks'] as const;
+export const UNION_GROUPS = ['pair', 'wed', 'divorce', 'uextra', 'research'] as const;
 export const EVENT_GROUPS = ['event', 'participants', 'source'] as const;
-export const SOURCE_GROUPS = ['source', 'use'] as const;
+export const SOURCE_GROUPS = ['source', 'use', 'research'] as const;
 export type ColumnGroup = typeof PERSON_GROUPS[number] | typeof UNION_GROUPS[number] | typeof EVENT_GROUPS[number] | typeof SOURCE_GROUPS[number];
 
 export type ColumnLabelKey = keyof StringsType['table']['col'];
@@ -44,6 +48,11 @@ export interface ColumnDef {
     computed: boolean;
     unionScoped: boolean;
     phase: 1 | 2;
+    /**
+     * The column needs the research (§16.1): offered only when the tree
+     * offers it (setResearchOffer), else not in the catalog at all.
+     */
+    research: boolean;
     /** Default width (px, desktop). */
     width: number;
     align: 'left' | 'right';
@@ -356,17 +365,46 @@ function deathOnly(ctx: TableContext, row: TableRow, compute: (p: Person) => Cel
     return ctx.living(p) ? naCell(naText, true) : compute(p);
 }
 
+/** The research columns of people with their widths (§16.2, §16.9, §16.10), in the catalog's order. */
+const RESEARCH_DEFS: readonly (readonly [ResearchColumnId, number])[] = [
+    ['rSum', 100], ['rWait', 196], ['rConf', 170], ['rHyp', 96], ['rTasks', 170], ['rAgent', 220], ['rMat', 92], ['rLine', 240],
+    ['rEdge', 260], ['rSearched', 260], ['rSync', 330], ['rOrig', 250], ['rStory', 190], ['rWhere', 300], ['rNew', 260], ['rAvail', 300],
+    ['rParish', 280], ['rEst', 210],
+];
+
+/** The research columns of unions (16zg). */
+const UNION_RESEARCH_DEFS: readonly (readonly [UnionResearchColumnId, number])[] = [['rLine', 240], ['rAgent', 220], ['rConf', 170]];
+
+function researchPersonCell(ctx: TableContext, row: TableRow, id: ResearchColumnId): CellValue {
+    return ctx.research ? researchCell(ctx.research, asPerson(row), id) : emptyCell();
+}
+
+/** ⇄ In another tree (§16.0): the other trees the person is in, by name; sorted by their number. */
+function crossTreeCell(ctx: TableContext, p: Person): CellValue {
+    const matches = ctx.crossTree?.(p) ?? [];
+    const names = [...new Set(matches.map(m => m.treeName))];
+    if (!names.length) return emptyCell();
+    return { ...EMPTY, text: names.join(', '), sortKey: names.length, empty: false };
+}
+
+/** Person status (§16.0): the card's one mark of sources and reliability in words; sorted strongest first. */
+function personStatusCell(ctx: TableContext, p: Person): CellValue {
+    const st = cardStatus(ctx.data, p, { ...ctx.reliability, treeHasSources: ctx.hasSources(), unions: ctx.unionsOf() });
+    if (!st) return emptyCell();
+    return { ...textCell(cardStatusLabel(st)), sortKey: CARD_STATUS_CLASSES.indexOf(st.cls) };
+}
+
 // ---------------------------------------------------------------------------
 // The catalog
 
-type Def = Omit<ColumnDef, 'rowType' | 'computed' | 'unionScoped' | 'phase' | 'align' | 'kind'> & Partial<Pick<ColumnDef, 'computed' | 'unionScoped' | 'kind' | 'align'>>;
+type Def = Omit<ColumnDef, 'rowType' | 'computed' | 'unionScoped' | 'phase' | 'align' | 'kind' | 'research'> & Partial<Pick<ColumnDef, 'computed' | 'unionScoped' | 'kind' | 'align' | 'research'>>;
 
 function cols(rowType: RowType, defs: Def[]): ColumnDef[] {
     return defs.map(d => {
         const kind = d.kind ?? 'text';
         const numeric = kind === 'age' || kind === 'number' || kind === 'percent';
         return {
-            computed: false, phase: 1 as const, ...d, rowType, kind,
+            computed: false, phase: 1 as const, ...d, rowType, kind, research: d.research ?? d.group === 'research',
             unionScoped: d.unionScoped ?? (rowType === 'persons' && (d.group === 'union' || d.group === 'divorce')),
             align: d.align ?? (numeric ? 'right' : 'left'),
         };
@@ -391,6 +429,8 @@ export const PERSON_COLUMNS: readonly ColumnDef[] = cols('persons', [
         },
     },
     { id: 'living', group: 'person', label: 'living', width: 80, computed: true, get: (c, r) => yesNo(c.living(asPerson(r))) },
+    { id: 'question', group: 'person', label: 'question', width: 220, get: (_c, r) => textCell(asPerson(r).question) },
+    { id: 'crossTree', group: 'person', label: 'crossTree', width: 190, get: (c, r) => crossTreeCell(c, asPerson(r)) },
     {
         id: 'researchId', group: 'person', label: 'researchId', width: 110, get: (_c, r) => {
             const ref = asPerson(r).refn?.trim();
@@ -582,6 +622,9 @@ export const PERSON_COLUMNS: readonly ColumnDef[] = cols('persons', [
             return { ...textCell(strings.factStatus[weakest], true), sortKey: order.indexOf(weakest) };
         },
     },
+    { id: 'personStatus', group: 'rel', label: 'personStatus', width: 190, get: (c, r) => personStatusCell(c, asPerson(r)) },
+    // Research (§16.2, §16.8–§16.10): only in a research tree, all hidden by default
+    ...RESEARCH_DEFS.map(([id, width]): Def => ({ id, group: 'research', label: id, width, get: (c, r) => researchPersonCell(c, r, id) })),
     // Checks (filled by §7)
     { id: 'nFind', group: 'checks', label: 'nFind', width: 92, kind: 'number', computed: true, get: (c, r) => findingsCell(c, r) },
     { id: 'topSev', group: 'checks', label: 'topSev', width: 130, computed: true, get: (c, r) => topSeverityCell(c, r) },
@@ -617,6 +660,7 @@ function partnerRec(ctx: TableContext, row: TableRow, k: 1 | 2): CellValue {
 export const UNION_COLUMNS: readonly ColumnDef[] = cols('unions', [
     { id: 'p1', group: 'pair', label: 'p1', width: 220, get: (c, r) => nameOf(unionPartners(c, asUnion(r)).p1) },
     { id: 'p2', group: 'pair', label: 'p2', width: 220, get: (c, r) => nameOf(unionPartners(c, asUnion(r)).p2) },
+    { id: 'uResearchId', group: 'pair', label: 'researchId', width: 110, research: true, get: (c, r) => c.research ? unionResearchIdCell(asUnion(r).union) : emptyCell() },
     { id: 'wDate', group: 'wed', label: 'wDate', width: 124, kind: 'date', get: (c, r) => dateCell(c, asUnion(r).union.startDate) },
     { id: 'wPlace', group: 'wed', label: 'wPlace', width: 210, get: (_c, r) => textCell(asUnion(r).union.startPlace) },
     { id: 'age1', group: 'wed', label: 'age1', width: 92, kind: 'age', computed: true, get: (c, r) => partnerAge(c, r, 1) },
@@ -633,6 +677,10 @@ export const UNION_COLUMNS: readonly ColumnDef[] = cols('unions', [
     { id: 'uLen', group: 'uextra', label: 'uLen', width: 96, kind: 'age', computed: true, get: (c, r) => unionLength(c, asUnion(r).union) },
     { id: 'srcCount', group: 'uextra', label: 'srcCount', width: 92, kind: 'number', computed: true, get: (_c, r) => numberCell(partnershipSourceIds(asUnion(r).union).length) },
     { id: 'uComp', group: 'uextra', label: 'uComp', width: 124, kind: 'percent', computed: true, get: (c, r) => unionComp(asUnion(r).union, unionPartners(c, asUnion(r)).p2) },
+    // Research (16zg): only in a research tree
+    ...UNION_RESEARCH_DEFS.map(([id, width]): Def => ({
+        id, group: 'research', label: id, width, get: (c, r) => c.research ? unionResearchCell(c.research, asUnion(r).union, id) : emptyCell(),
+    })),
 ]);
 
 // ---------------------------------------------------------------------------
@@ -815,6 +863,7 @@ function readersCell(row: TableRow): CellValue {
 
 export const SOURCE_COLUMNS: readonly ColumnDef[] = cols('sources', [
     { id: 'srcTitle', group: 'source', label: 'srcTitle', width: 280, get: (_c, r) => textCell(asSource(r).source.title) },
+    { id: 'srcResearchId', group: 'source', label: 'researchId', width: 110, research: true, get: (c, r) => c.research ? sourceResearchIdCell(asSource(r).source) : emptyCell() },
     { id: 'srcRepo', group: 'source', label: 'srcRepo', width: 200, get: (_c, r) => textCell(asSource(r).source.repository) },
     { id: 'srcRef', group: 'source', label: 'srcRef', width: 180, get: (_c, r) => textCell(asSource(r).source.reference) },
     { id: 'srcUrl', group: 'source', label: 'srcUrl', width: 230, kind: 'link', get: (_c, r) => urlCell(asSource(r).source.url) },
@@ -823,6 +872,8 @@ export const SOURCE_COLUMNS: readonly ColumnDef[] = cols('sources', [
     { id: 'srcRead', group: 'use', label: 'srcRead', width: 160, get: (_c, r) => readersCell(r) },
     { id: 'srcTranscript', group: 'use', label: 'srcTranscript', width: 90, get: (_c, r) => yesNo(!!asSource(r).source.transcript?.trim()) },
     { id: 'srcRecDate', group: 'use', label: 'srcRecDate', width: 130, kind: 'date', get: (c, r) => dateCell(c, asSource(r).source.recordDate) },
+    // Research (16zm): only in a research tree
+    { id: 'srcImage', group: 'research', label: 'srcImage', width: 250, get: (c, r) => c.research ? sourceImageCell(asSource(r).source) : emptyCell() },
 ]);
 
 const BY_TYPE: Record<RowType, ReadonlyMap<string, ColumnDef>> = {
@@ -831,6 +882,22 @@ const BY_TYPE: Record<RowType, ReadonlyMap<string, ColumnDef>> = {
     events: new Map(EVENT_COLUMNS.map(c => [c.id, c])),
     sources: new Map(SOURCE_COLUMNS.map(c => [c.id, c])),
 };
+
+/** The research columns the tree on screen offers, per row type (§16.1; none without research). */
+let offer: Record<RowType, ReadonlySet<string>> = { persons: new Set(), unions: new Set(), events: new Set(), sources: new Set() };
+
+/** Set what the tree on screen offers of the research columns (the view, before it reads its state). */
+export function setResearchOffer(next: Partial<Record<RowType, Iterable<string>>>): void {
+    offer = {
+        persons: new Set(next.persons ?? []), unions: new Set(next.unions ?? []),
+        events: new Set(next.events ?? []), sources: new Set(next.sources ?? []),
+    };
+}
+
+/** Whether the tree on screen offers a column (§16.1: a research column only in a research tree that has it). */
+export function columnOffered(col: ColumnDef): boolean {
+    return !col.research || offer[col.rowType].has(col.id);
+}
 
 export function columnsOf(type: RowType): readonly ColumnDef[] {
     return type === 'persons' ? PERSON_COLUMNS : type === 'unions' ? UNION_COLUMNS : type === 'events' ? EVENT_COLUMNS : SOURCE_COLUMNS;
@@ -942,6 +1009,7 @@ export function phoneWidth(col: ColumnDef, width: number, pinned: boolean): numb
     if (pinned && (col.id === 'name' || col.id === 'p1' || col.id === 'srcTitle')) return 156;
     if (pinned && col.id === 'evType') return 96;
     if (pinned && col.id === 'evWho') return 140;
+    if (col.id === 'rSum') return 96;
     return Math.max(PHONE_MIN_WIDTH[col.kind] ?? 70, Math.round(width * 0.8));
 }
 

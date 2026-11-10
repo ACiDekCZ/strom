@@ -22,7 +22,12 @@ import type { Person, PersonId, StromData } from '../types.js';
 import {
     researchTableEnv, researchCell, researchColumns, researchChips, researchLinesOf, personLineRole, researchLineCounts,
     researchColumnLiveOff, unionLineRole, unionResearchIdCell, sourceResearchIdCell, type ResearchTableInput,
+    researchOffer, unionResearchCell, sourceImageCell, applyResearch, RESEARCH_DEFAULT_COLUMNS,
 } from '../ui/table-view/table-research.js';
+import { cellOf, columnById, columnOffered, setResearchOffer } from '../ui/table-view/table-columns.js';
+import { catalogColumns, defaultTypeState, groupAllColumns, setGroupShown, shownColumns, showColumn } from '../ui/table-view/table-state.js';
+import { buildTableModel } from '../ui/table-view/table-model.js';
+import type { Partnership, Source } from '../types.js';
 
 const GED = readFileSync(join(__dirname, '../../e2e/fixtures/research-table.ged'), 'utf8');
 const LIVE = JSON.parse(readFileSync(join(__dirname, '../../e2e/fixtures/research-table-directions.json'), 'utf8')) as Record<string, unknown>;
@@ -361,5 +366,118 @@ describe('research chips', () => {
         const counts = researchLineCounts(env, Object.values(data.persons));
         expect(counts.lines.map(l => [l.line.id, l.count])).toEqual([['G0001', 5], ['G0002', 3]]);
         expect(counts.offLine).toBe(5);
+    });
+});
+
+describe('research columns in the table (§16.1, §16.2, 16zg, 16zm)', () => {
+    const data = load();
+    const P = (refn: string) => byRefn(data, refn);
+    const U = (ref: string): Partnership => Object.values(data.partnerships).find(x => x.researchId === ref)!;
+    const base: ResearchTableInput = { kind: 'research', live: true, now: NOW, working: [{ person: 'P0002', family: 'F0004', task: 'Sňatek 1850', who: 'agent' }] };
+    const env = researchTableEnv(data, base);
+    afterEach(() => setResearchOffer({}));
+
+    it('researchOffer: per kind of tree; none without research', () => {
+        const all = researchOffer(env);
+        expect(all.persons).toEqual(researchColumns(env));
+        expect(all.unions).toEqual(['uResearchId', 'rLine', 'rAgent', 'rConf']);
+        expect(all.sources).toEqual(['srcResearchId', 'srcImage']);
+        const archive = researchOffer(researchTableEnv(data, { ...base, kind: 'archive', live: false }));
+        expect(archive.unions).toEqual(['uResearchId', 'rLine', 'rConf']);
+        expect(archive.persons).not.toContain('rAgent');
+        expect(researchOffer(researchTableEnv(data, { ...base, readOnly: true })).unions).not.toContain('rAgent');
+        const noLines = load(GED.replace(/1 _STROM_DIRECTIONS Y\n/, '').replace(/1 _STROM_DIRECTION G000[12]\n(2 .*\n)+/g, ''));
+        expect(researchOffer(researchTableEnv(noLines, base)).unions).toEqual(['uResearchId', 'rAgent', 'rConf']);
+        expect(researchOffer(researchTableEnv(data, { ...base, kind: 'none' }))).toEqual({ persons: [], unions: [], sources: [] });
+    });
+
+    it('union cells: the line of the line person, the agent on the couple, the couple\'s conflicts', () => {
+        expect(unionResearchCell(env, U('F0001'), 'rLine').text).toBe('G0001 Předci Karla Pivoňkovského');
+        expect(unionResearchCell(env, U('F0004'), 'rLine').text).toBe(researchCell(env, P('P0002'), 'rLine').text);
+        expect(unionResearchCell(env, U('F0004'), 'rAgent')).toMatchObject({ text: 'pracuje na páru: Sňatek 1850', research: { mark: 'agent' } });
+        expect(unionResearchCell(env, U('F0001'), 'rAgent').empty).toBe(true);
+        const off = researchTableEnv(data, { ...base, live: false });
+        expect(unionResearchCell(off, U('F0004'), 'rAgent')).toMatchObject({ text: '–', ghost: true });
+        // A birth conflict is the person's, not the couple's.
+        expect(unionResearchCell(env, U('F0003'), 'rConf').empty).toBe(true);
+        const marr = load(GED.replace('2 TYPE BIRT\n2 TITL Rok narození Marie', '2 TYPE MARR\n2 TITL Rok sňatku Marie'));
+        const menv = researchTableEnv(marr, base);
+        const u = Object.values(marr.partnerships).find(x => x.researchId === 'F0003')!;
+        const c = unionResearchCell(menv, u, 'rConf');
+        expect(c.research).toMatchObject({ mark: 'conf', count: 1 });
+        expect(c.research?.export).toMatch(/^1: /);
+    });
+
+    it('source image: missing, on the research\'s computer, online, unknown', () => {
+        const s = (more: Partial<Source>): Source => ({ id: 'S1', title: 'Matrika', ...more } as Source);
+        expect(sourceImageCell(s({ imageHeld: 'missing' }))).toMatchObject({ text: 'sken chybí v počítači výzkumu', sortKey: 0 });
+        expect(sourceImageCell(s({ originalInResearch: true })).text).toBe('v počítači výzkumu');
+        expect(sourceImageCell(s({ imageHeld: 'limit' })).text).toBe('v počítači výzkumu');
+        expect(sourceImageCell(s({ imageHeld: 'other', url: 'https://example.org/scan' })).text).toBe('online (archiv)');
+        expect(sourceImageCell(s({})).empty).toBe(true);
+    });
+
+    it('the catalog offers the research columns only when the tree does', () => {
+        expect(catalogColumns('persons').some(c => c.group === 'research')).toBe(false);
+        expect(catalogColumns('unions').map(c => c.id)).not.toContain('uResearchId');
+        expect(catalogColumns('sources').map(c => c.id)).not.toContain('srcImage');
+        // Not research columns: offered in every tree, hidden by default.
+        for (const id of ['question', 'crossTree', 'personStatus']) expect(catalogColumns('persons').map(c => c.id)).toContain(id);
+        const st = defaultTypeState('persons');
+        expect(showColumn('persons', st, 'rSum')).toBe(false);
+        setResearchOffer(researchOffer(env));
+        expect(columnOffered(columnById('persons', 'rSum')!)).toBe(true);
+        const groups = [...new Set(catalogColumns('persons').map(c => c.group))];
+        expect(groups.slice(groups.indexOf('rel'), groups.indexOf('rel') + 3)).toEqual(['rel', 'research', 'checks']);
+        expect(catalogColumns('unions').map(c => c.id)).toContain('uResearchId');
+        // An archive: no waiting, tasks or agent.
+        setResearchOffer(researchOffer(researchTableEnv(data, { ...base, kind: 'archive', live: false })));
+        const ids = catalogColumns('persons').map(c => c.id);
+        for (const id of ['rWait', 'rTasks', 'rAgent']) expect(ids).not.toContain(id);
+        expect(ids).toContain('rSum');
+    });
+
+    it('the default state shows no research column, offered or not', () => {
+        setResearchOffer(researchOffer(env));
+        for (const type of ['persons', 'unions', 'events', 'sources'] as const) {
+            const st = defaultTypeState(type);
+            expect(shownColumns(type, st, false).columns.some(c => c.research || ['question', 'crossTree', 'personStatus'].includes(c.id))).toBe(false);
+        }
+    });
+
+    it('"all" in the research group shows its default set; hiding takes every column', () => {
+        setResearchOffer(researchOffer(env));
+        expect(groupAllColumns('persons', 'research').map(c => c.id)).toEqual([...RESEARCH_DEFAULT_COLUMNS]);
+        expect(groupAllColumns('persons', 'birth').length).toBe(catalogColumns('persons').filter(c => c.group === 'birth').length);
+        const st = defaultTypeState('persons');
+        expect(setGroupShown('persons', st, 'research', true)).toBe(true);
+        expect(st.columns.filter(id => columnById('persons', id)?.group === 'research')).toEqual([...RESEARCH_DEFAULT_COLUMNS]);
+        // After the relations group, before the checks.
+        expect(st.columns.indexOf('rSum')).toBeLessThan(st.columns.indexOf('nFind'));
+        showColumn('persons', st, 'rLine');
+        expect(setGroupShown('persons', st, 'research', false)).toBe(true);
+        expect(st.columns.some(id => columnById('persons', id)?.group === 'research')).toBe(false);
+        // A state with research columns read in a tree without research keeps none of them.
+        setGroupShown('persons', st, 'research', true);
+        setResearchOffer({});
+        expect(shownColumns('persons', st, false).columns.some(c => c.group === 'research')).toBe(false);
+    });
+
+    it('the model reads the research through applyResearch; a change drops the cached cells', () => {
+        setResearchOffer(researchOffer(env));
+        const m = buildTableModel(data, { rev: 1, homeId: null, lang: 'cs', year: 2026 });
+        const row = m.persons.find(r => r.person.refn === 'P0001')!;
+        const col = columnById('persons', 'rLine')!;
+        expect(cellOf(m, row, col).empty).toBe(true);
+        expect(applyResearch(m, env)).toBe(true);
+        expect(applyResearch(m, env)).toBe(false);
+        expect(cellOf(m, row, col).text).toBe('G0001 Předci Karla Pivoňkovského');
+        const urow = m.unions.find(r => r.union.researchId === 'F0004')!;
+        expect(cellOf(m, urow, columnById('unions', 'uResearchId')!).text).toBe('F0004');
+        const srow = m.sources[0];
+        expect(cellOf(m, srow, columnById('sources', 'srcResearchId')!).text).toBe('S0014');
+        applyResearch(m, null);
+        expect(cellOf(m, row, col).empty).toBe(true);
+        expect(cellOf(m, srow, columnById('sources', 'srcResearchId')!).empty).toBe(true);
     });
 });

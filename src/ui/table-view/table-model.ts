@@ -17,6 +17,9 @@ import { buildLineages, rodLabels, type LineageIndex, type RodId } from '../../l
 import type { ReliabilityOptions } from '../../reliability.js';
 import type { Language } from '../../strings.js';
 import type { CheckIndex } from './table-checks.js';
+import type { ResearchTableEnv } from './table-research.js';
+import type { CrossTreeMatch } from '../../cross-tree.js';
+import { treeHasAnySource, unionsByPerson } from '../../evidence-level.js';
 import { buildEventRows } from './table-events.js';
 import { buildSourceRows } from './table-sources.js';
 
@@ -238,6 +241,18 @@ export interface TableContext {
      * of the check columns (applyChecks).
      */
     checks: CheckIndex | null;
+    /**
+     * The research's cells read this (§16, table-research.ts); null: a tree
+     * without research. Set by the view; a change drops the cached research
+     * cells (applyResearch).
+     */
+    research: ResearchTableEnv | null;
+    /** The other trees a person is in (§16 crossTree); null: not read. Set by the view, like `research`. */
+    crossTree: ((p: Person) => readonly CrossTreeMatch[]) | null;
+    /** Whether the tree has any source (the person's status mark, §16 personStatus). */
+    hasSources(): boolean;
+    /** Each person's unions (the person's status mark). */
+    unionsOf(): Map<string, Partnership[]>;
 }
 
 export interface TableModel {
@@ -308,6 +323,8 @@ function makeContext(data: StromData, opts: BuildOptions): TableContext {
     let bounds: Map<string, number> | null = null;
     let blood: Set<string> | null = null;
     const livingCache = new Map<string, boolean>();
+    let hasSources: boolean | undefined;
+    let unions: Map<string, Partnership[]> | null = null;
     const year = opts.year ?? new Date().getFullYear();
     return {
         data, lang: opts.lang, homeId: opts.homeId, year,
@@ -326,6 +343,10 @@ function makeContext(data: StromData, opts: BuildOptions): TableContext {
         blood: () => blood ??= bloodOf(data, opts.homeId),
         person: id => realPerson(data, id),
         checks: null,
+        research: null,
+        crossTree: null,
+        hasSources: () => hasSources ??= treeHasAnySource(data),
+        unionsOf: () => unions ??= unionsByPerson(data),
     };
 }
 

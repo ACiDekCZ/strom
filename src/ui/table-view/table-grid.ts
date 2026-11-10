@@ -38,7 +38,7 @@
 
 import { strings } from '../../strings.js';
 import { cellPlainText, columnLabel, groupLabel, type ColumnDef, type SortSpec } from './table-columns.js';
-import { rowKey, type CellName, type CellSeverity, type CellValue, type RowType, type TableModel, type TableRow } from './table-model.js';
+import { rowKey, type CellName, type CellSeverity, type CellValue, type ResearchCellDetail, type ResearchMark, type RowType, type TableModel, type TableRow } from './table-model.js';
 import { columnRun, groupRuns, MIN_COLUMN_WIDTH, type CollapsedBand } from './table-state.js';
 import { columnOffsets, columnWindow, lineOffsets, lineWindow, type ColumnWindow } from './table-window.js';
 import { lineCell, lineKey, lineLevel, plainLines, type GridLine } from './table-subrows.js';
@@ -90,6 +90,8 @@ export interface GridInput {
     stale?: ReadonlySet<string>;
     /** The action icons in the first column (§10.1; `edit` false: read-only); none on a phone (10b). */
     actions?: { edit: boolean } | null;
+    /** Live-only research columns while the research is not followed (§16.2: the head's dashed "live" tag). */
+    liveOff?: ReadonlySet<string>;
 }
 
 /** A row's action (§10.1): show in the tree, open the person, edit. */
@@ -188,7 +190,7 @@ export function cellClasses(value: CellValue, col: ColumnDef, issue: CellSeverit
     if (col.id === 'srcTitle') cls += ' tv-src-title';
     if (value.aggregate) cls += ' tv-cell--aggregate';
     else if (value.na) cls += ' tv-cell--na';
-    else if (value.computed && !value.empty) cls += ' tv-cell--computed';
+    else if (value.computed && !value.empty && !value.research) cls += ' tv-cell--computed';
     if (value.uncertain) cls += ' tv-cell--uncertain';
     if (value.subst) cls += ' tv-cell--subst';
     if (value.ghost) cls += ' tv-cell--ghost';
@@ -229,7 +231,29 @@ export function moreCitesHtml(n: number): string {
     return `<button type="button" class="tv-cites-more" tabindex="-1" aria-haspopup="dialog" aria-label="${esc(strings.table.moreCites(n))}">+${n}</button>`;
 }
 
+/** A research mark's glyph (§16.3; its look and legend: the marks' own styles). */
+const RESEARCH_GLYPH: Record<ResearchMark, string> = { wait: '!', ext: '!', conf: '≠', q: '?', agent: '◔', done: '✓', queue: '·', new: '•' };
+
+/**
+ * A research cell (§16.2, §16.9, §16.10): its mark, the count (600), "+n"
+ * further kinds, then its parts each in its tone, weight and slant.
+ */
+export function researchHtml(d: ResearchCellDetail, hit = ''): string {
+    const text = (t: string): string => (hit ? highlightHtml(t, hit) : esc(t));
+    let html = d.mark ? `<span class="tv-rmark tv-rmark--${d.mark}" aria-hidden="true">${RESEARCH_GLYPH[d.mark]}</span>` : '';
+    if (d.count !== undefined) html += `<span class="tv-rcount">${d.count}</span>`;
+    if (d.more) html += `<span class="tv-rmore">+${d.more}</span>`;
+    for (const part of d.parts) {
+        const cls = ['tv-rpart', part.tone ? `tv-rtone--${part.tone}` : '', part.weight ? `tv-rw--${part.weight}` : '', part.italic ? 'tv-rpart--i' : '']
+            .filter(Boolean).join(' ');
+        html += `<span class="${cls}">${text(part.text)}</span>`;
+    }
+    return `<span class="tv-cell-text tv-rcell">${html}</span>`;
+}
+
 function cellValueCore(value: CellValue, col: ColumnDef, hit = ''): string {
+    const r = value.research;
+    if (r && !value.na && (r.parts.length > 0 || r.count !== undefined || r.mark)) return researchHtml(r, hit);
     if (col.kind === 'percent' && value.percent !== undefined && !value.na) {
         const fill = Math.round((value.percent * COMP_BAR) / 100);
         return `<span class="tv-comp"><span class="tv-comp-num">${esc(value.text)}</span>`
@@ -632,12 +656,15 @@ export class TableGrid {
                 ? ` <span class="tv-sort-mark" aria-hidden="true">${input.sort[sort].dir === 'desc' ? '↓' : '↑'}${input.sort.length > 1 ? sort + 1 : ''}</span>`
                 : '';
             const filtered = input.filtered?.has(col.id) ? `<span class="tv-filter-mark">${esc(strings.table.filterMark)}</span>` : '';
+            const liveOff = !!input.liveOff?.has(col.id);
+            const liveTag = liveOff ? `<span class="tv-live-tag" title="${esc(strings.table.res.liveOnly)}">${esc(strings.table.res.liveTag)}</span>` : '';
+            const headName = liveOff ? `${label} (${strings.table.res.liveOnly})` : label;
             const right = col.align === 'right' ? ' tv-right' : '';
             const computed = col.computed ? ' is-computed' : '';
             names += `<div class="tv-cell tv-headcell${right}${computed}${this.pinClass(i, input)}" role="columnheader"`
                 + ` aria-colindex="${i + 1}" data-col="${esc(col.id)}" data-index="${i}" tabindex="${col.id === focusCol ? 0 : -1}"`
-                + ` title="${esc(label)}" aria-label="${esc(label)}"${ariaSort} style="${this.pinStyle(i, input)}">`
-                + `<span class="tv-cell-text">${esc(label)}</span>${arrow}${filtered}`
+                + ` title="${esc(headName)}" aria-label="${esc(headName)}"${ariaSort} style="${this.pinStyle(i, input)}">`
+                + `<span class="tv-cell-text">${esc(label)}</span>${liveTag}${arrow}${filtered}`
                 + (col.id === 'name' && input.unionsButton
                     ? `<button type="button" class="tv-head-all" tabindex="-1" data-expand="${input.unionsButton === 'expand' ? 1 : 0}">`
                         + `${esc(input.unionsButton === 'expand' ? strings.table.expandAll : strings.table.collapseAll)}</button>`

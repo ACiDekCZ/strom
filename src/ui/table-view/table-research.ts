@@ -23,7 +23,7 @@ import { placeKey } from '../../places.js';
 import { formatFlexDate } from '../../dates.js';
 import { shownName } from '../../person-name.js';
 import { getCurrentLanguage, strings } from '../../strings.js';
-import type { CellValue, ResearchCellDetail, ResearchCellPart, ResearchMark } from './table-model.js';
+import type { CellValue, ResearchCellDetail, ResearchCellPart, ResearchMark, TableModel } from './table-model.js';
 
 // ==================== INPUT ====================
 
@@ -40,7 +40,7 @@ export interface ResearchTableInput {
     /** What waits for the user: live, else as last heard (≤ 7 days), else none. */
     waiting?: readonly LiveWaiting[];
     /** The agent's work right now (live only). */
-    working?: readonly Pick<LiveWorker, 'person' | 'task' | 'who' | 'paused'>[];
+    working?: readonly Pick<LiveWorker, 'person' | 'family' | 'task' | 'who' | 'paused'>[];
     /** The agent's queue in its order (live only). */
     queue?: readonly Pick<LiveQueueItem, 'state' | 'person' | 'text'>[];
     /** People (REFN) the agent was just done with: since when (ms). */
@@ -223,6 +223,24 @@ export function researchColumns(env: ResearchTableEnv): ResearchColumnId[] {
         if (c === 'rLine' && env.lines.lines.length === 0) return false;
         return true;
     });
+}
+
+/** The research columns of the Unions table (16zg): line, agent on the couple, conflicts; the research id is in the Couple group. */
+export const UNION_RESEARCH_COLUMNS = ['rLine', 'rAgent', 'rConf'] as const;
+export type UnionResearchColumnId = typeof UNION_RESEARCH_COLUMNS[number];
+
+/**
+ * Every column the tree offers that needs the research (§16.1), per row
+ * type: the People's research group, the Unions' research id, line, agent
+ * and conflicts, the Sources' research id and image. None without research.
+ */
+export function researchOffer(env: ResearchTableEnv): { persons: string[]; unions: string[]; sources: string[] } {
+    const { kind, readOnly } = env.input;
+    if (kind === 'none') return { persons: [], unions: [], sources: [] };
+    const agentless = kind === 'archive' || !!readOnly;
+    const lines = env.lines.lines.length > 0;
+    const unions = ['uResearchId', ...UNION_RESEARCH_COLUMNS.filter(c => (c !== 'rLine' || lines) && (c !== 'rAgent' || !agentless))];
+    return { persons: researchColumns(env), unions, sources: ['srcResearchId', 'srcImage'] };
 }
 
 /** A live-only column while the research is not followed (§16.2: dashed "live" tag, "–" cells). */
@@ -632,6 +650,25 @@ export function researchCell(env: ResearchTableEnv, p: Person, col: ResearchColu
     }
 }
 
+/**
+ * Give the model the research's environment (§16): the research cells
+ * read it; a change drops their cached values (as applyChecks does for the
+ * findings). Returns whether it changed.
+ */
+export function applyResearch(model: TableModel, env: ResearchTableEnv | null): boolean {
+    const was = model.ctx.research;
+    if (was === env) return false;
+    model.ctx.research = env;
+    for (const row of model.persons) for (const col of RESEARCH_COLUMNS) row.cache.delete(col);
+    for (const row of model.unions) {
+        row.cache.delete('uResearchId');
+        for (const col of UNION_RESEARCH_COLUMNS) row.cache.delete(col);
+    }
+    // A source's cells only ask whether the tree has research.
+    if (!was !== !env) for (const row of model.sources) { row.cache.delete('srcResearchId'); row.cache.delete('srcImage'); }
+    return true;
+}
+
 // ==================== CHIPS ====================
 
 /** The research chips (§16.5, §16.9, §16.10); a line chip is `line:G…`. */
@@ -697,6 +734,64 @@ export function researchLineCounts(env: ResearchTableEnv, persons: readonly Pers
 export function unionLineRole(env: ResearchTableEnv, u: Partnership): PersonLineRole | null {
     const roles = [u.person1Id, u.person2Id].map(id => env.data.persons[id]).filter(Boolean).map(p => personLineRole(env.lines, p));
     return roles.find(r => r?.kind === 'line' && !r.partner) ?? roles.find(r => r?.kind === 'line') ?? roles.find(r => !!r) ?? null;
+}
+
+/** The partner who gives the union its line (unionLineRole's choice). */
+function unionLinePerson(env: ResearchTableEnv, u: Partnership): Person | null {
+    const people = [u.person1Id, u.person2Id].map(id => env.data.persons[id]).filter((p): p is Person => !!p);
+    const roles = people.map(p => ({ p, r: personLineRole(env.lines, p) }));
+    return (roles.find(x => x.r?.kind === 'line' && !x.r.partner) ?? roles.find(x => x.r?.kind === 'line') ?? roles.find(x => !!x.r))?.p ?? null;
+}
+
+/** Fact tags of a couple: a conflict of one of these on a partner is the union's. */
+const UNION_FACTS = new Set(['MARR', 'MARB', 'MARC', 'MARL', 'MARS', 'ENGA', 'DIV', 'DIVF', 'ANUL']);
+
+/** A research cell of a union row (16zg). */
+export function unionResearchCell(env: ResearchTableEnv, u: Partnership, col: UnionResearchColumnId): CellValue {
+    switch (col) {
+        case 'rLine': {
+            if (env.lines.source === 'none') return emptyResearch();
+            const p = unionLinePerson(env, u);
+            return p ? lineCell(env, p) : emptyResearch();
+        }
+        case 'rAgent': {
+            if (!env.input.live) return emptyResearch(true);
+            const ref = u.researchId?.trim();
+            const w = ref ? (env.input.working ?? []).find(x => x.family === ref && !x.paused) : undefined;
+            if (!w) return emptyResearch();
+            const text = strings.table.res.workingPair(w.task || w.who || '');
+            return cell(text, 3, { mark: 'agent', parts: [{ text }], export: text });
+        }
+        case 'rConf': {
+            const seen = new Set<string>();
+            const open: ResearchConflict[] = [];
+            for (const id of [u.person1Id, u.person2Id]) {
+                const p = env.data.persons[id];
+                if (!p) continue;
+                for (const c of openConflicts(env, p)) {
+                    if (!UNION_FACTS.has(c.fact) || seen.has(c.id)) continue;
+                    seen.add(c.id);
+                    open.push(c);
+                }
+            }
+            if (open.length === 0) return emptyResearch();
+            const words = [...new Set(open.map(c => factWord(c.fact, c.title)))].join(', ');
+            return partsCell([{ text: '· ' + words }], open.length, { mark: 'conf', count: open.length, export: `${open.length}: ${words}` });
+        }
+    }
+}
+
+/**
+ * Where the source's image is (16zm, srcImage): the scan missing on the
+ * research's computer (accent), there (the research holds the original or
+ * left the image out of its file), else online at the archive; nothing known.
+ */
+export function sourceImageCell(s: Source): CellValue {
+    const R = strings.table.res.img;
+    if (s.imageHeld === 'missing') return partsCell([{ text: R.missing, tone: 'accent', weight: 600 }], 0);
+    if (s.originalInResearch || (s.imageHeld && s.imageHeld !== 'other')) return partsCell([{ text: R.research }], 1);
+    if (s.excerpts?.some(e => !!e.pageUrl) || s.url?.trim()) return partsCell([{ text: R.online, tone: 'light' }], 2);
+    return emptyResearch();
 }
 
 /** The union's id in the research (F…), uResearchId. */

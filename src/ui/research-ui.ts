@@ -788,6 +788,43 @@ function followedHere(): LiveSession | null {
     return live && !live.ended && live.treeId === treeId ? live : null;
 }
 
+/** What the Table view's research cells read beyond the tree (spec 073 §16). */
+export interface ResearchTableLive {
+    /** The tree on screen is followed live. */
+    live: boolean;
+    /** What waits: live, else as last heard (≤ 7 days). */
+    waiting: LiveSession['waiting'];
+    working: LiveSession['working'];
+    queue: LiveSession['queue'];
+    /** People (REFN) the agent was just done with, since when. */
+    done: ReadonlyMap<string, number>;
+    /** The followed bridge (its lines' places); null when not followed. */
+    base: string | null;
+}
+
+const NO_DONE: ReadonlyMap<string, number> = new Map();
+const NO_WAITING: LiveSession['waiting'] = [];
+const NO_WORKING: LiveSession['working'] = [];
+const NO_QUEUE: LiveSession['queue'] = [];
+/** The kept waiting list last given out: the same list again while it does not change (the table builds its research anew only on a change). */
+let storedWaiting: { key: string; items: LiveSession['waiting'] } | null = null;
+
+/** The research's live state for the Table view: the followed session, else the waiting list kept from the last time. */
+export function researchTableLive(): ResearchTableLive {
+    const s = followedHere();
+    if (s) return { live: true, waiting: s.waiting, working: s.working, queue: s.queue, done: agentDone, base: s.bridge.base || null };
+    const treeId = DataManager.getCurrentTreeId();
+    const researchId = treeId && !DataManager.isViewMode() ? TreeManager.getTreeMetadata(treeId)?.research?.id : undefined;
+    const items = (researchId ? storedResearchWaiting(researchId)?.items : undefined) ?? NO_WAITING;
+    let waiting = NO_WAITING;
+    if (items.length > 0) {
+        const key = `${researchId}|${JSON.stringify(items)}`;
+        if (storedWaiting?.key !== key) storedWaiting = { key, items };
+        waiting = storedWaiting.items;
+    }
+    return { live: false, waiting, working: NO_WORKING, queue: NO_QUEUE, done: NO_DONE, base: null };
+}
+
 /**
  * Whom the agent was just done with: REFN → when it left `working[]`.
  * Only a live change counts (never what a page load finds), so the session

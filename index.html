@@ -9897,6 +9897,30 @@
         .tv-body .tv-cell--warning { background: var(--warning-soft); }
         .tv-body .tv-cell.has-issue { cursor: pointer; color: var(--text); }
         .tv-cell--ghost { color: var(--text-ghost); }
+        /* §16.2 a research cell: mark, count, "+n", then its parts in their tones; a live-only head's dashed tag. */
+        .tv-rcell { display: inline-flex; align-items: baseline; gap: 4px; }
+        .tv-rmark { flex: none; font-weight: 700; color: var(--accent-text); }
+        .tv-rmark--conf { color: var(--warning-text); }
+        .tv-rmark--agent, .tv-rmark--done, .tv-rmark--new { color: var(--primary); }
+        .tv-rmark--queue { color: var(--text-faint); }
+        .tv-rcount { flex: none; font-weight: 600; font-variant-numeric: tabular-nums; }
+        .tv-rmore { flex: none; font-size: 12px; font-weight: 600; color: var(--text-light); }
+        .tv-rpart { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+        .tv-rtone--faint { color: var(--text-faint); font-size: 11.5px; }
+        .tv-rtone--light { color: var(--text-light); }
+        .tv-rtone--primary { color: var(--primary); }
+        .tv-rtone--accent { color: var(--accent-text); }
+        .tv-rtone--ghost { color: var(--text-ghost); }
+        .tv-rw--500 { font-weight: 500; }
+        .tv-rw--600 { font-weight: 600; }
+        .tv-rpart--i { font-style: italic; }
+        .tv-live-tag {
+            flex: none; margin-left: 6px; padding: 0 4px; border: 1px dashed var(--text-faint); border-radius: var(--r-sm);
+            font-size: 10px; font-weight: 500; line-height: 14px; color: var(--text-light); white-space: nowrap;
+        }
+        .tv-status-res { color: var(--text-faint); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+        .tv-status-res.is-following { color: var(--primary); font-weight: 600; }
+        .tv-status-res[hidden] { display: none; }
         .tv-mark {
             flex: none; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
             font-family: var(--font-sans, inherit); font-style: normal; line-height: 1; user-select: none;
