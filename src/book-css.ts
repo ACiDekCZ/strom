@@ -39,7 +39,7 @@ a { color: inherit; }
 /* Title page and contents */
 .book-front { page: front; }
 .book-title-page { min-height: 230mm; display: flex; flex-direction: column; justify-content: center; }
-.book-title-page h1 { font-size: 34pt; font-weight: 600; letter-spacing: .01em; }
+.book-title-page h1 { font-size: 34pt; font-weight: 600; letter-spacing: .01em; overflow-wrap: anywhere; }
 .book-title-sub { font-size: 15pt; color: #4a4438; margin-top: 6px; }
 .book-title-meta { font-size: 10pt; color: #5c5546; line-height: 1.8; }
 .book-toc h2 { font-size: 22.5pt; margin-bottom: 14px; }
@@ -55,7 +55,8 @@ a { color: inherit; }
 /* A lineage */
 .book-rod { break-before: page; }
 .book-kicker { font: 600 10pt ${SANS}; letter-spacing: .14em; text-transform: uppercase; color: #8a5528; }
-.book-rod-name { font-size: 30pt; margin: 4px 0 0; }
+/* A long surname without spaces breaks inside the page (screen, print, PDF). */
+.book-rod-name { font-size: 30pt; margin: 4px 0 0; overflow-wrap: anywhere; }
 .book-grid { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 4px 16px; margin: 0; }
 .book-grid dt { color: #5c5546; font-size: 10.5pt; padding-top: 2px; }
 .book-grid dd { margin: 0; }
@@ -85,7 +86,7 @@ a { color: inherit; }
 /* A family */
 .book-family { margin-top: 26px; }
 .book-family-head { break-inside: avoid; break-after: avoid; border-top: 1px solid #e3dccd; padding-top: 14px; }
-.book-family-head h2 { font-size: 22.5pt; margin: 4px 0 2px; }
+.book-family-head h2 { font-size: 22.5pt; margin: 4px 0 2px; overflow-wrap: anywhere; }
 .book-family.is-sub .book-family-head h2 { font-size: 18pt; }
 .book-family-line { color: #4a4438; }
 .book-section { border-top: 1px solid #e3dccd; margin-top: 14px; padding-top: 4px; }

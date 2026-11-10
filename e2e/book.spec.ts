@@ -656,3 +656,49 @@ test.describe('family book: the content', () => {
         await book.close();
     });
 });
+
+// A surname without spaces longer than the page is wide (1110): the lineage's
+// heading breaks inside the page on screen, on a phone and in print.
+test.describe('family book: a long surname without spaces', () => {
+    const LONG = 'Wolkenhammerstrandvoldeckenbergsheim';
+
+    async function openLongBook(page: Page, context: BrowserContext): Promise<Page> {
+        await openApp(page);
+        const tree = rodsTree();
+        for (const p of Object.values(tree.persons)) if (p.lastName === 'Brandvold') p.lastName = LONG;
+        await page.evaluate(async (data) => {
+            const S = window.Strom;
+            await S.DataManager.importAsNewTree(data, 'Long');
+            S.TreeRenderer.setFocus(data.defaultPersonId);
+            await S.TreeRenderer.renderAsync();
+        }, tree);
+        await openDialog(page);
+        return openBook(page, context);
+    }
+
+    /** Headings wider than their box or past the page's text column. */
+    const overflowing = (book: Page): Promise<string[]> => book.evaluate(() =>
+        [...document.querySelectorAll<HTMLElement>('.book-rod-name, .book-title-page h1, .book-family-head h2')].filter(h => {
+            const sheet = h.closest('.book-sheet');
+            const pad = sheet ? parseFloat(getComputedStyle(sheet).paddingRight) : 0;
+            const right = sheet ? sheet.getBoundingClientRect().right - pad : innerWidth;
+            return h.scrollWidth > h.clientWidth + 0.5 || h.getBoundingClientRect().right > right + 0.5;
+        }).map(h => h.textContent ?? ''));
+
+    for (const vp of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+        test(`the lineage heading breaks inside the page at ${vp.width}, and in print`, async ({ page, context }) => {
+            await page.setViewportSize(vp);
+            const book = await openLongBook(page, context);
+            await book.setViewportSize(vp);
+            const heading = book.locator('.book-rod-name', { hasText: LONG.slice(0, 12) }).first();
+            await expect(heading).toBeVisible();
+            // Whole, on more than one line.
+            await expect(heading).toContainText(LONG);
+            expect(await heading.evaluate(h => h.getBoundingClientRect().height / parseFloat(getComputedStyle(h).lineHeight))).toBeGreaterThan(1.5);
+            expect(await overflowing(book)).toEqual([]);
+            await book.emulateMedia({ media: 'print' });
+            expect(await overflowing(book)).toEqual([]);
+            await book.close();
+        });
+    }
+});
