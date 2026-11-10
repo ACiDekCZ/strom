@@ -9511,6 +9511,23 @@
         .tv-link { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
         .tv-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; border-radius: 2px; }
         .tv-cell .fact-status.tv-readers { margin: 0; vertical-align: middle; }
+        /* §14.3: a fact's further citations as a pill "+2" after the first one's value; its bubble lists the sources. */
+        .tv-cites-more {
+            flex: none; display: inline-flex; align-items: center; height: 18px; padding: 0 6px; margin-left: 6px; box-sizing: border-box;
+            border: 1px solid var(--border); border-radius: 999px; background: var(--surface);
+            font-family: var(--font-sans); font-size: 11px; color: var(--text-light); cursor: pointer; white-space: nowrap;
+        }
+        .tv-cites-more:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .tv-bubble--cites { padding: 6px 0 8px; }
+        .tv-bub-cites { display: flex; flex-direction: column; }
+        .tv-bub-cite {
+            display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%; min-height: 40px; padding: 5px 14px;
+            border: none; background: none; text-align: left; font: inherit; color: var(--text); cursor: pointer;
+        }
+        .tv-bub-cite + .tv-bub-cite { border-top: 1px solid var(--divider); }
+        .tv-bub-cite-title { font-size: 13px; font-weight: 600; color: var(--primary); overflow-wrap: anywhere; }
+        .tv-bub-cite-meta { font-size: 12px; color: var(--text-light); overflow-wrap: anywhere; }
+        .tv-bub-cite:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         .tv-cell--computed { color: var(--text-light); }
         .tv-cell--na { color: var(--text-faint); font-style: italic; }
         .tv-cell--uncertain .tv-cell-text { border-bottom: 1px dotted var(--text-faint); }
@@ -9909,6 +9926,9 @@
             .tv-nm:hover { text-decoration: underline; }
             .tv-nm--person:hover { color: var(--primary-dark); }
             .tv-link:hover { color: var(--primary-dark); }
+            .tv-cites-more:hover { border-color: var(--primary); color: var(--text); }
+            .tv-bub-cite:hover { background: var(--surface-2); }
+            .tv-bub-cite:hover .tv-bub-cite-title { text-decoration: underline; }
             .tv-chips-clear:hover { color: var(--primary-dark); }
             .tv-fpanel-cancel:hover { border-color: var(--primary); }
             .tv-fpanel-apply:hover, .tv-nomatch-clear:hover { background: var(--primary-dark); border-color: var(--primary-dark); color: var(--on-primary); }
@@ -9935,6 +9955,10 @@
             .tv-toggle { width: 44px; margin-left: -10px; margin-right: -8px; }
             .tv-head-all { height: 100%; }
             .tv-bub-btn, .tv-bub-link { height: 44px; }
+            .tv-bub-cite { min-height: 44px; }
+            /* The pill stays 18 px tall; its target reaches 44 px into the row. */
+            .tv-cites-more { position: relative; }
+            .tv-cites-more::after { content: ''; position: absolute; inset: -13px -6px; }
             .tv-search-q { height: 44px; font-size: 16px; }
             .tv-chips { min-height: 52px; }
             .tv-chip { height: 36px; position: relative; }

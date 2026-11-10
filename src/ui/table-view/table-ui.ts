@@ -66,7 +66,7 @@ import { buildTableCsv, tableCsvFileName, type TableCsv } from './table-export.j
 import { applyChecks, bandSeverity, CHECK_COLUMNS, CheckIndex, isPlaceColumn, type CellFinding } from './table-checks.js';
 import { lineCell, lineKey, type GridLine } from './table-subrows.js';
 import { markHtml, type CellIssueMark } from './table-grid.js';
-import { bubbleHeading, bubbleHtml, closeTableBubble, legendHtml, openBubblePanel, sheetElement } from './table-bubble.js';
+import { bubbleHeading, bubbleHtml, citesHtml, closeTableBubble, legendHtml, openBubblePanel, sheetElement, type BubbleCite } from './table-bubble.js';
 import { bridgeChanges, changedKeys, familyKeys, keepOrder, namesList, rowKeysFor, watchEdit } from './table-refresh.js';
 import type { DataChangedDetail } from '../../data.js';
 import { isCoarsePointer } from '../bottom-sheet.js';
@@ -324,6 +324,7 @@ export const tableMethods = uiModule({
                 },
                 onRowAction: (action, line) => this.tableRowAction(action, line),
                 onName: (line, _col, name, anchor) => this.tableNameAction(line, name, anchor),
+                onMoreCites: (_line, _col, ids, anchor) => this.showTableCites(ids, anchor),
                 onRowMenu: (line, anchor) => this.showTableRowMenu(line, anchor),
                 onIssue: (line, col, cell) => this.showTableFinding(line, col, cell),
                 onToggleUnions: (personId, expand) => this.changeTableColumns(st => setExpanded(st.unions, personId, expand)),
@@ -970,12 +971,51 @@ export const tableMethods = uiModule({
      * source; a locked tree, which has no manager, shows the source itself.
      */
     openTableSource(row: SourceRow): void {
+        this.openTableSourceId(row.id);
+    },
+
+    /** A source by its id in the sources manager (§14.2, §14.3); a locked tree shows the source itself. */
+    openTableSourceId(id: string): void {
         const data = DataManager.getData();
-        if (!data.sources?.[row.id]) return;
-        if (DataManager.isTreeLocked()) { this.showSourceViewer(row.id, null, { readOnly: true }); return; }
-        watching = { tree: treeKey(), name: () => DataManager.getData().sources?.[row.id]?.title ?? '', keys: watchEdit(data, [`s:${row.id}`]) };
+        if (!data.sources?.[id]) return;
+        if (DataManager.isTreeLocked()) { this.showSourceViewer(id, null, { readOnly: true }); return; }
+        watching = { tree: treeKey(), name: () => DataManager.getData().sources?.[id]?.title ?? '', keys: watchEdit(data, [`s:${id}`]) };
         this.clearDialogStack();
-        this.showSourcesDialog(row.id);
+        this.showSourcesDialog(id);
+    },
+
+    /**
+     * The pill "+N" of a citation cell (§14.3): the further cited sources, a
+     * click (a tap on a phone's sheet) opens one in the sources manager.
+     */
+    showTableCites(ids: readonly string[], anchor: HTMLElement): void {
+        closeHeadMenu();
+        const catalog = DataManager.getData().sources ?? {};
+        const list = ids.filter(id => catalog[id]);
+        if (!list.length) return;
+        const cites: BubbleCite[] = list.map(id => {
+            const src = catalog[id]!;
+            return {
+                title: src.title?.trim() || src.reference?.trim() || '?',
+                meta: [src.repository?.trim(), src.reference?.trim()].filter(Boolean).join(' · '),
+            };
+        });
+        const t = strings.table;
+        if (isPhoneBar() || isCoarsePointer()) {
+            this.noteBottomSheetTrigger();
+            this.hideBottomSheet();
+            this.presentMenuSheet(t.citesTitle, [{
+                rows: list.map((id, i) => ({
+                    label: cites[i].title, ...(cites[i].meta ? { sub: cites[i].meta } : {}), run: () => this.openTableSourceId(id),
+                })),
+            }]);
+            return;
+        }
+        openBubblePanel({
+            rect: anchor.getBoundingClientRect(), label: t.citesTitle, kind: 'cites', html: citesHtml(cites),
+            focusBack: () => (anchor.isConnected ? anchor : null), scroller: mounted?.grid.el,
+            onAction: (act, i) => { if (act === 'source' && list[i]) this.openTableSourceId(list[i]); },
+        });
     },
 
     /**
