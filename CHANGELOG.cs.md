@@ -10,6 +10,7 @@
 - **Kvalita dat**: nové kontroly věku rodiče při narození dítěte, sňatku před 16. rokem a zapsaného věku, který se od dat liší o víc než dva roky; varování se všude jmenují *k ověření*.
 - **Pořadí manželství**: manželství bez data sňatku se řadí podle rozvodu nebo narození prvního dítěte. Tomuto pořadí odpovídají čísla manželství, bubliny i tabulka a ve stromu stojí partneři osoby s více svazky zleva doprava v pořadí sňatků, pod každým svazkem jeho děti.
 - **Data, jak je lidé píšou**: „asi 1850“, „po roce 1850“, rozsahy jako „1850-1852“ nebo „5-7/1850“ a měsíc jako „07/1987“ se čtou jako data, v poli data, při importu GEDCOM i v datech, která už ve stromu jsou; text zůstává, jak byl zapsán.
+- **Rozestupy**: *Nastavení → Karta osoby* nabízí *Rozestupy*, *Normální* nebo *Husté*; *Husté* přiblíží karty i generace, takže se na obrazovku vejde víc osob, s každým typem karty. Export obrázku, plakát a tisk do PDF mají vlastní volbu a výřez zůstane na téže osobě, když se změní rozestupy nebo typ karty.
 - **Dlouhá jména**: na kartě *Normální* a *Podrobná* se dlouhé jméno zalomí na více řádků místo zkrácení „…“, i v tisku, PDF, exportovaném obrázku a rodinné knize.
 - **GEDCOM**: fotky osob a rodin ze souboru jiného programu se vrátí v *Zpět do {programu}*; ruční sloučení dvou osob zachová poznámky obou; ID, které nese víc osob, shodu jen nabídne.
 - **Šifrování bez https**: na adrese bez https dialogy hesla řeknou, že šifrování funguje jen přes https nebo na tomto počítači, místo hlášení špatného hesla; strom s fotkami se tam také uloží.
