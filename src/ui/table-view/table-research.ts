@@ -40,9 +40,9 @@ export interface ResearchTableInput {
     /** What waits for the user: live, else as last heard (≤ 7 days), else none. */
     waiting?: readonly LiveWaiting[];
     /** The agent's work right now (live only). */
-    working?: readonly Pick<LiveWorker, 'person' | 'family' | 'task' | 'who' | 'paused'>[];
+    working?: readonly (Pick<LiveWorker, 'person' | 'family' | 'task' | 'who' | 'paused'> & Partial<Pick<LiveWorker, 'since' | 'research'>>)[];
     /** The agent's queue in its order (live only). */
-    queue?: readonly Pick<LiveQueueItem, 'state' | 'person' | 'text'>[];
+    queue?: readonly (Pick<LiveQueueItem, 'state' | 'person' | 'text'> & Partial<Pick<LiveQueueItem, 'id' | 'research'>>)[];
     /** People (REFN) the agent was just done with: since when (ms). */
     done?: ReadonlyMap<string, number>;
     /** Who stands where in the lines, read live (`directions.places`); wins over the file's. */
@@ -271,6 +271,10 @@ function partsCell(parts: ResearchCellPart[], sortKey: number | string | null, m
 }
 
 /** A day from an ISO day or instant, in the app's date format ('' when none). */
+export function researchDayText(iso: string | undefined): string {
+    return dayText(iso);
+}
+
 function dayText(iso: string | undefined): string {
     if (!iso) return '';
     if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return formatFlexDate(iso);
@@ -300,7 +304,11 @@ export function researchConflictWhat(c: ResearchConflict): string {
     return factWord(c.fact.trim().toUpperCase(), c.title);
 }
 
-/** What waits outside: the live items sent out, and the file's sent waits not said live (by id). */
+/** What waits outside (§16.10 item 5): the live items sent out, and the file's sent waits not said live (by id). */
+export function researchExternalWaits(env: ResearchTableEnv, p: Person): { text: string; id: string }[] {
+    return externalWaits(env, p);
+}
+
 function externalWaits(env: ResearchTableEnv, p: Person): { text: string; id: string }[] {
     const out: { text: string; id: string }[] = [];
     const seen = new Set<string>();
@@ -420,6 +428,10 @@ function matCell(env: ResearchTableEnv, p: Person): CellValue {
 }
 
 /** The name of the person of a side branch (by REFN), else its id. */
+export function researchBranchName(env: ResearchTableEnv, branch: ResearchBranch | undefined, id: string | undefined): string {
+    return branchName(env, branch, id);
+}
+
 function branchName(env: ResearchTableEnv, branch: ResearchBranch | undefined, id: string | undefined): string {
     const ref = branch?.person ?? id?.slice(2);
     const person = ref ? env.byRefn.get(ref) : undefined;
@@ -517,17 +529,34 @@ function factNow(p: Person, key: string, parts: readonly string[] | undefined): 
 
 const ORIGIN_FACT: Record<string, string> = { name: 'NAME', sex: 'SEX', birth: 'BIRT', death: 'DEAT' };
 
-function origCell(env: ResearchTableEnv, p: Person): CellValue {
-    const R = strings.table.res;
-    const items: string[] = [];
+/** A fact the research changed (§16.10 item 2): its key in researchOrigins, word, the tree's value, the value now and the source it went by. */
+export interface ResearchOriginItem {
+    key: string;
+    fact: string;
+    was: string;
+    now: string;
+    /** The first cited source the tree has (its id and REFN). */
+    sourceId?: string;
+    sourceRefn?: string;
+}
+
+/** The facts the research changed, as the column Originally in the family tree lists them. */
+export function researchOriginItems(env: ResearchTableEnv, p: Person): ResearchOriginItem[] {
+    const items: ResearchOriginItem[] = [];
     for (const [key, origin] of Object.entries(p.researchOrigins ?? {})) {
         const was = origin.was?.value?.trim();
         if (!was) continue;
         const fact = ORIGIN_FACT[key] ? factWord(ORIGIN_FACT[key]) : changeWord('event');
         const now = factNow(p, key, origin.was?.parts) || '–';
-        const src = origin.sourceIds?.map(id => env.data.sources?.[id]?.refn).find(Boolean);
-        items.push(R.origWas(fact, was, now) + (src ? ` (${src})` : ''));
+        const sourceId = origin.sourceIds?.find(id => !!env.data.sources?.[id]?.refn);
+        items.push({ key, fact, was, now, ...(sourceId ? { sourceId, sourceRefn: env.data.sources![sourceId].refn } : {}) });
     }
+    return items;
+}
+
+function origCell(env: ResearchTableEnv, p: Person): CellValue {
+    const R = strings.table.res;
+    const items = researchOriginItems(env, p).map(o => R.origWas(o.fact, o.was, o.now) + (o.sourceRefn ? ` (${o.sourceRefn})` : ''));
     if (items.length === 0) return emptyResearch();
     return partsCell(items.map((text, i) => ({ text: i ? '· ' + text : text })), items.length, { export: items.join('; ') });
 }
