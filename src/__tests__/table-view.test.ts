@@ -133,6 +133,13 @@ describe('column catalog', () => {
         expect(phoneWidth(nFind, 84, false)).toBe(70);
     });
 
+    it('a phone keeps a date and an age range whole beside a finding mark (1110)', () => {
+        // Events' date 110 → 88 cut "28. 12. 1888" before its year; Age at marriage 90 → 72 cut "15–16".
+        expect(phoneWidth(columnById('events', 'evDate')!, 110, false)).toBe(124);
+        expect(phoneWidth(columnById('persons', 'wAge')!, 90, false)).toBe(92);
+        expect(phoneWidth(columnById('persons', 'bDate')!, 200, false)).toBe(160);
+    });
+
     it('the shown columns of a default state, desktop and phone', () => {
         const st = defaultTableState();
         const desk = shownColumns('persons', st.types.persons, false);

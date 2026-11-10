@@ -930,12 +930,19 @@ export const DEFAULT_VIEWS: Record<RowType, DefaultView> = {
     },
 };
 
-/** Phone (≤ 640): the name column pinned at 156 px, the others at 0.8 of their width (min 70; §1.4). */
+/**
+ * The least phone width of a column kind: the longest date ("28. 12. 1888")
+ * or age range ("15–16") whole beside a finding's mark (16 px + 6 px gap and
+ * the cell's 2 × 10 px padding).
+ */
+const PHONE_MIN_WIDTH: Partial<Record<ColumnKind, number>> = { date: 124, age: 92 };
+
+/** Phone (≤ 640): the name column pinned at 156 px, the others at 0.8 of their width (min 70, a date or age more; §1.4). */
 export function phoneWidth(col: ColumnDef, width: number, pinned: boolean): number {
     if (pinned && (col.id === 'name' || col.id === 'p1' || col.id === 'srcTitle')) return 156;
     if (pinned && col.id === 'evType') return 96;
     if (pinned && col.id === 'evWho') return 140;
-    return Math.max(70, Math.round(width * 0.8));
+    return Math.max(PHONE_MIN_WIDTH[col.kind] ?? 70, Math.round(width * 0.8));
 }
 
 /**
