@@ -1412,8 +1412,34 @@ export function partnershipParticipants(u: Pick<Partnership, 'participants' | 'e
  *   holds for (ResearchFactVerify.value) came within v16 without a bump: an
  *   entry without it is filled when the tree is read, from the research's
  *   kept copy of the tree, else from the current value.
+ * v17 (2026-11, spec 073): StromData.tableViews (saved views of the Table
+ *   view). Additive; existing trees get none. An older app (v16) ignores the
+ *   field and would drop it on a re-save, so the bump makes it warn first.
  */
-export const STROM_DATA_VERSION = 16;
+export const STROM_DATA_VERSION = 17;
+
+/** The rows of a saved Table view (spec 073 §2; events and sources come later). */
+export type TableViewRowType = 'persons' | 'unions' | 'events' | 'sources';
+
+/**
+ * A saved view of the Table view (spec 073 §9.1). The filter items are the
+ * table's own (src/ui/table-view/table-filter.ts); a sort key's `dir` is 1
+ * (ascending) or -1. `unions` only for the People rows (§3.2).
+ */
+export interface TableView {
+    id: string;
+    name: string;
+    rowType: TableViewRowType;
+    columns: { id: string; width?: number }[];
+    pinned: number;
+    collapsedGroups: string[];
+    coverageRow: boolean;
+    filter: { op: 'and'; items: Record<string, unknown>[] };
+    sort: { col: string; dir: 1 | -1 }[];
+    unions?: { collapsed: boolean; except: string[] };
+    /** ISO time of the last save. */
+    updated: string;
+}
 
 /**
  * Manual corrections of the lineages (rody, see src/lineage.ts), by person id.
@@ -1633,6 +1659,14 @@ export interface StromData {
     lineageOverrides?: LineageOverrides;
 
     /**
+     * Saved views of the Table view (spec 073 §9.1, data version 17): row
+     * type, columns, pinning, collapsed groups, coverage row, filter, sort
+     * and the union sub-rows. The built-in views are not stored. Absent or
+     * empty = none saved.
+     */
+    tableViews?: TableView[];
+
+    /**
      * When Strom Research wrote what the people's `research` says (GEDCOM
      * header `_STROM_ASOF`, ISO date): "as of". Research trees only.
      */
@@ -1839,6 +1873,9 @@ export type AuditAction =
     | 'lineage.founder'
     | 'lineage.split'
     | 'surnames.removeForm'
+    | 'tableView.save'
+    | 'tableView.rename'
+    | 'tableView.delete'
     | 'undo'
     | 'redo';
 

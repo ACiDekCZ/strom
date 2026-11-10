@@ -109,6 +109,11 @@ function fullTree(): Required<StromData> {
         surnameRejections: [{ forms: ['Lhoták', 'Lhota'], id: 'sg_lhotak_lhota', at: '2026-10-20T10:00:00.000Z' }],
         qualityDismissed: [{ kind: 'possibleDuplicate', persons: [ALICE, BOB].sort(), at: '2026-10-21T09:00:00.000Z', sync: 'sent' }],
         lineageOverrides: { founders: [BOB], notCarriers: [ALICE] },
+        tableViews: [{
+            id: 'tv-1', name: 'Births 1840–1870', rowType: 'persons', columns: [{ id: 'name', width: 240 }, { id: 'bDate' }], pinned: 1,
+            collapsedGroups: ['birth'], coverageRow: false, filter: { op: 'and', items: [{ chip: 'deceased' }] },
+            sort: [{ col: 'bDate', dir: -1 }], unions: { collapsed: true, except: [ALICE] }, updated: '2026-11-10T09:00:00.000Z',
+        }],
         researchAsOf: '2026-09-20',
         imports: [{ id: 'I1', program: 'Rodokmenář 5', version: '5.2', fileDate: '12 MAR 2024', at: '2026-11-08', file: 'rodokmen.ged', encoding: 'windows-1250' }],
         defaultPersonId: LAST_FOCUSED,

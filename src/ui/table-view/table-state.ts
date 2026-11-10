@@ -7,6 +7,7 @@
 
 import { columnById, columnsOf, DEFAULT_VIEWS, phoneWidth, type ColumnDef, type ColumnGroup, type SortSpec } from './table-columns.js';
 import type { RowType } from './table-model.js';
+import type { TableView } from '../../types.js';
 import { defaultUnionCollapse, type UnionCollapse } from './table-subrows.js';
 import { emptyFilter, type TableFilter } from './table-filter.js';
 
@@ -47,6 +48,12 @@ export interface RowTypeState {
 export interface TableState {
     rowType: RowType;
     types: Record<RowType, RowTypeState>;
+    /** The view open in each row type (§9; a built-in `b:…` or a saved view's id). */
+    open: Record<RowType, string>;
+    /** Unsaved states of views not open now, by view id (§9.3: kept until the app closes). */
+    drafts: Record<string, TableView>;
+    /** The tree's stored working state was read (localStorage, §9.1). */
+    restored?: boolean;
 }
 
 /** A row type's state as its default view gives it. */
@@ -56,7 +63,10 @@ export function defaultTypeState(type: RowType): RowTypeState {
 }
 
 export function defaultTableState(): TableState {
-    return { rowType: 'persons', types: { persons: defaultTypeState('persons'), unions: defaultTypeState('unions') } };
+    return {
+        rowType: 'persons', types: { persons: defaultTypeState('persons'), unions: defaultTypeState('unions') },
+        open: { persons: 'b:overview', unions: 'b:marriages' }, drafts: {},
+    };
 }
 
 /** The state per tree, while the app is open. */

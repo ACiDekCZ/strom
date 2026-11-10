@@ -44,8 +44,8 @@ const OPTS = { researchTree: false, originFeature: false };
 const RESEARCH = { researchTree: true, originFeature: true };
 
 describe('data version 16', () => {
-    it('is 16', () => {
-        expect(STROM_DATA_VERSION).toBe(16);
+    it('is 16 or later', () => {
+        expect(STROM_DATA_VERSION).toBeGreaterThanOrEqual(16);
     });
 
     it('a v15 tree loads unchanged (nothing is added)', () => {

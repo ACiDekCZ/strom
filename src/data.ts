@@ -30,6 +30,7 @@ import {
     generatePartnershipId,
     LAST_FOCUSED,
     LastFocusedMarker,
+    TableView,
     STROM_DATA_VERSION, PERSON_CITATION_FIELDS, PARTNERSHIP_CITATION_FIELDS, PersonCitationField, isGender, oppositeGender, isPrimaryName, PrimaryName, mergedPrimaryName,
     EmbeddedDataEnvelope,
     isEmbeddedEnvelope,
@@ -70,6 +71,7 @@ import { cleanFactVerify, factConfirmation, factValueSignature, researchConfirma
 import { maxGenerations, maxGenerationsWithSiblings } from './focus-depth.js';
 import { cleanPlaceGeoMeta, sanitizePlaceRecords, sanitizePlaceRefs } from './place-records.js';
 import { addPlaceAlias, sanitizePlaceAliases } from './place-groups.js';
+import { sanitizeTableViews } from './table-views-data.js';
 
 /** Extended updates for Partnership */
 
@@ -291,6 +293,10 @@ export function migrateData(data: unknown): StromData {
         const clean = cleanLineageOverrides(result, { founders: list(o.founders), notCarriers: list(o.notCarriers) });
         if (clean) result.lineageOverrides = clean;
     }
+
+    // v17: the saved views of the Table view (src/table-views-data.ts).
+    const tableViews = sanitizeTableViews(d.tableViews);
+    if (tableViews) result.tableViews = tableViews;
 
     // v15: the GEDCOM files loaded into the tree and the origin of facts and
     // links from them (src/import-origin.ts). Only valid records; marks that
@@ -1701,6 +1707,43 @@ class DataManagerClass {
         // Not silent: the usual Undo toast follows the change.
         this.commitMutation(undoLabel);
         if (audit && this.currentTreeId) AuditLogManager.log(this.currentTreeId, audit.action, audit.text);
+        return true;
+    }
+
+    // ==================== TABLE VIEWS ====================
+
+    /**
+     * Save a view of the Table view (spec 073 §9.3): a new one is added, one
+     * with the same id is replaced. One undo step and a change-log entry;
+     * silent (the table shows its own state). False while read-only.
+     */
+    saveTableView(view: TableView, rename = false): boolean {
+        if (this.isReadOnly()) return false;
+        const list = this.data.tableViews ?? [];
+        const at = list.findIndex(v => v.id === view.id);
+        const copy = structuredClone(view);
+        this.beginMutation();
+        this.data.tableViews = at >= 0 ? list.map((v, i) => (i === at ? copy : v)) : [...list, copy];
+        this.commitMutation(rename ? strings.undo.renameTableView(view.name) : strings.undo.saveTableView(view.name), true);
+        if (this.currentTreeId) {
+            AuditLogManager.log(this.currentTreeId, rename ? 'tableView.rename' : 'tableView.save',
+                rename ? strings.auditLog.tableViewRenamed(view.name) : strings.auditLog.tableViewSaved(view.name));
+        }
+        return true;
+    }
+
+    /** Delete a saved view: one undo step (the usual Undo toast) and a change-log entry. */
+    deleteTableView(id: string): boolean {
+        if (this.isReadOnly()) return false;
+        const list = this.data.tableViews ?? [];
+        const view = list.find(v => v.id === id);
+        if (!view) return false;
+        this.beginMutation();
+        const next = list.filter(v => v.id !== id);
+        if (next.length) this.data.tableViews = next;
+        else delete this.data.tableViews;
+        this.commitMutation(strings.undo.deleteTableView(view.name));
+        if (this.currentTreeId) AuditLogManager.log(this.currentTreeId, 'tableView.delete', strings.auditLog.tableViewDeleted(view.name));
         return true;
     }
 

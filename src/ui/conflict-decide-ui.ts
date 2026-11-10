@@ -9,6 +9,7 @@
  * hypotheses: a conflict is amber and two sides, a hypothesis a ghost.
  */
 
+import { keepTableViews } from '../table-views-data.js';
 import { researchActionLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
@@ -652,7 +653,7 @@ export const conflictDecideMethods = uiModule({
         const link = this.researchSyncLink()?.link;
         const here = DataManager.getData();
         const features = link ? this.researchStatusOf(link.id)?.features : null;
-        return stabilizeIds(keepImports(keepLineageOverrides(keepSurnameVariants(keepMarriedSurname(keepTitles(data, here, features, researchHasTitles(link, features)), here, features), here), here), here, features), here);
+        return stabilizeIds(keepTableViews(keepImports(keepLineageOverrides(keepSurnameVariants(keepMarriedSurname(keepTitles(data, here, features, researchHasTitles(link, features)), here, features), here), here), here, features), here), here);
     },
 
     /** A card's notice action: try the same side again, send the tree, load the research's version, decide in the research. */

@@ -144,6 +144,8 @@ export function extractSubtree(data: StromData, seedIds: Set<PersonId>): StromDa
     const lineage = cleanLineageOverrides(result, data.lineageOverrides);
     if (lineage) result.lineageOverrides = lineage;
     if (data.researchAsOf) result.researchAsOf = data.researchAsOf;
+    // The saved views of the Table view are about columns, not people: whole.
+    if (data.tableViews?.length) result.tableViews = structuredClone(data.tableViews);
     // The GEDCOM files the tree was loaded from come along; marks of parent
     // links to people left behind go (pruneImportOrigin).
     if (data.imports?.length) result.imports = structuredClone(data.imports);
