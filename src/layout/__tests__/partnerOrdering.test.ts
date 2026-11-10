@@ -13,6 +13,7 @@ import { runPipeline } from './helpers/runPipeline.js';
 import { assertPartnerOrdering } from './helpers/assertions.js';
 import { PersonId, PartnershipId, Person, Partnership, StromData, DEFAULT_LAYOUT_CONFIG } from '../../types.js';
 import { runLayoutPipeline } from '../pipeline/index.js';
+import type { PartnerOrder } from '../pipeline/types.js';
 
 describe('Partner Ordering Invariant', () => {
     it('simple-family: all couples have A left of B', () => {
@@ -72,8 +73,9 @@ describe('Partner Ordering Invariant', () => {
  * wedding date, then data order, an undated union last — the earliest next
  * to the person. The primary couple stays where it was.
  */
-describe('Chronological partner order (T13)', () => {
-    function threeMarriages(shared: 'male' | 'female', dataOrder: string[], dates: Record<string, string | undefined>): StromData {
+describe('Partner order in a chain (T13)', () => {
+    function threeMarriages(shared: 'male' | 'female', dataOrder: string[], dates: Record<string, string | undefined>,
+        count = 3): StromData {
         const other = shared === 'male' ? 'female' : 'male';
         const persons: Record<string, Person> = {};
         const partnerships: Record<string, Partnership> = {};
@@ -94,19 +96,31 @@ describe('Chronological partner order (T13)', () => {
         };
         person('gf', 'male'); person('gm', 'female'); person('S', shared);
         union('u_g', 'gf', 'gm', '1830', ['S']);
-        for (const n of ['1', '2', '3']) { person('P' + n, other); person('c' + n, 'male', `${1860 + Number(n)}`); }
+        for (let n = 1; n <= count; n++) { person('P' + n, other); person('c' + n, 'male', `${1860 + n}`); }
         for (const n of dataOrder) union('u' + n, 'S', 'P' + n, dates[n], ['c' + n]);
         return { persons, partnerships } as unknown as StromData;
     }
 
-    function row(data: StromData, focus: string): string {
-        const result = runLayoutPipeline({
+    function layout(data: StromData, focus: string, partnerOrder?: PartnerOrder, includeSpouseAncestors = true) {
+        return runLayoutPipeline({
             data, focusPersonId: focus as PersonId, config: DEFAULT_LAYOUT_CONFIG,
             ancestorDepth: 3, descendantDepth: 3,
-            includeSpouseAncestors: true, includeParentSiblings: true, includeParentSiblingDescendants: true,
-            displayPolicy: { mode: 'standard', autoExpand: true },
+            includeSpouseAncestors, includeParentSiblings: true, includeParentSiblingDescendants: true,
+            displayPolicy: { mode: 'standard', autoExpand: true, ...(partnerOrder ? { partnerOrder } : {}) },
         });
-        return ['S', 'P1', 'P2', 'P3'].filter(id => result.positions.has(id as PersonId))
+    }
+
+    function row(data: StromData, focus: string, partnerOrder?: PartnerOrder, includeSpouseAncestors = true): string {
+        const result = layout(data, focus, partnerOrder, includeSpouseAncestors);
+        return ['S', 'P1', 'P2', 'P3', 'P4'].filter(id => result.positions.has(id as PersonId))
+            .sort((a, b) => result.positions.get(a as PersonId)!.x - result.positions.get(b as PersonId)!.x)
+            .join(' ');
+    }
+
+    /** The children of the chain's unions, left to right. */
+    function children(data: StromData, focus: string, partnerOrder?: PartnerOrder): string {
+        const result = layout(data, focus, partnerOrder);
+        return ['c1', 'c2', 'c3', 'c4'].filter(id => result.positions.has(id as PersonId))
             .sort((a, b) => result.positions.get(a as PersonId)!.x - result.positions.get(b as PersonId)!.x)
             .join(' ');
     }
@@ -114,32 +128,115 @@ describe('Chronological partner order (T13)', () => {
     // P1 1866, P3 1880, P2 1908 — data order 2, 3, 1 (not chronological).
     const dates = { '1': '1866', '2': '1908', '3': '1880' };
 
-    it('a man: the extra wives on his left, the earliest next to him', () => {
-        const data = threeMarriages('male', ['2', '3', '1'], dates);
-        // Primary = the newest marriage (focus has no line through a wife).
-        expect(row(data, 'S')).toBe('P3 P1 S P2');
-        // Seen from the first marriage's child: that marriage is the primary one.
-        expect(row(data, 'c1')).toBe('P2 P3 S P1');
-        // From his parents: the same row as from himself.
-        expect(row(data, 'gf')).toBe('P3 P1 S P2');
+    describe('compact (partnerOrder "compact", the order before variant B)', () => {
+        it('a man: the extra wives on his left, the earliest next to him', () => {
+            const data = threeMarriages('male', ['2', '3', '1'], dates);
+            // Primary = the newest marriage (focus has no line through a wife).
+            expect(row(data, 'S', 'compact')).toBe('P3 P1 S P2');
+            // Seen from the first marriage's child: that marriage is the primary one.
+            expect(row(data, 'c1', 'compact')).toBe('P2 P3 S P1');
+            // From his parents: the same row as from himself.
+            expect(row(data, 'gf', 'compact')).toBe('P3 P1 S P2');
+        });
+
+        it('a woman: the extra husbands on her right, the earliest next to her', () => {
+            const data = threeMarriages('female', ['2', '3', '1'], dates);
+            expect(row(data, 'S', 'compact')).toBe('P2 S P1 P3');
+            expect(row(data, 'c1', 'compact')).toBe('P1 S P3 P2');
+        });
+
+        it('an undated marriage with nothing to bound it stands after the dated ones', () => {
+            const data = threeMarriages('male', ['3', '2', '1'], { '1': '1866', '2': '1908', '3': undefined });
+            delete (data.persons['c3' as PersonId] as { birthDate?: string }).birthDate;
+            expect(row(data, 'c1', 'compact')).toBe('P3 P2 S P1');
+        });
+
+        it('an undated marriage is bounded by its first child (T13)', () => {
+            // Child of the undated union born 1863: that marriage came before 1908.
+            const data = threeMarriages('male', ['3', '2', '1'], { '1': '1866', '2': '1908', '3': undefined });
+            expect(row(data, 'c1', 'compact')).toBe('P2 P3 S P1');
+        });
     });
 
-    it('a woman: the extra husbands on her right, the earliest next to her', () => {
-        const data = threeMarriages('female', ['2', '3', '1'], dates);
-        expect(row(data, 'S')).toBe('P2 S P1 P3');
-        expect(row(data, 'c1')).toBe('P1 S P3 P2');
-    });
+    describe('chronological (the default, variant B): the marriages left to right', () => {
+        it('a man with three marriages: the older two left of him, the newest right', () => {
+            const data = threeMarriages('male', ['2', '3', '1'], dates);
+            expect(row(data, 'S')).toBe('P1 P3 S P2');
+            expect(row(data, 'S', 'chronological')).toBe('P1 P3 S P2');
+            // The half-siblings stand in the order of the marriages too
+            expect(children(data, 'S')).toBe('c1 c3 c2');
+            // From his parents: the same row as from himself
+            expect(row(data, 'gf')).toBe('P1 P3 S P2');
+        });
 
-    it('an undated marriage with nothing to bound it stands after the dated ones', () => {
-        const data = threeMarriages('male', ['3', '2', '1'], { '1': '1866', '2': '1908', '3': undefined });
-        delete (data.persons['c3' as PersonId] as { birthDate?: string }).birthDate;
-        expect(row(data, 'c1')).toBe('P3 P2 S P1');
-    });
+        it('the primary union stays next to the person: the split moves, the wife may stand left of him', () => {
+            const data = threeMarriages('male', ['2', '3', '1'], dates);
+            // Seen from the first marriage's child, that marriage is the primary one
+            expect(row(data, 'c1')).toBe('P1 S P3 P2');
+            expect(children(data, 'c1')).toBe('c1 c3 c2');
+        });
 
-    it('an undated marriage is bounded by its first child (T13)', () => {
-        // Child of the undated union born 1863: that marriage came before 1908.
-        const data = threeMarriages('male', ['3', '2', '1'], { '1': '1866', '2': '1908', '3': undefined });
-        expect(row(data, 'c1')).toBe('P2 P3 S P1');
+        it('a woman with three marriages: the same order, her husbands around her', () => {
+            const data = threeMarriages('female', ['2', '3', '1'], dates);
+            expect(row(data, 'S')).toBe('P1 P3 S P2');
+            expect(row(data, 'c1')).toBe('P1 S P3 P2');
+            expect(children(data, 'S')).toBe('c1 c3 c2');
+        });
+
+        it('two marriages: the first partner left, the second right, whichever is primary', () => {
+            for (const shared of ['male', 'female'] as const) {
+                const data = threeMarriages(shared, ['2', '1'], { '1': '1866', '2': '1908' }, 2);
+                expect(row(data, 'S')).toBe('P1 S P2');
+                expect(row(data, 'c1')).toBe('P1 S P2');
+                expect(row(data, 'c2')).toBe('P1 S P2');
+            }
+        });
+
+        it('four marriages: two left, two right, or the split moved to the primary one', () => {
+            for (const shared of ['male', 'female'] as const) {
+                const data = threeMarriages(shared, ['4', '2', '3', '1'],
+                    { '1': '1866', '2': '1880', '3': '1890', '4': '1908' }, 4);
+                // Primary = the newest: three left of the person
+                expect(row(data, 'S')).toBe('P1 P2 P3 S P4');
+                expect(row(data, 'c1')).toBe('P1 S P2 P3 P4');
+                expect(row(data, 'c2')).toBe('P1 P2 S P3 P4');
+                expect(row(data, 'c3')).toBe('P1 P2 S P3 P4');
+                expect(children(data, 'S')).toBe('c1 c2 c3 c4');
+            }
+        });
+
+        it('a partner with parents in view: the compact order', () => {
+            const data = threeMarriages('male', ['2', '3', '1'], dates);
+            const add = (id: string, gender: 'male' | 'female') => {
+                data.persons[id as PersonId] = { id: id as PersonId, firstName: id, lastName: 'Y', gender, isPlaceholder: false,
+                    partnerships: ['u_pp' as PartnershipId], parentIds: [], childIds: ['P3' as PersonId] } as Person;
+            };
+            add('ppf', 'male'); add('ppm', 'female');
+            data.partnerships['u_pp' as PartnershipId] = { id: 'u_pp' as PartnershipId, person1Id: 'ppf' as PersonId,
+                person2Id: 'ppm' as PersonId, childIds: ['P3' as PersonId], status: 'married' } as Partnership;
+            data.persons['P3' as PersonId].parentIds.push('ppf' as PersonId, 'ppm' as PersonId);
+            // The partner's parents in view (the spouse's ancestors): as before
+            expect(row(data, 'S')).toBe(row(data, 'S', 'compact'));
+            expect(row(data, 'S')).toBe('P3 P1 S P2');
+            // Seen from her child the parents are the focus's grandparents
+            expect(row(data, 'c3', undefined, false)).toBe(row(data, 'c3', 'compact', false));
+            // Not in view: the chronological order
+            expect(row(data, 'S', undefined, false)).toBe('P1 P3 S P2');
+        });
+
+        it('the reported tree (fictional): 1. · 2. · the man · 3., the children 1999, 2008, 2010, 2011', () => {
+            const data = loadFixture('edge-t13-partner-order');
+            const result = layout(data, 'aldous');
+            const order = (ids: string[]) => ids.filter(id => result.positions.has(id as PersonId))
+                .sort((a, b) => result.positions.get(a as PersonId)!.x - result.positions.get(b as PersonId)!.x).join(' ');
+            expect(order(['aldous', 'briony', 'saskia', 'imelda'])).toBe('briony saskia aldous imelda');
+            expect(order(['juniper', 'caspian', 'linnea', 'rafferty'])).toBe('juniper caspian linnea rafferty');
+            // 'compact': the layout as before, the extra wives left of him in reverse
+            const compact = layout(data, 'aldous', 'compact');
+            const compactOrder = ['aldous', 'briony', 'saskia', 'imelda'].sort((a, b) =>
+                compact.positions.get(a as PersonId)!.x - compact.positions.get(b as PersonId)!.x).join(' ');
+            expect(compactOrder).toBe('saskia briony aldous imelda');
+        });
     });
 });
 

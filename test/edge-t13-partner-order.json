@@ -1,0 +1,157 @@
+{
+  "version": 17,
+  "persons": {
+    "aldous": {
+      "id": "aldous",
+      "firstName": "Aldous",
+      "lastName": "Pennyfeather",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_t13_b",
+        "u_t13_a",
+        "u_t13_c"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "caspian",
+        "linnea",
+        "rafferty",
+        "juniper"
+      ],
+      "birthDate": "1972-04-18"
+    },
+    "saskia": {
+      "id": "saskia",
+      "firstName": "Saskia",
+      "lastName": "Tolliver",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_t13_b"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "caspian"
+      ],
+      "birthDate": "1977-09-02"
+    },
+    "imelda": {
+      "id": "imelda",
+      "firstName": "Imelda",
+      "lastName": "Fenwick",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_t13_a"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "linnea",
+        "rafferty"
+      ],
+      "birthDate": "1985-01-27"
+    },
+    "briony": {
+      "id": "briony",
+      "firstName": "Briony",
+      "lastName": "Ashcombe",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_t13_c"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "juniper"
+      ]
+    },
+    "caspian": {
+      "id": "caspian",
+      "firstName": "Caspian",
+      "lastName": "Pennyfeather",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "aldous",
+        "saskia"
+      ],
+      "childIds": [],
+      "birthDate": "2008-06-11"
+    },
+    "linnea": {
+      "id": "linnea",
+      "firstName": "Linnea",
+      "lastName": "Pennyfeather",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "aldous",
+        "imelda"
+      ],
+      "childIds": [],
+      "birthDate": "2010-03-05"
+    },
+    "rafferty": {
+      "id": "rafferty",
+      "firstName": "Rafferty",
+      "lastName": "Pennyfeather",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "aldous",
+        "imelda"
+      ],
+      "childIds": [],
+      "birthDate": "2011-10-21"
+    },
+    "juniper": {
+      "id": "juniper",
+      "firstName": "Juniper",
+      "lastName": "Pennyfeather",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "aldous",
+        "briony"
+      ],
+      "childIds": [],
+      "birthDate": "1999-12-08"
+    }
+  },
+  "partnerships": {
+    "u_t13_b": {
+      "id": "u_t13_b",
+      "person1Id": "aldous",
+      "person2Id": "saskia",
+      "childIds": [
+        "caspian"
+      ],
+      "status": "married"
+    },
+    "u_t13_a": {
+      "id": "u_t13_a",
+      "person1Id": "aldous",
+      "person2Id": "imelda",
+      "childIds": [
+        "linnea",
+        "rafferty"
+      ],
+      "status": "married"
+    },
+    "u_t13_c": {
+      "id": "u_t13_c",
+      "person1Id": "aldous",
+      "person2Id": "briony",
+      "childIds": [
+        "juniper"
+      ],
+      "status": "married"
+    }
+  },
+  "defaultPersonId": "aldous"
+}

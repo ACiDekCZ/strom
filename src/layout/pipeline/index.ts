@@ -414,6 +414,23 @@ function withChildrenShown(
 }
 
 /**
+ * Chains that only things shown in place made (the children tab, the
+ * "▸ ∞" pill) keep the compact partner order (DisplayPolicy
+ * compactChainPersonIds): their partners join on the side away from the
+ * partner drawn before, so the cards drawn before stay where they were.
+ */
+function withInPlaceChainsCompact(before: DisplayPolicy, after: DisplayPolicy): DisplayPolicy {
+    if (after === before) return after;
+    const chainedBefore = new Set([...before.expandedPersonIds ?? [], ...before.appendagePersonIds ?? []]);
+    const compact = new Set<PersonId>();
+    for (const id of [...after.expandedPersonIds ?? [], ...after.appendagePersonIds ?? []]) {
+        if (!chainedBefore.has(id)) compact.add(id);
+    }
+    for (const id of after.chainPartnershipsOf?.keys() ?? []) compact.add(id);
+    return compact.size > 0 ? { ...after, compactChainPersonIds: compact } : after;
+}
+
+/**
  * The chains limited to the marriages a "▸ ∞" picked (PipelineInput
  * showPartnerUnions, DisplayPolicy.chainPartnershipsOf): each of `owners`
  * not chained before (or chained before only so) takes only its listed
@@ -526,8 +543,25 @@ function drawnWithoutPartnerUnions(input: PipelineInput): () => ReadonlySet<Pers
 
 /**
  * Run the complete layout pipeline.
+ *
+ * The chronological partner order (DisplayPolicy.partnerOrder, T13) is kept
+ * only where it costs no line: when step 7 left a line out of a layout whose
+ * partner chains stand in that order, the tree is laid out once more in the
+ * compact order, and the layout with fewer lines left out wins (the
+ * chronological one on a tie). A chain whose half-siblings marry into the
+ * other half of the pedigree can knot that way (edge-children-elsewhere,
+ * etalon-half-sisters).
  */
 export function runLayoutPipeline(input: PipelineInput): LayoutResult {
+    const result = runLayoutPipelineOnce(input);
+    const omitted = result.omittedEdges?.length ?? 0;
+    if (omitted === 0 || ![...result.partnerChains?.values() ?? []].some(c => c.chronologicalOrderUsed)) return result;
+    const policy = input.displayPolicy ?? DEFAULT_DISPLAY_POLICY;
+    const compact = runLayoutPipelineOnce({ ...input, displayPolicy: { ...policy, partnerOrder: 'compact' } });
+    return (compact.omittedEdges?.length ?? 0) < omitted ? compact : result;
+}
+
+function runLayoutPipelineOnce(input: PipelineInput): LayoutResult {
     const {
         data: inputData,
         focusPersonId,
@@ -593,7 +627,8 @@ export function runLayoutPipeline(input: PipelineInput): LayoutResult {
                 mode: 'expanded',
                 expandedPersonIds: merged,
                 appendagePersonIds: appendageIds,
-                autoExpand: true
+                autoExpand: true,
+                ...(displayPolicy.partnerOrder ? { partnerOrder: displayPolicy.partnerOrder } : {})
             };
         }
     }
@@ -602,9 +637,11 @@ export function runLayoutPipeline(input: PipelineInput): LayoutResult {
     expandSelectionForDisplay(data, selection, effectivePolicy);
     // Children shown in place (the card's "children" tab)
     const drawnBeforeUnions = drawnWithoutPartnerUnions(input);
+    const effectivePolicyBefore = effectivePolicy;
     effectivePolicy = withChildrenShown(data, selection, effectivePolicy, input.expandChildrenOf, input.showPartnerUnions, drawnBeforeUnions);
     // Other partners shown in place (the "▸ ∞" pill)
     effectivePolicy = withPartnersShown(data, selection, effectivePolicy, input.showPartnersOf, input.showPartnerUnions, drawnBeforeUnions);
+    effectivePolicy = withInPlaceChainsCompact(effectivePolicyBefore, effectivePolicy);
     // Ancestors folded for now to make room for the children shown
     if (input.expandChildrenOf?.length && input.foldAncestorsOf?.length) {
         foldAncestorsInSelection(data, selection, input.foldAncestorsOf, focusPersonId);
@@ -793,7 +830,8 @@ export function runLayoutPipelineWithDebug(
                 mode: 'expanded',
                 expandedPersonIds: merged,
                 appendagePersonIds: appendageIdsDebug,
-                autoExpand: true
+                autoExpand: true,
+                ...(displayPolicy.partnerOrder ? { partnerOrder: displayPolicy.partnerOrder } : {})
             };
         }
     }
@@ -801,8 +839,10 @@ export function runLayoutPipelineWithDebug(
     // Expand selection for expanded persons (add missing partners/children)
     expandSelectionForDisplay(data, selection, effectivePolicyDebug);
     const drawnBeforeUnionsDebug = drawnWithoutPartnerUnions(input);
+    const effectivePolicyDebugBefore = effectivePolicyDebug;
     effectivePolicyDebug = withChildrenShown(data, selection, effectivePolicyDebug, input.expandChildrenOf, input.showPartnerUnions, drawnBeforeUnionsDebug);
     effectivePolicyDebug = withPartnersShown(data, selection, effectivePolicyDebug, input.showPartnersOf, input.showPartnerUnions, drawnBeforeUnionsDebug);
+    effectivePolicyDebug = withInPlaceChainsCompact(effectivePolicyDebugBefore, effectivePolicyDebug);
     if (input.expandChildrenOf?.length && input.foldAncestorsOf?.length) {
         foldAncestorsInSelection(data, selection, input.foldAncestorsOf, focusPersonId);
     }

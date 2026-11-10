@@ -393,13 +393,16 @@ function findChainPrimaryUnionId(
  */
 function buildChainBlockPersonOrder(
     chain: PartnerChain,
-    model: LayoutModel
+    model: LayoutModel,
+    chronologicalAllowed = true
 ): PersonId[] {
     const primaryUnionId = model.personToUnion.get(chain.sharedPersonId);
     if (!primaryUnionId) return [chain.sharedPersonId];
 
     const primaryUnion = model.unions.get(primaryUnionId);
     if (!primaryUnion) return [chain.sharedPersonId];
+
+    const chronological = chronologicalAllowed ? chronologicalChainPersonOrder(chain, primaryUnionId, model) : null;
 
     const partnerA = primaryUnion.partnerA;  // Left (typically male)
     const partnerB = primaryUnion.partnerB;  // Right (typically female)
@@ -448,7 +451,56 @@ function buildChainBlockPersonOrder(
     order.push(partnerA);
     if (partnerB) order.push(partnerB);
     order.push(...rightSide);
+    if (chronological && chronological.some((p, i) => p !== order[i])) {
+        // runLayoutPipeline compares the result with the compact order
+        chain.chronologicalOrderUsed = true;
+        return chronological;
+    }
     return order;
+}
+
+/**
+ * The chronological partner order of a chain (DisplayPolicy.partnerOrder,
+ * T13): the partners of the shared person left to right in the order of the
+ * marriages, the older ⌈n/2⌉ unions left of the person (the oldest outermost),
+ * the newer right. The primary union stays next to the person: when it would
+ * not, the split moves to the nearest place where it does (the order stays
+ * chronological, only the number on the left changes), so the primary couple
+ * may stand "wife left, husband right".
+ *
+ * Only for a chain of one person's own unions (chain.chronologicalUnionIds,
+ * not a merged chain) and only while no partner has parents in view: their
+ * lines up would cross the other partners' (6-constraints keeps a partner's
+ * parents on that partner's side). Otherwise null: the compact order. An
+ * ancestor couple in the grandparents' rows and above keeps the compact
+ * order too (buildAncestorBlocks): faceLineSiblings sets its other partners
+ * by the line child's siblings, and a deep ancestor's appendage spouses stand
+ * beside the line as before.
+ */
+function chronologicalChainPersonOrder(
+    chain: PartnerChain,
+    primaryUnionId: UnionId,
+    model: LayoutModel
+): PersonId[] | null {
+    const unionIds = chain.chronologicalUnionIds;
+    if (!unionIds || unionIds.length < 2 || unionIds.length !== chain.unionIds.length) return null;
+    const shared = chain.sharedPersonId;
+    const partners: PersonId[] = [];
+    for (const uid of unionIds) {
+        const u = model.unions.get(uid);
+        if (!u || !u.partnerB) return null;
+        const partner = u.partnerA === shared ? u.partnerB : u.partnerB === shared ? u.partnerA : null;
+        if (!partner || partner === shared || partners.includes(partner)) return null;
+        if (model.childToParentUnion.has(partner)) return null;
+        partners.push(partner);
+    }
+    const primaryIdx = unionIds.indexOf(primaryUnionId);
+    if (primaryIdx < 0) return null;
+    // Partners left of the person: ⌈n/2⌉, moved so the primary partner is adjacent
+    let left = Math.ceil(partners.length / 2);
+    if (primaryIdx < left - 1) left = primaryIdx + 1;
+    else if (primaryIdx > left) left = primaryIdx;
+    return [...partners.slice(0, left), shared, ...partners.slice(left)];
 }
 
 /**
@@ -600,7 +652,7 @@ function buildAncestorBlocks(
     if (chain) {
         // Chain block: wider coupleWidth for all unique persons
         const personOrder = faceLineSiblings(
-            buildChainBlockPersonOrder(chain, model), parentUnion, personId, directLineUnionId, gen, side, lineCoupleChildRole, shown, model, chain.unionIds, blocks, unionToBlock);
+            buildChainBlockPersonOrder(chain, model, gen > -2), parentUnion, personId, directLineUnionId, gen, side, lineCoupleChildRole, shown, model, chain.unionIds, blocks, unionToBlock);
         const uniquePersonCount = personOrder.length;
         coupleWidth = uniquePersonCount * config.cardWidth + (uniquePersonCount - 1) * config.partnerGap;
         chainInfo = {

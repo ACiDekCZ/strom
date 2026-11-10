@@ -57,6 +57,9 @@ const DEFAULT_FIXTURES = [
     // marriages, ten children): they stand beside the parent, not beyond
     // the width of the family below.
     'edge-aunts-wide-family',
+    // A man with three marriages without wedding dates (T13): the partners
+    // stand in the order of the marriages around him.
+    'edge-t13-partner-order',
     // Synthetic etalon: systematically designed constellations (see docs/ETALON.md).
     'etalon-line-10gen',
     'etalon-ancestors-binary5',

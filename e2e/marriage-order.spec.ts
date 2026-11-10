@@ -6,8 +6,8 @@ import { openApp, card } from './helpers.js';
  * Marriage order (T13): a man with three wives — data order 1908, undated
  * (no date of the child either), 1866 — in the expanded view. Each wife's card carries a pill on its top
  * edge at the corner pointing to him ("1st ∞ 1866", "2nd ∞ 1908", "3rd ∞"),
- * he has none, a couple of one marriage has none; the wives on one side
- * stand in the order of the marriages. Below 60 % zoom the pill hides; the
+ * he has none, a couple of one marriage has none; the wives stand from
+ * left to right in the order of the marriages (T13 part 2). Below 60 % zoom the pill hides; the
  * image export draws it whole, measured as the screen draws it; a mouse shows
  * its bubble, which names whose marriage it is. A union has one pill (a widow
  * who married a widower), and the pill never covers a hidden-relatives tab,
@@ -120,16 +120,16 @@ test.describe('marriage-order pill (T13)', () => {
         await expect(card(page, 'Ludmila').locator('.union-order-pill')).toHaveCount(0);
         await expect(page.locator('.union-order-pill')).toHaveCount(3);
 
-        // The wives on his left in the order of the marriages, the earliest
-        // next to him; the newest (primary) marriage on his right.
+        // The wives from left to right in the order of the marriages (T13
+        // part 2): the older half (1st, 2nd) on his left, the 3rd on his right.
         const x = async (name: string) => (await card(page, name).boundingBox())!.x;
-        const [ex, ax, jx, mx] = [await x('Eva'), await x('Anna'), await x('Josef'), await x('Marie')];
-        expect(ex).toBeLessThan(ax);
-        expect(ax).toBeLessThan(jx);
-        expect(jx).toBeLessThan(mx);
+        const [ax, mx, jx, ex] = [await x('Anna'), await x('Marie'), await x('Josef'), await x('Eva')];
+        expect(ax).toBeLessThan(mx);
+        expect(mx).toBeLessThan(jx);
+        expect(jx).toBeLessThan(ex);
 
         // On the top edge, half over the border, 12px from the corner toward Josef.
-        for (const [name, side] of [['Anna', 'right'], ['Eva', 'right'], ['Marie', 'left']] as const) {
+        for (const [name, side] of [['Anna', 'right'], ['Marie', 'right'], ['Eva', 'left']] as const) {
             const c = (await card(page, name).boundingBox())!;
             const b = (await pill(page, name).boundingBox())!;
             expect(Math.abs(b.y + b.height / 2 - c.y)).toBeLessThanOrEqual(1.5);
