@@ -22,7 +22,7 @@ import {
     applyColumnSetup, columnSetupOf, defaultTypeState, type ColumnSetup, type RowTypeState, type TableState,
 } from './table-state.js';
 
-export const BUILTIN_VIEWS = ['overview', 'births', 'marriages', 'deaths', 'sources', 'gaps', 'checks', 'events'] as const;
+export const BUILTIN_VIEWS = ['overview', 'births', 'marriages', 'deaths', 'sources', 'gaps', 'checks', 'events', 'allSources'] as const;
 export type BuiltinViewName = typeof BUILTIN_VIEWS[number];
 
 const BUILTIN_PREFIX = 'b:';
@@ -72,6 +72,10 @@ const BUILTIN_DEFS: Record<BuiltinViewName, BuiltinDef> = {
         rowType: 'events', columns: DEFAULT_VIEWS.events.columns, widths: DEFAULT_VIEWS.events.widths,
         pinned: DEFAULT_VIEWS.events.pinned, sort: DEFAULT_VIEWS.events.sort,
     },
+    allSources: {
+        rowType: 'sources', columns: DEFAULT_VIEWS.sources.columns, widths: DEFAULT_VIEWS.sources.widths,
+        pinned: DEFAULT_VIEWS.sources.pinned, sort: DEFAULT_VIEWS.sources.sort,
+    },
 };
 
 export function builtinId(name: BuiltinViewName): string {
@@ -82,9 +86,9 @@ export function isBuiltinId(id: string): boolean {
     return id.startsWith(BUILTIN_PREFIX) && (BUILTIN_VIEWS as readonly string[]).includes(id.slice(BUILTIN_PREFIX.length));
 }
 
-/** The view a row type opens with (§2: Overview for people, Marriages for unions, All events for events). */
+/** The view a row type opens with (§2: Overview for people, Marriages for unions, All events, All sources). */
 export function defaultViewId(type: RowType): string {
-    return builtinId(type === 'persons' ? 'overview' : type === 'unions' ? 'marriages' : 'events');
+    return builtinId(type === 'persons' ? 'overview' : type === 'unions' ? 'marriages' : type === 'events' ? 'events' : 'allSources');
 }
 
 /** A built-in view as a `TableView` (its name in the current language). */

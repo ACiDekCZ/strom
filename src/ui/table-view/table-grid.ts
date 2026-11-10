@@ -183,6 +183,7 @@ export function cellClasses(value: CellValue, col: ColumnDef, issue: CellSeverit
     let cls = 'tv-cell';
     if (col.align === 'right') cls += ' tv-right';
     if (col.id === 'name' || col.id === 'p1' || col.id === 'p2' || col.id === 'evWho') cls += ' tv-name';
+    if (col.id === 'srcTitle') cls += ' tv-src-title';
     if (value.aggregate) cls += ' tv-cell--aggregate';
     else if (value.na) cls += ' tv-cell--na';
     else if (value.computed && !value.empty) cls += ' tv-cell--computed';
@@ -227,7 +228,26 @@ function cellValueHtml(value: CellValue, col: ColumnDef, hit = ''): string {
     }
     if (value.prefix) html += `<span class="tv-qual">${hit ? highlightHtml(value.prefix, hit) : esc(value.prefix)}</span>`;
     if (value.names?.length && !value.na) return html + `<span class="tv-cell-text">${namesHtml(value.names, hit)}</span>`;
+    if (value.link && !value.na) return html + linkHtml(value.link, hit);
+    if (value.dots && !value.na) return html + readersHtml(value, hit);
     return html + `<span class="tv-cell-text">${hit && !value.na ? highlightHtml(cellText(value), hit) : esc(cellText(value))}</span>`;
+}
+
+/**
+ * A web address in a cell (§14.2 Online): a link into a new window with ↗,
+ * out of the tab order until its cell is the active one (`syncNameTabs`).
+ */
+export function linkHtml(link: { href: string; label: string }, hit = ''): string {
+    const label = hit ? highlightHtml(link.label, hit) : esc(link.label);
+    return `<span class="tv-cell-text"><a class="tv-link" href="${esc(link.href)}" target="_blank" rel="noopener" tabindex="-1">${label}`
+        + `<span class="tv-link-out" aria-hidden="true"> ↗</span></a></span>`;
+}
+
+/** The readers of a source (§14.2): the reliability pill's dots (spec 066) and the count, inert. */
+export function readersHtml(value: CellValue, hit = ''): string {
+    const dots = (value.dots ?? []).map(on => (on ? '<i class="on"></i>' : '<i></i>')).join('');
+    const text = hit ? highlightHtml(value.text, hit) : esc(value.text);
+    return `<span class="fact-status tv-readers"><span class="fs-dots" aria-hidden="true">${dots}</span><span class="fs-text">${text}</span></span>`;
 }
 
 /**
@@ -320,6 +340,8 @@ export class TableGrid {
             }
             const nm = t.closest<HTMLElement>('.tv-nm[data-ni]');
             if (nm && cellEl && this.nameAt(line, cellEl, nm)) return;
+            // A web address opens its own window (§14.2); the row stays as it is.
+            if (t.closest('a.tv-link')) return;
             const act = t.closest<HTMLElement>('.tv-act[data-act]');
             if (act) {
                 this.select(line);
@@ -337,7 +359,7 @@ export class TableGrid {
         // A double click edits (§10.1); the ▾/▸, the count pill and the icons are their own.
         this.body.addEventListener('dblclick', (e) => {
             const t = e.target as Element;
-            if (t.closest('.tv-toggle, .tv-unions-pill, .tv-act, .tv-more-btn, .tv-nm')) return;
+            if (t.closest('.tv-toggle, .tv-unions-pill, .tv-act, .tv-more-btn, .tv-nm, .tv-link')) return;
             const line = this.lineOf(t);
             if (!line || line.kind === 'more') return;
             this.handlers.onRowAction?.('edit', line);
@@ -394,7 +416,7 @@ export class TableGrid {
 
     /** The names of the active cell (the one with the body's tab stop) in the tab order, the others out (§14.1). */
     private syncNameTabs(): void {
-        for (const b of this.body.querySelectorAll<HTMLElement>('.tv-nm[data-ni]')) {
+        for (const b of this.body.querySelectorAll<HTMLElement>('.tv-nm[data-ni], .tv-link')) {
             b.tabIndex = b.closest('[aria-colindex]')?.getAttribute('tabindex') === '0' ? 0 : -1;
         }
     }
@@ -1062,7 +1084,10 @@ export class TableGrid {
             const b = (act: RowAction, icon: string, label: string): string =>
                 `<button type="button" class="tv-act" data-act="${act}" tabindex="-1" title="${esc(label)}" aria-label="${esc(label)}">`
                 + `<span aria-hidden="true">${icon}</span></button>`;
-            html += `<span class="tv-acts">${b('tree', '⌖', t.tree)}${b('open', '▤', t.open)}${acts.edit ? b('edit', '✎', t.edit) : ''}</span>`;
+            // A source is not in the tree (§14.2): Open source and Edit, both its dialog.
+            html += line.row.kind === 'source'
+                ? `<span class="tv-acts">${b('open', '▤', t.openSource)}${acts.edit ? b('edit', '✎', t.edit) : ''}</span>`
+                : `<span class="tv-acts">${b('tree', '⌖', t.tree)}${b('open', '▤', t.open)}${acts.edit ? b('edit', '✎', t.edit) : ''}</span>`;
         }
         return html;
     }
@@ -1151,7 +1176,7 @@ export class TableGrid {
         if (!input || !this.lines.length) return;
         if (e.altKey) return;
         // A name in a cell (§14.1) is a button: Enter and Space are its own.
-        if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.tv-nm')) return;
+        if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.tv-nm, .tv-link')) return;
         const at = this.activeLineIndex();
         const line = this.lines[at];
         const col = Math.min(this.activeCol, input.columns.length - 1);

@@ -1,0 +1,75 @@
+/**
+ * Table view (spec 073 §14.2): the Sources rows.
+ *
+ * One row per source of the tree's catalog (`StromData.sources`), with how
+ * much of the tree it documents: the people whose facts cite it and the
+ * number of those facts. Counted in one pass over the tree for all sources
+ * (never per cell). A fact is one citation list: a person's own citations,
+ * the birth, the death, each of a person's events, a union's wedding, its
+ * divorce and each of a couple's events; a union's fact documents both
+ * partners. Placeholders are not people of the table, so their facts do not
+ * count; a story's sources are not a fact's.
+ */
+
+import { PARTNERSHIP_CITATION_FIELDS, PERSON_CITATION_FIELDS, type Person, type Source, type StromData } from '../../types.js';
+import type { SourceRow } from './table-model.js';
+
+/** How much of the tree one source documents. */
+export interface SourceUse {
+    persons: number;
+    facts: number;
+}
+
+/** Each cited source's people and facts (§14.2 Use), in one pass over the tree. */
+export function sourceUsage(data: StromData): Map<string, SourceUse> {
+    const people = new Map<string, Set<string>>();
+    const facts = new Map<string, number>();
+    const cite = (ids: readonly string[] | undefined, holders: readonly Person[]) => {
+        if (!ids?.length || !holders.length) return;
+        for (const id of new Set(ids)) {
+            facts.set(id, (facts.get(id) ?? 0) + 1);
+            let set = people.get(id);
+            if (!set) people.set(id, set = new Set());
+            for (const p of holders) set.add(p.id);
+        }
+    };
+    for (const p of Object.values(data.persons ?? {})) {
+        if (!p || p.isPlaceholder) continue;
+        const holder = [p];
+        for (const f of PERSON_CITATION_FIELDS) cite(p[f], holder);
+        for (const e of p.events ?? []) cite(e.sourceIds, holder);
+    }
+    for (const u of Object.values(data.partnerships ?? {})) {
+        if (!u) continue;
+        const holders = [u.person1Id, u.person2Id]
+            .map(id => data.persons[id])
+            .filter((p): p is Person => !!p && !p.isPlaceholder);
+        for (const f of PARTNERSHIP_CITATION_FIELDS) cite(u[f], holders);
+        for (const e of u.events ?? []) cite(e.sourceIds, holders);
+    }
+    const out = new Map<string, SourceUse>();
+    for (const [id, n] of facts) out.set(id, { persons: people.get(id)?.size ?? 0, facts: n });
+    return out;
+}
+
+/** All source rows of a tree, in the catalog's order, and each by its id. */
+export function buildSourceRows(data: StromData): { rows: SourceRow[]; byId: Map<string, SourceRow> } {
+    const use = sourceUsage(data);
+    const rows: SourceRow[] = [];
+    const byId = new Map<string, SourceRow>();
+    for (const [key, source] of Object.entries(data.sources ?? {}) as [string, Source | undefined][]) {
+        if (!source) continue;
+        const id = source.id || key;
+        if (byId.has(id)) continue;
+        const u = use.get(key) ?? use.get(id);
+        const row: SourceRow = { kind: 'source', id, source, persons: u?.persons ?? 0, facts: u?.facts ?? 0, cache: new Map() };
+        rows.push(row);
+        byId.set(id, row);
+    }
+    return { rows, byId };
+}
+
+/** The readers of a source's transcript (§14.2): the app and the research, as `readBy` says. */
+export function sourceReaders(source: Pick<Source, 'readBy'>): number {
+    return source.readBy === 'both' ? 2 : source.readBy === 'user' || source.readBy === 'research' ? 1 : 0;
+}

@@ -1,7 +1,7 @@
 /**
  * Table view (spec 073 §13): the states drawn in place of the grid, without
  * the DOM. An empty tree (13a, 13b), a Unions table without unions (13e),
- * an Events table without events (§14.1),
+ * an Events table without events (§14.1), a Sources table without sources (§14.2),
  * the built-in Checks view without findings (13f) and the built-in Gaps
  * view when nothing is missing (13g). "Nothing matches the filter" (13c,
  * 13d) stays under the head of the grid (`GridInput.noMatch`).
@@ -11,13 +11,15 @@ import { strings } from '../../strings.js';
 import type { RowType } from './table-model.js';
 import { builtinId } from './table-views.js';
 
-export type TableEmptyKind = 'empty' | 'noUnions' | 'noEvents' | 'noFindings' | 'nothingMissing';
+export type TableEmptyKind = 'empty' | 'noUnions' | 'noEvents' | 'noSources' | 'noFindings' | 'nothingMissing';
 
 export interface TableEmptyInput {
     persons: number;
     unions: number;
     /** The events of the tree (§14.1); not given: not counted. */
     events?: number;
+    /** The sources of the tree (§14.2); not given: not counted. */
+    sources?: number;
     type: RowType;
     /** The open view's id and whether the table differs from it (§9.3). */
     viewId: string;
@@ -55,6 +57,7 @@ export function tableEmptyState(i: TableEmptyInput): TableEmptyState | null {
     }
     if (i.type === 'unions' && i.unions === 0) return { kind: 'noUnions', title: t.noUnionsTitle, text: t.noUnionsText, action: null };
     if (i.type === 'events' && i.events === 0) return { kind: 'noEvents', title: t.noEventsTitle, text: t.noEventsText, action: null };
+    if (i.type === 'sources' && i.sources === 0) return { kind: 'noSources', title: t.noSourcesTitle, text: t.noSourcesText, action: null };
     const asView = !i.viewChanged && !i.search.trim();
     if (asView && i.type === 'persons' && i.viewId === builtinId('checks') && i.checksDone && i.shown === 0) {
         return {

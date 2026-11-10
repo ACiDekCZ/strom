@@ -64,8 +64,8 @@ export function defaultTypeState(type: RowType): RowTypeState {
 
 export function defaultTableState(): TableState {
     return {
-        rowType: 'persons', types: { persons: defaultTypeState('persons'), unions: defaultTypeState('unions'), events: defaultTypeState('events') },
-        open: { persons: 'b:overview', unions: 'b:marriages', events: 'b:events' }, drafts: {},
+        rowType: 'persons', types: { persons: defaultTypeState('persons'), unions: defaultTypeState('unions'), events: defaultTypeState('events'), sources: defaultTypeState('sources') },
+        open: { persons: 'b:overview', unions: 'b:marriages', events: 'b:events', sources: 'b:allSources' }, drafts: {},
     };
 }
 
@@ -102,7 +102,7 @@ export const MAX_PINNED_SHARE = 0.5;
 
 /** The column that is always shown and pinned first (§4.4: the name). */
 export function lockedColumn(type: RowType): string {
-    return type === 'persons' ? 'name' : type === 'unions' ? 'p1' : 'evType';
+    return type === 'persons' ? 'name' : type === 'unions' ? 'p1' : type === 'events' ? 'evType' : 'srcTitle';
 }
 
 /** The catalog's P1 columns of a row type (the Columns panel lists these). */

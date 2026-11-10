@@ -8,7 +8,7 @@
  * in node and measured with the perf budget.
  */
 
-import type { CoupleEvent, EventParticipant, LifeEvent, ParticipantRole, Partnership, PartnershipId, Person, PersonId, StromData } from '../../types.js';
+import type { CoupleEvent, EventParticipant, LifeEvent, ParticipantRole, Partnership, PartnershipId, Person, PersonId, Source, StromData } from '../../types.js';
 import { parseFlexDate } from '../../dates.js';
 import { assignGenerations } from '../../generations.js';
 import { inferBirthUpperBounds, isLivingPerson } from '../../privacy.js';
@@ -17,10 +17,11 @@ import type { ReliabilityOptions } from '../../reliability.js';
 import type { Language } from '../../strings.js';
 import type { CheckIndex } from './table-checks.js';
 import { buildEventRows } from './table-events.js';
+import { buildSourceRows } from './table-sources.js';
 
-/** What the rows of a table are. P2 adds events (and sources), P3 places. */
-export type RowType = 'persons' | 'unions' | 'events';
-export const ROW_TYPES: readonly RowType[] = ['persons', 'unions', 'events'];
+/** What the rows of a table are. P2 adds events and sources, P3 places. */
+export type RowType = 'persons' | 'unions' | 'events' | 'sources';
+export const ROW_TYPES: readonly RowType[] = ['persons', 'unions', 'events', 'sources'];
 
 /** A cell's mark (§7.3): a finding's level, or `unusual` for one marked "Not an error". */
 export type CellSeverity = 'error' | 'warning' | 'info' | 'unusual';
@@ -74,6 +75,16 @@ export interface CellValue {
      * the Partner cell of a person whose unions are sub-rows).
      */
     aggregate?: boolean;
+    /**
+     * A web address the cell links to (§14.2 Online: a new window, only
+     * http and https); `label` is what the link shows.
+     */
+    link?: { href: string; label: string };
+    /**
+     * A pill of dots before the text (§14.2 Read by the research: one dot per
+     * reader, filled when read, as the reliability pill of spec 066).
+     */
+    dots?: boolean[];
     /**
      * The names the text lists (§14.1: the person or couple of an event, its
      * participants): each with the tree's person it is, when it is one (a
@@ -154,7 +165,22 @@ export interface EventRow {
     cache: Map<string, CellValue>;
 }
 
-export type TableRow = PersonRow | UnionRow | EventRow;
+/**
+ * One source of the tree's catalog (§14.2) with how much of the tree it
+ * documents: the people whose facts cite it and the facts that do.
+ */
+export interface SourceRow {
+    kind: 'source';
+    id: string;
+    source: Source;
+    /** The real people (no placeholders) a cited fact belongs to; a union's fact: both partners. */
+    persons: number;
+    /** The facts that cite it: a person's citations, the birth, the death, each event, a wedding, a divorce, a couple's event. */
+    facts: number;
+    cache: Map<string, CellValue>;
+}
+
+export type TableRow = PersonRow | UnionRow | EventRow | SourceRow;
 
 /** Everything the columns compute from; the heavy indexes are built on first use. */
 export interface TableContext {
@@ -189,6 +215,9 @@ export interface TableModel {
     /** The event rows (§14.1), built on first use. */
     readonly events: EventRow[];
     readonly eventRows: Map<string, EventRow>;
+    /** The source rows (§14.2), built on first use with the counts of their use. */
+    readonly sources: SourceRow[];
+    readonly sourceRows: Map<string, SourceRow>;
 }
 
 export interface BuildOptions {
@@ -302,10 +331,14 @@ export function buildTableModel(data: StromData, opts: BuildOptions): TableModel
     }
     let events: { rows: EventRow[]; byId: Map<string, EventRow> } | null = null;
     const ev = () => events ??= buildEventRows(data);
+    let sources: { rows: SourceRow[]; byId: Map<string, SourceRow> } | null = null;
+    const src = () => sources ??= buildSourceRows(data);
     return {
         data, rev: opts.rev, ctx, persons, unions, personRows, unionRows,
         get events() { return ev().rows; },
         get eventRows() { return ev().byId; },
+        get sources() { return src().rows; },
+        get sourceRows() { return src().byId; },
     };
 }
 
@@ -315,32 +348,37 @@ export function modelIsCurrent(model: TableModel | null, data: StromData, rev: n
 }
 
 export function rowsOf(model: TableModel, type: RowType): TableRow[] {
-    return type === 'persons' ? model.persons : type === 'unions' ? model.unions : model.events;
+    return type === 'persons' ? model.persons : type === 'unions' ? model.unions : type === 'events' ? model.events : model.sources;
 }
 
-/** A row type's key of the count texts (`strings.table.countOf.p|u|e`, `showN`, the export's). */
-export const ROW_KEY: Readonly<Record<RowType, 'p' | 'u' | 'e'>> = { persons: 'p', unions: 'u', events: 'e' };
+/** A row type's key of the count texts (`strings.table.countOf.p|u|e|s`, `showN`, the export's). */
+export const ROW_KEY: Readonly<Record<RowType, 'p' | 'u' | 'e' | 's'>> = { persons: 'p', unions: 'u', events: 'e', sources: 's' };
 
 /** The number of rows of each type (§2: the Rows switch). */
 export function rowCounts(model: TableModel | null): Record<RowType, number> {
-    return { persons: model?.persons.length ?? 0, unions: model?.unions.length ?? 0, events: model?.events.length ?? 0 };
+    return {
+        persons: model?.persons.length ?? 0, unions: model?.unions.length ?? 0,
+        events: model?.events.length ?? 0, sources: model?.sources.length ?? 0,
+    };
 }
 
 /** A row's stable key (selection, DOM). */
 export function rowKey(row: TableRow): string {
-    return row.kind === 'person' ? `p:${row.id}` : row.kind === 'union' ? `u:${row.id}` : `e:${row.id}`;
+    return row.kind === 'person' ? `p:${row.id}` : row.kind === 'union' ? `u:${row.id}` : row.kind === 'event' ? `e:${row.id}` : `s:${row.id}`;
 }
 
 /** The same row in another model (by its kind and id); null when it is gone. */
 export function sameRow(model: TableModel, row: TableRow): TableRow | null {
     if (row.kind === 'person') return model.personRows.get(row.id) ?? null;
     if (row.kind === 'union') return model.unionRows.get(row.id) ?? null;
+    if (row.kind === 'source') return model.sourceRows.get(row.id) ?? null;
     return model.eventRows.get(row.id) ?? null;
 }
 
-/** The person a row is about: the person; a union's first partner; an event's first person. */
+/** The person a row is about: the person; a union's first partner; an event's first person; a source none. */
 export function rowPersonId(row: TableRow): PersonId | null {
     if (row.kind === 'person') return row.id;
     if (row.kind === 'union') return row.p1?.id ?? row.p2?.id ?? null;
+    if (row.kind === 'source') return null;
     return row.persons[0]?.id ?? null;
 }

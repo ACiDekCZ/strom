@@ -13,7 +13,9 @@
  */
 
 import { cellOf, columnById, columnLabel, type ColumnDef, type ColumnKind, type SortSpec } from './table-columns.js';
-import { rowsOf, type CellValue, type EventCategory, type EventRow, type PersonRow, type RowType, type TableModel, type TableRow } from './table-model.js';
+import { rowsOf, type CellValue, type EventCategory, type EventRow, type PersonRow, type RowType, type SourceRow, type TableModel, type TableRow } from './table-model.js';
+import { sourceReaders } from './table-sources.js';
+import { safeHttpUrl } from '../../validation.js';
 import { cellFilled } from './table-coverage.js';
 import { personPassesUnions, type UnionPredicate } from './table-subrows.js';
 import { rodOf, type RodId } from '../../lineage.js';
@@ -36,7 +38,10 @@ export const EVENT_CHIP_ORDER = ['evBirth', 'evMarriage', 'evDeath', 'evOther', 
  * (§14.1 "Godparent: {name} ×"), which is set from a participant's name in
  * a cell and is not in the quick row.
  */
-export type ChipId = typeof CHIP_ORDER[number] | typeof EVENT_CHIP_ORDER[number] | 'participant';
+export type ChipId = typeof CHIP_ORDER[number] | typeof EVENT_CHIP_ORDER[number] | typeof SOURCE_CHIP_ORDER[number] | 'participant';
+
+/** The Sources table's quick chips (§14.2), in their fixed order. */
+export const SOURCE_CHIP_ORDER = ['srcNoPerson', 'srcUnread', 'srcTranscript', 'srcOnline'] as const;
 
 /** The event chips that exclude each other (one family of events at a time). */
 const EVENT_KIND_CHIPS: Readonly<Record<string, EventCategory>> = { evBirth: 'birth', evMarriage: 'marriage', evDeath: 'death', evOther: 'other' };
@@ -105,7 +110,7 @@ export function columnItems(filter: TableFilter): ColumnFilter[] {
 export type FilterKind = 'text' | 'range' | 'values';
 
 /** Enumerations filtered by their values (§8.2: union status, level), besides the pills. */
-const VALUE_COLUMNS = new Set(['uStatus', 'topSev', 'gender', 'living', 'div', 'evid', 'certainty', 'rod']);
+const VALUE_COLUMNS = new Set(['uStatus', 'topSev', 'gender', 'living', 'div', 'evid', 'certainty', 'rod', 'srcRead', 'srcTranscript']);
 
 export function filterKindOf(col: ColumnDef): FilterKind {
     if (col.kind === 'pill' || VALUE_COLUMNS.has(col.id)) return 'values';
@@ -178,6 +183,7 @@ export function clearFilter(filter: TableFilter): boolean {
 /** Whether a chip applies to a row type and tree (§8.1: "Unconfirmed research" only in a research tree). */
 export function chipAvailable(model: TableModel, type: RowType, chip: ChipId): boolean {
     if (type === 'events') return chip === 'participant' || (EVENT_CHIP_ORDER as readonly string[]).includes(chip);
+    if (type === 'sources') return (SOURCE_CHIP_ORDER as readonly string[]).includes(chip);
     if (type !== 'persons' || !(CHIP_ORDER as readonly string[]).includes(chip)) return false;
     if (chip === 'unconfirmed') return model.ctx.reliability.researchTree;
     return true;
@@ -185,7 +191,7 @@ export function chipAvailable(model: TableModel, type: RowType, chip: ChipId): b
 
 /** The quick chips a row type offers, in their fixed order (the participant filter is not one). */
 export function availableChips(model: TableModel, type: RowType): ChipId[] {
-    const order: readonly ChipId[] = type === 'events' ? EVENT_CHIP_ORDER : CHIP_ORDER;
+    const order: readonly ChipId[] = type === 'events' ? EVENT_CHIP_ORDER : type === 'sources' ? SOURCE_CHIP_ORDER : CHIP_ORDER;
     return order.filter(c => chipAvailable(model, type, c));
 }
 
@@ -243,6 +249,18 @@ export function eventPassesChip(model: TableModel, row: EventRow, item: ChipFilt
     if (item.chip === 'noSource') return row.sourceIds.length === 0;
     const cat = EVENT_KIND_CHIPS[item.chip];
     return cat ? row.category === cat : true;
+}
+
+/** Whether a source passes one chip (§14.2). */
+export function sourcePassesChip(row: SourceRow, item: ChipFilter): boolean {
+    const s = row.source;
+    switch (item.chip) {
+        case 'srcNoPerson': return row.persons === 0;
+        case 'srcUnread': return sourceReaders(s) === 0;
+        case 'srcTranscript': return !!s.transcript?.trim();
+        case 'srcOnline': return !!safeHttpUrl(s.url ?? '');
+        default: return true;
+    }
 }
 
 /** Whether a person passes one chip. Chips on findings pass everyone while the checks run. */
@@ -437,6 +455,8 @@ export function filterRows(
             if (!personPassesUnions(row, pass)) return false;
         } else if (row.kind === 'event') {
             for (const c of chips) if (!eventPassesChip(model, row, c)) return false;
+        } else if (row.kind === 'source') {
+            for (const c of chips) if (!sourcePassesChip(row, c)) return false;
         }
         for (const x of rowCols) if (!cellPasses(cellOf(model, row, x.col), x.item, x.kind)) return false;
         if (q && !rowMatches(model, row, search!.columns, q)) return false;

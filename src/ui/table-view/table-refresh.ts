@@ -12,7 +12,7 @@
  *   `rowKeysFor` turns them into the row keys of a table.
  */
 
-import type { Person, PersonId, Partnership, PartnershipId, StromData } from '../../types.js';
+import type { Person, PersonId, Partnership, PartnershipId, Source, StromData } from '../../types.js';
 import { rowKey, sameRow, type EventRow, type RowType, type TableModel, type TableRow } from './table-model.js';
 
 /** The rows in their kept order and those of them that no longer pass (their row keys). */
@@ -50,7 +50,7 @@ export function keepOrder(m: TableModel, previous: readonly TableRow[], fresh: r
 }
 
 /** A person's or a union's stored form, to tell a change. */
-function signature(value: Person | Partnership | undefined): string {
+function signature(value: Person | Partnership | Source | undefined): string {
     return value ? JSON.stringify(value) : '';
 }
 
@@ -69,8 +69,9 @@ export function familyKeys(data: StromData, personId: PersonId): string[] {
     return [...keys];
 }
 
-function entity(data: StromData, key: string): Person | Partnership | undefined {
+function entity(data: StromData, key: string): Person | Partnership | Source | undefined {
     const id = key.slice(2);
+    if (key.startsWith('s:')) return data.sources?.[id];
     return key.startsWith('p:') ? data.persons[id as PersonId] : data.partnerships[id as PartnershipId];
 }
 
@@ -140,6 +141,10 @@ export function rowKeysFor(data: StromData, type: RowType, keys: readonly string
         for (const r of events ?? []) {
             if ((r.union && ids.has(`u:${r.union.id}`)) || r.persons.some(p => ids.has(`p:${p.id}`))) out.add(rowKey(r));
         }
+        return out;
+    }
+    if (type === 'sources') {
+        for (const key of keys) if (key.startsWith('s:')) out.add(key);
         return out;
     }
     for (const key of keys) {

@@ -19,7 +19,9 @@ import { sortLifeEvents, eventValueIsOnTag, coupleEventLabel } from '../../event
 import { lifeEventLabel } from '../../person-sources.js';
 import { factReliability, type ReliabilityStepName } from '../../reliability.js';
 import { strings, type StringsType } from '../../strings.js';
-import { dateNumber, type CellName, type CellValue, type EventRow, type PersonRow, type RowType, type TableContext, type TableModel, type TableRow, type UnionRow } from './table-model.js';
+import { safeHttpUrl } from '../../validation.js';
+import { sourceReaders } from './table-sources.js';
+import { dateNumber, type CellName, type CellValue, type EventRow, type PersonRow, type RowType, type SourceRow, type TableContext, type TableModel, type TableRow, type UnionRow } from './table-model.js';
 
 export type ColumnKind = 'text' | 'date' | 'age' | 'number' | 'percent' | 'pill' | 'link';
 
@@ -27,7 +29,8 @@ export type ColumnKind = 'text' | 'date' | 'age' | 'number' | 'percent' | 'pill'
 export const PERSON_GROUPS = ['person', 'birth', 'parents', 'union', 'divorce', 'death', 'events', 'sources', 'rel', 'checks'] as const;
 export const UNION_GROUPS = ['pair', 'wed', 'divorce', 'uextra'] as const;
 export const EVENT_GROUPS = ['event', 'participants', 'source'] as const;
-export type ColumnGroup = typeof PERSON_GROUPS[number] | typeof UNION_GROUPS[number] | typeof EVENT_GROUPS[number];
+export const SOURCE_GROUPS = ['source', 'use'] as const;
+export type ColumnGroup = typeof PERSON_GROUPS[number] | typeof UNION_GROUPS[number] | typeof EVENT_GROUPS[number] | typeof SOURCE_GROUPS[number];
 
 export type ColumnLabelKey = keyof StringsType['table']['col'];
 
@@ -748,14 +751,57 @@ export const PARTICIPANT_COLUMNS: Readonly<Record<ParticipantRole, string>> = {
     godparent: 'godparents', witness: 'witnesses', officiant: 'officiants', other: 'others',
 };
 
+// ---------------------------------------------------------------------------
+// Sources (§14.2)
+
+const asSource = (row: TableRow): SourceRow => row as SourceRow;
+
+/** A web address as the Online cell shows it: without the scheme and a trailing slash. */
+export function shortUrl(url: string): string {
+    return url.replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/$/, '');
+}
+
+/** The Online cell (§14.2): the address, a link ↗ into a new window when it is a web address. */
+function urlCell(value: string | undefined): CellValue {
+    const cell = textCell(value);
+    if (cell.empty) return cell;
+    const href = safeHttpUrl(cell.text);
+    return href ? { ...cell, link: { href, label: shortUrl(cell.text) } } : cell;
+}
+
+/** Read by the research (§14.2): one dot per reader of the transcript, "2 readers"; else "no" (counted as empty). */
+function readersCell(row: TableRow): CellValue {
+    const src = asSource(row).source;
+    const n = sourceReaders(src);
+    const s = strings.table;
+    if (!n || !src.readBy) return { ...EMPTY, text: s.no, sortKey: 0 };
+    return {
+        ...EMPTY, text: s.readers(n), sortKey: n, empty: false,
+        dots: [true, n > 1], title: strings.sources.readBy[src.readBy],
+    };
+}
+
+export const SOURCE_COLUMNS: readonly ColumnDef[] = cols('sources', [
+    { id: 'srcTitle', group: 'source', label: 'srcTitle', width: 280, get: (_c, r) => textCell(asSource(r).source.title) },
+    { id: 'srcRepo', group: 'source', label: 'srcRepo', width: 200, get: (_c, r) => textCell(asSource(r).source.repository) },
+    { id: 'srcRef', group: 'source', label: 'srcRef', width: 180, get: (_c, r) => textCell(asSource(r).source.reference) },
+    { id: 'srcUrl', group: 'source', label: 'srcUrl', width: 230, kind: 'link', get: (_c, r) => urlCell(asSource(r).source.url) },
+    { id: 'srcPersons', group: 'use', label: 'srcPersons', width: 76, kind: 'number', computed: true, get: (_c, r) => numberCell(asSource(r).persons) },
+    { id: 'srcFacts', group: 'use', label: 'srcFacts', width: 80, kind: 'number', computed: true, get: (_c, r) => numberCell(asSource(r).facts) },
+    { id: 'srcRead', group: 'use', label: 'srcRead', width: 160, get: (_c, r) => readersCell(r) },
+    { id: 'srcTranscript', group: 'use', label: 'srcTranscript', width: 90, get: (_c, r) => yesNo(!!asSource(r).source.transcript?.trim()) },
+    { id: 'srcRecDate', group: 'use', label: 'srcRecDate', width: 130, kind: 'date', get: (c, r) => dateCell(c, asSource(r).source.recordDate) },
+]);
+
 const BY_TYPE: Record<RowType, ReadonlyMap<string, ColumnDef>> = {
     persons: new Map(PERSON_COLUMNS.map(c => [c.id, c])),
     unions: new Map(UNION_COLUMNS.map(c => [c.id, c])),
     events: new Map(EVENT_COLUMNS.map(c => [c.id, c])),
+    sources: new Map(SOURCE_COLUMNS.map(c => [c.id, c])),
 };
 
 export function columnsOf(type: RowType): readonly ColumnDef[] {
-    return type === 'persons' ? PERSON_COLUMNS : type === 'unions' ? UNION_COLUMNS : EVENT_COLUMNS;
+    return type === 'persons' ? PERSON_COLUMNS : type === 'unions' ? UNION_COLUMNS : type === 'events' ? EVENT_COLUMNS : SOURCE_COLUMNS;
 }
 
 export function columnById(type: RowType, id: string): ColumnDef | undefined {
@@ -842,11 +888,17 @@ export const DEFAULT_VIEWS: Record<RowType, DefaultView> = {
         pinned: 2,
         sort: [{ col: 'evDate', dir: 'asc' }],
     },
+    sources: {
+        columns: ['srcTitle', 'srcRepo', 'srcRef', 'srcUrl', 'srcPersons', 'srcFacts', 'srcRead', 'srcTranscript'],
+        widths: {},
+        pinned: 1,
+        sort: [{ col: 'srcTitle', dir: 'asc' }],
+    },
 };
 
 /** Phone (≤ 640): the name column pinned at 156 px, the others at 0.8 of their width (min 70; §1.4). */
 export function phoneWidth(col: ColumnDef, width: number, pinned: boolean): number {
-    if (pinned && (col.id === 'name' || col.id === 'p1')) return 156;
+    if (pinned && (col.id === 'name' || col.id === 'p1' || col.id === 'srcTitle')) return 156;
     if (pinned && col.id === 'evType') return 96;
     if (pinned && col.id === 'evWho') return 140;
     return Math.max(70, Math.round(width * 0.8));

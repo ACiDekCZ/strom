@@ -120,7 +120,7 @@ describe('event rows (§14.1)', () => {
         expect(cellOf(m, shared[0], col('evWho')).text).toBe('Ignác Šlapetný, Žofie Kvapilová, Čeněk Šlapetný');
         // Two baptisms are two events, however alike.
         expect(m.events.filter(r => r.type === 'baptism')).toHaveLength(2);
-        expect(rowCounts(m)).toEqual({ persons: 8, unions: 4, events: m.events.length });
+        expect(rowCounts(m)).toEqual({ persons: 8, unions: 4, events: m.events.length, sources: m.sources.length });
     });
 
     it('a wedding is one row for the couple; a divorce its own; nothing for a couple with nothing written', () => {

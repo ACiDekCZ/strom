@@ -282,7 +282,7 @@ export class CheckIndex {
             list = this.cells.get(cellKey('persons', row.id, colId, union?.id));
         } else if (row.kind === 'event') {
             list = this.eventFindings(row, colId);
-        } else {
+        } else if (row.kind === 'union') {
             const partner = UNION_PARTNER_COLUMNS[colId];
             const p = partner ? (partner[1] === 1 ? row.p1 : row.p2) : null;
             const col = partner ? (p ? `${partner[0]}@${p.id}` : '') : colId;
@@ -301,7 +301,7 @@ export class CheckIndex {
         const out: CellFinding[] = [];
         if (row.kind === 'person') out.push(...(this.cells.get(cellKey('persons', row.id, colId, union?.id)) ?? []));
         else if (row.kind === 'event') out.push(...this.eventFindings(row, colId));
-        else {
+        else if (row.kind === 'union') {
             const partner = UNION_PARTNER_COLUMNS[colId];
             const p = partner ? (partner[1] === 1 ? row.p1 : row.p2) : null;
             const col = partner ? (p ? `${partner[0]}@${p.id}` : '') : colId;
