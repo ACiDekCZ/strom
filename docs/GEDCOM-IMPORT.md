@@ -610,8 +610,11 @@ A person's `1 OBJE` written in place whose `FILE` is a path or an address (no
 picture in the file) is kept as written, its `_DATE` and other lines included,
 while its file is not taken in: "Back to {program}" writes that block back on
 the person. Once the user picks the file for it, the picture is the tree's and
-the kept block goes. A link to a multimedia record (`1 OBJE @O1@`) whose file
-is not in the file is not kept.
+the kept block goes. A person's or a family's link to a multimedia record
+(`1 OBJE @O1@`) whose file is not in the file is kept the same way: the
+record's lines go under the link as a picture written in place (one level
+deeper), the link's own lines after them, and "Back to {program}" writes that
+block on the person or the family (the record itself is not written).
 
 Strom's export embeds photos and documents this way unless the export dialog's
 content options leave them out — other programs cannot read data URLs, so a
@@ -686,7 +689,8 @@ the record ids, the export to the program the tree came from keeps:
   place, witnesses or a status in the app, or the couple's status is changed;
 - `EMAIL` under a fact (`1 RESI` / `2 EMAIL`): shown as a line of the fact's
   note, written back as `2 EMAIL` while that line is there (other exports
-  keep the note line);
+  keep the note line); an `EMAIL` written right under the person (`1 EMAIL`,
+  not GEDCOM 5.5.1) is not carried over and is counted as unsupported;
 - a structure that became lines of the record's note — a fact of the table
   above (`1 NCHI 3` → "Number of children: 3"), a source's `PUBL` (with its
   `CONT` / `CONC`), and the `NOTE`, `RELI`, `CAUS`, `AGE`, `ADDR` or

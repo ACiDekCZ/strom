@@ -452,6 +452,45 @@ describe('a picture linked by path or address, with no file taken in (P-b)', () 
     });
 });
 
+describe('a person’s picture by a link to a media record (1 OBJE @O1@), as a family’s', () => {
+    const file = MYHERITAGE
+        .replace('1 FAMS @F500001@\n1 RIN MH:I500001', ['1 FAMS @F500001@', '1 OBJE @O500001@', '2 _PRIM Y', '1 RIN MH:I500001'].join('\n'))
+        .replace('0 TRLR', ['0 @O500001@ OBJE', '1 FILE https://example.org/photos/ozubec-statek.jpg', '2 FORM jpg', '2 TITL Statek Ozubec', '1 _DATE 1 JAN 1930', '0 TRLR'].join('\n'));
+    const BLOCK = ['1 OBJE', '2 FILE https://example.org/photos/ozubec-statek.jpg', '3 FORM jpg', '3 TITL Statek Ozubec', '2 _DATE 1 JAN 1930', '2 _PRIM Y'];
+
+    it('goes back with "Back to" as the record wrote it, under the person; the summary names it neither kept nor left out', () => {
+        const r = load(file);
+        expect(r.externalMedia.map(m => m.fileName)).toEqual(['ozubec-statek.jpg']);
+        expect(r.stats.keptTagSummary ?? '').not.toContain('OBJE');
+        expect(r.stats.droppedTagSummary ?? '').not.toContain('OBJE');
+        const rec = record(backTo(migrateData(r.data)), '@I500001@');
+        const at = rec.indexOf(BLOCK[1]);
+        expect(rec.slice(at - 1, at - 1 + BLOCK.length)).toEqual(BLOCK);
+        // No record of its own goes back, and no other export writes it.
+        const back = backTo(migrateData(r.data));
+        expect(back).not.toMatch(/^0 @O500001@ OBJE$/m);
+        expect(back).not.toContain('OBJE @O500001@');
+        expect(exportToGedcom(migrateData(r.data), 'Ozubec', { origins: true }).content).not.toContain('ozubec-statek.jpg');
+    });
+
+    it('once its file is taken in, the link is not written as well', () => {
+        const data = migrateData(load(file).data);
+        dropMediaLink(byName(data, 'Hromoslav'), 'https://example.org/photos/ozubec-statek.jpg');
+        expect(record(backTo(data), '@I500001@').some(l => l.includes('ozubec-statek.jpg'))).toBe(false);
+    });
+});
+
+describe('an e-mail written right under the person (1 EMAIL, not GEDCOM 5.5.1)', () => {
+    const file = MYHERITAGE.replace('1 SEX F\n', '1 SEX F\n1 EMAIL libuna@@example.org\n');
+
+    it('is named in the import summary as not carried over', () => {
+        const r = load(file);
+        expect(r.stats.droppedTagSummary ?? '').toContain('EMAIL');
+        // The e-mail under RESI is carried over, never counted.
+        expect(load(MYHERITAGE).stats.droppedTagSummary ?? '').not.toContain('EMAIL');
+    });
+});
+
 describe('a couple without MARR in its file', () => {
     it('is noted on import, a couple with one is not', () => {
         const data = load(MYHERITAGE).data;

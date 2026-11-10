@@ -896,9 +896,14 @@ interface RawMedia {
     orient?: number;
     /** _DATE: the picture's date as written (MyHeritage), kept with the picture (spec 066 G8). */
     date?: string;
-    /** Written in place (`1 OBJE` with its lines): where in the file, and those lines as written. */
+    /**
+     * Written in place (`1 OBJE` with its lines): where in the file, and those
+     * lines as written; a link to a media record: the record's lines written in place.
+     */
     rawLine?: number;
     rawLines?: string[];
+    /** A link to a media record (`1 OBJE @O1@`): where the link is in the file. */
+    linkLine?: number;
 }
 
 interface RawEvent {
@@ -3699,8 +3704,10 @@ export function parseGedcom(content: string): ParsedGedcom {
                         case 'OBJE': {
                             // Written in place, or a link to a media record (`1 OBJE @O1@`).
                             const media: RawMedia = { title: '', form: '', file: '', stromKind: '' };
-                            if (GED_POINTER.test(value.trim())) media.ref = value.trim();
-                            else if (level === 1) media.rawLine = rec.src;
+                            if (GED_POINTER.test(value.trim())) {
+                                media.ref = value.trim();
+                                if (level === 1) media.linkLine = rec.src;
+                            } else if (level === 1) media.rawLine = rec.src;
                             indi.media.push(media);
                             currentMedia = media;
                             break;
@@ -4481,10 +4488,42 @@ export function parseGedcom(content: string): ParsedGedcom {
         }
     }
 
+    // A picture by a link to a media record (a person's or a family's): the
+    // record's lines go under the link as a picture written in place (one
+    // level deeper), the link's own lines after them — the form a program
+    // reads without the record. Kept as written for "Back to {prog}" like one
+    // written in place.
+    /** The lines below line `at` of the file (deeper than it), trimmed. */
+    const linesBelow = (at: number): string[] => {
+        const out: string[] = [];
+        const top = parseInt(lines[at].trim(), 10);
+        for (let i = at + 1; i < lines.length; i++) {
+            const l = lines[i].trim();
+            if (!l) continue;
+            if (!(parseInt(l, 10) > top)) break;
+            out.push(l);
+        }
+        return out;
+    };
+    /** A link to media record `ref` (at line `linkLine`) as a picture written in place; null when it cannot be kept. */
+    const linkedMediaBlock = (ref: string, linkLine: number): string[] | null => {
+        const start = mediaRecordLines.get(ref);
+        if (start === undefined) return null;
+        const block = ['1 OBJE', ...linesBelow(start).map(l => l.replace(/^\d+/, n => String(Number(n) + 1))), ...linesBelow(linkLine)];
+        if (!validExtraBlock(block) || block.some(l => DATA_URL_IN_LINE.test(l) || /^\d+ @|\s@[^@\s]+@|^\d+ _STROM_/.test(l))) return null;
+        return block;
+    };
+
     // A picture written in place: its lines as written, for a link that stays
-    // one (a path or an address, no file to take) — "Back to {prog}" gives it back.
+    // one (a path or an address, no file to take) — "Back to {prog}" gives it
+    // back; a link to a media record the same, as the record wrote it.
     for (const indi of individuals.values()) {
         for (const media of indi.media) {
+            if (media.ref && media.linkLine !== undefined) {
+                const block = linkedMediaBlock(media.ref, media.linkLine);
+                if (block) media.rawLines = block;
+                continue;
+            }
             if (media.rawLine === undefined) continue;
             const block = [lines[media.rawLine].trim()];
             for (let i = media.rawLine + 1; i < lines.length; i++) {
@@ -4498,28 +4537,10 @@ export function parseGedcom(content: string): ParsedGedcom {
         }
     }
 
-    // A family's picture by a link to a media record: the record's lines go
-    // under the family as a picture written in place (one level deeper), the
-    // link's own lines after them — the form a program reads without the
-    // record. Kept as written for "Back to {prog}" like one written in place.
-    /** The lines below line `at` of the file (deeper than it), trimmed. */
-    const linesBelow = (at: number): string[] => {
-        const out: string[] = [];
-        const top = parseInt(lines[at].trim(), 10);
-        for (let i = at + 1; i < lines.length; i++) {
-            const l = lines[i].trim();
-            if (!l) continue;
-            if (!(parseInt(l, 10) > top)) break;
-            out.push(l);
-        }
-        return out;
-    };
     for (const fam of families.values()) {
         for (const link of fam.mediaLinks ?? []) {
-            const start = mediaRecordLines.get(link.ref);
-            if (start === undefined) continue;
-            const block = ['1 OBJE', ...linesBelow(start).map(l => l.replace(/^\d+/, n => String(Number(n) + 1))), ...linesBelow(link.line)];
-            if (!validExtraBlock(block) || block.some(l => DATA_URL_IN_LINE.test(l) || /^\d+ @|\s@[^@\s]+@|^\d+ _STROM_/.test(l))) continue;
+            const block = linkedMediaBlock(link.ref, link.line);
+            if (!block) continue;
             (fam.extras ??= []).push({ tag: 'OBJE', lines: block });
             (fam.keptMedia ??= []).push(link.ref);
         }
