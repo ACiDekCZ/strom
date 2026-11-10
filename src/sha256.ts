@@ -184,6 +184,24 @@ function hashInWorker(blob: Blob, onProgress?: (done: number) => void): Promise<
 }
 
 /**
+ * SHA-256 of bytes in memory: WebCrypto where the page has it, the
+ * self-contained implementation otherwise. crypto.subtle exists only in a
+ * secure context (https, localhost, a file opened from disk); on plain http
+ * at a network address the app still has to hash its images.
+ */
+export async function sha256Bytes(bytes: Uint8Array): Promise<ArrayBuffer> {
+    if (typeof crypto !== 'undefined' && crypto.subtle) {
+        return crypto.subtle.digest('SHA-256', bytes as BufferSource);
+    }
+    const h = createSha256();
+    h.update(bytes);
+    const hexText = h.digestHex();
+    const out = new Uint8Array(32);
+    for (let i = 0; i < 32; i++) out[i] = parseInt(hexText.slice(i * 2, i * 2 + 2), 16);
+    return out.buffer;
+}
+
+/**
  * SHA-256 of a whole Blob as lowercase hex. Small files in one piece through
  * WebCrypto, large ones streamed in a worker (or on this thread when no worker
  * starts). `onProgress` gets the bytes done so far for the large ones.

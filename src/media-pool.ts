@@ -24,6 +24,7 @@
 import { StorageManager } from './storage.js';
 import { CryptoSession, EncryptedData } from './crypto.js';
 import { bytesToBase64, base64ToBytes } from './base64.js';
+import { sha256Bytes } from './sha256.js';
 
 /** Strings at least this long starting with "data:" go to the pool. */
 export const POOL_MIN_LENGTH = 1024;
@@ -139,7 +140,7 @@ async function contentIds(urls: Set<string>, encrypted: boolean, scope: string):
                 input.set(pepper);
                 input.set(text, pepper.length);
             }
-            const digest = await crypto.subtle.digest('SHA-256', input as BufferSource);
+            const digest = await sha256Bytes(input);
             id = (encrypted ? 'e:' : 'p:') + hex(digest, 20);
         }
         ids.set(url, id);

@@ -28,6 +28,7 @@
  */
 
 import { base64ToBytes, bytesToBase64 } from './base64.js';
+import { sha256Bytes } from './sha256.js';
 
 /** A FILE value that names an image by its hash. */
 export const IMAGE_REF_PREFIX = 'strom-image:';
@@ -150,9 +151,9 @@ export interface ImageResolveDeps extends ImageFetchDeps {
     treeImages(researchId: string): Promise<Iterable<string>>;
 }
 
-/** SHA-256 hex of bytes by the browser's (or Node's) Web Crypto. */
+/** SHA-256 hex of bytes (Web Crypto, or the built-in implementation outside a secure context). */
 export async function sha256Hex(bytes: Uint8Array): Promise<string> {
-    const digest = await crypto.subtle.digest('SHA-256', bytes as BufferSource);
+    const digest = await sha256Bytes(bytes);
     return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
 }
 
