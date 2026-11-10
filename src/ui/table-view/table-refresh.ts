@@ -13,7 +13,7 @@
  */
 
 import type { Person, PersonId, Partnership, PartnershipId, StromData } from '../../types.js';
-import { rowKey, sameRow, type RowType, type TableModel, type TableRow } from './table-model.js';
+import { rowKey, sameRow, type EventRow, type RowType, type TableModel, type TableRow } from './table-model.js';
 
 /** The rows in their kept order and those of them that no longer pass (their row keys). */
 export interface KeptRows {
@@ -130,10 +130,18 @@ export function bridgeChanges(before: StromData, after: StromData): DataChanges 
 /**
  * The rows of a table that show changed entities: in the People table a
  * changed person and both partners of a changed union; in the Unions table a
- * changed union and the unions of a changed person.
+ * changed union and the unions of a changed person; in the Events table
+ * (`events`: its rows) the events of a changed person or union.
  */
-export function rowKeysFor(data: StromData, type: RowType, keys: readonly string[]): Set<string> {
+export function rowKeysFor(data: StromData, type: RowType, keys: readonly string[], events?: readonly EventRow[]): Set<string> {
     const out = new Set<string>();
+    if (type === 'events') {
+        const ids = new Set(keys);
+        for (const r of events ?? []) {
+            if ((r.union && ids.has(`u:${r.union.id}`)) || r.persons.some(p => ids.has(`p:${p.id}`))) out.add(rowKey(r));
+        }
+        return out;
+    }
     for (const key of keys) {
         const id = key.slice(2);
         if (type === 'persons') {

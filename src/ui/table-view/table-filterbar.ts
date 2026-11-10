@@ -58,6 +58,16 @@ export interface FilterBarHandlers {
     onSheet(): void;
 }
 
+/** The participant filter's chip (§14.1: "Godparent: {name} ×"), when it is on. */
+function participantChipHtml(model: TableModel, type: RowType, filter: TableFilter): string {
+    const item = type === 'events' ? chipItem(filter, 'participant') : null;
+    if (!item) return '';
+    const label = chipLabel(model, item, 'participant');
+    return `<span class="tv-chip tv-chip--col tv-chip--part is-active" data-partchip>`
+        + `<span class="tv-chip-text">${esc(label)}</span>`
+        + `<button type="button" class="tv-chip-x" data-xchip="participant" aria-label="${esc(strings.table.removeFilter(label))}">×</button></span>`;
+}
+
 /** The bar's filter controls: search, the chips' row and the phone's Filters button. */
 export class FilterBar {
     private readonly input: HTMLInputElement;
@@ -147,6 +157,7 @@ export class FilterBar {
                 + (choice ? ' aria-haspopup="dialog"' : '')
                 + `>${item ? '✓ ' : ''}${esc(chipLabel(model, item, chip))}${choice ? ' ▾' : ''}</button>`;
         }
+        html += participantChipHtml(model, type, filter);
         for (const c of cols) {
             const label = columnItemLabel(type, c);
             html += `<span class="tv-chip tv-chip--col is-active" data-colchip="${esc(c.col)}">`
@@ -199,6 +210,8 @@ export class FilterBar {
         if (!st) return;
         const t = e.target as Element;
         if (t.closest('.tv-chips-clear')) { this.handlers.onClear(); return; }
+        const xc = t.closest<HTMLElement>('[data-xchip]');
+        if (xc) { this.handlers.onChip(xc.dataset.xchip as ChipId, false); return; }
         const x = t.closest<HTMLElement>('[data-x]');
         if (x) { this.handlers.onRemoveColumn(x.dataset.x!); return; }
         const edit = t.closest<HTMLElement>('.tv-chip-edit[data-col]');
@@ -514,6 +527,8 @@ export class FilterSheet {
             const page = t.closest<HTMLElement>('[data-page]');
             if (page) { this.page = page.dataset.page as 'rod' | 'gen'; this.render(); this.body.querySelector<HTMLElement>('input, select')?.focus(); return; }
             if (t.closest('.tv-fs-more')) { this.all = true; this.render(); return; }
+            const xc = t.closest<HTMLElement>('[data-xchip]');
+            if (xc) { this.handlers.onChip(xc.dataset.xchip as ChipId, false); return; }
             const x = t.closest<HTMLElement>('[data-x]');
             if (x) this.handlers.onRemoveColumn(x.dataset.x!);
         });
@@ -567,6 +582,12 @@ export class FilterSheet {
                 + `<span class="tv-fs-label">${esc(t.chip[chip])}</span>${waits ? `<span class="tv-cp-note">${esc(t.checksWait)}</span>` : ''}</label>`;
         }
         if (rest > 0) html += `<button type="button" class="tv-fs-row tv-fs-more">${esc(t.moreN(rest))}</button>`;
+        const part = st.type === 'events' ? chipItem(st.filter, 'participant') : null;
+        if (part) {
+            const label = chipLabel(st.model, part, 'participant');
+            html += `<div class="tv-fs-row tv-fs-part"><span class="tv-fs-label">${esc(label)}</span>`
+                + `<button type="button" class="tv-fs-x" data-xchip="participant" aria-label="${esc(t.removeFilter(label))}">×</button></div>`;
+        }
         const cols = columnItems(st.filter);
         if (cols.length) {
             html += `<div class="tv-fs-section">${esc(t.inColumns)}</div>`;

@@ -40,6 +40,17 @@ describe('table empty states', () => {
         expect(tableEmptyState({ ...base, type: 'persons', unions: 0 })).toBeNull();
     });
 
+    it('the Events table without events says when they appear (§14.1)', () => {
+        const s = tableEmptyState({ ...base, type: 'events', events: 0, shown: 0, viewId: builtinId('events') });
+        expect(s?.kind).toBe('noEvents');
+        expect(s?.title).toBe('There is no event in the tree');
+        expect(s?.action).toBeNull();
+        expect(tableEmptyState({ ...base, type: 'events', events: 3, shown: 0, viewId: builtinId('events') })).toBeNull();
+        expect(tableEmptyState({ ...base, type: 'persons', events: 0 })).toBeNull();
+        // An empty tree says so in the Events table too.
+        expect(tableEmptyState({ ...base, persons: 0, unions: 0, events: 0, shown: 0, type: 'events' })?.kind).toBe('empty');
+    });
+
     it('the Checks view without findings: Data quality › only when there are leads', () => {
         const checks = { ...base, viewId: builtinId('checks'), shown: 0 };
         const none = tableEmptyState(checks);

@@ -9380,6 +9380,7 @@
         .tv-chip-edit, .tv-chip-x { height: 100%; border: none; background: none; color: inherit; font: inherit; cursor: pointer; }
         .tv-chip-edit { padding: 0 4px 0 11px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .tv-chip-x { width: 24px; padding: 0; font-size: 15px; border-radius: 999px; }
+        .tv-chip-text { padding: 0 4px 0 11px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .tv-chips-clear {
             flex: none; margin-left: auto; padding: 0 2px; border: none; background: none; color: var(--primary);
             font: inherit; font-size: 12.5px; text-decoration: underline; cursor: pointer; white-space: nowrap; order: 1000;
@@ -9498,6 +9499,13 @@
         .tv-body .tv-row[aria-selected="true"] { background: var(--line-selected-bg); }
         .tv-name { font-family: var(--font-serif); font-size: 14px; }
         .tv-row.is-home .tv-name { font-weight: 600; }
+        /* §14.1: names in a cell. A tree's person is a link (opens the person); a participant's name offers its filter. */
+        .tv-nm {
+            display: inline; padding: 0; margin: 0; border: none; background: none;
+            font: inherit; color: inherit; text-align: inherit; white-space: inherit; cursor: pointer;
+        }
+        .tv-nm--person { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
+        .tv-nm:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; border-radius: 2px; }
         .tv-cell--computed { color: var(--text-light); }
         .tv-cell--na { color: var(--text-faint); font-style: italic; }
         .tv-cell--uncertain .tv-cell-text { border-bottom: 1px dotted var(--text-faint); }
@@ -9893,6 +9901,8 @@
             .tv-bub-close:hover { color: var(--text); }
             .tv-chip:not([aria-disabled="true"]):not(.tv-chip--col):hover, .tv-filters-btn:hover { border-color: var(--primary); }
             .tv-chip-x:hover, .tv-chip-edit:hover { background: var(--surface-2); }
+            .tv-nm:hover { text-decoration: underline; }
+            .tv-nm--person:hover { color: var(--primary-dark); }
             .tv-chips-clear:hover { color: var(--primary-dark); }
             .tv-fpanel-cancel:hover { border-color: var(--primary); }
             .tv-fpanel-apply:hover, .tv-nomatch-clear:hover { background: var(--primary-dark); border-color: var(--primary-dark); color: var(--on-primary); }

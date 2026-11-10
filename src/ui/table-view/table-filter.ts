@@ -198,8 +198,11 @@ function col(type: RowType, id: string): ColumnDef {
     return columnById(type, id)!;
 }
 
+/** What the participant filter reads of a participant: the role, the tree's person, the name as written. */
+export type ParticipantName = Pick<EventParticipant, 'role' | 'personId' | 'name'>;
+
 /** A participant's name for the participant filter: the tree person's shown name, else as written. */
-function participantText(model: TableModel, x: EventParticipant): string {
+function participantText(model: TableModel, x: ParticipantName): string {
     const p = x.personId ? model.ctx.person(x.personId) : null;
     return (p ? shownNameOrEmpty(p) : '') || (x.name ?? '');
 }
@@ -210,7 +213,7 @@ const foldName = (text: string): string => foldText(text).replace(/\s+/g, ' ').t
  * The participant filter of a participant (§14.1: "Godparent: {name}"): the
  * role and the tree's person, or for a name only the name as written.
  */
-export function participantChip(model: TableModel, x: EventParticipant): Omit<ChipFilter, 'chip'> {
+export function participantChip(model: TableModel, x: ParticipantName): Omit<ChipFilter, 'chip'> {
     const p = x.personId ? model.ctx.person(x.personId) : null;
     const name = participantText(model, x).trim();
     return p ? { role: x.role, personId: p.id, name } : { role: x.role, name };
@@ -230,7 +233,7 @@ export function eventHasParticipant(model: TableModel, row: EventRow, item: Chip
 }
 
 /** Filter the events by a participant (§14.1: "Godparent: {name} ×"); replaces the participant filter there was. */
-export function setParticipantFilter(filter: TableFilter, model: TableModel, x: EventParticipant): boolean {
+export function setParticipantFilter(filter: TableFilter, model: TableModel, x: ParticipantName): boolean {
     return setChip(filter, 'participant', true, participantChip(model, x));
 }
 

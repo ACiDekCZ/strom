@@ -8556,6 +8556,8 @@ const stringsEN = {
         emptyText: 'It will show all people of the tree side by side: dates and places, ages, gaps and the findings of the checks.',
         noUnionsTitle: 'There is no union in the tree',
         noUnionsText: 'Unions appear here as soon as someone has a partner.',
+        noEventsTitle: 'There is no event in the tree',
+        noEventsText: 'Births, marriages, deaths and other events appear here as soon as a date, a place or a source is written for them.',
         noFindingsTitle: 'No errors and nothing to check',
         noFindingsText: (n: number) => (n > 0
             ? `The checks found nothing worth checking. Leads (${numEn(n)}) are in Data quality.`
@@ -16814,6 +16816,8 @@ const stringsCZ: StringsType = {
         emptyText: 'Ukáže všechny osoby stromu vedle sebe: data a místa, věky, mezery a nálezy kontrol.',
         noUnionsTitle: 'Ve stromu není žádný svazek',
         noUnionsText: 'Svazky se tu ukážou, jakmile bude mít některá osoba partnera.',
+        noEventsTitle: 'Ve stromu není žádná událost',
+        noEventsText: 'Narození, sňatky, úmrtí a další události se tu ukážou, jakmile u nich bude zapsané datum, místo nebo pramen.',
         noFindingsTitle: 'Bez chyb a k ověření',
         noFindingsText: (n: number) => (n > 0
             ? `Kontroly nenašly nic, co by stálo za ověření. Stopy (${numCs(n)}) jsou v Kvalitě dat.`
@@ -24991,6 +24995,8 @@ const stringsDE: StringsType = {
         emptyText: 'Hier stehen alle Personen des Stammbaums nebeneinander: Daten und Orte, Alter, Lücken und die Befunde der Prüfungen.',
         noUnionsTitle: 'Im Stammbaum gibt es keine Verbindung',
         noUnionsText: 'Verbindungen erscheinen hier, sobald eine Person einen Partner hat.',
+        noEventsTitle: 'Im Stammbaum gibt es kein Ereignis',
+        noEventsText: 'Geburten, Heiraten, Todesfälle und andere Ereignisse erscheinen hier, sobald ein Datum, ein Ort oder eine Quelle dazu eingetragen ist.',
         noFindingsTitle: 'Keine Fehler und nichts zu prüfen',
         noFindingsText: (n: number) => (n > 0
             ? `Die Prüfungen fanden nichts, was eine Prüfung lohnt. Spuren (${numDe(n)}) stehen in der Datenqualität.`

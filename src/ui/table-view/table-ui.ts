@@ -26,15 +26,19 @@ import { TreeRenderer } from '../../renderer.js';
 import { isPhoneBar } from '../../breakpoints.js';
 import { strings, getCurrentLanguage, type Language } from '../../strings.js';
 import { uiModule } from '../module.js';
-import { cellOf, columnById, columnLabel, columnNote, type SortSpec } from './table-columns.js';
+import { cellOf, columnById, columnLabel, columnNote, dateCell, eventPersons, eventTypeLabel, type SortSpec } from './table-columns.js';
 import {
-    CHECK_CHIPS, chipItem, clearFilter, columnItem, filterRows, filterSummary, isChipItem, removeColumnFilter, searchQuery, setChip,
+    CHECK_CHIPS, chipItem, clearFilter, columnItem, filterRows, filterSummary, isChipItem, removeColumnFilter, searchQuery, setChip, setParticipantFilter,
     setColumnFilter, setEmptyFilter, sortRows, columnItemActive, type ChipId, type FilterResult, type TableFilter,
 } from './table-filter.js';
 import {
     chipChoiceForm, closeFilterPanel, columnFilterForm, FilterBar, FilterSheet, openFilterPanel, type FilterBarState, type PanelOptions,
 } from './table-filterbar.js';
-import { buildTableModel, modelIsCurrent, ROW_KEY, ROW_TYPES, rowCounts, rowKey, rowPersonId, rowsOf, type RowType, type TableModel, type TableRow } from './table-model.js';
+import {
+    buildTableModel, modelIsCurrent, ROW_KEY, ROW_TYPES, rowCounts, rowKey, rowPersonId, rowsOf,
+    type CellName, type EventRow, type RowType, type TableModel, type TableRow,
+} from './table-model.js';
+import { eventEditTarget } from './table-events.js';
 import { TableGrid, type RowAction } from './table-grid.js';
 import { createBar, createStatus, updateBar, updateStatus } from './table-bar.js';
 import {
@@ -311,6 +315,7 @@ export const tableMethods = uiModule({
                     return true;
                 },
                 onRowAction: (action, line) => this.tableRowAction(action, line),
+                onName: (line, _col, name, anchor) => this.tableNameAction(line, name, anchor),
                 onRowMenu: (line, anchor) => this.showTableRowMenu(line, anchor),
                 onIssue: (line, col, cell) => this.showTableFinding(line, col, cell),
                 onToggleUnions: (personId, expand) => this.changeTableColumns(st => setExpanded(st.unions, personId, expand)),
@@ -437,7 +442,7 @@ export const tableMethods = uiModule({
         mounted.unionsButton = unionsButton;
         const openView = openViewOf(state, type, data.tableViews);
         this.drawTableEmpty(tableEmptyState({
-            persons: counts.persons, unions: counts.unions, type, viewId: openView.id, viewChanged: viewChanged(openView, st),
+            persons: counts.persons, unions: counts.unions, events: counts.events, type, viewId: openView.id, viewChanged: viewChanged(openView, st),
             search: st.search, shown: rows.length, checksDone: !!index && !checks?.running,
             leads: index ? index.issues.filter(i => i.severity === 'info').length : 0,
             allComplete: () => {
@@ -476,7 +481,7 @@ export const tableMethods = uiModule({
             } : undefined,
         }, restore);
         if (flashNext) {
-            const lit = flashNext.tree === tree ? rowKeysFor(data, type, flashNext.keys) : null;
+            const lit = flashNext.tree === tree ? rowKeysFor(data, type, flashNext.keys, type === 'events' ? m.events : undefined) : null;
             flashNext = null;
             if (lit?.size) mounted.grid.flash(lit);
         }
@@ -932,6 +937,7 @@ export const tableMethods = uiModule({
             return;
         }
         if (tableReadOnly()) return;
+        if (line.row.kind === 'event') { this.editTableEvent(line.row); return; }
         const data = DataManager.getData();
         const union = unionOfLine(line);
         watching = { tree: treeKey(), personId, keys: watchEdit(data, familyKeys(data, personId)) };
@@ -944,6 +950,75 @@ export const tableMethods = uiModule({
         this.showRelationshipsPanel(personId);
         const grid = document.querySelector<HTMLElement>(`#relationships-content .partnership-grid[data-partnership-id="${CSS.escape(union)}"]`);
         grid?.scrollIntoView({ block: 'nearest' });
+    },
+
+    /**
+     * Edit an event row (§14.1): a person's event in the person dialog on that
+     * event, a couple's event in its own dialog, the wedding and the divorce in
+     * the union's panel, the birth and the death in the person dialog.
+     */
+    editTableEvent(row: EventRow): void {
+        const target = eventEditTarget(row);
+        if (!target) return;
+        const data = DataManager.getData();
+        const keys = new Set(row.persons.flatMap(p => familyKeys(data, p.id)));
+        if (row.union) keys.add(`u:${row.union.id}`);
+        const personId = target.kind === 'coupleEvent' ? row.persons[0]?.id : target.personId;
+        if (!personId) return;
+        watching = { tree: treeKey(), personId, keys: watchEdit(data, [...keys]) };
+        switch (target.kind) {
+            case 'person':
+            case 'personEvent':
+                this.clearDialogStack();
+                this.pushDialog('person-modal');
+                this.showEditPersonModal(target.personId);
+                if (target.kind === 'personEvent') this.showEditEventModal(target.eventId);
+                return;
+            case 'coupleEvent':
+                this.clearDialogStack();
+                this.showEditCoupleEventModal(target.partnershipId, target.eventId);
+                return;
+            case 'union': {
+                this.showRelationshipsPanel(target.personId);
+                const grid = document.querySelector<HTMLElement>(`#relationships-content .partnership-grid[data-partnership-id="${CSS.escape(target.partnershipId)}"]`);
+                grid?.scrollIntoView({ block: 'nearest' });
+                return;
+            }
+        }
+    },
+
+    /**
+     * A name in a cell (§14.1). A person or couple's name opens the person; a
+     * participant's name offers "Filter: godparent {name}" (and, for a tree's
+     * person, Open person), as a menu or on a phone and by touch as a sheet.
+     */
+    tableNameAction(line: GridLine, name: CellName, anchor: HTMLElement): void {
+        closeHeadMenu();
+        const role = name.role;
+        if (!role) {
+            if (name.personId && DataManager.getPerson(name.personId)) this.showPersonPage(name.personId);
+            return;
+        }
+        if (line.kind === 'more' || line.row.kind !== 'event') return;
+        const t = strings.table;
+        const filter = (): void => this.changeTableFilter((f) => {
+            const m = model;
+            return !!m && setParticipantFilter(f, m, { role, personId: name.personId, name: name.text });
+        }, true);
+        const personId = name.personId && DataManager.getPerson(name.personId) ? name.personId : null;
+        const open = (): void => { if (personId) this.showPersonPage(personId); };
+        if (isPhoneBar() || isCoarsePointer()) {
+            const rows = [{ label: t.filterParticipant[role](name.text), icon: '', run: filter }];
+            if (personId) rows.push({ label: t.act.open, icon: '▤', run: open });
+            this.noteBottomSheetTrigger();
+            this.hideBottomSheet();
+            this.presentMenuSheet(name.text, [{ rows }]);
+            return;
+        }
+        const entries: MenuEntry[] = [{ id: 'participant', label: t.filterParticipant[role](name.text), icon: '', run: filter }];
+        if (personId) entries.push({ id: 'open', label: t.act.open, icon: '▤', run: open });
+        const menu = openHeadMenu(anchor, '', '', entries);
+        menu.setAttribute('aria-label', name.text);
     },
 
     /** The row's menu (§10.1): Show in tree · Open person (Enter) · Edit… (double click) · Expand / Collapse unions. */
@@ -1002,10 +1077,14 @@ export const tableMethods = uiModule({
             }).filter((r): r is NonNullable<typeof r> => !!r);
             if (unionRows.length) blocks.push({ rows: unionRows, divider: true } as typeof blocks[number]);
         }
-        const years = fanYears(person);
+        // An event's sheet (§14.1): its type and people on top, its date under them.
+        const ev = line.row.kind === 'event' ? line.row : null;
+        const title = ev && model ? `${eventTypeLabel(ev)}: ${eventPersons(model.ctx, ev).map(p => personName(p)).join(', ')}` : personName(person);
+        const date = ev && model ? dateCell(model.ctx, ev.date) : null;
+        const sub = date ? [date.prefix, date.text].filter(Boolean).join(' ') : fanYears(person);
         this.noteBottomSheetTrigger();
         this.hideBottomSheet();
-        this.presentMenuSheet(personName(person), blocks, years ? { subtitle: years } : {});
+        this.presentMenuSheet(title, blocks, sub ? { subtitle: sub } : {});
     },
 
     /** The dialog or panel opened from the table was saved (§10.3): its changed rows lit, "Saved: {name}". */
@@ -1042,7 +1121,7 @@ export const tableMethods = uiModule({
     showTableChanged(tree: string, keys: readonly string[]): void {
         if (treeKey() !== tree || TreeRenderer.getViewMode() !== 'table' || !view) return;
         const state = stateOf(tree);
-        const want = rowKeysFor(DataManager.getData(), state.rowType, keys);
+        const want = rowKeysFor(DataManager.getData(), state.rowType, keys, state.rowType === 'events' ? model?.events : undefined);
         const first = view.result.rows.find(r => want.has(rowKey(r)));
         if (!first) return;
         const key = rowKey(first);

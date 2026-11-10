@@ -1401,6 +1401,8 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         emptyText: 'Pokaże wszystkie osoby drzewa obok siebie: daty i miejsca, wiek, luki i wyniki kontroli.',
         noUnionsTitle: 'W drzewie nie ma żadnego związku',
         noUnionsText: 'Związki pojawią się tu, gdy któraś osoba będzie mieć partnera.',
+        noEventsTitle: 'W drzewie nie ma żadnego wydarzenia',
+        noEventsText: 'Urodzenia, śluby, zgony i inne wydarzenia pojawią się tu, gdy zostanie przy nich zapisana data, miejsce lub źródło.',
         noFindingsTitle: 'Bez błędów i rzeczy do sprawdzenia',
         noFindingsText: (n: number) => (n > 0
             ? `Kontrole nie znalazły niczego, co warto sprawdzić. Tropy (${n}) są w Jakości danych.`

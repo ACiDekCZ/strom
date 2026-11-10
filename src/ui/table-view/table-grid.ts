@@ -38,7 +38,7 @@
 
 import { strings } from '../../strings.js';
 import { cellPlainText, columnLabel, groupLabel, type ColumnDef, type SortSpec } from './table-columns.js';
-import { rowKey, type CellSeverity, type CellValue, type RowType, type TableModel, type TableRow } from './table-model.js';
+import { rowKey, type CellName, type CellSeverity, type CellValue, type RowType, type TableModel, type TableRow } from './table-model.js';
 import { columnRun, groupRuns, MIN_COLUMN_WIDTH, type CollapsedBand } from './table-state.js';
 import { columnOffsets, columnWindow, lineOffsets, lineWindow, type ColumnWindow } from './table-window.js';
 import { lineCell, lineKey, lineLevel, plainLines, type GridLine } from './table-subrows.js';
@@ -113,6 +113,11 @@ export interface GridHandlers {
     onRowClick?(line: GridLine): void;
     /** A row's action (§10.1): its icon, Enter (open), a double click (edit). */
     onRowAction?(action: RowAction, line: GridLine): void;
+    /**
+     * A name in a cell was clicked or chosen by Enter (§14.1): a tree's person
+     * (a link), a participant's name (its filter).
+     */
+    onName?(line: GridLine, col: ColumnDef, name: CellName, anchor: HTMLElement): void;
     /** The row's menu (§10.1): a right click, Shift+F10, the menu key. */
     onRowMenu?(line: GridLine, anchor: HTMLElement): void;
     /** A person's ▾/▸, the count pill or → / ← on the name cell (§3.2). */
@@ -177,7 +182,7 @@ export function markHtml(severity: CellSeverity, label?: string): string {
 export function cellClasses(value: CellValue, col: ColumnDef, issue: CellSeverity | null = null): string {
     let cls = 'tv-cell';
     if (col.align === 'right') cls += ' tv-right';
-    if (col.id === 'name' || col.id === 'p1' || col.id === 'p2') cls += ' tv-name';
+    if (col.id === 'name' || col.id === 'p1' || col.id === 'p2' || col.id === 'evWho') cls += ' tv-name';
     if (value.aggregate) cls += ' tv-cell--aggregate';
     else if (value.na) cls += ' tv-cell--na';
     else if (value.computed && !value.empty) cls += ' tv-cell--computed';
@@ -221,7 +226,22 @@ function cellValueHtml(value: CellValue, col: ColumnDef, hit = ''): string {
         html += `<span class="tv-subst" title="${esc(tip)}" aria-label="${esc(tip)}">${esc(value.subst === 'bap' ? s.bapShort : s.burShort)}</span>`;
     }
     if (value.prefix) html += `<span class="tv-qual">${hit ? highlightHtml(value.prefix, hit) : esc(value.prefix)}</span>`;
+    if (value.names?.length && !value.na) return html + `<span class="tv-cell-text">${namesHtml(value.names, hit)}</span>`;
     return html + `<span class="tv-cell-text">${hit && !value.na ? highlightHtml(cellText(value), hit) : esc(cellText(value))}</span>`;
+}
+
+/**
+ * The names of a cell (§14.1): a tree's person as a link, a participant's
+ * name as a button that offers its filter, any other name as text. Out of
+ * the tab order until their cell is the active one (`syncNameTabs`).
+ */
+export function namesHtml(names: readonly CellName[], hit = ''): string {
+    return names.map((n, i) => {
+        const text = hit ? highlightHtml(n.text, hit) : esc(n.text);
+        if (!n.personId && !n.role) return `<span>${text}</span>`;
+        return `<button type="button" class="tv-nm${n.personId ? ' tv-nm--person' : ''}" data-ni="${i}" tabindex="-1"`
+            + `${n.role ? ' aria-haspopup="menu"' : ''}>${text}</button>`;
+    }).join(', ');
 }
 
 export class TableGrid {
@@ -298,6 +318,8 @@ export class TableGrid {
                 this.handlers.onToggleUnions?.(line.row.id, !line.expanded);
                 return;
             }
+            const nm = t.closest<HTMLElement>('.tv-nm[data-ni]');
+            if (nm && cellEl && this.nameAt(line, cellEl, nm)) return;
             const act = t.closest<HTMLElement>('.tv-act[data-act]');
             if (act) {
                 this.select(line);
@@ -315,7 +337,7 @@ export class TableGrid {
         // A double click edits (§10.1); the ▾/▸, the count pill and the icons are their own.
         this.body.addEventListener('dblclick', (e) => {
             const t = e.target as Element;
-            if (t.closest('.tv-toggle, .tv-unions-pill, .tv-act, .tv-more-btn')) return;
+            if (t.closest('.tv-toggle, .tv-unions-pill, .tv-act, .tv-more-btn, .tv-nm')) return;
             const line = this.lineOf(t);
             if (!line || line.kind === 'more') return;
             this.handlers.onRowAction?.('edit', line);
@@ -345,6 +367,7 @@ export class TableGrid {
             this.activeCol = Number(cellEl.getAttribute('aria-colindex')) - 1;
             for (const other of this.body.querySelectorAll<HTMLElement>('[aria-colindex][tabindex="0"]')) if (other !== cellEl) other.tabIndex = -1;
             cellEl.tabIndex = 0;
+            this.syncNameTabs();
         });
         this.wireHead();
         this.resize = typeof ResizeObserver === 'function' ? new ResizeObserver(() => this.schedule()) : null;
@@ -356,6 +379,24 @@ export class TableGrid {
     private lineOf(t: Element): GridLine | undefined {
         const rowEl = t.closest<HTMLElement>('.tv-row[data-index]');
         return rowEl ? this.lines[Number(rowEl.dataset.index)] : undefined;
+    }
+
+    /** A name of a cell (§14.1) to its handler; false: not a name the cell lists. */
+    private nameAt(line: GridLine, cellEl: HTMLElement, nm: HTMLElement): boolean {
+        const input = this.input;
+        if (!input || line.kind === 'more' || !this.handlers.onName) return false;
+        const col = input.columns[Number(cellEl.getAttribute('aria-colindex')) - 1];
+        const name = col ? lineCell(input.model, line, col).names?.[Number(nm.dataset.ni)] : undefined;
+        if (!col || !name) return false;
+        this.handlers.onName(line, col, name, nm);
+        return true;
+    }
+
+    /** The names of the active cell (the one with the body's tab stop) in the tab order, the others out (§14.1). */
+    private syncNameTabs(): void {
+        for (const b of this.body.querySelectorAll<HTMLElement>('.tv-nm[data-ni]')) {
+            b.tabIndex = b.closest('[aria-colindex]')?.getAttribute('tabindex') === '0' ? 0 : -1;
+        }
     }
 
     /** Select a line's row (its person for a sub-row) unless it is the selected one. */
@@ -963,6 +1004,7 @@ export class TableGrid {
             html += `<div class="${cls}" role="row" data-key="${esc(key)}" data-index="${r}" aria-rowindex="${r + 4}"${attrs}`
                 + ` style="top:${tops[r]}px;height:${tops[r + 1] - tops[r]}px;width:${cw.total}px">`;
             let prev = -1;
+            const tailAt = this.tailColumn(input);
             for (const i of cw.indices) {
                 if (prev >= 0 && i !== prev + 1) html += this.spacer(cw.before);
                 prev = i;
@@ -975,7 +1017,7 @@ export class TableGrid {
                     continue;
                 }
                 if (input.subRows && col.id === 'name') {
-                    html += this.nameCell(input, line, col, i, tab, i === 0 ? this.rowTail(input, line) : '');
+                    html += this.nameCell(input, line, col, i, tab, i === tailAt ? this.rowTail(input, line) : '');
                     continue;
                 }
                 const value = lineCell(input.model, line, col);
@@ -984,12 +1026,23 @@ export class TableGrid {
                 const title = value.title ?? (substTip || (value.text.length > 24 ? value.text : ''));
                 html += `<div class="${cellClasses(value, col, issue?.severity ?? null)}${this.pinClass(i, input)}" role="gridcell" aria-colindex="${i + 1}" tabindex="${tab}"`
                     + ` style="${this.pinStyle(i, input)}"${title ? ` title="${esc(title)}"` : ''}>${cellInner(value, col, issue, line.kind === 'more' ? '' : input.hit ?? '')}`
-                    + `${i === 0 ? this.rowTail(input, line) : ''}</div>`;
+                    + `${i === tailAt ? this.rowTail(input, line) : ''}</div>`;
             }
             html += this.spacer(cw.after) + '</div>';
         }
         this.body.innerHTML = html;
+        this.syncNameTabs();
         if (refocus) this.focusActive(false);
+    }
+
+    /**
+     * The column that carries the row's tail: the first; in the Events table
+     * the person or couple when it is pinned (the narrow Type keeps its text, §14.1).
+     */
+    private tailColumn(input: GridInput): number {
+        if (input.type !== 'events') return 0;
+        const at = input.columns.findIndex(c => c.id === 'evWho');
+        return at > 0 && at < input.pinned ? at : 0;
     }
 
     /**
@@ -1097,6 +1150,8 @@ export class TableGrid {
         const input = this.input;
         if (!input || !this.lines.length) return;
         if (e.altKey) return;
+        // A name in a cell (§14.1) is a button: Enter and Space are its own.
+        if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.tv-nm')) return;
         const at = this.activeLineIndex();
         const line = this.lines[at];
         const col = Math.min(this.activeCol, input.columns.length - 1);

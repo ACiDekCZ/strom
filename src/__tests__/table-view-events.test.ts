@@ -25,6 +25,8 @@ import {
 import { sanitizeTableView } from '../table-views-data.js';
 import { buildCheckIndex } from '../ui/table-view/table-checks.js';
 import { validateTreeData, type ValidationIssue } from '../validation.js';
+import { namesHtml } from '../ui/table-view/table-grid.js';
+import { rowKeysFor } from '../ui/table-view/table-refresh.js';
 
 /**
  * An invented village: a couple with two children, a third household, a
@@ -330,5 +332,44 @@ describe('findings on event cells (§7.2, §14.1)', () => {
         const m3 = build(bad);
         const index3 = buildCheckIndex(bad, validateTreeData(bad).issues);
         expect(index3.cell(m3.eventRows.get('d:e')!, 'evDate', null)?.issue.type).toBe('deathBeforeBirth');
+    });
+});
+
+describe('the Events table on screen (§14.1)', () => {
+    it('names in a cell: a tree\'s person a link, a participant\'s name a button for its filter, others text', () => {
+        const m = build();
+        const gods = cell(m, 'l:c:bc', 'godparents');
+        const html = namesHtml(gods.names!);
+        expect(html).toBe(
+            '<button type="button" class="tv-nm tv-nm--person" data-ni="0" tabindex="-1" aria-haspopup="menu">Vendelín Pospíchal</button>, '
+            + '<button type="button" class="tv-nm" data-ni="1" tabindex="-1" aria-haspopup="menu">Kryšpín Hrbolatý</button>',
+        );
+        // The person or couple: links that open the person, no menu.
+        expect(namesHtml(cell(m, 'w:u1', 'evWho').names!)).not.toContain('aria-haspopup');
+        expect(namesHtml(cell(m, 'w:u1', 'evWho').names!).match(/tv-nm--person/g)).toHaveLength(2);
+        // A name that is neither stays text, escaped; the search marks its match.
+        expect(namesHtml([{ text: 'A <b>' }])).toBe('<span>A &lt;b&gt;</span>');
+        expect(namesHtml([{ text: 'Kryšpín', role: 'godparent' }], 'krys')).toContain('<mark');
+    });
+
+    it('a name chosen in a cell sets the participant filter by its role', () => {
+        const m = build();
+        const name = cell(m, 'l:c:bc', 'godparents').names![1];
+        const f = emptyFilter();
+        expect(setParticipantFilter(f, m, { role: name.role!, personId: name.personId, name: name.text })).toBe(true);
+        expect(ids(run(m, f.items).rows)).toEqual(['l:c:bc', 'l:d:bd']);
+        expect(chipLabel(m, f.items[0] as ChipFilter, 'participant')).toBe('Godparent: Kryšpín Hrbolatý');
+    });
+
+    it('the rows lit after a change: the events of a changed person or union', () => {
+        const m = build();
+        const data = tree();
+        const byPerson = [...rowKeysFor(data, 'events', ['p:d'], m.events)].sort();
+        expect(byPerson).toEqual(m.events.filter(r => r.persons.some(p => p.id === 'd')).map(rowKey).sort());
+        expect(byPerson).toContain('e:l:d:bd');
+        expect([...rowKeysFor(data, 'events', ['u:u2'], m.events)].sort()).toEqual(['e:v:u2', 'e:w:u2']);
+        // The shared residence is one row, lit by any of its people.
+        expect(rowKeysFor(data, 'events', ['p:b'], m.events).has('e:l:a:ra')).toBe(true);
+        expect(rowKeysFor(data, 'events', ['p:b']).size).toBe(0);
     });
 });
