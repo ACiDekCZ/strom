@@ -14,7 +14,7 @@
 
 import { strings } from '../../strings.js';
 import type { TableView, TableViewRowType } from '../../types.js';
-import { DEFAULT_VIEWS, type SortSpec } from './table-columns.js';
+import { columnById, DEFAULT_VIEWS, type SortSpec } from './table-columns.js';
 import { ROW_TYPES, type RowType } from './table-model.js';
 import type { FilterItem } from './table-filter.js';
 import { defaultUnionCollapse } from './table-subrows.js';
@@ -82,8 +82,105 @@ export function builtinId(name: BuiltinViewName): string {
     return BUILTIN_PREFIX + name;
 }
 
+/** A view that cannot be saved over, renamed or deleted: a built-in one or one of the research's (§9.4, §16.5). */
 export function isBuiltinId(id: string): boolean {
+    if (isResearchViewId(id)) return true;
     return id.startsWith(BUILTIN_PREFIX) && (BUILTIN_VIEWS as readonly string[]).includes(id.slice(BUILTIN_PREFIX.length));
+}
+
+// ---------------------------------------------------------------------------
+// The research's views (§16.5, §16.9, §16.10): after the built-in ones, only in a research tree.
+
+const RESEARCH_PREFIX = 'r:';
+
+/** What the tree offers of the research's views; the table sets it before it reads its state (like setResearchOffer). */
+export interface ResearchViewOffer {
+    /** A research tree: the view Research (its overview). */
+    overview: boolean;
+    /** The research's lines in its order: a view each, and Off the lines. */
+    lines: readonly { id: string; name: string }[];
+    /** Exchange with research (a research tree that can change). */
+    exchange: boolean;
+}
+
+const NO_RESEARCH_VIEWS: ResearchViewOffer = { overview: false, lines: [], exchange: false };
+let researchViewOffer: ResearchViewOffer = NO_RESEARCH_VIEWS;
+
+export function setResearchViews(offer: ResearchViewOffer | null): void {
+    researchViewOffer = offer ?? NO_RESEARCH_VIEWS;
+}
+
+/** The id of a research view (§16.5): 'research', 'offLine', 'exchange' or `line:<id>`. */
+export function researchViewId(key: string): string {
+    return RESEARCH_PREFIX + key;
+}
+
+export function isResearchViewId(id: string): boolean {
+    return id.startsWith(RESEARCH_PREFIX);
+}
+
+/** The research's view ids the tree offers, in their order: Research, a line's each, Off the lines, Exchange. */
+export function researchViewIds(): string[] {
+    const o = researchViewOffer;
+    if (!o.overview) return [];
+    const out = [`${RESEARCH_PREFIX}research`];
+    for (const l of o.lines) out.push(`${RESEARCH_PREFIX}line:${l.id}`);
+    if (o.lines.length) out.push(`${RESEARCH_PREFIX}offLine`);
+    if (o.exchange) out.push(`${RESEARCH_PREFIX}exchange`);
+    return out;
+}
+
+const LINE_COLUMNS = ['name', 'rLine', 'gen', 'rSum', 'bDate', 'dDate', 'rConf', 'rAgent'];
+const LINE_WIDTHS: Record<string, number> = { name: 230, rLine: 300, gen: 84, rSum: 100, bDate: 140, dDate: 140, rConf: 190, rAgent: 256 };
+
+/** A column's "only filled" filter (§16.5: the views Research and Exchange). */
+function filledItem(col: string): Record<string, unknown> {
+    return { col, kind: columnById('persons', col)?.kind ?? 'text', filled: true };
+}
+
+/** One of the research's views (§16.5 table), or null when the tree does not offer it. */
+function researchView(id: string): TableView | null {
+    if (!researchViewIds().includes(id)) return null;
+    const key = id.slice(RESEARCH_PREFIX.length);
+    const R = strings.table.res.view;
+    const line = key.startsWith('line:') ? researchViewOffer.lines.find(l => `line:${l.id}` === key) : undefined;
+    let name: string;
+    let columns: string[];
+    let widths: Record<string, number>;
+    let items: Record<string, unknown>[];
+    let sort: { col: string; dir: 1 | -1 }[];
+    if (key === 'research') {
+        name = R.research;
+        columns = ['name', 'rSum', 'rWait', 'rConf', 'rHyp', 'rAgent', 'rTasks', 'bDate', 'dDate'];
+        widths = { name: 230, rSum: 84, rWait: 230, rConf: 190, rHyp: 84, rAgent: 230, rTasks: 190, bDate: 120, dDate: 120 };
+        items = [filledItem('rSum')];
+        sort = [{ col: 'rSum', dir: -1 }, { col: 'name', dir: 1 }];
+    } else if (key === 'exchange') {
+        name = R.exchange;
+        columns = ['name', 'rSync', 'rOrig', 'rNew', 'rConf', 'bDate'];
+        widths = { name: 230, rSync: 360, rOrig: 300, rNew: 280, rConf: 270 };
+        items = [filledItem('rSync')];
+        sort = [];
+    } else {
+        name = line ? R.line(`${line.id} ${line.name}`) : R.offLine;
+        columns = LINE_COLUMNS;
+        widths = LINE_WIDTHS;
+        items = [{ chip: line ? `line:${line.id}` : 'offLine' }];
+        sort = [{ col: 'rLine', dir: 1 }];
+    }
+    return {
+        id, name, rowType: 'persons',
+        columns: columns.map(c => (widths[c] !== undefined ? { id: c, width: widths[c] } : { id: c })),
+        pinned: 1, collapsedGroups: [], coverageRow: true,
+        filter: { op: 'and', items }, sort,
+        unions: { collapsed: true, except: [] },
+        updated: '',
+    };
+}
+
+/** The research's views the tree offers (§16.5), in their order. */
+export function researchViews(): TableView[] {
+    return researchViewIds().map(researchView).filter((v): v is TableView => !!v);
 }
 
 /** The view a row type opens with (§2: Overview for people, Marriages for unions, All events, All sources). */
@@ -125,6 +222,7 @@ export function customViews(stored: readonly TableView[] | undefined): TableView
 
 /** A view by its id: a built-in one or one of the tree's. */
 export function findView(id: string, stored: readonly TableView[] | undefined): TableView | null {
+    if (isResearchViewId(id)) return researchView(id);
     if (isBuiltinId(id)) return builtinView(id.slice(BUILTIN_PREFIX.length) as BuiltinViewName);
     return customViews(stored).find(v => v.id === id) ?? null;
 }
@@ -204,7 +302,7 @@ export function uniqueViewName(name: string, taken: readonly string[]): string {
 
 /** The names a new or renamed view must not take: every built-in and every saved view but `except`. */
 export function takenViewNames(stored: readonly TableView[] | undefined, except?: string): string[] {
-    return [...builtinViews().map(v => v.name), ...(stored ?? []).filter(v => v.id !== except).map(v => v.name)];
+    return [...builtinViews().map(v => v.name), ...researchViews().map(v => v.name), ...(stored ?? []).filter(v => v.id !== except).map(v => v.name)];
 }
 
 export function newViewId(): string {
@@ -379,6 +477,8 @@ export interface ViewListEntry {
 
 export interface ViewList {
     builtin: ViewListEntry[];
+    /** The research's views (§16.5): after the built-in ones, only in a research tree. */
+    research: ViewListEntry[];
     custom: ViewListEntry[];
     /** "Save as new…" (not in a read-only tree). */
     canSaveAs: boolean;
@@ -399,6 +499,7 @@ export function viewList(state: TableState, stored: readonly TableView[] | undef
     const builtinOpen = isBuiltinId(openId);
     return {
         builtin: builtinViews().map(entry),
+        research: researchViews().map(entry),
         custom: customViews(stored).map(entry),
         canSaveAs: !readOnly,
         canEdit: !readOnly && !builtinOpen,

@@ -23,13 +23,13 @@
 import { DataManager } from '../../data.js';
 import { TreeManager } from '../../tree-manager.js';
 import { TreeRenderer } from '../../renderer.js';
-import { isPhoneBar } from '../../breakpoints.js';
+import { isPhoneBar, isTabletOrMobile } from '../../breakpoints.js';
 import { strings, getCurrentLanguage, type Language } from '../../strings.js';
 import { uiModule } from '../module.js';
 import { cellOf, columnById, columnLabel, columnNote, dateCell, eventPersons, eventTypeLabel, setResearchOffer, type SortSpec } from './table-columns.js';
 import {
-    applyResearch, researchColumnLiveOff, researchConflictWhat, researchOffer, researchOpenConflicts, researchTableEnv,
-    type ResearchColumnId, type ResearchTableEnv, type ResearchTableInput,
+    applyResearch, isResearchChipId, researchChipCounts, researchChipOffer, researchColumnLiveOff, researchConflictWhat, researchOffer,
+    researchOpenConflicts, researchTableEnv, type ResearchChipId, type ResearchColumnId, type ResearchNewWindow, type ResearchTableEnv, type ResearchTableInput,
 } from './table-research.js';
 import { researchTableLive } from '../research-ui.js';
 import { materialsCountNow, researchConflictsNow } from '../../card-signals.js';
@@ -37,11 +37,11 @@ import { directionPlacesKept, onDirectionPlaces } from '../../research-direction
 import { findCrossTreeMatches, getTreesDataForMatching, type CrossTreeMatch } from '../../cross-tree.js';
 import type { ChangeKind, PersonChange } from '../../research-changes.js';
 import {
-    CHECK_CHIPS, chipItem, clearFilter, columnItem, filterRows, filterSummary, isChipItem, removeColumnFilter, searchQuery, setChip, setParticipantFilter,
+    CHECK_CHIPS, chipItem, chipLabel, clearFilter, columnItem, filterRows, filterSummary, isChipItem, newWindowOf, removeColumnFilter, searchQuery, setChip, setParticipantFilter,
     setColumnFilter, setEmptyFilter, sortRows, columnItemActive, type ChipId, type FilterResult, type TableFilter,
 } from './table-filter.js';
 import {
-    chipChoiceForm, closeFilterPanel, columnFilterForm, FilterBar, FilterSheet, openFilterPanel, type FilterBarState, type PanelOptions,
+    chipChoiceForm, closeFilterPanel, columnFilterForm, FilterBar, FilterSheet, openFilterPanel, type FilterBarState, type PanelOptions, type ResearchBarState,
 } from './table-filterbar.js';
 import {
     buildTableModel, modelIsCurrent, ROW_KEY, ROW_TYPES, rowCounts, rowKey, rowPersonId, rowsOf,
@@ -67,7 +67,7 @@ import { dismissalFor, dismissalKey } from '../../quality-dismiss.js';
 import { QUALITY_CHANGED_EVENT } from '../quality-ui.js';
 import type { Partnership, PartnershipId, Person, PersonId, StromData, TableView, TreeId } from '../../types.js';
 import {
-    discardViewChanges, dropMissingViews, isBuiltinId, newViewId, openViewOf, readTableWork, restoreTableState, switchView,
+    discardViewChanges, dropMissingViews, isBuiltinId, isResearchViewId, newViewId, openViewOf, readTableWork, restoreTableState, setResearchViews, switchView,
     tableWorkOf, takenViewNames, uniqueViewName, viewChanged, viewFromState, viewList, writeTableWork,
 } from './table-views.js';
 import { exportDownloadLabel, exportForm, ViewBar, viewNameForm, type ExportFormat, type ExportSummary } from './table-viewbar.js';
@@ -115,6 +115,36 @@ interface Mounted {
     unionsButton: 'expand' | 'collapse' | null;
 }
 
+/** "New from research" in a window, or off (16zk): the window is the chip's value. */
+function setResearchNew(f: TableFilter, w: ResearchNewWindow | null): boolean {
+    return setChip(f, 'xNew', !!w, w ? { values: [w] } : {});
+}
+
+/** The research chips' counts, kept while the research's environment and the window stay (§16.5 menus). */
+let researchCounts: { env: ResearchTableEnv; window: ResearchNewWindow; counts: ReadonlyMap<ResearchChipId, number> } | null = null;
+
+/** The research's part of the chips' row (§16.5): what the tree offers, whether the block is open, the counts on demand. */
+function researchBarState(
+    env: ResearchTableEnv, m: TableModel, filter: TableFilter, columns: readonly ColumnDef[], researchView: boolean,
+): ResearchBarState | undefined {
+    const offer = researchChipOffer(env);
+    if (!offer.length) return undefined;
+    const chipOn = filter.items.some(i => isChipItem(i) && isResearchChipId(i.chip));
+    const window = newWindowOf(chipItem(filter, 'xNew'));
+    return {
+        offer,
+        engaged: chipOn || researchView || columns.some(c => !!c.fromResearch),
+        narrow: isTabletOrMobile(),
+        live: env.input.live,
+        counts: () => {
+            if (researchCounts?.env !== env || researchCounts.window !== window) {
+                researchCounts = { env, window, counts: researchChipCounts(env, m.persons.map(r => r.person), window) };
+            }
+            return researchCounts.counts;
+        },
+    };
+}
+
 /** The phone's Filters sheet while it is open (8h). */
 let filterSheet: { sheet: FilterSheet; overlay: HTMLElement } | null = null;
 
@@ -133,7 +163,11 @@ const NONE: ReadonlySet<string> = new Set();
  * set (filter, search, sort) and the findings it reads. `kept`: in their
  * place since a change of the data (§10.3), until the user sets something.
  */
-let view: { tree: string; model: TableModel; type: RowType; key: string; checks: number; kept: boolean; result: ShownRows } | null = null;
+let view: {
+    tree: string; model: TableModel; type: RowType; key: string; checks: number;
+    /** The research's environment the rows were filtered or sorted by (research chips or columns, §16.5), else null. */
+    research: unknown; kept: boolean; result: ShownRows;
+} | null = null;
 
 /** An edit opened from the table (§10.3): what it edits (the toast's name) and the records the edit may change, as stored before. */
 let watching: { tree: string; name: () => string; keys: Map<string, string> } | null = null;
@@ -338,15 +372,19 @@ function viewRows(
         || filter.items.some(i => isChipItem(i) && CHECK_CHIPS.includes(i.chip));
     const key = JSON.stringify([filter, q, q ? columns.map(c => c.id) : 0, sort]);
     const checksVersion = byChecks ? m.ctx.checks?.version ?? 0 : 0;
+    // A research chip or a research column's sort reads the research: a new environment filters and sorts again.
+    const byResearch = filter.items.some(i => isChipItem(i) && isResearchChipId(i.chip))
+        || sort.some(s => !!columnById(type, s.col)?.fromResearch);
+    const researchNow = byResearch ? m.ctx.research ?? null : null;
     const last = view && view.tree === tree && view.type === type && view.key === key ? view : null;
-    if (last && last.model === m && last.checks === checksVersion) return last.result;
+    if (last && last.model === m && last.checks === checksVersion && last.research === researchNow) return last.result;
     const f = filterRows(m, type, rowsOf(m, type), filter, q ? { query: q, columns } : undefined);
     const rows = sort.length ? sortRows(m, type, f.rows, sort, f.pass ? sortUnionOf(f.pass) : undefined) : f.rows;
     // §10.3: after a change of the data the rows stay in place, those that no longer
     // pass dimmed, until the sort, the filter or the view change.
     const kept = last && (last.model.rev !== m.rev || last.kept) ? keepOrder(m, last.result.rows, rows) : null;
     const result: ShownRows = kept ? { rows: kept.rows, pass: f.pass, stale: kept.stale } : { rows, pass: f.pass, stale: NONE };
-    view = { tree, model: m, type, key, checks: checksVersion, kept: !!kept, result };
+    view = { tree, model: m, type, key, checks: checksVersion, research: researchNow, kept: !!kept, result };
     return result;
 }
 
@@ -472,6 +510,12 @@ export const tableMethods = uiModule({
         const research = this.tableResearchEnv(data, rev, m);
         applyResearch(m, research);
         setResearchOffer(research ? researchOffer(research) : {});
+        // §16.5: the research's views the tree offers, before its state is read (a view no longer offered falls back).
+        setResearchViews(research && research.input.kind !== 'none' ? {
+            overview: true,
+            lines: research.lines.lines.map(l => ({ id: l.id, name: l.name })),
+            exchange: research.input.kind === 'research' && !research.input.readOnly,
+        } : null);
         const state = stateOf(tree);
         // An undo or a delete took the open view away: back to the default one (§9.3).
         dropMissingViews(state, data.tableViews);
@@ -580,6 +624,7 @@ export const tableMethods = uiModule({
                     return was !== searchQuery(text);
                 }),
                 onChip: (chip, on) => this.changeTableFilter(f => setChip(f, chip, on)),
+                onResearchNew: (w) => this.changeTableFilter(f => setResearchNew(f, w)),
                 onChoiceChip: (chip, anchor) => this.showTableChipChoice(chip, anchor),
                 onEditColumn: (col, anchor) => this.showTableColumnFilter(col, anchor),
                 onRemoveColumn: (col) => this.changeTableFilter(f => removeColumnFilter(f, col)),
@@ -607,6 +652,7 @@ export const tableMethods = uiModule({
                 const act = (e.target as Element).closest<HTMLElement>('[data-empty-act]')?.dataset.emptyAct;
                 if (act === 'add') this.showAddPersonModal();
                 else if (act === 'quality') void this.showTreeValidationDialog(treeKey() as TreeId);
+                else if (act === 'follow') this.showLiveResearchNow();
             });
             container.append(bar, grid.el, empty, status);
             mounted = {
@@ -628,6 +674,7 @@ export const tableMethods = uiModule({
         const summary = filterSummary(m, type, st.filter, st.search);
         const filterState: FilterBarState = {
             model: m, type, filter: st.filter, search: st.search, shown: rows.length, checking: !index || !!checks?.running, phone,
+            research: persons && research ? researchBarState(research, m, st.filter, display.columns, isResearchViewId(state.open[type])) : undefined,
         };
         mounted.filterState = filterState;
         mounted.filters.update(filterState);
@@ -653,6 +700,7 @@ export const tableMethods = uiModule({
                 return !!comp && rows.every(r => { const c = cellOf(m, r, comp); return c.na || c.percent === 100; });
             },
             readOnly: tableReadOnly(),
+            canFollow: !!research && research.input.kind === 'research' && !research.input.readOnly && !research.input.live,
         }));
         const drawn = `${tree}|${type}`;
         const restore = mounted.drawn !== drawn ? { top: st.top, left: st.left } : undefined;
@@ -1020,7 +1068,7 @@ export const tableMethods = uiModule({
             const choice = form.read();
             return setChip(f, chip, !!choice, choice ?? {});
         });
-        this.showTableFilterForm(anchor, strings.table.chip[chip], form.el, apply);
+        this.showTableFilterForm(anchor, chipLabel(null, null, chip), form.el, apply);
     },
 
     /**
@@ -1096,6 +1144,7 @@ export const tableMethods = uiModule({
         if (!mounted?.filterState || filterSheet) return;
         const sheet = new FilterSheet({
             onChip: (chip, on) => this.changeTableFilter(f => setChip(f, chip, on)),
+            onResearchNew: (w) => this.changeTableFilter(f => setResearchNew(f, w)),
             onChoice: (chip, choice) => this.changeTableFilter(f => setChip(f, chip, !!choice, choice ?? {})),
             onRemoveColumn: (col) => this.changeTableFilter(f => removeColumnFilter(f, col)),
             onClear: () => this.changeTableFilter(f => clearFilter(f), true),
@@ -1459,6 +1508,7 @@ export const tableMethods = uiModule({
                 id: e.id, label: e.name, icon: '', hint: e.rowNote || undefined, checked: e.active, run: () => this.openTableView(e.id),
             });
             const entries: MenuEntry[] = [{ heading: t.views.builtin }, ...list.builtin.map(item)];
+            if (list.research.length) entries.push(SEP, { heading: t.views.research }, ...list.research.map(item));
             if (list.custom.length) entries.push(SEP, { heading: t.views.custom }, ...list.custom.map(item));
             if (list.canSaveAs) {
                 entries.push(SEP,
@@ -1485,6 +1535,7 @@ export const tableMethods = uiModule({
             blocks.push({ header: `● ${t.changed}`, rows, ...(list.builtinOpen && !ro ? { note: t.builtinNote } : {}) });
         }
         blocks.push({ header: t.views.builtin, rows: list.builtin.map(row) });
+        if (list.research.length) blocks.push({ header: t.views.research, rows: list.research.map(row) });
         if (list.custom.length) blocks.push({ header: t.views.custom, rows: list.custom.map(row) });
         if (!ro) {
             const rows = [];
@@ -1718,11 +1769,11 @@ export const tableMethods = uiModule({
         const add = state.action?.id === 'add';
         mounted.empty.innerHTML = emptyStateHtml({ title: state.title, text: state.text, actionLabel: add ? state.action!.label : undefined });
         mounted.empty.querySelector('.empty-block-action')?.setAttribute('data-empty-act', 'add');
-        if (state.action?.id === 'quality') {
+        if (state.action?.id === 'quality' || state.action?.id === 'follow') {
             const link = document.createElement('button');
             link.type = 'button';
             link.className = 'tv-empty-link';
-            link.dataset.emptyAct = 'quality';
+            link.dataset.emptyAct = state.action.id;
             link.textContent = state.action.label;
             mounted.empty.querySelector('.empty-block')?.appendChild(link);
         }

@@ -10,7 +10,7 @@
  */
 
 import { strings } from '../../strings.js';
-import { columnById, columnLabel, type SortSpec } from './table-columns.js';
+import { columnById, columnLabel, columnOffered, type SortSpec } from './table-columns.js';
 import { ROW_KEY, ROW_TYPES, type RowType } from './table-model.js';
 
 export interface BarHandlers {
@@ -35,7 +35,7 @@ export function countText(type: RowType, shown: number, total: number): string {
 /** "Sort: Birth date ↑, Name ↓" (empty without a sort). */
 export function sortText(type: RowType, sort: readonly SortSpec[]): string {
     const cols = sort
-        .map(s => { const col = columnById(type, s.col); return col ? `${columnLabel(col)} ${s.dir === 'desc' ? '↓' : '↑'}` : ''; })
+        .map(s => { const col = columnById(type, s.col); return col && columnOffered(col) ? `${columnLabel(col)} ${s.dir === 'desc' ? '↓' : '↑'}` : ''; })
         .filter(Boolean);
     return cols.length ? strings.table.sortedBy(cols.join(', ')) : '';
 }

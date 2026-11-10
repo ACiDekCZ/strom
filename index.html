@@ -9468,6 +9468,16 @@
             flex: none; margin-left: auto; padding: 0 2px; border: none; background: none; color: var(--primary);
             font: inherit; font-size: 12.5px; text-decoration: underline; cursor: pointer; white-space: nowrap; order: 1000;
         }
+        /* §16.5 the research's part of the row: after the general chips and their "More filters", before "Clear filters". */
+        .tv-rsep, .tv-rtoggle, .tv-rlabel, .tv-rchip, .tv-rmore { order: 600; }
+        .tv-rsep { flex: none; align-self: center; width: 1px; height: 18px; margin: 0 2px; background: var(--border); }
+        .tv-rlabel {
+            flex: none; align-self: center; font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+            color: var(--accent-text); white-space: nowrap;
+        }
+        .tv-rlabel[hidden] { display: none; }
+        .tv-rchip[aria-disabled="true"] { border-style: dashed; }
+        .tv-fs-row.is-off .tv-fs-label { color: var(--text-ghost); }
         /* §8.2 a filter's panel under its head or chip. */
         .tv-fpanel {
             position: fixed; z-index: 3000; width: 280px; max-width: calc(100vw - 16px); padding: 10px 0 0; box-sizing: border-box;
@@ -9509,7 +9519,7 @@
         .tv-fs-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .tv-fs-row.is-active .tv-fs-label { color: var(--primary); font-weight: 600; }
         .tv-fs-chev { flex: none; color: var(--text-light); }
-        .tv-fs-more { color: var(--primary); font-weight: 600; }
+        .tv-fs-more, .tv-fs-rmore { color: var(--primary); font-weight: 600; }
         .tv-fs-x { flex: none; width: 44px; height: 44px; margin-right: -12px; border: none; background: none; color: var(--text-light); font-size: 20px; cursor: pointer; }
         .tv-fs-cancel, .tv-fs-clear { font-size: 15px; }
         .tv-fs-clear[hidden] { display: none; }

@@ -3,15 +3,16 @@
  * the DOM. An empty tree (13a, 13b), a Unions table without unions (13e),
  * an Events table without events (§14.1), a Sources table without sources (§14.2),
  * the built-in Checks view without findings (13f) and the built-in Gaps
- * view when nothing is missing (13g). "Nothing matches the filter" (13c,
+ * view when nothing is missing (13g), the research's views Research and
+ * Exchange with research when nothing is there (§16.5, 16q). "Nothing matches the filter" (13c,
  * 13d) stays under the head of the grid (`GridInput.noMatch`).
  */
 
 import { strings } from '../../strings.js';
 import type { RowType } from './table-model.js';
-import { builtinId } from './table-views.js';
+import { builtinId, researchViewId } from './table-views.js';
 
-export type TableEmptyKind = 'empty' | 'noUnions' | 'noEvents' | 'noSources' | 'noFindings' | 'nothingMissing';
+export type TableEmptyKind = 'empty' | 'noUnions' | 'noEvents' | 'noSources' | 'noFindings' | 'nothingMissing' | 'researchEmpty' | 'exchangeEmpty';
 
 export interface TableEmptyInput {
     persons: number;
@@ -36,6 +37,8 @@ export interface TableEmptyInput {
     allComplete: () => boolean;
     /** No edits: no Add person. */
     readOnly: boolean;
+    /** The research can be followed from here and is not followed now: Research's empty state offers it (16q). */
+    canFollow?: boolean;
 }
 
 export interface TableEmptyState {
@@ -43,7 +46,7 @@ export interface TableEmptyState {
     title: string;
     text: string;
     /** The primary action (Add person) or the quiet link (Data quality ›). */
-    action: { id: 'add' | 'quality'; label: string } | null;
+    action: { id: 'add' | 'quality' | 'follow'; label: string } | null;
 }
 
 /** The state to draw in place of the grid, or null for the grid. */
@@ -67,6 +70,16 @@ export function tableEmptyState(i: TableEmptyInput): TableEmptyState | null {
     }
     if (asView && i.type === 'persons' && i.viewId === builtinId('gaps') && i.shown > 0 && i.allComplete()) {
         return { kind: 'nothingMissing', title: t.nothingMissingTitle, text: t.nothingMissingText(i.shown), action: null };
+    }
+    if (asView && i.type === 'persons' && i.shown === 0 && i.viewId === researchViewId('research')) {
+        const R = t.res;
+        return {
+            kind: 'researchEmpty', title: R.emptyTitle, text: R.emptyText,
+            action: i.canFollow ? { id: 'follow', label: strings.card.menuAgent } : null,
+        };
+    }
+    if (asView && i.type === 'persons' && i.shown === 0 && i.viewId === researchViewId('exchange')) {
+        return { kind: 'exchangeEmpty', title: t.res.exchangeEmpty, text: '', action: null };
     }
     return null;
 }

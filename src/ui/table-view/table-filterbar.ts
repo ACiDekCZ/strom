@@ -14,10 +14,13 @@ import { strings } from '../../strings.js';
 import { columnLabel, type ColumnDef } from './table-columns.js';
 import { ROW_KEY, type RowType, type TableModel } from './table-model.js';
 import {
-    activeFilterCount, availableChips, CHECK_CHIPS, chipItem, chipLabel, columnItemLabel, columnItems, columnValues, filterKindOf,
-    generationSpan, rodChoices, type ChipFilter, type ChipId, type ColumnFilter, type TableFilter,
+    activeFilterCount, availableChips, CHECK_CHIPS, chipItem, chipLabel, columnItemLabel, columnValues, filterKindOf,
+    generationSpan, newWindowOf, rodChoices, shownColumnItems, type ChipFilter, type ChipId, type ColumnFilter, type TableFilter,
 } from './table-filter.js';
-import { closeHeadMenu, openHeadMenu, type HeadMenuEntry } from './table-headmenu.js';
+import { closeHeadMenu, openHeadMenu, type HeadMenuEntry, type MenuEntry } from './table-headmenu.js';
+import {
+    type ResearchChipId, type ResearchChipOffer, type ResearchNewWindow,
+} from './table-research.js';
 
 function esc(text: string): string {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -42,6 +45,30 @@ export interface FilterBarState {
     /** The checks still run: the chips on findings wait (§13i). */
     checking: boolean;
     phone: boolean;
+    /** The research's chips (§16.5); absent without research. */
+    research?: ResearchBarState;
+}
+
+/** The research's part of the chips' row (§16.5, 16a0, 16n–16p, 16z, 16zk). */
+export interface ResearchBarState {
+    /** The research chips the tree offers, in the block's order (researchChipOffer). */
+    offer: readonly ResearchChipOffer[];
+    /** A research column is shown, a research view is open or a research chip is on: the block is open in the row. */
+    engaged: boolean;
+    /** A tablet or a narrower window (≤ 1024): the block stays one "Research ▾" chip (16p). */
+    narrow: boolean;
+    /** Following the research live: the live-only chips can filter. */
+    live: boolean;
+    /** How many people each chip would show (computed when asked: the lines' chips and the menus). */
+    counts(): ReadonlyMap<ResearchChipId, number>;
+}
+
+/** The windows of "New from research" (16zk). */
+const NEW_WINDOWS: readonly ResearchNewWindow[] = ['day', 'week', 'lastOpen'];
+
+/** The research chips that are on now. */
+function activeResearch(rs: ResearchBarState, filter: TableFilter): ResearchChipOffer[] {
+    return rs.offer.filter(o => !!chipItem(filter, o.id));
 }
 
 export interface FilterBarHandlers {
@@ -50,6 +77,8 @@ export interface FilterBarHandlers {
     onChip(chip: ChipId, on: boolean): void;
     /** Family line or Generation: their panel. */
     onChoiceChip(chip: ChipId, anchor: HTMLElement): void;
+    /** "New from research" in a window, or off (16zk). */
+    onResearchNew(window: ResearchNewWindow | null): void;
     /** A column filter's chip: its form. */
     onEditColumn(col: string, anchor: HTMLElement): void;
     onRemoveColumn(col: string): void;
@@ -80,6 +109,8 @@ export class FilterBar {
     private width = 0;
     /** The chips the row could not show (they are in "More filters"). */
     private hidden: ChipId[] = [];
+    /** The research block's chips the row could not show (they are first in the block's "More"). */
+    private rHidden: ResearchChipId[] = [];
 
     constructor(bar: HTMLElement, private readonly handlers: FilterBarHandlers) {
         const slot = bar.querySelector<HTMLElement>('.tv-slot-search')!;
@@ -144,7 +175,7 @@ export class FilterBar {
         this.sheetBtn.classList.toggle('is-active', n > 0);
 
         const chips = availableChips(model, type);
-        const cols = columnItems(filter);
+        const cols = shownColumnItems(type, filter);
         this.row.hidden = state.phone || (!chips.length && !cols.length);
         if (this.row.hidden) { this.row.innerHTML = ''; return; }
         let html = '';
@@ -165,10 +196,43 @@ export class FilterBar {
                 + `<button type="button" class="tv-chip-x" data-x="${esc(c.col)}" aria-label="${esc(strings.table.removeFilter(label))}">×</button></span>`;
         }
         html += '<button type="button" class="tv-chip tv-chip-more" aria-haspopup="menu" hidden></button>';
+        html += this.researchHtml(state);
         if (n) html += `<button type="button" class="tv-chips-clear">${esc(strings.table.clearFilters)}</button>`;
         this.row.innerHTML = html;
         this.width = this.row.clientWidth;
         this.fit();
+    }
+
+    /**
+     * The research's part of the row (§16.5): a separator, then either one
+     * "Research ▾" chip (16a0, 16o, 16p) or the block (16n): its label, the
+     * active chips first, the signals, a chip per line, Off the lines, and
+     * "More ▾". Both are drawn; fit() shows one of them.
+     */
+    private researchHtml(state: FilterBarState): string {
+        const rs = state.research;
+        if (!rs || !rs.offer.length || state.type !== 'persons') return '';
+        const R = strings.table.res;
+        const act = activeResearch(rs, state.filter);
+        const label = act.length ? `${R.block} (${act.length})` : R.block;
+        let html = '<span class="tv-rsep" aria-hidden="true"></span>';
+        html += `<button type="button" class="tv-chip tv-rtoggle${act.length ? ' is-active' : ''}" aria-haspopup="menu" data-rtoggle>${esc(label)} ▾</button>`;
+        if (!rs.engaged || rs.narrow) return html;
+        const counts = rs.counts();
+        const block = rs.offer.filter(o => o.place === 'block' || !!chipItem(state.filter, o.id));
+        const ordered = [...block.filter(o => !!chipItem(state.filter, o.id)), ...block.filter(o => !chipItem(state.filter, o.id))];
+        html += `<span class="tv-rlabel" data-rblock>${esc(R.block)}</span>`;
+        for (const o of ordered) {
+            const item = chipItem(state.filter, o.id);
+            const off = o.live && !rs.live;
+            let text = chipLabel(state.model, item, o.id);
+            if (o.line || o.id === 'offLine') text += ` · ${counts.get(o.id) ?? 0}`;
+            html += `<button type="button" class="tv-chip tv-rchip${item ? ' is-active' : ''}" data-rchip="${esc(o.id)}" aria-pressed="${!!item}"`
+                + (off ? ` aria-disabled="true" title="${esc(R.liveOnly)}"` : '')
+                + `>${item ? '✓ ' : ''}${esc(text)}</button>`;
+        }
+        html += `<button type="button" class="tv-chip tv-rmore" aria-haspopup="menu" data-rmore>${esc(R.more)} ▾</button>`;
+        return html;
     }
 
     /**
@@ -181,9 +245,20 @@ export class FilterBar {
         if (!st || this.row.hidden) return;
         const quick = [...this.row.querySelectorAll<HTMLElement>('.tv-chip[data-chip]')];
         const more = this.row.querySelector<HTMLElement>('.tv-chip-more')!;
+        const toggle = this.row.querySelector<HTMLElement>('[data-rtoggle]');
+        const blockParts = [...this.row.querySelectorAll<HTMLElement>('[data-rblock], .tv-rchip, [data-rmore]')];
+        const rchips = [...this.row.querySelectorAll<HTMLElement>('.tv-rchip')];
         for (const c of quick) { c.hidden = false; c.style.order = ''; }
         more.hidden = true;
         this.hidden = [];
+        this.rHidden = [];
+        // The block (when drawn) replaces the "Research ▾" chip.
+        const showBlock = (on: boolean): void => {
+            for (const el of blockParts) el.hidden = !on;
+            for (const c of rchips) c.hidden = !on;
+            if (toggle) toggle.hidden = on && blockParts.length > 0;
+        };
+        showBlock(blockParts.length > 0);
         const over = (): boolean => this.row.scrollWidth > this.row.clientWidth + 1;
         if (!over()) return;
         // Active chips go first, column chips after them, the rest keeps its order.
@@ -196,12 +271,32 @@ export class FilterBar {
             const act = this.hidden.filter(id => !!chipItem(st.filter, id)).length;
             more.textContent = `${strings.table.moreFilters}${act ? ` (${act})` : ''} ▾`;
         };
+        const hideQuick = (keep: number): void => {
+            for (let i = inactive.length - 1; i >= 0 && over(); i--) {
+                if (inactive[i].hidden) continue;
+                if (quick.filter(c => !c.hidden).length <= keep) break;
+                inactive[i].hidden = true;
+                this.hidden.unshift(inactive[i].dataset.chip as ChipId);
+                label();
+            }
+        };
         label();
-        for (let i = inactive.length - 1; i >= 0 && over(); i--) {
-            inactive[i].hidden = true;
-            this.hidden.unshift(inactive[i].dataset.chip as ChipId);
-            label();
+        if (blockParts.length) {
+            // §16.5: the general chips give way down to three, then the block down to three chips and "More ▾";
+            // when even that does not fit, the block becomes one "Research ▾" chip.
+            hideQuick(3);
+            const rInactive = rchips.filter(c => !c.classList.contains('is-active'));
+            for (let i = rInactive.length - 1; i >= 0 && over(); i--) {
+                if (rchips.filter(c => !c.hidden).length <= 3) break;
+                rInactive[i].hidden = true;
+                this.rHidden.unshift(rInactive[i].dataset.rchip as ResearchChipId);
+            }
+            if (over()) {
+                showBlock(false);
+                this.rHidden = [];
+            }
         }
+        hideQuick(0);
         if (!this.hidden.length) more.hidden = true;
     }
 
@@ -218,6 +313,18 @@ export class FilterBar {
         if (edit) { this.handlers.onEditColumn(edit.dataset.col!, edit); return; }
         const more = t.closest<HTMLElement>('.tv-chip-more');
         if (more) { this.openMore(more); return; }
+        const rtoggle = t.closest<HTMLElement>('[data-rtoggle]');
+        if (rtoggle) { this.openResearchMenu(rtoggle, false); return; }
+        const rmore = t.closest<HTMLElement>('[data-rmore]');
+        if (rmore) { this.openResearchMenu(rmore, true); return; }
+        const rchip = t.closest<HTMLElement>('.tv-rchip[data-rchip]');
+        if (rchip) {
+            if (rchip.getAttribute('aria-disabled') === 'true') return;
+            const id = rchip.dataset.rchip as ResearchChipId;
+            if (id === 'xNew') this.handlers.onResearchNew(null);
+            else this.handlers.onChip(id, rchip.getAttribute('aria-pressed') !== 'true');
+            return;
+        }
         const btn = t.closest<HTMLElement>('.tv-chip[data-chip]');
         if (!btn || btn.getAttribute('aria-disabled') === 'true') return;
         const chip = btn.dataset.chip as ChipId;
@@ -241,6 +348,79 @@ export class FilterBar {
         });
         openHeadMenu(anchor, strings.table.moreFilters, '', entries);
     }
+
+    /**
+     * The research's menu: of the "Research ▾" chip (16a0: signals, lines,
+     * exchange, sources and places, new from research, the note) or of the
+     * block's "More ▾" (16zk: the chips the row could not show, the other
+     * research chips, new from research).
+     */
+    private openResearchMenu(anchor: HTMLElement, block: boolean): void {
+        const st = this.state;
+        const rs = st?.research;
+        if (!st || !rs) return;
+        openHeadMenu(anchor, '', '', researchMenuEntries(st, rs, block ? this.rHidden : null, this.handlers));
+    }
+}
+
+/** The entries of the research's menus (FilterBar): `hidden` = the block's "More" with the chips the row could not show. */
+function researchMenuEntries(
+    st: FilterBarState, rs: ResearchBarState, hidden: readonly ResearchChipId[] | null,
+    handlers: Pick<FilterBarHandlers, 'onChip' | 'onResearchNew'>,
+): MenuEntry[] {
+    const R = strings.table.res;
+    const counts = rs.counts();
+    const item = (o: ResearchChipOffer, count: boolean): HeadMenuEntry => {
+        const on = !!chipItem(st.filter, o.id);
+        const off = o.live && !rs.live;
+        return {
+            id: o.id, label: chipLabel(st.model, null, o.id), icon: '', checked: on,
+            hint: off ? R.liveTag : count ? String(counts.get(o.id) ?? 0) : undefined,
+            disabled: off,
+            run: () => handlers.onChip(o.id, !on),
+        };
+    };
+    const offerOf = (pred: (o: ResearchChipOffer) => boolean): ResearchChipOffer[] => rs.offer.filter(pred);
+    const out: MenuEntry[] = [];
+    const isMore = (o: ResearchChipOffer): boolean => o.place === 'more' && o.id !== 'xNew';
+    if (hidden) {
+        const rest = offerOf(o => hidden.includes(o.id));
+        for (const o of rest) out.push(item(o, !!o.line || o.id === 'offLine'));
+        const others = offerOf(o => isMore(o) && !chipItem(st.filter, o.id));
+        if (others.length) {
+            out.push({ heading: R.menu.moreChips });
+            for (const o of others) out.push(item(o, true));
+        }
+    } else {
+        const signals = offerOf(o => o.place === 'block' && !o.line && o.id !== 'offLine');
+        if (signals.length) {
+            out.push({ heading: R.menu.signals });
+            for (const o of signals) out.push(item(o, false));
+        }
+        const lines = offerOf(o => !!o.line || o.id === 'offLine');
+        if (lines.length) {
+            out.push({ heading: R.menu.lines });
+            for (const o of lines) out.push(item(o, true));
+        }
+        const more = offerOf(isMore);
+        if (more.length) {
+            out.push({ heading: R.menu.exchange });
+            for (const o of more) out.push(item(o, true));
+        }
+    }
+    if (rs.offer.some(o => o.id === 'xNew')) {
+        const cur = chipItem(st.filter, 'xNew');
+        const w = cur ? newWindowOf(cur) : null;
+        out.push({ heading: R.menu.newHead });
+        for (const win of NEW_WINDOWS) {
+            out.push({
+                id: `xNew:${win}`, label: R.newWindow[win], icon: '', checked: w === win,
+                run: () => handlers.onResearchNew(w === win ? null : win),
+            });
+        }
+    }
+    if (!hidden) out.push({ note: R.menu.expandNote });
+    return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -460,6 +640,8 @@ export function openFilterPanel(anchor: HTMLElement, title: string, form: HTMLEl
 export interface FilterSheetHandlers {
     onChip(chip: ChipId, on: boolean): void;
     onChoice(chip: ChipId, choice: Omit<ChipFilter, 'chip'> | null): void;
+    /** "New from research" in a window, or off (16z). */
+    onResearchNew(window: ResearchNewWindow | null): void;
     onRemoveColumn(col: string): void;
     onClear(): void;
     onClose(): void;
@@ -481,6 +663,8 @@ export class FilterSheet {
     private state: FilterBarState | null = null;
     private page: 'main' | 'rod' | 'gen' = 'main';
     private all = false;
+    /** "More research (n)" was opened (16z). */
+    private rAll = false;
     private readonly uid = `tv-fs-${++formSeq}`;
 
     constructor(private readonly handlers: FilterSheetHandlers) {
@@ -521,11 +705,14 @@ export class FilterSheet {
             const input = e.target as HTMLInputElement;
             const chip = input.dataset.chip as ChipId | undefined;
             if (chip) this.handlers.onChip(chip, input.checked);
+            const win = input.dataset.rnew as ResearchNewWindow | undefined;
+            if (win) this.handlers.onResearchNew(input.checked ? win : null);
         });
         this.body.addEventListener('click', (e) => {
             const t = e.target as Element;
             const page = t.closest<HTMLElement>('[data-page]');
             if (page) { this.page = page.dataset.page as 'rod' | 'gen'; this.render(); this.body.querySelector<HTMLElement>('input, select')?.focus(); return; }
+            if (t.closest('.tv-fs-rmore')) { this.rAll = true; this.render(); return; }
             if (t.closest('.tv-fs-more')) { this.all = true; this.render(); return; }
             const xc = t.closest<HTMLElement>('[data-xchip]');
             if (xc) { this.handlers.onChip(xc.dataset.xchip as ChipId, false); return; }
@@ -588,7 +775,7 @@ export class FilterSheet {
             html += `<div class="tv-fs-row tv-fs-part"><span class="tv-fs-label">${esc(label)}</span>`
                 + `<button type="button" class="tv-fs-x" data-xchip="participant" aria-label="${esc(t.removeFilter(label))}">×</button></div>`;
         }
-        const cols = columnItems(st.filter);
+        const cols = shownColumnItems(st.type, st.filter);
         if (cols.length) {
             html += `<div class="tv-fs-section">${esc(t.inColumns)}</div>`;
             for (const c of cols) {
@@ -597,6 +784,46 @@ export class FilterSheet {
                     + `<button type="button" class="tv-fs-x" data-x="${esc(c.col)}" aria-label="${esc(t.removeFilter(label))}">×</button></div>`;
             }
         }
+        html += this.researchHtml(st);
         this.body.innerHTML = html;
+    }
+
+    /**
+     * The section Research (16z), after the others: the signals, a row per
+     * line and Off the lines with their counts; "More research (n)" opens the
+     * other research chips and the windows of "New from research". The
+     * active ones are always there.
+     */
+    private researchHtml(st: FilterBarState): string {
+        const rs = st.research;
+        if (!rs || !rs.offer.length || st.type !== 'persons') return '';
+        const R = strings.table.res;
+        const counts = rs.counts();
+        const row = (o: ResearchChipOffer): string => {
+            const item = chipItem(st.filter, o.id);
+            const off = o.live && !rs.live;
+            const n = o.place === 'more' || o.line || o.id === 'offLine' ? ` · ${counts.get(o.id) ?? 0}` : '';
+            return `<label class="tv-fs-row${off ? ' is-off' : ''}"><input type="checkbox" class="tv-cp-check" data-chip="${esc(o.id)}"${item ? ' checked' : ''}${off ? ' disabled' : ''}>`
+                + `<span class="tv-fs-label">${esc(chipLabel(st.model, null, o.id) + n)}</span>`
+                + (off ? `<span class="tv-cp-note">${esc(R.liveTag)}</span>` : '') + '</label>';
+        };
+        let html = `<div class="tv-fs-section">${esc(R.block)}</div>`;
+        for (const o of rs.offer) if (o.place === 'block') html += row(o);
+        const more = rs.offer.filter(o => o.place === 'more' && o.id !== 'xNew');
+        const newOn = chipItem(st.filter, 'xNew');
+        const hasNew = rs.offer.some(o => o.id === 'xNew');
+        const shownMore = this.rAll ? more : more.filter(o => !!chipItem(st.filter, o.id));
+        for (const o of shownMore) html += row(o);
+        const win = newOn ? newWindowOf(newOn) : null;
+        if (hasNew && (this.rAll || newOn)) {
+            for (const w of NEW_WINDOWS) {
+                if (!this.rAll && w !== win) continue;
+                html += `<label class="tv-fs-row"><input type="checkbox" class="tv-cp-check" data-rnew="${w}"${w === win ? ' checked' : ''}>`
+                    + `<span class="tv-fs-label">${esc(R.newIn(R.newWindow[w]))}</span></label>`;
+            }
+        }
+        const rest = more.length - shownMore.length + (hasNew && !this.rAll ? (newOn ? NEW_WINDOWS.length - 1 : NEW_WINDOWS.length) : 0);
+        if (rest > 0) html += `<button type="button" class="tv-fs-row tv-fs-rmore">${esc(R.moreResearch(rest))}</button>`;
+        return html;
     }
 }

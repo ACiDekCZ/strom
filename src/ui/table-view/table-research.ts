@@ -738,6 +738,86 @@ export function researchLineCounts(env: ResearchTableEnv, persons: readonly Pers
     return { lines: env.lines.lines.map(line => ({ line, count: counts.get(line.id) ?? 0 })), offLine };
 }
 
+/** The block's own chips (§16.5): the signals in their order; the lines and Off the lines follow them. */
+export const RESEARCH_SIGNAL_CHIPS = ['rWait', 'rConf', 'rQ', 'rAgent'] as const;
+
+/** The chips of the block's "More" (§16.10, §16.8), in their order. */
+export const RESEARCH_MORE_CHIPS = [
+    'xUnsent', 'xChanged', 'xDecideHere', 'xExternal', 'xNew', 'xReadingRoom', 'xPlaceOpen', 'xAgentDecided', 'xPaused', 'rEdge',
+] as const;
+
+/** Whether a chip id is a research chip (a line's `line:G…` too). */
+export function isResearchChipId(id: string): id is ResearchChipId {
+    return id.startsWith('line:') || id === 'offLine'
+        || (RESEARCH_SIGNAL_CHIPS as readonly string[]).includes(id) || (RESEARCH_MORE_CHIPS as readonly string[]).includes(id);
+}
+
+/** A research chip the tree offers (§16.5): `live` = only while following, inactive otherwise. */
+export interface ResearchChipOffer {
+    id: ResearchChipId;
+    /** In the block itself (signals, lines, Off the lines) or in its "More" (§16.10, §16.8). */
+    place: 'block' | 'more';
+    /** Only while following the research (Agent working / queued). */
+    live?: boolean;
+    /** The line of a line chip. */
+    line?: ResearchLine;
+}
+
+/**
+ * The research chips the tree offers, in the block's order (§16.5): the
+ * signals (waiting and the agent not in an archive or a read-only copy), a
+ * chip per line and Off the lines (only with lines), then the chips of
+ * "More" (§16.10, §16.8; not sent and deciding here only where the tree can
+ * change). None without research.
+ */
+export function researchChipOffer(env: ResearchTableEnv): ResearchChipOffer[] {
+    const { kind, readOnly } = env.input;
+    if (kind === 'none') return [];
+    const agentHere = kind === 'research' && !readOnly;
+    const out: ResearchChipOffer[] = [];
+    for (const id of RESEARCH_SIGNAL_CHIPS) {
+        if ((id === 'rWait' || id === 'rAgent') && !agentHere) continue;
+        out.push({ id, place: 'block', ...(id === 'rAgent' ? { live: true } : {}) });
+    }
+    if (env.lines.lines.length > 0) {
+        for (const line of env.lines.lines) out.push({ id: `line:${line.id}`, place: 'block', line });
+        out.push({ id: 'offLine', place: 'block' });
+    }
+    for (const id of RESEARCH_MORE_CHIPS) {
+        if ((id === 'xUnsent' || id === 'xDecideHere') && (kind !== 'research' || readOnly)) continue;
+        out.push({ id, place: 'more' });
+    }
+    return out;
+}
+
+/** The chip can filter now: offered, and a live-only one only while following (§16.5: inactive otherwise). */
+export function researchChipActive(env: ResearchTableEnv, id: string): boolean {
+    const offer = researchChipOffer(env).find(c => c.id === id);
+    return !!offer && (!offer.live || env.input.live);
+}
+
+const chipMemo = new WeakMap<ResearchTableEnv, Map<string, Set<ResearchChipId>>>();
+
+/** researchChips, kept per environment (one person and window computed once while the research stays). */
+export function researchChipsCached(env: ResearchTableEnv, p: Person, newWindow: ResearchNewWindow = 'week'): Set<ResearchChipId> {
+    let m = chipMemo.get(env);
+    if (!m) { m = new Map(); chipMemo.set(env, m); }
+    const key = `${newWindow}|${p.id}`;
+    let set = m.get(key);
+    if (!set) { set = researchChips(env, p, newWindow); m.set(key, set); }
+    return set;
+}
+
+/** How many people each research chip would show (the menus' counts, §16.5, 16zk). */
+export function researchChipCounts(env: ResearchTableEnv, persons: readonly Person[], newWindow: ResearchNewWindow = 'week'): Map<ResearchChipId, number> {
+    const out = new Map<ResearchChipId, number>();
+    for (const p of persons) {
+        if (p.isPlaceholder) continue;
+        for (const id of researchChipsCached(env, p, newWindow)) out.set(id, (out.get(id) ?? 0) + 1);
+    }
+    return out;
+}
+
 // ==================== UNIONS AND SOURCES ====================
 
 /** A union's line (§16.9, 16zg): by its partner who is a person of a line (not a partner of one), else the other's. */

@@ -12,7 +12,10 @@
  * order never wobbles between renders. No DOM here.
  */
 
-import { cellOf, columnById, columnLabel, type ColumnDef, type ColumnKind, type SortSpec } from './table-columns.js';
+import { cellOf, columnById, columnLabel, columnOffered, type ColumnDef, type ColumnKind, type SortSpec } from './table-columns.js';
+import {
+    isResearchChipId, researchChipActive, researchChipsCached, type ResearchChipId, type ResearchNewWindow,
+} from './table-research.js';
 import { rowsOf, type CellValue, type EventCategory, type EventRow, type PersonRow, type RowType, type SourceRow, type TableModel, type TableRow } from './table-model.js';
 import { sourceReaders } from './table-sources.js';
 import { safeHttpUrl } from '../../validation.js';
@@ -38,7 +41,10 @@ export const EVENT_CHIP_ORDER = ['evBirth', 'evMarriage', 'evDeath', 'evOther', 
  * (§14.1 "Godparent: {name} ×"), which is set from a participant's name in
  * a cell and is not in the quick row.
  */
-export type ChipId = typeof CHIP_ORDER[number] | typeof EVENT_CHIP_ORDER[number] | typeof SOURCE_CHIP_ORDER[number] | 'participant';
+export type ChipId = typeof CHIP_ORDER[number] | typeof EVENT_CHIP_ORDER[number] | typeof SOURCE_CHIP_ORDER[number] | 'participant' | ResearchChipId;
+
+/** A chip of the quick row (not the research's block, §16.5): its words are `strings.table.chip`. */
+export type QuickChipId = Exclude<ChipId, `line:${string}`>;
 
 /** The Sources table's quick chips (§14.2), in their fixed order. */
 export const SOURCE_CHIP_ORDER = ['srcNoPerson', 'srcUnread', 'srcTranscript', 'srcOnline'] as const;
@@ -50,7 +56,8 @@ const EVENT_KIND_CHIPS: Readonly<Record<string, EventCategory>> = { evBirth: 'bi
  * A quick chip. Family line: the chosen lines (`values`, RodIds); Generation:
  * the range `from`–`to` (1-based). Participant: the `role` and the tree's
  * person (`personId`) or the name as written (`name`; with a person, the name
- * it had when chosen).
+ * it had when chosen). New from research (§16.10): its window in `values`
+ * (`day`, `week`, `lastOpen`; none = a week).
  */
 export interface ChipFilter {
     chip: ChipId;
@@ -104,6 +111,15 @@ export function columnItem(filter: TableFilter, col: string): ColumnFilter | nul
 
 export function columnItems(filter: TableFilter): ColumnFilter[] {
     return filter.items.filter((i): i is ColumnFilter => !isChipItem(i));
+}
+
+/**
+ * The column filters a row type shows: a filter of a column the tree does
+ * not offer (a research column outside a research tree, §16.1) is left out
+ * quietly, as its column is.
+ */
+export function shownColumnItems(type: RowType, filter: TableFilter): ColumnFilter[] {
+    return columnItems(filter).filter(i => { const c = columnById(type, i.col); return !c || columnOffered(c); });
 }
 
 /** How a column is filtered (§8.2): text, a range (dates by years) or chosen values. */
@@ -184,14 +200,15 @@ export function clearFilter(filter: TableFilter): boolean {
 export function chipAvailable(model: TableModel, type: RowType, chip: ChipId): boolean {
     if (type === 'events') return chip === 'participant' || (EVENT_CHIP_ORDER as readonly string[]).includes(chip);
     if (type === 'sources') return (SOURCE_CHIP_ORDER as readonly string[]).includes(chip);
+    if (type === 'persons' && isResearchChipId(chip)) return !!model.ctx.research && researchChipActive(model.ctx.research, chip);
     if (type !== 'persons' || !(CHIP_ORDER as readonly string[]).includes(chip)) return false;
     if (chip === 'unconfirmed') return model.ctx.reliability.researchTree;
     return true;
 }
 
-/** The quick chips a row type offers, in their fixed order (the participant filter is not one). */
-export function availableChips(model: TableModel, type: RowType): ChipId[] {
-    const order: readonly ChipId[] = type === 'events' ? EVENT_CHIP_ORDER : type === 'sources' ? SOURCE_CHIP_ORDER : CHIP_ORDER;
+/** The quick chips a row type offers, in their fixed order (the participant filter and the research's block are not in it). */
+export function availableChips(model: TableModel, type: RowType): QuickChipId[] {
+    const order: readonly QuickChipId[] = type === 'events' ? EVENT_CHIP_ORDER : type === 'sources' ? SOURCE_CHIP_ORDER : CHIP_ORDER;
     return order.filter(c => chipAvailable(model, type, c));
 }
 
@@ -297,8 +314,16 @@ export function personPassesChip(model: TableModel, row: PersonRow, item: ChipFi
                 const pill = cellOf(model, row, col('persons', id)).pill;
                 return !!pill && UNCONFIRMED_STEPS.has(pill);
             });
-        default: return true;
+        default:
+            if (isResearchChipId(item.chip) && ctx.research) return researchChipsCached(ctx.research, p, newWindowOf(item)).has(item.chip);
+            return true;
     }
+}
+
+/** The window of New from research (§16.10): a day, a week (default) or since the tree was last opened. */
+export function newWindowOf(item: ChipFilter | null): ResearchNewWindow {
+    const v = item?.values?.[0];
+    return v === 'day' || v === 'lastOpen' ? v : 'week';
 }
 
 /** The family lines of the tree with their names (the Family line chip's choice), by name. */
@@ -440,7 +465,7 @@ export function filterRows(
     const chips = filter.items.filter(isChipItem).filter(i => chipAvailable(model, type, i.chip));
     const cols = columnItems(filter)
         .map(item => ({ item, col: columnById(type, item.col) }))
-        .filter((x): x is { item: ColumnFilter; col: ColumnDef } => !!x.col && columnItemActive(x.item))
+        .filter((x): x is { item: ColumnFilter; col: ColumnDef } => !!x.col && columnOffered(x.col) && columnItemActive(x.item))
         .map(x => ({ ...x, kind: filterKindOf(x.col) }));
     const unionCols = type === 'persons' ? cols.filter(x => x.col.unionScoped) : [];
     const rowCols = type === 'persons' ? cols.filter(x => !x.col.unionScoped) : cols;
@@ -467,7 +492,11 @@ export function filterRows(
 
 /** The number of active filters (§8.1: "Filters (n)" counts chips and column filters). */
 export function activeFilterCount(model: TableModel, type: RowType, filter: TableFilter): number {
-    return filter.items.filter(i => (isChipItem(i) ? chipAvailable(model, type, i.chip) : !!columnById(type, i.col) && columnItemActive(i))).length;
+    return filter.items.filter(i => {
+        if (isChipItem(i)) return chipAvailable(model, type, i.chip);
+        const c = columnById(type, i.col);
+        return !!c && columnOffered(c) && columnItemActive(i);
+    }).length;
 }
 
 // ---------------------------------------------------------------------------
@@ -492,7 +521,13 @@ export function chipLabel(model: TableModel | null, item: ChipFilter | null, chi
     if (chip === 'gen' && item && (item.from !== undefined || item.to !== undefined)) {
         return t.chipGen(item.from === item.to ? num(item.from!) : `${item.from !== undefined ? num(item.from) : ''}–${item.to !== undefined ? num(item.to) : ''}`);
     }
-    return t.chip[chip];
+    if (chip.startsWith('line:')) {
+        const id = chip.slice('line:'.length);
+        const line = model?.ctx.research?.lines.lines.find(l => l.id === id);
+        return line ? `${line.id} ${line.name}` : id;
+    }
+    if (chip === 'xNew' && item) return t.res.newIn(t.res.newWindow[newWindowOf(item)]);
+    return t.chip[chip as QuickChipId];
 }
 
 /** A column filter's words (§8.1: the chip "Age at marriage ≤ 15"). */
@@ -529,7 +564,7 @@ export function filterSummary(model: TableModel, type: RowType, filter: TableFil
     const out: string[] = [];
     for (const i of filter.items) {
         if (isChipItem(i)) { if (chipAvailable(model, type, i.chip)) out.push(chipLabel(model, i, i.chip)); }
-        else if (columnItemActive(i) && columnById(type, i.col)) out.push(columnItemLabel(type, i));
+        else if (columnItemActive(i) && columnById(type, i.col) && columnOffered(columnById(type, i.col)!)) out.push(columnItemLabel(type, i));
     }
     if (searchQuery(search)) out.push(`“${search.trim()}”`);
     return out.join(' · ');
@@ -607,7 +642,7 @@ export function sortRows(
     model: TableModel, type: RowType, rows: readonly TableRow[], specs: readonly SortSpec[],
     unionOf?: (row: TableRow) => number,
 ): TableRow[] {
-    const cols = specs.map(s => ({ col: columnById(type, s.col), dir: s.dir === 'desc' ? -1 : 1 })).filter(x => !!x.col);
+    const cols = specs.map(s => ({ col: columnById(type, s.col), dir: s.dir === 'desc' ? -1 : 1 })).filter(x => !!x.col && columnOffered(x.col));
     if (!cols.length) return [...rows];
     collator = collatorFor(model.ctx.lang);
     const keyed = rows.map((row, i) => ({

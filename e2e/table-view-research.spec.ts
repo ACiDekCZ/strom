@@ -304,3 +304,148 @@ test.describe('trees without the research (§16.1)', () => {
         expect(await headOrder(page)).toEqual([...OVERVIEW.slice(0, -2), 'rSum', 'rConf', 'rHyp', ...OVERVIEW.slice(-2)]);
     });
 });
+
+/** The research's part of the chips' row (§16.5). */
+const rToggle = (page: Page) => page.locator('#table-container .tv-chips [data-rtoggle]');
+const rLabel = (page: Page) => page.locator('#table-container .tv-chips .tv-rlabel');
+const rChip = (page: Page, id: string) => page.locator(`#table-container .tv-chips .tv-rchip[data-rchip="${id}"]`);
+const status = (page: Page) => page.locator('#table-container .tv-status-count');
+const menuItem = (page: Page, label: string) => page.locator('.tv-menu .tv-menu-item', { hasText: label });
+
+const LINE_VIEW = ['name', 'rLine', 'gen', 'rSum', 'bDate', 'dDate', 'rConf', 'rAgent'];
+
+test.describe('research chips and views (§16.5)', () => {
+    test.use({ viewport: { width: 1440, height: 900 } });
+
+    test('the row keeps its chips and adds "Research ▾"; its menu; a choice opens the block', async ({ page }) => {
+        await openResearchTable(page);
+        await expect(status(page)).toHaveText('13 of 13 people');
+        // The general chips as in any research tree; the research's one chip after them.
+        const quick = await page.locator('#table-container .tv-chips .tv-chip[data-chip]').evaluateAll(els => els.map(el => (el as HTMLElement).dataset.chip));
+        expect(quick.every(id => !/^(r[A-Z]|x[A-Z]|line:|offLine)/.test(id ?? ''))).toBe(true);
+        await expect(rToggle(page)).toHaveText('Research ▾');
+        await expect(rLabel(page)).toHaveCount(0);
+        await rToggle(page).click();
+        const menu = page.locator('.tv-menu');
+        await expect(menu.locator('.tv-menu-heading')).toHaveText(['Signals', 'Lines', 'Exchange, sources and places', 'New from research']);
+        await expect(menu.locator('.tv-menu-foot')).toHaveText('A choice opens the Research block in the row.');
+        await expect(menuItem(page, 'G0001 Předci Karla Pivoňkovského')).toContainText('5');
+        // Not following: the agent's chip waits for the live research.
+        await expect(menuItem(page, 'Agent working / queued')).toHaveAttribute('aria-disabled', 'true');
+        await menuItem(page, 'Off the lines').click();
+        await expect(status(page)).toHaveText('5 of 13 people');
+        // The block: its label, the active chip first, the signals, the lines, "More ▾".
+        await expect(rLabel(page)).toHaveText('Research');
+        await expect(rToggle(page)).toBeHidden();
+        // The general chips give way first (down to three), then the block's last chips go into its "More ▾".
+        const ids = await page.locator('#table-container .tv-chips .tv-rchip').evaluateAll(els => els.map(el => (el as HTMLElement).dataset.rchip));
+        expect(ids).toEqual(['offLine', 'rWait', 'rConf', 'rQ', 'rAgent', 'line:G0001', 'line:G0002']);
+        const shown = await page.locator('#table-container .tv-chips .tv-rchip:not([hidden])').count();
+        expect(shown).toBeGreaterThanOrEqual(3);
+        const general = await page.locator('#table-container .tv-chips .tv-chip[data-chip]:not([hidden])').count();
+        expect(general).toBeGreaterThanOrEqual(3);
+        const over = await page.locator('#table-container .tv-chips').evaluate(el => el.scrollWidth - el.clientWidth);
+        expect(over).toBeLessThanOrEqual(1);
+        await expect(rChip(page, 'offLine')).toHaveText('✓ Off the lines · 5');
+        await expect(rChip(page, 'rAgent')).toHaveAttribute('aria-disabled', 'true');
+        // "More ▾": the other research chips and New from research.
+        await page.locator('#table-container .tv-chips [data-rmore]').click();
+        await expect(page.locator('.tv-menu .tv-menu-heading')).toHaveText(['More research chips', 'New from research']);
+        const hidden = await page.locator('#table-container .tv-chips .tv-rchip[hidden]').count();
+        if (hidden) await expect(page.locator('.tv-menu .tv-menu-item').first()).toBeVisible();
+        await expect(menuItem(page, 'Paused / postponed')).toBeVisible();
+        await menuItem(page, 'last 24 h').click();
+        await expect(rChip(page, 'xNew')).toHaveText('✓ New from research: last 24 h');
+        // Off again: without a research column or view the block folds back into one chip.
+        await rChip(page, 'xNew').click();
+        await rChip(page, 'offLine').click();
+        await expect(status(page)).toHaveText('13 of 13 people');
+        await expect(rToggle(page)).toHaveText('Research ▾');
+        await expect(rLabel(page)).toHaveCount(0);
+        await expect(changed(page)).toBeHidden();
+    });
+
+    test('the research\'s views after the built-in ones: a line, Off the lines, Research; not changed when opened', async ({ page }) => {
+        await openResearchTable(page);
+        await page.locator('#table-container .tv-view-btn').click();
+        const headings = page.locator('.tv-menu .tv-menu-heading');
+        await expect(headings).toHaveText(['Built-in', 'Research']);
+        await expect(page.locator('.tv-menu .tv-menu-item')).toContainText([
+            'Research', 'Line: G0001 Předci Karla Pivoňkovského', 'Line: G0002 Klikvové z Rebarborova', 'Off the lines', 'Exchange with research',
+        ]);
+        await menuItem(page, 'Line: G0001 Předci Karla Pivoňkovského').click();
+        expect(await headOrder(page)).toEqual(LINE_VIEW);
+        await expect(changed(page)).toBeHidden();
+        await expect(status(page)).toHaveText('5 of 13 people');
+        await expect(rLabel(page)).toBeVisible();
+        await expect(rChip(page, 'line:G0001')).toHaveText('✓ G0001 Předci Karla Pivoňkovského · 5');
+        await page.locator('#table-container .tv-view-btn').click();
+        await menuItem(page, 'Off the lines').click();
+        await expect(status(page)).toHaveText('5 of 13 people');
+        await expect(changed(page)).toBeHidden();
+        await page.locator('#table-container .tv-view-btn').click();
+        await page.locator('.tv-menu .tv-menu-item').filter({ hasText: /^Research$/ }).click();
+        expect(await headOrder(page)).toEqual(['name', 'rSum', 'rWait', 'rConf', 'rHyp', 'rAgent', 'rTasks', 'bDate', 'dDate']);
+        await expect(changed(page)).toBeHidden();
+    });
+
+    test('a tree without research: no research chip and no research views', async ({ page }) => {
+        await openApp(page);
+        await seedTree(page, PLAIN, 'Kvelden', 'a');
+        await openTable(page);
+        await expect(rToggle(page)).toHaveCount(0);
+        await expect(page.locator('#table-container .tv-chips .tv-rsep')).toHaveCount(0);
+        await page.locator('#table-container .tv-view-btn').click();
+        await expect(page.locator('.tv-menu .tv-menu-heading')).toHaveText(['Built-in']);
+    });
+});
+
+test.describe('research chips on a tablet (16p)', () => {
+    test.use({ viewport: { width: 900, height: 800 } });
+
+    test('the block stays one chip with the count of the active ones', async ({ page }) => {
+        await page.clock.setFixedTime(new Date('2026-11-10T12:00:00Z'));
+        await openApp(page);
+        await dropGed(page, GED);
+        await expect(card(page, 'Karel')).toBeVisible();
+        await page.evaluate(() => window.Strom.UI.setDisplayViewMode('table'));
+        await expect(page.locator('#table-container .tv-grid[role="treegrid"]')).toBeVisible();
+        await page.locator('#table-container .tv-view-btn').click();
+        await menuItem(page, 'Off the lines').click();
+        await expect(status(page)).toHaveText('5 of 13 people');
+        await expect(rLabel(page)).toHaveCount(0);
+        await expect(rToggle(page)).toHaveText('Research (1) ▾');
+        const over = await page.locator('#table-container .tv-chips').evaluate(el => el.scrollWidth - el.clientWidth);
+        expect(over).toBeLessThanOrEqual(1);
+    });
+});
+
+test.describe('research chips on a phone (16z)', () => {
+    test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+    test('the Filters sheet ends with the section Research; "More research (n)" opens the rest', async ({ page }) => {
+        await page.clock.setFixedTime(new Date('2026-11-10T12:00:00Z'));
+        await openApp(page);
+        await dropGed(page, GED);
+        await expect(card(page, 'Karel')).toBeVisible();
+        await page.locator('#bb-view-more').tap();
+        await page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: 'Table' }).tap();
+        await expect(status(page)).toHaveText('13 of 13 people');
+        await page.locator('#table-container .tv-filters-btn').tap();
+        const sheet = page.locator('.tv-fsheet');
+        await expect(sheet.locator('.tv-fs-section').last()).toHaveText('Research');
+        await expect(sheet.locator('label.tv-fs-row', { hasText: 'G0001 Předci Karla Pivoňkovského · 5' })).toBeVisible();
+        await expect(sheet.locator('input[data-chip="rAgent"]')).toBeDisabled();
+        await expect(sheet.locator('input[data-chip="xPaused"]')).toHaveCount(0);
+        await sheet.locator('.tv-fs-rmore').tap();
+        await expect(sheet.locator('input[data-chip="xPaused"]')).toBeVisible();
+        await sheet.locator('input[data-chip="offLine"]').check();
+        await expect(status(page)).toHaveText('5 of 13 people');
+        const rowH = await sheet.locator('label.tv-fs-row', { hasText: 'Off the lines' }).evaluate(el => el.getBoundingClientRect().height);
+        expect(rowH).toBeGreaterThanOrEqual(48);
+        await sheet.locator('.tv-fs-show').tap();
+        await expect(page.locator('#table-container .tv-filters-btn')).toHaveText('Filters (1)');
+        const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+        expect(over).toBeLessThanOrEqual(0);
+    });
+});
