@@ -69,9 +69,13 @@ export const searchMethods = uiModule({
             containerId: 'toolbar-search-picker',
             openOnFocus: true,
             onSelect: (personId) => {
-                TreeRenderer.setFocus(personId);
-                ZoomPan.centerOnPerson(personId);
-                ZoomPan.highlightPerson(personId);
+                // The Table view selects the person's row and scrolls to it (the focus stays).
+                if (TreeRenderer.getViewMode() === 'table') this.revealTablePerson(personId);
+                else {
+                    TreeRenderer.setFocus(personId);
+                    ZoomPan.centerOnPerson(personId);
+                    ZoomPan.highlightPerson(personId);
+                }
                 // Clear picker after selection. clear() empties the input
                 // programmatically — no 'input' event fires — so the live
                 // match-dimming must be dropped here, or it sticks around

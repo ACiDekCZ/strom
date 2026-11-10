@@ -9357,6 +9357,78 @@
         .tv-bar-spacer { flex: 1 1 auto; }
         .tv-bar-row2 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 44px; padding: 0 16px; box-sizing: border-box; border-top: 1px solid var(--divider); }
         .tv-bar-row2[hidden], .tv-slot:empty { display: none; }
+        /* §8.3 search in the bar; §8.1 the quick chips in row 2 (one line; what does not fit goes into More filters). */
+        .tv-search { display: flex; align-items: center; gap: 8px; }
+        .tv-search-q {
+            width: 240px; height: 34px; padding: 0 10px; box-sizing: border-box; border: 1px solid var(--border); border-radius: var(--r-md);
+            background: var(--surface); color: var(--text); font: inherit; font-size: 13px;
+        }
+        .tv-search-q:focus { outline: none; border-color: var(--primary); box-shadow: var(--shadow-focus); }
+        .tv-matches { font-size: 12px; color: var(--text-light); white-space: nowrap; font-variant-numeric: tabular-nums; }
+        .tv-matches:empty { display: none; }
+        .tv-filters-btn { display: none; }
+        .tv-chips { flex-wrap: nowrap; overflow: hidden; }
+        .tv-chip {
+            flex: none; display: inline-flex; align-items: center; height: 28px; padding: 0 11px; box-sizing: border-box; white-space: nowrap;
+            border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text-light);
+            font: inherit; font-size: 12.5px; cursor: pointer;
+        }
+        .tv-chip[hidden] { display: none; }
+        .tv-chip.is-active { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); font-weight: 600; }
+        .tv-chip[aria-disabled="true"] { color: var(--text-ghost); cursor: default; }
+        .tv-chip--col { padding: 0 2px 0 0; cursor: default; }
+        .tv-chip-edit, .tv-chip-x { height: 100%; border: none; background: none; color: inherit; font: inherit; cursor: pointer; }
+        .tv-chip-edit { padding: 0 4px 0 11px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .tv-chip-x { width: 24px; padding: 0; font-size: 15px; border-radius: 999px; }
+        .tv-chips-clear {
+            flex: none; margin-left: auto; padding: 0 2px; border: none; background: none; color: var(--primary);
+            font: inherit; font-size: 12.5px; text-decoration: underline; cursor: pointer; white-space: nowrap; order: 1000;
+        }
+        /* §8.2 a filter's panel under its head or chip. */
+        .tv-fpanel {
+            position: fixed; z-index: 3000; width: 280px; max-width: calc(100vw - 16px); padding: 10px 0 0; box-sizing: border-box;
+            background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--r-md);
+            box-shadow: var(--shadow-lg); font-size: 13px;
+        }
+        .tv-fpanel-title { padding: 0 14px 6px; font-weight: 600; }
+        .tv-fpanel-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--divider); }
+        .tv-fpanel-cancel, .tv-fpanel-apply {
+            height: 32px; padding: 0 14px; border-radius: var(--r-md); font: inherit; font-weight: 600; cursor: pointer;
+            border: 1px solid var(--border); background: var(--surface); color: var(--text);
+        }
+        .tv-fpanel-apply { border-color: var(--primary); background: var(--primary); color: var(--on-primary); }
+        .tv-ff { padding: 0 14px 4px; }
+        .tv-fsheet .tv-ff { padding: 8px 16px; }
+        .tv-ff-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 4px 0; }
+        .tv-ff-lead { font-size: 12px; color: var(--text-light); }
+        .tv-ff-range { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-light); }
+        .tv-ff select, .tv-ff input[type="text"], .tv-ff input[type="number"] {
+            height: 32px; padding: 0 8px; box-sizing: border-box; border: 1px solid var(--border); border-radius: var(--r-sm);
+            background: var(--surface); color: var(--text); font: inherit; font-size: 13px; min-width: 0;
+        }
+        .tv-ff input[type="text"] { flex: 1 1 120px; }
+        .tv-ff input[type="number"] { width: 84px; }
+        .tv-ff-values { max-height: 220px; overflow-y: auto; overscroll-behavior: contain; padding: 2px 0; }
+        .tv-ff-check { display: flex; align-items: center; gap: 8px; min-height: 30px; cursor: pointer; }
+        .tv-ff-check input { flex: none; width: 16px; height: 16px; margin: 0; accent-color: var(--primary); }
+        .tv-ff-check span:first-of-type { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .tv-ff-n { flex: none; font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+        .tv-ff-sep { height: 1px; margin: 6px 0; background: var(--divider); }
+        /* 8h the phone's Filters sheet: 48 px rows. */
+        .tv-fs-back { width: 44px; height: 44px; margin-left: -8px; border: none; background: none; color: var(--text); font-size: 22px; cursor: pointer; }
+        .tv-fs-back[hidden] { display: none; }
+        .tv-fs-section { padding: 12px 16px 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent-text); }
+        .tv-fs-row {
+            display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 0 16px; box-sizing: border-box;
+            border: none; border-top: 1px solid var(--divider); background: none; color: var(--text); font: inherit; font-size: 15px; text-align: left; cursor: pointer;
+        }
+        .tv-fs-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .tv-fs-row.is-active .tv-fs-label { color: var(--primary); font-weight: 600; }
+        .tv-fs-chev { flex: none; color: var(--text-light); }
+        .tv-fs-more { color: var(--primary); font-weight: 600; }
+        .tv-fs-x { flex: none; width: 44px; height: 44px; margin-right: -12px; border: none; background: none; color: var(--text-light); font-size: 20px; cursor: pointer; }
+        .tv-fs-cancel, .tv-fs-clear { font-size: 15px; }
+        .tv-fs-clear[hidden] { display: none; }
         /* Row type: a segmented radio group (§2), "People 38". */
         .tv-rowtype { display: inline-flex; border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; background: var(--surface-2); }
         .tv-rowtype .segment-btn { padding: 0 14px; height: 34px; font-size: 13px; white-space: nowrap; border-radius: 0; }
@@ -9397,9 +9469,28 @@
         .tv-headcell { font-size: 12px; font-weight: 600; color: var(--text-light); white-space: normal; line-height: 1.2; }
         .tv-headcell .tv-cell-text { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
         .tv-headcell.is-computed { color: var(--text-faint); }
-        .tv-sort-mark { flex: none; margin-left: 4px; color: var(--text); }
+        .tv-sort-mark { flex: none; margin-left: 4px; color: var(--primary); font-weight: 700; font-variant-numeric: tabular-nums; }
         .tv-covcell { font-size: 11px; color: var(--text-faint); }
+        .tv-covcell.is-clickable { cursor: pointer; }
         .tv-body { position: relative; }
+        /* §8.2 a column with a filter; §8.3 the search's matches. */
+        .tv-filter-mark {
+            flex: none; margin-left: 6px; padding: 1px 5px; border-radius: var(--r-sm); font-size: 10.5px; font-weight: 600; line-height: 1.3;
+            color: var(--primary); background: var(--primary-soft);
+        }
+        mark.tv-hit { background: var(--help-mark-hit); color: inherit; border-radius: 2px; padding: 0; }
+        /* §13c/§13d nothing passes the filter: under the head, across the visible width. */
+        .tv-nomatch {
+            position: sticky; left: 0; box-sizing: border-box; max-width: 100%; padding: 40px 16px; text-align: center;
+            display: flex; flex-direction: column; align-items: center; gap: 8px; white-space: normal;
+        }
+        .tv-nomatch[hidden] { display: none; }
+        .tv-nomatch-title { font-family: var(--font-serif); font-size: 18px; font-weight: 600; color: var(--text); }
+        .tv-nomatch-text { max-width: 520px; font-size: 13px; color: var(--text-light); overflow-wrap: anywhere; }
+        .tv-nomatch-clear {
+            margin-top: 6px; height: 34px; padding: 0 16px; border: 1px solid var(--primary); border-radius: var(--r-md);
+            background: var(--surface); color: var(--primary); font: inherit; font-weight: 600; cursor: pointer;
+        }
         .tv-body .tv-row {
             position: absolute; left: 0; height: var(--tv-row-h);
             background: var(--surface); border-bottom: 1px solid var(--divider);
@@ -9676,6 +9767,13 @@
             .tv-bub-btn:hover { border-color: var(--primary); }
             .tv-bub-link:hover { text-decoration: underline; }
             .tv-bub-close:hover { color: var(--text); }
+            .tv-chip:not([aria-disabled="true"]):not(.tv-chip--col):hover, .tv-filters-btn:hover { border-color: var(--primary); }
+            .tv-chip-x:hover, .tv-chip-edit:hover { background: var(--surface-2); }
+            .tv-chips-clear:hover { color: var(--primary-dark); }
+            .tv-fpanel-cancel:hover { border-color: var(--primary); }
+            .tv-fpanel-apply:hover, .tv-nomatch-clear:hover { background: var(--primary-dark); border-color: var(--primary-dark); color: var(--on-primary); }
+            .tv-headcell[data-col]:not(.tv-bandhead) { cursor: pointer; }
+            .tv-covcell.is-clickable:hover { color: var(--primary); text-decoration: underline; }
         }
         /* Tablet: no top tabs; the table keeps the desktop rows. Touch: taller rows. */
         @media (pointer: coarse) {
@@ -9692,6 +9790,15 @@
             .tv-toggle { width: 44px; margin-left: -10px; margin-right: -8px; }
             .tv-head-all { height: 100%; }
             .tv-bub-btn, .tv-bub-link { height: 44px; }
+            .tv-search-q { height: 44px; font-size: 16px; }
+            .tv-chips { min-height: 52px; }
+            .tv-chip { height: 36px; position: relative; }
+            .tv-chip:not(.tv-chip--col)::after { content: ''; position: absolute; inset: -4px 0; }
+            .tv-chip-x { width: 40px; }
+            .tv-chips-clear { min-height: 44px; }
+            .tv-fpanel-cancel, .tv-fpanel-apply, .tv-nomatch-clear { height: 44px; }
+            .tv-ff select, .tv-ff input[type="text"], .tv-ff input[type="number"] { height: 44px; font-size: 16px; }
+            .tv-ff-check { min-height: 44px; }
         }
         /* Phone (≤ 640) and a phone held sideways: the row type as a button with a sheet, 40 px rows. */
         @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
@@ -9704,6 +9811,22 @@
             .tv-group-toggle, .tv-resize { display: none; }
             .tv-groupcell { cursor: default; }
             .tv-status-checks { font-size: 11.5px; }
+            /* 8h the search and the Filters button on a line of their own; no chips' row. */
+            .tv-slot-search { order: 10; flex: 1 1 0; min-width: 0; }
+            .tv-search { width: 100%; }
+            .tv-search-q { width: 100%; flex: 1 1 auto; height: 40px; font-size: 16px; }
+            .tv-filters-btn {
+                order: 11; display: inline-flex; align-items: center; flex: none; height: 40px; padding: 0 12px;
+                border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text);
+                font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap;
+            }
+            .tv-filters-btn.is-active { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); }
+            .tv-bar-row1::after { content: ''; order: 9; flex-basis: 100%; height: 0; }
+            .tv-chips { display: none; }
+            .tv-ff select, .tv-ff input[type="text"], .tv-ff input[type="number"] { height: 44px; font-size: 16px; }
+            .tv-ff-check { min-height: 48px; }
+            .tv-ff-values { max-height: none; }
+            .tv-nomatch { padding: 28px 12px; }
         }
         .map-canvas { position: absolute; inset: 0; }
         .map-tiles, .map-markers, .map-lines { position: absolute; inset: 0; }

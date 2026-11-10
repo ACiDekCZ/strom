@@ -26,17 +26,23 @@ import { isPhoneBar } from '../../breakpoints.js';
 import { strings, getCurrentLanguage, type Language } from '../../strings.js';
 import { uiModule } from '../module.js';
 import { columnById, columnLabel, columnNote, type SortSpec } from './table-columns.js';
-import { sortRows } from './table-filter.js';
+import {
+    CHECK_CHIPS, chipItem, clearFilter, columnItem, filterRows, filterSummary, isChipItem, removeColumnFilter, searchQuery, setChip,
+    setColumnFilter, setEmptyFilter, sortRows, columnItemActive, type ChipId, type FilterResult, type TableFilter,
+} from './table-filter.js';
+import { chipChoiceForm, closeFilterPanel, columnFilterForm, FilterBar, FilterSheet, openFilterPanel, type FilterBarState } from './table-filterbar.js';
 import { buildTableModel, modelIsCurrent, ROW_TYPES, rowKey, rowsOf, type RowType, type TableModel, type TableRow } from './table-model.js';
 import { TableGrid } from './table-grid.js';
 import { createBar, createStatus, updateBar, updateStatus } from './table-bar.js';
 import {
     canMoveColumn, canPinColumn, catalogColumns, displayColumns, hideColumn, lockedColumn, moveColumnBy, moveColumnRun, moveColumnTo,
-    normalizeColumns, pinColumn, resetColumns, setColumnWidth, setGroupCollapsed, setGroupShown, showColumn, sortAdd, sortOnly,
-    tableStateFor, unpinColumn, type DisplayColumns, type RowTypeState,
+    filterChanged, normalizeColumns, pinColumn, resetColumns, setColumnWidth, setGroupCollapsed, setGroupShown, showColumn, sortAdd, sortClick,
+    sortOnly, sortShiftClick, tableStateFor, unpinColumn, type DisplayColumns, type RowTypeState,
 } from './table-state.js';
 import { ColumnPanel } from './table-colpanel.js';
-import { anyExpanded, buildLines, coverageUnionsOf, hasMultiUnions, setAllExpanded, setExpanded, type UnionPredicate } from './table-subrows.js';
+import {
+    anyExpanded, buildLines, coverageUnionsOf, hasMultiUnions, setAllExpanded, setExpanded, sortUnionOf, type UnionPredicate,
+} from './table-subrows.js';
 import { columnCoverage, coverageCell, coverageLabel, type CoverageCell } from './table-coverage.js';
 import type { ColumnDef } from './table-columns.js';
 import { closeHeadMenu, headMenuItems, openHeadMenu, SEP, type HeadMenuItem } from './table-headmenu.js';
@@ -61,13 +67,20 @@ interface Mounted {
     drawn: string;
     /** The columns as last drawn (maps drawn positions to the state's). */
     display: DisplayColumns | null;
+    /** Search and the filter's chips (§8). */
+    filters: FilterBar;
+    /** The filter's state as last drawn (the phone's sheet follows it). */
+    filterState: FilterBarState | null;
 }
+
+/** The phone's Filters sheet while it is open (8h). */
+let filterSheet: { sheet: FilterSheet; overlay: HTMLElement } | null = null;
 
 /** The open Columns panel; on a phone it sits in a sheet (`overlay`). */
 let panel: { panel: ColumnPanel; overlay: HTMLElement | null } | null = null;
 
 let model: TableModel | null = null;
-let sorted: { model: TableModel; type: RowType; sort: string; rows: TableRow[] } | null = null;
+let view: { model: TableModel; type: RowType; key: string; result: FilterResult } | null = null;
 let mounted: Mounted | null = null;
 /** The coverage row's cells (§6.1) for the rows last drawn; computed when a column is first drawn. */
 let coverage: { rows: readonly TableRow[]; cells: Map<string, CoverageCell> } | null = null;
@@ -130,14 +143,24 @@ function treeKey(): string {
     return DataManager.getCurrentTreeId() ?? '';
 }
 
-function sortedRows(m: TableModel, type: RowType, sort: readonly SortSpec[]): TableRow[] {
-    // Sorted by a column of the findings: sorted again when they change (else the order stays, §13i).
-    const byChecks = sort.some(s => CHECK_COLUMNS.includes(s.col));
-    const key = JSON.stringify(sort) + (byChecks ? `|${m.ctx.checks?.version ?? 0}` : '');
-    if (sorted && sorted.model === m && sorted.type === type && sorted.sort === key) return sorted.rows;
-    const rows = sortRows(m, type, rowsOf(m, type), sort);
-    sorted = { model: m, type, sort: key, rows };
-    return rows;
+/**
+ * The rows shown (§8): filtered and searched, then sorted (a union column by
+ * each person's first passing union, §3.3). Kept while the model, the row
+ * type, the filter, the search (and the columns it looks in) and the sort
+ * stay; sorted or filtered by the findings, again when they change (else the
+ * order stays, §13i).
+ */
+function viewRows(m: TableModel, type: RowType, filter: TableFilter, search: string, sort: readonly SortSpec[], columns: readonly ColumnDef[]): FilterResult {
+    const q = searchQuery(search);
+    const byChecks = sort.some(s => CHECK_COLUMNS.includes(s.col))
+        || filter.items.some(i => isChipItem(i) && CHECK_CHIPS.includes(i.chip));
+    const key = JSON.stringify([filter, q, q ? columns.map(c => c.id) : 0, sort, byChecks ? m.ctx.checks?.version ?? 0 : 0]);
+    if (view && view.model === m && view.type === type && view.key === key) return view.result;
+    const f = filterRows(m, type, rowsOf(m, type), filter, q ? { query: q, columns } : undefined);
+    const rows = sort.length ? sortRows(m, type, f.rows, sort, f.pass ? sortUnionOf(f.pass) : undefined) : f.rows;
+    const result = { rows, pass: f.pass };
+    view = { model: m, type, key, result };
+    return result;
 }
 
 export const tableMethods = uiModule({
@@ -160,8 +183,11 @@ export const tableMethods = uiModule({
 
         if (!mounted || mounted.container !== container || mounted.lang !== lang || !container.contains(mounted.grid.el)) {
             this.closeTableColumns(false);
+            this.closeTableFilters();
             closeHeadMenu();
+            closeFilterPanel();
             mounted?.grid.destroy();
+            mounted?.filters.destroy();
             container.innerHTML = '';
             const bar = createBar({
                 onRowType: (t) => this.setTableRowType(t),
@@ -188,6 +214,14 @@ export const tableMethods = uiModule({
                 }),
                 onToggleGroup: (group, collapse) => this.changeTableColumns(st => setGroupCollapsed(st, group, collapse)),
                 onHeadMenu: (colId, anchor) => this.showTableHeadMenu(colId, anchor),
+                onHeadSort: (colId, add) => this.changeTableColumns(st => (add ? sortShiftClick(st, colId) : sortClick(st, colId))),
+                onCoverageCell: (colId, anchor) => this.showTableCoverageMenu(colId, anchor),
+                // §13c: the search counts among what applies, so it goes too.
+                onClearFilters: () => this.changeTableFilter((f, st) => {
+                    const searched = st.search !== '';
+                    st.search = '';
+                    return clearFilter(f) || searched;
+                }, true),
                 onResize: (colId, width) => this.changeTableColumns(st => setColumnWidth(st, colId, width)),
                 onMoveColumn: (colId, offset) => this.changeTableColumns((st, t) => moveColumnBy(t, st, colId, offset)),
                 onMoveGroup: (start, end, before) => this.changeTableColumns((st, t) => {
@@ -217,21 +251,41 @@ export const tableMethods = uiModule({
             colsBtn.setAttribute('aria-expanded', 'false');
             colsBtn.addEventListener('click', () => (panel ? this.closeTableColumns(true) : this.showTableColumns()));
             bar.querySelector('.tv-slot-cols')!.appendChild(colsBtn);
+            const filters = new FilterBar(bar, {
+                onSearch: (text) => this.changeTableFilter((_f, st) => {
+                    if (st.search === text) return false;
+                    const was = searchQuery(st.search);
+                    st.search = text;
+                    // Below two letters the search does nothing: no new draw.
+                    return was !== searchQuery(text);
+                }),
+                onChip: (chip, on) => this.changeTableFilter(f => setChip(f, chip, on)),
+                onChoiceChip: (chip, anchor) => this.showTableChipChoice(chip, anchor),
+                onEditColumn: (col, anchor) => this.showTableColumnFilter(col, anchor),
+                onRemoveColumn: (col) => this.changeTableFilter(f => removeColumnFilter(f, col)),
+                onClear: () => this.changeTableFilter(f => clearFilter(f), true),
+                onSheet: () => this.showTableFilters(),
+            });
             container.append(bar, grid.el, status);
-            mounted = { container, lang, bar, grid, status, colsBtn, drawn: '', display: null };
+            mounted = { container, lang, bar, grid, status, colsBtn, drawn: '', display: null, filters, filterState: null };
         }
 
         const counts = { persons: m.persons.length, unions: m.unions.length } as Record<RowType, number>;
-        const rows = sortedRows(m, type, st.sort);
-        // The union filters (§3.3) come with part C2's filter; until then every union passes.
-        const pass: UnionPredicate | null = null;
-        const persons = type === 'persons';
-        const lines = persons ? buildLines(rows, { collapse: st.unions, pass, revealed: new Set(st.revealedUnions) }) : undefined;
-        const unionsButton = persons && hasMultiUnions(rows) ? (anyExpanded(st.unions, rows) ? 'collapse' : 'expand') : null;
         const phone = isPhoneBar();
         normalizeColumns(type, st);
         const display = displayColumns(type, st, phone);
         mounted.display = display;
+        const { rows, pass } = viewRows(m, type, st.filter, st.search, st.sort, display.columns);
+        const persons = type === 'persons';
+        const lines = persons ? buildLines(rows, { collapse: st.unions, pass, revealed: new Set(st.revealedUnions) }) : undefined;
+        const unionsButton = persons && hasMultiUnions(rows) ? (anyExpanded(st.unions, rows) ? 'collapse' : 'expand') : null;
+        const summary = filterSummary(m, type, st.filter, st.search);
+        const filterState: FilterBarState = {
+            model: m, type, filter: st.filter, search: st.search, shown: rows.length, checking: !index || !!checks?.running, phone,
+        };
+        mounted.filterState = filterState;
+        mounted.filters.update(filterState);
+        filterSheet?.sheet.update(filterState);
         const total = catalogColumns(type).length;
         mounted.colsBtn.innerHTML = `<span class="tv-cols-label">${strings.table.columns}</span>`
             + `<span class="tv-cols-count" aria-hidden="true">${st.columns.length}</span>`;
@@ -245,6 +299,11 @@ export const tableMethods = uiModule({
         mounted.grid.setInput({
             model: m, type, rows, columns: display.columns, widths: display.widths, pinned: display.pinned, sort: st.sort, homeId,
             bands: display.bands, coverageRow: st.coverageRow, editableHead: !phone,
+            hit: searchQuery(st.search),
+            filtered: new Set(st.filter.items.filter((i): i is Exclude<typeof i, { chip: ChipId }> => !isChipItem(i) && columnItemActive(i)).map(i => i.col)),
+            noMatch: !rows.length && summary
+                ? { title: strings.table.noMatch, text: strings.table.applies(summary), action: strings.table.clearFilters }
+                : null,
             lines, subRows: persons, unionsButton,
             coverage: st.coverageRow ? (col) => coverageOf(m, type, rows, col, pass) : undefined,
             selected: st.selected,
@@ -505,6 +564,11 @@ export const tableMethods = uiModule({
             sortAsc: change(s => sortOnly(s, colId, 'asc')),
             sortDesc: change(s => sortOnly(s, colId, 'desc')),
             sortAdd: change(s => sortAdd(s, colId)),
+            filter: {
+                open: () => this.showTableColumnFilter(colId, anchor),
+                onlyEmpty: () => this.changeTableFilter(f => setEmptyFilter(f, col, 'empty')),
+                onlyFilled: () => this.changeTableFilter(f => setEmptyFilter(f, col, 'filled')),
+            },
             pin: change((s, t) => pinColumn(t, s, colId)),
             unpin: change((s, t) => unpinColumn(t, s, colId)),
             move: (dir) => this.changeTableColumns((s, t) => moveColumnBy(t, s, colId, dir)),
@@ -526,6 +590,145 @@ export const tableMethods = uiModule({
         this.noteBottomSheetTrigger();
         this.hideBottomSheet();
         this.presentMenuSheet(title, blocks.filter(b => b.rows.length).map((b, i) => (i ? { ...b, divider: true } : b)), note ? { subtitle: note } : {});
+    },
+
+    /**
+     * Change the shown row type's filter or search (§8) and draw again when
+     * something changed; the unions shown on request are hidden again (§3.3).
+     * `toTop`: the rows start from the top (Clear filters).
+     */
+    changeTableFilter(change: (filter: TableFilter, st: RowTypeState) => boolean | void, toTop = false): void {
+        const state = tableStateFor(treeKey());
+        const st = state.types[state.rowType];
+        if (change(st.filter, st) === false) return;
+        filterChanged(st);
+        if (toTop) st.top = 0;
+        const el = document.getElementById('table-container');
+        if (el && TreeRenderer.getViewMode() === 'table') this.renderTableView(el);
+    },
+
+    /** A column's filter (8d): a panel under the head or its chip; on a phone a sheet. */
+    showTableColumnFilter(colId: string, anchor: HTMLElement): void {
+        if (!model) return;
+        const state = tableStateFor(treeKey());
+        const type = state.rowType;
+        const col = columnById(type, colId);
+        if (!col) return;
+        const form = columnFilterForm(model, type, col, columnItem(state.types[type].filter, colId));
+        const apply = (): void => this.changeTableFilter(f => setColumnFilter(f, form.read()));
+        this.showTableFilterForm(anchor, columnLabel(col), form.el, apply);
+    },
+
+    /** The Family line or Generation chip's choice (8b). */
+    showTableChipChoice(chip: ChipId, anchor: HTMLElement): void {
+        if (!model) return;
+        const state = tableStateFor(treeKey());
+        const form = chipChoiceForm(model, chip, chipItem(state.types[state.rowType].filter, chip));
+        const apply = (): void => this.changeTableFilter(f => {
+            const choice = form.read();
+            return setChip(f, chip, !!choice, choice ?? {});
+        });
+        this.showTableFilterForm(anchor, strings.table.chip[chip], form.el, apply);
+    },
+
+    /** A filter's form: a panel on a computer and a tablet; a sheet with Cancel · Apply on a phone. */
+    showTableFilterForm(anchor: HTMLElement, title: string, form: HTMLElement, apply: () => void): void {
+        closeHeadMenu();
+        if (!isPhoneBar()) {
+            openFilterPanel(anchor, title, form, apply);
+            return;
+        }
+        const t = strings.table;
+        const el = document.createElement('div');
+        el.className = 'tv-colpanel tv-colpanel--sheet bottom-sheet tv-fsheet';
+        el.setAttribute('role', 'dialog');
+        el.setAttribute('aria-modal', 'true');
+        el.setAttribute('aria-label', t.filterOf(title));
+        const head = document.createElement('div');
+        head.className = 'tv-cp-head';
+        head.innerHTML = `<h2 class="tv-cp-title"></h2>`;
+        head.querySelector('h2')!.textContent = title;
+        const body = document.createElement('div');
+        body.className = 'tv-cp-list tv-fs-body';
+        body.appendChild(form);
+        const foot = document.createElement('div');
+        foot.className = 'tv-cp-foot';
+        foot.innerHTML = '<button type="button" class="link-button tv-cp-reset tv-fs-cancel"></button><button type="button" class="primary tv-cp-done tv-fs-apply"></button>';
+        foot.querySelector('.tv-fs-cancel')!.textContent = t.cancel;
+        foot.querySelector('.tv-fs-apply')!.textContent = t.apply;
+        foot.querySelector('.tv-fs-cancel')!.addEventListener('click', () => this.hideBottomSheet());
+        foot.querySelector('.tv-fs-apply')!.addEventListener('click', () => { this.hideBottomSheet(); apply(); });
+        el.append(head, body, foot);
+        this.showTableSheet(el);
+        el.querySelector<HTMLElement>('input:not([type="checkbox"]), select, input')?.focus({ preventScroll: true });
+    },
+
+    /** A coverage cell (§6.1): only empty / only filled as the column's filter. */
+    showTableCoverageMenu(colId: string, anchor: HTMLElement): void {
+        const state = tableStateFor(treeKey());
+        const col = columnById(state.rowType, colId);
+        if (!col) return;
+        const t = strings.table;
+        const empty = (): void => this.changeTableFilter(f => setEmptyFilter(f, col, 'empty'));
+        const filled = (): void => this.changeTableFilter(f => setEmptyFilter(f, col, 'filled'));
+        if (!isPhoneBar()) {
+            openHeadMenu(anchor, columnLabel(col), '', [
+                { id: 'onlyEmpty', label: t.onlyEmpty, icon: '', run: empty },
+                { id: 'onlyFilled', label: t.onlyFilled, icon: '', run: filled },
+            ]);
+            return;
+        }
+        this.noteBottomSheetTrigger();
+        this.hideBottomSheet();
+        this.presentMenuSheet(columnLabel(col), [{ rows: [{ label: t.onlyEmpty, run: empty }, { label: t.onlyFilled, run: filled }] }]);
+    },
+
+    /** The phone's Filters sheet (8h): every change applies at once; "Show n people" closes it. */
+    showTableFilters(): void {
+        if (!mounted?.filterState || filterSheet) return;
+        const sheet = new FilterSheet({
+            onChip: (chip, on) => this.changeTableFilter(f => setChip(f, chip, on)),
+            onChoice: (chip, choice) => this.changeTableFilter(f => setChip(f, chip, !!choice, choice ?? {})),
+            onRemoveColumn: (col) => this.changeTableFilter(f => removeColumnFilter(f, col)),
+            onClear: () => this.changeTableFilter(f => clearFilter(f), true),
+            onClose: () => this.closeTableFilters(),
+        });
+        sheet.update(mounted.filterState);
+        this.noteBottomSheetTrigger();
+        this.hideBottomSheet();
+        const overlay = document.createElement('div');
+        overlay.className = 'bottom-sheet-overlay tv-colpanel-overlay';
+        overlay.appendChild(sheet.el);
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) this.closeTableFilters(); });
+        document.body.appendChild(overlay);
+        this.bottomSheet = overlay;
+        this.bottomSheetOnClose = () => { if (filterSheet?.overlay === overlay) filterSheet = null; };
+        filterSheet = { sheet, overlay };
+        requestAnimationFrame(() => overlay.classList.add('active'));
+        sheet.focusFirst();
+    },
+
+    closeTableFilters(): void {
+        if (!filterSheet) return;
+        const open = filterSheet;
+        filterSheet = null;
+        if (this.bottomSheet === open.overlay) this.hideBottomSheet();
+        else open.overlay.remove();
+    },
+
+    /**
+     * The app's person search in the table (§8.3): the person's row is
+     * selected and scrolled to (the People table); the diagram's focus stays.
+     */
+    revealTablePerson(personId: string): void {
+        const state = tableStateFor(treeKey());
+        state.rowType = 'persons';
+        const key = `p:${personId}`;
+        state.types.persons.selected = key;
+        const el = document.getElementById('table-container');
+        if (!el || TreeRenderer.getViewMode() !== 'table') return;
+        this.renderTableView(el);
+        mounted?.grid.revealKey(key);
     },
 
     /** Switch the table's rows (§2); each type keeps its own state. */
