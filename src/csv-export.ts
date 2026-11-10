@@ -18,7 +18,7 @@ const SEP = ';';
  * from foreign files, so such cells get a leading apostrophe and are shown as
  * text. Plain numbers (e.g. "-5") cannot be formulas and stay untouched.
  */
-function neutralizeFormula(value: string): string {
+export function neutralizeFormula(value: string): string {
     if (!/^[=+\-@\t\r]/.test(value)) return value;
     if (/^[+-]?\d+([.,]\d+)?$/.test(value)) return value;
     return `'${value}`;
