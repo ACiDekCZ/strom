@@ -145,7 +145,7 @@ test.describe('desktop (1440)', () => {
         const panel = page.locator('.tv-fpanel.tv-xpanel');
         await expect(panel).toBeVisible();
         expect(Math.round((await panel.boundingBox())!.width)).toBe(380);
-        await expect(panel.locator('.tv-xopt')).toHaveText(['●CSV · for Excel and Google Sheets', '●Everything shown · 5 people']);
+        await expect(panel.locator('.tv-xopt')).toHaveText(['●CSV · for Excel and Google Sheets', '○XLSX · groups, frozen panes, check colours', '●Everything shown · 5 people']);
         await expect(panel.locator('.tv-xfile')).toHaveText('File: Oskvelt_Overview_2026-06-15.csv');
         await expect(panel.locator('.tv-fpanel-cancel')).toHaveCount(0);
         const [download] = await Promise.all([

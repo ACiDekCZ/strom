@@ -7,7 +7,7 @@
  * Discard; nothing is saved into the tree. On a phone the button alone (a
  * dot in it when changed); its sheet carries the rest (table-ui.ts).
  *
- * The forms of the view name (§9.3) and of the CSV export (§11.1) are built
+ * The forms of the view name (§9.3) and of the export (§11.1, §11.3) are built
  * here; table-ui.ts shows them as a panel or a sheet.
  */
 
@@ -111,29 +111,72 @@ export function viewNameForm(name: string): { el: HTMLElement; read(): string; i
     };
 }
 
+/** The export's formats (§11.1: CSV in P1, XLSX in P2, §11.3). */
+export type ExportFormat = 'csv' | 'xlsx';
+
 export interface ExportSummary {
     /** People or unions written. */
     items: number;
     /** Columns written. */
     columns: number;
-    file: string;
+    /** The file's name per format. */
+    files: Record<ExportFormat, string>;
 }
 
-/** The Export form (11a): the format, the rows, the file name and what goes in (P1: CSV of everything shown). */
-export function exportForm(type: RowType, sum: ExportSummary): HTMLElement {
+/** The Download button's label of a format. */
+export function exportDownloadLabel(format: ExportFormat): string {
+    return format === 'xlsx' ? strings.table.exportDownloadXlsx : strings.table.exportDownload;
+}
+
+/**
+ * The Export form (11a, 14d): the format (CSV · XLSX, a radio group: click,
+ * tap, arrows), the rows, the file name and what goes in. A change of the
+ * format updates the file name here and calls `onFormat` (the panel's button).
+ */
+export function exportForm(type: RowType, sum: ExportSummary, format: ExportFormat, onFormat: (f: ExportFormat) => void): HTMLElement {
     const t = strings.table;
     const k = ROW_KEY[type];
     const el = document.createElement('div');
     el.className = 'tv-xform';
+    const pick = (f: ExportFormat, label: string): string => {
+        const on = f === format;
+        return `<button type="button" class="tv-xopt tv-xopt-pick" role="radio" data-format="${f}" aria-checked="${on}" tabindex="${on ? 0 : -1}">`
+            + `<span class="tv-xopt-dot" aria-hidden="true">${on ? '●' : '○'}</span><span>${esc(label)}</span></button>`;
+    };
     const opt = (label: string): string => '<div class="tv-xopt" role="radio" aria-checked="true">'
         + `<span class="tv-xopt-dot" aria-hidden="true">●</span><span>${esc(label)}</span></div>`;
     el.innerHTML = `<div class="tv-xlab" id="tv-xf-format">${esc(t.exportFormat)}</div>`
-        + `<div role="radiogroup" aria-labelledby="tv-xf-format">${opt(t.exportCsv)}</div>`
+        + `<div class="tv-xformats" role="radiogroup" aria-labelledby="tv-xf-format">${pick('csv', t.exportCsv)}${pick('xlsx', t.exportXlsx)}</div>`
         + '<div class="tv-xsep" role="separator"></div>'
         + `<div class="tv-xlab" id="tv-xf-rows">${esc(t.exportRows)}</div>`
         + `<div role="radiogroup" aria-labelledby="tv-xf-rows">${opt(t.exportAll[k](sum.items))}</div>`
         + '<div class="tv-xsep" role="separator"></div>'
-        + `<p class="tv-xfile">${esc(t.exportFile(sum.file))}</p>`
+        + `<p class="tv-xfile">${esc(t.exportFile(sum.files[format]))}</p>`
         + `<p class="tv-xwhat">${esc(t.exportWhat[k](sum.columns))}</p>`;
+    const picks = [...el.querySelectorAll<HTMLButtonElement>('.tv-xopt-pick')];
+    const choose = (f: ExportFormat, focus: boolean): void => {
+        for (const b of picks) {
+            const on = b.dataset.format === f;
+            b.setAttribute('aria-checked', String(on));
+            b.tabIndex = on ? 0 : -1;
+            b.querySelector('.tv-xopt-dot')!.textContent = on ? '●' : '○';
+            if (on && focus) b.focus();
+        }
+        el.querySelector('.tv-xfile')!.textContent = t.exportFile(sum.files[f]);
+        if (f !== format) {
+            format = f;
+            onFormat(f);
+        }
+    };
+    for (const b of picks) {
+        b.addEventListener('click', () => choose(b.dataset.format as ExportFormat, false));
+        b.addEventListener('keydown', (e) => {
+            if (!['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+            e.preventDefault();
+            const i = picks.indexOf(b);
+            const next = picks[(i + (e.key === 'ArrowDown' || e.key === 'ArrowRight' ? 1 : picks.length - 1)) % picks.length];
+            choose(next.dataset.format as ExportFormat, true);
+        });
+    }
     return el;
 }

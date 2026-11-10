@@ -1390,10 +1390,12 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         exportFormat: 'Format',
         exportRows: 'Wiersze',
         exportCsv: 'CSV · dla Excela i Arkuszy Google',
+        exportXlsx: 'XLSX · grupy, zablokowane kolumny, kolory kontroli',
         exportAll: { p: (n: number) => `Wszystko widoczne · ${nPl(n, 'osoba', 'osoby', 'osób')}`, u: (n: number) => `Wszystko widoczne · ${nPl(n, 'związek', 'związki', 'związków')}`, e: (n: number) => `Wszystko widoczne · ${nPl(n, 'wydarzenie', 'wydarzenia', 'wydarzeń')}`, s: (n: number) => `Wszystko widoczne · ${nPl(n, 'źródło', 'źródła', 'źródeł')}` },
         exportFile: (file: string) => `Plik: ${file}`,
         exportWhat: { p: (k: number) => `${nPl(k, 'kolumna', 'kolumny', 'kolumn')} w kolejności tabeli, filtr i sortowanie jak teraz, związki jako wiersze kontynuacji.`, u: (k: number) => `${nPl(k, 'kolumna', 'kolumny', 'kolumn')} w kolejności tabeli, filtr i sortowanie jak teraz.`, e: (k: number) => `${nPl(k, 'kolumna', 'kolumny', 'kolumn')} w kolejności tabeli, filtr i sortowanie jak teraz.`, s: (k: number) => `${nPl(k, 'kolumna', 'kolumny', 'kolumn')} w kolejności tabeli, filtr i sortowanie jak teraz.` },
         exportDownload: 'Pobierz CSV',
+        exportDownloadXlsx: 'Pobierz XLSX',
         csvUnionCol: 'Związek',
         csvUnionOf: (k: number, n: number) => `${k} z ${n}`,
         exportedToast: {

@@ -61,8 +61,9 @@ import {
     discardViewChanges, dropMissingViews, isBuiltinId, newViewId, openViewOf, readTableWork, restoreTableState, switchView,
     tableWorkOf, takenViewNames, uniqueViewName, viewChanged, viewFromState, viewList, writeTableWork,
 } from './table-views.js';
-import { ExportSummary, exportForm, ViewBar, viewNameForm } from './table-viewbar.js';
-import { buildTableCsv, tableCsvFileName, type TableCsv } from './table-export.js';
+import { exportDownloadLabel, exportForm, ViewBar, viewNameForm, type ExportFormat, type ExportSummary } from './table-viewbar.js';
+import { buildTableCsv, tableCsvFileName, type TableCsvInput } from './table-export.js';
+import { buildTableXlsx } from './table-xlsx.js';
 import { applyChecks, bandSeverity, CHECK_COLUMNS, CheckIndex, isPlaceColumn, type CellFinding } from './table-checks.js';
 import { lineCell, lineKey, type GridLine } from './table-subrows.js';
 import { markHtml, type CellIssueMark } from './table-grid.js';
@@ -161,6 +162,20 @@ let checks: { tree: string; data: StromData; rev: number; issues: ValidationIssu
 let checksJob = 0;
 /** Findings mapped per idle slice (§7.1). */
 const CHECK_BATCH = 500;
+
+/** The export's format last chosen (§11.1: CSV · XLSX), kept while the app runs. */
+let exportFormat: ExportFormat = 'csv';
+
+/** What an export takes from the table shown now (tableExportNow). */
+interface TableExportNow {
+    input: TableCsvInput;
+    pinned: number;
+    widths: readonly number[];
+    view: string;
+    checks: CheckIndex | null;
+    files: Record<ExportFormat, string>;
+    type: RowType;
+}
 const DISMISS_TOAST_MS = 6000;
 
 function whenIdle(fn: (deadline: { timeRemaining(): number } | null) => void): void {
@@ -1387,8 +1402,8 @@ export const tableMethods = uiModule({
         });
     },
 
-    /** The CSV of what the table shows now (§11.2) and its file name (§11.1). */
-    tableCsvNow(): { csv: TableCsv; file: string; type: RowType } | null {
+    /** What the table shows now as the export takes it (§11.2): rows, columns, pinning, findings, file names. */
+    tableExportNow(): TableExportNow | null {
         if (!model) return null;
         const tree = treeKey();
         const state = stateOf(tree);
@@ -1398,40 +1413,63 @@ export const tableMethods = uiModule({
         const shown = viewRows(tree, model, type, st.filter, st.search, st.sort, display.columns);
         // A row kept after an edit that no longer passes (§10.3) is not part of the export.
         const rows = shown.stale.size ? shown.rows.filter(r => !shown.stale.has(rowKey(r))) : shown.rows;
-        const pass = shown.pass;
-        const csv = buildTableCsv({ model, type, rows, columns: shownColumns(type, st, false).columns, pass });
+        const all = shownColumns(type, st, false);
         const treeName = (tree && TreeManager.getTreeMetadata(tree as TreeId)?.name) || '';
-        const file = tableCsvFileName(treeName, openViewOf(state, type, storedViews()).name, new Date());
-        return { csv, file, type };
+        const view = openViewOf(state, type, storedViews()).name;
+        const now = new Date();
+        return {
+            input: { model, type, rows, columns: all.columns, pass: shown.pass },
+            pinned: all.pinned, widths: all.widths, view,
+            checks: checks && checks.tree === tree ? checks.index : null,
+            files: { csv: tableCsvFileName(treeName, view, now, 'csv'), xlsx: tableCsvFileName(treeName, view, now, 'xlsx') },
+            type,
+        };
     },
 
-    /** Export (11a): a 380 px panel under the button; on a phone a sheet. */
+    /** Export (11a, 14d): a 380 px panel under the button; on a phone a sheet. CSV or XLSX, the last choice kept. */
     showTableExport(): void {
         if (!mounted) return;
-        const now = this.tableCsvNow();
+        const now = this.tableExportNow();
         if (!now) return;
         const t = strings.table;
-        const sum: ExportSummary = { items: now.csv.items, columns: now.csv.columns, file: now.file };
-        this.showTableFilterForm(mounted.exportBtn, '', exportForm(now.type, sum), () => this.downloadTableCsv(), {
-            applyLabel: t.exportDownload, ariaLabel: t.export, cls: 'tv-xpanel', noCancel: true,
+        const csv = buildTableCsv(now.input);
+        const sum: ExportSummary = { items: csv.items, columns: csv.columns, files: now.files };
+        const form = exportForm(now.type, sum, exportFormat, (f) => {
+            exportFormat = f;
+            const btn = form.closest('.tv-fpanel, .tv-fsheet')?.querySelector('.tv-fpanel-apply, .tv-fs-apply');
+            if (btn) btn.textContent = exportDownloadLabel(f);
+        });
+        this.showTableFilterForm(mounted.exportBtn, '', form, () => this.downloadTableExport(), {
+            applyLabel: exportDownloadLabel(exportFormat), ariaLabel: t.export, cls: 'tv-xpanel', noCancel: true,
         });
     },
 
-    /** Download the CSV (§11.2) and say what went in (11b). */
-    downloadTableCsv(): void {
-        const now = this.tableCsvNow();
+    /** Download the CSV (§11.2) or the XLSX (§11.3) and say what went in (11b). */
+    downloadTableExport(format: ExportFormat = exportFormat): void {
+        const now = this.tableExportNow();
         if (!now) return;
-        const blob = new Blob([now.csv.csv], { type: 'text/csv;charset=utf-8' });
+        let blob: Blob;
+        let made: { items: number; lines: number; columns: number };
+        if (format === 'xlsx') {
+            const x = buildTableXlsx({ ...now.input, pinned: now.pinned, widths: now.widths, checks: now.checks, sheetName: now.view });
+            blob = new Blob([x.bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            made = x;
+        } else {
+            const c = buildTableCsv(now.input);
+            blob = new Blob([c.csv], { type: 'text/csv;charset=utf-8' });
+            made = c;
+        }
+        const file = now.files[format];
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = now.file;
+        a.download = file;
         document.body.appendChild(a);
         a.click();
         a.remove();
         setTimeout(() => URL.revokeObjectURL(url), 0);
         const k = ROW_KEY[now.type];
-        this.showToast(strings.table.exportedToast[k](now.file, now.csv.items, now.csv.lines, now.csv.columns), 5000);
+        this.showToast(strings.table.exportedToast[k](file, made.items, made.lines, made.columns), 5000);
     },
 
     /** The Export dialog's link (11d): the dialog closes, the Table view opens with its Export. */
