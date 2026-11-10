@@ -19,7 +19,7 @@ import { ROW_TYPES, type RowType } from './table-model.js';
 import type { FilterItem } from './table-filter.js';
 import { defaultUnionCollapse } from './table-subrows.js';
 import {
-    applyColumnSetup, columnSetupOf, defaultTypeState, type ColumnSetup, type RowTypeState,
+    applyColumnSetup, columnSetupOf, defaultTypeState, type ColumnSetup, type RowTypeState, type TableState,
 } from './table-state.js';
 
 export const BUILTIN_VIEWS = ['overview', 'births', 'marriages', 'deaths', 'sources', 'gaps', 'checks'] as const;
@@ -247,4 +247,153 @@ export function writeTableWork(treeId: string, work: StoredTableWork): void {
     } catch {
         // Storage full or blocked: the table works without it.
     }
+}
+
+// ---------------------------------------------------------------------------
+// Opening, switching and keeping views in a tree's table state (§9.2, §9.3).
+
+/** Open a view's unsaved state over it: "Reset to default" still returns to the view (§4.4). */
+function applyDraft(draft: TableView, type: RowType, st: RowTypeState): void {
+    const base = st.base;
+    applyView({ ...draft, rowType: type }, st);
+    st.base = base;
+}
+
+/** The view open in a row type, or that type's default view when it is gone. */
+export function openViewOf(state: TableState, type: RowType, stored: readonly TableView[] | undefined): TableView {
+    const v = findView(state.open[type], stored);
+    return v && v.rowType === type ? v : findView(defaultViewId(type), stored)!;
+}
+
+/**
+ * The tree's table as it was left (§9.1): each row type's open view with its
+ * unsaved state over it, and the row type. Without a stored state, each type
+ * opens its default view. Marks the state restored.
+ */
+export function restoreTableState(state: TableState, work: StoredTableWork | null, stored: readonly TableView[] | undefined): void {
+    for (const t of ROW_TYPES) {
+        const id = work?.open[t];
+        const found = id ? findView(id, stored) : null;
+        const view = found && found.rowType === t ? found : findView(defaultViewId(t), stored)!;
+        const st = state.types[t];
+        state.open[t] = view.id;
+        applyView(view, st);
+        const w = work?.work[t];
+        if (w && found) applyDraft(w, t, st);
+    }
+    if (work) state.rowType = work.rowType;
+    state.restored = true;
+}
+
+/**
+ * A view open in a row type that the tree no longer has (deleted, or an undo
+ * took it away): that type goes back to its default view (§9.3). True when
+ * something changed.
+ */
+export function dropMissingViews(state: TableState, stored: readonly TableView[] | undefined): boolean {
+    let changed = false;
+    for (const t of ROW_TYPES) {
+        const v = findView(state.open[t], stored);
+        if (v && v.rowType === t) continue;
+        const def = findView(defaultViewId(t), stored)!;
+        state.open[t] = def.id;
+        applyView(def, state.types[t]);
+        state.types[t].top = 0;
+        state.types[t].left = 0;
+        changed = true;
+    }
+    for (const id of Object.keys(state.drafts)) {
+        if (!findView(id, stored)) delete state.drafts[id];
+    }
+    return changed;
+}
+
+/**
+ * Choose a view (§9.2): its row type is shown. The view left keeps its
+ * unsaved changes until the tree closes (§9.3: no question); a view chosen
+ * again comes back with them. False when there is no such view.
+ */
+export function switchView(state: TableState, id: string, stored: readonly TableView[] | undefined): boolean {
+    const view = findView(id, stored);
+    if (!view || !isShownRowType(view.rowType)) return false;
+    const t = view.rowType;
+    const st = state.types[t];
+    const curId = state.open[t];
+    if (curId !== id) {
+        const cur = findView(curId, stored);
+        if (cur && viewChanged(cur, st)) state.drafts[curId] = viewFromState(t, st, curId, cur.name, '');
+        else delete state.drafts[curId];
+        applyView(view, st);
+        const draft = state.drafts[id];
+        if (draft) {
+            applyDraft(draft, t, st);
+            delete state.drafts[id];
+        }
+        state.open[t] = id;
+        st.top = 0;
+        st.left = 0;
+    }
+    state.rowType = t;
+    return true;
+}
+
+/** "Discard changes" (§9.3): the shown row type back to its open view as stored. */
+export function discardViewChanges(state: TableState, stored: readonly TableView[] | undefined): void {
+    const t = state.rowType;
+    const view = openViewOf(state, t, stored);
+    state.open[t] = view.id;
+    applyView(view, state.types[t]);
+    delete state.drafts[view.id];
+}
+
+/** What the tree's table keeps in localStorage now (§9.1). */
+export function tableWorkOf(state: TableState, stored: readonly TableView[] | undefined): StoredTableWork {
+    const work: StoredTableWork = { rowType: state.rowType, open: {}, work: {} };
+    for (const t of ROW_TYPES) {
+        const view = openViewOf(state, t, stored);
+        work.open[t] = view.id;
+        const st = state.types[t];
+        if (viewChanged(view, st)) work.work[t] = viewFromState(t, st, view.id, view.name, '');
+    }
+    return work;
+}
+
+// ---------------------------------------------------------------------------
+// The list of views (9a).
+
+export interface ViewListEntry {
+    id: string;
+    name: string;
+    /** The row type when it is not the one shown ("unions"). */
+    rowNote: string;
+    active: boolean;
+}
+
+export interface ViewList {
+    builtin: ViewListEntry[];
+    custom: ViewListEntry[];
+    /** "Save as new…" (not in a read-only tree). */
+    canSaveAs: boolean;
+    /** "Rename…" and "Delete": a saved view in a tree that can change. */
+    canEdit: boolean;
+    /** The open view is built in: Rename and Delete are inactive, with a note why. */
+    builtinOpen: boolean;
+}
+
+/** The list of views for the shown row type (§9.2): built-in in their order, then the tree's alphabetically. */
+export function viewList(state: TableState, stored: readonly TableView[] | undefined, readOnly: boolean): ViewList {
+    const shown = state.rowType;
+    const openId = openViewOf(state, shown, stored).id;
+    const entry = (v: TableView): ViewListEntry => ({
+        id: v.id, name: v.name, active: v.id === openId,
+        rowNote: v.rowType !== shown && isShownRowType(v.rowType) ? strings.table.viewRows[v.rowType] : '',
+    });
+    const builtinOpen = isBuiltinId(openId);
+    return {
+        builtin: builtinViews().map(entry),
+        custom: customViews(stored).map(entry),
+        canSaveAs: !readOnly,
+        canEdit: !readOnly && !builtinOpen,
+        builtinOpen,
+    };
 }

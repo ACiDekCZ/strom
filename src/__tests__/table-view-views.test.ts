@@ -18,8 +18,9 @@ import { STROM_DATA_VERSION, type PersonId, type StromData, type TableView, type
 import {
     applyView, builtinView, builtinViews, customViews, defaultViewId, findView, isBuiltinId, readTableWork, takenViewNames, uniqueViewName,
     viewChanged, viewFromState, workStorageKey, writeTableWork, BUILTIN_VIEWS,
+    discardViewChanges, dropMissingViews, openViewOf, restoreTableState, switchView, tableWorkOf, viewList,
 } from '../ui/table-view/table-views.js';
-import { defaultTypeState, hideColumn, setColumnWidth, sortClick } from '../ui/table-view/table-state.js';
+import { defaultTableState, defaultTypeState, hideColumn, resetColumns, setColumnWidth, sortClick } from '../ui/table-view/table-state.js';
 import { setChip } from '../ui/table-view/table-filter.js';
 import { setExpanded } from '../ui/table-view/table-subrows.js';
 
@@ -275,5 +276,106 @@ describe('the working state in localStorage (§9.1)', () => {
         });
         expect(readTableWork('t1')).toBeNull();
         expect(() => writeTableWork('t1', { rowType: 'persons', open: {}, work: {} })).not.toThrow();
+    });
+});
+
+describe('opening, switching and keeping views in the table state (§9.2, §9.3)', () => {
+    it('opens each row type\'s default view, unchanged, when nothing is stored', () => {
+        const state = defaultTableState();
+        restoreTableState(state, null, undefined);
+        expect(state.restored).toBe(true);
+        expect(state.open).toEqual({ persons: 'b:overview', unions: 'b:marriages' });
+        expect(viewChanged(openViewOf(state, 'persons', undefined), state.types.persons)).toBe(false);
+        expect(tableWorkOf(state, undefined)).toEqual({ rowType: 'persons', open: { persons: 'b:overview', unions: 'b:marriages' }, work: {} });
+    });
+
+    it('switching keeps the changes of the view left until it is chosen again, and switches the row type', () => {
+        const stored = [saved()];
+        const state = defaultTableState();
+        restoreTableState(state, null, stored);
+        sortClick(state.types.persons, 'name');
+        expect(viewChanged(openViewOf(state, 'persons', stored), state.types.persons)).toBe(true);
+        expect(switchView(state, 'tv-a', stored)).toBe(true);
+        expect(state.open.persons).toBe('tv-a');
+        expect(state.types.persons.columns).toEqual(['name', 'bapDate', 'bapPlace']);
+        expect(viewChanged(stored[0], state.types.persons)).toBe(false);
+        expect(Object.keys(state.drafts)).toEqual(['b:overview']);
+        // Back: the changes are there again, and Reset still returns to the view's columns.
+        switchView(state, 'b:overview', stored);
+        expect(state.types.persons.sort).toEqual([{ col: 'name', dir: 'asc' }]);
+        expect(viewChanged(builtinView('overview'), state.types.persons)).toBe(true);
+        expect(state.drafts).toEqual({});
+        hideColumn('persons', state.types.persons, 'bPlace');
+        resetColumns('persons', state.types.persons);
+        expect(state.types.persons.columns).toEqual(builtinView('overview').columns.map(c => c.id));
+        // A view of the other row type switches the rows.
+        switchView(state, 'b:marriages', stored);
+        expect(state.rowType).toBe('unions');
+        expect(switchView(state, 'tv-missing', stored)).toBe(false);
+    });
+
+    it('Discard changes goes back to the view as stored', () => {
+        const stored = [saved()];
+        const state = defaultTableState();
+        restoreTableState(state, null, stored);
+        switchView(state, 'tv-a', stored);
+        setColumnWidth(state.types.persons, 'bapDate', 300);
+        expect(viewChanged(stored[0], state.types.persons)).toBe(true);
+        discardViewChanges(state, stored);
+        expect(viewChanged(stored[0], state.types.persons)).toBe(false);
+        expect(state.types.persons.widths.bapDate).not.toBe(300);
+    });
+
+    it('restores the open views and their unsaved state from the stored working state', () => {
+        const stored = [saved()];
+        const a = defaultTableState();
+        restoreTableState(a, null, stored);
+        switchView(a, 'tv-a', stored);
+        setChip(a.types.persons.filter, 'living', true);
+        switchView(a, 'b:marriages', stored);
+        const work = tableWorkOf(a, stored);
+        expect(work.rowType).toBe('unions');
+        expect(work.open.persons).toBe('tv-a');
+        expect(work.work.persons?.filter.items).toEqual([{ chip: 'living' }]);
+        const b = defaultTableState();
+        restoreTableState(b, JSON.parse(JSON.stringify(work)), stored);
+        expect(b.rowType).toBe('unions');
+        expect(b.open.persons).toBe('tv-a');
+        expect(b.types.persons.filter.items).toEqual([{ chip: 'living' }]);
+        expect(viewChanged(stored[0], b.types.persons)).toBe(true);
+        // Reset returns to the view's own columns, not the defaults.
+        expect(b.types.persons.base?.columns.map(c => c.id)).toEqual(['name', 'bapDate', 'bapPlace']);
+        // A stored view the tree no longer has: the default view, without the unsaved state.
+        const c = defaultTableState();
+        restoreTableState(c, JSON.parse(JSON.stringify(work)), []);
+        expect(c.open.persons).toBe('b:overview');
+        expect(viewChanged(builtinView('overview'), c.types.persons)).toBe(false);
+    });
+
+    it('an open view the tree no longer has (deleted, undone) falls back to the default view', () => {
+        const stored = [saved()];
+        const state = defaultTableState();
+        restoreTableState(state, null, stored);
+        switchView(state, 'tv-a', stored);
+        expect(dropMissingViews(state, stored)).toBe(false);
+        expect(dropMissingViews(state, [])).toBe(true);
+        expect(state.open.persons).toBe('b:overview');
+        expect(viewChanged(builtinView('overview'), state.types.persons)).toBe(false);
+    });
+
+    it('the list: built-in in order, custom by name, the other row type named, Rename and Delete only for a saved view', () => {
+        const stored = [saved('tv-b', 'Witnesses', { rowType: 'unions', columns: [{ id: 'partner' }] }), saved('tv-a', 'Baptisms')];
+        const state = defaultTableState();
+        restoreTableState(state, null, stored);
+        let list = viewList(state, stored, false);
+        expect(list.builtin.map(e => e.id)).toEqual(BUILTIN_VIEWS.map(n => `b:${n}`));
+        expect(list.builtin.find(e => e.active)?.id).toBe('b:overview');
+        expect(list.builtin.find(e => e.id === 'b:marriages')?.rowNote).toBe('unions');
+        expect(list.custom.map(e => [e.name, e.rowNote])).toEqual([['Baptisms', ''], ['Witnesses', 'unions']]);
+        expect(list).toMatchObject({ canSaveAs: true, canEdit: false, builtinOpen: true });
+        switchView(state, 'tv-a', stored);
+        list = viewList(state, stored, false);
+        expect(list).toMatchObject({ canSaveAs: true, canEdit: true, builtinOpen: false });
+        expect(viewList(state, stored, true)).toMatchObject({ canSaveAs: false, canEdit: false });
     });
 });
