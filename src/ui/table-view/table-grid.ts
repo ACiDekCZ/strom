@@ -36,6 +36,7 @@ import { columnRun, groupRuns, MIN_COLUMN_WIDTH, type CollapsedBand } from './ta
 import { columnOffsets, columnWindow, lineOffsets, lineWindow, type ColumnWindow } from './table-window.js';
 import { lineCell, lineKey, lineLevel, plainLines, type GridLine } from './table-subrows.js';
 import type { CoverageCell } from './table-coverage.js';
+import { highlightHtml } from './table-filter.js';
 import { shownNameOrEmpty as personName } from '../../person-name.js';
 
 export interface GridInput {
@@ -72,6 +73,12 @@ export interface GridInput {
     bandCell?: (line: GridLine, band: CollapsedBand) => string;
     /** The finding shown in a cell (§7.3) and its title; null: none (or the checks still run). */
     issueAt?: (line: GridLine, col: ColumnDef, value: CellValue) => CellIssueMark | null;
+    /** The search's folded query (§8.3): its matches are marked in the cells. */
+    hit?: string;
+    /** The columns with a filter (§8.2: the head says "filter"). */
+    filtered?: ReadonlySet<string>;
+    /** Nothing passes the filter (§13c, §13d): said under the head, with "Clear filters". */
+    noMatch?: { title: string; text: string; action: string } | null;
 }
 
 /** A finding's mark in a cell: its level (or `unusual`) and the finding's title (for the mark's name). */
@@ -103,6 +110,12 @@ export interface GridHandlers {
     onMoveGroup?(start: number, end: number, before: number): void;
     /** A cell with a finding was clicked or Enter was pressed on it (§7.4): its line, its drawn column, the cell. */
     onIssue?(line: GridLine, col: number, cell: HTMLElement): void;
+    /** A click on a column's head (§8.4); `add`: with Shift, a further sort key. */
+    onHeadSort?(colId: string, add: boolean): void;
+    /** A click on a coverage cell (§6.1: only empty / only filled). */
+    onCoverageCell?(colId: string, anchor: HTMLElement): void;
+    /** "Clear filters" under the head when nothing passes (§13c). */
+    onClearFilters?(): void;
 }
 
 /** How far a press moves before it is a drag; how long a touch holds for the header menu. */
@@ -163,14 +176,14 @@ const COMP_BAR = 30;
  * A cell's inner HTML (§5, §6.2): a substitute's label before the value in
  * italics, a date qualifier's word, a completeness percentage with its bar.
  */
-export function cellInner(value: CellValue, col: ColumnDef, issue: CellIssueMark | null = null): string {
-    if (issue) return cellValueHtml(value, col) + markHtml(issue.severity, issue.label);
-    if (!value.mark) return cellValueHtml(value, col);
+export function cellInner(value: CellValue, col: ColumnDef, issue: CellIssueMark | null = null, hit = ''): string {
+    if (issue) return cellValueHtml(value, col, hit) + markHtml(issue.severity, issue.label);
+    if (!value.mark) return cellValueHtml(value, col, hit);
     // A level beside a value (Findings: after the number; Highest level: before its word).
-    return col.align === 'right' ? cellValueHtml(value, col) + markHtml(value.mark) : markHtml(value.mark) + cellValueHtml(value, col);
+    return col.align === 'right' ? cellValueHtml(value, col, hit) + markHtml(value.mark) : markHtml(value.mark) + cellValueHtml(value, col, hit);
 }
 
-function cellValueHtml(value: CellValue, col: ColumnDef): string {
+function cellValueHtml(value: CellValue, col: ColumnDef, hit = ''): string {
     if (col.kind === 'percent' && value.percent !== undefined && !value.na) {
         const fill = Math.round((value.percent * COMP_BAR) / 100);
         return `<span class="tv-comp"><span class="tv-comp-num">${esc(value.text)}</span>`
@@ -182,8 +195,8 @@ function cellValueHtml(value: CellValue, col: ColumnDef): string {
         const tip = value.subst === 'bap' ? s.bap : s.bur;
         html += `<span class="tv-subst" title="${esc(tip)}" aria-label="${esc(tip)}">${esc(value.subst === 'bap' ? s.bapShort : s.burShort)}</span>`;
     }
-    if (value.prefix) html += `<span class="tv-qual">${esc(value.prefix)}</span>`;
-    return html + `<span class="tv-cell-text">${esc(cellText(value))}</span>`;
+    if (value.prefix) html += `<span class="tv-qual">${hit ? highlightHtml(value.prefix, hit) : esc(value.prefix)}</span>`;
+    return html + `<span class="tv-cell-text">${hit && !value.na ? highlightHtml(cellText(value), hit) : esc(cellText(value))}</span>`;
 }
 
 export class TableGrid {
@@ -193,6 +206,7 @@ export class TableGrid {
     private readonly headRow: HTMLElement;
     private readonly covRow: HTMLElement;
     private readonly body: HTMLElement;
+    private readonly noMatch: HTMLElement;
     private input: GridInput | null = null;
     private offsets: number[] = [0];
     private frame = 0;
@@ -222,13 +236,18 @@ export class TableGrid {
             + '<div class="tv-row tv-grouprow" role="row"></div>'
             + '<div class="tv-row tv-headrow" role="row"></div>'
             + '<div class="tv-row tv-covrow" role="row"></div>'
-            + '</div><div class="tv-body" role="rowgroup"></div>';
+            + '</div><div class="tv-body" role="rowgroup"></div>'
+            + '<div class="tv-nomatch" role="status" hidden></div>';
         this.el = el;
         this.head = el.querySelector('.tv-head')!;
         this.groupRow = el.querySelector('.tv-grouprow')!;
         this.headRow = el.querySelector('.tv-headrow')!;
         this.covRow = el.querySelector('.tv-covrow')!;
         this.body = el.querySelector('.tv-body')!;
+        this.noMatch = el.querySelector('.tv-nomatch')!;
+        this.noMatch.addEventListener('click', (e) => {
+            if ((e.target as Element).closest('.tv-nomatch-clear')) this.handlers.onClearFilters?.();
+        });
         el.addEventListener('scroll', () => {
             el.classList.toggle('is-scrolled-x', el.scrollLeft > 0);
             this.handlers.onScroll?.(el.scrollTop, el.scrollLeft);
@@ -293,6 +312,13 @@ export class TableGrid {
         this.body.style.height = `${this.lineTops(this.rowHeight())[this.lines.length]}px`;
         this.body.style.width = `${this.offsets[input.columns.length]}px`;
         this.covRow.hidden = input.coverageRow === false;
+        const nm = input.noMatch;
+        this.noMatch.hidden = !nm;
+        this.noMatch.innerHTML = nm
+            ? `<div class="tv-nomatch-title">${esc(nm.title)}</div>`
+                + (nm.text ? `<div class="tv-nomatch-text">${esc(nm.text)}</div>` : '')
+                + `<button type="button" class="tv-nomatch-clear">${esc(nm.action)}</button>`
+            : '';
         if (scroll) {
             this.el.scrollTop = scroll.top;
             this.el.scrollLeft = scroll.left;
@@ -338,6 +364,7 @@ export class TableGrid {
         const tops = this.lineTops(rowH);
         this.body.style.height = `${tops[this.lines.length]}px`;
         const cw = columnWindow(input.widths, input.pinned, this.el.scrollLeft, this.el.clientWidth);
+        if (!this.noMatch.hidden) this.noMatch.style.width = `${this.el.clientWidth}px`;
         const rw = lineWindow(tops, Math.max(0, this.el.scrollTop - headH), Math.max(0, this.el.clientHeight - headH));
         const colKey = cw.indices.join(',');
         if (colKey !== this.headKey) {
@@ -425,13 +452,16 @@ export class TableGrid {
             const label = columnLabel(col);
             const sort = input.sort.findIndex(s => s.col === col.id);
             const ariaSort = sort === 0 ? ` aria-sort="${input.sort[0].dir === 'desc' ? 'descending' : 'ascending'}"` : '';
-            const arrow = sort >= 0 ? ` <span class="tv-sort-mark" aria-hidden="true">${input.sort[sort].dir === 'desc' ? '↓' : '↑'}</span>` : '';
+            const arrow = sort >= 0
+                ? ` <span class="tv-sort-mark" aria-hidden="true">${input.sort[sort].dir === 'desc' ? '↓' : '↑'}${input.sort.length > 1 ? sort + 1 : ''}</span>`
+                : '';
+            const filtered = input.filtered?.has(col.id) ? `<span class="tv-filter-mark">${esc(strings.table.filterMark)}</span>` : '';
             const right = col.align === 'right' ? ' tv-right' : '';
             const computed = col.computed ? ' is-computed' : '';
             names += `<div class="tv-cell tv-headcell${right}${computed}${this.pinClass(i, input)}" role="columnheader"`
                 + ` aria-colindex="${i + 1}" data-col="${esc(col.id)}" data-index="${i}" tabindex="${col.id === focusCol ? 0 : -1}"`
                 + ` title="${esc(label)}" aria-label="${esc(label)}"${ariaSort} style="${this.pinStyle(i, input)}">`
-                + `<span class="tv-cell-text">${esc(label)}</span>${arrow}`
+                + `<span class="tv-cell-text">${esc(label)}</span>${arrow}${filtered}`
                 + (col.id === 'name' && input.unionsButton
                     ? `<button type="button" class="tv-head-all" tabindex="-1" data-expand="${input.unionsButton === 'expand' ? 1 : 0}">`
                         + `${esc(input.unionsButton === 'expand' ? strings.table.expandAll : strings.table.collapseAll)}</button>`
@@ -441,7 +471,7 @@ export class TableGrid {
                 + '</div>';
             const cc = input.coverage?.(col) ?? null;
             const ccls = cc?.label ? ' tv-cov-label' : cc?.low ? ' tv-cov-low' : '';
-            cov += `<div class="tv-cell tv-covcell${right}${ccls}${this.pinClass(i, input)}" role="gridcell" aria-colindex="${i + 1}"`
+            cov += `<div class="tv-cell tv-covcell${right}${ccls}${this.pinClass(i, input)}${cc && !cc.label && this.handlers.onCoverageCell ? ' is-clickable' : ''}" role="gridcell" aria-colindex="${i + 1}"`
                 + ` data-col="${esc(col.id)}" style="${this.pinStyle(i, input)}"${cc?.title ? ` title="${esc(cc.title)}"` : ''}>${esc(cc?.text ?? '')}</div>`;
             prev = i;
         }
@@ -488,6 +518,13 @@ export class TableGrid {
             }
             const band = t.closest<HTMLElement>('.tv-headcell[data-band]');
             if (band) { this.handlers.onToggleGroup?.(band.dataset.band!, false); return; }
+            // §8.4: a click on the head sorts (Shift: a further key); not on the edge or the head's buttons.
+            if (cell && !t.closest('.tv-resize, button')) {
+                this.handlers.onHeadSort?.(cell.dataset.col!, (e as MouseEvent).shiftKey);
+                return;
+            }
+            const cov = t.closest<HTMLElement>('.tv-covcell.is-clickable[data-col]');
+            if (cov) { this.handlers.onCoverageCell?.(cov.dataset.col!, cov); return; }
             const collapsed = t.closest<HTMLElement>('.tv-groupcell.is-collapsed');
             const bandAt = collapsed ? this.input?.bands?.[Number(collapsed.dataset.start)] : null;
             if (bandAt) this.handlers.onToggleGroup?.(bandAt.group, false);
@@ -555,6 +592,11 @@ export class TableGrid {
         if (band && (e.key === 'Enter' || e.key === ' ')) {
             e.preventDefault();
             this.handlers.onToggleGroup?.(band.group, false);
+            return;
+        }
+        if (!band && (e.key === 'Enter' || e.key === ' ') && t === cell) {
+            e.preventDefault();
+            this.handlers.onHeadSort?.(col.id, e.shiftKey);
             return;
         }
         if (!horizontal || e.ctrlKey || e.metaKey) return;
@@ -853,7 +895,7 @@ export class TableGrid {
                 const substTip = value.subst ? (value.subst === 'bap' ? strings.table.subst.bap : strings.table.subst.bur) : '';
                 const title = value.title ?? (substTip || (value.text.length > 24 ? value.text : ''));
                 html += `<div class="${cellClasses(value, col, issue?.severity ?? null)}${this.pinClass(i, input)}" role="gridcell" aria-colindex="${i + 1}" tabindex="${tab}"`
-                    + ` style="${this.pinStyle(i, input)}"${title ? ` title="${esc(title)}"` : ''}>${cellInner(value, col, issue)}</div>`;
+                    + ` style="${this.pinStyle(i, input)}"${title ? ` title="${esc(title)}"` : ''}>${cellInner(value, col, issue, line.kind === 'more' ? '' : input.hit ?? '')}</div>`;
             }
             html += this.spacer(cw.after) + '</div>';
         }
@@ -883,7 +925,8 @@ export class TableGrid {
         const head = issue
             ? `<div class="tv-cell tv-name tv-cell--${issue.severity} has-issue${this.pinClass(i, input)}" role="gridcell" aria-colindex="${i + 1}" tabindex="${tab}" style="${this.pinStyle(i, input)}"`
             : open;
-        return `${head}${name.length > 24 ? ` title="${esc(name)}"` : ''}>${toggle}<span class="tv-cell-text">${esc(name)}</span>${pill}`
+        const nameHtml = input.hit ? highlightHtml(name, input.hit) : esc(name);
+        return `${head}${name.length > 24 ? ` title="${esc(name)}"` : ''}>${toggle}<span class="tv-cell-text">${nameHtml}</span>${pill}`
             + `${issue ? markHtml(issue.severity, issue.label) : ''}</div>`;
     }
 
@@ -1002,6 +1045,22 @@ export class TableGrid {
         }
         e.preventDefault();
         this.focusCell(to[0], to[1]);
+    }
+
+    /** Scroll a row into view (§8.3: the app's person search in the table) and draw. */
+    revealKey(key: string): void {
+        const at = this.lines.findIndex(l => lineKey(l) === key);
+        if (at < 0) return;
+        const tops = this.lineTops(this.rowHeight());
+        const headH = this.head.offsetHeight;
+        const view = Math.max(0, this.el.clientHeight - headH);
+        if (tops[at] < this.el.scrollTop || tops[at + 1] > this.el.scrollTop + view) {
+            this.el.scrollTop = Math.max(0, tops[at] - Math.round(view / 3));
+        }
+        this.activeKey = key;
+        this.activeCol = 0;
+        this.bodyKey = '';
+        this.draw();
     }
 
     /** The rows drawn now (their indexes), for tests and keyboard moves. */
