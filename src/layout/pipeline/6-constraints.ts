@@ -3097,20 +3097,28 @@ function subtreeCardExtent(
  * Collect sibling block entries with their subtree card extents.
  * For a given union, finds children who have their own blocks at gen >= 0,
  * and computes the full subtree card extent for each.
+ *
+ * A child whose own union lies in the parents' block is no sibling cluster:
+ * in a partner chain the child's union can be one of the chain's unions (a
+ * mother's later husband also married her son's wife), so the child maps to
+ * the very block that holds the parents. That block's subtree contains every
+ * real sibling, so separating it from them pushed it and its children apart
+ * again on every pass and the coordinates ran off to ~1e9.
  */
 function collectSiblingExtents(
-    union: { childIds: PersonId[] },
+    union: { id: UnionId; childIds: PersonId[] },
     model: LayoutModel,
     unionToBlock: Map<UnionId, FamilyBlockId>,
     blocks: Map<FamilyBlockId, FamilyBlock>,
     config: LayoutConfig
 ): Array<{ personId: PersonId; blockId: FamilyBlockId; xCenter: number; extent: { minX: number; maxX: number } }> {
     const result: Array<{ personId: PersonId; blockId: FamilyBlockId; xCenter: number; extent: { minX: number; maxX: number } }> = [];
+    const parentsBlockId = unionToBlock.get(union.id);
     for (const childId of union.childIds) {
         const childUnionId = model.personToUnion.get(childId);
         if (!childUnionId) continue;
         const blockId = unionToBlock.get(childUnionId);
-        if (!blockId) continue;
+        if (!blockId || blockId === parentsBlockId) continue;
         const block = blocks.get(blockId);
         if (!block || block.generation < 0) continue;
 

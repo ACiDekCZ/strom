@@ -1,0 +1,221 @@
+{
+  "persons": {
+    "eberwin": {
+      "id": "eberwin",
+      "firstName": "Eberwin",
+      "lastName": "Torgelow",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eberwin_irmentraud"
+      ],
+      "parentIds": [
+        "bonifaz",
+        "hildeburg"
+      ],
+      "childIds": [],
+      "birthDate": "1805-03-15"
+    },
+    "irmentraud": {
+      "id": "irmentraud",
+      "firstName": "Irmentraud",
+      "lastName": "Eichenlaub",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eberwin_irmentraud",
+        "u_leodegar_irmentraud",
+        "u_wigbert_irmentraud"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "adelgunde",
+        "pankraz"
+      ],
+      "birthDate": "1802-03-15"
+    },
+    "leodegar": {
+      "id": "leodegar",
+      "firstName": "Leodegar",
+      "lastName": "Fenchelbach",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_leodegar_irmentraud",
+        "u_leodegar_mechthild"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "adelgunde",
+        "notburga"
+      ],
+      "birthDate": "1806-03-15"
+    },
+    "mechthild": {
+      "id": "mechthild",
+      "firstName": "Mechthild",
+      "lastName": "Ruebenacker",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_leodegar_mechthild"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "notburga"
+      ],
+      "birthDate": "1809-03-15"
+    },
+    "bonifaz": {
+      "id": "bonifaz",
+      "firstName": "Bonifaz",
+      "lastName": "Torgelow",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_bonifaz_hildeburg"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "eberwin"
+      ],
+      "birthDate": "1778-03-15"
+    },
+    "hildeburg": {
+      "id": "hildeburg",
+      "firstName": "Hildeburg",
+      "lastName": "Spiesshammer",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_bonifaz_hildeburg",
+        "u_wigbert_hildeburg"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "eberwin"
+      ],
+      "birthDate": "1775-03-15"
+    },
+    "notburga": {
+      "id": "notburga",
+      "firstName": "Notburga",
+      "lastName": "Fenchelbach",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_wigbert_notburga"
+      ],
+      "parentIds": [
+        "leodegar",
+        "mechthild"
+      ],
+      "childIds": [],
+      "birthDate": "1833-03-15"
+    },
+    "wigbert": {
+      "id": "wigbert",
+      "firstName": "Wigbert",
+      "lastName": "Wermelskamp",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_wigbert_irmentraud",
+        "u_wigbert_notburga",
+        "u_wigbert_hildeburg"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "pankraz"
+      ],
+      "birthDate": "1808-03-15"
+    },
+    "pankraz": {
+      "id": "pankraz",
+      "firstName": "Pankraz",
+      "lastName": "Wermelskamp",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "wigbert",
+        "irmentraud"
+      ],
+      "childIds": [],
+      "birthDate": "1832-03-15"
+    },
+    "adelgunde": {
+      "id": "adelgunde",
+      "firstName": "Adelgunde",
+      "lastName": "Fenchelbach",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "leodegar",
+        "irmentraud"
+      ],
+      "childIds": [],
+      "birthDate": "1831-03-15"
+    }
+  },
+  "partnerships": {
+    "u_eberwin_irmentraud": {
+      "id": "u_eberwin_irmentraud",
+      "person1Id": "eberwin",
+      "person2Id": "irmentraud",
+      "childIds": [],
+      "status": "married"
+    },
+    "u_leodegar_irmentraud": {
+      "id": "u_leodegar_irmentraud",
+      "person1Id": "leodegar",
+      "person2Id": "irmentraud",
+      "childIds": [
+        "adelgunde"
+      ],
+      "status": "married"
+    },
+    "u_leodegar_mechthild": {
+      "id": "u_leodegar_mechthild",
+      "person1Id": "leodegar",
+      "person2Id": "mechthild",
+      "childIds": [
+        "notburga"
+      ],
+      "status": "married"
+    },
+    "u_bonifaz_hildeburg": {
+      "id": "u_bonifaz_hildeburg",
+      "person1Id": "bonifaz",
+      "person2Id": "hildeburg",
+      "childIds": [
+        "eberwin"
+      ],
+      "status": "married"
+    },
+    "u_wigbert_irmentraud": {
+      "id": "u_wigbert_irmentraud",
+      "person1Id": "wigbert",
+      "person2Id": "irmentraud",
+      "childIds": [
+        "pankraz"
+      ],
+      "status": "married"
+    },
+    "u_wigbert_notburga": {
+      "id": "u_wigbert_notburga",
+      "person1Id": "wigbert",
+      "person2Id": "notburga",
+      "childIds": [],
+      "status": "married"
+    },
+    "u_wigbert_hildeburg": {
+      "id": "u_wigbert_hildeburg",
+      "person1Id": "wigbert",
+      "person2Id": "hildeburg",
+      "childIds": [],
+      "status": "married"
+    }
+  }
+}
