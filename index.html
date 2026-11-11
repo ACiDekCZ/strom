@@ -9718,9 +9718,9 @@
             font-family: var(--font-sans); font-size: 11.5px; font-weight: 500; color: var(--primary); cursor: pointer;
             white-space: normal; line-height: 1.15; text-align: right;
         }
-        /* Where the name and the button do not fit side by side (a narrowed column), the button takes a line of its own under the name (the ▾ menu beside the name or the button), the name staying whole on its line (tester, T54 round 2: "Vollständiger Name" 0 px wide at 156 px). */
+        /* Where the name and the button do not fit side by side (a narrowed column), the button takes a line of its own under the name, the ▾ menu staying beside the name (the name takes the rest of its line, at least its longest word) (tester, T54 round 2: "Vollständiger Name" 0 px wide at 156 px). */
         .tv-headrow .tv-headcell[data-col="name"] { flex-wrap: wrap; align-content: center; column-gap: 4px; }
-        .tv-headrow .tv-headcell[data-col="name"] .tv-cell-text { -webkit-line-clamp: 1; }
+        .tv-headrow .tv-headcell[data-col="name"] .tv-cell-text { -webkit-line-clamp: 1; flex: 1 1 0; min-width: min-content; hyphens: manual; -webkit-hyphens: manual; }
         .tv-headrow .tv-headcell[data-col="name"] .tv-head-all { min-height: 20px; order: 2; }
         .tv-headrow .tv-headcell[data-col="name"] .tv-head-menu { height: 16px; }
         /* The active cell (a click, the arrows): a quiet outline; the keyboard's focus ring stays stronger. */
@@ -10231,7 +10231,7 @@
             .tv-head-all { height: 100%; }
             /* On touch the button keeps its full height beside the name (two lines each, as on a phone). */
             .tv-headrow .tv-headcell[data-col="name"] { flex-wrap: nowrap; }
-            .tv-headrow .tv-headcell[data-col="name"] .tv-cell-text { -webkit-line-clamp: 2; }
+            .tv-headrow .tv-headcell[data-col="name"] .tv-cell-text { -webkit-line-clamp: 2; flex: 0 1 auto; min-width: 0; hyphens: auto; -webkit-hyphens: auto; }
             .tv-bub-btn, .tv-bub-link { height: 44px; }
             .tv-bub-cite { min-height: 44px; }
             .tv-rbub-act, .tv-rbub-slot > button, .tv-rbub-slot > a { min-height: 44px; }

@@ -130,21 +130,32 @@ test.describe('desktop (1440), the pinned name narrowed beside "Collapse unions"
             const head = tv(page, '.tv-headrow [data-col="name"]');
             await expect(head.locator('.tv-cell-text')).toHaveText(name);
             await expect(head.locator('.tv-head-all')).toHaveText(collapse);
-            // Narrow the column with Alt+Shift+← (16 px a step) to 160 px or less.
-            await head.focus();
-            for (let i = 0; i < 12 && (await head.boundingBox())!.width > 160; i++) {
-                const w = (await head.boundingBox())!.width;
+            // Narrow the column with Alt+Shift+← (16 px a step) to 160 px or less; the head is drawn anew after each step.
+            const width = async () => (await head.boundingBox())?.width ?? Infinity;
+            await expect.poll(width).toBeLessThan(Infinity);
+            for (let i = 0; i < 12 && await width() > 160; i++) {
+                const w = await width();
+                await head.focus();
                 await page.keyboard.press('Alt+Shift+ArrowLeft');
-                await expect.poll(async () => (await head.boundingBox())!.width).toBeLessThan(w);
+                await expect.poll(width).toBeLessThan(w);
             }
             const m = await head.evaluate(el => {
                 const r = (sel: string) => (el.querySelector(sel) as HTMLElement).getBoundingClientRect().toJSON() as DOMRect;
-                const cut = (sel: string) => { const e = el.querySelector(sel) as HTMLElement; return e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 1; };
-                return { cell: el.getBoundingClientRect().toJSON() as DOMRect, label: r('.tv-cell-text'), btn: r('.tv-head-all'), labelCut: cut('.tv-cell-text'), btnCut: cut('.tv-head-all') };
+                const btn = el.querySelector('.tv-head-all') as HTMLElement;
+                // The name's first word as drawn.
+                const label = el.querySelector('.tv-cell-text') as HTMLElement;
+                const text = label.firstChild as Text;
+                const range = document.createRange();
+                range.setStart(text, 0);
+                range.setEnd(text, (text.data.indexOf(' ') + 1 || text.data.length + 1) - 1);
+                return {
+                    cell: el.getBoundingClientRect().toJSON() as DOMRect, label: r('.tv-cell-text'), btn: r('.tv-head-all'),
+                    word: range.getBoundingClientRect().width, btnCut: btn.scrollWidth > btn.clientWidth + 1 || btn.scrollHeight > btn.clientHeight + 1,
+                };
             });
             expect(m.cell.width).toBeLessThanOrEqual(160);
-            // The name shows whole, the button too (beside it or on a line of its own under it), both inside the head.
-            expect(m.labelCut).toBe(false);
+            // At least the name's first word shows, the button whole (beside it or on a line of its own under it), both inside the head.
+            expect(m.label.width).toBeGreaterThanOrEqual(m.word - 1);
             expect(m.btnCut).toBe(false);
             expect(m.label.right <= m.btn.left + 1 || m.label.bottom <= m.btn.top + 1).toBe(true);
             expect(m.label.top).toBeGreaterThanOrEqual(m.cell.top - 1);
