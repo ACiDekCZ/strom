@@ -54,17 +54,28 @@ test.describe('desktop (1440)', () => {
         await expect(page.locator('#table-container .is-active-cell')).toHaveCount(0);
 
         const place = await cell(page, 'p:b1', 'bPlace');
+        // The table's checks are drawn in idle time after the first draw (and draw the rows again):
+        // the click waits for the birthplace's mark ("one place written several ways"), so it always
+        // meets the settled table, whose click on a marked cell also opens the finding's bubble.
+        await expect(place.locator('.tv-mark')).toHaveCount(1);
         await place.click();
         await expect(place).toHaveClass(/is-active-cell/);
         await expect(page.locator('#table-container .is-active-cell')).toHaveCount(1);
         await expect(row(page, 'p:b1')).toHaveAttribute('aria-selected', 'true');
+        const bubble = page.locator('.tv-bubble');
+        await expect(bubble).toBeVisible();
         // A quiet outline in the light and the dark scheme.
         for (const scheme of ['light', 'dark'] as const) {
             await page.emulateMedia({ colorScheme: scheme });
-            const o = await place.evaluate(e => { const s = getComputedStyle(e); return { style: s.outlineStyle, width: s.outlineWidth }; });
-            expect(o).toEqual({ style: 'solid', width: '1px' });
+            // Read until the outline settled after the click and the scheme switch (a single read can catch it mid-change).
+            await expect.poll(() => place.evaluate(e => { const s = getComputedStyle(e); return { style: s.outlineStyle, width: s.outlineWidth }; }))
+                .toEqual({ style: 'solid', width: '1px' });
         }
         await page.emulateMedia({ colorScheme: 'light' });
+        // Escape closes the bubble and gives the focus back to the active cell.
+        await page.keyboard.press('Escape');
+        await expect(bubble).toHaveCount(0);
+        await expect(place).toBeFocused();
 
         await page.keyboard.press('ControlOrMeta+c');
         await expect.poll(() => clipboard(page)).toBe('Lhotka nad Brodem');

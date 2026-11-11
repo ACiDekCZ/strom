@@ -211,6 +211,9 @@ test.describe('tree overview: family lines', () => {
             return await S.DataManager.importAsNewTree(data, 'Ostrander') as string;
         }, subTree(rodsTree(), ['o1', 'o1w', 'o2', 'k1', 'k1w'], 'o2'));
         await page.keyboard.press('Escape');
+        // The imported tree is the open one once its focus (Albin) is set: the overview reads its
+        // root person from that focus, so it is opened only after the switch settled.
+        await expect.poll(() => page.evaluate(() => window.Strom.TreeRenderer.getFocusPersonId())).toBe('o2');
         sec = await openRods(page, small);
         await expect(sec.locator('.tov-sum')).toHaveText('2 small families');
         await expect(sec.locator('.tov-rod-other')).toHaveCount(0);

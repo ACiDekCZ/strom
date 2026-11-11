@@ -315,9 +315,10 @@ test.describe('Kinds of history: the manager', () => {
         await expect(box.locator('.hm-kinds-note')).toContainText('The same options as in Settings');
         await expect(box.locator('.hm-kind-row')).toHaveCount(9);
         await expect(box.locator('[data-search-kind][data-state="off"]')).toHaveCount(2);
-        // Three columns on a desktop.
-        const cols = await box.locator('.hm-kinds-grid').evaluate(el => getComputedStyle(el).gridTemplateColumns.split(' ').length);
-        expect(cols).toBe(3);
+        // Three columns on a desktop. Read until the grid is laid out: a read while the manager draws the box
+        // again (its answer from the research) catches an element without a style yet ("" = one column).
+        await expect.poll(() => box.locator('.hm-kinds-grid').evaluate(el => getComputedStyle(el).gridTemplateColumns.split(' ').length))
+            .toBe(3);
         // The same switch as in Settings: a kind switched off is written after its confirmation (1102).
         await box.locator('[data-search-kind="state"]').click();
         await expect(page.locator('#confirmation-modal.active #confirm-message')).toContainText('would hide 1 found event of this kind');
