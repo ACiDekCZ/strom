@@ -43,6 +43,8 @@ test.describe('the Table without following (spec 057 §7.4)', () => {
         await expect.poll(() => cellOf(page, 'P0001', 'rTasks')).toBe('1 · next no. 1 in the queue');
         // The columns look as while following: no dashed "live" tag in their heads.
         await expect(page.locator('#table-container .tv-headrow [data-col="rAgent"] .tv-live-tag')).toHaveCount(0);
+        // The status line names where the cells come from: the running research, not following it.
+        await expect(page.locator('#table-container .tv-status-res')).toHaveText('● Agent and tasks from the running research');
 
         // The next answer: nobody at work, the queue empty — empty cells, not "–".
         bridge.statusExtra = { working: [], queue: [] };
@@ -56,5 +58,6 @@ test.describe('the Table without following (spec 057 §7.4)', () => {
         await expect.poll(() => cellOf(page, 'P0003', 'rAgent')).toBe('–');
         await expect.poll(() => cellOf(page, 'P0001', 'rTasks')).toBe('–');
         await expect(page.locator('#table-container .tv-headrow [data-col="rAgent"] .tv-live-tag')).toHaveCount(1);
+        await expect(page.locator('#table-container .tv-status-res')).not.toHaveText(/running research|live/);
     });
 });

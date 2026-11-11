@@ -77,6 +77,8 @@ describe('the Table without following (spec 057 §7.4)', () => {
         });
         const live = tableLive();
         expect(live.live).toBe(true);
+        // Not followed: the status line names the bridge, not following.
+        expect(live.followed).toBe(false);
         expect(live.queue.map(q => q.id)).toEqual(['T0007']);
         expect(cellText(live, 'P0001', 'rAgent')).toBe('working: Křest Tobiáše');
         expect(cellText(live, 'P0002', 'rAgent')).toBe('in the queue');

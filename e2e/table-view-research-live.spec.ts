@@ -291,6 +291,8 @@ test.describe('phone (390): Research and Line right after the name (16x, 16zh)',
         await openView(page, 'r:research');
         await nextToName(page, 'rSum', true);
         await expect((await nameOf(page, 'P0003')).locator('.tv-agent-bar')).toBeVisible();
+        // Followed here: the status line says so.
+        await expect(page.locator('#table-container .tv-status-res')).toHaveText('● Following the research live');
         await openView(page, 'r:line:G0001');
         await nextToName(page, 'rLine', true);
     });

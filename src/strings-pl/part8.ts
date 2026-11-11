@@ -1226,6 +1226,7 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
             liveOnly: 'Tylko podczas śledzenia badań',
             exportNotLive: 'Agent i Zadania badań są puste: badania nie są śledzone.',
             following: '● Badania śledzone na żywo',
+            fromBridge: '● Agent i zadania z działającego badania',
             stale: (when: string) => `Badania: stan z ${when}`,
             workingPair: (task: string) => task ? `pracuje nad parą: ${task}` : 'pracuje nad parą',
             img: { research: 'na komputerze badań', missing: 'brak skanu na komputerze badań', online: 'online (archiwum)' },

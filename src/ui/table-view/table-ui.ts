@@ -499,12 +499,12 @@ export const tableMethods = uiModule({
         const done = [...now.done].filter(([, t]) => at - t < AGENT_DONE_MS);
         this.tableAgentDoneLater(done.length ? Math.min(...done.map(([, t]) => t)) + AGENT_DONE_MS - at : null);
         const key = [
-            data, rev, m, kind, readOnly, now.live, now.waiting, now.working, now.queue, done.join(';'), places,
+            data, rev, m, kind, readOnly, now.live, now.followed, now.waiting, now.working, now.queue, done.join(';'), places,
             b && b !== 'same' ? b.base : b, b && b !== 'same' ? b.key : '',
         ];
         if (researchMemo && sameKey(researchMemo.key, key)) return researchMemo.env;
         const input: ResearchTableInput = {
-            kind, readOnly, live: now.live, waiting: now.waiting, working: now.working, queue: now.queue, done: new Map(done),
+            kind, readOnly, live: now.live, followed: now.followed, waiting: now.waiting, working: now.working, queue: now.queue, done: new Map(done),
             livePlaces: places, unsent: new LazyUnsent(() => this.researchChangesNow()),
             conflictsOf: researchConflictsNow, materialsOf: materialsCountNow,
             generationOf: id => m.ctx.generations().get(id), now: at,
@@ -794,7 +794,7 @@ export const tableMethods = uiModule({
         updateStatus(mounted.status, type, rows.length, counts[type], st.sort, !!checks?.running, tableReadOnly());
         const researchShown = !!research && display.columns.some(c => c.group === 'research');
         updateResearchStatus(mounted.status, !research || !researchShown ? null
-            : research.input.live ? { live: true } : { live: false, when: this.tableResearchWhen(tree) });
+            : research.input.live ? { live: true, followed: !!research.input.followed } : { live: false, when: this.tableResearchWhen(tree) });
         mounted.unionsButton = unionsButton;
         const openView = openViewOf(state, type, data.tableViews);
         this.drawTableEmpty(tableEmptyState({

@@ -37,6 +37,8 @@ export interface ResearchTableInput {
     readOnly?: boolean;
     /** The agent's work and queue are known now: the research is followed live, or its bridge answers (spec 057 §7.4). */
     live: boolean;
+    /** Followed here; live without it: the bridge's state without following (the status line names which). */
+    followed?: boolean;
     /** What waits for the user: live, else as last heard (≤ 7 days), else none. */
     waiting?: readonly LiveWaiting[];
     /** The agent's work right now (live only). */

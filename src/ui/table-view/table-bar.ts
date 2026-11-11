@@ -123,12 +123,15 @@ export function updateStatus(el: HTMLElement, type: RowType, shown: number, tota
 
 /**
  * The research's state in the status line (§16.2), only while a research
- * column is shown: "● Following the research live", else "Research: as of
- * {when}" (the state the cells come from); nothing otherwise.
+ * column is shown, naming where the cells come from: "● Following the
+ * research live", "● Agent and tasks from the running research" (its bridge
+ * answers, not followed), else "Research: as of {when}" (the last load from
+ * it); nothing otherwise.
  */
-export function updateResearchStatus(el: HTMLElement, state: { live: true } | { live: false; when: string } | null): void {
+export function updateResearchStatus(el: HTMLElement, state: { live: true; followed: boolean } | { live: false; when: string } | null): void {
     const res = el.querySelector<HTMLElement>('.tv-status-res')!;
-    const text = !state ? '' : state.live ? strings.table.res.following : state.when ? strings.table.res.stale(state.when) : '';
+    const R = strings.table.res;
+    const text = !state ? '' : state.live ? (state.followed ? R.following : R.fromBridge) : state.when ? R.stale(state.when) : '';
     res.hidden = !text;
     res.textContent = text;
     res.title = text;

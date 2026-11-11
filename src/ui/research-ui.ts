@@ -835,6 +835,8 @@ export interface ResearchTableLive {
     done: ReadonlyMap<string, number>;
     /** The followed bridge (its lines' places); null when not followed. */
     base: string | null;
+    /** Followed here (else, when live, the bridge answers without following). */
+    followed: boolean;
 }
 
 const NO_DONE: ReadonlyMap<string, number> = new Map();
@@ -871,7 +873,7 @@ function unfollowedAgentNow(researchId: string): Pick<LiveSession, 'working' | '
  */
 export function researchTableLive(): ResearchTableLive {
     const s = followedHere();
-    if (s) return { live: true, waiting: s.waiting, working: s.working, queue: s.queue, done: agentDone, base: s.bridge.base || null };
+    if (s) return { live: true, waiting: s.waiting, working: s.working, queue: s.queue, done: agentDone, base: s.bridge.base || null, followed: true };
     const treeId = DataManager.getCurrentTreeId();
     const researchId = treeId && !DataManager.isViewMode() ? TreeManager.getTreeMetadata(treeId)?.research?.id : undefined;
     const items = (researchId ? storedResearchWaiting(researchId)?.items : undefined) ?? NO_WAITING;
@@ -882,8 +884,8 @@ export function researchTableLive(): ResearchTableLive {
         waiting = storedWaiting.items;
     }
     const agent = researchId ? unfollowedAgentNow(researchId) : null;
-    if (agent) return { live: true, waiting, working: agent.working, queue: agent.queue, done: NO_DONE, base: null };
-    return { live: false, waiting, working: NO_WORKING, queue: NO_QUEUE, done: NO_DONE, base: null };
+    if (agent) return { live: true, waiting, working: agent.working, queue: agent.queue, done: NO_DONE, base: null, followed: false };
+    return { live: false, waiting, working: NO_WORKING, queue: NO_QUEUE, done: NO_DONE, base: null, followed: false };
 }
 
 /**
