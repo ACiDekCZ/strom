@@ -177,6 +177,23 @@ function keepAnswerFocus(): () => void {
     };
 }
 
+/**
+ * A control with a focus key (the hypotheses' boxes, "Select all", "Accept
+ * proposals") keeps the focus over a redraw that rebuilt it: a status of the
+ * research followed live draws the overview again at any moment.
+ */
+function keepKeyFocus(): () => void {
+    const a = document.activeElement as HTMLElement | null;
+    const key = a?.closest('#research-overview') ? a.dataset.focusKey : undefined;
+    if (!a || !key) return () => {};
+    return () => {
+        const now = document.activeElement;
+        if (now && now !== document.body && now.isConnected) return;
+        const target = document.querySelector<HTMLElement>(`#research-overview [data-focus-key="${CSS.escape(key)}"]`);
+        if (target && !(target as HTMLButtonElement).disabled) target.focus({ preventScroll: true });
+    };
+}
+
 /** The open answer form closes (its draft stays). */
 function closeAnswerForm(): void {
     if (!answeringKey) return;
@@ -390,6 +407,7 @@ export const researchOverviewMethods = uiModule({
         }
         queueMicrotask(keepLineFocus());
         queueMicrotask(keepAnswerFocus());
+        queueMicrotask(keepKeyFocus());
         // The followed research's, else the open tree's viewed without following (spec 057 §7.2).
         const followed = followedOverview();
         const viewed = followed ? null : overviewViewing();

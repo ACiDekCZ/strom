@@ -240,6 +240,9 @@ test.describe('Research hypotheses in What waits and the overview', () => {
         await expect(foot.locator('.hp2-sum')).toHaveText('2 selected. Large link: H0052 → A links 214 people.');
         await expect(foot.locator('.hp2-accept')).toContainText('Accept proposals (2)');
         await expect(foot.locator('.hp2-accept')).toBeFocused();
+        // A redraw of the overview (a status of the research followed live) keeps that focus.
+        await page.evaluate(() => window.Strom.UI.renderResearchOverview());
+        await expect(foot.locator('.hp2-accept')).toBeFocused();
         // The same choice in What waits.
         await unfoldWaiting(page);
         await expect(item(page, 'H0052').locator('.hp2-box')).toBeChecked();
