@@ -50,7 +50,7 @@ import { shownName, fitNameHtml } from '../person-name.js';
 import { isOpenHypothesis } from '../view-links.js';
 import { waitBranchText, workingWhyText } from './research-offline-ui.js';
 import { beginQueueSlots, endQueueSlots } from '../research-queue-pages.js';
-import { PREF_KEYS, SectionPref, prefKeyOfOverview, sectionPrefs, setSectionPref } from './live-section-prefs.js';
+import { PREF_KEYS, PrefKey, SectionPref, prefKeyOfOverview, sectionOrder, sectionPrefs, setSectionPref, topPrefs, topTileShown } from './live-section-prefs.js';
 
 /** The overview stays open over a reload / the next following (per device). */
 const OPEN_KEY = 'strom-live-overview-open';
@@ -491,22 +491,37 @@ export const researchOverviewMethods = uiModule({
         if (PREF_KEYS.every(k => sectionPrefs()[k] === 'hidden')) {
             appendAllHidden(body, (anchor) => this.openLiveSectionEditor(anchor, 'overview'));
         }
-        if (shown('now')) this.appendOverviewNow(body, s, fold('now'), mode);
-        if (s.waiting.length > 0 && shown('waiting')) {
-            const f = fold('waiting');
-            // Collapsed: "N new" beside the title; expanded: what is to do now is seen.
-            if (f.collapsed) {
-                const chip = waitingNewChip(s);
-                if (chip) f.extra = [...(f.extra ?? []), chip];
-            } else {
-                noteWaitingShown(s);
-            }
-            this.appendOverviewWaiting(body, s, f, mode);
-        }
-        if (shown('directions')) this.appendOverviewDirections(body, s, fold('directions'), mode);
-        if (shown('timeline')) this.appendOverviewTimeline(body, s, fold('timeline'), mode);
-        if (!s.ended && shown('queue')) this.appendQueueSection(body, s, fold('queue'), 20, L.queueTitle, true);
-        if (shown('knows')) this.appendOverviewKnows(body, fold('knows'), mode);
+        const draw: Record<PrefKey, () => void> = {
+            working: () => {
+                if (shown('now')) this.appendOverviewNow(body, s, fold('now'), mode);
+            },
+            waiting: () => {
+                if (s.waiting.length === 0 || !shown('waiting')) return;
+                const f = fold('waiting');
+                // Collapsed: "N new" beside the title; expanded: what is to do now is seen.
+                if (f.collapsed) {
+                    const chip = waitingNewChip(s);
+                    if (chip) f.extra = [...(f.extra ?? []), chip];
+                } else {
+                    noteWaitingShown(s);
+                }
+                this.appendOverviewWaiting(body, s, f, mode);
+            },
+            directions: () => {
+                if (shown('directions')) this.appendOverviewDirections(body, s, fold('directions'), mode);
+            },
+            changes: () => {
+                if (shown('timeline')) this.appendOverviewTimeline(body, s, fold('timeline'), mode);
+            },
+            queue: () => {
+                if (!s.ended && shown('queue')) this.appendQueueSection(body, s, fold('queue'), 20, L.queueTitle, true);
+            },
+            knows: () => {
+                if (shown('knows')) this.appendOverviewKnows(body, fold('knows'), mode);
+            },
+        };
+        // In the sections' order (one for the overview and the panel).
+        for (const key of sectionOrder()) draw[key]();
         this.appendOverviewFoot(root, s, mode);
         endQueueSlots();
         body.scrollTop = scrollTop;
@@ -523,14 +538,27 @@ export const researchOverviewMethods = uiModule({
         const persons = Object.values(data.persons).filter(p => !p.isPlaceholder).length;
         const sources = Object.keys(data.sources ?? {}).length;
         const strip = el('div', 'research-overview__summary');
-        const cell = (label: string, value: string, sub: HTMLElement | string, cls = '', title = ''): void => {
+        // What the top shows: the parts of the tiles (the cost only when switched on).
+        const top = topPrefs();
+        const cell = (label: string, value: HTMLElement | string, sub: HTMLElement | string | null, cls = '', title = ''): void => {
             const c = el('div', `research-overview__cell${cls ? ` ${cls}` : ''}`);
-            c.append(el('div', 'research-overview__cell-label', label), el('div', 'research-overview__cell-value', value));
-            const subEl = typeof sub === 'string' ? el('div', 'research-overview__cell-sub', sub) : sub;
-            // One line; the whole text (and the research version) on hover.
-            subEl.title = title || subEl.textContent || '';
-            c.appendChild(subEl);
+            const valueEl = typeof value === 'string' ? el('div', 'research-overview__cell-value', value) : value;
+            c.append(el('div', 'research-overview__cell-label', label), valueEl);
+            if (sub !== null) {
+                const subEl = typeof sub === 'string' ? el('div', 'research-overview__cell-sub', sub) : sub;
+                // One line; the whole text (and the research version) on hover.
+                subEl.title = title || subEl.textContent || '';
+                c.appendChild(subEl);
+            }
             strip.appendChild(c);
+        };
+        // A tile with one part: that part is its value, no line under it.
+        const dayCell = (label: string, persons: string, sources: string): void => {
+            if (!topTileShown(top, 'day')) return;
+            const p = top['day.persons'];
+            const q = top['day.sources'];
+            if (p && q) cell(label, persons, sources);
+            else cell(label, p ? persons : sources, null);
         };
         const { label: state, cls: stateCls } = liveState(s);
         // When the research last changed (its own time; else the last change
@@ -554,12 +582,12 @@ export const researchOverviewMethods = uiModule({
             // What the research added in the last 24 hours: the bridge's own count
             // (and what came after it), else from its history.
             const added = recentAddsCount(s.recent, s.adds, Date.now(), RECENT_MS);
-            cell(L.last24h, L.plusPersons(added.persons), L.plusSourcesToday(added.sources));
+            dayCell(L.last24h, L.plusPersons(added.persons), L.plusSourcesToday(added.sources));
         } else {
-            cell(L.sinceWatching, L.plusPersons(Math.max(0, persons - s.startPersons)),
+            dayCell(L.sinceWatching, L.plusPersons(Math.max(0, persons - s.startPersons)),
                 L.plusSources(Math.max(0, sources - s.startSources), hhmm(s.startedAt)));
         }
-        if (s.spend && mode !== 'sheet') {
+        if (s.spend && mode !== 'sheet' && topTileShown(top, 'month')) {
             const currency = s.spend.currency;
             const money = (n: number): string => {
                 try {
@@ -568,25 +596,34 @@ export const researchOverviewMethods = uiModule({
                     return `${n.toFixed(2)} ${currency}`;
                 }
             };
-            const amount = money(s.spend.amount);
+            const price = top['month.price'];
+            const count = s.spend.sessions;
             const url = this.activeResearchLink('sessions');
-            let sub: HTMLElement;
-            if (url) {
-                sub = setResearchActionLabel(el('button', 'link-button research-overview__cell-sub'), L.sessions(s.spend.sessions), researchLinkMark('sessions'));
-                (sub as HTMLButtonElement).type = 'button';
-                sub.onclick = () => this.launchResearchLink(url);
+            // The sessions: a link into the research (with its mark), else plain text.
+            const sessionsEl = (cls: string): HTMLElement => {
+                if (!url) return el('div', cls, L.sessions(count));
+                const btn = setResearchActionLabel(el('button', `link-button ${cls}`), L.sessions(count), researchLinkMark('sessions'));
+                btn.type = 'button';
+                btn.onclick = () => this.launchResearchLink(url);
+                return btn;
+            };
+            if (!price) {
+                // Without the cost: the sessions are the value; no amount anywhere (nor on hover).
+                cell(L.thisMonth, sessionsEl('research-overview__cell-value'), null);
             } else {
-                sub = el('div', 'research-overview__cell-sub', L.sessions(s.spend.sessions));
+                const amount = money(s.spend.amount);
+                cell(L.thisMonth, amount, top['month.sessions'] ? sessionsEl('research-overview__cell-sub') : null);
             }
-            cell(L.thisMonth, amount, sub);
-            // Of it the scan readers (a bridge that counts them, when they cost anything).
-            if (s.spend.readers) {
+            // Of it the scan readers (a bridge that counts them, when they cost anything): a part of the cost.
+            if (price && s.spend.readers) {
                 const readers = el('div', 'research-overview__cell-sub research-overview__readers', L.scanReaders(money(s.spend.readers)));
                 readers.title = readers.textContent ?? '';
                 strip.lastElementChild?.appendChild(readers);
             }
         }
-        strip.classList.toggle('research-overview__summary--two', strip.childElementCount === 2);
+        // The tiles share the row equally (3 / 2); the state alone takes it whole.
+        const n = Math.min(3, strip.childElementCount);
+        for (const k of [1, 2, 3]) strip.classList.toggle(`research-overview__summary--n${k}`, k === n);
         body.appendChild(strip);
     },
 

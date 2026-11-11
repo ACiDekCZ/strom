@@ -1,15 +1,14 @@
 /**
- * Customize panel (spec 044): the rows each place shows (order, words,
- * notes, the line before the overview's own sections), the state shown
- * dashed while a section has no choice, a section menu's head and the
- * segment's arrow keys.
+ * Customize panel (spec 044, 057): the rows each place shows (order, words,
+ * notes), the state shown dashed while a section has no choice, a section
+ * menu's head and the segment's arrow keys.
  */
 import { describe, it, expect } from 'vitest';
 import {
     OVERVIEW_ORDER, SECTION_STATES, sectionDefaultNote, sectionEditRows, sectionMenuHead, sectionStateLabel,
     sectionTitle, segmentArrowTarget,
 } from '../ui/live-section-edit.js';
-import { PREF_KEYS } from '../ui/live-section-prefs.js';
+import { DEFAULT_ORDER } from '../ui/live-section-prefs.js';
 import type { SectionNow } from '../ui/live-section-edit.js';
 import { strings } from '../strings.js';
 
@@ -17,20 +16,25 @@ const L = strings.live;
 const expanded = (): SectionNow => ({ current: 'expanded', autoFolded: false });
 
 describe('sectionEditRows', () => {
-    it('panel: its four sections, a line, then the two the overview alone has', () => {
+    it('panel: all six in the sections\' order, in one list; the two the overview alone has say so', () => {
         const rows = sectionEditRows('panel', {}, expanded);
-        expect(rows.map(r => r.key)).toEqual([...PREF_KEYS]);
-        expect(rows.map(r => r.sep)).toEqual([false, false, false, false, true, false]);
+        expect(rows.map(r => r.key)).toEqual([...DEFAULT_ORDER]);
         expect(rows[0].label).toBe(strings.research.atWork);
         expect(rows[0].note).toBe(`${L.sectionDefault} · ${L.inOverview(L.now)}`);
-        expect(rows[4].note).toBe(`${L.sectionDefault} · ${L.onlyInOverview}`);
+        expect(rows.find(r => r.key === 'directions')!.note).toBe(`${L.sectionDefault} · ${L.onlyInOverview}`);
         expect(rows[1].note).toBe(L.sectionDefault);
+    });
+
+    it('a stored order is the rows\' order in every place', () => {
+        const order = ['queue', 'knows', 'working', 'changes', 'waiting', 'directions'] as const;
+        for (const surface of ['panel', 'overview', 'settings'] as const) {
+            expect(sectionEditRows(surface, {}, expanded, order).map(r => r.key)).toEqual([...order]);
+        }
     });
 
     it('overview: its own order and words, no line, the panel name as the alias', () => {
         const rows = sectionEditRows('overview', {}, expanded);
         expect(rows.map(r => r.key)).toEqual([...OVERVIEW_ORDER]);
-        expect(rows.some(r => r.sep)).toBe(false);
         expect(rows.map(r => r.label)).toEqual([L.now, strings.research.waiting, L.dirTitleEmpty, L.timeline, L.queueTitle, L.knowsTitle]);
         expect(rows[3].note).toBe(`${L.sectionDefault} · ${L.inPanel(strings.research.changes)}`);
     });
@@ -49,12 +53,12 @@ describe('sectionEditRows', () => {
         expect(queue.note).toBe(`${L.sectionDefault}, ${L.autoFoldedNote}`);
     });
 
-    it('Settings: the panel words, no line, no state shown (the default differs by place)', () => {
+    it('Settings: the panel words, no state shown (the default differs by place)', () => {
         let asked = 0;
         const rows = sectionEditRows('settings', { knows: 'collapsed' }, () => { asked++; return expanded(); });
         expect(asked).toBe(0);
-        expect(rows.map(r => r.key)).toEqual([...PREF_KEYS]);
-        expect(rows.every(r => r.current === null && !r.sep)).toBe(true);
+        expect(rows.map(r => r.key)).toEqual([...DEFAULT_ORDER]);
+        expect(rows.every(r => r.current === null)).toBe(true);
         expect(rows.find(r => r.key === 'knows')!.note).toBe(L.onlyInOverview);
         expect(rows.find(r => r.key === 'queue')!.note).toBe(L.sectionDefault);
     });

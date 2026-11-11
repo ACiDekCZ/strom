@@ -243,7 +243,22 @@ test.describe('live panel: up next, update, spend', () => {
         const headings = await panel.locator('.live-section__title').allTextContents();
         expect(headings.map(h => h.trim())).toEqual(['At work', 'Latest changes', 'Up next']);
         await expect(panel.locator('.live-panel-update')).toContainText('New Strom Research 1.7.0');
+        // The cost hidden by default (spec 057): the sessions alone; switched on, both.
+        await expect(panel.locator('.live-panel-spend-text')).toHaveText('Agent this month: 4 sessions');
+        await expect(panel.locator('.live-panel-spend')).not.toContainText('$');
+        const setTop = (t: Record<string, boolean>) => page.evaluate((top) => {
+            localStorage.setItem('strom-live-section-prefs', JSON.stringify({ v: 2, s: {}, t: top }));
+            document.dispatchEvent(new CustomEvent('strom:live-section-prefs'));
+        }, t);
+        await setTop({ 'month.price': true });
         await expect(panel.locator('.live-panel-spend')).toHaveText(/Agent this month: 4 sessions · \$3\.20/);
+        await setTop({ 'month.price': true, 'month.sessions': false });
+        await expect(panel.locator('.live-panel-spend-text')).toHaveText('Agent this month: $3.20');
+        // Neither part: no foot at all.
+        await setTop({ 'month.sessions': false });
+        await expect(panel.locator('.live-panel-spend')).toHaveCount(0);
+        await setTop({});
+        await expect(panel.locator('.live-panel-spend')).toHaveCount(1);
 
         // ⋯ → a small menu; Escape closes it (and only it).
         const more = panel.locator('.live-queue-more').first();

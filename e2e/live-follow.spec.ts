@@ -947,6 +947,30 @@ test.describe('follow the agent in the fan (spec 043)', () => {
         await expect(page.locator('#live-panel .live-follow-view')).toHaveCount(0);
     });
 
+    test('"Follow in" hidden at the top (spec 057): no row in the panel or the overview, following goes on in the view chosen before', async ({ page }) => {
+        await follow(page, { idle: 60_000 });
+        await page.evaluate(() => {
+            localStorage.setItem('strom-live-follow-view', 'fan');
+            localStorage.setItem('strom-live-section-prefs', JSON.stringify({ v: 2, s: {}, t: { followIn: false } }));
+            document.dispatchEvent(new CustomEvent('strom:live-section-prefs'));
+        });
+        await btn(page).click();
+        await expect(btn(page)).toHaveAttribute('aria-pressed', 'true');
+        await expect.poll(() => view(page)).toBe('fan');
+        await expect(page.locator('#live-panel .live-follow-view')).toHaveCount(0);
+        await page.evaluate(() => window.Strom.UI.openResearchOverview());
+        await expect(page.locator('#research-overview')).toBeVisible();
+        await expect(page.locator('.live-follow-view--overview')).toHaveCount(0);
+        await page.keyboard.press('Escape');
+        // Shown again: the row comes back at once (the choice's event redraws).
+        await page.evaluate(() => {
+            localStorage.setItem('strom-live-section-prefs', JSON.stringify({ v: 2, s: {} }));
+            document.dispatchEvent(new CustomEvent('strom:live-section-prefs'));
+        });
+        await expect(page.locator('#live-panel .live-follow-view [aria-checked="true"]')).toHaveText('Fan');
+        await expect(btn(page)).toHaveAttribute('aria-pressed', 'true');
+    });
+
     test('in the fan a tap on a sector keeps following; the descendants view pauses it; Back to the agent returns to the fan', async ({ page }) => {
         await follow(page, { idle: 60_000, on: true });
         await expect.poll(() => focusRefn(page)).toBe('P0012');

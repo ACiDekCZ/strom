@@ -19003,7 +19003,6 @@
         }
         .live-sec-edit__head { flex: none; padding: 10px 14px 6px; font-size: 14px; font-weight: 600; }
         .live-sec-edit__list { flex: 1; min-height: 0; overflow-y: auto; padding: 0 14px 4px; }
-        .live-sec-edit__sep { height: 1px; background: var(--divider); margin: 6px 0 2px; }
         .live-sec-edit__row { display: grid; grid-template-columns: 12px minmax(0, 1fr); column-gap: 4px; padding: 7px 0; }
         .live-sec-edit__main { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
         .live-sec-edit__text { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; min-width: 0; }
@@ -19078,7 +19077,6 @@
         }
         .live-sec-sheet__close:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         .live-sec-sheet .live-sec-edit__list { padding: 0 18px 6px; }
-        .live-sec-sheet .live-sec-edit__sep { margin: 4px 0; }
         .live-sec-sheet .live-sec-edit__row { display: block; padding: 8px 0; }
         .live-sec-sheet .live-sec-edit__main { flex-direction: column; gap: 6px 12px; }
         .live-sec-sheet .live-sec-edit__label { font-size: 15px; }
@@ -19165,7 +19163,14 @@
             display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; margin: 12px -16px 0;
             background: var(--divider); border-bottom: 1px solid var(--divider);
         }
-        .research-overview__summary--two { grid-template-columns: repeat(2, 1fr); }
+        /* The tiles share the row equally (3 / 2); the state alone: one row, label, value and time on one line (spec 057). */
+        .research-overview__summary--n3 { grid-template-columns: repeat(3, 1fr); }
+        .research-overview__summary--n2 { grid-template-columns: repeat(2, 1fr); }
+        .research-overview__summary--n1 { grid-template-columns: 1fr; }
+        .research-overview__summary--n1 .research-overview__cell { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+        .research-overview__summary--n1 .research-overview__cell-value,
+        .research-overview__summary--n1 .research-overview__cell-sub { margin-top: 0; }
+        .research-overview__summary--n1 .research-overview__cell-sub { display: inline; min-width: 0; }
         /* Under "Follow in" the summary closes up to its band: no white strip there once the line about the switch is gone (1105). */
         .research-overview > .live-follow-view + .research-overview__body > .research-overview__summary { margin-top: 0; }
         .research-overview__cell { background: var(--surface-2); padding: 10px 14px; min-width: 0; }
@@ -19821,7 +19826,7 @@
         .research-overview__foot .link-button { padding: 0; font-size: 13px; }
         .research-overview__open { margin-left: auto; }
         @media (max-width: 640px) {
-            .research-overview__summary { grid-template-columns: repeat(2, 1fr); }
+            .research-overview__summary--n3 { grid-template-columns: repeat(2, 1fr); }
         }
 
         /* Live panel: update strip, "Up next", this month's spend. */

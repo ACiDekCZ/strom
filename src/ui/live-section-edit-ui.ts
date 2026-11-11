@@ -229,11 +229,6 @@ function fillEditorList(list: HTMLElement, surface: Surface, sheet: boolean): vo
     const mark = focusMark(list);
     list.replaceChildren();
     for (const row of sectionEditRows(surface, sectionPrefs(), nowOf(surface))) {
-        if (row.sep) {
-            const sep = el('div', 'live-sec-edit__sep');
-            sep.setAttribute('aria-hidden', 'true');
-            list.appendChild(sep);
-        }
         const line = el('div', 'live-sec-edit__row');
         line.dataset.key = row.key;
         if (!sheet) {

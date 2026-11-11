@@ -63,7 +63,7 @@ import type { TaskOrderDo } from '../research-directions-write.js';
 import { OTHER_GROUP, panelWaiting, textWithLinks, todoWaiting, waitingSection, waitingTodoCount } from '../research-waiting.js';
 import { agoShort } from '../research-others.js';
 import {
-    PrefKey, SECTION_PREFS_EVENT, SectionPref, hasSectionPrefs, isImportantWaiting, resetSectionPrefs, restoreSectionPrefs, newWaiting, noteWaitingSeen, sectionPrefs, setSectionPref,
+    PrefKey, SECTION_PREFS_EVENT, SectionPref, autoFoldOrder, hasSectionPrefs, isImportantWaiting, resetSectionPrefs, restoreSectionPrefs, newWaiting, noteWaitingSeen, panelSectionOrder, sectionPrefs, sectionPrefsSnapshot, setSectionPref, topPrefs,
     waitingSeen, watchSectionPrefsStorage, PANEL_PREF_KEYS,
 } from './live-section-prefs.js';
 import {
@@ -272,8 +272,6 @@ const RETRY_MAX_MS = 5000;
 const MAX_CHANGES = 3000;
 /** Change lines in the small panel. */
 const PANEL_CHANGES = 5;
-/** The panel folds these by itself, in this order, when it runs out of room. */
-const AUTO_FOLD: LiveSectionKey[] = ['queue', 'changes', 'working'];
 
 /** The small panel hides on another tree and while the overview (which shows the same) is drawn. */
 function livePanelHidden(s: LiveSession): boolean {
@@ -3724,8 +3722,8 @@ export const researchUiMethods = uiModule({
 
     /** A section hidden from its menu (it vanishes where it was clicked): said, with Undo for a while. */
     hideLiveSection(key: PrefKey): void {
-        const before = sectionPrefs();
-        if (before[key] === 'hidden') return;
+        const before = sectionPrefsSnapshot();
+        if (before.s[key] === 'hidden') return;
         setSectionPref(key, 'hidden');
         this.showToast(strings.live.hiddenToast, 6000, {
             kind: 'live-sections',
@@ -4037,87 +4035,98 @@ export const researchUiMethods = uiModule({
         // show it only while live.
         const multi = linesMulti(s);
         const sel = selectedLine(s);
-        if (panelSectionHidden('working')) {
-            // Hidden by the user: not drawn.
-        } else if (!s.ended && multi) {
-            // Two or more lines at work: a row each, one can be selected (spec 011).
-            const o = strings.otherResearch;
-            const groups = workingLineGroups(s);
-            const n = workingLineCount(groups);
-            const glyphs = groups.filter(g => g.id).map(g => directionGlyph(g.direction)).join(' ');
-            const summary = sel ? o.lineSelected(directionGlyph(sel), sel.name)
-                : [glyphs, o.linesWorking(n)].filter(Boolean).join(' · ');
-            // Folded, the summary says the lines or the selection; unfolded, the title says the count
-            // and "All directions" drops a selection.
-            const workingFold = fold('working');
-            const title = n >= 2 && !workingFold.collapsed ? o.linesTitle(n) : r.atWork;
-            let aside: HTMLButtonElement | undefined;
-            if (sel && !workingFold.collapsed) {
-                aside = el('button', 'link-button live-lines-all', o.linesAll);
-                aside.type = 'button';
-                // Focus goes back to the dropped line's row after the redraw.
-                aside.dataset.direction = sel.id;
-                aside.onclick = () => this.setWorkingLine('all');
+        const drawWorking = (): void => {
+            if (panelSectionHidden('working')) {
+                // Hidden by the user: not drawn.
+            } else if (!s.ended && multi) {
+                // Two or more lines at work: a row each, one can be selected (spec 011).
+                const o = strings.otherResearch;
+                const groups = workingLineGroups(s);
+                const n = workingLineCount(groups);
+                const glyphs = groups.filter(g => g.id).map(g => directionGlyph(g.direction)).join(' ');
+                const summary = sel ? o.lineSelected(directionGlyph(sel), sel.name)
+                    : [glyphs, o.linesWorking(n)].filter(Boolean).join(' · ');
+                // Folded, the summary says the lines or the selection; unfolded, the title says the count
+                // and "All directions" drops a selection.
+                const workingFold = fold('working');
+                const title = n >= 2 && !workingFold.collapsed ? o.linesTitle(n) : r.atWork;
+                let aside: HTMLButtonElement | undefined;
+                if (sel && !workingFold.collapsed) {
+                    aside = el('button', 'link-button live-lines-all', o.linesAll);
+                    aside.type = 'button';
+                    // Focus goes back to the dropped line's row after the redraw.
+                    aside.dataset.direction = sel.id;
+                    aside.onclick = () => this.setWorkingLine('all');
+                }
+                const host = liveSection(body, { ...workingFold, title, summary: workingFold.collapsed ? summary : undefined, aside, help: nowHelpTopic(s) });
+                this.appendWorkingLines(host, s, groups);
+            } else if (!s.ended) {
+                const w = s.working[0];
+                const since = w ? Date.parse(w.since) : NaN;
+                const summary = w ? [w.who, w.paused ? L.statePaused : Number.isFinite(since) ? liveDuration(since) : ''].filter(Boolean).join(' · ') : L.nobody;
+                const host = liveSection(body, { ...fold('working'), title: r.atWork, summary, help: nowHelpTopic(s) });
+                this.appendWorkingList(host, s);
             }
-            const host = liveSection(body, { ...workingFold, title, summary: workingFold.collapsed ? summary : undefined, aside, help: nowHelpTopic(s) });
-            this.appendWorkingLines(host, s, groups);
-        } else if (!s.ended) {
-            const w = s.working[0];
-            const since = w ? Date.parse(w.since) : NaN;
-            const summary = w ? [w.who, w.paused ? L.statePaused : Number.isFinite(since) ? liveDuration(since) : ''].filter(Boolean).join(' · ') : L.nobody;
-            const host = liveSection(body, { ...fold('working'), title: r.atWork, summary, help: nowHelpTopic(s) });
-            this.appendWorkingList(host, s);
-        }
+        };
 
-        // What waits for the user comes before what changed: it needs them.
-        if (s.waiting.length > 0 && !panelSectionHidden('waiting')) {
-            const waitingFold = fold('waiting');
-            // Collapsed: "N new" beside the title (inside the heading's button); expanded and in view: all seen.
-            const newChip = waitingFold.collapsed ? waitingNewChip(s) : null;
-            if (!waitingFold.collapsed && !collapsed && !panel.hidden) noteWaitingShown(s);
-            const host = this.appendWaitingSection(body, s.waiting, !s.ended, { ...waitingFold, ...(newChip ? { extra: [newChip] } : {}) });
-            if (!s.ended) {
-                // A question about a place is answered here (its Answer opens the dialog), the rest in the research.
-                const where = waitingAnswerPlace(s.waiting, this.waitingPlacesAccess().canAnswer);
-                host.appendChild(el('p', 'live-panel-hint', where === 'here' ? r.answerHere : where === 'mixed' ? r.answerMixed : r.answerWhere));
+        // What waits for the user (by default before what changed: it needs them).
+        const drawWaiting = (): void => {
+            if (s.waiting.length > 0 && !panelSectionHidden('waiting')) {
+                const waitingFold = fold('waiting');
+                // Collapsed: "N new" beside the title (inside the heading's button); expanded and in view: all seen.
+                const newChip = waitingFold.collapsed ? waitingNewChip(s) : null;
+                if (!waitingFold.collapsed && !collapsed && !panel.hidden) noteWaitingShown(s);
+                const host = this.appendWaitingSection(body, s.waiting, !s.ended, { ...waitingFold, ...(newChip ? { extra: [newChip] } : {}) });
+                if (!s.ended) {
+                    // A question about a place is answered here (its Answer opens the dialog), the rest in the research.
+                    const where = waitingAnswerPlace(s.waiting, this.waitingPlacesAccess().canAnswer);
+                    host.appendChild(el('p', 'live-panel-hint', where === 'here' ? r.answerHere : where === 'mixed' ? r.answerMixed : r.answerWhere));
+                }
             }
-        }
+        };
 
         // What changed: the last few here, all of them in the overview; a selected line: only its own.
-        const changesHidden = panelSectionHidden('changes');
-        const changesFold = fold('changes');
-        if (!changesFold.collapsed && !changesHidden) s.seenInSection = s.changes.length;
-        const freshInSection = s.changes.length - s.seenInSection;
-        const shownChanges = sel ? s.changes.filter(c => c.research === sel.id) : s.changes;
-        if (!changesHidden) {
-            const changesHost = liveSection(body, {
-                ...changesFold, title: r.changes,
-                ...(sel ? { summary: strings.otherResearch.lineOnly(directionGlyph(sel), sel.name) }
-                    : { summary: freshInSection > 0 ? L.newChanges(freshInSection) : undefined, summaryCls: 'live-section__sum--new' }),
-            });
-            const changes = el('ul', 'live-panel-list live-changes');
-            changesHost.appendChild(changes);
-            this.appendChangeRows(changes, shownChanges.slice(0, PANEL_CHANGES), multi ? (c) => lineGlyphFor(s, c.research) : undefined);
-            if (shownChanges.length > PANEL_CHANGES && this.canOpenResearchOverview()) {
-                const all = el('button', 'link-button live-all-changes', L.allInOverview);
-                all.type = 'button';
-                all.onclick = () => this.openResearchOverview();
-                changesHost.appendChild(all);
+        const drawChanges = (): void => {
+            const changesHidden = panelSectionHidden('changes');
+            const changesFold = fold('changes');
+            if (!changesFold.collapsed && !changesHidden) s.seenInSection = s.changes.length;
+            const freshInSection = s.changes.length - s.seenInSection;
+            const shownChanges = sel ? s.changes.filter(c => c.research === sel.id) : s.changes;
+            if (!changesHidden) {
+                const changesHost = liveSection(body, {
+                    ...changesFold, title: r.changes,
+                    ...(sel ? { summary: strings.otherResearch.lineOnly(directionGlyph(sel), sel.name) }
+                        : { summary: freshInSection > 0 ? L.newChanges(freshInSection) : undefined, summaryCls: 'live-section__sum--new' }),
+                });
+                const changes = el('ul', 'live-panel-list live-changes');
+                changesHost.appendChild(changes);
+                this.appendChangeRows(changes, shownChanges.slice(0, PANEL_CHANGES), multi ? (c) => lineGlyphFor(s, c.research) : undefined);
+                if (shownChanges.length > PANEL_CHANGES && this.canOpenResearchOverview()) {
+                    const all = el('button', 'link-button live-all-changes', L.allInOverview);
+                    all.type = 'button';
+                    all.onclick = () => this.openResearchOverview();
+                    changesHost.appendChild(all);
+                }
             }
-        }
+        };
 
         // The agent's queue: only while live (an old queue misleads).
-        if (!s.ended && !panelSectionHidden('queue')) this.appendQueueSection(body, s, fold('queue'), 3);
+        const drawQueue = (): void => {
+            if (!s.ended && !panelSectionHidden('queue')) this.appendQueueSection(body, s, fold('queue'), 3);
+        };
+        // In the sections' order (one for the panel and the overview; the panel has four of them).
+        const draw: Record<LiveSectionKey, () => void> = { working: drawWorking, waiting: drawWaiting, changes: drawChanges, queue: drawQueue };
+        for (const key of panelSectionOrder()) draw[key]();
         panel.appendChild(body);
         if (!s.ended && s.spend && !phone) this.appendSpendFoot(panel, s.spend);
         placeLivePanel(panel);
         const again = menuTask ? panel.querySelector<HTMLElement>(`.live-queue-more[data-task="${menuTask}"]`) : null;
         if (again && menuTask) this.openLiveTaskMenu(again, menuTask);
-        // Too tall for the window: fold Up next, then Changes, then Working (never
-        // Waiting, never a section with a choice: one kept expanded makes the panel scroll). Not remembered.
+        // Too tall for the window: fold from the bottom up (by default Up next, then Changes, then Working;
+        // never Waiting, never a section with a choice: one kept expanded makes the panel scroll). Not remembered.
         if (!collapsed && !panel.hidden && body.scrollHeight > body.clientHeight + 1) {
             const prefs = sectionPrefs();
-            const next = AUTO_FOLD.find(k => prefs[k] === undefined && !s.autoCollapsed.has(k)
+            const next = autoFoldOrder().find(k => prefs[k] === undefined && !s.autoCollapsed.has(k)
                 && body.querySelector(`#live-sec-${k}`));
             if (next) {
                 s.autoCollapsed.add(next);
@@ -4527,8 +4536,14 @@ export const researchUiMethods = uiModule({
         } catch {
             amount = `${spend.amount.toFixed(2)} ${spend.currency}`;
         }
+        // The parts the top shows (the cost only when switched on); neither: no foot.
+        const top = topPrefs();
+        const sessions = top['month.sessions'];
+        const price = top['month.price'];
+        if (!sessions && !price) return;
+        const text = sessions && price ? r.spend(spend.sessions, amount) : sessions ? r.spendSessions(spend.sessions) : r.spendAmount(amount);
         const foot = el('div', 'live-panel-spend');
-        foot.appendChild(el('span', 'live-panel-spend-text', r.spend(spend.sessions, amount)));
+        foot.appendChild(el('span', 'live-panel-spend-text', text));
         const url = this.activeResearchLink('sessions');
         if (url) {
             const btn = el('button', 'live-panel-spend-link');

@@ -257,6 +257,14 @@ async function setPrefs(page: Page, prefs: Record<string, string>): Promise<void
     }, prefs);
 }
 
+/** The whole record v2 (spec 057: the order and the top), then its event. */
+async function setRecord(page: Page, rec: { s?: Record<string, string>; o?: string[]; t?: Record<string, boolean> }): Promise<void> {
+    await page.evaluate((r) => {
+        localStorage.setItem('strom-live-section-prefs', JSON.stringify({ v: 2, s: {}, ...r }));
+        document.dispatchEvent(new CustomEvent('strom:live-section-prefs'));
+    }, rec);
+}
+
 const storedPrefs = (page: Page) => page.evaluate(() => JSON.parse(localStorage.getItem('strom-live-section-prefs') ?? 'null'));
 
 test.describe('section choices: expanded, collapsed, hidden (spec 044)', () => {
@@ -272,7 +280,7 @@ test.describe('section choices: expanded, collapsed, hidden (spec 044)', () => {
         await expect(head(page, '#live-panel', 'At work')).toHaveAttribute('aria-expanded', 'false');
         await expect(head(page, '#live-panel', 'Awaiting action · 2')).toHaveAttribute('aria-expanded', 'true');
         await expect(head(page, '#live-panel', 'Up next')).toHaveAttribute('aria-expanded', 'true');
-        expect(await storedPrefs(page)).toEqual({ v: 1, s: { working: 'collapsed', queue: 'expanded', changes: 'collapsed' } });
+        expect(await storedPrefs(page)).toEqual({ v: 2, s: { working: 'collapsed', queue: 'expanded', changes: 'collapsed' } });
         // The old records stay as they were (an older version still reads them).
         expect(await page.evaluate(() => localStorage.getItem('strom-live-sections'))).toBe(JSON.stringify({ working: true, waiting: false, queue: false }));
         // One choice for both places: the panel's Up next expanded is the overview's Queue too.
@@ -513,13 +521,13 @@ test.describe('Customize panel: ⋯, a section\'s menu, Settings (spec 044)', ()
         const more = panel.locator('.live-panel-more');
         await expect(more).toHaveAttribute('aria-label', 'Customize panel');
 
-        // 1. The popover: the panel's rows, a line, the overview's two.
+        // 1. The popover: all six in the sections' order, in one list (spec 057); the overview's two say so.
         await more.click();
         const pop = page.locator('.live-sec-edit[role="dialog"]');
         await expect(pop).toHaveAttribute('aria-label', 'Customize panel');
         await expect(more).toHaveAttribute('aria-expanded', 'true');
-        await expect(pop.locator('.live-sec-edit__label')).toHaveText(['At work', 'Awaiting action', 'Latest changes', 'Up next', 'Directions', 'What the research knows']);
-        await expect(pop.locator('.live-sec-edit__sep')).toHaveCount(1);
+        await expect(pop.locator('.live-sec-edit__label')).toHaveText(['At work', 'Awaiting action', 'Directions', 'Latest changes', 'Up next', 'What the research knows']);
+        await expect(pop.locator('.live-sec-edit__sep')).toHaveCount(0);
         const row = (key: string) => pop.locator(`.live-sec-edit__row[data-key="${key}"]`);
         await expect(row('working').locator('.live-sec-edit__note')).toHaveText('default · in the overview: Now');
         await expect(row('knows').locator('.live-sec-edit__grip')).toHaveAttribute('aria-hidden', 'true');
@@ -891,6 +899,10 @@ test.describe('the research history (/log)', () => {
         });
         await page.locator('#live-panel .live-panel-expand').click();
         const month = page.locator('#research-overview .research-overview__cell').filter({ hasText: 'This month' });
+        // The cost hidden by default: neither the amount nor the readers.
+        await expect(month.locator('.research-overview__cell-value')).toHaveText(/^14 sessions/);
+        await expect(month.locator('.research-overview__readers')).toHaveCount(0);
+        await setRecord(page, { t: { 'month.price': true } });
         await expect(month.locator('.research-overview__cell-value')).toHaveText('$63.40');
         await expect(month.locator('.research-overview__readers')).toHaveText('of it scan readers $41.20');
     });
@@ -901,10 +913,79 @@ test.describe('the research history (/log)', () => {
             b.spend = READERS_SPEND;
         });
         await page.locator('#live-panel .live-panel-expand').click();
+        await setRecord(page, { t: { 'month.price': true } });
         const month = page.locator('#research-overview .research-overview__cell').filter({ hasText: 'This month' });
         await expect(month.locator('.research-overview__cell-value')).toHaveText('$63.40');
         await expect(month.locator('.research-overview__cell-sub')).toHaveCount(1);
         await expect(month.locator('.research-overview__readers')).toHaveCount(0);
+    });
+
+    test('the tiles by their parts (spec 057): the count of cells, the row shared equally, no amount anywhere with the cost hidden', async ({ page }) => {
+        await follow(page, { width: 1440, height: 900 }, (b) => { b.events = false; });
+        await page.locator('#live-panel .live-panel-expand').click();
+        const ov = page.locator('#research-overview');
+        const strip = ov.locator('.research-overview__summary');
+        const cells = strip.locator('.research-overview__cell');
+        const month = cells.filter({ hasText: 'This month' });
+        // No amount in the text nor in any title of the strip.
+        const noAmount = async (): Promise<void> => {
+            expect(await strip.evaluate(el => el.textContent ?? '')).not.toContain('3.20');
+            expect(await strip.evaluate(el => [el, ...el.querySelectorAll('*')].map(e => e.getAttribute('title') ?? '').join('|'))).not.toContain('3.20');
+        };
+        // (a) Nothing chosen: state, 24 h, this month as its sessions (a link, its research mark), no cost.
+        await expect(cells).toHaveCount(3);
+        await expect(strip).toHaveClass(/research-overview__summary--n3/);
+        await expect(month.locator('.research-overview__cell-value')).toHaveText(/^4 sessions/);
+        await expect(month.locator('button.research-overview__cell-value')).toHaveCount(1);
+        await expect(month.locator('.research-overview__cell-sub')).toHaveCount(0);
+        await noAmount();
+        // (b) The cost on: the amount, the sessions under it.
+        await setRecord(page, { t: { 'month.price': true } });
+        await expect(month.locator('.research-overview__cell-value')).toHaveText('$3.20');
+        await expect(month.locator('.research-overview__cell-sub')).toHaveText(/^4 sessions/);
+        await expect(strip).toHaveClass(/research-overview__summary--n3/);
+        // (c) The cost alone: the amount, nothing under it.
+        await setRecord(page, { t: { 'month.price': true, 'month.sessions': false } });
+        await expect(month.locator('.research-overview__cell-value')).toHaveText('$3.20');
+        await expect(month.locator('.research-overview__cell-sub')).toHaveCount(0);
+        // (d) Sources alone, this month off: two cells, the sources the value, no line under it.
+        await setRecord(page, { t: { 'day.persons': false, 'month.sessions': false } });
+        await expect(cells).toHaveCount(2);
+        await expect(strip).toHaveClass(/research-overview__summary--n2/);
+        await expect(cells.nth(1).locator('.research-overview__cell-value')).toHaveText(/^\+\d+ sources?/);
+        await expect(cells.nth(1).locator('.research-overview__cell-sub')).toHaveCount(0);
+        await noAmount();
+        // (e) Both tiles off: the state alone over the whole row, on one line.
+        await setRecord(page, { t: { 'day.persons': false, 'day.sources': false, 'month.sessions': false } });
+        await expect(cells).toHaveCount(1);
+        await expect(strip).toHaveClass(/research-overview__summary--n1/);
+        await expect(strip).not.toHaveClass(/--n2|--n3/);
+        const box = await cells.first().evaluate((c) => {
+            const [label, value] = [c.querySelector('.research-overview__cell-label')!, c.querySelector('.research-overview__cell-value')!];
+            return { label: label.getBoundingClientRect().top, value: value.getBoundingClientRect().top, cell: c.getBoundingClientRect().width, strip: c.parentElement!.getBoundingClientRect().width };
+        });
+        expect(Math.abs(box.label - box.value)).toBeLessThan(8);
+        expect(box.cell).toBeGreaterThan(box.strip - 2);
+        await noAmount();
+    });
+
+    test('an order of its own (spec 057): the overview and the panel draw the sections in it', async ({ page }) => {
+        await follow(page, { width: 1440, height: 900 }, (b) => { b.events = false; });
+        const panel = page.locator('#live-panel');
+        const titles = async (root: string): Promise<string[]> =>
+            (await page.locator(`${root} .live-section__title`).allTextContents()).map(t => t.trim());
+        // The default order first.
+        await expect.poll(() => titles('#live-panel')).toEqual(['At work', 'Awaiting action · 2', 'Latest changes', 'Up next']);
+        await setRecord(page, { o: ['queue', 'knows', 'changes', 'waiting', 'directions', 'working'] });
+        await expect.poll(() => titles('#live-panel')).toEqual(['Up next', 'Latest changes', 'Awaiting action · 2', 'At work']);
+        await panel.locator('.live-panel-expand').click();
+        // The overview: the same order (the sections it draws here, in that order).
+        const order = ['Queue', 'What the research knows', 'Progress', 'Awaiting action', 'Directions', 'Now'];
+        const drawn = (await titles('#research-overview')).map(t => order.findIndex(o => t.startsWith(o))).filter(i => i >= 0);
+        expect(drawn.length).toBeGreaterThanOrEqual(4);
+        expect(drawn).toEqual([...drawn].sort((a, b) => a - b));
+        expect(drawn[0]).toBe(0);
+        expect(drawn[drawn.length - 1]).toBe(5);
     });
 
     test('the overview previews at most 20 steps, the rest is in the research', async ({ page }) => {
@@ -1105,7 +1186,8 @@ test.describe('Research overview', () => {
         expect(Math.abs(midAfter[0] - midBefore[0])).toBeLessThan(2);
         expect(Math.abs(midAfter[1] - midBefore[1])).toBeLessThan(2);
 
-        await expect(ov.locator('.research-overview__cell-value')).toHaveText(['Working', '+3 people', '$3.20']);
+        // The cost hidden by default: this month's value is its sessions (spec 057).
+        await expect(ov.locator('.research-overview__cell-value')).toHaveText(['Working', '+3 people', /^4 sessions/]);
         // Who works now comes first, what waits right below it.
         await expect(ov.locator('.live-section__title').nth(0)).toHaveText(/^Now/);
         await expect(ov.locator('.live-section__title').nth(1)).toHaveText(/^Awaiting action/);

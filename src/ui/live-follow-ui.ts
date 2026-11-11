@@ -25,6 +25,7 @@ import { PersonId, ViewMode, LAST_FOCUSED } from '../types.js';
 import { uiModule } from './module.js';
 import { el, liveSession } from './research-ui.js';
 import { segmentArrowTarget } from './live-section-edit.js';
+import { topPrefs } from './live-section-prefs.js';
 import { FollowView, FOLLOW_VIEWS, getFollowView, getFanCenterSetting, getFanPerson, getFollowTrail, getFocusBefore, setFocusBefore } from '../live-follow-prefs.js';
 import {
     FollowTarget, TrailEntry, followTargets, changedTargets, sessionNumbers, fanCenter, pushTrail,
@@ -429,12 +430,14 @@ export const liveFollowMethods = uiModule({
 
     /**
      * "Follow in: Family / Fan / Map" (the small panel, the overview, the
-     * phone strip): only while following is on. Radios, an arrow key moves
-     * and chooses at once.
+     * phone strip): only while following is on, and while the top shows it
+     * (hidden, following goes on in the view chosen before). Radios, an
+     * arrow key moves and chooses at once.
      */
     liveFollowViewRow(where: 'panel' | 'overview' | 'phone'): HTMLElement | null {
         const s = liveSession();
         if (!followOn || !s || s.ended || DataManager.isViewMode()) return null;
+        if (!topPrefs().followIn) return null;
         const fs = followSession();
         if (!fs) return null;
         const row = el('div', `live-follow-view live-follow-view--${where}`);

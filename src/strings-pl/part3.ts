@@ -735,6 +735,8 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
         },
         spend: (s: number, a: string) => `Agent w tym miesiącu: ${nPl(s, 'sesja', 'sesje', 'sesji')} · ${a}`,
         spendOpenSr: 'Sesje w badaniu',
+        spendSessions: (s: number) => `Agent w tym miesiącu: ${nPl(s, 'sesja', 'sesje', 'sesji')}`,
+        spendAmount: (a: string) => `Agent w tym miesiącu: ${a}`,
         knows: 'Co wie badanie',
         openConflicts: (n: number) => nPl(n, 'sprzeczność', 'sprzeczności', 'sprzeczności'),
         asOf: (d: string) => `stan na ${d}`,
