@@ -334,7 +334,7 @@ function cellValueCore(value: CellValue, col: ColumnDef, hit = ''): string {
  */
 export function linkHtml(link: { href: string; label: string }, hit = ''): string {
     const label = hit ? highlightHtml(link.label, hit) : esc(link.label);
-    return `<span class="tv-cell-text"><a class="tv-link" href="${esc(link.href)}" target="_blank" rel="noopener" tabindex="-1">${label}`
+    return `<span class="tv-cell-text"><a class="tv-link" href="${esc(link.href)}" target="_blank" rel="noopener noreferrer" tabindex="-1">${label}`
         + `<span class="tv-link-out" aria-hidden="true"> ↗</span></a></span>`;
 }
 

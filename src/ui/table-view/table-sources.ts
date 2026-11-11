@@ -13,6 +13,7 @@
 
 import { PARTNERSHIP_CITATION_FIELDS, PERSON_CITATION_FIELDS, type Partnership, type Person, type Source, type StromData } from '../../types.js';
 import type { SourceRow } from './table-model.js';
+import { safeWebUrl } from '../../validation.js';
 
 /** How much of the tree one source documents. */
 export interface SourceUse {
@@ -72,6 +73,20 @@ export function buildSourceRows(data: StromData): { rows: SourceRow[]; byId: Map
 /** The readers of a source's transcript (§14.2): the app and the research, as `readBy` says. */
 export function sourceReaders(source: Pick<Source, 'readBy'>): number {
     return source.readBy === 'both' ? 2 : source.readBy === 'user' || source.readBy === 'research' ? 1 : 0;
+}
+
+/**
+ * Where a source is online (§14.2 Online): its own web address, else the
+ * first excerpt's page in the archive's viewer; written with or without
+ * "https://". The address as written and the link it opens; null when
+ * neither is a web address. One rule for the Online column and the Online chip.
+ */
+export function sourceOnline(source: Pick<Source, 'url' | 'excerpts'>): { text: string; href: string } | null {
+    for (const text of [source.url, ...(source.excerpts ?? []).map(e => e.pageUrl)]) {
+        const href = safeWebUrl(text);
+        if (href) return { text: text!.trim(), href };
+    }
+    return null;
 }
 
 /** A cited source: the id the citation names (the catalog's key) and the source. */

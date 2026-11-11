@@ -21,7 +21,7 @@ const PERSONS = {
     b: person('b', 'Ludmila', 'Hruštičková', { gender: 'female', birthDate: '1845', deathDate: '1870', partnerships: ['u1'], childIds: ['c'] }),
     w: person('w', 'Johana', 'Vrbatová', { gender: 'female', birthDate: '1850', deathDate: '1910', partnerships: ['u2'] }),
     c: person('c', 'Kvirin', 'Pecháček', {
-        birthDate: '1866-08-01', parentIds: ['a', 'b'],
+        birthDate: '1866-08-01', parentIds: ['a', 'b'], refn: 'K-3/1866',
         events: [{
             id: 'cb', type: 'baptism', date: '1866-08-02',
             participants: [{ id: 'g1', role: 'godparent', personId: 'g' }, { id: 'g2', role: 'godparent', name: 'Drahobud Vlčírek' }],
@@ -37,7 +37,7 @@ const SOURCES = {
     s1: { id: 's1', title: 'Kniha narozených Lhota pod Skalkou', repository: 'Archiv Smyšlený', reference: 'fol. 7', url: 'https://example.org/lhota/7' },
     s2: { id: 's2', title: 'Výpis ze soupisu', reference: 'č. 41' },
     s3: { id: 's3', title: 'Oddací kniha Lhota pod Skalkou', repository: 'Farní úřad Lhota', reference: 'fol. 30' },
-    s4: { id: 's4', title: 'Kniha zemřelých Lhota pod Skalkou', reference: 'fol. 99' },
+    s4: { id: 's4', title: 'Kniha zemřelých Lhota pod Skalkou', reference: 'fol. 99', url: 'www.example.org/zemreli/99' },
 };
 
 const tv = (page: Page, sel: string) => page.locator(`#table-container ${sel}`);
@@ -144,6 +144,44 @@ test.describe('desktop (1440)', () => {
         await gods.locator('.tv-nm--person').click();
         await expect(page.locator('#person-page-modal')).toBeVisible();
         await expect(page.locator('#person-page-modal')).toContainText('Ostromír Plíšťák');
+    });
+});
+
+test.describe('desktop (1440): the URL columns (T54)', () => {
+    test.use({ viewport: { width: 1440, height: 900 } });
+
+    test('"<Event>: URL" columns; a web address with or without "https://" opens a new tab, the row\'s selection stays', async ({ page }) => {
+        // The archive's pages are not fetched: the new tab gets a blank page.
+        await page.context().route(/example\.org/, route => route.fulfill({ status: 200, contentType: 'text/html', body: '<p>ok</p>' }));
+        await openTable(page, false);
+        await showColumns(page, false, ['Birth: URL', 'Marriage: URL', 'Ref. number (REFN)']);
+        await expect(tv(page, '.tv-headrow [data-col="bUrl"]')).toContainText('Birth: URL');
+
+        // A person selected by a click on a cell.
+        // The reference number as written (REFN, offered in the Person group).
+        await expect((await cell(page, 'p:c', 'refn')).locator('.tv-cell-text')).toHaveText('K-3/1866');
+        await (await cell(page, 'p:c', 'refn')).click();
+        await expect(tv(page, '.tv-body .tv-row[data-key="p:c"]')).toHaveAttribute('aria-selected', 'true');
+
+        const birth = (await cell(page, 'p:a', 'bUrl')).locator('a.tv-link');
+        await expect(birth).toHaveAttribute('href', 'https://example.org/lhota/7');
+        await expect(birth).toHaveAttribute('target', '_blank');
+        await expect(birth).toHaveAttribute('rel', 'noopener noreferrer');
+        const [tab] = await Promise.all([page.waitForEvent('popup'), birth.click()]);
+        await expect.poll(() => tab.url()).toBe('https://example.org/lhota/7');
+        await tab.close();
+        await expect(tv(page, '.tv-body .tv-row[data-key="p:a"]')).toHaveAttribute('aria-selected', 'false');
+        await expect(tv(page, '.tv-body .tv-row[data-key="p:c"]')).toHaveAttribute('aria-selected', 'true');
+
+        // Written without the scheme (the second marriage's source): https, on the union's sub-row.
+        const marriage = (await cell(page, 'p:a#u2', 'wUrl')).locator('a.tv-link');
+        await expect(marriage).toHaveAttribute('href', 'https://www.example.org/zemreli/99');
+        await expect(marriage).toContainText('example.org/zemreli/99');
+        const [tab2] = await Promise.all([page.waitForEvent('popup'), marriage.click()]);
+        await expect.poll(() => tab2.url()).toBe('https://www.example.org/zemreli/99');
+        await tab2.close();
+        await expect(tv(page, '.tv-body .tv-row[data-key="p:a"]')).toHaveAttribute('aria-selected', 'false');
+        await expect(tv(page, '.tv-body .tv-row[data-key="p:c"]')).toHaveAttribute('aria-selected', 'true');
     });
 });
 

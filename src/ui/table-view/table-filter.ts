@@ -17,8 +17,7 @@ import {
     isResearchChipId, researchChipActive, researchChipsCached, type ResearchChipId, type ResearchNewWindow,
 } from './table-research.js';
 import { rowsOf, type CellValue, type EventCategory, type EventRow, type PersonRow, type RowType, type SourceRow, type TableModel, type TableRow } from './table-model.js';
-import { sourceReaders } from './table-sources.js';
-import { safeHttpUrl } from '../../validation.js';
+import { sourceOnline, sourceReaders } from './table-sources.js';
 import { cellFilled } from './table-coverage.js';
 import { personPassesUnions, type UnionPredicate } from './table-subrows.js';
 import { rodOf, type RodId } from '../../lineage.js';
@@ -275,7 +274,7 @@ export function sourcePassesChip(row: SourceRow, item: ChipFilter): boolean {
         case 'srcNoPerson': return row.persons === 0;
         case 'srcUnread': return sourceReaders(s) === 0;
         case 'srcTranscript': return !!s.transcript?.trim();
-        case 'srcOnline': return !!safeHttpUrl(s.url ?? '');
+        case 'srcOnline': return !!sourceOnline(s);
         default: return true;
     }
 }

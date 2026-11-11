@@ -73,7 +73,7 @@ test.describe('desktop (1440)', () => {
         const link = col(page, 's:s2', 4).locator('a.tv-link');
         await expect(link).toHaveAttribute('href', 'https://example.org/soupis');
         await expect(link).toHaveAttribute('target', '_blank');
-        await expect(link).toHaveAttribute('rel', 'noopener');
+        await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
         await expect(link).toContainText('example.org/soupis ↗');
         await expect(col(page, 's:s3', 4).locator('a')).toHaveCount(0);
 
@@ -114,6 +114,24 @@ test.describe('desktop (1440)', () => {
         await expect(col(page, 's:s3', 1)).toContainText('Oddací kniha Dolní Lhotka');
         // Its toast (it may wait under the manager's own message: one toast shows at a time).
         await expect(page.locator('.toast').filter({ hasText: 'Saved: Oddací kniha Dolní Lhotka' })).toHaveCount(1);
+    });
+
+    test('Online: web addresses written without "https://" pass the chip, as the Online column links them (T54)', async ({ page }) => {
+        await openTable(page, false, {
+            s1: { id: 's1', title: 'Matrika Horní Lhotka', repository: 'Archiv Fiktivní', reference: 'Kniha 98', url: 'www.example.org/lhotka' },
+            s2: { id: 's2', title: 'Matrika Dolní Lhotka', repository: 'Archiv Druhý', reference: '234567', url: 'www.example.net' },
+            s3: { id: 's3', title: 'Oddací kniha Horní Lhotka', reference: 'str. 4' },
+        });
+        await page.locator('#table-container .tv-rowtype [data-rowtype="sources"]').click();
+        await expect(status(page)).toHaveText('3 of 3 sources');
+        await expect(col(page, 's:s1', 4).locator('a.tv-link')).toHaveAttribute('href', 'https://www.example.org/lhotka');
+        await expect(col(page, 's:s2', 4).locator('a.tv-link')).toHaveAttribute('href', 'https://www.example.net/');
+        const chip = page.locator('#table-container .tv-chips .tv-chip[data-chip="srcOnline"]');
+        await chip.click();
+        await expect(status(page)).toHaveText('2 of 3 sources');
+        await expect(page.locator('#table-container .tv-body .tv-row')).toHaveCount(2);
+        await expect(row(page, 's:s3')).toHaveCount(0);
+        await expect(page.locator('#table-container .tv-empty')).toBeHidden();
     });
 
     test('a tree without sources: the empty Sources table', async ({ page }) => {

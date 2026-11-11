@@ -20,8 +20,8 @@ import { lifeEventLabel } from '../../person-sources.js';
 import { CARD_STATUS_CLASSES, cardStatus, factReliability, type ReliabilityStepName } from '../../reliability.js';
 import { cardStatusLabel } from '../fact-status.js';
 import { strings, type StringsType } from '../../strings.js';
-import { safeHttpUrl } from '../../validation.js';
-import { factCitations, sourceReaders, type CitedSource } from './table-sources.js';
+import { safeWebUrl } from '../../validation.js';
+import { factCitations, sourceOnline, sourceReaders, type CitedSource } from './table-sources.js';
 import { personGodparents } from './table-events.js';
 import {
     researchCell, sourceImageCell, sourceResearchIdCell, unionResearchCell, unionResearchIdCell, type ResearchColumnId, type UnionResearchColumnId,
@@ -437,6 +437,8 @@ export const PERSON_COLUMNS: readonly ColumnDef[] = cols('persons', [
             return textCell(ref && /^P\d{1,7}$/.test(ref) ? ref : '');
         },
     },
+    // The person's user reference number (GEDCOM REFN) as the file or the form wrote it; offered, not shown by default.
+    { id: 'refn', group: 'person', label: 'refn', width: 130, get: (_c, r) => textCell(asPerson(r).refn) },
     {
         id: 'gen', group: 'person', label: 'gen', width: 84, kind: 'number', computed: true, get: (c, r) => {
             const g = c.generations().get(r.id);
@@ -841,12 +843,21 @@ export function shortUrl(url: string): string {
     return url.replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/$/, '');
 }
 
-/** The Online cell (§14.2): the address, a link ↗ into a new window when it is a web address. */
+/**
+ * A web address cell (§14.2 Online, §14.3 a citation's URL): the address, a
+ * link ↗ into a new window when it is a web address (http/https; one
+ * written without the scheme opens as https).
+ */
 function urlCell(value: string | undefined): CellValue {
     const cell = textCell(value);
     if (cell.empty) return cell;
-    const href = safeHttpUrl(cell.text);
+    const href = safeWebUrl(cell.text);
     return href ? { ...cell, link: { href, label: shortUrl(cell.text) } } : cell;
+}
+
+/** The Online cell of a source: where it is online (sourceOnline), else what its URL field holds. */
+function sourceUrlCell(src: SourceRow['source']): CellValue {
+    return urlCell(sourceOnline(src)?.text ?? src.url);
 }
 
 /** Read by the research (§14.2): one dot per reader of the transcript, "2 readers"; else "no" (counted as empty). */
@@ -866,7 +877,7 @@ export const SOURCE_COLUMNS: readonly ColumnDef[] = cols('sources', [
     { id: 'srcResearchId', group: 'source', label: 'researchId', width: 110, fromResearch: true, get: (c, r) => c.research ? sourceResearchIdCell(asSource(r).source) : emptyCell() },
     { id: 'srcRepo', group: 'source', label: 'srcRepo', width: 200, get: (_c, r) => textCell(asSource(r).source.repository) },
     { id: 'srcRef', group: 'source', label: 'srcRef', width: 180, get: (_c, r) => textCell(asSource(r).source.reference) },
-    { id: 'srcUrl', group: 'source', label: 'srcUrl', width: 230, kind: 'link', get: (_c, r) => urlCell(asSource(r).source.url) },
+    { id: 'srcUrl', group: 'source', label: 'srcUrl', width: 230, kind: 'link', get: (_c, r) => sourceUrlCell(asSource(r).source) },
     { id: 'srcPersons', group: 'use', label: 'srcPersons', width: 90, kind: 'number', computed: true, get: (_c, r) => numberCell(asSource(r).persons) },
     { id: 'srcFacts', group: 'use', label: 'srcFacts', width: 90, kind: 'number', computed: true, get: (_c, r) => numberCell(asSource(r).facts) },
     { id: 'srcRead', group: 'use', label: 'srcRead', width: 160, get: (_c, r) => readersCell(r) },

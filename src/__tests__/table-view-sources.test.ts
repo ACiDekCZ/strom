@@ -136,7 +136,7 @@ describe('source rows (§14.2)', () => {
     it('the cells\' markup: the link into a new window with ↗, the readers as the reliability pill', () => {
         const m = build();
         const link = cellInner(cell(m, 's1', 'srcUrl'), col('srcUrl'));
-        expect(link).toContain('<a class="tv-link" href="https://example.org/kniha/12" target="_blank" rel="noopener"');
+        expect(link).toContain('<a class="tv-link" href="https://example.org/kniha/12" target="_blank" rel="noopener noreferrer"');
         expect(link).toContain('↗');
         expect(cellInner(cell(m, 's2', 'srcUrl'), col('srcUrl'))).not.toContain('<a');
         const pill = cellInner(cell(m, 's2', 'srcRead'), col('srcRead'));

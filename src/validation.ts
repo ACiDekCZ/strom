@@ -850,6 +850,22 @@ export function safeHttpUrl(url: string | undefined | null): string | null {
 }
 
 /**
+ * A web address as people write it, made safe to render as an href: an
+ * absolute http(s) URL as safeHttpUrl, and an address without its scheme
+ * ("www.archiv.cz/kniha", "matriky.example.org/12") as https. Anything else —
+ * another scheme, text with spaces, a bare word — returns null.
+ */
+export function safeWebUrl(url: string | undefined | null): string | null {
+    const trimmed = (url ?? '').trim();
+    if (!trimmed) return null;
+    // A scheme ("javascript:", "ftp:"); a host's port ("archiv.cz:8080") is not one.
+    if (/^[a-z][a-z0-9+.-]*:(?!\d)/i.test(trimmed)) return safeHttpUrl(trimmed);
+    // A host with a dot and a letter top-level domain, then a path, a query or nothing.
+    if (!/^[^\s/?#:@.]+(?:\.[^\s/?#:@.]+)*\.[\p{L}]{2,}(?::\d{1,5})?(?:[/?#]\S*)?$/u.test(trimmed)) return null;
+    return safeHttpUrl(`https://${trimmed}`);
+}
+
+/**
  * Drop photos and attachments whose payload is not an allowed data URL
  * (e.g. data:text/html from a crafted file — it would open with the app's
  * origin). Mutates `data`; returns how many were dropped. Run on load, so
