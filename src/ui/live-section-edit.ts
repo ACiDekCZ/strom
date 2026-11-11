@@ -7,7 +7,9 @@
  */
 
 import { strings } from '../strings.js';
-import { DEFAULT_ORDER, PrefKey, SectionPref, SectionPrefs, sectionOrder } from './live-section-prefs.js';
+import {
+    DEFAULT_ORDER, PrefKey, SectionPref, SectionPrefs, TopKey, panelSectionOrder, sectionOrder, topTileShown,
+} from './live-section-prefs.js';
 
 /** Where the choices are made: the small panel's ⋯, the overview's ⋯, Settings. */
 export type EditSurface = 'panel' | 'overview' | 'settings';
@@ -120,4 +122,76 @@ export function segmentArrowTarget(key: string, index: number, count: number): n
     if (key === 'Home') return 0;
     if (key === 'End') return count - 1;
     return null;
+}
+
+// ==================== The order (spec 057 §4) ====================
+
+/**
+ * Whether a section's menu offers Move up / Move down: where it stands in
+ * the order of the place it is drawn in (the panel skips the two the
+ * overview alone has).
+ */
+export function sectionMoves(order: readonly PrefKey[], key: PrefKey, surface: EditSurface): { up: boolean; down: boolean } {
+    const shown: readonly PrefKey[] = surface === 'panel' ? panelSectionOrder(order) : order;
+    const i = shown.indexOf(key);
+    return { up: i > 0, down: i >= 0 && i < shown.length - 1 };
+}
+
+/**
+ * The order after a section is dragged (pure): `at` is its new place among
+ * the others (0 = first, their count = last).
+ */
+export function droppedOrder(order: readonly PrefKey[], key: PrefKey, at: number): PrefKey[] {
+    const others = order.filter(k => k !== key);
+    if (others.length === order.length) return [...order];
+    others.splice(Math.max(0, Math.min(at, others.length)), 0, key);
+    return others;
+}
+
+/** What a screen reader hears after a section moved in the editor (all six listed there). */
+export function movedNote(surface: EditSurface, order: readonly PrefKey[], key: PrefKey): string {
+    return strings.live.movedSr(sectionTitle(surface, key), order.indexOf(key) + 1, order.length);
+}
+
+// ==================== The top (spec 057 §2, §5) ====================
+
+/** One part of a tile: a checkbox chip. */
+export interface TopEditPart { key: TopKey; label: string; on: boolean; disabled: boolean }
+
+/** A row of the card "At the top": the state (always shown), the two tiles with their parts, "Follow in". */
+export interface TopEditRow {
+    key: 'state' | 'day' | 'month' | 'followIn';
+    label: string;
+    /** The quiet line under the name ('' = none). */
+    help: string;
+    /** No switch: always shown. */
+    locked: boolean;
+    on: boolean;
+    /** The switch cannot be used (this month on a phone). */
+    disabled: boolean;
+    parts: TopEditPart[];
+}
+
+/**
+ * The card "At the top" (pure). `phone`: this month is not shown there (the
+ * row greyed, saying so); `long`: Settings' longer word about the cost.
+ */
+export function topEditRows(top: Readonly<Record<TopKey, boolean>>, opts: { phone: boolean; long: boolean }): TopEditRow[] {
+    const L = strings.live;
+    const day = topTileShown(top, 'day');
+    const month = topTileShown(top, 'month');
+    const part = (key: TopKey, label: string, off: boolean): TopEditPart => ({ key, label, on: top[key], disabled: off });
+    const priceNote = top['month.price'] ? '' : opts.long ? L.priceHelpLong : L.priceHelp;
+    return [
+        { key: 'state', label: L.state, help: '', locked: true, on: true, disabled: false, parts: [] },
+        {
+            key: 'day', label: L.topDay, help: '', locked: false, on: day, disabled: false,
+            parts: [part('day.persons', L.partPersons, !day), part('day.sources', L.partSources, !day)],
+        },
+        {
+            key: 'month', label: L.topMonth, help: opts.phone ? L.monthPhoneNote : priceNote, locked: false, on: month, disabled: opts.phone,
+            parts: [part('month.sessions', L.partSessions, !month || opts.phone), part('month.price', L.partPrice, !month || opts.phone)],
+        },
+        { key: 'followIn', label: L.topFollowIn, help: L.followInHelp, locked: false, on: top.followIn, disabled: false, parts: [] },
+    ];
 }

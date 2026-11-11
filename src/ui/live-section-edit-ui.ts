@@ -8,7 +8,7 @@
  */
 
 import { strings } from '../strings.js';
-import { isPhoneBar } from '../breakpoints.js';
+import { isMobile, isPhoneBar } from '../breakpoints.js';
 import { TreeManager } from '../tree-manager.js';
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
@@ -25,11 +25,12 @@ import type { UIClass } from './index.js';
 import { el, livePanelSectionState } from './research-ui.js';
 import { overviewSectionState } from './research-overview-ui.js';
 import {
-    PANEL_PREF_KEYS, PrefKey, SectionPref, hasSectionPrefs, overviewKeyOf, sectionPrefs, setSectionPref,
+    PANEL_PREF_KEYS, PrefKey, SectionPref, hasSectionPrefs, movedOrder, overviewKeyOf, sectionOrder, sectionPrefs,
+    setSectionOrder, setSectionPref, setTopPref, setTopTile, topPrefs,
 } from './live-section-prefs.js';
 import {
-    SECTION_STATES, SectionEditRow, SectionNow, sectionDefaultNote, sectionEditRows, sectionMenuHead,
-    sectionStateLabel, sectionTitle, segmentArrowTarget,
+    EditSurface, SECTION_STATES, SectionEditRow, SectionNow, droppedOrder, movedNote, sectionDefaultNote, sectionEditRows,
+    sectionMenuHead, sectionMoves, sectionStateLabel, sectionTitle, segmentArrowTarget, topEditRows,
 } from './live-section-edit.js';
 
 type Surface = 'panel' | 'overview';
@@ -51,7 +52,7 @@ interface OpenLayer {
     sheet: boolean;
     cleanup: () => void;
 }
-interface Editor extends OpenLayer { anchor: HTMLElement; list: HTMLElement; reset: HTMLElement }
+interface Editor extends OpenLayer { anchor: HTMLElement; body: HTMLElement }
 interface Menu extends OpenLayer { key: PrefKey; head: HTMLElement; at: At }
 
 let editor: Editor | null = null;
@@ -181,18 +182,23 @@ function focusMark(host: HTMLElement): { key?: string; value?: string; reset: bo
     };
 }
 
+/** Focus found again; a move button at the end of the list (now unusable) hands it to the other one. */
 function refocus(host: HTMLElement, mark: ReturnType<typeof focusMark>): void {
     if (!mark) return;
-    const target = mark.reset
+    let target = mark.reset
         ? host.querySelector<HTMLElement>('.live-sec-reset')
         : host.querySelector<HTMLElement>(`[data-key="${mark.key}"] [data-value="${mark.value}"]`);
+    if (target?.classList.contains('live-sec-edit__move') && target.getAttribute('aria-disabled') === 'true') {
+        const other = target.parentElement?.querySelector<HTMLElement>('.live-sec-edit__move[aria-disabled="false"]');
+        if (other) target = other;
+    }
     target?.focus({ preventScroll: true });
 }
 
 /**
  * One section's three-way segment: radios with a roving tab stop, the stored
  * choice checked, a section without one shows its present state dashed.
- * An arrow moves and chooses at once.
+ * An arrow moves and chooses at once (with Alt: the row moves instead).
  */
 function segment(row: SectionEditRow, labelId: string, cls: string): HTMLElement {
     const seg = el('div', `live-sec-seg ${cls}`);
@@ -212,6 +218,7 @@ function segment(row: SectionEditRow, labelId: string, cls: string): HTMLElement
         if (!row.chosen && row.current === v) b.classList.add('is-current');
         b.onclick = () => pick(v);
         b.onkeydown = (e) => {
+            if (e.altKey) return;
             const t = segmentArrowTarget(e.key, i, SECTION_STATES.length);
             if (t === null) return;
             e.preventDefault();
@@ -224,30 +231,279 @@ function segment(row: SectionEditRow, labelId: string, cls: string): HTMLElement
     return seg;
 }
 
-/** The editor's rows (popover and sheet). */
-function fillEditorList(list: HTMLElement, surface: Surface, sheet: boolean): void {
-    const mark = focusMark(list);
-    list.replaceChildren();
-    for (const row of sectionEditRows(surface, sectionPrefs(), nowOf(surface))) {
-        const line = el('div', 'live-sec-edit__row');
-        line.dataset.key = row.key;
-        if (!sheet) {
-            // Room for reordering the sections later; empty now.
-            const grip = el('span', 'live-sec-edit__grip');
-            grip.setAttribute('aria-hidden', 'true');
-            line.appendChild(grip);
-        }
-        const main = el('div', 'live-sec-edit__main');
-        const text = el('div', 'live-sec-edit__text');
-        const label = el('span', 'live-sec-edit__label', row.label);
-        label.id = `live-sec-edit-l-${row.key}`;
-        text.appendChild(label);
-        if (row.note) text.appendChild(el('span', 'live-sec-edit__note', row.note));
-        main.append(text, segment(row, label.id, 'live-sec-seg--edit'));
-        line.appendChild(main);
-        list.appendChild(line);
+/** Where the choices are drawn: the popover, a phone's bottom sheet, Settings (all on one line). */
+type EditMode = 'popover' | 'sheet' | 'settings';
+
+/** How long a moved section stays lit in the panel and the overview. */
+const MOVED_MS = 1500;
+let moved: { key: PrefKey; until: number } | null = null;
+let movedTimer = 0;
+
+/** A section was moved: lit where it is drawn for a while (the redraw that follows asks `sectionMovedNow`). */
+function noteSectionMoved(key: PrefKey): void {
+    moved = { key, until: Date.now() + MOVED_MS };
+    if (movedTimer) clearTimeout(movedTimer);
+    movedTimer = window.setTimeout(() => {
+        moved = null;
+        movedTimer = 0;
+        document.querySelectorAll('.live-section__head.is-moved, .live-section__body.is-moved').forEach(n => n.classList.remove('is-moved'));
+    }, MOVED_MS);
+}
+
+/** Whether the section drawn with this body id has just moved (the panel's `live-sec-*`, the overview's `ov-sec-*`). */
+export function sectionMovedNow(id: string): boolean {
+    if (!moved || Date.now() > moved.until) return false;
+    return id === `live-sec-${moved.key}` || id === `ov-sec-${overviewKeyOf(moved.key)}`;
+}
+
+/** The polite region of a container (the popover, Settings' group): created once, kept across redraws. */
+function srRegion(host: HTMLElement): HTMLElement {
+    let r = host.querySelector<HTMLElement>(':scope > .live-sec-edit__sr');
+    if (!r) {
+        r = el('div', 'live-sec-edit__sr');
+        r.setAttribute('aria-live', 'polite');
+        r.setAttribute('role', 'status');
+        host.appendChild(r);
     }
-    refocus(list, mark);
+    return r;
+}
+
+/** Keep a new order (lit in the open panel and overview); a move in the editor or Settings is said to a screen reader. */
+function moveSectionTo(order: readonly PrefKey[], key: PrefKey, surface: EditSurface, from: HTMLElement | null): void {
+    const before = sectionOrder();
+    if (order.length === before.length && order.every((k, i) => k === before[i])) return;
+    // Found before the redraw: the row is drawn again (Settings draws its whole group again).
+    const host = from?.closest<HTMLElement>('.live-sec-edit, #settings-group-research-follow') ?? null;
+    noteSectionMoved(key);
+    setSectionOrder(order);
+    if (!host?.isConnected) return;
+    const region = srRegion(host);
+    const text = movedNote(surface, sectionOrder(), key);
+    region.textContent = '';
+    setTimeout(() => { region.textContent = text; }, 30);
+}
+
+/** A drag of a row by its grip is on: the list is not drawn again under it. */
+let dragging = false;
+
+/**
+ * Drag a row by its grip (mouse, finger, pen): the row lifts, a line shows
+ * where it lands, the release keeps the new order; Escape cancels.
+ */
+function bindDrag(grip: HTMLElement, line: HTMLElement, surface: EditSurface): void {
+    grip.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0 || dragging) return;
+        const list = line.parentElement;
+        if (!list) return;
+        e.preventDefault();
+        const rows = [...list.querySelectorAll<HTMLElement>(':scope > .live-sec-edit__row')];
+        const from = rows.indexOf(line);
+        const key = line.dataset.key as PrefKey;
+        const others = rows.filter(r => r !== line);
+        const mids = others.map((r) => { const b = r.getBoundingClientRect(); return b.top + b.height / 2; });
+        const startY = e.clientY;
+        let at = from;
+        dragging = true;
+        try { grip.setPointerCapture(e.pointerId); } catch { /* the pointer is gone */ }
+        line.classList.add('is-dragging');
+        const mark = (): void => {
+            others.forEach(r => r.classList.remove('is-drop-before', 'is-drop-after'));
+            if (at === from) return;
+            if (at < others.length) others[at].classList.add('is-drop-before');
+            else others[others.length - 1]?.classList.add('is-drop-after');
+        };
+        const move = (ev: PointerEvent): void => {
+            line.style.transform = `translateY(${Math.round(ev.clientY - startY)}px)`;
+            at = mids.filter(m => ev.clientY > m).length;
+            mark();
+        };
+        const end = (keep: boolean): void => {
+            if (!dragging) return;
+            dragging = false;
+            grip.removeEventListener('pointermove', move);
+            grip.removeEventListener('pointerup', up);
+            grip.removeEventListener('pointercancel', cancel);
+            grip.removeEventListener('lostpointercapture', cancel);
+            window.removeEventListener('keydown', onKey, true);
+            line.classList.remove('is-dragging');
+            line.style.transform = '';
+            at = keep ? at : from;
+            mark();
+            if (keep && at !== from) moveSectionTo(droppedOrder(sectionOrder(), key, at), key, surface, line);
+        };
+        const up = (): void => end(true);
+        const cancel = (): void => end(false);
+        // Escape ends the drag only (before the popover's own Escape).
+        const onKey = (ev: KeyboardEvent): void => {
+            if (ev.key !== 'Escape') return;
+            ev.preventDefault();
+            ev.stopImmediatePropagation();
+            end(false);
+        };
+        grip.addEventListener('pointermove', move);
+        grip.addEventListener('pointerup', up);
+        grip.addEventListener('pointercancel', cancel);
+        grip.addEventListener('lostpointercapture', cancel);
+        window.addEventListener('keydown', onKey, true);
+    });
+}
+
+/**
+ * A section's row: the grip (not on a phone), its name (with "hidden" when
+ * hidden) and note, ↑ ↓, and the segment; in the popover and the sheet the
+ * segment goes under the name, in Settings all on one line.
+ */
+function sectionRow(row: SectionEditRow, i: number, count: number, surface: EditSurface, mode: EditMode): HTMLElement {
+    const L = strings.live;
+    const hidden = row.chosen === 'hidden';
+    const line = el('div', `live-sec-edit__row${hidden ? ' is-hidden' : ''}`);
+    line.setAttribute('role', 'listitem');
+    line.dataset.key = row.key;
+    if (mode !== 'sheet') {
+        const grip = el('span', 'live-sec-edit__grip', '⠿');
+        grip.setAttribute('aria-hidden', 'true');
+        bindDrag(grip, line, surface);
+        line.appendChild(grip);
+    }
+    const text = el('div', 'live-sec-edit__text');
+    const name = el('span', 'live-sec-edit__name');
+    const label = el('span', 'live-sec-edit__label', row.label);
+    label.id = `live-sec-${mode}-l-${row.key}`;
+    name.appendChild(label);
+    if (hidden) name.appendChild(el('span', 'live-sec-edit__tag', L.hiddenTag));
+    text.appendChild(name);
+    if (row.note) text.appendChild(el('span', 'live-sec-edit__note', row.note));
+    const moves = el('div', 'live-sec-edit__moves');
+    const go = (dir: -1 | 1): void => moveSectionTo(movedOrder(sectionOrder(), row.key, dir, 'settings'), row.key, surface, line);
+    for (const dir of [-1, 1] as const) {
+        const edge = dir < 0 ? i === 0 : i === count - 1;
+        const b = el('button', 'live-sec-edit__move', dir < 0 ? '↑' : '↓');
+        b.type = 'button';
+        b.dataset.value = dir < 0 ? 'up' : 'down';
+        b.title = dir < 0 ? L.moveUp : L.moveDown;
+        b.setAttribute('aria-label', (dir < 0 ? L.moveUpAria : L.moveDownAria)(row.label));
+        b.setAttribute('aria-disabled', String(edge));
+        b.onclick = () => { if (!edge) go(dir); };
+        moves.appendChild(b);
+    }
+    const seg = segment(row, label.id, mode === 'settings' ? 'live-sec-seg--settings' : 'live-sec-seg--edit');
+    // The order of the focus follows what is seen; in Settings the segment and ↑ ↓ keep together (beside the name, or under it when short of room).
+    if (mode === 'settings') {
+        const ctl = el('div', 'live-sec-edit__ctl');
+        ctl.append(seg, moves);
+        line.append(text, ctl);
+    } else {
+        line.append(text, moves, seg);
+    }
+    // Alt+↑ / Alt+↓ anywhere in the row moves it; the focus stays where it was.
+    line.addEventListener('keydown', (e) => {
+        if (!e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const dir = e.key === 'ArrowUp' ? -1 : 1;
+        if (dir < 0 ? i > 0 : i < count - 1) go(dir);
+    });
+    return line;
+}
+
+/** The card "Sections and order": every section in the sections' order, in one list. */
+function sectionsCard(surface: EditSurface, mode: EditMode, now: (key: PrefKey) => SectionNow): HTMLElement {
+    const L = strings.live;
+    const card = el('div', 'live-sec-card live-sec-card--sections');
+    const title = el('div', 'live-sec-card__title', L.groupSections);
+    title.id = `live-sec-${mode}-sections`;
+    const list = el('div', 'live-sec-edit__list');
+    list.setAttribute('role', 'list');
+    list.setAttribute('aria-labelledby', title.id);
+    const rows = sectionEditRows(surface, sectionPrefs(), now);
+    rows.forEach((row, i) => list.appendChild(sectionRow(row, i, rows.length, surface, mode)));
+    card.append(title, list);
+    return card;
+}
+
+/** This month is not shown in the overview's phone sheet (nor on a phone at all): its row says so there. */
+function monthOffHere(surface: EditSurface): boolean {
+    if (surface === 'overview') return isPhoneBar();
+    return surface === 'settings' && isMobile();
+}
+
+/**
+ * The card "At the top": the state (always shown), Last 24 h and This month
+ * with a switch and their parts, "Follow in".
+ */
+function topCard(surface: EditSurface, mode: EditMode): HTMLElement {
+    const L = strings.live;
+    const card = el('div', 'live-sec-card live-sec-card--top');
+    const title = el('div', 'live-sec-card__title', L.groupTop);
+    title.id = `live-sec-${mode}-top`;
+    card.appendChild(title);
+    for (const t of topEditRows(topPrefs(), { phone: monthOffHere(surface), long: mode === 'settings' })) {
+        const line = el('div', `live-sec-top__row${t.disabled ? ' is-disabled' : ''}`);
+        line.dataset.key = `top-${t.key}`;
+        const main = el('div', 'live-sec-top__main');
+        const text = el('span', 'live-sec-top__text');
+        const label = el('span', 'live-sec-top__label', t.label);
+        label.id = `live-sec-${mode}-t-${t.key}`;
+        text.appendChild(label);
+        let helpId: string | null = null;
+        if (t.help) {
+            const help = el('span', 'live-sec-top__help', t.help);
+            helpId = `live-sec-${mode}-th-${t.key}`;
+            help.id = helpId;
+            text.appendChild(help);
+        }
+        main.appendChild(text);
+        if (t.locked) {
+            main.appendChild(el('span', 'live-sec-top__lock', L.alwaysShown));
+        } else {
+            const sw = el('button', 'live-sec-switch');
+            sw.type = 'button';
+            sw.setAttribute('role', 'switch');
+            sw.setAttribute('aria-checked', String(t.on));
+            sw.setAttribute('aria-labelledby', label.id);
+            if (helpId) sw.setAttribute('aria-describedby', helpId);
+            sw.setAttribute('aria-disabled', String(t.disabled));
+            sw.dataset.value = 'switch';
+            sw.appendChild(el('span', 'live-sec-switch__knob'));
+            sw.onclick = () => {
+                if (t.disabled) return;
+                if (t.key === 'followIn') setTopPref('followIn', !t.on);
+                else if (t.key === 'day' || t.key === 'month') setTopTile(t.key, !t.on);
+            };
+            main.appendChild(sw);
+        }
+        line.appendChild(main);
+        if (t.parts.length > 0) {
+            const parts = el('div', 'live-sec-top__parts');
+            parts.setAttribute('role', 'group');
+            parts.setAttribute('aria-labelledby', label.id);
+            for (const p of t.parts) {
+                const chip = el('button', 'live-sec-chip');
+                chip.type = 'button';
+                chip.setAttribute('role', 'checkbox');
+                chip.setAttribute('aria-checked', String(p.on));
+                chip.setAttribute('aria-disabled', String(p.disabled));
+                chip.dataset.value = p.key;
+                const box = el('span', 'live-sec-chip__box', p.on ? '✓' : '');
+                box.setAttribute('aria-hidden', 'true');
+                chip.append(box, el('span', 'live-sec-chip__label', p.label));
+                chip.onclick = () => { if (!p.disabled) setTopPref(p.key, !p.on); };
+                parts.appendChild(chip);
+            }
+            line.appendChild(parts);
+        }
+        card.appendChild(line);
+    }
+    return card;
+}
+
+/** The editor's body (popover and sheet): both cards, then Restore defaults and the way to Settings. */
+function fillEditorBody(body: HTMLElement, surface: Surface, sheet: boolean, foot: HTMLElement): void {
+    if (dragging) return;
+    const mark = focusMark(body);
+    const mode: EditMode = sheet ? 'sheet' : 'popover';
+    body.replaceChildren(sectionsCard(surface, mode, nowOf(surface)), topCard(surface, mode), foot);
+    refocus(body, mark);
 }
 
 /** `withFollow`: Settings, whose Restore defaults also takes the choices of following (view, fan centre, trail). */
@@ -303,18 +559,25 @@ function settingsLine(key: string, name: string, desc: string | null, control: H
     return { line, labelId: label.id };
 }
 
-/** A sheet's handle and title row (× closes); dragging either down closes it. */
-function sheetHead(box: HTMLElement, title: string, close: () => void): HTMLElement {
+/** A sheet's handle and title row (× or Done closes); dragging either down closes it. */
+function sheetHead(box: HTMLElement, title: string, close: () => void, done?: string): HTMLElement {
     const handle = el('span', 'live-sec-sheet__handle');
     handle.setAttribute('aria-hidden', 'true');
     const head = el('div', 'live-sec-sheet__head');
     head.appendChild(el('span', 'live-sec-sheet__title', title));
-    const x = el('button', 'live-sec-sheet__close', '×');
-    x.type = 'button';
-    x.setAttribute('aria-label', strings.research.close);
-    x.title = strings.research.close;
-    x.onclick = close;
-    head.appendChild(x);
+    if (done) {
+        const b = el('button', 'live-sec-sheet__done', done);
+        b.type = 'button';
+        b.onclick = close;
+        head.appendChild(b);
+    } else {
+        const x = el('button', 'live-sec-sheet__close', '×');
+        x.type = 'button';
+        x.setAttribute('aria-label', strings.research.close);
+        x.title = strings.research.close;
+        x.onclick = close;
+        head.appendChild(x);
+    }
     box.append(handle, head);
     let from: number | null = null;
     let dy = 0;
@@ -366,16 +629,18 @@ function placePopover(box: HTMLElement, anchor: HTMLElement): void {
     const w = Math.min(320, vw - 16);
     box.style.width = `${w}px`;
     box.style.left = `${Math.round(Math.max(8, Math.min(r.right - w, vw - w - 8)))}px`;
+    // At most the window less 96px; the head stays, the rest scrolls.
+    const most = Math.max(120, vh - 96);
     const below = vh - r.bottom - 6 - 12;
     if (below >= 220 || below >= r.top - 18) {
         box.style.top = `${Math.round(r.bottom + 6)}px`;
         box.style.bottom = '';
-        box.style.maxHeight = `${Math.max(120, Math.round(below))}px`;
+        box.style.maxHeight = `${Math.min(most, Math.max(120, Math.round(below)))}px`;
     } else {
         // An anchor low in the window (the way back under "All sections are hidden"): above it.
         box.style.top = '';
         box.style.bottom = `${Math.round(vh - r.top + 6)}px`;
-        box.style.maxHeight = `${Math.max(120, Math.round(r.top - 6 - 12))}px`;
+        box.style.maxHeight = `${Math.min(most, Math.max(120, Math.round(r.top - 6 - 12)))}px`;
     }
 }
 
@@ -474,8 +739,12 @@ function syncNow(ui: UIClass): void {
         if (!e.anchor.isConnected || !surfaceRoot(e.surface)) {
             ui.closeLiveSectionEditor(false);
         } else {
-            fillEditorList(e.list, e.surface, e.sheet);
-            syncReset(e.reset);
+            const foot = e.body.querySelector<HTMLElement>('.live-sec-edit__foot');
+            if (foot) {
+                fillEditorBody(e.body, e.surface, e.sheet, foot);
+                const reset = foot.querySelector<HTMLElement>('.live-sec-reset');
+                if (reset) syncReset(reset);
+            }
         }
     }
     syncMoreExpanded();
@@ -529,11 +798,22 @@ export const liveSectionEditMethods = uiModule({
         box.setAttribute('role', 'dialog');
         box.setAttribute('aria-label', L.editPanel);
         const close = (): void => this.closeLiveSectionEditor(true);
-        if (sheet) sheetHead(box, L.editPanel, close);
-        else box.appendChild(el('div', 'live-sec-edit__head', L.editPanel));
-        const list = el('div', 'live-sec-edit__list');
+        if (sheet) {
+            sheetHead(box, L.editPanel, close, L.done);
+        } else {
+            const head = el('div', 'live-sec-edit__head');
+            head.appendChild(el('span', 'live-sec-edit__title', L.editPanel));
+            const x = el('button', 'live-sec-edit__close', '×');
+            x.type = 'button';
+            x.setAttribute('aria-label', strings.research.close);
+            x.title = strings.research.close;
+            x.onclick = close;
+            head.appendChild(x);
+            box.appendChild(head);
+        }
+        const body = el('div', 'live-sec-edit__body');
         const foot = el('div', 'live-sec-edit__foot');
-        const reset = el('button', 'link-button live-sec-reset live-sec-edit__reset', L.resetDefaults);
+        const reset = el('button', 'live-sec-reset live-sec-edit__reset', L.resetDefaults);
         reset.type = 'button';
         reset.onclick = () => {
             if (!hasSectionPrefs()) return;
@@ -541,14 +821,21 @@ export const liveSectionEditMethods = uiModule({
             this.resetLiveSections();
             this.closeLiveSectionEditor(true);
         };
-        foot.appendChild(reset);
-        box.append(list, foot);
-        fillEditorList(list, surface, sheet);
+        const all = el('button', 'link-button live-sec-edit__all', L.allFollowSettings);
+        all.type = 'button';
+        all.onclick = () => {
+            this.closeLiveSectionEditor(false);
+            this.openResearchFollowSettings();
+        };
+        foot.append(reset, all);
+        box.appendChild(body);
+        fillEditorBody(body, surface, sheet, foot);
+        srRegion(box);
         syncReset(reset);
         const root = sheet ? sheetOverlay(box, close) : box;
         document.body.appendChild(root);
         if (!sheet) placePopover(box, anchor);
-        const layer: Editor = { surface, root, box, sheet, anchor, list, reset, cleanup: () => {} };
+        const layer: Editor = { surface, root, box, sheet, anchor, body, cleanup: () => {} };
         editor = layer;
         layer.cleanup = guard(() => (editor === layer ? layer : null), (back) => this.closeLiveSectionEditor(back), {
             trap: true,
@@ -556,7 +843,21 @@ export const liveSectionEditMethods = uiModule({
             ignore: (t) => !!t.closest('.live-sec-more'),
         });
         syncMoreExpanded();
-        list.querySelector<HTMLElement>('[role="radio"][tabindex="0"]')?.focus({ preventScroll: true });
+        body.querySelector<HTMLElement>('[role="radio"][tabindex="0"]')?.focus({ preventScroll: true });
+    },
+
+    /** Settings opened at Following research (from Customize panel); the overview's phone sheet closes first (it lies over Settings). */
+    openResearchFollowSettings(): void {
+        if (document.querySelector('.research-overview--sheet')) this.closeResearchOverview();
+        this.showSettingsDialog();
+        const group = document.getElementById('settings-group-research-follow');
+        if (!group || group.hidden) return;
+        group.scrollIntoView({ block: 'start' });
+        const title = group.querySelector<HTMLElement>('.settings-group-title');
+        if (title) {
+            title.tabIndex = -1;
+            title.focus({ preventScroll: true });
+        }
     },
 
     closeLiveSectionEditor(focusBack: boolean): void {
@@ -633,9 +934,33 @@ export const liveSectionEditMethods = uiModule({
             item.onclick = go;
             items.appendChild(item);
         }
-        const sep = el('div', 'live-sec-menu__sep');
-        sep.setAttribute('role', 'separator');
-        items.appendChild(sep);
+        const separator = (): void => {
+            const sep = el('div', 'live-sec-menu__sep');
+            sep.setAttribute('role', 'separator');
+            items.appendChild(sep);
+        };
+        // Move up / Move down where the section stands in this place's order (none past an end).
+        const can = sectionMoves(sectionOrder(), key, surface);
+        if (can.up || can.down) {
+            separator();
+            for (const dir of [-1, 1] as const) {
+                if (dir < 0 ? !can.up : !can.down) continue;
+                const item = el('div', 'live-sec-menu__item live-sec-menu__move');
+                item.setAttribute('role', 'menuitem');
+                item.tabIndex = -1;
+                item.dataset.move = dir < 0 ? 'up' : 'down';
+                const pad = el('span', 'live-sec-menu__check');
+                pad.setAttribute('aria-hidden', 'true');
+                item.append(pad, el('span', 'live-sec-menu__label', dir < 0 ? L.moveUp : L.moveDown));
+                item.onclick = () => {
+                    this.closeLiveSectionMenu(false);
+                    moveSectionTo(movedOrder(sectionOrder(), key, dir, surface), key, surface, null);
+                    back();
+                };
+                items.appendChild(item);
+            }
+        }
+        separator();
         const edit = el('div', 'live-sec-menu__item live-sec-menu__edit');
         edit.setAttribute('role', 'menuitem');
         edit.tabIndex = -1;
@@ -701,25 +1026,25 @@ export const liveSectionEditMethods = uiModule({
             body.replaceChildren();
             return;
         }
+        // A drag of a row is on: drawn again after it.
+        if (dragging) return;
         const mark = focusMark(body);
         fanPersonPicker?.destroy();
         fanPersonPicker = null;
         body.replaceChildren();
-        for (const row of sectionEditRows('settings', sectionPrefs(), () => ({ current: 'expanded', autoFolded: false }))) {
-            const line = el('div', 'settings-row live-sec-set__row');
-            line.dataset.key = row.key;
-            const text = el('span', 'settings-text');
-            const name = el('span', 'settings-name', row.label);
-            name.id = `live-sec-set-l-${row.key}`;
-            text.append(name, el('span', 'settings-desc', row.note));
-            line.append(text, segment(row, name.id, 'live-sec-seg--settings'));
-            body.appendChild(line);
-        }
+        // The two cards of Customize panel, each row on one line (spec 057 §5), then following (spec 043).
+        const cards = el('div', 'live-sec-cards live-sec-cards--settings');
+        cards.append(
+            sectionsCard('settings', 'settings', () => ({ current: 'expanded', autoFolded: false })),
+            topCard('settings', 'settings'),
+        );
+        body.appendChild(cards);
+        srRegion(group);
         // Following an agent: never offered while every research tree is an archive (no agent to follow).
         const agentTree = TreeManager.getTrees().some(t => !!t.research?.id && t.research.mode !== 'archive');
         if (agentTree || hasFollowPrefs()) this.appendFollowPrefRows(body);
         const foot = el('div', 'settings-row live-sec-set__reset');
-        const reset = el('button', 'link-button live-sec-reset', strings.live.resetDefaults);
+        const reset = el('button', 'live-sec-reset', strings.live.resetDefaults);
         reset.type = 'button';
         reset.onclick = () => this.resetLiveSections(true);
         syncReset(reset, true);

@@ -562,7 +562,7 @@ test.describe('Customize panel: ⋯, a section\'s menu, Settings (spec 044)', ()
         await expect(changes).toHaveClass(/is-menu-open/);
         await expect(menu.locator('[role="menuitemradio"]')).toHaveText(['Expanded', 'Collapsed', 'Hidden']);
         await expect(menu.locator('[role="menuitemradio"][aria-checked="true"]')).toHaveCount(0);
-        await expect(menu.locator('[role="menuitem"]')).toHaveText('Customize panel…');
+        await expect(menu.locator('.live-sec-menu__edit')).toHaveText('Customize panel…');
         await menu.locator('[role="menuitemradio"]', { hasText: 'Hidden' }).click();
         await expect(menu).toHaveCount(0);
         await expect(changes).toHaveCount(0);
@@ -576,7 +576,7 @@ test.describe('Customize panel: ⋯, a section\'s menu, Settings (spec 044)', ()
         await waiting().click({ button: 'right' });
         await expect(menu.locator('[role="menuitemradio"][aria-checked="true"]')).toHaveText(/Collapsed/);
         await expect(menu.locator('.live-sec-menu__head')).toHaveText('Awaiting action');
-        await menu.locator('[role="menuitem"]').click();
+        await menu.locator('.live-sec-menu__edit').click();
         await expect(menu).toHaveCount(0);
         await expect(pop).toBeVisible();
         await page.keyboard.press('Escape');
@@ -588,10 +588,10 @@ test.describe('Customize panel: ⋯, a section\'s menu, Settings (spec 044)', ()
         const group = page.locator('#settings-group-research-follow');
         await expect(group).toBeVisible();
         await expect(group.locator('.settings-group-title')).toHaveText(/Following research/i);
-        await expect(group.locator('.settings-group-note')).toHaveText('On this device, for all trees (the chosen person only for its own tree). Applies to the panel, overview, Family, fan and map.');
-        const set = (key: string) => group.locator(`.live-sec-set__row[data-key="${key}"]`);
+        await expect(group.locator('.settings-group-note')).toHaveText('On this device, for all trees. Applies to the panel and the Research overview, with or without following.');
+        const set = (key: string) => group.locator(`.live-sec-edit__row[data-key="${key}"]`);
         await expect(set('waiting').locator('[aria-checked="true"]')).toHaveText('Collapsed');
-        await expect(set('working').locator('.settings-desc')).toHaveText('default · in the overview: Now');
+        await expect(set('working').locator('.live-sec-edit__note')).toHaveText('default · in the overview: Now');
         await expect(group.locator('.is-current')).toHaveCount(0);
         await set('waiting').locator('[role="radio"]', { hasText: 'Expanded' }).click();
         await expect(waiting()).toHaveAttribute('aria-expanded', 'true');
@@ -603,7 +603,7 @@ test.describe('Customize panel: ⋯, a section\'s menu, Settings (spec 044)', ()
         await group.locator('.live-sec-reset').click();
         await expect(page.locator('.toast[data-kind="live-sections"]')).toContainText('Defaults restored');
         // The sections' choices are gone (the follow rows always show their choice).
-        await expect(group.locator('.live-sec-set__row:not([data-key^="follow-"]) [aria-checked="true"]')).toHaveCount(0);
+        await expect(group.locator('.live-sec-edit__row [aria-checked="true"]')).toHaveCount(0);
         await expect(group.locator('.live-sec-reset')).toHaveAttribute('aria-disabled', 'true');
     });
 
@@ -690,6 +690,235 @@ test.describe('Customize panel: ⋯, a section\'s menu, Settings (spec 044)', ()
     });
 });
 
+/** A fixed clock at the real now, kept away from midnight UTC (the bridge's own times are real ones). */
+async function fixClock(page: Page): Promise<void> {
+    const now = Date.now();
+    const h = new Date(now).getUTCHours();
+    await page.clock.setFixedTime(new Date(h >= 22 ? now - 3 * 3600_000 : h < 2 ? now + 3 * 3600_000 : now));
+}
+
+const DEFAULT_ORDER = ['working', 'waiting', 'directions', 'changes', 'queue', 'knows'];
+const storedOrder = async (page: Page): Promise<string[]> => (await storedPrefs(page))?.o ?? DEFAULT_ORDER;
+const panelTitles = async (page: Page): Promise<string[]> =>
+    (await page.locator('#live-panel .live-section__title').allTextContents()).map(t => t.trim().replace(/ · \d+$/, ''));
+
+test.describe('Customize panel: the order and the top (spec 057)', () => {
+    test('↑ ↓, Alt+arrows, a section\'s menu and a drag move a section; said to a screen reader, kept over a reload', async ({ page }) => {
+        await fixClock(page);
+        await follow(page, TALL, (b) => { b.events = false; });
+        const panel = page.locator('#live-panel');
+        await panel.locator('.live-panel-more').click();
+        const pop = page.locator('.live-sec-edit[role="dialog"]');
+        const row = (key: string) => pop.locator(`.live-sec-edit__row[data-key="${key}"]`);
+        const move = (key: string, dir: 'up' | 'down') => row(key).locator(`.live-sec-edit__move[data-value="${dir}"]`);
+        const sr = pop.locator('.live-sec-edit__sr');
+        await expect(sr).toHaveAttribute('aria-live', 'polite');
+        // The ends: no way up for the first, none down for the last; each button says which section.
+        await expect(move('working', 'up')).toHaveAttribute('aria-disabled', 'true');
+        await expect(move('working', 'down')).toHaveAttribute('aria-disabled', 'false');
+        await expect(move('knows', 'down')).toHaveAttribute('aria-disabled', 'true');
+        await expect(move('working', 'down')).toHaveAttribute('aria-label', 'Move At work down');
+        await expect(move('working', 'down')).toHaveAttribute('title', 'Move down');
+        // ↓: second of six; the focus stays on it, the panel draws the new order and marks the section a while.
+        await move('working', 'down').click();
+        await expect(pop.locator('.live-sec-edit__label')).toHaveText(['Awaiting action', 'At work', 'Directions', 'Latest changes', 'Up next', 'What the research knows']);
+        await expect(move('working', 'down')).toBeFocused();
+        await expect(sr).toHaveText('At work moved to position 2 of 6.');
+        expect(await storedOrder(page)).toEqual(['waiting', 'working', 'directions', 'changes', 'queue', 'knows']);
+        await expect.poll(() => panelTitles(page)).toEqual(['Awaiting action', 'At work', 'Latest changes', 'Up next']);
+        await expect(panel.locator('[aria-controls="live-sec-working"]')).toHaveClass(/is-moved/);
+        await expect(panel.locator('[aria-controls="live-sec-working"]')).not.toHaveClass(/is-moved/, { timeout: 4000 });
+        // ↑ back to the top: that button can no longer be used, the focus goes to ↓.
+        await move('working', 'up').click();
+        await expect(move('working', 'up')).toHaveAttribute('aria-disabled', 'true');
+        await expect(move('working', 'down')).toBeFocused();
+        await expect(sr).toHaveText('At work moved to position 1 of 6.');
+        expect(await storedOrder(page)).toEqual(DEFAULT_ORDER);
+        // Alt+↑ from the row's segment: the row moves, the focus stays in the segment.
+        const queueRadio = row('queue').locator('[role="radio"][tabindex="0"]');
+        await queueRadio.focus();
+        await page.keyboard.press('Alt+ArrowUp');
+        await expect(row('queue').locator('[role="radio"][tabindex="0"]')).toBeFocused();
+        await expect(sr).toHaveText('Up next moved to position 4 of 6.');
+        expect(await storedOrder(page)).toEqual(['working', 'waiting', 'directions', 'queue', 'changes', 'knows']);
+        await expect(row('queue').locator('[aria-checked="true"]')).toHaveCount(0);
+
+        // A drag by the grip: Up next above At work.
+        const grip = (await row('queue').locator('.live-sec-edit__grip').boundingBox())!;
+        const first = (await row('working').boundingBox())!;
+        await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(grip.x + grip.width / 2, first.y + first.height / 2 + 4, { steps: 6 });
+        await page.mouse.move(grip.x + grip.width / 2, first.y + 4, { steps: 4 });
+        await expect(row('queue')).toHaveClass(/is-dragging/);
+        await expect(row('working')).toHaveClass(/is-drop-before/);
+        await page.mouse.up();
+        await expect(pop.locator('.live-sec-edit__label').first()).toHaveText('Up next');
+        await expect(sr).toHaveText('Up next moved to position 1 of 6.');
+        expect(await storedOrder(page)).toEqual(['queue', 'working', 'waiting', 'directions', 'changes', 'knows']);
+        // A drag let go with Escape: nothing moves, the popover stays.
+        const g2 = (await row('knows').locator('.live-sec-edit__grip').boundingBox())!;
+        await page.mouse.move(g2.x + g2.width / 2, g2.y + g2.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(g2.x + g2.width / 2, first.y + 4, { steps: 6 });
+        await page.keyboard.press('Escape');
+        await page.mouse.up();
+        await expect(pop).toBeVisible();
+        await expect(row('knows')).not.toHaveClass(/is-dragging/);
+        expect(await storedOrder(page)).toEqual(['queue', 'working', 'waiting', 'directions', 'changes', 'knows']);
+        await page.keyboard.press('Escape');
+        await expect(pop).toHaveCount(0);
+
+        // A section's menu: the first in the panel offers Move down only; the panel's order skips Directions.
+        await expect.poll(() => panelTitles(page)).toEqual(['Up next', 'At work', 'Awaiting action', 'Latest changes']);
+        await head(page, '#live-panel', 'Up next').click({ button: 'right' });
+        const menu = page.locator('.live-sec-menu[role="menu"]');
+        await expect(menu.locator('.live-sec-menu__move')).toHaveText(['Move down']);
+        await page.keyboard.press('Escape');
+        await expect(menu).toHaveCount(0);
+        await head(page, '#live-panel', /^Latest changes/).click({ button: 'right' });
+        await expect(menu.locator('.live-sec-menu__move')).toHaveText(['Move up']);
+        await expect(menu.locator('.live-sec-menu__edit')).toHaveText('Customize panel…');
+        await menu.locator('.live-sec-menu__move').click();
+        await expect(menu).toHaveCount(0);
+        // One place in the panel's order: it takes the place of Awaiting action (Directions, not in the panel, stays).
+        expect(await storedOrder(page)).toEqual(['queue', 'working', 'changes', 'directions', 'waiting', 'knows']);
+        await expect.poll(() => panelTitles(page)).toEqual(['Up next', 'At work', 'Latest changes', 'Awaiting action']);
+        await expect(head(page, '#live-panel', /^Latest changes/)).toBeFocused();
+
+        // Kept over a reload.
+        await page.reload();
+        await expect(page.locator('#live-panel')).toBeVisible();
+        await expect.poll(() => panelTitles(page)).toEqual(['Up next', 'At work', 'Latest changes', 'Awaiting action']);
+    });
+
+    test('hiding from the popover: the row says hidden, the section goes, no toast', async ({ page }) => {
+        await fixClock(page);
+        await follow(page, TALL, (b) => { b.events = false; });
+        await page.locator('#live-panel .live-panel-more').click();
+        const pop = page.locator('.live-sec-edit');
+        const row = pop.locator('.live-sec-edit__row[data-key="changes"]');
+        await row.locator('[role="radio"]', { hasText: 'Hidden' }).click();
+        await expect(row).toHaveClass(/is-hidden/);
+        await expect(row.locator('.live-sec-edit__tag')).toHaveText('hidden');
+        await expect(head(page, '#live-panel', /^Latest changes/)).toHaveCount(0);
+        await expect(page.locator('.toast[data-kind="live-sections"]')).toHaveCount(0);
+        await row.locator('[role="radio"]', { hasText: 'Expanded' }).click();
+        await expect(row).not.toHaveClass(/is-hidden/);
+        await expect(row.locator('.live-sec-edit__tag')).toHaveCount(0);
+        await expect(head(page, '#live-panel', /^Latest changes/)).toBeVisible();
+    });
+
+    test('At the top: switches and parts; both parts off is the tile off, on again its default parts; the cost off until switched on', async ({ page }) => {
+        await fixClock(page);
+        await follow(page, TALL, (b) => { b.events = false; });
+        await page.locator('#live-panel .live-panel-expand').click();
+        const ov = page.locator('#research-overview');
+        const cells = ov.locator('.research-overview__summary .research-overview__cell');
+        const month = cells.filter({ hasText: 'This month' });
+        await expect(cells).toHaveCount(3);
+        await ov.locator('.research-overview__more').click();
+        const pop = page.locator('.live-sec-edit');
+        const top = (key: string) => pop.locator(`.live-sec-top__row[data-key="top-${key}"]`);
+        const chip = (key: string, part: string) => top(key).locator(`.live-sec-chip[data-value="${part}"]`);
+        await expect(pop.locator('.live-sec-card__title')).toHaveText(['Sections and order', 'At the top']);
+        await expect(pop.locator('.live-sec-top__label')).toHaveText(['State', 'Last 24 h', 'This month', 'Follow in']);
+        await expect(top('state').locator('.live-sec-top__lock')).toHaveText('always shown');
+        await expect(top('state').locator('[role="switch"]')).toHaveCount(0);
+        // The cost: off without a choice, and said so; switched on, the amount shows and the word goes.
+        await expect(chip('month', 'month.price')).toHaveAttribute('aria-checked', 'false');
+        await expect(top('month').locator('.live-sec-top__help')).toHaveText('Cost shows only when switched on.');
+        await expect(month.locator('.research-overview__cell-value')).toHaveText(/^4 sessions/);
+        await chip('month', 'month.price').click();
+        await expect(month.locator('.research-overview__cell-value')).toHaveText('$3.20');
+        await expect(top('month').locator('.live-sec-top__help')).toHaveCount(0);
+        expect((await storedPrefs(page)).t).toEqual({ 'month.price': true });
+        // Last 24 h switched off: its parts greyed, the tile gone.
+        const daySwitch = top('day').locator('[role="switch"]');
+        await expect(daySwitch).toHaveAttribute('aria-checked', 'true');
+        await daySwitch.click();
+        await expect(daySwitch).toHaveAttribute('aria-checked', 'false');
+        await expect(chip('day', 'day.persons')).toHaveAttribute('aria-disabled', 'true');
+        await expect(chip('day', 'day.sources')).toHaveAttribute('aria-disabled', 'true');
+        await expect(cells).toHaveCount(2);
+        // On again: its default parts.
+        await daySwitch.click();
+        await expect(chip('day', 'day.persons')).toHaveAttribute('aria-checked', 'true');
+        await expect(chip('day', 'day.sources')).toHaveAttribute('aria-checked', 'true');
+        await expect(cells).toHaveCount(3);
+        // Both parts unticked one by one: the tile is off.
+        await chip('day', 'day.persons').click();
+        await expect(daySwitch).toHaveAttribute('aria-checked', 'true');
+        await chip('day', 'day.sources').click();
+        await expect(daySwitch).toHaveAttribute('aria-checked', 'false');
+        await expect(cells).toHaveCount(2);
+        // Follow in: a switch of its own, with when it shows.
+        await expect(top('followIn').locator('.live-sec-top__help')).toHaveText('Only while following live.');
+        await top('followIn').locator('[role="switch"]').click();
+        await expect(top('followIn').locator('[role="switch"]')).toHaveAttribute('aria-checked', 'false');
+        expect((await storedPrefs(page)).t).toEqual({ 'month.price': true, 'day.persons': false, 'day.sources': false, followIn: false });
+        // Kept over a reload.
+        await page.reload();
+        // The overview opens again by itself.
+        await expect(ov).toBeVisible();
+        await expect(cells).toHaveCount(2);
+        await expect(month.locator('.research-overview__cell-value')).toHaveText('$3.20');
+    });
+
+    test('Restore defaults puts back the order, the parts and the states; Undo brings all of them back', async ({ page }) => {
+        await fixClock(page);
+        await follow(page, TALL, (b) => { b.events = false; });
+        const rec = { s: { changes: 'hidden' }, o: ['queue', 'working', 'waiting', 'directions', 'changes', 'knows'], t: { 'month.price': true, followIn: false } };
+        await setRecord(page, rec);
+        await expect.poll(() => panelTitles(page)).toEqual(['Up next', 'At work', 'Awaiting action']);
+        await page.locator('#live-panel .live-panel-more').click();
+        await page.locator('.live-sec-edit .live-sec-reset').click();
+        await expect(page.locator('.live-sec-edit')).toHaveCount(0);
+        await expect.poll(() => panelTitles(page)).toEqual(['At work', 'Awaiting action', 'Latest changes', 'Up next']);
+        const after = await storedPrefs(page);
+        expect([after?.s ?? {}, after?.o, after?.t]).toEqual([{}, undefined, undefined]);
+        const toast = page.locator('.toast[data-kind="live-sections"]');
+        await expect(toast).toContainText('Defaults restored');
+        await toast.getByRole('button', { name: 'Undo' }).click();
+        await expect.poll(() => panelTitles(page)).toEqual(['Up next', 'At work', 'Awaiting action']);
+        const back = await storedPrefs(page);
+        expect({ s: back.s, o: back.o, t: back.t }).toEqual(rec);
+    });
+
+    test('Settings: the same two cards, each row on one line; a move there moves the panel; the way there from the popover', async ({ page }) => {
+        await fixClock(page);
+        await follow(page, TALL, (b) => { b.events = false; });
+        await page.locator('#live-panel .live-panel-more').click();
+        await page.locator('.live-sec-edit .live-sec-edit__all').click();
+        await expect(page.locator('.live-sec-edit')).toHaveCount(0);
+        const group = page.locator('#settings-group-research-follow');
+        await expect(group).toBeVisible();
+        await expect(group.locator('.settings-group-title')).toBeFocused();
+        await expect(group.locator('.live-sec-card__title')).toHaveText(['Sections and order', 'At the top']);
+        await expect(group.locator('.live-sec-edit__label')).toHaveText(['At work', 'Awaiting action', 'Directions', 'Latest changes', 'Up next', 'What the research knows']);
+        await expect(group.locator('[data-key="top-month"] .live-sec-top__help')).toHaveText('Cost (amount and scan readers) shows only when switched on.');
+        // One line: the name, the segment and ↑ ↓ side by side.
+        const row = group.locator('.live-sec-edit__row[data-key="changes"]');
+        const [lab, seg, mv] = [
+            (await row.locator('.live-sec-edit__label').boundingBox())!,
+            (await row.locator('[role="radiogroup"]').boundingBox())!,
+            (await row.locator('.live-sec-edit__moves').boundingBox())!,
+        ];
+        expect(seg.x).toBeGreaterThan(lab.x + lab.width);
+        expect(mv.x).toBeGreaterThan(seg.x + seg.width - 1);
+        expect(Math.abs((seg.y + seg.height / 2) - (mv.y + mv.height / 2))).toBeLessThan(4);
+        await row.locator('.live-sec-edit__move[data-value="up"]').click();
+        await expect(group.locator('.live-sec-edit__sr')).toHaveText('Latest changes moved to position 3 of 6.');
+        await expect(row.locator('.live-sec-edit__move[data-value="up"]')).toBeFocused();
+        await expect.poll(() => panelTitles(page)).toEqual(['At work', 'Awaiting action', 'Latest changes', 'Up next']);
+        await row.locator('.live-sec-edit__move[data-value="up"]').click();
+        await expect.poll(() => panelTitles(page)).toEqual(['At work', 'Latest changes', 'Awaiting action', 'Up next']);
+        // The top's parts from Settings.
+        await group.locator('[data-key="top-month"] .live-sec-chip[data-value="month.sessions"]').click();
+        expect((await storedPrefs(page)).t).toEqual({ 'month.sessions': false });
+    });
+});
+
 test.describe('Customize panel on a touch screen (spec 044)', () => {
     test.use({ hasTouch: true, isMobile: true });
 
@@ -735,7 +964,7 @@ test.describe('Customize panel on a touch screen (spec 044)', () => {
         await noSideways(page);
     });
 
-    test('phone 390×844: ⋯ in the sheet opens a bottom sheet; a long press on a heading opens its sheet; × and the backdrop close', async ({ page }) => {
+    test('phone 390×844: ⋯ in the sheet opens a bottom sheet; a long press on a heading opens its sheet; Done and the backdrop close', async ({ page }) => {
         await follow(page, { width: 390, height: 844 });
         const panel = page.locator('#live-panel');
         await expect(panel).toHaveClass(/phone-strip/);
@@ -750,7 +979,7 @@ test.describe('Customize panel on a touch screen (spec 044)', () => {
         await expect(sheet).toBeVisible();
         await expect(sheet.locator('.live-sec-sheet__title')).toHaveText('Customize panel');
         expect(await minHeight(sheet.locator('[role="radio"]'))).toBeGreaterThanOrEqual(44);
-        expect(await minHeight(sheet.locator('.live-sec-sheet__close, .live-sec-reset'))).toBeGreaterThanOrEqual(44);
+        expect(await minHeight(sheet.locator('.live-sec-sheet__done, .live-sec-reset, .live-sec-edit__move'))).toBeGreaterThanOrEqual(44);
         const sb = (await sheet.boundingBox())!;
         expect(sb.y + sb.height).toBeCloseTo(844, 0);
         expect(sb.height).toBeLessThanOrEqual(844 * 0.86 + 1);
@@ -761,7 +990,7 @@ test.describe('Customize panel on a touch screen (spec 044)', () => {
         await noSideways(page);
         await sheet.locator('[data-key="queue"] [role="radio"]', { hasText: 'Collapsed' }).click();
         expect((await storedPrefs(page)).s).toEqual({ queue: 'collapsed' });
-        await sheet.locator('.live-sec-sheet__close').click();
+        await sheet.locator('.live-sec-sheet__done').click();
         await expect(sheet).toHaveCount(0);
         await expect(ov).toBeVisible();
 
@@ -782,26 +1011,66 @@ test.describe('Customize panel on a touch screen (spec 044)', () => {
         await expect(ov).toBeVisible();
         // Customize panel… from a heading's sheet opens the editor's sheet.
         await longPress(page, head(page, '#research-overview', /^Now/));
-        await sec.locator('[role="menuitem"]').click();
+        await sec.locator('.live-sec-menu__edit').click();
         await expect(sheet).toBeVisible();
     });
 
-    test('phone sideways 844×390: a centered sheet 560 wide, each name beside its segment', async ({ page }) => {
+    test('phone sideways 844×390: a centered sheet 390 wide, each segment under its name', async ({ page }) => {
         await follow(page, { width: 844, height: 390 });
         // Sideways the small panel stays, with its ⋯; the editor is a sheet all the same.
         await page.locator('#live-panel .live-panel-more').click();
         const sheet = page.locator('.live-sec-edit.live-sec-sheet');
         await expect(sheet).toBeVisible();
         const sb = (await sheet.boundingBox())!;
-        expect(Math.round(sb.width)).toBe(560);
-        expect(Math.abs(sb.x - (844 - 560) / 2)).toBeLessThanOrEqual(1);
-        expect(sb.height).toBeLessThanOrEqual(390 - 12 + 1);
+        expect(Math.round(sb.width)).toBe(390);
+        expect(Math.abs(sb.x - (844 - 390) / 2)).toBeLessThanOrEqual(1);
+        expect(sb.height).toBeLessThanOrEqual(390 - 20 + 1);
         const lab = (await sheet.locator('[data-key="queue"] .live-sec-edit__label').boundingBox())!;
         const seg = (await sheet.locator('[data-key="queue"] [role="radiogroup"]').boundingBox())!;
-        expect(seg.x).toBeGreaterThan(lab.x + lab.width);
-        expect(Math.round(seg.width)).toBe(330);
+        expect(seg.y).toBeGreaterThan(lab.y + lab.height - 1);
         expect(await minHeight(sheet.locator('[role="radio"]'))).toBeGreaterThanOrEqual(44);
         await noSideways(page);
+    });
+});
+
+test.describe('Customize panel on a touch screen: the order and the top (spec 057)', () => {
+    test.use({ hasTouch: true, isMobile: true });
+
+    test('tablet 1024×768: the popover with its grips, ↑ ↓, the parts and the switches 44px to a finger', async ({ page }) => {
+        await fixClock(page);
+        await follow(page, { width: 1024, height: 768 }, (b) => { b.events = false; });
+        await page.locator('#live-panel .live-panel-more').click();
+        const pop = page.locator('.live-sec-edit');
+        await expect(pop).not.toHaveClass(/live-sec-sheet/);
+        await expect(pop.locator('.live-sec-edit__grip')).toHaveCount(6);
+        expect(await minHeight(pop.locator('.live-sec-edit__move, .live-sec-chip, .live-sec-top__main'))).toBeGreaterThanOrEqual(44);
+        await noSideways(page);
+        await pop.locator('.live-sec-edit__row[data-key="working"] .live-sec-edit__move[data-value="down"]').tap();
+        expect(await storedOrder(page)).toEqual(['waiting', 'working', 'directions', 'changes', 'queue', 'knows']);
+    });
+
+    test('phone 390×844: the sheet without grips, ↑ ↓ of 44, This month greyed with why, Done closes', async ({ page }) => {
+        await fixClock(page);
+        await follow(page, { width: 390, height: 844 }, (b) => { b.events = false; });
+        await page.locator('#live-panel .live-panel-toggle').click();
+        await page.locator('#research-overview .research-overview__more').click();
+        const sheet = page.locator('.live-sec-edit.live-sec-sheet');
+        await expect(sheet).toBeVisible();
+        await expect(sheet.locator('.live-sec-edit__grip')).toHaveCount(0);
+        expect(await minHeight(sheet.locator('.live-sec-edit__move, .live-sec-chip:not([aria-disabled="true"]), .live-sec-sheet__done'))).toBeGreaterThanOrEqual(44);
+        const month = sheet.locator('.live-sec-top__row[data-key="top-month"]');
+        await expect(month).toHaveClass(/is-disabled/);
+        await expect(month.locator('.live-sec-top__help')).toHaveText('Not shown on the phone.');
+        await expect(month.locator('[role="switch"]')).toHaveAttribute('aria-disabled', 'true');
+        // aria-disabled: a tap does nothing (dispatched, the switch is not actionable to Playwright).
+        await month.locator('[role="switch"]').dispatchEvent('click');
+        expect((await storedPrefs(page))?.t ?? {}).toEqual({});
+        await noSideways(page);
+        await sheet.locator('.live-sec-edit__row[data-key="queue"] .live-sec-edit__move[data-value="up"]').tap();
+        await expect(sheet.locator('.live-sec-edit__sr')).toHaveText('Queue moved to position 4 of 6.');
+        await sheet.locator('.live-sec-sheet__done').tap();
+        await expect(sheet).toHaveCount(0);
+        await expect(page.locator('#research-overview')).toBeVisible();
     });
 });
 

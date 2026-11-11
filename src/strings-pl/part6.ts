@@ -207,7 +207,6 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         groupExperiments: 'Funkcje eksperymentalne',
         experimentsNote: 'Funkcje w fazie prób. Mogą się zmienić lub zniknąć.',
         groupResearchFollow: 'Śledzenie badania',
-        researchFollowNote: 'Na tym urządzeniu, dla wszystkich drzew (wybrana osoba tylko dla swojego drzewa). Dotyczy panelu, przeglądu, Rodziny, wachlarza i mapy.',
         followView: 'Śledzenie agenta w',
         followViewHelp: 'Stosowane przy włączeniu śledzenia i przy Powrót do agenta. Widok można przełączać w trakcie śledzenia.',
         followFanCenter: 'Środek wachlarza przy śledzeniu',

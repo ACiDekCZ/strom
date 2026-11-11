@@ -87,7 +87,7 @@ import { currentAppBrowser, appBrowserName } from '../research-transfer.js';
 import { localNetworkStatus } from '../local-network.js';
 import { pendingAdopt } from './pending-adopt.js';
 import { shownNameOrEmpty, fitNameHtml } from '../person-name.js';
-import { bindSectionMenu, sectionClickSwallowed } from './live-section-edit-ui.js';
+import { bindSectionMenu, sectionClickSwallowed, sectionMovedNow } from './live-section-edit-ui.js';
 import { BRIDGE_ANSWER_MS } from '../bridge-ask.js';
 import { bridgeGivesEtag, bridgeGivesImagesByHash, bridgeGivesStale, staleTreeUrl, storedTreeEtag, treeFamilyPartners, treeFileState, treeReplyEtag, treeReplyHeads, treeReplyImages, TREE_GED_TIMEOUT_MS, type TreeReplyHeads } from '../research-tree-file.js';
 import { findImageRefs, forgetHeldImages, imagesUrlOf, refTreeUrl, resolveImageRefs, sha256Hex, type ImageResolveDeps } from '../research-image-refs.js';
@@ -250,6 +250,8 @@ function reconnectMs(): number {
 }
 /** Poll interval when the browser has no EventSource. */
 const POLL_MS = 10000;
+/** "Defaults restored" with its Undo stays this long (spec 057 §5). */
+const RESTORED_TOAST_MS = 8000;
 /** After someone starts or stops working: the status is asked this much later (the events settle)... */
 const WORKING_STATUS_DELAY_MS = 1000;
 /** ...and at most once in this long. */
@@ -420,6 +422,11 @@ export function liveSection(host: HTMLElement, o: {
     const body = el('div', 'live-section__body');
     body.id = o.id;
     body.hidden = o.collapsed;
+    // Just moved in Customize panel: lit for a while.
+    if (sectionMovedNow(o.id)) {
+        head.classList.add('is-moved');
+        body.classList.add('is-moved');
+    }
     if (o.aside && o.help) {
         // The control and "?" go under the heading together when they do not fit beside it.
         const row = el('div', 'live-section__headrow live-section__headrow--m');
@@ -3707,10 +3714,10 @@ export const researchUiMethods = uiModule({
         const followBefore = follow ? resetFollowPrefs() : null;
         const before = hasSectionPrefs() ? resetSectionPrefs() : null;
         if (!before) this.renderResearchFollowSettings();
-        this.showToast(strings.live.restoredToast, 6000, {
+        this.showToast(strings.live.restoredToast, RESTORED_TOAST_MS, {
             kind: 'live-sections',
             action: {
-                label: strings.undo.undo,
+                label: strings.live.undo,
                 run: () => {
                     if (followBefore) restoreFollowPrefs(followBefore);
                     if (before) restoreSectionPrefs(before);
