@@ -56,3 +56,29 @@ describe('the help mark of "Awaiting action" (1105)', () => {
         expect(getStringsForLang('de').help.topics.waiting).toBe('Wartet auf Bearbeitung');
     });
 });
+
+describe('the Table names the research as the rest of the app does (spec 073)', () => {
+    /** Every text of a branch of strings, the functions called with sample arguments. */
+    const textsOf = (v: unknown, out: string[] = []): string[] => {
+        if (typeof v === 'string') out.push(v);
+        else if (typeof v === 'function') {
+            try { textsOf((v as (...a: unknown[]) => unknown)(2, 'X', 'Y', 'Z'), out); } catch { /* a text that wants other arguments */ }
+        } else if (v && typeof v === 'object') for (const x of Object.values(v)) textsOf(x, out);
+        return out;
+    };
+
+    it('pl: "Badanie" in the singular, "Czeka na załatwienie" as the overview\'s heading', () => {
+        const pl = getStringsForLang('pl');
+        const t = pl.table;
+        expect(t.group.research).toBe('Badanie');
+        expect(t.res.block).toBe('Badanie');
+        expect(t.res.view.research).toBe('Badanie');
+        expect(t.views.research).toBe('Badanie');
+        expect(t.col.rSum).toBe('Badanie');
+        expect(t.col.rWait).toBe(pl.research.waiting);
+        expect(t.chip.rWait).toBe(pl.research.waiting);
+        expect(t.res.bub.waitTitle(3)).toBe(`${pl.research.waiting} · 3`);
+        const plural = textsOf(t).filter(x => /Badania\b|badań|badaniach|badaniami|Czeka na decyzję|czekają/u.test(x));
+        expect(plural).toEqual([]);
+    });
+});
