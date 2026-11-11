@@ -9714,6 +9714,8 @@
             font-family: var(--font-sans); font-size: inherit; outline: none; box-shadow: var(--shadow-focus);
         }
         .tv-editor.has-error .tv-editor-input { border-color: var(--danger); }
+        /* A choice (T54 G3: the sex, a union's type): the select fills the cell like the text field. */
+        select.tv-editor-input { padding: 0 4px; min-height: 0; line-height: normal; }
         .tv-editor-error {
             position: absolute; top: 100%; left: 0; max-width: max(100%, 280px); width: max-content; box-sizing: border-box;
             margin-top: 2px; padding: 4px 8px; border-radius: var(--r-sm); background: var(--surface); color: var(--danger);

@@ -112,16 +112,18 @@ export interface GridInput {
  */
 export interface CellEditSpec {
     value: string;
-    input: 'text' | 'date' | 'place';
+    input: 'text' | 'date' | 'place' | 'select';
     /** The field's accessible name. */
     label: string;
     /** A datalist's id: the suggestions of a place. */
     list?: string;
+    /** A choice's values with their words (T54 G3: the sex, a union's type). */
+    options?: readonly { value: string; label: string }[];
     save(text: string): string | null;
 }
 
 /** The least width of an editor, wider than a narrow column (T54 F8: it goes over the cell's edge). */
-const EDITOR_MIN_WIDTH: Record<CellEditSpec['input'], number> = { text: 160, date: 150, place: 240 };
+const EDITOR_MIN_WIDTH: Record<CellEditSpec['input'], number> = { text: 160, date: 150, place: 240, select: 150 };
 
 /** The agent at a row (§16.6): at work on its task, or just done. */
 export type AgentRowState = { kind: 'working'; task: string } | { kind: 'done' };
@@ -455,7 +457,7 @@ export class TableGrid {
     private readonly flashKeys = new Set<string>();
     private flashTimer: ReturnType<typeof setTimeout> | null = null;
     /** The open cell editor (T54 F8): over the cell, in the scrolled area (outside the body, so a redraw keeps it). */
-    private editor: { key: string; colId: string; box: HTMLElement; input: HTMLInputElement; error: HTMLElement; spec: CellEditSpec } | null = null;
+    private editor: { key: string; colId: string; box: HTMLElement; input: HTMLInputElement | HTMLSelectElement; error: HTMLElement; spec: CellEditSpec } | null = null;
 
     constructor(private readonly handlers: GridHandlers = {}) {
         const el = document.createElement('div');
@@ -1675,14 +1677,27 @@ export class TableGrid {
         const box = document.createElement('div');
         box.className = 'tv-editor';
         box.dataset.input = spec.input;
-        const field = document.createElement('input');
-        field.type = 'text';
+        let field: HTMLInputElement | HTMLSelectElement;
+        // A choice (T54 G3): its values in a select; a value picked with the mouse saves at once.
+        let picked = false;
+        if (spec.input === 'select') {
+            const select = document.createElement('select');
+            for (const o of spec.options ?? []) select.add(new Option(o.label, o.value, false, o.value === spec.value));
+            select.value = spec.value;
+            select.addEventListener('pointerdown', () => { picked = true; });
+            select.addEventListener('change', () => { if (picked && this.editor?.input === select && this.commitEdit(null)) this.focusActive(true); });
+            field = select;
+        } else {
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.autocomplete = 'off';
+            input.spellcheck = false;
+            input.value = spec.value;
+            if (spec.list) input.setAttribute('list', spec.list);
+            field = input;
+        }
         field.className = 'tv-editor-input';
-        field.autocomplete = 'off';
-        field.spellcheck = false;
-        field.value = spec.value;
         field.setAttribute('aria-label', spec.label);
-        if (spec.list) field.setAttribute('list', spec.list);
         const error = document.createElement('div');
         error.className = 'tv-editor-error';
         error.id = `tv-editor-error-${Date.now().toString(36)}`;
@@ -1693,7 +1708,7 @@ export class TableGrid {
         const ed = { key: lineKey(line), colId: ref.col.id, box, input: field, error, spec };
         this.editor = ed;
         this.el.appendChild(box);
-        field.addEventListener('keydown', (e) => {
+        (field as HTMLElement).addEventListener('keydown', (e) => {
             e.stopPropagation();
             if (e.key === 'Enter' && !e.isComposing) {
                 e.preventDefault();
@@ -1711,7 +1726,7 @@ export class TableGrid {
         field.addEventListener('blur', () => { if (this.editor === ed) this.commitEdit(null, true); });
         this.placeEditor();
         field.focus({ preventScroll: true });
-        field.select();
+        if (field instanceof HTMLInputElement) field.select();
         return true;
     }
 

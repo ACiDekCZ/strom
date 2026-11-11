@@ -50,7 +50,7 @@ import {
 } from './table-model.js';
 import { eventEditTarget } from './table-events.js';
 import { TableGrid, type CellEditSpec, type GridCellRef, type RowAction } from './table-grid.js';
-import { editChangeOf, editTargetOf, editValueOf, type EditTarget } from './table-edit.js';
+import { editChangeOf, editOptionsOf, editTargetOf, editValueOf, type EditTarget } from './table-edit.js';
 import { cellChoices, copyPlainText } from './table-cell.js';
 import { fanZoomModifier } from '../../fan-zoom.js';
 import { createBar, createStatus, updateBar, updateResearchStatus, updateStatus } from './table-bar.js';
@@ -1688,8 +1688,10 @@ export const tableMethods = uiModule({
     /** The fact a cell edits in place; null: not here (another cell, a person held by the research's bridge). */
     tableEditTarget(line: GridLine, col: ColumnDef): EditTarget | null {
         if (!this.tableInlineEdit()) return null;
-        const t = editTargetOf(stateOf(treeKey()).rowType, line, col);
+        const t = editTargetOf(stateOf(treeKey()).rowType, line, col, model?.ctx);
         if (!t) return null;
+        // A recorded age at the wedding: of a partner in the tree.
+        if (t.agePersonId && !DataManager.getPerson(t.agePersonId)) return null;
         // As the person dialog: a locked person is not edited.
         if (t.personId) return DataManager.getPerson(t.personId) && !DataManager.isPersonLocked(t.personId) ? t : null;
         const u = t.unionId ? DataManager.getData().partnerships[t.unionId] : undefined;
@@ -1709,6 +1711,7 @@ export const tableMethods = uiModule({
             input: t.input,
             label: strings.table.cell.editLabel(columnLabel(col)),
             ...(t.input === 'place' ? { list: 'places-datalist' } : {}),
+            ...(t.input === 'select' ? { options: editOptionsOf(t) ?? [] } : {}),
             save: (text) => this.tableSaveCell(t, text),
         };
     },

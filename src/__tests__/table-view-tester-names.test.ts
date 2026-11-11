@@ -85,7 +85,8 @@ describe('REFN (F3)', () => {
         expect(c.kind).toBe('text');
         expect(columnOffered(c)).toBe(true);
         expect(DEFAULT_VIEWS.persons.columns).not.toContain('refn');
-        const labels: Record<string, string> = { en: 'Ref. number (REFN)', cs: 'Ref. číslo (REFN)', de: 'Ref.-Nummer (REFN)', pl: 'Nr ref. (REFN)' };
+        // T54 G3: without "(REFN)".
+        const labels: Record<string, string> = { en: 'Ref. number', cs: 'Ref. číslo', de: 'Ref.-Nummer', pl: 'Nr ref.' };
         for (const [lang, label] of Object.entries(labels)) {
             setLanguage(lang as 'cs');
             expect(columnLabel(c), lang).toBe(label);

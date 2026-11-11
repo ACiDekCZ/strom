@@ -1176,6 +1176,7 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         sortedBy: (cols: string) => `Sortowanie: ${cols}`,
         legend: 'Oznaczenia',
         na: 'Nie dotyczy',
+        naNoWedding: 'Nie dotyczy: związek bez ślubu',
         living: 'żyjący',
         yes: 'tak',
         no: 'nie',
@@ -1310,7 +1311,7 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         },
         col: {
             name: 'Imię i nazwisko', surname: 'Nazwisko', birthSurname: 'Nazwisko rodowe', marriedSurname: 'Nazwisko po ślubie', titles: 'Tytuły',
-            gender: 'Płeć', living: 'Żyjący', researchId: 'ID badań', refn: 'Nr ref. (REFN)', gen: 'Pokolenie', kin: 'Pokrewieństwo z osobą główną', rod: 'Ród',
+            gender: 'Płeć', living: 'Żyjący', researchId: 'ID badań', refn: 'Nr ref.', gen: 'Pokolenie', kin: 'Pokrewieństwo z osobą główną', rod: 'Ród',
             bDate: 'Data urodzenia', bPlace: 'Miejsce urodzenia', bAddr: 'Adres urodzenia', bapDate: 'Data chrztu', bapPlace: 'Miejsce chrztu',
             fAge: 'Wiek ojca przy urodzeniu', mAge: 'Wiek matki przy urodzeniu', bComp: 'Kompletność urodzenia',
             father: 'Ojciec', mother: 'Matka', sibs: 'Liczba rodzeństwa', sibOrder: 'Kolejność wśród rodzeństwa',
@@ -1396,7 +1397,7 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         missingNone: 'niczego nie brakuje',
         compCounts: (list: string) => `Liczone z: ${list}.`,
         compList: {
-            birth: 'data, miejsce, ojciec, matka, źródło', union: 'data, miejsce, partner, źródło ślubu',
+            birth: 'data, miejsce, ojciec, matka, źródło', union: 'data, miejsce, partner, źródło ślubu', unionNoWedding: 'partner (związek bez ślubu)',
             death: 'data, miejsce, źródło', all: 'urodzenie, związki i zgon',
         },
         compField: {

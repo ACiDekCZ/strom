@@ -8553,6 +8553,8 @@ const stringsEN = {
         sortedBy: (cols: string) => `Sort: ${cols}`,
         legend: 'Marks',
         na: 'Does not apply',
+        /** A wedding's cell of a union without a wedding (T54 G5: partners, separated). */
+        naNoWedding: 'Does not apply: a union without a wedding',
         living: 'living',
         yes: 'yes',
         no: 'no',
@@ -8685,7 +8687,7 @@ const stringsEN = {
         },
         col: {
             name: 'Name', surname: 'Surname', birthSurname: 'Birth surname', marriedSurname: 'Married surname', titles: 'Titles',
-            gender: 'Sex', living: 'Living', researchId: 'Research ID', refn: 'Ref. number (REFN)', gen: 'Generation', kin: 'Relationship to home person', rod: 'Family line',
+            gender: 'Sex', living: 'Living', researchId: 'Research ID', refn: 'Ref. number', gen: 'Generation', kin: 'Relationship to home person', rod: 'Family line',
             bDate: 'Birth date', bPlace: 'Birthplace', bAddr: 'Birth address', bapDate: 'Baptism date', bapPlace: 'Baptism place',
             fAge: 'Father’s age at birth', mAge: 'Mother’s age at birth', bComp: 'Birth completeness',
             father: 'Father', mother: 'Mother', sibs: 'Siblings', sibOrder: 'Birth order',
@@ -8771,7 +8773,7 @@ const stringsEN = {
         missingNone: 'nothing missing',
         compCounts: (list: string) => `Counted from: ${list}.`,
         compList: {
-            birth: 'date, place, father, mother, source', union: 'date, place, partner, marriage source',
+            birth: 'date, place, father, mother, source', union: 'date, place, partner, marriage source', unionNoWedding: 'partner (a union without a wedding)',
             death: 'date, place, source', all: 'birth, unions and death',
         },
         compField: {
@@ -17174,6 +17176,7 @@ const stringsCZ: StringsType = {
         sortedBy: (cols: string) => `Řazení: ${cols}`,
         legend: 'Značky',
         na: 'Nevztahuje se',
+        naNoWedding: 'Nevztahuje se: svazek bez sňatku',
         living: 'žijící',
         yes: 'ano',
         no: 'ne',
@@ -17308,7 +17311,7 @@ const stringsCZ: StringsType = {
         },
         col: {
             name: 'Jméno', surname: 'Příjmení', birthSurname: 'Rodné příjmení', marriedSurname: 'Příjmení po sňatku', titles: 'Tituly',
-            gender: 'Pohlaví', living: 'Žijící', researchId: 'ID výzkumu', refn: 'Ref. číslo (REFN)', gen: 'Generace', kin: 'Vztah k hlavní osobě', rod: 'Rod',
+            gender: 'Pohlaví', living: 'Žijící', researchId: 'ID výzkumu', refn: 'Ref. číslo', gen: 'Generace', kin: 'Vztah k hlavní osobě', rod: 'Rod',
             bDate: 'Datum narození', bPlace: 'Místo narození', bAddr: 'Adresa narození', bapDate: 'Datum křtu', bapPlace: 'Místo křtu',
             fAge: 'Věk otce při narození', mAge: 'Věk matky při narození', bComp: 'Úplnost narození',
             father: 'Otec', mother: 'Matka', sibs: 'Počet sourozenců', sibOrder: 'Pořadí mezi sourozenci',
@@ -17394,7 +17397,7 @@ const stringsCZ: StringsType = {
         missingNone: 'nic nechybí',
         compCounts: (list: string) => `Počítá se z: ${list}.`,
         compList: {
-            birth: 'datum, místo, otec, matka, pramen', union: 'datum, místo, partner, pramen sňatku',
+            birth: 'datum, místo, otec, matka, pramen', union: 'datum, místo, partner, pramen sňatku', unionNoWedding: 'partner (svazek bez sňatku)',
             death: 'datum, místo, pramen', all: 'narození, svazky a úmrtí',
         },
         compField: {
@@ -25717,6 +25720,7 @@ const stringsDE: StringsType = {
         sortedBy: (cols: string) => `Sortierung: ${cols}`,
         legend: 'Zeichen',
         na: 'Trifft nicht zu',
+        naNoWedding: 'Trifft nicht zu: Verbindung ohne Heirat',
         living: 'lebend',
         yes: 'ja',
         no: 'nein',
@@ -25851,7 +25855,7 @@ const stringsDE: StringsType = {
         },
         col: {
             name: 'Name', surname: 'Nachname', birthSurname: 'Geburtsname', marriedSurname: 'Ehename', titles: 'Titel',
-            gender: 'Geschlecht', living: 'Lebend', researchId: 'Forschungs-ID', refn: 'Ref.-Nummer (REFN)', gen: 'Generation', kin: 'Beziehung zur Hauptperson', rod: 'Stamm',
+            gender: 'Geschlecht', living: 'Lebend', researchId: 'Forschungs-ID', refn: 'Ref.-Nummer', gen: 'Generation', kin: 'Beziehung zur Hauptperson', rod: 'Stamm',
             bDate: 'Geburtsdatum', bPlace: 'Geburtsort', bAddr: 'Geburtsadresse', bapDate: 'Taufdatum', bapPlace: 'Taufort',
             fAge: 'Alter des Vaters bei der Geburt', mAge: 'Alter der Mutter bei der Geburt', bComp: 'Vollständigkeit Geburt',
             father: 'Vater', mother: 'Mutter', sibs: 'Zahl der Geschwister', sibOrder: 'Geburtsrang',
@@ -25937,7 +25941,7 @@ const stringsDE: StringsType = {
         missingNone: 'nichts fehlt',
         compCounts: (list: string) => `Gezählt aus: ${list}.`,
         compList: {
-            birth: 'Datum, Ort, Vater, Mutter, Quelle', union: 'Datum, Ort, Partner, Quelle zur Heirat',
+            birth: 'Datum, Ort, Vater, Mutter, Quelle', union: 'Datum, Ort, Partner, Quelle zur Heirat', unionNoWedding: 'Partner (Verbindung ohne Heirat)',
             death: 'Datum, Ort, Quelle', all: 'Geburt, Verbindungen und Tod',
         },
         compField: {

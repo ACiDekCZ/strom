@@ -75,6 +75,25 @@ export function naCell(text = '', computed = false): CellValue {
     return { ...EMPTY, na: true, text, computed, title: strings.table.na };
 }
 
+/**
+ * A union without a wedding (T54 G5): partners, or separated partners. The
+ * union form calls their dates the start and the end of the relationship;
+ * the model's other views (timeline, person page) read them as unmarried.
+ */
+export function unionWithoutWedding(u: Pick<Partnership, 'status'>): boolean {
+    return u.status === 'partners' || u.status === 'separated';
+}
+
+/**
+ * A wedding's cell (T54 G5): in a union without a wedding an empty cell does
+ * not apply ("–", the bubble says why; left out of coverage). A value stored
+ * there anyway (the relationship's start, written in the union form) is shown
+ * as it is.
+ */
+function weddingCell(u: Partnership, cell: CellValue): CellValue {
+    return unionWithoutWedding(u) && cell.empty ? { ...naCell('', cell.computed), title: strings.table.naNoWedding } : cell;
+}
+
 function textCell(value: string | null | undefined, computed = false): CellValue {
     const text = (value ?? '').trim();
     if (!text) return emptyCell(computed);
@@ -258,11 +277,13 @@ function unionLength(ctx: TableContext, u: Partnership): CellValue {
  * baptism for the birth) does not fill a field.
  */
 function oneUnionFields(u: Partnership, partner: Person | null): CompField[] {
+    // A union without a wedding (T54 G5): the wedding's fields do not count, only the partner.
+    if (unionWithoutWedding(u)) return [['partner', !!partner]];
     return [['wDate', !!u.startDate], ['wPlace', !!u.startPlace?.trim()], ['partner', !!partner], ['wSrc', (u.sourceIds?.length ?? 0) > 0]];
 }
 
 function unionComp(u: Partnership, partner: Person | null): CellValue {
-    return compCell(oneUnionFields(u, partner), 'uComp', 'union');
+    return compCell(oneUnionFields(u, partner), 'uComp', unionWithoutWedding(u) ? 'unionNoWedding' : 'union');
 }
 
 export function birthFields(ctx: TableContext, p: Person): CompField[] {
@@ -525,26 +546,26 @@ export const PERSON_COLUMNS: readonly ColumnDef[] = cols('persons', [
     // Unions
     { id: 'uCount', group: 'union', label: 'uCount', width: 92, kind: 'number', computed: true, unionScoped: false, get: (_c, r) => numberCell((r as PersonRow).unions.length) },
     { id: 'partner', group: 'union', label: 'partner', width: 200, get: inUnion((c, r, u) => nameOf(otherPartner(c, u, r.id))) },
-    { id: 'wDate', group: 'union', label: 'wDate', width: 120, kind: 'date', get: inUnion((c, _r, u) => dateCell(c, u.startDate)) },
-    { id: 'wPlace', group: 'union', label: 'wPlace', width: 200, get: inUnion((_c, _r, u) => textCell(u.startPlace)) },
-    { id: 'wAge', group: 'union', label: 'wAge', width: 96, kind: 'age', computed: true, get: inUnion((_c, r, u) => ageAt(r.person, u.startDate), true) },
-    { id: 'wAgeRec', group: 'union', label: 'wAgeRec', width: 104, get: inUnion((_c, r, u) => textCell(u.ages?.[r.id])) },
-    { id: 'wAgeDiff', group: 'union', label: 'wAgeDiff', width: 104, kind: 'number', computed: true, get: inUnion((_c, r, u) => gapCell(u.ages?.[r.id], r.person.birthDate, u.startDate), true) },
-    { id: 'pAge', group: 'union', label: 'pAge', width: 104, kind: 'age', computed: true, get: inUnion((c, r, u) => ageAt(otherPartner(c, u, r.id), u.startDate), true) },
+    { id: 'wDate', group: 'union', label: 'wDate', width: 120, kind: 'date', get: inUnion((c, _r, u) => weddingCell(u, dateCell(c, u.startDate))) },
+    { id: 'wPlace', group: 'union', label: 'wPlace', width: 200, get: inUnion((_c, _r, u) => weddingCell(u, textCell(u.startPlace))) },
+    { id: 'wAge', group: 'union', label: 'wAge', width: 96, kind: 'age', computed: true, get: inUnion((_c, r, u) => weddingCell(u, ageAt(r.person, u.startDate)), true) },
+    { id: 'wAgeRec', group: 'union', label: 'wAgeRec', width: 104, get: inUnion((_c, r, u) => weddingCell(u, textCell(u.ages?.[r.id]))) },
+    { id: 'wAgeDiff', group: 'union', label: 'wAgeDiff', width: 104, kind: 'number', computed: true, get: inUnion((_c, r, u) => weddingCell(u, gapCell(u.ages?.[r.id], r.person.birthDate, u.startDate)), true) },
+    { id: 'pAge', group: 'union', label: 'pAge', width: 104, kind: 'age', computed: true, get: inUnion((c, r, u) => weddingCell(u, ageAt(otherPartner(c, u, r.id), u.startDate)), true) },
     {
         id: 'pAgeRec', group: 'union', label: 'pAgeRec', width: 104, get: inUnion((c, r, u) => {
             const other = otherPartner(c, u, r.id);
-            return other ? textCell(u.ages?.[other.id]) : emptyCell();
+            return weddingCell(u, other ? textCell(u.ages?.[other.id]) : emptyCell());
         }),
     },
     {
         id: 'pAgeDiff', group: 'union', label: 'pAgeDiff', width: 104, kind: 'number', computed: true, get: inUnion((c, r, u) => {
             const other = otherPartner(c, u, r.id);
-            return other ? gapCell(u.ages?.[other.id], other.birthDate, u.startDate) : emptyCell(true);
+            return weddingCell(u, other ? gapCell(u.ages?.[other.id], other.birthDate, u.startDate) : emptyCell(true));
         }, true),
     },
     { id: 'uStatus', group: 'union', label: 'uStatus', width: 120, get: inUnion((_c, _r, u) => textCell(strings.partnershipStatus[u.status])) },
-    { id: 'witnesses', group: 'union', label: 'witnesses', width: 230, get: inUnion((c, _r, u) => witnessNames(c, u)) },
+    { id: 'witnesses', group: 'union', label: 'witnesses', width: 230, get: inUnion((c, _r, u) => weddingCell(u, witnessNames(c, u))) },
     { id: 'uLen', group: 'union', label: 'uLen', width: 96, kind: 'age', computed: true, get: inUnion((c, _r, u) => unionLength(c, u), true) },
     { id: 'uKids', group: 'union', label: 'uKids', width: 88, kind: 'number', computed: true, get: inUnion((_c, _r, u) => numberCell(u.childIds.length), true) },
     { id: 'uComp', group: 'union', label: 'uComp', width: 124, kind: 'percent', computed: true, get: inUnion((c, r, u) => unionComp(u, otherPartner(c, u, r.id)), true) },
@@ -615,7 +636,7 @@ export const PERSON_COLUMNS: readonly ColumnDef[] = cols('persons', [
     { id: 'relN', group: 'rel', label: 'relN', width: 150, kind: 'pill', computed: true, get: (c, r) => pillCell(c, asPerson(r), 'name') },
     { id: 'relB', group: 'rel', label: 'relB', width: 150, kind: 'pill', computed: true, get: (c, r) => pillCell(c, asPerson(r), 'birth') },
     { id: 'relD', group: 'rel', label: 'relD', width: 150, kind: 'pill', computed: true, get: (c, r) => c.living(asPerson(r)) ? naCell('', true) : pillCell(c, asPerson(r), 'death') },
-    { id: 'relW', group: 'rel', label: 'relW', width: 150, kind: 'pill', computed: true, unionScoped: true, get: (c, _r, u) => pillCell(c, u, 'marriage') },
+    { id: 'relW', group: 'rel', label: 'relW', width: 150, kind: 'pill', computed: true, unionScoped: true, get: (c, _r, u) => u ? weddingCell(u, pillCell(c, u, 'marriage')) : pillCell(c, u, 'marriage') },
     {
         id: 'evid', group: 'rel', label: 'evid', width: 124, computed: true, get: (_c, r) => {
             const row = r as PersonRow;
@@ -674,19 +695,22 @@ function partnerRec(ctx: TableContext, row: TableRow, k: 1 | 2): CellValue {
     return p ? textCell(r.union.ages?.[p.id]) : naCell();
 }
 
+/** A wedding's cell of a union row (T54 G5). */
+const wedOf = (row: TableRow, cell: CellValue): CellValue => weddingCell(asUnion(row).union, cell);
+
 export const UNION_COLUMNS: readonly ColumnDef[] = cols('unions', [
     { id: 'p1', group: 'pair', label: 'p1', width: 220, get: (c, r) => nameOf(unionPartners(c, asUnion(r)).p1) },
     { id: 'p2', group: 'pair', label: 'p2', width: 220, get: (c, r) => nameOf(unionPartners(c, asUnion(r)).p2) },
     { id: 'uResearchId', group: 'pair', label: 'researchId', width: 110, fromResearch: true, get: (c, r) => c.research ? unionResearchIdCell(asUnion(r).union) : emptyCell() },
-    { id: 'wDate', group: 'wed', label: 'wDate', width: 124, kind: 'date', get: (c, r) => dateCell(c, asUnion(r).union.startDate) },
-    { id: 'wPlace', group: 'wed', label: 'wPlace', width: 210, get: (_c, r) => textCell(asUnion(r).union.startPlace) },
-    { id: 'age1', group: 'wed', label: 'age1', width: 92, kind: 'age', computed: true, get: (c, r) => partnerAge(c, r, 1) },
-    { id: 'rec1', group: 'wed', label: 'rec1', width: 100, get: (c, r) => partnerRec(c, r, 1) },
-    { id: 'age2', group: 'wed', label: 'age2', width: 92, kind: 'age', computed: true, get: (c, r) => partnerAge(c, r, 2) },
-    { id: 'rec2', group: 'wed', label: 'rec2', width: 100, get: (c, r) => partnerRec(c, r, 2) },
+    { id: 'wDate', group: 'wed', label: 'wDate', width: 124, kind: 'date', get: (c, r) => wedOf(r, dateCell(c, asUnion(r).union.startDate)) },
+    { id: 'wPlace', group: 'wed', label: 'wPlace', width: 210, get: (_c, r) => wedOf(r, textCell(asUnion(r).union.startPlace)) },
+    { id: 'age1', group: 'wed', label: 'age1', width: 92, kind: 'age', computed: true, get: (c, r) => wedOf(r, partnerAge(c, r, 1)) },
+    { id: 'rec1', group: 'wed', label: 'rec1', width: 100, get: (c, r) => wedOf(r, partnerRec(c, r, 1)) },
+    { id: 'age2', group: 'wed', label: 'age2', width: 92, kind: 'age', computed: true, get: (c, r) => wedOf(r, partnerAge(c, r, 2)) },
+    { id: 'rec2', group: 'wed', label: 'rec2', width: 100, get: (c, r) => wedOf(r, partnerRec(c, r, 2)) },
     { id: 'uStatus', group: 'wed', label: 'uStatus', width: 116, get: (_c, r) => textCell(strings.partnershipStatus[asUnion(r).union.status]) },
-    { id: 'witnesses', group: 'wed', label: 'witnesses', width: 220, get: (c, r) => witnessNames(c, asUnion(r).union) },
-    { id: 'relW', group: 'wed', label: 'relW', width: 150, kind: 'pill', computed: true, get: (c, r) => pillCell(c, asUnion(r).union, 'marriage') },
+    { id: 'witnesses', group: 'wed', label: 'witnesses', width: 220, get: (c, r) => wedOf(r, witnessNames(c, asUnion(r).union)) },
+    { id: 'relW', group: 'wed', label: 'relW', width: 150, kind: 'pill', computed: true, get: (c, r) => wedOf(r, pillCell(c, asUnion(r).union, 'marriage')) },
     { id: 'div', group: 'divorce', label: 'div', width: 88, computed: true, get: (_c, r) => yesNo(asUnion(r).union.status === 'divorced' || !!asUnion(r).union.endDate) },
     { id: 'divDate', group: 'divorce', label: 'divDate', width: 120, kind: 'date', get: (c, r) => dateCell(c, asUnion(r).union.endDate) },
     { id: 'divPlace', group: 'divorce', label: 'divPlace', width: 180, get: (_c, r) => textCell(asUnion(r).union.endPlace) },

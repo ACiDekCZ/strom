@@ -154,7 +154,7 @@ test.describe('desktop (1440): the URL columns (T54)', () => {
         // The archive's pages are not fetched: the new tab gets a blank page.
         await page.context().route(/example\.org/, route => route.fulfill({ status: 200, contentType: 'text/html', body: '<p>ok</p>' }));
         await openTable(page, false);
-        await showColumns(page, false, ['Birth: URL', 'Marriage: URL', 'Ref. number (REFN)']);
+        await showColumns(page, false, ['Birth: URL', 'Marriage: URL', 'Ref. number']);
         await expect(tv(page, '.tv-headrow [data-col="bUrl"]')).toContainText('Birth: URL');
 
         // A person selected by a click on a cell.
