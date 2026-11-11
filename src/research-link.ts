@@ -108,9 +108,10 @@ export function researchLinkMark(action: ResearchLinkAction, p: ResearchLinkMark
 /**
  * Actions asked through the research's bridge, no link and no terminal (spec 065): verify a fact,
  * a person or the tree (an AI agent works on them in the research's background), confirm a fact
- * from the scan or take it back, stop the verification not yet begun.
+ * from the scan or take it back, stop the verification not yet begun, split the older sources'
+ * locations into fields and undo that split (spec 075 §5, no agent: the research's code).
  */
-export const RESEARCH_BRIDGE_ACTIONS = ['verify', 'verify-bulk', 'fact-confirm', 'verify-stop'] as const;
+export const RESEARCH_BRIDGE_ACTIONS = ['verify', 'verify-bulk', 'fact-confirm', 'verify-stop', 'sources-split'] as const;
 export type ResearchBridgeAction = typeof RESEARCH_BRIDGE_ACTIONS[number];
 
 /**
@@ -122,7 +123,7 @@ export type ResearchBridgeMark = 'none' | 'bridgeAgent';
 /** The mark of each action asked through the bridge (`researchBridgeActionLabel` draws it). */
 export const RESEARCH_BRIDGE_MARKS: Readonly<Record<ResearchBridgeAction, ResearchBridgeMark>> = {
     verify: 'bridgeAgent', 'verify-bulk': 'bridgeAgent',
-    'fact-confirm': 'none', 'verify-stop': 'none',
+    'fact-confirm': 'none', 'verify-stop': 'none', 'sources-split': 'none',
 };
 
 /**

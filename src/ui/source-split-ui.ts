@@ -5,9 +5,12 @@
  *
  * Everything here reads one interface, `SplitProvider` (src/source-split.ts):
  * the app itself for a tree without a research (one undo step, Ctrl+Z too),
- * the research's bridge for a research tree. A research tree is never split
- * here; until its bridge source is in place it is `needsResearch` (a quiet
- * sentence in the Sources manager, nothing in the Table).
+ * the research's bridge for a research tree (`sources.split`: the preview
+ * read when the Sources manager or the Table's Sources view opens, kept until
+ * the research's head moves; the split and its undo written by the research,
+ * its version then taken quietly). A research tree is never split here: its
+ * research not running or without `sources.split` it is `needsResearch` (a
+ * quiet sentence in the Sources manager, nothing in the Table).
  */
 
 import { DataManager } from '../data.js';
@@ -16,10 +19,16 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { formatShortDateTime } from '../format.js';
 import { MQ_MOBILE, MQ_PHONE_LANDSCAPE } from '../breakpoints.js';
 import {
-    localSplitPlan, localSplitPreview, splitOffer, splitPreviewMark,
-    type LocalSplitPlan, type SplitPreview, type SplitProvider, type SplitRow, type SplitSourceKind, type SplitState, type SplitUndoInfo,
+    localSplitPlan, localSplitPreview, splitOffer, splitPreviewMark, withSourcePlaces,
+    type LocalSplitPlan, type SplitPreview, type SplitReadResult, type SplitProvider, type SplitRow, type SplitSourceKind, type SplitState, type SplitUndoInfo,
 } from '../source-split.js';
 import type { StromData } from '../types.js';
+import { SOURCES_SPLIT_FEATURE } from '../research-link.js';
+import { ownWriteHeadTarget } from '../research-sync.js';
+import { diffValues } from '../research-changes.js';
+import { getBridgeSplit, postBridgeSplit, postBridgeSplitUndo, type BridgeSplitReading } from '../source-split-bridge.js';
+import { researchBridgeActionLabel } from './research-open-mark.js';
+import { bridgeBase } from './history-ui.js';
 import { uiModule } from './module.js';
 
 export const SOURCE_SPLIT_DIALOG_ID = 'source-split-modal';
@@ -68,6 +77,28 @@ function localUndoNow(): SplitUndoInfo | null {
     return mark?.kind === 'sourcesSplit' ? { id: localUndoId(mark.at), at: mark.at, count: mark.count } : null;
 }
 
+// ---- The research's bridge (a research tree whose bridge offers `sources.split`) ----
+
+/** The bridge's last reading for a research at its head (`archive`: it said the tree is an archive). */
+interface BridgeCache {
+    rid: string;
+    head: string;
+    state: SplitState | null;
+    archive: boolean;
+}
+
+let bridgeCache: BridgeCache | null = null;
+/** A reading on its way (one at a time per research and head) and who waits for it. */
+let bridgeReading: { rid: string; head: string; waiters: (() => void)[] } | null = null;
+
+const bridgeState = (reading: BridgeSplitReading): SplitState => ({ kind: 'bridge', preview: reading.preview, undo: reading.undo });
+
+/** Nothing left to split, the split just done to undo: what the bridge says right after a split. */
+const afterSplit = (undo: SplitUndoInfo | null): SplitState => ({
+    kind: 'bridge', undo,
+    preview: { rows: [], count: 0, complete: true, unrecognized: 0, unrecognizedExamples: [], fromNote: 0 },
+});
+
 // ---- The dialog's state ----
 
 interface DialogState {
@@ -112,18 +143,150 @@ function rowCells(r: SplitRow, withCallNumber: boolean): { label: string; text: 
 export const sourceSplitMethods = uiModule({
     /**
      * Where the split comes from for the open tree. A research tree: the
-     * research's bridge (its source is added with the bridge's `sources.split`;
-     * until then `needsResearch`), `archive` for a research in the archive.
+     * research's bridge while it runs and says `sources.split` (else
+     * `needsResearch`), `archive` for a research in the archive (also when
+     * its bridge said so at this head).
      */
     sourceSplitKind(): SplitSourceKind {
         if (!DataManager.getCurrentTreeId() || DataManager.isReadOnly() || DataManager.isTreeLocked()) return 'none';
-        if (this.researchSyncLink()) return this.activeResearchArchive() ? 'archive' : 'needsResearch';
-        return 'local';
+        const ctx = this.researchSyncLink();
+        if (!ctx) return 'local';
+        if (this.activeResearchArchive()) return 'archive';
+        const rid = ctx.link.id;
+        if (bridgeCache?.rid === rid && bridgeCache.archive && bridgeCache.head === this.researchHeadNow(rid)) return 'archive';
+        const up = !!bridgeBase(rid) && this.researchBridgeUp(rid);
+        return up && this.researchStatusOf(rid)?.features?.includes(SOURCES_SPLIT_FEATURE) ? 'bridge' : 'needsResearch';
     },
 
     /** The split's source for the open tree, or null when none is offered (`sourceSplitKind`). */
     sourceSplitProvider(): SplitProvider | null {
-        return this.sourceSplitKind() === 'local' ? this.sourceSplitLocal() : null;
+        const kind = this.sourceSplitKind();
+        if (kind === 'local') return this.sourceSplitLocal();
+        const rid = this.researchSyncLink()?.link.id;
+        return kind === 'bridge' && rid ? this.sourceSplitBridge(rid) : null;
+    },
+
+    /**
+     * The research's split through its bridge: the preview (`GET
+     * /sources/split`, kept until its head moves), the split on the click
+     * (`POST /sources/split {plan}`) and its undo, written by the research as
+     * the user's; its version then taken quietly (sourceSplitTakeVersion).
+     * Nothing is split in the app.
+     */
+    sourceSplitBridge(rid: string): SplitProvider {
+        const t = strings.sources.split;
+        const down = strings.history.storiesBridgeDown;
+        const keep = (head: string, state: SplitState | null, archive = false): void => { bridgeCache = { rid, head, state, archive }; };
+        const read = async (all = false): Promise<SplitReadResult> => {
+            const base = bridgeBase(rid);
+            if (!base) return { ok: false, error: 'failed', reason: down };
+            const head = this.researchHeadNow(rid);
+            const r = await getBridgeSplit(base, all);
+            if (r.ok) {
+                const state = bridgeState(r.reading);
+                keep(head, state);
+                return { ok: true, state };
+            }
+            if (r.code === 'archive') {
+                keep(head, null, true);
+                return { ok: false, error: 'archive' };
+            }
+            // Not read at this head: not asked again until it moves (the dialog's Try again asks).
+            if (bridgeCache?.rid !== rid || bridgeCache.head !== head) keep(head, null);
+            return { ok: false, error: r.code === 'busy' ? 'busy' : 'failed', ...(r.code === 'network' ? { reason: down } : {}) };
+        };
+        return {
+            kind: 'bridge',
+            state: () => (bridgeCache?.rid === rid && bridgeCache.state) || { kind: 'bridge', preview: null, undo: null },
+            read,
+            apply: async (preview) => {
+                const plan = preview.plan;
+                if (!plan) return { ok: false, error: 'failed' };
+                const before = this.researchHeadNow(rid);
+                const r = await this.postResearchBridgeWrite(base => postBridgeSplit(base, plan), { load: false });
+                if (!r) return { ok: false, error: 'failed', reason: down };
+                if (r.ok) {
+                    const undo = r.undo ? { id: r.undo, at: Date.now(), count: r.count } : null;
+                    keep(r.head || before, afterSplit(undo));
+                    void this.sourceSplitTakeVersion(rid, before, r.head, r.parent);
+                    return { ok: true, count: r.count, undo };
+                }
+                if (r.code === 'plan') {
+                    if (r.reading) {
+                        keep(this.researchHeadNow(rid), bridgeState(r.reading));
+                        return { ok: false, error: 'plan', preview: r.reading.preview };
+                    }
+                    const again = await read();
+                    return again.ok && again.state.preview ? { ok: false, error: 'plan', preview: again.state.preview } : { ok: false, error: 'failed' };
+                }
+                if (r.code === 'archive') {
+                    keep(this.researchHeadNow(rid), null, true);
+                    return { ok: false, error: 'archive' };
+                }
+                return { ok: false, error: r.code === 'busy' ? 'busy' : 'failed', ...(r.code === 'network' ? { reason: down } : {}) };
+            },
+            undo: async (info) => {
+                const before = this.researchHeadNow(rid);
+                const r = await this.postResearchBridgeWrite(base => postBridgeSplitUndo(base, info.id), { load: false });
+                if (!r) return { ok: false, error: 'failed', reason: down };
+                if (r.ok) {
+                    // The preview comes back: read again at the next look.
+                    bridgeCache = null;
+                    void this.sourceSplitTakeVersion(rid, before, r.head, r.parent);
+                    return { ok: true, restored: r.restored };
+                }
+                if (r.code === 'changed') return { ok: false, error: 'changed', count: r.count, titles: r.titles };
+                if (r.code === 'gone') return { ok: false, error: 'failed', reason: t.errUndoLater };
+                return { ok: false, error: r.code === 'busy' ? 'busy' : 'failed', ...(r.code === 'network' ? { reason: down } : {}) };
+            },
+        };
+    },
+
+    /**
+     * The bridge's preview for the offer lines, read once per research head
+     * (the Sources manager or the Table's Sources view opened, the head
+     * moved); `then` redraws the line once it is in.
+     */
+    sourceSplitBridgeFresh(then: () => void): void {
+        if (this.sourceSplitKind() !== 'bridge') return;
+        const rid = this.researchSyncLink()?.link.id;
+        if (!rid) return;
+        const head = this.researchHeadNow(rid);
+        if (bridgeCache?.rid === rid && bridgeCache.head === head) return;
+        if (bridgeReading?.rid === rid && bridgeReading.head === head) {
+            bridgeReading.waiters.push(then);
+            return;
+        }
+        const reading = { rid, head, waiters: [then] };
+        bridgeReading = reading;
+        void this.sourceSplitBridge(rid).read(false).finally(() => {
+            if (bridgeReading === reading) bridgeReading = null;
+            for (const fn of reading.waiters) fn();
+        });
+    },
+
+    /**
+     * After a split or its undo through the bridge: the research's version
+     * taken quietly when the tree was in step with the research before the
+     * write (its head the tree's, ownWriteHeadTarget), nothing of the app's
+     * own waits to be sent, and the version differs only in the sources'
+     * places. Else the version waits as any newer one (its head noted).
+     */
+    async sourceSplitTakeVersion(rid: string, before: string, head: string, parent: string): Promise<void> {
+        const ctx = this.researchSyncLink();
+        if (!ctx || ctx.link.id !== rid || !head) return;
+        const { treeId, link } = ctx;
+        if (!ownWriteHeadTarget(link, before, head, parent)) return;
+        const fps = this.researchSyncFingerprints(treeId, link);
+        if (!fps.matchesBase && fps.current !== link.sent?.fingerprint) return;
+        const version = await this.researchVersionRead(true);
+        if (!version || DataManager.getCurrentTreeId() !== treeId) return;
+        if (version.header.head && version.header.head !== head) return;
+        const there = this.researchVersionAsLoaded(version.data);
+        if (diffValues(withSourcePlaces(DataManager.getData(), there), there).rows.length > 0) return;
+        if (!await this.ensureLocalUnlocked()) return;
+        await this.applyResearch(version.data, version.header, { force: true, quiet: true, head });
+        this.sourceSplitLinesAgain();
     },
 
     /** The app's own split: the plan of the data now, applied as one undo step. */
@@ -163,6 +326,7 @@ export const sourceSplitMethods = uiModule({
     renderSourceSplitBar(): void {
         const box = document.getElementById('sources-split-bulk');
         if (!box) return;
+        this.sourceSplitBridgeFresh(() => this.renderSourceSplitBar());
         const offer = splitOffer(this.sourceSplitState(), 'sources');
         const t = strings.sources.split;
         if (offer.line === 'hidden') {
@@ -184,6 +348,7 @@ export const sourceSplitMethods = uiModule({
 
     /** The Table's line over the Sources view: the offer only (§3). */
     renderTableSplitBar(el: HTMLElement, rowType: string): void {
+        if (rowType === 'sources') this.sourceSplitBridgeFresh(() => { if (el.isConnected) this.renderTableSplitBar(el, rowType); });
         const offer = rowType === 'sources' ? splitOffer(this.sourceSplitState(), 'table') : { line: 'hidden' as const };
         if (offer.line !== 'offer') {
             el.hidden = true;
@@ -414,6 +579,8 @@ export const sourceSplitMethods = uiModule({
         const pv = st.state.preview;
         const n = pv?.count ?? 0;
         const local = st.state.kind === 'local';
+        // Through the bridge: no mark (RESEARCH_BRIDGE_MARKS, the research writes it, no terminal).
+        const bridgeLabel = (label: string): string => st.provider.kind === 'bridge' ? researchBridgeActionLabel(label, 'sources-split') : esc(label);
         const withCallNumber = local && !!pv && pv.fromNote > 0;
         const body = modal.querySelector<HTMLElement>('.ssp-body');
         const list = modal.querySelector<HTMLElement>('.ssp-list');
@@ -423,7 +590,7 @@ export const sourceSplitMethods = uiModule({
         if (undo) {
             content += '<div class="ssp-undo-row">'
                 + `<span class="ssp-undo-text">${esc(t.undoRow(formatShortDateTime(undo.at, getCurrentLanguage()), undo.count))}</span>`
-                + `<button type="button" class="secondary ssp-small" data-ssp="undo"${st.busy ? ' disabled' : ''}>${esc(t.undoBtn)}</button></div>`;
+                + `<button type="button" class="secondary ssp-small" data-ssp="undo"${st.busy ? ' disabled' : ''}>${bridgeLabel(t.undoBtn)}</button></div>`;
         }
         if (st.error) {
             content += '<div class="ssp-error" role="alert"><span class="ssp-error-text"><span class="ssp-dot" aria-hidden="true"></span>'
@@ -452,7 +619,7 @@ export const sourceSplitMethods = uiModule({
         modal.classList.toggle('has-call-number', withCallNumber);
         const primary = offer
             ? `<button type="button" class="primary" data-ssp="go"${st.busy || st.error?.retry === 'read' || st.error?.retry === 'apply' ? ' disabled' : ''}${st.busy ? ' aria-busy="true"' : ''}>`
-                + `${esc(st.busy && st.provider.kind === 'bridge' ? t.progress(n) : t.go(n))}</button>`
+                + `${bridgeLabel(st.busy && st.provider.kind === 'bridge' ? t.progress(n) : t.go(n))}</button>`
             : '';
         modal.innerHTML = '<div class="modal-header ssp-header">'
             + `<h2 id="ssp-title">${esc(t.title)}</h2>`

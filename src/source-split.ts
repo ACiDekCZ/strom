@@ -265,3 +265,28 @@ export function splitOffer(state: SplitState, where: 'sources' | 'table'): Split
     if (where === 'sources' && state.undo) return { line: 'done', undo: state.undo };
     return { line: 'hidden' };
 }
+
+// ---- The research's version after a split through the bridge ----
+
+/**
+ * `here` with each source's place (call number, folio, image, other
+ * location) as `there` has it (sources of both): what is left to compare
+ * when only the split changed the research's version. Pure.
+ */
+export function withSourcePlaces<T extends { sources?: Record<string, Source> }>(here: T, there: { sources?: Record<string, Source> }): T {
+    const hs = here.sources;
+    const ts = there.sources ?? {};
+    if (!hs) return here;
+    const sources: Record<string, Source> = {};
+    for (const [id, s] of Object.entries(hs)) {
+        const t = ts[id];
+        if (!t) { sources[id] = s; continue; }
+        const next: Source = { ...s };
+        for (const k of ['reference', 'folio', 'image', 'callNumber'] as const) {
+            if (t[k] !== undefined) next[k] = t[k];
+            else delete next[k];
+        }
+        sources[id] = next;
+    }
+    return { ...here, sources };
+}

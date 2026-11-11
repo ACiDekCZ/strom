@@ -166,6 +166,8 @@ export interface FakeBridge {
     places?: FakePlaces;
     /** Confirming the research's transcript (spec 022): `POST /sources/confirm` with `sources.confirm` in `features`. */
     sourcesConfirm?: FakeSourcesConfirm;
+    /** Splitting older locations (spec 075 §5): `GET/POST /sources/split`, `/sources/split/undo` with `sources.split` in `features`. */
+    sourcesSplit?: FakeSourcesSplit;
     /**
      * "Research on" (spec 064): `/status.live` and `POST /live {"idleMinutes"}` with `live.idle` in `features`,
      * `POST /live {"do": "stop"}` with `live.stop` (202, then the bridge is down).
@@ -451,6 +453,88 @@ function serveSourcesConfirm(b: FakeBridge, method: string, url: URL, posted: st
     const tags = [`1 _STROM_READ ${s.read}`, ...(s.conf ? [`2 _CONF ${s.conf}`] : []), `2 _TXT ${s.txt}`].join('\n');
     b.treeGed = b.treeGed.replace(new RegExp(`(0 @${id}@ SOUR[\\s\\S]*?)1 _STROM_READ \\S+(?:\\n2 _(?:CONF|TXT) \\S+)*`), `$1${tags}`);
     return { status: 200, body: { ...said(), head, parent } };
+}
+
+/** The research's split of older locations (spec 075 §5, ZADANI_VYZKUM citace-pole, Odpověď výzkumu D). */
+export interface FakeSourcesSplit {
+    /** Every source the split changes now (`{source, title, before, after}`); GET gives the first 10, `?all=1` all. */
+    rows: unknown[];
+    unrecognized?: number;
+    /** The preview's mark; another one posted: 409 `source.split.plan`. */
+    plan: string;
+    /** The splits it can undo, newest first. */
+    undos: { id: string; at: string; sources: number }[];
+    /** The research's file after the split (its head line set by moveHead); the file before comes back on undo. */
+    splitGed?: string;
+    /** Every GET (`''` or `'all'`), every POST body, every undo body. */
+    gets: string[];
+    posts: Record<string, unknown>[];
+    undoPosts: Record<string, unknown>[];
+    /** Answers instead of the default, taken one by one from the front. */
+    getReplies?: { status: number; body: unknown }[];
+    postReplies?: { status: number; body: unknown }[];
+    undoReplies?: { status: number; body: unknown }[];
+    /** The split takes this long (ms of real time). */
+    delayMs?: number;
+    /** The rows and the file before the last split (undo puts them back). */
+    before?: { rows: unknown[]; ged: string };
+}
+
+export function fakeSourcesSplit(init: Partial<FakeSourcesSplit> = {}): FakeSourcesSplit {
+    return { rows: [], plan: '0123456789abcdef', undos: [], gets: [], posts: [], undoPosts: [], ...init };
+}
+
+/** The preview as the research answers GET /sources/split (core/live.ts splitPreview). */
+function splitPreviewOf(sp: FakeSourcesSplit, all: boolean): Record<string, unknown> {
+    return { split: all ? sp.rows : sp.rows.slice(0, 10), count: sp.rows.length, unrecognized: sp.unrecognized ?? 0, nothing: 0, undos: sp.undos, plan: sp.plan };
+}
+
+/** `/sources/split*` as the research answers them (null: not it; 404 without `sources.split`). */
+async function serveSourcesSplit(b: FakeBridge, method: string, url: URL, posted: string | null): Promise<{ status: number; body: unknown } | null> {
+    const sp = b.sourcesSplit;
+    const rest = url.pathname.replace(/^\/[^/]+/, '');
+    if (!sp || (rest !== '/sources/split' && rest !== '/sources/split/undo')) return null;
+    if (!(b.features ?? []).includes('sources.split')) return { status: 404, body: { error: 'Not found.', code: 'route.unknown' } };
+    let body: Record<string, unknown> = {};
+    try { body = JSON.parse(posted ?? '{}'); } catch { /* keep empty */ }
+    if (rest === '/sources/split' && method === 'GET') {
+        const all = url.searchParams.get('all') === '1';
+        sp.gets.push(all ? 'all' : '');
+        return sp.getReplies?.shift() ?? { status: 200, body: splitPreviewOf(sp, all) };
+    }
+    if (method !== 'POST') return { status: 404, body: { error: 'Not found.', code: 'route.unknown' } };
+    if (rest === '/sources/split') {
+        sp.posts.push(body);
+        if (sp.delayMs) await new Promise(resolve => setTimeout(resolve, sp.delayMs));
+        const reply = sp.postReplies?.shift();
+        if (reply) return reply;
+        if (body.plan !== sp.plan) {
+            return { status: 409, body: { error: 'the split would now do otherwise', code: 'source.split.plan', preview: splitPreviewOf(sp, false) } };
+        }
+        const n = sp.rows.length;
+        const parent = b.head;
+        sp.before = { rows: sp.rows, ged: b.treeGed };
+        if (sp.splitGed) b.treeGed = sp.splitGed;
+        const head = moveHead(b);
+        const undo = `20261111101500-${(0xa1b2c0 + sp.undos.length).toString(16)}`;
+        sp.undos = [{ id: undo, at: '2026-11-11T10:15:00.000Z', sources: n }, ...sp.undos];
+        sp.rows = [];
+        return { status: 200, body: { done: { split: n }, undo, head, parent } };
+    }
+    sp.undoPosts.push(body);
+    const reply = sp.undoReplies?.shift();
+    if (reply) return reply;
+    if (!sp.undos.length || body.undo !== sp.undos[0].id) return { status: 404, body: { error: 'no such split', code: 'source.split.undo' } };
+    const parent = b.head;
+    const restored = sp.undos[0].sources;
+    if (sp.before) {
+        sp.rows = sp.before.rows;
+        b.treeGed = sp.before.ged;
+        sp.before = undefined;
+    }
+    const head = moveHead(b);
+    sp.undos = sp.undos.slice(1);
+    return { status: 200, body: { undone: { restored }, head, parent } };
 }
 
 function serveQuality(b: FakeBridge, method: string, url: URL, posted: string | null): { status: number; body: unknown } | null {
@@ -1697,6 +1781,8 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
         if (hyp) return json(hyp.status, hyp.body);
         const conf = serveSourcesConfirm(b, method, url, route.request().postData());
         if (conf) return json(conf.status, conf.body);
+        const split = await serveSourcesSplit(b, method, url, route.request().postData());
+        if (split) return json(split.status, split.body);
         const qual = serveQuality(b, method, url, route.request().postData());
         if (qual) return json(qual.status, qual.body);
         const names = await serveSurnames(b, method, url);

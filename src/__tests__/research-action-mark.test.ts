@@ -102,6 +102,9 @@ describe('the map of research actions to their marks', () => {
         expect(RESEARCH_BRIDGE_MARKS['verify-bulk']).toBe('bridgeAgent');
         expect(RESEARCH_BRIDGE_MARKS['fact-confirm']).toBe('none');
         expect(RESEARCH_BRIDGE_MARKS['verify-stop']).toBe('none');
+        // Splitting the older locations (spec 075 §5): the research's code, no agent, no terminal.
+        expect(RESEARCH_BRIDGE_MARKS['sources-split']).toBe('none');
+        expect(researchBridgeActionLabel(strings.sources.split.go(3), 'sources-split')).toBe(strings.sources.split.go(3));
         const verify = researchBridgeActionLabel(strings.verify.start, 'verify');
         expect(verify).toContain('research-ai-badge');
         expect(verify).not.toContain('research-open-mark');
