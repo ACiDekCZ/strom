@@ -27,6 +27,7 @@ import {
     CoupleEvent, FactOriginKind, FactPart, GedcomExtra, ImportRecord, ImportedValue, LifeEvent, OriginalIdLine, OriginalIds,
     Partnership, Person, PersonId, ResearchFactOrigin, ResearchFactWas, Source, StromData,
 } from './types.js';
+import { CitationHolder, citationQuality } from './citation-quality.js';
 
 /** A person or a couple: what carries facts. */
 export type FactHolder = Person | Partnership;
@@ -154,6 +155,13 @@ export type FactCitationContext =
     | { personId: PersonId; eventId?: string; fact?: 'birth' | 'death' }
     | { partnershipId: Partnership['id']; eventId?: string; fact?: 'divorce' };
 
+/** A source cited at a fact: where the citation sits and its QUAY (none: neither the citation nor its source says one). */
+export interface FactCitation {
+    source: Source;
+    ctx: FactCitationContext;
+    quality?: number;
+}
+
 const BIRTH_CITE_EVENTS: ReadonlySet<string> = new Set(['birth', 'baptism']);
 const DEATH_CITE_EVENTS: ReadonlySet<string> = new Set(['death', 'burial', 'cremation']);
 
@@ -162,42 +170,44 @@ const DEATH_CITE_EVENTS: ReadonlySet<string> = new Set(['death', 'burial', 'crem
  * citations; the birth by its field and the birth / baptism events; the death by its field and the
  * death / burial / cremation events; an event by its own; a couple's marriage by the couple's
  * citations, its divorce by the divorce's own. A cited id the tree no longer has is skipped; a source cited twice comes once.
+ * Each with its citation's QUAY (spec 077: its own, else its source's; the first citation's when cited twice).
  */
 export function factCitations(
     data: Pick<StromData, 'sources'>, holder: FactHolder, fact: string,
-): { source: Source; ctx: FactCitationContext }[] {
-    const out: { source: Source; ctx: FactCitationContext }[] = [];
+): FactCitation[] {
+    const out: FactCitation[] = [];
     const seen = new Set<string>();
-    const add = (ids: readonly string[] | undefined, ctx: FactCitationContext): void => {
-        for (const id of ids ?? []) {
+    const add = <F extends string>(at: CitationHolder<F> & Partial<Record<F, string[]>>, field: F, ctx: FactCitationContext): void => {
+        for (const id of at[field] ?? []) {
             const source = data.sources?.[id];
             if (!source || seen.has(id)) continue;
             seen.add(id);
-            out.push({ source, ctx });
+            const quality = citationQuality(at, field, id, data.sources);
+            out.push({ source, ctx, ...(quality !== undefined ? { quality } : {}) });
         }
     };
     if (isPartnership(holder)) {
         const partnershipId = holder.id;
         if (fact.startsWith('event:')) {
             const ev = eventById(holder, fact.slice(6));
-            if (ev) add(ev.sourceIds, { partnershipId, eventId: ev.id });
+            if (ev) add(ev, 'sourceIds', { partnershipId, eventId: ev.id });
         } else if (fact === 'marriage') {
-            add(holder.sourceIds, { partnershipId });
+            add(holder, 'sourceIds', { partnershipId });
         } else if (fact === 'divorce') {
-            add(holder.divorceSourceIds, { partnershipId, fact: 'divorce' });
+            add(holder, 'divorceSourceIds', { partnershipId, fact: 'divorce' });
         }
         return out;
     }
     const personId = holder.id;
     if (fact === 'name') {
-        add(holder.sourceIds, { personId });
+        add(holder, 'sourceIds', { personId });
     } else if (fact === 'birth' || fact === 'death') {
-        add(fact === 'birth' ? holder.birthSourceIds : holder.deathSourceIds, { personId, fact });
+        add(holder, fact === 'birth' ? 'birthSourceIds' : 'deathSourceIds', { personId, fact });
         const types = fact === 'birth' ? BIRTH_CITE_EVENTS : DEATH_CITE_EVENTS;
-        for (const ev of holder.events ?? []) if (ev && types.has(ev.type)) add(ev.sourceIds, { personId, eventId: ev.id });
+        for (const ev of holder.events ?? []) if (ev && types.has(ev.type)) add(ev, 'sourceIds', { personId, eventId: ev.id });
     } else if (fact.startsWith('event:')) {
         const ev = eventById(holder, fact.slice(6));
-        if (ev) add(ev.sourceIds, { personId, eventId: ev.id });
+        if (ev) add(ev, 'sourceIds', { personId, eventId: ev.id });
     }
     return out;
 }

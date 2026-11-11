@@ -11,6 +11,7 @@ import { yearOf } from './dates.js';
 import { sortCoupleEvents, sortLifeEvents } from './events.js';
 import { shownName } from './person-name.js';
 import { strings as appStrings } from './strings.js';
+import { CitationHolder, citationQuality } from './citation-quality.js';
 
 type Strings = typeof appStrings;
 
@@ -28,6 +29,8 @@ export interface PersonSourceCite {
     title?: string;
     /** Cited by a story (Story.sources), not by a fact: listed after the facts. */
     story?: true;
+    /** The citation's QUAY (spec 077: its own, else its source's); none for a story's. */
+    quality?: number;
 }
 
 /** One source and everything it supports for the person. */
@@ -66,44 +69,48 @@ export function personSourceRows(data: StromData, personId: PersonId, S: Strings
         return p ? shownName(p) : '?';
     };
     const rows = new Map<string, PersonSourceRow>();
-    const add = (ids: string[] | undefined, cite: PersonSourceCite) => {
+    const addIds = (ids: string[] | undefined, cite: PersonSourceCite, quality?: (id: string) => number | undefined) => {
         for (const id of new Set(ids ?? [])) {
             const source = catalog[id];
             if (!source) continue;
             const row = rows.get(id) ?? { source, cites: [] };
-            if (!row.cites.some(c => c.label === cite.label)) row.cites.push(cite);
+            const q = quality?.(id);
+            if (!row.cites.some(c => c.label === cite.label)) row.cites.push(q !== undefined ? { ...cite, quality: q } : cite);
             rows.set(id, row);
         }
     };
+    /** A list of citations (`holder[field]`), each with its QUAY. */
+    const add = <F extends string>(holder: CitationHolder<F> & Partial<Record<F, string[]>>, field: F, cite: PersonSourceCite) =>
+        addIds(holder[field], cite, id => citationQuality(holder, field, id, catalog));
     const withYear = (label: string, year: number | null) => (year !== null ? `${label} ${year}` : label);
-    add(person.sourceIds, { label: S.personSources.citePerson, ctx: { personId }, year: null });
+    add(person, 'sourceIds', { label: S.personSources.citePerson, ctx: { personId }, year: null });
     // The birth and death entries (GEDCOM BIRT.SOUR / DEAT.SOUR).
     for (const fact of ['birth', 'death'] as const) {
         const year = yearOf(fact === 'birth' ? person.birthDate : person.deathDate);
-        add(fact === 'birth' ? person.birthSourceIds : person.deathSourceIds,
+        add(person, fact === 'birth' ? 'birthSourceIds' : 'deathSourceIds',
             { label: withYear(S.events.types[fact], year), ctx: { personId, fact }, year });
     }
     for (const ev of sortLifeEvents(person.events ?? [])) {
         const year = yearOf(ev.date);
-        add(ev.sourceIds, { label: withYear(lifeEventLabel(ev, S), year), ctx: { personId, eventId: ev.id }, year });
+        add(ev, 'sourceIds', { label: withYear(lifeEventLabel(ev, S), year), ctx: { personId, eventId: ev.id }, year });
     }
     for (const u of Object.values(data.partnerships)) {
         if (u.person1Id !== personId && u.person2Id !== personId) continue;
         const year = yearOf(u.startDate);
-        add(u.sourceIds, {
+        add(u, 'sourceIds', {
             label: S.personSources.citeUnion(year), ctx: { partnershipId: u.id }, year,
             title: S.sources.citedPartnership(fullName(u.person1Id), fullName(u.person2Id)),
         });
         // The divorce's own record: "Divorce 1890".
         const endYear = yearOf(u.endDate);
-        add(u.divorceSourceIds, {
+        add(u, 'divorceSourceIds', {
             label: withYear(S.fields.divorceRow, endYear), ctx: { partnershipId: u.id, fact: 'divorce' }, year: endYear,
             title: S.partnerEvents.cited(S.fields.divorceRow, S.partnerEvents.couple(fullName(u.person1Id), fullName(u.person2Id))),
         });
         // The couple's events (banns, a census): "Banns 1888".
         for (const ev of sortCoupleEvents(u.events ?? [])) {
             const evYear = yearOf(ev.date);
-            add(ev.sourceIds, {
+            add(ev, 'sourceIds', {
                 label: withYear(coupleEventLabelIn(ev, S), evYear), ctx: { partnershipId: u.id, eventId: ev.id }, year: evYear,
                 title: S.partnerEvents.cited(coupleEventLabelIn(ev, S),
                     S.partnerEvents.couple(fullName(u.person1Id), fullName(u.person2Id))),
@@ -114,10 +121,10 @@ export function personSourceRows(data: StromData, personId: PersonId, S: Strings
         // A story's sources (its facts' and its background's, e.g. a chronicle no event cites).
         // Its pointers and the sources its facts cite by code, as the story's section lists them.
         const told = (st: Story | undefined) => (st?.text?.trim() ? storyBasisSourceIds(catalog, st) : undefined);
-        add(told(person.story), { label: S.personPage.sec.story, ctx: { personId }, year: null, story: true });
+        addIds(told(person.story), { label: S.personPage.sec.story, ctx: { personId }, year: null, story: true });
         for (const u of Object.values(data.partnerships)) {
             if (u.person1Id !== personId && u.person2Id !== personId) continue;
-            add(told(u.story), {
+            addIds(told(u.story), {
                 label: S.personPage.story.titleCouple, ctx: { partnershipId: u.id }, year: null, story: true,
                 title: S.sources.citedPartnership(fullName(u.person1Id), fullName(u.person2Id)),
             });
@@ -136,4 +143,16 @@ export function personSourceRows(data: StromData, personId: PersonId, S: Strings
         return years.length > 0 ? Math.min(...years) : yearOf(r.source.recordDate);
     };
     return list.sort((a, b) => byYear(rowYear(a), rowYear(b)) || a.source.title.localeCompare(b.source.title));
+}
+
+/**
+ * The reliability a row shows once (spec 077): that of its citations when
+ * they all say the same (a row only stories cite: its source's), null when
+ * they differ and each citation shows its own.
+ */
+export function rowQuality(row: PersonSourceRow): number | undefined | null {
+    const facts = row.cites.filter(c => !c.story);
+    if (facts.length === 0) return row.source.quality;
+    const first = facts[0].quality;
+    return facts.every(c => c.quality === first) ? first : null;
 }

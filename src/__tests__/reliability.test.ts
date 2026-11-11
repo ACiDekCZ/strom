@@ -349,6 +349,45 @@ describe('cardStatus: the one mark of a tree card (spec 066 P4 §1, table 1b)', 
         expect(at([residence('probable', 's1')], { birthDate: '1851', sourceIds: ['s1'] })?.cls).toBe('cs-p1');
     });
 
+    it('spec 077: the QUAY of the citation at the fact decides, not its source\'s default', () => {
+        // One census entry (an original, QUAY 3): the occupation read first hand, the birth from the age (QUAY 2 of its own).
+        const census = { id: 'sC', title: 'Census Bludovec 1857', quality: 3 };
+        const at = (p: Person) => ({ ...tree([I1], p), sources: { ...SOURCES, sC: census } }) as unknown as StromData;
+        const birth = (own: number | null) => person({ birthDate: '1821', birthStatus: 'probable', birthSourceIds: ['sC'],
+            citationQuay: { birthSourceIds: { sC: own } } } as unknown as Partial<Person>);
+        const of = (p: Person) => cls(at(p), p, opts({ ...RESEARCH, treeHasSources: true }));
+        // BIRT QUAY 2 (a copy with primary information): still read from a source, ●○.
+        expect(of(birth(2))).toBe('cs-p1');
+        // The same entry cited at the birth with QUAY 1 or none: only a trace (○), although the entry is an original.
+        expect(of(birth(1))).toBe('cs-res');
+        expect(of(birth(null))).toBe('cs-res');
+        // The other way round: an entry of QUAY 1 whose citation at a baptism says 3.
+        const copy = { ...census, quality: 1 };
+        const baptised = person({ birthDate: '1821', birthStatus: 'possible', events: [{ id: 'b1', type: 'baptism', date: '1821',
+            sourceIds: ['sC'], citationQuay: { sourceIds: { sC: 3 } } }] } as unknown as Partial<Person>);
+        const data = { ...at(baptised), sources: { sC: copy } } as unknown as StromData;
+        expect(cls(data, baptised, opts(RESEARCH))).toBe('cs-p1');
+        // The record the research changed the birth by, cited at the birth with QUAY 1: its citation says, not the entry's 3.
+        const bySrc = person({ birthDate: '1821', birthStatus: 'probable', birthSourceIds: ['sC'],
+            citationQuay: { birthSourceIds: { sC: 1 } },
+            researchOrigins: { name: { kind: 'research' }, birth: { kind: 'research', sourceIds: ['sC'] } } } as unknown as Partial<Person>);
+        expect(of(bySrc)).toBe('cs-res');
+        // The occupation (OCCU QUAY 3 at an entry of QUAY 1) makes a person without other steps known: ●○.
+        const occu = person({ events: [{ id: 'o1', type: 'occupation', value: 'chalupník', status: 'probable',
+            sourceIds: ['sC'], citationQuay: { sourceIds: { sC: 3 } } }] } as unknown as Partial<Person>);
+        expect(cls({ ...at(occu), sources: { sC: copy } } as unknown as StromData, occu, opts({ ...RESEARCH, treeHasSources: true })))
+            .toBe('cs-p1');
+        const occuCopy = person({ events: [{ id: 'o1', type: 'occupation', value: 'chalupník', status: 'probable', sourceIds: ['sC'] }] } as unknown as Partial<Person>);
+        expect(cls({ ...at(occuCopy), sources: { sC: copy } } as unknown as StromData, occuCopy, opts({ ...RESEARCH, treeHasSources: true })))
+            .toBe('cs-res');
+        // A couple's wedding cited with its own QUAY 3 at an entry of QUAY 1.
+        const spouse = person({ partnerships: ['u1'] } as unknown as Partial<Person>);
+        const wed = { ...tree([I1], spouse), sources: { sC: copy } } as unknown as StromData;
+        wed.partnerships = { u1: { id: 'u1', person1Id: 'p1', person2Id: 'p2', startDate: '1850', startStatus: 'probable',
+            sourceIds: ['sC'], citationQuay: { sourceIds: { sC: 3 } } } } as unknown as StromData['partnerships'];
+        expect(cls(wed, spouse, opts(RESEARCH))).toBe('cs-p1');
+    });
+
     it('K5.1: a wedding probable from the original register makes the person known (the couple\'s facts count)', () => {
         const p = person({ partnerships: ['u1'] } as unknown as Partial<Person>);
         const data = tree([I1], p);
@@ -441,6 +480,17 @@ describe('factCitations', () => {
         const rows = factCitations(data, p, 'birth');
         expect(titles(rows)).toEqual(['Křestní matrika Lhotka 1850', 'Sčítání lidu 1880']);
         expect(rows.map(r => r.ctx)).toEqual([{ personId: 'p1', fact: 'birth' }, { personId: 'p1', eventId: 'e1' }]);
+    });
+
+    it('each citation with its QUAY: its own, else its source\'s (spec 077)', () => {
+        const census = { sC: { id: 'sC', title: 'Census Bludovec 1857', quality: 3 }, s1: { id: 's1', title: 'Křestní matrika Lhotka 1850' } };
+        const p = person({
+            birthSourceIds: ['sC', 's1'], citationQuay: { birthSourceIds: { sC: 2 } },
+            events: [{ id: 'o1', type: 'occupation', sourceIds: ['sC'] }, { id: 'b1', type: 'baptism', sourceIds: ['s1'], citationQuay: { sourceIds: { s1: null } } }],
+        } as unknown as Partial<Person>);
+        const d = { sources: census } as unknown as Pick<StromData, 'sources'>;
+        expect(factCitations(d, p, 'birth').map(r => [r.source.id, r.quality])).toEqual([['sC', 2], ['s1', undefined]]);
+        expect(factCitations(d, p, 'event:o1').map(r => r.quality)).toEqual([3]);
     });
 
     it('the death: a burial event counts', () => {

@@ -929,14 +929,16 @@ function sourceKey(src: Source): string {
 }
 
 /**
- * sourceKey with the citation's own date, quality and kept lines: a file
- * citing one page twice with another QUAY, DATA > DATE or DATA > TEXT gives
- * two entries, and each is kept by its own twin.
+ * sourceKey with the citation's own date and kept lines: a file citing one
+ * page twice with another DATA > DATE or DATA > TEXT gives two entries, and
+ * each is kept by its own twin. Not the QUAY: it is the citation's (spec 077),
+ * kept at each citation pointed at the twin (remapSourceReferences), so an
+ * entry with another default QUAY is still the same entry, never a second one.
  */
 function citationKey(src: Source): string {
     const key = sourceKey(src);
     const said = (src.gedcomExtra ?? []).map(e => citeLines(e.lines)).find(l => l.length) ?? [];
-    return key ? [key, src.recordDate ?? '', src.quality ?? '', said.join('\n')].join('\u0001') : '';
+    return key ? [key, src.recordDate ?? '', said.join('\n')].join('\u0001') : '';
 }
 
 /** Two attachments are the same document when they carry the same bytes. */
@@ -979,16 +981,18 @@ function mergeSourceCatalogs(
         const cite = citationKey(src);
         const twin = cite ? byCitation.get(cite) : undefined;
         const byTitle = key ? byKey.get(key) : undefined;
-        // A citation of the same file record at another QUAY than the entry the tree kept of
-        // it (both read with the file's ids and a QUAY) is a citation of its own: folding it in
-        // lost its QUAY. An entry kept without a QUAY still takes the incoming one's details.
+        // A citation of the same file record with its own date or lines (no twin) at another QUAY
+        // than the entry the tree kept of it (both read with the file's ids and a QUAY) is a
+        // citation of its own: folding it in lost what it says. An entry kept without a QUAY still
+        // takes the incoming one's details. Another QUAY alone is no other entry (a twin, spec 077):
+        // the citations pointed at the kept one keep theirs.
         const keptByTitle = byTitle ? catalog[byTitle] : undefined;
         const otherCitation = !twin && !!keptByTitle && !!src.originalIds?.length && !!keptByTitle.originalIds?.length
             && src.quality !== undefined && keptByTitle.quality !== undefined && src.quality !== keptByTitle.quality;
         const kept = (src.refn ? byRefn.get(src.refn) : undefined) ?? twin ?? (otherCitation ? undefined : byTitle);
         if (kept && kept !== id && !catalog[id]) {
             remap.set(id, kept);
-            if (kept !== twin) takeCitationQuality(catalog[kept], src, mergedData, incomingImports);
+            takeCitationQuality(catalog[kept], src, mergedData, incomingImports);
             absorbSourceDetails(catalog[kept], src);
             continue;
         }

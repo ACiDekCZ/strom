@@ -1407,7 +1407,7 @@ export function stabilizeIds(next: StromData, previous: StromData): StromData {
         taken.add(oldId);
     }
     // A source without a number on both sides — the source of its own a
-    // citation of another page, QUAY or date gets at every reading (the file
+    // citation of another page or date gets at every reading (the file
     // has no id for it), or an entry made in the app the research has not
     // numbered — is the same entry when all it says is the same. Only where
     // that is unique on both sides: two such entries are never joined.

@@ -127,13 +127,13 @@ let host: StatusTipHost | null = null;
 
 // ==================== The model ====================
 
-interface SourceRowModel {
+export interface SourceRowModel {
     source: Source;
     ctx: CitationContextLike;
     sub: string;
 }
 
-interface SourcesModel {
+export interface SourcesModel {
     head: string;
     rows: SourceRowModel[];
     /** No row: what stands in its place. */
@@ -196,10 +196,10 @@ function stepGlyphHtml(r: ReliabilityStep): string {
     return `<span class="fact-status fact-status-${r.step} st-pill" aria-hidden="true">${inner}</span>`;
 }
 
-/** "fol. 12 · 3 Feb 1865 · original" under a source's title. */
-function sourceSub(source: Source): string {
+/** "fol. 12 · 3 Feb 1865 · original" under a source's title: the reliability is the citation's (spec 077). */
+function sourceSub(source: Source, quality: number | undefined): string {
     const date = source.recordDate ? formatFlexDate(source.recordDate) : '';
-    return [sourceEntryText(source), date, qualityLabel(source.quality)].filter(Boolean).join(' · ');
+    return [sourceEntryText(source), date, qualityLabel(quality)].filter(Boolean).join(' · ');
 }
 
 /** Sources in the tip's order: the one the value is from first, then by the record's date. */
@@ -214,18 +214,19 @@ function holderCtx(holder: FactHolder): CitationContextLike {
     return isPartnership(holder) ? { partnershipId: holder.id } : { personId: holder.id };
 }
 
-/** The sources block of one fact's pill. */
-function factSourcesModel(data: StromData, holder: FactHolder, fact: string, r: FactReliability | null,
+/** The sources block of one fact's pill (each row's reliability that of its citation at the fact). */
+export function factSourcesModel(data: StromData, holder: FactHolder, fact: string, r: FactReliability | null,
     personId: string | undefined): SourcesModel {
     const s = strings.reliability;
     const cited = factCitations(data, holder, fact);
     // The record the research read the value from leads, even when it is not cited at the fact.
     const valueId = r?.sourceIds?.find(id => data.sources?.[id]);
-    const all = valueId && !cited.some(c => c.source.id === valueId)
-        ? [{ source: data.sources![valueId], ctx: holderCtx(holder) }, ...cited] : cited;
+    const valueSource = valueId ? data.sources![valueId] : undefined;
+    const all: { source: Source; ctx: CitationContextLike; quality?: number }[] = valueSource && !cited.some(c => c.source.id === valueId)
+        ? [{ source: valueSource, ctx: holderCtx(holder), quality: valueSource.quality }, ...cited] : cited;
     const ordered = orderSources(all, valueId);
     const rows: SourceRowModel[] = ordered.map((c, i) => {
-        let sub = sourceSub(c.source);
+        let sub = sourceSub(c.source, c.quality);
         if (i === 0 && r?.step === 'proven' && r.dots === 2) sub = [sub, s.readersAgree].filter(Boolean).join(' · ');
         return { source: c.source, ctx: c.ctx, sub };
     });

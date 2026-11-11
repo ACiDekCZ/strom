@@ -22,9 +22,10 @@
  */
 
 import type {
-    FactPart, FactStatus, FactOriginKind, ImportRecord, Partnership, Person, ResearchFactOrigin, ResearchFactWas, StromData,
+    CoupleEvent, LifeEvent, FactPart, FactStatus, FactOriginKind, ImportRecord, Partnership, Person, ResearchFactOrigin, ResearchFactWas, StromData,
 } from './types.js';
 import { personSourceIds } from './types.js';
+import { CitationHolder, citationQuality } from './citation-quality.js';
 import {
     FactHolder, factImportParts, factParts, factsOf, factValue, importRecordOf, isPartnership,
 } from './import-origin.js';
@@ -403,27 +404,42 @@ function cardFactPresent(person: Person, fact: CardStatusFact): boolean {
     return !!types && (person.events ?? []).some(e => types.has(e.type));
 }
 
+/** A citation at a fact (its list's holder, the list and the source), or a bare source id: the research's record of a change. */
+export type FactCitationRef = string | { id: string; holder: CitationHolder; field: string };
+
+/** The citations of a holder's list, each with where its QUAY sits. */
+function citationRefs<F extends string>(holder: CitationHolder<F> & Partial<Record<F, string[]>>, field: F): FactCitationRef[] {
+    return (holder[field] ?? []).map(id => ({ id, holder: holder as CitationHolder, field }));
+}
+
+/** The citations at a fact and the record the research changed it by, unless that record is cited there (its citation says). */
+function withChangeRecord(cites: FactCitationRef[], r: FactReliability): FactCitationRef[] {
+    const cited = new Set(cites.map(c => (typeof c === 'string' ? c : c.id)));
+    return [...cites, ...(r.sourceIds ?? []).filter(id => !cited.has(id))];
+}
+
 /**
  * The citations at a fact itself: the name by the person's own citations (INDI / NAME.SOUR), the birth
  * and the death by their fields or a birth / baptism (death / burial) event, any of them by the record
  * the research changed it by.
  */
-function cardFactCitations(person: Person, fact: CardStatusFact, r: FactReliability): string[] {
-    const ids = [...(r.sourceIds ?? [])];
-    if (fact === 'name') return [...ids, ...(person.sourceIds ?? [])];
+function cardFactCitations(person: Person, fact: CardStatusFact, r: FactReliability): FactCitationRef[] {
+    if (fact === 'name') return withChangeRecord(citationRefs(person, 'sourceIds'), r);
     const types = fact === 'birth' ? BIRTH_EVENT_TYPES : DEATH_EVENT_TYPES;
-    ids.push(...((fact === 'birth' ? person.birthSourceIds : person.deathSourceIds) ?? []));
-    for (const e of person.events ?? []) if (types.has(e.type)) ids.push(...(e.sourceIds ?? []));
-    return ids;
+    const cites = citationRefs(person, fact === 'birth' ? 'birthSourceIds' : 'deathSourceIds');
+    for (const e of person.events ?? []) if (types.has(e.type)) cites.push(...citationRefs(e, 'sourceIds'));
+    return withChangeRecord(cites, r);
 }
 
 /**
- * One of the citations reads the fact from a source: its quality (GEDCOM QUAY, kept on the cited
- * entry as `Source.quality`) is 2 or 3. A family tree or a memory (0), an authored work or a copy
- * with secondary information (1), and a citation without a QUAY, do not.
+ * One of the citations reads the fact from a source: its quality (GEDCOM QUAY: the citation's own,
+ * else its source's `Source.quality`, spec 077) is 2 or 3. A family tree or a memory (0), an authored
+ * work or a copy with secondary information (1), and a citation without a QUAY, do not. A bare id
+ * (the research's record of a change) is its source's.
  */
-export function citesSourceRead(data: Pick<StromData, 'sources'>, ids: readonly string[] | undefined): boolean {
-    return (ids ?? []).some(id => (data.sources?.[id]?.quality ?? -1) >= CARD_SOURCE_QUALITY);
+export function citesSourceRead(data: Pick<StromData, 'sources'>, cites: readonly FactCitationRef[] | undefined): boolean {
+    return (cites ?? []).some(c => ((typeof c === 'string' ? data.sources?.[c]?.quality
+        : citationQuality(c.holder, c.field, c.id, data.sources)) ?? -1) >= CARD_SOURCE_QUALITY);
 }
 
 /**
@@ -452,16 +468,16 @@ const READ_STEPS: ReadonlySet<ReliabilityStepName> = new Set(['human', 'proven',
  * source); no step anywhere: ○ when the person cites anything, the dotted frame when not.
  */
 function otherFactsClass(data: StromData, person: Person, opts: CardStatusOptions): CardStatusClass {
-    const eventFacts = (events: readonly { id: string; sourceIds?: string[] }[] | undefined) =>
-        (events ?? []).filter(e => e && typeof e.id === 'string').map(e => ({ fact: `event:${e.id}`, ids: e.sourceIds ?? [] }));
-    const holders: { holder: Person | Partnership; facts: { fact: string; ids: string[] }[] }[] = [
+    const eventFacts = (events: readonly (LifeEvent | CoupleEvent)[] | undefined) =>
+        (events ?? []).filter(e => e && typeof e.id === 'string').map(e => ({ fact: `event:${e.id}`, ids: citationRefs(e, 'sourceIds') }));
+    const holders: { holder: Person | Partnership; facts: { fact: string; ids: FactCitationRef[] }[] }[] = [
         { holder: person, facts: eventFacts(person.events) },
     ];
     const unions = opts.unions?.get(person.id)
         ?? (person.partnerships ?? []).map(id => data.partnerships?.[id]).filter((u): u is Partnership => !!u);
     for (const u of unions) {
         holders.push({ holder: u, facts: [
-            { fact: 'marriage', ids: u.sourceIds ?? [] }, { fact: 'divorce', ids: u.divorceSourceIds ?? [] }, ...eventFacts(u.events),
+            { fact: 'marriage', ids: citationRefs(u, 'sourceIds') }, { fact: 'divorce', ids: citationRefs(u, 'divorceSourceIds') }, ...eventFacts(u.events),
         ] });
     }
     let strongest: CardStatusClass | null = null;
@@ -471,7 +487,7 @@ function otherFactsClass(data: StromData, person: Person, opts: CardStatusOption
             if (ids.length) cites = true;
             const r = factReliability(data, holder, fact, opts);
             if (!r) continue;
-            const cls: CardStatusClass = READ_STEPS.has(r.step) && citesSourceRead(data, [...ids, ...(r.sourceIds ?? [])]) ? 'cs-p1'
+            const cls: CardStatusClass = READ_STEPS.has(r.step) && citesSourceRead(data, withChangeRecord(ids, r)) ? 'cs-p1'
                 : r.step === 'import' ? 'cs-import' : r.step === 'none' ? 'cs-none' : 'cs-res';
             if (!strongest || CARD_STATUS_CLASSES.indexOf(cls) < CARD_STATUS_CLASSES.indexOf(strongest)) strongest = cls;
         }

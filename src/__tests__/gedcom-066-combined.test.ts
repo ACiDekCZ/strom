@@ -498,8 +498,8 @@ describe('The combined 066 file: import → "Back to" → import → "Back to"',
             const cited = (ids?: string[]) => (ids ?? []).map(id => [tree.sources![id].title, tree.sources![id].reference ?? '', tree.sources![id].quality]);
             expect(cited(couple.sourceIds)).toEqual([['Parish register Hrbolcov', 'fol. 41', undefined]]);
             expect(cited(couple.divorceSourceIds)).toEqual([['Parish register Hrbolcov', 'fol. 78', 2], ['Drnkalov chronicle', '', 1]]);
-            expect(factCitations(tree, couple, 'divorce')).toEqual(couple.divorceSourceIds!.map(id =>
-                ({ source: tree.sources![id], ctx: { partnershipId: couple.id, fact: 'divorce' } })));
+            expect(factCitations(tree, couple, 'divorce')).toEqual(couple.divorceSourceIds!.map((id, i) =>
+                ({ source: tree.sources![id], ctx: { partnershipId: couple.id, fact: 'divorce' }, quality: [2, 1][i] })));
             expect(factCitations(tree, couple, 'marriage').map(c => c.source.id)).toEqual(couple.sourceIds);
             for (const ged of [first, second]) {
                 const rec = record(ged, '@F2501@');

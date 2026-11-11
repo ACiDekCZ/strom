@@ -774,9 +774,11 @@ function sourceTitles(ids: readonly string[], sources: Record<string, Source>): 
 
 /**
  * What a citation cites: the entry and its page (title, archive, page). A
- * page cited with its own QUAY or date is a source of its own, read anew
- * (another id) at every reading of the file, and a tree stored before that
- * cites the record itself: still the same entry and page, not a change.
+ * page cited with its own date is a source of its own, read anew (another id)
+ * at every reading of the file, and a tree stored before that cites the
+ * record itself: still the same entry and page, not a change. Its QUAY is the
+ * citation's (spec 077), never part of what it cites: a source a tree of 3.26
+ * made for another QUAY and joined back into its entry since is the same.
  */
 function citedKey(id: string, sources: Record<string, Source>): string {
     const src = sources[id];

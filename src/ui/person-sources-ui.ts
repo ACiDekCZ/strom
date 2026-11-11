@@ -11,7 +11,7 @@ import { DataManager } from '../data.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { PartnershipId, PersonId, Source, Story } from '../types.js';
 import { yearOf } from '../dates.js';
-import { personSourceRows as personSourceRowsOf, PersonSourceRow } from '../person-sources.js';
+import { personSourceRows as personSourceRowsOf, PersonSourceRow, rowQuality } from '../person-sources.js';
 import { storyProseHtml, coupleStories, coupleStoryYears, coupleChipNames } from '../story-text.js';
 import { personInitials } from '../initials.js';
 import { uiModule } from './module.js';
@@ -203,9 +203,16 @@ export const personSourcesMethods = uiModule({
         // An archive has no reading results to give: no link to one.
         const readings = !this.activeResearchAgentless();
         list.innerHTML = rows.map((r, i) => {
-            const q = qualityLabel(r.source.quality);
-            const labels = r.cites.map(c => c.title
-                ? `<span title="${esc(c.title)}">${esc(c.label)}</span>` : esc(c.label)).join(' · ');
+            // One reliability for the row, or each citation its own where they differ (spec 077).
+            const whole = rowQuality(r);
+            const q = whole === null ? '' : qualityLabel(whole);
+            const tag = (quality: number | undefined): string => {
+                const label = qualityLabel(quality);
+                return label ? ` <span class="source-quality-tag">${esc(label)}</span>` : '';
+            };
+            const labels = r.cites.map(c => (c.title
+                ? `<span title="${esc(c.title)}">${esc(c.label)}</span>` : esc(c.label))
+                + (whole === null && !c.story ? tag(c.quality) : '')).join(' · ');
             const focus = this.personSourcesFocus?.has(r.source.id) ?? false;
             const cls = `person-source-row${before !== null && !before.has(key(r)) ? ' is-new' : ''}${focus ? ' is-focus' : ''}`;
             const row = `
