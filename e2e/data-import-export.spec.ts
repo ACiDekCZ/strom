@@ -308,11 +308,19 @@ test('GEDCOM import: photos by URL that cannot be downloaded say so, with their 
     await page.locator('#gedcom-input').setInputFiles('e2e/fixtures/mh-style.ged');
     const dialog = page.locator('#gedcom-result-modal');
     await expect(dialog).toBeVisible();
+    // An earlier change's "Undo" pill on the screen (the seed person's): it must not ride in this message.
+    await page.evaluate(() => (window as unknown as { Strom: { UI: { showUndoToast(d: string): void } } }).Strom.UI.showUndoToast('Seed Person added'));
     await dialog.locator('#gedcom-media-download').click();
     await expect(page.locator('.toast').last()).toHaveText(/The photos could not be downloaded \(1\)\./);
     await expect(page.locator('.toast').last()).not.toContainText('None of the selected files');
-    // The link stays offered.
-    await expect(dialog.locator('#gedcom-media-download')).toBeVisible();
+    // No "Undo" of the earlier change rides in the message (read at once: the pill would lend it as the message shows).
+    expect(await page.locator('.toast').last().textContent()).not.toContain('Undo');
+    await expect(page.locator('.undo-toast')).toHaveCount(0);
+    // The link stays offered, with its own label again (T54, tester round 2: "Downloading photos… 1/1" stood).
+    const btn = dialog.locator('#gedcom-media-download');
+    await expect(btn).toBeVisible();
+    await expect(btn).toHaveText('Download photos from the internet');
+    await expect(btn).toBeEnabled();
 });
 
 test('plain GEDCOM import clears stale manager intent; new-tree opens naming dialog', async ({ page }) => {

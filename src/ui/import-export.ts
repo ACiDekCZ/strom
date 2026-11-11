@@ -690,9 +690,12 @@ export const importExportMethods = uiModule({
                 }
             } catch { /* expired link, offline, CORS — ref stays offered */ }
         }
-        if (btn) btn.disabled = false;
+        // Its own label again ("Downloading photos… 1/1" stood after a failed download); the links not downloaded stay offered.
+        if (btn) { btn.disabled = false; btn.textContent = strings.gedcom.downloadMedia; }
 
         this.gedcomResult.externalMedia = refs.filter(r => !succeeded.has(r));
+        // The photos go into the import, not yet into the tree: no "Undo" of an earlier change rides in this message.
+        this.dismissUndoToast();
         if (ok > 0) this.gedcomImportImages = true;
         this.showToast(ok > 0
             ? strings.gedcom.mediaAttached(ok, urlRefs.length)

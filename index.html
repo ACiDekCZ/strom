@@ -9712,10 +9712,17 @@
             font-family: var(--font-sans); font-size: 12px; color: var(--primary); cursor: pointer;
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
+        /* The pinned name's head keeps its name beside "Collapse unions" at any width (de "Verbindungen zuklappen" took it all in a narrowed column): the button wraps as the name does. */
         .tv-head-all {
-            flex: none; margin-left: auto; padding: 0 4px; height: 26px; border: none; background: none; border-radius: var(--r-sm);
-            font-family: var(--font-sans); font-size: 11.5px; font-weight: 500; color: var(--primary); cursor: pointer; white-space: nowrap;
+            flex: 0 2 auto; margin-left: auto; padding: 0 4px; min-height: 26px; border: none; background: none; border-radius: var(--r-sm);
+            font-family: var(--font-sans); font-size: 11.5px; font-weight: 500; color: var(--primary); cursor: pointer;
+            white-space: normal; line-height: 1.15; text-align: right;
         }
+        /* Where the name and the button do not fit side by side (a narrowed column), the button takes a line of its own under the name (the ▾ menu beside the name or the button), the name staying whole on its line (tester, T54 round 2: "Vollständiger Name" 0 px wide at 156 px). */
+        .tv-headrow .tv-headcell[data-col="name"] { flex-wrap: wrap; align-content: center; column-gap: 4px; }
+        .tv-headrow .tv-headcell[data-col="name"] .tv-cell-text { -webkit-line-clamp: 1; }
+        .tv-headrow .tv-headcell[data-col="name"] .tv-head-all { min-height: 20px; order: 2; }
+        .tv-headrow .tv-headcell[data-col="name"] .tv-head-menu { height: 16px; }
         /* The active cell (a click, the arrows): a quiet outline; the keyboard's focus ring stays stronger. */
         .tv-body .tv-cell.is-active-cell { outline: 1px solid color-mix(in srgb, var(--primary) 70%, transparent); outline-offset: -1px; }
         .tv-body .tv-cell:focus-visible, .tv-head-all:focus-visible, .tv-more-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
@@ -10222,6 +10229,9 @@
             .table-view { --tv-more-h: var(--tv-row-h); }
             .tv-toggle { width: 44px; margin-left: -10px; margin-right: -8px; }
             .tv-head-all { height: 100%; }
+            /* On touch the button keeps its full height beside the name (two lines each, as on a phone). */
+            .tv-headrow .tv-headcell[data-col="name"] { flex-wrap: nowrap; }
+            .tv-headrow .tv-headcell[data-col="name"] .tv-cell-text { -webkit-line-clamp: 2; }
             .tv-bub-btn, .tv-bub-link { height: 44px; }
             .tv-bub-cite { min-height: 44px; }
             .tv-rbub-act, .tv-rbub-slot > button, .tv-rbub-slot > a { min-height: 44px; }
@@ -10255,8 +10265,6 @@
             .tv-view-btn { height: 40px; max-width: none; font-size: 14px; }
             .tv-group-toggle, .tv-resize { display: none; }
             .tv-groupcell { cursor: default; }
-            /* The pinned name's head keeps its name beside "Collapse unions" (de "Verbindungen zuklappen" took it all): the button wraps too. */
-            .tv-head-all { flex: 0 2 auto; white-space: normal; line-height: 1.15; text-align: right; }
             .tv-status-checks { font-size: 11.5px; }
             /* 8h the search and the Filters button on a line of their own; no chips' row. */
             .tv-slot-search { order: 10; flex: 1 1 0; min-width: 0; max-width: none; }

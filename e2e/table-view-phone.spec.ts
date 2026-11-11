@@ -113,6 +113,48 @@ async function toEvents(page: Page, phone: boolean): Promise<void> {
     await expect(tv(page, '.tv-rowtype [data-rowtype="events"][aria-checked="true"]')).toHaveCount(1);
 }
 
+test.describe('desktop (1440), the pinned name narrowed beside "Collapse unions"', () => {
+    test.use({ viewport: { width: 1440, height: 900 } });
+
+    // T54 (tester, 2nd round): the name column narrowed to about 156 px in German showed only "Verbindungen zuklappen", "Vollständiger Name" 0 px wide.
+    for (const [lang, name, collapse] of [
+        ['de', 'Vollständiger Name', 'Verbindungen zuklappen'],
+        ['en', 'Full name', 'Collapse unions'],
+    ] as const) {
+        test(`the column's name stays readable beside the button (${lang})`, async ({ page }) => {
+            await page.clock.setFixedTime(new Date('2026-06-15T10:00:00Z'));
+            await seedSetting(page, 'language', lang);
+            await openApp(page);
+            await seedTree(page, FAMILY, 'Kvelden', 'a');
+            await page.locator('#view-mode-table').click();
+            const head = tv(page, '.tv-headrow [data-col="name"]');
+            await expect(head.locator('.tv-cell-text')).toHaveText(name);
+            await expect(head.locator('.tv-head-all')).toHaveText(collapse);
+            // Narrow the column with Alt+Shift+← (16 px a step) to 160 px or less.
+            await head.focus();
+            for (let i = 0; i < 12 && (await head.boundingBox())!.width > 160; i++) {
+                const w = (await head.boundingBox())!.width;
+                await page.keyboard.press('Alt+Shift+ArrowLeft');
+                await expect.poll(async () => (await head.boundingBox())!.width).toBeLessThan(w);
+            }
+            const m = await head.evaluate(el => {
+                const r = (sel: string) => (el.querySelector(sel) as HTMLElement).getBoundingClientRect().toJSON() as DOMRect;
+                const cut = (sel: string) => { const e = el.querySelector(sel) as HTMLElement; return e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 1; };
+                return { cell: el.getBoundingClientRect().toJSON() as DOMRect, label: r('.tv-cell-text'), btn: r('.tv-head-all'), labelCut: cut('.tv-cell-text'), btnCut: cut('.tv-head-all') };
+            });
+            expect(m.cell.width).toBeLessThanOrEqual(160);
+            // The name shows whole, the button too (beside it or on a line of its own under it), both inside the head.
+            expect(m.labelCut).toBe(false);
+            expect(m.btnCut).toBe(false);
+            expect(m.label.right <= m.btn.left + 1 || m.label.bottom <= m.btn.top + 1).toBe(true);
+            expect(m.label.top).toBeGreaterThanOrEqual(m.cell.top - 1);
+            expect(m.btn.right).toBeLessThanOrEqual(m.cell.right + 1);
+            expect(m.label.bottom).toBeLessThanOrEqual(m.cell.bottom + 1);
+            expect(m.btn.bottom).toBeLessThanOrEqual(m.cell.bottom + 1);
+        });
+    }
+});
+
 for (const [label, viewport] of [['390', { width: 390, height: 844 }], ['844 × 390', { width: 844, height: 390 }]] as const) {
     test.describe(`phone (${label}), the pinned name's head beside "Collapse unions"`, () => {
         test.use({ viewport, hasTouch: true, isMobile: true });
