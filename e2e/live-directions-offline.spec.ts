@@ -291,20 +291,28 @@ test.describe('work outside the directions through the bridge', () => {
         const nowRow = (who: string) => overview(page).locator('.research-overview__now-row', { hasText: who });
         // One at work: its row says the line it helps and how, in place of the line's name.
         await followManaged(page, { caps: OFF_CAPS, features: [...FEATURES, 'working.helps'], offLine: OFF_LINE, queue: QUEUE, ged: GED_OFFLINE, working: [helping] });
+        // The live panel's row says the same.
+        await expect(page.locator('#live-panel .live-working .live-working__why'))
+            .toHaveText(' · helps the direction Potomci: Josef Fíšek · connects people to the tree');
         await openOverview(page);
         await expect(nowRow('agent-matriky').locator('.research-overview__dir'))
             .toHaveText(' · helps the direction Potomci: Josef Fíšek · connects people to the tree');
         await expect(nowRow('agent-matriky').locator('.research-overview__why')).toHaveCount(1);
     });
 
-    test('Now with two at work: the helping task\'s reason under its line, the branch under Outside the directions (036 K1.8)', async ({ page }) => {
+    test('Now with two at work: under its line how the task helps it (without the line\'s name), the branch under Outside the directions (036 K1.8)', async ({ page }) => {
         const helping = { who: 'agent-matriky', since: ago(16), task: 'Křest Terezie Fíškové', person: 'P0012', research: 'G0002', helps: 'joins', session: 'N0132' };
         const outside = { who: 'agent-scitani', since: ago(5), task: 'Sňatek Aloise Fíška, Vídeň 1894', branch: 'B-P0031', session: 'N0133' };
         await followManaged(page, { caps: OFF_CAPS, features: [...FEATURES, 'working.helps'], offLine: OFF_LINE, queue: QUEUE, ged: GED_OFFLINE, working: [helping, outside] });
+        // The live panel's lines say the same.
+        const panelLine = page.locator('#live-panel .live-line[data-direction="G0002"]');
+        await expect(panelLine.locator('.live-line__name')).toHaveText('Potomci: Josef Fíšek');
+        await expect(panelLine.locator('.live-line__why')).toHaveText('connects people to the tree');
+        await expect(page.locator('#live-panel .live-line--outside .live-line__why')).toHaveText('branch Alois Fíšek');
         await openOverview(page);
         const rows = overview(page).locator('.research-overview__now-row--line');
-        await expect(rows.filter({ hasText: 'agent-matriky' }).locator('.research-overview__why'))
-            .toHaveText('helps the direction Potomci: Josef Fíšek · connects people to the tree');
+        await expect(rows.filter({ hasText: 'agent-matriky' }).locator('strong')).toHaveText('Potomci: Josef Fíšek');
+        await expect(rows.filter({ hasText: 'agent-matriky' }).locator('.research-overview__why')).toHaveText('connects people to the tree');
         await expect(rows.filter({ hasText: 'agent-scitani' }).locator('strong')).toHaveText('Outside the directions');
         await expect(rows.filter({ hasText: 'agent-scitani' }).locator('.research-overview__why')).toHaveText('branch Alois Fíšek');
     });
@@ -316,6 +324,7 @@ test.describe('work outside the directions through the bridge', () => {
         const row = overview(page).locator('.research-overview__now-row', { hasText: 'agent-matriky' });
         await expect(row.locator('.research-overview__dir')).toHaveText(' · Potomci: Josef Fíšek');
         await expect(row.locator('.research-overview__why')).toHaveCount(0);
+        await expect(page.locator('#live-panel .live-working__why')).toHaveCount(0);
     });
 
     test('a branch\'s tasks unfold under it: no jump, their places in the queue, ⋯ as in the queue, all of them behind the chip', async ({ page }) => {

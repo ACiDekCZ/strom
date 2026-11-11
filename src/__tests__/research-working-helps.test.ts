@@ -110,6 +110,18 @@ describe('the Now row\'s reason, in four languages', () => {
             expect(workingWhyText(w({ branch: 'B-P0040' }), session)).toBe(t.out);
             expect(workingWhyText(w({ branch: 'B-P0040' }), session, true)).toBe(t.outGrouped);
         });
+
+        it(`${lang}: under the line's own heading, how it helps without the line's name`, () => {
+            setLanguage(lang);
+            const t = expected[lang];
+            const how = (s: string) => s.slice(s.indexOf(`${LINE} · `) + LINE.length + 3);
+            for (const by of ['question', 'joins', 'agent', 'partner'] as const) {
+                const said = workingWhyText(w({ research: 'G0003', helps: by }), session, true);
+                expect(said).toBe(how(t[by]));
+                expect(said).not.toContain(LINE);
+            }
+            expect(workingWhyText(w({ research: 'G0003', helps: 'branch', branch: 'B-P0031' }), session, true)).toBe(how(t.branch));
+        });
     }
 
     it('a task of the line, or a research that does not say: no reason (the line\'s name stays)', () => {
@@ -135,5 +147,7 @@ describe('the Now row\'s reason, in four languages', () => {
     it('a line the research does not list: its id', () => {
         setLanguage('cs');
         expect(workingWhyText(w({ research: 'G0009', helps: 'joins' }), session)).toBe('pomáhá linii G0009 · připojuje lidi ke stromu');
+        // Under Outside the directions (no heading of its own): the id stays.
+        expect(workingWhyText(w({ research: 'G0009', helps: 'joins' }), session, true)).toBe('pomáhá linii G0009 · připojuje lidi ke stromu');
     });
 });

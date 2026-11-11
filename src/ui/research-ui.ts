@@ -58,7 +58,7 @@ import {
     taskDirectionName, workingLineCount, workingLineGroups,
 } from './research-directions-ui.js';
 import { iconSvg } from '../icons.js';
-import { queueBranchFilter, queueWhyText, setQueueBranchFilter, taskOrderOffered, waitBranchText } from './research-offline-ui.js';
+import { queueBranchFilter, queueWhyText, setQueueBranchFilter, taskOrderOffered, waitBranchText, workingWhyText } from './research-offline-ui.js';
 import type { TaskOrderDo } from '../research-directions-write.js';
 import { OTHER_GROUP, panelWaiting, textWithLinks, todoWaiting, waitingSection, waitingTodoCount } from '../research-waiting.js';
 import { agoShort } from '../research-others.js';
@@ -3773,6 +3773,9 @@ export const researchUiMethods = uiModule({
                 ref.title = strings.live.personNotInApp;
                 li.appendChild(ref);
             }
+            // How the task helps its line, or its branch outside the lines (as in the overview's Now).
+            const why = workingWhyText(w, s);
+            if (why) li.appendChild(el('span', 'live-working__why', ` · ${why}`));
             if (w.paused) li.appendChild(el('span', 'live-paused', pausedText(w)));
             const since = timeEl(w.since, 'sincefor');
             if (since) li.appendChild(since);

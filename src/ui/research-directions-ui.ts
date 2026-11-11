@@ -10,6 +10,7 @@
  */
 
 import { setResearchActionLabel } from './research-open-mark.js';
+import { workingWhyText } from './research-offline-ui.js';
 import { DataManager } from '../data.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { formatLiveClock } from '../live-time.js';
@@ -538,6 +539,10 @@ export const researchDirectionsMethods = uiModule({
             const parts: (string | HTMLElement)[] = [];
             if (person) parts.push(fullName(person));
             else if (w.person) parts.push(w.person);
+            // How the task helps its line, or its branch outside the lines (under the line's name: without it).
+            const s = liveSession();
+            const why = s ? workingWhyText(w, s, true) : '';
+            if (why) parts.push(el('span', 'live-line__why', why));
             if (w.paused) parts.push(el('span', 'live-paused', pausedText(w)));
             else {
                 const since = timeEl(w.since, 'sincefor');

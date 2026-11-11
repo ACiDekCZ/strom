@@ -203,14 +203,15 @@ export function queueWhyText(q: LiveQueueItem, s: LiveSession | null): string {
  * Why a task at work now is done, in the queue's words (spec 036 K1.8): a
  * task that helps its line says the line and how; a task outside the lines
  * says its branch ('' = a task of a line, or an older research that does not
- * say). Under a heading that already names "Outside the directions"
- * (`grouped`), the branch alone.
+ * say). Under a heading that already names the line or "Outside the
+ * directions" (`grouped`), how it helps alone, or the branch alone.
  */
 export function workingWhyText(w: LiveWorker, s: LiveSession, grouped = false): string {
     const L = strings.live;
     if (w.helps && w.research) {
         const how = w.helps === 'branch' && w.branch ? L.qWhyHowBranch(branchName(w.branch)) : L.qWhyHow[w.helps];
-        return L.qWhyHelps(directionName(s, w.research) || w.research, how);
+        // A line the research does not list has no heading of its own: its id stays.
+        return grouped && s.researches.some(d => d.id === w.research) ? how : L.qWhyHelps(directionName(s, w.research) || w.research, how);
     }
     if (w.branch && !s.researches.some(d => d.id === w.research)) {
         return grouped ? L.qWhyHowBranch(branchName(w.branch)) : L.qWhyOutBranch(branchName(w.branch));
