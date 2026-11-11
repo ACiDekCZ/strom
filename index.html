@@ -13615,6 +13615,34 @@
             border: 2px solid var(--surface); background: var(--signal-warn); pointer-events: none;
         }
         body[data-card-density="compact"] .card-signal-dot { display: block; }
+        /* Two or three signals (src/card-signal-marks.ts): a stack of badges from the avatar's
+           corner, the most pressing in front where the single badge sits, the ones behind
+           without a glyph (7px of them show, their 2px rim in the card's colour tells them
+           apart); one button. Inside the card in every density and on the custom card. */
+        .card-signal-stack {
+            position: absolute; z-index: 2; padding: 0; margin: 0; min-width: 0; border: 0; background: none;
+            border-radius: 999px; cursor: pointer; box-shadow: none;
+        }
+        .card-signal-stack.n3 { left: 8px; top: -8px; width: 32px; height: 20px; }
+        .card-signal-stack.n2 { left: 15px; top: -7px; width: 25px; height: 19px; }
+        .card-signal-stack.is-open { z-index: 1001; }
+        .cs-coin {
+            position: absolute; box-sizing: border-box; border-radius: 50%;
+            border: 2px solid var(--surface); background: var(--signal-warn);
+        }
+        .cs-back2 { left: 0; top: 0; width: 16px; height: 16px; z-index: 1; }
+        .n3 > .cs-back1 { left: 7px; top: 1px; width: 16px; height: 16px; z-index: 2; }
+        .n2 > .cs-back1 { left: 0; top: 0; width: 16px; height: 16px; z-index: 2; }
+        .cs-front {
+            right: 0; bottom: 0; width: 18px; height: 18px; z-index: 3; color: var(--on-signal-warn);
+            font: 700 11px/1 var(--font-sans, system-ui, sans-serif);
+            display: flex; align-items: center; justify-content: center;
+        }
+        /* The mouse's area: the stack and 3px around it. */
+        .card-signal-stack::before { content: ''; position: absolute; inset: -3px; border-radius: 999px; }
+        .card-signal-stack:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; box-shadow: 0 0 0 2px var(--surface); }
+        /* The stack's dot where the card has no avatar (compact): two, the one behind smaller. */
+        .card-signal-dot--back { top: -6px; right: 4px; width: 10px; height: 10px; z-index: 1; }
         /* The agent at work: an arc circling the avatar, a ring at the card's
            corner in compact. Only transform animates (compositor only); every
            arc gets the same phase from the renderer. */
@@ -13649,6 +13677,7 @@
         @keyframes agDone { 0%, 93% { opacity: 1; } 100% { opacity: 0; } }
         /* Compact: the relations / branch pills make way for the dot. */
         body[data-card-density="compact"] .person-card.has-signal .edge-top-right { margin-right: 8px; }
+        body[data-card-density="compact"] .person-card.has-signal-stack .edge-top-right { margin-right: 14px; }
         /* Zoomed far out (< 55%, spec 066 P4 §7): the story's fold goes, the
            status mark stays in the corner grown to about 10px on screen
            (0.85 / zoom, from its bottom-right corner); below 30% (zoom-tiny)
@@ -13708,6 +13737,8 @@
             top: calc(-0.4 * max(12px, calc(8px * var(--zoom-inv, 1))));
             right: calc(-0.4 * max(12px, calc(8px * var(--zoom-inv, 1))));
         }
+        /* A stack becomes the one dot too. */
+        #tree-canvas.zoom-far .card-signal-stack, #tree-canvas.zoom-far .card-signal-dot--back { display: none; }
         /* The agent's mark in the tooltip and the menu: its arc, still. */
         .agent-mark {
             flex: 0 0 auto; display: inline-block; width: 10px; height: 10px; box-sizing: border-box;
@@ -13729,6 +13760,15 @@
         .person-card > .mark-tip.mt-lock::after { left: auto; right: 12px; }
         .person-card > .mark-tip.mt-story { left: auto; right: -8px; transform: none; }
         .person-card > .mark-tip.mt-story::after { left: auto; right: 12px; }
+        /* The stack's bubble: a row per signal (its glyph, its head, the task or question on one line). */
+        .mark-tip.mt-stack { max-width: 260px; }
+        .mt-stack > .mt-row { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 8px; margin-top: 6px; align-items: start; }
+        .mt-stack > .mt-row:first-child { margin-top: 0; }
+        .mt-row > .mt-glyph { width: 14px; height: 14px; font-size: 9px; margin-top: 1px; }
+        .mt-row-text { display: flex; flex-direction: column; min-width: 0; font-size: 12px; line-height: 1.4; }
+        .mt-row-head { font-weight: 600; color: var(--text); }
+        .mt-row-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-light); font-size: 11.5px; }
+        .mt-stack > .badge-tooltip-action { display: block; margin-top: 8px; }
         .so-tip > :is(.badge-tooltip-header, .badge-tooltip-body) { display: block; }
         .so-tip > .badge-tooltip-body { color: var(--text); }
         /* ⇄ on the bottom edge: its bubble below the card too. */
@@ -13754,12 +13794,21 @@
                 opacity: 0 !important; visibility: hidden !important; transition: none !important;
             }
         }
+        /* The stack's menu open: neither its bubble nor the card's. */
+        .card-signal-stack[aria-expanded="true"] + .mark-tip { display: none !important; }
+        .person-card:has(.card-signal-stack[aria-expanded="true"]) .card-tooltip {
+            opacity: 0 !important; visibility: hidden !important; transition: none !important;
+        }
         /* Touch (§9 round 2): a tap on a mark opens its bubble; the areas a finger hits, none over another:
            C the badge 32 × 32 (the agent: the avatar), D 44 × 32 in the card's bottom-right corner (the
            status mark's, with the story in its tip; the story's own without a status mark), E ⇄ and the
            order below the card (their pills' areas), B the lock 28 × 24. */
         @media (pointer: coarse) {
             .card-signal::before { inset: -9px; border-radius: 0; }  /* 14px inside the border + 18 = 32 */
+            /* The stack: 44 × 32 from the avatar's top-left (x 1–45, y −15–17); its right and top
+               edges as the single badge's 32 × 32, it grows only left over the avatar's top half. */
+            .card-signal-stack.n3::before { inset: -7px -5px -5px -7px; border-radius: 0; }   /* 32+12 × 20+12 */
+            .card-signal-stack.n2::before { inset: -8px -5px -5px -14px; border-radius: 0; }  /* 25+19 × 19+13 */
             #tree-canvas .person-card > .lock-icon[data-mark]::before { width: 28px; height: 24px; }
             /* D from 33px inside the card's right edge to 11px out of it and down to the card's
                bottom edge: clear of the bottom edge's pills, which end 40px before the corner
@@ -13794,11 +13843,11 @@
         /* Printing the page (spec 066 P4 §7): the status mark and the story's
            fold, at their own size whatever the zoom; the badges, the agent
            and the lock stay on screen. */
-        body.view-mode-print :is(.card-signal, .card-signal-dot, .card-agent, .card-agent-mark, .card-agent-dot, .person-card > .lock-icon, .mark-tip) { display: none !important; }
+        body.view-mode-print :is(.card-signal, .card-signal-stack, .card-signal-dot, .card-signal-dot--back, .card-agent, .card-agent-mark, .card-agent-dot, .person-card > .lock-icon, .mark-tip) { display: none !important; }
         body.view-mode-print #tree-canvas .person-card > .card-status-mark { display: inline-flex !important; transform: none !important; }
         body.view-mode-print #tree-canvas .person-card > .card-story { display: block !important; }
         @media print {
-            .card-signal, .card-signal-dot, .card-agent, .card-agent-mark, .card-agent-dot, .person-card > .lock-icon, .mark-tip { display: none !important; }
+            .card-signal, .card-signal-stack, .card-signal-dot, .card-signal-dot--back, .card-agent, .card-agent-mark, .card-agent-dot, .person-card > .lock-icon, .mark-tip { display: none !important; }
             #tree-canvas .person-card > .card-status-mark { display: inline-flex !important; transform: none !important; }
             #tree-canvas .person-card > .card-story { display: block !important; }
         }

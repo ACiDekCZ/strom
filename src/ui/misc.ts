@@ -622,7 +622,7 @@ export const miscMethods = uiModule({
         }
         if (has('> .card-story:not(.couple):not(.draft)')) rows.push([storyFoldHtml({ kind: 'own', final: true }, true), l.storyOwn]);
         if (has('> .card-story:is(.couple, .draft)')) rows.push([storyFoldHtml({ kind: 'couple', final: true }, true), l.storyOther]);
-        if (has('.card-signal')) rows.push(['<span class="menu-signal-glyph" aria-hidden="true">≠</span>', l.action]);
+        if (has(':is(.card-signal, .card-signal-stack)')) rows.push(['<span class="menu-signal-glyph" aria-hidden="true">≠</span>', l.action]);
         if (has('.cross-tree-badge')) rows.push(['<span class="legend-cross" aria-hidden="true">⇄ 1</span>', l.cross]);
         treeLegend.classList.toggle('has-marks', rows.length > 0);
         if (rows.length === 0) { part?.remove(); return; }

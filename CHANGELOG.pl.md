@@ -15,6 +15,7 @@ Lista zmian po polsku zaczyna się od wersji 3.21.0; starsze wersje są opisane 
 - **Kolejność małżeństw**: małżeństwo bez daty ślubu zajmuje miejsce według rozwodu lub urodzenia pierwszego dziecka; numery małżeństw, dymki, tabela i drzewo są w tej kolejności, a partnerzy stoją od lewej do prawej w kolejności małżeństw.
 - **Odstępy i długie imiona**: *Ustawienia → Karta osoby* oferują *Odstępy*, *Normalne* lub *Gęste*, aby na ekranie zmieściło się więcej osób; eksport obrazu, plakat i druk do PDF mają własny wybór. Przy kartach *Normalne* i *Szczegółowe* długie imię i nazwisko łamie się na więcej wierszy zamiast kończyć się „…”.
 - **GEDCOM**: zdjęcia osób i rodzin z pliku innego programu wracają w *Z powrotem do {programu}*; ręczne scalenie dwóch osób zachowuje notatki obu; identyfikator, który ma kilka osób, zgodność tylko proponuje.
+- **Kilka znaczników na karcie**: karta, przy której czeka kilka rzeczy naraz (zadanie, sprzeczność, pytanie), pokazuje znaczniki jeden za drugim, najpilniejszy z przodu; ich dymek wymienia każdy, a kliknięcie oferuje wybór, co otworzyć.
 - **Poprawki**: pod adresem bez https okna hasła mówią, że szyfrowanie działa tylko przez https lub na tym komputerze, a drzewo ze zdjęciami się tam zapisuje; *Pełne rodziny* nie kończą się już błędem, gdy małżeństwo dziecka łączy się z małżeństwami rodziców; w *Odczycie dokumentu* zgodność oparta tylko na niepewnym imieniu jest wstępnie ustawiona na *Nie*; kropka przy *Akcje* gaśnie po otwarciu *Rocznic*.
 
 ## 3.26.0

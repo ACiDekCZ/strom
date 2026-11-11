@@ -6,7 +6,8 @@
  *     about this person, a conflict between sources, or an open question;
  *   - while following live, an arc circling the avatar of whom the agent works
  *     on (only without a badge), and a short-lived check once it is done.
- * The badge shows the most pressing signal only; the tooltip lists them all.
+ * One signal shows as its badge; two or three as a stack of badges with the
+ * most pressing in front, whose click offers what to open.
  * Which signals the card shows is a per-device setting (Settings → Show on
  * card); the tooltip keeps its status rows either way. Pure.
  */
@@ -120,8 +121,10 @@ export interface CardSignalInfo {
     showStatus: boolean;
     /** Show the story's folded corner on the card. */
     showStory: boolean;
-    /** The one badge (null: none). */
+    /** The one badge (null: none): the first of `actions`. */
     action: ActionSignal | null;
+    /** Every action signal present and switched on, in ACTION_ORDER (0–3); two or more show as a stack. */
+    actions: ActionSignal[];
     /** Circle the avatar: the agent works on this person and no badge shows. */
     showAgent: boolean;
     /** The check after the agent's work: since when (null: none). */
@@ -202,22 +205,55 @@ export function cardSignalInfo(p: Person, ctx: CardSignalContext): CardSignalInf
         showStatus: !!status && ctx.settings.status,
         showStory: !!story && ctx.settings.story,
         action: null,
+        actions: [],
         showAgent: false,
         doneSince: null,
     };
     if (p.isPlaceholder) return { ...info, showStatus: false, showStory: false };
-    const present: Record<ActionSignal, boolean> = {
-        waiting: !!info.waiting,
-        conflict: conflicts > 0,
-        question: !!info.question,
-    };
-    info.action = ACTION_ORDER.find(s => present[s] && ctx.settings[s]) ?? null;
+    info.actions = presentActions(info, ctx.settings);
+    info.action = info.actions[0] ?? null;
     // The amber badge comes first: then the agent is in the tooltip only.
     if (!info.action && ctx.settings.agent) {
         info.showAgent = !!info.agent;
         if (!info.agent && research?.done !== undefined) info.doneSince = research.done;
     }
     return info;
+}
+
+/**
+ * The action signals a card shows: every one present and switched on
+ * (Settings → Show on card), in ACTION_ORDER. The first is the badge; two
+ * or more show as a stack of badges.
+ */
+export function presentActions(
+    s: Pick<CardSignalInfo, 'waiting' | 'conflicts' | 'question'>,
+    settings: Pick<CardSignals, ActionSignal>,
+): ActionSignal[] {
+    const present: Record<ActionSignal, boolean> = {
+        waiting: !!s.waiting,
+        conflict: s.conflicts > 0,
+        question: !!s.question,
+    };
+    return ACTION_ORDER.filter(a => present[a] && settings[a]);
+}
+
+/** One choice of the stack's menu: answer what waits, compare a story's new version, what the research knows, follow the research. */
+export type StackChoice = 'waiting' | 'story' | 'knows' | 'agent';
+
+/**
+ * The choices a click on a stack of badges offers, in the menu's order:
+ * what waits, a story's new version, what the research knows (conflicts,
+ * hypotheses, the question — one choice), and following the research while
+ * the agent works on the person (its arc is not drawn beside the badges).
+ * One choice opens at once; two or more open the menu.
+ */
+export function stackChoices(s: Pick<CardSignalInfo, 'waiting' | 'waitingStory' | 'conflicts' | 'question' | 'agent' | 'showAgent'>): StackChoice[] {
+    const out: StackChoice[] = [];
+    if (s.waiting) out.push('waiting');
+    if (s.waitingStory) out.push('story');
+    if (s.conflicts > 0 || s.question) out.push('knows');
+    if (s.showAgent || s.agent) out.push('agent');
+    return out;
 }
 
 /**

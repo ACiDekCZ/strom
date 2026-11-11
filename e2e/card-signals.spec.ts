@@ -149,11 +149,20 @@ test.describe('card signals', () => {
         // The year text itself is unchanged by the mark.
         await expect(card(page, 'Jan').locator('.birth-date')).toHaveText('1865 – 1932');
 
-        // Jan: an open conflict (≠). Eva: a conflict AND a waiting task — waiting wins (!).
+        // Jan: an open conflict (≠). Eva: a conflict AND a waiting task — a stack of two, waiting (!) in front.
         await expect(card(page, 'Jan').locator('.card-signal')).toHaveText('≠');
-        await expect(card(page, 'Eva').locator('.card-signal')).toHaveText('!');
+        await expect(card(page, 'Jan').locator('.card-signal')).toHaveAttribute('aria-label', '1 conflict');
+        await expect(card(page, 'Jan').locator('.card-signal-stack')).toHaveCount(0);
+        await expect(card(page, 'Eva').locator('.card-signal')).toHaveCount(0);
+        const evaStack = card(page, 'Eva').locator('.card-signal-stack.n2');
+        await expect(evaStack.locator('.cs-front')).toHaveText('!');
+        await expect(evaStack.locator('.cs-coin')).toHaveCount(2);
+        await expect(evaStack).toHaveAttribute('aria-label', '1 waiting, 1 conflict');
+        await expect(evaStack).toHaveAttribute('aria-haspopup', 'menu');
+        await expect(evaStack).toHaveAttribute('aria-expanded', 'false');
+        expect(await evaStack.getAttribute('aria-describedby')).toBeNull();
+        await expect(card(page, 'Eva')).toHaveClass(/\bhas-signal-stack\b/);
         await expect(card(page, 'Josef').locator('.card-signal')).toHaveCount(0);
-        await expect(card(page, 'Eva').locator('.card-signal')).toHaveAttribute('aria-label', 'Awaiting action: Uložte snímek oddací matriky');
 
         const tt = card(page, 'Jan').locator('.card-tooltip .tt-signals');
         // The card map's order (spec 066 P4 §5): name, years, the mark in words; then story, what waits.
@@ -326,10 +335,13 @@ test.describe('card signals', () => {
             await expect(josef.locator(':scope > .card-story'), why('final fold')).not.toHaveClass(/draft/);
             await expect(jan.locator(':scope > .card-story'), why('draft fold')).toHaveClass(/draft/);
             if (density === 'compact') {
-                // No avatar: the dot on the card's corner stands for the badge.
-                for (const c of [jan, eva, anna]) await expect(c.locator(':scope > .card-signal-dot'), why('dot')).toBeVisible();
+                // No avatar: the dot on the card's corner stands for the badge (two for Eva's stack).
+                for (const c of [jan, eva, anna]) await expect(c.locator(':scope > .card-signal-dot:not(.card-signal-dot--back)'), why('dot')).toBeVisible();
+                await expect(eva.locator(':scope > .card-signal-dot--back'), why('second dot')).toBeVisible();
+                await expect(jan.locator(':scope > .card-signal-dot--back'), why('one dot')).toHaveCount(0);
             } else {
-                await expect(eva.locator('.card-avatar-wrap .card-signal'), why('!')).toHaveText('!');
+                await expect(eva.locator('.card-avatar-wrap .card-signal-stack .cs-front'), why('!')).toHaveText('!');
+                await expect(eva.locator('.card-avatar-wrap .card-signal-stack'), why('stack')).toBeVisible();
                 await expect(jan.locator('.card-avatar-wrap .card-signal'), why('≠')).toHaveText('≠');
                 await expect(anna.locator('.card-avatar-wrap .card-signal'), why('?')).toHaveText('?');
             }
@@ -344,7 +356,10 @@ test.describe('card signals', () => {
             await page.evaluate((d) => window.Strom.UI.setCardDensity(d as never), density);
             await expect(page.locator('body')).toHaveAttribute('data-card-density', density);
             await expect(jan.locator('.card-signal'), `${density}: no badge far out`).toBeHidden();
-            for (const c of [jan, eva, anna]) await expect(c.locator(':scope > .card-signal-dot'), `${density}: dot far out`).toBeVisible();
+            for (const c of [jan, eva, anna]) await expect(c.locator(':scope > .card-signal-dot:not(.card-signal-dot--back)'), `${density}: dot far out`).toBeVisible();
+            // A stack becomes the one dot too.
+            await expect(eva.locator('.card-signal-stack'), `${density}: no stack far out`).toBeHidden();
+            await expect(eva.locator(':scope > .card-signal-dot--back'), `${density}: one dot far out`).toBeHidden();
             // The status mark stays far out, grown to stay readable (spec 066 P4 §7); the fold goes.
             await expect(jan.locator(':scope > .card-status-mark'), `${density}: status mark far out`).toBeVisible();
             await expect(jan.locator(':scope > .card-story'), `${density}: no fold far out`).toBeHidden();
@@ -365,7 +380,7 @@ test.describe('card signals', () => {
             await expect(jan.locator(':scope > .card-status-mark'), `${density}: status mark off`).toHaveCount(0);
             await expect(josef.locator(':scope > .card-story'), `${density}: fold off`).toHaveCount(0);
             await expect(anna.locator('.card-signal'), `${density}: ? off`).toHaveCount(0);
-            if (density !== 'compact') await expect(eva.locator('.card-signal'), `${density}: ! stays`).toHaveText('!');
+            if (density !== 'compact') await expect(eva.locator('.card-signal-stack .cs-front'), `${density}: ! stays`).toHaveText('!');
             expect(await page.evaluate(() => localStorage.getItem('strom-card-signals'))).toBe(kept);
         }
     });
@@ -580,6 +595,46 @@ test.describe('card signals', () => {
         await expect(h.locator(':scope > .lock-icon')).toBeVisible();
     });
 
+    test('desktop: a stack of two badges inside the card, its bubble a row per signal, hidden while its menu is open', async ({ page }) => {
+        await setup(page);
+        const eva = card(page, 'Eva');
+        const stack = eva.locator('.card-signal-stack');
+        // The whole stack inside the card, left of the name; the front coin where the single badge sits.
+        const box = await eva.evaluate((el) => {
+            const c = el.getBoundingClientRect();
+            const st = el.querySelector('.card-signal-stack')!.getBoundingClientRect();
+            const front = el.querySelector('.cs-front')!.getBoundingClientRect();
+            const av = el.querySelector('.card-avatar-wrap')!.getBoundingClientRect();
+            const name = el.querySelector('.name-text')!.getBoundingClientRect();
+            // In the card's own px (the tree is zoomed): the avatar is 34 px.
+            const z = av.width / 34;
+            return {
+                inside: st.left >= c.left && st.top >= c.top && st.right <= c.right,
+                beforeName: st.right <= name.left + 0.5,
+                front: [Math.round((front.right - av.right) / z), Math.round((front.top - av.top) / z), Math.round(front.width / z)],
+            };
+        });
+        expect(box).toEqual({ inside: true, beforeName: true, front: [6, -6, 18] });
+        await stack.hover();
+        const tip = eva.locator('.mt-stack');
+        await expect(tip).toBeVisible();
+        await expect(tip.locator('.mt-row')).toHaveCount(2);
+        await expect(tip.locator('.mt-row-head')).toHaveText(['Awaiting action · 1', '1 conflict']);
+        await expect(tip.locator('.mt-row-sub')).toHaveText(['Uložte snímek oddací matriky']);
+        await expect(tip.locator('.badge-tooltip-action')).toHaveText('Click: choose what to open');
+        await expect(tip.locator('.badge-tooltip-header')).toHaveCount(0);
+        await page.waitForTimeout(700);
+        await expect(eva.locator('.card-tooltip')).toBeHidden();
+        // The menu open (aria-expanded): neither the stack's bubble nor the card's.
+        await stack.evaluate((el) => el.setAttribute('aria-expanded', 'true'));
+        await expect(tip).toBeHidden();
+        await eva.locator('.name').hover();
+        await page.waitForTimeout(700);
+        await expect(eva.locator('.card-tooltip')).toBeHidden();
+        await stack.evaluate((el) => el.setAttribute('aria-expanded', 'false'));
+        await expect(eva.locator('.card-tooltip')).toBeVisible();
+    });
+
     test('printing the page: the status mark and the fold, no badge, whatever the zoom (spec 066 P4 §7)', async ({ page }) => {
         await setup(page);
         await expect(card(page, 'Jan').locator(':scope > .card-story')).toBeVisible();
@@ -591,12 +646,15 @@ test.describe('card signals', () => {
         await expect(card(page, 'Jan').locator(':scope > .card-status-mark')).toHaveCSS('transform', 'none');
         await expect(card(page, 'Jan').locator(':scope > .card-status-mark')).toHaveCSS('right', '15px');
         for (const sel of ['.card-signal', '.card-signal-dot']) await expect(card(page, 'Jan').locator(sel)).toBeHidden();
+        // Eva's stack of two and its two dots neither.
+        for (const sel of ['.card-signal-stack', '.card-signal-dot >> nth=0', '.card-signal-dot >> nth=1']) await expect(card(page, 'Eva').locator(sel)).toBeHidden();
         // The same with the print view's class on screen.
         await page.emulateMedia({ media: 'screen' });
         await page.evaluate(() => document.body.classList.add('view-mode-print'));
         await expect(card(page, 'Jan').locator(':scope > .card-status-mark')).toBeVisible();
         await expect(card(page, 'Jan').locator(':scope > .card-story')).toBeVisible();
         await expect(card(page, 'Jan').locator('.card-signal-dot')).toBeHidden();
+        await expect(card(page, 'Eva').locator('.card-signal-stack')).toBeHidden();
     });
 
     test('image export: the status mark and the fold as the cards show them, only with their switch on (spec 066 P4 §7)', async ({ page }) => {

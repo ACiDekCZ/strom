@@ -33,7 +33,8 @@ import {
 } from './card-width.js';
 import { checkRecordedAge, ageBirthDate } from './recorded-age.js';
 import { treeKnowsOrigin, CardStatusClass } from './reliability.js';
-import { ACTION_GLYPH, AGENT_DONE_MS, AGENT_DONE_FADE_MS, AGENT_SPIN_MS, CardSignalContext, CardSignalInfo, cardSignalInfo, researchCardInfoNow, sharedPhaseDelay, storyFoldHtml, storySignalText, StoryMark } from './card-signals.js';
+import { cardActionMarksHtml, actionSignalText, clipText, markTipHtml } from './card-signal-marks.js';
+import { AGENT_DONE_MS, AGENT_DONE_FADE_MS, AGENT_SPIN_MS, CardSignalContext, CardSignalInfo, cardSignalInfo, researchCardInfoNow, sharedPhaseDelay, storyFoldHtml, storySignalText, StoryMark } from './card-signals.js';
 import { EvidenceLevel, treeHasAnySource, unionsByPerson } from './evidence-level.js';
 import { EdgeHypoFamilyLink, EdgeView, edgeHypoFamilies, edgeMoves, edgeNamedOptions, edgeView } from './research-edge.js';
 import {
@@ -4549,6 +4550,7 @@ class TreeRendererClass {
                 ? CrossTree.findCrossTreeMatches(currentTreeId, person, allTrees) : [];
             const crossTreeGroups = CrossTree.groupCrossTreeMatches(crossTreeMatches);
             if (signals.action || signals.showAgent || signals.doneSince !== null) classes += ' has-signal';
+            if (signals.actions.length >= 2) classes += ' has-signal-stack';
             // The one mark of sources and reliability (spec 066 P4 §1), bottom right inside the card.
             const statusHtml = signals.showStatus ? statusMarkHtml(signals.status, { mark: true }) : '';
             if (statusHtml) classes += ' has-status';
@@ -4581,7 +4583,9 @@ class TreeRendererClass {
                 // the sibling order as the card. The status mark is the status tip's (status-tip.ts).
                 const mark = target.closest<HTMLElement>('[data-mark]');
                 const kind = mark?.dataset.mark;
-                if (mark && kind !== 'status') {
+                // The stack of badges (two or three signals) has no pinned bubble: until its own
+                // choice menu, a click or tap on it opens the person menu, which leads with the same choices.
+                if (mark && kind !== 'status' && kind !== 'badge-stack') {
                     if (window.matchMedia?.('(pointer: coarse)').matches) {
                         e.stopPropagation();
                         UI.openCardMarkTip(id, mark);
@@ -4777,12 +4781,7 @@ class TreeRendererClass {
             const c = strings.card;
             // Each mark's own bubble (spec 066 P4 §5 round 2): a mouse over the mark shows it, the card's bubble steps aside.
             const markTip = (kind: string, head: string, lines: string[], click: string, below = false): string =>
-                `<span class="badge-tooltip mark-tip mt-${kind}${below ? ' below' : ''}" id="mt-${kind}-${this.escapeHtml(id)}" role="tooltip">`
-                + `<span class="badge-tooltip-header">${this.escapeHtml(head)}</span>`
-                + lines.filter(Boolean).map(l => `<span class="badge-tooltip-body">${this.escapeHtml(l)}</span>`).join('')
-                + (click ? `<span class="badge-tooltip-action">${this.escapeHtml(click)}</span>` : '')
-                + '</span>';
-            const clipText = (t: string, n = 120): string => (t.length > n ? `${t.slice(0, n - 1).trimEnd()}…` : t);
+                markTipHtml(id, kind, head, lines, click, below);
             const storyTip = stateHtml && signals.story
                 ? markTip('story', c.story.own(''), [storySignalText(signals.story, c.story), c.tipStoryKind], c.tipClickStory, true) : '';
             // The fold takes the very corner; without it the status mark moves into it (index.html).
@@ -4791,26 +4790,13 @@ class TreeRendererClass {
             // corner where there is no avatar, or when zoomed far out). Without
             // a badge: the agent's arc circling the avatar (a small ring at the
             // card's corner), or the check once it is done with the person.
-            const signalLabel = signals.action ? this.signalText(signals, signals.action) : '';
+            // Two or three signals: a stack of badges, its bubble a row per signal (src/card-signal-marks.ts).
             let badgeHtml = '';
             let dotHtml = '';
-            if (signals.action) {
-                // The badge's bubble: what waits, and what else does ("Also 2 conflicts, 1 question").
-                const also = (parts: string[]): string => (parts.length > 0 ? c.tipAlso(parts.join(', ')) : '');
-                const knowsParts = [
-                    signals.conflicts > 0 ? c.ttConflicts(signals.conflicts) : '',
-                    signals.question ? c.menuQuestions(1) : '',
-                ].filter(Boolean);
-                const tip = signals.action === 'waiting'
-                    ? markTip('badge', strings.cardDensity.cardWaiting, [clipText(signals.waiting ?? ''), also(knowsParts)], c.tipClickAnswer)
-                    : signals.action === 'conflict'
-                        ? markTip('badge', c.tipConflictHead, [
-                            [c.ttConflicts(signals.conflicts), signals.hypotheses > 0 ? c.ttHypotheses(signals.hypotheses) : ''].filter(Boolean).join(' · '),
-                            also(signals.question ? [c.menuQuestions(1)] : []),
-                        ], c.tipClickKnows)
-                        : markTip('badge', c.tipQuestionHead, [clipText(signals.question ?? '')], c.tipClickKnows);
-                badgeHtml = `<button type="button" class="card-signal signal-${signals.action}" data-signal="${signals.action}" data-mark="badge" aria-label="${this.escapeHtml(signalLabel)}" aria-describedby="mt-badge-${this.escapeHtml(id)}">${ACTION_GLYPH[signals.action]}</button>${tip}`;
-                dotHtml = `<span class="card-signal-dot signal-${signals.action}" aria-hidden="true"></span>`;
+            const actionMarks = cardActionMarksHtml(id, signals,
+                signals.actions.length >= 2 && signals.waiting ? UI.waitingCountOf(id) : 1);
+            if (actionMarks) {
+                ({ badgeHtml, dotHtml } = actionMarks);
             } else if (signals.showAgent) {
                 badgeHtml = `<span class="card-agent-mark" data-mark="agent"><span class="card-agent" style="animation-delay:${spinDelay}" aria-hidden="true"></span></span>`
                     + markTip('agent', c.tipAgentHead, [clipText(signals.agent ?? '')], c.tipClickAgent);
@@ -5891,13 +5877,7 @@ class TreeRendererClass {
 
     /** One action signal in words (badge label, tooltip row). */
     private signalText(s: CardSignalInfo, which: 'waiting' | 'conflict' | 'question' | 'agent' | 'queued'): string {
-        const c = strings.card;
-        const clip = (t: string): string => (t.length > 60 ? `${t.slice(0, 59).trimEnd()}…` : t);
-        if (which === 'waiting') return c.ttWaiting(clip(s.waiting ?? ''));
-        if (which === 'conflict') return c.ttConflicts(s.conflicts);
-        if (which === 'question') return c.ttQuestion(clip(s.question ?? ''));
-        if (which === 'queued') return c.ttQueued(clip(s.queued ?? ''));
-        return c.ttAgent(clip(s.agent ?? ''));
+        return actionSignalText(s, which);
     }
 
     /**

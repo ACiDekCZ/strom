@@ -13,6 +13,7 @@
 - **Pořadí manželství**: manželství bez data sňatku se řadí podle rozvodu nebo narození prvního dítěte; tomuto pořadí odpovídají čísla manželství, bubliny, tabulka i strom, kde partneři stojí zleva doprava v pořadí sňatků.
 - **Rozestupy a dlouhá jména**: *Nastavení → Karta osoby* nabízí *Rozestupy*, *Normální* nebo *Husté*, aby se na obrazovku vešlo víc osob; export obrázku, plakát a tisk do PDF mají vlastní volbu. Na kartě *Normální* a *Podrobná* se dlouhé jméno zalomí na více řádků místo zkrácení „…“.
 - **GEDCOM**: fotky osob a rodin ze souboru jiného programu se vrátí v *Zpět do {programu}*; ruční sloučení dvou osob zachová poznámky obou; ID, které nese víc osob, shodu jen nabídne.
+- **Více značek na kartě**: karta, u které čeká víc věcí najednou (úkol, rozpor, otázka), ukáže značky v zákrytu, nejnaléhavější vpředu; jejich bublina vypíše každou a klik nabídne, co otevřít.
 - **Opravy**: na adrese bez https dialogy hesla řeknou, že šifrování funguje jen přes https nebo na tomto počítači, a strom s fotkami se tam uloží; *Úplné rodiny* už neskončí chybou, když se sňatek dítěte napojí na sňatky rodičů; v *Přečíst dokument* je shoda, která stojí jen na nejistém jméně, předvybraná na *Ne*; tečka u *Akce* po otevření *Výročí* zhasne.
 
 ## 3.26.0
