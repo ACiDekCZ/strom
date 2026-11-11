@@ -14,6 +14,7 @@
 
 import { Partnership, PartnershipId, Person, PersonId, PlaceGeo, StromData } from './types.js';
 import { getStringsForLang, Language } from './strings.js';
+import { sourceEntryText } from './source-location.js';
 import { formatFlexDate, yearOf } from './dates.js';
 import { Rod, RodId, rods as allRods, ancestorSlots, marriedInto, rodGenerations, rodNameForms, sortByBirth } from './lineage.js';
 import { sortCoupleEvents } from './events.js';
@@ -955,7 +956,7 @@ function marriageClip(r: Render, u: Partnership): { src: string; caption: string
             const page = safeHttpUrl(e.pageUrl);
             const href = page ?? safeHttpUrl(s.url);
             const scan = href ? `<a href="${esc(href)}" rel="noopener noreferrer" target="_blank">${esc(page ? P.archiveScan : P.archivePage)} ↗</a>` : '';
-            return { src, caption: [s.title?.trim(), s.reference?.trim()].filter(Boolean).join(', '), scan };
+            return { src, caption: [s.title?.trim(), sourceEntryText(s, ', ', r.set.options.lang)].filter(Boolean).join(', '), scan };
         }
     }
     return null;
@@ -1043,7 +1044,8 @@ function familySourcesHtml(r: Render, u: Partnership): string {
     const ids = [...new Set([...(u.sourceIds ?? []), ...(u.events ?? []).flatMap(e => e.sourceIds ?? [])])].filter(id => !!sources[id]);
     const rows = ids.map(id => {
         const s = sources[id];
-        return [s.title, s.reference].filter(x => !!x?.trim()).map(x => esc(x!.trim())).join(', ');
+        // The entry's place without the book (an older source: its location as it is).
+        return [s.title, sourceEntryText(s, ', ', r.set.options.lang)].filter(x => !!x?.trim()).map(x => esc(x!.trim())).join(', ');
     }).filter(Boolean);
     if (!rows.length) return '';
     return `<section class="sp-block"><h2 class="sp-h2">${esc(r.S.familyPages.fam.sources)}</h2>${rows.map(x => `<p class="sp-src">${x}</p>`).join('')}</section>`;

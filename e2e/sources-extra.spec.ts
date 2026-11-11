@@ -666,7 +666,8 @@ test.describe('the source viewer', () => {
         await catalog(page).locator('.source-row-open').click();
         const v = viewer(page);
         await expect(v).toBeVisible();
-        await expect(v.locator('#source-viewer-meta')).toHaveText('SOA Zámrsk · recorded 20 Mar 1865 · Uncertain');
+        await expect(v.locator('#source-viewer-meta')).toHaveText('recorded 20 Mar 1865 · Uncertain');
+        await expect(v.locator('.viewer-place')).toHaveText('BookSOA Zámrsk');
         await expect(v.locator('.viewer-cites li')).toHaveText([
             'Jan Novák — Baptism (1865)',
             'Marriage: Jan Novák and Marie Nováková',

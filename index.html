@@ -24642,6 +24642,18 @@
             border: none; background: rgba(0,0,0,0.55); color: #fff; cursor: pointer; font-size: 16px;
         }
         .viewer-open-page { align-self: flex-start; color: var(--primary); font-size: 14px; }
+        /* Where the entry stands (spec 075 §2): Book / Entry (an older source's Location), the page's link under them. */
+        .viewer-place-block { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+        .viewer-place {
+            display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 5px 14px;
+            margin: 0; font-size: 14px; line-height: 1.4;
+        }
+        .viewer-place dt { font-size: 13px; color: var(--text-light); }
+        .viewer-place dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+        .viewer-no-url { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-faint); }
+        @media (max-width: 640px), (pointer: coarse) {
+            .viewer-open-page { display: inline-flex; align-items: center; min-height: 44px; }
+        }
         .viewer-section-title {
             font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
             color: var(--text-faint); margin: 0 0 4px;

@@ -12,6 +12,7 @@
 import { Partnership, PartnershipId, Person, PersonId, Source, StromData, Story, personSourceIds } from './types.js';
 import { PrivacyMode } from './privacy.js';
 import { getStringsForLang } from './strings.js';
+import { sourceEntryText, sourcePlaceParts } from './source-location.js';
 import { formatFlexDate, parseFlexDate, yearOf } from './dates.js';
 import { sortCoupleEvents } from './events.js';
 import { shownNameOrEmpty } from './person-name.js';
@@ -689,7 +690,8 @@ function chapterSourcesHtml(ctx: BookCtx, n: number): string {
     if (!ids.length) return '';
     const rows = ids.map(id => {
         const s = ctx.sources.source(id)!;
-        const short = [s.title, s.reference].filter(x => !!x?.trim()).map(x => esc(x!.trim())).join(', ');
+        // The entry's place without the book (an older source: its location as it is).
+        const short = [s.title, sourceEntryText(s, ', ', ctx.lang)].filter(x => !!x?.trim()).map(x => esc(x!.trim())).join(', ');
         return `<p><span class="book-pn">P${ctx.sources.no.get(id)}</span>${short}</p>`;
     }).join('');
     return `<div class="book-section book-chapter-sources"><h3 class="book-sub">${esc(B.chapterSources)}</h3>${rows}<p class="book-muted">${esc(B.chapterSourcesNote)}</p></div>`;
@@ -789,7 +791,9 @@ export function sourcesHtml(ctx: BookCtx): string {
     if (!ids.length) return '';
     const rows = ids.map(id => {
         const s = ctx.sources.source(id)!;
-        const full = [s.title, s.repository, s.reference].filter(x => !!x?.trim()).map(x => esc(x!.trim())).join(', ');
+        // Title, archive, call number, folio, image, the rest (an older source: title, archive, location).
+        const place = sourcePlaceParts(s, ctx.lang);
+        const full = [s.title, ...place.book, ...(place.whole ? [place.whole] : place.entry)].filter(x => !!x?.trim()).map(x => esc(x!.trim())).join(', ');
         const href = safeHttpUrl(s.url);
         const scan = href ? `<span class="book-source-scan">${esc(B.scan)} <a href="${esc(href)}" data-print="${esc(printedUrl(href))}"><span>${esc(href)}</span></a></span>` : '';
         const back = ctx.sources.chapters.get(id) ?? [];

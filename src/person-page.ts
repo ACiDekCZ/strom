@@ -46,6 +46,7 @@ import { fanZoomInlineScript } from './fan-zoom.js';
 import { websiteUrl } from './about-links.js';
 import type { ImageRegistry } from './image-registry.js';
 import { sourceTranslation } from './source-translation.js';
+import { sourcePlaceLine } from './source-location.js';
 
 // ─── Interface (ZADANI §2.6) ────────────────────────────────────────────────
 
@@ -2918,7 +2919,8 @@ function sourcesHtml(c: Ctx, rows: PersonSourceRow[]): string {
         const s = row.source;
         const title = stripResearchIds(s.title || '?').text;
         const sup = row.cites.length ? `${P.sources.supports}: ${row.cites.map(x => x.label).join(' · ')}` : '';
-        const ref = [s.repository, s.reference].map(x => x?.trim()).filter(Boolean).join(' · ');
+        // Archive · call number · folio · image · the rest (an older source: archive · location), spec 075 §4.
+        const ref = sourcePlaceLine(s, 'long', c.opts.lang);
         const body: string[] = [];
         const main = c.mainEx.get(s.id);
         // Each excerpt shown here links its own scan; the card's link below is another page, or none.

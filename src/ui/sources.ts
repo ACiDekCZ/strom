@@ -14,7 +14,8 @@ import { researchActionLabel } from './research-open-mark.js';
 import { researchLinkMark } from '../research-link.js';
 import { DataManager, CitedFact, personCitationField } from '../data.js';
 import { bookReference, entryDateLine, sameBookReference } from '../source-page.js';
-import { sourcePlaceSearchText, recognizeLocation, imageWord, hasPlaceFields } from '../source-location.js';
+import { sourcePlaceSearchText, recognizeLocation, imageWord, hasPlaceFields, sourcePlaceParts, sourcePlaceLine } from '../source-location.js';
+import { MQ_MOBILE } from '../breakpoints.js';
 import { sourceTranslation } from '../source-translation.js';
 import { TreeRenderer } from '../renderer.js';
 import { TreeManager } from '../tree-manager.js';
@@ -71,6 +72,28 @@ function formatBytes(bytes: number): string {
 /** Secondary line for a source: repository / reference joined with a middot. */
 export function sourceMeta(source: Source): string {
     return [source.repository, source.reference].filter(Boolean).join(' · ');
+}
+
+/**
+ * A citation chip's tooltip (spec 075 §4): the title, the book (archive ·
+ * call number) and the entry (folio · image · the rest, or an older
+ * source's whole location), one per line, the empty ones left out.
+ */
+export function sourceChipTitle(src: Source): string {
+    const p = sourcePlaceParts(src);
+    return [src.title?.trim() ?? '', p.book.join(' · '), p.whole ?? p.entry.join(' · ')].filter(Boolean).join('\n');
+}
+
+/** The viewer's place rows (spec 075 §2): Book, Entry, or an older source's Location; empty when nothing is known. */
+export function sourceViewerPlaceHtml(src: Source): string {
+    const s = strings.sources;
+    const p = sourcePlaceParts(src);
+    const rows: [string, string][] = [];
+    if (p.book.length) rows.push([s.viewerBook, p.book.join(' · ')]);
+    if (p.entry.length) rows.push([s.viewerEntry, p.entry.join(' · ')]);
+    if (p.whole) rows.push([s.viewerLocation, p.whole]);
+    if (!rows.length) return '';
+    return `<dl class="viewer-place">${rows.map(([dt, dd]) => `<dt>${esc(dt)}</dt><dd>${esc(dd)}</dd>`).join('')}</dl>`;
 }
 
 /** Label of a QUAY value as the editor names it (0 reads as "uncertain"). */
@@ -136,7 +159,7 @@ export function hydrateThumbs(container: HTMLElement): void {
  */
 export function sourceChipOpenHtml(src: Source): string {
     return `<button type="button" class="source-chip-open" data-source-open="${esc(src.id)}"
-        aria-label="${esc(strings.sources.chipOpen(src.title))}" title="${esc(sourceMeta(src) || src.title)}">
+        aria-label="${esc(strings.sources.chipOpen(src.title))}" title="${esc(sourceChipTitle(src))}">
         ${sourceThumbHtml(src, 'chip')}<span class="source-chip-label">${esc(src.title)}</span></button>`;
 }
 
@@ -267,9 +290,11 @@ export const sourcesMethods = uiModule({
             : this.sourcesFilter === 'imageHeld' ? all.filter(src => held.has(src.id)) : all;
         const sources = filtered.filter(s => this.sourceMatches(s, query)).sort((a, b) => a.title.localeCompare(b.title));
         const counts = DataManager.sourceCitationCounts();
+        const phone = (() => { try { return window.matchMedia?.(MQ_MOBILE).matches ?? false; } catch { return false; } })();
         container.innerHTML = sources.map(src => {
             const count = counts.get(src.id) ?? 0;
-            const meta = sourceMeta(src);
+            // The place on one line (spec 075 §2): on a phone without the archive when the call number names the book.
+            const meta = sourcePlaceLine(src, phone ? 'list-phone' : 'short');
             return `
                 <div class="source-row">
                     ${sourceThumbHtml(src, 'row')}
@@ -396,11 +421,13 @@ export const sourcesMethods = uiModule({
         if (titleEl) titleEl.textContent = src.title;
         const metaEl = document.getElementById('source-viewer-meta');
         if (metaEl) {
-            const parts = [src.repository, src.reference,
-                src.recordDate ? s.recordedOn(formatFlexDate(src.recordDate)) : ''].filter(Boolean).map(t => esc(t!));
+            // The archive and the location moved to the place rows under the excerpts (spec 075 §2).
+            const parts = [src.recordDate ? s.recordedOn(formatFlexDate(src.recordDate)) : ''].filter(Boolean).map(t => esc(t!));
             const q = qualityLabel(src.quality);
             if (q) parts.push(`<span class="source-quality-tag">${esc(q)}</span>`);
             metaEl.innerHTML = parts.join(' · ');
+            // Neither date nor reliability: no empty line under the title.
+            metaEl.hidden = parts.length === 0;
         }
 
         const chunks: string[] = [];
@@ -429,8 +456,14 @@ export const sourcesMethods = uiModule({
             chunks.push(`<button type="button" class="secondary viewer-add-excerpt">${esc(s.addExcerpt)}</button>`);
         }
         const pageUrl = safeHttpUrl(excerpts[0]?.pageUrl) ?? safeHttpUrl(src.url);
-        if (pageUrl) {
-            chunks.push(`<a class="viewer-open-page" href="${esc(pageUrl)}" target="_blank" rel="noopener noreferrer">${esc(s.viewerOpenPage)} ↗</a>`);
+        const openPage = pageUrl
+            ? `<a class="viewer-open-page" href="${esc(pageUrl)}" target="_blank" rel="noopener noreferrer">${esc(s.viewerOpenPage)} ↗</a>` : '';
+        // Where the entry stands (Book, Entry or Location), the link to its page under it; without a link a sentence says how it is found.
+        const place = sourceViewerPlaceHtml(src);
+        if (place) {
+            chunks.push(`<div class="viewer-place-block">${place}${openPage || `<p class="viewer-no-url">${esc(s.viewerNoUrl)}</p>`}</div>`);
+        } else if (openPage) {
+            chunks.push(openPage);
         }
         // Written from a reading ("Read a document"): its whole result is a click away, beside the transcript
         // (not in an archive: it has no reading results to give).
@@ -1707,7 +1740,7 @@ export const sourcesMethods = uiModule({
             return;
         }
         const item = (s: Source) => {
-            const meta = sourceMeta(s);
+            const meta = sourcePlaceLine(s, 'short');
             return `
                 <div class="source-picker-row">
                 <button type="button" class="source-picker-item" data-source-id="${esc(s.id)}">

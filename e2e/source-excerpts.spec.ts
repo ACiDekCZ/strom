@@ -129,8 +129,9 @@ test.describe('citation chips and the viewer', () => {
         const v = viewer(page);
         await expect(v).toBeVisible();
         await expect(v.locator('#source-viewer-title')).toHaveText('Křest Jana');
-        await expect(v.locator('#source-viewer-meta')).toContainText('SOA Zámrsk');
         await expect(v.locator('#source-viewer-meta')).toContainText('Original');
+        // The archive and the (older, whole) location are the place rows under the excerpts.
+        await expect(v.locator('.viewer-place')).toHaveText('BookSOA ZámrskLocationfol. 45');
         await expect(v.locator('.viewer-excerpt img')).toHaveCount(1);
         await expect(v.locator('figcaption')).toHaveText('levá strana');
         // The page link wins over the book link.
