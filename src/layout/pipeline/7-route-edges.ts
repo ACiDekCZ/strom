@@ -16,7 +16,7 @@
  */
 
 import { PersonId, LayoutConfig, spouseLineOffset, personCardHeight } from '../../types.js';
-import { computeGenerationBands } from './bands.js';
+import { computeGenerationBands, roomBelowExtra } from './bands.js';
 import { findChainExtraPartner } from './6-constraints.js';
 import { connectionSegments, layoutSegments, LineViolation, LINE_EPS, SegmentIndex } from './line-geometry.js';
 import {
@@ -42,8 +42,14 @@ import {
  * so the second routing allocates the same lanes in the taller gap.
  */
 export function routeEdges(input: RouteEdgesInput): RoutedModel {
-    if (!input.config.dense) return routeEdgesOnce(input).routed;
-    let gapExtra = new Map<number, number>();
+    // The room the screen keeps under a row (LayoutConfig.roomBelow): those gaps grow first.
+    const { placed } = input.constrained;
+    const room = roomBelowExtra(placed.measured.genModel, placed.personX, input.config);
+    if (!input.config.dense) {
+        if (room.size === 0) return routeEdgesOnce(input).routed;
+        return { ...routeEdgesOnce(input, room).routed, gapExtra: room };
+    }
+    let gapExtra = new Map<number, number>(room);
     let { routed, laneSpan } = routeEdgesOnce(input, gapExtra);
     for (let pass = 0; pass < 3; pass++) {
         const needed = denseGapExtra(laneSpan);

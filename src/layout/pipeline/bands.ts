@@ -15,9 +15,11 @@
  * Without personHeights and gapExtra every band is cardHeight tall, so
  * top(g) = padding + (g - minGen) * (cardHeight + verticalGap).
  *
- * gapExtra exists only in the dense spacing (LayoutConfig.dense): a gap
- * whose buses need more than one lane above and one below its middle grows
- * by 2 * LANE_OFFSET per further lane level (step 7 resolveDenseLanes).
+ * gapExtra comes from the dense spacing (LayoutConfig.dense): a gap whose
+ * buses need more than one lane above and one below its middle grows by
+ * 2 * LANE_OFFSET per further lane level (step 7 resolveDenseLanes); and
+ * from the room the screen keeps under a row (LayoutConfig.roomBelow,
+ * roomBelowExtra). The bus stays in the middle of the taller gap.
  */
 
 import { LayoutConfig, PersonId, personCardHeight } from '../../types.js';
@@ -81,4 +83,32 @@ export function computeGenerationBands(
         y += h + config.verticalGap + (extra?.get(gen) ?? 0);
     }
     return { bands, top, height };
+}
+
+/**
+ * LayoutConfig.roomBelow as gap growth: for each set of persons, the top
+ * generation holding one of them laid out (personX, not a hidden stand-in)
+ * gets the px its gap lacks beyond verticalGap; the larger growth where two
+ * sets meet in one generation. The last generation has no gap below it.
+ */
+export function roomBelowExtra(
+    genModel: Pick<GenerationalModel, 'model' | 'personGen' | 'maxGen'>,
+    personX: ReadonlyMap<PersonId, number>,
+    config: Pick<LayoutConfig, 'verticalGap' | 'roomBelow'>
+): Map<number, number> {
+    const extra = new Map<number, number>();
+    if (!config.roomBelow) return extra;
+    const hidden = genModel.model.hiddenPersonIds;
+    for (const { personIds, px } of config.roomBelow) {
+        const grow = px - config.verticalGap;
+        if (grow <= 0) continue;
+        let top = Infinity;
+        for (const id of personIds) {
+            if (hidden?.has(id) || !personX.has(id)) continue;
+            const gen = genModel.personGen.get(id);
+            if (gen !== undefined && gen < top) top = gen;
+        }
+        if (top < genModel.maxGen) extra.set(top, Math.max(grow, extra.get(top) ?? 0));
+    }
+    return extra;
 }

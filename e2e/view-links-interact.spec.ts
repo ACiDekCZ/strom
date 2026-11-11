@@ -1,6 +1,6 @@
 import { test, expect, Page, Locator } from '@playwright/test';
 import { readFileSync } from 'fs';
-import { openApp, card } from './helpers.js';
+import { openApp, card, seedSetting } from './helpers.js';
 
 /**
  * Linked in the view only, the first actions: the `named` stub (two hollow
@@ -593,6 +593,33 @@ test.describe('linked in the view only: the family’s own button', () => {
         expect(await records(page)).toEqual([{ hypo: 'H0022', variant: 'C', on: true, anchor: 'P0010' }]);
         expect(C.variant).toBe('C');
     });
+});
+
+test.describe('linked in the view only: the family’s button keeps clear of the cards', () => {
+    // The button and its line stand in a gap the layout keeps under the top
+    // couple (LayoutConfig.roomBelow): never over a card of the next row,
+    // in the dense spacing (gap 48) as in the normal one.
+    for (const spacing of ['normal', 'dense']) for (const width of [390, 1440]) {
+        test(`${spacing} spacing, ${width} wide`, async ({ page }) => {
+            await page.setViewportSize({ width, height: 900 });
+            await seedSetting(page, 'treeSpacing', spacing);
+            await setup(page);
+            await store(page, [], 'P0125');
+            const wrap = page.locator('.view-link-island');
+            await expect(wrap).toHaveCount(1);
+            const parts = await Promise.all([wrap.locator('.view-link-island-btn').boundingBox(), wrap.locator('.view-link-island-sub').boundingBox()]);
+            const cards = await page.locator('#tree-canvas .person-card').evaluateAll(els => els.map(el => {
+                const r = el.getBoundingClientRect();
+                return { name: el.querySelector('.name-text')?.textContent ?? '', x: r.x, y: r.y, width: r.width, height: r.height };
+            }));
+            expect(cards.length).toBeGreaterThan(3);
+            const meets = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>
+                a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+            expect(cards.filter(c => parts.some(p => meets(p!, c))).map(c => c.name)).toEqual([]);
+            // The next row (Jakub and Marie) stands below the line under the button.
+            expect((await card(page, 'Marie').boundingBox())!.y).toBeGreaterThan(parts[1]!.y + parts[1]!.height);
+        });
+    }
 });
 
 test.describe('linked in the view only: a phone (touch)', () => {

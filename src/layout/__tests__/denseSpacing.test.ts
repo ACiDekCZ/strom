@@ -82,6 +82,27 @@ describe.skipIf(!existsSync(join(process.cwd(), 'test', `${FIXTURE}.json`)))('de
         expect(Math.max(...lanes)).toBe(2);
     });
 
+    it('the room kept under a row (roomBelow): the gap below the top row of those people grows, its buses in its middle', () => {
+        const normal = run(DEFAULT_LAYOUT_CONFIG);
+        const rows = [...new Set([...normal.positions.values()].map(p => p.y))].sort((a, b) => a - b);
+        // People of the second and the fourth row: the room goes under the second only.
+        const second = [...normal.positions].filter(([, p]) => p.y === rows[1]).map(([id]) => id);
+        const fourth = [...normal.positions].filter(([, p]) => p.y === rows[3]).map(([id]) => id);
+        const gen = normal.bands![1].generation;
+        const gaps = (r: LayoutResult) => r.bands!.slice(1).map((b, i) => b.top - (r.bands![i].top + r.bands![i].height));
+        const roomy = run({ ...DEFAULT_LAYOUT_CONFIG, roomBelow: [{ personIds: new Set([...second, ...fourth]), px: 120 }] });
+        expect([...(roomy.gapExtra ?? [])]).toEqual([[gen, 40]]);
+        expect(gaps(roomy)).toEqual(gaps(normal).map((g, i) => i === 1 ? 120 : g));
+        expect(lanesOffMiddle(roomy)).toEqual(lanesOffMiddle(normal));
+        // Room the gap has already: nothing grows.
+        expect(run({ ...DEFAULT_LAYOUT_CONFIG, roomBelow: [{ personIds: new Set(second), px: 80 }] }).gapExtra).toBeUndefined();
+        // Dense: the room and the lanes' growth, the larger of them per gap.
+        const dense = run({ ...DENSE_LAYOUT_CONFIG, roomBelow: [{ personIds: new Set(second), px: 100 }] });
+        expect(gen).toBe(-1);
+        expect(new Map(dense.gapExtra)).toEqual(new Map([[-2, 16], [-1, 52]]));
+        expect(auditBusClearance(dense, DENSE_LAYOUT_CONFIG, 16)).toEqual([]);
+    });
+
     it('the normal spacing has no lane cap: the same tree, no gap grown', () => {
         const normal = run(DEFAULT_LAYOUT_CONFIG);
         expect(normal.gapExtra).toBeUndefined();

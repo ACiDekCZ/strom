@@ -1940,6 +1940,14 @@ export interface LayoutConfig {
      * more lanes grows instead (step 7, bands.ts). Unset: the normal spacing.
      */
     dense?: boolean;
+    /**
+     * Room the screen keeps under a row for something drawn there (the
+     * button of a family outside the tree under its top couple): for each
+     * set of persons, the gap below the top generation that holds one of
+     * them laid out is at least `px` tall (bands.ts roomBelowExtra). Unset:
+     * every gap is verticalGap (plus the dense lanes' growth).
+     */
+    roomBelow?: ReadonlyArray<{ personIds: ReadonlySet<PersonId>; px: number }>;
 }
 
 /** The partner line's distance from the card's top: the set offset, else the card's middle. */

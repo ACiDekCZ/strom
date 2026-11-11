@@ -13132,7 +13132,9 @@
         .view-link-menu__item:focus { background: var(--hover-bg); }
         .view-link-menu__hint { font-size: 12px; color: var(--text-light); white-space: normal; }
         @media (pointer: coarse) { .view-link-menu__item { min-height: 44px; justify-content: center; box-sizing: border-box; } }
-        /* The family's own button, under the caption of its top couple. */
+        /* The family's own button, under the caption of its top couple, in the
+           gap the layout keeps for it (renderer.ts VIEW_LINK_ISLAND_ROOM: its
+           sizes here must match that room). */
         .view-link-island {
             position: absolute;
             transform: translateX(-50%);
@@ -13163,7 +13165,7 @@
         }
         @media (hover: hover) { .view-link-island-btn:hover { background: color-mix(in srgb, var(--primary) 8%, var(--surface)); } }
         .view-link-island-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-        /* A 44px target beyond its 32px (the next generation stands 80px below). */
+        /* A 44px target beyond its 32px (the room kept under the couple has space for it). */
         @media (pointer: coarse) {
             .view-link-island-btn::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 44px; transform: translateY(-50%); }
         }

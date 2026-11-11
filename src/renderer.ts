@@ -199,6 +199,13 @@ interface LineStyle {
 const VIEW_LABEL_BELOW = 18;
 /** The line a child's label leaves showing at both ends of the horizontal stretch it sits on (px, together). */
 const VIEW_LABEL_LINE_ENDS = 24;
+/**
+ * The gap kept under the top couple of a family outside the tree for its
+ * button "Show linked to the tree" and the line under it (px). MUST match
+ * index.html .view-link-island: 26 (the caption above it) + 32 (the button)
+ * + 4 + 15 (the line) = 77, and 11 clear above the next row's cards.
+ */
+const VIEW_LINK_ISLAND_ROOM = 88;
 /** How long the cards of children just shown (or one glided to) glow (ms). */
 const CHILDREN_GLOW_MS = 1600;
 /** The "▾ children" bubble stays this long after the pointer left it (ms), so the pointer can reach its rows. */
@@ -823,6 +830,9 @@ class TreeRendererClass {
         this.updatePlacesDatalist();
         // Links "linked in the view only": the Family and Descendants views lay them out as if real.
         const viewLinks = this.currentViewLinks();
+        // The button of a family outside the tree gets its room under the family's top couple.
+        const islandRoom = this.viewLinkIslandRoom(viewLinks);
+        if (islandRoom) this.config = { ...this.config, roomBelow: islandRoom };
         let result = this.computeTreeLayout(descendantsOnly, viewLinks);
         if (custom) {
             const metrics = this.measureCustomCards(result.positions);
@@ -1326,7 +1336,7 @@ class TreeRendererClass {
      */
     private outputLayout(spacing: TreeSpacing = this.getLayoutSpacing()): OutputLayout {
         const own = spacing === this.getLayoutSpacing();
-        if (!this.focusPersonId || this.positions.size === 0 || (own && !this.viewLayer)) {
+        if (!this.focusPersonId || this.positions.size === 0 || (own && !this.viewLayer && !this.config.roomBelow)) {
             return {
                 positions: this.positions, connections: this.withoutEdgeRoom(this.connections, this.edgeRoomIds),
                 spouseLines: this.spouseLines, omittedEdges: this.omittedEdges,
@@ -1338,7 +1348,9 @@ class TreeRendererClass {
         const descendantsOnly = this.viewMode === 'descendants';
         // Another spacing (the image export's own, spec 069 §4): the same
         // people at the same card sizes, laid out with that spacing's gaps.
-        let config = own ? this.config : withSpacing(this.config, spacing);
+        // The outputs draw no button of a family outside the tree: no room kept for it.
+        const { roomBelow: _room, ...screen } = this.config;
+        let config: LayoutConfig = own ? screen : withSpacing(screen, spacing);
         let result = this.computeTreeLayout(descendantsOnly, [], false, config);
         let custom: CustomCardMetrics | null = null;
         let edgeRoomIds = new Set<PersonId>();
@@ -5713,30 +5725,13 @@ class TreeRendererClass {
      */
     private renderViewLinkIslands(canvas: HTMLElement): void {
         canvas.querySelectorAll('.view-link-island').forEach(el => el.remove());
-        if (this.researchEdgeMode() !== 'all') return;
         const data = DataManager.getData();
-        const islandIds = [...this.positions.keys()].filter(id => {
-            const p = data.persons[id];
-            return !!p?.research?.island && !p.isPlaceholder && !this.viewLayer?.ghostIds.has(id);
-        });
-        if (islandIds.length === 0 || !this.viewLinksOffered()) return;
-        const ctx = viewLinkContext(data);
-        const candidates = viewLinkCandidates(data, ctx).filter(c => c.state === 'draw');
-        if (candidates.length === 0) return;
-        const shownGroups = new Set((this.viewLayer?.links ?? []).flatMap(l => l.islandIds.map(id => ctx.group.get(id))));
-        const byGroup = new Map<number, PersonId[]>();
-        for (const id of islandIds) {
-            const g = ctx.group.get(id);
-            if (g === undefined || shownGroups.has(g)) continue;
-            const list = byGroup.get(g) ?? [];
-            list.push(id);
-            byGroup.set(g, list);
-        }
+        const families = this.viewLinkIslandFamilies(this.viewLayer?.links ?? [], [...this.positions.keys()]);
         const w = this.config.cardWidth;
         const v = strings.viewLinks;
-        for (const [g, ids] of byGroup) {
-            const offers = candidates.filter(c => c.islandIds.some(id => ctx.group.get(id) === g));
-            if (offers.length === 0) continue;
+        for (const [g, { ids: all, offers }] of families) {
+            const ids = all.filter(id => this.positions.has(id) && !this.viewLayer?.ghostIds.has(id));
+            if (ids.length === 0) continue;
             // The top row of the family, its leftmost card and that card's partner beside it.
             const top = Math.min(...ids.map(id => this.positions.get(id)!.y));
             const row = ids.filter(id => this.positions.get(id)!.y === top).sort((a, b) => this.positions.get(a)!.x - this.positions.get(b)!.x);
@@ -5769,6 +5764,53 @@ class TreeRendererClass {
                 UI.showViewLinkFromIsland(btn, offers);
             };
         }
+    }
+
+    /**
+     * The families outside the tree that get their own button
+     * (renderViewLinkIslands), by family group: the people of the family
+     * among `inView` (not a "?" stand-in) and the versions that would link it
+     * to the tree. None outside the research edge "all", without the view
+     * links, or for a family shown linked (`shown`: the links laid out).
+     */
+    private viewLinkIslandFamilies(shown: readonly ViewLink[], inView: Iterable<PersonId>): Map<number, { ids: PersonId[]; offers: ViewLinkCandidate[] }> {
+        const families = new Map<number, { ids: PersonId[]; offers: ViewLinkCandidate[] }>();
+        if (this.researchEdgeMode() !== 'all') return families;
+        const data = DataManager.getData();
+        const islandIds = [...inView].filter(id => {
+            const p = data.persons[id];
+            return !!p?.research?.island && !p.isPlaceholder;
+        });
+        if (islandIds.length === 0 || !this.viewLinksOffered()) return families;
+        const ctx = viewLinkContext(data);
+        const candidates = viewLinkCandidates(data, ctx).filter(c => c.state === 'draw');
+        if (candidates.length === 0) return families;
+        const shownGroups = new Set(shown.flatMap(l => l.islandIds.map(id => ctx.group.get(id))));
+        for (const id of islandIds) {
+            const g = ctx.group.get(id);
+            if (g === undefined || shownGroups.has(g)) continue;
+            const family = families.get(g) ?? { ids: [], offers: candidates.filter(c => c.islandIds.some(x => ctx.group.get(x) === g)) };
+            family.ids.push(id);
+            families.set(g, family);
+        }
+        for (const [g, family] of families) if (family.offers.length === 0) families.delete(g);
+        return families;
+    }
+
+    /**
+     * The room kept under the top couple of a family outside the tree for its
+     * button (LayoutConfig.roomBelow): only with the focus in such a family
+     * (a family outside the tree is never laid out together with the tree
+     * unless shown linked, and then it has no button).
+     */
+    private viewLinkIslandRoom(viewLinks: readonly ViewLink[]): LayoutConfig['roomBelow'] {
+        const data = DataManager.getData();
+        const focus = this.focusPersonId ? data.persons[this.focusPersonId] : undefined;
+        if (!focus?.research?.island) return undefined;
+        const shown = viewLinks.length > 0 ? buildViewLayer(data, viewLinks)?.links ?? [] : [];
+        const families = this.viewLinkIslandFamilies(shown, Object.keys(data.persons) as PersonId[]);
+        if (families.size === 0) return undefined;
+        return [...families.values()].map(f => ({ personIds: new Set(f.ids), px: VIEW_LINK_ISLAND_ROOM }));
     }
 
     /** "H0022 B · to Václav Horák (1818)": what the family's button would link it to. */
