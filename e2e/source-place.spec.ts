@@ -104,6 +104,35 @@ test.describe('the sources manager', () => {
     });
 });
 
+test.describe('a long title without spaces', () => {
+    // 60 characters without a space (a file name typed as the title), wider than the viewer's header at 1440.
+    const LONG = 'MATRIKA_VZOROV_N7_KRTY_ODDANI_ZEMRELI_1820_1835_SKENY_000123';
+    for (const width of [390, 1440]) {
+        test(`wraps in the sources manager's row and the viewer's header at ${width}, nothing runs over`, async ({ page }) => {
+            expect(LONG).toHaveLength(60);
+            await tree(page, { s1: { ...NEW, title: LONG }, s2: OLD }, width);
+            await page.evaluate(() => window.Strom.UI.showSourcesDialog());
+            const row = catalog(page).locator('.source-row', { hasText: LONG });
+            await expect(row.locator('.source-title')).toHaveText(LONG);
+            const over = (sel: string) => (els: Element[]) => els.filter(el => el.scrollWidth > el.clientWidth + 1)
+                .map(el => `${sel} ${el.tagName}.${(el as HTMLElement).className}: ${el.scrollWidth} > ${el.clientWidth}`);
+            expect(await catalog(page).locator('.source-row, .source-row *').evaluateAll(over('row'))).toEqual([]);
+            const rowBox = (await row.boundingBox())!;
+            const titleBox = (await row.locator('.source-title').boundingBox())!;
+            expect(titleBox.x + titleBox.width).toBeLessThanOrEqual(rowBox.x + rowBox.width + 0.5);
+            await row.locator('.source-row-open').click();
+            await expect(viewer(page)).toBeVisible();
+            const h2 = viewer(page).locator('#source-viewer-title');
+            await expect(h2).toHaveText(LONG);
+            expect(await viewer(page).locator('.source-viewer-header, .source-viewer-header *').evaluateAll(over('header'))).toEqual([]);
+            const head = (await viewer(page).locator('.source-viewer-header').boundingBox())!;
+            const h2Box = (await h2.boundingBox())!;
+            expect(h2Box.x + h2Box.width).toBeLessThanOrEqual(head.x + head.width + 0.5);
+            expect(h2Box.x + h2Box.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+        });
+    }
+});
+
 test.describe('a citation chip', () => {
     test('its tooltip has three lines: the title, the book, the entry (an older source: its location)', async ({ page }) => {
         await tree(page, { s1: NEW, s2: OLD, s3: { title: 'Holý pramen' } });

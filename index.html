@@ -23705,7 +23705,8 @@
         .source-row .source-main { flex: 1; min-width: 0; }
         /* The source a row of the Table view opened the manager on (§14.2). */
         .source-row.is-target { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
-        .source-title { font-weight: 600; }
+        /* A title without spaces (a file name) breaks where it must instead of running over the row (all widths). */
+        .source-title { font-weight: 600; overflow-wrap: anywhere; }
         .source-meta { color: var(--text-secondary, #777); font-size: 13px; }
         .source-count { margin-left: 6px; color: var(--text-secondary, #999); font-size: 12px; }
         .source-actions { display: flex; gap: 4px; flex-shrink: 0; }
@@ -24652,7 +24653,7 @@
         .source-viewer { max-width: 720px; }
         .source-viewer-header { align-items: flex-start; }
         .source-viewer-heading { min-width: 0; }
-        .source-viewer-heading h2 { font-family: var(--font-serif); font-size: 19px; font-weight: 600; margin: 0; }
+        .source-viewer-heading h2 { font-family: var(--font-serif); font-size: 19px; font-weight: 600; margin: 0; overflow-wrap: anywhere; }
         .source-viewer-meta { font-size: 13px; color: var(--text-light); margin-top: 4px; }
         .source-quality-tag {
             display: inline-block; padding: 0 6px; border-radius: 999px; font-size: 12px;
