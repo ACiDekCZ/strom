@@ -80,7 +80,8 @@ import { contentFingerprint } from '../research-link.js';
 import { qualityOnlySources } from '../citation-quality.js';
 import { researchAutoState, patchResearchAutoState } from '../research-device.js';
 import { researchBaseKey, RESEARCH_COPY_FP_KEY } from '../storage-keys.js';
-import { StromData, TreeId, TreeMetadata, ResearchLink } from '../types.js';
+import { researchGedcom } from '../ui/research-ui.js';
+import { StromData, TreeId, TreeMetadata, ResearchLink, PersonId } from '../types.js';
 
 const TREE = 'quay-research' as TreeId;
 const RESEARCH = '0f3c2a7e-5b1d-4c8e-9a6f-2d4e8b1c7a90';
@@ -305,5 +306,71 @@ describe('leaving the page: the base known at once (audit 017 a-D1)', () => {
         TreeManager.patchResearchLink(TREE, { fingerprint: contentFingerprint(DataManager.getData()) });
         await send();
         expect(now).toHaveBeenCalledTimes(1);
+    });
+});
+
+/**
+ * The source records of a GEDCOM by their REFN (the research's own number),
+ * each without its xref: what the research reads as its entry.
+ */
+function sourcesByRefn(ged: string): Map<string, string> {
+    const out = new Map<string, string>();
+    for (const rec of ged.split(/\r?\n(?=0 )/)) {
+        const lines = rec.split(/\r?\n/);
+        if (!/^0 @[^@]+@ SOUR$/.test(lines[0])) continue;
+        const refn = lines.find(l => l.startsWith('1 REFN '))?.slice(7);
+        if (refn) out.set(refn, lines.slice(1).join('\n'));
+    }
+    return out;
+}
+
+describe('the first edit after the data update to version 19 (package 1111-app-migrace-citace, N1)', () => {
+    /**
+     * The tree of a research as 3.26 imported it: the entry the research numbers
+     * S0007, its page taken from its first citation (the record had none), the
+     * same entry made again for the birth's other QUAY (no number: the research
+     * never had it), a second person citing the entry.
+     */
+    function research326(): StromData {
+        const data = storedBy326();
+        data.sources!.s1 = { ...data.sources!.s1, refn: 'S0007' };
+        data.persons['p2' as PersonId] = {
+            id: 'p2' as PersonId, firstName: 'Ludmila', lastName: 'Zlatoňáková', gender: 'female', partnerships: [], parentIds: [], childIds: [],
+            sourceIds: ['s1'],
+        } as unknown as StromData['persons'][PersonId];
+        return data;
+    }
+
+    it('sends only the user\'s edit: the changes name that person alone, the entry\'s record goes as before', async () => {
+        const data = research326();
+        const was = contentFingerprint(data);
+        const link = { id: RESEARCH, head: 'h-2026-11-10', fingerprint: was, syncedAt: '2026-11-10T08:00:00Z' } as ResearchLink;
+        const header = { id: RESEARCH, head: link.head, appTree: TREE, transcripts: 'lead' as const };
+        const before = researchGedcom(structuredClone(data), 'Zlatoňák', header, 'tags', true, true);
+        await storeTree(data, link, was);
+
+        await start();
+        expect(DataManager.getData().sources?.['s1~1']).toBeUndefined();
+        expect(await ui.researchChangesReady()).toEqual([]);
+
+        DataManager.updatePerson('p2' as PersonId, { notes: 'Seamstress at Zlatoňákov' });
+        // The page drops its fingerprints on 'strom:data-changed' (the sync UI is not started here).
+        Object.assign(ui, {
+            researchSyncFingerprints: (_t: TreeId, l: ResearchLink) => {
+                const current = contentFingerprint(DataManager.getData());
+                return { current, matchesBase: current === l.fingerprint };
+            },
+        });
+        const changes = await ui.researchChangesReady() as Array<{ personId: string }> | null;
+        expect(changes?.map(c => c.personId)).toEqual(['p2']);
+
+        // The research's entry is written as it was (title, page, transcript,
+        // quality): nothing in it for the research to read as another reading.
+        const after = researchGedcom(DataManager.getData(), 'Zlatoňák', header, 'tags', true, true);
+        expect(sourcesByRefn(after)).toEqual(sourcesByRefn(before));
+        expect(sourcesByRefn(after).get('S0007')).toContain('PAGE p. 3');
+        // The birth cites the entry itself, with its own QUAY; no record of its own.
+        expect(after.match(/^0 @[^@]+@ SOUR$/gm)?.length).toBe(1);
+        expect(after).toMatch(/1 BIRT\n(?:[2-9] .*\n)*?2 SOUR @[^@]+@\n(?:[3-9] .*\n)*?3 QUAY 1/);
     });
 });
