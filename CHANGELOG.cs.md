@@ -4,7 +4,7 @@
 
 ## 3.27.0
 
-*Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
+*Vydáno 12. listopadu 2026.*
 
 - **Pohled Tabulka**: nový pohled vedle *Vějíře* a *Mapy* (na telefonu a tabletu v *Více*) ukáže osoby, svazky, události nebo prameny jako tabulku se sloupci k výběru, dopočtenými věky, úplností, nálezy kontrol, filtry, hledáním, řazením a uloženými pohledy a vyexportuje řádky do CSV nebo XLSX. Buňka, která odpovídá jednomu údaji, se upravuje na místě (dvojklik nebo F2), buňka se kopíruje přes Ctrl/Cmd+C, filtr umí jednu hodnotu ponechat nebo vynechat, nálezy osoby se otevřou z její buňky a osoba ve fokusu se přenáší mezi tabulkou a stromem. Na místě se nově upravují i příčina a zapsaný věk při úmrtí, *Ref. číslo*, zapsané věky partnerů při sňatku a datum a místo rozvodu; pohlaví a typ svazku se vybírají z jejich hodnot a prázdná buňka sňatku nebo rozvodu v řádku svazku tento údaj založí. Svazek bez sňatku má v buňkách sňatku „–“ a ty se do úplnosti nepočítají. Vedle *Celého jména* je sloupec *Křestní jméno*, upravitelný na místě; *Řádek pokrytí* pod sloupcem úplnosti ukazuje průměr; nabídka buňky se otevře u buňky; neuložené změny pohledů se po obnovení stránky vrátí; karta *V tento den* stojí dole uprostřed a v tabulce nejsou šipky historie fokusu (↩ ↪). Zvládne i strom s tisíci osob a vychází z tabulky Ondřeje Chrpy.
 - **Výzkum v tabulce**: ve stromu propojeném s výzkumem přidá skrytá skupina *Výzkum* sloupce s tím, co čeká na rozhodnutí, rozpory, hypotézami, prací AI agenta, úkoly, materiály a liniemi; *Výzkum ▾* podle nich filtruje, připravené pohledy je otevřou a klik na buňku výzkumu otevře bublinu s podrobnostmi a akcemi k nim. Při sledování výzkumu se tabulka mění na místě a řádky neposkakují.
