@@ -440,7 +440,7 @@ describe('the texts of deciding a hypothesis in four languages', () => {
                 r.hypoPick, r.hypoPickAria('B'), r.hypoNone, r.hypoLeave, r.hypoProposal('x'), r.hypoWait, r.hypoWaitAsk('q'),
                 r.hypoWaitLongText, r.hypoChangeReason, r.hypoElsewhere('A', r.hypoByApp), r.hypoStaysNote, r.hypoRemote,
                 r.hypoCannotReopenTree(2, true), r.hypoCannotReopenWork(2, true), r.hypoCannotReopen, r.hypoAcceptMax,
-                r.hypoBigSum('H0052', 'A', 214), r.hypoNoLinkNote, r.hypoInTreeNote, r.hypoMerge, r.hypoOnlyResearch,
+                r.hypoBigSum('H0052', 'A', 214), r.hypoKeepsTree, r.hypoInTreeNote, r.hypoMerge, r.hypoOnlyResearch,
             ].join(' ');
             expect(all).not.toMatch(/\b(you|your|vy|váš|vaše|tvůj)\b/i);
             // German by case: "auf ihr baut …" (on it) is no address.

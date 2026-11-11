@@ -9,7 +9,7 @@
  */
 
 import type { ResearchHypothesis, ResearchHypothesisVariant } from './types.js';
-import { HypothesisPick, hypothesisCannotReopen, hypothesisChoiceStays } from './research-hypothesis-pick.js';
+import { HypothesisPick, hypothesisCannotReopen, hypothesisChoiceKeepsTree, hypothesisChoiceStays } from './research-hypothesis-pick.js';
 import type { PendingHypothesis } from './research-hypothesis-wait.js';
 import { isOpenHypothesis } from './view-links.js';
 
@@ -64,10 +64,16 @@ export interface HypothesisCardPlan {
     info: 'remote' | 'merge' | null;
 }
 
-/** A version that changes nothing drawn when it is chosen: it links nobody, or the tree records it already. */
-function variantNote(v: ResearchHypothesisVariant): 'noLink' | 'inTree' | null {
+/**
+ * A version that changes nothing drawn when it is chosen: it links nobody, or
+ * the tree records it already. One that links nobody says so only when its
+ * choice keeps the tree (a change away from a linked choice takes that link
+ * out): the same sentence as the wait's.
+ */
+function variantNote(h: ResearchHypothesis, v: ResearchHypothesisVariant): 'noLink' | 'inTree' | null {
     if (v.links.length > 0 || (v.people ?? 0) > 0) return null;
-    return v.inTree?.length ? 'inTree' : 'noLink';
+    if (v.inTree?.length) return 'inTree';
+    return hypothesisChoiceKeepsTree(h, v.id) ? 'noLink' : null;
 }
 
 /**
@@ -105,7 +111,7 @@ export function hypothesisCardPlan(
             else if (changing) pickBtn = busy || chosen ? 'off' : 'on';
             const note = pickBtn !== 'on' ? null
                 : changing && hypothesisChoiceStays(h, v.id) ? 'stays'
-                : variantNote(v);
+                : variantNote(h, v);
             return {
                 id: v.id,
                 pick: pickBtn,

@@ -814,7 +814,6 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
         hypoCannotReopen: 'Przywrócić się nie da: na połączeniu opiera się dalsza praca badania.',
         hypoStaysNote: 'Drzewo się nie zmieni: stare powiązanie zostanie, opiera się na nim dalsza praca.',
         hypoBig: (n: number) => `połączy ${nPl(n, 'osobę', 'osoby', 'osób')}`,
-        hypoNoLinkNote: 'W drzewie nic się nie połączy, badanie zapisze tylko rozstrzygnięcie.',
         hypoInTreeNote: 'Drzewo się nie zmieni, badanie zapisze tylko rozstrzygnięcie.',
         hypoKeepsTree: 'Drzewo się nie zmieni, zapisze się tylko rozstrzygnięcie.',
         hypoMerge: 'O scaleniu osób rozstrzyga się w badaniu.',

@@ -174,7 +174,18 @@ describe('hypothesisCardPlan: a decided hypothesis', () => {
     it('a version whose choice leaves the old link says so', () => {
         const h = decidedHypo({ reopen: { ok: false, type: 'work', count: 2, stays: ['A'] } });
         const plan = hypothesisCardPlan(h, 'pick', { changing: true });
-        expect(plan.variants.map(v => v.note)).toEqual(['stays', null, 'noLink']);
+        // C links nobody, but changing to it takes B's link out of the tree: no "the tree does not change".
+        expect(plan.variants.map(v => v.note)).toEqual(['stays', null, null]);
+    });
+
+    it('a version that links nobody says the tree does not change only when its choice keeps the tree', () => {
+        // Open: choosing C changes nothing.
+        expect(hypothesisCardPlan(openHypo(), 'pick').variants.map(v => v.note)).toEqual([null, null, 'noLink']);
+        // Decided for B (linked), changing: C would take B's link out.
+        expect(hypothesisCardPlan(decidedHypo(), 'pick', { changing: true }).variants[2].note).toBeNull();
+        // Decided for C (links nobody), changing to D (links nobody either): the tree stays.
+        const h = decidedHypo({ chosen: 'C', variants: [...openHypo().variants!, { id: 'D', title: 'Someone else', links: [] }] });
+        expect(hypothesisCardPlan(h, 'pick', { changing: true }).variants.map(v => v.note)).toEqual([null, null, null, 'noLink']);
     });
 
     it('a change asked keeps the change mode while it waits, without Cancel', () => {

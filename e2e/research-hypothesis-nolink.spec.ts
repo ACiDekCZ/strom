@@ -129,10 +129,10 @@ test.describe('A hypothesis without a link, decided from the app (K1.6)', () => 
         const stubs = await stub(page).count();
 
         await openCard(page);
-        // Each version: Choose, with the sentence that nothing is linked.
+        // Each version: Choose, with the sentence that the tree does not change (as the wait says).
         await expect(card(page).locator('.prv-pick:not([disabled])')).toHaveCount(2);
         for (const v of ['A', 'B']) {
-            await expect(row(page, v).locator('.prv-kindnote')).toHaveText('Nothing is linked in the tree; the research only records the decision.');
+            await expect(row(page, v).locator('.prv-kindnote')).toHaveText(KEEPS);
         }
         await row(page, 'B').locator('.prv-pick').click();
         expect(await opened(page)).toEqual([`strom-research://hypothesis?tree=${UUID}&id=H0060&do=decide&variant=B`]);

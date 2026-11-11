@@ -582,7 +582,7 @@ export const personResearchMethods = uiModule({
             const proposalHtml = vp.proposal && proposal ? `
                         <span class="prv-proposal"><strong>${esc(proposal.label)}</strong>${proposal.text ? ` <span>${esc(proposal.text)}</span>` : ''}</span>` : '';
             const sources = plan.extras ? this.researchVariantSourcesHtml(variant, catalog) : null;
-            const noteText = vp.note === 'stays' ? r.hypoStaysNote : vp.note === 'inTree' ? r.hypoInTreeNote : vp.note === 'noLink' ? r.hypoNoLinkNote : '';
+            const noteText = vp.note === 'stays' ? r.hypoStaysNote : vp.note === 'inTree' ? r.hypoInTreeNote : vp.note === 'noLink' ? r.hypoKeepsTree : '';
             const pickHtml = vp.pick ? `
                         <button type="button" class="secondary prv-pick" data-hypo-pick="${esc(variant.id)}" aria-label="${esc(r.hypoPickAria(variant.id))}"${off(vp.pick)}>${researchActionLabel(r.hypoPick, terminal, { sr: false })}</button>` : '';
             const waitHtml = vp.waiting && pending ? this.researchHypothesisWaitHtml(h, pending) : '';
