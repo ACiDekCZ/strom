@@ -340,11 +340,20 @@ export interface ResearchLinkParams {
     inherit?: boolean;
     /** `history-align`: the terminal's alignment offers deleting from the shared catalogues too (`prune=1`). */
     prune?: boolean;
-    /** `hypothesis` (spec 060): the hypothesis ("H0022") to decide, or whose decision to change (`do=decide`). */
+    /**
+     * `hypothesis` (spec 060, 074): the hypothesis ("H0022") and what to do with it: `decide` (its
+     * screen in the research; with `variant`: that version, confirmed in the terminal), `abandon`
+     * (no version holds), `keep-open` (leave it open), `reopen` (back to open).
+     */
     hypothesis?: string;
-    hypothesisDo?: 'decide';
+    hypothesisDo?: ResearchHypothesisDo;
+    /** `hypothesis` with `do=decide` (spec 074): the version chosen ("B"). */
+    variant?: string;
     /** `hypotheses` (spec 060): who decides the research's hypotheses (the research confirms it in its terminal). */
     decide?: ResearchHypothesesDecide;
+    /** `hypotheses` (spec 074 P2): accept the agent's proposals of these hypotheses (`do=accept&ids=`, at most 50). */
+    hypothesesDo?: 'accept';
+    ids?: readonly string[];
     /**
      * `live` (spec 064, with `live.start` in the research's features): only start the bridge at its last
      * address (`do=start`), no new window and no terminal; without it the link also opens the app followed live.
@@ -355,6 +364,12 @@ export interface ResearchLinkParams {
 /** Who decides the research's hypotheses (spec 060): the person (the default), or the agent on its own. */
 export type ResearchHypothesesDecide = 'person' | 'agent';
 const HYPOTHESES_DECIDE: readonly string[] = ['person', 'agent'];
+
+/** What a `hypothesis` link asks (spec 060, 074; the research's fixed list, V4). */
+export const LINK_HYPOTHESIS_DOS = ['decide', 'abandon', 'keep-open', 'reopen'] as const;
+export type ResearchHypothesisDo = typeof LINK_HYPOTHESIS_DOS[number];
+/** The most hypotheses one "Accept proposals" link names (spec 074 P2). */
+export const MAX_HYPOTHESES_ACCEPT = 50;
 
 /** A hypothesis's id in the research ("H0022"), or null. */
 export function researchHypothesisRef(id: unknown): string | null {
@@ -490,13 +505,24 @@ export function researchSchemeUrl(action: ResearchLinkAction, p: ResearchLinkPar
             return kinds ? `${base}&scope=${p.kindsScope}&kinds=${kinds}` : null;
         }
         case 'hypothesis': {
-            // spec 060: the hypothesis by its id and the fixed `do=decide` (open: decide it; decided: change it).
+            // spec 060, 074: the hypothesis by its id and a `do` of the fixed list; a version only with `decide`.
             const id = researchHypothesisRef(p.hypothesis);
-            return id && p.hypothesisDo === 'decide' ? `${base}&id=${id}&do=decide` : null;
+            if (!id || !p.hypothesisDo || !(LINK_HYPOTHESIS_DOS as readonly string[]).includes(p.hypothesisDo)) return null;
+            if (p.variant === undefined) return `${base}&id=${id}&do=${p.hypothesisDo}`;
+            return p.hypothesisDo === 'decide' && typeof p.variant === 'string' && /^[A-Z]{1,3}$/.test(p.variant)
+                ? `${base}&id=${id}&do=decide&variant=${p.variant}` : null;
         }
-        case 'hypotheses':
+        case 'hypotheses': {
+            // spec 074 P2: accept the agent's proposals of 1–50 hypotheses by their ids, nothing else.
+            if (p.hypothesesDo !== undefined) {
+                if (p.hypothesesDo !== 'accept' || p.decide !== undefined || !Array.isArray(p.ids)) return null;
+                const ids = p.ids.map(x => typeof x === 'string' && /^H\d{1,7}$/.test(x) ? x : null);
+                if (ids.length < 1 || ids.length > MAX_HYPOTHESES_ACCEPT || ids.some(x => !x) || new Set(ids).size !== ids.length) return null;
+                return `${base}&do=accept&ids=${ids.join(',')}`;
+            }
             // spec 060: a fixed value only; the research confirms it in its terminal.
             return p.decide && HYPOTHESES_DECIDE.includes(p.decide) ? `${base}&decide=${p.decide}` : null;
+        }
         case 'history-align':
             // spec 035: the research's terminal shows the preview and asks; `prune=1` leads to the shared catalogues (only there).
             return p.prune ? `${base}&prune=1` : base;
@@ -2142,6 +2168,13 @@ export const STORIES_HISTORY_FEATURE = 'stories.history';
  * hypothesis in the research's file (`_BY`, `DECI`, `_AT`).
  */
 export const HYPOTHESES_DECIDE_FEATURE = 'hypotheses.decide';
+/**
+ * spec 074 (P1): the research takes a hypothesis decided by a version from the app
+ * (`hypothesis?do=decide&variant=`, `abandon`, `keep-open`, `reopen`), confirmed in its terminal.
+ */
+export const HYPOTHESIS_DECIDE_LINK_FEATURE = 'hypothesis.decide.link';
+/** spec 074 (P2): the research takes the agent's proposals accepted together (`hypotheses?do=accept&ids=`). */
+export const HYPOTHESES_ACCEPT_LINK_FEATURE = 'hypotheses.accept.link';
 
 /** The tree's kind as the status said it, or null (an older research). */
 export function sanitizeTreeKind(value: unknown): ResearchTreeKind | null {

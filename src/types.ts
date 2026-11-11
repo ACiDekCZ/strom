@@ -1106,15 +1106,78 @@ export interface ResearchHypothesis {
     chosen?: string;
     /**
      * Who decided it (2 _BY, decided or abandoned only): `agent` when the
-     * research's agent did; absent: the person (also every older record).
+     * research's agent did, `app` when a person did by a link from the app
+     * (spec 074); absent: the person in the research (also every older record).
      */
-    decidedBy?: 'agent';
+    decidedBy?: 'agent' | 'app';
     /** Why it was decided so (2 DECI, CONC/CONT joined; decided or abandoned only). */
     decision?: string;
     /** The day it was decided (2 _AT, ISO "YYYY-MM-DD"; decided or abandoned only). */
     decidedAt?: string;
     /** Its variants and what each would connect (2 _VAR), in the file's order. */
     variants?: ResearchHypothesisVariant[];
+    /**
+     * It can be decided by a version from the app (2 _PICK Y, spec 074): every
+     * link of every version is `child` or `partners` and one at least has one.
+     * The research's word; links of people not in the file are missing there.
+     */
+    pickable?: true;
+    /** The decision before the last one (2 _PREV, spec 074): its version (null: no version held), who, why, when. */
+    previous?: ResearchHypothesisPrevious;
+    /** It cannot be reopened (2 _REOPEN no, decided or abandoned only, spec 074): why, how many links, the versions that would not change the tree. */
+    reopen?: ResearchHypothesisReopen;
+    /** The agent's open proposal (2 _PROP, open only, spec 074): its version (null: no version holds), its sentence, its day. */
+    proposal?: ResearchHypothesisProposal;
+    /** Left open on this day (2 _LEFT, open only, spec 074): a proposal not taken, or none waited. ISO "YYYY-MM-DD". */
+    leftOpen?: string;
+}
+
+/** Who decided a hypothesis besides the person in the research: its agent, or a person by a link from the app. */
+export type ResearchHypothesisDecider = 'agent' | 'app';
+
+/** The decision a hypothesis had before (2 _PREV, only the last one). */
+export interface ResearchHypothesisPrevious {
+    /** Its version's letter; null when it was "no version holds" (abandoned). */
+    variant: string | null;
+    /** 3 _BY; absent: the person in the research. */
+    by?: ResearchHypothesisDecider;
+    /** 3 DECI (CONC/CONT joined). */
+    reason?: string;
+    /** 3 _AT, ISO "YYYY-MM-DD". */
+    day?: string;
+}
+
+/**
+ * Why a decided hypothesis cannot be reopened by a link (2 _REOPEN no):
+ * `tree` — the chosen version's links are in the tree, written otherwise than
+ * by this decision (the agent, an older research); `work` — further work
+ * stands on links this decision wrote; another word as written (a sentence
+ * of its own is not known: the general one).
+ */
+export interface ResearchHypothesisReopen {
+    ok: false;
+    /** 3 TYPE, lower case ('' when not said). */
+    type: 'tree' | 'work' | string;
+    /** 3 _COUNT: how many such links. */
+    count?: number;
+    /** 3 _STAYS (repeated): versions whose choice leaves the tree as it is (the old link stays, the new one is not written). */
+    stays?: string[];
+}
+
+/** The agent's open proposal for a hypothesis (2 _PROP). */
+export interface ResearchHypothesisProposal {
+    /** Its version's letter; null for "no version holds". */
+    variant: string | null;
+    /** 3 DECI: its sentence (CONC/CONT joined). */
+    text?: string;
+    /** 3 _AT, ISO "YYYY-MM-DD". */
+    day?: string;
+}
+
+/** A text against a version (3 _AGAINST) and the sources it names (4 SOUR), catalog ids. */
+export interface ResearchHypothesisAgainst {
+    text: string;
+    sourceIds?: string[];
 }
 
 /** One answer to a hypothesis ("B: son of Jakub and Marie"). */
@@ -1133,6 +1196,10 @@ export interface ResearchHypothesisVariant {
     inTree?: ResearchVariantLink[];
     /** The sources it names (3 SOUR), catalog ids. */
     sourceIds?: string[];
+    /** What speaks against it (3 _AGAINST, spec 074), each a text with the sources it names. */
+    against?: ResearchHypothesisAgainst[];
+    /** How many people outside the tree it would join to it (3 _PEOPLE, spec 074; only more than 0). */
+    people?: number;
 }
 
 /** What a variant would connect (3 _LINK); people as the research's person numbers (REFN). */

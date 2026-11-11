@@ -210,7 +210,7 @@ function toStory(raw: RawStory | undefined, mapRefs: (refs?: string[]) => string
  */
 interface RawResearch {
     conflicts: { id: string; fact: string; title: string; stat: string; take: string; kind?: string; values: RawResearchValue[]; decision?: RawResearchValue }[];
-    hypotheses: { id: string; title: string; note: string; stat: string; chosen: string; by: string; deci: string; at: string; variants: RawResearchVariant[] }[];
+    hypotheses: RawResearchHypothesis[];
     searched: { title: string; date: string; resn: string; at: string }[];
     /** The _STROM_EDGE / _STROM_ISLAND block: its value and the lines under it (level, tag, value). */
     edge?: RawResearchBlock;
@@ -235,6 +235,21 @@ interface RawResearchValue {
     raw?: string;
 }
 
+/** `1 _STROM_HYPO` as written (spec 060, 074). */
+interface RawResearchHypothesis {
+    id: string; title: string; note: string; stat: string; chosen: string; by: string; deci: string; at: string;
+    variants: RawResearchVariant[];
+    /** 2 _PICK, 2 _LEFT. */
+    pick: string;
+    left: string;
+    /** 2 _PREV › 3 _BY, DECI, _AT. */
+    prev?: { value: string; by: string; deci: string; at: string };
+    /** 2 _REOPEN › 3 TYPE, _COUNT, _STAYS. */
+    reopen?: { value: string; type: string; count: string; stays: string[] };
+    /** 2 _PROP › 3 DECI, _AT. */
+    prop?: { value: string; deci: string; at: string };
+}
+
 /** 3 _LINK / 3 _INTREE under a variant: its kind and pointers, as written. */
 interface RawResearchVariantLink { kind: string; persons: string[]; family: string[]; parents: string[] }
 
@@ -245,6 +260,10 @@ interface RawResearchVariant {
     links: RawResearchVariantLink[];
     inTree: RawResearchVariantLink[];
     sourceRefs: string[];
+    /** 3 _AGAINST › 4 CONC/CONT, 4 SOUR. */
+    against: { text: string; sourceRefs: string[] }[];
+    /** 3 _PEOPLE. */
+    people: string;
 }
 
 /** What the research's pointers name: a person's REFN, a family's partners (pointers). */
@@ -418,17 +437,30 @@ function toPersonResearch(raw: RawResearch | undefined, mapRefs: (refs: string[]
             // Who decided, why and when: only of a decided or abandoned one.
             const settled = status === 'decided' || status === 'abandoned';
             const decision = settled ? h.deci.trim() : '';
-            const at = settled ? /^\d{4}-\d{2}-\d{2}$/.exec(h.at.trim())?.[0] : undefined;
+            const at = settled ? researchIsoDay(h.at) : undefined;
+            const by = settled ? researchDecider(h.by) : undefined;
+            // spec 074: what the app decides by (the research's word), the decision before, why it
+            // cannot be reopened (decided or abandoned), the agent's proposal and "left open" (open).
+            const open = !status || status === 'open';
+            const previous = researchHypothesisPrevious(h.prev);
+            const reopen = settled ? researchHypothesisReopen(h.reopen) : undefined;
+            const proposal = open ? researchHypothesisProposal(h.prop) : undefined;
+            const left = open ? researchIsoDay(h.left) : undefined;
             return {
                 ...(RESEARCH_ID.H.test(h.id.trim()) ? { id: h.id.trim() } : {}),
                 title: h.title.trim(),
                 ...(h.note.trim() ? { note: h.note.trim() } : {}),
                 ...(status ? { status } : {}),
                 ...(chosen && status === 'decided' ? { chosen } : {}),
-                ...(settled && h.by.trim().toLowerCase() === 'agent' ? { decidedBy: 'agent' as const } : {}),
+                ...(by ? { decidedBy: by } : {}),
                 ...(decision ? { decision } : {}),
                 ...(at ? { decidedAt: at } : {}),
                 ...(variants.length > 0 ? { variants } : {}),
+                ...(h.pick.trim().toUpperCase() === 'Y' ? { pickable: true as const } : {}),
+                ...(previous ? { previous } : {}),
+                ...(reopen ? { reopen } : {}),
+                ...(proposal ? { proposal } : {}),
+                ...(left ? { leftOpen: left } : {}),
             };
         });
     if (hypotheses.length > 0) out.hypotheses = hypotheses;
@@ -465,6 +497,56 @@ const RESEARCH_ID = {
 function researchVariantLabel(value: string): string | undefined {
     const v = value.trim();
     return /^[A-Z]{1,3}$/.test(v) ? v : undefined;
+}
+
+/** A day as the research writes it (ISO "YYYY-MM-DD"), or undefined. */
+function researchIsoDay(value: string | undefined): string | undefined {
+    return /^\d{4}-\d{2}-\d{2}$/.exec((value ?? '').trim())?.[0];
+}
+
+/** Who decided (2 _BY / 3 _BY): the agent, or a person by a link from the app; anything else is the person in the research. */
+function researchDecider(value: string | undefined): 'agent' | 'app' | undefined {
+    const v = (value ?? '').trim().toLowerCase();
+    return v === 'agent' || v === 'app' ? v : undefined;
+}
+
+/** A version's letter or `none` (no version holds: null); undefined for anything else. */
+function researchVariantOrNone(value: string): string | null | undefined {
+    return value.trim().toLowerCase() === 'none' ? null : researchVariantLabel(value);
+}
+
+/** 2 _PREV: the decision before (its version or none, who, why, when); undefined when its value is not one. */
+function researchHypothesisPrevious(raw: RawResearchHypothesis['prev']): ResearchHypothesis['previous'] {
+    if (!raw) return undefined;
+    const variant = researchVariantOrNone(raw.value);
+    if (variant === undefined) return undefined;
+    const by = researchDecider(raw.by);
+    const reason = raw.deci.trim();
+    const day = researchIsoDay(raw.at);
+    return { variant, ...(by ? { by } : {}), ...(reason ? { reason } : {}), ...(day ? { day } : {}) };
+}
+
+/** 2 _REOPEN no: why it cannot be reopened, how many links, the versions that leave the tree as it is; undefined otherwise. */
+function researchHypothesisReopen(raw: RawResearchHypothesis['reopen']): ResearchHypothesis['reopen'] {
+    if (!raw || raw.value.trim().toLowerCase() !== 'no') return undefined;
+    const type = raw.type.trim().toLowerCase();
+    const count = researchInt(raw.count, 1, 1e6);
+    const stays = [...new Set(raw.stays.map(researchVariantLabel).filter((v): v is string => !!v))];
+    return {
+        ok: false, type: /^[a-z][a-z0-9_-]{0,31}$/.test(type) ? type : '',
+        ...(count !== undefined ? { count } : {}),
+        ...(stays.length > 0 ? { stays } : {}),
+    };
+}
+
+/** 2 _PROP: the agent's proposal (its version or none, its sentence, its day); undefined when its value is not one. */
+function researchHypothesisProposal(raw: RawResearchHypothesis['prop']): ResearchHypothesis['proposal'] {
+    if (!raw) return undefined;
+    const variant = researchVariantOrNone(raw.value);
+    if (variant === undefined) return undefined;
+    const text = raw.deci.trim();
+    const day = researchIsoDay(raw.at);
+    return { variant, ...(text ? { text } : {}), ...(day ? { day } : {}) };
 }
 
 /**
@@ -538,10 +620,16 @@ function researchVariants(raw: RawResearchVariant[], mapRefs: (refs: string[]) =
         }
         const title = v.title.trim();
         const sourceIds = mapRefs(v.sourceRefs);
+        // What speaks against it (spec 074): a text each, with the sources it names in the file.
+        const against = v.against.map(a => ({ text: a.text.trim(), ids: mapRefs(a.sourceRefs) })).filter(a => a.text)
+            .map(a => ({ text: a.text, ...(a.ids.length > 0 ? { sourceIds: a.ids } : {}) }));
+        const joins = researchInt(v.people, 1, 1e7);
         out.push({
             id, ...(title ? { title } : {}), links,
             ...(inTree.length > 0 ? { inTree } : {}),
             ...(sourceIds.length > 0 ? { sourceIds } : {}),
+            ...(against.length > 0 ? { against } : {}),
+            ...(joins !== undefined ? { people: joins } : {}),
         });
     }
     return out;
@@ -2220,12 +2308,13 @@ const MEDIA_CUTOUT_TAG = /^_(?:[A-Z0-9]+_)*CUTOUT(?:_[A-Z0-9]+)*$|^_(?:[A-Z0-9]+
  * keeps the list complete: every `'_XXX'` the reader names is in it.
  */
 export const GEDCOM_READ_UNDERSCORE_TAGS: ReadonlySet<string> = new Set([
-    '_ACCESS', '_AT', '_BASIS', '_BOOK', '_BRANCH', '_BY', '_CHOSEN', '_CONF', '_CONFLICT', '_COST', '_COVERED', '_DATE',
+    '_ACCESS', '_AGAINST', '_AT', '_BASIS', '_BOOK', '_BRANCH', '_BY', '_CHOSEN', '_CONF', '_CONFLICT', '_COST', '_COUNT', '_COVERED', '_DATE',
     '_DIRECTION', '_DRAFT', '_DUP', '_END', '_EST', '_EXPORTED_FROM_SITE_ID', '_FAM', '_FOCUS', '_FREL', '_FSFTID', '_GEN',
-    '_GROUP', '_HELD', '_HYPO', '_INTREE', '_ISLAND', '_JOIN', '_KEY', '_LAST', '_LEVEL', '_LINK', '_MARNM', '_MILI',
-    '_MILT', '_MODE', '_MREL', '_NEAREST', '_NEXT', '_NORECORDS', '_ON', '_PAR', '_PART', '_PARTIAL', '_PERS',
-    '_PERSONALPHOTO', '_POS', '_PRIM', '_PRIMARY', '_PRIO', '_PROJECT_GUID', '_QUESTION', '_READERS', '_RECORDS', '_REF',
-    '_RELATIONSHIP_STATUS', '_RESEARCH', '_SCOPE', '_SEARCHES', '_SENT', '_SESSIONS', '_SOUR', '_STAT', '_STORY', '_TASK',
+    '_GROUP', '_HELD', '_HYPO', '_INTREE', '_ISLAND', '_JOIN', '_KEY', '_LAST', '_LEFT', '_LEVEL', '_LINK', '_MARNM', '_MILI',
+    '_MILT', '_MODE', '_MREL', '_NEAREST', '_NEXT', '_NORECORDS', '_ON', '_PAR', '_PART', '_PARTIAL', '_PEOPLE', '_PERS',
+    '_PERSONALPHOTO', '_PICK', '_POS', '_PREV', '_PRIM', '_PRIMARY', '_PRIO', '_PROJECT_GUID', '_PROP', '_QUESTION', '_READERS',
+    '_RECORDS', '_REF', '_RELATIONSHIP_STATUS', '_REOPEN', '_RESEARCH', '_SCOPE', '_SEARCHES', '_SENT', '_SESSIONS', '_SOUR',
+    '_STAT', '_STAYS', '_STORY', '_TASK',
     '_TEST', '_TRIED', '_TXT', '_UID', '_UNTIL', '_UPD', '_URL', '_VAR', '_VIA', '_WHY', '_WITN', '_XREF',
 ]);
 
@@ -3839,7 +3928,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                                 research.conflicts.push({ id: value.trim(), fact: '', title: '', stat: '', take: '', values: [] });
                                 currentResearch = { kind: 'conflict', sub: null };
                             } else if (tag === '_STROM_HYPO') {
-                                research.hypotheses.push({ id: value.trim(), title: '', note: '', stat: '', chosen: '', by: '', deci: '', at: '', variants: [] });
+                                research.hypotheses.push({ id: value.trim(), title: '', note: '', stat: '', chosen: '', by: '', deci: '', at: '', variants: [], pick: '', left: '' });
                                 currentResearch = { kind: 'hypo', sub: null };
                             } else if (tag === '_STROM_EDGE' || tag === '_STROM_ISLAND') {
                                 // A snapshot: one per person (a second replaces the first).
@@ -4095,6 +4184,8 @@ export function parseGedcom(content: string): ParsedGedcom {
                 } else if (open.kind === 'hypo') {
                     const h = research.hypotheses[research.hypotheses.length - 1];
                     // 2 _VAR > 3 TITL (4 CONC/CONT) / 3 _LINK, _INTREE > 4 _PERS, _FAM, _PAR / 3 SOUR
+                    //          / 3 _AGAINST (4 CONC/CONT, 4 SOUR) / 3 _PEOPLE
+                    // 2 _PREV > 3 _BY, DECI (4 CONC/CONT), _AT · 2 _REOPEN > 3 TYPE, _COUNT, _STAYS · 2 _PROP > 3 DECI (4 CONC/CONT), _AT
                     const variant = open.sub === '_VAR' ? h.variants[h.variants.length - 1] : undefined;
                     if (level === 2) {
                         open.sub = tag;
@@ -4107,18 +4198,49 @@ export function parseGedcom(content: string): ParsedGedcom {
                         else if (tag === '_BY') h.by = value;
                         else if (tag === 'DECI') h.deci = value;
                         else if (tag === '_AT') h.at = value;
-                        else if (tag === '_VAR') h.variants.push({ label: value, title: '', links: [], inTree: [], sourceRefs: [] });
+                        else if (tag === '_VAR') h.variants.push({ label: value, title: '', links: [], inTree: [], sourceRefs: [], against: [], people: '' });
+                        // Deciding in the app (spec 074): one each (a second replaces the first).
+                        else if (tag === '_PICK') h.pick = value;
+                        else if (tag === '_LEFT') h.left = value;
+                        else if (tag === '_PREV') h.prev = { value, by: '', deci: '', at: '' };
+                        else if (tag === '_REOPEN') h.reopen = { value, type: '', count: '', stays: [] };
+                        else if (tag === '_PROP') h.prop = { value, deci: '', at: '' };
                     } else if (level === 3 && variant) {
                         open.sub3 = tag;
                         if (tag === 'TITL') variant.title = value;
                         else if (tag === '_LINK') variant.links.push({ kind: value.trim().toLowerCase(), persons: [], family: [], parents: [] });
                         else if (tag === '_INTREE') variant.inTree.push({ kind: value.trim().toLowerCase(), persons: [], family: [], parents: [] });
                         else if (tag === 'SOUR' && GED_POINTER.test(value)) variant.sourceRefs.push(value);
+                        else if (tag === '_AGAINST') variant.against.push({ text: value, sourceRefs: [] });
+                        else if (tag === '_PEOPLE') variant.people = value;
                     } else if (level === 3 && (tag === 'CONC' || tag === 'CONT')) {
                         const glue = tag === 'CONT' ? '\n' + value : value;
                         if (open.sub === 'TITL') h.title += tag === 'CONT' ? ' ' + value : value;
                         else if (open.sub === 'NOTE') h.note += glue;
                         else if (open.sub === 'DECI') h.deci += glue;
+                    } else if (level === 3 && (open.sub === '_PREV' || open.sub === '_REOPEN' || open.sub === '_PROP')) {
+                        open.sub3 = tag;
+                        if (open.sub === '_PREV' && h.prev) {
+                            if (tag === '_BY') h.prev.by = value;
+                            else if (tag === 'DECI') h.prev.deci = value;
+                            else if (tag === '_AT') h.prev.at = value;
+                        } else if (open.sub === '_REOPEN' && h.reopen) {
+                            if (tag === 'TYPE') h.reopen.type = value;
+                            else if (tag === '_COUNT') h.reopen.count = value;
+                            else if (tag === '_STAYS') h.reopen.stays.push(value);
+                        } else if (open.sub === '_PROP' && h.prop) {
+                            if (tag === 'DECI') h.prop.deci = value;
+                            else if (tag === '_AT') h.prop.at = value;
+                        }
+                    } else if (level === 4 && open.sub3 === 'DECI' && (tag === 'CONC' || tag === 'CONT')) {
+                        const glue = tag === 'CONT' ? '\n' + value : value;
+                        if (open.sub === '_PREV' && h.prev) h.prev.deci += glue;
+                        else if (open.sub === '_PROP' && h.prop) h.prop.deci += glue;
+                    } else if (level === 4 && variant && open.sub3 === '_AGAINST') {
+                        const against = variant.against[variant.against.length - 1];
+                        if (tag === 'CONC') against.text += value;
+                        else if (tag === 'CONT') against.text += '\n' + value;
+                        else if (tag === 'SOUR' && GED_POINTER.test(value)) against.sourceRefs.push(value);
                     } else if (level === 4 && variant) {
                         const link = open.sub3 === '_LINK' ? variant.links[variant.links.length - 1]
                             : open.sub3 === '_INTREE' ? variant.inTree[variant.inTree.length - 1] : undefined;

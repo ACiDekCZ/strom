@@ -26,7 +26,8 @@ import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
 import { strings, getCurrentLanguage } from '../strings.js';
-import { TreeId, PersonId, ResearchLink, ResearchSend, ResearchSendMode, StromData, ResearchConflict } from '../types.js';
+import { TreeId, PersonId, ResearchLink, ResearchSend, ResearchSendMode, StromData, ResearchConflict, ResearchHypothesis } from '../types.js';
+import { HypothesisPick, hypothesisPickable } from '../research-hypothesis-pick.js';
 import { formatLiveClock } from '../live-time.js';
 import { PhoneSummary } from '../phone.js';
 import { localNetworkDenied } from '../local-network.js';
@@ -541,6 +542,21 @@ export const researchSyncMethods = uiModule({
         const id = this.activeResearchId();
         const status = id ? this.researchStatusOf(id) : null;
         return conflictDecideMode({ bridge: status ? { features: status.features } : null, linkAvailable: this.researchLinkAvailable('conflict') });
+    },
+
+    /**
+     * How the card of a hypothesis of the active research tree is offered (spec 074, DEV §2):
+     * the research's features as its bridge says them now, else as it said them last in this
+     * page; the `hypothesis` link announced on this computer; a tree that takes no edits only read.
+     */
+    researchHypothesisPickable(h: ResearchHypothesis): HypothesisPick {
+        const id = this.activeResearchId();
+        const status = id ? this.researchStatusOf(id) ?? lastBridgeStatus(id) : null;
+        return hypothesisPickable(h, {
+            readOnly: !id || DataManager.isReadOnly(),
+            features: status?.features ?? null,
+            linkAvailable: this.researchLinkAvailable('hypothesis'),
+        });
     },
 
     /**
