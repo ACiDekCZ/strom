@@ -101,10 +101,10 @@ test.describe('the Research menu', () => {
         await expect(page.locator('#actions-menu-dropdown')).not.toContainText('Research');
         await openResearchMenu(page);
         await expect(page.locator('#actions-menu-dropdown')).not.toHaveClass(/active/);
-        // Frequent first (waiting, agent, the research, the send), then now and then (a version to load, the
-        // phone: offered while the research is not running too, its dialog starts it).
+        // The overview first (spec 057 §7.1), then frequent (waiting, agent, the research, the send), then now and
+        // then (a version to load, the phone: offered while the research is not running too, its dialog starts it).
         await expect(submenuItems(page).locator('.research-item-label'))
-            .toHaveText(['Awaiting action', 'Continue with the agent', 'Open research', 'Send changes', 'Load new version', 'Connect phone…']);
+            .toHaveText(['Research overview', 'Awaiting action', 'Continue with the agent', 'Open research', 'Send changes', 'Load new version', 'Connect phone…']);
         await expect(page.locator('#research-item-waiting')).toHaveAttribute('aria-label', 'Awaiting action: 2');
         const chat = page.locator('#research-item-chat');
         await expect(chat.locator('.research-ai-badge')).toHaveText('AI');
@@ -132,7 +132,7 @@ test.describe('the Research menu', () => {
     test('an action the research did not announce is missing', async ({ page }) => {
         await setup(page, ['send', 'open']);
         await openResearchMenu(page);
-        await expect(submenuItems(page).locator('.research-item-label')).toHaveText(['Open research', 'Send changes', 'Connect phone…']);
+        await expect(submenuItems(page).locator('.research-item-label')).toHaveText(['Research overview', 'Open research', 'Send changes', 'Connect phone…']);
         await expect(page.locator('#research-menu-signal')).toBeHidden();
     });
 
@@ -197,7 +197,7 @@ test.describe('the Research menu', () => {
     test('nothing announced, the research not known here: Start the research, Send changes, and the way to install it', async ({ page }) => {
         await setup(page, []);
         await openResearchMenu(page);
-        await expect(submenuItems(page)).toHaveText(['Start the research', 'Send changes', 'Connect phone…', 'Not installed? Install…']);
+        await expect(submenuItems(page)).toHaveText(['Research overview', 'Start the research', 'Send changes', 'Connect phone…', 'Not installed? Install…']);
         await page.locator('#research-item-start').click();
         expect(await launched(page)).toEqual([`strom-research://open?tree=${UUID}`]);
         await openResearchMenu(page, { expandMore: true });
@@ -209,14 +209,14 @@ test.describe('the Research menu', () => {
         await setup(page, []);
         await page.evaluate(([uuid, base]) => localStorage.setItem(`strom-research-bridge:${uuid}`, JSON.stringify({ base })), [UUID, BRIDGE]);
         await openResearchMenu(page);
-        await expect(submenuItems(page)).toHaveText(['Start the research', 'Send changes', 'Connect phone…', 'What is Strom Research']);
+        await expect(submenuItems(page)).toHaveText(['Research overview', 'Start the research', 'Send changes', 'Connect phone…', 'What is Strom Research']);
     });
 
     test('links switched off in Settings: neither start nor install is offered', async ({ page }) => {
         await setup(page, []);
         await page.evaluate(() => localStorage.setItem('strom-research-links-off', '1'));
         await openResearchMenu(page);
-        await expect(submenuItems(page)).toHaveText(['Send changes', 'Connect phone…', 'What is Strom Research']);
+        await expect(submenuItems(page)).toHaveText(['Research overview', 'Send changes', 'Connect phone…', 'What is Strom Research']);
     });
 
     test('research known here: another tree has no "Ancestor research" (no way to its website)', async ({ page }) => {
@@ -302,9 +302,10 @@ test.describe('live research: Awaiting action', () => {
         await expect(page.locator('#research-menu-following .research-sync-title')).toHaveText('Following live');
         await expect(page.locator('#research-menu-following .research-sync-sub')).toHaveText('tree is locked');
         await expect(page.locator('#research-menu-following')).toHaveAttribute('aria-label', 'Following live');
-        // The first level as design 2d with the overview under the agent: the tree is the research's own, nothing of it to send (menu 1020 §2.7).
+        // The first level: the overview and Stop following first (spec 057 §7.1), then design 2d — the tree is the
+        // research's own, nothing of it to send (menu 1020 §2.7).
         await expect(page.locator('#research-menu > .research-menu-group > .tree-switcher-action .research-item-label'))
-            .toHaveText(['Awaiting action', 'Continue with the agent', 'Research overview', 'Open research', 'Other actions']);
+            .toHaveText(['Research overview', 'Stop following', 'Awaiting action', 'Continue with the agent', 'Open research', 'Other actions']);
         await expect(page.locator('#research-item-send')).toHaveCount(0);
         await page.locator('#research-item-waiting').click();
         await expect(panel).not.toHaveClass(/collapsed/);

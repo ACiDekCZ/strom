@@ -197,14 +197,18 @@ export const treeActionsMethods = uiModule({
             ] },
             { key: 'outputs', rows: by.export
                 ? [{ key: 'export', label: s.export, run: () => this.showExportDialogFromManager(id) }] : [] },
-            { key: 'research', header: g.research, rows: editable ? [
-                ...(by.researchSend && tree.research && researchRunsHere()
+            { key: 'research', header: g.research, rows: [
+                // The open tree's research overview, followed or not, read-only too, where no Research menu has it
+                // (a phone, a tablet; spec 057 §7.1, §6b).
+                ...(isActive && tree.research && this.canOpenResearchOverview() && !this.researchMenuShown()
+                    ? [{ key: 'researchOverview', label: strings.live.overviewTitle, run: () => this.openResearchOverview() }] : []),
+                ...(!editable ? [] : by.researchSend && tree.research && researchRunsHere()
                     // Through the bridge with no mark; without it, the send link opens the research's terminal.
                     ? [{ key: 'researchSend', label: strings.research.sendMenu, editOnly: true,
                         research: !this.researchSyncCapable(tree.research.id) && this.researchLinkAvailable('send') && researchLinkMark('send') !== 'none',
                         run: () => void this.researchSendTree(id) }] : []),
-                ...this.treeResearchRow(id, isActive),
-            ] : [] },
+                ...(editable ? this.treeResearchRow(id, isActive) : []),
+            ] },
             { key: 'settings', header: g.settings, rows: editable ? [
                 { key: 'rename', label: s.rename, editOnly: true, run: () => this.showRenameTreeDialog(id, parent) },
                 // The narrow flyout may cut the label and the value: the tooltip says both.

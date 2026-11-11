@@ -2654,6 +2654,8 @@ export const researchSyncMethods = uiModule({
         this.surnameSuggestBridgeChanged();
         // Kinds of history in Settings (spec 035 §5): the Search column follows the bridge, up or gone.
         this.historyKindsBridgeChanged();
+        // The Research overview open without following: drawn from what the bridge says now (spec 057 §7.2).
+        this.syncOverviewViewing();
     },
 
     /**

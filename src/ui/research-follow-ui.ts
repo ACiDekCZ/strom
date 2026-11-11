@@ -139,7 +139,7 @@ export const researchFollowMethods = uiModule({
             await this.researchFollowAfterSwitch(treeId as TreeId, { followed: null, open: null, panelShown: false });
         }
         if (DataManager.getCurrentTreeId() !== treeId) return;
-        if (this.isFollowingActiveResearch() && this.canOpenResearchOverview()) {
+        if (this.isFollowingActiveResearch() && this.canExpandLivePanel()) {
             this.unfoldOverviewSection('waiting');
             this.openResearchOverview();
             document.querySelector('#research-overview .live-panel-heading-waiting')?.scrollIntoView({ block: 'start' });

@@ -18,7 +18,7 @@ import { Person, PersonId } from '../types.js';
 import { LiveDirection, LiveDirectionKind, LiveWorker, ResearchDirectionDo, researchLinkMark } from '../research-link.js';
 import { uiModule } from './module.js';
 import { MQ_PHONE_BAR } from '../breakpoints.js';
-import { LiveFold, LiveSession, el, liveSection, liveSession, pausedText, timeEl, workingNumberBadge } from './research-ui.js';
+import { LiveFold, LiveSession, el, liveSection, researchSession, pausedText, timeEl, workingNumberBadge } from './research-ui.js';
 import { shownName, fitNameHtml } from '../person-name.js';
 import {
     orderDirections, withPendingOrder, moveInOrder, dropInOrder, sameOrder, DirectionOrderWriter, DirectionMove, withBusyRetry,
@@ -94,7 +94,7 @@ export function queueDirectionFilter(s: LiveSession | null): string {
 
 export function setQueueDirectionFilter(id: string): void {
     queueFilter = id;
-    queueFilterTree = id === 'all' ? null : liveSession()?.treeId ?? null;
+    queueFilterTree = id === 'all' ? null : researchSession()?.treeId ?? null;
 }
 
 /**
@@ -525,7 +525,7 @@ export const researchDirectionsMethods = uiModule({
         row.appendChild(glyph);
         const main = el('span', 'live-line__main');
         main.appendChild(el('span', 'live-line__name', name));
-        const working = liveSession()?.working ?? [];
+        const working = researchSession()?.working ?? [];
         for (const w of g.workers) {
             // Two or more runs while following: each run's session number in its colour (as in the fan).
             const num = this.liveWorkingNumber(working.indexOf(w));
@@ -540,7 +540,7 @@ export const researchDirectionsMethods = uiModule({
             if (person) parts.push(fullName(person));
             else if (w.person) parts.push(w.person);
             // How the task helps its line, or its branch outside the lines (under the line's name: without it).
-            const s = liveSession();
+            const s = researchSession();
             const why = s ? workingWhyText(w, s, true) : '';
             if (why) parts.push(el('span', 'live-line__why', why));
             if (w.paused) parts.push(el('span', 'live-paused', pausedText(w)));
@@ -559,7 +559,7 @@ export const researchDirectionsMethods = uiModule({
 
     /** A click on a line: selected (lit up in the tree, Changes and Up next narrowed), again: all lines. */
     selectWorkingLine(id: string): void {
-        this.setWorkingLine(queueDirectionFilter(liveSession()) === id ? 'all' : id);
+        this.setWorkingLine(queueDirectionFilter(researchSession()) === id ? 'all' : id);
     },
 
     /**
@@ -573,14 +573,14 @@ export const researchDirectionsMethods = uiModule({
             window.addEventListener('strom:tree-switched', () => this.syncLineSelection());
         }
         setQueueDirectionFilter(id);
-        const s = liveSession();
+        const s = researchSession();
         const d = id === 'all' ? undefined : s?.researches.find(x => x.id === id);
         const ids = d ? directionPersonIds(d) ?? [] : [];
         if (d && ids.length > 0) {
             // Dropped meanwhile (a tree switch): the same people until the light ends with the selection.
             let lit = ids;
             this.startPersonHighlight('direction', d.name, ids, () => {
-                if (queueDirectionFilter(liveSession()) === d.id) lit = directionPersonIds(d) ?? [];
+                if (queueDirectionFilter(researchSession()) === d.id) lit = directionPersonIds(d) ?? [];
                 return lit;
             });
             selectionLit = true;
@@ -592,7 +592,7 @@ export const researchDirectionsMethods = uiModule({
 
     /** A selection that no longer stands (another tree, following ended) is dropped with its light. */
     syncLineSelection(): void {
-        if (queueDirectionFilter(liveSession()) === 'all' && selectionLit) this.endLineHighlight();
+        if (queueDirectionFilter(researchSession()) === 'all' && selectionLit) this.endLineHighlight();
     },
 
     /** End the tree's light the selection started (another highlight since is left alone). */
@@ -1158,7 +1158,7 @@ export const researchDirectionsMethods = uiModule({
      */
     async changeDirectionState(d: LiveDirection, what: DirectionStateDo, opts: { reason?: string; undo?: boolean } = {}): Promise<boolean> {
         this.closeDirectionMenu();
-        const s = liveSession();
+        const s = researchSession();
         if (!s || s.ended || !this.directionsView(s).canWrite || rowsBusy.has(d.id)) return false;
         const L = strings.live;
         const before = s.researches.find(x => x.id === d.id) ?? d;
@@ -1168,7 +1168,7 @@ export const researchDirectionsMethods = uiModule({
         const head = await this.waitingHeadBeforeWrite(s);
         const r = await withBusyRetry(() => setDirectionState(s.bridge.base, d.id, what, opts.reason));
         rowsBusy.delete(d.id);
-        if (liveSession() !== s || s.ended) return false;
+        if (researchSession() !== s || s.ended) return false;
         if (!r.ok) {
             if (r.code === 'archive') archiveSaid = s.bridge.base;
             if (opts.undo) {
@@ -1213,7 +1213,7 @@ export const researchDirectionsMethods = uiModule({
      */
     moveDirection(id: string, move: DirectionMove | { drop: number }, focusHandle = false): void {
         this.closeDirectionMenu();
-        const s = liveSession();
+        const s = researchSession();
         if (!s || s.ended || !this.directionsView(s).canOrder) return;
         const current = shownOrder(s);
         const next = typeof move === 'object' ? dropInOrder(current, id, move.drop) : moveInOrder(current, id, move);
@@ -1240,7 +1240,7 @@ export const researchDirectionsMethods = uiModule({
             const head = await this.waitingHeadBeforeWrite(s);
             const r = await withBusyRetry(() => writeDirectionOrder(base, order));
             orderSaving = false;
-            if (liveSession() !== s || s.ended) return;
+            if (researchSession() !== s || s.ended) return;
             const moved = pendingOrder?.moved;
             if (r.ok) {
                 if (r.head) this.researchTakeOwnWriteHead(s.researchId, head, r.head, r.parent);
@@ -1670,7 +1670,7 @@ export const researchDirectionsMethods = uiModule({
     /** Open the overview on a direction: Directions unfolded, its detail open. */
     openResearchDirection(id: string): void {
         expanded = id;
-        const s = liveSession();
+        const s = researchSession();
         const state = s?.researches.find(d => d.id === id)?.state;
         if (state !== 'active') inactiveOpen = true;
         if (state === 'done') endedOpen = true;
@@ -1689,7 +1689,7 @@ export const researchDirectionsMethods = uiModule({
      */
     personDirection(personId: PersonId, action: string): LiveDirection | null {
         const kind = MENU_KIND[action];
-        const s = liveSession();
+        const s = researchSession();
         const refn = DataManager.getPerson(personId)?.refn;
         if (!kind || !s || s.ended || s.treeId !== DataManager.getCurrentTreeId() || !refn) return null;
         const mine = s.researches.filter(d => d.direction === kind && d.focus === refn);

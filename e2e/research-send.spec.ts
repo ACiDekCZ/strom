@@ -308,8 +308,9 @@ test.describe('where the tree menu offers it', () => {
         await expect(page.locator('#research-menu-row')).toBeHidden();
         await page.locator('#research-menu-btn').click();
         const items = page.locator('#research-menu .tree-switcher-action:not(.research-item-more)');
-        // The tree came from a research: it can be started (the research not known here: the way to install it too, under "Other actions").
-        await expect(items).toHaveText(['Start the research', 'Send changes', 'Connect phone…', 'Not installed? Install…']);
+        // The overview first (spec 057 §7.1); the tree came from a research: it can be started (the research not known here:
+        // the way to install it too, under "Other actions").
+        await expect(items).toHaveText(['Research overview', 'Start the research', 'Send changes', 'Connect phone…', 'Not installed? Install…']);
         await expect(page.locator('#research-menu-more #research-item-install')).toBeHidden();
         await expect(page.locator('#research-menu-foot')).toBeVisible();
         await page.locator('#research-item-send').click();

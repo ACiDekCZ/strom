@@ -16,7 +16,7 @@ import { DEFAULT_MEDIA_MAX_BYTES } from '../originals.js';
 import { MQ_PHONE_BAR, isPhoneBar } from '../breakpoints.js';
 import { setResearchActionLabel } from './research-open-mark.js';
 import { uiModule } from './module.js';
-import { el, liveSession, LiveSession } from './research-ui.js';
+import { el, liveSession, LiveSession, researchSession } from './research-ui.js';
 import { UploadNumbers, UploadOutcome, WaitingImagesUpload } from './waiting-images-upload.js';
 import { WaitingAnswerForm, waitingAnswerChangedNote } from './waiting-answer-form.js';
 import { bindImagesDrop, imagesShortEl, itemKey } from './waiting-images-ui.js';
@@ -115,7 +115,7 @@ export const waitingTaskMethods = uiModule({
         if (place === 'ov') {
             if (overviewImagesKey === key) overviewImagesKey = null;
             if (text) overviewResults.set(key, text);
-            if (liveSession() === s && s.overview) {
+            if (researchSession() === s && s.overview) {
                 this.renderResearchOverview();
                 document.querySelector<HTMLElement>(`#research-overview .research-overview__waiting-item[data-id="${CSS.escape(w.id)}"] [data-action="images"]`)?.focus();
             }
@@ -156,7 +156,7 @@ export const waitingTaskMethods = uiModule({
 
     closeOverviewImages(s: LiveSession, w: LiveWaiting): void {
         if (overviewImagesKey === itemKey(s, w.id)) overviewImagesKey = null;
-        if (liveSession() !== s || !s.overview) return;
+        if (researchSession() !== s || !s.overview) return;
         this.renderResearchOverview();
         document.querySelector<HTMLElement>(`#research-overview .research-overview__waiting-item[data-id="${CSS.escape(w.id)}"] [data-action="images"]`)?.focus();
     },
@@ -436,7 +436,7 @@ export const waitingTaskMethods = uiModule({
                 done: () => {
                     sheetForms.delete(key);
                     this.closeWaitingAnswerSheet(true);
-                    if (liveSession() === s && s.overview) this.renderResearchOverview();
+                    if (researchSession() === s && s.overview) this.renderResearchOverview();
                 },
                 onChange: (f) => {
                     const btn = document.querySelector<HTMLElement>(`#${SHEET_ID} .waiting-answer-sheet__send`);

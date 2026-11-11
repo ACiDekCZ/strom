@@ -25,7 +25,7 @@ import {
     BEFORE_MAX, BEFORE_MIN, FORM_KINDS, FormKind, FormProblem, GENERATIONS_MAX, autoDirectionName, changedLimits,
     findDuplicateDirection, formProblem, newPrimary, parseBeforeYear,
 } from '../direction-form.js';
-import { LiveSession, el, liveSession } from './research-ui.js';
+import { LiveSession, el, researchSession } from './research-ui.js';
 import { directionGlyph, directionRefusedText, markFreshDirection } from './research-directions-ui.js';
 import { readRecent } from './tree-overview.js';
 import { normalizeModal } from './modal-skeleton.js';
@@ -117,7 +117,7 @@ function kindLabel(kind: FormKind): string {
 
 /** The kinds the research creates (`caps.directionKinds`; all three when it does not say). */
 function offeredKinds(): FormKind[] {
-    const said = liveSession()?.caps?.directionKinds;
+    const said = researchSession()?.caps?.directionKinds;
     const kinds = Array.isArray(said) ? FORM_KINDS.filter(k => said.includes(k)) : [...FORM_KINDS];
     return kinds.length > 0 ? kinds : [...FORM_KINDS];
 }
@@ -132,7 +132,7 @@ const q = <T extends HTMLElement>(root: HTMLElement, sel: string): T => root.que
 export const directionFormMethods = uiModule({
     /** The followed research of this tree manages its directions through the bridge (`caps.directionsWrite`). */
     managesDirections(): boolean {
-        const s = liveSession();
+        const s = researchSession();
         return !!s && !s.ended && s.treeId === DataManager.getCurrentTreeId() && !!s.caps?.directionsWrite;
     },
 
@@ -147,7 +147,7 @@ export const directionFormMethods = uiModule({
         if (!places && (!s.caps?.directionsWrite || !s.features?.includes(PEOPLE_FEATURE))) return;
         const before = directionPeopleKept(s.bridge.base);
         void fetchDirectionPeople(s.bridge.base, head, places ? s.directionsRev ?? '' : '').then(r => {
-            if (!r.ok || liveSession() !== s || s.ended) return;
+            if (!r.ok || researchSession() !== s || s.ended) return;
             this.renderPersonInLine();
             // A growing branch's main button picks its running direction by who is in which one: newly read, drawn again.
             if (r.people !== before && s.waiting.some(w => w.kind === 'branch')) this.renderLivePanel();
@@ -156,7 +156,7 @@ export const directionFormMethods = uiModule({
 
     /** The person's directions (active and paused), the narrowest first; [] when not known. */
     personInLine(personId: PersonId): LiveDirection[] {
-        const s = liveSession();
+        const s = researchSession();
         if (!s || s.ended || s.treeId !== DataManager.getCurrentTreeId() || !s.caps?.directionsWrite) return [];
         if (!s.features?.includes(PEOPLE_FEATURE)) return [];
         const refn = DataManager.getPerson(personId)?.refn;
@@ -238,7 +238,7 @@ export const directionFormMethods = uiModule({
 
     /** Open the direction dialog on a new direction (a person and kind may come chosen) or on one to edit. */
     openDirectionForm(opts: DirectionFormOptions): void {
-        const s = liveSession();
+        const s = researchSession();
         if (!s || s.ended || !s.caps?.directionsWrite) return;
         this.closeDirectionForm(false);
         const edit = opts.mode === 'edit' ? opts.direction ?? null : null;
@@ -312,7 +312,7 @@ export const directionFormMethods = uiModule({
         const heading = el('div', 'audit-log-heading');
         const h2 = el('h2', undefined, edit ? L.dirFormEdit : L.dirFormNew);
         h2.id = 'direction-form-title';
-        heading.append(h2, el('div', 'audit-log-subtitle', edit ? edit.name : liveSession()?.name ?? ''));
+        heading.append(h2, el('div', 'audit-log-subtitle', edit ? edit.name : researchSession()?.name ?? ''));
         const x = el('button', 'close-btn', '×');
         x.type = 'button';
         x.id = 'direction-form-close-x';
@@ -497,7 +497,7 @@ export const directionFormMethods = uiModule({
         const f = form;
         if (!f) return;
         const L = strings.live;
-        const s = liveSession();
+        const s = researchSession();
         const root = f.root;
         const modal = q(root, '.modal');
         modal.classList.toggle('is-sending', f.sending);
@@ -785,7 +785,7 @@ export const directionFormMethods = uiModule({
     directionFormDuplicate(f: FormState): LiveDirection | null {
         if (f.edit || !f.refn) return null;
         if (f.existing) return f.existing;
-        return findDuplicateDirection(liveSession()?.researches ?? [], f.refn, f.kind, f.question);
+        return findDuplicateDirection(researchSession()?.researches ?? [], f.refn, f.kind, f.question);
     },
 
     /** "Show it": the form closes, the overview opens on that direction. */
@@ -798,7 +798,7 @@ export const directionFormMethods = uiModule({
     async submitDirectionForm(): Promise<void> {
         const f = form;
         if (!f || f.sending) return;
-        const s = liveSession();
+        const s = researchSession();
         if (!s || s.ended) {
             this.closeDirectionForm();
             return;
@@ -851,7 +851,7 @@ export const directionFormMethods = uiModule({
 
     /** Create the direction: last in the order, lit for 2 s, a toast with "Work on this direction". */
     async createDirectionFromForm(f: FormState, year: number | null): Promise<void> {
-        const s = liveSession();
+        const s = researchSession();
         if (!s) return;
         const L = strings.live;
         const base = s.bridge.base;
@@ -869,7 +869,7 @@ export const directionFormMethods = uiModule({
             ...(branch ? { branch } : {}),
         }));
         f.sending = false;
-        if (liveSession() !== s || s.ended) {
+        if (researchSession() !== s || s.ended) {
             if (form === f) this.closeDirectionForm(false);
             return;
         }
@@ -911,7 +911,7 @@ export const directionFormMethods = uiModule({
     /** Save an edit: only what changed; the research's sentence about tasks moved (or Saved) with Undo. */
     async saveDirectionEdit(f: FormState, year: number | null): Promise<void> {
         const d = f.edit!;
-        const before = liveSession()?.researches.find(x => x.id === d.id) ?? d;
+        const before = researchSession()?.researches.find(x => x.id === d.id) ?? d;
         const body: DirectionEditBody = {};
         const name = f.name.trim();
         if (name && name !== before.name) body.name = name;
@@ -946,12 +946,12 @@ export const directionFormMethods = uiModule({
      * research went away meanwhile.
      */
     async writeDirectionEdit(before: LiveDirection, body: DirectionEditBody, undo = false): Promise<true | FormProblem | null> {
-        const s = liveSession();
+        const s = researchSession();
         if (!s || s.ended) return null;
         const L = strings.live;
         const head = await this.waitingHeadBeforeWrite(s);
         const r = await withBusyRetry(() => editDirection(s.bridge.base, before.id, body));
-        if (liveSession() !== s || s.ended) return null;
+        if (researchSession() !== s || s.ended) return null;
         if (!r.ok) return formProblem(r, 'edit', directionRefusedText);
         if (r.head) this.researchTakeOwnWriteHead(s.researchId, head, r.head, r.parent);
         const limits = { ...(before.limits ?? {}) };

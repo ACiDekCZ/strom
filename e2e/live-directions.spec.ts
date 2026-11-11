@@ -462,9 +462,11 @@ test.describe('research directions', () => {
             const menu = page.locator('#research-menu');
             await expect(menu).toBeVisible();
             await expect(menu.locator('#research-menu-following')).toHaveCount(0);
-            for (const id of ['research-item-chat', 'research-item-live', 'research-item-overview', 'research-item-waiting']) {
+            for (const id of ['research-item-chat', 'research-item-live', 'research-item-stop', 'research-item-waiting']) {
                 await expect(menu.locator(`#${id}`)).toHaveCount(0);
             }
+            // The overview stays offered, followed or not (spec 057 §7.1).
+            await expect(menu.locator('#research-item-overview')).toHaveCount(1);
             await expect(page.locator('body')).not.toContainText('Back to the agent');
             expect(await page.evaluate(() => window.Strom.UI.researchWaiting()?.items.length ?? 0)).toBe(0);
             // The tree can be edited.

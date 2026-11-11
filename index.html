@@ -19295,6 +19295,53 @@
         .research-overview__summary--n1 .research-overview__cell-value,
         .research-overview__summary--n1 .research-overview__cell-sub { margin-top: 0; }
         .research-overview__summary--n1 .research-overview__cell-sub { display: inline; min-width: 0; }
+        /* The overview without following (spec 057 §7): the bridge's strip "Follow live" under the head. */
+        .research-overview__follow {
+            display: flex; align-items: center; gap: 8px 12px; padding: 8px 12px 8px 16px; box-sizing: border-box;
+            background: var(--surface-2); border-bottom: 1px solid var(--border);
+        }
+        .research-overview__follow-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+        .research-overview__follow-note { margin: 0; font-size: 12.5px; color: var(--text-light); overflow-wrap: anywhere; }
+        .research-overview__agent-started { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600; color: var(--text); }
+        .research-overview__agent-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--primary); }
+        /* Two classes: dialogs style every button. */
+        .research-overview__follow > .research-overview__follow-live {
+            flex: none; height: 30px; min-height: 0; margin: 0; padding: 0 12px; box-sizing: border-box;
+            border: 1px solid var(--primary); border-radius: var(--r-md); background: none; box-shadow: none;
+            color: var(--primary); font: inherit; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer;
+        }
+        .research-overview__follow > .research-overview__follow-live.is-filled { background: var(--primary); color: var(--on-primary); }
+        @media (hover: hover) { .research-overview__follow > .research-overview__follow-live:not(.is-filled):hover { background: var(--hover-bg); } }
+        .research-overview__follow > .research-overview__follow-live:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        @media (pointer: coarse) { .research-overview__follow > .research-overview__follow-live { height: 44px; } }
+        @media (max-width: 640px) {
+            .research-overview__follow { flex-wrap: wrap; padding: 8px 14px; }
+            .research-overview__follow > .research-overview__follow-live { height: 44px; flex: 1 1 100%; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .research-overview__follow { flex-wrap: nowrap; padding-top: 4px; padding-bottom: 4px; }
+            .research-overview__follow > .research-overview__follow-live { flex: none; height: 40px; }
+            /* The sheet sideways: the head and the tiles stay while the sections scroll (§6b). */
+            .research-overview--sheet .research-overview__body > .research-overview__summary { position: sticky; top: 0; z-index: 1; margin-top: 0; }
+        }
+        /* Not running: the faded dot, the state with Turn on; the line naming what comes once it runs. */
+        .live-dot.live-dot--off { background: var(--text-ghost); box-shadow: none; }
+        .research-overview__cell.is-off .link-button,
+        .research-overview__cell.is-off .research-live-note { flex-basis: 100%; margin: 4px 0 0; font-size: 12.5px; }
+        .research-overview__why-off { white-space: normal; }
+        .research-overview__after-on { margin: 16px 0 0; font-size: 12.5px; color: var(--text-light); overflow-wrap: anywhere; }
+        .research-overview__as-of { font-size: 12px; font-weight: 400; color: var(--text-light); }
+        p.research-overview__as-of { margin: 6px 0 0; }
+        /* The lines as the tree's file says them: a name and its people. */
+        .research-overview__lines { margin: 4px 0 0; padding: 0; list-style: none; }
+        .research-overview__line {
+            display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-height: 32px;
+            padding: 6px 0; box-sizing: border-box; border-bottom: 1px solid var(--divider);
+        }
+        .research-overview__line:last-child { border-bottom: 0; }
+        .research-overview__line-name { min-width: 0; font-size: 13.5px; overflow-wrap: anywhere; }
+        .research-overview__line-meta { flex: none; font-size: 12px; color: var(--text-light); }
+        @media (pointer: coarse) { .research-overview__line { min-height: 44px; align-items: center; } }
         /* Under "Follow in" the summary closes up to its band: no white strip there once the line about the switch is gone (1105). */
         .research-overview > .live-follow-view + .research-overview__body > .research-overview__summary { margin-top: 0; }
         .research-overview__cell { background: var(--surface-2); padding: 10px 14px; min-width: 0; }

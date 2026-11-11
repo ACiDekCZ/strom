@@ -24,7 +24,7 @@ import { WaitingPhase, imagesState, waitingPhase } from '../research-waiting.js'
 import type { UploadOutcome } from './waiting-images-upload.js';
 import { imagesSentence, itemKey, takeOwnImages } from './waiting-images-ui.js';
 import { uiModule } from './module.js';
-import { el, liveSession, LiveSession } from './research-ui.js';
+import { el, LiveSession, researchSession } from './research-ui.js';
 import { normalizeModal } from './modal-skeleton.js';
 import { TreeManager } from '../tree-manager.js';
 
@@ -50,9 +50,12 @@ function writeState(s: LiveSession): WriteState {
     return st;
 }
 
-/** The session the write was made in still runs (following ended or went elsewhere: nothing to show). */
+/**
+ * The session the write was made in still runs: followed, or viewed through its bridge in the
+ * overview (following ended, went elsewhere or the overview closed: nothing to show).
+ */
 function stillFollowing(s: LiveSession): boolean {
-    return liveSession() === s && !s.ended;
+    return researchSession() === s && !s.ended;
 }
 
 /** What a refused write says (none: nothing, the row just goes). */
@@ -107,8 +110,8 @@ export const researchWaitingWriteMethods = uiModule({
         return this.researchHeadBeforeWrite(s.researchId, { ask: true, base: s.bridge.base });
     },
 
-    /** What the followed research's bridge takes from "Awaiting action". */
-    liveWaitingWrites(s: LiveSession | null = liveSession()): WaitingWrites {
+    /** What the followed (or viewed) research's bridge takes from "Awaiting action". */
+    liveWaitingWrites(s: LiveSession | null = researchSession()): WaitingWrites {
         if (!s || s.ended) return NO_WAITING_WRITES;
         return waitingWrites({ features: s.features, accepts: s.accepts });
     },

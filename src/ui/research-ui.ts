@@ -1294,7 +1294,7 @@ let timeTicker: ReturnType<typeof setInterval> | null = null;
  * A time element of the panel: `ago` = "just now / N min ago / 14:36",
  * `since` = "since 14:36". Refreshed by the ticker from its data-ts.
  */
-export function timeEl(value: string, kind: 'ago' | 'since' | 'sincefor' | 'lastchange'): HTMLElement | null {
+export function timeEl(value: string, kind: LiveTimeKind): HTMLElement | null {
     const ts = Date.parse(value);
     if (!Number.isFinite(ts)) return null;
     const node = el('small', 'live-time');
@@ -1304,8 +1304,12 @@ export function timeEl(value: string, kind: 'ago' | 'since' | 'sincefor' | 'last
     return node;
 }
 
-function liveTimeText(ts: number, kind: 'ago' | 'since' | 'sincefor' | 'lastchange'): string {
+/** How a time is said: ago, since, since and for how long, the last change, the bridge's last answer. */
+type LiveTimeKind = 'ago' | 'since' | 'sincefor' | 'lastchange' | 'refreshed';
+
+function liveTimeText(ts: number, kind: LiveTimeKind): string {
     const lang = getCurrentLanguage();
+    if (kind === 'refreshed') return strings.live.refreshedAgo(formatLiveTime(ts, Date.now(), lang, strings.research.justNow));
     if (kind === 'lastchange') return strings.live.lastChange(formatLiveTime(ts, Date.now(), lang, strings.research.justNow));
     if (kind === 'sincefor') return strings.live.sinceFor(formatLiveClock(ts, Date.now(), lang), liveDuration(ts));
     return kind === 'since'
@@ -1371,7 +1375,7 @@ function tickLiveTimes(): void {
     for (const host of hosts) {
         host.querySelectorAll<HTMLElement>('.live-time[data-ts]').forEach((node) => {
             const k = node.dataset.kind;
-            const kind = k === 'since' || k === 'sincefor' || k === 'lastchange' ? k : 'ago';
+            const kind = k === 'since' || k === 'sincefor' || k === 'lastchange' || k === 'refreshed' ? k : 'ago';
             node.textContent = liveTimeText(Number(node.dataset.ts), kind);
         });
     }
@@ -1452,6 +1456,66 @@ export function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: st
 /** The followed research (null: none), for the overview. */
 export function liveSession(): LiveSession | null {
     return live;
+}
+
+/**
+ * The Research overview open without following (spec 057 §7): the open
+ * tree's research, drawn from what its bridge says (its status, /log and
+ * /queue as the regular ask brings them) or, while it does not answer (a
+ * phone never asks), from the tree and what was last said. `session` is
+ * shaped as the followed one for the overview's helpers but is never `live`:
+ * the tree is neither replaced nor locked.
+ */
+export interface OverviewViewing {
+    treeId: TreeId;
+    researchId: string;
+    /** Where it is drawn from now: the bridge answers, or only the tree (and what it said last). */
+    kind: 'bridge' | 'tree';
+    session: LiveSession;
+    /** The bridge's last status taken in (null: none, drawn from the tree). */
+    status: LiveStatus | null;
+    /** "Follow live" was asked from the overview: it stays open with following. */
+    follow?: boolean;
+    /** When the bridge last answered (ms; 0: not since the overview opened). */
+    refreshedAt: number;
+    /** Someone worked at the last answer (null: not known yet). */
+    working: boolean | null;
+    /** An agent began while the overview was open (§7.3): said, never followed by itself. */
+    agentStarted: boolean;
+    /** The research's head whose history (/log) was read last ('' : none yet). */
+    logHead: string;
+    /** Bridge-less: when the waiting list kept on this device was said (ms; 0: none kept). */
+    waitingAt: number;
+}
+let viewing: OverviewViewing | null = null;
+
+/** The overview open without following (null: not open, or open while following). */
+export function overviewViewing(): OverviewViewing | null {
+    return viewing;
+}
+
+/** What the overview and its sections act on: the followed research, else the one viewed through its bridge. */
+export function researchSession(): LiveSession | null {
+    if (live && !live.ended) return live;
+    return viewing?.kind === 'bridge' ? viewing.session : null;
+}
+
+/** No bridge known (the overview drawn from the tree). */
+const EMPTY_BRIDGE: LiveBridgeUrls = { base: '', status: '', ged: '', events: '', log: '' };
+
+/** An empty session-shaped record of a research viewed without following (filled from its status). */
+function viewingSessionOf(bridge: LiveBridgeUrls, researchId: string, treeId: TreeId, name: string): LiveSession {
+    const data = DataManager.getData();
+    return {
+        bridge, researchId, treeId, name, head: '', headAt: '',
+        working: [], waiting: [], features: null, accepts: null, queue: [], queueMore: 0, update: null, spend: null,
+        lastIntake: null, researches: [], autoCollapsed: new Set(), seenWaiting: new Set(), waitingPendingOpen: new Set(),
+        overviewShown: new Set(), waitingView: newWaitingView(), seenInSection: 0, startedAt: Date.now(),
+        startPersons: Object.values(data.persons).filter(p => !p.isPlaceholder).length,
+        startSources: Object.keys(data.sources ?? {}).length,
+        overview: true, logged: false, changes: [], adds: [], recent: null, ended: false, collapsed: false, seenChanges: 0,
+        es: null, timer: null, failures: 0, lostSince: null, chain: Promise.resolve(),
+    };
 }
 
 /** The followed research's whole queue is read by pages now (`queue.page`, its bridge answering). */
@@ -2639,13 +2703,154 @@ export const researchUiMethods = uiModule({
 
     /** "Follow live" in the idle panel: the open tree's research, through its bridge here (else its link). */
     followResearchHere(researchId: string): void {
+        this.startFollowLive('panel', researchId);
+    },
+
+    /**
+     * "Follow live", wherever it is asked (the Research menu, the idle panel,
+     * the overview's strip; spec 057 §7.1): the research through its bridge
+     * here when this browser knows it (the tree switches to the research's
+     * version), else its link (the research starts its bridge and opens
+     * ?live= here). One way for all of them.
+     */
+    startFollowLive(origin: 'menu' | 'panel' | 'overview', forResearch?: string): void {
+        const researchId = forResearch ?? this.activeResearchId();
+        if (!researchId) return;
         const base = storedResearchBridge(researchId)?.base;
         if (base && parseLiveBridge(base)) {
+            // From the overview: it stays open, now the followed research's.
+            if (origin === 'overview' && viewing) viewing.follow = true;
             void this.startLiveFollow(base, { follow: true, from: { followed: null, open: null } });
             return;
         }
         const url = this.activeResearchLink('live');
         if (url) this.launchResearchLink(url);
+    },
+
+    // ==================== THE OVERVIEW WITHOUT FOLLOWING (spec 057 §7) ====================
+
+    /** Open the overview of the open tree's research without following (false: not a research tree). */
+    openOverviewViewing(): boolean {
+        const treeId = DataManager.getCurrentTreeId();
+        const researchId = this.activeResearchId();
+        if (!treeId || !researchId) return false;
+        if (!viewing || viewing.treeId !== treeId || viewing.researchId !== researchId) {
+            const name = TreeManager.getTreeMetadata(treeId)?.name || strings.research.defaultName;
+            viewing = {
+                treeId, researchId, kind: 'tree', session: viewingSessionOf(EMPTY_BRIDGE, researchId, treeId, name),
+                status: null, refreshedAt: 0, working: null, agentStarted: false, logHead: '', waitingAt: 0,
+            };
+        }
+        this.syncOverviewViewing(false);
+        // What the bridge says now (unless it said so seconds ago): the overview follows its answer.
+        if (onComputer()) this.refreshResearchStateSoon();
+        return true;
+    },
+
+    /** Close the overview opened without following (its record goes; nothing else changes). */
+    closeOverviewViewing(): void {
+        if (!viewing) return;
+        viewing = null;
+        resetQueueLists();
+        onQueueListsChange(null);
+    },
+
+    /**
+     * The overview open without following takes in what the bridge says now
+     * (each answer of the regular ask; a phone never asks): its status, the
+     * history when the research moved on, and an agent who began meanwhile.
+     * Another tree, or following begun: it goes. `draw`: redraw it.
+     */
+    syncOverviewViewing(draw = true): void {
+        const v = viewing;
+        if (!v) return;
+        if (DataManager.getCurrentTreeId() !== v.treeId || this.activeResearchId() !== v.researchId || (live && !live.ended)) {
+            this.closeOverviewViewing();
+            if (draw) this.renderResearchOverview();
+            return;
+        }
+        const status = onComputer() ? this.researchStatusOf(v.researchId) : null;
+        const bridge = status ? parseLiveBridge(storedResearchBridge(v.researchId)?.base) : null;
+        if (status && bridge && status.treeId === v.researchId) {
+            if (status !== v.status) this.takeViewingStatus(v, status, bridge);
+        } else {
+            this.viewingFromTree(v);
+        }
+        if (draw) this.renderResearchOverview();
+    },
+
+    /** A status of the viewed research: the overview's record follows it (no tree loaded, nothing locked). */
+    takeViewingStatus(v: OverviewViewing, status: LiveStatus, bridge: LiveBridgeUrls): void {
+        const first = v.kind !== 'bridge' || v.session.bridge.base !== bridge.base;
+        if (first) {
+            v.session = viewingSessionOf(bridge, v.researchId, v.treeId, v.session.name);
+            v.logHead = '';
+            // Pages of the queue read through the bridge redraw the overview when they come.
+            resetQueueLists();
+            onQueueListsChange(() => this.queueListsChanged());
+        }
+        const s = v.session;
+        v.kind = 'bridge';
+        v.status = status;
+        v.refreshedAt = Date.now();
+        if (status.name) s.name = status.name;
+        s.head = status.head;
+        if (status.headAt) s.headAt = status.headAt;
+        s.working = withFamilyPersons(status.working, s.bridge);
+        s.features = status.features;
+        s.accepts = status.accepts;
+        s.waiting = this.withoutBranchAnswers(this.liveWaitingShown(s, status.waiting));
+        // A task new since the overview opened unfolds as it does while following (the first answer is no news).
+        const fresh = status.waiting.filter(w => !s.seenWaiting.has(w.id));
+        for (const w of fresh) s.seenWaiting.add(w.id);
+        if (!first) {
+            const freshTodo = todoWaiting(fresh);
+            for (const w of freshTodo) s.waitingView.fresh.add(w.id);
+            const pref = sectionPrefs().waiting;
+            if (freshTodo.length > 0 && (pref === undefined || pref === 'expanded')) this.openWaitingItems(s, freshTodo);
+            else for (const w of freshTodo) s.waitingPendingOpen.add(w.id);
+        }
+        s.queue = status.queue;
+        s.queueMore = status.queueMore;
+        s.queueCounts = status.queueCounts;
+        if (status.queueCounts) noteQueueRev(s.bridge.base, status.queueCounts.rev);
+        s.researches = status.researches;
+        s.caps = status.caps;
+        s.offLine = status.offLine;
+        s.update = status.update;
+        s.busy = status.busy;
+        s.browser = status.browser;
+        s.spend = status.spend;
+        s.lastIntake = status.lastIntake;
+        s.recent = status.recent;
+        s.directionsRev = status.directionsRev;
+        // An agent began while it was open: said in its strip, never followed by itself (§7.3).
+        const working = status.working.some(w => !w.paused);
+        if (v.working === false && working) v.agentStarted = true;
+        if (!working) v.agentStarted = false;
+        v.working = working;
+        // The research moved on: its history read again (the changes, the last 24 hours).
+        if (status.head !== v.logHead) {
+            v.logHead = status.head;
+            void this.fetchLiveLog(s);
+        }
+    },
+
+    /** The bridge does not answer (or a phone): the tree and the waiting list said last on this device (≤ 7 days). */
+    viewingFromTree(v: OverviewViewing): void {
+        if (v.kind === 'bridge') {
+            v.session = viewingSessionOf(EMPTY_BRIDGE, v.researchId, v.treeId, v.session.name);
+            resetQueueLists();
+            onQueueListsChange(null);
+        }
+        v.kind = 'tree';
+        v.status = null;
+        v.working = null;
+        v.agentStarted = false;
+        v.logHead = '';
+        const stored = this.activeResearchAgentless() ? null : storedResearchWaiting(v.researchId);
+        v.session.waiting = stored?.items ?? [];
+        v.waitingAt = stored?.at ?? 0;
     },
 
     /** Opening the tree found its bridge answering with nobody at work: an agent there later "has started work". */
@@ -3077,7 +3282,11 @@ export const researchUiMethods = uiModule({
                 lostSince: null,
                 chain: Promise.resolve(),
             };
-            live.overview = this.researchOverviewRemembered();
+            // The overview open without following stays open, now of the followed research, when "Follow
+            // live" was asked from it; else it opens as it was left last time.
+            const viewed = !!viewing?.follow && viewing.treeId === treeId;
+            viewing = null;
+            live.overview = viewed || this.researchOverviewRemembered();
             if (live.overview) live.collapsed = false;
             // Pages of the queue read through the bridge redraw the overview when they come.
             resetQueueLists();
@@ -3385,7 +3594,8 @@ export const researchUiMethods = uiModule({
         } catch {
             return;
         }
-        if (!entries || s.ended || live !== s) return;
+        // Followed, or the overview open without following (spec 057 §7.2).
+        if (!entries || s.ended || (live !== s && viewing?.session !== s)) return;
         const data = DataManager.getCurrentTreeId() === s.treeId ? DataManager.getData() : null;
         const nameOf = (ref: string): string | null => {
             const [id] = data ? personsByRefs(data, [ref]) : [];
@@ -3651,7 +3861,7 @@ export const researchUiMethods = uiModule({
         }
         if (more > 0) {
             // The rest in the overview (where it can open), else just how many.
-            if (this.canOpenResearchOverview()) {
+            if (this.canExpandLivePanel()) {
                 const btn = el('button', 'link-button live-waiting-more', L.waitingMore(more));
                 btn.type = 'button';
                 btn.onclick = () => this.openResearchOverview();
@@ -3955,7 +4165,7 @@ export const researchUiMethods = uiModule({
         const icons = el('div', 'live-panel-icons');
         const followBtn = phone ? null : this.liveFollowButton('panel');
         if (followBtn) icons.appendChild(followBtn);
-        if (this.canOpenResearchOverview()) {
+        if (this.canExpandLivePanel()) {
             const expand = el('button', 'live-panel-expand', '⤢');
             expand.type = 'button';
             expand.setAttribute('aria-label', L.openOverview);
@@ -4108,7 +4318,7 @@ export const researchUiMethods = uiModule({
                 const changes = el('ul', 'live-panel-list live-changes');
                 changesHost.appendChild(changes);
                 this.appendChangeRows(changes, shownChanges.slice(0, PANEL_CHANGES), multi ? (c) => lineGlyphFor(s, c.research) : undefined);
-                if (shownChanges.length > PANEL_CHANGES && this.canOpenResearchOverview()) {
+                if (shownChanges.length > PANEL_CHANGES && this.canExpandLivePanel()) {
                     const all = el('button', 'link-button live-all-changes', L.allInOverview);
                     all.type = 'button';
                     all.onclick = () => this.openResearchOverview();

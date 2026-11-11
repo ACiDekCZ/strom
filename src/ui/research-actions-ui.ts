@@ -378,6 +378,12 @@ export const researchActionsMethods = uiModule({
         let note = r.footerFull;
         let moreAttention = '';
         let tools: ResearchToolAction[] = [];
+        // First of all, followed or not (spec 057 §7.1): the overview, then following live — Stop while
+        // following, else "Follow live" (it stays in the app: no mark; an archive has no agent to follow).
+        const followingHere = this.isFollowingActiveResearch();
+        const overviewRows: SubmenuItem[] = [{ id: 'research-item-overview', label: strings.live.overviewTitle, method: 'researchActionOverview' }];
+        if (followingHere) overviewRows.push({ id: 'research-item-stop', label: r.stop, method: 'researchActionStop' });
+        else if (!noAgent && this.researchLinkAvailable('live')) overviewRows.push({ id: 'research-item-live', label: r.followLive, method: 'researchActionLive' });
         if (!this.researchAnyAnnounced()) {
             // No strom-research:// links here (an older research, none announced, or
             // switched off): the way back, and what it is. A research that says what
@@ -397,18 +403,14 @@ export const researchActionsMethods = uiModule({
             // Read a document goes through the bridge, not a strom-research:// link: offered here too.
             const read = noAgent ? null : this.readMenuEntry();
             if (read) readRow = [{ id: 'research-item-read', method: 'showReadDocumentDialog', ...read, link: undefined }];
-            first = [...startRow, ...sendRow.map(i => ({ ...i, ext: false }))];
+            first = [...overviewRows, ...startRow, ...sendRow.map(i => ({ ...i, ext: false }))];
             more = [...changesRow, ...verifyRow, ...viewLinks, ...materials, ...phone];
             moreQuiet = [...treeSettings, ...aboutRow];
         } else {
-            // First: what waits, the agent, following live, the research itself, the send.
-            first = [];
+            // First: the overview and following live, what waits, the agent, the research itself, the send.
+            first = [...overviewRows];
             if (waiting > 0) first.push({ id: 'research-item-waiting', label: r.waiting, method: 'researchActionWaiting', count: waiting });
             if (!noAgent && this.researchLinkAvailable('chat')) first.push({ id: 'research-item-chat', label: r.continueAgent, method: 'researchActionChat', ...opens(researchLinkMark('chat')) });
-            // Right under the agent: following live, its overview; else "Follow live" — the research starts
-            // (or reuses) its bridge and opens ?live= here (an archive has no agent to follow).
-            if (this.isFollowingActiveResearch()) first.push({ id: 'research-item-overview', label: strings.live.overviewTitle, method: 'researchActionOverview' });
-            else if (!noAgent && this.researchLinkAvailable('live')) first.push({ id: 'research-item-live', label: r.followLive, method: 'researchActionLive', ...opens(researchLinkMark('live')) });
             const read = noAgent ? null : this.readMenuEntry();
             if (read) readRow = [{ id: 'research-item-read', method: 'showReadDocumentDialog', ...read, link: read.link && this.researchLinkAvailable('open') ? read.link : undefined }];
             if (this.researchLinkAvailable('open')) first.push({ id: 'research-item-open', label: r.openResearch, method: 'researchActionOpen', ...opens(researchLinkMark('open')) });
@@ -846,7 +848,7 @@ export const researchActionsMethods = uiModule({
         if (!this.researchMenuShown()) return null;
         const model = this.researchMenuModel();
         // "Open research", "Read a document" and the rest: on the second level, "All research actions ›".
-        const frequent = new Set(['research-item-waiting', 'research-item-chat', 'research-item-images', 'research-item-materials']);
+        const frequent = new Set(['research-item-overview', 'research-item-waiting', 'research-item-chat', 'research-item-images', 'research-item-materials']);
         const ui = this as unknown as Record<string, (...args: string[]) => void>;
         const rows: ResearchSheetRow[] = [...model.first, ...model.more].filter(i => frequent.has(i.id) && !i.disabled).map(i => ({
             label: i.label, count: i.count, ai: i.ai, ext: i.ext, ariaLabel: itemAria(i), value: i.val, id: `sheet-${i.id}`,
@@ -930,10 +932,16 @@ export const researchActionsMethods = uiModule({
         this.showResearchWaiting();
     },
 
+    /** "Follow live": through the research's bridge here when known, else its link (one way for every place). */
     researchActionLive(): void {
         this.closeActionsMenu();
-        const url = this.activeResearchLink('live');
-        if (url) this.launchResearchLink(url);
+        this.startFollowLive('menu');
+    },
+
+    /** "Stop following": the tree is the user's again. */
+    researchActionStop(): void {
+        this.closeActionsMenu();
+        this.stopLiveFollow();
     },
 
     researchActionOverview(): void {
