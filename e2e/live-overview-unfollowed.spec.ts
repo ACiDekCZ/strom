@@ -116,6 +116,31 @@ test.describe('the Research overview without following', () => {
         expect(await readOnly(page)).toBe(false);
     });
 
+    test('the queue says a task\'s kind (story, history) with a small tag; a task without it has none', async ({ page }) => {
+        const bridge = await researchTree(page);
+        bridge.statusExtra = {
+            ...bridge.statusExtra, queue: [
+                { id: 'T0101', text: 'Matriky Čapkov', state: 'next', research: 'G0001' },
+                { id: 'T0102', text: 'Příběh Jana Fíška', state: 'next', research: 'G0001', kind: 'story' },
+                { id: 'T0103', text: 'Požár Čapkova 1874', state: 'next', research: 'G0001', kind: 'history' },
+            ],
+        };
+        await poll(page);
+        await openFromMenu(page);
+        const rows = ov(page).locator('.live-queue-row[data-task]');
+        await expect(rows).toHaveCount(3);
+        await expect(rows.nth(0).locator('.live-queue-kind')).toHaveCount(0);
+        await expect(rows.nth(1).locator('.live-queue-kind')).toHaveText('story');
+        await expect(rows.nth(2).locator('.live-queue-kind')).toHaveText('history');
+        // Quiet: the row's light text colour, a hairline frame.
+        const look = await rows.nth(1).locator('.live-queue-kind').evaluate(el => {
+            const cs = getComputedStyle(el);
+            return { size: parseFloat(cs.fontSize), border: cs.borderTopStyle };
+        });
+        expect(look.size).toBeLessThanOrEqual(12);
+        expect(look.border).toBe('solid');
+    });
+
     test('an agent begins while it is open: said in the strip, the button filled, nothing switches or locks', async ({ page }) => {
         const bridge = await researchTree(page);
         await openFromMenu(page);

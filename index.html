@@ -20024,6 +20024,11 @@
         .live-queue-text { flex: 1; min-width: 0; font-size: 14px; color: var(--text); }
         .live-queue-row--parked .live-queue-text { color: var(--text-faint); font-size: 13px; }
         /* Why a task waits at the end, or goes with its line: a quiet second line under its text (wraps on a phone). */
+        /* A queued task's kind (story / history) after its text: a quiet tag, as the row's other small tags. */
+        .live-queue-kind {
+            display: inline-block; padding: 0 6px; border: 1px solid var(--border); border-radius: 999px;
+            font-size: 11px; line-height: 16px; color: var(--text-light); white-space: nowrap; vertical-align: 1px;
+        }
         .live-queue-note { display: block; margin-top: 1px; font-size: 12px; color: var(--text-light); overflow-wrap: anywhere; }
         .live-queue-more {
             flex: none; width: 26px; height: 22px; padding: 0; cursor: pointer;

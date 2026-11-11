@@ -18,7 +18,7 @@ import {
     LiveDirection, LiveOffLine, LiveQueueItem, LiveWaiting, LiveWorker, OFF_LINE_BRANCHES_FEATURE, OFF_LINE_MODES, OffLineBranch, OffLineMode, QUEUE_OWN_FEATURE,
 } from '../research-link.js';
 import { uiModule } from './module.js';
-import { LiveSession, el, liveQueueItem, liveSession, queuePaged, queueNoteText } from './research-ui.js';
+import { LiveSession, el, liveQueueItem, liveSession, queueKindTag, queuePaged, queueNoteText } from './research-ui.js';
 import { shownName, fitNameHtml } from '../person-name.js';
 import { bookYears } from '../book-blocks.js';
 import { withBusyRetry } from '../research-directions.js';
@@ -660,6 +660,8 @@ export const researchOffLineMethods = uiModule({
                 li.appendChild(num);
             }
             const text = el('span', 'research-offline__task-text', q.text);
+            const kind = queueKindTag(q);
+            if (kind) text.append(' ', kind);
             // Only a hand-set place: the rest of the reason repeats the branch's row.
             if (q.own) text.appendChild(el('span', 'research-offline__task-why', q.own === 'next' ? L.qWhyManualNext : L.qWhyManualLast));
             if (doing) text.appendChild(el('span', 'research-offline__task-why', L.taskDoing));

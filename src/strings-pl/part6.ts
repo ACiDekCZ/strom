@@ -730,6 +730,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         phoneTreeOnly: 'Tylko z drzewa',
         phoneWhy: 'Pracę agenta widać na komputerze z badaniami.',
         researchLink: 'Badania ›',
+        queueKind: { story: 'opowieść', history: 'historia' },
         waitingWrite: {
             sent: 'Wysłano',
             unsent: 'Przywróć do załatwienia',

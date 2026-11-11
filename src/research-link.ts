@@ -2533,7 +2533,12 @@ export interface LiveQueueItem {
     why?: QueueWhy;
     /** Its place in the whole queue, 1 = next (`queue.page`); absent: a task set aside, or an older research. */
     pos?: number;
+    /** What the task makes (Strom Research 1.31): a person's story, or a piece of history; absent: neither said. */
+    kind?: LiveQueueKind;
 }
+
+/** The kinds of a queued task the research names. */
+export type LiveQueueKind = 'story' | 'history';
 
 /** How work outside the directions is taken (the tree's choice, and a branch's own). */
 export type OffLineMode = 'occasional' | 'last' | 'normal' | 'never';
@@ -2963,10 +2968,13 @@ export function sanitizeQueue(value: unknown, offLine = false, branches = false,
         const why = branches ? sanitizeQueueWhy(r.why) : null;
         // Its place in the whole queue: tasks up next only (one set aside has none).
         const pos = state === 'next' && typeof r.pos === 'number' && Number.isInteger(r.pos) && r.pos >= 1 && r.pos <= 10_000_000 ? r.pos : null;
+        // What it makes (a story, history): only the kinds known here.
+        const kind = r.kind === 'story' || r.kind === 'history' ? r.kind : null;
         if (state) out.push({
             id, text, state, ...(person ? { person } : {}), ...(research ? { research } : {}),
             ...(off ? { offLine: off } : {}), ...(helps ? { helps } : {}),
             ...(branch ? { branch } : {}), ...(own ? { own } : {}), ...(why ? { why } : {}), ...(pos ? { pos } : {}),
+            ...(kind ? { kind } : {}),
         });
     }
     return out;

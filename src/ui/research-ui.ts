@@ -474,6 +474,20 @@ export function queueNoteText(q: LiveQueueItem): string {
     return q.helps ? r.queueHelps[q.helps] : '';
 }
 
+/** A queued task's kind in words ("story", "history"); '' = the research did not say. */
+export function queueKindText(q: Pick<LiveQueueItem, 'kind'>): string {
+    return q.kind ? strings.live.queueKind[q.kind] ?? '' : '';
+}
+
+/** The small tag of a queued task's kind after its text (null: no kind said). */
+export function queueKindTag(q: Pick<LiveQueueItem, 'kind'>): HTMLElement | null {
+    const text = queueKindText(q);
+    if (!text) return null;
+    const tag = el('span', 'live-queue-kind', text);
+    tag.dataset.kind = q.kind!;
+    return tag;
+}
+
 /**
  * The note under a queued task's text (a quiet second line): why it stands
  * where it stands (a research with branches; one line, the whole sentence
@@ -4531,6 +4545,8 @@ export const researchUiMethods = uiModule({
             // The panel, two or more lines at work: the task's line first.
             const glyph = directions ? '' : lineGlyphFor(s, q.research);
             if (glyph) text.prepend(el('span', 'live-queue-dir', `${glyph} `));
+            const kind = queueKindTag(q);
+            if (kind) text.append(' ', kind);
             const dir = multi ? taskDirectionName(s, q.research) : '';
             if (dir) text.appendChild(el('span', 'research-overview__dir', ` · ${dir}`));
             appendQueueNote(text, q, s);
@@ -4560,6 +4576,8 @@ export const researchUiMethods = uiModule({
             const li = el('li', 'live-queue-row live-queue-row--parked');
             li.dataset.task = q.id;
             const text = el('span', 'live-queue-text', `${r.parkedPrefix} ${q.text}`);
+            const kind = queueKindTag(q);
+            if (kind) text.append(' ', kind);
             appendQueueNote(text, q, s);
             li.appendChild(text);
             if (canTask) {

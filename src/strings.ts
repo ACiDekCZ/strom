@@ -5567,6 +5567,8 @@ const stringsEN = {
         phoneTreeOnly: 'From the tree only',
         phoneWhy: "The agent's work is visible on the computer with the research.",
         researchLink: 'Research ›',
+        /** A queued task's kind (the research says it): a story or a piece of history. */
+        queueKind: { story: 'story', history: 'history' },
         waitingWrite: {
             sent: 'Sent',
             unsent: 'Back to To do',
@@ -14156,6 +14158,7 @@ const stringsCZ: StringsType = {
         phoneTreeOnly: 'Jen ze stromu',
         phoneWhy: 'Práce agenta je vidět na počítači s výzkumem.',
         researchLink: 'Výzkum ›',
+        queueKind: { story: 'příběh', history: 'dějiny' },
         waitingWrite: {
             sent: 'Odesláno',
             unsent: 'Vrátit mezi k vyřízení',
@@ -22642,6 +22645,7 @@ const stringsDE: StringsType = {
         phoneTreeOnly: 'Nur aus dem Stammbaum',
         phoneWhy: 'Die Arbeit des Agenten ist am Computer mit der Forschung sichtbar.',
         researchLink: 'Forschung ›',
+        queueKind: { story: 'Erzählung', history: 'Zeitgeschehen' },
         waitingWrite: {
             sent: 'Gesendet',
             unsent: 'Zurück zu „Zu erledigen“',
