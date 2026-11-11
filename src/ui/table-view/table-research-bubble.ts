@@ -36,9 +36,9 @@ export type ResearchBubbleSectionId = 'wait' | 'conf' | 'hyp' | 'agent' | 'tasks
 
 /**
  * What an action does (the table's UI runs it):
- * - `waitAnswer`: a waiting item's answer, as the panel Awaiting decision answers it (`waitId`);
+ * - `waitAnswer`: a waiting item's answer, as the panel Awaiting action answers it (`waitId`);
  * - `storyCompare`: compare the story's versions (`personId`);
- * - `waitingPanel`: the panel Awaiting decision;
+ * - `waitingPanel`: the panel Awaiting action;
  * - `decide`: the dialog What the research knows on the conflict (`personId`, `conflictId`);
  * - `knows`: the dialog What the research knows on its questions (`personId`);
  * - `reviewHypothesis`: the research's link `hypothesis` (`hypothesisId`; `link`);
@@ -101,7 +101,7 @@ export interface ResearchBubbleSection {
     /** The research mark at the title (as the cell's). */
     signal?: ResearchSignal;
     items: ResearchBubbleItem[];
-    /** The section's own actions under its items ("Awaiting decision ›", "Follow the research ›"). */
+    /** The section's own actions under its items ("Awaiting action ›", "Follow the research ›"). */
     actions: ResearchBubbleAction[];
 }
 

@@ -14,7 +14,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import type { LiveWaiting } from '../research-link.js';
-import { setLanguage } from '../strings.js';
+import { getStringsForLang, setLanguage } from '../strings.js';
 import type { Person, StromData } from '../types.js';
 import { researchTableEnv, type ResearchTableInput } from '../ui/table-view/table-research.js';
 import { researchBubble, researchBubbleActions, researchConflictBubble } from '../ui/table-view/table-research-bubble.js';
@@ -126,5 +126,24 @@ describe('research bubble drawn (§16.4)', () => {
         expect(html).not.toContain('<button');
         expect(html).not.toContain('data-witem');
         expect(html).toMatch(/<div class="tv-rbub-note">Read-only: conflicts cannot be decided here\.<\/div>$/);
+    });
+});
+
+describe('the bubble\'s way to the waiting panel', () => {
+    it('names the panel, not the group above it ("Awaiting decision · n")', () => {
+        for (const lang of ['en', 'cs', 'de', 'pl'] as const) {
+            const S = getStringsForLang(lang);
+            const panel = S.table.res.bub.waitingPanel;
+            const group = S.table.res.bub.waitTitle(1).replace(/ · 1$/, '');
+            expect(panel.replace(/ ›$/, ''), lang).not.toBe(group);
+            expect(panel.endsWith(' ›'), lang).toBe(true);
+        }
+        // The panel's own name (its heading) in en, cs and de.
+        for (const lang of ['en', 'cs', 'de'] as const) {
+            const S = getStringsForLang(lang);
+            expect(S.table.res.bub.waitingPanel, lang).toBe(`${S.research.waiting} ›`);
+        }
+        expect(getStringsForLang('en').table.res.bub.waitingPanel).toBe('Awaiting action ›');
+        expect(getStringsForLang('de').table.res.bub.waitingPanel).toBe('Wartet auf Bearbeitung ›');
     });
 });

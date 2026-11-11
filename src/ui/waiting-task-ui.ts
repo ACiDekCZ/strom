@@ -218,7 +218,7 @@ export const waitingTaskMethods = uiModule({
 
     /**
      * The answer's control of one waiting item, as its row in the panel
-     * Awaiting decision draws it (the Table view's bubble, §16.4): while
+     * Awaiting action draws it (the Table view's bubble, §16.4): while
      * following, the item's main action; a question about a place, its card;
      * else the task in the research by its link. Null: nothing answers it here.
      */

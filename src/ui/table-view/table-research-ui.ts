@@ -5,7 +5,7 @@
  * bottom (a phone, 44 px actions), fills a waiting item's answer with the
  * waiting panel's own control and runs each action by what it is:
  *
- * - in the app: Compare versions, Awaiting decision, What the research
+ * - in the app: Compare versions, Awaiting action, What the research
  *   knows on a conflict or its questions, the materials, the line or side
  *   branch lit in the Family view, the line in the research's overview, a
  *   source in the Sources table;
