@@ -114,6 +114,43 @@ async function toEvents(page: Page, phone: boolean): Promise<void> {
 }
 
 for (const [label, viewport] of [['390', { width: 390, height: 844 }], ['844 × 390', { width: 844, height: 390 }]] as const) {
+    test.describe(`phone (${label}), the pinned name's head beside "Collapse unions"`, () => {
+        test.use({ viewport, hasTouch: true, isMobile: true });
+
+        // T54: in German "Verbindungen zuklappen" took the whole head of the pinned name and "Vollständiger Name" was gone.
+        for (const [lang, more, name, collapse] of [
+            ['de', 'Tabelle', 'Vollständiger Name', 'Verbindungen zuklappen'],
+            ['en', 'Table', 'Full name', 'Collapse unions'],
+        ] as const) {
+            test(`the column's name stays readable beside the button (${lang})`, async ({ page }) => {
+                await page.clock.setFixedTime(new Date('2026-06-15T10:00:00Z'));
+                await seedSetting(page, 'language', lang);
+                await openApp(page);
+                await seedTree(page, FAMILY, 'Kvelden', 'a');
+                await page.locator('#bb-view-more').click();
+                await page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: more }).click();
+                const head = tv(page, '.tv-headrow [data-col="name"]');
+                await expect(head.locator('.tv-cell-text')).toHaveText(name);
+                await expect(head.locator('.tv-head-all')).toHaveText(collapse);
+                const measure = () => head.evaluate(el => {
+                    const r = (sel: string) => (el.querySelector(sel) as HTMLElement).getBoundingClientRect().toJSON() as DOMRect;
+                    const btn = el.querySelector('.tv-head-all') as HTMLElement;
+                    return { cell: el.getBoundingClientRect().toJSON() as DOMRect, label: r('.tv-cell-text'), btn: r('.tv-head-all'), btnCut: btn.scrollWidth > btn.clientWidth + 1 };
+                });
+                // The head is drawn at its column's width once the table is laid out.
+                await expect.poll(async () => (await measure()).cell.width).toBeGreaterThan(100);
+                // At least a word of the name shows (with "…" when longer), the button stays whole, both inside the head.
+                await expect.poll(async () => (await measure()).label.width).toBeGreaterThanOrEqual(40);
+                const m = await measure();
+                expect(m.btnCut).toBe(false);
+                expect(m.label.right).toBeLessThanOrEqual(m.btn.left + 1);
+                expect(m.btn.right).toBeLessThanOrEqual(m.cell.right + 1);
+                expect(m.label.bottom).toBeLessThanOrEqual(m.cell.bottom + 1);
+                expect(m.btn.bottom).toBeLessThanOrEqual(m.cell.bottom + 1);
+            });
+        }
+    });
+
     test.describe(`phone (${label}), a finding beside a date or an age range`, () => {
         test.use({ viewport, hasTouch: true, isMobile: true });
 
