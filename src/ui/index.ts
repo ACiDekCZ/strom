@@ -353,6 +353,12 @@ export class UIClass {
     sourceEditorOriginal: Partial<Source> | null = null;
     /** The research read this source and the user changed its transcript or page: the note stays until close. */
     sourceUserReadingShown = false;
+    /** "Use" on the editor's proposal: the folio, image and location before it, and the location it came from (for Undo). */
+    sourceLocationTaken: { folio: string; image: string; reference: string } | null = null;
+    /** The pending re-check of the editor's location line after typing in Other location. */
+    sourceLocationTimer: ReturnType<typeof setTimeout> | null = null;
+    /** The image field's help: pinned by a tap, shown on hover or on keyboard focus. */
+    sourceImageHelp = { pinned: false, hover: false, focus: false };
     /** Where the open source editor was reached from (for page crops and citing). */
     sourceEditorContext: CitationContext | null = null;
     /** The source shown in the viewer, and the citation chip it was opened from. */

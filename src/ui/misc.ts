@@ -981,6 +981,8 @@ export const miscMethods = uiModule({
                         confirmModal.classList.remove('active');
                         return;
                     }
+                    // The image field's help closes first, the editor stays.
+                    if (this.closeSourceImageHelp()) return;
                     this.closeSourceEditor();
                     return;
                 }

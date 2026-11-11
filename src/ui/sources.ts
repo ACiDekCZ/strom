@@ -14,7 +14,7 @@ import { researchActionLabel } from './research-open-mark.js';
 import { researchLinkMark } from '../research-link.js';
 import { DataManager, CitedFact, personCitationField } from '../data.js';
 import { bookReference, entryDateLine, sameBookReference } from '../source-page.js';
-import { sourcePlaceSearchText } from '../source-location.js';
+import { sourcePlaceSearchText, recognizeLocation, imageWord, hasPlaceFields } from '../source-location.js';
 import { sourceTranslation } from '../source-translation.js';
 import { TreeRenderer } from '../renderer.js';
 import { TreeManager } from '../tree-manager.js';
@@ -565,6 +565,9 @@ export const sourcesMethods = uiModule({
         };
         set('input-source-title', src.title);
         set('input-source-repository', src.repository);
+        set('input-source-callnumber', src.callNumber);
+        set('input-source-folio', src.folio);
+        set('input-source-image', src.image);
         set('input-source-reference', src.reference);
         set('input-source-url', src.url);
         set('input-source-note', src.note);
@@ -576,6 +579,7 @@ export const sourcesMethods = uiModule({
         this.sourceQualityDraft = src.quality;
         this.sourceEditorOriginal = { ...src, excerpts: undefined };
         this.sourceUserReadingShown = false;
+        this.resetSourceLocationNote();
         const verified = document.getElementById('input-source-verified') as HTMLInputElement | null;
         if (verified) verified.checked = !!src.transcriptVerified;
         const more = document.getElementById('source-more') as HTMLDetailsElement | null;
@@ -593,6 +597,7 @@ export const sourcesMethods = uiModule({
         this.renderExcerptBlock();
         this.renderQualityControl();
         this.renderSourceReading();
+        this.renderSourceLocationNote();
         const sameBook = document.getElementById('source-editor-same-book');
         if (sameBook) sameBook.hidden = !this.editingSourceId;
         modal.classList.add('active');
@@ -608,9 +613,10 @@ export const sourcesMethods = uiModule({
         this.sourceEditorWired = true;
         const modal = document.getElementById('source-editor-modal');
         // "Transcription verified" and the note about the research's reading follow the wording and the page.
-        for (const id of ['input-source-transcript', 'input-source-reference']) {
+        for (const id of ['input-source-transcript', 'input-source-reference', 'input-source-folio', 'input-source-image']) {
             document.getElementById(id)?.addEventListener('input', () => this.renderSourceReading());
         }
+        this.wireSourceLocation();
         modal?.addEventListener('paste', (e) => {
             const file = imageFromTransfer((e as ClipboardEvent).clipboardData);
             // Only an image is taken over; text pastes into the field as usual.
@@ -658,6 +664,8 @@ export const sourcesMethods = uiModule({
             title: original.title ?? '',
             transcript: val('input-source-transcript'),
             reference: val('input-source-reference'),
+            folio: val('input-source-folio') || undefined,
+            image: val('input-source-image') || undefined,
             refn: original.refn,
             readBy: original.readBy,
             transcriptVerified: original.transcriptVerified,
@@ -678,7 +686,8 @@ export const sourcesMethods = uiModule({
         const note = document.getElementById('source-user-reading-note');
         if (note) {
             const researchRead = !!this.editingSourceId && !!link && capable && researchReadSource(original as Source, link);
-            const changed = draft.transcript !== (original.transcript ?? '').trim() || draft.reference !== (original.reference ?? '').trim();
+            const changed = draft.transcript !== (original.transcript ?? '').trim()
+                || (['reference', 'folio', 'image'] as const).some(k => (draft[k] ?? '') !== (original[k] ?? '').trim());
             if (researchRead && changed) this.sourceUserReadingShown = true;
             note.hidden = !this.sourceUserReadingShown;
         }
@@ -708,7 +717,7 @@ export const sourcesMethods = uiModule({
 
     /** The editor's form values as one comparable string. */
     sourceEditorState(): string {
-        const fields = ['title', 'repository', 'reference', 'url', 'note', 'transcript', 'recorddate'].map(f =>
+        const fields = ['title', 'repository', 'callnumber', 'folio', 'image', 'reference', 'url', 'note', 'transcript', 'recorddate'].map(f =>
             (document.getElementById(`input-source-${f}`) as HTMLInputElement | null)?.value ?? '');
         const excerpts = this.excerptDrafts.map(d => [d.excerpt.dataUrl.length, d.excerpt.dataUrl.slice(-64), d.excerpt.caption ?? '']);
         const verified = (document.getElementById('input-source-verified') as HTMLInputElement | null)?.checked ?? false;
@@ -740,6 +749,7 @@ export const sourcesMethods = uiModule({
         this.sourceQualityDraft = undefined;
         this.sourceEditorOriginal = null;
         this.sourceUserReadingShown = false;
+        this.resetSourceLocationNote();
         this.sourceEditorContext = null;
         document.querySelector('.excerpt-page-picker')?.remove();
         // If this editor was opened from the picker, tear the picker down too.
@@ -764,6 +774,9 @@ export const sourcesMethods = uiModule({
         const val = (id: string) => ((document.getElementById(id) as HTMLInputElement | null)?.value ?? '').trim();
         const title = val('input-source-title');
         const repository = val('input-source-repository');
+        const callNumber = val('input-source-callnumber');
+        const folio = val('input-source-folio');
+        const image = val('input-source-image');
         const reference = val('input-source-reference');
         const url = val('input-source-url');
         const note = val('input-source-note');
@@ -781,6 +794,9 @@ export const sourcesMethods = uiModule({
 
         const payload: Omit<Source, 'id'> = { title };
         if (repository) payload.repository = repository;
+        if (callNumber) payload.callNumber = callNumber;
+        if (folio) payload.folio = folio;
+        if (image) payload.image = image;
         if (reference) payload.reference = reference;
         if (url) payload.url = url;
         if (note) payload.note = note;
@@ -834,6 +850,9 @@ export const sourcesMethods = uiModule({
                     ...(reworded ? { readConfirmed: undefined, readMark: undefined } : {}),
                     ...payload,
                     repository: repository || undefined,
+                    callNumber: callNumber || undefined,
+                    folio: folio || undefined,
+                    image: image || undefined,
                     reference: reference || undefined,
                     url: url || undefined,
                     note: note || undefined,
@@ -1207,11 +1226,211 @@ export const sourcesMethods = uiModule({
         return out;
     },
 
+    // ==================== WHERE THE ENTRY STANDS (editor, spec 075 §1) ====================
+
+    /** One-time handlers of the location line and the image field's help. */
+    wireSourceLocation(): void {
+        const reference = document.getElementById('input-source-reference');
+        // The proposal follows what is typed in Other location, a moment after.
+        reference?.addEventListener('input', () => {
+            if (this.sourceLocationTimer) clearTimeout(this.sourceLocationTimer);
+            this.sourceLocationTimer = setTimeout(() => {
+                this.sourceLocationTimer = null;
+                this.renderSourceLocationNote();
+            }, 200);
+        });
+        for (const id of ['input-source-folio', 'input-source-image', 'input-source-reference']) {
+            document.getElementById(id)?.addEventListener('input', (e) => {
+                // A field changed by hand is no longer the one taken over.
+                (e.target as HTMLElement).classList.remove('is-taken');
+                if (id !== 'input-source-reference') this.renderSourceLocationNote();
+            });
+        }
+        document.getElementById('source-location-note')?.addEventListener('click', (e) => {
+            const action = (e.target as HTMLElement).closest<HTMLElement>('[data-location-action]')?.dataset.locationAction;
+            if (action === 'take') this.takeSourceLocationProposal();
+            else if (action === 'undo') this.undoSourceLocationTake();
+            else if (action === 'fix') this.fixSourceLocationConflict();
+        });
+        const btn = document.getElementById('source-image-help-btn');
+        if (!btn) return;
+        const help = this.sourceImageHelp;  // one object for the editor's life (reset in place)
+        btn.addEventListener('click', (e) => {
+            // A tap (or a click on it shown by hover) pins it; the next one takes it away. Enter or
+            // Space (no pointer: detail 0) closes it shown by the keyboard's focus too.
+            if (help.pinned || (e.detail === 0 && help.focus)) {
+                help.pinned = false;
+                help.hover = false;
+                help.focus = false;
+            } else {
+                help.pinned = true;
+            }
+            this.renderSourceImageHelp();
+        });
+        btn.addEventListener('focus', () => {
+            if (!btn.matches(':focus-visible')) return;
+            help.focus = true;
+            this.renderSourceImageHelp();
+        });
+        btn.addEventListener('blur', () => { help.focus = false; this.renderSourceImageHelp(); });
+        if (window.matchMedia?.('(hover: hover)').matches) {
+            btn.addEventListener('mouseenter', () => { help.hover = true; this.renderSourceImageHelp(); });
+            btn.addEventListener('mouseleave', () => { help.hover = false; this.renderSourceImageHelp(); });
+        }
+        // A tap anywhere else closes it.
+        document.addEventListener('pointerdown', (e) => {
+            if (!help.pinned && !help.focus) return;
+            const t = e.target as Node;
+            if (btn.contains(t) || document.getElementById('source-image-help')?.contains(t)) return;
+            help.pinned = false;
+            help.focus = false;
+            this.renderSourceImageHelp();
+        }, true);
+    },
+
+    renderSourceImageHelp(): void {
+        const h = this.sourceImageHelp;
+        const open = h.pinned || h.hover || h.focus;
+        const tip = document.getElementById('source-image-help');
+        if (tip) tip.hidden = !open;
+        document.getElementById('source-image-help-btn')?.setAttribute('aria-expanded', String(open));
+    },
+
+    /** Escape in the editor: the image field's help goes first. True when it was open. */
+    closeSourceImageHelp(): boolean {
+        const h = this.sourceImageHelp;
+        if (!h.pinned && !h.hover && !h.focus) return false;
+        h.pinned = false;
+        h.hover = false;
+        h.focus = false;
+        this.renderSourceImageHelp();
+        return true;
+    },
+
+    /** A newly opened (or closed) editor: no line taken over, no help open. */
+    resetSourceLocationNote(): void {
+        this.sourceLocationTaken = null;
+        if (this.sourceLocationTimer) clearTimeout(this.sourceLocationTimer);
+        this.sourceLocationTimer = null;
+        document.querySelectorAll('#source-editor-modal input.is-taken').forEach(el => el.classList.remove('is-taken'));
+        // In place: the help's handlers hold this object.
+        Object.assign(this.sourceImageHelp, { pinned: false, hover: false, focus: false });
+        this.renderSourceImageHelp();
+    },
+
+    /** The folio, image and other location as typed. */
+    sourceLocationValues(): { folio: string; image: string; reference: string } {
+        const val = (id: string) => ((document.getElementById(id) as HTMLInputElement | null)?.value ?? '').trim();
+        return { folio: val('input-source-folio'), image: val('input-source-image'), reference: val('input-source-reference') };
+    },
+
+    /**
+     * The line under the entry: what was taken over (with Undo), a conflict
+     * (the location names another image or folio than its field), or a
+     * proposal from an older location (folio and image both empty), or nothing.
+     */
+    renderSourceLocationNote(): void {
+        const note = document.getElementById('source-location-note');
+        if (!note) return;
+        const s = strings.sources;
+        const v = this.sourceLocationValues();
+        const show = (kind: string, html: string): void => {
+            note.className = `source-location-note is-${kind}`;
+            note.innerHTML = html;
+            note.hidden = false;
+        };
+        const taken = this.sourceLocationTaken;
+        if (taken) {
+            show('taken', `<span class="sln-text">${esc(s.proposalTaken(taken.reference))}</span>`
+                + `<button type="button" class="link-button" data-location-action="undo">${esc(s.proposalUndo)}</button>`);
+            return;
+        }
+        if (v.folio || v.image) {
+            const overlap = recognizeLocation({ folio: v.folio, image: v.image, reference: v.reference })?.overlap;
+            const text = overlap?.image && !overlap.image.same ? s.conflictImage(overlap.image.named, v.image)
+                : overlap?.folio && !overlap.folio.same ? s.conflictFolio(overlap.folio.named, v.folio) : '';
+            if (overlap && text) {
+                const fix = overlap.rest ? s.conflictFix(overlap.rest) : s.conflictFixEmpty;
+                show('conflict', `<span class="sln-text"><span class="sln-dot" aria-hidden="true"></span><span>${esc(text)}</span></span>`
+                    + `<button type="button" class="link-button" data-location-action="fix">${esc(fix)}</button>`);
+                return;
+            }
+        } else {
+            const found = recognizeLocation(v.reference);
+            if (found && (found.folio || found.image)) {
+                const parts = [found.folio, found.image ? `${imageWord()} ${found.image}` : '',
+                    found.rest ? `${s.proposalRest} ${s.quoted(found.rest)}` : ''].filter(Boolean).join(' · ');
+                show('proposal', `<span class="sln-text"><span class="sln-from">${esc(s.proposalFrom)} </span>`
+                    + `<span class="sln-parts">${esc(parts)}</span></span>`
+                    + `<button type="button" class="sln-take" data-location-action="take">${esc(s.proposalTake)}</button>`);
+                return;
+            }
+        }
+        note.hidden = true;
+        note.innerHTML = '';
+        note.className = 'source-location-note';
+    },
+
+    /** "Use": the folio, image and the rest of the location into their fields (saved only with Save). */
+    takeSourceLocationProposal(): void {
+        const v = this.sourceLocationValues();
+        const found = recognizeLocation(v.reference);
+        if (!found || (!found.folio && !found.image) || v.folio || v.image) return;
+        this.sourceLocationTaken = v;
+        const put = (id: string, value: string): void => {
+            const el = document.getElementById(id) as HTMLInputElement | null;
+            if (!el) return;
+            el.value = value;
+            el.classList.add('is-taken');
+        };
+        put('input-source-folio', found.folio ?? '');
+        put('input-source-image', found.image ?? '');
+        put('input-source-reference', found.rest);
+        this.renderSourceLocationNote();
+        this.renderSourceReading();
+        document.querySelector<HTMLElement>('#source-location-note [data-location-action="undo"]')?.focus();
+    },
+
+    /** "Undo" after "Use": the three fields as they were, the proposal again. */
+    undoSourceLocationTake(): void {
+        const before = this.sourceLocationTaken;
+        if (!before) return;
+        this.sourceLocationTaken = null;
+        const put = (id: string, value: string): void => {
+            const el = document.getElementById(id) as HTMLInputElement | null;
+            if (!el) return;
+            el.value = value;
+            el.classList.remove('is-taken');
+        };
+        put('input-source-folio', before.folio);
+        put('input-source-image', before.image);
+        put('input-source-reference', before.reference);
+        this.renderSourceLocationNote();
+        this.renderSourceReading();
+        document.querySelector<HTMLElement>('#source-location-note [data-location-action="take"]')?.focus();
+    },
+
+    /** "Change location to …": Other location without the part its field says otherwise (the field stays). */
+    fixSourceLocationConflict(): void {
+        const v = this.sourceLocationValues();
+        const overlap = recognizeLocation({ folio: v.folio, image: v.image, reference: v.reference })?.overlap;
+        if (!overlap) return;
+        const input = document.getElementById('input-source-reference') as HTMLInputElement | null;
+        if (!input) return;
+        input.value = overlap.rest;
+        this.renderSourceLocationNote();
+        this.renderSourceReading();
+        input.focus();
+    },
+
     // ==================== "ANOTHER ENTRY FROM THE SAME REGISTER" ====================
 
     /**
-     * A new source with the same archive, reference and link as the current
-     * one (editor or viewer). Opened from a citation chip, it is cited there.
+     * A new source with the same book as the current one (editor or viewer):
+     * its archive, call number and link, the title as a placeholder; the
+     * folio, image and other location left to fill in, the cursor in the
+     * folio (spec 075 §1). An older source (its whole location in one field)
+     * gives the book of that location. Opened from a citation chip, it is cited there.
      */
     startSameBookEntry(): void {
         const editorOpen = document.getElementById('source-editor-modal')?.classList.contains('active');
@@ -1229,6 +1448,11 @@ export const sourcesMethods = uiModule({
                 this.citeSourceAfterCreate = true;
             }
             this.sourceEditorContext = ctx;
+            if (hasPlaceFields(base)) {
+                this.showAddSourceModal({ repository: base.repository, callNumber: base.callNumber, url: base.url }, base.title);
+                document.getElementById('input-source-folio')?.focus();
+                return;
+            }
             // The book, without the entry's own number and date; a shape not recognized stays whole, selected to check.
             const ref = base.reference?.trim() ? sameBookReference(base.reference) : null;
             this.showAddSourceModal({ repository: base.repository, reference: ref?.reference ?? base.reference, url: base.url }, base.title);
@@ -1577,8 +1801,10 @@ export const sourcesMethods = uiModule({
         // (they would point the new one there).
         const page = (book.reference ?? '').trim();
         const note = (book.note ?? '').split('\n').filter(line => (!page || !line.includes(page)) && !entryDateLine(line)).join('\n').trim();
+        // The book's call number in its field (spec 075): the folio, image and the rest are the entry's own.
+        const fields = hasPlaceFields(book);
         // The book's reference without its page ("Voss, Ministerialbok 1820–1835, s. "): the user types the page.
-        const reference = bookReference(page);
+        const reference = fields ? '' : bookReference(page);
         // An entry titled after its person ("Baptism of Ota Hora 1915") names someone else here: the title
         // made from what is cited instead (N6 of the final round), the book's own title otherwise.
         const namesPerson = Object.values(DataManager.getData().persons).some(p => !p.isPlaceholder && !!p.firstName && !!p.lastName
@@ -1586,10 +1812,11 @@ export const sourcesMethods = uiModule({
         const suggested = namesPerson ? this.suggestedSourceTitle() : '';
         this.showAddSourceModal({
             title: suggested || book.title, repository: book.repository, url: book.url, note,
+            ...(fields && book.callNumber ? { callNumber: book.callNumber } : {}),
             ...(reference ? { reference } : {}),
             ...(book.quality !== undefined ? { quality: book.quality } : {}),
         });
-        const input = document.getElementById('input-source-reference') as HTMLInputElement | null;
+        const input = document.getElementById(fields ? 'input-source-folio' : 'input-source-reference') as HTMLInputElement | null;
         input?.focus();
         input?.setSelectionRange(input.value.length, input.value.length);
     },
