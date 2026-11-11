@@ -2220,12 +2220,13 @@ const MEDIA_CUTOUT_TAG = /^_(?:[A-Z0-9]+_)*CUTOUT(?:_[A-Z0-9]+)*$|^_(?:[A-Z0-9]+
  * keeps the list complete: every `'_XXX'` the reader names is in it.
  */
 export const GEDCOM_READ_UNDERSCORE_TAGS: ReadonlySet<string> = new Set([
-    '_ACCESS', '_AT', '_BASIS', '_BOOK', '_BY', '_CHOSEN', '_CONF', '_CONFLICT', '_COST', '_COVERED', '_DATE', '_DRAFT', '_DUP',
-    '_END', '_EST', '_EXPORTED_FROM_SITE_ID', '_FAM', '_FREL', '_FSFTID', '_GEN', '_HELD', '_HYPO', '_INTREE', '_ISLAND',
-    '_JOIN', '_LAST', '_LEVEL', '_LINK', '_MARNM', '_MILI', '_MILT', '_MREL', '_NEXT', '_NORECORDS', '_PAR', '_PART',
-    '_PARTIAL', '_PERS', '_PERSONALPHOTO', '_POS', '_PRIM', '_PRIMARY', '_PROJECT_GUID', '_QUESTION', '_READERS', '_RECORDS', '_REF',
-    '_RELATIONSHIP_STATUS', '_RESEARCH', '_SCOPE', '_SEARCHES', '_SESSIONS', '_SOUR', '_STAT', '_STORY', '_TASK', '_TEST',
-    '_TRIED', '_TXT', '_UID', '_UNTIL', '_UPD', '_URL', '_VAR', '_WHY', '_WITN', '_XREF',
+    '_ACCESS', '_AT', '_BASIS', '_BOOK', '_BRANCH', '_BY', '_CHOSEN', '_CONF', '_CONFLICT', '_COST', '_COVERED', '_DATE',
+    '_DIRECTION', '_DRAFT', '_DUP', '_END', '_EST', '_EXPORTED_FROM_SITE_ID', '_FAM', '_FOCUS', '_FREL', '_FSFTID', '_GEN',
+    '_GROUP', '_HELD', '_HYPO', '_INTREE', '_ISLAND', '_JOIN', '_KEY', '_LAST', '_LEVEL', '_LINK', '_MARNM', '_MILI',
+    '_MILT', '_MODE', '_MREL', '_NEAREST', '_NEXT', '_NORECORDS', '_ON', '_PAR', '_PART', '_PARTIAL', '_PERS',
+    '_PERSONALPHOTO', '_POS', '_PRIM', '_PRIMARY', '_PRIO', '_PROJECT_GUID', '_QUESTION', '_READERS', '_RECORDS', '_REF',
+    '_RELATIONSHIP_STATUS', '_RESEARCH', '_SCOPE', '_SEARCHES', '_SENT', '_SESSIONS', '_SOUR', '_STAT', '_STORY', '_TASK',
+    '_TEST', '_TRIED', '_TXT', '_UID', '_UNTIL', '_UPD', '_URL', '_VAR', '_VIA', '_WHY', '_WITN', '_XREF',
 ]);
 
 /** Another program's `_XXX` the reader takes nowhere (and no bookkeeping, no id). */
