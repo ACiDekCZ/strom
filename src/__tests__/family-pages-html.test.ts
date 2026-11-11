@@ -490,6 +490,7 @@ describe('time (§6.5)', () => {
         });
         console.log(budgetReport('family pages set 500 people', m, SET_BUDGET_MS));
         if (m.judged) expect(m.ms).toBeLessThan(SET_BUDGET_MS);
-        // The budget is the normalized time above; the runner's own 5 s limit would count the wall clock of the pairs.
-    }, 30_000);
+        // The budget is the normalized time above; the runner's limit only guards against a hang: on a loaded
+        // machine the warm-up and the pairs took 48.9 s of wall clock (the 30 s limit failed a run the budget did not judge).
+    }, 120_000);
 });

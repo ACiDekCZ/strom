@@ -46,7 +46,10 @@ function section(html: string, slug: string): string {
     return html.slice(at, next < 0 ? html.indexOf('</main>') : next);
 }
 
-describe('the search (§3.4)', () => {
+/** A safety net for a loaded machine (the full suite with other runs beside it); the tests check no time. */
+const LOADED_TIMEOUT = { timeout: 60_000 };
+
+describe('the search (§3.4)', LOADED_TIMEOUT, () => {
     it('the file\'s script normalizes as the app (Ch, ß, ł, ø, æ, marks, punctuation, spaces)', () => {
         const sample = ['Chmurná', 'Straße', 'Łukasz Wałęsa', 'Søren Kierkegård', 'Ægir Œdipe', 'Đorđe Þór',
             "O'Brien-Smith", '  Jan   Fíšek  ', 'ŘEPÍKOVÁ', 'Mädchen Müller', 'Ångström 1902', 'ı ŀ ŧ ĸ ŋ ħ ð'];
@@ -107,7 +110,7 @@ describe('the search (§3.4)', () => {
     });
 });
 
-describe('the bar (§3.1)', () => {
+describe('the bar (§3.1)', LOADED_TIMEOUT, () => {
     it('the file: one bar before the pages, the field, Index, Map of places, Menu with the indexes; no map link without a map', () => {
         const set = rodsSet(familyPagesFixture().data);
         const html = buildPageSetHtml(set);
@@ -138,7 +141,7 @@ describe('the bar (§3.1)', () => {
     });
 });
 
-describe('the indexes (§3.5)', () => {
+describe('the indexes (§3.5)', LOADED_TIMEOUT, () => {
     it('the four tabs on every index; the lineage\'s block links the four', () => {
         const set = rodsSet(familyPagesFixture().data);
         const html = buildPageSetHtml(set);

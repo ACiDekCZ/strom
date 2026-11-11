@@ -38,7 +38,10 @@ function lettersTree(persons: number): StromData {
     return data;
 }
 
-describe('a whole tree of about 4800 people (1102 §7.1, §7.3)', () => {
+/** A safety net for a loaded machine (the full suite with other runs beside it); the tests check no time. */
+const LOADED_TIMEOUT = { timeout: 60_000 };
+
+describe('a whole tree of about 4800 people (1102 §7.1, §7.3)', LOADED_TIMEOUT, () => {
     let data: StromData;
     let full: PageSet;
     let minimal: PageSet;
@@ -97,7 +100,7 @@ describe('a whole tree of about 4800 people (1102 §7.1, §7.3)', () => {
     });
 });
 
-describe('the indexes split by letters (1102 §7.4)', () => {
+describe('the indexes split by letters (1102 §7.4)', LOADED_TIMEOUT, () => {
     it('more than 500 rows: a page per letter, Ch after H and Č apart from C, every row on one letter page', () => {
         const set = treeSet(lettersTree(1400));
         const letters = set.indexLetters.persons;
@@ -132,7 +135,7 @@ describe('the indexes split by letters (1102 §7.4)', () => {
     });
 });
 
-describe('the set of files of a large tree (1102 §7.5, §8)', () => {
+describe('the set of files of a large tree (1102 §7.5, §8)', LOADED_TIMEOUT, () => {
     let set: PageSet;
     let entries: ZipEntry[];
     beforeAll(async () => {
@@ -220,7 +223,7 @@ describe('the choice of a line in a set of many lines (1102 §7.5)', () => {
     }, 120_000);
 });
 
-describe('the archive written an entry at a time (1102 §7.5)', () => {
+describe('the archive written an entry at a time (1102 §7.5)', LOADED_TIMEOUT, () => {
     it('ZipWriter in parts gives the same bytes as buildZip', () => {
         const when = new Date(2026, 0, 2, 3, 4, 6);
         const entries: ZipEntry[] = [{ path: 'index.html', data: '<p>Ahoj</p>' }, { path: 'osoby/a.html', data: new Uint8Array([1, 2, 3]) }];

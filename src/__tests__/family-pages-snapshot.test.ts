@@ -62,7 +62,10 @@ function personPages(tag: string, data: StromData): Record<string, string> {
     return out;
 }
 
-describe('outputs unchanged by the family pages', () => {
+/** A safety net for a loaded machine (the full suite with other runs beside it); the tests check no time. */
+const LOADED_TIMEOUT = { timeout: 60_000 };
+
+describe('outputs unchanged by the family pages', LOADED_TIMEOUT, () => {
     it('person pages of the sample tree', () => {
         expect(personPages('fp', familyPagesFixture().data)).toMatchSnapshot();
     });
