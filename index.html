@@ -13866,6 +13866,29 @@
         .menu-act > .agent-mark { width: 14px; height: 14px; margin: 2px; }
         .menu-act-glyph { min-width: 18px; text-align: center; color: var(--text-light); font-size: 13px; }
 
+        /* The menu of a card's stack of marks (src/ui/card-signals-ui.ts openCardSignalsMenu): at the
+           stack with a mouse and on a tablet or a phone held sideways (by a finger its rows 44px tall),
+           a bottom sheet with 48px rows on a phone (≤ 640px). The header is the person menu's (name and
+           years); under "Answer" a line of what waits first. Placed in JS, fitted into the window. */
+        .context-menu.card-signals-menu { width: max-content; min-width: 240px; max-width: min(320px, calc(100vw - 16px)); }
+        .card-signals-menu .context-menu-header.csm-head {
+            display: flex; align-items: baseline; gap: 8px; max-width: none; white-space: normal;
+        }
+        .card-signals-menu .csm-head .cmh-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .card-signals-menu .csm-head .cmh-name:has(.pn-note) { white-space: normal; }
+        .csm-years { flex: none; font-family: var(--font-sans); font-size: 12px; font-weight: 400; color: var(--text-faint); }
+        .card-signals-menu .context-menu-item { min-height: 38px; box-sizing: border-box; padding: 8px 16px; }
+        .card-signals-menu .context-menu-item:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; border-radius: 6px; }
+        .card-signals-menu.is-touch .context-menu-item { min-height: 44px; }
+        .menu-act-sub {
+            display: block; margin-top: 1px; font-size: 12px; line-height: 1.35; color: var(--text-light);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .card-signals-sheet .bottom-sheet-item { min-height: 48px; }
+        .card-signals-sheet .csm-head { align-items: baseline; }
+        .card-signals-sheet .csm-head .csm-years { padding-top: 8px; }
+        @media (prefers-reduced-motion: reduce) { .card-signals-menu { animation: none; } }
+
         /* Settings → "Show on card": options left, preview card right. */
         .card-signals-settings { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
         .card-signals-options { flex: 1 1 240px; min-width: 0; display: flex; flex-direction: column; gap: 8px; }

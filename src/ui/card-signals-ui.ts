@@ -8,7 +8,11 @@ import { TreeRenderer } from '../renderer.js';
 import { SettingsManager, CardSignals, CARD_SIGNAL_KEYS } from '../settings.js';
 import { strings } from '../strings.js';
 import { PersonId } from '../types.js';
-import { ActionSignal, ACTION_GLYPH, storyFoldHtml } from '../card-signals.js';
+import { ActionSignal, ACTION_GLYPH, storyFoldHtml, stackChoices } from '../card-signals.js';
+import { placeStackMenu, stackMenuItemsHtml } from '../card-signal-marks.js';
+import { cardYears } from '../card-fields.js';
+import { nameHtml, shownName } from '../person-name.js';
+import { ZoomPan } from '../zoom.js';
 import { groupCrossTreeMatches } from '../cross-tree.js';
 import { HELP_TOPICS } from '../help/topics.js';
 import { openHelp } from './help-ui.js';
@@ -17,11 +21,14 @@ import { announcedResearchLinks } from '../research-device.js';
 import { researchConflictRef } from '../research-link.js';
 import { uiModule } from './module.js';
 import { researchBridgeActionLabel } from './research-open-mark.js';
-import { openMarkTip } from './status-tip.js';
+import { closeStatusTip, openMarkTip } from './status-tip.js';
 import { DataManager } from '../data.js';
 import { LiveWaiting } from '../research-link.js';
 import { personWaiting } from '../research-waiting.js';
 import { storyWaitingTarget, storyWithDraft } from './story-compare-ui.js';
+
+/** A swipe down this far closes the stack's bottom sheet (as the person sheet). */
+const STACK_SHEET_SWIPE_PX = 80;
 
 const STATE_KEYS: (keyof CardSignals)[] = ['status', 'story'];
 const ACTION_KEYS: (keyof CardSignals)[] = ['waiting', 'conflict', 'question', 'agent'];
@@ -39,6 +46,56 @@ function signalLabel(key: keyof CardSignals): string {
 function signalSub(key: keyof CardSignals): string {
     const d = strings.cardDensity;
     return key === 'status' ? d.cardStatusSub : key === 'crossTree' ? d.cardCrossTreeSub : '';
+}
+
+
+/** The open menu of a card's stack of marks (one at a time), and how it closes. */
+let stackMenu: { el: HTMLElement; stack: HTMLElement; close: (returnFocus: boolean) => void } | null = null;
+/** A press outside the open menu closed it: the click it makes goes nowhere (until this time). */
+let swallowArmed = false;
+let swallowUntil = 0;
+let stackMenuListening = false;
+
+/** The page's listeners of the stack's menu, installed once: a press outside closes it and its click is swallowed; a zoom or pan, a resize close it. */
+function listenForStackMenu(): void {
+    if (stackMenuListening || typeof document === 'undefined') return;
+    stackMenuListening = true;
+    document.addEventListener('pointerdown', (e) => {
+        swallowArmed = false;
+        if (!stackMenu || stackMenu.el.contains(e.target as Node)) return;
+        stackMenu.close(false);
+        swallowArmed = true;
+        swallowUntil = Number.POSITIVE_INFINITY;
+    }, true);
+    document.addEventListener('pointerup', () => { if (swallowArmed) swallowUntil = performance.now() + 400; }, true);
+    window.addEventListener('click', (e) => {
+        if (!swallowArmed) return;
+        swallowArmed = false;
+        if (performance.now() > swallowUntil) return;
+        e.preventDefault();
+        e.stopPropagation();
+    }, true);
+    document.addEventListener('wheel', (e) => {
+        if (stackMenu && !stackMenu.el.contains(e.target as Node)) stackMenu.close(false);
+    }, { capture: true, passive: true });
+    window.addEventListener('resize', () => stackMenu?.close(false));
+    ZoomPan.onChange(() => stackMenu?.close(false));
+}
+
+/** Close the open menu of a stack of marks (`returnFocus`: back to the stack). */
+export function closeCardSignalsMenu(returnFocus = false): void {
+    stackMenu?.close(returnFocus);
+}
+
+/** Whether a stack's menu is open (for tests and callers). */
+export function cardSignalsMenuOpen(): boolean {
+    return !!stackMenu;
+}
+
+/** The stack of marks shows its menu open (aria-expanded, above the card's bubble) or closed. */
+function markStackOpen(stack: HTMLElement, open: boolean): void {
+    stack.setAttribute('aria-expanded', String(open));
+    stack.classList.toggle('is-open', open);
 }
 
 export const cardSignalsUiMethods = uiModule({
@@ -156,6 +213,177 @@ export const cardSignalsUiMethods = uiModule({
                 trees.length === 1 ? `${c.crossTreeGo} ${trees[0].treeName}` : c.menuCrossN(trees.length)));
         }
         return items.join('');
+    },
+
+    /**
+     * The choices of a card's stack of marks (two or three signals): the
+     * person menu's first items for the signals, the line of what waits
+     * under "Answer", no fact check and no other tree. Empty without signals.
+     */
+    personSignalsStackHtml(personId: PersonId, touch: boolean, itemClass: 'context-menu-item' | 'bottom-sheet-item'): string {
+        const s = TreeRenderer.cardSignalsFor(personId);
+        if (!s) return '';
+        return stackMenuItemsHtml(s, { touch, waitingCount: s.waiting ? this.waitingCountOf(personId) : 1, itemClass });
+    },
+
+    /**
+     * A click or tap on a card's stack of marks: a small menu of what to open
+     * — at the stack (mouse, a tablet's finger with 44 px rows), or a bottom
+     * sheet on a phone (≤ 640 px). With one choice only (conflicts and a
+     * question) straight to what the research knows, no menu. `viaKeyboard`:
+     * the focus goes to the first choice. A press outside, Esc, a choice, a
+     * pan or zoom of the tree, a resize or a new drawing of the tree close it.
+     */
+    openCardSignalsMenu(personId: PersonId, stack: HTMLElement, viaKeyboard: boolean): void {
+        const s = TreeRenderer.cardSignalsFor(personId);
+        if (!s) return;
+        if (stackChoices(s).length < 2) {
+            this.openPersonResearchKnows(personId);
+            return;
+        }
+        const wasOpen = stackMenu?.stack === stack;
+        closeCardSignalsMenu();
+        if (wasOpen) return;
+        this.hideContextMenu();
+        closeStatusTip();
+        const person = DataManager.getPerson(personId);
+        const name = person ? shownName(person) : '';
+        const years = person ? cardYears(person) : '';
+        const label = strings.card.stackMenuLabel(name);
+        const nameMarkup = person ? nameHtml(person, { former: true }) : this.escapeHtml(name);
+        const yearsMarkup = years ? `<span class="csm-years">${this.escapeHtml(years)}</span>` : '';
+        const run = (action: string | undefined): void => {
+            if (action) this.runPersonMenuAction(personId, action);
+        };
+
+        // A phone: the person sheet's frame with the signals' choices alone, 48 px rows.
+        if (typeof matchMedia === 'function' && matchMedia('(max-width: 640px)').matches) {
+            this.noteBottomSheetTrigger();
+            this.hideBottomSheet();
+            const overlay = document.createElement('div');
+            overlay.className = 'bottom-sheet-overlay';
+            overlay.innerHTML = `
+            <div class="bottom-sheet bottom-sheet-person card-signals-sheet" role="menu" aria-label="${this.escapeHtml(label)}">
+                <div class="bottom-sheet-handle"></div>
+                <div class="bs-person-head csm-head"><div class="bottom-sheet-menu-title">${nameMarkup}</div>${yearsMarkup}</div>
+                <div class="bottom-sheet-items">${this.personSignalsStackHtml(personId, true, 'bottom-sheet-item')}</div>
+            </div>`;
+            const sheet = overlay.querySelector<HTMLElement>('.bottom-sheet')!;
+            // A tap on the darkened tree closes the sheet (the overlay takes the tap).
+            overlay.addEventListener('click', (e) => { if (e.target === overlay) this.hideBottomSheet(); });
+            sheet.addEventListener('click', (e) => {
+                const item = (e.target as HTMLElement).closest<HTMLElement>('[data-action]');
+                if (!item) return;
+                this.hideBottomSheet();
+                run(item.dataset.action);
+            });
+            // A swipe down closes it.
+            let startY = 0;
+            let dragging = false;
+            sheet.addEventListener('touchstart', (e) => {
+                startY = e.touches[0].clientY;
+                dragging = true;
+                sheet.style.transition = 'none';
+            }, { passive: true });
+            sheet.addEventListener('touchmove', (e) => {
+                if (!dragging) return;
+                const dy = e.touches[0].clientY - startY;
+                if (dy > 0) sheet.style.transform = `translateY(${dy}px)`;
+            }, { passive: true });
+            sheet.addEventListener('touchend', (e) => {
+                dragging = false;
+                sheet.style.transition = '';
+                if (e.changedTouches[0].clientY - startY > STACK_SHEET_SWIPE_PX) this.hideBottomSheet();
+                else sheet.style.transform = '';
+            });
+            document.body.appendChild(overlay);
+            this.bottomSheet = overlay;
+            markStackOpen(stack, true);
+            this.bottomSheetOnClose = () => markStackOpen(stack, false);
+            requestAnimationFrame(() => overlay.classList.add('active'));
+            if (viaKeyboard) sheet.querySelector<HTMLElement>('.bottom-sheet-item')?.focus({ preventScroll: true });
+            return;
+        }
+
+        listenForStackMenu();
+        const touch = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+        const el = document.createElement('div');
+        el.className = `context-menu card-signals-menu${touch ? ' is-touch' : ''}`;
+        el.setAttribute('role', 'menu');
+        el.setAttribute('aria-label', label);
+        el.innerHTML = `<div class="context-menu-header csm-head" role="presentation"><span class="cmh-name">${nameMarkup}</span>${yearsMarkup}</div>`
+            + this.personSignalsStackHtml(personId, touch, 'context-menu-item');
+        const items = (): HTMLElement[] => Array.from(el.querySelectorAll<HTMLElement>('.context-menu-item[data-action]'));
+
+        // A new drawing of the tree takes the stack away: the menu goes with it.
+        const canvas = document.getElementById('tree-canvas');
+        const observer = canvas && typeof MutationObserver === 'function'
+            ? new MutationObserver(() => { if (!stack.isConnected) close(false); }) : null;
+        const onKey = (e: KeyboardEvent): void => {
+            const active = document.activeElement as HTMLElement | null;
+            const inside = !!active && el.contains(active);
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
+                close(true);
+                return;
+            }
+            const list = items();
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Home' || e.key === 'End') {
+                if (!inside && active !== stack && active !== document.body && active) return;
+                e.preventDefault();
+                e.stopPropagation();
+                const at = inside ? list.indexOf(active!) : -1;
+                const next = e.key === 'Home' ? 0 : e.key === 'End' ? list.length - 1
+                    : at === -1 ? (e.key === 'ArrowUp' ? list.length - 1 : 0)
+                        : (at + (e.key === 'ArrowDown' ? 1 : -1) + list.length) % list.length;
+                list[next]?.focus();
+                return;
+            }
+            if (!inside) return;
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                e.stopPropagation();
+                const action = active!.dataset.action;
+                close(false);
+                run(action);
+                return;
+            }
+            if (e.key === 'Tab') {
+                // Tab: on from the stack (the browser moves past it); Shift+Tab: back to the stack.
+                if (e.shiftKey) e.preventDefault();
+                close(false);
+                stack.focus({ preventScroll: true });
+            }
+        };
+        const close = (returnFocus: boolean): void => {
+            if (stackMenu?.el !== el) return;
+            stackMenu = null;
+            observer?.disconnect();
+            document.removeEventListener('keydown', onKey, true);
+            el.remove();
+            markStackOpen(stack, false);
+            if (returnFocus && stack.isConnected) stack.focus({ preventScroll: true });
+        };
+        el.addEventListener('click', (e) => {
+            const item = (e.target as HTMLElement).closest<HTMLElement>('.context-menu-item[data-action]');
+            if (!item) return;
+            close(false);
+            run(item.dataset.action);
+        });
+
+        document.body.appendChild(el);
+        stackMenu = { el, stack, close };
+        markStackOpen(stack, true);
+        // Layout size, not getBoundingClientRect(): the open animation scales the menu.
+        const place = placeStackMenu(stack.getBoundingClientRect(), { width: el.offsetWidth, height: el.offsetHeight },
+            { width: window.innerWidth, height: window.innerHeight });
+        if (place.maxHeight !== null) el.style.maxHeight = `${place.maxHeight}px`;
+        el.style.left = `${place.left}px`;
+        el.style.top = `${place.top}px`;
+        if (canvas) observer?.observe(canvas, { childList: true, subtree: true });
+        document.addEventListener('keydown', onKey, true);
+        if (viaKeyboard) items()[0]?.focus();
     },
 
     /** The person's story (the card's corner, a status tip's story row). */

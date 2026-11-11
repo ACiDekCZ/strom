@@ -4583,9 +4583,14 @@ class TreeRendererClass {
                 // the sibling order as the card. The status mark is the status tip's (status-tip.ts).
                 const mark = target.closest<HTMLElement>('[data-mark]');
                 const kind = mark?.dataset.mark;
-                // The stack of badges (two or three signals) has no pinned bubble: until its own
-                // choice menu, a click or tap on it opens the person menu, which leads with the same choices.
-                if (mark && kind !== 'status' && kind !== 'badge-stack') {
+                // The stack of badges (two or three signals): by mouse, finger or keyboard (a click
+                // without a pointer) the menu of what to open, or straight what the research knows.
+                if (mark && kind === 'badge-stack') {
+                    e.stopPropagation();
+                    UI.openCardSignalsMenu(id, mark, e.detail === 0);
+                    return;
+                }
+                if (mark && kind !== 'status') {
                     if (window.matchMedia?.('(pointer: coarse)').matches) {
                         e.stopPropagation();
                         UI.openCardMarkTip(id, mark);
@@ -4612,6 +4617,13 @@ class TreeRendererClass {
                 locked: DataManager.isPersonLocked(id),
             }));
             card.addEventListener('keydown', (e) => {
+                // ↓ on the stack of badges opens its menu, as Enter and Space do (their click).
+                const stack = e.key === 'ArrowDown' ? (e.target as HTMLElement).closest?.<HTMLElement>('.card-signal-stack') : null;
+                if (stack) {
+                    e.preventDefault();
+                    UI.openCardSignalsMenu(id, stack, true);
+                    return;
+                }
                 if (e.target !== card || (e.key !== 'Enter' && e.key !== ' ')) return;
                 e.preventDefault();
                 openCardMenuFromKeyboard(card);

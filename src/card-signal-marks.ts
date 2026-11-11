@@ -8,7 +8,7 @@
  */
 
 import { strings } from './strings.js';
-import { ACTION_GLYPH, ActionSignal, CardSignalInfo, stackChoices } from './card-signals.js';
+import { ACTION_GLYPH, ActionSignal, CardSignalInfo, stackChoices, storyFoldHtml } from './card-signals.js';
 
 /** Escaped for text and attribute values (quotes too). */
 function esc(text: string): string {
@@ -114,4 +114,75 @@ export function cardActionMarksHtml(id: string, s: CardSignalInfo, waitingCount 
         badgeHtml: `<button type="button" class="card-signal signal-${action}" data-signal="${action}" data-mark="badge" aria-label="${esc(actionSignalText(s, action))}" aria-describedby="mt-badge-${esc(id)}">${ACTION_GLYPH[action]}</button>${tip}`,
         dotHtml: `<span class="card-signal-dot signal-${action}" aria-hidden="true"></span>`,
     };
+}
+
+/**
+ * The choices of the stack's menu (a click on a card with two or three
+ * signals), in the order of `stackChoices`: answer what waits (by touch:
+ * Waiting for you) with the first item's text on a line under it, compare
+ * the story's new version, what the research knows (the conflicts, the
+ * hypotheses and the question as one choice), follow the research. The same
+ * texts, classes and actions as the person menu's first items; no fact
+ * check and no other tree. Every choice stays in the app: no research mark.
+ */
+export function stackMenuItemsHtml(s: CardSignalInfo, o: { touch: boolean; waitingCount: number; itemClass: 'context-menu-item' | 'bottom-sheet-item' }): string {
+    const c = strings.card;
+    const item = (action: string, kind: string, glyph: string, text: string, sub = ''): string => {
+        const cls = `${o.itemClass} menu-act menu-signal-${kind}`;
+        const body = `${glyph}<span class="menu-act-text">${esc(text)}`
+            + (sub ? `<span class="menu-act-sub">${esc(clipText(sub))}</span>` : '') + '</span>';
+        return o.itemClass === 'bottom-sheet-item'
+            ? `<button type="button" class="${cls}" role="menuitem" data-action="${action}">${body}</button>`
+            : `<div class="${cls}" role="menuitem" tabindex="-1" data-action="${action}">${body}</div>`;
+    };
+    const glyph = (a: ActionSignal): string => `<span class="menu-signal-glyph signal-${a}" aria-hidden="true">${ACTION_GLYPH[a]}</span>`;
+    return stackChoices(s).map(choice => {
+        if (choice === 'waiting') {
+            return o.touch ? item('signal-waiting-list', 'waiting', glyph('waiting'), c.menuWaiting(o.waitingCount), s.waiting ?? '')
+                : item('signal-waiting', 'waiting', glyph('waiting'), c.menuAnswer(o.waitingCount), s.waiting ?? '');
+        }
+        if (choice === 'story') return item('signal-story-compare', 'story', storyFoldHtml(s.story, true) || glyph('waiting'), strings.story.compare);
+        if (choice === 'knows') {
+            const parts = [
+                s.conflicts > 0 ? c.ttConflicts(s.conflicts) : '',
+                s.hypotheses > 0 ? c.ttHypotheses(s.hypotheses) : '',
+                s.question ? c.menuQuestions(1) : '',
+            ].filter(Boolean);
+            const kind: ActionSignal = s.conflicts > 0 ? 'conflict' : 'question';
+            return item('signal-knows', kind, glyph(kind), c.menuKnows(parts.join(', ')));
+        }
+        return item('signal-agent', 'agent', '<span class="agent-mark" aria-hidden="true"></span>', c.menuAgent);
+    }).join('');
+}
+
+/** The gap between the stack and its menu, and the menu's least distance from the window's edges. */
+const STACK_MENU_GAP = 6;
+const STACK_MENU_EDGE = 8;
+
+/**
+ * Where the stack's menu stands (fixed, in the window): under the stack, its
+ * left edge at the stack's; with no room on the right its right edge at the
+ * stack's, kept in the window; with no room below it above the stack; with
+ * room neither below nor above at the window's top, as tall as the window
+ * allows (`maxHeight`, it scrolls inside). It does not follow the card.
+ */
+export function placeStackMenu(
+    r: { left: number; top: number; right: number; bottom: number },
+    menu: { width: number; height: number },
+    view: { width: number; height: number },
+): { left: number; top: number; maxHeight: number | null } {
+    const { width: w, height: h } = menu;
+    let left = r.left;
+    if (left + w > view.width - STACK_MENU_EDGE) left = r.right - w;
+    left = Math.max(STACK_MENU_EDGE, Math.min(left, view.width - w - STACK_MENU_EDGE));
+    let top = r.bottom + STACK_MENU_GAP;
+    let maxHeight: number | null = null;
+    if (top + h > view.height - STACK_MENU_EDGE) {
+        top = r.top - STACK_MENU_GAP - h;
+        if (top < STACK_MENU_EDGE) {
+            top = STACK_MENU_EDGE;
+            maxHeight = view.height - 2 * STACK_MENU_EDGE;
+        }
+    }
+    return { left: Math.round(left), top: Math.round(top), maxHeight };
 }
