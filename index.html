@@ -20493,6 +20493,103 @@
             .person-research-variant { padding: 10px 12px; gap: 10px; }
             .view-link-switch__label { display: none; }
         }
+        /* Spec 074: the card of a hypothesis decided in the app (data-pick: pick, remote, readonly, merge). */
+        .person-research-hypo[data-pick] .person-research-variant { align-items: flex-start; }
+        .person-research-hypo[data-pick] .view-link-switch { margin-top: 2px; }
+        .person-research-hypo[data-pick] .person-research-variant.is-chosen { background: color-mix(in srgb, var(--primary-soft) 55%, var(--surface)); }
+        .person-research-hypo[data-pick] .person-research-variant.is-dim .prv-title { color: var(--text-light); }
+        .person-research-hypo[data-pick] .prv-text { gap: 4px; }
+        .prv-tag {
+            display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 999px;
+            background: var(--primary-soft); color: var(--primary-dark, var(--primary)); font-size: 11.5px; font-weight: 600; line-height: 1.5;
+        }
+        .prv-big {
+            display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px; border: 1.5px solid var(--ghost-line); border-radius: 999px;
+            background: var(--ghost-pill-bg); color: var(--ghost-name); font-size: 12.5px; font-weight: 600; line-height: 1.5;
+        }
+        .prv-proposal {
+            display: block; margin: 2px 0 0; padding: 5px 8px; border-radius: 6px; background: var(--research-soft); color: var(--research);
+            font-size: 12.5px; line-height: 1.45; overflow-wrap: anywhere;
+        }
+        .prh-proposal-none { margin-top: 8px; }
+        .prv-sources {
+            display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 8px; align-items: baseline;
+            font-size: 12.5px; line-height: 1.45; color: var(--text-light); overflow-wrap: anywhere;
+        }
+        .prv-src-label { display: inline-flex; align-items: center; gap: 5px; font-weight: 600; white-space: nowrap; }
+        .prv-src-label--for { color: var(--primary-dark, var(--primary)); }
+        .prv-src-label--against { color: var(--error-text); }
+        .prv-src-mark {
+            display: inline-flex; align-items: center; justify-content: center; width: 13px; height: 13px; flex: none;
+            font-size: 11px; line-height: 1; border: 1px solid currentColor;
+        }
+        .prv-src-label--for .prv-src-mark { border-color: var(--primary); border-radius: 50%; }
+        .prv-src-label--against .prv-src-mark { border-color: var(--danger); border-radius: 2px; }
+        .prv-src-list { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .prv-src-item { min-width: 0; }
+        .prv-sources .link-button.prv-source {
+            display: inline; padding: 0; min-height: 0; font-size: inherit; font-weight: 400; text-align: left;
+            color: var(--primary); text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere;
+        }
+        .prv-src-list > .prv-source + .prv-source { margin-top: 2px; }
+        .link-button.prv-sources-toggle { display: none; align-self: flex-start; padding: 0; font-size: 13px; font-weight: 500; text-align: left; }
+        .link-button.prv-sources-toggle::after { content: ' ▸'; font-weight: 400; }
+        .is-sources-open .link-button.prv-sources-toggle::after { content: ' ▾'; }
+        .prv-kindnote { font-size: 12.5px; line-height: 1.45; color: var(--text-light); }
+        .modal button.secondary.prv-pick {
+            align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; min-height: 34px; margin-top: 2px; padding: 4px 14px;
+            border: 1px solid var(--primary); border-radius: 8px; font-size: 14px; font-weight: 600; color: var(--primary-dark, var(--primary));
+        }
+        .modal button.secondary.prv-pick:disabled,
+        .modal .prh-choices button.secondary:disabled { border-color: var(--border); color: var(--text-ghost); cursor: default; opacity: 1; }
+        .prv-wait {
+            display: flex; flex-direction: column; gap: 3px; margin-top: 4px; padding: 8px 10px; border-radius: 8px;
+            background: var(--info-soft); color: var(--text); font-size: 12.5px; line-height: 1.45; overflow-wrap: anywhere;
+        }
+        .prh-choices + .prv-wait, .person-research-variants ~ .prv-wait { margin-top: 10px; }
+        .prv-wait-title { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
+        .prv-wait-dot { width: 8px; height: 8px; flex: none; border: 1.5px solid currentColor; border-radius: 50%; }
+        .prv-wait-text { color: var(--text-light); }
+        .prv-wait-actions { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+        .prv-wait-actions .link-button { padding: 0; font-size: 13px; font-weight: 600; text-align: left; }
+        .prv-wait-actions .prv-wait-stop { font-weight: 400; color: var(--text-light); }
+        .person-research-hypo[data-pick] > .prv-wait { margin-top: 10px; }
+        .prh-choices { align-items: center; margin-top: 10px; }
+        .modal .prh-choices button.secondary.prh-act {
+            display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 4px 14px; border-radius: 8px; font-size: 14px;
+        }
+        .prh-choices .link-button.prh-cancel-change { padding: 0; font-size: 13px; color: var(--text-light); text-decoration: underline; }
+        .prh-note { margin: 6px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--text-light); overflow-wrap: anywhere; }
+        .prh-prev, .prh-holds { margin: 6px 0 0; font-size: 13px; line-height: 1.45; color: var(--text-light); overflow-wrap: anywhere; }
+        .prh-holds { color: var(--text); }
+        .prh-info {
+            margin: 10px 0 0; padding: 8px 10px; border-radius: 8px; background: var(--info-soft);
+            font-size: 13px; line-height: 1.45; color: var(--text); overflow-wrap: anywhere;
+        }
+        .prh-more { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--divider); }
+        .prh-more .link-button.prh-more-link {
+            padding: 0; font-size: 12.5px; font-weight: 400; color: var(--text-light); text-decoration: underline; text-align: left;
+        }
+        @media (hover: hover) {
+            .modal button.secondary.prv-pick:not(:disabled):hover { background: var(--primary-soft); }
+            .prh-more .link-button.prh-more-link:hover { color: var(--text); }
+        }
+        @media (pointer: coarse) {
+            .modal button.secondary.prv-pick, .modal .prh-choices button.secondary.prh-act { min-height: 44px; }
+            .prv-wait-actions .link-button, .prh-more .link-button.prh-more-link, .link-button.prv-sources-toggle,
+            .prh-choices .link-button.prh-cancel-change, .prv-sources .link-button.prv-source { min-height: 44px; }
+            .prv-sources .link-button.prv-source { display: inline-flex; align-items: center; }
+        }
+        @media (max-width: 640px) {
+            /* The sources fold behind "Sources (n)"; Choose and the choices take the row's width. */
+            .link-button.prv-sources-toggle { display: inline-flex; align-items: center; min-height: 44px; }
+            .person-research-variant:not(.is-sources-open) .prv-sources { display: none; }
+            .modal button.secondary.prv-pick { align-self: stretch; justify-content: center; min-height: 44px; font-size: 15px; }
+            .modal .prh-choices button.secondary.prh-act { flex: 1 1 100%; justify-content: center; min-height: 44px; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .modal button.secondary.prv-pick, .modal .prh-choices button.secondary.prh-act { min-height: 40px; }
+        }
         .person-research-years { white-space: nowrap; font-variant-numeric: tabular-nums; }
         .person-research-result--found { color: var(--primary); font-weight: 600; }
         .person-research-result--none { color: var(--text-faint); }

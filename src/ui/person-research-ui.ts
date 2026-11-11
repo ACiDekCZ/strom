@@ -11,11 +11,18 @@ import { researchActionLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings } from '../strings.js';
-import { PersonId, ResearchConflict, ResearchConflictValue, ResearchHypothesis } from '../types.js';
+import { PersonId, ResearchConflict, ResearchConflictValue, ResearchHypothesis, ResearchHypothesisVariant } from '../types.js';
 import { isOpenHypothesis, loadViewLinks, researchHypotheses } from '../view-links.js';
 import {
     researchHypothesisNote, researchHypothesisState, researchHypothesisDecision, researchHypothesisLinkLabel, HYPOTHESIS_REASON_FOLD,
+    researchHypothesisBigJoin, researchHypothesisReopenNote, researchHypothesisCannotReopenText, researchHypothesisWaitText,
+    researchHypothesisPreviousText, researchHypothesisHoldsSinceText, researchHypothesisProposalParts,
 } from '../research-hypotheses.js';
+import { HypothesisPick } from '../research-hypothesis-pick.js';
+import { HypothesisCardButton, hypothesisCardPlan } from '../research-hypothesis-card.js';
+import {
+    PendingHypothesis, newPendingHypothesis, onPendingHypothesisChange, pendingHypothesis, pendingHypothesisPhase, setPendingHypothesis,
+} from '../research-hypothesis-wait.js';
 import { formatFlexDate } from '../dates.js';
 import { parseGedcomDate, gedcomTagEventType } from '../ged-parser.js';
 import { HYPOTHESES_DECIDE_FEATURE, researchConflictRef, researchHypothesisRef, researchLinkMark } from '../research-link.js';
@@ -35,6 +42,33 @@ const DIALOG_ID = 'person-research-modal';
 export const CONFLICT_HIGHLIGHT_MS = 1500;
 /** What had the keyboard when the dialog opened (a line's label, a stub): it gets it back on close. */
 let dialogOpener: HTMLElement | null = null;
+
+/**
+ * The hypotheses whose "Change" was clicked (spec 074 DEV §6): a mode of this
+ * page, by `${researchId}|${hypothesisId}`; "Cancel the change", a decision
+ * asked or the dialog closed ends it.
+ */
+const changingHypotheses = new Set<string>();
+
+function hypothesisKey(researchId: string, hypothesisId: string): string {
+    return `${researchId.toLowerCase()}|${hypothesisId}`;
+}
+
+/** Draws the open dialog's hypotheses again (set while the dialog is open). */
+let redrawHypotheses: (() => void) | null = null;
+
+/** The one listener of the waits (registered once; it draws the dialog that is open). */
+function redrawPendingHypotheses(): void {
+    redrawHypotheses?.();
+}
+
+/** The keyboard on a hypothesis's card: its wait, else its first working choice, else its heading. */
+function focusHypothesis(host: HTMLElement, hypo: string): void {
+    const card = host.querySelector<HTMLElement>(`[data-hypo="${CSS.escape(hypo)}"]`);
+    (card?.querySelector<HTMLElement>('.prv-wait-again')
+        ?? card?.querySelector<HTMLElement>('.prv-pick:not([disabled]), .prh-act:not([disabled])')
+        ?? card?.querySelector<HTMLElement>(':scope > summary'))?.focus({ preventScroll: true });
+}
 
 /** Spec 060 K1.8: from this many open hypotheses (the person deciding) the switch to the AI deciding is offered. */
 export const HYPOTHESES_OFFER_MIN = 10;
@@ -372,73 +406,273 @@ export const personResearchMethods = uiModule({
      * on this computer announced the `hypothesis` link.
      */
     researchHypothesesHtml(personId: PersonId, hypotheses: readonly ResearchHypothesis[]): string {
+        return hypotheses.map(h => {
+            const pick = this.researchHypothesisPickable(h);
+            return pick === 'old' || pick === 'merge' ? this.researchHypothesisTodayHtml(h, pick) : this.researchHypothesisPickHtml(personId, h, pick);
+        }).join('');
+    },
+
+    /** A hypothesis's heading line: "H0022 · open · 3 versions · its note" (or who decided it and when), "left open {day}". */
+    researchHypothesisMetaHtml(h: ResearchHypothesis, opts: { left?: boolean } = {}): string {
+        const r = strings.research;
+        const variants = h.variants ?? [];
+        const note = researchHypothesisNote(h);
+        const decision = researchHypothesisDecision(h);
+        return [
+            esc(h.id ?? ''), esc(researchHypothesisState(h)),
+            decision.by ? `<span class="person-research-hypo-by">${esc(decision.by)}</span>` : '',
+            esc(decision.day), esc(variants.length > 0 ? r.hypoVersions(variants.length) : ''), esc(variants.length > 0 ? note : ''),
+            opts.left && h.leftOpen && isOpenHypothesis(h) ? esc(r.hypoLeft(formatFlexDate(h.leftOpen))) : '',
+        ].filter(Boolean).join(' · ');
+    },
+
+    /** A decided or abandoned hypothesis's reason ("Reason: …", a long one folded). */
+    researchHypothesisReasonHtml(h: ResearchHypothesis): string {
+        const r = strings.research;
+        const decision = researchHypothesisDecision(h);
+        const reasonLong = decision.reason.length > HYPOTHESIS_REASON_FOLD;
+        return !decision.reason ? '' : `
+                    <p class="person-research-hypo-reason${reasonLong ? ' is-long' : ''}"><span class="prh-reason-label">${esc(r.hypoReason)}:</span> ${reasonLong
+                        ? `<button type="button" class="prh-reason-text prh-reason--more" aria-expanded="false">${esc(decision.reason)}</button>`
+                        : `<span class="prh-reason-text">${esc(decision.reason)}</span>`}</p>`;
+    },
+
+    /** A version's claim: two lines, a long one (over 90 characters) unfolded on a click. */
+    researchVariantTitleHtml(variant: ResearchHypothesisVariant): string {
+        const title = variant.title ?? '';
+        return title.length > 90
+            ? `<button type="button" class="prv-title prv-title--more" aria-expanded="false">${esc(title)}</button>`
+            : `<span class="prv-title">${esc(title)}</span>`;
+    },
+
+    /** A version's "Show" switch (the view link). */
+    researchVariantSwitchHtml(variant: ResearchHypothesisVariant, shown: boolean): string {
+        const v = strings.viewLinks;
+        return `
+                    <button type="button" class="view-link-switch" role="switch" aria-checked="${shown ? 'true' : 'false'}"
+                        data-variant="${esc(variant.id)}" aria-label="${esc(v.switchAria(variant.id))}">
+                        <span class="view-link-switch__label" aria-hidden="true">${esc(v.switchLabel)}</span>
+                        <span class="view-link-switch__track" aria-hidden="true"></span>
+                    </button>`;
+    },
+
+    /**
+     * Today's card (spec 060, and DEV §2 `old`): what an older research, one
+     * without deciding by a link, gets. `merge` (DEV §2): the same rows, a line
+     * that merging people is decided in the research, and the way there the
+     * card's main action.
+     */
+    researchHypothesisTodayHtml(h: ResearchHypothesis, pick: HypothesisPick): string {
         const r = strings.research;
         const v = strings.viewLinks;
         const offered = TreeRenderer.viewLinksOffered();
         const canLink = this.researchLinkAvailable('hypothesis');
-        return hypotheses.map(h => {
-            const open = isOpenHypothesis(h);
-            const variants = h.variants ?? [];
-            const note = researchHypothesisNote(h);
-            const decision = researchHypothesisDecision(h);
-            const metaHtml = [
-                esc(h.id ?? ''), esc(researchHypothesisState(h)),
-                decision.by ? `<span class="person-research-hypo-by">${esc(decision.by)}</span>` : '',
-                esc(decision.day), esc(variants.length > 0 ? r.hypoVersions(variants.length) : ''), esc(variants.length > 0 ? note : ''),
-            ].filter(Boolean).join(' · ');
-            const reasonLong = decision.reason.length > HYPOTHESIS_REASON_FOLD;
-            const reasonHtml = !decision.reason ? '' : `
-                    <p class="person-research-hypo-reason${reasonLong ? ' is-long' : ''}"><span class="prh-reason-label">${esc(r.hypoReason)}:</span> ${reasonLong
-                        ? `<button type="button" class="prh-reason-text prh-reason--more" aria-expanded="false">${esc(decision.reason)}</button>`
-                        : `<span class="prh-reason-text">${esc(decision.reason)}</span>`}</p>`;
-            const hypoId = researchHypothesisRef(h.id);
-            const linkHtml = canLink && hypoId ? `<button type="button" class="link-button person-research-hypo-link" data-hypo-do="decide">${researchActionLabel(researchHypothesisLinkLabel(h), researchLinkMark('hypothesis'))}</button>` : '';
-            const offers = h.id && offered ? this.viewLinkOffersFor(h.id) : [];
-            const rows = variants.map(variant => {
-                const o = offers.find(x => x.variant === variant.id);
-                const chosen = h.status === 'decided' && h.chosen === variant.id;
-                const canSwitch = open && !!o?.choice && (o.shown || o.state?.state === 'draw');
-                let metaHtml: string;
-                if (o?.shown && o.choice) {
-                    metaHtml = `<span class="view-link-icon" aria-hidden="true"></span><span>${esc(`${v.shownWord} · ${v.people(o.people)}`)} · </span>`
-                        + `<button type="button" class="link-button prv-find" data-variant="${esc(variant.id)}" aria-label="${esc(v.findAria(this.viewLinkWho(o.choice)))}">${esc(v.find)}</button>`;
-                } else {
-                    const what = o?.choice ? v.people(o.people)
-                        : (o ? o.inTree : !!variant.inTree?.length) ? v.inTree
-                        : o?.textOnly || variant.links.some(l => l.kind === 'same' || l.kind === 'siblings') ? v.textOnly
-                        : v.notInResearch;
-                    const state = !open || !o?.state ? ''
-                        : o.state.state === 'real' ? v.real
-                        : o.state.state === 'invalid' ? v.reason[o.state.reason] : '';
-                    metaHtml = esc([chosen ? r.hypoChosen : '', what, state].filter(Boolean).join(' · '));
-                }
-                const title = variant.title ?? '';
-                const long = title.length > 90;
-                const titleHtml = long
-                    ? `<button type="button" class="prv-title prv-title--more" aria-expanded="false">${esc(title)}</button>`
-                    : `<span class="prv-title">${esc(title)}</span>`;
-                const sw = canSwitch ? `
-                    <button type="button" class="view-link-switch" role="switch" aria-checked="${o!.shown ? 'true' : 'false'}"
-                        data-variant="${esc(variant.id)}" aria-label="${esc(v.switchAria(variant.id))}">
-                        <span class="view-link-switch__label" aria-hidden="true">${esc(v.switchLabel)}</span>
-                        <span class="view-link-switch__track" aria-hidden="true"></span>
-                    </button>` : '';
-                return `<div class="person-research-variant${o?.shown ? ' is-shown' : ''}${chosen ? ' is-chosen' : ''}" role="listitem" data-variant="${esc(variant.id)}">
+        const open = isOpenHypothesis(h);
+        const variants = h.variants ?? [];
+        const metaHtml = this.researchHypothesisMetaHtml(h);
+        const reasonHtml = this.researchHypothesisReasonHtml(h);
+        const hypoId = researchHypothesisRef(h.id);
+        const linkHtml = canLink && hypoId ? `<button type="button" class="link-button person-research-hypo-link" data-hypo-do="decide">${researchActionLabel(researchHypothesisLinkLabel(h), researchLinkMark('hypothesis'))}</button>` : '';
+        const offers = h.id && offered ? this.viewLinkOffersFor(h.id) : [];
+        const rows = variants.map(variant => {
+            const o = offers.find(x => x.variant === variant.id);
+            const chosen = h.status === 'decided' && h.chosen === variant.id;
+            const canSwitch = open && !!o?.choice && (o.shown || o.state?.state === 'draw');
+            let metaHtml: string;
+            if (o?.shown && o.choice) {
+                metaHtml = `<span class="view-link-icon" aria-hidden="true"></span><span>${esc(`${v.shownWord} · ${v.people(o.people)}`)} · </span>`
+                    + `<button type="button" class="link-button prv-find" data-variant="${esc(variant.id)}" aria-label="${esc(v.findAria(this.viewLinkWho(o.choice)))}">${esc(v.find)}</button>`;
+            } else {
+                const what = o?.choice ? v.people(o.people)
+                    : (o ? o.inTree : !!variant.inTree?.length) ? v.inTree
+                    : o?.textOnly || variant.links.some(l => l.kind === 'same' || l.kind === 'siblings') ? v.textOnly
+                    : v.notInResearch;
+                const state = !open || !o?.state ? ''
+                    : o.state.state === 'real' ? v.real
+                    : o.state.state === 'invalid' ? v.reason[o.state.reason] : '';
+                metaHtml = esc([chosen ? r.hypoChosen : '', what, state].filter(Boolean).join(' · '));
+            }
+            const sw = canSwitch ? this.researchVariantSwitchHtml(variant, !!o!.shown) : '';
+            return `<div class="person-research-variant${o?.shown ? ' is-shown' : ''}${chosen ? ' is-chosen' : ''}" role="listitem" data-variant="${esc(variant.id)}">
                     <span class="prv-id" aria-hidden="true">${esc(variant.id)}</span>
-                    <span class="prv-text">${titleHtml}<span class="prv-meta">${metaHtml}</span></span>${sw}
+                    <span class="prv-text">${this.researchVariantTitleHtml(variant)}<span class="prv-meta">${metaHtml}</span></span>${sw}
                 </div>`;
-            }).join('');
-            return `
-                <details class="person-research-hypo${open ? '' : ' is-closed'}"${h.id ? ` data-hypo="${esc(h.id)}"` : ''}${open ? ' open' : ''}>
+        }).join('');
+        const mergeHtml = pick === 'merge' ? `<p class="prh-info">${esc(r.hypoMerge)}</p>` : '';
+        return `
+                <details class="person-research-hypo${open ? '' : ' is-closed'}"${pick === 'merge' ? ' data-pick="merge"' : ''}${h.id ? ` data-hypo="${esc(h.id)}"` : ''}${open ? ' open' : ''}>
                     <summary class="person-research-hypo-head">
                         <span class="person-research-hypo-title">${esc(h.title)}</span>
                         ${metaHtml ? `<span class="person-research-hypo-meta">${metaHtml}</span>` : ''}
                     </summary>${reasonHtml}
                     ${rows ? `<div class="person-research-variants" role="list" aria-label="${esc(h.title)}">${rows}</div>` : ''}
-                    ${!rows && h.note ? `<p class="person-research-hypo-note">${esc(h.note)}</p>` : ''}
+                    ${!rows && h.note ? `<p class="person-research-hypo-note">${esc(h.note)}</p>` : ''}${mergeHtml}
                     <div class="person-research-hypo-actions">${linkHtml}</div>
                 </details>`;
+    },
+
+    /**
+     * The card of a hypothesis that knows deciding in the app (spec 074, DEV
+     * §1–§7, hypothesisCardPlan): `pick` — under each version's claim the
+     * agent's proposal, its sources for and against, what choosing it does to
+     * the tree and "Choose" (into the research's terminal); under the box "No
+     * version holds" and "Leave open", or for a decided one "Change" and
+     * "Reopen" with what that does (or why it cannot be); "Decide in the
+     * research" quiet below a line. The wait for the research's confirmation
+     * at what was asked, the other choices switched off. `remote`: readable,
+     * "Show" works, a line that it is decided on the research's computer.
+     * `readonly`: only read.
+     */
+    researchHypothesisPickHtml(personId: PersonId, h: ResearchHypothesis, pick: HypothesisPick): string {
+        const r = strings.research;
+        const v = strings.viewLinks;
+        const rid = this.activeResearchId();
+        const open = isOpenHypothesis(h);
+        const hypoId = researchHypothesisRef(h.id);
+        const pending = rid && h.id ? pendingHypothesis(rid, h.id) : null;
+        const plan = hypothesisCardPlan(h, pick, {
+            changing: !!rid && !!h.id && changingHypotheses.has(hypothesisKey(rid, h.id)),
+            pending,
+            linkable: this.researchLinkAvailable('hypothesis') && !!hypoId,
+        });
+        const metaHtml = this.researchHypothesisMetaHtml(h, { left: true });
+        const holds = plan.holdsSince ? researchHypothesisHoldsSinceText(h) : '';
+        const prev = researchHypothesisPreviousText(h);
+        const headHtml = holds ? `
+                    <p class="prh-holds">${esc(holds)}</p>`
+            : `${this.researchHypothesisReasonHtml(h)}${prev ? `
+                    <p class="prh-prev">${esc(prev)}</p>` : ''}`;
+        const offers = h.id && TreeRenderer.viewLinksOffered() && pick !== 'readonly' ? this.viewLinkOffersFor(h.id) : [];
+        const catalog = DataManager.getData().sources ?? {};
+        const terminal = researchLinkMark('hypothesis');
+        const off = (b: HypothesisCardButton): string => b === 'off' ? ' disabled' : '';
+        const proposal = researchHypothesisProposalParts(h);
+        const rows = (h.variants ?? []).map((variant, i) => {
+            const vp = plan.variants[i];
+            const o = offers.find(x => x.variant === variant.id);
+            const canSwitch = open && !!o?.choice && (o.shown || o.state?.state === 'draw');
+            const big = open ? researchHypothesisBigJoin({ people: variant.people ?? (o?.choice ? o.people : undefined) }) : 0;
+            const bigHtml = big ? `<span class="prv-big"><span class="view-link-icon view-link-icon--12" aria-hidden="true"></span>${esc(r.hypoBig(big))}</span>` : '';
+            const tagHtml = vp.tag ? `<span class="prv-tag">${esc(vp.tag === 'holds' ? r.hypoHoldsNow : r.hypoChosen)}</span>` : '';
+            let metaHtml: string;
+            if (o?.shown && o.choice) {
+                metaHtml = `${bigHtml}${big ? '' : '<span class="view-link-icon" aria-hidden="true"></span>'}<span>${esc(big ? v.shownWord : `${v.shownWord} · ${v.people(o.people)}`)} · </span>`
+                    + `<button type="button" class="link-button prv-find" data-variant="${esc(variant.id)}" aria-label="${esc(v.findAria(this.viewLinkWho(o.choice)))}">${esc(v.find)}</button>`;
+            } else {
+                const what = big ? ''
+                    : o?.choice ? v.people(variant.people ?? o.people)
+                    : (o ? o.inTree : !!variant.inTree?.length) ? v.inTree
+                    : o?.textOnly || variant.links.some(l => l.kind === 'same' || l.kind === 'siblings') ? v.textOnly
+                    : variant.people ? v.people(variant.people)
+                    : v.notInResearch;
+                const state = !open || !o?.state ? ''
+                    : o.state.state === 'real' ? v.real
+                    : o.state.state === 'invalid' ? v.reason[o.state.reason] : '';
+                const words = [what, state].filter(Boolean).join(' · ');
+                metaHtml = `${tagHtml}${bigHtml}${words ? `<span>${esc(words)}</span>` : ''}`;
+            }
+            const proposalHtml = vp.proposal && proposal ? `
+                        <span class="prv-proposal"><strong>${esc(proposal.label)}</strong>${proposal.text ? ` <span>${esc(proposal.text)}</span>` : ''}</span>` : '';
+            const sources = plan.extras ? this.researchVariantSourcesHtml(variant, catalog) : null;
+            const noteText = vp.note === 'stays' ? r.hypoStaysNote : vp.note === 'inTree' ? r.hypoInTreeNote : vp.note === 'noLink' ? r.hypoNoLinkNote : '';
+            const pickHtml = vp.pick ? `
+                        <button type="button" class="secondary prv-pick" data-hypo-pick="${esc(variant.id)}" aria-label="${esc(r.hypoPickAria(variant.id))}"${off(vp.pick)}>${researchActionLabel(r.hypoPick, terminal, { sr: false })}</button>` : '';
+            const waitHtml = vp.waiting && pending ? this.researchHypothesisWaitHtml(h, pending) : '';
+            const sw = canSwitch ? this.researchVariantSwitchHtml(variant, !!o!.shown) : '';
+            const cls = [o?.shown ? 'is-shown' : '', vp.tag ? 'is-chosen' : '', vp.dim ? 'is-dim' : ''].filter(Boolean).join(' ');
+            return `<div class="person-research-variant${cls ? ` ${cls}` : ''}" role="listitem" data-variant="${esc(variant.id)}">
+                    <span class="prv-id" aria-hidden="true">${esc(variant.id)}</span>
+                    <span class="prv-text">${this.researchVariantTitleHtml(variant)}<span class="prv-meta">${metaHtml}</span>${proposalHtml}${sources ? `
+                        <button type="button" class="link-button prv-sources-toggle" aria-expanded="false">${esc(r.hypoSources(sources.count))}</button>${sources.html}` : ''}${noteText ? `
+                        <span class="prv-kindnote">${esc(noteText)}</span>` : ''}${pickHtml}${waitHtml}</span>${sw}
+                </div>`;
         }).join('');
+        const proposalNoneHtml = plan.proposalNone && proposal ? `
+                    <p class="prv-proposal prh-proposal-none"><strong>${esc(proposal.label)}</strong> <span>${esc(proposal.text)}</span></p>` : '';
+        // Under the box: the wait for what was asked there, the choices, what reopening does.
+        let underHtml = '';
+        if (plan.footWait && pending) underHtml += this.researchHypothesisWaitHtml(h, pending);
+        const buttons: string[] = [];
+        if (plan.foot) {
+            if (plan.foot.none) buttons.push(`<button type="button" class="secondary prh-act" data-hypo-act="abandon"${off(plan.foot.none)}>${researchActionLabel(r.hypoNone, terminal)}</button>`);
+            if (plan.foot.leave) buttons.push(`<button type="button" class="secondary prh-act" data-hypo-act="keep-open"${off(plan.foot.leave)}>${researchActionLabel(r.hypoLeave, terminal)}</button>`);
+            if (plan.foot.cancelChange) buttons.push(`<button type="button" class="link-button prh-cancel-change" data-hypo-act="change-cancel">${esc(r.hypoChangeCancel)}</button>`);
+        }
+        if (plan.decided) {
+            buttons.push(`<button type="button" class="secondary prh-act" data-hypo-act="change">${esc(r.hypoChangeHere)}</button>`);
+            if (plan.decided.reopen) buttons.push(`<button type="button" class="secondary prh-act" data-hypo-act="reopen">${researchActionLabel(r.hypoReopen, terminal)}</button>`);
+        }
+        if (buttons.length) underHtml += `
+                    <div class="person-research-hypo-actions prh-choices">${buttons.join('')}</div>`;
+        const decNote = !plan.decided ? '' : plan.decided.cannot ? researchHypothesisCannotReopenText(h) : researchHypothesisReopenNote(h);
+        if (decNote) underHtml += `
+                    <p class="prh-note">${esc(decNote)}</p>`;
+        if (plan.changeHint) underHtml += `
+                    <p class="prh-note">${esc(r.hypoChangeReason)}</p>`;
+        if (plan.info) underHtml += `
+                    <p class="prh-info">${esc(plan.info === 'remote' ? r.hypoRemote : r.hypoMerge)}</p>`;
+        if (plan.link) {
+            const label = open ? r.decide : plan.decided?.cannot ? r.decide : r.hypoChange;
+            underHtml += `
+                    <div class="prh-more"><button type="button" class="link-button person-research-hypo-link prh-more-link" data-hypo-do="decide">${researchActionLabel(label, terminal)}</button></div>`;
+        }
+        return `
+                <details class="person-research-hypo${open ? '' : ' is-closed'}" data-pick="${pick}"${h.id ? ` data-hypo="${esc(h.id)}"` : ''}${open ? ' open' : ''}>
+                    <summary class="person-research-hypo-head">
+                        <span class="person-research-hypo-title">${esc(h.title)}</span>
+                        ${metaHtml ? `<span class="person-research-hypo-meta">${metaHtml}</span>` : ''}
+                    </summary>${headHtml}
+                    ${rows ? `<div class="person-research-variants" role="list" aria-label="${esc(h.title)}">${rows}</div>` : ''}
+                    ${!rows && h.note ? `<p class="person-research-hypo-note">${esc(h.note)}</p>` : ''}${proposalNoneHtml}${underHtml}
+                </details>`;
+    },
+
+    /**
+     * A version's sources (DEV §1): "+ For:" the ones it names (3 SOUR), "−
+     * Against:" what speaks against it (3 _AGAINST) with its sources; a source
+     * of the file opens as elsewhere in What the research knows. Null when it
+     * names neither; `count` for "Sources (n)" (folded on a phone).
+     */
+    researchVariantSourcesHtml(variant: ResearchHypothesisVariant, catalog: Record<string, { title: string }>): { html: string; count: number } | null {
+        const r = strings.research;
+        const link = (id: string): string => `<button type="button" class="link-button prv-source" data-source="${esc(id)}">${esc(catalog[id].title)}</button>`;
+        const pro = (variant.sourceIds ?? []).filter(id => catalog[id]);
+        const against = (variant.against ?? []).filter(a => a.text.trim());
+        if (!pro.length && !against.length) return null;
+        const proHtml = pro.length ? `
+                            <span class="prv-src-label prv-src-label--for"><span class="prv-src-mark" aria-hidden="true">+</span>${esc(r.hypoFor)}</span>
+                            <span class="prv-src-list">${pro.map(link).join('')}</span>` : '';
+        const againstHtml = against.length ? `
+                            <span class="prv-src-label prv-src-label--against"><span class="prv-src-mark" aria-hidden="true">−</span>${esc(r.hypoAgainst)}</span>
+                            <span class="prv-src-list">${against.map(a => {
+                                const ids = (a.sourceIds ?? []).filter(id => catalog[id]);
+                                return `<span class="prv-src-item">${esc(a.text)}${ids.length ? ` ${ids.map(link).join(' ')}` : ''}</span>`;
+                            }).join('')}</span>` : '';
+        return { html: `
+                        <span class="prv-sources">${proHtml}${againstHtml}
+                        </span>`, count: pro.length + against.length };
+    },
+
+    /**
+     * The wait for the research's confirmation (DEV §4): "Waiting for
+     * confirmation in the research" (after ten minutes "Not confirmed by the
+     * research yet"), the terminal's question, "Open again" (the same link)
+     * and "Stop waiting" (forgets it here). At the version chosen, or under
+     * the box for No version holds, Leave open and Reopen.
+     */
+    researchHypothesisWaitHtml(h: ResearchHypothesis, p: PendingHypothesis): string {
+        const r = strings.research;
+        const long = pendingHypothesisPhase(p, Date.now()) === 'long';
+        const text = long ? r.hypoWaitLongText : researchHypothesisWaitText(h, p.do, p.variant);
+        return `
+                        <span class="prv-wait" role="status" data-wait-phase="${long ? 'long' : 'waiting'}">
+                            <span class="prv-wait-title"><span class="prv-wait-dot" aria-hidden="true"></span>${esc(long ? r.hypoWaitLong : r.hypoWait)}</span>
+                            ${text ? `<span class="prv-wait-text">${esc(text)}</span>` : ''}
+                            <span class="prv-wait-actions">
+                                <button type="button" class="link-button prv-wait-again">${researchActionLabel(r.hypoWaitAgain, researchLinkMark('hypothesis'))}</button>
+                                <button type="button" class="link-button prv-wait-stop">${esc(r.hypoWaitStop)}</button>
+                            </span>
+                        </span>`;
     },
 
     /**
@@ -451,7 +685,8 @@ export const personResearchMethods = uiModule({
      */
     researchHypothesesOffer(): { url: string; open: number } | null {
         const rid = this.activeResearchId();
-        if (!rid || hypothesesOfferHidden(rid)) return null;
+        // An archive has no AI agent to hand the deciding to (spec 074).
+        if (!rid || hypothesesOfferHidden(rid) || this.activeResearchArchive()) return null;
         const status = this.researchStatusOf(rid) ?? lastBridgeStatus(rid);
         if (!status?.features?.includes(HYPOTHESES_DECIDE_FEATURE) || status.hypothesesDecide !== 'person') return null;
         const open = [...researchHypotheses(DataManager.getData()).values()].filter(isOpenHypothesis).length;
@@ -501,15 +736,46 @@ export const personResearchMethods = uiModule({
             const open = new Set([...host.querySelectorAll<HTMLDetailsElement>('.person-research-hypo')].filter(d => d.open).map(d => d.dataset.hypo ?? ''));
             const expanded = new Set([...host.querySelectorAll<HTMLElement>('.person-research-variant.is-expanded')]
                 .map(row => `${row.closest<HTMLElement>('[data-hypo]')?.dataset.hypo}:${row.dataset.variant}`));
+            const sourcesOpen = [...host.querySelectorAll<HTMLElement>('.person-research-variant.is-sources-open')]
+                .map(row => [row.closest<HTMLElement>('[data-hypo]')?.dataset.hypo ?? '', row.dataset.variant ?? ''] as const);
             host.innerHTML = this.researchHypothesesHtml(personId, DataManager.getPerson(personId)?.research?.hypotheses ?? []);
             host.querySelectorAll<HTMLDetailsElement>('.person-research-hypo[data-hypo]').forEach(d => { d.open = open.has(d.dataset.hypo!); });
             for (const key of expanded) {
                 const [hypo, variant] = key.split(':');
                 this.expandResearchVariant(host, hypo, variant);
             }
+            for (const [hypo, variant] of sourcesOpen) {
+                const row = host.querySelector<HTMLElement>(`[data-hypo="${CSS.escape(hypo)}"] .person-research-variant[data-variant="${CSS.escape(variant)}"]`);
+                row?.classList.add('is-sources-open');
+                row?.querySelector('.prv-sources-toggle')?.setAttribute('aria-expanded', 'true');
+            }
             if (focus) {
                 host.querySelector<HTMLElement>(`[data-hypo="${CSS.escape(focus.hypo)}"] .view-link-switch[data-variant="${CSS.escape(focus.variant)}"]`)?.focus({ preventScroll: true });
             }
+        };
+        // A wait asked or ended (here, or by the research's confirmation): the cards drawn again,
+        // the keyboard kept on the card it was in.
+        redrawHypotheses = () => {
+            if (!host.isConnected) { redrawHypotheses = null; return; }
+            const active = document.activeElement as HTMLElement | null;
+            const inHypo = active && host.contains(active) ? active.closest<HTMLElement>('[data-hypo]')?.dataset.hypo : undefined;
+            redraw();
+            if (inHypo) focusHypothesis(host, inHypo);
+        };
+        onPendingHypothesisChange(redrawPendingHypotheses);
+        const hypothesisOf = (id: string): ResearchHypothesis | undefined =>
+            (DataManager.getPerson(personId)?.research?.hypotheses ?? []).find(h => h.id === id);
+        // Ask the research (its terminal) to decide for a version, abandon, leave open or reopen,
+        // and wait here for its confirmation (DEV §4).
+        const ask = (hypo: string, what: 'decide' | 'abandon' | 'keep-open' | 'reopen', variant?: string): void => {
+            const rid = this.activeResearchId();
+            const h = hypothesisOf(hypo);
+            const url = this.activeResearchLink('hypothesis', { hypothesis: hypo, hypothesisDo: what, ...(variant ? { variant } : {}) });
+            if (!rid || !h || !url) return;
+            this.launchResearchLink(url, 'terminal');
+            changingHypotheses.delete(hypothesisKey(rid, hypo));
+            setPendingHypothesis(rid, hypo, newPendingHypothesis(h, what, url, this.researchSyncLink()?.link.head ?? '', Date.now(), variant));
+            focusHypothesis(host, hypo);
         };
         host.addEventListener('click', (e) => {
             const target = e.target as HTMLElement;
@@ -529,7 +795,54 @@ export const personResearchMethods = uiModule({
                 reason.setAttribute('aria-expanded', String(on));
                 return;
             }
+            const sourcesToggle = target.closest<HTMLButtonElement>('.prv-sources-toggle');
+            if (sourcesToggle) {
+                const row = sourcesToggle.closest<HTMLElement>('.person-research-variant')!;
+                const on = !row.classList.contains('is-sources-open');
+                row.classList.toggle('is-sources-open', on);
+                sourcesToggle.setAttribute('aria-expanded', String(on));
+                return;
+            }
+            const source = target.closest<HTMLButtonElement>('.prv-source');
+            if (source) {
+                this.showSourceViewer(source.dataset.source ?? '', { personId });
+                return;
+            }
             if (!hypo) return;
+            const rid = this.activeResearchId();
+            const pickBtn = target.closest<HTMLButtonElement>('[data-hypo-pick]');
+            if (pickBtn) {
+                if (!pickBtn.disabled) ask(hypo, 'decide', pickBtn.dataset.hypoPick);
+                return;
+            }
+            const act = target.closest<HTMLButtonElement>('[data-hypo-act]');
+            if (act) {
+                if (act.disabled || !rid) return;
+                const what = act.dataset.hypoAct;
+                if (what === 'change' || what === 'change-cancel') {
+                    // The change mode (DEV §6): the versions offered, or back to the decided card.
+                    if (what === 'change') changingHypotheses.add(hypothesisKey(rid, hypo));
+                    else changingHypotheses.delete(hypothesisKey(rid, hypo));
+                    redraw();
+                    const card = host.querySelector<HTMLElement>(`[data-hypo="${CSS.escape(hypo)}"]`);
+                    (what === 'change'
+                        ? card?.querySelector<HTMLElement>('.prv-pick:not([disabled])')
+                        : card?.querySelector<HTMLElement>('[data-hypo-act="change"]'))?.focus({ preventScroll: true });
+                } else if (what === 'abandon' || what === 'keep-open' || what === 'reopen') {
+                    ask(hypo, what);
+                }
+                return;
+            }
+            if (target.closest('.prv-wait-again')) {
+                const url = rid ? pendingHypothesis(rid, hypo)?.url : undefined;
+                if (url) this.launchResearchLink(url, 'terminal');
+                return;
+            }
+            if (target.closest('.prv-wait-stop')) {
+                if (rid) setPendingHypothesis(rid, hypo, null);
+                host.querySelector<HTMLElement>(`[data-hypo="${CSS.escape(hypo)}"] > summary`)?.focus({ preventScroll: true });
+                return;
+            }
             // Into the research: decide the hypothesis there, or change its decision (its terminal).
             if (target.closest('[data-hypo-do="decide"]')) {
                 const url = this.activeResearchLink('hypothesis', { hypothesis: hypo, hypothesisDo: 'decide' });
@@ -603,6 +916,9 @@ export const personResearchMethods = uiModule({
     closePersonResearchDialog(): void {
         // The decided cards are done: opened again, the data say it.
         this.researchConflictCardsClosed();
+        // A change begun is not carried to the next opening (DEV §6); a wait asked is (DEV §4).
+        changingHypotheses.clear();
+        redrawHypotheses = null;
         const dialog = document.getElementById(DIALOG_ID);
         const hadFocus = !!dialog?.contains(document.activeElement);
         dialog?.remove();

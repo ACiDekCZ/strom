@@ -124,3 +124,44 @@ export function researchHypothesisWaitText(h: ResearchHypothesis, what: Research
     if (!q) return '';
     return what === 'keep-open' ? strings.research.hypoWaitAskPlain(q) : strings.research.hypoWaitAsk(q);
 }
+
+/**
+ * The decision before the last one (DEV §6, `_PREV`, only the last): "before:
+ * B, 9 Nov 2026 · its reason", or "before: no version held, …". '' without one.
+ */
+export function researchHypothesisPreviousText(h: ResearchHypothesis): string {
+    const p = h.previous;
+    if (!p) return '';
+    const r = strings.research;
+    const day = p.day ? formatFlexDate(p.day) : '';
+    const head = p.variant ? r.hypoBefore(p.variant, day) : r.hypoBeforeNone(day);
+    const reason = p.reason?.trim() ?? '';
+    return reason ? `${head} · ${reason}` : head;
+}
+
+/**
+ * While a decided hypothesis is being changed (DEV §6): "Holds since {day}:
+ * {B} · its reason" above its versions. '' when it holds no version or no day is known.
+ */
+export function researchHypothesisHoldsSinceText(h: ResearchHypothesis): string {
+    if (h.status !== 'decided' || !h.chosen || !h.decidedAt) return '';
+    const head = strings.research.hypoHoldsSince(formatFlexDate(h.decidedAt), h.chosen);
+    const reason = h.decision?.trim() ?? '';
+    return reason ? `${head} · ${reason}` : head;
+}
+
+/**
+ * The agent's proposal in words (DEV §1): its label ("proposed by the
+ * agent:", in bold) and what follows it — the sentence and the day for a
+ * version; "no version holds" and the sentence for none. Null without one.
+ */
+export function researchHypothesisProposalParts(h: ResearchHypothesis): { label: string; text: string } | null {
+    const p = h.proposal;
+    if (!p) return null;
+    const r = strings.research;
+    const label = r.hypoProposal('').trim();
+    const said = [p.text?.trim() ?? '', p.day ? formatFlexDate(p.day) : ''].filter(Boolean).join(' · ');
+    if (p.variant !== null) return { label, text: said };
+    const none = r.hypoProposalNone.startsWith(label) ? r.hypoProposalNone.slice(label.length).trim() : r.hypoProposalNone;
+    return { label, text: [none, said].filter(Boolean).join(' · ') };
+}
