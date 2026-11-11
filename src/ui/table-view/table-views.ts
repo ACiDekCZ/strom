@@ -7,13 +7,15 @@
  * compared with the view open in it: any difference is "changed" (§9.3);
  * the search, the selected row and the scroll never are.
  *
- * The working state of each row type and the view open in it are kept per
- * tree in localStorage (`strom.table.{treeId}`), not in the tree's data, so
- * a reload comes back to the same table with its unsaved changes.
+ * The working state of each row type, the view open in it and the unsaved
+ * states of views left are kept per tree in localStorage
+ * (`strom.table.{treeId}`), not in the tree's data, so a reload or an app
+ * update comes back to the same table with its unsaved changes.
  */
 
 import { strings } from '../../strings.js';
 import type { TableView, TableViewRowType } from '../../types.js';
+import { sanitizeTableView } from '../../table-views-data.js';
 import { columnById, DEFAULT_VIEWS, type SortSpec } from './table-columns.js';
 import { ROW_TYPES, type RowType } from './table-model.js';
 import type { FilterItem } from './table-filter.js';
@@ -316,33 +318,58 @@ export function newViewId(): string {
 // ---------------------------------------------------------------------------
 // The working state in localStorage (§9.1).
 
-/** What a tree's table keeps between visits: the row type, each type's open view and its unsaved state. */
+/**
+ * What a tree's table keeps between visits: the row type, each type's open
+ * view and its unsaved state, and the unsaved states of views left (§9.3), so
+ * a reload or an app update comes back with every "● changed" as it was.
+ */
 export interface StoredTableWork {
     rowType: RowType;
     open: Partial<Record<RowType, string>>;
     /** Each row type's state as a view (only when it differs from the open view). */
     work: Partial<Record<RowType, TableView>>;
+    /** Unsaved states of views not open now, by view id (absent when none). */
+    drafts?: Record<string, TableView>;
 }
 
 export function workStorageKey(treeId: string): string {
     return `strom.table.${treeId}`;
 }
 
+/** A stored unsaved state as a view of row type `type` (when given), or null: read as a stored view is (table-views-data). */
+function storedDraft(raw: unknown, type?: RowType): TableView | null {
+    const v = sanitizeTableView(raw);
+    if (!v || !isShownRowType(v.rowType) || (type && v.rowType !== type)) return null;
+    return v;
+}
+
+/** The tree's stored working state; what cannot be read is left out without a word (null when nothing is). */
 export function readTableWork(treeId: string): StoredTableWork | null {
     try {
         const raw = localStorage.getItem(workStorageKey(treeId));
         if (!raw) return null;
         const v = JSON.parse(raw) as Partial<StoredTableWork>;
-        if (!v || typeof v !== 'object') return null;
+        if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
         const rowType = (ROW_TYPES as readonly string[]).includes(v.rowType as string) ? v.rowType as RowType : 'persons';
         const open: StoredTableWork['open'] = {};
         const work: StoredTableWork['work'] = {};
+        const openRaw = v.open && typeof v.open === 'object' ? v.open : {};
+        const workRaw = v.work && typeof v.work === 'object' ? v.work : {};
         for (const t of ROW_TYPES) {
-            if (typeof v.open?.[t] === 'string') open[t] = v.open[t];
-            const w = v.work?.[t];
-            if (w && typeof w === 'object' && w.rowType === t && Array.isArray(w.columns) && Array.isArray(w.sort) && w.filter && Array.isArray(w.filter.items)) work[t] = w;
+            if (typeof openRaw[t] === 'string' && openRaw[t]) open[t] = openRaw[t];
+            const w = storedDraft(workRaw[t], t);
+            if (w) work[t] = w;
         }
-        return { rowType, open, work };
+        const out: StoredTableWork = { rowType, open, work };
+        if (v.drafts && typeof v.drafts === 'object' && !Array.isArray(v.drafts)) {
+            const drafts: Record<string, TableView> = {};
+            for (const [id, d] of Object.entries(v.drafts)) {
+                const draft = storedDraft(d);
+                if (draft && draft.id === id) drafts[id] = draft;
+            }
+            if (Object.keys(drafts).length) out.drafts = drafts;
+        }
+        return out;
     } catch {
         return null;
     }
@@ -374,7 +401,7 @@ export function openViewOf(state: TableState, type: RowType, stored: readonly Ta
 
 /**
  * The tree's table as it was left (§9.1): each row type's open view with its
- * unsaved state over it, and the row type. Without a stored state, each type
+ * unsaved state over it, the unsaved states of views left, and the row type. Without a stored state, each type
  * opens its default view. Marks the state restored.
  */
 export function restoreTableState(state: TableState, work: StoredTableWork | null, stored: readonly TableView[] | undefined): void {
@@ -387,6 +414,11 @@ export function restoreTableState(state: TableState, work: StoredTableWork | nul
         applyView(view, st);
         const w = work?.work[t];
         if (w && found) applyDraft(w, t, st);
+    }
+    state.drafts = {};
+    for (const [id, d] of Object.entries(work?.drafts ?? {})) {
+        const view = findView(id, stored);
+        if (view && view.rowType === d.rowType && state.open[view.rowType as RowType] !== id) state.drafts[id] = d;
     }
     if (work) state.rowType = work.rowType;
     state.restored = true;
@@ -417,8 +449,8 @@ export function dropMissingViews(state: TableState, stored: readonly TableView[]
 
 /**
  * Choose a view (§9.2): its row type is shown. The view left keeps its
- * unsaved changes until the tree closes (§9.3: no question); a view chosen
- * again comes back with them. False when there is no such view.
+ * unsaved changes (§9.3: no question; kept with the working state, so a
+ * reload keeps them too); a view chosen again comes back with them. False when there is no such view.
  */
 export function switchView(state: TableState, id: string, stored: readonly TableView[] | undefined): boolean {
     const view = findView(id, stored);
@@ -462,6 +494,12 @@ export function tableWorkOf(state: TableState, stored: readonly TableView[] | un
         const st = state.types[t];
         if (viewChanged(view, st)) work.work[t] = viewFromState(t, st, view.id, view.name, '');
     }
+    const drafts: Record<string, TableView> = {};
+    for (const [id, d] of Object.entries(state.drafts)) {
+        const view = findView(id, stored);
+        if (view && view.rowType === d.rowType && work.open[view.rowType as RowType] !== id) drafts[id] = d;
+    }
+    if (Object.keys(drafts).length) work.drafts = drafts;
     return work;
 }
 

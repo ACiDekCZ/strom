@@ -285,6 +285,70 @@ describe('the working state in localStorage (§9.1)', () => {
         expect(readTableWork('t1')).toBeNull();
         expect(() => writeTableWork('t1', { rowType: 'persons', open: {}, work: {} })).not.toThrow();
     });
+
+    it('the unsaved state of a view left comes back after a reload (T54 G9), as the open one does', () => {
+        const stored = [saved()];
+        const a = defaultTableState();
+        restoreTableState(a, null, stored);
+        hideColumn('persons', a.types.persons, 'bPlace');
+        switchView(a, 'tv-a', stored);
+        setColumnWidth(a.types.persons, 'bapDate', 310);
+        writeTableWork('t1', tableWorkOf(a, stored));
+        // The reload: a new state from what was written.
+        const b = defaultTableState();
+        restoreTableState(b, readTableWork('t1'), stored);
+        expect(b.open.persons).toBe('tv-a');
+        expect(b.types.persons.widths.bapDate).toBe(310);
+        expect(viewChanged(stored[0], b.types.persons)).toBe(true);
+        expect(Object.keys(b.drafts)).toEqual(['b:overview']);
+        switchView(b, 'b:overview', stored);
+        expect(b.types.persons.columns).not.toContain('bPlace');
+        expect(viewChanged(builtinView('overview'), b.types.persons)).toBe(true);
+        // Discard: nothing unsaved is written any more.
+        discardViewChanges(b, stored);
+        writeTableWork('t1', tableWorkOf(b, stored));
+        const c = readTableWork('t1')!;
+        expect(c.work.persons).toBeUndefined();
+        expect(c.drafts?.['b:overview']).toBeUndefined();
+        expect(c.drafts?.['tv-a']?.columns).toContainEqual({ id: 'bapDate', width: 310 });
+        // Back on the saved view and saved as it is: no unsaved state left anywhere.
+        switchView(b, 'tv-a', stored);
+        const savedNow = viewFromState('persons', b.types.persons, 'tv-a', stored[0].name, '2026-11-11T10:00:00Z');
+        writeTableWork('t1', tableWorkOf(b, [savedNow]));
+        expect(readTableWork('t1')).toEqual({ rowType: 'persons', open: { persons: 'tv-a', unions: 'b:marriages', events: 'b:events', sources: 'b:allSources' }, work: {} });
+    });
+
+    it('a stored unsaved state is read as a stored view is: malformed parts left out, unknown ones dropped', () => {
+        const good = viewFromState('persons', defaultTypeState('persons'), 'b:births', 'Births', '');
+        store.set(workStorageKey('t1'), JSON.stringify({
+            rowType: 'persons',
+            open: { persons: 'b:overview', unions: '' },
+            work: {
+                persons: { ...good, id: 'b:overview', name: 'Overview', columns: [{ id: 'name' }, { width: 90 }, 'bDate', { id: 'bDate', width: -4 }], sort: [{ col: '' }, { col: 'bDate', dir: -1 }] },
+                unions: { ...good, rowType: 'unions', id: 'b:marriages', name: '' },
+                events: { ...good, id: 'b:events', name: 'Events' },
+            },
+            drafts: {
+                'b:births': good,
+                'b:deaths': { ...good, id: 'b:gaps' },
+                'b:gaps': { ...good, id: 'b:gaps', rowType: 'places' },
+                'tv-x': 'nonsense',
+            },
+        }));
+        const w = readTableWork('t1')!;
+        expect(w.open).toEqual({ persons: 'b:overview' });
+        expect(w.work.persons?.columns).toEqual([{ id: 'name' }, { id: 'bDate' }]);
+        expect(w.work.persons?.sort).toEqual([{ col: 'bDate', dir: -1 }]);
+        expect(Object.keys(w.work)).toEqual(['persons']);
+        expect(Object.keys(w.drafts ?? {})).toEqual(['b:births']);
+        // A draft of a view the tree does not have is not restored.
+        store.set(workStorageKey('t2'), JSON.stringify({ rowType: 'persons', open: {}, work: {}, drafts: { 'tv-gone': { ...good, id: 'tv-gone' } } }));
+        const state = defaultTableState();
+        restoreTableState(state, readTableWork('t2'), [saved()]);
+        expect(state.drafts).toEqual({});
+        store.set(workStorageKey('t3'), JSON.stringify([1, 2]));
+        expect(readTableWork('t3')).toBeNull();
+    });
 });
 
 describe('opening, switching and keeping views in the table state (§9.2, §9.3)', () => {

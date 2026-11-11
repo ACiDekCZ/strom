@@ -221,9 +221,20 @@ test.describe('desktop (1440)', () => {
         await openTable(page);
         await expect(back).toBeHidden();
         await expect(forward).toBeHidden();
+        // Alt+← / Alt+→ step nothing in the table either.
+        const focusNow = () => page.evaluate(() => window.Strom.TreeRenderer.getFocusPersonId());
+        await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+        await page.keyboard.press('Alt+ArrowLeft');
+        await page.keyboard.press('Alt+ArrowRight');
+        await page.keyboard.press('Alt+ArrowRight');
+        expect(await focusNow()).toBe('p4');
+        await expect(page.locator('#table-container .tv-grid')).toBeVisible();
         await page.locator('#view-mode-family').click();
         await expect(back).toBeVisible();
         await expect(forward).toBeVisible();
+        // Back in the diagram the keys step its history again.
+        await page.keyboard.press('Alt+ArrowLeft');
+        await expect.poll(focusNow).toBe('p0');
     });
 });
 

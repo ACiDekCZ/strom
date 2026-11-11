@@ -1305,7 +1305,17 @@ export const miscMethods = uiModule({
             const activeModals = document.querySelectorAll('.modal-overlay.active');
             if (activeModals.length > 0) return;
 
-            // Alt+Left / Alt+Right: focus-history back / forward
+            // Alt+Left / Alt+Right: focus-history back / forward. Not in the
+            // Table view (T54 G14): it neither shows nor sets the diagram's
+            // focus, so its ↩ ↪ are hidden and these keys step nothing either;
+            // a text field keeps its own Alt+arrow, elsewhere the browser does
+            // not go back a page.
+            if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && TreeRenderer.getViewMode() === 'table') {
+                const el = document.activeElement as HTMLElement | null;
+                const typing = !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
+                if (!typing) e.preventDefault();
+                return;
+            }
             if (e.altKey && e.key === 'ArrowLeft') {
                 e.preventDefault();
                 TreeRenderer.goBack();

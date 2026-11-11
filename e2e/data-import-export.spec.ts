@@ -299,6 +299,22 @@ test('GEDCOM import: photos referenced by URL download directly (MyHeritage)', a
     await expect(dialog.locator('#gedcom-media-row')).toBeHidden();
 });
 
+test('GEDCOM import: photos by URL that cannot be downloaded say so, with their count (T54)', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Seed', 'Person');
+    // The CDN link has expired.
+    await page.route('https://cdn.mh-test.example/**', route => route.fulfill({ status: 403, body: '' }));
+
+    await page.locator('#gedcom-input').setInputFiles('e2e/fixtures/mh-style.ged');
+    const dialog = page.locator('#gedcom-result-modal');
+    await expect(dialog).toBeVisible();
+    await dialog.locator('#gedcom-media-download').click();
+    await expect(page.locator('.toast').last()).toHaveText(/The photos could not be downloaded \(1\)\./);
+    await expect(page.locator('.toast').last()).not.toContainText('None of the selected files');
+    // The link stays offered.
+    await expect(dialog.locator('#gedcom-media-download')).toBeVisible();
+});
+
 test('plain GEDCOM import clears stale manager intent; new-tree opens naming dialog', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Emil', 'Fisek');

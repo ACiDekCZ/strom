@@ -696,7 +696,7 @@ export const importExportMethods = uiModule({
         if (ok > 0) this.gedcomImportImages = true;
         this.showToast(ok > 0
             ? strings.gedcom.mediaAttached(ok, urlRefs.length)
-            : strings.gedcom.mediaNoMatch);
+            : strings.gedcom.mediaDownloadFailed(urlRefs.length));
         this.showGedcomResultDialog();
     },
 

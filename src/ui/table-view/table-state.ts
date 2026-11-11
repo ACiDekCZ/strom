@@ -51,7 +51,7 @@ export interface TableState {
     types: Record<RowType, RowTypeState>;
     /** The view open in each row type (§9; a built-in `b:…` or a saved view's id). */
     open: Record<RowType, string>;
-    /** Unsaved states of views not open now, by view id (§9.3: kept until the app closes). */
+    /** Unsaved states of views not open now, by view id (§9.3; kept in the working state, §9.1). */
     drafts: Record<string, TableView>;
     /** The tree's stored working state was read (localStorage, §9.1). */
     restored?: boolean;

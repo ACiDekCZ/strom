@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { setLanguage } from '../strings.js';
+import { setLanguage, strings } from '../strings.js';
 import {
     validateTreeData, groupValidationIssues, validationCounts, issueCategory, fixAllNoteText,
     qualityFinding, qualityFindingKey, birthYears, AFTER_DEATH_EVENT_TYPES, ValidationIssue,
@@ -376,5 +376,25 @@ describe('what "Fix all (n)" fixes (T54 G15)', () => {
         expect(fixAllNoteText(of('orphanedPartnerRef'))).toBe('Behoben wird: beschädigte Verknüpfungen zwischen Personen und Partnerschaften (1). Andere Befunde bleiben unverändert.');
         setLanguage('pl');
         expect(fixAllNoteText(of('duplicatePartnership'))).toBe('Do naprawy: zduplikowany związek – zostanie połączony z pierwszym, dzieci zostają (1). Pozostałe wyniki pozostaną bez zmian.');
+    });
+});
+
+describe('the summary without anything to check says it as the group "To check" names it (T54 G15)', () => {
+    afterEach(() => setLanguage('en'));
+
+    it('en, cs, de, pl: no "problems" left beside "To check"', () => {
+        const expected: Record<'en' | 'cs' | 'de' | 'pl', [string, string, string]> = {
+            en: ['To check', 'Nothing to check', 'Nothing to check. 3 leads.'],
+            cs: ['K ověření', 'Nic k ověření', 'Nic k ověření. 3 stopy.'],
+            de: ['Zu prüfen', 'Nichts zu prüfen', 'Nichts zu prüfen. 3 Hinweise.'],
+            pl: ['Do sprawdzenia', 'Nic do sprawdzenia', 'Nic do sprawdzenia. 3 wskazówki.'],
+        };
+        for (const [lang, [group, passed, leads]] of Object.entries(expected)) {
+            setLanguage(lang as 'en');
+            const s = strings.treeManager;
+            expect(s.valProblems).toBe(group);
+            expect(s.validationPassed).toBe(passed);
+            expect(s.summaryLeadsOnly(3)).toBe(leads);
+        }
     });
 });

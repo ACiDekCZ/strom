@@ -137,6 +137,59 @@ test.describe('desktop (1440)', () => {
         await expect(page.locator('.tv-menu .tv-menu-heading')).toHaveText(['Built-in']);
     });
 
+    test('unsaved columns of a view come back after a reload, of a view left too; once saved, nothing unsaved (T54 G9)', async ({ page }) => {
+        await openTable(page);
+        await waitForPersist(page, 'Ferdan');
+        const headCell = (id: string) => page.locator(`#table-container .tv-headrow [data-col="${id}"]`);
+        const reopen = async (): Promise<void> => {
+            await page.reload();
+            await expect(page.locator('html')).not.toHaveClass(/app-loading/);
+            if (!await page.locator('#table-container .tv-grid').isVisible()) await page.locator('#view-mode-table').click();
+            await expect(status(page)).toHaveText('7 of 7 people');
+        };
+        // Hide a column of Overview from its header menu: "changed".
+        await expect(headCell('bPlace')).toBeVisible();
+        await headCell('bPlace').hover();
+        await headCell('bPlace').getByRole('button', { name: /^Column menu: / }).click();
+        await page.getByRole('menuitem', { name: 'Hide column' }).click();
+        await expect(headCell('bPlace')).toHaveCount(0);
+        await expect(changed(page)).toBeVisible();
+        await reopen();
+        await expect(viewName(page)).toHaveText('Overview');
+        await expect(changed(page)).toBeVisible();
+        await expect(headCell('bPlace')).toHaveCount(0);
+
+        // Another view, a reload, and back: Overview still has its unsaved columns.
+        await viewBtn(page).click();
+        await menuItem(page, 'Sources and citations').click();
+        await expect(viewName(page)).toHaveText('Sources and citations');
+        await expect(changed(page)).toBeHidden();
+        await reopen();
+        await expect(viewName(page)).toHaveText('Sources and citations');
+        await viewBtn(page).click();
+        await menuItem(page, 'Overview').click();
+        await expect(viewName(page)).toHaveText('Overview');
+        await expect(changed(page)).toBeVisible();
+        await expect(headCell('bPlace')).toHaveCount(0);
+
+        // Saved as a new view: after a reload it opens as saved, nothing "changed".
+        await page.locator('#table-container .tv-view-saveas').click();
+        const input = page.locator('.tv-vpanel .tv-vname-input');
+        await input.fill('Without places');
+        await input.press('Enter');
+        await expect(viewName(page)).toHaveText('Without places');
+        await expect(changed(page)).toBeHidden();
+        await waitForPersist(page, 'Without places');
+        await reopen();
+        await expect(viewName(page)).toHaveText('Without places');
+        await expect(changed(page)).toBeHidden();
+        await expect(headCell('bPlace')).toHaveCount(0);
+        await viewBtn(page).click();
+        await menuItem(page, 'Overview').click();
+        await expect(changed(page)).toBeHidden();
+        await expect(headCell('bPlace')).toBeVisible();
+    });
+
     test('Export: the panel, then a CSV with a head and as many rows as "N of M"', async ({ page }) => {
         await openTable(page);
         await chip(page, 'deceased').click();

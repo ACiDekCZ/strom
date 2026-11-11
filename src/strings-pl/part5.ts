@@ -786,6 +786,7 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
         downloading: (done: number, total: number) => `Pobieranie zdjęć… ${done}/${total}`,
         mediaAttached: (matched: number, total: number) => `Podłączono ${matched} z ${total} ${plPl(total, 'wskazanego pliku', 'wskazanych plików', 'wskazanych plików')}.`,
         mediaNoMatch: 'Żaden z wybranych plików nie odpowiada wskazanym nazwom.',
+        mediaDownloadFailed: (count: number) => `Nie udało się pobrać zdjęć (${count}).`,
         encodingLabel: 'Kodowanie tekstu',
         encodingNames: {
             'utf-8': 'UTF-8',
