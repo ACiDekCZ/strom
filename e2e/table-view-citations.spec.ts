@@ -96,7 +96,7 @@ test.describe('desktop (1440)', () => {
 
     test('the citation columns and Godparents from the Columns panel; "+2" opens its bubble, a click opens the source', async ({ page }) => {
         await openTable(page, false);
-        await showColumns(page, false, ['Birth: reference', 'Marriage: reference', 'Godparents']);
+        await showColumns(page, false, ['Birth: other location', 'Marriage: other location', 'Godparents']);
 
         // The first citation's reference and the pill of the other two.
         const ref = await cell(page, 'p:a', 'bRef');
@@ -190,7 +190,7 @@ test.describe('phone (390)', () => {
 
     test('the pill opens a sheet of the other sources; a tap opens the source; nothing overflows', async ({ page }) => {
         await openTable(page, true);
-        await showColumns(page, true, ['Birth: reference']);
+        await showColumns(page, true, ['Birth: other location']);
         const ref = await cell(page, 'p:a', 'bRef');
         const pill = ref.locator('.tv-cites-more');
         await pill.scrollIntoViewIfNeeded();
@@ -223,7 +223,7 @@ test.describe('phone held sideways (844 × 390)', () => {
 
     test('the pill\'s sheet fits the low screen; its rows are 44 px; nothing overflows', async ({ page }) => {
         await openTable(page, true);
-        await showColumns(page, true, ['Birth: reference']);
+        await showColumns(page, true, ['Birth: other location']);
         const pill = (await cell(page, 'p:a', 'bRef')).locator('.tv-cites-more');
         await pill.scrollIntoViewIfNeeded();
         await settle(page);

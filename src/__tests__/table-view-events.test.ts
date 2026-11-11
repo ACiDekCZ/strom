@@ -155,6 +155,11 @@ describe('event rows (§14.1)', () => {
         expect(cell(m, 'w:u1', 'witnesses').names?.map(n => n.personId ?? n.text)).toEqual(['k', 'Kryšpín Hrbolatý']);
         expect(cell(m, 'l:a:ra', 'others').text).toBe('Eufrozína Mlhavá');
         expect(cell(m, 'l:c:bc', 'evSource').text).toBe('Matrika N 1870–1890, str. 4');
+        // Where the entry stands field by field (spec 075 U3 §3): call number, folio, image and the rest after the title.
+        const data = tree();
+        const placed = { ...data.sources!.s2!, callNumber: 'N 7', folio: 'fol. 12v', image: '34', reference: 'č. 5' };
+        const m2 = build({ ...data, sources: { ...data.sources, s2: placed } } as StromData);
+        expect(cell(m2, 'l:c:bc', 'evSource').text).toBe('Matrika N 1870–1890, N 7, fol. 12v, image 34, č. 5');
     });
 
     it('age at the event: days under a year, each partner at a wedding, none at a birth', () => {

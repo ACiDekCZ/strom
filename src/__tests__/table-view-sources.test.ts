@@ -10,7 +10,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import type { PersonId, StromData } from '../types.js';
 import { setLanguage } from '../strings.js';
 import { buildTableModel, rowCounts, rowKey, rowPersonId, sameRow, type SourceRow, type TableModel } from '../ui/table-view/table-model.js';
-import { cellOf, cellPlainText, columnById, columnsOf, DEFAULT_VIEWS } from '../ui/table-view/table-columns.js';
+import { cellOf, cellPlainText, columnById, columnLabel, columnsOf, DEFAULT_VIEWS } from '../ui/table-view/table-columns.js';
 import { sourceUsage } from '../ui/table-view/table-sources.js';
 import {
     activeFilterCount, availableChips, chipLabel, filterRows, searchQuery, setChip, sortRows, type TableFilter,
@@ -174,7 +174,9 @@ describe('quick chips, search and sorting (§14.2)', () => {
 
     it('the default columns and the phone\'s pinned title', () => {
         const st = defaultTypeState('sources');
-        expect(st.columns).toEqual(['srcTitle', 'srcRepo', 'srcRef', 'srcUrl', 'srcPersons', 'srcFacts', 'srcRead', 'srcTranscript']);
+        expect(st.columns).toEqual(['srcTitle', 'srcRepo', 'srcSig', 'srcFolio', 'srcImageNo', 'srcRef', 'srcUrl', 'srcPersons', 'srcFacts']);
+        // Read by the research and the transcript only in the Columns panel.
+        expect(columnsOf('sources').map(c => c.id)).toEqual(expect.arrayContaining(['srcRead', 'srcTranscript']));
         expect(st.pinned).toBe(1);
         expect(shownColumns('sources', st, true).widths[0]).toBe(156);
         expect(columnsOf('sources').map(c => c.id)).toContain('srcRecDate');
@@ -248,5 +250,68 @@ describe('a saved Sources view (§9.1)', () => {
         } finally {
             vi.unstubAllGlobals();
         }
+    });
+});
+
+/**
+ * Where the entry stands (spec 075 U3 §3): call number, folio and image in
+ * columns of their own, the other location after them; an older source keeps
+ * its whole location there with the three empty. Invented archive and books.
+ */
+describe('the place columns of the Sources table (spec 075 U3 §3)', () => {
+    const placed = (): StromData => {
+        const src = (id: string, extra: Record<string, unknown>) => ({ id, title: `Křest ${id}`, repository: 'Zemský archiv Vzorov', ...extra });
+        const sources = {
+            p1: src('p1', { callNumber: 'N 7', folio: 'fol. 2', image: '9', reference: 'č. 8, sloupec 2' }),
+            p2: src('p2', { callNumber: 'N 7', folio: 'fol. 3r', image: '10', reference: 'č. 3' }),
+            p3: src('p3', { callNumber: 'N 7', folio: 'fol. 12v', image: '34', reference: 'č. 5' }),
+            p4: src('p4', { folio: 'S. 15', image: '57–58' }),
+            p5: src('p5', { reference: 'N 9, fol. 44v, sn. 102' }),
+            p6: src('p6', { callNumber: 'N 12', folio: 'pag. 112', reference: 'č. 14' }),
+        };
+        return { persons: {}, partnerships: {}, sources } as unknown as StromData;
+    };
+
+    it('call number, folio, image and other location; an older source only its whole location', () => {
+        const m = build(placed());
+        expect(['srcSig', 'srcFolio', 'srcImageNo', 'srcRef'].map(c => cell(m, 'p3', c).text)).toEqual(['N 7', 'fol. 12v', '34', 'č. 5']);
+        expect(['srcSig', 'srcFolio', 'srcImageNo'].map(c => cell(m, 'p5', c).empty)).toEqual([true, true, true]);
+        expect(cell(m, 'p5', 'srcRef').text).toBe('N 9, fol. 44v, sn. 102');
+        expect(cell(m, 'p4', 'srcRef').empty).toBe(true);
+        expect(['srcSig', 'srcFolio', 'srcImageNo', 'srcRef'].map(c => col(c).width)).toEqual([120, 120, 80, 170]);
+        // The research's column of where the scan is keeps its id (saved views) and gets a name of its own.
+        expect(col('srcImage').group).toBe('research');
+        expect(columnLabel(col('srcImageNo'))).toBe('Image');
+        expect(columnLabel(col('srcImage'))).not.toBe(columnLabel(col('srcImageNo')));
+        expect(columnLabel(col('srcRef'))).toBe('Other location');
+    });
+
+    it('sorts naturally (9 before 10, 57–58 after 34), the empty ones last both ways', () => {
+        const m = build(placed());
+        const by = (c: string, dir: 'asc' | 'desc') => ids(sortRows(m, 'sources', m.sources, [{ col: c, dir }]));
+        expect(by('srcImageNo', 'asc')).toEqual(['p1', 'p2', 'p3', 'p4', 'p5', 'p6']);
+        expect(by('srcImageNo', 'desc')).toEqual(['p4', 'p3', 'p2', 'p1', 'p5', 'p6']);
+        expect(by('srcFolio', 'asc')).toEqual(['p1', 'p2', 'p3', 'p6', 'p4', 'p5']);
+        expect(by('srcSig', 'asc')).toEqual(['p1', 'p2', 'p3', 'p6', 'p4', 'p5']);
+        expect(by('srcSig', 'desc')).toEqual(['p6', 'p1', 'p2', 'p3', 'p4', 'p5']);
+    });
+
+    it('filters and searches the fields as text', () => {
+        const m = build(placed());
+        const search = (q: string) => ids(filterRows(m, 'sources', m.sources, { op: 'and', items: [] }, { query: searchQuery(q), columns: [col('srcFolio')] }).rows);
+        expect(search('12v')).toEqual(['p3']);
+        expect(col('srcImageNo').kind ?? 'text').toBe('text');
+    });
+
+    it('a saved view keeps its columns: the new ones are not added to it', () => {
+        const old = ['srcTitle', 'srcRepo', 'srcRef', 'srcUrl', 'srcPersons', 'srcFacts', 'srcRead', 'srcTranscript'];
+        const st = defaultTypeState('sources');
+        st.columns = [...old];
+        const view = viewFromState('sources', st, 'tv-old', 'Older view', '2026-11-10T10:30:00Z');
+        const back = sanitizeTableView(JSON.parse(JSON.stringify(view)))!;
+        const st2 = defaultTypeState('sources');
+        applyView(back, st2);
+        expect(st2.columns).toEqual(old);
+        expect(st2.columns).not.toContain('srcSig');
     });
 });

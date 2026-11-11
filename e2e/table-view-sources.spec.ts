@@ -30,6 +30,18 @@ const SOURCES = {
 const row = (page: Page, key: string) => page.locator(`#table-container .tv-body .tv-row[data-key="${key}"]`);
 const status = (page: Page) => page.locator('#table-container .tv-status-count');
 const col = (page: Page, key: string, i: number) => row(page, key).locator(`[aria-colindex="${i}"]`);
+const head = (page: Page, id: string) => page.locator(`#table-container .tv-headrow [data-col="${id}"]`);
+
+/** The cell of a row in the column with this id (found by its head's column index). */
+async function cellIn(page: Page, key: string, id: string) {
+    const index = await head(page, id).getAttribute('aria-colindex');
+    expect(index).not.toBeNull();
+    return col(page, key, Number(index));
+}
+
+async function headOrder(page: Page): Promise<string[]> {
+    return page.locator('#table-container .tv-headrow .tv-headcell').evaluateAll(els => els.map(el => (el as HTMLElement).dataset.col ?? ''));
+}
 
 async function openTable(page: Page, phone = false, sources: Record<string, unknown> = SOURCES): Promise<void> {
     await page.clock.setFixedTime(new Date('2026-06-15T10:00:00Z'));
@@ -62,20 +74,28 @@ test.describe('desktop (1440)', () => {
         await expect(page.locator('#table-container .tv-body .tv-row')).toHaveCount(3);
         await expect(page.locator('#table-container .tv-body .tv-row').first()).toHaveAttribute('data-key', 's:s1');
         await expect(col(page, 's:s1', 1)).toContainText('Kniha narozených Horní Lhotka');
-        // People and facts; the readers' pill.
-        await expect(col(page, 's:s1', 5)).toHaveText('3');
-        await expect(col(page, 's:s1', 6)).toHaveText('3');
-        await expect(col(page, 's:s1', 7).locator('.fact-status .fs-dots i.on')).toHaveCount(2);
-        await expect(col(page, 's:s1', 7)).toContainText('2 readers');
-        await expect(col(page, 's:s3', 7)).toHaveText('no');
+        // The default columns (spec 075 U3 §3): where the entry stands field by field; read and transcript only in the panel.
+        expect(await headOrder(page)).toEqual(['srcTitle', 'srcRepo', 'srcSig', 'srcFolio', 'srcImageNo', 'srcRef', 'srcUrl', 'srcPersons', 'srcFacts']);
+        // People and facts.
+        await expect(await cellIn(page, 's:s1', 'srcPersons')).toHaveText('3');
+        await expect(await cellIn(page, 's:s1', 'srcFacts')).toHaveText('3');
+        // The readers' pill, its column shown from the panel.
+        await page.locator('#table-container .tv-cols-btn').click();
+        const panel = page.getByRole('dialog', { name: 'Columns' });
+        await panel.locator('.tv-cp-q').fill('Read by');
+        await panel.getByRole('checkbox', { name: 'Read by the research', exact: true }).check();
+        await page.keyboard.press('Escape');
+        await expect((await cellIn(page, 's:s1', 'srcRead')).locator('.fact-status .fs-dots i.on')).toHaveCount(2);
+        await expect(await cellIn(page, 's:s1', 'srcRead')).toContainText('2 readers');
+        await expect(await cellIn(page, 's:s3', 'srcRead')).toHaveText('no');
 
         // The web address: a link ↗ into a new window.
-        const link = col(page, 's:s2', 4).locator('a.tv-link');
+        const link = (await cellIn(page, 's:s2', 'srcUrl')).locator('a.tv-link');
         await expect(link).toHaveAttribute('href', 'https://example.org/soupis');
         await expect(link).toHaveAttribute('target', '_blank');
         await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
         await expect(link).toContainText('example.org/soupis ↗');
-        await expect(col(page, 's:s3', 4).locator('a')).toHaveCount(0);
+        await expect((await cellIn(page, 's:s3', 'srcUrl')).locator('a')).toHaveCount(0);
 
         // Unread: the source no research read.
         await page.locator('#table-container .tv-chips .tv-chip[data-chip="srcUnread"]').click();
@@ -124,14 +144,57 @@ test.describe('desktop (1440)', () => {
         });
         await page.locator('#table-container .tv-rowtype [data-rowtype="sources"]').click();
         await expect(status(page)).toHaveText('3 of 3 sources');
-        await expect(col(page, 's:s1', 4).locator('a.tv-link')).toHaveAttribute('href', 'https://www.example.org/lhotka');
-        await expect(col(page, 's:s2', 4).locator('a.tv-link')).toHaveAttribute('href', 'https://www.example.net/');
+        await expect((await cellIn(page, 's:s1', 'srcUrl')).locator('a.tv-link')).toHaveAttribute('href', 'https://www.example.org/lhotka');
+        await expect((await cellIn(page, 's:s2', 'srcUrl')).locator('a.tv-link')).toHaveAttribute('href', 'https://www.example.net/');
         const chip = page.locator('#table-container .tv-chips .tv-chip[data-chip="srcOnline"]');
         await chip.click();
         await expect(status(page)).toHaveText('2 of 3 sources');
         await expect(page.locator('#table-container .tv-body .tv-row')).toHaveCount(2);
         await expect(row(page, 's:s3')).toHaveCount(0);
         await expect(page.locator('#table-container .tv-empty')).toBeHidden();
+    });
+
+    test('where the entry stands in columns of its own: natural sort of the images, an older source only its location, German heads whole (spec 075 U3 §3)', async ({ page }) => {
+        const A = 'Zemský archiv Vzorov';
+        await openTable(page, false, {
+            s1: { id: 's1', title: 'Křest – Karel Vzorek, 1852', repository: A, callNumber: 'N 7', folio: 'fol. 2', image: '9', reference: 'č. 8, sloupec 2' },
+            s2: { id: 's2', title: 'Křest – Josefa Vzorková, 1850', repository: A, callNumber: 'N 7', folio: 'fol. 3r', image: '10', reference: 'č. 3' },
+            s3: { id: 's3', title: 'Oddací matrika Pokusov 1820–1835', repository: A, reference: 'N 9, fol. 44v, sn. 102' },
+            s4: { id: 's4', title: 'Taufe – Johanna Mustermannová', repository: A, folio: 'S. 15', image: '57–58' },
+            s5: { id: 's5', title: 'Křest – Anna Vzorková, 1834', repository: A, callNumber: 'N 7', folio: 'fol. 12v', image: '34', reference: 'č. 5' },
+        });
+        await page.locator('#table-container .tv-rowtype [data-rowtype="sources"]').click();
+        await expect(status(page)).toHaveText('5 of 5 sources');
+        expect(await headOrder(page)).toEqual(['srcTitle', 'srcRepo', 'srcSig', 'srcFolio', 'srcImageNo', 'srcRef', 'srcUrl', 'srcPersons', 'srcFacts']);
+        await expect(head(page, 'srcImageNo')).toHaveText(/^Image/);
+        await expect(head(page, 'srcRef')).toHaveText(/^Other location/);
+        const texts = async (id: string) => {
+            const index = await head(page, id).getAttribute('aria-colindex');
+            return page.locator(`#table-container .tv-body .tv-row [aria-colindex="${index}"]`).allInnerTexts();
+        };
+        expect(await texts('srcSig')).toEqual(['N 7', 'N 7', 'N 7', '', '']);
+        // An older source: its whole location as the other location, call number, folio and image empty.
+        await expect(await cellIn(page, 's:s3', 'srcRef')).toHaveText('N 9, fol. 44v, sn. 102');
+        await expect(await cellIn(page, 's:s3', 'srcFolio')).toHaveText('');
+
+        // Sorted by the image: 9 before 10, 57–58 after 34, the older source last both ways.
+        await head(page, 'srcImageNo').click();
+        await expect(page.locator('#table-container .tv-status-sort')).toHaveText('Sort: Image ↑');
+        expect((await texts('srcImageNo')).map(t => t.trim())).toEqual(['9', '10', '34', '57–58', '']);
+        await head(page, 'srcImageNo').click();
+        await expect(page.locator('#table-container .tv-status-sort')).toHaveText('Sort: Image ↓');
+        expect((await texts('srcImageNo')).map(t => t.trim())).toEqual(['57–58', '34', '10', '9', '']);
+
+        // German: the heads whole on one line, nothing cut.
+        await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
+        await expect(head(page, 'srcRef')).toHaveText(/^Weitere Fundstelle/);
+        for (const id of ['srcRepo', 'srcSig', 'srcFolio', 'srcImageNo', 'srcRef']) {
+            const fit = await head(page, id).locator('.tv-cell-text').evaluate(el => {
+                const line = parseFloat(getComputedStyle(el).lineHeight);
+                return { clipped: el.scrollWidth > el.clientWidth || el.scrollHeight > el.clientHeight + 1, lines: Math.round(el.getBoundingClientRect().height / line) };
+            });
+            expect(fit, id).toEqual({ clipped: false, lines: 1 });
+        }
     });
 
     test('a tree without sources: the empty Sources table', async ({ page }) => {

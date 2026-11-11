@@ -124,7 +124,7 @@ function researchLegendHtml(full: boolean): string {
 /** One further citation of a cell (§14.3) as its bubble lists it. */
 export interface BubbleCite {
     title: string;
-    /** The archive and the reference ("Archive · fol. 12"), empty when neither is written. */
+    /** Where the entry stands, short ("Archive · N 7 · fol. 12v · img. 34"), empty when nothing is written. */
     meta: string;
 }
 

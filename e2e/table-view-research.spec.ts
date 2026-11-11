@@ -174,8 +174,8 @@ test.describe('desktop (1440)', () => {
         const sp = await openPanel(page);
         await sp.locator('.tv-cp-q').fill('Research ID');
         await sp.getByRole('checkbox', { name: 'Research ID', exact: true }).check();
-        await sp.locator('.tv-cp-q').fill('Image');
-        await sp.getByRole('checkbox', { name: 'Image', exact: true }).check();
+        await sp.locator('.tv-cp-q').fill('Scan');
+        await sp.getByRole('checkbox', { name: 'Scan', exact: true }).check();
         await page.keyboard.press('Escape');
         expect((await headOrder(page)).slice(0, 2)).toEqual(['srcTitle', 'srcResearchId']);
         await expect(head(page, 'srcImage')).toHaveCount(1);

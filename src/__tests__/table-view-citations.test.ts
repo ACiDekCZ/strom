@@ -12,7 +12,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import type { PersonId, StromData } from '../types.js';
 import { setLanguage, strings } from '../strings.js';
 import { buildTableModel, type PersonRow, type TableModel } from '../ui/table-view/table-model.js';
-import { cellOf, cellPlainText, columnById, columnLabel, DEFAULT_VIEWS } from '../ui/table-view/table-columns.js';
+import { cellOf, cellPlainText, columnById, columnLabel, columnsOf, DEFAULT_VIEWS } from '../ui/table-view/table-columns.js';
 import { factCitations } from '../ui/table-view/table-sources.js';
 import { personGodparents } from '../ui/table-view/table-events.js';
 import { buildTableCsv } from '../ui/table-view/table-export.js';
@@ -90,15 +90,23 @@ afterAll(() => { vi.useRealTimers(); });
 
 describe('citation columns (§14.3)', () => {
     it('in the Sources group, not in the default set; the marriage\'s union-scoped', () => {
-        const ids = ['bArch', 'bRef', 'bUrl', 'wArch', 'wRef', 'wUrl', 'dArch', 'dRef', 'dUrl'];
+        const ids = [
+            'bArch', 'bSig', 'bFolio', 'bImage', 'bRef', 'bUrl', 'wArch', 'wSig', 'wFolio', 'wImage', 'wRef', 'wUrl',
+            'dArch', 'dSig', 'dFolio', 'dImage', 'dRef', 'dUrl',
+        ];
         for (const id of ids) {
             expect(col(id).group).toBe('sources');
             expect(col(id).phase).toBe(1);
             expect(DEFAULT_VIEWS.persons.columns).not.toContain(id);
         }
-        expect(ids.filter(id => col(id).unionScoped)).toEqual(['wArch', 'wRef', 'wUrl']);
+        expect(ids.filter(id => col(id).unionScoped)).toEqual(['wArch', 'wSig', 'wFolio', 'wImage', 'wRef', 'wUrl']);
+        // The group's order (spec 075 U3 §3): archive, call number, folio, image, other location, URL.
+        const group = columnsOf('persons').filter(c => c.group === 'sources' && c.id.startsWith('b')).map(c => c.id);
+        expect(group).toEqual(['bArch', 'bSig', 'bFolio', 'bImage', 'bRef', 'bUrl']);
+        expect(['bSig', 'bFolio', 'bImage', 'bRef'].map(id => col(id).width)).toEqual([160, 180, 130, 230]);
         expect(col('bUrl').kind).toBe('link');
-        expect(columnLabel(col('wRef'))).toBe('Marriage: reference');
+        expect(columnLabel(col('wRef'))).toBe('Marriage: other location');
+        expect(['bSig', 'bFolio', 'bImage'].map(id => columnLabel(col(id)))).toEqual(['Birth: call number', 'Birth: folio/page', 'Birth: image']);
     });
 
     it('factCitations: the birth\'s own and its baptism\'s, each once, unknown ids left out', () => {
@@ -173,12 +181,25 @@ describe('citation columns (§14.3)', () => {
         expect(cell(m, 'g', 'wArch').na).toBe(true);
     });
 
+    it('the place fields of the first citation; an older source leaves call number, folio and image empty (spec 075 U3 §3)', () => {
+        const data = tree();
+        const placed = { ...data.sources!.s1!, callNumber: 'N 7', folio: 'fol. 12v', image: '34', reference: 'č. 5' };
+        const m = build({ ...data, sources: { ...data.sources, s1: placed } } as StromData);
+        expect(['bArch', 'bSig', 'bFolio', 'bImage', 'bRef'].map(id => cell(m, 'a', id).text)).toEqual(['Archiv Smyšlený', 'N 7', 'fol. 12v', '34', 'č. 5']);
+        expect(cell(m, 'a', 'bImage').moreSources).toEqual(['s2', 's3']);
+        const old = build();
+        expect(['bSig', 'bFolio', 'bImage'].map(id => cell(old, 'a', id).empty)).toEqual([true, true, true]);
+        expect(cell(old, 'a', 'bRef').text).toBe('fol. 7');
+        // Death of a living person: does not apply, as the other death columns.
+        expect(cell(old, 'n', 'dFolio').na).toBe(cell(old, 'n', 'dRef').na);
+    });
+
     it('the CSV: the first value and "(+N)"; a second union on its continuation row', () => {
         const m = build();
         const columns = ['name', 'bRef', 'wRef'].map(col);
         const out = buildTableCsv({ model: m, type: 'persons', rows: [row(m, 'a'), row(m, 'b')], columns });
         const lines = out.csv.replace(/^﻿/, '').split('\r\n');
-        expect(lines[0]).toBe('Name;Union;Birth: reference;Marriage: reference');
+        expect(lines[0]).toBe('Name;Union;Birth: other location;Marriage: other location');
         expect(lines[1]).toBe('Radoslav Pecháček;1 of 2;fol. 7 (+2);fol. 30 (+1)');
         expect(lines[2]).toBe(';2 of 2;;fol. 99');
         expect(lines[3]).toBe('Ludmila Hruštičková;;;fol. 30 (+1)');

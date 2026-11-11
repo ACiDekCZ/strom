@@ -21,6 +21,7 @@ import { CARD_STATUS_CLASSES, cardStatus, factReliability, type ReliabilityStepN
 import { cardStatusLabel } from '../fact-status.js';
 import { strings, type StringsType } from '../../strings.js';
 import { safeWebUrl } from '../../validation.js';
+import { sourceEntryText } from '../../source-location.js';
 import { factCitations, sourceOnline, sourceReaders, type CitedSource } from './table-sources.js';
 import { personGodparents } from './table-events.js';
 import {
@@ -292,15 +293,20 @@ function personSources(row: PersonRow): number {
     return ids.size;
 }
 
+/** The text field of a source a citation cell shows (§14.3, spec 075 U3 §3). */
+const CITE_FIELD = { repo: 'repository', sig: 'callNumber', folio: 'folio', image: 'image', ref: 'reference' } as const;
+
 /**
- * A citation cell (§14.3): the first cited source's archive, reference or
- * web address (a link ↗); with more, the others' ids for the pill "+N".
- * Sorted and filtered by the first one's value.
+ * A citation cell (§14.3): the first cited source's archive, call number,
+ * folio, image, other location (an older source: its whole location) or web
+ * address (a link ↗); with more, the others' ids for the pill "+N". Sorted
+ * and filtered by the first one's value; an older source leaves the call
+ * number, folio and image empty.
  */
-export function citeCell(cites: readonly CitedSource[], field: 'repo' | 'ref' | 'url'): CellValue {
+export function citeCell(cites: readonly CitedSource[], field: keyof typeof CITE_FIELD | 'url'): CellValue {
     if (!cites.length) return emptyCell();
     const first = cites[0].source;
-    const cell = field === 'url' ? urlCell(first.url) : textCell(field === 'repo' ? first.repository : first.reference);
+    const cell = field === 'url' ? urlCell(first.url) : textCell(first[CITE_FIELD[field]]);
     return cites.length > 1 ? { ...cell, moreSources: cites.slice(1).map(c => c.id) } : cell;
 }
 
@@ -588,13 +594,22 @@ export const PERSON_COLUMNS: readonly ColumnDef[] = cols('persons', [
     { id: 'srcCount', group: 'sources', label: 'srcCount', width: 92, kind: 'number', computed: true, get: (_c, r) => numberCell(personSources(r as PersonRow)) },
     // The citations of the birth, the marriage (the union of the row or sub-row) and the death (§14.3).
     { id: 'bArch', group: 'sources', label: 'bArch', width: 200, get: (c, r) => citeCell(factCitations(c.data, 'birth', asPerson(r)), 'repo') },
-    { id: 'bRef', group: 'sources', label: 'bRef', width: 190, get: (c, r) => citeCell(factCitations(c.data, 'birth', asPerson(r)), 'ref') },
+    { id: 'bSig', group: 'sources', label: 'bSig', width: 160, get: (c, r) => citeCell(factCitations(c.data, 'birth', asPerson(r)), 'sig') },
+    { id: 'bFolio', group: 'sources', label: 'bFolio', width: 180, get: (c, r) => citeCell(factCitations(c.data, 'birth', asPerson(r)), 'folio') },
+    { id: 'bImage', group: 'sources', label: 'bImage', width: 130, get: (c, r) => citeCell(factCitations(c.data, 'birth', asPerson(r)), 'image') },
+    { id: 'bRef', group: 'sources', label: 'bRef', width: 230, get: (c, r) => citeCell(factCitations(c.data, 'birth', asPerson(r)), 'ref') },
     { id: 'bUrl', group: 'sources', label: 'bUrl', width: 200, kind: 'link', get: (c, r) => citeCell(factCitations(c.data, 'birth', asPerson(r)), 'url') },
     { id: 'wArch', group: 'sources', label: 'wArch', width: 200, unionScoped: true, get: inUnion((c, _r, u) => citeCell(factCitations(c.data, 'marriage', u), 'repo')) },
-    { id: 'wRef', group: 'sources', label: 'wRef', width: 190, unionScoped: true, get: inUnion((c, _r, u) => citeCell(factCitations(c.data, 'marriage', u), 'ref')) },
+    { id: 'wSig', group: 'sources', label: 'wSig', width: 160, unionScoped: true, get: inUnion((c, _r, u) => citeCell(factCitations(c.data, 'marriage', u), 'sig')) },
+    { id: 'wFolio', group: 'sources', label: 'wFolio', width: 180, unionScoped: true, get: inUnion((c, _r, u) => citeCell(factCitations(c.data, 'marriage', u), 'folio')) },
+    { id: 'wImage', group: 'sources', label: 'wImage', width: 130, unionScoped: true, get: inUnion((c, _r, u) => citeCell(factCitations(c.data, 'marriage', u), 'image')) },
+    { id: 'wRef', group: 'sources', label: 'wRef', width: 230, unionScoped: true, get: inUnion((c, _r, u) => citeCell(factCitations(c.data, 'marriage', u), 'ref')) },
     { id: 'wUrl', group: 'sources', label: 'wUrl', width: 200, kind: 'link', unionScoped: true, get: inUnion((c, _r, u) => citeCell(factCitations(c.data, 'marriage', u), 'url')) },
     { id: 'dArch', group: 'sources', label: 'dArch', width: 200, get: (c, r) => deathOnly(c, r, p => citeCell(factCitations(c.data, 'death', p), 'repo')) },
-    { id: 'dRef', group: 'sources', label: 'dRef', width: 190, get: (c, r) => deathOnly(c, r, p => citeCell(factCitations(c.data, 'death', p), 'ref')) },
+    { id: 'dSig', group: 'sources', label: 'dSig', width: 160, get: (c, r) => deathOnly(c, r, p => citeCell(factCitations(c.data, 'death', p), 'sig')) },
+    { id: 'dFolio', group: 'sources', label: 'dFolio', width: 180, get: (c, r) => deathOnly(c, r, p => citeCell(factCitations(c.data, 'death', p), 'folio')) },
+    { id: 'dImage', group: 'sources', label: 'dImage', width: 130, get: (c, r) => deathOnly(c, r, p => citeCell(factCitations(c.data, 'death', p), 'image')) },
+    { id: 'dRef', group: 'sources', label: 'dRef', width: 230, get: (c, r) => deathOnly(c, r, p => citeCell(factCitations(c.data, 'death', p), 'ref')) },
     { id: 'dUrl', group: 'sources', label: 'dUrl', width: 200, kind: 'link', get: (c, r) => deathOnly(c, r, p => citeCell(factCitations(c.data, 'death', p), 'url')) },
     // Reliability and research
     { id: 'relN', group: 'rel', label: 'relN', width: 150, kind: 'pill', computed: true, get: (c, r) => pillCell(c, asPerson(r), 'name') },
@@ -786,13 +801,16 @@ function eventValueCell(row: TableRow): CellValue {
     return textCell(e.cause);
 }
 
-/** The sources cited on the event: "title, reference", several joined by "; " (§14.1). */
+/**
+ * The sources cited on the event: "title, call number, folio, image, other
+ * location" (an older source: "title, location"), several joined by "; " (§14.1).
+ */
 function eventSourceCell(ctx: TableContext, row: TableRow): CellValue {
     const out: string[] = [];
     for (const id of asEvent(row).sourceIds) {
         const src = ctx.data.sources?.[id];
         if (!src) continue;
-        const text = [src.title?.trim(), src.reference?.trim()].filter(Boolean).join(', ');
+        const text = [src.title?.trim(), src.callNumber?.trim(), sourceEntryText(src, ', ')].filter(Boolean).join(', ');
         if (text && !out.includes(text)) out.push(text);
     }
     return textCell(out.join('; '));
@@ -876,7 +894,12 @@ export const SOURCE_COLUMNS: readonly ColumnDef[] = cols('sources', [
     { id: 'srcTitle', group: 'source', label: 'srcTitle', width: 280, get: (_c, r) => textCell(asSource(r).source.title) },
     { id: 'srcResearchId', group: 'source', label: 'researchId', width: 110, fromResearch: true, get: (c, r) => c.research ? sourceResearchIdCell(asSource(r).source) : emptyCell() },
     { id: 'srcRepo', group: 'source', label: 'srcRepo', width: 200, get: (_c, r) => textCell(asSource(r).source.repository) },
-    { id: 'srcRef', group: 'source', label: 'srcRef', width: 180, get: (_c, r) => textCell(asSource(r).source.reference) },
+    // Where the entry stands (spec 075 U3 §3): call number, folio, image, then the other location (an older source: its whole location).
+    // The image's id is srcImageNo: srcImage is the research's column of where the scan is, kept for saved views.
+    { id: 'srcSig', group: 'source', label: 'srcSig', width: 120, get: (_c, r) => textCell(asSource(r).source.callNumber) },
+    { id: 'srcFolio', group: 'source', label: 'srcFolio', width: 120, get: (_c, r) => textCell(asSource(r).source.folio) },
+    { id: 'srcImageNo', group: 'source', label: 'srcImageNo', width: 80, get: (_c, r) => textCell(asSource(r).source.image) },
+    { id: 'srcRef', group: 'source', label: 'srcRef', width: 170, get: (_c, r) => textCell(asSource(r).source.reference) },
     { id: 'srcUrl', group: 'source', label: 'srcUrl', width: 230, kind: 'link', get: (_c, r) => sourceUrlCell(asSource(r).source) },
     { id: 'srcPersons', group: 'use', label: 'srcPersons', width: 90, kind: 'number', computed: true, get: (_c, r) => numberCell(asSource(r).persons) },
     { id: 'srcFacts', group: 'use', label: 'srcFacts', width: 90, kind: 'number', computed: true, get: (_c, r) => numberCell(asSource(r).facts) },
@@ -1001,7 +1024,7 @@ export const DEFAULT_VIEWS: Record<RowType, DefaultView> = {
         sort: [{ col: 'evDate', dir: 'asc' }],
     },
     sources: {
-        columns: ['srcTitle', 'srcRepo', 'srcRef', 'srcUrl', 'srcPersons', 'srcFacts', 'srcRead', 'srcTranscript'],
+        columns: ['srcTitle', 'srcRepo', 'srcSig', 'srcFolio', 'srcImageNo', 'srcRef', 'srcUrl', 'srcPersons', 'srcFacts'],
         widths: {},
         pinned: 1,
         sort: [{ col: 'srcTitle', dir: 'asc' }],

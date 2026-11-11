@@ -92,6 +92,7 @@ import { fanYears } from '../../fan-labels.js';
 import { shownNameOrEmpty as personName } from '../../person-name.js';
 import { emptyStateHtml } from '../empty-state.js';
 import { tableEmptyState, type TableEmptyState } from './table-empty.js';
+import { sourcePlaceLine } from '../../source-location.js';
 
 interface Mounted {
     container: HTMLElement;
@@ -1454,7 +1455,7 @@ export const tableMethods = uiModule({
             const src = catalog[id]!;
             return {
                 title: src.title?.trim() || src.reference?.trim() || '?',
-                meta: [src.repository?.trim(), src.reference?.trim()].filter(Boolean).join(' · '),
+                meta: sourcePlaceLine(src, 'short'),
             };
         });
         const t = strings.table;
@@ -1663,7 +1664,7 @@ export const tableMethods = uiModule({
         const run = (a: RowAction) => () => this.tableRowAction(a, line);
         const rows = [{ label: t.act.openSource, icon: '▤', run: run('open') }];
         if (!tableReadOnly()) rows.push({ label: t.act.edit, icon: '✎', run: run('edit') });
-        const sub = [src.repository, src.reference].map(x => x?.trim()).filter(Boolean).join(' · ');
+        const sub = sourcePlaceLine(src, 'short');
         const cellBlocks = this.tableCellSheetBlocks(line, cell);
         this.noteBottomSheetTrigger();
         this.hideBottomSheet();
