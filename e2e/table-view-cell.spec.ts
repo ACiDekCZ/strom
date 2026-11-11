@@ -189,6 +189,37 @@ test.describe('desktop (1440)', () => {
         await expect(colChips(page)).toHaveText(['Father = Radomír Šlapetný']);
         await expect(row(page, 'p:t')).toHaveCount(0);
     });
+
+    test('the menu of a cell on another row than the selected one opens under that cell (T54 G7)', async ({ page }) => {
+        await openTable(page);
+        await expect(row(page, 'p:b1')).toHaveAttribute('aria-selected', 'true');
+        const menu = page.locator('.tv-menu');
+        const under = async (key: string, colId: string) => {
+            const c = await cell(page, key, colId);
+            await c.click({ button: 'right' });
+            await expect(menu).toBeVisible();
+            await expect(row(page, key)).toHaveAttribute('aria-selected', 'true');
+            const box = (await menu.boundingBox())!;
+            const at = (await (await cell(page, key, colId)).boundingBox())!;
+            // Under the cell (or above it near the window's bottom), never in the window's corner.
+            expect(Math.abs(box.x - at.x)).toBeLessThan(2);
+            expect(Math.abs(box.y - (at.y + at.height + 2)) < 2 || Math.abs(box.y + box.height + 2 - at.y) < 2).toBe(true);
+            await page.keyboard.press('Escape');
+            await expect(menu).toHaveCount(0);
+        };
+        await under('p:t', 'bPlace');
+        await under('p:m', 'bDate');
+        // The selected row's cell as before.
+        await under('p:m', 'bPlace');
+        // Shift+F10 on a cell of another row, focused by the keyboard.
+        await (await cell(page, 'p:b2', 'bDate')).focus();
+        await page.keyboard.press('Shift+F10');
+        await expect(menu).toBeVisible();
+        const box = (await menu.boundingBox())!;
+        const at = (await (await cell(page, 'p:b2', 'bDate')).boundingBox())!;
+        expect(Math.abs(box.x - at.x)).toBeLessThan(2);
+        expect(box.y).toBeGreaterThan(at.y);
+    });
 });
 
 test.describe('phone (390)', () => {

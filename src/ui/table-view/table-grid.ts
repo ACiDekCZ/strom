@@ -555,9 +555,10 @@ export class TableGrid {
             e.preventDefault();
             const cellEl = t.closest<HTMLElement>('[aria-colindex]');
             if (cellEl) this.chooseCell(line, cellEl);
+            const ref = this.cellRefOf(line, cellEl);
             const anchor = cellEl ?? t.closest<HTMLElement>('.tv-row')!;
             this.select(line);
-            this.handlers.onRowMenu(line, anchor, this.cellRefOf(line, cellEl));
+            this.handlers.onRowMenu(line, this.liveAnchor(line, anchor), ref);
         });
         this.body.addEventListener('keydown', (e) => this.onBodyKey(e));
         // The grid itself focused (its tab stop): an arrow enters the body at the active cell.
@@ -664,6 +665,21 @@ export class TableGrid {
         for (const b of this.body.querySelectorAll<HTMLElement>('.tv-nm[data-ni], .tv-link, .tv-cites-more, .tv-conf')) {
             b.tabIndex = b.closest('[aria-colindex]')?.getAttribute('tabindex') === '0' ? 0 : -1;
         }
+    }
+
+    /**
+     * The element a menu opens at after a select: selecting another row draws
+     * the rows anew, so the cell clicked is no longer on the page (a menu at
+     * it opened in the window's corner, T54 G7). The same cell (or row) as
+     * drawn now; the element itself while it is still there.
+     */
+    private liveAnchor(line: GridLine, el: HTMLElement): HTMLElement {
+        if (el.isConnected) return el;
+        const at = this.lines.findIndex(l => lineKey(l) === lineKey(line));
+        const rowEl = at >= 0 ? this.body.querySelector<HTMLElement>(`.tv-row[data-index="${at}"]`) : null;
+        if (!rowEl) return el;
+        const col = el.getAttribute('aria-colindex');
+        return (col ? rowEl.querySelector<HTMLElement>(`[aria-colindex="${col}"]`) : null) ?? rowEl;
     }
 
     /** Select a line's row (its person for a sub-row) unless it is the selected one. */
@@ -1515,8 +1531,10 @@ export class TableGrid {
             e.preventDefault();
             const cellEl = (e.target as Element).closest<HTMLElement>('[aria-colindex]');
             if (cellEl) this.chooseCell(line, cellEl);
+            const ref = this.cellRefOf(line, cellEl);
+            const anchor = cellEl ?? (e.target as HTMLElement);
             this.select(line);
-            this.handlers.onRowMenu(line, cellEl ?? (e.target as HTMLElement), this.cellRefOf(line, cellEl));
+            this.handlers.onRowMenu(line, this.liveAnchor(line, anchor), ref);
             return;
         }
         // F2 edits the active cell in place (T54 F8).
