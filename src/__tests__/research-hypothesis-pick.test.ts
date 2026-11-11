@@ -343,18 +343,18 @@ describe('the question the terminal asks, as the waiting card repeats it (DEV §
 
     it('in Czech: choose (with a large link), change, abandon, reopen, leave open', () => {
         setLanguage('cs');
-        expect(researchHypothesisAsk(h, 'decide', 'A')).toBe('Rozhodnout H0052 pro verzi A? Připojí 214 osob. (Enter = ano)');
-        expect(researchHypothesisAsk(h, 'decide', 'B')).toBe('Rozhodnout H0052 pro verzi B? (Enter = ano)');
-        expect(researchHypothesisAsk({ ...h, status: 'decided', chosen: 'A' }, 'decide', 'B')).toBe('Změnit H0052 z A na verzi B? (Enter = ano)');
-        expect(researchHypothesisAsk(h, 'abandon')).toBe('Žádná verze H0052 neplatí, hypotézu opustit? (Enter = ano)');
-        expect(researchHypothesisAsk({ ...h, status: 'decided', chosen: 'A' }, 'reopen')).toBe('Vrátit H0052 na otevřenou? Ze stromu zmizí spojení 214 osob. (Enter = ano)');
-        expect(researchHypothesisAsk(h, 'keep-open')).toBe('Nechat H0052 otevřenou? Návrh agenta (B) se nepřijme. (Enter = ano)');
+        expect(researchHypothesisAsk(h, 'decide', 'A')).toBe('rozhodnout H0052 pro verzi A. Připojí 214 osob.');
+        expect(researchHypothesisAsk(h, 'decide', 'B')).toBe('rozhodnout H0052 pro verzi B.');
+        expect(researchHypothesisAsk({ ...h, status: 'decided', chosen: 'A' }, 'decide', 'B')).toBe('změnit H0052 z A na verzi B.');
+        expect(researchHypothesisAsk(h, 'abandon')).toBe('žádná verze H0052 neplatí, hypotéza se opustí.');
+        expect(researchHypothesisAsk({ ...h, status: 'decided', chosen: 'A' }, 'reopen')).toBe('vrátit H0052 na otevřenou. Ze stromu zmizí spojení 214 osob.');
+        expect(researchHypothesisAsk(h, 'keep-open')).toBe('nechat H0052 otevřenou. Návrh agenta (B) se nepřijme.');
         expect(researchHypothesisAsk(h, 'decide')).toBe('');
         expect(researchHypothesisWaitText(h, 'decide', 'B')).toBe(
-            'Terminál výzkumu se ptá: „Rozhodnout H0052 pro verzi B? (Enter = ano)“, pak nepovinně na důvod. Do potvrzení se tu nic nemění.');
+            'V terminálu výzkumu se potvrzuje (Enter = ano): rozhodnout H0052 pro verzi B. Pak se terminál nepovinně zeptá na důvod. Do potvrzení se tu nic nemění.');
         // Leaving open asks for no reason.
         expect(researchHypothesisWaitText({ ...h, proposal: undefined }, 'keep-open')).toBe(
-            'Terminál výzkumu se ptá: „Nechat H0052 otevřenou? (Enter = ano)“. Do potvrzení se tu nic nemění.');
+            'V terminálu výzkumu se potvrzuje (Enter = ano): nechat H0052 otevřenou. Do potvrzení se tu nic nemění.');
         expect(researchHypothesisBigJoin(h.variants![0])).toBe(214);
         expect(researchHypothesisBigJoin(h.variants![1])).toBe(0);
     });
@@ -362,9 +362,9 @@ describe('the question the terminal asks, as the waiting card repeats it (DEV §
     it('in English: the same sentences', () => {
         setLanguage('en');
         expect(researchHypothesisWaitText(h, 'decide', 'A')).toBe(
-            'The research terminal asks: “Decide H0052 for version A? Links 214 people. (Enter = yes)”, then optionally for a reason. Nothing changes here until confirmed.');
+            'To be confirmed in the research terminal (Enter = yes): decide H0052 for version A. Links 214 people. Then the terminal optionally asks for a reason. Nothing changes here until confirmed.');
         expect(researchHypothesisAsk({ ...h, proposal: { variant: null } }, 'keep-open')).toBe(
-            'Leave H0052 open? The agent\'s proposal (no version holds) is not accepted. (Enter = yes)');
+            'leave H0052 open. The agent\'s proposal (no version holds) is not accepted.');
     });
 });
 
@@ -392,6 +392,13 @@ describe('the texts of deciding a hypothesis in four languages', () => {
             // German by case: "auf ihr baut …" (on it) is no address.
             expect(all).not.toMatch(/\b(Sie|Ihr|Ihre|du|dein|deine)\b/);
             expect(all).not.toMatch(/\b(wy|twój|pan|pani)\b/i);
+            // The wait describes what the terminal confirms, never quotes it:
+            // the research words its own question (a/n, then the reason).
+            const h = { id: 'H0052', status: 'open', variants: [{ id: 'B', links: [] }] } as unknown as ResearchHypothesis;
+            for (const t of [r.hypoWaitAsk('q'), r.hypoWaitAskPlain('q'), researchHypothesisAsk(h, 'decide', 'B'),
+                researchHypothesisAsk(h, 'abandon'), researchHypothesisAsk(h, 'reopen'), researchHypothesisAsk(h, 'keep-open')]) {
+                expect(t).not.toMatch(/[„“”"?]/);
+            }
         }
     });
 });

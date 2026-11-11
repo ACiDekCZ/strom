@@ -91,12 +91,12 @@ export function researchHypothesisCannotReopenText(h: ResearchHypothesis): strin
 }
 
 /**
- * The question the research's terminal asks for a link from the app, as
- * the waiting card repeats it (DEV §3, §4; the terminal words it in its own
- * language): decide (or change) for a version, abandon, reopen, leave open,
- * with the count of a large link, the link that leaves the tree, the
- * agent's proposal not taken; "(Enter = yes)" at its end. '' for `decide`
- * without a version (the research's own screen, no waiting).
+ * What the research's terminal asks to confirm for a link from the app, as
+ * the waiting card describes it (DEV §3, §4) — not a quote: the terminal
+ * words its question itself. Decide (or change) for a version, abandon,
+ * reopen, leave open, with the count of a large link, the link that leaves
+ * the tree, the agent's proposal not taken. '' for `decide` without a
+ * version (the research's own screen, no waiting).
  */
 export function researchHypothesisAsk(h: ResearchHypothesis, what: ResearchHypothesisDo, variant?: string): string {
     const r = strings.research;
@@ -116,7 +116,7 @@ export function researchHypothesisAsk(h: ResearchHypothesis, what: ResearchHypot
     } else {
         q = r.hypoAskLeave(id) + (h.proposal ? ` ${r.hypoAskProposalDropped(h.proposal.variant)}` : '');
     }
-    return `${q} ${r.hypoAskEnter}`;
+    return q;
 }
 
 /** The waiting card's sentence (DEV §4): the terminal's question, then (not for "Leave open") the optional reason. */
