@@ -11,6 +11,7 @@ import { collectPlaces } from './places.js';
 import { factValueSignature, handedConfirmations } from './verify.js';
 import type { FactHolder } from './import-origin.js';
 import { getStringsForLang, SUPPORTED_LANGUAGES } from './strings.js';
+import { sourcePlaceDiffers, sourcePlaceKey } from './source-location.js';
 
 export type ChangeKind =
     | 'added' | 'deleted' | 'name' | 'gender' | 'birth' | 'death' | 'marriage' | 'event'
@@ -406,15 +407,16 @@ export function diffOther(base: StromData | null, current: StromData): OtherChan
         } else if (differs(a, b)) {
             if (differs(a.title ?? '', b.title ?? '')) kinds.add('title');
             if (differs(a.transcript ?? '', b.transcript ?? '')) kinds.add('transcript');
-            if (differs(a.reference ?? '', b.reference ?? '')) kinds.add('page');
+            // Where the entry stands (spec 075: the call number, folio and image beside the rest of the location).
+            if (sourcePlaceDiffers(a, b)) kinds.add('page');
             const ea = new Map((a.excerpts ?? []).map(e => [e.id, e]));
             const eb = new Map((b.excerpts ?? []).map(e => [e.id, e]));
             if ([...eb.keys()].some(id => !ea.has(id))) kinds.add('excerptAdded');
             if ([...ea.keys()].some(id => !eb.has(id))) kinds.add('excerptRemoved');
             // Anything else of the entry (the archive, the date, a re-cropped excerpt, the reading…).
             // Not the user's: the record it was in a loaded file, its author and tags as written there.
-            const { title: _t1, transcript: _r1, reference: _p1, excerpts: ex1, originalIds: _o1, gedcomAuthor: _a1, gedcomText: _x1, gedcomExtra: _g1, ...restA } = a;
-            const { title: _t2, transcript: _r2, reference: _p2, excerpts: ex2, originalIds: _o2, gedcomAuthor: _a2, gedcomText: _x2, gedcomExtra: _g2, ...restB } = b;
+            const { title: _t1, transcript: _r1, reference: _p1, callNumber: _c1, folio: _f1, image: _i1, excerpts: ex1, originalIds: _o1, gedcomAuthor: _a1, gedcomText: _x1, gedcomExtra: _g1, ...restA } = a;
+            const { title: _t2, transcript: _r2, reference: _p2, callNumber: _c2, folio: _f2, image: _i2, excerpts: ex2, originalIds: _o2, gedcomAuthor: _a2, gedcomText: _x2, gedcomExtra: _g2, ...restB } = b;
             const sameExcerpts = (ex1 ?? []).filter(e => eb.has(e.id)).every(e => !differs(e, eb.get(e.id)));
             if (differs(restA, restB) || !sameExcerpts) kinds.add('other');
         }
@@ -761,7 +763,7 @@ const EVENT_TAG: Record<string, string> = {
 function sourceLabel(id: string, sources: Record<string, Source>): string {
     const src = sources[id];
     const title = src?.title?.trim() || id;
-    const page = src?.reference?.trim() ?? '';
+    const page = src ? sourcePlaceKey(src) : '';
     return page && !title.includes(page) ? `${title} · ${page}` : title;
 }
 
@@ -778,7 +780,7 @@ function sourceTitles(ids: readonly string[], sources: Record<string, Source>): 
  */
 function citedKey(id: string, sources: Record<string, Source>): string {
     const src = sources[id];
-    return src ? [src.title, src.repository, src.reference].map(v => (v ?? '').trim()).join('\u0000') : `\u0001${id}`;
+    return src ? [src.title, src.repository, sourcePlaceKey(src)].map(v => (v ?? '').trim()).join('\u0000') : `\u0001${id}`;
 }
 
 /**
@@ -788,7 +790,7 @@ function citedKey(id: string, sources: Record<string, Source>): string {
 function pageMoved(id: string, as: Record<string, Source>, bs: Record<string, Source>): boolean {
     const x = as[id];
     const y = bs[id];
-    return !!x && !!y && (x.reference ?? '').trim() !== (y.reference ?? '').trim();
+    return !!x && !!y && sourcePlaceDiffers(x, y);
 }
 
 /**

@@ -40,6 +40,7 @@ import {
 } from './types.js';
 import { StorageManager } from '../storage.js';
 import { mergeNoteText } from './notes.js';
+import { sourcePlaceKey } from '../source-location.js';
 import { sameFileRecord } from './id-match.js';
 
 // ==================== BACKUP ====================
@@ -914,9 +915,15 @@ function carryAlsoChildOf(
     }
 }
 
-/** Title + repository + reference; '' for a source with none of them (never deduplicated). */
+/**
+ * Title + repository + where the entry stands; '' for a source with none of
+ * them (never deduplicated). The place is the composed PAGE (the same whether
+ * the folio and image are fields or words of the location) and the call
+ * number when the source has one (spec 075): an older source's key is as before.
+ */
 function sourceKey(src: Source): string {
-    const parts = [contentKey(src.title), contentKey(src.repository), contentKey(src.reference)];
+    const parts = [contentKey(src.title), contentKey(src.repository), contentKey(sourcePlaceKey(src)),
+        ...(src.callNumber?.trim() ? [contentKey(src.callNumber)] : [])];
     return parts.some(Boolean) ? parts.join('\u0001') : '';
 }
 

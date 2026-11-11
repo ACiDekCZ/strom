@@ -1339,6 +1339,14 @@ interface RawSource {
     reference: string;
     url: string;
     note: string;
+    /** The first `2 CALN` under the record's `1 REPO`: the book's call number (spec 075). */
+    callNumber?: string;
+    /** `1 _STROM_FOLIO` / `_STROM_IMAGE` / `_STROM_LOCATOR` (spec 075): with any of them the fields hold, not PAGE. */
+    folio?: string;
+    image?: string;
+    locator?: string;
+    /** The record carried any of the `_STROM_FOLIO/_IMAGE/_LOCATOR` lines (its PAGE is composed of them). */
+    placeFields?: boolean;
     /** QUAY seen on the record or a citation (first wins). */
     quality?: number;
     /** ABBR: the short title, used when the record has no TITL. */
@@ -2080,7 +2088,8 @@ interface GedLine {
  * name, witness, citation page, web address or label. Joined up front, so a
  * value split to respect the 255-byte line limit reads back whole.
  */
-const JOINED_VALUE_TAGS = new Set(['PLAC', 'NAME', '_WITN', 'WITN', 'PAGE', 'WWW', 'URL', 'REFN', 'TYPE', 'SOUR', '_QUESTION']);
+const JOINED_VALUE_TAGS = new Set(['PLAC', 'NAME', '_WITN', 'WITN', 'PAGE', 'WWW', 'URL', 'REFN', 'TYPE', 'SOUR', '_QUESTION',
+    '_STROM_FOLIO', '_STROM_IMAGE', '_STROM_LOCATOR', 'CALN']);
 
 /**
  * Split the file into lines and do the reading that needs the whole file:
@@ -3696,8 +3705,9 @@ export function parseGedcom(content: string): ParsedGedcom {
             // The source has one note, and everything else the record says that
             // has no field of its own lands there: every NOTE (a second one used
             // to overwrite the first), the publication (PUBL), the author (AUTH)
-            // and the call number the repository files it under (REPO > CALN)
-            // — each labelled, each with its continuation lines.
+            // — each labelled, each with its continuation lines. The call number
+            // the repository files it under (REPO > CALN) is a field of its own
+            // (spec 075; the first of them when the record names several).
             const src = currentSource;
             const addLine = (line: string, sep: string): void => {
                 src.note = src.note ? `${src.note}${sep}${line}` : line;
@@ -3708,7 +3718,8 @@ export function parseGedcom(content: string): ParsedGedcom {
                 currentSubTag = tag;
                 readingAuthor = false;
                 if (tag === 'TITL') src.title = value;
-                else if (tag === 'REPO') src.repository = value;
+                // The first archive named (as its first CALN is the call number; Strom Research reads the same).
+                else if (tag === 'REPO') { if (!src.repository) src.repository = value; }
                 else if (tag === 'PAGE') src.reference = value;
                 else if (tag === 'TEXT') {
                     // The entry's wording has a field of its own: the transcript.
@@ -3723,6 +3734,10 @@ export function parseGedcom(content: string): ParsedGedcom {
                 }
                 else if (tag === 'REFN') { if (value) src.refn = value; }
                 else if (tag === '_STROM_VERIFIED') { if (value.trim().toUpperCase() === 'Y') src.verified = true; }
+                // Where the entry stands, field by field (spec 075): the PAGE is then composed of them.
+                else if (tag === '_STROM_FOLIO') { src.placeFields = true; if (value.trim()) src.folio = value.trim(); }
+                else if (tag === '_STROM_IMAGE') { src.placeFields = true; if (value.trim()) src.image = value.trim(); }
+                else if (tag === '_STROM_LOCATOR') { src.placeFields = true; if (value.trim()) src.locator = value; }
                 else if (tag === '_STROM_READ') {
                     const who = value.trim().toLowerCase();
                     if (who === 'user' || who === 'research' || who === 'both') src.readBy = who;
@@ -3787,7 +3802,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                 } else if (currentSubTag === '_STROM_READING' && tag === '_STROM_ENTRY') {
                     if (src.reading && /^[A-Za-z][A-Za-z0-9_-]{0,20}$/.test(value.trim())) src.readingEntry = value.trim();
                 } else if (currentSubTag === 'REPO' && tag === 'CALN' && value) {
-                    addLine(strings.gedcomNotes.sourceCallNumber(value), '\n');
+                    if (src.callNumber === undefined && value.trim()) src.callNumber = value.trim();
                 } else if (currentSubTag === 'OBJE' && src.media.length > 0) {
                     const media = src.media[src.media.length - 1];
                     sourceMediaSubTag = tag;
@@ -4791,11 +4806,17 @@ export function parseGedcom(content: string): ParsedGedcom {
     for (const src of sources.values()) {
         recordPage.set(src.id, src.reference.trim());
         recordQuality.set(src.id, src.quality);
+        // A record with its place field by field (spec 075): the fields hold,
+        // its PAGE is composed of them (a citation carrying that PAGE cites the
+        // record itself); the rest of the location is _STROM_LOCATOR's alone.
+        if (src.placeFields) src.reference = src.locator ?? '';
     }
+    /** The record's own PAGE as a citation's is compared with it: as written on the record (composed, for a record with fields). */
+    const ownPage = (src: RawSource): string => src.placeFields ? recordPage.get(src.id) ?? '' : src.reference.trim();
     for (const src of sources.values()) {
         const m = src.repository.match(/^@\w+@$/);
         if (m) src.repository = repositories.get(src.repository) ?? '';
-        if (!src.reference && citationPages.has(src.id)) {
+        if (!src.reference && !src.placeFields && citationPages.has(src.id)) {
             src.reference = citationPages.get(src.id)!;
         }
         if (src.quality === undefined && citationQuality.has(src.id)) {
@@ -4886,7 +4907,7 @@ export function parseGedcom(content: string): ParsedGedcom {
         const quay = c.quay ?? recordQuality.get(c.id);
         const block = citeBlock(c);
         const kept = block.join('\n');
-        if (page === src.reference.trim()) {
+        if (page === ownPage(src)) {
             if (!ownCite.has(c.id)) {
                 ownCite.set(c.id, { date, quay, kept });
                 if (block.length) (src.extras ??= []).push({ tag: CITE_TAG, lines: block, quiet: true });
@@ -4903,6 +4924,8 @@ export function parseGedcom(content: string): ParsedGedcom {
             sources.set(derived, {
                 id: derived, title: src.title, repository: src.repository, reference: page, url: src.url,
                 note: src.note, media: [], derivedFrom: c.id,
+                // Another page of the same book: its call number too (the folio and image are the record's page's).
+                ...(src.callNumber ? { callNumber: src.callNumber } : {}),
                 ...(src.abbr ? { abbr: src.abbr } : {}),
                 ...(quality !== undefined ? { quality } : {}),
                 ...(date ? { recordDate: date } : {}),
@@ -5044,6 +5067,9 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         sourceIdMap.set(gedId, newId);
         const src: Source = { id: newId, title: raw.title || raw.abbr || '?' };
         if (raw.repository) src.repository = raw.repository;
+        if (raw.callNumber) src.callNumber = raw.callNumber;
+        if (raw.folio) src.folio = raw.folio;
+        if (raw.image) src.image = raw.image;
         if (raw.reference) src.reference = raw.reference;
         if (raw.url) src.url = raw.url;
         if (raw.note) src.note = raw.note;

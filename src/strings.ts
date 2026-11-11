@@ -1164,6 +1164,10 @@ const stringsEN = {
         fieldRepository: 'Repository',
         fieldReference: 'Reference',
         fieldUrl: 'URL',
+        /** The word of an image number: the GEDCOM PAGE composed from the fields ("image 34") and the long place line. */
+        imageWord: 'image',
+        /** The image number's short word in a short place line ("img. 34"). */
+        imageShort: 'img.',
         fieldNote: 'Note',
         titleRequired: 'Enter a source title',
         unsavedMessage: 'This source has unsaved changes.',
@@ -9810,6 +9814,8 @@ const stringsCZ: StringsType = {
         fieldRepository: 'Archiv / instituce',
         fieldReference: 'Signatura / strana',
         fieldUrl: 'URL',
+        imageWord: 'snímek',
+        imageShort: 'sn.',
         fieldNote: 'Poznámka',
         titleRequired: 'Chybí název pramene',
         unsavedMessage: 'V tomto prameni jsou neuložené změny.',
@@ -18351,6 +18357,8 @@ const stringsDE: StringsType = {
         fieldRepository: 'Archiv / Einrichtung',
         fieldReference: 'Signatur / Fundstelle',
         fieldUrl: 'URL',
+        imageWord: 'Bild',
+        imageShort: 'Bild',
         fieldNote: 'Notiz',
         titleRequired: 'Quellentitel eingeben',
         unsavedMessage: 'Diese Quelle hat ungespeicherte Änderungen.',

@@ -111,7 +111,7 @@ describe('GEDCOM from a research tool', () => {
     const data = importGed(GED);
     const josef = byName(data, 'Josef');
 
-    it('keeps every NOTE of a source, the whole transcript, the author and the call number', () => {
+    it('keeps every NOTE of a source, the whole transcript, the author, and the call number in its field', () => {
         const note = sourceTitled(data, 'Oddací').note ?? '';
         expect(note).toContain('Fond / svazek: Kamenice nad Lipou 12, O 1901–1920\nfol. 45, č. 12');
         expect(note).toContain('\n\nPoznámka badatele k zdroji');
@@ -120,7 +120,9 @@ describe('GEDCOM from a research tool', () => {
             .toBe('Anno 1910 die 12 Februarii copulati sunt\nJosephus Novák, agricola, annorum 25');
         expect(note).not.toContain('Anno 1910');
         expect(note).toContain(g.sourceAuthor('Římskokatolická farnost Kamenice nad Lipou'));
-        expect(note).toContain(g.sourceCallNumber('Sig. 12/7'));
+        // The call number has a field of its own (spec 075): no longer a line of the note.
+        expect(note).not.toContain(g.sourceCallNumber('Sig. 12/7'));
+        expect(sourceTitled(data, 'Oddací').callNumber).toBe('Sig. 12/7');
         expect(sourceTitled(data, 'Oddací').repository).toBe('Státní oblastní archiv v Třeboni');
     });
 

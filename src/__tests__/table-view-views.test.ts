@@ -60,8 +60,8 @@ function reset(data: StromData = migrateData(tree())): void {
 beforeAll(() => setLanguage('en'));
 
 describe('data version 17: the saved views (§9.1)', () => {
-    it('is 17', () => {
-        expect(STROM_DATA_VERSION).toBe(17);
+    it('is 17 or later', () => {
+        expect(STROM_DATA_VERSION).toBeGreaterThanOrEqual(17);
     });
 
     it('a v16 tree without views loads unchanged and gets none', () => {

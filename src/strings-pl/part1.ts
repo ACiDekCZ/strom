@@ -946,6 +946,8 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         fieldRepository: 'Archiwum / instytucja',
         fieldReference: 'Sygnatura / strona',
         fieldUrl: 'URL',
+        imageWord: 'skan',
+        imageShort: 'skan',
         fieldNote: 'Notatka',
         titleRequired: 'Brak tytułu źródła',
         unsavedMessage: 'W tym źródle są niezapisane zmiany.',

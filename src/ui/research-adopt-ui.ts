@@ -25,7 +25,7 @@ import { countImages, stripMedia } from '../attachments.js';
 import { exportToGedcom, countFamilies } from '../ged-exporter.js';
 import {
     parseLiveBridge, sanitizeAdoptOffer, sanitizeAdoptReply, newAdoptToken, researchNewUrl, contentFingerprint, researchSchemeUrl,
-    readResearchHeader, applyAdoptIds, AdoptOffer, AdoptIds, researchGedcomTitles, TitlesInGedcom, sanitizeLiveStatus, statusAgentless, type BrowserInfo,
+    readResearchHeader, applyAdoptIds, AdoptOffer, AdoptIds, researchGedcomTitles, researchSendsSourceFields, TitlesInGedcom, sanitizeLiveStatus, statusAgentless, type BrowserInfo,
     researchLinkMark,
 } from '../research-link.js';
 import { newTieSendMode } from '../research-sync.js';
@@ -76,17 +76,19 @@ async function researchMovesTrees(base: string): Promise<boolean> {
 /**
  * How the titles of the names go to the research behind this bridge (its
  * /status, researchGedcomTitles): not reached, in NPFX / NSFX only, which
- * any research reads right.
+ * any research reads right. And whether it reads the sources' place field by
+ * field (sources.fields): not reached, not.
  */
-async function researchTitlesAt(base: string): Promise<TitlesInGedcom> {
+async function researchTitlesAt(base: string): Promise<{ titles: TitlesInGedcom; sourceFields: boolean }> {
     try {
         const res = await fetchWithTimeout(`${base}/status`, 4000);
-        if (!res.ok) return 'tags';
+        if (!res.ok) return { titles: 'tags', sourceFields: false };
         const body = await res.json() as { features?: unknown } | null;
         const features = Array.isArray(body?.features) ? body.features.filter((f): f is string => typeof f === 'string') : null;
-        return researchGedcomTitles({ features });
+        // The sources' place field by field only to a research that reads it (sources.fields).
+        return { titles: researchGedcomTitles({ features }), sourceFields: researchSendsSourceFields({ features }) };
     } catch {
-        return 'tags';
+        return { titles: 'tags', sourceFields: false };
     }
 }
 
@@ -291,8 +293,8 @@ export const researchAdoptMethods = uiModule({
         }
         // The research does not take photos over yet: they stay here only.
         // A research that knows no titles gets the names without them (B-1): they stay here.
-        const titles = await researchTitlesAt(bridge.base);
-        const exported = exportToGedcom(choice.images ? data : stripMedia(data), tree.name, { titles });
+        const { titles, sourceFields } = await researchTitlesAt(bridge.base);
+        const exported = exportToGedcom(choice.images ? data : stripMedia(data), tree.name, { titles, sourceFields });
         let reply: { tree: string; head: string | null; ids: AdoptIds | null } | null = null;
         let refusedEmpty = false;
         let held: ResearchWriteHeld | null = null;

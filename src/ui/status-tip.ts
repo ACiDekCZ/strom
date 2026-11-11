@@ -23,6 +23,7 @@
 
 import { strings } from '../strings.js';
 import { formatFlexDate } from '../dates.js';
+import { sourceEntryText } from '../source-location.js';
 import { FactHolder, factCitations, isPartnership } from '../import-origin.js';
 import {
     CARD_STATUS_FACTS, CardStatus, FactReliability, ReliabilityOptions, ReliabilityStep, ReliabilityStepName, factReliability,
@@ -198,7 +199,7 @@ function stepGlyphHtml(r: ReliabilityStep): string {
 /** "fol. 12 · 3 Feb 1865 · original" under a source's title. */
 function sourceSub(source: Source): string {
     const date = source.recordDate ? formatFlexDate(source.recordDate) : '';
-    return [source.reference ?? '', date, qualityLabel(source.quality)].filter(Boolean).join(' · ');
+    return [sourceEntryText(source), date, qualityLabel(source.quality)].filter(Boolean).join(' · ');
 }
 
 /** Sources in the tip's order: the one the value is from first, then by the record's date. */
@@ -251,7 +252,7 @@ function cardSourcesModel(data: StromData, person: Person, status: CardStatus): 
     const ordered = orderSources([...bySource.values()], valueId);
     const rows: SourceRowModel[] = ordered.map(r => ({
         source: r.source, ctx: r.ctx,
-        sub: [r.facts.join(', '), r.source.reference ?? ''].filter(Boolean).join(' · '),
+        sub: [r.facts.join(', '), sourceEntryText(r.source)].filter(Boolean).join(' · '),
     }));
     const total = host?.personSourceCount(person.id) ?? rows.length;
     const more = total > 0 ? { label: s.srcPerson(total), personId: person.id, sourceIds: rows.map(x => x.source.id) } : undefined;

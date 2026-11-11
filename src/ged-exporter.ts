@@ -40,6 +40,7 @@ import { lineageOverridesOf } from './lineage.js';
 import { citeLines, ExtraHolder, FactHolder, factImportTags, gedcomHtmlText, importedValueOf, IMPORT_TAG, joinedEventKey, joinedNoteBack, type JoinedRecord, joinedRecords, mediaDateValue, notedBack, NotedStructure, notedStructures, withoutCiteLines, withoutJoinedNotes, withoutNotedLines, XID_TAG } from './import-origin.js';
 import { CONFIRMED_TAG, EID_TAG, factResearchEid, factVerifyInfo } from './verify.js';
 import { importProgramName } from './import-next.js';
+import { composePage, hasEntryFields } from './source-location.js';
 
 /** What to leave out of a GEDCOM export (the export dialog's Content section). */
 export interface GedcomExportOptions {
@@ -106,6 +107,14 @@ export interface GedcomExportOptions {
      * `REFN` + `TYPE {prog} xref`.
      */
     backTo?: string;
+    /**
+     * Write a source's place field by field (spec 075): `1 _STROM_FOLIO`,
+     * `_STROM_IMAGE` and `_STROM_LOCATOR` beside the PAGE composed of them.
+     * Default: written (the app's own file). False for a research that does not
+     * read them (no `sources.fields` in its features): it gets the composed
+     * PAGE alone, as from an older app. "Back to {prog}" never writes them.
+     */
+    sourceFields?: boolean;
 }
 
 /**
@@ -1185,7 +1194,8 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         const src = data.sources?.[srcId];
         const kept = keptCiteLines(src);
         const at = (line: string): string => line.replace(/^\d+/, n => String(Number(n) + level));
-        if (src?.reference) pushLongValue(lines, level + 1, 'PAGE', src.reference);
+        const page = src ? composePage(src) : undefined;
+        if (page) pushLongValue(lines, level + 1, 'PAGE', page);
         // The entry recording date lives on the citation in 5.5.1 (DATA > DATE).
         const recorded = formatGedcomDate(src?.recordDate);
         if (recorded || kept.data.length) {
@@ -2075,12 +2085,22 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         if (backIds) pushOriginalIdLines(lines, 1, backIds, false);
         if (source.title) pushWrapped(lines, 1, 'TITL', source.title);
         if (author) pushLongValue(lines, 1, 'AUTH', author);
-        if (source.repository) {
-            const repoRef = repoIdMap.get(source.repository);
-            if (repoRef) lines.push(`1 REPO ${repoRef}`);
-        }
+        // The archive, and the call number it files the book under (`2 CALN`; without an archive under a `1 REPO` of none).
+        const repoRef = source.repository ? repoIdMap.get(source.repository) : undefined;
+        const callNumber = source.callNumber?.trim();
+        if (repoRef) lines.push(`1 REPO ${repoRef}`);
+        else if (callNumber) lines.push('1 REPO');
+        if (callNumber) pushWrapped(lines, 2, 'CALN', callNumber);
         // A record of another program's file has its pages on the citations (5.5.1 knows no PAGE on a record).
-        if (source.reference && !members) pushLongValue(lines, 1, 'PAGE', source.reference);
+        // The PAGE is composed of the folio, the rest and the image (an older source's: its reference exactly).
+        const recordPage = composePage(source);
+        if (recordPage && !members) pushLongValue(lines, 1, 'PAGE', recordPage);
+        // The place field by field, for a Strom app and a research that read them (an empty one is not written).
+        if (options.sourceFields !== false && !options.backTo && hasEntryFields(source)) {
+            if (source.folio?.trim()) pushWrapped(lines, 1, '_STROM_FOLIO', source.folio.trim());
+            if (source.image?.trim()) pushWrapped(lines, 1, '_STROM_IMAGE', source.image.trim());
+            if (source.reference?.trim()) pushLongValue(lines, 1, '_STROM_LOCATOR', source.reference);
+        }
         if (source.refn) pushWrapped(lines, 1, 'REFN', source.refn);
         // "Back to {prog}": its TEXT with the HTML it had, while the transcript is still its text.
         const textAsWritten = members ? members.find(m => m.transcript)?.gedcomText : undefined;

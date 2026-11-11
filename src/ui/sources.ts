@@ -14,6 +14,7 @@ import { researchActionLabel } from './research-open-mark.js';
 import { researchLinkMark } from '../research-link.js';
 import { DataManager, CitedFact, personCitationField } from '../data.js';
 import { bookReference, entryDateLine, sameBookReference } from '../source-page.js';
+import { sourcePlaceSearchText } from '../source-location.js';
 import { sourceTranslation } from '../source-translation.js';
 import { TreeRenderer } from '../renderer.js';
 import { TreeManager } from '../tree-manager.js';
@@ -328,10 +329,10 @@ export const sourcesMethods = uiModule({
         });
     },
 
-    /** Search over title, archive, reference and transcript (case-insensitive). */
+    /** Search over title, archive, call number, folio, image, location and transcript (case-insensitive). */
     sourceMatches(src: Source, query: string): boolean {
         if (!query) return true;
-        return [src.title, sourceMeta(src), src.transcript ?? ''].some(t => t.toLowerCase().includes(query));
+        return [src.title, sourceMeta(src), sourcePlaceSearchText(src), src.transcript ?? ''].some(t => t.toLowerCase().includes(query));
     },
 
     async deleteSource(sourceId: string): Promise<void> {

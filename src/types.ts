@@ -300,7 +300,28 @@ export interface Source {
     title: string;
     /** Archive / institution holding the source. */
     repository?: string;
-    /** Signature / inventory number / page. */
+    /**
+     * The call number of the book the entry is in ("N 7", "inv. no. 1702";
+     * spec 075, data v18). GEDCOM `2 CALN` under the record's `1 REPO`.
+     */
+    callNumber?: string;
+    /**
+     * The folio or page as the book numbers it, with its word ("fol. 12v",
+     * "pag. 112", a bare "12v" too; spec 075, data v18). GEDCOM `1 _STROM_FOLIO`.
+     */
+    folio?: string;
+    /**
+     * The image number as the archive's portal counts it ("34", "57–58",
+     * "34a"; text, spec 075, data v18). GEDCOM `1 _STROM_IMAGE`.
+     */
+    image?: string;
+    /**
+     * "Further location" — the rest of where the entry stands (its number, a
+     * column) when the source has any of callNumber / folio / image; without
+     * them (an older source) the whole location as written ("fol. 12v, č. 5,
+     * snímek 34"), kept as it is (see src/source-location.ts). GEDCOM: the
+     * PAGE composed of folio, this and the image; `1 _STROM_LOCATOR` this alone.
+     */
     reference?: string;
     url?: string;
     note?: string;
@@ -1562,8 +1583,14 @@ export function partnershipParticipants(u: Pick<Partnership, 'participants' | 'e
  * v17 (2026-11, spec 073): StromData.tableViews (saved views of the Table
  *   view). Additive; existing trees get none. An older app (v16) ignores the
  *   field and would drop it on a re-save, so the bump makes it warn first.
+ * v18 (2026-11, spec 075): Source.callNumber, Source.folio, Source.image
+ *   (where the entry stands, field by field); Source.reference is then the
+ *   rest of the location. Additive: an existing source keeps its whole
+ *   location in reference, nothing is split by itself. An older app (v17)
+ *   keeps sources whole but would write neither the folio nor the image to
+ *   its GEDCOM export (only the reference), so the bump makes it warn first.
  */
-export const STROM_DATA_VERSION = 17;
+export const STROM_DATA_VERSION = 18;
 
 /** The rows of a saved Table view (spec 073 §2; events and sources come later). */
 export type TableViewRowType = 'persons' | 'unions' | 'events' | 'sources';

@@ -19,6 +19,7 @@ import { READ_CHOICES_NOW_FEATURE, READ_CHOOSE_FEATURE } from './read-choices.js
 import { verifyStatusSaid, type LiveVerifyStatus } from './research-verify.js';
 import { researchPersonRef, researchFamilyRef, personResearchRef, familyResearchRef, confirmationEdits } from './verify.js';
 import { HISTORY_KINDS, isHistoryKind, parseHistoryKindList, type HistoryKind } from './history.js';
+import { sourcePlaceKey } from './source-location.js';
 
 /** `1 SOUR` value that marks a file written by Strom Research. */
 export const STROM_RESEARCH_SOURCE = 'STROM_RESEARCH';
@@ -940,6 +941,20 @@ export function unknownSexFromTie(data: StromData, sexU: unknown): StromData | n
 /** The bridge feature of a research that keeps titles apart from the name (NPFX / NSFX; Strom Research 1.13). */
 export const TITLES_FEATURE = 'person.titles';
 
+/**
+ * `/status.features` (Strom Research 1.31, spec 075): the research reads a source's place field by field — the
+ * folio, the image and the call number (`_STROM_FOLIO`, `_STROM_IMAGE`, `_STROM_LOCATOR` beside the composed PAGE;
+ * JSON `folio`, `image`, `callNumber`). Without it a send carries the composed PAGE alone.
+ */
+export const SOURCES_FIELDS_FEATURE = 'sources.fields';
+/** `/status.features` (spec 075 §5): `GET/POST <token>/sources/split` and `/sources/split/undo` — the older locations split. */
+export const SOURCES_SPLIT_FEATURE = 'sources.split';
+
+/** Whether a send to this research carries the sources' place field by field (`sources.fields`); not known: no. */
+export function researchSendsSourceFields(status: { features: readonly string[] | null } | null | undefined): boolean {
+    return !!status?.features?.includes(SOURCES_FIELDS_FEATURE);
+}
+
 /** `/status.features`: the research takes a source sent as an entry of its reading (`_STROM_READING`) in `/sync`. */
 export const READ_SYNC_FEATURE = 'read.sync';
 
@@ -1371,9 +1386,11 @@ export function stabilizeIds(next: StromData, previous: StromData): StromData {
         map.set(newId, oldId);
     }
     // An entry the user made in the app comes back with the research's number:
-    // the same title, archive, page and wording is the same entry.
+    // the same title, archive, page and wording is the same entry. The page is
+    // the composed PAGE (spec 075): the same whether the research gave the
+    // folio and image back as fields or, an older one, as words of the location.
     const entryKey = (src: Source): string =>
-        [src.title, src.repository, src.reference, src.transcript].map(v => (v ?? '').trim().toLowerCase()).join('\u0000');
+        [src.title, src.repository, sourcePlaceKey(src), src.transcript].map(v => (v ?? '').trim().toLowerCase()).join('\u0000');
     const prevUnnumbered = new Map<string, string | null>();
     for (const [id, src] of Object.entries(previous.sources ?? {})) {
         if (!src || src.refn) continue;
@@ -1394,7 +1411,7 @@ export function stabilizeIds(next: StromData, previous: StromData): StromData {
     // numbered — is the same entry when all it says is the same. Only where
     // that is unique on both sides: two such entries are never joined.
     const unnumberedKey = (src: Source): string => {
-        const text = [src.title, src.repository, src.reference, src.url, src.note, src.recordDate, src.transcript]
+        const text = [src.title, src.repository, src.callNumber, sourcePlaceKey(src), src.url, src.note, src.recordDate, src.transcript]
             .map(v => (v ?? '').trim());
         return [...text, src.quality ?? '', JSON.stringify(src.gedcomExtra ?? [])].join('\u0000');
     };
@@ -4235,7 +4252,7 @@ export function researchIdsByContent(current: StromData, handedOver: StromData, 
         p => name(p),
     ];
     const sourceKey = (src: Source): string =>
-        [src.title, src.repository, src.reference, src.transcript].map(norm).join('\u0000');
+        [src.title, src.repository, sourcePlaceKey(src), src.transcript].map(norm).join('\u0000');
     const unique = <T>(records: [string, T][], key: (r: T) => string): Map<string, string> => {
         const seen = new Map<string, string | null>();
         for (const [id, r] of records) {
