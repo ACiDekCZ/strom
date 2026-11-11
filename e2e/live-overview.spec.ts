@@ -1072,6 +1072,37 @@ test.describe('Customize panel on a touch screen: the order and the top (spec 05
         await expect(sheet).toHaveCount(0);
         await expect(page.locator('#research-overview')).toBeVisible();
     });
+
+    test.describe('in German', () => {
+        test.use({ locale: 'de-DE' });
+
+        test('phone 390×844 Settings: a row of the sections has its name and ↑ ↓ on one line, the segment across under them, no choice cut', async ({ page }) => {
+            await fixClock(page);
+            await follow(page, { width: 390, height: 844 }, (b) => { b.events = false; });
+            await page.locator('#live-panel .live-panel-toggle').click();
+            await page.locator('#research-overview .research-overview__more').click();
+            await page.locator('.live-sec-edit .live-sec-edit__all').click();
+            const group = page.locator('#settings-group-research-follow');
+            await expect(group).toBeVisible();
+            const opts = group.locator('.live-sec-edit__row .live-sec-seg__opt');
+            await expect(opts.first()).toHaveText('Aufgeklappt');
+            const cut = await opts.evaluateAll((els) => els
+                .filter((e) => e.scrollWidth > e.clientWidth)
+                .map((e) => `${e.textContent} ${e.scrollWidth}>${e.clientWidth}`));
+            expect(cut).toEqual([]);
+            const row = group.locator('.live-sec-edit__row[data-key="changes"]');
+            const [rb, lab, seg, mv] = [
+                (await row.boundingBox())!,
+                (await row.locator('.live-sec-edit__label').boundingBox())!,
+                (await row.locator('[role="radiogroup"]').boundingBox())!,
+                (await row.locator('.live-sec-edit__moves').boundingBox())!,
+            ];
+            expect(mv.x).toBeGreaterThan(lab.x + lab.width);
+            expect(mv.y + mv.height).toBeLessThanOrEqual(seg.y + 1);
+            expect(seg.width).toBeGreaterThan(rb.width * 0.8);
+            await noSideways(page);
+        });
+    });
 });
 
 test.describe('the research history (/log)', () => {
