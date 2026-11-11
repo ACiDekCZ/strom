@@ -39,7 +39,7 @@ export function waitingTodoCount(items: readonly LiveWaiting[]): number {
 /** The item's chip: as the research says, else by its kind (a story or an archive's question is a decision). */
 export function waitingSection(w: LiveWaiting): WaitingSection {
     if (w.section) return w.section;
-    return w.kind === 'story' || w.kind === 'permission' || w.kind === 'place' || w.kind === 'takeover' || w.kind === 'check' ? 'decide' : 'other';
+    return w.kind === 'story' || w.kind === 'permission' || w.kind === 'place' || w.kind === 'takeover' || w.kind === 'check' || w.kind === 'hypothesis' ? 'decide' : 'other';
 }
 
 /** The research's order; `order` only settles what a filter left (the list comes sorted). */
@@ -150,7 +150,7 @@ const IMAGES_LINK_ORDER: readonly WaitingLinkAction[] = ['chat', 'answer', 'fold
  * never goes by the task link. What was sent is not marked sent again.
  */
 export function waitingTaskActions(w: LiveWaiting): WaitingLinkAction[] | null {
-    if (!w.actions || w.kind === 'story' || w.kind === 'permission' || w.kind === 'takeover') return null;
+    if (!w.actions || w.kind === 'story' || w.kind === 'permission' || w.kind === 'takeover' || w.kind === 'hypothesis') return null;
     return (w.kind === 'images' ? IMAGES_LINK_ORDER : ACTION_ORDER).filter(a => w.actions!.includes(a) && !(a === 'sent' && waitingPhase(w) === 'sent'));
 }
 

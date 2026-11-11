@@ -138,13 +138,13 @@ describe('hypothesisCardPlan: a decided hypothesis', () => {
         expect(plan.variants.map(v => v.dim)).toEqual([true, false, true]);
         expect(plan.variants.every(v => v.pick === null)).toBe(true);
         expect(plan.foot).toBeNull();
-        expect(plan.decided).toEqual({ change: true, reopen: true, cannot: false });
+        expect(plan.decided).toEqual({ change: true, reopen: true, cannot: false, off: false });
         expect(plan.link).toBe('faint');
     });
 
     it('cannot be reopened: Change stays, Reopen goes, the reason is said', () => {
         const plan = hypothesisCardPlan(decidedHypo({ reopen: { ok: false, type: 'tree', count: 3 } }), 'pick');
-        expect(plan.decided).toEqual({ change: true, reopen: false, cannot: true });
+        expect(plan.decided).toEqual({ change: true, reopen: false, cannot: true, off: false });
     });
 
     it('in the change mode: the other versions offered, the held one "holds now", its reason above', () => {
@@ -156,6 +156,19 @@ describe('hypothesisCardPlan: a decided hypothesis', () => {
         expect(plan.foot).toEqual({ none: 'on', leave: null, cancelChange: true });
         expect(plan.decided).toBeNull();
         expect(plan.link).toBeNull();
+    });
+
+    it('decided in the research, its version not loaded yet ("Later"): every choice switched off, no way into the research', () => {
+        const open = hypothesisCardPlan(openHypo(), 'pick', { held: true, linkable: true });
+        expect(open.variants.map(v => v.pick)).toEqual(['off', 'off', 'off']);
+        expect(open.variants.some(v => v.waiting)).toBe(false);
+        expect(open.foot).toEqual({ none: 'off', leave: 'off', cancelChange: false });
+        expect(open.link).toBeNull();
+        const decided = hypothesisCardPlan(decidedHypo(), 'pick', { held: true, linkable: true });
+        expect(decided.decided).toEqual({ change: true, reopen: true, cannot: false, off: true });
+        expect(decided.link).toBeNull();
+        // Only the card that chooses holds back: a card read away from the research stays as it is.
+        expect(hypothesisCardPlan(openHypo(), 'remote', { held: true }).variants.map(v => v.pick)).toEqual([null, null, null]);
     });
 
     it('a version whose choice leaves the old link says so', () => {
@@ -197,7 +210,7 @@ describe('hypothesisCardPlan: an abandoned hypothesis', () => {
         const h = openHypo({ status: 'abandoned', decidedAt: '2026-10-05' });
         const plan = hypothesisCardPlan(h, 'pick');
         expect(plan.variants.every(v => v.dim)).toBe(true);
-        expect(plan.decided).toEqual({ change: true, reopen: true, cannot: false });
+        expect(plan.decided).toEqual({ change: true, reopen: true, cannot: false, off: false });
         const changing = hypothesisCardPlan(h, 'pick', { changing: true });
         expect(changing.variants.map(v => v.pick)).toEqual(['on', 'on', 'on']);
         expect(changing.foot).toEqual({ none: null, leave: null, cancelChange: true });

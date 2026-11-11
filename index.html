@@ -19640,6 +19640,99 @@
         }
         .research-overview__knows-row.is-conflict { color: var(--warning-text); }
         @media (hover: hover) { .research-overview__knows-row:hover { text-decoration: underline; } }
+        /* A research hypothesis in What waits (spec 074 §9): its choices in the row. */
+        .hwr-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 4px; }
+        .hwr-item.is-fresh { box-shadow: inset 3px 0 0 var(--warning); }
+        .hwr-item.is-person-focus { background: var(--primary-soft); box-shadow: inset 3px 0 0 var(--primary); }
+        .hwr-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+        .hwr-what { margin: 0; font-size: 14px; line-height: 1.4; overflow-wrap: anywhere; }
+        .hwr-id { font-weight: 600; }
+        .hwr-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+        .hwr-proposal {
+            max-width: 100%; padding: 3px 8px; border-radius: 6px; background: var(--research-soft); color: var(--research);
+            font-size: 12.5px; line-height: 1.45; overflow-wrap: anywhere;
+        }
+        .hwr-proposal strong { font-weight: 600; }
+        .hwr-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+        .hwr-actions .hwr-more { margin-left: auto; }
+        .hwr-sentence { flex: 1 1 12em; min-width: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-light); overflow-wrap: anywhere; }
+        button.secondary.hwr-accept, button.secondary.hwr-leave, button.secondary.hwr-pick {
+            display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 3px 12px; box-sizing: border-box;
+            border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text);
+            font: inherit; font-size: 13px; font-weight: 500; line-height: 1.25; white-space: normal; text-align: left; cursor: pointer;
+        }
+        button.secondary.hwr-accept, button.secondary.hwr-pick { border-color: var(--primary); color: var(--primary-dark, var(--primary)); font-weight: 600; }
+        button.secondary.hwr-accept:disabled, button.secondary.hwr-leave:disabled, button.secondary.hwr-pick:disabled {
+            border-color: var(--border); color: var(--text-ghost); cursor: default;
+        }
+        button.secondary.hwr-pick { min-height: 30px; padding: 3px 10px; flex: none; }
+        .link-button.hwr-more { padding: 0; font-size: 13px; font-weight: 600; text-decoration: none; white-space: nowrap; }
+        .hwr-versions { border: 1px solid var(--divider); border-radius: 8px; }
+        .hwr-version { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 6px 10px; }
+        .hwr-version + .hwr-version { border-top: 1px solid var(--divider); }
+        .hwr-version-id { width: 14px; flex: none; font-weight: 600; color: var(--text-light); }
+        .hwr-version-title { flex: 1 1 8em; min-width: 0; font-size: 13.5px; overflow-wrap: anywhere; }
+        .hwr-version .hwr-wait { flex-basis: 100%; }
+        .hwr-wait .prv-wait { margin-top: 0; }
+        .hwr-note { margin: 0; padding: 6px 8px; border-radius: 6px; background: var(--info-soft); font-size: 12.5px; line-height: 1.45; overflow-wrap: anywhere; }
+        .hwr-versions + .hwr-actions { justify-content: flex-end; }
+        button.secondary.hwr-accept:focus-visible, button.secondary.hwr-leave:focus-visible, button.secondary.hwr-pick:focus-visible,
+        .link-button.hwr-more:focus-visible, .hp2-box:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        /* Accepting the agent's proposals at once (§10): a box before each hypothesis, the list's head and foot. */
+        .hp2-box { flex: none; width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--primary); cursor: pointer; }
+        .hp2-box:disabled { cursor: default; }
+        .hp2-box--none { display: inline-block; }
+        .hp2-box--only { appearance: none; -webkit-appearance: none; box-sizing: border-box; border: 1.5px dashed var(--border); border-radius: 4px; background: var(--surface-2); }
+        .hp2-note { font-size: 12px; line-height: 1.45; color: var(--text-light); }
+        .hp2-head { display: flex; justify-content: flex-end; padding: 2px 0 6px; }
+        .link-button.hp2-all { padding: 0; font-size: 12.5px; font-weight: 600; text-decoration: none; text-align: right; }
+        .hp2-wait { margin: 0 0 8px; }
+        .hp2-foot { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px solid var(--divider); }
+        .hp2-sum { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-light); overflow-wrap: anywhere; }
+        button.primary.hp2-accept {
+            align-self: flex-end; display: inline-flex; align-items: center; gap: 7px; min-height: 36px; padding: 4px 16px; box-sizing: border-box;
+            border: 1px solid var(--primary); border-radius: 8px; background: var(--primary); color: var(--on-primary, #fff);
+            font: inherit; font-size: 13.5px; font-weight: 600; line-height: 1.25; white-space: normal; text-align: center; cursor: pointer;
+        }
+        button.primary.hp2-accept:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .hp2-list--waiting > .hp2-foot { margin: 6px 0 4px; }
+        .research-overview__knows.has-accept > li.rok-item { display: flex; align-items: flex-start; gap: 10px; }
+        .research-overview__knows.has-accept > li.rok-item > .hp2-box { margin-top: 6px; }
+        .research-overview__knows-row.has-tags { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+        .rok-text { overflow-wrap: anywhere; }
+        .rok-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+        .rok-tag {
+            max-width: 100%; padding: 1px 7px; border-radius: 999px; background: var(--research-soft); color: var(--research);
+            font-size: 12px; font-weight: 600; line-height: 1.5; overflow-wrap: anywhere;
+        }
+        .rok-tag--done { background: var(--primary-soft); color: var(--primary-dark, var(--primary)); }
+        .rok-tag--note { border-radius: 6px; background: var(--info-soft); color: var(--text); font-weight: 400; }
+        @media (hover: hover) {
+            button.secondary.hwr-accept:not(:disabled):hover, button.secondary.hwr-pick:not(:disabled):hover { background: var(--primary-soft); }
+            button.secondary.hwr-leave:not(:disabled):hover { background: var(--hover-bg); }
+            .link-button.hwr-more:hover, .link-button.hp2-all:hover { text-decoration: underline; }
+            button.primary.hp2-accept:hover { background: var(--primary-hover, var(--primary)); }
+            .research-overview__knows-row.has-tags:hover { text-decoration: none; }
+            .research-overview__knows-row.has-tags:hover .rok-text { text-decoration: underline; }
+        }
+        @media (pointer: coarse) {
+            button.secondary.hwr-accept, button.secondary.hwr-leave, button.secondary.hwr-pick, button.primary.hp2-accept { min-height: 44px; }
+            .link-button.hwr-more, .link-button.hp2-all { display: inline-flex; align-items: center; min-height: 44px; }
+            .hp2-box { width: 22px; height: 22px; }
+        }
+        @media (min-width: 641px) and (max-width: 1024px) {
+            .hwr-item { padding: 12px 4px; }
+        }
+        @media (max-width: 640px) {
+            .hwr-what { font-size: 15px; }
+            .hwr-actions > button.secondary { flex: 1 1 auto; justify-content: center; text-align: center; }
+            .hwr-actions .hwr-more { flex: none; }
+            button.primary.hp2-accept { align-self: stretch; justify-content: center; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .hwr-item { padding: 6px 4px; }
+            button.secondary.hwr-accept, button.secondary.hwr-leave, button.secondary.hwr-pick, button.primary.hp2-accept { min-height: 40px; }
+        }
         .research-overview__foot {
             display: flex; align-items: center; gap: 12px; justify-content: space-between;
             padding: 10px 16px; background: var(--surface-2); border-top: 1px solid var(--divider); font-size: 13px;

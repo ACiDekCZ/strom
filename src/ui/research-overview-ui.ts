@@ -18,7 +18,8 @@ import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
 import { strings, getCurrentLanguage } from '../strings.js';
-import { Person, PersonId } from '../types.js';
+import { Person, PersonId, ResearchHypothesis } from '../types.js';
+import { acceptBatch, acceptBatchRowResult } from '../research-hypothesis-waiting.js';
 import { computeEvidenceGaps } from '../stats.js';
 import { LiveChangeKind, LiveWaiting, ResearchActionMark, WAITING_SECTIONS, researchConflictRef, researchTaskRef, recentAddsCount, researchLinkMark } from '../research-link.js';
 import { waitingGroupSendable, waitingGroupHasNote, waitingSendable, waitingUnsendable, waitingFileWritable } from '../research-waiting-write.js';
@@ -611,8 +612,10 @@ export const researchOverviewMethods = uiModule({
         noteImagesArrived(s);
         const rows = (items: readonly LiveWaiting[]): HTMLElement => {
             const list = el('ul', 'research-overview__waiting-rows');
-            for (const w of items) list.appendChild(this.overviewWaitingRow(s, w, mode));
-            return list;
+            // A hypothesis (spec 074 §9): its choices in the row, not behind a detail.
+            for (const w of items) list.appendChild(w.kind === 'hypothesis' ? this.hypothesisWaitingRow(w, mode, null) : this.overviewWaitingRow(s, w, mode));
+            // Its proposals accepted at once (§10), where the research takes that.
+            return items.some(w => w.kind === 'hypothesis') ? this.hypothesisWaitingList(items, mode, list) : list;
         };
         // An older research: no kinds, places or phases.
         if (!s.waiting.some(w => w.section)) {
@@ -1532,7 +1535,10 @@ export const researchOverviewMethods = uiModule({
     appendOverviewKnows(body: HTMLElement, fold: LiveFold, mode: Mode): void {
         const L = strings.live;
         const facts = strings.research.changeWords.facts as Record<string, string>;
-        const rows: { person: Person; text: string; conflict: boolean; conflictId?: string }[] = [];
+        const rows: { person: Person; text: string; conflict: boolean; conflictId?: string; hypo?: ResearchHypothesis }[] = [];
+        // A list of proposals accepted at once (spec 074 §10): its rows stay, decided, with what became of each.
+        const rid = this.activeResearchId();
+        const batch = rid ? acceptBatch(rid) : null;
         for (const p of Object.values(DataManager.getData().persons)) {
             // As the research has them now: one decided from here (or read decided from its version not loaded) goes at once.
             for (const c of this.researchConflictsOf(p.id)) {
@@ -1542,8 +1548,8 @@ export const researchOverviewMethods = uiModule({
                     conflictId: researchConflictRef(c.id) ?? undefined });
             }
             for (const h of p.research?.hypotheses ?? []) {
-                if (!isOpenHypothesis(h)) continue;
-                rows.push({ person: p, text: `${fullName(p)} · ${L.hypothesisRow(h.title)}`, conflict: false });
+                if (!isOpenHypothesis(h) && !(h.id && acceptBatchRowResult(batch, h.id))) continue;
+                rows.push({ person: p, text: `${fullName(p)} · ${L.hypothesisRow(h.title)}`, conflict: false, hypo: h });
             }
         }
         // The tree's "Verifying" (spec 065 §10k): waiting facts, Stop, the bulk verification.
@@ -1551,25 +1557,44 @@ export const researchOverviewMethods = uiModule({
         if (rows.length === 0 && !verify) return;
         rows.sort((a, b) => Number(b.conflict) - Number(a.conflict));
         const conflicts = rows.filter(r => r.conflict).length;
-        const host = liveSection(body, { ...fold, title: L.knowsTitle, ...(rows.length > 0 ? { summary: L.knowsSum(conflicts, rows.length - conflicts) } : {}) });
+        const openHypos = rows.filter(r => r.hypo && isOpenHypothesis(r.hypo)).length;
+        const host = liveSection(body, { ...fold, title: L.knowsTitle, ...(rows.length > 0 ? { summary: L.knowsSum(conflicts, openHypos) } : {}) });
         if (rows.length === 0) {
             host.appendChild(verify!);
             return;
         }
-        const list = el('ul', 'live-panel-list research-overview__knows');
+        // Accepting the agent's proposals at once (§10): a box before each hypothesis, the list's head and foot.
+        const accept = this.hypothesisKnowsAccept(rows.flatMap(r => r.hypo?.id ? [r.hypo.id] : []), mode);
+        if (accept?.head) host.appendChild(accept.head);
+        const list = el('ul', `live-panel-list research-overview__knows${accept ? ' has-accept' : ''}`);
         for (const row of rows) {
             const li = el('li');
-            const btn = el('button', `research-overview__knows-row${row.conflict ? ' is-conflict' : ''}`, `${row.text} ›`);
+            const btn = el('button', `research-overview__knows-row${row.conflict ? ' is-conflict' : ''}`);
             btn.type = 'button';
+            const entry = row.hypo?.id ? accept?.entries.get(row.hypo.id) ?? null : null;
+            const tags = row.hypo ? this.hypothesisKnowsTagsEl(row.hypo, entry) : null;
+            if (tags) {
+                btn.classList.add('has-tags');
+                btn.append(el('span', 'rok-text', `${row.text} ›`), tags);
+            } else {
+                btn.textContent = `${row.text} ›`;
+            }
             btn.onclick = () => {
                 if (mode === 'sheet') this.closeResearchOverview();
-                // A conflict's row: the dialog at its card (decided there).
-                this.showPersonResearchDialog(row.person.id, row.conflictId ? { conflict: row.conflictId } : {});
+                // A conflict's row: the dialog at its card (decided there); a hypothesis's: at its card.
+                this.showPersonResearchDialog(row.person.id, row.conflictId ? { conflict: row.conflictId }
+                    : row.hypo?.id && this.researchHypothesisPickable(row.hypo) !== 'old' ? { hypo: { id: row.hypo.id } } : {});
             };
+            if (accept) {
+                li.classList.add('rok-item');
+                if (entry) li.appendChild(this.hypothesisAcceptBoxEl(rid!, entry, 'knows'));
+                else li.appendChild(el('span', 'hp2-box hp2-box--none')).setAttribute('aria-hidden', 'true');
+            }
             li.appendChild(btn);
             list.appendChild(li);
         }
         host.appendChild(list);
+        if (accept?.foot) host.appendChild(accept.foot);
         if (verify) host.appendChild(verify);
     },
 

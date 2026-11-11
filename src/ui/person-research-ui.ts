@@ -531,16 +531,17 @@ export const personResearchMethods = uiModule({
         const open = isOpenHypothesis(h);
         const hypoId = researchHypothesisRef(h.id);
         const pending = rid && h.id ? pendingHypothesis(rid, h.id) : null;
+        // What became of a wait that loaded nothing new here (DEV §4): decided otherwise, or "Later".
+        const note = rid && h.id ? hypothesisCardNote(rid, h.id) : null;
         const plan = hypothesisCardPlan(h, pick, {
             changing: !!rid && !!h.id && changingHypotheses.has(hypothesisKey(rid, h.id)),
             pending,
             linkable: this.researchLinkAvailable('hypothesis') && !!hypoId,
+            held: note?.kind === 'later',
         });
         const metaHtml = this.researchHypothesisMetaHtml(h, { left: true });
         const holds = plan.holdsSince ? researchHypothesisHoldsSinceText(h) : '';
         const prev = researchHypothesisPreviousText(h);
-        // What became of a wait that loaded nothing new here (DEV §4): decided otherwise, or "Later".
-        const note = rid && h.id ? hypothesisCardNote(rid, h.id) : null;
         const shownNote = note && (note.kind === 'later' || note.state === hypothesisStateKey(h)) ? note : null;
         const noteHtml = shownNote ? `
                     <p class="prh-info prh-decided-note" role="status">${esc(researchHypothesisNoteText(shownNote))}${shownNote.kind === 'later' ? `
@@ -606,8 +607,9 @@ export const personResearchMethods = uiModule({
             if (plan.foot.cancelChange) buttons.push(`<button type="button" class="link-button prh-cancel-change" data-hypo-act="change-cancel">${esc(r.hypoChangeCancel)}</button>`);
         }
         if (plan.decided) {
-            buttons.push(`<button type="button" class="secondary prh-act" data-hypo-act="change">${esc(r.hypoChangeHere)}</button>`);
-            if (plan.decided.reopen) buttons.push(`<button type="button" class="secondary prh-act" data-hypo-act="reopen">${researchActionLabel(r.hypoReopen, terminal)}</button>`);
+            const dis = plan.decided.off ? ' disabled' : '';
+            buttons.push(`<button type="button" class="secondary prh-act" data-hypo-act="change"${dis}>${esc(r.hypoChangeHere)}</button>`);
+            if (plan.decided.reopen) buttons.push(`<button type="button" class="secondary prh-act" data-hypo-act="reopen"${dis}>${researchActionLabel(r.hypoReopen, terminal)}</button>`);
         }
         if (buttons.length) underHtml += `
                     <div class="person-research-hypo-actions prh-choices">${buttons.join('')}</div>`;

@@ -1741,7 +1741,15 @@ export interface LiveWaiting {
      * 'permission': the research asks how it may download from an archive (`host`); `on` carries its terms.
      * The rest only from a research with `waiting.groups` in its features (see below).
      */
-    kind?: 'story' | 'permission' | 'place' | 'branch' | WaitingTaskKind;
+    kind?: 'story' | 'permission' | 'place' | 'branch' | 'hypothesis' | WaitingTaskKind;
+    /**
+     * 'hypothesis' (spec 074, V13; a research that decides hypotheses from the app): the item's id is the
+     * hypothesis ("H0022"), `person` the first person of its question; the agent's proposal (a version's
+     * letter, or 'none': no version holds) and whether it can be decided by a version from the app (`pick`).
+     * Its question, versions and proposal's sentence come from the research's tree (GEDCOM), by its id.
+     */
+    proposal?: string;
+    pick?: true;
     /**
      * 'branch' (`offLine.branches`): a branch outside the directions grew; the research asks once what to do with it.
      * The branch, its tasks and people (the line it is near is `research`).
@@ -1868,7 +1876,7 @@ export interface WaitingInbox {
 }
 /** Each kind's chip. */
 const KIND_SECTION: Record<string, WaitingSection> = {
-    story: 'decide', permission: 'decide', place: 'decide', branch: 'decide', takeover: 'decide', check: 'decide',
+    story: 'decide', permission: 'decide', place: 'decide', branch: 'decide', hypothesis: 'decide', takeover: 'decide', check: 'decide',
     images: 'images', letter: 'letter', family: 'family', web: 'web', other: 'other',
 };
 
@@ -2891,18 +2899,29 @@ export function sanitizeWaiting(value: unknown, groups = false, branches = false
         const placeQ = !story && !host && r.kind === 'place' ? waitingPlaceFields(r) : null;
         // A growing branch (`offLine.branches`): it names the branch; without a valid one it is just a line.
         const branch = branches && r.kind === 'branch' ? researchBranchRef(r.branch) : null;
-        const kind: LiveWaiting['kind'] = story ? 'story' : host ? 'permission' : placeQ ? 'place' : branch ? 'branch' : task ?? undefined;
+        // A hypothesis to decide (spec 074, V13): it names the hypothesis by its id; without a valid one it is "other".
+        const hypo = groups && !story && !host && r.kind === 'hypothesis' ? researchHypothesisRef(r.id) : null;
+        const kind: LiveWaiting['kind'] = story ? 'story' : host ? 'permission' : placeQ ? 'place' : branch ? 'branch' : hypo ? 'hypothesis' : task ?? undefined;
         out.push({
             id: host ? `permission:${host}` : cleanText(r.id, 40), what, on: cleanText(r.on, host ? MAX_TERMS : 120), at: cleanText(r.at ?? r.since, 40),
             ...(person ? { person } : {}), ...(research ? { research } : {}),
             ...(story ? { kind: 'story' as const } : {}), ...(partner && partner !== person ? { partner } : {}),
             ...(host ? { kind: 'permission' as const, host } : {}),
-            ...(task && !placeQ && !branch ? { kind: task } : {}),
+            ...(task && !placeQ && !branch && !hypo ? { kind: task } : {}),
+            ...(hypo ? { kind: 'hypothesis' as const, ...waitingHypothesisFields(r) } : {}),
             ...(placeQ ?? {}),
             ...(branch ? { kind: 'branch' as const, branch, tasks: asCount(r.tasks) ?? 0, persons: asCount(r.persons ?? r.newPersons) ?? 0 } : {}),
             ...(groups ? waitingGroupFields(r, kind) : {}),
         });
     }
+    return out;
+}
+
+/** A hypothesis item's own fields (V13): the agent's proposal (a version's letter or 'none') and `pick`. Anything else is dropped. */
+function waitingHypothesisFields(r: Record<string, unknown>): Partial<LiveWaiting> {
+    const out: Partial<LiveWaiting> = {};
+    if (typeof r.proposal === 'string' && (r.proposal === 'none' || /^[A-Z]{1,3}$/.test(r.proposal))) out.proposal = r.proposal;
+    if (r.pick === true) out.pick = true;
     return out;
 }
 

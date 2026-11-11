@@ -15,7 +15,7 @@ import { formatFlexDate } from '../dates.js';
 import { PersonId, ResearchEdge, ResearchEdgeHypo, ResearchEdgeMode, ResearchHypothesis } from '../types.js';
 import { familyGroups } from '../view-links.js';
 import { hypothesisCardPlan } from '../research-hypothesis-card.js';
-import { PendingHypothesis, newPendingHypothesis, onPendingHypothesisChange, pendingHypothesis, pendingHypothesisPhase, setPendingHypothesis } from '../research-hypothesis-wait.js';
+import { PendingHypothesis, hypothesisCardNote, newPendingHypothesis, onPendingHypothesisChange, pendingHypothesis, pendingHypothesisPhase, setPendingHypothesis } from '../research-hypothesis-wait.js';
 import {
     EdgeHypoFamilyLink, edgeEndText, edgeEstimateText, edgeFactsLine, edgeHypoFamilies, edgeNamedHypothesis, edgeNextText, edgeTimeline, edgeTone, edgeMuted, effectiveNext,
 } from '../research-edge.js';
@@ -254,7 +254,7 @@ export const researchEdgeUiMethods = uiModule({
         const rid = this.activeResearchId();
         const pick = withActions && hypo.id ? this.researchHypothesisPickable(hypo) : null;
         const pending = pick === 'pick' && rid && hypo.id ? pendingHypothesis(rid, hypo.id) : null;
-        const plan = pick === 'pick' ? hypothesisCardPlan(hypo, pick, { pending }) : null;
+        const plan = pick === 'pick' ? hypothesisCardPlan(hypo, pick, { pending, held: !!rid && hypothesisCardNote(rid, hypo.id!)?.kind === 'later' }) : null;
         const terminal = researchLinkMark('hypothesis');
         const rows = (hypo.variants ?? []).map((variant, i) => {
             const o = offers.find(x => x.variant === variant.id);

@@ -3612,6 +3612,8 @@ export const researchUiMethods = uiModule({
             // A newer research names the kind: a short label before the text.
             if (w.kind === 'branch') what.appendChild(el('span', 'live-kind live-kind--decide', strings.live.waitBranchKind));
             else if (w.section) what.appendChild(waitingKindLabel(w));
+            // A hypothesis (spec 074 §9): its id before its question.
+            if (w.kind === 'hypothesis') what.append(el('strong', 'hwr-id', w.id), ' · ');
             what.append(w.kind === 'branch' ? waitBranchText(w, liveSession()) : w.what);
             // "on" is the agent's free text; "user" only repeats the heading.
             if (!waitsOnUser(w.on)) text.appendChild(el('small', 'live-time', r.waitingOn(w.on!)));
@@ -3630,6 +3632,10 @@ export const researchUiMethods = uiModule({
                 answer.dataset.action = 'place';
                 answer.onclick = () => this.showWaitingPlaces(w.place ?? w.id);
                 li.appendChild(answer);
+            } else if (w.kind === 'hypothesis') {
+                // A hypothesis: decided in its card (or in the overview's row), "More ›" leads there.
+                const personId = this.waitingHypothesisPerson(w);
+                if (personId) li.appendChild(this.waitingHypothesisMoreEl(w.id, personId, 'panel'));
             } else if (answerable && this.canAnswerResearchWaiting(w)) {
                 const answer = setResearchActionLabel(el('button', 'live-waiting-answer'), r.answer, researchLinkMark('task'));
                 answer.type = 'button';

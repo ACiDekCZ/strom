@@ -53,7 +53,7 @@ export interface HypothesisCardPlan {
     /** "No version holds" / "Leave open" / "Cancel the change" under the box. */
     foot: { none: HypothesisCardButton; leave: HypothesisCardButton; cancelChange: boolean } | null;
     /** "Change" and "Reopen" under the box of a decided or abandoned one, with what reopening does, or why it cannot be. */
-    decided: { change: boolean; reopen: boolean; cannot: boolean } | null;
+    decided: { change: boolean; reopen: boolean; cannot: boolean; off: boolean } | null;
     /** The wait under the box (No version holds, Leave open, Reopen asked). */
     footWait: boolean;
     /** The sentence that the research's terminal asks for the reason of a change. */
@@ -76,9 +76,12 @@ function variantNote(v: ResearchHypothesisVariant): 'noLink' | 'inTree' | null {
  * `pending`: what was asked of the research and waits for its confirmation
  * (only a `pick` card waits; any other ignores it). `linkable`: the
  * hypothesis link is there for "Decide in the research" (today's way).
+ * `held`: the research decided it already and its version is not loaded yet
+ * ("Later" in the Load dialog): every choice is switched off as during a wait,
+ * and the way into the research is not offered, until the version loads.
  */
 export function hypothesisCardPlan(
-    h: ResearchHypothesis, pick: HypothesisPick, opts: { changing?: boolean; pending?: PendingHypothesis | null; linkable?: boolean } = {},
+    h: ResearchHypothesis, pick: HypothesisPick, opts: { changing?: boolean; pending?: PendingHypothesis | null; linkable?: boolean; held?: boolean } = {},
 ): HypothesisCardPlan {
     const variants = h.variants ?? [];
     const open = isOpenHypothesis(h);
@@ -86,6 +89,8 @@ export function hypothesisCardPlan(
     const extras = pick === 'pick' || pick === 'remote' || pick === 'readonly';
     const choosing = pick === 'pick';
     const pending = choosing ? opts.pending ?? null : null;
+    // A wait, or a decision of the research not loaded yet: the choices are drawn switched off.
+    const busy = !!pending || (choosing && !!opts.held);
     // Changing a decided or abandoned one: by "Change", or a version or "No version holds" asked from it.
     const changeWait = !open && !!pending && pending.do !== 'reopen';
     const changing = choosing && !open && (!!opts.changing || changeWait);
@@ -96,8 +101,8 @@ export function hypothesisCardPlan(
         variants: variants.map(v => {
             const chosen = decided && h.chosen === v.id;
             let pickBtn: HypothesisCardButton = null;
-            if (choosing && open) pickBtn = pending ? 'off' : 'on';
-            else if (changing) pickBtn = pending || chosen ? 'off' : 'on';
+            if (choosing && open) pickBtn = busy ? 'off' : 'on';
+            else if (changing) pickBtn = busy || chosen ? 'off' : 'on';
             const note = pickBtn !== 'on' ? null
                 : changing && hypothesisChoiceStays(h, v.id) ? 'stays'
                 : variantNote(v);
@@ -116,23 +121,23 @@ export function hypothesisCardPlan(
         foot: null,
         decided: null,
         footWait: !!pending && (pending.do === 'abandon' || pending.do === 'keep-open' || pending.do === 'reopen'),
-        changeHint: changing && !pending,
+        changeHint: changing && !busy,
         link: null,
         info: pick === 'remote' ? 'remote' : pick === 'merge' ? 'merge' : null,
     };
     if (choosing && open) {
-        plan.foot = { none: pending ? 'off' : 'on', leave: h.leftOpen ? null : pending ? 'off' : 'on', cancelChange: false };
+        plan.foot = { none: busy ? 'off' : 'on', leave: h.leftOpen ? null : busy ? 'off' : 'on', cancelChange: false };
     } else if (changing) {
-        plan.foot = { none: decided ? (pending ? 'off' : 'on') : null, leave: null, cancelChange: !pending };
+        plan.foot = { none: decided ? (busy ? 'off' : 'on') : null, leave: null, cancelChange: !busy };
     } else if (choosing && !reopenWait) {
         const cannot = !!hypothesisCannotReopen(h);
-        plan.decided = { change: true, reopen: !cannot, cannot };
+        plan.decided = { change: true, reopen: !cannot, cannot, off: busy };
     }
     // The way into the research: today's main action where nothing is chosen here; quiet below a
     // line beside the choice; not while a wait or a change goes on.
     if (opts.linkable !== false && h.id) {
         if (pick === 'old' || pick === 'merge') plan.link = 'main';
-        else if (choosing && !pending && !changing) plan.link = 'faint';
+        else if (choosing && !busy && !changing) plan.link = 'faint';
     }
     return plan;
 }

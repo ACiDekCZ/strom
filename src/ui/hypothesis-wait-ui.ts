@@ -24,6 +24,7 @@ import {
     onPendingHypothesisChange, pendingHypothesesOf, setHypothesisCardNote, setPendingHypothesis, settlePendingHypotheses, touchPendingHypotheses,
 } from '../research-hypothesis-wait.js';
 import { HypothesisLoadRow, researchHypothesisLoadRows, researchHypothesisOutcomeToast } from '../research-hypotheses.js';
+import { noteAcceptOutcome } from '../research-hypothesis-waiting.js';
 import { researchDateLabel, liveSession } from './research-ui.js';
 import { researchSendMode } from './research-sync-ui.js';
 import { viewLinksToldInvalid } from './view-links-list-ui.js';
@@ -134,6 +135,7 @@ export const hypothesisWaitMethods = uiModule({
     researchHypothesesLater(rid: string, there: ReadonlyMap<string, ResearchHypothesis>, outcomes: ReadonlyMap<string, PendingHypothesisOutcome>): void {
         for (const [id, o] of outcomes) {
             if (o.kind === 'waiting') continue;
+            noteAcceptOutcome(rid, id, o);
             setPendingHypothesis(rid, id, null);
             const note = hypothesisNoteOf(o, there.get(id), true);
             if (note) setHypothesisCardNote(rid, id, note);
@@ -180,6 +182,8 @@ export const hypothesisWaitMethods = uiModule({
                 this.researchHypothesisBubbleDone(personId);
                 this.refreshResearchEdgeSection(personId);
             }
+            // One of a list asked at once: the list's notice says how many (hypothesis-waiting-ui).
+            if (noteAcceptOutcome(rid, id, o)) continue;
             if (!text || told) continue;
             told = true;
             this.showToast(text, TOAST_MS, personId ? {
