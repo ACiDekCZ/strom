@@ -182,7 +182,8 @@ export const waitingPlacesMethods = uiModule({
             const close = overlay.querySelector('#waiting-places-close') as HTMLButtonElement;
             (close.offsetParent ? close : overlay.querySelector('#waiting-places-x') as HTMLButtonElement).focus();
         }
-        // What the research says now (an older list may be shown first).
+        // What the research says now (an older list may be shown first); `data-status` says when it is read.
+        overlay.dataset.status = 'reading';
         void this.refreshWaitingPlacesStatus();
     },
 
@@ -707,6 +708,8 @@ export const waitingPlacesMethods = uiModule({
         this.refreshActionMenuBadges();
         this.renderLivePanel();
         this.renderWaitingPlaces();
+        const overlay = document.getElementById(MODAL_ID);
+        if (overlay) overlay.dataset.status = 'read';
     },
 
     /** A refused answer or undo, said; a question changed meanwhile reads "Awaiting action" again. */

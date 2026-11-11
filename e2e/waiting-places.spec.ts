@@ -121,6 +121,8 @@ const toast = (page: Page): Locator => page.locator('.toast');
 const openWin = async (page: Page, place?: string): Promise<void> => {
     await page.evaluate((p) => window.Strom.UI.showWaitingPlaces(p), place);
     await expect(win(page)).toBeVisible();
+    // The window reads the research's status as it opens and draws its cards again then: a card found before that is gone.
+    await expect(win(page)).toHaveAttribute('data-status', 'read');
 };
 
 /** Nothing wider than the screen: the window's content, the page and every visible element of the cards. */
