@@ -67,7 +67,7 @@ describe('the Table names the research as the rest of the app does (spec 073)', 
         return out;
     };
 
-    it('pl: "Badanie" in the singular, "Czeka na załatwienie" as the overview\'s heading', () => {
+    it('pl: "Badanie" in the singular; the Table\'s group "Czeka na decyzję" (en "Awaiting decision"), not the panel\'s name', () => {
         const pl = getStringsForLang('pl');
         const t = pl.table;
         expect(t.group.research).toBe('Badanie');
@@ -75,10 +75,11 @@ describe('the Table names the research as the rest of the app does (spec 073)', 
         expect(t.res.view.research).toBe('Badanie');
         expect(t.views.research).toBe('Badanie');
         expect(t.col.rSum).toBe('Badanie');
-        expect(t.col.rWait).toBe(pl.research.waiting);
-        expect(t.chip.rWait).toBe(pl.research.waiting);
-        expect(t.res.bub.waitTitle(3)).toBe(`${pl.research.waiting} · 3`);
-        const plural = textsOf(t).filter(x => /Badania\b|badań|badaniach|badaniami|Czeka na decyzję|czekają/u.test(x));
+        expect(t.col.rWait).toBe('Czeka na decyzję');
+        expect(t.chip.rWait).toBe('Czeka na decyzję');
+        expect(t.res.bub.waitTitle(3)).toBe('Czeka na decyzję · 3');
+        expect(t.res.bub.waitingPanel).toBe(`${pl.research.waiting} ›`);
+        const plural = textsOf(t).filter(x => /Badania\b|badań|badaniach|badaniami|czekają/u.test(x));
         expect(plural).toEqual([]);
     });
 });
