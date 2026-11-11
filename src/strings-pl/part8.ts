@@ -1466,6 +1466,13 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         filterFilled: 'wypełnione',
         matchContains: 'zawiera',
         matchStarts: 'zaczyna się od',
+        matchEquals: 'jest',
+        matchNotEquals: 'nie jest',
+        cell: {
+            copy: 'Kopiuj',
+            only: (v: string) => `Tylko „${v}”`,
+            without: (v: string) => `Bez „${v}”`,
+        },
         rangeFrom: 'od',
         rangeTo: 'do',
         rangeYears: 'Rok',

@@ -43,7 +43,8 @@ import { columnRun, groupRuns, MIN_COLUMN_WIDTH, type CollapsedBand } from './ta
 import { columnOffsets, columnWindow, lineOffsets, lineWindow, type ColumnWindow } from './table-window.js';
 import { lineCell, lineKey, lineLevel, plainLines, type GridLine } from './table-subrows.js';
 import type { CoverageCell } from './table-coverage.js';
-import { highlightHtml } from './table-filter.js';
+import { cellShownText, highlightHtml } from './table-filter.js';
+import { copyPlainText } from './table-cell.js';
 import { shownNameOrEmpty as personName } from '../../person-name.js';
 import { AGENT_SPIN_MS, sharedPhaseDelay } from '../../card-signals.js';
 import { PERSON_FINDINGS_COLUMNS } from './table-checks.js';
@@ -134,13 +135,20 @@ export interface CellIssueMark {
     label: string;
 }
 
+/** A body cell: its column (drawn position `index`) and its value; not a collapsed group's band. */
+export interface GridCellRef {
+    col: ColumnDef;
+    index: number;
+    value: CellValue;
+}
+
 export interface GridHandlers {
     /** The grid scrolled (the view keeps its position per row type). */
     onScroll?(top: number, left: number): void;
     /** A row was selected (a click, ↑ ↓; a sub-row selects its person); null: Escape cleared it. */
     onSelect?(key: string | null, row: TableRow | null): void;
-    /** A line was clicked or tapped, after its selection (a phone opens the row's sheet, 10b). */
-    onRowClick?(line: GridLine): void;
+    /** A line was clicked or tapped, after its selection (a phone opens the row's sheet, 10b); the cell it was on. */
+    onRowClick?(line: GridLine, cell: GridCellRef | null): void;
     /** A row's action (§10.1): its icon, Enter (open), a double click (edit). */
     onRowAction?(action: RowAction, line: GridLine): void;
     /**
@@ -150,8 +158,8 @@ export interface GridHandlers {
     onName?(line: GridLine, col: ColumnDef, name: CellName, anchor: HTMLElement): void;
     /** The pill "+N" of a citation cell (§14.3): the further citations' bubble. */
     onMoreCites?(line: GridLine, col: ColumnDef, ids: readonly string[], anchor: HTMLElement): void;
-    /** The row's menu (§10.1): a right click, Shift+F10, the menu key. */
-    onRowMenu?(line: GridLine, anchor: HTMLElement): void;
+    /** The row's menu (§10.1): a right click, Shift+F10, the menu key; the cell it is for (T54 F4). */
+    onRowMenu?(line: GridLine, anchor: HTMLElement, cell: GridCellRef | null): void;
     /** A person's ▾/▸, the count pill or → / ← on the name cell (§3.2). */
     onToggleUnions?(personId: string, expand: boolean): void;
     /** "Expand unions" / "Collapse unions" in the name head, `*` / Shift+`*` (§3.2, §3.4). */
@@ -407,6 +415,12 @@ export class TableGrid {
     /** The body's active cell (roving tabindex, §3.4): the line's key and the column's drawn position. */
     private activeKey: string | null = null;
     private activeCol = 0;
+    /**
+     * The active cell was chosen (a click, a right click, the keys; T54 F9):
+     * it carries a quiet outline. A jump to a row (the person in focus coming
+     * into the table, the app's search) only makes the row active.
+     */
+    private cellChosen = false;
     /** The rows last drawn, so a redraw of the same rows replaces only the cells that changed (§16.6). */
     private drawnRows: DrawnRow[] = [];
     /** The agent's bars stop while out of sight (§16.6). */
@@ -446,7 +460,7 @@ export class TableGrid {
             const rowEl = t.closest<HTMLElement>('.tv-row[data-key]');
             const line = rowEl ? this.lines[Number(rowEl.dataset.index)] : undefined;
             const cellEl = t.closest<HTMLElement>('[aria-colindex]');
-            if (line && cellEl) { this.activeKey = lineKey(line); this.activeCol = Number(cellEl.getAttribute('aria-colindex')) - 1; }
+            if (line && cellEl) this.chooseCell(line, cellEl);
             const band = t.closest<HTMLElement>('.tv-band[data-band]');
             if (band) { this.handlers.onToggleGroup?.(band.dataset.band!, false); return; }
             if (!line || !this.input) return;
@@ -492,7 +506,7 @@ export class TableGrid {
             }
             this.select(line);
             if (cellEl?.querySelector('.tv-comp') && this.handlers.onComp?.(line, Number(cellEl.getAttribute('aria-colindex')) - 1, cellEl)) return;
-            this.handlers.onRowClick?.(line);
+            this.handlers.onRowClick?.(line, this.cellRefOf(line, cellEl));
         });
         // A double click edits (§10.1); the ▾/▸, the count pill and the icons are their own.
         this.body.addEventListener('dblclick', (e) => {
@@ -507,9 +521,11 @@ export class TableGrid {
             const line = this.lineOf(t);
             if (!line || line.kind === 'more' || !this.handlers.onRowMenu) return;
             e.preventDefault();
-            const anchor = t.closest<HTMLElement>('[aria-colindex]') ?? t.closest<HTMLElement>('.tv-row')!;
+            const cellEl = t.closest<HTMLElement>('[aria-colindex]');
+            if (cellEl) this.chooseCell(line, cellEl);
+            const anchor = cellEl ?? t.closest<HTMLElement>('.tv-row')!;
             this.select(line);
-            this.handlers.onRowMenu(line, anchor);
+            this.handlers.onRowMenu(line, anchor, this.cellRefOf(line, cellEl));
         });
         this.body.addEventListener('keydown', (e) => this.onBodyKey(e));
         // The grid itself focused (its tab stop): an arrow enters the body at the active cell.
@@ -525,9 +541,11 @@ export class TableGrid {
             if (!cellEl || !line) return;
             this.activeKey = lineKey(line);
             this.activeCol = Number(cellEl.getAttribute('aria-colindex')) - 1;
+            this.cellChosen = true;
             for (const other of this.body.querySelectorAll<HTMLElement>('[aria-colindex][tabindex="0"]')) if (other !== cellEl) other.tabIndex = -1;
             cellEl.tabIndex = 0;
             this.syncNameTabs();
+            this.syncActiveMark();
         });
         this.wireHead();
         this.resize = typeof ResizeObserver === 'function' ? new ResizeObserver(() => this.schedule()) : null;
@@ -561,6 +579,47 @@ export class TableGrid {
         if (!col || !ids?.length) return false;
         this.handlers.onMoreCites(line, col, ids, btn);
         return true;
+    }
+
+    /** A cell clicked or right-clicked becomes the active one (T54 F9). */
+    private chooseCell(line: GridLine, cellEl: HTMLElement): void {
+        this.activeKey = lineKey(line);
+        this.activeCol = Number(cellEl.getAttribute('aria-colindex')) - 1;
+        this.cellChosen = true;
+        this.syncActiveMark();
+    }
+
+    /** A body cell's column and value; null for a collapsed group's band or the "more" line. */
+    private cellRefOf(line: GridLine, cellEl: HTMLElement | null | undefined): GridCellRef | null {
+        const input = this.input;
+        if (!input || !cellEl || line.kind === 'more' || cellEl.classList.contains('tv-band')) return null;
+        const index = Number(cellEl.getAttribute('aria-colindex')) - 1;
+        const col = input.columns[index];
+        if (!col || input.bands?.[index]) return null;
+        return { col, index, value: lineCell(input.model, line, col) };
+    }
+
+    /**
+     * The active cell (T54 F9; F8 edits it by F2 / Enter): its line, column
+     * and element (null while out of the drawn window); null without a chosen one.
+     */
+    activeCell(): { line: GridLine; cell: GridCellRef; el: HTMLElement | null } | null {
+        if (!this.cellChosen || !this.activeKey || !this.input) return null;
+        const at = this.lines.findIndex(l => lineKey(l) === this.activeKey);
+        const line = at >= 0 ? this.lines[at] : undefined;
+        const col = this.input.columns[this.activeCol];
+        if (!line || !col || line.kind === 'more' || this.input.bands?.[this.activeCol]) return null;
+        const el = this.body.querySelector<HTMLElement>(`.tv-row[data-index="${at}"] [aria-colindex="${this.activeCol + 1}"]`);
+        return { line, cell: { col, index: this.activeCol, value: lineCell(this.input.model, line, col) }, el };
+    }
+
+    /** The quiet outline on the chosen active cell (T54 F9), off everywhere else. */
+    private syncActiveMark(): void {
+        for (const c of this.body.querySelectorAll('.is-active-cell')) c.classList.remove('is-active-cell');
+        if (!this.cellChosen || !this.activeKey) return;
+        const at = this.lines.findIndex(l => lineKey(l) === this.activeKey);
+        if (at < 0) return;
+        this.body.querySelector(`.tv-row[data-index="${at}"] [aria-colindex="${this.activeCol + 1}"]`)?.classList.add('is-active-cell');
     }
 
     /** The names of the active cell (the one with the body's tab stop) in the tab order, the others out (§14.1). */
@@ -1213,6 +1272,7 @@ export class TableGrid {
         }
         this.paintBody(drawn);
         this.syncNameTabs();
+        this.syncActiveMark();
         if (refocus) this.focusActive(false);
     }
 
@@ -1367,6 +1427,7 @@ export class TableGrid {
         col = Math.max(0, Math.min(input.columns.length - 1, col));
         this.activeKey = lineKey(this.lines[line]);
         this.activeCol = col;
+        this.cellChosen = true;
         const tops = this.lineTops(this.rowHeight());
         const headH = this.head.offsetHeight;
         const el = this.el;
@@ -1396,6 +1457,7 @@ export class TableGrid {
     private onBodyKey(e: KeyboardEvent): void {
         const input = this.input;
         if (!input || !this.lines.length) return;
+        if (this.copyKey(e)) return;
         if (e.altKey) return;
         // A name in a cell (§14.1) is a button: Enter and Space are its own.
         if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.tv-nm, .tv-link, .tv-cites-more, .tv-conf')) return;
@@ -1412,8 +1474,9 @@ export class TableGrid {
             if (line.kind === 'more' || !this.handlers.onRowMenu) return;
             e.preventDefault();
             const cellEl = (e.target as Element).closest<HTMLElement>('[aria-colindex]');
+            if (cellEl) this.chooseCell(line, cellEl);
             this.select(line);
-            this.handlers.onRowMenu(line, cellEl ?? (e.target as HTMLElement));
+            this.handlers.onRowMenu(line, cellEl ?? (e.target as HTMLElement), this.cellRefOf(line, cellEl));
             return;
         }
         switch (e.key) {
@@ -1492,6 +1555,25 @@ export class TableGrid {
         }
     }
 
+    /**
+     * Ctrl/Cmd+C (T54 F9): with no text selected, the active cell's shown
+     * text (no marks or icons); a selection made by the mouse copies as usual.
+     * True when the key was this one.
+     */
+    private copyKey(e: KeyboardEvent): boolean {
+        if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || (e.key.toLowerCase() !== 'c' && e.code !== 'KeyC')) return false;
+        const sel = typeof window.getSelection === 'function' ? window.getSelection() : null;
+        if (sel && !sel.isCollapsed && sel.toString().trim()) return true;
+        const cellEl = (e.target as Element).closest<HTMLElement>('[aria-colindex]');
+        const line = this.lineOf(e.target as Element);
+        const ref = line ? this.cellRefOf(line, cellEl) : null;
+        const text = ref ? cellShownText(ref.value) : '';
+        if (!text) return true;
+        e.preventDefault();
+        copyPlainText(text);
+        return true;
+    }
+
     /** Scroll a row into view (§8.3: the app's person search in the table) and draw. */
     revealKey(key: string): void {
         const at = this.lines.findIndex(l => lineKey(l) === key);
@@ -1504,6 +1586,7 @@ export class TableGrid {
         }
         this.activeKey = key;
         this.activeCol = 0;
+        this.cellChosen = false;
         this.bodyKey = '';
         this.draw();
     }

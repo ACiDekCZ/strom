@@ -96,6 +96,8 @@ export interface CellValue {
      * ", ".
      */
     names?: CellName[];
+    /** The tree's person the cell names (a name, a parent, a partner): "Only" / "Without" compare the person (T54 F4). */
+    personId?: PersonId;
     /**
      * The further citations of a fact (§14.3): the cell shows the first
      * source's value and a pill "+N" whose bubble lists these (the cited ids).

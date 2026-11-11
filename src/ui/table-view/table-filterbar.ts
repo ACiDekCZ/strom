@@ -14,7 +14,7 @@ import { strings } from '../../strings.js';
 import { columnLabel, type ColumnDef } from './table-columns.js';
 import { ROW_KEY, type RowType, type TableModel } from './table-model.js';
 import {
-    activeFilterCount, availableChips, CHECK_CHIPS, chipItem, chipLabel, columnItemLabel, columnValues, filterKindOf,
+    activeFilterCount, availableChips, CHECK_CHIPS, chipItem, chipLabel, columnItemLabel, columnValues, filterKindOf, isEqualityItem,
     generationSpan, newWindowOf, rodChoices, shownColumnItems, type ChipFilter, type ChipId, type ColumnFilter, type TableFilter,
 } from './table-filter.js';
 import { closeHeadMenu, openHeadMenu, type HeadMenuEntry, type MenuEntry } from './table-headmenu.js';
@@ -449,20 +449,30 @@ export function columnFilterForm(model: TableModel, type: RowType, col: ColumnDe
     const el = document.createElement('div');
     el.className = 'tv-ff';
     let html = '';
+    // "Only" / "Without" of a cell's menu (T54 F4): "is" / "is not" with the value, in any kind of column.
+    const eq = !!item && isEqualityItem(item);
+    const opt = (value: NonNullable<ColumnFilter['match']>, label: string, on: boolean): string =>
+        `<option value="${value}"${on ? ' selected' : ''}>${esc(label)}</option>`;
+    const eqOptions = opt('equals', t.matchEquals, item?.match === 'equals') + opt('notEquals', t.matchNotEquals, item?.match === 'notEquals');
+    const textInput = `<input type="text" class="tv-ff-text" value="${esc(item?.text ?? '')}" aria-label="${esc(t.filterValue)}" autocomplete="off" spellcheck="false">`;
     if (kind === 'text') {
         html += '<div class="tv-ff-line">'
             + `<select class="tv-ff-match" aria-label="${esc(columnLabel(col))}">`
-            + `<option value="contains"${item?.match !== 'starts' ? ' selected' : ''}>${esc(t.matchContains)}</option>`
-            + `<option value="starts"${item?.match === 'starts' ? ' selected' : ''}>${esc(t.matchStarts)}</option></select>`
-            + `<input type="text" class="tv-ff-text" value="${esc(item?.text ?? '')}" aria-label="${esc(t.filterValue)}" autocomplete="off" spellcheck="false">`
+            + opt('contains', t.matchContains, !item?.match || item.match === 'contains')
+            + opt('starts', t.matchStarts, item?.match === 'starts')
+            + eqOptions + '</select>'
+            + textInput
             + '</div>';
-    } else if (kind === 'range') {
+    } else if (eq) {
+        html += `<div class="tv-ff-line"><select class="tv-ff-match" aria-label="${esc(columnLabel(col))}">${eqOptions}</select>${textInput}</div>`;
+    }
+    if (kind === 'range') {
         const lead = col.kind === 'date' ? `<span class="tv-ff-lead">${esc(t.rangeYears)}</span>` : '';
         html += `<div class="tv-ff-line">${lead}`
             + `<label class="tv-ff-range"><span>${esc(t.rangeFrom)}</span><input type="number" inputmode="numeric" class="tv-ff-from" value="${item?.from ?? ''}"></label>`
             + `<label class="tv-ff-range"><span>${esc(t.rangeTo)}</span><input type="number" inputmode="numeric" class="tv-ff-to" value="${item?.to ?? ''}"></label>`
             + '</div>';
-    } else {
+    } else if (kind === 'values') {
         const values = columnValues(model, type, col);
         html += `<div class="tv-ff-values" role="group" aria-label="${esc(columnLabel(col))}">`
             + values.map(v => `<label class="tv-ff-check"><input type="checkbox" class="tv-ff-value" value="${esc(v.value)}"`
@@ -482,15 +492,24 @@ export function columnFilterForm(model: TableModel, type: RowType, col: ColumnDe
         el,
         read(): ColumnFilter {
             const out: ColumnFilter = { col: col.id, kind: col.kind };
-            if (kind === 'text') {
-                const text = el.querySelector<HTMLInputElement>('.tv-ff-text')!.value.trim();
-                if (text) { out.text = text; out.match = el.querySelector<HTMLSelectElement>('.tv-ff-match')!.value === 'starts' ? 'starts' : 'contains'; }
-            } else if (kind === 'range') {
+            const textEl = el.querySelector<HTMLInputElement>('.tv-ff-text');
+            if (textEl) {
+                const text = textEl.value.trim();
+                const m = el.querySelector<HTMLSelectElement>('.tv-ff-match')!.value;
+                const match: NonNullable<ColumnFilter['match']> = m === 'starts' || m === 'equals' || m === 'notEquals' ? m : 'contains';
+                if (text) {
+                    out.text = text;
+                    out.match = match;
+                    // The person compared stays while the value is the one the cell gave.
+                    if (item?.personId && (match === 'equals' || match === 'notEquals') && text === item.text?.trim()) out.personId = item.personId;
+                }
+            }
+            if (kind === 'range') {
                 const from = numberOr(el.querySelector<HTMLInputElement>('.tv-ff-from')!);
                 const to = numberOr(el.querySelector<HTMLInputElement>('.tv-ff-to')!);
                 if (from !== undefined) out.from = from;
                 if (to !== undefined) out.to = to;
-            } else {
+            } else if (kind === 'values') {
                 const values = [...el.querySelectorAll<HTMLInputElement>('.tv-ff-value:checked')].map(i => i.value);
                 if (values.length) out.values = values;
             }

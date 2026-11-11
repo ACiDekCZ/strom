@@ -9699,6 +9699,8 @@
             flex: none; margin-left: auto; padding: 0 4px; height: 26px; border: none; background: none; border-radius: var(--r-sm);
             font-family: var(--font-sans); font-size: 11.5px; font-weight: 500; color: var(--primary); cursor: pointer; white-space: nowrap;
         }
+        /* The active cell (a click, the arrows): a quiet outline; the keyboard's focus ring stays stronger. */
+        .tv-body .tv-cell.is-active-cell { outline: 1px solid color-mix(in srgb, var(--primary) 70%, transparent); outline-offset: -1px; }
         .tv-body .tv-cell:focus-visible, .tv-head-all:focus-visible, .tv-more-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         .tv-status {
             flex: none; display: flex; align-items: center; gap: 12px; height: 30px; padding: 0 16px;

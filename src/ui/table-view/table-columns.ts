@@ -197,7 +197,7 @@ function nameOf(p: Person | null | undefined): CellValue {
     const text = shownNameOrEmpty(p);
     if (!text) return emptyCell();
     const key = `${(p.lastName ?? '').toLocaleLowerCase()}\u0000${(p.firstName ?? '').toLocaleLowerCase()}`;
-    return { ...EMPTY, text, sortKey: key, empty: false };
+    return { ...EMPTY, text, sortKey: key, empty: false, personId: p.id };
 }
 
 // ---------------------------------------------------------------------------

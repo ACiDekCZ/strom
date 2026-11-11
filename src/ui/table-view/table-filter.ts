@@ -72,14 +72,23 @@ export interface ChipFilter {
  * A column filter (§8.2): text "contains" / "starts with"; a date by years
  * `from`–`to`; an age or a number `from`–`to` (bounds included); a pill or
  * an enumeration by `values`; and "only empty" / "only filled".
+ *
+ * "Only {value}" / "Without {value}" of a cell's menu (T54 F4) are `match`
+ * `equals` / `notEquals` with the shown `text` (case and diacritics aside,
+ * any kind of column); a cell naming one of the tree's people compares that
+ * person (`personId`), not the text. Without the value counts empty cells
+ * as passing. Older versions read such an item as "contains" (a text column)
+ * or ignore it, so a stored view needs no new data version.
  */
 export interface ColumnFilter {
     col: string;
     kind: ColumnKind;
     from?: number;
     to?: number;
-    match?: 'contains' | 'starts';
+    match?: 'contains' | 'starts' | 'equals' | 'notEquals';
     text?: string;
+    /** The tree's person an equality compares (a name of a person, parent, partner). */
+    personId?: string;
     values?: string[];
     empty?: true;
     filled?: true;
@@ -136,7 +145,7 @@ export function filterKindOf(col: ColumnDef): FilterKind {
 /** Whether a column filter says anything (an empty one is dropped). */
 export function columnItemActive(item: ColumnFilter): boolean {
     return !!item.empty || !!item.filled || item.from !== undefined || item.to !== undefined
-        || !!item.text?.trim() || (item.values?.length ?? 0) > 0;
+        || !!item.text?.trim() || !!item.personId || (item.values?.length ?? 0) > 0;
 }
 
 /** Turn a quick chip on (with its choice) or off. Returns whether the filter changed. */
@@ -383,10 +392,41 @@ function yearOf(value: CellValue): number | null {
     return typeof value.sortKey === 'number' ? Math.floor(value.sortKey / 10000) : null;
 }
 
+/** Whether a column filter compares whole values ("Only" / "Without", T54 F4). */
+export function isEqualityItem(item: ColumnFilter): boolean {
+    return item.match === 'equals' || item.match === 'notEquals';
+}
+
+/**
+ * The text a cell shows: its qualifier and value, without marks, icons or
+ * pills ("abt. 1850"). What Ctrl/Cmd+C copies and "Only" / "Without" compare.
+ */
+export function cellShownText(value: CellValue): string {
+    if (value.na && !value.text) return '';
+    return [value.prefix ?? '', value.text].filter(Boolean).join(' ').trim();
+}
+
+/** The tree's person a cell names (one person: a name, a parent, a partner, a single participant). */
+export function cellPersonOf(value: CellValue): string | undefined {
+    if (value.personId) return value.personId;
+    return value.names?.length === 1 ? value.names[0].personId : undefined;
+}
+
+/** Whether a cell holds the value of an equality filter: the same person, else the same text (case and diacritics aside). */
+export function cellEquals(value: CellValue, item: ColumnFilter): boolean {
+    if (value.na || value.empty) return false;
+    if (item.personId) return cellPersonOf(value) === item.personId;
+    const want = foldName(item.text ?? '');
+    return want !== '' && foldName(cellShownText(value)) === want;
+}
+
 /** Whether one cell passes a column filter (all its conditions). */
 export function cellPasses(value: CellValue, item: ColumnFilter, kind: FilterKind): boolean {
     if (item.empty && (value.na || cellFilled(value))) return false;
     if (item.filled && !cellFilled(value)) return false;
+    if (isEqualityItem(item) && (item.personId || item.text?.trim())) {
+        if (cellEquals(value, item) !== (item.match === 'equals')) return false;
+    }
     if (kind === 'range' && (item.from !== undefined || item.to !== undefined)) {
         if (value.na || value.empty) return false;
         const n = item.kind === 'date' ? yearOf(value) : typeof value.sortKey === 'number' ? value.sortKey : null;
@@ -394,7 +434,7 @@ export function cellPasses(value: CellValue, item: ColumnFilter, kind: FilterKin
         if (item.from !== undefined && n < item.from) return false;
         if (item.to !== undefined && n > item.to) return false;
     }
-    if (kind === 'text' && item.text?.trim()) {
+    if (kind === 'text' && item.text?.trim() && !isEqualityItem(item)) {
         if (value.na || value.empty) return false;
         const q = foldText(item.text.trim());
         const t = foldedCell(value);
@@ -541,7 +581,8 @@ export function columnItemLabel(type: RowType, item: ColumnFilter): string {
         const to = item.to !== undefined ? num(item.to) : '';
         parts.push(f && to ? (f === to ? `= ${f}` : `${f}–${to}`) : f ? `≥ ${f}` : `≤ ${to}`);
     }
-    if (kind === 'text' && item.text?.trim()) parts.push(item.match === 'starts' ? t.filterStarts(item.text.trim()) : t.filterContains(item.text.trim()));
+    if (isEqualityItem(item) && item.text?.trim()) parts.push(`${item.match === 'equals' ? '=' : '≠'} ${item.text.trim()}`);
+    else if (kind === 'text' && item.text?.trim()) parts.push(item.match === 'starts' ? t.filterStarts(item.text.trim()) : t.filterContains(item.text.trim()));
     if (kind === 'values' && item.values?.length) parts.push(item.values.length > 2 ? `${item.values.length}×` : item.values.map(v => valueWord(c, v)).join(', '));
     if (item.empty) parts.push(t.filterEmpty);
     if (item.filled) parts.push(t.filterFilled);

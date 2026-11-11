@@ -39,7 +39,7 @@ import { findCrossTreeMatches, getTreesDataForMatching, type CrossTreeMatch } fr
 import type { ChangeKind, PersonChange } from '../../research-changes.js';
 import {
     CHECK_CHIPS, chipItem, chipLabel, clearFilter, columnItem, filterRows, filterSummary, isChipItem, newWindowOf, removeColumnFilter, searchQuery, setChip, setParticipantFilter,
-    setColumnFilter, setEmptyFilter, sortRows, columnItemActive, type ChipId, type FilterResult, type TableFilter,
+    setColumnFilter, setEmptyFilter, sortRows, columnItemActive, type ChipId, type ColumnFilter, type FilterResult, type TableFilter,
 } from './table-filter.js';
 import {
     chipChoiceForm, closeFilterPanel, columnFilterForm, FilterBar, FilterSheet, openFilterPanel, type FilterBarState, type PanelOptions, type ResearchBarState,
@@ -49,7 +49,9 @@ import {
     type CellName, type CellValue, type EventRow, type RowType, type SourceRow, type TableModel, type TableRow,
 } from './table-model.js';
 import { eventEditTarget } from './table-events.js';
-import { TableGrid, type RowAction } from './table-grid.js';
+import { TableGrid, type GridCellRef, type RowAction } from './table-grid.js';
+import { cellChoices, copyPlainText } from './table-cell.js';
+import { fanZoomModifier } from '../../fan-zoom.js';
 import { createBar, createStatus, updateBar, updateResearchStatus, updateStatus } from './table-bar.js';
 import {
     canMoveColumn, canPinColumn, catalogColumns, displayColumns, hideColumn, lockedColumn, moveColumnBy, moveColumnRun, moveColumnTo,
@@ -602,7 +604,7 @@ export const tableMethods = uiModule({
                     s.types[s.rowType].selected = key;
                     this.renderTableView(container);
                 },
-                onRowClick: (line) => { if (isPhoneBar() || isCoarsePointer()) this.showTableRowSheet(line); },
+                onRowClick: (line, cell) => { if (isPhoneBar() || isCoarsePointer()) this.showTableRowSheet(line, cell); },
                 // §6.2 by touch: the completeness bubble on a tap of its cell (a mouse has its title).
                 onComp: (line, col, cell) => {
                     if (!isPhoneBar() && !isCoarsePointer()) return false;
@@ -612,7 +614,7 @@ export const tableMethods = uiModule({
                 onRowAction: (action, line) => this.tableRowAction(action, line),
                 onName: (line, _col, name, anchor) => this.tableNameAction(line, name, anchor),
                 onMoreCites: (_line, _col, ids, anchor) => this.showTableCites(ids, anchor),
-                onRowMenu: (line, anchor) => this.showTableRowMenu(line, anchor),
+                onRowMenu: (line, anchor, cell) => this.showTableRowMenu(line, anchor, cell),
                 onIssue: (line, col, cell) => this.showTableFinding(line, col, cell),
                 onFindings: (line, col, cell) => this.showTablePersonFindings(line, col, cell),
                 onConflict: (line, col, mark) => this.showTableConflict(line, col, mark),
@@ -1526,19 +1528,55 @@ export const tableMethods = uiModule({
         menu.setAttribute('aria-label', name.text);
     },
 
-    /** The row's menu (§10.1): Show in tree · Open person (Enter) · Edit… (double click) · Expand / Collapse unions. */
-    showTableRowMenu(line: GridLine, anchor: HTMLElement): void {
+    /**
+     * The cell's part of the row's menu and sheet (T54 F4): Copy · Only
+     * "{value}" · Without "{value}"; an empty cell's only empty / only
+     * filled; Copy alone for a cell without one value to compare.
+     */
+    tableCellChoices(line: GridLine, cell: GridCellRef | null): HeadMenuItem[] {
+        if (!cell || !model || line.kind === 'more') return [];
+        const type = stateOf(treeKey()).rowType;
+        const choices = cellChoices(model, type, line, cell.col, cell.value);
+        if (!choices) return [];
+        const t = strings.table;
+        const col = cell.col;
+        const set = (item: ColumnFilter) => (): void => this.changeTableFilter(f => setColumnFilter(f, item), true);
+        const out: HeadMenuItem[] = [];
+        const copy = choices.copy;
+        if (copy) out.push({ id: 'cellCopy', label: t.cell.copy, icon: '', hint: fanZoomModifier() === '⌘' ? '⌘C' : 'Ctrl+C', run: () => copyPlainText(copy) });
+        if (choices.only) out.push({ id: 'cellOnly', label: t.cell.only(choices.label), icon: '', run: set(choices.only) });
+        if (choices.without) out.push({ id: 'cellWithout', label: t.cell.without(choices.label), icon: '', run: set(choices.without) });
+        if (choices.empty) {
+            out.push(
+                { id: 'cellEmpty', label: t.onlyEmpty, icon: '', run: () => this.changeTableFilter(f => setEmptyFilter(f, col, 'empty'), true) },
+                { id: 'cellFilled', label: t.onlyFilled, icon: '', run: () => this.changeTableFilter(f => setEmptyFilter(f, col, 'filled'), true) },
+            );
+        }
+        return out;
+    },
+
+    /** The cell's part as the first block of a row's sheet (T54 F4), none without one. */
+    tableCellSheetBlocks(line: GridLine, cell: GridCellRef | null): { rows: { id: string; label: string; icon: string; run: () => void }[] }[] {
+        const items = this.tableCellChoices(line, cell);
+        return items.length ? [{ rows: items.map(i => ({ id: `tv-sheet-${i.id}`, label: i.label, icon: '', run: i.run })) }] : [];
+    },
+
+    /** The row's menu (§10.1): the cell's part (T54 F4) · Show in tree · Open person (Enter) · Edit… (double click) · Expand / Collapse unions. */
+    showTableRowMenu(line: GridLine, anchor: HTMLElement, cell: GridCellRef | null = null): void {
         if (line.kind === 'more') return;
-        if (isPhoneBar()) { this.showTableRowSheet(line); return; }
+        if (isPhoneBar()) { this.showTableRowSheet(line, cell); return; }
         const t = strings.table;
         const run = (a: RowAction) => () => this.tableRowAction(a, line);
         const src = line.row.kind === 'source' ? line.row : null;
-        const entries: MenuEntry[] = src
-            ? [{ id: 'open', label: t.act.openSource, icon: '▤', hint: 'Enter', run: run('open') }]
-            : [
+        const cellPart = this.tableCellChoices(line, cell);
+        const entries: MenuEntry[] = cellPart.length ? [...cellPart, SEP] : [];
+        if (src) entries.push({ id: 'open', label: t.act.openSource, icon: '▤', hint: 'Enter', run: run('open') });
+        else {
+            entries.push(
                 { id: 'tree', label: t.act.tree, icon: '⌖', run: run('tree') },
                 { id: 'open', label: t.act.open, icon: '▤', hint: 'Enter', run: run('open') },
-            ];
+            );
+        }
         if (!tableReadOnly()) entries.push({ id: 'edit', label: t.act.edit, icon: '✎', hint: t.dblClickHint, run: run('edit') });
         if (line.kind === 'row' && line.expanded !== null) {
             const expand = !line.expanded;
@@ -1559,9 +1597,9 @@ export const tableMethods = uiModule({
      * top, the three actions, then a row per union into the relationships
      * panel ("Union k: {partner} · Edit ›"); a sub-row's sheet has its union only.
      */
-    showTableRowSheet(line: GridLine): void {
+    showTableRowSheet(line: GridLine, cell: GridCellRef | null = null): void {
         if (line.kind === 'more') return;
-        if (line.row.kind === 'source') { this.showTableSourceSheet(line); return; }
+        if (line.row.kind === 'source') { this.showTableSourceSheet(line, cell); return; }
         const personId = personOfRow(line.row);
         const person = personId ? DataManager.getPerson(personId) : null;
         if (!personId || !person) return;
@@ -1573,7 +1611,8 @@ export const tableMethods = uiModule({
             { label: t.act.open, icon: '▤', run: run('open') },
         ];
         if (!ro) rows.push({ label: t.act.edit, icon: '✎', run: run('edit') });
-        const blocks = [{ rows }];
+        const cellBlocks = this.tableCellSheetBlocks(line, cell);
+        const blocks: { rows: typeof rows; divider?: boolean }[] = [...cellBlocks, cellBlocks.length ? { rows, divider: true } : { rows }];
         if (!ro && line.row.kind === 'person') {
             const row = line.row;
             const n = row.unions.length;
@@ -1597,7 +1636,7 @@ export const tableMethods = uiModule({
     },
 
     /** A source row's sheet (§14.2): its title and archive on top, Open source and Edit. */
-    showTableSourceSheet(line: GridLine): void {
+    showTableSourceSheet(line: GridLine, cell: GridCellRef | null = null): void {
         if (line.kind === 'more' || line.row.kind !== 'source') return;
         const src = line.row.source;
         const t = strings.table;
@@ -1605,9 +1644,10 @@ export const tableMethods = uiModule({
         const rows = [{ label: t.act.openSource, icon: '▤', run: run('open') }];
         if (!tableReadOnly()) rows.push({ label: t.act.edit, icon: '✎', run: run('edit') });
         const sub = [src.repository, src.reference].map(x => x?.trim()).filter(Boolean).join(' · ');
+        const cellBlocks = this.tableCellSheetBlocks(line, cell);
         this.noteBottomSheetTrigger();
         this.hideBottomSheet();
-        this.presentMenuSheet(src.title, [{ rows }], sub ? { subtitle: sub } : {});
+        this.presentMenuSheet(src.title, [...cellBlocks, cellBlocks.length ? { rows, divider: true } : { rows }], sub ? { subtitle: sub } : {});
     },
 
     /** The dialog or panel opened from the table was saved (§10.3): its changed rows lit, "Saved: {name}". */
