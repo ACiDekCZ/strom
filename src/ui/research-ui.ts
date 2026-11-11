@@ -27,6 +27,7 @@ import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
 import { strings, getCurrentLanguage } from '../strings.js';
+import { researchHypothesisLogLine } from '../research-hypotheses.js';
 import { sessionTone } from '../live-follow-targets.js';
 import { hasFollowPrefs, resetFollowPrefs, restoreFollowPrefs } from '../live-follow-prefs.js';
 import { helpMark } from './help-mark.js';
@@ -119,6 +120,8 @@ export interface LiveChangeItem {
     research?: string;
     /** The sources the line names, by the research's IDs ("S0012"; a newer research). */
     sourceRefs?: string[];
+    /** A hypothesis decided in the Strom app (its `what` line says so; spec 074 V14). */
+    inApp?: boolean;
 }
 
 /** What one research commit added (the "+N people, +N sources" of the last 24 hours). */
@@ -486,18 +489,25 @@ function appendQueueNote(text: HTMLElement, q: LiveQueueItem, s: LiveSession): v
 function entryItems(e: LiveLogEntry, data: StromData | null, nameOf: (ref: string) => string | null): LiveChangeItem[] {
     const base = { at: e.at, task: e.task, head: e.head, ...(e.research ? { research: e.research } : {}) };
     const ids = (refs: string[]): PersonId[] => (data && refs.length > 0 ? personsByRefs(data, refs) : []);
+    // Hypotheses decided in the Strom app: their lines tagged (the research's text, or the line in these words).
+    const inApp = new Set(e.what.map(line => researchHypothesisLogLine(line)?.id).filter((id): id is string => !!id));
     if (e.text) {
         return e.text.map((line, i) => ({
             ...base, text: textWithoutRefs(line), personIds: ids(textPersonRefs(line)), kind: e.kinds?.[i] ?? textKind(line, e.what),
             ...(e.sources?.[i]?.length ? { sourceRefs: e.sources[i] } : {}),
+            ...(inApp.has(/^(H\d+)\b/.exec(line.trim())?.[1] ?? '') ? { inApp: true } : {}),
         })).reverse();
     }
-    return [...e.what].reverse().map(line => ({
-        ...base,
-        text: humanizeChange(line, nameOf, strings.research.changeWords),
-        personIds: ids(extractChangedRefs([line])),
-        kind: changeKind(line),
-    }));
+    return [...e.what].reverse().map(line => {
+        const hypo = researchHypothesisLogLine(line);
+        return {
+            ...base,
+            text: hypo ? hypo.text : humanizeChange(line, nameOf, strings.research.changeWords),
+            personIds: ids(extractChangedRefs([line])),
+            kind: changeKind(line),
+            ...(hypo ? { inApp: true } : {}),
+        };
+    });
 }
 
 /** What a commit added: its `+P…` and `+S…` lines (whatever the text says). */
@@ -574,6 +584,8 @@ export function appendChangeText(host: HTMLElement, c: LiveChangeItem, show: (id
         pos = m.at + m.length;
     }
     if (pos < c.text.length) host.appendChild(document.createTextNode(c.text.slice(pos)));
+    // A hypothesis decided in the app (spec 074 DEV §5): the same tag as in the Load dialog.
+    if (c.inApp) host.append(' ', el('span', 'research-change-inapp', strings.research.hypoInApp));
     return missing;
 }
 
@@ -2126,6 +2138,7 @@ export const researchUiMethods = uiModule({
                 const bytes = incomingImageBytes(data);
                 const answer = await this.askResearchLoad(existing.name, dateLabel, previous, stabilizeIds(data, previous), {
                     off: researchSendMode(existing.research) === 'off', notWritten: nw,
+                    hypotheses: this.researchHypothesisRowsFor(previous, data),
                     ...(bytes > 0 ? { images: { label: strings.importImages.label, checked: includeImages, detail: strings.importImages.size((bytes / (1024 * 1024)).toFixed(1)) } } : {}),
                 });
                 if (!answer) return null;
@@ -2222,6 +2235,8 @@ export const researchUiMethods = uiModule({
         }
         this.refreshResearchSyncUi();
         // Shown links the new version no longer holds: said once (after the load's own notice).
+        // Hypotheses asked from this page and now decided in it: said, the waits end (spec 074).
+        if (!created) this.researchHypothesesLoaded(treeId);
         if (!created && previous) this.noteViewLinksAfterLoad(treeId, previous);
         // A tree new from the research: its places not on the map, offered once (spec 034 U5 point 7).
         if (created && source.treeId) this.armPlacesOffer(treeId);
@@ -3319,6 +3334,8 @@ export const researchUiMethods = uiModule({
         if (change.head && change.head === s.head) return;
         const data = await this.refreshLiveTree(s, change.head);
         if (!data) return;
+        // Following live: a hypothesis asked from this page and decided in this version is said (spec 074).
+        if (DataManager.getCurrentTreeId() === s.treeId) this.researchHypothesesLoaded(s.treeId);
         const nameOf = (ref: string): string | null => {
             const [id] = personsByRefs(data, [ref]);
             const p = id ? data.persons[id] : undefined;

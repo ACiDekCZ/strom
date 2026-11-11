@@ -9,6 +9,7 @@ import type { ResearchHypothesis, ResearchHypothesisVariant } from './types.js';
 import type { ResearchHypothesisDo } from './research-link.js';
 import { isOpenHypothesis } from './view-links.js';
 import { HYPOTHESIS_BIG_JOIN, hypothesisCannotReopen } from './research-hypothesis-pick.js';
+import { HypothesisCardNote, PendingHypothesisOutcome, hypothesisStateKey } from './research-hypothesis-wait.js';
 
 /** A decision's reason longer than this shows its first lines, the rest unfolded on a click. */
 export const HYPOTHESIS_REASON_FOLD = 200;
@@ -164,4 +165,95 @@ export function researchHypothesisProposalParts(h: ResearchHypothesis): { label:
     if (p.variant !== null) return { label, text: said };
     const none = r.hypoProposalNone.startsWith(label) ? r.hypoProposalNone.slice(label.length).trim() : r.hypoProposalNone;
     return { label, text: [none, said].filter(Boolean).join(' · ') };
+}
+
+/** The notice of a wait that ended as asked (DEV §4): decided for a version, no version holds, open again; '' for none. */
+export function researchHypothesisOutcomeToast(id: string, outcome: PendingHypothesisOutcome): string {
+    const r = strings.research;
+    if (outcome.kind === 'asked') return outcome.variant ? r.hypoDecidedToast(id, outcome.variant) : r.hypoNoneToast(id);
+    if (outcome.kind === 'reopened') return r.hypoReopenedToast(id);
+    return '';
+}
+
+/**
+ * The card's line of a decision it did not load (DEV §4): "Already decided in
+ * the research: A (decided by the agent)" — the version, "no version holds",
+ * or "open"; who decided where the research says it.
+ */
+export function researchHypothesisNoteText(note: HypothesisCardNote): string {
+    const r = strings.research;
+    const what = note.status === 'decided' ? note.variant ?? '' : note.status === 'abandoned' ? r.hypoNoneWord : r.hypoOpen;
+    const who = note.by === 'agent' ? r.hypoByAgent : note.by === 'app' ? r.hypoByApp : '';
+    return r.hypoElsewhere(what, who);
+}
+
+/**
+ * How a hypothesis changed between this tree (`was`) and the research's
+ * version (`now`) as one row of the Load dialog and of the history (DEV §5):
+ * "H0022 decided for B", "H0022 changed to C", "H0022: no version holds",
+ * "H0022 reopened", "H0031 left open"; '' when its decision is as it was.
+ */
+export function researchHypothesisChangeText(was: ResearchHypothesis | undefined, now: ResearchHypothesis): string {
+    if (was && hypothesisStateKey(was) === hypothesisStateKey(now)) return '';
+    const r = strings.research;
+    const id = now.id ?? '';
+    const status = now.status ?? 'open';
+    if (status === 'decided' && now.chosen) {
+        return was?.status === 'decided' && was.chosen && was.chosen !== now.chosen ? r.hypoRowChanged(id, now.chosen) : r.hypoRowDecided(id, now.chosen);
+    }
+    if (status === 'abandoned') return r.hypoRowNone(id);
+    if (was && !isOpenHypothesis(was) && isOpenHypothesis(now)) return r.hypoRowReopened(id);
+    if (isOpenHypothesis(now) && now.leftOpen && !was?.leftOpen) return r.hypoRowLeftOpen(id);
+    return '';
+}
+
+/** One hypothesis row of the Load dialog: whose it is, what became of it, decided in the app. */
+export interface HypothesisLoadRow {
+    id: string;
+    personName: string;
+    text: string;
+    inApp: boolean;
+}
+
+/**
+ * The Load dialog's hypothesis rows (DEV §4, §5): each hypothesis whose
+ * decision the research's version changes and that was decided in the app
+ * (`_BY app`) or asked from this page (`asked`), in the research's order.
+ * `owner`: the name of the person a hypothesis belongs to (there).
+ */
+export function researchHypothesisLoadRows(
+    here: ReadonlyMap<string, ResearchHypothesis>, there: ReadonlyMap<string, ResearchHypothesis>,
+    asked: ReadonlySet<string>, owner: (id: string) => string,
+): HypothesisLoadRow[] {
+    const rows: HypothesisLoadRow[] = [];
+    for (const [id, h] of there) {
+        const inApp = h.decidedBy === 'app' && !isOpenHypothesis(h);
+        if (!inApp && !asked.has(id)) continue;
+        const text = researchHypothesisChangeText(here.get(id), h);
+        if (text) rows.push({ id, personName: owner(id), text, inApp: inApp || asked.has(id) });
+    }
+    return rows;
+}
+
+/**
+ * A line of the research's history (`/log` what) that tells a decision made
+ * in the Strom app (DEV §5, V14): "H0022 decided for B in the Strom app",
+ * "… abandoned …", "… reopened …", "… decided again for C …", "… left open …".
+ * Its words here and the hypothesis, or null for any other line.
+ */
+export function researchHypothesisLogLine(line: string): { id: string; text: string } | null {
+    const m = /^(H\d+)\b[\s:–-]*(.*?)\s+in the Strom app\b/i.exec(line.trim());
+    if (!m) return null;
+    const id = m[1];
+    const what = m[2].toLowerCase();
+    const r = strings.research;
+    const v = /\bfor\s+(?:version\s+)?([A-Z]{1,3})\b/i.exec(m[2])?.[1]?.toUpperCase();
+    let text: string;
+    if ((what.startsWith('decided') || what.startsWith('changed')) && v) {
+        text = what.startsWith('decided again') || what.startsWith('changed') ? r.hypoRowChanged(id, v) : r.hypoRowDecided(id, v);
+    } else if (what.startsWith('abandoned') || what.includes('no version')) text = r.hypoRowNone(id);
+    else if (what.startsWith('reopened')) text = r.hypoRowReopened(id);
+    else if (what.startsWith('left open') || what.startsWith('kept open')) text = r.hypoRowLeftOpen(id);
+    else return null;
+    return { id, text };
 }

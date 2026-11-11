@@ -16,12 +16,13 @@ import { isOpenHypothesis, loadViewLinks, researchHypotheses } from '../view-lin
 import {
     researchHypothesisNote, researchHypothesisState, researchHypothesisDecision, researchHypothesisLinkLabel, HYPOTHESIS_REASON_FOLD,
     researchHypothesisBigJoin, researchHypothesisReopenNote, researchHypothesisCannotReopenText, researchHypothesisWaitText,
-    researchHypothesisPreviousText, researchHypothesisHoldsSinceText, researchHypothesisProposalParts,
+    researchHypothesisPreviousText, researchHypothesisHoldsSinceText, researchHypothesisProposalParts, researchHypothesisNoteText,
 } from '../research-hypotheses.js';
 import { HypothesisPick } from '../research-hypothesis-pick.js';
 import { HypothesisCardButton, hypothesisCardPlan } from '../research-hypothesis-card.js';
 import {
-    PendingHypothesis, newPendingHypothesis, onPendingHypothesisChange, pendingHypothesis, pendingHypothesisPhase, setPendingHypothesis,
+    PendingHypothesis, clearHypothesisCardNotes, hypothesisCardNote, hypothesisStateKey, newPendingHypothesis, onPendingHypothesisChange,
+    pendingHypothesis, pendingHypothesisPhase, setPendingHypothesis,
 } from '../research-hypothesis-wait.js';
 import { formatFlexDate } from '../dates.js';
 import { parseGedcomDate, gedcomTagEventType } from '../ged-parser.js';
@@ -538,10 +539,16 @@ export const personResearchMethods = uiModule({
         const metaHtml = this.researchHypothesisMetaHtml(h, { left: true });
         const holds = plan.holdsSince ? researchHypothesisHoldsSinceText(h) : '';
         const prev = researchHypothesisPreviousText(h);
-        const headHtml = holds ? `
+        // What became of a wait that loaded nothing new here (DEV §4): decided otherwise, or "Later".
+        const note = rid && h.id ? hypothesisCardNote(rid, h.id) : null;
+        const shownNote = note && (note.kind === 'later' || note.state === hypothesisStateKey(h)) ? note : null;
+        const noteHtml = shownNote ? `
+                    <p class="prh-info prh-decided-note" role="status">${esc(researchHypothesisNoteText(shownNote))}${shownNote.kind === 'later' ? `
+                        <button type="button" class="link-button prh-decided-load">${esc(r.hypoLoad)}</button>` : ''}</p>` : '';
+        const headHtml = noteHtml + (holds ? `
                     <p class="prh-holds">${esc(holds)}</p>`
             : `${this.researchHypothesisReasonHtml(h)}${prev ? `
-                    <p class="prh-prev">${esc(prev)}</p>` : ''}`;
+                    <p class="prh-prev">${esc(prev)}</p>` : ''}`);
         const offers = h.id && TreeRenderer.viewLinksOffered() && pick !== 'readonly' ? this.viewLinkOffersFor(h.id) : [];
         const catalog = DataManager.getData().sources ?? {};
         const terminal = researchLinkMark('hypothesis');
@@ -838,6 +845,10 @@ export const personResearchMethods = uiModule({
                 if (url) this.launchResearchLink(url, 'terminal');
                 return;
             }
+            if (target.closest('.prh-decided-load')) {
+                void this.researchLoadNewer();
+                return;
+            }
             if (target.closest('.prv-wait-stop')) {
                 if (rid) setPendingHypothesis(rid, hypo, null);
                 host.querySelector<HTMLElement>(`[data-hypo="${CSS.escape(hypo)}"] > summary`)?.focus({ preventScroll: true });
@@ -919,6 +930,9 @@ export const personResearchMethods = uiModule({
         // A change begun is not carried to the next opening (DEV §6); a wait asked is (DEV §4).
         changingHypotheses.clear();
         redrawHypotheses = null;
+        // A decision made otherwise is said once, at the card open then (DEV §4).
+        const closedRid = this.activeResearchId();
+        if (closedRid) clearHypothesisCardNotes(closedRid, 'elsewhere');
         const dialog = document.getElementById(DIALOG_ID);
         const hadFocus = !!dialog?.contains(document.activeElement);
         dialog?.remove();

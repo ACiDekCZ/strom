@@ -79,14 +79,18 @@ export const researchLoadMethods = uiModule({
      */
     askResearchLoad(treeName: string, versionDate: string, here: StromData, there: StromData,
         opts: { off?: boolean; notWritten?: number; images?: { label: string; detail: string; checked: boolean };
-            decided?: { intro: string; later: string; rows: (row: ValueChange) => boolean } } = {}): Promise<{ choice: 'load' | 'copy'; images: boolean } | null> {
+            decided?: { intro: string; later: string; rows: (row: ValueChange) => boolean };
+            hypotheses?: ReadonlyArray<{ personName: string; text: string; inApp: boolean }> } = {}): Promise<{ choice: 'load' | 'copy'; images: boolean } | null> {
         document.querySelectorAll(`#${LOAD_ID}`).forEach(el => el.remove());
         const s = strings.sync;
         const diff = diffValues(here, there);
         const decided = opts.decided;
         // The decided values first, the rest in their order.
         if (decided) diff.rows = [...diff.rows.filter(r => decided.rows(r)), ...diff.rows.filter(r => !decided.rows(r))];
-        const people = new Set(diff.rows.map(r => r.personId)).size;
+        // The people of the value rows and of the hypotheses' rows (spec 074 DEV §5), each once.
+        const rowNames = new Set(diff.rows.map(r => r.name));
+        const people = new Set(diff.rows.map(r => r.personId)).size
+            + new Set((opts.hypotheses ?? []).map(h => h.personName).filter(n => !rowNames.has(n))).size;
         const row = (r: ValueChange, first: boolean): string => {
             const here = valueText(r, r.here);
             const there = r.field === 'person' ? s.fieldPersonGone : valueText(r, r.there);
@@ -98,7 +102,12 @@ export const researchLoadMethods = uiModule({
                 + `<td class="research-load-change"><span class="research-load-here">${esc(here)}</span> <span aria-hidden="true">→</span> <span class="research-load-there">${esc(there)}</span></td>`
                 + '</tr>';
         };
-        const rows = diff.rows.map((r, i) => row(r, i === 0 || diff.rows[i - 1].personId !== r.personId || diff.rows[i - 1].name !== r.name));
+        // A hypothesis decided (spec 074 DEV §5): its row first, "in the app" for one decided here.
+        const hypoRows = (opts.hypotheses ?? []).map((h, i) => `<tr class="research-load-hypo${i === 0 ? ' is-first' : ''}">`
+            + `<td class="research-load-who">${esc(h.personName)}</td>`
+            + `<td class="research-load-field" colspan="2">${esc(h.text)}${h.inApp ? ` <span class="research-load-inapp">${esc(strings.research.hypoInApp)}</span>` : ''}</td>`
+            + '</tr>');
+        const rows = [...hypoRows, ...diff.rows.map((r, i) => row(r, i === 0 || diff.rows[i - 1].personId !== r.personId || diff.rows[i - 1].name !== r.name))];
         const more = Math.max(0, rows.length - ROWS_SHOWN);
         // After a decision: Later or Load, never a copy.
         const overwrite = !decided && (!!opts.off || (opts.notWritten ?? 0) > 0);

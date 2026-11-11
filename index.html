@@ -13084,6 +13084,46 @@
             .reb-variant { flex-wrap: wrap; }
             .reb-variant-actions { flex-basis: 100%; padding-left: 24px; }
         }
+        /* Spec 074 DEV §8: a pinned bubble decided here — "Choose" under each version's text, the agent's
+           proposal as a tag, the short wait at the version chosen. */
+        .reb-variant--pick { flex-wrap: wrap; }
+        .reb-variant--pick .reb-variant-actions { flex-basis: 100%; flex-wrap: wrap; padding-left: 24px; box-sizing: border-box; }
+        .reb-pick {
+            display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+            min-height: 32px; padding: 4px 12px; box-sizing: border-box;
+            border: 1.5px solid var(--primary); border-radius: 8px; background: transparent; color: var(--primary);
+            font: 600 12.5px/1.25 var(--font-sans); cursor: pointer;
+        }
+        .reb-variant--pick .reb-variant-btn { height: auto; min-height: 32px; padding: 4px 12px; line-height: 1.25; white-space: normal; text-align: center; }
+        .reb-pick:disabled { border-color: var(--border); color: var(--text-ghost); cursor: default; }
+        .reb-pick:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        @media (hover: hover) { .reb-pick:not(:disabled):hover { background: color-mix(in srgb, var(--primary) 10%, transparent); } }
+        .reb-proposal-tag {
+            display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 999px;
+            background: var(--research-soft); color: var(--research); font-size: 11px; font-weight: 600; line-height: 1.6; white-space: nowrap;
+        }
+        .reb-wait {
+            flex-basis: 100%; display: flex; flex-direction: column; gap: 2px; margin-left: 24px; padding: 6px 10px; box-sizing: border-box;
+            border-radius: 8px; background: var(--info-soft); color: var(--text); font-size: 12.5px; line-height: 1.45; overflow-wrap: anywhere;
+        }
+        .reb-variants + .reb-wait { margin: 8px 0 0; }
+        .reb-wait-title { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+        .reb-wait-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; }
+        .reb-wait-actions .link-button { padding: 0; min-height: 0; font-size: 12.5px; font-weight: 600; text-align: left; }
+        .reb-wait-actions .reb-wait-stop { font-weight: 400; color: var(--text-light); }
+        .reb-wait-sep { color: var(--text-faint); }
+        @media (pointer: coarse) {
+            .reb-pick, .reb-variant--pick .reb-variant-btn { min-height: 44px; }
+            .reb-wait-actions .link-button { min-height: 44px; }
+        }
+        @media (max-width: 640px) {
+            /* Show and Choose side by side, half the row each. */
+            .reb-variant--pick .reb-variant-actions > button { flex: 1 1 0; min-width: 0; min-height: 44px; }
+            .reb-variant--pick .reb-variant-shown { flex: none; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .reb-pick, .reb-variant--pick .reb-variant-btn, .reb-wait-actions .link-button { min-height: 40px; }
+        }
 
         /* Linked in the view only: the small menu of "+ family" (show it linked,
            or go to it) and of the family's own button (its versions). */
@@ -18224,6 +18264,12 @@
         /* After a conflict was decided for the research's value: what was decided, its rows tagged "decided". */
         .research-load-intro { margin: 0 0 10px; font-size: 14px; line-height: 1.5; color: var(--text-light); }
         .research-load-conflict.research-load-decided { background: var(--primary-soft); color: var(--primary-dark); }
+        /* Spec 074 DEV §5: a hypothesis decided in the app, in the Load dialog and the research's history. */
+        .research-load-inapp, .research-change-inapp {
+            display: inline-block; padding: 0 7px; border-radius: 999px; background: var(--primary-soft); color: var(--primary-dark, var(--primary));
+            font-size: 11px; font-weight: 600; line-height: 1.6; white-space: nowrap; vertical-align: baseline;
+        }
+        .research-load-inapp { margin-left: 4px; }
         .research-load-more { margin-top: 6px; font-size: 13px; font-weight: 600; }
         .research-load-added, .research-load-nothing { margin: 10px 0 0; font-size: 13px; }
         .modal label.research-load-images { display: flex; gap: 8px; align-items: flex-start; margin: 10px 0 0; font-size: 14px; font-weight: 400; }
@@ -20491,7 +20537,9 @@
         @media (pointer: coarse) { .reb-hypo .reb-join, #research-edge-section .rep-join { min-height: 44px; } }
         @media (max-width: 640px) {
             .person-research-variant { padding: 10px 12px; gap: 10px; }
-            .view-link-switch__label { display: none; }
+            /* Today's card keeps the bare switch; a card decided in the app says what it does (spec 074 DEV §11). */
+            .person-research-hypo:not([data-pick]) .view-link-switch__label,
+            .person-research-hypo[data-pick="old"] .view-link-switch__label { display: none; }
         }
         /* Spec 074: the card of a hypothesis decided in the app (data-pick: pick, remote, readonly, merge). */
         .person-research-hypo[data-pick] .person-research-variant { align-items: flex-start; }
@@ -20566,6 +20614,9 @@
             margin: 10px 0 0; padding: 8px 10px; border-radius: 8px; background: var(--info-soft);
             font-size: 13px; line-height: 1.45; color: var(--text); overflow-wrap: anywhere;
         }
+        .prh-decided-note { margin: 8px 0 0; }
+        .prh-decided-note .link-button.prh-decided-load { margin-left: 8px; padding: 0; min-height: 0; font-size: 13px; font-weight: 600; }
+        @media (pointer: coarse) { .prh-decided-note .link-button.prh-decided-load { min-height: 44px; } }
         .prh-more { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--divider); }
         .prh-more .link-button.prh-more-link {
             padding: 0; font-size: 12.5px; font-weight: 400; color: var(--text-light); text-decoration: underline; text-align: left;

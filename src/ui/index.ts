@@ -77,6 +77,7 @@ import { storyCompareMethods } from './story-compare-ui.js';
 import { cardFieldsUiMethods } from './card-fields-ui.js';
 import { personResearchMethods } from './person-research-ui.js';
 import { conflictDecideMethods } from './conflict-decide-ui.js';
+import { hypothesisWaitMethods } from './hypothesis-wait-ui.js';
 import { conflictPanelMethods } from './conflict-panel-ui.js';
 import { researchAdoptMethods } from './research-adopt-ui.js';
 import { researchInstallMethods } from './research-install-ui.js';
@@ -634,6 +635,10 @@ Object.assign(UIClass.prototype, personResearchMethods);
 type ConflictDecideMethods = typeof conflictDecideMethods;
 export interface UIClass extends ConflictDecideMethods {}
 Object.assign(UIClass.prototype, conflictDecideMethods);
+
+type HypothesisWaitMethods = typeof hypothesisWaitMethods;
+export interface UIClass extends HypothesisWaitMethods {}
+Object.assign(UIClass.prototype, hypothesisWaitMethods);
 
 type ConflictPanelMethods = typeof conflictPanelMethods;
 export interface UIClass extends ConflictPanelMethods {}

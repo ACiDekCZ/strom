@@ -37,6 +37,14 @@ let panelKeyHandler: ((e: KeyboardEvent) => void) | null = null;
 let howToOpen = false;
 /** Invalid records already told about after a load in this page (tree, hypothesis, version): once each. */
 const toldInvalid = new Set<string>();
+
+/**
+ * Records a load leaves invalid that need no notice of their own: unlinked
+ * with a hypothesis decided from this page (its notice says it, spec 074).
+ */
+export function viewLinksToldInvalid(treeId: string, links: ReadonlyArray<{ hypo: string; variant: string }>): void {
+    for (const l of links) toldInvalid.add(`${treeId}|${l.hypo}|${l.variant}`);
+}
 let storageWatched = false;
 /** Whether the feature showed at the last drawing (a bridge's answer may change it). */
 let offeredAtDrawing: boolean | null = null;

@@ -159,3 +159,71 @@ export function clearPendingHypotheses(researchId?: string): void {
     if (researchId === undefined) { pending.clear(); return; }
     for (const id of pendingHypothesesOf(researchId).keys()) setPendingHypothesis(researchId, id, null);
 }
+
+/** Tell every listener (the wait turned long: the card and the bubble draw their other heading). */
+export function touchPendingHypotheses(): void {
+    tell('', '');
+}
+
+/**
+ * When the next wait turns long (HYPOTHESIS_WAIT_LONG_MS after it was asked),
+ * after `now`; null when none will (no wait, or each long already).
+ */
+export function nextPendingHypothesisLongAt(now: number): number | null {
+    let next: number | null = null;
+    for (const p of pending.values()) {
+        const at = p.since + HYPOTHESIS_WAIT_LONG_MS;
+        if (at > now && (next === null || at < next)) next = at;
+    }
+    return next;
+}
+
+// ==================== WHAT A WAIT LEFT ON THE CARD ====================
+
+/**
+ * What the card says after a wait ended without the tree loading the decision:
+ * - `elsewhere`: the research decided otherwise ("Already decided in the research: A (by the agent)"),
+ *   shown while the hypothesis is as it was then (`state`);
+ * - `later`: decided as asked, the Load dialog put off ("Later") — "Already decided in the research: B
+ *   (decided in the app)" with "Load", until a version of the research loads.
+ */
+export type HypothesisCardNote =
+    | { kind: 'elsewhere'; status: string; variant: string | null; by: 'agent' | 'app' | 'person'; state: string }
+    | { kind: 'later'; status: string; variant: string | null; by: 'agent' | 'app' | 'person' };
+
+const notes = new Map<string, HypothesisCardNote>();
+
+/** The card's note of a hypothesis, or null. */
+export function hypothesisCardNote(researchId: string, hypothesisId: string): HypothesisCardNote | null {
+    return notes.get(key(researchId, hypothesisId)) ?? null;
+}
+
+/** Set (null: drop) the card's note of a hypothesis; the card draws again. */
+export function setHypothesisCardNote(researchId: string, hypothesisId: string, note: HypothesisCardNote | null): void {
+    if (note) notes.set(key(researchId, hypothesisId), note);
+    else if (!notes.delete(key(researchId, hypothesisId))) return;
+    tell(researchId, hypothesisId);
+}
+
+/** Drop the notes of a research (of one kind, or all; every research without one). */
+export function clearHypothesisCardNotes(researchId?: string, kind?: HypothesisCardNote['kind']): void {
+    const prefix = researchId === undefined ? '' : `${researchId.toLowerCase()}|`;
+    for (const [k, n] of [...notes]) {
+        if (k.startsWith(prefix) && (!kind || n.kind === kind)) notes.delete(k);
+    }
+    if (researchId !== undefined) tell(researchId, '');
+}
+
+/**
+ * The note an elsewhere outcome or a put-off load leaves (`h`: the hypothesis
+ * in the research's version). Null for an outcome that leaves none.
+ */
+export function hypothesisNoteOf(outcome: PendingHypothesisOutcome, h: ResearchHypothesis | undefined, later: boolean): HypothesisCardNote | null {
+    if (!h) return null;
+    const status = h.status ?? 'open';
+    const by = h.decidedBy ?? 'person';
+    const variant = status === 'decided' ? h.chosen ?? null : null;
+    if (outcome.kind === 'elsewhere' && !later) return { kind: 'elsewhere', status, variant, by, state: hypothesisStateKey(h) };
+    if (later && outcome.kind !== 'waiting' && outcome.kind !== 'gone') return { kind: 'later', status, variant, by };
+    return null;
+}

@@ -14,6 +14,8 @@ import { strings } from '../strings.js';
 import { formatFlexDate } from '../dates.js';
 import { PersonId, ResearchEdge, ResearchEdgeHypo, ResearchEdgeMode, ResearchHypothesis } from '../types.js';
 import { familyGroups } from '../view-links.js';
+import { hypothesisCardPlan } from '../research-hypothesis-card.js';
+import { PendingHypothesis, newPendingHypothesis, onPendingHypothesisChange, pendingHypothesis, pendingHypothesisPhase, setPendingHypothesis } from '../research-hypothesis-wait.js';
 import {
     EdgeHypoFamilyLink, edgeEndText, edgeEstimateText, edgeFactsLine, edgeHypoFamilies, edgeNamedHypothesis, edgeNextText, edgeTimeline, edgeTone, edgeMuted, effectiveNext,
 } from '../research-edge.js';
@@ -47,6 +49,11 @@ let pinned = false;
 let pinnedCleanup: (() => void) | null = null;
 /** The keyboard comes back to the stub from a closed pinned bubble: no hover bubble for it. */
 let quietFocus = false;
+/** Draws the pinned bubble again (a wait asked, turned long or ended: spec 074 DEV §8). */
+let redrawPinned: (() => void) | null = null;
+onPendingHypothesisChange(() => redrawPinned?.());
+/** Below this width a pinned bubble offers no "Choose" (a large font on a phone): the card has it. */
+const BUBBLE_PICK_MIN_PX = 300;
 
 function clearTimers(): void {
     window.clearTimeout(showTimer);
@@ -240,10 +247,18 @@ export const researchEdgeUiMethods = uiModule({
     namedEdgeBubbleHtml(personId: PersonId, hypo: ResearchHypothesis, nextText: string, tone: string, withActions: boolean): string {
         const re = strings.researchEdge;
         const v = strings.viewLinks;
+        const r = strings.research;
         const offers = TreeRenderer.viewLinksOffered() ? this.viewLinkOffersFor(hypo.id!) : [];
         const shown = offers.find(o => o.shown);
-        const rows = (hypo.variants ?? []).map(variant => {
+        // Pinned, and decided here (spec 074 DEV §8): "Choose" at each version, the agent's proposal as a tag, the wait.
+        const rid = this.activeResearchId();
+        const pick = withActions && hypo.id ? this.researchHypothesisPickable(hypo) : null;
+        const pending = pick === 'pick' && rid && hypo.id ? pendingHypothesis(rid, hypo.id) : null;
+        const plan = pick === 'pick' ? hypothesisCardPlan(hypo, pick, { pending }) : null;
+        const terminal = researchLinkMark('hypothesis');
+        const rows = (hypo.variants ?? []).map((variant, i) => {
             const o = offers.find(x => x.variant === variant.id);
+            const vp = plan?.variants[i];
             const meta = o?.choice ? v.people(o.people)
                 : (o ? o.inTree : !!variant.inTree?.length) ? v.inTree
                 : o?.textOnly ? v.textOnly : v.notInResearch;
@@ -256,23 +271,41 @@ export const researchEdgeUiMethods = uiModule({
                     action = `<button type="button" class="secondary reb-variant-btn reb-show">${esc(shown ? v.showInstead(shown.variant) : v.show)}</button>`;
                 }
             }
+            if (vp?.pick) {
+                action += `<button type="button" class="secondary reb-pick" data-variant="${esc(variant.id)}" aria-label="${esc(r.hypoPickAria(variant.id))}"${vp.pick === 'off' ? ' disabled' : ''}>${researchActionLabel(r.hypoPick, terminal, { sr: false })}</button>`;
+            }
+            const waitHtml = vp?.waiting && pending ? this.researchEdgeWaitHtml(pending) : '';
             const title = variant.title ?? '';
-            return `<div class="reb-variant${o?.shown ? ' is-shown' : ''}" role="listitem" data-variant="${esc(variant.id)}">
+            const tag = vp?.proposal ? `<span class="reb-proposal-tag">${esc(r.hypoProposalTag)}</span>` : '';
+            return `<div class="reb-variant${o?.shown ? ' is-shown' : ''}${plan ? ' reb-variant--pick' : ''}" role="listitem" data-variant="${esc(variant.id)}">
                 <span class="reb-variant-id">${esc(variant.id)}</span>
                 <span class="reb-variant-text">
                     <span class="reb-variant-title"${title.length > 90 ? ` title="${esc(title)}"` : ''}>${esc(title)}</span>
-                    <span class="reb-variant-meta">${esc(meta)}</span>
+                    <span class="reb-variant-meta">${esc(meta)}${tag}</span>
                 </span>
-                ${action ? `<span class="reb-variant-actions">${action}</span>` : ''}
+                ${action ? `<span class="reb-variant-actions">${action}</span>` : ''}${waitHtml}
             </div>`;
         }).join('');
+        // A wait asked from the card for no version (No version holds, Leave open): under the versions.
+        const footWait = plan?.footWait && pending ? this.researchEdgeWaitHtml(pending) : '';
         return `
             <div class="reb-end" id="${BUBBLE_ID}-title">${esc(re.named)}</div>
             ${nextText ? `<div class="reb-next tone-${tone}"><span class="reb-dot" aria-hidden="true"></span>${esc(nextText)}</div>` : ''}
             <div class="reb-question"><span class="reb-question-id">${esc(hypo.id ?? '')}</span> · ${esc(hypo.title)}</div>
-            ${rows ? `<div class="reb-variants" role="list">${rows}</div>` : ''}
-            <button type="button" class="link-button reb-more">${esc(re.moreInResearch)}</button>
+            ${rows ? `<div class="reb-variants" role="list">${rows}</div>` : ''}${footWait}
+            <button type="button" class="link-button reb-more">${esc(plan ? r.hypoMoreInCard : re.moreInResearch)}</button>
             ${withActions ? `<button type="button" class="reb-close" aria-label="${esc(strings.buttons.close)}">&times;</button>` : ''}`;
+    },
+
+    /** The bubble's short wait (DEV §8): "Waiting for confirmation in the research" (or not confirmed yet) · Open again · Stop waiting. */
+    researchEdgeWaitHtml(p: PendingHypothesis): string {
+        const r = strings.research;
+        const long = pendingHypothesisPhase(p, Date.now()) === 'long';
+        return `
+                <div class="reb-wait" role="status" aria-live="polite" data-wait-phase="${long ? 'long' : 'waiting'}">
+                    <span class="reb-wait-title"><span class="prv-wait-dot" aria-hidden="true"></span>${esc(long ? r.hypoWaitLong : r.hypoWait)}</span>
+                    <span class="reb-wait-actions"><button type="button" class="link-button reb-wait-again">${researchActionLabel(r.hypoWaitAgain, researchLinkMark('hypothesis'))}</button><span class="reb-wait-sep" aria-hidden="true">·</span><button type="button" class="link-button reb-wait-stop">${esc(r.hypoWaitStop)}</button></span>
+                </div>`;
     },
 
     /** A pinned bubble: a dialog, its actions wired, the keyboard inside, Esc / × / a click outside close it. */
@@ -282,23 +315,74 @@ export const researchEdgeUiMethods = uiModule({
         bubble.setAttribute('aria-modal', 'false');
         bubble.setAttribute('aria-labelledby', `${BUBBLE_ID}-title`);
         anchor.setAttribute('aria-expanded', 'true');
-        const offers = this.viewLinkOffersFor(hypo);
-        bubble.querySelectorAll<HTMLElement>('.reb-variant').forEach(row => {
-            const o = offers.find(x => x.variant === row.dataset.variant);
-            const choice = o?.choice;
-            if (!choice) return;
-            row.querySelector<HTMLButtonElement>('.reb-show')?.addEventListener('click', () => {
-                void this.viewLinkShow(choice, { focusLabel: true });
-            });
-            row.querySelector<HTMLButtonElement>('.reb-unlink')?.addEventListener('click', (e) => {
-                void this.viewLinkUnlink(hypo, { near: e.currentTarget as HTMLElement, restoreFocus: true });
-            });
-        });
         const close = (): void => {
             this.hideResearchEdgeBubble();
             this.focusResearchEdgeQuietly(anchor);
         };
-        bubble.querySelector<HTMLButtonElement>('.reb-close')!.onclick = close;
+        // A narrow bubble (a large font on a phone): no "Choose", the card has it (DEV §8).
+        const narrow = (): void => {
+            if (bubble.clientWidth >= BUBBLE_PICK_MIN_PX) return;
+            bubble.classList.add('is-narrow');
+            bubble.querySelectorAll('.reb-pick').forEach(b => b.remove());
+            bubble.querySelectorAll('.reb-variant-actions').forEach(a => { if (!a.children.length) a.remove(); });
+        };
+        narrow();
+        // One listener for the bubble's actions: they are drawn again while it stays.
+        bubble.addEventListener('click', (e) => {
+            const t = e.target as HTMLElement;
+            const row = t.closest<HTMLElement>('.reb-variant');
+            const rid = this.activeResearchId();
+            if (t.closest('.reb-close')) { close(); return; }
+            if (t.closest('.reb-show') && row) {
+                const choice = this.viewLinkOffersFor(hypo).find(x => x.variant === row.dataset.variant)?.choice;
+                if (choice) void this.viewLinkShow(choice, { focusLabel: true });
+                return;
+            }
+            if (t.closest('.reb-unlink')) {
+                void this.viewLinkUnlink(hypo, { near: t.closest<HTMLElement>('.reb-unlink'), restoreFocus: true });
+                return;
+            }
+            const pickBtn = t.closest<HTMLButtonElement>('.reb-pick');
+            if (pickBtn) {
+                if (pickBtn.disabled || !rid) return;
+                const variant = pickBtn.dataset.variant ?? '';
+                const h = (DataManager.getPerson(personId)?.research?.hypotheses ?? []).find(x => x.id === hypo);
+                const url = this.activeResearchLink('hypothesis', { hypothesis: hypo, hypothesisDo: 'decide', variant });
+                if (!h || !url) return;
+                this.launchResearchLink(url, 'terminal');
+                setPendingHypothesis(rid, hypo, newPendingHypothesis(h, 'decide', url, this.researchSyncLink()?.link.head ?? '', Date.now(), variant));
+                return;
+            }
+            if (t.closest('.reb-wait-again')) {
+                const url = rid ? pendingHypothesis(rid, hypo)?.url : undefined;
+                if (url) this.launchResearchLink(url, 'terminal');
+                return;
+            }
+            if (t.closest('.reb-wait-stop')) {
+                if (rid) setPendingHypothesis(rid, hypo, null);
+            }
+        });
+        redrawPinned = () => {
+            if (!bubble.isConnected || !pinned) { redrawPinned = null; return; }
+            const person = DataManager.getPerson(personId);
+            const h = person ? edgeNamedHypothesis(person) : null;
+            const found = edgeOf(personId);
+            if (!h || h.id !== hypo || !found) return;
+            // The keyboard stays where it was: a version's wait (its "Open again"), else the same kind of button.
+            const active = document.activeElement as HTMLElement | null;
+            const inside = !!active && bubble.contains(active);
+            const variant = active?.closest<HTMLElement>('.reb-variant')?.dataset.variant;
+            const tone = edgeMuted(found.edge.scope) ? 'none' : edgeTone(found.next);
+            bubble.innerHTML = this.namedEdgeBubbleHtml(personId, h, edgeNextText(found.edge, found.next), tone, true);
+            narrow();
+            if (!inside) return;
+            const row = variant ? bubble.querySelector<HTMLElement>(`.reb-variant[data-variant="${CSS.escape(variant)}"]`) : null;
+            (row?.querySelector<HTMLElement>('.reb-wait-again')
+                ?? bubble.querySelector<HTMLElement>('.reb-wait-again')
+                ?? row?.querySelector<HTMLElement>('.reb-pick:not([disabled]), .reb-variant-btn')
+                ?? bubble.querySelector<HTMLElement>('.reb-variant-btn, .reb-pick:not([disabled])')
+                ?? bubble.querySelector<HTMLElement>('.reb-close'))?.focus({ preventScroll: true });
+        };
         const focusables = (): HTMLElement[] => [...bubble.querySelectorAll<HTMLElement>('button:not([disabled])')];
         const onKey = (e: KeyboardEvent): void => {
             if (document.getElementById(CHAIN_POPOVER_ID)) return;
@@ -339,8 +423,26 @@ export const researchEdgeUiMethods = uiModule({
         quietFocus = false;
     },
 
+    /**
+     * A hypothesis of the person was decided as the pinned bubble asked (DEV
+     * §8): the bubble closes (its edge is gone), the keyboard on the person's
+     * card (the stub when it stays), when it was in the bubble.
+     */
+    researchHypothesisBubbleDone(personId: PersonId): void {
+        if (!pinned || bubbleFor !== personId) return;
+        const bubble = document.getElementById(BUBBLE_ID);
+        const hadFocus = !!bubble?.contains(document.activeElement);
+        this.hideResearchEdgeBubble();
+        if (!hadFocus) return;
+        const card = `.person-card[data-id="${CSS.escape(personId)}"]`;
+        const stub = document.querySelector<HTMLElement>(`${card} .research-edge`);
+        if (stub) this.focusResearchEdgeQuietly(stub);
+        else document.querySelector<HTMLElement>(card)?.focus({ preventScroll: true });
+    },
+
     hideResearchEdgeBubble(): void {
         clearTimers();
+        redrawPinned = null;
         pinnedCleanup?.();
         pinnedCleanup = null;
         document.getElementById(BUBBLE_ID)?.remove();
@@ -557,6 +659,29 @@ export const researchEdgeUiMethods = uiModule({
                 }
             };
         });
+    },
+
+    /**
+     * The open "What the research knows" of `personId`: its section of the
+     * research edge drawn again from the data now (a hypothesis decided and
+     * loaded links the family, the "?" edge goes; spec 074 DEV §4).
+     */
+    refreshResearchEdgeSection(personId: PersonId): void {
+        const dialog = document.querySelector<HTMLElement>(`#person-research-modal[data-person="${CSS.escape(personId)}"]`);
+        const old = dialog?.querySelector<HTMLElement>('#research-edge-section');
+        if (!dialog || !old) return;
+        const html = this.researchEdgeSectionHtml(personId).trim();
+        if (!html) {
+            if (old.contains(document.activeElement)) dialog.querySelector<HTMLElement>('#person-research-close-x')?.focus({ preventScroll: true });
+            old.remove();
+            return;
+        }
+        const tmp = document.createElement('template');
+        tmp.innerHTML = html;
+        const next = tmp.content.firstElementChild as HTMLElement | null;
+        if (!next || next.isEqualNode(old)) return;
+        old.replaceWith(next);
+        this.bindResearchEdgeSection(dialog, personId);
     },
 
     /** The followed research's direction to change through its bridge (null: an older research, or one it does not list). */

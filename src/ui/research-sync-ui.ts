@@ -1095,6 +1095,8 @@ export const researchSyncMethods = uiModule({
             // was decided there): read again, never counted from the old one (B1 of beta.56).
             const held = this.researchHeld(ctx.treeId);
             if (held && status.head && status.head !== held.head) await this.researchReadHeld(ctx.treeId);
+            // A hypothesis asked from this page: its new version read, the decision loaded (spec 074 DEV §4).
+            if (status.head) await this.researchHypothesesHeadSeen(ctx.treeId, status.head);
         }
         this.refreshResearchSyncUi();
         // Updated since: it takes sends now — what waits starts its quiet time.
