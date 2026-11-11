@@ -168,6 +168,14 @@ describe('the card’s marks: a stack of two or three', () => {
         expect(m.dotHtml).toContain('card-signal-dot signal-conflict');
     });
 
+    it('a conflict and a question alone (one choice, straight to what the research knows): a dialog, no menu', () => {
+        const s = signalsOf(person({ question: 'Q', research: { conflicts: [conflict('X0001')] } } as Partial<Person>));
+        const m = cardActionMarksHtml('p1', s)!;
+        expect(m.badgeHtml).toContain('class="card-signal-stack n2" data-mark="badge-stack" aria-haspopup="dialog" aria-label=');
+        expect(m.badgeHtml).not.toContain('aria-expanded');
+        expect(m.badgeHtml).not.toContain('aria-haspopup="menu"');
+    });
+
     it('the stack\'s name in four languages', () => {
         const s = all();
         const label = (): string => stackAriaLabel(s, 3);

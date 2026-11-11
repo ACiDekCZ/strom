@@ -89,8 +89,10 @@ export function cardActionMarksHtml(id: string, s: CardSignalInfo, waitingCount 
         const coins = (n === 3 ? '<span class="cs-coin cs-back2" aria-hidden="true"></span>' : '')
             + '<span class="cs-coin cs-back1" aria-hidden="true"></span>'
             + `<span class="cs-coin cs-front" aria-hidden="true">${ACTION_GLYPH[action]}</span>`;
+        // Two or more choices open the stack's menu; one choice opens What the research knows straight away.
+        const popup = stackChoices(s).length >= 2 ? 'aria-haspopup="menu" aria-expanded="false"' : 'aria-haspopup="dialog"';
         return {
-            badgeHtml: `<button type="button" class="card-signal-stack n${n}" data-mark="badge-stack" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(stackAriaLabel(s, waitingCount))}">${coins}</button>`
+            badgeHtml: `<button type="button" class="card-signal-stack n${n}" data-mark="badge-stack" ${popup} aria-label="${esc(stackAriaLabel(s, waitingCount))}">${coins}</button>`
                 + stackTipHtml(id, s, waitingCount),
             dotHtml: '<span class="card-signal-dot card-signal-dot--back" aria-hidden="true"></span>'
                 + `<span class="card-signal-dot signal-${action}" aria-hidden="true"></span>`,

@@ -40,16 +40,20 @@ async function dropFile(page: Page, content: string): Promise<void> {
     for (const type of ['dragenter', 'dragover', 'drop']) await page.dispatchEvent('#tree-container', type, { dataTransfer });
 }
 
+/** A fixed clock, away from midnight UTC: the remembered Waiting is an hour old. */
+const NOW = new Date('2026-06-15T10:30:00Z');
+
 /** The research tree; the research last said a task about Eva waits (before the app starts). */
 async function seedWaiting(page: Page): Promise<void> {
-    await page.addInitScript((uuid) => {
+    await page.clock.setFixedTime(NOW);
+    await page.addInitScript(({ uuid, at }) => {
         if (sessionStorage.getItem('seeded')) return;
         sessionStorage.setItem('seeded', '1');
         localStorage.setItem(`strom-research-waiting:${uuid}`, JSON.stringify({
             items: [{ id: 'T0004', what: 'Uložte snímek oddací matriky', at: '', person: 'P0013' }],
-            at: new Date(Date.now() - 3600_000).toISOString(),
+            at,
         }));
-    }, UUID);
+    }, { uuid: UUID, at: new Date(NOW.getTime() - 3600_000).toISOString() });
 }
 
 async function setup(page: Page, width = 1440, height = 900): Promise<void> {
