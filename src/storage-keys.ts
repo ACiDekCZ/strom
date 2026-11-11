@@ -43,3 +43,8 @@ export const FAN_STORAGE_KEYS = {
     /** Legend card open: '1' / '0'. */
     legendOpen: 'strom-fan-legend-open',
 } as const;
+
+/** localStorage: the fingerprint the kept copy of the research's version stands for (written at once; the copy keeps its own). */
+export const RESEARCH_COPY_FP_KEY = 'strom-research-base-fp:';
+/** localStorage: the fingerprint of the kept copy before the last written send. */
+export const RESEARCH_PREV_COPY_FP_KEY = 'strom-research-base-prev-fp:';

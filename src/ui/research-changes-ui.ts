@@ -20,6 +20,7 @@ import {
     sourceAppOnly, coupleAppOnly, placesAppOnly, variantsAppOnly, lineageAppOnly, pairNotWritten, RESEARCH_UNREAD_KINDS,
 } from '../research-changes.js';
 import { saveResearchCopy, loadResearchCopy, saveResearchPrevCopy, loadResearchPrevCopy } from '../research-copy.js';
+import { RESEARCH_COPY_FP_KEY, RESEARCH_PREV_COPY_FP_KEY } from '../storage-keys.js';
 import { researchAutoState, patchResearchAutoState, noteResearchSendPreviewSkipped } from '../research-device.js';
 import { researchSendMode, personsByResearchRefs } from './research-sync-ui.js';
 import { researchFactLabel } from './person-research-ui.js';
@@ -30,9 +31,9 @@ import { shownNameOrEmpty } from '../person-name.js';
 
 const PANEL_ID = 'research-changes-panel';
 /** The fingerprint the kept copy stands for (the tie's base, or the written send's). */
-const FP_KEY = 'strom-research-base-fp:';
+const FP_KEY = RESEARCH_COPY_FP_KEY;
 /** The fingerprint of the copy before the last written send (the base again once that send is taken back). */
-const FP_PREV_KEY = 'strom-research-base-prev-fp:';
+const FP_PREV_KEY = RESEARCH_PREV_COPY_FP_KEY;
 /** What the last written send carried, person by person (for "What was written"). */
 const WRITTEN_KEY = 'strom-research-written:';
 /** At most this many kinds on a row, then "+ N more". */

@@ -28,7 +28,7 @@ import { peekReloadPoint, forgetLastView } from './resume-view.js';
 import { AuditLogManager } from './audit-log.js';
 import { StorageManager } from './storage.js';
 import { createSnapshot, SnapshotResearchBase } from './snapshots.js';
-import { researchAutoState, patchResearchAutoState } from './research-device.js';
+import { researchAutoState, patchResearchAutoState, type ResearchAutoState } from './research-device.js';
 import { researchBaseKey, isHistoryKey } from './storage-keys.js';
 import { deleteHistoryStore } from './history-store.js';
 import { deleteQualityBridgeRecord } from './quality-bridge.js';
@@ -676,20 +676,39 @@ class TreeManagerClass {
         const next = structuredClone(data);
         joinQualityOnlySources(next);
         const link = tree?.research;
-        if (link?.fingerprint) {
-            const was = link.fingerprint;
-            if (was === fingerprintLike(data, was)) {
-                link.fingerprint = fingerprintLike(next, was);
-                this.saveIndex();
-                await rebaseResearchCopies(id, was, link.fingerprint);
-            } else {
-                await rebaseResearchCopies(id, null, null);
-            }
-        } else if (link) {
-            await rebaseResearchCopies(id, null, null);
-        }
+        if (tree && link) await rebaseResearchCopies(id, this.followJoinedFingerprints(id, tree, link, data, next));
         this.saveTreeData(id, next);
         return next;
+    }
+
+    /**
+     * The fingerprints a tree in step with its research stands on follow its
+     * data from `before` to `after` (data version 19): the base's (in step with
+     * the version loaded) and a written send's (in step with what it wrote),
+     * with what the research's state of that send keeps of it. Returned:
+     * each fingerprint that followed, before → after, for the kept copies.
+     * A fingerprint the data no longer had (edited since) stays.
+     */
+    private followJoinedFingerprints(id: TreeId, tree: TreeMetadata, link: ResearchLink, before: StromData, after: StromData): Map<string, string> {
+        const moved = new Map<string, string>();
+        const follow = (fp: string | undefined): void => {
+            if (fp && !moved.has(fp) && fingerprintLike(before, fp) === fp) moved.set(fp, fingerprintLike(after, fp));
+        };
+        follow(link.fingerprint);
+        const sent = link.sent;
+        if (sent?.state === 'written') follow(sent.fingerprint);
+        if (moved.size === 0) return moved;
+        const next: ResearchLink = { ...link };
+        if (link.fingerprint && moved.has(link.fingerprint)) next.fingerprint = moved.get(link.fingerprint)!;
+        if (sent?.state === 'written' && moved.has(sent.fingerprint)) next.sent = { ...sent, fingerprint: moved.get(sent.fingerprint)! };
+        tree.research = next;
+        this.saveIndex();
+        const st = researchAutoState(id);
+        const patch: Partial<ResearchAutoState> = {};
+        if (st.lastWritten?.fingerprint && moved.has(st.lastWritten.fingerprint)) patch.lastWritten = { ...st.lastWritten, fingerprint: moved.get(st.lastWritten.fingerprint)! };
+        if (st.notWritten && moved.has(st.notWritten.fingerprint)) patch.notWritten = { ...st.notWritten, fingerprint: moved.get(st.notWritten.fingerprint)! };
+        if (Object.keys(patch).length > 0) patchResearchAutoState(id, patch);
+        return moved;
     }
 
     /**
@@ -906,6 +925,8 @@ class TreeManagerClass {
 
     /** The newest state handed to the queue per tree until its write lands (see rescueUnsettledSaves). */
     private unsettledSaves = new Map<TreeId, { data: StromData; base: ResearchBase | null }>();
+    /** The research base this window last read or wrote with each tree (researchBaseKnownMatches). */
+    private storedBases = new Map<TreeId, ResearchBase & { researchId: string }>();
 
     /** How many states were handed to the queue per tree (a read can tell a write made meanwhile). */
     private queuedWrites = new Map<TreeId, number>();
@@ -1163,6 +1184,7 @@ class TreeManagerClass {
             await StorageManager.set('trees', id, record);
             await StorageManager.set('trees', researchBaseKey(id), stored);
         }
+        this.storedBases.set(id, { researchId: link.id, head: base.head, fingerprint: base.fingerprint });
     }
 
     // ==================== RESEARCH BASE ====================
@@ -1226,6 +1248,10 @@ class TreeManagerClass {
     }
 
     private async reconcileResearchBase(id: TreeId): Promise<void> {
+        // This window's own writes land first: a migration on reading (data
+        // version 19) stores the tree with the base its fingerprint followed
+        // to, and the base stored before it must not take that back.
+        await this.flush(id);
         const link = this.index.trees.find(t => t.id === id)?.research;
         if (!link) return;
         let stored: StoredResearchBase | null = null;
@@ -1234,9 +1260,27 @@ class TreeManagerClass {
         } catch { return; }
         if (!stored || stored.researchId !== link.id) return;
         const base = { head: stored.head ?? '', fingerprint: stored.fingerprint ?? '' };
+        this.storedBases.set(id, { researchId: stored.researchId, ...base });
         if (sameBase(this.researchBaseOf(id), base)) return;
         console.warn('The research base stored with the tree differs from its link: taking the stored one', id);
         this.patchResearchLink(id, { head: base.head || undefined, fingerprint: base.fingerprint });
+    }
+
+    /**
+     * At once, without reading (leaving the page, audit 017 a-D1): the base
+     * this window last knew stored with the tree — the one its queued write
+     * stores, else the one read or written last — is the link's. False: the
+     * two drifted apart (a stored base taken over the window's while its own
+     * write was still on its way), and what this window holds must not go
+     * to the research. True when nothing is known.
+     */
+    researchBaseKnownMatches(id: TreeId): boolean {
+        const link = this.index.trees.find(t => t.id === id)?.research;
+        if (!link) return true;
+        const queued = this.unsettledSaves.get(id)?.base;
+        const known = queued ? { researchId: link.id, ...queued } : this.storedBases.get(id);
+        if (!known || known.researchId !== link.id) return true;
+        return sameBase(this.researchBaseOf(id), known);
     }
 
     /**

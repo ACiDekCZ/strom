@@ -12,6 +12,7 @@ import { saveBaseline, loadBaseline, deleteBaselinesForTree } from './share-base
 import { baseCopy, markOlderCopy } from './research-changes.js';
 import { unknownSexFromTie } from './research-link.js';
 import { joinQualityOnlySources } from './citation-quality.js';
+import { RESEARCH_COPY_FP_KEY, RESEARCH_PREV_COPY_FP_KEY } from './storage-keys.js';
 
 const key = (treeId: string): string => `research-base:${treeId}`;
 /** The copy before the last written send replaced it (a send taken back puts the research there again). */
@@ -97,21 +98,28 @@ export async function unknownSexInResearchCopies(treeId: string, sexU: unknown):
  * Data version 19 for the kept copies (spec 077 K1.5): the sources made only
  * for another QUAY join their entry in them as in the tree (the same ids), so
  * the changes per person do not show the joined citations as the user's. A
- * copy kept for fingerprint `from` stands for `to` after it (the tree's
- * fingerprint followed); any other keeps its own.
+ * copy kept for a fingerprint the tree's followed (`moved`: before → after)
+ * stands for the new one after it, here and in the fingerprint this browser
+ * keeps for it (localStorage, read to find the copy); any other keeps its own.
  */
-export async function rebaseResearchCopies(treeId: string, from: string | null, to: string | null): Promise<void> {
-    for (const k of [key(treeId), prevKey(treeId)]) {
+export async function rebaseResearchCopies(treeId: string, moved: ReadonlyMap<string, string>): Promise<void> {
+    for (const [k, fpKey] of [[key(treeId), RESEARCH_COPY_FP_KEY], [prevKey(treeId), RESEARCH_PREV_COPY_FP_KEY]] as const) {
         try {
             const kept = await loadBaseline(k) as KeptCopy | null;
-            if (!kept) continue;
-            const joined = joinQualityOnlySources(kept) > 0;
-            const moved = from !== null && to !== null && kept.copyFp === from;
-            if (moved) kept.copyFp = to!;
-            if (joined || moved) await saveBaseline(k, k, kept, Date.now());
+            if (kept) {
+                const joined = joinQualityOnlySources(kept) > 0;
+                const to = kept.copyFp !== undefined ? moved.get(kept.copyFp) : undefined;
+                if (to !== undefined) kept.copyFp = to;
+                if (joined || to !== undefined) await saveBaseline(k, k, kept, Date.now());
+            }
         } catch (err) {
             console.warn('Converting the kept research version failed', err);
         }
+        try {
+            const fp = localStorage.getItem(fpKey + treeId);
+            const to = fp !== null ? moved.get(fp) : undefined;
+            if (to !== undefined) localStorage.setItem(fpKey + treeId, to);
+        } catch { /* no storage here */ }
     }
 }
 

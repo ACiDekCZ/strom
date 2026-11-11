@@ -1742,8 +1742,9 @@ export const researchSyncMethods = uiModule({
         // Another window stored this tree since: what this one holds would
         // take back what that one has. Never send it; a reload brings it up to date.
         // Leaving the page: only what is known at once (another window's save is told to this one as it
-        // happens) — reading the stored base takes longer than the page has (audit 017 a-D1).
-        if (isTreeStale(treeId) || (!opts.keepalive && !await TreeManager.researchBaseMatches(treeId))) {
+        // happens, and the base this window last stored or read) — reading the stored base takes longer
+        // than the page has (audit 017 a-D1).
+        if (isTreeStale(treeId) || (opts.keepalive ? !TreeManager.researchBaseKnownMatches(treeId) : !await TreeManager.researchBaseMatches(treeId))) {
             console.warn('Not sending a stale copy of the tree to the research', treeId);
             if (!opts.auto) this.showToast(s.staleTab, 8000, { action: { label: strings.storageSafety.reload, run: () => window.location.reload() } });
             return;
