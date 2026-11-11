@@ -35,7 +35,8 @@ import { deleteQualityBridgeRecord } from './quality-bridge.js';
 import { deleteSurnamesBridgeRecord } from './surname-suggest-bridge.js';
 import { VIEW_LINK_KEY_PREFIXES, forgetViewLinks } from './view-links.js';
 import { unknownSexFromTie, fingerprintLike, normalizeResearchId } from './research-link.js';
-import { unknownSexInResearchCopies, loadResearchCopy } from './research-copy.js';
+import { unknownSexInResearchCopies, loadResearchCopy, rebaseResearchCopies } from './research-copy.js';
+import { joinQualityOnlySources, qualityOnlySources } from './citation-quality.js';
 import { fillResearchConfirmedValues, hasUnvaluedResearchConfirmations } from './verify.js';
 import { requestPersistentStorage } from './persistence.js';
 import { newTieSendMode } from './research-sync.js';
@@ -612,6 +613,9 @@ class TreeManagerClass {
             }
             if (tree?.research && 'sexU' in tree.research && !this.isTreeNewer(id)) result.data = await this.dropLegacySexU(id, tree, result.data);
             if (!this.isTreeNewer(id) && hasUnvaluedResearchConfirmations(result.data)) await this.valueResearchConfirmations(id, result.data);
+            if (!this.isTreeNewer(id) && version < 19 && qualityOnlySources(result.data.sources).size > 0) {
+                result.data = await this.joinQualityOnlySourcesOf(id, tree, result.data);
+            }
             const count = realPersonCount(result.data);
             if (tree && tree.personCount !== count) {
                 tree.personCount = count;
@@ -653,6 +657,39 @@ class TreeManagerClass {
         // Before the tree is shown: its changes per person are read against the copy.
         await unknownSexInResearchCopies(id, sexU);
         return next ?? data;
+    }
+
+    /**
+     * Data version 19 (spec 077 K1.5): the sources an import of 3.26 made
+     * only for a citation of the same page with another QUAY join their entry
+     * again, the QUAY going to the citation (joinQualityOnlySources). A backup
+     * of the tree as it was is taken first; the tree is saved so. A tree in
+     * step with the research before stays in step (its fingerprint follows),
+     * and the kept copies of the research's version change the same way.
+     */
+    private async joinQualityOnlySourcesOf(id: TreeId, tree: TreeMetadata | undefined, data: StromData): Promise<StromData> {
+        try {
+            await createSnapshot(id, data, 'pre-migration', Date.now(), this.backupResearchBase(id, this.researchBaseOf(id)));
+        } catch (err) {
+            console.warn('The backup before the data update could not be written', err);
+        }
+        const next = structuredClone(data);
+        joinQualityOnlySources(next);
+        const link = tree?.research;
+        if (link?.fingerprint) {
+            const was = link.fingerprint;
+            if (was === fingerprintLike(data, was)) {
+                link.fingerprint = fingerprintLike(next, was);
+                this.saveIndex();
+                await rebaseResearchCopies(id, was, link.fingerprint);
+            } else {
+                await rebaseResearchCopies(id, null, null);
+            }
+        } else if (link) {
+            await rebaseResearchCopies(id, null, null);
+        }
+        this.saveTreeData(id, next);
+        return next;
     }
 
     /**

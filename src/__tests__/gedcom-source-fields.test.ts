@@ -235,8 +235,8 @@ describe('round trip: the app\'s file read back keeps every field', () => {
 });
 
 describe('data version 18 (spec 075)', () => {
-    it('is 18', () => {
-        expect(STROM_DATA_VERSION).toBe(18);
+    it('is at least 18', () => {
+        expect(STROM_DATA_VERSION).toBeGreaterThanOrEqual(18);
     });
 
     it('a v17 tree with older sources loads unchanged: the whole location stays in reference, no field is added', () => {

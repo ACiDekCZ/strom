@@ -4,6 +4,7 @@
  */
 
 import { rewriteStorySources, storySourceIds } from './story-sources.js';
+import { cleanCitationQuay, cleanTreeCitationQuay, joinQualityOnlySources, unionCitations } from './citation-quality.js';
 import { normalizeSingleParents, looseSingleParents, isPurePlaceholder, fillPlaceholder, tidyPlaceholders } from './single-parent.js';
 import {
     Person,
@@ -242,6 +243,12 @@ export function migrateData(data: unknown): StromData {
     if (d.sources && typeof d.sources === 'object') {
         result.sources = d.sources as StromData['sources'];
     }
+
+    // v19 (spec 077): the sources an import of 3.26 made only for a citation
+    // of the same page with another QUAY join their entry, the QUAY going to
+    // the citation; then only valid own QUAY of citations still cited stay.
+    if ((typeof d.version === 'number' ? d.version : 1) < 19) joinQualityOnlySources(result);
+    cleanTreeCitationQuay(result);
 
     // Photos/attachments/excerpts must be image (or PDF) data URLs — anything
     // else (data:text/html…) from a crafted file is dropped before it can be
@@ -2510,11 +2517,13 @@ class DataManagerClass {
                 if (kept.length > 0) person[field] = kept;
                 else delete person[field];
             }
+            cleanCitationQuay(person, PERSON_CITATION_FIELDS);
             for (const ev of person.events ?? []) {
                 if (ev.sourceIds) {
                     ev.sourceIds = ev.sourceIds.filter(id => id !== sourceId);
                     if (ev.sourceIds.length === 0) delete ev.sourceIds;
                 }
+                cleanCitationQuay(ev, ['sourceIds']);
             }
             for (const att of person.attachments ?? []) {
                 if (att.sourceId === sourceId) delete att.sourceId;
@@ -2527,10 +2536,12 @@ class DataManagerClass {
                 if (kept?.length) partnership[field] = kept;
                 else delete partnership[field];
             }
+            cleanCitationQuay(partnership, PARTNERSHIP_CITATION_FIELDS);
             for (const holder of partnership.events ?? []) {
                 if (!holder.sourceIds) continue;
                 holder.sourceIds = holder.sourceIds.filter(id => id !== sourceId);
                 if (holder.sourceIds.length === 0) delete holder.sourceIds;
+                cleanCitationQuay(holder, ['sourceIds']);
             }
             rewriteStorySources(partnership.story, ids => ids.filter(id => id !== sourceId));
         }
@@ -2783,6 +2794,7 @@ class DataManagerClass {
         this.beginMutation();
         ev.sourceIds = ev.sourceIds.filter(id => id !== sourceId);
         if (ev.sourceIds.length === 0) delete ev.sourceIds;
+        cleanCitationQuay(ev, ['sourceIds']);
         this.commitMutation(strings.undo.uncite(auditPersonName(person)));
         AuditLogManager.log(this.currentTreeId, 'source.uncite', strings.auditLog.uncitedSource(auditPersonName(person)));
         return true;
@@ -2868,6 +2880,7 @@ class DataManagerClass {
         this.beginMutation();
         ev.sourceIds = ev.sourceIds.filter(id => id !== sourceId);
         if (ev.sourceIds.length === 0) delete ev.sourceIds;
+        cleanCitationQuay(ev, ['sourceIds']);
         const names = this.partnershipNames(partnership);
         this.commitMutation(strings.undo.uncite(names));
         AuditLogManager.log(this.currentTreeId, 'source.uncite', strings.auditLog.uncitedSource(names));
@@ -4168,10 +4181,8 @@ class DataManagerClass {
                 if (!seen.has(ev.id)) keepPerson.events.push(ev);
             }
         }
-        for (const field of PERSON_CITATION_FIELDS) {
-            const ids = removePerson[field];
-            if (ids && ids.length > 0) keepPerson[field] = [...new Set([...(keepPerson[field] ?? []), ...ids])];
-        }
+        // A citation only the removed person had keeps its own QUAY.
+        for (const field of PERSON_CITATION_FIELDS) unionCitations(keepPerson, removePerson, field);
         if (removePerson.attachments && removePerson.attachments.length > 0) {
             if (!keepPerson.attachments) keepPerson.attachments = [];
             const seenAtt = new Set(keepPerson.attachments.map(a => a.id));

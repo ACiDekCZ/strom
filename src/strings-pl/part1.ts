@@ -382,6 +382,7 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
             'pre-research-load': 'Przed wczytaniem wersji z badania',
             'pre-first-send': 'Przed pierwszym wysłaniem do badania',
             'closed-tab': 'Kopia awaryjna z zamkniętej karty',
+            'pre-migration': 'Przed dostosowaniem danych do nowej wersji',
         },
         exportLast: (d: string) => `Ostatni eksport wszystkich drzew: ${d}`,
         exportNever: 'Nie wszystkie drzewa są wyeksportowane',

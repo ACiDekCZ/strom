@@ -91,6 +91,7 @@ function surnameNoteGroups(noteLines: readonly string[] | null): string[][] {
     return groups;
 }
 import { excerptFromDataUrl } from './excerpts';
+import { unionCitations } from './citation-quality';
 import { imageRefSha, resolveImageFile } from './research-image-refs';
 import { normalizeSha256 } from './sha256';
 import { isConfirmDay, isTranscriptMark } from './source-confirm';
@@ -1636,6 +1637,12 @@ interface GedcomFamily {
 
 /** Parsed GEDCOM data */
 export interface ParsedGedcom {
+    /**
+     * The QUAY of each citation, by the list its pointer is in (the very
+     * array) and the source it cites: undefined when it is its source's
+     * default, `null` when the citation gave none while the source has one.
+     */
+    citationQuay?: Map<string[], Map<string, number | null | undefined>>;
     individuals: Map<string, GedcomIndividual>;
     families: Map<string, GedcomFamily>;
     sources: Map<string, RawSource>;
@@ -4889,9 +4896,13 @@ export function parseGedcom(content: string): ParsedGedcom {
     // and the export wrote it to each of them. An entry's date (DATA > DATE)
     // is the entry's too: the same page cited with another date is another
     // entry, and a citation without one is not given one (spec 066 K3.1).
+    // Its QUAY is the citation's own (spec 077): the same page cited at two
+    // facts with another QUAY each is one entry, each citation keeps its QUAY.
     const pageSources = new Map<string, string>();
     /** The date, QUAY and unread lines the record's own citations carry: the first of them says them. */
     const ownCite = new Map<string, { date: string; quay: number | undefined; kept: string }>();
+    /** Each citation's QUAY and the source it cites now (the record, or a page's source of its own). */
+    const citedQuay: { c: CitationSlot; target: string; quay: number | undefined }[] = [];
     /** A citation's unread lines as a kept block (CITE_TAG): none, or `1 _STROM_CITE` and its lines a level deeper. */
     const citeBlock = (c: CitationSlot): string[] => {
         const body = [...(c.dataText?.length ? ['1 DATA', ...c.dataText] : []), ...(c.even ?? [])];
@@ -4913,9 +4924,9 @@ export function parseGedcom(content: string): ParsedGedcom {
                 if (block.length) (src.extras ??= []).push({ tag: CITE_TAG, lines: block, quiet: true });
             }
             const own = ownCite.get(c.id)!;
-            if (own.date === date && own.quay === quay && own.kept === kept) continue;
+            if (own.date === date && own.kept === kept) { citedQuay.push({ c, target: c.id, quay }); continue; }
         }
-        const key = `${c.id}\u0000${page}\u0000${date}\u0000${quay ?? ''}\u0000${kept}`;
+        const key = `${c.id}\u0000${page}\u0000${date}\u0000${kept}`;
         let derived = pageSources.get(key);
         if (!derived) {
             derived = `${c.id}~${pageSources.size + 1}`;
@@ -4938,6 +4949,7 @@ export function parseGedcom(content: string): ParsedGedcom {
             });
         }
         c.list[c.index] = derived;
+        citedQuay.push({ c, target: derived, quay });
     }
     // The record's own date: that of its own citations, else (a citation read
     // elsewhere, e.g. under a name) the first one seen, as before.
@@ -4952,6 +4964,17 @@ export function parseGedcom(content: string): ParsedGedcom {
         if (src.recordDate) continue;
         if (own) { if (own.date) src.recordDate = own.date; }
         else if (citationDates.has(src.id)) src.recordDate = citationDates.get(src.id);
+    }
+    // A citation whose QUAY is not its source's keeps its own (`null`: it gave
+    // none). The first citation of a source in a list says it (a list names
+    // each source once).
+    const citationQuay = new Map<string[], Map<string, number | null | undefined>>();
+    for (const { c, target, quay } of citedQuay) {
+        const list = citationQuay.get(c.list) ?? new Map<string, number | null | undefined>();
+        citationQuay.set(c.list, list);
+        if (list.has(target)) continue;
+        const def = sources.get(target)?.quality;
+        list.set(target, quay === def ? undefined : quay ?? null);
     }
 
     closePlaceRecord();
@@ -4990,6 +5013,7 @@ export function parseGedcom(content: string): ParsedGedcom {
         },
         ...((stromApp || stromResearch) && headImports.length > 0 ? { stromImports: headImports } : {}),
         ...(mediaRecords.size > 0 ? { mediaRecords } : {}),
+        ...(citationQuay.size > 0 ? { citationQuay } : {}),
     };
 }
 
@@ -5125,6 +5149,25 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
      */
     const mapRefs = (refs?: string[]): string[] =>
         [...new Set((refs ?? []).map(r => sourceIdMap.get(r)).filter((id): id is string => !!id))];
+    /**
+     * The own QUAY of a list's citations by catalog id (spec 077): those whose
+     * QUAY is not their source's; the first citation of a source says it, as
+     * mapRefs keeps it.
+     */
+    const quayOf = (refs?: string[]): Record<string, number | null> | undefined => {
+        const said = refs ? gedcom.citationQuay?.get(refs) : undefined;
+        if (!refs || !said) return undefined;
+        const out: Record<string, number | null> = {};
+        const seen = new Set<string>();
+        for (const ref of refs) {
+            const id = sourceIdMap.get(ref);
+            if (!id || seen.has(id)) continue;
+            seen.add(id);
+            const q = said.get(ref);
+            if (q !== undefined) out[id] = q;
+        }
+        return Object.keys(out).length ? out : undefined;
+    };
     /** The research's pointers in what its hypotheses say: a person's number, a family's partners. */
     const researchRefs: ResearchRefs = {
         person: xref => individuals.get(xref)?.refn || undefined,
@@ -5266,6 +5309,8 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
                 }
                 const evRefs = mapRefs(ev.sourceRefs);
                 if (evRefs.length > 0) out.sourceIds = evRefs;
+                const evQuay = quayOf(ev.sourceRefs);
+                if (evQuay) out.citationQuay = { sourceIds: evQuay };
 
                 const parts = (ev.participants ?? [])
                     .map(toParticipant).filter((p): p is EventParticipant => !!p);
@@ -5352,6 +5397,12 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         if (birthRefs.length > 0) person.birthSourceIds = birthRefs;
         const deathRefs = mapRefs(indi.deathSourceRefs);
         if (deathRefs.length > 0) person.deathSourceIds = deathRefs;
+        const personQuay = {
+            ...(quayOf(indi.sourceRefs) ? { sourceIds: quayOf(indi.sourceRefs) } : {}),
+            ...(quayOf(indi.birthSourceRefs) ? { birthSourceIds: quayOf(indi.birthSourceRefs) } : {}),
+            ...(quayOf(indi.deathSourceRefs) ? { deathSourceIds: quayOf(indi.deathSourceRefs) } : {}),
+        };
+        if (Object.keys(personQuay).length) person.citationQuay = personQuay;
 
         // OBJE media: a data-URL FILE is either the portrait (Strom marker)
         // or an attachment. External file paths cannot be embedded — counted
@@ -5570,6 +5621,8 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
                 if (ev.status) out.status = ev.status;
                 const refs = mapRefs(ev.sourceRefs);
                 if (refs.length > 0) out.sourceIds = refs;
+                const evQuay = quayOf(ev.sourceRefs);
+                if (evQuay) out.citationQuay = { sourceIds: evQuay };
                 const parts = (ev.participants ?? []).map(toWitness)
                     .filter((p): p is EventParticipant => !!p);
                 if (parts.length > 0) out.participants = parts;
@@ -5589,6 +5642,11 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         if (famRefs.length > 0) partnership.sourceIds = [...new Set(famRefs)];
         const divorceRefs = mapRefs(fam.divorceSourceRefs);
         if (divorceRefs.length > 0) partnership.divorceSourceIds = [...new Set(divorceRefs)];
+        const famQuay = quayOf(fam.sourceRefs);
+        const divorceQuay = quayOf(fam.divorceSourceRefs);
+        if (famQuay || divorceQuay) {
+            partnership.citationQuay = { ...(famQuay ? { sourceIds: famQuay } : {}), ...(divorceQuay ? { divorceSourceIds: divorceQuay } : {}) };
+        }
 
         // Witnesses at the wedding, named under 1 MARR.
         const witnesses = fam.marriageParticipants.map(toWitness)
@@ -5628,8 +5686,9 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
             into.note = into.note ? `${into.note}\n${from.note}` : from.note;
             marks.text = from.note;
         }
-        if (from.sourceIds?.length) into.sourceIds = [...new Set([...(into.sourceIds ?? []), ...from.sourceIds])];
-        if (from.divorceSourceIds?.length) into.divorceSourceIds = [...new Set([...(into.divorceSourceIds ?? []), ...from.divorceSourceIds])];
+        // (A citation only this record has keeps its own QUAY.)
+        unionCitations(into, from, 'sourceIds');
+        unionCitations(into, from, 'divorceSourceIds');
         if (from.participants?.length) {
             const seen = new Set((into.participants ?? []).map(p => p.personId ?? p.name));
             for (const part of from.participants) {

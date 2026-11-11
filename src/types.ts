@@ -217,6 +217,8 @@ export interface LifeEvent {
     note?: string;
     /** Ids of Source entries (StromData.sources) citing this event. */
     sourceIds?: string[];
+    /** A citation's own QUAY where it differs from its source's (see CitationQuay). */
+    citationQuay?: CitationQuay<'sourceIds'>;
     /** Godparents, witnesses, the officiating priest… (see EventParticipant). */
     participants?: EventParticipant[];
     /** The research's status of the event (see FactStatus). */
@@ -326,8 +328,10 @@ export interface Source {
     url?: string;
     note?: string;
     /**
-     * GEDCOM QUAY 0–3 (unreliable … primary evidence). Preserved on import
-     * (first citation wins, like `reference`) and re-exported on citations.
+     * GEDCOM QUAY 0–3 (unreliable … primary evidence): the source's default
+     * reliability. Preserved on import (the record's own first citation wins,
+     * like `reference`) and re-exported on citations; a citation with another
+     * QUAY keeps its own (CitationQuay, data v19).
      */
     quality?: number;
     /** Verbatim transcript of the entry (GEDCOM SOUR.TEXT). */
@@ -640,6 +644,8 @@ export interface Person {
     birthSourceIds?: string[];
     /** Sources citing the death fields (deathDate / deathPlace; GEDCOM DEAT.SOUR). */
     deathSourceIds?: string[];
+    /** A citation's own QUAY where it differs from its source's, per list (see CitationQuay). */
+    citationQuay?: CitationQuay<PersonCitationField>;
     /** Attached documents (scans, certificates, letters…). */
     attachments?: Attachment[];
     /**
@@ -1360,6 +1366,8 @@ export interface Partnership {
      * app keeps partnerships whole and only does not show them.
      */
     divorceSourceIds?: string[];
+    /** A citation's own QUAY where it differs from its source's, per list (see CitationQuay). */
+    citationQuay?: CitationQuay<PartnershipCitationField>;
     /**
      * Witnesses at the wedding (see EventParticipant). A marriage entry names
      * them the way a baptism names godparents, and they are the same kind of
@@ -1445,6 +1453,8 @@ export interface CoupleEvent {
     note?: string;
     /** Ids of Source entries citing this event. */
     sourceIds?: string[];
+    /** A citation's own QUAY where it differs from its source's (see CitationQuay). */
+    citationQuay?: CitationQuay<'sourceIds'>;
     /** Witnesses and others the record names. */
     participants?: EventParticipant[];
     /** The research's status of the event (see FactStatus). */
@@ -1460,6 +1470,17 @@ export type PartnershipUpdates = Partial<Pick<Partnership,
 /** Special marker value for "last focused" default setting */
 export const LAST_FOCUSED = "__last_focused__" as const;
 export type LastFocusedMarker = typeof LAST_FOCUSED;
+
+/**
+ * The reliability (GEDCOM QUAY 0–3) of single citations, by citation list and
+ * source id (spec 077, data v19): only a citation whose QUAY differs from its
+ * source's default (Source.quality) has an entry; `null` is a citation that
+ * gave no QUAY while its source has one. The same entry cited at two facts
+ * with another QUAY each stays one source. Read through citationQuality()
+ * (src/citation-quality.ts); an entry of a source no longer in its list says
+ * nothing (dropped when the tree is read).
+ */
+export type CitationQuay<F extends string = string> = Partial<Record<F, Record<string, number | null>>>;
 
 /** A person's citation lists: the person as a whole, the birth, the death. */
 export const PERSON_CITATION_FIELDS = ['sourceIds', 'birthSourceIds', 'deathSourceIds'] as const;
@@ -1589,8 +1610,16 @@ export function partnershipParticipants(u: Pick<Partnership, 'participants' | 'e
  *   location in reference, nothing is split by itself. An older app (v17)
  *   keeps sources whole but would write neither the folio nor the image to
  *   its GEDCOM export (only the reference), so the bump makes it warn first.
+ * v19 (2026-11, spec 077): the reliability of a single citation
+ *   (Person/Partnership/LifeEvent/CoupleEvent.citationQuay) where it differs
+ *   from its source's; Source.quality is the source's default. A page cited
+ *   with another QUAY is no longer a source of its own: the sources an import
+ *   of 3.26 made only for that are joined back into their entry when the
+ *   tree is read (src/citation-quality.ts, a backup first). An older app
+ *   (v18) would show and export the source's QUAY at every citation, so the
+ *   bump makes it warn first.
  */
-export const STROM_DATA_VERSION = 18;
+export const STROM_DATA_VERSION = 19;
 
 /** The rows of a saved Table view (spec 073 §2; events and sources come later). */
 export type TableViewRowType = 'persons' | 'unions' | 'events' | 'sources';

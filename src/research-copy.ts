@@ -11,6 +11,7 @@ import { normalizeSingleParents } from './single-parent.js';
 import { saveBaseline, loadBaseline, deleteBaselinesForTree } from './share-baselines.js';
 import { baseCopy, markOlderCopy } from './research-changes.js';
 import { unknownSexFromTie } from './research-link.js';
+import { joinQualityOnlySources } from './citation-quality.js';
 
 const key = (treeId: string): string => `research-base:${treeId}`;
 /** The copy before the last written send replaced it (a send taken back puts the research there again). */
@@ -46,7 +47,8 @@ export async function loadResearchCopy(treeId: string, fp?: string): Promise<Str
         const base = standsFor(await loadBaseline(key(treeId)) as KeptCopy | null, fp);
         // Kept before a child with one known parent got its "?" family: the same conversion as the tree
         // had on load (same ids), so the changes per person do not show those families as weddings.
-        if (base) normalizeSingleParents(markOlderCopy(base));
+        // Likewise the sources made only for another QUAY (data v19), joined as in the tree.
+        if (base) { normalizeSingleParents(markOlderCopy(base)); joinQualityOnlySources(base); }
         return base;
     } catch {
         return null;
@@ -66,7 +68,7 @@ export async function saveResearchPrevCopy(treeId: string, data: StromData, fp: 
 export async function loadResearchPrevCopy(treeId: string, fp: string): Promise<StromData | null> {
     try {
         const base = standsFor(await loadBaseline(prevKey(treeId)) as KeptCopy | null, fp);
-        if (base) normalizeSingleParents(markOlderCopy(base));
+        if (base) { normalizeSingleParents(markOlderCopy(base)); joinQualityOnlySources(base); }
         return base;
     } catch {
         return null;
@@ -85,6 +87,28 @@ export async function unknownSexInResearchCopies(treeId: string, sexU: unknown):
             const kept = await loadBaseline(k) as KeptCopy | null;
             const next = kept ? unknownSexFromTie(kept, sexU) as KeptCopy | null : null;
             if (next) await saveBaseline(k, k, next, Date.now());
+        } catch (err) {
+            console.warn('Converting the kept research version failed', err);
+        }
+    }
+}
+
+/**
+ * Data version 19 for the kept copies (spec 077 K1.5): the sources made only
+ * for another QUAY join their entry in them as in the tree (the same ids), so
+ * the changes per person do not show the joined citations as the user's. A
+ * copy kept for fingerprint `from` stands for `to` after it (the tree's
+ * fingerprint followed); any other keeps its own.
+ */
+export async function rebaseResearchCopies(treeId: string, from: string | null, to: string | null): Promise<void> {
+    for (const k of [key(treeId), prevKey(treeId)]) {
+        try {
+            const kept = await loadBaseline(k) as KeptCopy | null;
+            if (!kept) continue;
+            const joined = joinQualityOnlySources(kept) > 0;
+            const moved = from !== null && to !== null && kept.copyFp === from;
+            if (moved) kept.copyFp = to!;
+            if (joined || moved) await saveBaseline(k, k, kept, Date.now());
         } catch (err) {
             console.warn('Converting the kept research version failed', err);
         }

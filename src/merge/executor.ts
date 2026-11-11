@@ -4,6 +4,7 @@
  */
 
 import { rewriteStorySources } from '../story-sources.js';
+import { remapCitations, unionCitations } from '../citation-quality.js';
 import {
     PersonId,
     PartnershipId,
@@ -739,7 +740,7 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
         pruneImportOrigin(mergedData);
 
         // Citations of a source that was already in the tree now name the kept entry.
-        remapSourceReferences(mergedData, sourceRemap);
+        remapSourceReferences(mergedData, sourceRemap, state.incomingData.sources);
         unlinkOrphanExcerpts(mergedData);
 
         // Validate result
@@ -1087,26 +1088,22 @@ function unlinkOrphanExcerpts(data: StromData): void {
     }
 }
 
-/** Point every citation of a deduplicated source at the kept entry (no duplicates left in a list). */
-function remapSourceReferences(data: StromData, remap: Map<string, string>): void {
+/**
+ * Point every citation of a deduplicated source at the kept entry (no
+ * duplicates left in a list); each keeps its QUAY, its own or that of the
+ * incoming source it cited (`incoming`), as its own where the kept entry's
+ * differs (spec 077).
+ */
+function remapSourceReferences(data: StromData, remap: Map<string, string>, incoming: Record<string, Source> | undefined): void {
     if (remap.size === 0) return;
-    const fix = (ids: string[] | undefined): string[] | undefined =>
-        ids ? [...new Set(ids.map(id => remap.get(id) ?? id))] : ids;
+    remapCitations(data, remap, incoming);
     for (const person of Object.values(data.persons)) {
-        for (const field of PERSON_CITATION_FIELDS) if (person[field]) person[field] = fix(person[field]);
-        for (const ev of person.events ?? []) {
-            if (ev.sourceIds) ev.sourceIds = fix(ev.sourceIds);
-        }
         for (const att of person.attachments ?? []) {
             if (att.sourceId && remap.has(att.sourceId)) att.sourceId = remap.get(att.sourceId);
         }
         rewriteStorySources(person.story, ids => ids.map(id => remap.get(id) ?? id));
     }
     for (const partnership of Object.values(data.partnerships)) {
-        for (const field of PARTNERSHIP_CITATION_FIELDS) if (partnership[field]) partnership[field] = fix(partnership[field]);
-        for (const ev of partnership.events ?? []) {
-            if (ev.sourceIds) ev.sourceIds = fix(ev.sourceIds);
-        }
         rewriteStorySources(partnership.story, ids => ids.map(id => remap.get(id) ?? id));
     }
 }
@@ -1359,9 +1356,7 @@ export function mergePersonData(
                 }
                 if (!twin.gedcomValue && event.gedcomValue && twin.note === event.note) twin.gedcomValue = event.gedcomValue;
                 if (!twin.gedcomAddress && event.gedcomAddress && twin.address === event.address) twin.gedcomAddress = structuredClone(event.gedcomAddress);
-                if (event.sourceIds?.length) {
-                    twin.sourceIds = [...new Set([...(twin.sourceIds ?? []), ...event.sourceIds])];
-                }
+                unionCitations(twin, event, 'sourceIds');
                 // The e-mail the file wrote (its note line is the same): a tree loaded before it was kept takes it.
                 if (!twin.gedcomEmails?.length && event.gedcomEmails?.length) twin.gedcomEmails = [...event.gedcomEmails];
                 continue;
@@ -1377,11 +1372,9 @@ export function mergePersonData(
         }
     }
 
-    // Merge source citations: union of source ids (the person, the birth, the death).
-    for (const field of PERSON_CITATION_FIELDS) {
-        const ids = incoming[field];
-        if (ids && ids.length > 0) existing[field] = [...new Set([...(existing[field] ?? []), ...ids])];
-    }
+    // Merge source citations: union of source ids (the person, the birth, the death),
+    // a citation only the incoming person has with its own QUAY.
+    for (const field of PERSON_CITATION_FIELDS) unionCitations(existing, incoming, field);
 
     // Merge written name variants: the spelling that made the match possible
     // ("Fischek") must survive the merge, or the next import of the same
@@ -1483,10 +1476,7 @@ export function mergePartnershipData(
     // Source citations: union like persons' sourceIds — a marriage record cited
     // on either side is evidence for the union and must survive the merge.
     // The divorce's own the same way (a tree loaded before they were read takes them).
-    for (const field of PARTNERSHIP_CITATION_FIELDS) {
-        const ids = incoming[field];
-        if (ids && ids.length > 0) existing[field] = [...new Set([...(existing[field] ?? []), ...ids])];
-    }
+    for (const field of PARTNERSHIP_CITATION_FIELDS) unionCitations(existing, incoming, field);
     // status is required, so a well-formed partnership always has one; fill only
     // if the existing side somehow lacks it. isPrimary is deliberately left
     // alone — which union shows first is the existing tree's own arrangement.
@@ -1525,7 +1515,7 @@ export function mergePartnershipData(
         for (const event of incoming.events) {
             const twin = byContent.get(coupleEventKey(event));
             if (twin) {
-                if (event.sourceIds?.length) twin.sourceIds = [...new Set([...(twin.sourceIds ?? []), ...event.sourceIds])];
+                unionCitations(twin, event, 'sourceIds');
                 continue;
             }
             const cloned = structuredClone(event);

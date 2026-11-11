@@ -23,7 +23,8 @@ import {
 /** `other-window`: this window's state when another window (an older app too) saved over its tree. */
 /** `pre-research-load` / `pre-first-send`: before the research's version replaced the tree, before its first send. */
 /** `closed-tab`: a window's state rescued as it closed, which another window's later save outdated. */
-export type SnapshotReason = 'auto' | 'manual' | 'pre-import' | 'pre-merge' | 'other-window' | 'pre-research-load' | 'pre-first-send' | 'closed-tab';
+/** `pre-migration`: before a newer app changed the stored tree to its data version (spec 077, v19). */
+export type SnapshotReason = 'auto' | 'manual' | 'pre-import' | 'pre-merge' | 'other-window' | 'pre-research-load' | 'pre-first-send' | 'closed-tab' | 'pre-migration';
 
 export interface SnapshotMeta {
     id: string;

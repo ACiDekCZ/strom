@@ -1,7 +1,7 @@
 /**
- * A source record cited at several pages, or at one page with another QUAY
- * or date, becomes a source of its own per citation when read (spec 066
- * K3.1). Such a source has no REFN and gets a new id at every reading: loading
+ * A source record cited at several pages, or at one page with another date,
+ * becomes a source of its own per citation when read (spec 066 K3.1); another
+ * QUAY alone stays on the citation (spec 077). Such a source has no REFN and gets a new id at every reading: loading
  * the very same research file again must still show no citation as changed,
  * and a tree stored before those sources existed (its citations on the
  * record itself) neither.
@@ -19,6 +19,8 @@ interface Opts {
     residenceCited?: boolean;
     /** The page of Ole's birth citation (the record's first citation: its page kept on the record). */
     birthPage?: string;
+    /** Ole's occupation citation has a date of its own (the record's page, another date). */
+    occuDate?: boolean;
 }
 
 function researchGed(opts: Opts = {}): string {
@@ -27,8 +29,9 @@ function researchGed(opts: Opts = {}): string {
         '1 CHAR UTF-8',
         '0 @P0001@ INDI', '1 NAME Ole /Brekke/', '1 SEX M', '1 REFN P0001',
         '1 BIRT', '2 DATE 1850', '2 SOUR @S0001@', `3 PAGE ${opts.birthPage ?? 'fol. 12'}`, '3 QUAY 3',
-        // The same page, another QUAY: a source of its own.
-        '1 OCCU sedlák', '2 SOUR @S0001@', `3 PAGE ${opts.occuPage ?? 'fol. 12'}`, '3 QUAY 1',
+        // The same page, another QUAY: the record itself, the QUAY on the citation (spec 077).
+        '1 OCCU sedlák', '2 SOUR @S0001@', `3 PAGE ${opts.occuPage ?? 'fol. 12'}`,
+        ...(opts.occuDate ? ['3 DATA', '4 DATE 1 JAN 1851'] : []), '3 QUAY 1',
         '1 RESI', '2 PLAC Tovik', ...(opts.residenceCited ? ['2 SOUR @S0001@', '3 PAGE fol. 40', '3 QUAY 2'] : []),
         '1 SOUR @S0001@', '2 PAGE fol. 40', '2 DATA', '3 DATE 2 MAR 1850', '2 QUAY 2',
         '0 @P0002@ INDI', '1 NAME Kari /Brekke/', '1 SEX F', '1 REFN P0002',
@@ -49,8 +52,13 @@ const citationRows = (here: StromData, there: StromData) => diffValues(here, the
 describe('sources of their own per citation across readings', () => {
     it('the same file read twice: the same ids, no citation row, the same fingerprint', () => {
         const first = read(researchGed());
-        // The fixture really makes sources of their own (another QUAY, another page, another date).
-        expect(unnumbered(first).length).toBeGreaterThanOrEqual(3);
+        // The fixture really makes sources of their own (another page, another date).
+        expect(unnumbered(first).length).toBeGreaterThanOrEqual(2);
+        // Another QUAY alone is no source of its own: the occupation cites the record (spec 077).
+        const record = Object.values(first.sources ?? {}).find(s => s.refn === 'S0001')!;
+        const ole = byRefn(first, 'P0001');
+        expect(ole.events?.find(e => e.type === 'occupation')?.sourceIds).toEqual([record.id]);
+        expect(ole.birthSourceIds).toEqual([record.id]);
         const again = stabilizeIds(read(researchGed()), first);
         expect(Object.keys(again.sources ?? {}).sort()).toEqual(Object.keys(first.sources ?? {}).sort());
         expect(citationRows(first, again)).toEqual([]);
@@ -93,8 +101,8 @@ describe('sources of their own per citation across readings', () => {
     });
 
     it('a tree stored before (its citations on the record itself) shows no citation row', () => {
-        const fresh = read(researchGed());
-        // As an earlier version stored it: a citation of the record's page with another QUAY or date
+        const fresh = read(researchGed({ occuDate: true }));
+        // As an earlier version stored it: a citation of the record's page with another date
         // on the record itself (only another page had a source of its own).
         const recordOf = new Map<string, string>();
         const records = Object.values(fresh.sources ?? {}).filter(s => s.refn);
@@ -113,7 +121,7 @@ describe('sources of their own per citation across readings', () => {
             for (const e of p.events ?? []) e.sourceIds = onRecord(e.sourceIds);
         }
         expect(byRefn(old, 'P0001').events?.find(e => e.type === 'occupation')?.sourceIds).toEqual([records[0].id]);
-        const next = stabilizeIds(read(researchGed()), old);
+        const next = stabilizeIds(read(researchGed({ occuDate: true })), old);
         expect(citationRows(old, next)).toEqual([]);
     });
 
