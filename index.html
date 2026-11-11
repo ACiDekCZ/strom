@@ -9654,7 +9654,7 @@
         .tv-body .tv-row.is-selected-sub { background: var(--line-selected-bg); }
         .tv-row.is-dimmed .tv-cell { opacity: 0.55; }
         /* §10.1 row actions: in the first column, under the pointer and on the selected row (none on a phone, 10b).
-           Over the cell's end, so nothing moves under the pointer; the selected row's name ends in "…" before them. */
+           At the cell's end; the row's name ends in "…" before them (the cell keeps them their room). */
         .tv-acts {
             display: none; position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
             align-items: center; gap: 4px; padding-left: 6px; background: inherit;
@@ -10148,6 +10148,7 @@
             .tv-body .tv-row:hover { background: var(--surface-2); }
             .tv-body .tv-row[aria-selected="true"]:hover { background: var(--line-selected-bg); }
             .tv-body .tv-row:hover .tv-acts { display: inline-flex; }
+            .tv-body .tv-row:hover > .tv-cell:has(> .tv-acts) { padding-right: 100px; }
             .tv-act:hover { color: var(--text); border-color: var(--primary); }
             .tv-rowtype-btn:hover, .tv-legend-btn:hover { color: var(--text); border-color: var(--primary); }
             .tv-headcell:hover .tv-head-menu { opacity: 1; }

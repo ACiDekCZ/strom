@@ -112,6 +112,38 @@ test.describe('desktop (1440)', () => {
     });
 });
 
+test('under the pointer, the row\'s actions get their room: a long name ends in "…" before them', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.clock.setFixedTime(new Date('2026-06-15T10:00:00Z'));
+    await openApp(page);
+    await seedTree(page, {
+        ...FAMILY,
+        c: { ...FAMILY.c, firstName: 'Lubor Maximilián Bořivoj', lastName: 'Vranoš z Lichtenburku' },
+    }, 'Vranoš', 'a');
+    await page.locator('#view-mode-table').click();
+    await expect(status(page)).toHaveText('4 of 4 people');
+    const geometry = (key: string) => row(page, key).locator('.tv-name').evaluate(cell => {
+        const text = cell.querySelector('.tv-cell-text') as HTMLElement;
+        const acts = cell.querySelector('.tv-acts') as HTMLElement;
+        return {
+            textRight: text.getBoundingClientRect().right,
+            actsLeft: acts.getBoundingClientRect().left,
+            cut: text.scrollWidth > text.clientWidth,
+            acts: getComputedStyle(acts).display,
+        };
+    });
+    // Not selected, under the pointer: the same room as the selected row's.
+    await row(page, 'p:c').locator('.tv-name').hover();
+    const hovered = await geometry('p:c');
+    expect(hovered.acts).not.toBe('none');
+    expect(hovered.cut).toBe(true);
+    expect(hovered.textRight).toBeLessThanOrEqual(hovered.actsLeft);
+    await row(page, 'p:c').locator('.tv-name').click();
+    const chosen = await geometry('p:c');
+    expect(chosen.textRight).toBeLessThanOrEqual(chosen.actsLeft);
+    expect(Math.abs(chosen.textRight - hovered.textRight)).toBeLessThan(1);
+});
+
 test.describe('phone (390)', () => {
     test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
