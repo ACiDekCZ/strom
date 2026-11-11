@@ -20,6 +20,8 @@ import { participantName } from '../../godparents.js';
 import { parentSlots, type ParticipantRole, type Partnership, type PartnershipId, type Person, type ResearchConflict, type StromData } from '../../types.js';
 import type { CellSeverity, EventRow, PersonRow, TableModel, TableRow } from './table-model.js';
 import { personGodparents } from './table-events.js';
+import { lineCell, type GridLine } from './table-subrows.js';
+import type { ColumnDef } from './table-columns.js';
 
 /** One cell a finding is about: a row of People, Unions or Events, a column, the union of a union column. */
 export interface CheckTarget {
@@ -224,6 +226,8 @@ export class CheckIndex {
     readonly issues: ValidationIssue[] = [];
     private readonly cells = new Map<string, CellFinding[]>();
     private readonly people = new Map<string, PersonFindings>();
+    /** Each person's findings (Findings, Highest level: their bubble, §7.4). */
+    private readonly peopleAll = new Map<string, CellFinding[]>();
     /** placeSpelling: the place's key → its findings. */
     private readonly places = new Map<string, CellFinding[]>();
     /** recurringGodparent: the participant's name key (`p:` linked, `n:` written) → its findings. */
@@ -256,6 +260,7 @@ export class CheckIndex {
                 else if (!list.includes(f)) list.push(f);
             }
             for (const id of new Set(issue.personIds ?? [])) {
+                (this.peopleAll.get(id) ?? this.peopleAll.set(id, []).get(id)!).push(f);
                 const s = this.people.get(id) ?? { n: 0, top: null, unusual: 0 };
                 if (dismissed) s.unusual++;
                 else {
@@ -270,6 +275,14 @@ export class CheckIndex {
     /** A person's findings (none: zeros). */
     person(id: string): PersonFindings {
         return this.people.get(id) ?? { n: 0, top: null, unusual: 0 };
+    }
+
+    /**
+     * A person's findings as the Findings and Highest level cells open them
+     * (§7.4): the reported ones by level, then those marked "Not an error".
+     */
+    personAll(id: string): CellFinding[] {
+        return [...(this.peopleAll.get(id) ?? [])].sort((a, b) => RANK[b.severity] - RANK[a.severity]);
     }
 
     /**
@@ -356,6 +369,28 @@ export function buildCheckIndex(data: StromData, issues: readonly ValidationIssu
     index.add(issues);
     return index;
 }
+
+/** The union a line of the People table reads in its union columns: a sub-row's, the shown one of a person's row. */
+export function lineUnion(line: GridLine): Partnership | null {
+    if (line.kind === 'more' || line.row.kind !== 'person' || line.union === null) return null;
+    return line.row.unions[line.union] ?? null;
+}
+
+/**
+ * The findings of a line's cell (§7.4): a union column of the People table
+ * reads the line's union, a place cell its value. A union's sub-row shows
+ * only its union's cells (§3), so the person's own cells there carry no
+ * finding: those stay on the person's row.
+ */
+export function lineFindings(index: CheckIndex, m: TableModel, line: GridLine, col: ColumnDef): CellFinding[] {
+    if (line.kind === 'more' || (line.kind === 'sub' && !col.unionScoped)) return [];
+    const union = col.unionScoped ? lineUnion(line) : null;
+    const text = PLACE_COLUMNS.has(col.id) ? lineCell(m, line, col).text : '';
+    return index.cellAll(line.row, col.id, union, text);
+}
+
+/** The columns whose cell opens the list of the person's findings (§7.4): Findings, Highest level. */
+export const PERSON_FINDINGS_COLUMNS: ReadonlySet<string> = new Set(['nFind', 'topSev']);
 
 /** The columns whose cells read the person's findings (cached cells dropped when the findings change). */
 export const CHECK_COLUMNS: readonly string[] = ['nFind', 'topSev', 'unusual'];

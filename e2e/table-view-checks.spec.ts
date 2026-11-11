@@ -17,6 +17,14 @@ const FAMILY: Record<string, SeedPerson> = {
     f: { firstName: 'Fenwick', lastName: 'Wrenhallow', birthDate: '1895-06-01', parents: ['o'] },
 };
 
+/** Fenwick married twice, so his unions are sub-rows under his row. */
+const TWICE: Record<string, SeedPerson> = {
+    ...FAMILY,
+    f: { ...FAMILY.f, partners: ['i', 'q'] },
+    i: { firstName: 'Isaura', lastName: 'Ťygvald', gender: 'female', birthDate: '1897-02-01', partners: ['f'] },
+    q: { firstName: 'Quijany', lastName: 'Žopygra', gender: 'female', birthDate: '1899-09-01', partners: ['f'] },
+};
+
 const row = (page: Page, key: string) => page.locator(`#table-container .tv-body .tv-row[data-key="${key}"]`);
 
 /** A body cell of a row by its column's id (its position in the head). */
@@ -29,10 +37,10 @@ async function cell(page: Page, key: string, colId: string) {
     return row(page, key).locator(`[aria-colindex="${index}"]`);
 }
 
-async function openTable(page: Page, phone = false): Promise<void> {
+async function openTable(page: Page, phone = false, family = FAMILY): Promise<void> {
     await page.clock.setFixedTime(new Date('2026-06-15T10:00:00Z'));
     await openApp(page);
-    await seedTree(page, FAMILY, 'Wrenhallow', 'f');
+    await seedTree(page, family, 'Wrenhallow', 'f');
     if (phone) {
         await page.locator('#bb-view-more').tap();
         await page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: 'Table' }).tap();
@@ -111,6 +119,65 @@ test.describe('desktop (1440)', () => {
         await expect(modal.locator('.vq-group[data-type="motherTooYoung16"]')).toContainText('Mother younger than 16 at the birth');
     });
 
+    test('Findings and Highest level open the list of the person\'s findings (T54)', async ({ page }) => {
+        await openTable(page);
+        const findings = await cell(page, 'p:g', 'nFind');
+        await expect(findings).not.toHaveText('…');
+        const n = parseInt((await findings.textContent())!, 10);
+        expect(n).toBeGreaterThanOrEqual(1);
+        await expect(findings).toHaveAttribute('aria-haspopup', 'dialog');
+        await findings.click();
+        const bubble = page.locator('.tv-bubble--finding');
+        await expect(bubble).toBeVisible();
+        await expect(row(page, 'p:g')).toHaveAttribute('aria-selected', 'true');
+        // Each finding with its level, its text and whom it is about; the highest first.
+        await expect(bubble.locator('.tv-bub-finding')).toHaveCount(n);
+        await expect(bubble.locator('.tv-bub-level').first()).toHaveText('error');
+        await expect(bubble.locator('.tv-bub-msg', { hasText: 'Death date is before birth date' })).toHaveCount(1);
+        await expect(bubble.locator('.tv-bub-about').first()).toHaveText('Garrick Wrenhallow');
+        await page.keyboard.press('Escape');
+        await expect(bubble).toHaveCount(0);
+
+        // Highest level by the keyboard; Fenwick's finding names his mother and him.
+        await page.locator('#table-container .tv-cols-btn').click();
+        const panel = page.getByRole('dialog', { name: 'Columns' });
+        await panel.locator('.tv-cp-q').fill('Highest');
+        await panel.getByRole('checkbox', { name: 'Highest level' }).check();
+        await panel.getByRole('button', { name: 'Done' }).click();
+        const top = await cell(page, 'p:f', 'topSev');
+        await expect(top).toHaveText(/to check$/);
+        await top.click();
+        await expect(bubble).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(bubble).toHaveCount(0);
+        await expect(await cell(page, 'p:f', 'topSev')).toBeFocused();
+        await page.keyboard.press('Enter');
+        await expect(bubble).toBeVisible();
+        const young = bubble.locator('.tv-bub-finding', { hasText: 'Mother younger than 16 at the birth' });
+        await expect(young.locator('.tv-bub-about')).toHaveText('Orla Wrenhallow, Fenwick Wrenhallow');
+        await expect(young.locator('[data-act="dismiss"]')).toHaveText('Not an error');
+    });
+
+    test('a union\'s sub-rows carry no finding of the person (T54)', async ({ page }) => {
+        await openTable(page, false, TWICE);
+        await page.locator('#table-container .tv-cols-btn').click();
+        const panel = page.getByRole('dialog', { name: 'Columns' });
+        await panel.locator('.tv-cp-q').fill('Mother');
+        await panel.getByRole('checkbox', { name: /^Mother.s age at (the )?birth$/ }).check();
+        await panel.getByRole('button', { name: 'Done' }).click();
+        await expect(row(page, 'p:f#u2')).toBeVisible();
+        const own = await cell(page, 'p:f', 'mAge');
+        await expect(own.locator('.tv-mark--warning')).toHaveCount(1);
+        await expect(own).toHaveClass(/has-issue/);
+        for (const sub of ['p:f#u1', 'p:f#u2']) {
+            const c = await cell(page, sub, 'mAge');
+            await expect(c.locator('.tv-mark')).toHaveCount(0);
+            await expect(c).not.toHaveClass(/has-issue|tv-cell--warning/);
+        }
+        // No mark anywhere on the sub-rows: the person's findings stay on the person's row.
+        await expect(page.locator('#table-container .tv-body .tv-row[data-key^="p:f#u"] .tv-mark')).toHaveCount(0);
+    });
+
     test('the legend of the marks', async ({ page }) => {
         await openTable(page);
         const btn = page.locator('#table-container .tv-legend-btn');
@@ -142,6 +209,19 @@ test.describe('phone (390)', () => {
         const dismiss = sheet.locator('[data-act="dismiss"]');
         await expect(dismiss).toHaveText('Not an error');
         expect(Math.round((await dismiss.boundingBox())!.height)).toBeGreaterThanOrEqual(44);
+        await sheet.locator('.tv-bub-close').tap();
+        await expect(sheet).toHaveCount(0);
+    });
+
+    test('a tap on Findings opens the sheet of the person\'s findings (T54)', async ({ page }) => {
+        await openTable(page, true);
+        const findings = await cell(page, 'p:g', 'nFind');
+        await expect(findings).not.toHaveText('…');
+        await findings.tap();
+        const sheet = page.locator('.tv-bubble--sheet.tv-bubble--finding');
+        await expect(sheet).toBeVisible();
+        await expect(sheet.locator('.tv-bub-sheet-title')).toHaveText('error');
+        await expect(sheet.locator('.tv-bub-about').first()).toHaveText('Garrick Wrenhallow');
         await sheet.locator('.tv-bub-close').tap();
         await expect(sheet).toHaveCount(0);
     });

@@ -74,7 +74,9 @@ import {
 import { exportDownloadLabel, exportForm, ViewBar, viewNameForm, type ExportFormat, type ExportSummary } from './table-viewbar.js';
 import { buildTableCsv, exportColumnCount, exportsNotLive, tableCsvFileName, type TableCsvInput } from './table-export.js';
 import { buildTableXlsx } from './table-xlsx.js';
-import { applyChecks, bandSeverity, CHECK_COLUMNS, CheckIndex, conflictCells, isPlaceColumn, type CellFinding, type ConflictCell } from './table-checks.js';
+import {
+    applyChecks, bandSeverity, CHECK_COLUMNS, CheckIndex, conflictCells, lineFindings, lineUnion, type CellFinding, type ConflictCell,
+} from './table-checks.js';
 import { conflictScope } from '../person-research-ui.js';
 import { lineCell, lineKey, type GridLine } from './table-subrows.js';
 import { cellText, markHtml, type CellConflictMark, type CellIssueMark } from './table-grid.js';
@@ -183,6 +185,17 @@ function personNameOf(personId: PersonId): () => string {
         return p ? personName(p) : '';
     };
 }
+/** The person in focus when the table was entered (spec 073 U9): the next draw makes their row the active one. */
+let focusOnEnter: { tree: string; person: PersonId } | null = null;
+
+/** The people a row is about, the main one first: a person; a union's partners; an event's people; a source none. */
+function rowPeople(row: TableRow): PersonId[] {
+    if (row.kind === 'person') return [row.id];
+    if (row.kind === 'union') return [row.p1?.id, row.p2?.id].filter((id): id is PersonId => !!id);
+    if (row.kind === 'event') return row.persons.map(p => p.id);
+    return [];
+}
+
 /** Records changed (entity keys) whose rows light up at the next draw (§10.3). */
 let flashNext: { tree: string; keys: readonly string[] } | null = null;
 const BRIDGE_TOAST_MS = 8000;
@@ -247,12 +260,6 @@ let redrawFrame = 0;
 function redrawTable(draw: (el: HTMLElement) => void): void {
     const el = document.getElementById('table-container');
     if (el && TreeRenderer.getViewMode() === 'table') draw(el);
-}
-
-/** The union a line reads in a union column of the People table (none for a "more" line or the Unions table). */
-function lineUnion(line: GridLine): Partnership | null {
-    if (line.kind === 'more' || line.row.kind !== 'person' || line.union === null) return null;
-    return line.row.unions[line.union] ?? null;
 }
 
 /** The ≠ cells of each person for one research environment (§16.3), worked out when a row is drawn. */
@@ -351,13 +358,11 @@ function researchCellOpens(line: GridLine, col: ColumnDef, value: CellValue): bo
     return !!r && !value.na && !r.liveOff && (r.parts.length > 0 || r.count !== undefined || !!r.signal);
 }
 
-/** The findings of a line's cell: its union for a union column of the People table, the value of a place cell. */
-function cellFindings(index: CheckIndex, m: TableModel, line: GridLine, col: ColumnDef): CellFinding[] {
-    if (line.kind === 'more') return [];
-    const row = line.row;
-    const union = col.unionScoped ? lineUnion(line) : null;
-    const text = isPlaceColumn(col.id) ? lineCell(m, line, col).text : '';
-    return index.cellAll(row, col.id, union, text);
+/** Whom or what a finding is about, as Data quality names it: the subject (a place, a godparent), else its people. */
+function findingAbout(issue: ValidationIssue, data: StromData): string {
+    if (issue.subject) return issue.subject;
+    const names = (issue.personIds ?? []).map(id => { const p = data.persons[id]; return p ? personName(p) || id : id; });
+    return names.join(issue.type === 'possibleDuplicate' ? ' × ' : ', ');
 }
 
 function treeKey(): string {
@@ -609,6 +614,7 @@ export const tableMethods = uiModule({
                 onMoreCites: (_line, _col, ids, anchor) => this.showTableCites(ids, anchor),
                 onRowMenu: (line, anchor) => this.showTableRowMenu(line, anchor),
                 onIssue: (line, col, cell) => this.showTableFinding(line, col, cell),
+                onFindings: (line, col, cell) => this.showTablePersonFindings(line, col, cell),
                 onConflict: (line, col, mark) => this.showTableConflict(line, col, mark),
                 onResearch: (line, col, cell) => this.showTableResearch(line, col, cell),
                 onToggleUnions: (personId, expand) => this.changeTableColumns(st => setExpanded(st.unions, personId, expand)),
@@ -731,6 +737,19 @@ export const tableMethods = uiModule({
         mounted.display = display;
         this.tableCrossTrees(tree, m, type === 'persons' && display.columns.some(c => c.id === 'crossTree'));
         const { rows, pass, stale } = viewRows(tree, m, type, st.filter, st.search, st.sort, display.columns);
+        // Entered from another view (U9): the person in focus is the active row (the active one kept if it is theirs).
+        let revealFocus: string | null = null;
+        if (focusOnEnter) {
+            // Sources are about no one: their table keeps its row.
+            const want = focusOnEnter.tree === tree && type !== 'sources' ? focusOnEnter.person : null;
+            focusOnEnter = null;
+            if (want) {
+                const current = st.selected ? rows.find(r => rowKey(r) === st.selected) : undefined;
+                const row = current && rowPeople(current).includes(want) ? current : rows.find(r => rowPeople(r).includes(want));
+                st.selected = row ? rowKey(row) : null;
+                revealFocus = st.selected;
+            }
+        }
         const persons = type === 'persons';
         const lines = persons ? buildLines(rows, { collapse: st.unions, pass, revealed: new Set(st.revealedUnions) }) : undefined;
         const unionsButton = persons && hasMultiUnions(rows) ? (anyExpanded(st.unions, rows) ? 'collapse' : 'expand') : null;
@@ -790,18 +809,21 @@ export const tableMethods = uiModule({
                 ? (line) => (line.kind === 'row' && line.row.kind === 'person' ? researchAgentRow(research, line.row.person) : null)
                 : undefined,
             issueAt: index ? (line, col): CellIssueMark | null => {
-                const f = cellFindings(index, m, line, col)[0];
+                const f = lineFindings(index, m, line, col)[0];
                 return f ? { severity: f.severity, label: translateValidationType(f.issue.type) } : null;
             } : undefined,
             bandCell: index ? (line, band) => {
                 const row = line.row;
                 const union = lineUnion(line);
-                const sev = bandSeverity(index, row, band.columns.map(c => c.id),
+                // A union's sub-row: only its union's cells (the person's findings stay on the person's row, §3).
+                const ids = band.columns.filter(c => line.kind !== 'sub' || c.unionScoped).map(c => c.id);
+                const sev = bandSeverity(index, row, ids,
                     id => (columnById(type, id)?.unionScoped ? union : null),
                     id => { const c = columnById(type, id); return c ? lineCell(m, line, c).text : ''; });
                 return sev ? markHtml(sev) : '';
             } : undefined,
         }, restore);
+        if (revealFocus) mounted.grid.revealKey(revealFocus);
         if (flashNext) {
             const lit = flashNext.tree === tree ? rowKeysFor(data, type, flashNext.keys, type === 'events' ? m.events : undefined) : null;
             flashNext = null;
@@ -925,8 +947,23 @@ export const tableMethods = uiModule({
         const index = checks?.index;
         const col = mounted?.display?.columns[colPos];
         if (!m || !index || !col || !mounted) return;
-        const list = cellFindings(index, m, line, col);
-        if (!list.length) return;
+        this.openTableFindings(line, colPos, cell, lineFindings(index, m, line, col), false);
+    },
+
+    /**
+     * The Findings or Highest level cell of a person was clicked or Enter
+     * pressed on it (§7.4): the bubble lists all of the person's findings,
+     * each with its level, its text and whom or what it is about.
+     */
+    showTablePersonFindings(line: GridLine, colPos: number, cell: HTMLElement): void {
+        const index = checks?.index;
+        if (!index || line.kind !== 'row' || line.row.kind !== 'person') return;
+        this.openTableFindings(line, colPos, cell, index.personAll(line.row.id), true);
+    },
+
+    /** The bubble (a phone: the sheet) of these findings at a cell; `about`: each says whom or what it is about. */
+    openTableFindings(line: GridLine, colPos: number, cell: HTMLElement, list: readonly CellFinding[], about: boolean): void {
+        if (!list.length || !mounted) return;
         const rect = cell.getBoundingClientRect();
         const treeId = treeKey();
         const readOnly = this.treeValidationReadOnly(treeId);
@@ -941,8 +978,10 @@ export const tableMethods = uiModule({
         const cellKey = lineKey(line);
         const findCell = (): HTMLElement | null => [...grid.el.querySelectorAll<HTMLElement>('.tv-row[data-key]')]
             .find(r => r.dataset.key === cellKey)?.querySelector<HTMLElement>(`[aria-colindex="${colPos + 1}"]`) ?? null;
+        const data = DataManager.getData();
         const shown = list.map(f => ({
             severity: f.severity, title: translateValidationType(f.issue.type), detail: f.issue.detail ?? '',
+            ...(about ? { about: findingAbout(f.issue, data) } : {}),
         }));
         const act = (what: string, i: number): void => {
             const f = list[i];
@@ -1281,6 +1320,33 @@ export const tableMethods = uiModule({
         filterSheet = null;
         if (this.bottomSheet === open.overlay) this.hideBottomSheet();
         else open.overlay.remove();
+    },
+
+    /**
+     * The person the table hands to the next view (spec 073 U9): the
+     * active row's (a union's sub-row: its person; a union: a partner, the
+     * one in focus if it is either; an event: its main person, or the one in
+     * focus if the event is theirs too). Null: no active row, a row out of
+     * view or a source: the focus stays.
+     */
+    tableFocusPerson(focus: PersonId | null): PersonId | null {
+        const tree = treeKey();
+        if (!view || view.tree !== tree) return null;
+        const key = stateOf(tree).types[view.type].selected;
+        const row = key ? view.result.rows.find(r => rowKey(r) === key) : undefined;
+        if (!row) return null;
+        const people = rowPeople(row).filter(id => !!DataManager.getPerson(id));
+        if (focus && people.includes(focus)) return focus;
+        return people[0] ?? null;
+    },
+
+    /**
+     * The table is being entered (spec 073 U9): the next draw makes the row
+     * of the person in focus the active one and scrolls to it. The filter
+     * and the search stay; a person they leave out: no row is active.
+     */
+    tableTakeFocus(person: PersonId | null): void {
+        focusOnEnter = person ? { tree: treeKey(), person } : null;
     },
 
     /**

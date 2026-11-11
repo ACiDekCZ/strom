@@ -3681,6 +3681,10 @@ class TreeRendererClass {
     /** Switch the display view mode and re-render. Persisted per tree. */
     setViewMode(mode: ViewMode): void {
         if (this.viewMode === mode) return;
+        // The Table view and the others share the person in focus (spec 073 U9):
+        // the table's active row's person goes along, and the table opens at the focus.
+        const fromTable = this.viewMode === 'table' ? UI.tableFocusPerson?.(this.focusPersonId) ?? null : null;
+        if (mode === 'table') UI.tableTakeFocus?.(this.focusPersonId);
         this.viewMode = mode;
         this.resetChildrenShown();
         this.persistViewMode();
@@ -3690,6 +3694,10 @@ class TreeRendererClass {
         if (centre && centre !== this.focusPersonId && DataManager.getPerson(centre)) {
             this.fanView?.deactivate();
             void this.setFocus(centre, false);
+            return;
+        }
+        if (fromTable && fromTable !== this.focusPersonId && DataManager.getPerson(fromTable)) {
+            void this.setFocus(fromTable, true, () => this.centerForViewMode());
             return;
         }
         // The modes lay the tree out in different coordinate frames — the

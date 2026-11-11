@@ -71,7 +71,8 @@ test.describe('desktop (1440)', () => {
         await expect(subs).toHaveCount(0);
 
         // Keys on the name cell: → expands, ← collapses, ← on a sub-row goes to the person's row.
-        await main.locator('.tv-name').click();
+        // The row is the active one (the person in focus, U9): its icons beside the name, the pill in the cell's middle.
+        await main.locator('.tv-name').focus();
         await page.keyboard.press('ArrowRight');
         await expect(subs).toHaveCount(2);
         await page.keyboard.press('ArrowDown');

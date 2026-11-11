@@ -9551,6 +9551,10 @@
             white-space: nowrap; text-overflow: ellipsis; background: inherit;
         }
         .tv-cell-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+        /* A text that ends in "…" is clipped at its own box, with line-height: normal exactly the font's height:
+           the ink of g, j, p, y (2.8 of Instrument Sans' 3 px below the baseline) and a caron over a capital,
+           centred on a half pixel of a row, lost its edge. 2 px of room above and below, the text where it was. */
+        .tv-body .tv-cell-text { padding-block: 2px; margin-block: -2px; }
         .tv-cell.tv-right { justify-content: flex-end; font-variant-numeric: tabular-nums; }
         .tv-spacer { flex: none; height: 100%; }
         .tv-pinned { position: sticky; z-index: 1; }
@@ -9597,7 +9601,7 @@
            for its cell ends in its own "…" (a phone's 156 px column) instead of being cut off. */
         .tv-nm {
             display: inline-block; max-width: 100%; vertical-align: bottom; overflow: hidden; text-overflow: ellipsis;
-            padding: 0 0 2px; margin: 0 0 -2px; border: none; background: none;
+            padding: 2px 0; margin: -2px 0; border: none; background: none;
             font: inherit; color: inherit; text-align: inherit; white-space: nowrap; cursor: pointer;
         }
         .tv-nm--person { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
@@ -9906,6 +9910,7 @@
         .tv-body .tv-cell--error { background: var(--danger-soft); }
         .tv-body .tv-cell--warning { background: var(--warning-soft); }
         .tv-body .tv-cell.has-issue { cursor: pointer; color: var(--text); }
+        .tv-body .tv-cell.has-finds { cursor: pointer; }
         .tv-cell--ghost { color: var(--text-ghost); }
         /* §16.2 a research cell: mark, count, "+n", then its parts in their tones; a live-only head's dashed tag. */
         .tv-rcell { display: inline-flex; align-items: baseline; gap: 4px; }
@@ -10013,6 +10018,8 @@
         .tv-bub-level { font-size: 12px; font-weight: 600; color: var(--text-light); }
         .tv-bub-msg { padding: 2px 14px; font-size: 13.5px; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
         .tv-bub-detail { padding: 0 14px 8px; font-size: 12.5px; color: var(--text-light); line-height: 1.45; overflow-wrap: anywhere; }
+        /* §7.4 the person's findings: whom or what each is about, under its text. */
+        .tv-bub-about { padding: 0 14px 4px; font-size: 12.5px; color: var(--text); line-height: 1.45; overflow-wrap: anywhere; }
         .tv-bub-note { padding: 0 14px 8px; font-size: 12px; color: var(--text-faint); line-height: 1.45; }
         .tv-bub-actions { display: flex; align-items: center; gap: 14px; padding: 8px 14px; border-top: 1px solid var(--divider); }
         .tv-bub-btn {
@@ -10042,6 +10049,7 @@
         .tv-bub-close { width: 44px; height: 44px; border: none; background: none; color: var(--text-light); font-size: 22px; cursor: pointer; }
         .tv-bubble--sheet .tv-bub-msg { font-size: 15px; padding-top: 10px; }
         .tv-bubble--sheet .tv-bub-detail { font-size: 14px; }
+        .tv-bubble--sheet .tv-bub-about { font-size: 14px; }
         .tv-bubble--sheet .tv-bub-btn { flex: 1 1 auto; height: 44px; font-size: 15px; }
         .tv-bubble--sheet .tv-bub-link { height: 44px; padding: 0 8px; font-size: 15px; }
         .tv-bubble--sheet .tv-leg-name { font-size: 14px; }

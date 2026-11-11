@@ -26,6 +26,8 @@ export interface BubbleFinding {
     /** The type's title (translateValidationType). */
     title: string;
     detail: string;
+    /** Who or what it is about (the person's list, §7.4): the subject, else the people of the finding. */
+    about?: string;
 }
 
 export interface BubbleActions {
@@ -59,6 +61,7 @@ export function bubbleHtml(findings: readonly BubbleFinding[], readOnly: boolean
             html += `<div class="tv-bub-head">${markHtml(f.severity)}<span class="tv-bub-level">${esc(bubbleHeading(f.severity))}</span></div>`;
         }
         html += `<div class="tv-bub-msg">${esc(f.title)}</div>`;
+        if (f.about) html += `<div class="tv-bub-about">${esc(f.about)}</div>`;
         if (f.detail) html += `<div class="tv-bub-detail">${esc(f.detail)}</div>`;
         if (unusual) html += `<div class="tv-bub-note">${esc(t.dismissedNote)}</div>`;
         html += '<div class="tv-bub-actions">';
