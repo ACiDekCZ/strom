@@ -821,9 +821,13 @@ export class FilterSheet {
         const row = (o: ResearchChipOffer): string => {
             const item = chipItem(st.filter, o.id);
             const off = o.live && !rs.live;
-            const n = o.place === 'more' || o.line || o.id === 'offLine' ? ` · ${counts.get(o.id) ?? 0}` : '';
+            const label = esc(chipLabel(st.model, null, o.id));
+            // The count stays whole beside a long name: only the name ends in "…".
+            const text = o.place === 'more' || o.line || o.id === 'offLine'
+                ? `<span class="tv-fs-label tv-fs-label--n"><span class="tv-fs-name">${label}</span><span class="tv-fs-n"> · ${counts.get(o.id) ?? 0}</span></span>`
+                : `<span class="tv-fs-label">${label}</span>`;
             return `<label class="tv-fs-row${off ? ' is-off' : ''}"><input type="checkbox" class="tv-cp-check" data-chip="${esc(o.id)}"${item ? ' checked' : ''}${off ? ' disabled' : ''}>`
-                + `<span class="tv-fs-label">${esc(chipLabel(st.model, null, o.id) + n)}</span>`
+                + text
                 + (off ? `<span class="tv-cp-note">${esc(R.liveTag)}</span>` : '') + '</label>';
         };
         let html = `<div class="tv-fs-section">${esc(R.block)}</div>`;

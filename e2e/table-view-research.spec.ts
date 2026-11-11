@@ -631,4 +631,33 @@ test.describe('research chips on a phone (16z)', () => {
         const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
         expect(over).toBeLessThanOrEqual(0);
     });
+
+    test('a long line name ends in "…" in the Filters sheet, its count stays whole beside it', async ({ page }) => {
+        await page.clock.setFixedTime(new Date('2026-11-10T12:00:00Z'));
+        await openApp(page);
+        await dropGed(page, GED.replace('2 NAME Klikvové z Rebarborova', '2 NAME Klikvové z Rebarborova a Bezinkové z Ostružinova u Malinova'));
+        await expect(card(page, 'Karel')).toBeVisible();
+        await page.locator('#bb-view-more').tap();
+        await page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: 'Table' }).tap();
+        await page.locator('#table-container .tv-filters-btn').tap();
+        const row = page.locator('.tv-fsheet label.tv-fs-row:has(input[data-chip="line:G0002"])');
+        await expect(row).toBeVisible();
+        const g = await row.evaluate(el => {
+            const name = el.querySelector('.tv-fs-name') as HTMLElement;
+            const n = el.querySelector('.tv-fs-n') as HTMLElement;
+            const label = el.querySelector('.tv-fs-label') as HTMLElement;
+            return {
+                cut: name.scrollWidth > name.clientWidth,
+                count: n.textContent, countWhole: n.scrollWidth <= n.clientWidth + 1,
+                countRight: n.getBoundingClientRect().right, labelRight: label.getBoundingClientRect().right,
+                nameRight: name.getBoundingClientRect().right, countLeft: n.getBoundingClientRect().left,
+            };
+        });
+        expect(g.cut).toBe(true);
+        expect(g.count).toMatch(/^ · \d+$/);
+        expect(g.countWhole).toBe(true);
+        expect(g.countRight).toBeLessThanOrEqual(g.labelRight + 0.5);
+        expect(g.nameRight).toBeLessThanOrEqual(g.countLeft + 0.5);
+        await expect(row).toHaveText(/^G0002 Klikvové z Rebarborova a Bezinkové z Ostružinova u Malinova · \d+$/);
+    });
 });

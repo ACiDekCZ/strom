@@ -9518,6 +9518,10 @@
         }
         .tv-fs-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .tv-fs-row.is-active .tv-fs-label { color: var(--primary); font-weight: 600; }
+        /* A row with a count (a research line · 12): the name ends in "…", the count stays whole. */
+        .tv-fs-label--n { display: flex; }
+        .tv-fs-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .tv-fs-n { flex: none; white-space: pre; }
         .tv-fs-chev { flex: none; color: var(--text-light); }
         .tv-fs-more, .tv-fs-rmore { color: var(--primary); font-weight: 600; }
         .tv-fs-x { flex: none; width: 44px; height: 44px; margin-right: -12px; border: none; background: none; color: var(--text-light); font-size: 20px; cursor: pointer; }
