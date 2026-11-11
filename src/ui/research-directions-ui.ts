@@ -67,6 +67,15 @@ function shortDate(iso: string): string {
 }
 
 /** Two or more directions run: tasks name theirs, the queue filters by them. */
+/**
+ * What a direction's line says of the task at work: "Now: <task>" where no
+ * Now section is seen beside it, only "being worked on" while one is (that
+ * section names the task already; spec 057 D1).
+ */
+export function directionNowText(task: string, nowShown: boolean): string {
+    return nowShown ? strings.live.dirWorkedOn : strings.live.dirNow(task);
+}
+
 export function directionsMulti(s: LiveSession | null): boolean {
     return !!s && s.researches.filter(d => d.state === 'active').length >= 2;
 }
@@ -602,10 +611,10 @@ export const researchDirectionsMethods = uiModule({
     },
 
     /** The Directions section of the overview (two or more directions). */
-    appendOverviewDirections(body: HTMLElement, s: LiveSession, fold: LiveFold, mode: Mode): void {
+    appendOverviewDirections(body: HTMLElement, s: LiveSession, fold: LiveFold, mode: Mode, nowShown = false): void {
         const view = this.directionsView(s);
         if (view.managed) {
-            this.appendManagedDirections(body, s, fold, mode, view);
+            this.appendManagedDirections(body, s, fold, mode, view, nowShown);
             return;
         }
         const outside = outsideWork(s);
@@ -658,7 +667,7 @@ export const researchDirectionsMethods = uiModule({
      * ones folded below. An archive shows them read-only.
      */
     appendManagedDirections(body: HTMLElement, s: LiveSession, fold: LiveFold,
-        mode: Mode, view: DirectionsView): void {
+        mode: Mode, view: DirectionsView, nowShown = false): void {
         const L = strings.live;
         const outside = outsideWork(s);
         const viewOnly = view.readOnly || view.phoneOnly;
@@ -699,7 +708,7 @@ export const researchDirectionsMethods = uiModule({
         }
         const list = el('div', 'research-directions__list');
         host.appendChild(list);
-        rows.forEach((d, i) => list.appendChild(this.managedDirectionRow(s, d, mode, i + 1, rows.length, view)));
+        rows.forEach((d, i) => list.appendChild(this.managedDirectionRow(s, d, mode, i + 1, rows.length, view, nowShown)));
         if (view.canOrder) this.wireDirectionDrop(list);
         // Work outside the directions has no number and no place in the order: below them (none without directions);
         // a research that groups it by branches shows them there, above the ended ones.
@@ -727,7 +736,8 @@ export const researchDirectionsMethods = uiModule({
      * while worked on, a chip while paused), one line of its state, ▲▼ on
      * touch, ⋯; its detail when open.
      */
-    managedDirectionRow(s: LiveSession, d: LiveDirection, mode: Mode, n: number, total: number, view: DirectionsView): HTMLElement {
+    managedDirectionRow(s: LiveSession, d: LiveDirection, mode: Mode, n: number, total: number, view: DirectionsView,
+        nowShown = false): HTMLElement {
         const L = strings.live;
         // The sheet (a narrow window, a phone): ▲▼ instead of the handle, a tap unfolds the row with its
         // actions, no ⋯ (More… in the unfolded row); the app on a phone without the bridge only shows.
@@ -791,7 +801,7 @@ export const researchDirectionsMethods = uiModule({
             };
         }
         main.appendChild(head);
-        const meta = this.managedDirectionMeta(s, d, mode);
+        const meta = this.managedDirectionMeta(s, d, mode, nowShown);
         if (meta.childElementCount > 0) main.appendChild(meta);
         const problem = rowProblems.get(d.id);
         if (problem) main.appendChild(directionProblemBox(problem));
@@ -842,9 +852,11 @@ export const researchDirectionsMethods = uiModule({
     /**
      * One line of a direction's state: its person · what runs now (or its
      * tasks, what waits, when last) · its limits; a paused one says why, or
-     * that its running task finishes.
+     * that its running task finishes. While the Now section is seen in the
+     * same place, the task itself stands there: the line only says it is
+     * worked on (spec 057 D1).
      */
-    managedDirectionMeta(s: LiveSession, d: LiveDirection, mode: Mode): HTMLElement {
+    managedDirectionMeta(s: LiveSession, d: LiveDirection, mode: Mode, nowShown = false): HTMLElement {
         const L = strings.live;
         const meta = el('div', 'research-direction__meta');
         const run = s.working.find(w => w.research === d.id && !w.paused && w.task);
@@ -861,7 +873,10 @@ export const researchDirectionsMethods = uiModule({
                 link.onclick = () => this.overviewShowPerson(focus.id, mode);
                 meta.appendChild(link);
             }
-            if (run) meta.appendChild(el('span', 'research-direction__now', L.dirNow(run.task)));
+            if (run) {
+                const now = meta.appendChild(el('span', 'research-direction__now', directionNowText(run.task, nowShown)));
+                if (nowShown) now.title = L.dirNow(run.task);
+            }
             else if (directionUnstarted(d) && !d.found) meta.appendChild(el('span', 'research-direction__empty', L.dirNoTasks));
             else if (isEmpty(d)) meta.appendChild(el('span', 'research-direction__empty', L.dirEmpty));
             else {

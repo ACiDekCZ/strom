@@ -902,6 +902,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         dirFoundPersons: (n: number) => nPl(n, 'osoba', 'osoby', 'osób'),
         dirFoundSources: (n: number) => nPl(n, 'źródło', 'źródła', 'źródeł'),
         dirNow: (t: string) => `Teraz: ${t}`,
+        dirWorkedOn: 'trwa praca',
         dirLastShort: (d: string) => `ostatnio ${d}`,
         dirNoTasks: 'Zadania zaproponuje następny przebieg.',
         dirLimitGen: (n: number) => n === 1 ? 'do 1 pokolenia' : `do ${n} pokoleń`,

@@ -24,8 +24,11 @@ test.describe('directions managed through the bridge', () => {
         await expect(managedNames(page)).toHaveText(['Předci: Jan Fíšek', 'Předci: Anna Svobodová', 'Potomci: Josef Fíšek']);
         await expect(sec.locator('.research-direction--managed .research-direction__num')).toHaveText(['1', '2', '3']);
         await expect(overview(page).locator('.live-section__title', { hasText: 'Directions' })).toHaveText('Directions · 2 active');
+        // The Now section above names the task: the line only says it is worked on (spec 057 D1).
         await expect(directionRow(page, 'G0001').locator('.research-direction__meta'))
-            .toHaveText(/Jan Fíšek.*Now: křest Marie Fíškové, Smrkov 1871.*up to 8 generations/);
+            .toHaveText(/Jan Fíšek.*being worked on.*up to 8 generations/);
+        await expect(directionRow(page, 'G0001').locator('.research-direction__now'))
+            .toHaveAttribute('title', 'Now: křest Marie Fíškové, Smrkov 1871');
         await expect(directionRow(page, 'G0004').locator('.research-direction__chip')).toHaveText(/^paused · /);
         await expect(directionRow(page, 'G0004').locator('.research-direction__meta')).toHaveText('“matriky ještě nejsou online”');
         await expect(directionRow(page, 'G0002').locator('.research-direction__meta'))
@@ -52,6 +55,19 @@ test.describe('directions managed through the bridge', () => {
         await expect(detail.locator('[data-do="work"] .research-ai-badge')).toHaveCount(1);
         await expect(detail.locator('[data-do="work"] .research-open-mark')).toHaveCount(1);
         await expect(detail.locator('[data-do="show"]')).toHaveText('Show in tree');
+    });
+
+    test('the Now section hidden: the line says the task at work in full (spec 057 D1)', async ({ page }) => {
+        await followManaged(page);
+        await openOverview(page);
+        await expect(directionRow(page, 'G0001').locator('.research-direction__now')).toHaveText('being worked on');
+        await page.evaluate(() => {
+            localStorage.setItem('strom-live-section-prefs', JSON.stringify({ v: 2, s: { working: 'hidden' } }));
+            document.dispatchEvent(new CustomEvent('strom:live-section-prefs'));
+        });
+        await expect(overview(page).locator('.research-overview__now')).toHaveCount(0);
+        await expect(directionRow(page, 'G0001').locator('.research-direction__now')).toHaveText('Now: křest Marie Fíškové, Smrkov 1871');
+        await expect(directionRow(page, 'G0001').locator('.research-direction__now')).not.toHaveAttribute('title', /./);
     });
 
     test('pause: written at once without a question, Undo restarts it', async ({ page }) => {

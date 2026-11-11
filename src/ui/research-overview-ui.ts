@@ -559,7 +559,7 @@ export const researchOverviewMethods = uiModule({
             directions: () => {
                 if (!shown('directions')) return;
                 if (fromTree) this.appendOverviewSkeletonLines(body, fold('directions'));
-                else this.appendOverviewDirections(body, s, fold('directions'), mode);
+                else this.appendOverviewDirections(body, s, fold('directions'), mode, shown('now'));
             },
             changes: () => {
                 if (!fromTree && shown('timeline')) this.appendOverviewTimeline(body, s, fold('timeline'), mode);
