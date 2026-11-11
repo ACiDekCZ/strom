@@ -619,6 +619,11 @@ export class TableGrid {
         this.activeCol = Number(cellEl.getAttribute('aria-colindex')) - 1;
         this.cellChosen = true;
         this.syncActiveMark();
+        // The click's caret left in a cut text hides its "…" (Chromium paints
+        // a box holding the selection without its ellipsis): drop it. A text
+        // selected by hand (not collapsed) stays for its copy.
+        const sel = document.getSelection();
+        if (sel?.rangeCount && sel.isCollapsed && cellEl.contains(sel.anchorNode)) sel.removeAllRanges();
     }
 
     /** A body cell's column and value; null for a collapsed group's band or the "more" line. */

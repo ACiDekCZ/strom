@@ -93,6 +93,22 @@ test.describe('desktop (1440)', () => {
         await expect.poll(() => clipboard(page)).toBe('Dolni');
     });
 
+    test('a click leaves no caret in the active cell, so a cut text keeps its "…"', async ({ page }) => {
+        await openTable(page);
+        // The selected row's cell: the click redraws nothing, the caret would stay in the text.
+        const place = await cell(page, 'p:b1', 'bPlace');
+        await place.locator('.tv-cell-text').click({ position: { x: 20, y: 6 } });
+        await expect(place).toHaveClass(/is-active-cell/);
+        const caretIn = () => place.evaluate((el) => {
+            const sel = window.getSelection();
+            return !!sel && sel.rangeCount > 0 && el.contains(sel.anchorNode);
+        });
+        expect(await caretIn()).toBe(false);
+        await place.click({ button: 'right' });
+        await expect(menuLabels(page).first()).toHaveText('Copy');
+        expect(await caretIn()).toBe(false);
+    });
+
     test('the cell\'s part of the row menu: Copy, Only and Without as "=" and "≠" chips; an empty cell: only empty / only filled', async ({ page }) => {
         await openTable(page);
         const place = await cell(page, 'p:b1', 'bPlace');
