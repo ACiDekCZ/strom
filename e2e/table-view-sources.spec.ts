@@ -188,12 +188,16 @@ test.describe('desktop (1440)', () => {
         // German: the heads whole on one line, nothing cut.
         await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
         await expect(head(page, 'srcRef')).toHaveText(/^Weitere Fundstelle/);
+        // The heads may be drawn again after the language change, so a measurement
+        // of a head that has just left the page (no style) is taken again.
         for (const id of ['srcRepo', 'srcSig', 'srcFolio', 'srcImageNo', 'srcRef']) {
-            const fit = await head(page, id).locator('.tv-cell-text').evaluate(el => {
-                const line = parseFloat(getComputedStyle(el).lineHeight);
+            await expect.poll(() => head(page, id).locator('.tv-cell-text').evaluate(el => {
+                if (!el.isConnected) return null;
+                const cs = getComputedStyle(el);
+                // "normal" line height has no number; the font's usual 1.2 stands in.
+                const line = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.2;
                 return { clipped: el.scrollWidth > el.clientWidth || el.scrollHeight > el.clientHeight + 1, lines: Math.round(el.getBoundingClientRect().height / line) };
-            });
-            expect(fit, id).toEqual({ clipped: false, lines: 1 });
+            }).catch(() => null), { message: id }).toEqual({ clipped: false, lines: 1 });
         }
     });
 
