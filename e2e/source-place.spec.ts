@@ -106,7 +106,7 @@ test.describe('the sources manager', () => {
 
 test.describe('a long title without spaces', () => {
     // 60 characters without a space (a file name typed as the title), wider than the viewer's header at 1440.
-    const LONG = 'MATRIKA_VZOROV_N7_KRTY_ODDANI_ZEMRELI_1820_1835_SKENY_000123';
+    const LONG = 'REGISTR_VZOROV_N7_QXWPLANY_KNIHA_UDALOSTI_1820_1835_SCAN_012';
     for (const width of [390, 1440]) {
         test(`wraps in the sources manager's row and the viewer's header at ${width}, nothing runs over`, async ({ page }) => {
             expect(LONG).toHaveLength(60);
