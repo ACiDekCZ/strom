@@ -250,11 +250,11 @@ test.describe('directions on every screen', () => {
             expect(directionWrites(b)).toEqual([]);
         });
 
-        test('844×390 held sideways: the sheet without the summary, one-line rows, ▲▼ side by side, the form full height', async ({ page }) => {
+        test('844×390 held sideways: the sheet keeps the summary, one-line rows, ▲▼ side by side, the form full height', async ({ page }) => {
             await follow(page, { width: 844, height: 390 });
             await openOverview(page);
             await expect(overview(page)).toHaveClass(/research-overview--sheet/);
-            await expect(overview(page).locator('.research-overview__summary')).toBeHidden();
+            await expect(overview(page).locator('.research-overview__summary')).toBeVisible();
             const row = directionRow(page, 'G0006');
             await expect(row.locator('.research-direction__name')).toHaveCSS('white-space', 'nowrap');
             await expect(row.locator('.research-direction__meta')).toHaveCSS('white-space', 'nowrap');

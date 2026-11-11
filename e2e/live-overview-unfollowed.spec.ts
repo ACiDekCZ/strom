@@ -202,6 +202,12 @@ test.describe('the Research overview without following', () => {
         await expect(summary).toHaveClass(/research-overview__summary--n1/);
         await expect(summary.locator('.research-overview__cell')).toHaveCount(1);
         await expect(summary).toContainText('The research is not running');
+        // Turn on stands under the state at the cell's left, not centred in its own line.
+        const turnOn = summary.locator('.research-overview__cell.is-off .link-button');
+        await expect(turnOn).toHaveCSS('text-align', 'left');
+        const [cBox, tBox] = await Promise.all([summary.locator('.research-overview__cell').boundingBox(), turnOn.boundingBox()]);
+        const pad = await summary.locator('.research-overview__cell').evaluate(e => parseFloat(getComputedStyle(e).paddingLeft));
+        expect(Math.abs(tBox!.x - (cBox!.x + pad))).toBeLessThanOrEqual(2);
         // Awaiting action from memory, with when it was said.
         await expect(ov(page)).toContainText('Confirm the baptism of Jan Fíšek');
         await expect(ov(page).locator('.research-overview__as-of').first()).toContainText('as of');
@@ -260,5 +266,21 @@ test.describe('the Research overview on a phone', () => {
         expect(first).toBe('researchOverview');
         await expect(ov(page)).toBeVisible();
         await expect(ov(page).locator('.research-overview__summary')).toContainText('From the tree only');
+    });
+});
+
+test.describe('the Research overview on a phone held sideways', () => {
+    test.use({ viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true });
+
+    test('844×390: the state stays at the top (From the tree only), the sections scroll under it (spec 057 6f)', async ({ page }) => {
+        await page.clock.setFixedTime(NOW);
+        await openResearch(page, { ged: GED, bridge: false });
+        await page.evaluate(() => window.Strom.UI.openResearchOverview());
+        await expect(ov(page)).toHaveClass(/research-overview--sheet/);
+        const summary = ov(page).locator('.research-overview__summary');
+        await expect(summary).toBeVisible();
+        await expect(summary).toContainText('From the tree only');
+        await expect(summary).toHaveCSS('position', 'sticky');
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     });
 });
