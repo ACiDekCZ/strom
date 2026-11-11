@@ -67,6 +67,8 @@ test.describe('work outside the directions in Research for this tree', () => {
         await openSettings(page);
         await expect(group(page).locator('legend')).toHaveText('Work outside the directions');
         await expect(group(page).locator('.research-offline-settings__intro')).toContainText('siblings of ancestors');
+        // What "helps a direction" means (036 K1.8).
+        await expect(group(page).locator('.research-offline-settings__intro')).toContainText('(a question of the direction, connecting people to someone in it or to their spouse, a reason the agent gives)');
         await expect(group(page).locator('.research-transcripts-title')).toHaveText(['Now and then (default)', 'At the end', 'As usual', 'Never']);
         await expect(card(page, 'occasional')).toContainText('About 1 task outside the directions per 12 tasks of the directions.');
         await expect(radio(page, 'occasional')).toBeChecked();

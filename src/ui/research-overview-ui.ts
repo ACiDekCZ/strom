@@ -48,7 +48,7 @@ import {
 import { conflictValueSaid, researchValueText } from './person-research-ui.js';
 import { shownName, fitNameHtml } from '../person-name.js';
 import { isOpenHypothesis } from '../view-links.js';
-import { waitBranchText } from './research-offline-ui.js';
+import { waitBranchText, workingWhyText } from './research-offline-ui.js';
 import { beginQueueSlots, endQueueSlots } from '../research-queue-pages.js';
 import { PREF_KEYS, SectionPref, prefKeyOfOverview, sectionPrefs, setSectionPref } from './live-section-prefs.js';
 
@@ -1317,8 +1317,10 @@ export const researchOverviewMethods = uiModule({
             const text = el('div', 'research-overview__now-text');
             text.appendChild(el('strong', undefined, w.who));
             if (w.task) text.appendChild(el('span', 'live-task', ` — ${w.task}`));
-            const dir = taskDirectionName(s, w.research);
-            if (dir) text.appendChild(el('span', 'research-overview__dir', ` · ${dir}`));
+            // How the task helps its line, or its branch outside the lines; else the line's name (two or more lines).
+            const why = workingWhyText(w, s);
+            const dir = why || taskDirectionName(s, w.research);
+            if (dir) text.appendChild(el('span', why ? 'research-overview__dir research-overview__why' : 'research-overview__dir', ` · ${dir}`));
             if (w.paused) text.appendChild(el('span', 'live-paused', pausedText(w)));
             const since = timeEl(w.since, 'sincefor');
             if (since) text.appendChild(since);
@@ -1350,6 +1352,7 @@ export const researchOverviewMethods = uiModule({
      */
     overviewNowLine(g: WorkingLine, selected: boolean, mode: Mode): HTMLElement {
         const L = strings.live;
+        const s = liveSession();
         const li = el('li', 'research-overview__now-row research-overview__now-row--line');
         if (g.id) li.dataset.direction = g.id;
         if (selected) li.classList.add('is-selected');
@@ -1372,6 +1375,8 @@ export const researchOverviewMethods = uiModule({
             const parts: (string | HTMLElement)[] = [w.who];
             if (person) parts.push(fullName(person));
             else if (w.person) parts.push(w.person);
+            const why = s ? workingWhyText(w, s, true) : '';
+            if (why) parts.push(el('span', 'research-overview__why', why));
             if (w.paused) parts.push(el('span', 'live-paused', pausedText(w)));
             else {
                 const since = timeEl(w.since, 'sincefor');

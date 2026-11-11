@@ -1708,10 +1708,19 @@ export interface LiveWorker {
     session?: string;
     /** The place record the work is about ("L0001"; with the feature `working.place`). */
     place?: string;
+    /**
+     * The task is not of the line in `research` but helps it, and how (as `queue[].why.by`; with the feature
+     * `working.helps`). Absent with `research`: a task of the line.
+     */
+    helps?: QueueHelpsBy;
+    /** The branch of the task ("B-P0208"): outside the lines, or added to the line (with the feature `working.helps`). */
+    branch?: string;
 }
 
 /** The bridge names the place record of a row of `working` (`working[].place`, research 1.28). */
 export const WORKING_PLACE_FEATURE = 'working.place';
+/** The bridge says how a row of `working` helps its line, and its branch (`working[].helps`, `branch`; spec 036 K1.8). */
+export const WORKING_HELPS_FEATURE = 'working.helps';
 
 /** Something the research waits for from the user. */
 /**
@@ -2672,7 +2681,7 @@ const asCount = (v: unknown): number | null =>
     typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : null;
 
 /** The `working` list (status field or `working` event). Untrusted input. */
-export function sanitizeWorking(value: unknown): LiveWorker[] {
+export function sanitizeWorking(value: unknown, helpsSaid = false): LiveWorker[] {
     if (!Array.isArray(value)) return [];
     const out: LiveWorker[] = [];
     for (const item of value.slice(0, MAX_ITEMS)) {
@@ -2689,9 +2698,13 @@ export function sanitizeWorking(value: unknown): LiveWorker[] {
         const research = researchDirectionRef(r.research);
         const session = researchSessionRef(r.session);
         const place = isPlaceRecordId(r.place) ? r.place : null;
+        // How the task helps its line, and its branch: only from a research that says so; `helps` only with the line.
+        const helps = helpsSaid && research && typeof r.helps === 'string' && HELPS_BY.includes(r.helps) ? r.helps as QueueHelpsBy : null;
+        const branch = helpsSaid ? researchBranchRef(r.branch) : null;
         out.push({
             who, since: cleanText(r.since, 40), task: cleanText(r.task), ...(person ? { person } : {}), ...(family ? { family } : {}), ...(paused ? { paused } : {}),
             ...(research ? { research } : {}), ...(session ? { session } : {}), ...(place ? { place } : {}),
+            ...(helps ? { helps } : {}), ...(branch ? { branch } : {}),
         });
     }
     return out;
@@ -3302,7 +3315,7 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         headAt: Number.isFinite(Date.parse(cleanText(r.headAt, 40))) ? cleanText(r.headAt, 40) : '',
         persons: asCount(r.persons),
         families: asCount(r.families),
-        working: sanitizeWorking(r.working),
+        working: sanitizeWorking(r.working, !!features?.includes(WORKING_HELPS_FEATURE)),
         waiting: sanitizeWaiting(r.waiting, !!features?.includes(WAITING_GROUPS_FEATURE), !!features?.includes(OFF_LINE_BRANCHES_FEATURE)),
         links: sanitizeResearchLinks(r.links),
         queue: sanitizeQueue(r.queue, !!features?.includes(TASKS_OFF_LINE_FEATURE), !!features?.includes(OFF_LINE_BRANCHES_FEATURE)),

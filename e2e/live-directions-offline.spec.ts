@@ -286,6 +286,38 @@ test.describe('work outside the directions through the bridge', () => {
 
     });
 
+    test('Now: a task that helps its line says the line and how, in place of the line\'s name (036 K1.8)', async ({ page }) => {
+        const helping = { who: 'agent-matriky', since: ago(16), task: 'Křest Terezie Fíškové', person: 'P0012', research: 'G0002', helps: 'joins', branch: 'B-P0031', session: 'N0132' };
+        const nowRow = (who: string) => overview(page).locator('.research-overview__now-row', { hasText: who });
+        // One at work: its row says the line it helps and how, in place of the line's name.
+        await followManaged(page, { caps: OFF_CAPS, features: [...FEATURES, 'working.helps'], offLine: OFF_LINE, queue: QUEUE, ged: GED_OFFLINE, working: [helping] });
+        await openOverview(page);
+        await expect(nowRow('agent-matriky').locator('.research-overview__dir'))
+            .toHaveText(' · helps the direction Potomci: Josef Fíšek · connects people to the tree');
+        await expect(nowRow('agent-matriky').locator('.research-overview__why')).toHaveCount(1);
+    });
+
+    test('Now with two at work: the helping task\'s reason under its line, the branch under Outside the directions (036 K1.8)', async ({ page }) => {
+        const helping = { who: 'agent-matriky', since: ago(16), task: 'Křest Terezie Fíškové', person: 'P0012', research: 'G0002', helps: 'joins', session: 'N0132' };
+        const outside = { who: 'agent-scitani', since: ago(5), task: 'Sňatek Aloise Fíška, Vídeň 1894', branch: 'B-P0031', session: 'N0133' };
+        await followManaged(page, { caps: OFF_CAPS, features: [...FEATURES, 'working.helps'], offLine: OFF_LINE, queue: QUEUE, ged: GED_OFFLINE, working: [helping, outside] });
+        await openOverview(page);
+        const rows = overview(page).locator('.research-overview__now-row--line');
+        await expect(rows.filter({ hasText: 'agent-matriky' }).locator('.research-overview__why'))
+            .toHaveText('helps the direction Potomci: Josef Fíšek · connects people to the tree');
+        await expect(rows.filter({ hasText: 'agent-scitani' }).locator('strong')).toHaveText('Outside the directions');
+        await expect(rows.filter({ hasText: 'agent-scitani' }).locator('.research-overview__why')).toHaveText('branch Alois Fíšek');
+    });
+
+    test('Now with an older research (no working.helps): the line\'s name as before, nothing read of helps (036 K1.8)', async ({ page }) => {
+        const helping = { who: 'agent-matriky', since: ago(16), task: 'Křest Terezie Fíškové', person: 'P0012', research: 'G0002', helps: 'joins', branch: 'B-P0031', session: 'N0132' };
+        await followManaged(page, { caps: OFF_CAPS, features: FEATURES, offLine: OFF_LINE, queue: QUEUE, ged: GED_OFFLINE, working: [helping] });
+        await openOverview(page);
+        const row = overview(page).locator('.research-overview__now-row', { hasText: 'agent-matriky' });
+        await expect(row.locator('.research-overview__dir')).toHaveText(' · Potomci: Josef Fíšek');
+        await expect(row.locator('.research-overview__why')).toHaveCount(0);
+    });
+
     test('a branch\'s tasks unfold under it: no jump, their places in the queue, ⋯ as in the queue, all of them behind the chip', async ({ page }) => {
         const off = (id: string, more: Record<string, unknown> = {}) => ({ state: 'next', branch: id, why: { kind: 'off', mode: 'occasional', branch: id }, ...more });
         const queue = [
