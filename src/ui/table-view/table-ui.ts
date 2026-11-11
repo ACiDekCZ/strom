@@ -98,6 +98,8 @@ interface Mounted {
     container: HTMLElement;
     lang: Language;
     bar: HTMLElement;
+    /** The line under the bar offering "Split as suggested…" (Sources, spec 075 §3). */
+    bulk: HTMLElement;
     grid: TableGrid;
     status: HTMLElement;
     /** The bar's Columns button (§4.4). */
@@ -730,7 +732,10 @@ export const tableMethods = uiModule({
                 else if (act === 'quality') void this.showTreeValidationDialog(treeKey() as TreeId);
                 else if (act === 'follow') this.showLiveResearchNow();
             });
-            container.append(bar, grid.el, empty, status);
+            const bulk = document.createElement('div');
+            bulk.className = 'table-bulk';
+            bulk.hidden = true;
+            container.append(bar, bulk, grid.el, empty, status);
             // A followed research's card stands below the bar: placed again when the bar's bottom moves
             // (the chips wrap, the research block opens, the window narrows).
             barWatch?.disconnect();
@@ -743,7 +748,7 @@ export const tableMethods = uiModule({
             }) : null;
             barWatch?.observe(bar);
             mounted = {
-                container, lang, bar, grid, status, colsBtn, drawn: '', display: null, filters, filterState: null, views, exportBtn,
+                container, lang, bar, bulk, grid, status, colsBtn, drawn: '', display: null, filters, filterState: null, views, exportBtn,
                 empty, emptyKey: '', unionsButton: null,
             };
         }
@@ -785,6 +790,7 @@ export const tableMethods = uiModule({
         mounted.colsBtn.setAttribute('aria-label', `${strings.table.columns}, ${strings.table.columnsCount(st.columns.length, total)}`);
         container.dataset.rowtype = type;
         updateBar(mounted.bar, type, counts);
+        this.renderTableSplitBar(mounted.bulk, type);
         updateStatus(mounted.status, type, rows.length, counts[type], st.sort, !!checks?.running, tableReadOnly());
         const researchShown = !!research && display.columns.some(c => c.group === 'research');
         updateResearchStatus(mounted.status, !research || !researchShown ? null

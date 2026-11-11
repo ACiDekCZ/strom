@@ -1159,6 +1159,10 @@ export const miscMethods = uiModule({
                         this.closeHistoryAlign();
                         return;
                     }
+                    if (currentDialog === 'source-split-modal') {
+                        this.closeSourceSplit();
+                        return;
+                    }
                     if (currentDialog === 'history-map-modal') {
                         this.historyMapEscape();
                         return;
@@ -1919,6 +1923,7 @@ export const miscMethods = uiModule({
         this.refreshUndoRedoToolbar();  // R3
         this.materialsTreeChanged();    // attachments brought back or gone again
         this.placesManagerTreeChanged();
+        this.sourceSplitTreeChanged();  // the Sources manager's lines, an open split dialog
         this.showToast(strings.undo.undone(result.description), 3000, { kind: 'undo-result' });
     },
 
@@ -1936,6 +1941,7 @@ export const miscMethods = uiModule({
         this.refreshUndoRedoToolbar();  // R3
         this.materialsTreeChanged();
         this.placesManagerTreeChanged();
+        this.sourceSplitTreeChanged();  // the Sources manager's lines, an open split dialog
         this.showToast(strings.undo.redone(result.description), 3000, { kind: 'undo-result' });
     },
 

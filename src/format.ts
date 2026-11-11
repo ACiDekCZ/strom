@@ -63,3 +63,24 @@ export function formatFileSize(bytes: number, lang: Language): string {
     const num = new Intl.NumberFormat(lang, { maximumFractionDigits: digits, minimumFractionDigits: 0 }).format(mb);
     return `${num} MB`;
 }
+
+/**
+ * A day and time this year, short, as the language writes it (spec 075 §5:
+ * when a split was done): "11. 11. 14:20" (cs), "11 Nov, 14:20" (en),
+ * "11. 11., 14:20" (de), "11.11, 14:20" (pl). Local time, no year, no seconds.
+ */
+export function formatShortDateTime(ts: number, lang: Language): string {
+    const d = new Date(ts);
+    const day = d.getDate();
+    const month = d.getMonth() + 1;
+    const time = `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
+    switch (lang) {
+        case 'cs': return `${day}. ${month}. ${time}`;
+        case 'de': return `${day}. ${month}., ${time}`;
+        case 'pl': return `${day}.${month}, ${time}`;
+        default: {
+            const mon = new Intl.DateTimeFormat('en', { month: 'short' }).format(d);
+            return `${day} ${mon}, ${time}`;
+        }
+    }
+}

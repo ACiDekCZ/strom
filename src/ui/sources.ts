@@ -273,6 +273,7 @@ export const sourcesMethods = uiModule({
             });
             document.getElementById('sources-empty-add')
                 ?.addEventListener('click', () => this.showAddSourceModal());
+            this.renderSourceSplitBar();
             return;
         }
         const query = search && !search.hidden ? search.value.trim().toLowerCase() : '';
@@ -326,6 +327,7 @@ export const sourcesMethods = uiModule({
         });
         hydrateThumbs(container);
         this.renderResearchImagesBulk();
+        this.renderSourceSplitBar();
     },
 
     /** The catalog's two filters (only while an Evidence tree has older unverified sources). */

@@ -158,6 +158,7 @@ import { researchSyncMethods } from './research-sync-ui.js';
 import { historyMethods } from './history-ui.js';
 import { historyKindsMethods } from './history-kinds-ui.js';
 import { historyAlignMethods } from './history-align-ui.js';
+import { sourceSplitMethods } from './source-split-ui.js';
 import { qualityMethods } from './quality-ui.js';
 import { researchFixesMethods } from './research-fixes-ui.js';
 import { verifyPersonMethods } from './verify-person-ui.js';
@@ -727,6 +728,9 @@ Object.assign(UIClass.prototype, historyKindsMethods);
 type HistoryAlignMethods = typeof historyAlignMethods;
 export interface UIClass extends HistoryAlignMethods {}
 Object.assign(UIClass.prototype, historyAlignMethods);
+type SourceSplitMethods = typeof sourceSplitMethods;
+export interface UIClass extends SourceSplitMethods {}
+Object.assign(UIClass.prototype, sourceSplitMethods);
 type QualityMethods = typeof qualityMethods;
 export interface UIClass extends QualityMethods {}
 Object.assign(UIClass.prototype, qualityMethods);

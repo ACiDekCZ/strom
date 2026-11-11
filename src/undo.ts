@@ -19,6 +19,16 @@ export interface UndoSnapshot {
     description: string;
     /** The research base these data build on (a tree tied to a research); undefined = not recorded. */
     base?: ResearchBase | null;
+    /** What kind of step this is, for a step a dialog offers to undo by name (the sources' split, spec 075 §5). */
+    mark?: UndoMark;
+}
+
+/** A step named beyond its description: its kind, when it was done, how many things it changed. */
+export interface UndoMark {
+    kind: 'sourcesSplit';
+    /** ms since the epoch */
+    at: number;
+    count: number;
 }
 
 /** Maximum number of undo steps kept per tree. */
@@ -60,7 +70,7 @@ class UndoManagerClass {
     undo(currentData: StromData, currentBase?: ResearchBase | null): UndoSnapshot | null {
         const snapshot = this.undoStack.pop();
         if (!snapshot) return null;
-        this.redoStack.push({ data: currentData, description: snapshot.description, ...(currentBase !== undefined ? { base: currentBase } : {}) });
+        this.redoStack.push({ data: currentData, description: snapshot.description, ...(currentBase !== undefined ? { base: currentBase } : {}), ...(snapshot.mark ? { mark: snapshot.mark } : {}) });
         return snapshot;
     }
 
@@ -68,7 +78,7 @@ class UndoManagerClass {
     redo(currentData: StromData, currentBase?: ResearchBase | null): UndoSnapshot | null {
         const snapshot = this.redoStack.pop();
         if (!snapshot) return null;
-        this.undoStack.push({ data: currentData, description: snapshot.description, ...(currentBase !== undefined ? { base: currentBase } : {}) });
+        this.undoStack.push({ data: currentData, description: snapshot.description, ...(currentBase !== undefined ? { base: currentBase } : {}), ...(snapshot.mark ? { mark: snapshot.mark } : {}) });
         return snapshot;
     }
 
@@ -81,6 +91,11 @@ class UndoManagerClass {
         return this.undoStack.length > 0
             ? this.undoStack[this.undoStack.length - 1].description
             : null;
+    }
+
+    /** The mark of the step a single undo would reverse, or null (none, or a step without one). */
+    peekUndoMark(): UndoMark | null {
+        return this.undoStack[this.undoStack.length - 1]?.mark ?? null;
     }
 
     canRedo(): boolean {

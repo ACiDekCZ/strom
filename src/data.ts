@@ -60,7 +60,7 @@ import { ChangePacket, applyPacketOntoData } from './share-diff.js';
 import { createSnapshot, getSnapshotPayload, SnapshotReason, hasAutoSnapshotOnDay } from './snapshots.js';
 import { ValidationIssue, stripUnsafeMediaDataUrls, translateValidationType } from './validation.js';
 import { cloneTreeData } from './clone.js';
-import { UndoManager } from './undo.js';
+import { UndoManager, type UndoMark } from './undo.js';
 import { applyLivingPrivacy, applyContentOptions, resolveContentOptions, ContentOptions, PrivacyMode } from './privacy.js';
 import { safeFileName } from './filenames.js';
 import { shownName } from './person-name.js';
@@ -1238,7 +1238,7 @@ class DataManagerClass {
      * stack with a description, then persist. Replaces this.save() at the end of
      * mutation methods. During a batch this defers to commitBatch (no push/save).
      */
-    private commitMutation(description: string, silent = false): void {
+    private commitMutation(description: string, silent = false, mark?: UndoMark): void {
         if (this.batchActive) {
             this.batchDirty = true;
             if (this.batchFirstDescription === null) this.batchFirstDescription = description;
@@ -1248,7 +1248,7 @@ class DataManagerClass {
         if (this.pendingBefore) {
             // Auto-backup the FIRST mutation of the day (state before it).
             this.maybeAutoSnapshot(this.pendingBefore, this.pendingBase);
-            UndoManager.push({ data: this.pendingBefore, description, base: this.pendingBase });
+            UndoManager.push({ data: this.pendingBefore, description, base: this.pendingBase, ...(mark ? { mark } : {}) });
             this.pendingBefore = null;
         }
         this.save();
@@ -1267,6 +1267,13 @@ class DataManagerClass {
     lastUndoDescription(): string | null {
         UndoManager.setActiveTree(this.currentTreeId);
         return UndoManager.peekUndoDescription();
+    }
+
+    /** The mark of the step a single undo would reverse (a sources' split), or null. */
+    lastUndoMark(): UndoMark | null {
+        if (this.isLocked() || this.isNewerData()) return null;
+        UndoManager.setActiveTree(this.currentTreeId);
+        return UndoManager.peekUndoMark();
     }
 
     /**
@@ -2464,6 +2471,26 @@ class DataManagerClass {
         this.commitMutation(strings.undo.editSource(src.title));
         AuditLogManager.log(this.currentTreeId, 'source.update', strings.auditLog.updatedSource(src.title));
         return true;
+    }
+
+    /**
+     * Split the older locations of several sources into their fields (spec 075 §5):
+     * each source replaced by its new form (same id), ONE undo step marked as the
+     * split (its dialog offers to undo it while it is the last step), no Undo toast
+     * of its own (the split's toast has one). Returns the undo step's mark, or null
+     * when nothing changed.
+     */
+    splitSourcePlaces(next: readonly Source[]): UndoMark | null {
+        if (this.isTreeLocked() || this.isReadOnly()) return null;
+        const sources = this.data.sources;
+        const changed = next.filter(s => sources?.[s.id]);
+        if (!sources || changed.length === 0) return null;
+        this.beginMutation();
+        for (const s of changed) sources[s.id] = { ...s };
+        const mark: UndoMark = { kind: 'sourcesSplit', at: Date.now(), count: changed.length };
+        this.commitMutation(strings.undo.splitSources(changed.length), true, mark);
+        AuditLogManager.log(this.currentTreeId, 'source.update', strings.auditLog.splitSources(changed.length));
+        return mark;
     }
 
     /** Remove a source and cascade-delete every citation of it (persons + events). */
