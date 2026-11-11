@@ -35,7 +35,7 @@ export interface ResearchTableInput {
     kind: ResearchTreeKind;
     /** A read-only copy: only the columns from the data (§16.7). */
     readOnly?: boolean;
-    /** The research is followed live now. */
+    /** The agent's work and queue are known now: the research is followed live, or its bridge answers (spec 057 §7.4). */
     live: boolean;
     /** What waits for the user: live, else as last heard (≤ 7 days), else none. */
     waiting?: readonly LiveWaiting[];

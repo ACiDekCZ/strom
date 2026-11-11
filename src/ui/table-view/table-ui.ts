@@ -511,6 +511,19 @@ export const tableMethods = uiModule({
         return env;
     },
 
+    /**
+     * What the research's bridge said changed (spec 057 §7.4): the table on
+     * screen is drawn again when the agent's work or queue its cells read is
+     * not the one drawn (following or not).
+     */
+    tableResearchAgentChanged(): void {
+        if (TreeRenderer.getViewMode() !== 'table' || !researchMemo) return;
+        const now = researchTableLive();
+        const drawn = researchMemo.env.input;
+        if (drawn.live === now.live && drawn.working === now.working && drawn.queue === now.queue) return;
+        redrawTable(el => this.renderTableView(el));
+    },
+
     /** Draw the table again once the oldest ✓ of the agent is due to go (§16.6; null: none stands). */
     tableAgentDoneLater(ms: number | null): void {
         if (agentDoneTimer) clearTimeout(agentDoneTimer);

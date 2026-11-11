@@ -373,6 +373,11 @@ function tellBridgeStatus(researchId: string, status: LiveStatus): void {
     }
 }
 
+/** The research's last status in this page, as its bridge answers now (null: not asked yet, or it does not answer). */
+export function researchStatusNow(researchId: string): LiveStatus | null {
+    return runtime.get(researchId)?.status ?? null;
+}
+
 /** A status the bridge gave elsewhere (?live=, ?send=, following): it runs, and this is what it said. */
 export function rememberBridgeStatus(researchId: string, status: LiveStatus): void {
     runtime.set(researchId, { up: true, checkedAt: Date.now(), status, blocked: false, downSince: 0 });
@@ -2656,6 +2661,8 @@ export const researchSyncMethods = uiModule({
         this.historyKindsBridgeChanged();
         // The Research overview open without following: drawn from what the bridge says now (spec 057 §7.2).
         this.syncOverviewViewing();
+        // The Table's agent and queue cells without following (spec 057 §7.4): drawn again when what the bridge says changed.
+        this.tableResearchAgentChanged();
     },
 
     /**

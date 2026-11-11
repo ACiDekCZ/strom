@@ -1176,3 +1176,73 @@ test.describe('tree overview: the jump to a section, the findings', () => {
         await expect(de.locator('.tov-leads')).toHaveText('2 Hinweise ›');
     });
 });
+
+test.describe('Research › to the Research overview (spec 057 §7.5)', () => {
+    /** The open tree tied to an invented research (not followed, no bridge known). */
+    async function researchTree(page: Page, width: number, height: number, data = family()): Promise<string> {
+        await page.setViewportSize({ width, height });
+        await openApp(page);
+        const treeId = await importTree(page, data, 'Lindqvist', data.defaultPersonId);
+        await page.evaluate((id) => {
+            window.Strom.TreeManager.setResearchLink(id as never, {
+                id: '6a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d', fingerprint: 'x', syncedAt: new Date().toISOString(),
+            });
+        }, treeId);
+        return treeId;
+    }
+
+    /** "Research ›" at the right of the head of Where to focus; a click closes the dialog and opens the Research overview. */
+    async function followLink(page: Page, dialog: Locator, minHeight: number): Promise<void> {
+        const head = section(dialog, 'focus').locator('.tov-sec-h');
+        const link = head.locator('.tov-research-link');
+        await expect(link).toHaveText('Research ›');
+        await expect(link.locator('.research-open-mark, .ai-badge')).toHaveCount(0);
+        const h = (await head.boundingBox())!;
+        const b = (await link.boundingBox())!;
+        expect(b.x + b.width).toBeGreaterThan(h.x + h.width - 40);
+        expect(b.height).toBeGreaterThanOrEqual(minHeight);
+        // The head still opens and closes the section.
+        await expect(head.locator('.tov-sec-head')).toHaveAttribute('aria-expanded', 'true');
+        expect(await dialog.locator('.tov-scroll').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+        await link.click();
+        await expect(page.locator('#tree-overview-modal')).toHaveCount(0);
+        await expect(page.locator('#research-overview')).toBeVisible();
+        expect(await page.evaluate(() => window.Strom.UI.isFollowingActiveResearch())).toBe(false);
+    }
+
+    test('a research tree at 1440: the link in the head of Where to focus opens the Research overview', async ({ page }) => {
+        const treeId = await researchTree(page, 1440, 900);
+        await followLink(page, await openOverview(page, treeId), 30);
+    });
+
+    test('phone 390: the link is 44 px to a finger and opens the Research overview', async ({ browser }) => {
+        const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+        const page = await context.newPage();
+        const treeId = await researchTree(page, 390, 844);
+        await followLink(page, await openOverview(page, treeId), 44);
+        await context.close();
+    });
+
+    test('no research: no link; another tree\'s overview: no link; an empty research tree: the link in the dialog\'s head', async ({ page }) => {
+        const plain = await setup(page);
+        let dialog = await openOverview(page, plain);
+        await expect(dialog.locator('.tov-research-link')).toHaveCount(0);
+        await page.keyboard.press('Escape');
+        const research = await importTree(page, { persons: {}, partnerships: {} }, 'Prázdný výzkum');
+        await page.evaluate((id) => {
+            window.Strom.TreeManager.setResearchLink(id as never, {
+                id: '7b2c3d4e-5f6a-4b7c-8d9e-0f1a2b3c4d5e', fingerprint: 'x', syncedAt: new Date().toISOString(),
+            });
+        }, research);
+        // Another tree (not the open one) has no research overview here.
+        dialog = await openOverview(page, plain);
+        await expect(dialog.locator('.tov-research-link')).toHaveCount(0);
+        await page.keyboard.press('Escape');
+        dialog = await openOverview(page, research);
+        await expect(dialog.locator('.tov-sec')).toHaveCount(0);
+        const link = dialog.locator('.tov-titlebar .tov-research-link');
+        await expect(link).toHaveText('Research ›');
+        await link.click();
+        await expect(page.locator('#research-overview')).toBeVisible();
+    });
+});

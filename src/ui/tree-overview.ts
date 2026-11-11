@@ -701,10 +701,12 @@ export const treeOverviewMethods = uiModule({
         const st = state!;
         const t = strings.treeOverview;
         const esc = (s: string): string => this.escapeHtml(s);
+        // "Research ›" (spec 057 §7.5): in the head of "Where to focus", else (no such section) in the dialog's head.
+        const research = this.treeOverviewResearchLinkHtml();
         const titleBar = `
             <div class="tov-titlebar">
                 <h2 class="tov-title" id="tov-title">${esc(t.title(st.treeName))}</h2>
-                <button type="button" class="tov-close" data-tov="close" data-key="close" aria-label="${esc(t.close)}" title="${esc(t.close)}">&times;</button>
+                ${header.persons === 0 ? research : ''}<button type="button" class="tov-close" data-tov="close" data-key="close" aria-label="${esc(t.close)}" title="${esc(t.close)}">&times;</button>
             </div>`;
         if (header.persons === 0) {
             return `
@@ -771,21 +773,34 @@ export const treeOverviewMethods = uiModule({
             <span class="tov-root-hint"><span aria-hidden="true">◉</span> ${esc(t.rootHint)}</span>`;
     },
 
+    /**
+     * "Research ›" (spec 057 §7.5): the open tree's research has an overview
+     * (followed or not); it closes this dialog and opens it. '' otherwise
+     * (no research, or another tree's overview).
+     */
+    treeOverviewResearchLinkHtml(): string {
+        const st = state;
+        if (!st?.active || !st.research || !this.canOpenResearchOverview()) return '';
+        const text = strings.live.researchLink;
+        return `<button type="button" class="tov-research-link" data-tov="research-overview" data-key="research-link">${this.escapeHtml(text)}</button>`;
+    },
+
     treeOverviewSectionHtml(id: SectionId, open: boolean): string {
         const t = strings.treeOverview;
         const esc = (s: string): string => this.escapeHtml(s);
         const mark = ROOTED.has(id)
             ? `<span class="tov-mark" title="${esc(t.rootMark)}" aria-label="${esc(t.rootMark)}">◉</span>`
             : '';
+        const link = id === 'focus' ? this.treeOverviewResearchLinkHtml() : '';
         return `
             <section class="tov-sec" data-section="${id}">
-                <h3 class="tov-sec-h">
+                <h3 class="tov-sec-h${link ? ' tov-sec-h--link' : ''}">
                     <button type="button" class="tov-sec-head" data-tov="toggle" data-key="sec-${id}" aria-expanded="${open}"
                         aria-controls="tov-body-${id}" id="tov-head-${id}">
                         <span class="tov-chev" aria-hidden="true">${open ? '▾' : '▸'}</span>
                         <span class="tov-sec-title">${esc(t.sections[id])}</span>${mark}
                         <span class="tov-sum"></span>
-                    </button>
+                    </button>${link}
                 </h3>
                 <div class="tov-sec-body" id="tov-body-${id}" role="region" aria-labelledby="tov-head-${id}"${open ? '' : ' hidden'}></div>
             </section>`;
@@ -2252,6 +2267,11 @@ export const treeOverviewMethods = uiModule({
                 return;
             case 'tree-pages':
                 void this.openTreeOverviewPages();
+                return;
+            case 'research-overview':
+                // The Research overview of the open tree's research, without following (spec 057 §7.5).
+                this.closeTreeOverview();
+                this.openResearchOverview();
                 return;
             case 'rod-book':
                 void this.openTreeOverviewRodBook(target.dataset.id as RodId);

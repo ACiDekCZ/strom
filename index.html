@@ -21302,6 +21302,19 @@
         .tov-root-hint { font-size: 12px; color: var(--text-faint); }
         .tov-sec { border-bottom: 1px solid var(--divider); }
         .tov-sec-h { margin: 0; font: inherit; }
+        /* "Research ›" at the right of the head of Where to focus (spec 057 §7.5): a link-like button beside the toggle. */
+        .tov-sec-h--link { display: flex; align-items: center; }
+        .tov-sec-h--link .tov-sec-head { flex: 1 1 auto; min-width: 0; padding-right: 10px; }
+        .tov-research-link {
+            flex: none; min-height: 30px; padding: 0 4px; border: 0; border-radius: 6px; background: none; cursor: pointer;
+            font: inherit; font-size: 13px; font-weight: 500; color: var(--primary);
+            text-decoration: underline; text-underline-offset: 3px; white-space: nowrap;
+        }
+        .tov-sec-h--link .tov-research-link { margin-right: 18px; }
+        .tov-titlebar .tov-research-link { margin-left: auto; }
+        @media (hover: hover) { .tov-research-link:hover { color: var(--primary-dark); background: var(--hover-bg); } }
+        .tov-research-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        @media (pointer: coarse) { .tov-research-link { min-height: 44px; padding: 0 8px; } }
         .tov-sec-head {
             width: 100%; min-height: 48px; display: flex; align-items: center; gap: 10px; padding: 0 22px;
             border: 0; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer;
@@ -21986,6 +21999,8 @@
             .tov-inactive { order: 3; margin: 8px 16px 0; }
             .tov-sections, .tov-empty { order: 4; }
             .tov-sec-head { padding: 0 16px; }
+            .tov-sec-h--link .tov-sec-head { padding-right: 8px; }
+            .tov-sec-h--link .tov-research-link { margin-right: 8px; }
             .tov-sec-body { padding: 0 16px 18px; }
             .tov-card { flex-direction: column; align-items: stretch; gap: 10px; padding: 12px; }
             .tov-dot { display: none; }
@@ -22025,6 +22040,7 @@
             .tov-root-label, .tov-root-hint { display: none; }
             .tov-root-btn { height: 44px; max-width: 30vw; }
             .tov-titlebar .tov-pages { order: 3; margin-left: 0; }
+            .tov-titlebar .tov-research-link { order: 3; margin-left: 0; }
             .tov-close { order: 3; width: 44px; height: 44px; }
             .tov-inactive { order: 4; flex: 1 0 100%; margin-bottom: 6px; }
             .tov-foot { display: none; }

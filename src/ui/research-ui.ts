@@ -81,7 +81,7 @@ import {
     noteResearchBridge, noteResearchBridgeStatus, researchTreeOfStatus, patchResearchAutoState, researchAutoState, researchIdAtBridge, ResearchLinkBefore,
     storedResearchBridge,
 } from '../research-device.js';
-import { rememberBridgeStatus, researchSendMode } from './research-sync-ui.js';
+import { rememberBridgeStatus, researchSendMode, researchStatusNow } from './research-sync-ui.js';
 import { sourceReadings, researchSendVouches, conflictTakeovers, heldConflicts } from '../research-sync.js';
 import { currentAppBrowser, appBrowserName } from '../research-transfer.js';
 import { localNetworkStatus } from '../local-network.js';
@@ -807,7 +807,11 @@ function followedHere(): LiveSession | null {
 
 /** What the Table view's research cells read beyond the tree (spec 073 §16). */
 export interface ResearchTableLive {
-    /** The tree on screen is followed live. */
+    /**
+     * The agent's work and queue are known now: the tree on screen is followed
+     * live, or (on a computer) its research's bridge answers the regular ask
+     * (spec 057 §7.4: the cells look as while following).
+     */
     live: boolean;
     /** What waits: live, else as last heard (≤ 7 days). */
     waiting: LiveSession['waiting'];
@@ -826,7 +830,31 @@ const NO_QUEUE: LiveSession['queue'] = [];
 /** The kept waiting list last given out: the same list again while it does not change (the table builds its research anew only on a change). */
 let storedWaiting: { key: string; items: LiveSession['waiting'] } | null = null;
 
-/** The research's live state for the Table view: the followed session, else the waiting list kept from the last time. */
+/** The agent's work as the last status of an unfollowed research said it (the same list again for the same status). */
+let unfollowedAgent: { status: LiveStatus; working: LiveSession['working'] } | null = null;
+
+/**
+ * The agent's work and queue of the open tree's research without following
+ * (spec 057 §7.4): what its bridge said at the regular ask (its status, whose
+ * `queue[]` is the queue's window), while it answers; null otherwise (a phone
+ * never asks, a bridge down said nothing).
+ */
+function unfollowedAgentNow(researchId: string): Pick<LiveSession, 'working' | 'queue'> | null {
+    if (!onComputer()) return null;
+    const status = researchStatusNow(researchId);
+    if (!status || status.treeId !== researchId) return null;
+    if (unfollowedAgent?.status !== status) {
+        const bridge = parseLiveBridge(storedResearchBridge(researchId)?.base);
+        unfollowedAgent = { status, working: bridge ? withFamilyPersons(status.working, bridge) : status.working };
+    }
+    return { working: unfollowedAgent.working, queue: status.queue };
+}
+
+/**
+ * The research's live state for the Table view: the followed session, else
+ * what its bridge says without following (the agent's work and queue) beside
+ * the waiting list kept from the last time.
+ */
 export function researchTableLive(): ResearchTableLive {
     const s = followedHere();
     if (s) return { live: true, waiting: s.waiting, working: s.working, queue: s.queue, done: agentDone, base: s.bridge.base || null };
@@ -839,6 +867,8 @@ export function researchTableLive(): ResearchTableLive {
         if (storedWaiting?.key !== key) storedWaiting = { key, items };
         waiting = storedWaiting.items;
     }
+    const agent = researchId ? unfollowedAgentNow(researchId) : null;
+    if (agent) return { live: true, waiting, working: agent.working, queue: agent.queue, done: NO_DONE, base: null };
     return { live: false, waiting, working: NO_WORKING, queue: NO_QUEUE, done: NO_DONE, base: null };
 }
 
