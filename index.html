@@ -9702,6 +9702,23 @@
         /* The active cell (a click, the arrows): a quiet outline; the keyboard's focus ring stays stronger. */
         .tv-body .tv-cell.is-active-cell { outline: 1px solid color-mix(in srgb, var(--primary) 70%, transparent); outline-offset: -1px; }
         .tv-body .tv-cell:focus-visible, .tv-head-all:focus-visible, .tv-more-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        /* A cell edited in place (T54 F8): the field over the cell, as wide as its column or its kind's least width; the error under it. */
+        .tv-editor { position: absolute; z-index: 2; box-sizing: border-box; }
+        .tv-editor-input {
+            box-sizing: border-box; width: 100%; height: 100%; margin: 0; padding: 0 8px;
+            border: 2px solid var(--primary); border-radius: 0; background: var(--surface); color: var(--text);
+            font-family: var(--font-sans); font-size: inherit; outline: none; box-shadow: var(--shadow-focus);
+        }
+        .tv-editor.has-error .tv-editor-input { border-color: var(--danger); }
+        .tv-editor-error {
+            position: absolute; top: 100%; left: 0; max-width: max(100%, 280px); width: max-content; box-sizing: border-box;
+            margin-top: 2px; padding: 4px 8px; border-radius: var(--r-sm); background: var(--surface); color: var(--danger);
+            border: 1px solid var(--danger); font-size: 12px; line-height: 1.35; white-space: normal; box-shadow: var(--shadow-sm);
+        }
+        .tv-editor-error[hidden] { display: none; }
+        @media (hover: hover) { .tv-body .tv-cell.is-editable { cursor: text; } }
+        /* Touch on a tablet: the field's text at 16px, so the browser does not zoom into it. */
+        @media (pointer: coarse) { .tv-editor-input { font-size: 16px; } }
         .tv-status {
             flex: none; display: flex; align-items: center; gap: 12px; height: 30px; padding: 0 16px;
             background: var(--surface-2); border-top: 1px solid var(--border); font-size: 12px; box-sizing: border-box;

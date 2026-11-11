@@ -101,7 +101,27 @@ export interface GridInput {
     researchAt?: (line: GridLine, col: ColumnDef, value: CellValue) => boolean;
     /** The agent at a row's person while the research is followed (§16.6): the bar on the name's left edge, ✓ once done. */
     agentAt?: (line: GridLine) => AgentRowState | null;
+    /** A cell edited in place (T54 F8): it carries `is-editable` (the text cursor under a mouse). */
+    editableAt?: (line: GridLine, col: ColumnDef) => boolean;
 }
+
+/**
+ * A cell's editor (T54 F8): the field's text, its kind and what a save does.
+ * `save` returns null when the text was saved (or nothing changed), else
+ * the short error said under the field (the editor stays).
+ */
+export interface CellEditSpec {
+    value: string;
+    input: 'text' | 'date' | 'place';
+    /** The field's accessible name. */
+    label: string;
+    /** A datalist's id: the suggestions of a place. */
+    list?: string;
+    save(text: string): string | null;
+}
+
+/** The least width of an editor, wider than a narrow column (T54 F8: it goes over the cell's edge). */
+const EDITOR_MIN_WIDTH: Record<CellEditSpec['input'], number> = { text: 160, date: 150, place: 240 };
 
 /** The agent at a row (§16.6): at work on its task, or just done. */
 export type AgentRowState = { kind: 'working'; task: string } | { kind: 'done' };
@@ -160,6 +180,12 @@ export interface GridHandlers {
     onMoreCites?(line: GridLine, col: ColumnDef, ids: readonly string[], anchor: HTMLElement): void;
     /** The row's menu (§10.1): a right click, Shift+F10, the menu key; the cell it is for (T54 F4). */
     onRowMenu?(line: GridLine, anchor: HTMLElement, cell: GridCellRef | null): void;
+    /**
+     * A cell to edit in place (T54 F8: a double click, F2, Enter): its
+     * editor, or null when the cell is not edited there (a double click then
+     * edits the row, Enter opens it).
+     */
+    onEditCell?(line: GridLine, cell: GridCellRef): CellEditSpec | null;
     /** A person's ▾/▸, the count pill or → / ← on the name cell (§3.2). */
     onToggleUnions?(personId: string, expand: boolean): void;
     /** "Expand unions" / "Collapse unions" in the name head, `*` / Shift+`*` (§3.2, §3.4). */
@@ -428,6 +454,8 @@ export class TableGrid {
     /** The rows lit after a change (row keys, §10.3) and the timer that ends it. */
     private readonly flashKeys = new Set<string>();
     private flashTimer: ReturnType<typeof setTimeout> | null = null;
+    /** The open cell editor (T54 F8): over the cell, in the scrolled area (outside the body, so a redraw keeps it). */
+    private editor: { key: string; colId: string; box: HTMLElement; input: HTMLInputElement; error: HTMLElement; spec: CellEditSpec } | null = null;
 
     constructor(private readonly handlers: GridHandlers = {}) {
         const el = document.createElement('div');
@@ -454,6 +482,7 @@ export class TableGrid {
             el.classList.toggle('is-scrolled-x', el.scrollLeft > 0);
             this.handlers.onScroll?.(el.scrollTop, el.scrollLeft);
             this.schedule();
+            this.placeEditor();
         }, { passive: true });
         this.body.addEventListener('click', (e) => {
             const t = e.target as Element;
@@ -514,6 +543,9 @@ export class TableGrid {
             if (t.closest('.tv-toggle, .tv-unions-pill, .tv-act, .tv-more-btn, .tv-nm, .tv-link, .tv-cites-more, .tv-conf')) return;
             const line = this.lineOf(t);
             if (!line || line.kind === 'more') return;
+            // A cell edited in place (T54 F8) opens its editor; any other cell edits the row.
+            const ref = this.cellRefOf(line, t.closest<HTMLElement>('[aria-colindex]'));
+            if (ref && this.startEdit(line, ref)) return;
             this.handlers.onRowAction?.('edit', line);
         });
         this.body.addEventListener('contextmenu', (e) => {
@@ -681,6 +713,7 @@ export class TableGrid {
             this.el.classList.toggle('is-scrolled-x', this.el.scrollLeft > 0);
         }
         this.draw();
+        this.syncEditor();
     }
 
     /** The row height the stylesheet gives (`--tv-row-h`; touch and phone rows are taller). */
@@ -732,6 +765,7 @@ export class TableGrid {
             this.bodyKey = bodyKey;
             this.drawBody(input, cw, rw.start, rw.end, tops);
         }
+        this.placeEditor();
     }
 
     /** The cell's sticky offset for a pinned column. */
@@ -1262,7 +1296,8 @@ export class TableGrid {
                 const res = line.kind !== 'more' && !issue && !!input.researchAt?.(line, col, value);
                 // §7.4: Findings and Highest level with a mark open the person's findings.
                 const finds = line.kind === 'row' && line.row.kind === 'person' && !issue && !!value.mark && PERSON_FINDINGS_COLUMNS.has(col.id);
-                cells.push(`<div class="${cellClasses(value, col, issue?.severity ?? null, !!conflict)}${res ? ' has-res' : ''}${finds ? ' has-finds' : ''}${this.pinClass(i, input)}" role="gridcell" aria-colindex="${i + 1}" tabindex="${tab}"`
+                const editable = line.kind !== 'more' && !!input.editableAt?.(line, col);
+                cells.push(`<div class="${cellClasses(value, col, issue?.severity ?? null, !!conflict)}${res ? ' has-res' : ''}${finds ? ' has-finds' : ''}${editable ? ' is-editable' : ''}${this.pinClass(i, input)}" role="gridcell" aria-colindex="${i + 1}" tabindex="${tab}"`
                     + (res || finds ? ' aria-haspopup="dialog"' : '')
                     + ` style="${this.pinStyle(i, input)}"${title ? ` title="${esc(title)}"` : ''}>${cellInner(value, col, issue, line.kind === 'more' ? '' : input.hit ?? '', conflict)}`
                     + `${i === tailAt ? this.rowTail(input, line) : ''}</div>`);
@@ -1479,6 +1514,12 @@ export class TableGrid {
             this.handlers.onRowMenu(line, cellEl ?? (e.target as HTMLElement), this.cellRefOf(line, cellEl));
             return;
         }
+        // F2 edits the active cell in place (T54 F8).
+        if (e.key === 'F2' && !ctrl && !e.shiftKey) {
+            e.preventDefault();
+            if (line.kind !== 'more') this.startEditAt(at, col);
+            return;
+        }
         switch (e.key) {
             case 'Escape':
                 if (!input.selected) return;
@@ -1533,8 +1574,8 @@ export class TableGrid {
                 }
                 if (line.kind === 'more') { this.handlers.onRevealUnions?.(line.row.id); return; }
                 this.select(line);
-                // Enter opens the person (§10.1); Space only selects.
-                if (e.key === 'Enter') this.handlers.onRowAction?.('open', line);
+                // Enter edits a cell edited in place (T54 F8), else opens the person (§10.1); Space only selects.
+                if (e.key === 'Enter' && !this.startEditAt(at, col)) this.handlers.onRowAction?.('open', line);
                 return;
             }
             case '*':
@@ -1574,6 +1615,162 @@ export class TableGrid {
         return true;
     }
 
+    // -----------------------------------------------------------------------
+    // The cell's editor (T54 F8)
+
+    /** The active cell edited in place (the row menu's "Edit cell"); false: it is not edited there. */
+    editActive(): boolean {
+        const at = this.activeLineIndex();
+        return at >= 0 && this.startEditAt(at, this.activeCol);
+    }
+
+    /** The cell's editor is open. */
+    isEditing(): boolean {
+        return !!this.editor;
+    }
+
+    /** A drawn line's cell edited in place, by the line's index and the column's drawn position. */
+    private startEditAt(at: number, col: number): boolean {
+        const line = this.lines[at];
+        const input = this.input;
+        if (!line || !input || line.kind === 'more' || input.bands?.[col]) return false;
+        const def = input.columns[col];
+        if (!def) return false;
+        return this.startEdit(line, { col: def, index: col, value: lineCell(input.model, line, def) });
+    }
+
+    /** Open the editor over a cell when its handler gives one (an open editor is saved first). */
+    private startEdit(line: GridLine, ref: GridCellRef): boolean {
+        if (line.kind === 'more' || !this.handlers.onEditCell) return false;
+        if (this.editor && !this.commitEdit(null)) return true;
+        const spec = this.handlers.onEditCell(line, ref);
+        if (!spec) return false;
+        this.activeKey = lineKey(line);
+        this.activeCol = ref.index;
+        this.cellChosen = true;
+        this.syncActiveMark();
+        const box = document.createElement('div');
+        box.className = 'tv-editor';
+        box.dataset.input = spec.input;
+        const field = document.createElement('input');
+        field.type = 'text';
+        field.className = 'tv-editor-input';
+        field.autocomplete = 'off';
+        field.spellcheck = false;
+        field.value = spec.value;
+        field.setAttribute('aria-label', spec.label);
+        if (spec.list) field.setAttribute('list', spec.list);
+        const error = document.createElement('div');
+        error.className = 'tv-editor-error';
+        error.id = `tv-editor-error-${Date.now().toString(36)}`;
+        error.setAttribute('role', 'alert');
+        error.hidden = true;
+        field.setAttribute('aria-describedby', error.id);
+        box.append(field, error);
+        const ed = { key: lineKey(line), colId: ref.col.id, box, input: field, error, spec };
+        this.editor = ed;
+        this.el.appendChild(box);
+        field.addEventListener('keydown', (e) => {
+            e.stopPropagation();
+            if (e.key === 'Enter' && !e.isComposing) {
+                e.preventDefault();
+                if (this.commitEdit(null)) this.focusActive(true);
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                this.closeEdit(true);
+            } else if (e.key === 'Tab') {
+                e.preventDefault();
+                this.commitEdit(e.shiftKey ? -1 : 1);
+            }
+        });
+        field.addEventListener('input', () => { if (!error.hidden) { error.hidden = true; box.classList.remove('has-error'); } });
+        // A click elsewhere saves; a date that cannot be read keeps the editor with its error.
+        field.addEventListener('blur', () => { if (this.editor === ed) this.commitEdit(null, true); });
+        this.placeEditor();
+        field.focus({ preventScroll: true });
+        field.select();
+        return true;
+    }
+
+    /**
+     * Save the editor's text. Saved: the editor closes and, with `step`
+     * (Tab ±1), the next cell edited in place in the row opens; not saved:
+     * the error under the field, the editor stays. True when saved.
+     */
+    private commitEdit(step: 1 | -1 | null, fromBlur = false): boolean {
+        const ed = this.editor;
+        if (!ed) return true;
+        const error = ed.spec.save(ed.input.value);
+        if (this.editor !== ed) return error === null;
+        if (error !== null) {
+            ed.error.textContent = error;
+            ed.error.hidden = false;
+            ed.box.classList.add('has-error');
+            ed.input.setAttribute('aria-invalid', 'true');
+            if (!fromBlur) ed.input.focus({ preventScroll: true });
+            return false;
+        }
+        this.closeEdit(false);
+        if (step !== null) {
+            const input = this.input;
+            const at = this.lines.findIndex(l => lineKey(l) === ed.key);
+            const from = input ? input.columns.findIndex(c => c.id === ed.colId) : -1;
+            const line = at >= 0 ? this.lines[at] : undefined;
+            let next = -1;
+            if (input && line && from >= 0) {
+                for (let i = from + step; i >= 0 && i < input.columns.length; i += step) {
+                    if (!input.bands?.[i] && input.editableAt?.(line, input.columns[i])) { next = i; break; }
+                }
+            }
+            if (next >= 0) {
+                this.focusCell(at, next);
+                if (!this.startEditAt(at, next)) this.focusActive(true);
+            } else this.focusActive(true);
+        }
+        return true;
+    }
+
+    /** Close the editor without saving; `refocus`: the focus back on its cell. */
+    private closeEdit(refocus: boolean): void {
+        const ed = this.editor;
+        if (!ed) return;
+        this.editor = null;
+        ed.box.remove();
+        if (refocus) this.focusActive(true);
+    }
+
+    /** The editor's line or column is gone (another filter, view or table): closed unsaved; else placed again. */
+    private syncEditor(): void {
+        const ed = this.editor;
+        if (!ed) return;
+        const input = this.input;
+        if (!input || !this.lines.some(l => lineKey(l) === ed.key) || !input.columns.some(c => c.id === ed.colId)) {
+            this.closeEdit(false);
+            return;
+        }
+        this.placeEditor();
+    }
+
+    /** The editor over its cell (in the scrolled area), as wide as the column and at least its kind's width. */
+    private placeEditor(): void {
+        const ed = this.editor;
+        const input = this.input;
+        if (!ed || !input) return;
+        const at = this.lines.findIndex(l => lineKey(l) === ed.key);
+        const col = input.columns.findIndex(c => c.id === ed.colId);
+        const cell = at >= 0 && col >= 0 ? this.body.querySelector<HTMLElement>(`.tv-row[data-index="${at}"] [aria-colindex="${col + 1}"]`) : null;
+        if (!cell) return;
+        const g = this.el.getBoundingClientRect();
+        const r = cell.getBoundingClientRect();
+        const width = Math.max(r.width, EDITOR_MIN_WIDTH[ed.spec.input]);
+        let left = r.left - g.left - this.el.clientLeft + this.el.scrollLeft;
+        // Wider than the room to the right: it ends at the visible edge.
+        const right = this.el.scrollLeft + this.el.clientWidth;
+        if (left + width > right) left = Math.max(this.el.scrollLeft, right - width);
+        const top = r.top - g.top - this.el.clientTop + this.el.scrollTop;
+        ed.box.style.cssText = `left:${Math.round(left)}px;top:${Math.round(top)}px;width:${Math.round(width)}px;height:${Math.round(r.height)}px`;
+    }
+
     /** Scroll a row into view (§8.3: the app's person search in the table) and draw. */
     revealKey(key: string): void {
         const at = this.lines.findIndex(l => lineKey(l) === key);
@@ -1599,6 +1796,7 @@ export class TableGrid {
     }
 
     destroy(): void {
+        this.closeEdit(false);
         if (this.frame) cancelAnimationFrame(this.frame);
         if (this.flashTimer) clearTimeout(this.flashTimer);
         this.resize?.disconnect();

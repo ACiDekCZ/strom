@@ -4084,7 +4084,7 @@ class TreeRendererClass {
      * a place offers what this family already uses (see src/places.ts — nothing
      * is downloaded). Most-used first: the browser keeps datalist order.
      */
-    private updatePlacesDatalist(): void {
+    updatePlacesDatalist(): void {
         const list = document.getElementById('places-datalist');
         if (!list) return;
         const places = placeList(DataManager.getData());

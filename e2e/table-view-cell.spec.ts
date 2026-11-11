@@ -98,7 +98,7 @@ test.describe('desktop (1440)', () => {
         const place = await cell(page, 'p:b1', 'bPlace');
         await place.click({ button: 'right' });
         await expect(place).toHaveClass(/is-active-cell/);
-        await expect(menuLabels(page)).toHaveText(['Copy', 'Only “Lhotka nad Brodem”', 'Without “Lhotka nad Brodem”', 'Show in tree', 'Open person', 'Edit…']);
+        await expect(menuLabels(page)).toHaveText(['Copy', 'Only “Lhotka nad Brodem”', 'Without “Lhotka nad Brodem”', 'Edit cell', 'Show in tree', 'Open person', 'Edit…']);
         await expect(page.locator('.tv-menu .tv-menu-item').first().locator('.tv-menu-hint')).toHaveText(/^(Ctrl\+C|⌘C)$/);
         await expect(page.locator('.tv-menu .tv-menu-sep')).toHaveCount(1);
         await menuItem(page, 'Copy').click();
@@ -130,7 +130,7 @@ test.describe('desktop (1440)', () => {
 
         // An empty cell: only empty / only filled.
         await (await cell(page, 'p:f', 'bPlace')).click({ button: 'right' });
-        await expect(menuLabels(page)).toHaveText(['Only empty', 'Only filled', 'Show in tree', 'Open person', 'Edit…']);
+        await expect(menuLabels(page)).toHaveText(['Only empty', 'Only filled', 'Edit cell', 'Show in tree', 'Open person', 'Edit…']);
         await menuItem(page, 'Only empty').click();
         await expect(status(page)).toHaveText('3 of 7 people');
 

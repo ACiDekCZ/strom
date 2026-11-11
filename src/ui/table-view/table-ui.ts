@@ -20,7 +20,7 @@
  * error" there marks it as Data quality does, with the same toast and Undo.
  */
 
-import { DataManager } from '../../data.js';
+import { auditPersonName, DataManager } from '../../data.js';
 import { TreeManager } from '../../tree-manager.js';
 import { TreeRenderer } from '../../renderer.js';
 import { isPhoneBar, isTabletOrMobile } from '../../breakpoints.js';
@@ -49,7 +49,8 @@ import {
     type CellName, type CellValue, type EventRow, type RowType, type SourceRow, type TableModel, type TableRow,
 } from './table-model.js';
 import { eventEditTarget } from './table-events.js';
-import { TableGrid, type GridCellRef, type RowAction } from './table-grid.js';
+import { TableGrid, type CellEditSpec, type GridCellRef, type RowAction } from './table-grid.js';
+import { editChangeOf, editTargetOf, editValueOf, type EditTarget } from './table-edit.js';
 import { cellChoices, copyPlainText } from './table-cell.js';
 import { fanZoomModifier } from '../../fan-zoom.js';
 import { createBar, createStatus, updateBar, updateResearchStatus, updateStatus } from './table-bar.js';
@@ -612,6 +613,7 @@ export const tableMethods = uiModule({
                     return true;
                 },
                 onRowAction: (action, line) => this.tableRowAction(action, line),
+                onEditCell: (line, cell) => this.tableEditCell(line, cell.col),
                 onName: (line, _col, name, anchor) => this.tableNameAction(line, name, anchor),
                 onMoreCites: (_line, _col, ids, anchor) => this.showTableCites(ids, anchor),
                 onRowMenu: (line, anchor, cell) => this.showTableRowMenu(line, anchor, cell),
@@ -799,6 +801,7 @@ export const tableMethods = uiModule({
                 : null,
             lines, subRows: persons, unionsButton, stale,
             actions: phone ? null : { edit: !tableReadOnly() },
+            editableAt: !phone && this.tableInlineEdit() ? (line, col) => !!this.tableEditTarget(line, col) : undefined,
             liveOff: research ? new Set(display.columns
                 .filter(c => c.group === 'research' && (c.id === 'rTasks' || c.id === 'rAgent') && researchColumnLiveOff(research, c.id as ResearchColumnId))
                 .map(c => c.id)) : undefined,
@@ -1568,7 +1571,11 @@ export const tableMethods = uiModule({
         const t = strings.table;
         const run = (a: RowAction) => () => this.tableRowAction(a, line);
         const src = line.row.kind === 'source' ? line.row : null;
-        const cellPart = this.tableCellChoices(line, cell);
+        const cellPart: MenuEntry[] = this.tableCellChoices(line, cell);
+        // T54 F8: the cell edited in place, as F2 does.
+        if (cell && this.tableEditTarget(line, cell.col)) {
+            cellPart.push({ id: 'cell-edit', label: t.cell.edit, icon: '', hint: 'F2', run: () => { mounted?.grid.editActive(); } });
+        }
         const entries: MenuEntry[] = cellPart.length ? [...cellPart, SEP] : [];
         if (src) entries.push({ id: 'open', label: t.act.openSource, icon: '▤', hint: 'Enter', run: run('open') });
         else {
@@ -1648,6 +1655,82 @@ export const tableMethods = uiModule({
         this.noteBottomSheetTrigger();
         this.hideBottomSheet();
         this.presentMenuSheet(src.title, [...cellBlocks, cellBlocks.length ? { rows, divider: true } : { rows }], sub ? { subtitle: sub } : {});
+    },
+
+    // -----------------------------------------------------------------------
+    // A cell edited in place (T54 F8)
+
+    /** Cells are edited in place: not in a read-only or locked tree, an archive, on a phone. */
+    tableInlineEdit(): boolean {
+        return !tableReadOnly() && !this.activeResearchArchive() && !isPhoneBar();
+    },
+
+    /** The fact a cell edits in place; null: not here (another cell, a person held by the research's bridge). */
+    tableEditTarget(line: GridLine, col: ColumnDef): EditTarget | null {
+        if (!this.tableInlineEdit()) return null;
+        const t = editTargetOf(stateOf(treeKey()).rowType, line, col);
+        if (!t) return null;
+        // As the person dialog: a locked person is not edited.
+        if (t.personId) return DataManager.getPerson(t.personId) && !DataManager.isPersonLocked(t.personId) ? t : null;
+        const u = t.unionId ? DataManager.getData().partnerships[t.unionId] : undefined;
+        if (!u || DataManager.isPersonLocked(u.person1Id) || DataManager.isPersonLocked(u.person2Id)) return null;
+        return t;
+    },
+
+    /** The cell's editor: its text, its kind, the place suggestions and the save. */
+    tableEditCell(line: GridLine, col: ColumnDef): CellEditSpec | null {
+        const t = this.tableEditTarget(line, col);
+        if (!t) return null;
+        closeHeadMenu();
+        closeTableBubble(false);
+        if (t.input === 'place') TreeRenderer.updatePlacesDatalist();
+        return {
+            value: editValueOf(DataManager.getData(), t),
+            input: t.input,
+            label: strings.table.cell.editLabel(columnLabel(col)),
+            ...(t.input === 'place' ? { list: 'places-datalist' } : {}),
+            save: (text) => this.tableSaveCell(t, text),
+        };
+    },
+
+    /**
+     * Save a cell (T54 F8) as the person dialog and the relationships panel
+     * save: one undo step, then the refresh of §10.3 (the row lit and kept in
+     * place, "Saved: {name}"). Null: saved or unchanged; else the error said under the field.
+     */
+    tableSaveCell(t: EditTarget, text: string): string | null {
+        const data = DataManager.getData();
+        const res = editChangeOf(data, t, text);
+        if (!res.ok) return res.error === 'date' ? strings.table.cell.badDate : strings.table.cell.nameNeeded;
+        const change = res.change;
+        if (!change) return null;
+        const t2 = strings.undo;
+        if (change.kind === 'union') {
+            const u = data.partnerships[change.unionId];
+            if (!u) return null;
+            const a = DataManager.getPerson(u.person1Id);
+            const b = DataManager.getPerson(u.person2Id);
+            const personId = a ? u.person1Id : u.person2Id;
+            watching = {
+                tree: treeKey(), name: personNameOf(personId),
+                keys: watchEdit(data, [...familyKeys(data, u.person1Id), ...familyKeys(data, u.person2Id), `u:${u.id}`]),
+            };
+            DataManager.runBatch(t2.editPartnership(auditPersonName(a), auditPersonName(b)), () => {
+                DataManager.updatePartnership(change.unionId, change.updates);
+            });
+        } else {
+            const id = change.personId;
+            watching = { tree: treeKey(), name: personNameOf(id), keys: watchEdit(data, familyKeys(data, id)) };
+            DataManager.runBatch(t2.editPerson(auditPersonName(DataManager.getPerson(id))), () => {
+                if (change.kind === 'person') DataManager.updatePerson(id, change.updates);
+                else if (change.kind === 'occupation') this.syncQuickEvent(id, 'occupation', 'note', change.value);
+                else if (change.eventId) DataManager.updateLifeEvent(id, change.eventId, change.updates);
+                else DataManager.addLifeEvent(id, { ...change.updates, type: change.type });
+            });
+        }
+        TreeRenderer.render();
+        this.refreshSearch();
+        return null;
     },
 
     /** The dialog or panel opened from the table was saved (§10.3): its changed rows lit, "Saved: {name}". */
