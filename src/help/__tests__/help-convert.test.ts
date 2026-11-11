@@ -194,6 +194,8 @@ describe('help conversion: Controls / Since', () => {
         ['aplikacja 3.11.0 z badaniem 1.14.0', { app: '3.11.0', research: '1.14.0' }],
         ['badanie 1.12.0, aplikacja Strom 3.9.0', { research: '1.12.0', app: '3.9.0' }],
         ['aplikacja 3.11.0 (badanie 1.14.0)', { app: '3.11.0', research: '1.14.0' }],
+        ['badanie 1.31.0 z aplikacją 3.27.0', { research: '1.31.0', app: '3.27.0' }],
+        ['výzkum 1.31.0 s aplikací 3.27.0', { research: '1.31.0', app: '3.27.0' }],
     ])('reads the since of "%s"', (text, since) => {
         expect(parseSince(text)).toEqual(since);
     });

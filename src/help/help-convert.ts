@@ -101,7 +101,7 @@ const phraseSubject = (phrase: string): 'research' | 'app' | null =>
     phrase.split(/\s+/).map(subjectOf).find(Boolean) ?? null;
 
 const SINCE_SUBJECT = '(výzkum|výzkumem|research|Forschung|badanie|badaniem|aplikace Strom|aplikace|aplikací|'
-    + 'aplikacja Strom|aplikacja|Strom app|app|Strom-App|App)';
+    + 'aplikacja Strom|aplikacja|aplikacją|Strom app|app|Strom-App|App)';
 const SINCE_PAIR = `${SINCE_SUBJECT}\\s+(${VERSION})`
     + `(?:(?:\\s*,\\s*|\\s+(?:s|with|mit|z)\\s+|\\s*\\(\\s*)${SINCE_SUBJECT}\\s+(${VERSION})`;
 /** The whole clause: "výzkum 1.12.0, aplikace 3.9.0", "aplikace 3.11.0 (výzkum 1.14.0)". */
