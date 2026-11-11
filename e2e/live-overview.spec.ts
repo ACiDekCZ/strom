@@ -627,17 +627,22 @@ test.describe('Customize panel: ⋯, a section\'s menu, Settings (spec 044)', ()
     });
 
     test('keyboard: Shift+F10 and the Menu key open a heading\'s menu under it; arrows choose in the popover; Escape gives focus back', async ({ page }) => {
-        await follow(page, TALL);
+        const bridge = await follow(page, TALL);
         const panel = page.locator('#live-panel');
         const queue = head(page, '#live-panel', 'Awaiting action');
+        // Following reads the tree twice (the research's newer head); the second load redraws the panel, which on a
+        // slow runner came in the middle of the keys below and took the focus and the menu with it.
+        await expect.poll(() => bridge.gedCalls).toBe(2);
         await expect(queue).toHaveAttribute('aria-expanded', 'true');
         // The locator's own press finds the heading again: a redraw of the panel (a slow runner) detaches a focused one.
         await queue.press('Shift+F10');
         const menu = page.locator('.live-sec-menu');
         await expect(menu).toBeVisible();
         // Under the heading, the first item focused; arrows walk, Escape closes back to the heading.
-        const [h, mb] = [(await queue.boundingBox())!, (await menu.boundingBox())!];
-        expect(mb.y).toBeGreaterThanOrEqual(h.y + h.height);
+        await expect(async () => {
+            const [h, mb] = [await queue.boundingBox(), await menu.boundingBox()];
+            expect(h && mb && mb.y >= h.y + h.height).toBe(true);
+        }).toPass();
         await expect(menu.locator('[role="menuitemradio"]').first()).toBeFocused();
         await page.keyboard.press('ArrowDown');
         await expect(menu.locator('[role="menuitemradio"]').nth(1)).toBeFocused();

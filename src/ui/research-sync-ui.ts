@@ -2925,8 +2925,9 @@ export const researchSyncMethods = uiModule({
             if (list && list.length > 0) {
                 // The facts on one line (menu 1020 §2.2): "2 people changed · 14:32", not "… · Changed 14:32".
                 const timeOnly = (state.kind === 'unsent' || state.kind === 'unsentBridgeDown') && !!changed && b.sub === s.changedAt(changed);
-                const facts = timeOnly ? changed : b.sub;
-                // The time never stands alone on a line of a narrow block: "· 16:01" stays with the word before it.
+                // The time never stands alone on a line of a narrow block: "· 16:01" stays with the word before it,
+                // and a 12-hour time keeps its "PM" ("11:13 PM" is one word).
+                const facts = timeOnly ? changed.replace(/\s/g, '\u00a0') : b.sub;
                 b.sub = [strings.changes.personsChanged(list.length), facts].filter(Boolean).join(timeOnly ? '\u00a0·\u00a0' : ' · ');
                 b.actions = [...(b.actions ?? []), { action: 'showChanges', label: strings.changes.whatWillBeSent, asLink: true }];
             }

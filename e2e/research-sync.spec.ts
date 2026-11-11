@@ -117,6 +117,8 @@ test.describe('the state of the tree and sending straight', () => {
 
     test('the block\'s facts line: the time stays on the line of the word before it (never alone after a wrap)', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 800 });
+        // The widest 12-hour time of the day, "11:13 PM": its "PM" stays on the line too (CI's wider font wrapped it).
+        await page.clock.setFixedTime(new Date(2026, 10, 11, 23, 13));
         await openResearch(page, { edit: true });
         const bridge = await fakeBridge(page);
         await poll(page);
@@ -124,7 +126,9 @@ test.describe('the state of the tree and sending straight', () => {
         await poll(page);
         await openResearchMenu(page);
         const sub = block(page).locator('.research-sync-sub');
-        await expect(sub).toHaveText(/^1 person changed\s·\s\d/);
+        await expect(sub).toHaveText(/^1 person changed\s·\s11:13\sPM$/);
+        // No place to break after "changed" ("11:13 PM" with a plain space wrapped "PM" alone on CI's wider font).
+        expect(await sub.textContent()).toMatch(/changed\u00a0·\u00a011:13\u00a0PM$/);
         // The narrow block wraps the line; "changed", "·" and the time share the last line.
         const tops = await sub.evaluate((el) => {
             const text = el.firstChild as Text;
