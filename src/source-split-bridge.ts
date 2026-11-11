@@ -8,7 +8,8 @@
  */
 
 import { cleanText, isResearchHead, withAppVersion } from './research-link.js';
-import type { SplitPlace, SplitPreview, SplitRow, SplitUndoInfo } from './source-split.js';
+import { clipWithEllipsis } from './text-clip.js';
+import { SPLIT_UNRECOGNIZED_EXAMPLES, type SplitPlace, type SplitPreview, type SplitRow, type SplitUndoInfo } from './source-split.js';
 
 /** How long a reading or a write may take (the research commits the split). */
 export const SPLIT_BRIDGE_TIMEOUT_MS = 15_000;
@@ -37,6 +38,22 @@ function placeOf(v: unknown): SplitPlace {
     const folio = text(r.folio);
     const image = text(r.image);
     return { ...(reference ? { reference } : {}), ...(folio ? { folio } : {}), ...(image ? { image } : {}) };
+}
+
+/**
+ * The locations not recognised the research names (`unrecognizedExamples`,
+ * research 1.31+; absent before: none): texts only, each once, NFC, the first
+ * few in its order.
+ */
+function examplesOf(v: unknown): string[] {
+    if (!Array.isArray(v)) return [];
+    const out: string[] = [];
+    for (const x of v.slice(0, 50)) {
+        const text = clipWithEllipsis(cleanText(x, 100_000).normalize('NFC'), 400);
+        if (text && !out.includes(text)) out.push(text);
+        if (out.length >= SPLIT_UNRECOGNIZED_EXAMPLES) break;
+    }
+    return out;
 }
 
 /** What the bridge's preview says: the preview and the newest split it can undo. */
@@ -73,7 +90,7 @@ export function parseBridgeSplit(body: unknown, all: boolean): BridgeSplitReadin
     return {
         preview: {
             rows, count, complete: all || rows.length >= count, unrecognized: countOf(r.unrecognized),
-            unrecognizedExamples: [], fromNote: 0, ...(plan ? { plan } : {}),
+            unrecognizedExamples: examplesOf(r.unrecognizedExamples), fromNote: 0, ...(plan ? { plan } : {}),
         },
         undo: undoOf(r.undos),
     };

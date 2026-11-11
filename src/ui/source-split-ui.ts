@@ -30,6 +30,7 @@ import { getBridgeSplit, postBridgeSplit, postBridgeSplitUndo, type BridgeSplitR
 import { researchBridgeActionLabel } from './research-open-mark.js';
 import { bridgeBase } from './history-ui.js';
 import { uiModule } from './module.js';
+import { clipWithEllipsis } from '../text-clip.js';
 
 export const SOURCE_SPLIT_DIALOG_ID = 'source-split-modal';
 
@@ -610,7 +611,7 @@ export const sourceSplitMethods = uiModule({
             content += this.sourceSplitRowsHtml(st, pv, withCallNumber);
             if (pv.unrecognized > 0) {
                 content += `<div class="ssp-unrec"><p>${esc(t.unrec(pv.unrecognized))}</p>`
-                    + (pv.unrecognizedExamples.length ? `<p class="ssp-unrec-ex">${esc(t.unrecEx(pv.unrecognizedExamples.map(x => x.length > 60 ? `${x.slice(0, 59)}…` : x)))}</p>` : '')
+                    + (pv.unrecognizedExamples.length ? `<p class="ssp-unrec-ex">${esc(t.unrecEx(pv.unrecognizedExamples.map(x => clipWithEllipsis(x, 60))))}</p>` : '')
                     + '</div>';
             }
         }

@@ -460,6 +460,8 @@ export interface FakeSourcesSplit {
     /** Every source the split changes now (`{source, title, before, after}`); GET gives the first 10, `?all=1` all. */
     rows: unknown[];
     unrecognized?: number;
+    /** The locations not recognised it names (research 1.31+; absent: the field is not sent). */
+    unrecognizedExamples?: string[];
     /** The preview's mark; another one posted: 409 `source.split.plan`. */
     plan: string;
     /** The splits it can undo, newest first. */
@@ -486,7 +488,8 @@ export function fakeSourcesSplit(init: Partial<FakeSourcesSplit> = {}): FakeSour
 
 /** The preview as the research answers GET /sources/split (core/live.ts splitPreview). */
 function splitPreviewOf(sp: FakeSourcesSplit, all: boolean): Record<string, unknown> {
-    return { split: all ? sp.rows : sp.rows.slice(0, 10), count: sp.rows.length, unrecognized: sp.unrecognized ?? 0, nothing: 0, undos: sp.undos, plan: sp.plan };
+    return { split: all ? sp.rows : sp.rows.slice(0, 10), count: sp.rows.length, unrecognized: sp.unrecognized ?? 0,
+        ...(sp.unrecognizedExamples ? { unrecognizedExamples: sp.unrecognizedExamples } : {}), nothing: 0, undos: sp.undos, plan: sp.plan };
 }
 
 /** `/sources/split*` as the research answers them (null: not it; 404 without `sources.split`). */

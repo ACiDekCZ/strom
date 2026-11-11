@@ -100,6 +100,14 @@ test('the preview comes from the bridge; Split with its progress, the toast, the
     await expect(page.locator('#research-load-modal')).toHaveCount(0);
 });
 
+test('the research\'s examples of locations not recognised are shown as in a tree of the app\'s own', async ({ page }) => {
+    await setup(page, { split: { unrecognizedExamples: ['Kniha N 7, zápis bez čísla', 'svazek bez označení'] } });
+    await openSources(page);
+    await line(page).getByRole('button', { name: 'Split as suggested…' }).click();
+    await expect(dialog(page).locator('.ssp-unrec')).toContainText('2 locations were not recognised and stay unchanged.');
+    await expect(dialog(page).locator('.ssp-unrec-ex')).toHaveText('E.g. “Kniha N 7, zápis bez čísla”, “svazek bez označení”.');
+});
+
 test('another plan meanwhile: the preview as it is now, said above the buttons, with its count', async ({ page }) => {
     const b = await setup(page, { split: { postReplies: [{ status: 409, body: {
         error: 'the split would now do otherwise', code: 'source.split.plan',

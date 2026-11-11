@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { localSplitOf, localSplitPlan, localSplitPreview, noteCallNumber, splitOffer, splitPreviewMark } from '../source-split.js';
 import { formatShortDateTime } from '../format.js';
+import { clipWithEllipsis } from '../text-clip.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { AuditLogManager } from '../audit-log.js';
@@ -76,6 +77,25 @@ describe('the local plan', () => {
         expect('note' in b.source).toBe(false);
         expect(localSplitOf(src('c', 'Matrika', { callNumber: 'N 8', note: 'Signatura: N 7' }))).toBeUndefined();
         expect(localSplitPlan([src('d', 'Matrika', { note: 'Call number: N 9' })]).fromNote).toBe(1);
+    });
+
+    it('counts as not recognised only a location without folio and image fields; names each example once, NFC', () => {
+        const nfd = 'Kniha N 7, zápis bez čísla'.normalize('NFD');
+        const plan = localSplitPlan([
+            // Split already: the rest of the location beside a folio or an image field is nothing to split.
+            src('a1', 'Matrika A', { reference: 'č. 5', folio: 'fol. 3' }),
+            src('a2', 'Matrika B', { reference: 'č. 6', image: '12' }),
+            src('b1', 'Kniha 1', { reference: 'Kniha N 7, zápis bez čísla' }),
+            src('b2', 'Kniha 2', { reference: nfd }),
+            src('b3', 'Kniha 3', { reference: '  Kniha N 7, zápis bez čísla ' }),
+            src('c1', 'Kniha 4', { reference: '家譜 第三巻 👨‍👩‍👧 🇨🇿' }),
+            src('c2', 'Kniha 5', { reference: 'svazek bez označení' }),
+            src('c3', 'Kniha 6', { reference: 'Ještě jeden' }),
+        ]);
+        expect(plan.changes).toEqual([]);
+        expect(plan.unrecognized).toBe(6);
+        expect(plan.unrecognizedExamples).toEqual(['Kniha N 7, zápis bez čísla', '家譜 第三巻 👨‍👩‍👧 🇨🇿', 'svazek bez označení']);
+        expect(plan.unrecognizedExamples.every(x => x === x.normalize('NFC'))).toBe(true);
     });
 
     it('marks a preview by what it does', () => {
@@ -163,5 +183,23 @@ describe('the split as one undo step', () => {
         DataManager.splitSourcePlaces(plan.changes.map(c => c.source));
         DataManager.createPerson({ firstName: 'Kvido', lastName: 'Pokusný', gender: 'male' });
         expect(DataManager.lastUndoMark()).toBeNull();
+    });
+});
+
+describe('an example cut for the dialog', () => {
+    it('keeps a short one, cuts a long one to 60 characters with "…", never inside a character', () => {
+        expect(clipWithEllipsis('Kniha N 7', 60)).toBe('Kniha N 7');
+        const emoji = '👨‍👩‍👧'.repeat(70);
+        const cut = clipWithEllipsis(emoji, 60);
+        expect(cut).toBe(`${'👨‍👩‍👧'.repeat(59)}…`);
+        const flags = clipWithEllipsis('🇨🇿'.repeat(61), 60);
+        expect(flags).toBe(`${'🇨🇿'.repeat(59)}…`);
+        // A letter with a combining mark that has no composed form stays one character.
+        const marks = clipWithEllipsis('q\u0303'.repeat(61), 60);
+        expect(marks).toBe(`${'q\u0303'.repeat(59)}…`);
+        const cjk = clipWithEllipsis('家譜第三巻'.repeat(13), 60);
+        expect(Array.from(cjk)).toHaveLength(60);
+        expect(cjk.endsWith('…')).toBe(true);
+        expect(clipWithEllipsis('é'.repeat(60), 60)).toBe('é'.repeat(60));
     });
 });

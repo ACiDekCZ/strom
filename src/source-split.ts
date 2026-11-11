@@ -55,9 +55,9 @@ export interface SplitPreview {
     count: number;
     /** Whether `rows` holds every source the split changes (else "Show all" reads them all). */
     complete: boolean;
-    /** Sources with a location in which neither a folio nor an image is recognised: they stay as they are. */
+    /** Sources with a location in which neither a folio nor an image is recognised, and neither field: they stay as they are. */
     unrecognized: number;
-    /** The first locations not recognised (examples; may be empty). */
+    /** The first locations not recognised (examples, each once, NFC; may be empty). */
     unrecognizedExamples: string[];
     /** How many sources take their call number from a note line (local; 0 through the bridge). */
     fromNote: number;
@@ -176,8 +176,8 @@ export interface LocalSplitPlan {
     fromNote: number;
 }
 
-/** How many locations not recognised the preview names. */
-export const SPLIT_UNRECOGNIZED_EXAMPLES = 2;
+/** How many locations not recognised the preview names (each once, NFC; the research's `unrecognizedExamples` alike). */
+export const SPLIT_UNRECOGNIZED_EXAMPLES = 3;
 
 /**
  * What one source's local split would be, or undefined when it changes
@@ -215,10 +215,13 @@ export function localSplitPlan(sources: readonly Source[]): LocalSplitPlan {
             continue;
         }
         if (!has(s.reference)) continue;
+        // A source with a folio or an image field is split already: the rest of its location ("č. 5") is nothing to split.
+        if (has(s.folio) || has(s.image)) continue;
         const found = recognizeLocation(s.reference);
         if (found?.folio || found?.image) continue;   // its folio and image are fields already: nothing to take
         unrecognized++;
-        if (examples.length < SPLIT_UNRECOGNIZED_EXAMPLES) examples.push(s.reference!.trim());
+        const example = s.reference!.trim().normalize('NFC');
+        if (examples.length < SPLIT_UNRECOGNIZED_EXAMPLES && !examples.includes(example)) examples.push(example);
     }
     return { changes, unrecognized, unrecognizedExamples: examples, fromNote };
 }

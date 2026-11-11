@@ -37,6 +37,19 @@ describe('the preview (GET /sources/split)', () => {
         expect(undo).toEqual({ id: '20261111101500-a1b2c3', at: Date.parse('2026-11-11T10:15:00.000Z'), count: 4 });
     });
 
+    it('reads the research\'s examples of locations not recognised: texts only, each once, NFC, at most three', () => {
+        const nfd = 'Kniha N 7, zápis bez čísla'.normalize('NFD');
+        const p = parseBridgeSplit({ ...preview(1), unrecognizedExamples: [
+            'Kniha N 7, zápis bez čísla', nfd, 7, '', '  svazek\tbez  označení ', '家譜 第三巻 👨‍👩‍👧', 'čtvrtý',
+        ] }, false)!.preview;
+        expect(p.unrecognizedExamples).toEqual(['Kniha N 7, zápis bez čísla', 'svazek bez označení', '家譜 第三巻 👨‍👩‍👧']);
+        expect(p.unrecognizedExamples.every(x => x === x.normalize('NFC'))).toBe(true);
+        expect(parseBridgeSplit({ ...preview(1), unrecognizedExamples: 'Kniha' }, false)!.preview.unrecognizedExamples).toEqual([]);
+        // A long one is cut whole characters long.
+        const long = parseBridgeSplit({ ...preview(1), unrecognizedExamples: ['🇨🇿'.repeat(500)] }, false)!.preview.unrecognizedExamples[0]!;
+        expect(long).toBe(`${'🇨🇿'.repeat(399)}…`);
+    });
+
     it('is complete with ?all=1 or when every row came', () => {
         const all = bridgeSplitReadReply(200, preview(12, 12), true);
         expect(all.ok && all.reading.preview.complete).toBe(true);
