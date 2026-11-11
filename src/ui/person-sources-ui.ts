@@ -210,9 +210,12 @@ export const personSourcesMethods = uiModule({
                 const label = qualityLabel(quality);
                 return label ? ` <span class="source-quality-tag">${esc(label)}</span>` : '';
             };
-            const labels = r.cites.map(c => (c.title
-                ? `<span title="${esc(c.title)}">${esc(c.label)}</span>` : esc(c.label))
-                + (whole === null && !c.story ? tag(c.quality) : '')).join(' · ');
+            const labels = r.cites.map(c => {
+                const label = c.title ? `<span title="${esc(c.title)}">${esc(c.label)}</span>` : esc(c.label);
+                const own = whole === null && !c.story ? tag(c.quality) : '';
+                // A fact and its own reliability wrap as one, never apart on a narrow screen.
+                return own ? `<span class="person-source-cite">${label}${own}</span>` : label;
+            }).join(' · ');
             const focus = this.personSourcesFocus?.has(r.source.id) ?? false;
             const cls = `person-source-row${before !== null && !before.has(key(r)) ? ' is-new' : ''}${focus ? ' is-focus' : ''}`;
             const row = `
