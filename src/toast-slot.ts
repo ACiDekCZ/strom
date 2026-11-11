@@ -175,7 +175,7 @@ function actionsOf(host: HTMLElement): HTMLElement {
  * more; 0 where none shows. The stylesheet keeps a toast in their row
  * between them (where they float: a phone, a tablet, a phone held sideways).
  */
-function measureClearance(): void {
+export function measureClearance(): void {
     const root = document.documentElement;
     const vw = window.innerWidth;
     let left = 0, right = 0;

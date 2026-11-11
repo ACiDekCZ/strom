@@ -1,8 +1,8 @@
 /**
  * Table view (T54 F8): a cell edited in place, without the DOM.
  *
- * Only a cell that stands for one fact of the tree is edited there: a
- * surname, the sex and the reference number (chosen / typed), the date and
+ * Only a cell that stands for one fact of the tree is edited there: the
+ * first name (T54 G10), a surname, the sex and the reference number (chosen / typed), the date and
  * the place of a birth, a baptism, a death, a burial, the cause of death and
  * the age at death as recorded, an occupation (while the person has at most
  * one), and a union's own facts (the Unions table, a union's sub-row, a
@@ -32,7 +32,7 @@ import type { GridLine } from './table-subrows.js';
 
 /** The fact a cell edits. */
 export type EditField =
-    | 'lastName' | 'marriedSurname'
+    | 'firstName' | 'lastName' | 'marriedSurname'
     | 'birthDate' | 'birthPlace' | 'deathDate' | 'deathPlace'
     | 'baptismDate' | 'baptismPlace' | 'burialDate' | 'burialPlace'
     | 'occupation' | 'gender' | 'refn' | 'deathCause' | 'deathAge'
@@ -54,6 +54,7 @@ export interface EditTarget {
 
 /** The People table's columns that edit a fact of the person. */
 const PERSON_FIELDS: Readonly<Record<string, EditField | ((p: Person) => EditField)>> = {
+    firstName: 'firstName',
     // "Surname" shows the married surname when there is one, else the birth surname: it edits what it shows.
     surname: p => (p.marriedSurname?.trim() ? 'marriedSurname' : 'lastName'),
     birthSurname: 'lastName',
@@ -160,6 +161,7 @@ function storedOf(data: StromData, t: EditTarget): string {
     const p = t.personId ? data.persons[t.personId] : undefined;
     if (!p) return '';
     switch (t.field) {
+        case 'firstName': return p.firstName ?? '';
         case 'lastName': return p.lastName ?? '';
         case 'marriedSurname': return p.marriedSurname ?? '';
         case 'birthDate': return p.birthDate ?? '';
@@ -231,8 +233,11 @@ export function editChangeOf(data: StromData, t: EditTarget, text: string, lang?
     if (!p) return { ok: true, change: null };
     const personId = p.id;
     switch (t.field) {
-        case 'lastName':
+        case 'firstName':
             // As the dialog: a person keeps a first name or a surname (a placeholder may have none).
+            if (!value && !p.lastName?.trim() && !p.isPlaceholder) return { ok: false, error: 'name' };
+            return { ok: true, change: { kind: 'person', personId, updates: { firstName: value } } };
+        case 'lastName':
             if (!value && !p.firstName?.trim() && !p.isPlaceholder) return { ok: false, error: 'name' };
             return { ok: true, change: { kind: 'person', personId, updates: { lastName: value } } };
         case 'marriedSurname':

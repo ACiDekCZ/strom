@@ -183,7 +183,7 @@ describe('the sheet (§11.3)', () => {
         expect(read.sheet).toContain('<mergeCells count="4"><mergeCell ref="A1:C1"/><mergeCell ref="D1:E1"/><mergeCell ref="F1:H1"/><mergeCell ref="J1:K1"/></mergeCells>');
         expect(read.cell('A1')!.style).toBe(XLSX_STYLE.group);
         const head = rowTexts(read, 2, n);
-        expect(head.slice(0, 4)).toEqual(['Name', 'Union', 'Sex', 'Birth date']);
+        expect(head.slice(0, 4)).toEqual(['Full name', 'Union', 'Sex', 'Birth date']);
         expect(read.cell('A2')!.style).toBe(XLSX_STYLE.bold);
         // Coverage: "filled" under the name, a percentage per column (a number shown "0%"), none for "Union".
         expect(read.cell('A3')!.text).toBe('filled');

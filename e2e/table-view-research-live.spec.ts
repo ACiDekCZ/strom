@@ -230,7 +230,7 @@ test.describe('export, read-only (§16.7, 16za, 16w)', () => {
         await openView(page, 'r:research');
         const lines = await downloadCsv(page);
         const head = lines[0];
-        expect(head).toEqual(['Name', 'Research', 'Awaiting decision', 'Conflicts', 'Hypotheses', 'Agent', 'Research tasks', 'Birth date', 'Death date']);
+        expect(head).toEqual(['Full name', 'Research', 'Awaiting decision', 'Conflicts', 'Hypotheses', 'Agent', 'Research tasks', 'Birth date', 'Death date']);
         for (const l of lines.slice(1)) {
             expect(l[head.indexOf('Agent')]).toBe('');
             expect(l[head.indexOf('Research tasks')]).toBe('');
@@ -250,7 +250,7 @@ test.describe('export, read-only (§16.7, 16za, 16w)', () => {
         await openView(page, 'r:research');
         await expect.poll(() => headOrder(page)).toEqual(['name', 'rSum', 'rConf', 'rHyp', 'bDate', 'dDate']);
         const lines = await downloadCsv(page);
-        expect(lines[0]).toEqual(['Name', 'Research', 'Conflicts', 'Hypotheses', 'Birth date', 'Death date']);
+        expect(lines[0]).toEqual(['Full name', 'Research', 'Conflicts', 'Hypotheses', 'Birth date', 'Death date']);
         await expect(page.locator('.toast').last()).not.toContainText('not being followed');
     });
 });

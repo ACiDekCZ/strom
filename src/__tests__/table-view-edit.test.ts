@@ -345,3 +345,29 @@ describe('a union without a wedding (T54 G5)', () => {
         expect(targetAt(m, 'v', 'divDate')).toMatchObject({ field: 'divorceDate' });
     });
 });
+
+describe('the full name and the first name (T54 G10)', () => {
+    it('"Full name" is the composed name (not edited); "First name" shows the given name alone and is edited', () => {
+        const data = tree();
+        const m = build(data);
+        expect(col('name').label).toBe('name');
+        expect(cellText(cellOf(m, rowOf(m, 'v'), col('name')))).toBe('Bořivoj Vrtišek');
+        expect(cellText(cellOf(m, rowOf(m, 'v'), col('firstName')))).toBe('Bořivoj');
+        expect(targetAt(m, 'v', 'name')).toBeNull();
+        const t = targetAt(m, 'v', 'firstName')!;
+        expect(t).toEqual({ field: 'firstName', input: 'text', personId: 'v', unionId: null });
+        expect(editValueOf(data, t)).toBe('Bořivoj');
+        expect(editChangeOf(data, t, '  Bořivoj Hostivít ')).toEqual({ ok: true, change: { kind: 'person', personId: 'v', updates: { firstName: 'Bořivoj Hostivít' } } });
+        expect(editChangeOf(data, t, 'Bořivoj')).toEqual({ ok: true, change: null });
+        // Emptied: the surname keeps the person named.
+        expect(editChangeOf(data, t, '')).toEqual({ ok: true, change: { kind: 'person', personId: 'v', updates: { firstName: '' } } });
+    });
+
+    it('a person without a surname keeps the first name', () => {
+        const data = tree();
+        data.persons['t' as PersonId].lastName = '';
+        data.persons['t' as PersonId].firstName = 'Radhost';
+        const m = build(data);
+        expect(editChangeOf(data, targetAt(m, 't', 'firstName')!, ' ')).toEqual({ ok: false, error: 'name' });
+    });
+});

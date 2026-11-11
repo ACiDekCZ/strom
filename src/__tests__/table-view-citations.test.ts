@@ -199,7 +199,7 @@ describe('citation columns (§14.3)', () => {
         const columns = ['name', 'bRef', 'wRef'].map(col);
         const out = buildTableCsv({ model: m, type: 'persons', rows: [row(m, 'a'), row(m, 'b')], columns });
         const lines = out.csv.replace(/^﻿/, '').split('\r\n');
-        expect(lines[0]).toBe('Name;Union;Birth: other location;Marriage: other location');
+        expect(lines[0]).toBe('Full name;Union;Birth: other location;Marriage: other location');
         expect(lines[1]).toBe('Radoslav Pecháček;1 of 2;fol. 7 (+2);fol. 30 (+1)');
         expect(lines[2]).toBe(';2 of 2;;fol. 99');
         expect(lines[3]).toBe('Ludmila Hruštičková;;;fol. 30 (+1)');

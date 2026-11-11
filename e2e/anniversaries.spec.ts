@@ -252,3 +252,86 @@ test('phone: opening the anniversaries from the More sheet puts out the More tab
     await page.locator('#anniversaries-modal .close-btn').click();
     await expect(moreDot).toBeHidden();
 });
+
+/**
+ * T54 G11: the card has the undo pill's look and place, bottom centre at
+ * every width (beside the side bar of a phone held sideways, the phone's
+ * width less its gutters on a phone), and rises above the family offer and
+ * the undo pill while they stand there, back at its place after.
+ */
+for (const vp of [
+    { name: 'desktop', width: 1440, height: 900 },
+    { name: 'tablet', width: 1024, height: 768 },
+    { name: 'phone held sideways', width: 844, height: 390 },
+    { name: 'phone', width: 390, height: 844 },
+]) {
+    test(`${vp.name}: the on-this-day card has the undo pill's look, at its place bottom centre, and rises above it (T54 G11)`, async ({ page }) => {
+        await page.clock.setFixedTime(new Date('2026-06-15T10:00:00Z'));
+        await page.setViewportSize({ width: vp.width, height: vp.height });
+        await openApp(page, { onThisDay: true });
+        await createFirstPerson(page, 'Dobromil', 'Hrachovec', { gender: 'male', birthDate: '1950-06-15' });
+        await waitForPersist(page, 'Dobromil');
+        await page.evaluate(() => window.Strom.UI.dismissUndoToast());
+        await page.evaluate(() => window.Strom.UI.maybeShowOnThisDay());
+        const card = page.locator('#otd-card');
+        await expect(card).toBeVisible();
+        await expect(card).toContainText('Dobromil');
+        // The family offer after the first person stands at that place too: the card above it, down once it goes.
+        const offer = page.locator('.family-offer.show .family-offer-pill');
+        await expect(offer).toBeVisible();
+        await expect.poll(async () => {
+            const c = (await card.boundingBox())!;
+            const o = (await offer.boundingBox())!;
+            return c.y + c.height <= o.y;
+        }).toBe(true);
+        await page.locator('.family-offer-close').click();
+        await expect(page.locator('.family-offer')).toHaveCount(0);
+        await expect.poll(() => card.evaluate((el) => el.style.bottom)).toBe('');
+
+        const box = (await card.boundingBox())!;
+        const room = await page.evaluate(() => {
+            const side = document.getElementById('bottom-bar');
+            const r = side?.getBoundingClientRect();
+            // A bar standing on the left (a phone held sideways) narrows the room; one along the bottom does not.
+            return r && r.height > r.width ? { left: r.right, bar: 0 } : { left: 0, bar: r && r.width > 0 ? window.innerHeight - r.top : 0 };
+        });
+        if (vp.name === 'phone') {
+            expect(box.x).toBeGreaterThanOrEqual(12 - 0.5);
+            expect(box.x + box.width).toBeLessThanOrEqual(vp.width - 12 + 0.5);
+        } else {
+            const mid = room.left + (vp.width - room.left) / 2;
+            expect(Math.abs(box.x + box.width / 2 - mid)).toBeLessThanOrEqual(1);
+        }
+        expect(box.y + box.height).toBeLessThanOrEqual(vp.height - room.bar - 11);
+        // Clear of the tree legend in the bottom-left corner.
+        const legend = page.locator('.tree-legend');
+        if (await legend.isVisible()) {
+            const l = (await legend.boundingBox())!;
+            expect(l.x + l.width <= box.x || box.y + box.height <= l.y || l.y + l.height <= box.y).toBe(true);
+        }
+
+        const look = (sel: string) => page.locator(sel).evaluate((el) => {
+            const c = getComputedStyle(el);
+            return { bg: c.backgroundColor, border: `${c.borderTopWidth} ${c.borderTopStyle} ${c.borderTopColor}`, shadow: c.boxShadow, size: c.fontSize };
+        });
+        const cardLook = await look('#otd-card');
+        await page.evaluate(() => window.Strom.UI.showUndoToast('editing Dobromil Hrachovec'));
+        const pill = page.locator('body > .undo-toast.show');
+        await expect(pill).toBeVisible();
+        expect(await look('body > .undo-toast.show')).toEqual(cardLook);
+        // The pill takes the card's place; the card stands above it, the two never overlap.
+        // (the pill slides in from below: measured once it rests)
+        await expect.poll(async () => {
+            const r = (await pill.boundingBox())!;
+            return Math.abs(r.y + r.height - (box.y + box.height)) <= 1;
+        }).toBe(true);
+        const p = (await pill.boundingBox())!;
+        await expect(card).toBeVisible();
+        await expect.poll(async () => {
+            const c = (await card.boundingBox())!;
+            return c.y + c.height <= p.y;
+        }).toBe(true);
+        await page.evaluate(() => window.Strom.UI.dismissUndoToast());
+        await expect.poll(async () => Math.round((await card.boundingBox())!.y)).toBe(Math.round(box.y));
+    });
+}

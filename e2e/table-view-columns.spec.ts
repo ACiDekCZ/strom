@@ -59,7 +59,7 @@ test.describe('desktop (1440)', () => {
 
         // The name stays checked and locked.
         await panel.getByRole('button', { name: /^Person\b/ }).click();
-        const name = panel.getByRole('checkbox', { name: 'Name', exact: true });
+        const name = panel.getByRole('checkbox', { name: 'Full name', exact: true });
         await expect(name).toBeChecked();
         await expect(name).toBeDisabled();
         await expect(panel.locator('.tv-cp-item[data-col="name"] .tv-cp-note')).toHaveText('pinned');

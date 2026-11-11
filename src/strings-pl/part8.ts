@@ -1310,7 +1310,7 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
             },
         },
         col: {
-            name: 'Imię i nazwisko', surname: 'Nazwisko', birthSurname: 'Nazwisko rodowe', marriedSurname: 'Nazwisko po ślubie', titles: 'Tytuły',
+            name: 'Imię i nazwisko', firstName: 'Imię', surname: 'Nazwisko', birthSurname: 'Nazwisko rodowe', marriedSurname: 'Nazwisko po ślubie', titles: 'Tytuły',
             gender: 'Płeć', living: 'Żyjący', researchId: 'ID badań', refn: 'Nr ref.', gen: 'Pokolenie', kin: 'Pokrewieństwo z osobą główną', rod: 'Ród',
             bDate: 'Data urodzenia', bPlace: 'Miejsce urodzenia', bAddr: 'Adres urodzenia', bapDate: 'Data chrztu', bapPlace: 'Miejsce chrztu',
             fAge: 'Wiek ojca przy urodzeniu', mAge: 'Wiek matki przy urodzeniu', bComp: 'Kompletność urodzenia',

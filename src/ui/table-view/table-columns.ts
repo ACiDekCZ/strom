@@ -445,6 +445,8 @@ const inUnion = (fn: (ctx: TableContext, row: PersonRow, u: Partnership) => Cell
 export const PERSON_COLUMNS: readonly ColumnDef[] = cols('persons', [
     // Person
     { id: 'name', group: 'person', label: 'name', width: 250, get: (_c, r) => nameOf(asPerson(r)) },
+    // The given name alone (T54 G10): offered, not shown by default; edited in place as the dialog's field.
+    { id: 'firstName', group: 'person', label: 'firstName', width: 150, get: (_c, r) => textCell(asPerson(r).firstName) },
     { id: 'surname', group: 'person', label: 'surname', width: 150, get: (_c, r) => textCell(asPerson(r).marriedSurname || asPerson(r).lastName) },
     { id: 'birthSurname', group: 'person', label: 'birthSurname', width: 150, get: (_c, r) => textCell(asPerson(r).lastName) },
     { id: 'marriedSurname', group: 'person', label: 'marriedSurname', width: 150, get: (_c, r) => textCell(asPerson(r).marriedSurname) },

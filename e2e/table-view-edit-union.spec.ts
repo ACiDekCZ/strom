@@ -8,7 +8,8 @@ import { card, openApp } from './helpers.js';
  * union's type and the sex chosen from their values, the cause and the
  * recorded age at death and the reference number typed; a union without a
  * wedding (partners) has "–" in the wedding's cells with why in the bubble,
- * no field there, and its completeness counts only the partner.
+ * no field there, and its completeness counts only the partner. T54 G10:
+ * "Full name" and the first name edited in its own column.
  */
 
 const person = (id: string, firstName: string, lastName: string, extra: Record<string, unknown> = {}) =>
@@ -182,5 +183,25 @@ test.describe('desktop (1440)', () => {
             await expect(c, id).toHaveText(value);
             expect((await personOf(page, 'v'))![field], id).toBe(value);
         }
+    });
+
+    test('"Full name" pinned and composed; "First name" offered, hidden by default, edited in the cell with one undo step (T54 G10)', async ({ page }) => {
+        await openTable(page);
+        await expect(tv(page, '.tv-headrow [data-col="name"]')).toContainText('Full name');
+        await expect(tv(page, '.tv-headrow [data-col="firstName"]')).toHaveCount(0);
+        await showColumns(page, ['First name']);
+        const first = await cell(page, 'p:v', 'firstName');
+        await expect(first).toHaveText('Bořivoj');
+        await first.dblclick();
+        await expect(editor(page)).toBeFocused();
+        await expect(editor(page)).toHaveValue('Bořivoj');
+        await editor(page).fill('Bolemír');
+        await editor(page).press('Enter');
+        await expect(first).toHaveText('Bolemír');
+        await expect(await cell(page, 'p:v', 'name')).toContainText('Bolemír Vrtišek');
+        expect((await personOf(page, 'v'))!.firstName).toBe('Bolemír');
+        await page.keyboard.press('ControlOrMeta+z');
+        await expect.poll(async () => (await personOf(page, 'v'))!.firstName).toBe('Bořivoj');
+        await expect(first).toHaveText('Bořivoj');
     });
 });

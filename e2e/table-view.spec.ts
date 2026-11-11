@@ -91,7 +91,7 @@ test.describe('desktop (1440)', () => {
         const status = page.locator('#table-container .tv-status-count');
         await expect(status).toHaveText('160 of 160 people');
         await expect(page.locator('#table-container .tv-status-sort')).toHaveText('Sort: Birth date ↑');
-        await expect(page.locator('#table-container .tv-headrow [data-col="name"]')).toHaveText('Name');
+        await expect(page.locator('#table-container .tv-headrow [data-col="name"]')).toHaveText('Full name');
 
         // Only a window of the 160 rows is in the DOM; scrolled to the end, the last row is drawn and the first is not.
         const rows = page.locator('#table-container .tv-body .tv-row');
@@ -205,6 +205,25 @@ test.describe('desktop (1440)', () => {
         await expect(selected).toHaveCount(0);
         await page.locator('#view-mode-family').click();
         await expect.poll(focusId).toBe('p92');
+    });
+
+    test('the diagram\'s back / forward (↩ ↪) stay away from the table and come back with the diagram (T54 G14)', async ({ page }) => {
+        await openApp(page);
+        await seedTree(page, longTree(12), 'Kvelden', 'p0');
+        await page.evaluate(() => window.Strom.TreeRenderer.setFocus('p4' as never));
+        await page.evaluate(() => window.Strom.TreeRenderer.setFocus('p8' as never));
+        await page.locator('#focus-back-btn').click();
+        await expect.poll(() => page.evaluate(() => window.Strom.TreeRenderer.getFocusPersonId())).toBe('p4');
+        const back = page.locator('#focus-back-btn');
+        const forward = page.locator('#focus-forward-btn');
+        await expect(back).toBeVisible();
+        await expect(forward).toBeVisible();
+        await openTable(page);
+        await expect(back).toBeHidden();
+        await expect(forward).toBeHidden();
+        await page.locator('#view-mode-family').click();
+        await expect(back).toBeVisible();
+        await expect(forward).toBeVisible();
     });
 });
 

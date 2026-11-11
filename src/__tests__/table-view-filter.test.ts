@@ -173,7 +173,7 @@ describe('column filters (§8.2)', () => {
         expect(f.items).toEqual([]);
         const m = build();
         const g: TableFilter = { op: 'and', items: [{ chip: 'deceased' }, { col: 'name', kind: 'text', text: 'ign' }, { col: 'bDate', kind: 'date', from: 1800, to: 1850 }] };
-        expect(filterSummary(m, 'persons', g)).toBe('Deceased · Name contains “ign” · Birth date 1800–1850');
+        expect(filterSummary(m, 'persons', g)).toBe('Deceased · Full name contains “ign” · Birth date 1800–1850');
         expect(activeFilterCount(m, 'persons', g)).toBe(3);
         expect(activeFilterCount(m, 'unions', g)).toBe(0);
     });

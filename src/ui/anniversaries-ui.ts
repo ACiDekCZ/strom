@@ -21,6 +21,7 @@ import {
 import { uiModule } from './module.js';
 import { emptyStateHtml } from './empty-state.js';
 import { shownNameOrEmpty } from '../person-name.js';
+import { measureClearance } from '../toast-slot.js';
 
 /** Days ahead the menu count (and the ⋯ dot) covers (T33: said in its label). */
 export const ANNIVERSARY_SOON_DAYS = 7;
@@ -48,6 +49,69 @@ function soonAnniversaries(today: Date): Anniversary[] {
 
 function personName(p?: Person): string {
     return p ? shownNameOrEmpty(p) : '';
+}
+
+/**
+ * The notes that share the card's place at the bottom centre (T54 G11): a
+ * message, the undo pill, the focus confirmation, the family and tour offers.
+ */
+const NOTES_AT_CARD = 'body > .toast.show:not(.toast-held), body > .undo-toast.show, .focus-toast-box.show, '
+    + '.family-offer.show .family-offer-pill, .tour-offer.show';
+/** Room between the card and the note under it, as between the undo pill and the family offer. */
+const CARD_NOTE_GAP = 8;
+
+/** Top edge of a note where it rests (its fixed box's own bottom, not mid-slide in its animation). */
+function restingTop(el: HTMLElement): number {
+    let box: HTMLElement | null = el;
+    while (box && getComputedStyle(box).position !== 'fixed') box = box.parentElement;
+    if (!box) return el.getBoundingClientRect().top;
+    const bottom = parseFloat(getComputedStyle(box).bottom);
+    return Number.isFinite(bottom) ? window.innerHeight - bottom - box.offsetHeight : box.getBoundingClientRect().top;
+}
+
+/**
+ * The card stands above each note shown at its place and comes back down
+ * once the note goes: one inline bottom over its own rule's (T54 G11).
+ */
+function liftOnThisDay(card: HTMLElement): void {
+    card.style.removeProperty('bottom');
+    if (!card.classList.contains('active')) return;
+    const own = card.getBoundingClientRect();
+    let bottom = parseFloat(getComputedStyle(card).bottom) || 0;
+    const notes = [...document.querySelectorAll<HTMLElement>(NOTES_AT_CARD)]
+        .map(el => ({ el, r: el.getBoundingClientRect(), top: restingTop(el) }))
+        .filter(n => n.r.width > 0 && n.r.right > own.left && n.r.left < own.right && getComputedStyle(n.el).visibility !== 'hidden')
+        .sort((a, b) => b.top - a.top);
+    for (const n of notes) {
+        const noteBottom = n.top + n.r.height;
+        const cardTop = window.innerHeight - bottom - own.height;
+        if (noteBottom > cardTop && n.top < window.innerHeight - bottom) bottom = window.innerHeight - n.top + CARD_NOTE_GAP;
+    }
+    if (bottom !== (parseFloat(getComputedStyle(card).bottom) || 0)) card.style.bottom = `${bottom}px`;
+}
+
+/** While the card shows: a note coming, going or resized moves it (watched only then). */
+let otdWatch: { observer: MutationObserver; onResize: () => void } | null = null;
+
+function watchOnThisDay(card: HTMLElement): void {
+    unwatchOnThisDay();
+    let frame = 0;
+    const relayout = () => {
+        if (frame) return;
+        frame = requestAnimationFrame(() => { frame = 0; liftOnThisDay(card); });
+    };
+    const observer = new MutationObserver(relayout);
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+    window.addEventListener('resize', relayout);
+    otdWatch = { observer, onResize: relayout };
+    liftOnThisDay(card);
+}
+
+function unwatchOnThisDay(): void {
+    if (!otdWatch) return;
+    otdWatch.observer.disconnect();
+    window.removeEventListener('resize', otdWatch.onResize);
+    otdWatch = null;
 }
 
 export const anniversariesUiMethods = uiModule({
@@ -168,7 +232,10 @@ export const anniversariesUiMethods = uiModule({
         card.dataset.personId = ev.personIds[0];
         if (otherTree) card.dataset.treeId = otherTree.id;
         else delete card.dataset.treeId;
+        // At the undo pill's place (T54 G11): clear of ↩ ↪ and the zoom stack as they stand now.
+        measureClearance();
         card.classList.add('active');
+        watchOnThisDay(card);
         // Mark shown for today regardless of whether the user interacts.
         localStorage.setItem(key, '1');
     },
@@ -204,7 +271,10 @@ export const anniversariesUiMethods = uiModule({
     },
 
     dismissOnThisDay(): void {
-        document.getElementById('otd-card')?.classList.remove('active');
+        unwatchOnThisDay();
+        const card = document.getElementById('otd-card');
+        card?.classList.remove('active');
+        card?.style.removeProperty('bottom');
     },
 
     /** Count of anniversaries within ANNIVERSARY_SOON_DAYS, for the menu badge (0 = none). */

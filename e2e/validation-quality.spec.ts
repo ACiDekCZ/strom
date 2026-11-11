@@ -124,6 +124,26 @@ test.describe('validation: Problems and Leads', () => {
         await expect(sectionHead(modal, 'trace')).toHaveAttribute('aria-expanded', 'true');
     });
 
+    test('the first group is "To check"; "Fix all (n)" says under it what it fixes (T54 G15)', async ({ page }) => {
+        const treeId = await importTree(page, lhotak());
+        const modal = await openValidation(page, treeId);
+        await expect(sectionHead(modal, 'problem').locator('.vq-section-title')).toHaveText('To check');
+        await expect(sectionHead(modal, 'trace').locator('.vq-section-title')).toHaveText('Leads');
+        const fixAll = modal.locator('.validation-fix-all-btn');
+        await expect(fixAll).toHaveText('Fix all (1)');
+        const note = modal.locator('.vq-fixall-note');
+        await expect(note).toHaveText('Fixes: a place written several ways – unified to the most used spelling (1). Other findings stay unchanged.');
+        await expect(fixAll).toHaveAttribute('aria-describedby', 'vq-fixall-note');
+        // The line stands under the sentence and the button.
+        const noteBox = (await note.boundingBox())!;
+        expect(noteBox.y).toBeGreaterThanOrEqual((await fixAll.boundingBox())!.y + (await fixAll.boundingBox())!.height - 1);
+        // Read-only: no button, no line.
+        await page.evaluate(() => window.Strom.UI.closeTreeValidationDialog());
+        await page.evaluate(() => { (window.Strom.DataManager as unknown as { viewMode: boolean }).viewMode = true; });
+        const ro = await openValidation(page, treeId);
+        await expect(ro.locator('.vq-fixall-note')).toHaveCount(0);
+    });
+
     test('a group of 50 or more shows 20, then 20 more per click, the focus stays on the button', async ({ page }) => {
         const treeId = await importTree(page, manyErrors(55));
         const modal = await openValidation(page, treeId);

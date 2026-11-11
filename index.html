@@ -8799,42 +8799,55 @@
             color: #26241f;
         }
 
-        /* "On this day" card (bottom-left, non-blocking) */
+        /* "On this day" card (non-blocking, T54 G11): the undo pill's look and its place, bottom centre
+           (beside the side bar of a phone held sideways, between ↩ ↪ and ⛶ on a phone; the rules by
+           the undo pill below). --otd-x is its centring shift, 0 where it spans the phone's width. */
         .otd-card {
+            --otd-x: -50%;
             position: fixed;
-            left: 24px;
+            left: 50%;
             bottom: 24px;
-            max-width: 340px;
+            transform: translateX(var(--otd-x));
+            width: max-content;
+            max-width: min(92vw, 420px);
+            box-sizing: border-box;
             display: none;
             align-items: center;
-            gap: 10px;
-            padding: 12px 14px;
-            background: var(--card-bg);
-            border: 1px solid var(--border-color, rgba(0,0,0,0.1));
-            border-radius: 10px;
-            box-shadow: var(--shadow-sm);
+            gap: 12px;
+            padding: 8px 10px 8px 16px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            box-shadow: var(--shadow-lg);
+            font-size: 13px;
+            color: var(--text);
             z-index: 200;
             animation: otd-in 0.25s ease;
+            transition: opacity 0.2s ease, visibility 0.2s;
         }
         .otd-card.active { display: flex; }
-        /* Copper left rim ties the card to the anniversaries "on this day" motif. */
-        .otd-card-rim { border-left: 3px solid var(--accent); }
-        .otd-text { font-size: 14px; color: var(--text-color); cursor: pointer; line-height: 1.35; }
+        .otd-text {
+            min-width: 0; font-family: var(--font-serif); font-weight: 600; font-size: 13px; line-height: 1.4;
+            color: var(--text); cursor: pointer; overflow-wrap: anywhere;
+        }
         @media (hover: hover) { .otd-text:hover { color: var(--primary); } }
         .otd-close {
             flex-shrink: 0;
             border: none;
-            background: none;
-            font-size: 20px;
+            background: transparent;
+            font-size: 18px;
             line-height: 1;
             color: var(--text-light);
             cursor: pointer;
-            padding: 0 2px;
+            padding: 4px 8px;
+            border-radius: 999px;
+            transition: background 0.15s;
         }
-        @keyframes otd-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-        @media (max-width: 640px) {
-            .otd-card { left: 12px; right: 12px; bottom: 12px; max-width: none; }
-        }
+        @media (hover: hover) { .otd-close:hover { background: color-mix(in srgb, var(--primary) 12%, transparent); color: var(--text); } }
+        .otd-close:focus-visible, .otd-text:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        @keyframes otd-in { from { opacity: 0; transform: translateX(var(--otd-x)) translateY(8px); } to { opacity: 1; transform: translateX(var(--otd-x)); } }
+        /* A toast, the undo pill, the focus confirmation or an offer at that place: the card stands above
+           it (an inline bottom set by liftOnThisDay in src/ui/anniversaries-ui.ts), back once it goes. */
 
         /* Offline indicator (PWA) */
         .offline-indicator {
@@ -14110,6 +14123,10 @@
         @media (hover: hover) { .focus-nav-btn:hover { background: rgba(128,128,128,0.12); } }
         body.view-mode-print .focus-nav-btn { display: none !important; }
         @media print { .focus-nav-btn { display: none !important; } }
+        /* The Table view (T54 G14): back / forward step through the diagram's focus, which the table
+           neither shows nor sets (its active row goes along when it is left, spec 073 U9); there they
+           only moved the home person under the table unseen, so they stay away, as the toolbar's focus. */
+        body[data-view-mode="table"] .focus-nav-btn { display: none !important; }
 
         /* The confirmation after a focus set from a card's tab (§2,
            src/focus-toast.ts): "◎ Focused on {name} | ↩ Back" at the bottom
@@ -15661,6 +15678,8 @@
         #tree-validation-content .vq-readonly { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-light); }
         #tree-validation-content .vq-summary { justify-content: space-between; padding: 12px 14px; }
         #tree-validation-content .vq-summary-text { flex: 1 1 auto; min-width: 0; font-size: 14px; font-weight: 500; line-height: 1.45; color: var(--text); }
+        /* What Fix all fixes (T54 G15): a quiet line under the sentence and the button, the whole width. */
+        #tree-validation-content .vq-fixall-note { flex: 1 1 100%; min-width: 0; margin-top: -6px; font-size: 12.5px; line-height: 1.45; color: var(--text-light); overflow-wrap: anywhere; }
         #tree-validation-content .vq-section { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
         #tree-validation-content .vq-section-head {
             display: flex; align-items: center; gap: 8px; width: 100%; min-height: 28px; padding: 0;
@@ -22309,6 +22328,7 @@
            --map-floor = their reach from the viewport bottom (map-ui.ts). */
         body.map-view .toast,
         body.map-view .undo-toast,
+        body.map-view .otd-card,
         body.map-view .family-offer,
         body.map-view .tour-offer { bottom: max(24px, calc(var(--map-floor, 0px) + 12px)); }
         body.map-view:has(.undo-toast) .family-offer { bottom: calc(max(24px, calc(var(--map-floor, 0px) + 12px)) + 60px); }
@@ -22316,6 +22336,7 @@
         @media (max-width: 1024px) {
             body.map-view .toast,
             body.map-view .undo-toast,
+            body.map-view .otd-card,
             body.map-view .family-offer,
             body.map-view .tour-offer { bottom: max(calc(var(--bottom-bar-h) + 12px), calc(var(--map-floor, 0px) + 12px)); }
             body.map-view:has(.undo-toast) .family-offer { bottom: calc(max(calc(var(--bottom-bar-h) + 12px), calc(var(--map-floor, 0px) + 12px)) + 60px); }
@@ -22329,6 +22350,7 @@
                 transform: translateY(12px);
             }
             .undo-toast.show { transform: translateY(0); }
+            .otd-card { --otd-x: 0px; left: 12px; right: 12px; width: auto; max-width: none; }
             /* Every message toast takes the phone's width (16px gutters), never only the half right of its
                centre; a long sentence wraps (017 j). It rises above back / forward and the zoom stack
                (bar + 16 + 44 + 8), so the wider toast covers none of their buttons. */
@@ -22347,6 +22369,10 @@
             .toast { width: max-content; }
             .undo-toast { right: auto; width: auto; transform: translateX(-50%) translateY(12px); }
             .undo-toast.show { transform: translateX(-50%) translateY(0); }
+            .otd-card {
+                --otd-x: -50%; left: calc(var(--side-bar-w) + (100vw - var(--side-bar-w)) / 2); right: auto; width: max-content;
+                max-width: min(calc(100vw - var(--side-bar-w) - 24px), 420px);
+            }
         }
         /* Clear of the floating controls (round 7 §55): a toast in the row of ↩ ↪ (left) and the zoom
            stack's ⛶ (right) stands between them, 8px from each (--toast-clear-l / -r: their room,
@@ -22354,7 +22380,8 @@
            middle, narrower where it would reach them. */
         @media (min-width: 641px) and (max-width: 1024px) {
             .toast, .toast--rich { max-width: calc(100vw - 2 * max(16px, var(--toast-clear-l, 0px), var(--toast-clear-r, 0px))); }
-            .undo-toast { max-width: min(92vw, 420px, calc(100vw - 2 * max(16px, var(--toast-clear-l, 0px), var(--toast-clear-r, 0px)))); }
+            .undo-toast,
+            .otd-card { max-width: min(92vw, 420px, calc(100vw - 2 * max(16px, var(--toast-clear-l, 0px), var(--toast-clear-r, 0px)))); }
             .focus-toast,
             body > .at-focus-toast { max-width: min(calc(100vw - 248px), calc(100vw - 2 * max(16px, var(--toast-clear-l, 0px), var(--toast-clear-r, 0px)))); }
         }
@@ -22362,7 +22389,8 @@
            message or the focus confirmation at the pill's place in the same room (not held sideways:
            there the rule below). */
         @media (max-width: 640px) and (orientation: portrait), (max-width: 640px) and (min-height: 501px) {
-            body > .undo-toast:not(.at-message-toast):not(.at-focus-toast) {
+            body > .undo-toast:not(.at-message-toast):not(.at-focus-toast),
+            .otd-card {
                 left: max(12px, var(--toast-clear-l, 0px)); right: max(12px, var(--toast-clear-r, 0px));
             }
             /* A sentence longer than that room (src/toast-slot.ts fitPill): above them at the phone's width,
@@ -22378,7 +22406,7 @@
         }
         /* A phone held sideways: in the middle beside the side bar as before, narrower where it would reach them. */
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
-            .undo-toast, .toast {
+            .undo-toast, .toast, .otd-card {
                 max-width: min(420px, calc(2 * min(
                     (100vw - var(--side-bar-w)) / 2 + var(--side-bar-w) - max(calc(var(--side-bar-w) + 12px), var(--toast-clear-l, 0px)),
                     (100vw - var(--side-bar-w)) / 2 - max(12px, var(--toast-clear-r, 0px)))));
@@ -28651,7 +28679,7 @@
     </div>
 
     <!-- "On this day" card (shown once per tree per day) -->
-    <div id="otd-card" class="otd-card otd-card-rim">
+    <div id="otd-card" class="otd-card">
         <span id="otd-text" class="otd-text" onclick="window.Strom.UI.focusOnThisDay()"></span>
         <button class="otd-close" onclick="window.Strom.UI.dismissOnThisDay()" aria-label="Close" data-i18n-aria-label="buttons.close">&times;</button>
     </div>

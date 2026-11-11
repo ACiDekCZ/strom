@@ -158,7 +158,7 @@ test.describe('desktop (1440)', () => {
         expect(text.charCodeAt(0)).toBe(0xfeff);
         const lines = text.slice(1).split('\r\n').filter(Boolean);
         const head = lines[0].split(';');
-        expect(head[0]).toBe('Name');
+        expect(head[0]).toBe('Full name');
         expect(lines.length - 1).toBe(5);
         expect(lines.slice(1).every(l => l.split(';').length === head.length)).toBe(true);
         await expect(page.locator('.toast').last()).toContainText(

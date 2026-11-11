@@ -350,6 +350,13 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
             `${person} · ${event}: ${who}`,
         valFix: 'Napraw',
         valFixAll: 'Napraw wszystko',
+        // What "Fix all (n)" fixes, under the summary (T54 G15).
+        valFixAllNote: (n: { links: number; self: number; duplicate: number; places: number }) => 'Do naprawy: ' + [
+            n.links ? `uszkodzone powiązania między osobami a związkami (${n.links})` : '',
+            n.self ? `związek osoby z samą sobą – zostanie usunięty (${n.self})` : '',
+            n.duplicate ? `zduplikowany związek – zostanie połączony z pierwszym, dzieci zostają (${n.duplicate})` : '',
+            n.places ? `miejsce zapisane na kilka sposobów – zostanie ujednolicone do najczęstszego zapisu (${n.places})` : '',
+        ].filter(Boolean).join('; ') + '. Pozostałe wyniki pozostaną bez zmian.',
         valFixed: (count: number) => `Naprawiono ${nPl(count, 'problem', 'problemy', 'problemów')}`,
         // Problems and leads, "Not an error" (spec 021 K1.4, K1.5)
         summaryErrors: (e: number, w: number, l: number) => [
@@ -362,7 +369,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
             l ? nPl(l, 'wskazówka', 'wskazówki', 'wskazówek') : '',
         ].filter(Boolean).join(', ') + '.',
         summaryLeadsOnly: (l: number) => `Bez problemów. ${nPl(l, 'wskazówka', 'wskazówki', 'wskazówek')}.`,
-        valProblems: 'Problemy',
+        valProblems: 'Do sprawdzenia',
         valLeads: 'Wskazówki',
         leadsIntro: 'To nie są błędy. Wskazówki, które mogą pomóc w poszukiwaniach.',
         leadsSkipped: 'Nie są zgłaszani: proboszcz, akuszerka i chrzestny występujący tylko u rodzeństwa.',

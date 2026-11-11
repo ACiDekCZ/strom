@@ -61,7 +61,7 @@ test.describe('desktop (1440)', () => {
         const bytes = readFileSync(await download.path());
         expect(bytes.subarray(0, 2).toString('latin1')).toBe('PK');
         const read = readXlsx(new Uint8Array(bytes));
-        expect(read.cell('A2')?.text).toBe('Name');
+        expect(read.cell('A2')?.text).toBe('Full name');
         expect(read.cell('A3')?.text).toBe('filled');
         // Every part parses in the browser's own XML parser: one broken attribute in
         // styles.xml was enough for Numbers to refuse the whole file.
@@ -117,6 +117,6 @@ test.describe('phone (390)', () => {
         expect(download.suggestedFilename()).toBe('Trasknar_Overview_2026-06-15.xlsx');
         const bytes = readFileSync(await download.path());
         expect(bytes.subarray(0, 2).toString('latin1')).toBe('PK');
-        expect(readXlsx(new Uint8Array(bytes)).cell('A2')?.text).toBe('Name');
+        expect(readXlsx(new Uint8Array(bytes)).cell('A2')?.text).toBe('Full name');
     });
 });

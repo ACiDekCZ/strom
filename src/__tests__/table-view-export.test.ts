@@ -71,7 +71,7 @@ describe('buildTableCsv (§11.2)', () => {
         expect(out.csv.startsWith('﻿')).toBe(true);
         expect(out.csv.endsWith('\r\n')).toBe(true);
         const lines = parseCsv(out.csv.slice(1));
-        expect(lines[0]).toEqual(['Name', 'Union', 'Birth date', 'Age at death']);
+        expect(lines[0]).toEqual(['Full name', 'Union', 'Birth date', 'Age at death']);
         // Bonifác: three unions → his row and two continuation rows.
         const k = lines.findIndex(l => l[0].startsWith('Bonifác'));
         expect(lines[k][1]).toBe('1 of 3');
@@ -91,7 +91,7 @@ describe('buildTableCsv (§11.2)', () => {
         const columns = cols('persons', ['name', 'wPlace', 'bDate']);
         const all = buildTableCsv({ model: m, type: 'persons', rows: m.persons.filter(r => r.id === 'a'), columns });
         expect(parseCsv(all.csv.slice(1))).toEqual([
-            ['Name', 'Union', 'Marriage place', 'Birth date'],
+            ['Full name', 'Union', 'Marriage place', 'Birth date'],
             ['Bonifác Zlatohlávek', '1 of 3', 'Horní Cvrčkov', 'abt. 1822'],
             ['', '2 of 3', 'Dolní Cvrčkov, okres X', ''],
             ['', '3 of 3', '', ''],
@@ -109,7 +109,7 @@ describe('buildTableCsv (§11.2)', () => {
     it('without a person of several unions there is no Union column; the Unions table has none', () => {
         const m = build();
         const one = buildTableCsv({ model: m, type: 'persons', rows: m.persons.filter(r => r.id === 'b'), columns: cols('persons', ['name', 'partner']) });
-        expect(parseCsv(one.csv.slice(1))[0]).toEqual(['Name', 'Partner']);
+        expect(parseCsv(one.csv.slice(1))[0]).toEqual(['Full name', 'Partner']);
         const u = buildTableCsv({ model: m, type: 'unions', rows: m.unions, columns: cols('unions', ['p1', 'p2', 'wDate']) });
         expect(u.lines).toBe(3);
         expect(parseCsv(u.csv.slice(1))[0]).toEqual(['Partner 1', 'Partner 2', 'Marriage date']);

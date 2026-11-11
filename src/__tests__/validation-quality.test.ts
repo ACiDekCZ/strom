@@ -7,9 +7,10 @@
  * The family is made up (the Lhoták family of Lhotka).
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
+import { setLanguage } from '../strings.js';
 import {
-    validateTreeData, groupValidationIssues, validationCounts, issueCategory,
+    validateTreeData, groupValidationIssues, validationCounts, issueCategory, fixAllNoteText,
     qualityFinding, qualityFindingKey, birthYears, AFTER_DEATH_EVENT_TYPES, ValidationIssue,
 } from '../validation.js';
 import { godparentLeads, participantName, attendsByOffice, siblingGroupCount } from '../godparents.js';
@@ -351,5 +352,29 @@ describe('Problems and Traces (K1.4)', () => {
         // NFD and NFC spellings of one name are one key.
         const nfd = qualityFinding(issue('3', 'info', 'recurringGodparent', ['a', 'b'], { subject: 'Václav Kmínek'.normalize('NFD') }));
         expect(qualityFindingKey(nfd)).toBe(qualityFindingKey(g1));
+    });
+});
+
+describe('what "Fix all (n)" fixes (T54 G15)', () => {
+    afterEach(() => setLanguage('en'));
+    const of = (...types: string[]): ValidationIssue[] =>
+        types.map(type => ({ type, severity: 'error', message: type }) as ValidationIssue);
+
+    it('names only the kinds present, each with its count; nothing fixable, no line', () => {
+        setLanguage('en');
+        expect(fixAllNoteText(of('orphanedParentRef', 'missingChildRef', 'placeSpelling'))).toBe(
+            'Fixes: broken links between people and unions (2); a place written several ways – unified to the most used spelling (1). Other findings stay unchanged.');
+        expect(fixAllNoteText(of('selfPartnership', 'duplicatePartnership', 'duplicatePartnership'))).toBe(
+            'Fixes: a union of a person with themselves – removed (1); a duplicate union – merged into the first, children kept (2). Other findings stay unchanged.');
+        expect(fixAllNoteText([])).toBe('');
+    });
+
+    it('in Czech, German and Polish without addressing anyone', () => {
+        setLanguage('cs');
+        expect(fixAllNoteText(of('placeSpelling'))).toBe('Opraví se: místo zapsané víckrát jinak – sjednotí se na nejčastější zápis (1). Ostatní nálezy zůstanou beze změny.');
+        setLanguage('de');
+        expect(fixAllNoteText(of('orphanedPartnerRef'))).toBe('Behoben wird: beschädigte Verknüpfungen zwischen Personen und Partnerschaften (1). Andere Befunde bleiben unverändert.');
+        setLanguage('pl');
+        expect(fixAllNoteText(of('duplicatePartnership'))).toBe('Do naprawy: zduplikowany związek – zostanie połączony z pierwszym, dzieci zostają (1). Pozostałe wyniki pozostaną bez zmian.');
     });
 });

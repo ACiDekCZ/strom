@@ -5264,6 +5264,13 @@ const stringsEN = {
             `${person} · ${event}: ${who}`,
         valFix: 'Fix',
         valFixAll: 'Fix all',
+        // What "Fix all (n)" fixes, under the summary (T54 G15): only the findings it fixes.
+        valFixAllNote: (n: { links: number; self: number; duplicate: number; places: number }) => 'Fixes: ' + [
+            n.links ? `broken links between people and unions (${n.links})` : '',
+            n.self ? `a union of a person with themselves – removed (${n.self})` : '',
+            n.duplicate ? `a duplicate union – merged into the first, children kept (${n.duplicate})` : '',
+            n.places ? `a place written several ways – unified to the most used spelling (${n.places})` : '',
+        ].filter(Boolean).join('; ') + '. Other findings stay unchanged.',
         valFixed: (count: number) => `Fixed ${count} issue${count !== 1 ? 's' : ''}`,
         // Problems and leads, "not an error" (spec 021 K1.4, K1.5)
         summaryErrors: (e: number, w: number, l: number) => [
@@ -5276,7 +5283,7 @@ const stringsEN = {
             l ? `${l} ${l === 1 ? 'lead' : 'leads'}` : '',
         ].filter(Boolean).join(', ') + '.',
         summaryLeadsOnly: (l: number) => `No problems. ${l} ${l === 1 ? 'lead' : 'leads'}.`,
-        valProblems: 'Problems',
+        valProblems: 'To check',
         valLeads: 'Leads',
         leadsIntro: 'Not errors. Leads that may help the research.',
         leadsSkipped: 'Not reported: the priest, the midwife and godparents only among siblings.',
@@ -8686,7 +8693,7 @@ const stringsEN = {
             },
         },
         col: {
-            name: 'Name', surname: 'Surname', birthSurname: 'Birth surname', marriedSurname: 'Married surname', titles: 'Titles',
+            name: 'Full name', firstName: 'First name', surname: 'Surname', birthSurname: 'Birth surname', marriedSurname: 'Married surname', titles: 'Titles',
             gender: 'Sex', living: 'Living', researchId: 'Research ID', refn: 'Ref. number', gen: 'Generation', kin: 'Relationship to home person', rod: 'Family line',
             bDate: 'Birth date', bPlace: 'Birthplace', bAddr: 'Birth address', bapDate: 'Baptism date', bapPlace: 'Baptism place',
             fAge: 'Father’s age at birth', mAge: 'Mother’s age at birth', bComp: 'Birth completeness',
@@ -13925,6 +13932,13 @@ const stringsCZ: StringsType = {
             `${person} · ${event}: ${who}`,
         valFix: 'Opravit',
         valFixAll: 'Opravit vše',
+        // What "Fix all (n)" fixes, under the summary (T54 G15).
+        valFixAllNote: (n: { links: number; self: number; duplicate: number; places: number }) => 'Opraví se: ' + [
+            n.links ? `poškozené vazby mezi osobami a svazky (${n.links})` : '',
+            n.self ? `svazek osoby se sebou samou – smaže se (${n.self})` : '',
+            n.duplicate ? `duplicitní svazek – sloučí se s prvním, děti zůstanou (${n.duplicate})` : '',
+            n.places ? `místo zapsané víckrát jinak – sjednotí se na nejčastější zápis (${n.places})` : '',
+        ].filter(Boolean).join('; ') + '. Ostatní nálezy zůstanou beze změny.',
         valFixed: (count: number) => `Opraveno ${count} ${plural('cs', count, 'problém', 'problémy', 'problémů')}`,
         // Problémy a stopy, „Není chyba“ (spec 021 K1.4, K1.5)
         summaryErrors: (e: number, w: number, l: number) => [
@@ -13937,7 +13951,7 @@ const stringsCZ: StringsType = {
             l ? `${l} ${plural('cs', l, 'stopa', 'stopy', 'stop')}` : '',
         ].filter(Boolean).join(', ') + '.',
         summaryLeadsOnly: (l: number) => `Bez problémů. ${l} ${plural('cs', l, 'stopa', 'stopy', 'stop')}.`,
-        valProblems: 'Problémy',
+        valProblems: 'K ověření',
         valLeads: 'Stopy',
         leadsIntro: 'Nejsou to chyby. Stopy, které mohou pomoct při pátrání.',
         leadsSkipped: 'Nehlásí se farář, porodní bába a kmotr jen u sourozenců.',
@@ -17310,7 +17324,7 @@ const stringsCZ: StringsType = {
             },
         },
         col: {
-            name: 'Jméno', surname: 'Příjmení', birthSurname: 'Rodné příjmení', marriedSurname: 'Příjmení po sňatku', titles: 'Tituly',
+            name: 'Celé jméno', firstName: 'Křestní jméno', surname: 'Příjmení', birthSurname: 'Rodné příjmení', marriedSurname: 'Příjmení po sňatku', titles: 'Tituly',
             gender: 'Pohlaví', living: 'Žijící', researchId: 'ID výzkumu', refn: 'Ref. číslo', gen: 'Generace', kin: 'Vztah k hlavní osobě', rod: 'Rod',
             bDate: 'Datum narození', bPlace: 'Místo narození', bAddr: 'Adresa narození', bapDate: 'Datum křtu', bapPlace: 'Místo křtu',
             fAge: 'Věk otce při narození', mAge: 'Věk matky při narození', bComp: 'Úplnost narození',
@@ -22489,6 +22503,13 @@ const stringsDE: StringsType = {
             `${person} · ${event}: ${who}`,
         valFix: 'Beheben',
         valFixAll: 'Alle beheben',
+        // What "Fix all (n)" fixes, under the summary (T54 G15).
+        valFixAllNote: (n: { links: number; self: number; duplicate: number; places: number }) => 'Behoben wird: ' + [
+            n.links ? `beschädigte Verknüpfungen zwischen Personen und Partnerschaften (${n.links})` : '',
+            n.self ? `Partnerschaft einer Person mit sich selbst – wird gelöscht (${n.self})` : '',
+            n.duplicate ? `doppelte Partnerschaft – wird mit der ersten zusammengeführt, Kinder bleiben (${n.duplicate})` : '',
+            n.places ? `ein Ort, verschieden geschrieben – wird auf die häufigste Schreibweise vereinheitlicht (${n.places})` : '',
+        ].filter(Boolean).join('; ') + '. Andere Befunde bleiben unverändert.',
         valFixed: (count: number) => `${count} ${count === 1 ? 'Problem' : 'Probleme'} behoben`,
         // Probleme und Hinweise, „Kein Fehler“ (spec 021 K1.4, K1.5)
         summaryErrors: (e: number, w: number, l: number) => [
@@ -22501,7 +22522,7 @@ const stringsDE: StringsType = {
             l ? `${l} ${l === 1 ? 'Hinweis' : 'Hinweise'}` : '',
         ].filter(Boolean).join(', ') + '.',
         summaryLeadsOnly: (l: number) => `Keine Probleme. ${l} ${l === 1 ? 'Hinweis' : 'Hinweise'}.`,
-        valProblems: 'Probleme',
+        valProblems: 'Zu prüfen',
         valLeads: 'Hinweise',
         leadsIntro: 'Keine Fehler. Hinweise, die bei der Forschung helfen können.',
         leadsSkipped: 'Nicht gemeldet werden Pfarrer, Hebamme und Paten nur bei Geschwistern.',
@@ -25854,7 +25875,7 @@ const stringsDE: StringsType = {
             },
         },
         col: {
-            name: 'Name', surname: 'Nachname', birthSurname: 'Geburtsname', marriedSurname: 'Ehename', titles: 'Titel',
+            name: 'Vollständiger Name', firstName: 'Vorname', surname: 'Nachname', birthSurname: 'Geburtsname', marriedSurname: 'Ehename', titles: 'Titel',
             gender: 'Geschlecht', living: 'Lebend', researchId: 'Forschungs-ID', refn: 'Ref.-Nummer', gen: 'Generation', kin: 'Beziehung zur Hauptperson', rod: 'Stamm',
             bDate: 'Geburtsdatum', bPlace: 'Geburtsort', bAddr: 'Geburtsadresse', bapDate: 'Taufdatum', bapPlace: 'Taufort',
             fAge: 'Alter des Vaters bei der Geburt', mAge: 'Alter der Mutter bei der Geburt', bComp: 'Vollständigkeit Geburt',

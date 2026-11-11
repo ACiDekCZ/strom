@@ -93,7 +93,7 @@ describe('the export (§16.7, 16za)', () => {
 
     it('text and counts, no marks: the summary, the conflicts, the agent, the tasks, the line', () => {
         const [head, josef, matej, marie] = csvLines(base, ['P0003', 'P0005', 'P0006']);
-        expect(head).toEqual(['Jméno', 'Výzkum', 'Čeká na rozhodnutí', 'Rozpory', 'Hypotézy', 'Agent', 'Úkoly výzkumu', 'Linie']);
+        expect(head).toEqual(['Celé jméno', 'Výzkum', 'Čeká na rozhodnutí', 'Rozpory', 'Hypotézy', 'Agent', 'Úkoly výzkumu', 'Linie']);
         expect(josef[5]).toBe('pracuje: Křest Josefa');
         expect(josef[6]).toBe('1: právě běží');
         expect(matej[1]).toBe('ve frontě');

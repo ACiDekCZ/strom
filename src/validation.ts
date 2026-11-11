@@ -1529,6 +1529,23 @@ export function groupValidationIssues(
     return sections;
 }
 
+/**
+ * What "Fix all (n)" fixes (T54 G15), from the fixable findings shown: the
+ * broken links (a reference to a person, a union or a participant that is
+ * gone, a back reference missing), a union of a person with themselves, a
+ * duplicate union, a place written several ways; '' without any.
+ */
+export function fixAllNoteText(fixable: readonly ValidationIssue[]): string {
+    const n = { links: 0, self: 0, duplicate: 0, places: 0 };
+    for (const i of fixable) {
+        if (i.type === 'selfPartnership') n.self++;
+        else if (i.type === 'duplicatePartnership') n.duplicate++;
+        else if (i.type === 'placeSpelling') n.places++;
+        else if (/^(orphaned|missing)/.test(i.type)) n.links++;
+    }
+    return n.links + n.self + n.duplicate + n.places ? strings.treeManager.valFixAllNote(n) : '';
+}
+
 /** The counts the summary sentence is made of (ZADANI_DEV §1.1). */
 export function validationCounts(issues: readonly ValidationIssue[]): { errors: number; warnings: number; traces: number } {
     let errors = 0, warnings = 0, traces = 0;
