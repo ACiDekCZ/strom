@@ -15,7 +15,7 @@ import {
 } from '../research-link.js';
 import {
     hypothesisPickable, hypothesisLinkUrl, hypothesesAcceptUrl, hypothesisChoiceStays, hypothesisChangeChangesTree,
-    hypothesisCannotReopen, HYPOTHESIS_BIG_JOIN, HypothesisPickEnv,
+    hypothesisCannotReopen, hypothesisChoiceKeepsTree, HYPOTHESIS_BIG_JOIN, HypothesisPickEnv,
 } from '../research-hypothesis-pick.js';
 import {
     researchHypothesisAsk, researchHypothesisWaitText, researchHypothesisReopenNote, researchHypothesisCannotReopenText,
@@ -365,6 +365,60 @@ describe('the question the terminal asks, as the waiting card repeats it (DEV §
             'To be confirmed in the research terminal (Enter = yes): decide H0052 for version A. Links 214 people. Then the terminal optionally asks for a reason. Nothing changes here until confirmed.');
         expect(researchHypothesisAsk({ ...h, proposal: { variant: null } }, 'keep-open')).toBe(
             'leave H0052 open. The agent\'s proposal (no version holds) is not accepted.');
+    });
+});
+
+describe('a hypothesis whose versions link nobody, decided in the app (K1.6)', () => {
+    const here: HypothesisPickEnv = { readOnly: false, features: [HYPOTHESIS_DECIDE_LINK_FEATURE], linkAvailable: true };
+    const ORIGIN = [
+        '1 _STROM_HYPO H0060', '2 TITL Odkud přišel Vlastimír do Lhoty?', '2 STAT open', '2 _PICK Y',
+        '2 _VAR A', '3 TITL Z Horní Lhoty', '3 SOUR @S1@',
+        '2 _VAR B', '3 TITL Z Hrádku',
+    ];
+    afterEach(() => setLanguage('en'));
+
+    it('_PICK Y with versions without _LINK is read and offered to choose', () => {
+        const [h] = hypothesesOf(ORIGIN);
+        expect(h).toMatchObject({ id: 'H0060', status: 'open', pickable: true });
+        expect(h.variants!.map(v => [v.id, v.links])).toEqual([['A', []], ['B', []]]);
+        expect(hypothesisPickable(h, here)).toBe('pick');
+        expect(hypothesisChoiceKeepsTree(h, 'A')).toBe(true);
+        expect(hypothesisChoiceKeepsTree(h, 'B')).toBe(true);
+    });
+
+    it('keeps the tree only where no link comes and none leaves', () => {
+        const child = { kind: 'child' as const, child: 'P0012', parents: ['P0013'] };
+        const h: ResearchHypothesis = {
+            id: 'H0061', title: 'Odkud?', status: 'open', pickable: true,
+            variants: [{ id: 'A', links: [child] }, { id: 'B', links: [] }, { id: 'C', links: [], people: 3 }],
+        };
+        expect([hypothesisChoiceKeepsTree(h, 'A'), hypothesisChoiceKeepsTree(h, 'B'), hypothesisChoiceKeepsTree(h, 'C')]).toEqual([false, true, false]);
+        expect(hypothesisChoiceKeepsTree(h, 'D')).toBe(false);
+        expect(hypothesisChoiceKeepsTree(h, null)).toBe(false);
+        // Changed from a linked version: its link leaves the tree, unless it stays (_STAYS).
+        expect(hypothesisChoiceKeepsTree({ ...h, status: 'decided', chosen: 'A' }, 'B')).toBe(false);
+        expect(hypothesisChoiceKeepsTree({ ...h, status: 'decided', chosen: 'A', reopen: { ok: false, type: 'work', stays: ['B'] } }, 'B')).toBe(true);
+        expect(hypothesisChoiceKeepsTree({ ...h, status: 'abandoned' }, 'B')).toBe(true);
+        expect(hypothesisChoiceKeepsTree({ ...h, status: 'decided', chosen: 'B', variants: [...h.variants!, { id: 'E', links: [] }] }, 'E')).toBe(true);
+    });
+
+    it('the wait says the tree stays and only the decision is recorded, in four languages', () => {
+        const [h] = hypothesesOf(ORIGIN);
+        const said: Record<Language, string> = {
+            cs: 'V terminálu výzkumu se potvrzuje (Enter = ano): rozhodnout H0060 pro verzi B. Strom se nezmění, zapíše se jen rozhodnutí. Pak se terminál nepovinně zeptá na důvod. Do potvrzení se tu nic nemění.',
+            en: 'To be confirmed in the research terminal (Enter = yes): decide H0060 for version B. The tree does not change; only the decision is recorded. Then the terminal optionally asks for a reason. Nothing changes here until confirmed.',
+            de: 'Im Terminal der Forschung zu bestätigen (Enter = ja): H0060 für Version B entscheiden. Der Stammbaum ändert sich nicht, nur die Entscheidung wird eingetragen. Danach fragt das Terminal optional nach einer Begründung. Bis zur Bestätigung ändert sich hier nichts.',
+            pl: 'Potwierdzenie w terminalu badania (Enter = tak): rozstrzygnąć H0060 na rzecz wersji B. Drzewo się nie zmieni, zapisze się tylko rozstrzygnięcie. Potem terminal opcjonalnie zapyta o uzasadnienie. Do potwierdzenia nic się tu nie zmienia.',
+        };
+        for (const lang of Object.keys(said) as Language[]) {
+            setLanguage(lang);
+            expect(researchHypothesisWaitText(h, 'decide', 'B')).toBe(said[lang]);
+            expect(strings.research.hypoKeepsTree).not.toMatch(/\b(you|your|vy|váš|vaše|Sie|Ihr|du|wy|twój)\b/);
+        }
+        // A linked version says no such thing.
+        setLanguage('en');
+        const linked = hypothesesOf(['1 _STROM_HYPO H0022', '2 TITL Otec Vlastimíra?', '2 STAT open', '2 _PICK Y', ...TWO_FATHERS])[0];
+        expect(researchHypothesisAsk(linked, 'decide', 'B')).toBe('decide H0022 for version B.');
     });
 });
 

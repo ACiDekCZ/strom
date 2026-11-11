@@ -130,6 +130,27 @@ describe('waitingHypothesisPlan', () => {
         expect(waitingHypothesisPlan({ proposal: 'B' }, undefined, 'old')).toMatchObject({ kind: 'plain', more: false });
         expect(waitingHypothesisPlan({}, hypo({ status: 'decided', chosen: 'A' }), 'pick')).toMatchObject({ kind: 'plain', more: false });
     });
+
+    it('a hypothesis without a link (K1.6): its choices say the tree stays, once for the row or at each such version', () => {
+        const noLink = hypo({
+            title: 'Where did Kvido Mlynařík come from?',
+            variants: [{ id: 'A', title: 'From Kvítkovice', links: [] }, { id: 'B', title: 'From Zálesí', links: [] }],
+        });
+        const versions = waitingHypothesisPlan({}, noLink, 'pick');
+        expect(versions).toMatchObject({ kind: 'versions', keepsTree: true });
+        expect(versions.versions.map(v => [v.id, v.pick, v.keepsTree])).toEqual([['A', 'on', true], ['B', 'on', true]]);
+        expect(waitingHypothesisPlan({ proposal: 'B' }, noLink, 'pick')).toMatchObject({ kind: 'proposal', accept: 'on', keepsTree: true });
+        // Linked versions promise their links: no such sentence.
+        expect(waitingHypothesisPlan({}, hypo(), 'pick').keepsTree).toBe(false);
+        expect(waitingHypothesisPlan({ proposal: 'B' }, hypo(), 'pick').keepsTree).toBe(false);
+        // Mixed: only the version without a link says it.
+        const mixed = hypo({ variants: [hypo().variants![0], { id: 'B', title: 'From Zálesí', links: [] }] });
+        const plan = waitingHypothesisPlan({}, mixed, 'pick');
+        expect(plan.keepsTree).toBe(false);
+        expect(plan.versions.map(v => v.keepsTree)).toEqual([false, true]);
+        // Nothing to choose here: nothing said.
+        expect(waitingHypothesisPlan({ proposal: 'B' }, noLink, 'remote').keepsTree).toBe(false);
+    });
 });
 
 describe('accepting proposals at once (P2)', () => {

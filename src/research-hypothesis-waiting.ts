@@ -13,7 +13,7 @@
 import type { ResearchHypothesis } from './types.js';
 import type { LiveWaiting } from './research-link.js';
 import { MAX_HYPOTHESES_ACCEPT } from './research-link.js';
-import type { HypothesisPick } from './research-hypothesis-pick.js';
+import { HypothesisPick, hypothesisChoiceKeepsTree } from './research-hypothesis-pick.js';
 import type { PendingHypothesis, PendingHypothesisOutcome } from './research-hypothesis-wait.js';
 import { researchHypothesisBigJoin } from './research-hypotheses.js';
 import { isOpenHypothesis } from './view-links.js';
@@ -51,6 +51,8 @@ export interface WaitingHypothesisVersion {
     pick: Exclude<WaitingHypothesisButton, null>;
     /** The wait for the research is at this version (Choose asked). */
     waiting: boolean;
+    /** Choosing it leaves the tree as it is, only the decision is recorded (K1.6). */
+    keepsTree: boolean;
 }
 
 /** What the row of a hypothesis item in "What waits" offers (DEV §9). */
@@ -76,6 +78,12 @@ export interface WaitingHypothesisPlan {
     rowWait: boolean;
     /** "More ›": the hypothesis's card at its person. */
     more: boolean;
+    /**
+     * Every choice the row offers leaves the tree as it is, only the decision is recorded (K1.6): the
+     * accepted proposal's version, or each version offered. One sentence says so; with only some
+     * versions keeping it, each of those says so itself (`versions[].keepsTree`).
+     */
+    keepsTree: boolean;
 }
 
 /**
@@ -88,7 +96,7 @@ export function waitingHypothesisPlan(
     item: Pick<LiveWaiting, 'proposal'>, h: ResearchHypothesis | undefined, pick: HypothesisPick,
     opts: { pending?: PendingHypothesis | null; held?: boolean } = {},
 ): WaitingHypothesisPlan {
-    const plan: WaitingHypothesisPlan = { kind: 'plain', big: 0, accept: null, leave: null, versions: [], text: null, rowWait: false, more: false };
+    const plan: WaitingHypothesisPlan = { kind: 'plain', big: 0, accept: null, leave: null, versions: [], text: null, rowWait: false, more: false, keepsTree: false };
     if (!h || !isOpenHypothesis(h)) return plan;
     plan.more = true;
     const choosing = pick === 'pick';
@@ -104,6 +112,7 @@ export function waitingHypothesisPlan(
         if (choosing) {
             plan.accept = busy ? 'off' : 'on';
             plan.leave = busy ? 'off' : 'on';
+            plan.keepsTree = hypothesisChoiceKeepsTree(h, proposal);
         } else {
             plan.text = sentence;
         }
@@ -116,7 +125,9 @@ export function waitingHypothesisPlan(
             id: v.id, title: v.title ?? '',
             pick: busy ? 'off' : 'on',
             waiting: !!pending && pending.do === 'decide' && pending.variant === v.id,
+            keepsTree: hypothesisChoiceKeepsTree(h, v.id),
         }));
+        plan.keepsTree = plan.versions.every(v => v.keepsTree);
         plan.rowWait = !!pending && !plan.versions.some(v => v.waiting);
         return plan;
     }

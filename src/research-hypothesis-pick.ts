@@ -92,6 +92,25 @@ export function hypothesisChoiceStays(h: ResearchHypothesis, variant: string): b
     return !!h.reopen?.stays?.includes(variant);
 }
 
+/** A version links nobody into the tree: no link of its own and no people it would join (spec 074 K1.6). */
+export function hypothesisVariantLinksNobody(h: ResearchHypothesis, variant: string | null | undefined): boolean {
+    const v = variant ? (h.variants ?? []).find(x => x.id === variant) : undefined;
+    return !!v && v.links.length === 0 && !((v.people ?? 0) > 0);
+}
+
+/**
+ * Choosing this version leaves the tree as it is and the research only
+ * records the decision (spec 074 K1.6): the version links nobody, and no
+ * link of a version chosen before leaves the tree (the hypothesis is open
+ * or abandoned, its chosen version links nobody either, or the old link
+ * stays by `_STAYS`).
+ */
+export function hypothesisChoiceKeepsTree(h: ResearchHypothesis, variant: string | null | undefined): boolean {
+    if (!variant || !hypothesisVariantLinksNobody(h, variant)) return false;
+    if (h.status !== 'decided' || !h.chosen || h.chosen === variant) return true;
+    return hypothesisVariantLinksNobody(h, h.chosen) || hypothesisChoiceStays(h, variant);
+}
+
 /** A decided hypothesis can be changed to another version that changes the tree (one not chosen and not in `_STAYS`). */
 export function hypothesisChangeChangesTree(h: ResearchHypothesis): boolean {
     return (h.variants ?? []).some(v => v.id !== h.chosen && !hypothesisChoiceStays(h, v.id));

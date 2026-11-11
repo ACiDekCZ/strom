@@ -389,12 +389,16 @@ export const hypothesisWaitingMethods = uiModule({
                 btn.disabled = v.pick === 'off';
                 btn.onclick = () => this.askWaitingHypothesis(h, 'decide', v.id);
                 row.appendChild(btn);
+                // Only some versions keep the tree as it is: each of those says so (K1.6).
+                if (v.keepsTree && !plan.keepsTree) row.appendChild(el('span', 'hwr-version-note', r.hypoKeepsTree));
                 if (v.waiting && rid) {
                     const wait = this.waitingHypothesisWaitEl(rid, h);
                     if (wait) row.appendChild(wait);
                 }
             }
         }
+        // Every choice of the row keeps the tree as it is: one sentence says only the decision is recorded (K1.6).
+        if (plan.keepsTree) main.appendChild(el('p', 'hwr-keeps', r.hypoKeepsTree));
         const actions = el('div', 'hwr-actions');
         if (plan.accept && h && plan.proposal !== undefined) {
             const proposal = plan.proposal;

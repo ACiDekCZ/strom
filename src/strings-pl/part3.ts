@@ -816,6 +816,7 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
         hypoBig: (n: number) => `połączy ${nPl(n, 'osobę', 'osoby', 'osób')}`,
         hypoNoLinkNote: 'W drzewie nic się nie połączy, badanie zapisze tylko rozstrzygnięcie.',
         hypoInTreeNote: 'Drzewo się nie zmieni, badanie zapisze tylko rozstrzygnięcie.',
+        hypoKeepsTree: 'Drzewo się nie zmieni, zapisze się tylko rozstrzygnięcie.',
         hypoMerge: 'O scaleniu osób rozstrzyga się w badaniu.',
         hypoRemote: 'Rozstrzyga się na komputerze z badaniem.',
         hypoAcceptMany: (n: number) => `Przyjmij propozycje (${n})`,

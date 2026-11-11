@@ -182,6 +182,10 @@ test.describe('Research hypotheses in What waits and the overview', () => {
         const h31 = item(page, 'H0031');
         await expect(h31.locator('.hwr-version')).toHaveCount(2);
         await expect(h31.locator('.hwr-version[data-variant="B"] .hwr-version-title')).toHaveText('Ne, nebyli');
+        // B links nobody (K1.6): it alone says the tree stays.
+        await expect(h31.locator('.hwr-version[data-variant="B"] .hwr-version-note')).toHaveText('The tree does not change; only the decision is recorded.');
+        await expect(h31.locator('.hwr-version[data-variant="A"] .hwr-version-note')).toHaveCount(0);
+        await expect(h31.locator('.hwr-keeps')).toHaveCount(0);
         await expect(h31.locator('.hwr-accept')).toHaveCount(0);
         // Merging: only the research decides it.
         const h40 = item(page, 'H0040');

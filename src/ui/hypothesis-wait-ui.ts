@@ -25,6 +25,7 @@ import {
 } from '../research-hypothesis-wait.js';
 import { HypothesisLoadRow, researchHypothesisLoadRows, researchHypothesisOutcomeToast } from '../research-hypotheses.js';
 import { noteAcceptOutcome } from '../research-hypothesis-waiting.js';
+import { hypothesisVariantLinksNobody } from '../research-hypothesis-pick.js';
 import { researchDateLabel, liveSession } from './research-ui.js';
 import { researchSendMode } from './research-sync-ui.js';
 import { viewLinksToldInvalid } from './view-links-list-ui.js';
@@ -155,7 +156,8 @@ export const hypothesisWaitMethods = uiModule({
      * A version of the research has loaded over `treeId` (a load of any kind,
      * following live): the waits of its research are settled against it and
      * what became of them told — decided as asked: a notice with "Show" (the
-     * card), the shown versions of the person's other hypotheses unlinked, a
+     * card), the shown versions of the person's other hypotheses unlinked
+     * (not for a version that links nobody, K1.6: the tree stays), a
      * pinned bubble closed with the keyboard on the person's card; open again:
      * its notice; left open: nothing; decided otherwise: the card's line. A
      * decision put off ("Later") is loaded now: its line goes.
@@ -177,7 +179,9 @@ export const hypothesisWaitMethods = uiModule({
             if (note) setHypothesisCardNote(rid, id, note);
             const text = researchHypothesisOutcomeToast(id, o);
             const [personId] = hypothesisPersons(data, id);
-            if (o.kind === 'asked') this.researchHypothesisUnlinkOthers(treeId, id, personId);
+            // A version that links nobody (K1.6) places no family: what the person's other hypotheses show stays.
+            const h = hyps.get(id);
+            if (o.kind === 'asked' && !(o.variant && h && hypothesisVariantLinksNobody(h, o.variant))) this.researchHypothesisUnlinkOthers(treeId, id, personId);
             if (personId && decides(o)) {
                 this.researchHypothesisBubbleDone(personId);
                 this.refreshResearchEdgeSection(personId);

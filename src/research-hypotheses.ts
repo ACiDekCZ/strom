@@ -8,7 +8,7 @@ import { formatFlexDate } from './dates.js';
 import type { ResearchHypothesis, ResearchHypothesisVariant } from './types.js';
 import type { ResearchHypothesisDo } from './research-link.js';
 import { isOpenHypothesis } from './view-links.js';
-import { HYPOTHESIS_BIG_JOIN, hypothesisCannotReopen } from './research-hypothesis-pick.js';
+import { HYPOTHESIS_BIG_JOIN, hypothesisCannotReopen, hypothesisChoiceKeepsTree } from './research-hypothesis-pick.js';
 import { HypothesisCardNote, PendingHypothesisOutcome, hypothesisStateKey } from './research-hypothesis-wait.js';
 
 /** A decision's reason longer than this shows its first lines, the rest unfolded on a click. */
@@ -108,6 +108,8 @@ export function researchHypothesisAsk(h: ResearchHypothesis, what: ResearchHypot
         const big = researchHypothesisBigJoin(v);
         q = h.status === 'decided' && h.chosen && h.chosen !== variant ? r.hypoAskChange(id, h.chosen, variant) : r.hypoAskDecide(id, variant);
         if (big) q += ` ${r.hypoAskBig(big)}`;
+        // A version without a link (K1.6): the tree stays, only the decision is recorded.
+        else if (hypothesisChoiceKeepsTree(h, variant)) q += ` ${r.hypoKeepsTree}`;
     } else if (what === 'abandon') {
         q = r.hypoAskAbandon(id);
     } else if (what === 'reopen') {
