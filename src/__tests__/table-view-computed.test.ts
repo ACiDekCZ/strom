@@ -8,7 +8,7 @@ import { describe, it, expect } from 'vitest';
 import type { PersonId, StromData } from '../types.js';
 import { approxAgeBetween, flexDateParts } from '../dates.js';
 import { getStringsForLang, type Language } from '../strings.js';
-import { buildTableModel, type PersonRow, type TableModel } from '../ui/table-view/table-model.js';
+import { buildTableModel, type PersonRow, type TableModel, type TableRow } from '../ui/table-view/table-model.js';
 import { ageCell, cellOf, cellPlainText, columnById, columnNote, PERSON_COLUMNS, UNION_COLUMNS } from '../ui/table-view/table-columns.js';
 import { sortRows } from '../ui/table-view/table-filter.js';
 import { columnCoverage, coverageCell } from '../ui/table-view/table-coverage.js';
@@ -194,6 +194,33 @@ describe('coverage row (§6.1)', () => {
         expect(columnCoverage(m, rows, columnById('persons', 'wDate')!, coverageUnionsOf(dated))).toEqual({ filled: 4, total: 4, percent: 100 });
         // Unions table: one row per union.
         expect(columnCoverage(m, m.unions, columnById('unions', 'wPlace')!).percent).toBe(33);
+    });
+
+    it('a completeness column shows the average of its rows, not the share of filled cells (T54 G12)', () => {
+        const m = build();
+        const mean = (rows: readonly TableRow[], type: 'persons' | 'unions', id: string) => {
+            const col = columnById(type, id)!;
+            const cells = rows.map(r => cellOf(m, r, col)).filter(v => !v.na);
+            return { n: cells.length, avg: Math.round(cells.reduce((a, v) => a + (v.percent ?? 0), 0) / cells.length) };
+        };
+        for (const id of ['comp', 'bComp', 'dComp']) {
+            const want = mean(m.persons, 'persons', id);
+            const cov = columnCoverage(m, m.persons, columnById('persons', id)!);
+            expect(cov.percent).toBe(want.avg);
+            expect(cov.percent).toBeLessThan(100);
+            expect(cov.total).toBe(want.n);
+            expect(coverageCell(cov)).toMatchObject({ text: `${want.avg} %`, title: `average of ${want.n}` });
+        }
+        // Brenna overall 33 %, Tobin 20 %: the two alone average 27 %.
+        const two = m.persons.filter(r => r.id === 'w2' || r.id === 's');
+        expect(columnCoverage(m, two, columnById('persons', 'comp')!).percent).toBe(27);
+        // The living leave the death completeness out.
+        expect(columnCoverage(m, m.persons, columnById('persons', 'dComp')!).total).toBe(5);
+        // The Unions table's completeness too.
+        const u = mean(m.unions, 'unions', 'uComp');
+        expect(columnCoverage(m, m.unions, columnById('unions', 'uComp')!).percent).toBe(u.avg);
+        // Other columns keep the share of filled cells.
+        expect(columnCoverage(m, m.persons, columnById('persons', 'bDate')!).average).toBeUndefined();
     });
 });
 

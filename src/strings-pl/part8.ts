@@ -1391,6 +1391,7 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         },
         coverage: 'wypełniono',
         coverageOf: (a: number, b: number) => `${numPl(a)} z ${numPl(b)}`,
+        coverageAverage: (n: number) => `średnia z ${numPl(n)}`,
         missing: (list: string) => `brak: ${list}`,
         missingNone: 'niczego nie brakuje',
         compCounts: (list: string) => `Liczone z: ${list}.`,
