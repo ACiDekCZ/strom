@@ -14,13 +14,13 @@ import { fakeBridge, openResearch, poll, links, UUID, HEAD, NEW_HEAD, BRIDGE, Fa
 const FEATURES = ['waiting.groups', 'hypothesis.decide.link', 'hypothesis.links'];
 const LINKS = ['send', 'open', 'live', 'app', 'setup', 'hypothesis'];
 const T0 = new Date('2026-11-11T09:30:00Z');
-const ORIGIN = 'Odkud přišel Jan Ořechovský do Lhoty?';
+const ORIGIN = 'Odkud přišel Jan Ořechovský do Kapradinova?';
 const KEEPS = 'The tree does not change; only the decision is recorded.';
 
 /**
  * The research's tree: Jan without parents, his "?" edge named by H0051 (A:
  * Hostivít and Vavřena, B: Bořivoj), and H0060 about where he came from (A:
- * Horní Lhota, B: Hrádek), versions that link nobody.
+ * Horní Kapradinov, B: Ostružinov), versions that link nobody.
  */
 function ged(opts: { head?: string; decided?: string; birth?: string } = {}): string {
     const origin = opts.decided
@@ -37,8 +37,8 @@ function ged(opts: { head?: string; decided?: string; birth?: string } = {}): st
         '2 _VAR A', '3 TITL Syn Hostivíta a Vavřeny', '3 _LINK child', '4 _PERS @P0003@', '4 _PAR @P0001@', '4 _PAR @P0002@',
         '2 _VAR B', '3 TITL Syn Bořivoje Zálesáka', '3 _LINK child', '4 _PERS @P0003@', '4 _PAR @P0004@',
         '1 _STROM_HYPO H0060', `2 TITL ${ORIGIN}`, ...origin,
-        '2 _VAR A', '3 TITL Přišel z Horní Lhoty',
-        '2 _VAR B', '3 TITL Přišel z Hrádku',
+        '2 _VAR A', '3 TITL Přišel z Horního Kapradinova',
+        '2 _VAR B', '3 TITL Přišel z Ostružinova',
         '0 @P0001@ INDI', '1 NAME Hostivít /Ořechovský/', '1 SEX M', '1 REFN P0001', '2 TYPE strom-research', '1 FAMS @F0001@',
         '0 @P0002@ INDI', '1 NAME Vavřena /Cvrkalová/', '1 SEX F', '1 REFN P0002', '2 TYPE strom-research', '1 FAMS @F0001@',
         '0 @P0004@ INDI', '1 NAME Bořivoj /Zálesák/', '1 SEX M', '1 REFN P0004', '2 TYPE strom-research',

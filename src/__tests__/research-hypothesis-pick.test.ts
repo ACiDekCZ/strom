@@ -371,9 +371,9 @@ describe('the question the terminal asks, as the waiting card repeats it (DEV §
 describe('a hypothesis whose versions link nobody, decided in the app (K1.6)', () => {
     const here: HypothesisPickEnv = { readOnly: false, features: [HYPOTHESIS_DECIDE_LINK_FEATURE], linkAvailable: true };
     const ORIGIN = [
-        '1 _STROM_HYPO H0060', '2 TITL Odkud přišel Vlastimír do Lhoty?', '2 STAT open', '2 _PICK Y',
-        '2 _VAR A', '3 TITL Z Horní Lhoty', '3 SOUR @S1@',
-        '2 _VAR B', '3 TITL Z Hrádku',
+        '1 _STROM_HYPO H0060', '2 TITL Odkud přišel Vlastimír do Kapradinova?', '2 STAT open', '2 _PICK Y',
+        '2 _VAR A', '3 TITL Z Horního Kapradinova', '3 SOUR @S1@',
+        '2 _VAR B', '3 TITL Z Ostružinova',
     ];
     afterEach(() => setLanguage('en'));
 
