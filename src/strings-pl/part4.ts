@@ -251,7 +251,7 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
             oldResearch: 'Ta wersja badania jeszcze nie wyszukuje miejsc.',
         },
         waiting: {
-            title: 'Czeka na decyzję · Miejsca',
+            title: 'Czeka na załatwienie · Miejsca',
             group: 'Miejsca',
             questions: (n: number) => nPl(n, 'pytanie', 'pytania', 'pytań'),
             answer: 'Odpowiedz',
@@ -319,7 +319,7 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
             tSkipped: (n: number) => `Pominięto: ${n} (zmiany w międzyczasie).`,
             undo: 'Cofnij',
             undone: 'Cofnięto.',
-            errChanged: 'Pytanie zmieniło się w międzyczasie; „Czeka na decyzję” odświeżono.',
+            errChanged: 'Pytanie zmieniło się w międzyczasie; „Czeka na załatwienie” odświeżono.',
             errBusy: 'Nie można teraz odpowiedzieć: badanie jest zajęte. Za chwilę będzie to możliwe.',
             errLocked: 'Nie można teraz odpowiedzieć: badanie jest zajęte przez inną sesję.',
             errFailed: 'Nie udało się wysłać odpowiedzi.',

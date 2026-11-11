@@ -15,7 +15,7 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         cardAlways: 'Zawsze: kłódka, kolejność rodzeństwa, zakładki gałęzi.',
         cardBranchLink: 'Kolory gałęzi: ustawienia Drzewo ›',
         cardStory: 'Opowieść',
-        cardWaiting: 'Czeka na decyzję',
+        cardWaiting: 'Czeka na załatwienie',
         cardConflict: 'Sprzeczności w źródłach',
         cardQuestion: 'Otwarte pytania',
         cardAgent: 'Nad czym pracuje agent',
@@ -405,7 +405,7 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         badgeRunning: (n: number) => n >= 2 ? nPl(n, 'linia', 'linie', 'linii') : 'działa',
         badgeWaiting: (n: number) => `czeka ${n}`,
         badgeOff: 'nie działa',
-        srWaiting: (n: number) => `Na decyzję ${plPl(n, 'czeka', 'czekają', 'czeka')} ${nPl(n, 'sprawa', 'sprawy', 'spraw')}.`,
+        srWaiting: (n: number) => `Na załatwienie ${plPl(n, 'czeka', 'czekają', 'czeka')} ${nPl(n, 'sprawa', 'sprawy', 'spraw')}.`,
         srLive: (n: number) => n > 0 ? `Badanie jest śledzone na żywo. ${plPl(n, 'Pracuje', 'Pracują', 'Pracuje')} ${nPl(n, 'linia', 'linie', 'linii')}.` : 'Badanie jest śledzone na żywo.',
         srRunning: (n: number) => `Badanie trwa, ${plPl(n, 'pracuje', 'pracują', 'pracuje')} ${nPl(n, 'linia', 'linie', 'linii')}.`,
         srIdle: 'Badanie jest połączone, nikt nad nim nie pracuje.',
@@ -416,7 +416,7 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         offPanel: 'Badanie teraz nie działa. Drzewo można edytować; zmiany zostaną wysłane, gdy badanie znów się połączy.',
         idlePanel: (mode: 'auto' | 'manual' | 'off') => 'Badanie jest połączone, nikt teraz nad nim nie pracuje. ' + (mode === 'auto' ? 'Zmiany są do niego wysyłane automatycznie.' : mode === 'manual' ? 'Zmiany wysyła do niego przycisk Wyślij.' : 'Dane są z niego tylko wczytywane, zmiany zostają tutaj.'),
         switcherDotSr: (name: string, waiting: number) => `Drzewo: ${name}. ${waiting > 0
-            ? `W innym drzewie na decyzję ${plPl(waiting, 'czeka', 'czekają', 'czeka')} ${nPl(waiting, 'sprawa', 'sprawy', 'spraw')}.`
+            ? `W innym drzewie na załatwienie ${plPl(waiting, 'czeka', 'czekają', 'czeka')} ${nPl(waiting, 'sprawa', 'sprawy', 'spraw')}.`
             : 'W innym drzewie trwa badanie.'}`,
         otherTreeLabel: 'Gdzie indziej',
         otherTreeSr: (name: string, state: string) => `Działa też w innym drzewie: ${name}, ${state}. Wybranie przełącza na nie.`,

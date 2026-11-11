@@ -228,7 +228,7 @@ describe('the stack\'s bubble', () => {
         const words: [string, string, string][] = [
             ['cs', 'Klik: vybrat, co otevřít', 'Čeká na vyřízení · 3'],
             ['de', 'Klick: auswählen, was sich öffnet', 'Wartet auf Bearbeitung · 3'],
-            ['pl', 'Kliknięcie: wybór, co otworzyć', 'Czeka na decyzję · 3'],
+            ['pl', 'Kliknięcie: wybór, co otworzyć', 'Czeka na załatwienie · 3'],
         ];
         for (const [lang, click, head] of words) {
             setLanguage(lang as 'cs' | 'de' | 'pl');

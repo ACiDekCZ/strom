@@ -658,7 +658,7 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         },
         accordingTo: (v: string, src: string) => `${v} (źródło: ${src})`,
         historyPending: 'Historia tego regionu jest jeszcze uzupełniana.',
-        waiting: 'Czeka na decyzję:',
+        waiting: 'Czeka na załatwienie:',
         storyDraft: 'W badaniu czeka nowa wersja opowieści; strona pokazuje zatwierdzony tekst.',
         edgeMissing: {
             parents: 'Rodzice są jeszcze poszukiwani.',
@@ -1122,7 +1122,7 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         // The help mark "?" in a heading (src/ui/help-mark.ts, 1105 §9–§10).
         mark: (topic: string) => `Jak to działa: ${topic}`,
         markTitle: (topic: string, id: string) => `Jak to działa: ${topic} (${id})`,
-        topics: { queue: 'Kolejka', places: 'Miejsca', placesManager: 'Miejsca w drzewie', conflicts: 'Sprzeczności', personConflicts: 'Sprzeczności', waiting: 'Czeka na decyzję', now: 'Praca agenta', nowPaused: 'Wstrzymanie', imagesHeld: 'Obraz tylko w badaniu', readDocument: 'Odczytanie dokumentu', hypotheses: 'Kto rozstrzyga hipotezy', mapLookup: 'Odszukanie miejsc w badaniu', following: 'Śledzenie w wachlarzu i na mapie', nameVariants: 'Inne formy imienia i nazwiska', eventParticipants: 'Chrzestni i świadkowie', story: 'Opowieść', reliability: 'Co oznaczają znaczniki' },
+        topics: { queue: 'Kolejka', places: 'Miejsca', placesManager: 'Miejsca w drzewie', conflicts: 'Sprzeczności', personConflicts: 'Sprzeczności', waiting: 'Czeka na załatwienie', now: 'Praca agenta', nowPaused: 'Wstrzymanie', imagesHeld: 'Obraz tylko w badaniu', readDocument: 'Odczytanie dokumentu', hypotheses: 'Kto rozstrzyga hipotezy', mapLookup: 'Odszukanie miejsc w badaniu', following: 'Śledzenie w wachlarzu i na mapie', nameVariants: 'Inne formy imienia i nazwiska', eventParticipants: 'Chrzestni i świadkowie', story: 'Opowieść', reliability: 'Co oznaczają znaczniki' },
     },
     importNext: {
         title: 'Co dalej',
