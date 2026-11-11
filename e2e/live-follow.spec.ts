@@ -865,6 +865,11 @@ test.describe('following: the person menu says why it does not edit (063 U3 A5)'
             await expect(edit).toHaveAttribute('aria-disabled', 'true');
             await expect(edit).toContainText('Edit');
             await expect(edit).toContainText('Read-only while following the research.');
+            // The sheet slides up (a transform transition): a forced tap skips the stable check,
+            // so it waits until the sheet stands still, else the row may still be below the window.
+            await expect(sheet).toHaveClass(/\bactive\b/);
+            await expect.poll(() => sheet.locator('.bottom-sheet').evaluate(el => el.getAnimations().length)).toBe(0);
+            await expect(edit).toBeInViewport({ ratio: 1 });
             await edit.tap({ force: true });
             await expect(edit).toBeVisible();
             await expect(page.locator('#person-modal.active')).toHaveCount(0);
