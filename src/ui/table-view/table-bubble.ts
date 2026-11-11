@@ -95,7 +95,8 @@ export function legendHtml(research: 'full' | 'data' | null = null): string {
         ['reliability', `<span class="tv-leg-sample tv-leg-computed" aria-hidden="true">${esc(strings.reliability.human)}</span>`],
         ['subst', `<span class="tv-leg-sample"><span class="tv-subst" aria-hidden="true">${esc(t.subst.bapShort)}</span></span>`],
         ['computed', '<span class="tv-leg-sample tv-leg-computed" aria-hidden="true">≈ 67</span>'],
-        ['na', '<span class="tv-leg-sample tv-leg-computed" aria-hidden="true">–</span>'],
+        // As a cell that does not apply shows it: "–", faint and slanted.
+        ['na', '<span class="tv-leg-sample tv-cell--na" aria-hidden="true">–</span>'],
     ];
     html += '<div class="tv-bub-sep" role="separator"></div>';
     for (const [k, sym] of others) {
