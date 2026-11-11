@@ -116,6 +116,14 @@ describe('the stack menu’s name', () => {
     });
 });
 
+describe('the answer choice in German', () => {
+    it('agrees with any count (no singular verb after a plural count)', () => {
+        setLanguage('de');
+        expect(strings.card.menuAnswer(1)).toBe('Antworten · 1 wartend');
+        expect(strings.card.menuAnswer(2)).toBe('Antworten · 2 wartend');
+    });
+});
+
 describe('the stack menu’s place', () => {
     const view = { width: 1440, height: 900 };
     const menu = { width: 280, height: 160 };

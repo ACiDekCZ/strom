@@ -21091,7 +21091,7 @@ const stringsDE: StringsType = {
         ttCrossN: (n: number) => `Auch in ${n} weiteren Bäumen`,
         crossTreeGo: 'Zum Baum wechseln',
         ttFooter: 'Klick öffnet das Personenmenü',
-        menuAnswer: (n: number) => `Antworten · ${n} wartet`,
+        menuAnswer: (n: number) => `Antworten · ${n} wartend`,
         menuWaiting: (n: number) => `Wartet auf Erledigung · ${n} ›`,
         menuKnows: (p: string) => `Was die Forschung weiß · ${p} ›`,
         menuQuestions: (n: number) => nDe(n, 'Frage', 'Fragen'),
