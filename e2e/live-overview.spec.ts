@@ -822,7 +822,7 @@ test.describe('Customize panel: the order and the top (spec 057)', () => {
         const top = (key: string) => pop.locator(`.live-sec-top__row[data-key="top-${key}"]`);
         const chip = (key: string, part: string) => top(key).locator(`.live-sec-chip[data-value="${part}"]`);
         await expect(pop.locator('.live-sec-card__title')).toHaveText(['Sections and order', 'At the top']);
-        await expect(pop.locator('.live-sec-top__label')).toHaveText(['State', 'Last 24 h', 'This month', 'Follow in']);
+        await expect(pop.locator('.live-sec-top__label')).toHaveText(['State', 'Last 24 h', 'This month', 'Follow in: Family / Fan / Map']);
         await expect(top('state').locator('.live-sec-top__lock')).toHaveText('always shown');
         await expect(top('state').locator('[role="switch"]')).toHaveCount(0);
         // The cost: off without a choice, and said so; switched on, the amount shows and the word goes.

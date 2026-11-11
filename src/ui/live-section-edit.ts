@@ -10,6 +10,7 @@ import { strings } from '../strings.js';
 import {
     DEFAULT_ORDER, PrefKey, SectionPref, SectionPrefs, TopKey, panelSectionOrder, sectionOrder, topTileShown,
 } from './live-section-prefs.js';
+import { FOLLOW_VIEWS } from '../live-follow-prefs.js';
 
 /** Where the choices are made: the small panel's ⋯, the overview's ⋯, Settings. */
 export type EditSurface = 'panel' | 'overview' | 'settings';
@@ -33,6 +34,11 @@ export interface SectionEditRow {
     chosen: SectionPref | undefined;
     /** The state shown dashed when there is no choice (null in Settings: the default differs by place). */
     current: SectionPref | null;
+}
+
+/** "Follow in: Family / Fan / Map": the top row named with the views it offers (the row itself says only "Follow in"). */
+function followInLabel(): string {
+    return strings.live.topFollowIn(FOLLOW_VIEWS.map(v => strings.viewModeSwitch[v]).join(' / '));
 }
 
 /** A section's title where it is drawn (the panel's words, or the overview's). */
@@ -192,6 +198,6 @@ export function topEditRows(top: Readonly<Record<TopKey, boolean>>, opts: { phon
             key: 'month', label: L.topMonth, help: opts.phone ? L.monthPhoneNote : priceNote, locked: false, on: month, disabled: opts.phone,
             parts: [part('month.sessions', L.partSessions, !month || opts.phone), part('month.price', L.partPrice, !month || opts.phone)],
         },
-        { key: 'followIn', label: L.topFollowIn, help: L.followInHelp, locked: false, on: top.followIn, disabled: false, parts: [] },
+        { key: 'followIn', label: followInLabel(), help: L.followInHelp, locked: false, on: top.followIn, disabled: false, parts: [] },
     ];
 }

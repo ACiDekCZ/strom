@@ -709,7 +709,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         priceHelp: 'Koszt widać dopiero po włączeniu.',
         priceHelpLong: 'Koszt (kwota i odczyt skanów) widać dopiero po włączeniu.',
         monthPhoneNote: 'Na telefonie niewidoczny.',
-        topFollowIn: 'Śledzenie w',
+        topFollowIn: (views: string) => `Śledzenie w: ${views}`,
         followInHelp: 'Tylko podczas śledzenia na żywo.',
         moveUp: 'Przesuń w górę',
         moveDown: 'Przesuń w dół',
