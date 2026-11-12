@@ -1414,8 +1414,10 @@
             position: absolute;
             transform-origin: 0 0;
         }
-        /* Its own compositor layer only while it moves (src/zoom.ts): a layer
-           kept for good is drawn once and then scaled, which blurs the cards. */
+        /* Its own compositor layer only while it zooms (src/zoom.ts): a layer
+           kept for good is drawn once and then scaled, which blurs the cards.
+           A pan takes none: as a layer it forced the generation labels and the
+           cards over them into layers of their own, and they flickered. */
         #tree-canvas.is-moving { will-change: transform; }
 
         #tree-lines,
@@ -1465,9 +1467,11 @@
             pointer-events: none;
             overflow: hidden;
             opacity: 1;
-            transition: opacity 0.15s;
         }
-        /* Dimmed while the tree is actively panning/zooming. */
+        /* Dimmed while the tree is actively panning/zooming. At once, with no
+           fade: a running opacity transition makes the labels a layer of
+           their own, and every card over them with it, at the start and the
+           end of each pan (cards redrawn, a flicker on a large tree). */
         .gen-labels.panning { opacity: 0.6; }
         /* No left-fade veil over the cards: readability is handled by hiding
            each label a card covers (.gen-label.covered), so a card panned to the

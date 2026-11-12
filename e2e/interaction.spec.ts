@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, createFirstPerson, card, focusViaSearch } from './helpers.js';
+import { openApp, createFirstPerson, card, focusViaSearch, seedTree, type SeedPerson } from './helpers.js';
 
 function canvasTransform(page: Page): Promise<string> {
     return page.locator('#tree-canvas').evaluate((el) => (el as HTMLElement).style.transform);
@@ -114,7 +114,7 @@ test('a drag that starts on a card pans the canvas past a few pixels and opens n
     expect(await canvasTransform(page)).toBe(panned);
 });
 
-test('the canvas is a compositor layer only while it moves, and pans in whole pixels (sharp cards) (T01)', async ({ page }) => {
+test('the canvas is a compositor layer only while it zooms, never for a pan, and pans in whole pixels (sharp cards) (T01, 1112)', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
     const willChange = () => page.locator('#tree-canvas').evaluate((el) => getComputedStyle(el).willChange);
@@ -122,12 +122,15 @@ test('the canvas is a compositor layer only while it moves, and pans in whole pi
     // At rest: no layer hint (a kept layer is scaled, not redrawn — blurry cards).
     await expect.poll(willChange).toBe('auto');
 
-    // Dragging: the hint is on while the mouse is down and moving, off after.
+    // Dragging only moves the canvas, as the minimap does: no hint while the
+    // mouse is down and moving, none after (a layer made the cards flicker, 1112).
     const box = (await page.locator('#tree-container').boundingBox())!;
+    const before = await canvasTransform(page);
     await page.mouse.move(box.x + box.width - 40, box.y + 40);
     await page.mouse.down();
     await page.mouse.move(box.x + box.width - 120, box.y + 120, { steps: 4 });
-    expect(await willChange()).toBe('transform');
+    expect(await canvasTransform(page)).not.toBe(before);
+    expect(await willChange()).toBe('auto');
     await page.mouse.up();
     expect(await willChange()).toBe('auto');
 
@@ -146,6 +149,90 @@ test('the canvas is a compositor layer only while it moves, and pans in whole pi
     const m = /translate\((-?[\d.]+)px, (-?[\d.]+)px\)/.exec(t);
     expect(m, t).not.toBeNull();
     expect(Number.isInteger(Number(m![1])) && Number.isInteger(Number(m![2])), t).toBe(true);
+});
+
+/**
+ * A family of three generations, every couple with three children: enough
+ * cards on screen at 45 % for the generation labels to show over them.
+ */
+function threeGenerations(): Record<string, SeedPerson> {
+    const people: Record<string, SeedPerson> = {
+        a: { firstName: 'Hostivít', lastName: 'Kvapil', gender: 'male', partners: ['b'] },
+        b: { firstName: 'Zdeslava', lastName: 'Kvapilová', gender: 'female', partners: ['a'] },
+    };
+    for (let i = 0; i < 3; i++) {
+        const child = `c${i}`, spouse = `s${i}`;
+        people[child] = { firstName: `Radegast${i}`, lastName: 'Kvapil', gender: 'male', parents: ['a', 'b'], partners: [spouse] };
+        people[spouse] = { firstName: `Dobromila${i}`, lastName: 'Ctiborová', gender: 'female', partners: [child] };
+        for (let k = 0; k < 3; k++) {
+            people[`g${i}${k}`] = { firstName: `Velemír${i}${k}`, lastName: 'Kvapil', gender: k % 2 ? 'female' : 'male', parents: [child, spouse] };
+        }
+    }
+    return people;
+}
+
+test('a pan zoomed out to 45 % gives nothing in the canvas a layer of its own (no flicker, 1112)', async ({ page }) => {
+    // The flicker: the canvas as a layer of its own while panned forced what
+    // it holds into layers (the lines; on a large tree the generation labels
+    // and every card over them), which came and went as the pan went on.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openApp(page);
+    await seedTree(page, threeGenerations(), 'Kvapil', 'a');
+    await page.evaluate(() => {
+        const z = window.Strom.ZoomPan;
+        const c = z.viewCenterWorld();
+        z.zoomAroundWorldPoint(c.x, c.y, 0.45, 0, (t: number) => t);
+    });
+    await expect(page.locator('#tree-canvas')).toHaveClass(/zoom-far/);
+    await expect(page.locator('#tree-canvas')).not.toHaveClass(/zoom-tiny/);
+    await expect(page.locator('#gen-labels .gen-label:visible').first()).toBeVisible();
+
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('DOM.enable');
+    await cdp.send('DOM.getDocument', { depth: 0 });
+    let layers: { layerId: string; backendNodeId?: number }[] = [];
+    cdp.on('LayerTree.layerTreeDidChange', (e) => { if (e.layers) layers = e.layers; });
+    await cdp.send('LayerTree.enable');
+    /** What inside the canvas (lines, labels, cards) has a layer of its own. */
+    const ownLayers = async (): Promise<string[]> => {
+        const out: string[] = [];
+        for (const l of layers) {
+            if (!l.backendNodeId) continue;
+            const { object } = await cdp.send('DOM.resolveNode', { backendNodeId: l.backendNodeId });
+            if (!object.objectId) continue;
+            const { result } = await cdp.send('Runtime.callFunctionOn', {
+                objectId: object.objectId,
+                returnByValue: true,
+                functionDeclaration: 'function () { const c = document.getElementById("tree-canvas"); return this !== c && c.contains(this) ? (this.id || String(this.className?.baseVal ?? this.className)) : ""; }',
+            });
+            if (result.value) out.push(result.value as string);
+        }
+        return out;
+    };
+
+    // Grab the canvas where no card is and pan across the tree.
+    const start = await page.evaluate(() => {
+        const box = document.getElementById('tree-container')!.getBoundingClientRect();
+        for (let y = box.top + box.height * 0.3; y < box.bottom - 40; y += 11) {
+            for (let x = box.left + box.width * 0.3; x < box.right - 40; x += 13) {
+                const el = document.elementFromPoint(x, y);
+                if (el && !el.closest('.person-card, button, .minimap, .zoom-controls, .focus-controls') && el.closest('#tree-container')) return { x, y };
+            }
+        }
+        return null;
+    });
+    expect(start).not.toBeNull();
+    await page.mouse.move(start!.x, start!.y);
+    await page.mouse.down();
+    const seen = new Set<string>();
+    for (let i = 1; i <= 8; i++) {
+        await page.mouse.move(start!.x + i * 15, start!.y + i * 4);
+        await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+        for (const l of await ownLayers()) seen.add(l);
+    }
+    await page.mouse.up();
+    expect([...seen]).toEqual([]);
+    await cdp.detach();
 });
 
 test('expanded mode: a multi-marriage person shows all partners inline', async ({ page }) => {

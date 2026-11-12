@@ -93,7 +93,10 @@ const ZOOM_ANIMATION_DURATION = 200; // ms
  * the wheel has been quiet this long, then it is drawn sharp again.
  */
 const WHEEL_IDLE_MS = 150;
-/** Class on #tree-canvas while it moves (drag, pinch, wheel, animation): will-change: transform. */
+/**
+ * Class on #tree-canvas while its scale changes (pinch, wheel, animation): will-change: transform.
+ * A pan (drag, one finger) moves it without the class, as the minimap does: see beginMotion.
+ */
 const MOVING_CLASS = 'is-moving';
 /** Views drawn in their own container over the (hidden) tree canvas. */
 // The welcome of an empty tree scrolls itself too (a phone held sideways is shorter than it).
@@ -250,7 +253,7 @@ class ZoomPanClass {
             this.notifyCardPanStart();
         }
         if (!this.dragging) return;
-        this.beginMotion();
+        // A pan only moves the canvas: no layer hint (see beginMotion).
         this.tx = e.clientX - this.dragStartX;
         this.ty = e.clientY - this.dragStartY;
         this.apply();
@@ -360,7 +363,7 @@ class ZoomPanClass {
                         document.getElementById('tree-container')?.classList.add(CARD_PANNING_CLASS);
                         this.notifyCardPanStart();
                     }
-                    this.beginMotion();
+                    // A pan only moves the canvas: no layer hint (see beginMotion).
                     this.touchState.lastX = touch.clientX;
                     this.touchState.lastY = touch.clientY;
                 }
@@ -422,6 +425,7 @@ class ZoomPanClass {
         } else if (e.touches.length === 1 && this.lastPinchDistance > 0) {
             // Went from pinch to single finger - reset to pan mode
             this.lastPinchDistance = 0;
+            this.endMotion();
             const touch = e.touches[0];
             this.touchState = {
                 startTime: Date.now(),
@@ -445,19 +449,27 @@ class ZoomPanClass {
     // ==================== LAYER HINT ====================
 
     /**
-     * While the canvas moves it is its own compositor layer (will-change:
-     * transform), so dragging stays smooth. A layer kept for good is drawn
-     * once and then only scaled, which blurs the cards; at rest the hint is
-     * dropped and the browser draws the cards sharp at the current scale.
+     * While the canvas zooms it is its own compositor layer (will-change:
+     * transform), so pinch, wheel and animated zooms stay smooth. A layer kept
+     * for good is drawn once and then only scaled, which blurs the cards; at
+     * rest the hint is dropped and the browser draws the cards sharp at the
+     * current scale.
+     *
+     * A pan (mouse drag, one finger) takes no hint: it only moves the canvas,
+     * as the minimap does. As a layer of its own the canvas forced the
+     * generation labels (#gen-labels, between the lines and the cards, with a
+     * transform of their own) into a layer too, and with them every card
+     * painted over them: those cards gained and lost layers of their own as
+     * the pan went on and were drawn anew, and on a large tree they flickered
+     * (zoomed out to where the labels still show, 0.3-0.55 on a real tree).
      */
     private beginMotion(): void {
         document.getElementById('tree-canvas')?.classList.add(MOVING_CLASS);
     }
 
-    /** Drop the layer hint, unless something still moves the canvas. */
+    /** Drop the layer hint, unless something still zooms the canvas. */
     private endMotion(): void {
-        if (this.dragging || this.touchState?.isPanning || this.lastPinchDistance > 0
-            || this.animationFrame !== null || this.wheelIdleTimer !== null) return;
+        if (this.lastPinchDistance > 0 || this.animationFrame !== null || this.wheelIdleTimer !== null) return;
         document.getElementById('tree-canvas')?.classList.remove(MOVING_CLASS);
     }
 
