@@ -9,8 +9,9 @@
  * satellite's edit names the revision it was made on; another revision means
  * the tree changed meanwhile and the edit is refused (§3.4). The revision is
  * read from the tree's state itself (its id, its data object, the data's
- * local revision, the lock), so no change can slip past it; saves and data
- * events only make it be read at once.
+ * content revision, the lock), so no change can slip past it; saves and data
+ * events only make it be read at once. A save that changes no content (the
+ * last focus, the default person) raises nothing: no edit is refused for it.
  */
 
 import { DataManager } from '../data.js';
@@ -56,7 +57,7 @@ export function dataManagerHost(overrides: Partial<MainWindowHost> = {}): MainWi
         treeName: (id) => TreeManager.getTrees().find(t => t.id === id)?.name ?? '',
         treeExists: (id) => TreeManager.getTrees().some(t => t.id === id),
         storedJson: () => DataManager.storedDataJson(),
-        stateStamp: () => [DataManager.getCurrentTreeId(), DataManager.getData(), DataManager.getRevision(), DataManager.isLocked()],
+        stateStamp: () => [DataManager.getCurrentTreeId(), DataManager.getData(), DataManager.getContentRevision(), DataManager.isLocked()],
         applyEdit: (json, label) => DataManager.applyWindowEdit(json, label),
         busy: () => DataManager.isEditSessionActive(),
         undo: () => { if (DataManager.undo()) changed(); },

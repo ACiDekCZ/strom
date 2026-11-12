@@ -494,6 +494,8 @@ class TreeRendererClass {
      * localStorage.
      */
     private viewMode: ViewMode = 'family';
+    /** A satellite window's one view (setWindowView), else null. */
+    private windowView: ViewMode | null = null;
 
     /**
      * Descendants view: show partners' whole families (their other unions and
@@ -1725,8 +1727,9 @@ class TreeRendererClass {
         this.loadViewModeForCurrentTree();
 
         // A reload in this tab keeps the tree, the view and the person (1101);
-        // only the first tree load after the page start may use it.
-        const reload = takeReloadPoint();
+        // only the first tree load after the page start may use it. A
+        // satellite window's copy of its opener's point is not its own.
+        const reload = DataManager.isWindowCopy() ? null : takeReloadPoint();
 
         const persons = DataManager.getAllPersons();
 
@@ -3691,6 +3694,15 @@ class TreeRendererClass {
         this.persistViewMode();
     }
 
+    /**
+     * A satellite window's view (spec 079 §2): every tree load opens it, and
+     * nothing of it is remembered (the main window's last view stays).
+     */
+    setWindowView(mode: ViewMode): void {
+        this.windowView = mode;
+        this.viewMode = mode;
+    }
+
     /** Switch the display view mode and re-render. Persisted per tree. */
     setViewMode(mode: ViewMode): void {
         if (this.viewMode === mode) return;
@@ -3737,7 +3749,7 @@ class TreeRendererClass {
      */
     private persistViewMode(): void {
         const treeId = DataManager.getCurrentTreeId();
-        if (!treeId || DataManager.isViewMode()) return;
+        if (!treeId || DataManager.isViewMode() || DataManager.isWindowCopy()) return;
         recordLastView(treeId, this.viewMode);
         this.recordReload();
     }
@@ -3749,6 +3761,10 @@ class TreeRendererClass {
      * from the tree's default person (restoreFromSession).
      */
     loadViewModeForCurrentTree(): void {
+        if (this.windowView) {
+            this.viewMode = this.windowView;
+            return;
+        }
         const treeId = DataManager.getCurrentTreeId();
         this.viewMode = chooseStartView(DataManager.getData().defaultView, treeId ? readLastView(treeId) : null);
     }
@@ -3756,7 +3772,7 @@ class TreeRendererClass {
     /** Note where the work in this tab stands, for a reload of the page (1101). */
     private recordReload(): void {
         const treeId = DataManager.getCurrentTreeId();
-        if (!treeId || !this.focusPersonId || DataManager.isViewMode()) return;
+        if (!treeId || !this.focusPersonId || DataManager.isViewMode() || DataManager.isWindowCopy()) return;
         recordReloadPoint({
             tree: treeId, person: this.focusPersonId, view: this.viewMode,
             up: this.focusDepthUp, down: this.focusDepthDown,

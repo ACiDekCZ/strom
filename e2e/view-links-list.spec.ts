@@ -1,6 +1,6 @@
 import { test, expect, Page, Locator } from '@playwright/test';
 import { readFileSync } from 'fs';
-import { openApp, card, importJsonAsNewTree } from './helpers.js';
+import { openApp, asWindowlessTab, card, importJsonAsNewTree } from './helpers.js';
 
 /**
  * Linked in the view only, keeping track: the indicator over the view (× turns
@@ -491,6 +491,7 @@ test.describe('keeping in step', () => {
         await expect(ghosts(page)).toHaveCount(5);
         await openList(page);
         const other = await context.newPage();
+        await asWindowlessTab(other);
         await other.goto(page.url());
         await expect(card(other, 'Karel').first()).toBeVisible();
         await expect(other.locator('#view-links-pill')).toBeVisible();

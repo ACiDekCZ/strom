@@ -31,6 +31,10 @@ import { collectPoolGarbage } from './media-pool.js';
 import { keepLifelineChipsFor } from './lifeline-view.js';
 import { parseDeepLink, deepLinkTreeMatches, stripDeepLinkParams } from './deep-link.js';
 import { shouldRegisterServiceWorker, registerServiceWorker, linkManifest, isBetaBuild, appModeFor, captureInstallPrompt, INSTALL_AVAILABILITY_EVENT, isSafariOnComputer, safariAppName } from './pwa.js';
+import { decideWindowRole, getWindowRole, setWindowRole, satelliteViewMode, type SatelliteParams } from './windows/window-role.js';
+import { startMainWindow, startSatelliteClient, forwardLaunches, showSecondTab } from './windows/window-start.js';
+import { windowTitle } from './windows/window-title.js';
+import type { SatelliteClient } from './windows/satellite.js';
 
 // Make modules available globally for HTML event handlers
 declare global {
@@ -245,7 +249,8 @@ function registerAppListeners(): void {
         });
     });
 
-    onTreeSavedElsewhere((treeId) => {
+    // A satellite window's tree is the main window's: its saves are this window's data coming in.
+    if (getWindowRole() !== 'satellite') onTreeSavedElsewhere((treeId) => {
         if (DataManager.isViewMode() || treeId !== DataManager.getCurrentTreeId()) return;
         // What this window holds is kept as a backup, once: another window — an older app too, which
         // knows no stale-copy guard — may have saved over this window's saved work (N2).
@@ -263,6 +268,92 @@ function registerAppListeners(): void {
     UI.syncLockedState();
 }
 
+/** The satellite's client (null in any other window). */
+let satelliteClient: SatelliteClient | null = null;
+let satelliteKind: SatelliteParams['kind'] | null = null;
+
+/** The window's title by its role, its tree (and a satellite's view); again at every switch or rename. */
+function updateWindowTitle(): void {
+    const role = getWindowRole();
+    let treeName = '';
+    if (role === 'satellite') {
+        treeName = satelliteClient?.hasTree ? satelliteClient.treeName : '';
+    } else if (role === 'main') {
+        // An empty tree (the first start's) is no tree yet: the app's name alone.
+        const id = DataManager.getCurrentTreeId();
+        let hasPeople = false;
+        for (const _ in DataManager.getData().persons) { hasPeople = true; break; }
+        treeName = id && hasPeople ? TreeManager.getTreeMetadata(id)?.name ?? '' : '';
+    }
+    document.title = windowTitle({ role, kind: satelliteKind, treeName, beta: isBetaBuild(APP_MODE) });
+}
+
+/**
+ * A satellite window (spec 079 §2): the view of the main window's tree. No
+ * storage is read or written here — no tree, no tree index, no settings, no
+ * last view or reload point; the research, links from outside, the welcome
+ * and "What's new" are the main window's. The tree comes with the client's
+ * first `tree` message; until then the view stays empty.
+ */
+function startSatelliteWindow(params: SatelliteParams, debugOptions: DebugOptions): void {
+    document.documentElement.classList.add('window-satellite');
+    satelliteKind = params.kind;
+    TreeRenderer.setWindowView(satelliteViewMode(params.kind));
+    const client = startSatelliteClient(params);
+    satelliteClient = client;
+
+    // The shell (as in the main window, without the tree switcher, files, research and the app's offers).
+    ZoomPan.init();
+    installCardTapTarget();
+    UI.installStatusTipHost();
+    UI.initMinimap();
+    UI.initGenLabels();
+    setTreeRendererGetter(() => TreeRenderer);
+    UI.initHasFallback();
+    UI.initKeyboard();
+    UI.initSearch();
+    UI.initHistoryManage();
+    if (debugOptions.enabled) TreeRenderer.setDebugOptions(debugOptions);
+
+    // Another tree (the first one, a switch in the main window): its default person, before the drawing below.
+    let shownTree: TreeId | null = null;
+    window.addEventListener('strom:data-changed', () => {
+        const treeId = DataManager.getCurrentTreeId();
+        if (treeId === shownTree) return;
+        shownTree = treeId;
+        TreeRenderer.restoreFromSession();
+    });
+    registerAppListeners();
+    UI.initOnlineIndicator();
+
+    // The settings are the main window's: what it stores shows here too.
+    SettingsManager.watchOtherWindows(({ languageBefore }) => {
+        if (SettingsManager.getLanguage() !== languageBefore) UI.setLanguage(SettingsManager.getLanguage());
+        else TreeRenderer.render();
+        updateWindowTitle();
+    });
+
+    client.on('tree', () => {
+        document.documentElement.classList.remove('app-loading');
+        updateWindowTitle();
+    });
+    client.on('tree-gone', () => updateWindowTitle());
+    // Whether anything may be edited here follows the connection and the main window's status (§3).
+    let readOnly = client.readOnly();
+    const followReadOnly = (): void => {
+        if (client.readOnly() === readOnly) return;
+        readOnly = client.readOnly();
+        UI.syncLockedState();
+        if (client.hasTree) TreeRenderer.render();
+    };
+    client.on('status', followReadOnly);
+    client.on('connection', followReadOnly);
+    client.start();
+    forwardLaunches(client, window.location.search);
+    updateWindowTitle();
+    console.log(`Strom v${APP_VERSION} initialized (window ${params.windowId})`);
+}
+
 /** IndexedDB could not be opened: say so instead of a blank page (S22). */
 function showStartupError(err: unknown): void {
     console.error('Startup failed', err);
@@ -275,10 +366,28 @@ document.addEventListener('DOMContentLoaded', async () => {
     // The welcome stays hidden until the first render (renderer.ts); a safety
     // net in case startup stops short of one (a password prompt left open).
     setTimeout(() => document.documentElement.classList.remove('app-booting'), 10000);
+
+    // Check if we have embedded data (from exported HTML)
+    const hasEmbeddedData = !!(window as Window & { STROM_EMBEDDED_DATA?: unknown }).STROM_EMBEDDED_DATA;
+
+    // The window's role, before anything is read or stored (spec 079 §0): a
+    // satellite and a second tab never write the settings, the tree index or a tree.
+    const role = await decideWindowRole({ embedded: hasEmbeddedData });
+    setWindowRole(role.role);
+    const satellite = role.role === 'satellite' ? role.satellite ?? null : null;
+    if (role.role === 'satellite' || role.role === 'second-tab') SettingsManager.setReadOnly(true);
+    if (role.role === 'second-tab') {
+        SettingsManager.init();
+        showSecondTab();
+        console.log(`Strom v${APP_VERSION}: open in another window`);
+        return;
+    }
+
     // Opening a research from outside (?import-url= / ?live=): keep the canvas
     // blank until that tree is in, instead of flashing the last-opened tree.
     // Cleared by UI.initExternalOpen when the open settles (with a safety net).
-    try {
+    // A satellite opens nothing from outside (its copy of the opener's session is not its own).
+    if (!satellite) try {
         const params = new URLSearchParams(window.location.search);
         let resumingLive = false;
         try {
@@ -293,8 +402,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Initialize settings (theme) early for smooth loading
     SettingsManager.init();
 
-    // Initialize audit log (reads enabled state from settings)
-    AuditLogManager.init();
+    // Initialize audit log (reads enabled state from settings). A satellite
+    // keeps none: the main window logs the edits it saves for it.
+    if (!satellite) AuditLogManager.init();
 
     // Initialize UI strings from strings.ts
     UI.initializeStrings();
@@ -320,12 +430,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Parse debug options from URL
     const debugOptions = parseDebugOptions();
 
+    if (satellite) {
+        startSatelliteWindow(satellite, debugOptions);
+        return;
+    }
+
     // A link beyond the tree (?person= / ?show=waiting): read before anything rewrites the address.
     const startParams = new URLSearchParams(window.location.search);
     const startDeepLink = parseDeepLink(startParams);
-
-    // Check if we have embedded data (from exported HTML)
-    const hasEmbeddedData = !!(window as Window & { STROM_EMBEDDED_DATA?: unknown }).STROM_EMBEDDED_DATA;
 
     // Storage connection problems (registered before init: onblocked can
     // fire while the database is opening).
@@ -354,6 +466,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (err) {
         showStartupError(err);
         return;
+    }
+    // The main window: the satellites get their tree from here (spec 079 §0).
+    if (role.role === 'main') startMainWindow();
+    // Its title names the open tree, as switched or renamed.
+    updateWindowTitle();
+    if (role.role === 'main') {
+        window.addEventListener('strom:tree-switched', updateWindowTitle);
+        window.addEventListener('strom:tree-renamed', updateWindowTitle);
+        window.addEventListener('strom:data-changed', updateWindowTitle);
     }
     // "What's new": whether this browser held trees before anything can be added.
     UI.captureReleaseNotesStart();
@@ -425,8 +546,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     // The pre-release test build (/beta/) says so next to the wordmark.
     if (isBetaBuild(APP_MODE)) {
-        // The window title too (as the installed app's name, "Strom Beta").
-        document.title = 'Strom Beta';
+        // The window title says "Strom Beta" too (as the installed app's name): updateWindowTitle.
         // The phone's More sheet shows "BETA · version" by About (no badge room there).
         document.body.classList.add('beta-build');
         const logo = document.querySelector('.app-wordmark');

@@ -72,8 +72,22 @@ export const MAP_KINDS_KEY = 'strom.map.kinds';
 /** Fallback sender names that older builds stored as if typed (cs/en/de). */
 const FORMER_SENDER_PLACEHOLDERS = new Set(['Příbuzný', 'A relative', 'Ein Verwandter', 'Ein Familienmitglied']);
 
+const DEFAULT_SETTINGS: Readonly<AppSettings> = { theme: 'system', language: 'system', encryption: false, auditLog: false };
+
+/** What changed when another window wrote the settings (watchOtherWindows). */
+export interface SettingsChange {
+    /** The language setting before the change (the caller switches the texts when it differs). */
+    languageBefore: LanguageSetting;
+}
+
 class SettingsManagerClass {
-    private settings: AppSettings = { theme: 'system', language: 'system', encryption: false, auditLog: false };
+    private settings: AppSettings = { ...DEFAULT_SETTINGS };
+    /**
+     * A window that is not the main one (a satellite, a second tab, spec 079
+     * §0): the settings are read, never written — the main window is the
+     * only one that stores them. A change here stays in this window.
+     */
+    private readOnly = false;
 
     init(): void {
         this.load();
@@ -82,6 +96,33 @@ class SettingsManagerClass {
         // Listen for system theme changes
         window.matchMedia('(prefers-color-scheme: dark)')
             .addEventListener('change', () => this.applyTheme());
+    }
+
+    /** Settings only read in this window (spec 079 §0); set before init. */
+    setReadOnly(on: boolean): void {
+        this.readOnly = on;
+    }
+
+    isReadOnly(): boolean {
+        return this.readOnly;
+    }
+
+    /**
+     * Follow the settings another window stores (the main window): they are
+     * read again, the theme follows at once, `onChange` does the rest (the
+     * language, a redraw). Returns the unsubscribe.
+     */
+    watchOtherWindows(onChange: (change: SettingsChange) => void): () => void {
+        const handler = (e: StorageEvent): void => {
+            if (e.key !== null && e.key !== SETTINGS_KEY && e.key !== CARD_SIGNALS_KEY && e.key !== MAP_KINDS_KEY) return;
+            const languageBefore = this.settings.language;
+            this.settings = { ...DEFAULT_SETTINGS };
+            this.load();
+            this.applyTheme();
+            onChange({ languageBefore });
+        };
+        window.addEventListener('storage', handler);
+        return () => window.removeEventListener('storage', handler);
     }
 
     private load(): void {
@@ -98,6 +139,7 @@ class SettingsManagerClass {
     }
 
     private save(): void {
+        if (this.readOnly) return;
         localStorage.setItem(SETTINGS_KEY, JSON.stringify(this.settings));
     }
 
@@ -627,7 +669,7 @@ class SettingsManagerClass {
             if (raw && typeof raw === 'object') app = { ...this.settings, ...(raw as typeof app) };
         } catch { /* the loaded settings */ }
         const { stored, changed } = migrateCardSignals(parsed, app);
-        if (changed) {
+        if (changed && !this.readOnly) {
             try { localStorage.setItem(CARD_SIGNALS_KEY, JSON.stringify(stored)); } catch { /* converted again next time */ }
         }
         return stored;
@@ -643,6 +685,7 @@ class SettingsManagerClass {
 
     setCardSignal(key: keyof CardSignals, on: boolean): void {
         const next = { ...this.loadCardSignals(), ...this.getCardSignals(), [key]: on, v: CARD_SIGNALS_VERSION };
+        if (this.readOnly) return;
         try { localStorage.setItem(CARD_SIGNALS_KEY, JSON.stringify(next)); } catch { /* not kept */ }
     }
 
@@ -665,6 +708,7 @@ class SettingsManagerClass {
     /** Remember the map's kinds for this device; an empty list is kept as all four. */
     setMapKinds(kinds: readonly MapKind[]): void {
         const on = MAP_KINDS.filter(k => kinds.includes(k));
+        if (this.readOnly) return;
         try { localStorage.setItem(MAP_KINDS_KEY, JSON.stringify(on.length ? on : [...MAP_KINDS])); } catch { /* not kept */ }
     }
 

@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, card } from './helpers.js';
+import { openApp, asWindowlessTab, card } from './helpers.js';
 import { HEAD, acceptLoad, editJan, fakeBridge, openResearch, poll, researchGed, FakeBridge } from './research-bridge.js';
 
 /**
@@ -58,6 +58,7 @@ async function loadWritten(page: Page): Promise<void> {
 /** A second window of the app in the same browser, on the same tree and bridge. */
 async function secondWindow(first: Page): Promise<{ page: Page; bridge: FakeBridge }> {
     const page = await first.context().newPage();
+    await asWindowlessTab(page);
     await page.setViewportSize(DESKTOP);
     const bridge = await fakeBridge(page, { accepts });
     await openApp(page);
@@ -170,6 +171,7 @@ test.describe('more than one window on one research', () => {
 
         // A third window opens the tree: the first window's data, with the head they build on.
         const third = await page.context().newPage();
+        await asWindowlessTab(third);
         await fakeBridge(third, { accepts });
         await openApp(third);
         await expect(card(third, 'Josef')).toBeVisible();

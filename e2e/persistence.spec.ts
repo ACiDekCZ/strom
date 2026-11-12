@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, fillPerson, exportTreeJson, createFirstPerson, cardAction, personModal, card, waitForPersist, stubPersistence } from './helpers.js';
+import { openApp, asWindowlessTab, fillPerson, exportTreeJson, createFirstPerson, cardAction, personModal, card, waitForPersist, stubPersistence } from './helpers.js';
 
 /** Import the 53-person fixture as a new tree (it has no version: no warning, straight to the dialog). */
 async function importBigTree(page: Page, name: string): Promise<void> {
@@ -413,6 +413,7 @@ test('a tab closed before its save landed keeps its state while another tab goes
     await page.evaluate(() => (window as unknown as W).Strom.DataManager.createPerson({ firstName: 'Pavel', lastName: 'Novak', gender: 'male', birthDate: '1910' }));
     await page.waitForTimeout(500);
     const other = await context.newPage();
+    await asWindowlessTab(other);
     await other.goto('/strom.html');
     await expect(other.locator('html')).not.toHaveClass(/app-loading/);
     const born = (p: Page, name: string) => p.evaluate((name) => (Object.values((window as unknown as W).Strom.DataManager.getData().persons).find((x: any) => x.firstName === name) as any)?.birthDate, name);

@@ -1,6 +1,6 @@
 import { test, expect, Page, Browser } from '@playwright/test';
 import fs from 'fs';
-import { openApp, card, createFirstPerson, addRelation, waitForPersist, seedResearchPromoSeen, seedSetting, AFTER_HAND_OVER, openTreeActions } from './helpers.js';
+import { openApp, asWindowlessTab, card, createFirstPerson, addRelation, waitForPersist, seedResearchPromoSeen, seedSetting, AFTER_HAND_OVER, openTreeActions } from './helpers.js';
 
 /**
  * Installing Strom Research from the app: "What it is" → the line for this
@@ -303,6 +303,7 @@ test.describe('installing the research from the app', () => {
 
         // A second tab still waiting.
         const other = await page.context().newPage();
+        await asWindowlessTab(other);
         await other.setViewportSize({ width: 1280, height: 900 });
         await openApp(other);
         await other.evaluate(() => window.Strom.UI.showResearchInstall());

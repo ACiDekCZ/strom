@@ -1,6 +1,6 @@
 import { test, expect, Page, Download } from '@playwright/test';
 import { pathToFileURL } from 'url';
-import { openApp, createFirstPerson, card, addRelation, waitForPersist } from './helpers.js';
+import { openApp, asWindowlessTab, createFirstPerson, card, addRelation, waitForPersist } from './helpers.js';
 
 /**
  * Data-safety paths: local encryption across reloads (unlock, cancel, wrong
@@ -243,6 +243,7 @@ test('another tab saving the same tree shows a notice with a Reload action', asy
     await waitForPersist(page, 'Jan');
 
     const pageB = await context.newPage();
+    await asWindowlessTab(pageB);
     await openApp(pageB);
     await expect(card(pageB, 'Jan')).toBeVisible();
     // Merely opening the tree elsewhere is not a change.

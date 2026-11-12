@@ -113,6 +113,18 @@ export async function openApp(
 }
 
 /**
+ * A page opened beside the app's main window as a whole app of its own: a
+ * browser without Web Locks (no window roles, every tab loads and saves the
+ * trees; another tab's save is told over tab-sync). Without it, another tab
+ * of the app is "already open" and loads nothing. Call before its goto.
+ */
+export async function asWindowlessTab(page: Page): Promise<void> {
+    await page.addInitScript(() => {
+        Object.defineProperty(navigator, 'locks', { configurable: true, value: undefined });
+    });
+}
+
+/**
  * What the app says once a tree is handed over to the research (the "linked"
  * toast, "The research is ready"): it first tries to load the research's
  * version, 0, 1 and 3 s after the hand-over (ADOPT_LOAD_WAITS in

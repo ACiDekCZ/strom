@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, createFirstPerson, addRelation, card, waitForPersist } from './helpers.js';
+import { openApp, asWindowlessTab, createFirstPerson, addRelation, card, waitForPersist } from './helpers.js';
 
 /**
  * Local encryption beyond switching it on: the password-setup validation,
@@ -232,6 +232,7 @@ test('a tree re-encrypted under another password in another tab asks for that pa
     // Tab B unlocks, switches encryption off and on again with OTHER_PASSWORD:
     // every tree is now under a key tab A's session does not hold.
     const tabB = await context.newPage();
+    await asWindowlessTab(tabB);
     await openApp(tabB);
     await expect(tabB.locator('#password-prompt-modal')).toBeVisible();
     await submitPrompt(tabB, PASSWORD);

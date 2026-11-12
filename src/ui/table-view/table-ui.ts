@@ -391,7 +391,8 @@ let keptWork = '';
 
 /** Keep the tree's table for the next visit (§9.1); a read-only tree's views are for this opening only. */
 function keepWork(tree: string, state: TableState): void {
-    if (!tree || DataManager.isReadOnly()) return;
+    // A satellite window reads the main window's table state, never writes it: its filters and sort stay in it (spec 079).
+    if (!tree || DataManager.isReadOnly() || DataManager.isWindowCopy()) return;
     const work = tableWorkOf(state, storedViews());
     const key = `${tree}|${JSON.stringify(work)}`;
     if (key === keptWork) return;

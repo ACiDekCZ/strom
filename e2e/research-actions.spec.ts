@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, card, openPersonSubmenu, openTreeActions } from './helpers.js';
+import { openApp, asWindowlessTab, card, openPersonSubmenu, openTreeActions } from './helpers.js';
 
 /**
  * The research's actions from the app (a Strom Research tree, on a computer):
@@ -163,6 +163,7 @@ test.describe('the Research menu', () => {
         await page.locator('#research-item-version').click();
         await expect(page.locator('.toast .toast-spinner')).toBeVisible();
         const other = await context.newPage();
+        await asWindowlessTab(other);
         await other.goto(`/strom.html?import-url=${encodeURIComponent('http://127.0.0.1:5995/tree.ged')}`);
         await expect(page.locator('.toast .toast-spinner')).toHaveCount(0);
         await other.close();

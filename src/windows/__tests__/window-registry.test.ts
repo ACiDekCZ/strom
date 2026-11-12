@@ -12,7 +12,7 @@ import { DataManager } from '../../data.js';
 import { TreeManager } from '../../tree-manager.js';
 import { AuditLogManager } from '../../audit-log.js';
 import { UndoManager } from '../../undo.js';
-import type { StromData, TreeId, Person } from '../../types.js';
+import { LAST_FOCUSED, type StromData, type TreeId, type Person } from '../../types.js';
 import { WindowBus, createMemoryHub, type WindowMessage } from '../window-bus.js';
 import { WindowRegistry, dataManagerHost, PATCH_INTERVAL_MS } from '../window-registry.js';
 
@@ -217,6 +217,29 @@ describe('edits from a satellite', () => {
         await settle(PATCH_INTERVAL_MS);
         expect(sat.of('patch').length).toBe(before + 1);
         expect(Object.keys(treeOf(last(sat.of('patch'))!.json).persons)).toHaveLength(6);
+    });
+
+    it('where the work stands here (focus, default person, default view) is no change: the edit made meanwhile passes, and the main window keeps its own', async () => {
+        const sat = await connect();
+        const base = sat.of('tree')[0].revision;
+        const zdislava = DataManager.getAllPersons()[0];
+        // A click on a card here while the satellite edits.
+        DataManager.setDefaultPerson(LAST_FOCUSED);
+        DataManager.saveLastFocus(zdislava.id, 3, 2);
+        DataManager.setDefaultView('last');
+        await settle(PATCH_INTERVAL_MS);
+        expect(registry.revision).toBe(base);
+
+        const next = treeOf(sat.of('tree')[0].json);
+        (next.persons[zdislava.id] as Person).birthPlace = 'Lhota';
+        sat.bus.post({ type: 'edit', windowId: sat.id, editId: 'e9', treeId: TREE, baseRevision: base, json: JSON.stringify(next), label: 'editing Zdislava Okurková' });
+        await settle();
+
+        expect(last(sat.of('edit-result'))).toMatchObject({ editId: 'e9', ok: true, revision: base + 1 });
+        expect(DataManager.getPerson(zdislava.id)!.birthPlace).toBe('Lhota');
+        const data = DataManager.getData();
+        expect([data.defaultPersonId, data.lastFocusPersonId, data.lastFocusDepthUp, data.lastFocusDepthDown, data.defaultView])
+            .toEqual([LAST_FOCUSED, zdislava.id, 3, 2, 'last']);
     });
 });
 

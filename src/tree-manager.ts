@@ -543,6 +543,8 @@ class TreeManagerClass {
             tree.name = name;
             tree.lastModifiedAt = new Date().toISOString();
             this.saveIndex();
+            // The main window's title names the tree (spec 079).
+            if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('strom:tree-renamed', { detail: { treeId: id } }));
         }
     }
 

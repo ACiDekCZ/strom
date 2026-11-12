@@ -106,6 +106,12 @@ export type DataChangedDetail =
     | { source: 'window' };
 
 /**
+ * The data's fields that say where the work stands in a window, not what the
+ * tree holds: a satellite's edit never overwrites the main window's (spec 079).
+ */
+const WINDOW_STATE_KEYS = ['lastFocusPersonId', 'lastFocusDepthUp', 'lastFocusDepthDown', 'defaultPersonId', 'defaultView'] as const satisfies readonly (keyof StromData)[];
+
+/**
  * Where a satellite window's edits go instead of storage and the undo history
  * (spec 079 §0): the main window saves them. DataManager calls it; the
  * satellite client (src/windows/satellite.ts) implements it.
@@ -1229,7 +1235,7 @@ class DataManagerClass {
 
     /** Store the open tree again as it is (its research base changed: they are stored together). */
     resaveCurrent(): void {
-        this.save();
+        this.save('state');
     }
 
     /**
@@ -1239,13 +1245,29 @@ class DataManagerClass {
      */
     private revision = 0;
 
+    /**
+     * Content revision: bumped like `revision`, except by saves that change
+     * no content of the tree — where the work stands (the last focus), the
+     * default person, the default view, a store of the same data. The main
+     * window's registry reads it (spec 079): such a save is no change a
+     * satellite window's edit could conflict with.
+     */
+    private contentRevision = 0;
+
     /** Current data revision (see `revision`). */
     getRevision(): number {
         return this.revision;
     }
 
-    private save(): void {
+    /** Current content revision (see `contentRevision`). */
+    getContentRevision(): number {
+        return this.contentRevision;
+    }
+
+    /** `state`: a save that changes no content of the tree (see `contentRevision`). */
+    private save(kind: 'content' | 'state' = 'content'): void {
         this.revision++;
+        if (kind === 'content') this.contentRevision++;
         // A satellite window never stores: its undoable edits go to the main
         // window (commitMutation); a save that is no user's edit (the focus
         // remembered, a rollback to the main window's state) stays here.
@@ -1302,6 +1324,7 @@ class DataManagerClass {
         this.data = migrateData(JSON.parse(json) as StromData);
         this.pendingBefore = null;
         this.revision++;
+        this.contentRevision++;
         CrossTree.invalidateCacheForTree(treeId);
         if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent<DataChangedDetail>('strom:data-changed', { detail: { source: 'window' } }));
@@ -1327,7 +1350,9 @@ class DataManagerClass {
      * tree's whole data as the satellite has it after the edit. Saved as an
      * edit of this window — one undo step named `label`, stored, logged — so
      * Undo here (or from any satellite) takes it back. Refused (false) when
-     * nothing may be edited now or a staged dialog is open here.
+     * nothing may be edited now or a staged dialog is open here. Where the
+     * work stands here (the last focus, the default person and view) stays
+     * this window's: the satellite's copy may hold an older one.
      */
     applyWindowEdit(json: string, label: string): boolean {
         if (this.windowSink || this.isReadOnly() || !this.currentTreeId) return false;
@@ -1337,6 +1362,10 @@ class DataManagerClass {
             next = migrateData(JSON.parse(json) as StromData);
         } catch {
             return false;
+        }
+        for (const key of WINDOW_STATE_KEYS) {
+            if (this.data[key] === undefined) delete next[key];
+            else (next as unknown as Record<string, unknown>)[key] = this.data[key];
         }
         this.beginMutation();
         this.data = next;
@@ -3779,7 +3808,7 @@ class DataManagerClass {
             this.data.defaultPersonId = value;
         }
 
-        this.save();
+        this.save('state');
     }
 
     /**
@@ -3797,7 +3826,7 @@ class DataManagerClass {
         if (!this.currentTreeId || this.isLocked() || this.isNewerData()) return;
         if (value === undefined) delete this.data.defaultView;
         else this.data.defaultView = value;
-        this.save();
+        this.save('state');
     }
 
     /** The view the current tree opens in (undefined = the family view). */
@@ -3816,7 +3845,7 @@ class DataManagerClass {
             this.data.lastFocusPersonId = personId;
             this.data.lastFocusDepthUp = depthUp;
             this.data.lastFocusDepthDown = depthDown;
-            this.save();
+            this.save('state');
         }
     }
 
