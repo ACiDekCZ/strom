@@ -2125,7 +2125,9 @@ export type AuditAction =
     | 'tableView.rename'
     | 'tableView.delete'
     | 'undo'
-    | 'redo';
+    | 'redo'
+    /** An edit made in a satellite window, saved by the main window (spec 079). */
+    | 'window.edit';
 
 export interface AuditEntry {
     /** ISO timestamp */

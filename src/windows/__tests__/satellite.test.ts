@@ -1,0 +1,329 @@
+/**
+ * A satellite window's side (spec 079 §2, §3): its DataManager takes the tree
+ * from the main window and never touches storage; an edit goes to the main
+ * window on the revision it was made on; a patch replaces the copy, but waits
+ * while an edit is on its way or a staged dialog is open; a refused edit drops
+ * what waited behind it; undo is the main window's; live research makes the
+ * copy read-only; "Follow selection" off sends and takes nothing; a main
+ * window that went quiet and let its lock go counts as closed.
+ */
+
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { DataManager } from '../../data.js';
+import { TreeManager } from '../../tree-manager.js';
+import { StorageManager } from '../../storage.js';
+import { AuditLogManager } from '../../audit-log.js';
+import { UndoManager } from '../../undo.js';
+import type { StromData, TreeId, Person, PersonId } from '../../types.js';
+import { WindowBus, createMemoryHub, type WindowMessage, type WindowStatus } from '../window-bus.js';
+import { SatelliteClient, followSelectionKey, MAIN_SILENCE_MS } from '../satellite.js';
+import type { LocksLike } from '../window-role.js';
+
+const TREE = 'sat-tree' as TreeId;
+const SAT = 'ab12cd34';
+
+function person(id: string, firstName: string): Person {
+    return { id: id as PersonId, firstName, lastName: 'Hrachovec', gender: 'male', isPlaceholder: false, partnerships: [], parentIds: [], childIds: [] } as unknown as Person;
+}
+
+function treeJson(...names: [string, string][]): string {
+    const data: StromData = { persons: {}, partnerships: {} } as StromData;
+    for (const [id, n] of names) (data.persons as Record<string, Person>)[id] = person(id, n);
+    return JSON.stringify(data);
+}
+
+function status(over: Partial<WindowStatus> = {}): WindowStatus {
+    return { live: false, locked: false, readOnly: false, researchState: null, treeExists: true, treeId: TREE, revision: 100, canUndo: true, canRedo: false, windows: [SAT], ...over };
+}
+
+function noLocks(): LocksLike {
+    return {
+        request: (_n, _o, cb) => Promise.resolve(cb(null)),
+        query: async () => ({ held: [] }),
+    };
+}
+
+let hub: ReturnType<typeof createMemoryHub>;
+let main: WindowBus;
+let got: WindowMessage[];
+let sat: SatelliteClient;
+let session: Map<string, string>;
+const writes = {
+    save: undefined as unknown as ReturnType<typeof vi.spyOn>,
+    note: undefined as unknown as ReturnType<typeof vi.spyOn>,
+    storeSet: undefined as unknown as ReturnType<typeof vi.spyOn>,
+    storeTogether: undefined as unknown as ReturnType<typeof vi.spyOn>,
+    storeDelete: undefined as unknown as ReturnType<typeof vi.spyOn>,
+    undoPush: undefined as unknown as ReturnType<typeof vi.spyOn>,
+    localSet: vi.fn(),
+    idbOpen: vi.fn(),
+};
+
+const of = <T extends WindowMessage['type']>(t: T) => got.filter(m => m.type === t) as Extract<WindowMessage, { type: T }>[];
+
+async function settle(ms = 0): Promise<void> {
+    await hub.flush();
+    await vi.advanceTimersByTimeAsync(ms);
+    await hub.flush();
+}
+
+/** The main window answers the hello: status, then the whole tree. */
+async function connect(json = treeJson(['p1', 'Bořivoj']), revision = 100): Promise<void> {
+    sat.start();
+    await settle();
+    main.post({ type: 'status', ...status({ revision }) });
+    main.post({ type: 'tree', to: SAT, treeId: TREE, name: 'Hrachovcovi', revision, json });
+    await settle();
+}
+
+beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-12T10:00:00Z'));
+    writes.save = vi.spyOn(TreeManager, 'saveTreeData').mockImplementation(() => {});
+    writes.note = vi.spyOn(TreeManager, 'noteUserChange').mockImplementation(() => {});
+    writes.storeSet = vi.spyOn(StorageManager, 'set').mockResolvedValue(undefined);
+    writes.storeTogether = vi.spyOn(StorageManager, 'setTogether').mockResolvedValue(undefined);
+    writes.storeDelete = vi.spyOn(StorageManager, 'delete').mockResolvedValue(undefined);
+    writes.undoPush = vi.spyOn(UndoManager, 'push');
+    writes.localSet = vi.fn();
+    writes.idbOpen = vi.fn();
+    vi.stubGlobal('localStorage', { getItem: () => null, setItem: writes.localSet, removeItem: writes.localSet, clear: writes.localSet, key: () => null, length: 0 });
+    vi.stubGlobal('indexedDB', { open: writes.idbOpen, deleteDatabase: writes.idbOpen });
+    vi.spyOn(AuditLogManager, 'log').mockImplementation(() => {});
+    const dm = DataManager as unknown as { data: StromData; currentTreeId: TreeId | null; viewMode: boolean; pendingBefore: StromData | null; liveTreeId: TreeId | null };
+    dm.data = { persons: {}, partnerships: {} } as StromData;
+    dm.currentTreeId = null;
+    dm.viewMode = false;
+    dm.pendingBefore = null;
+    dm.liveTreeId = null;
+    DataManager.rollbackEditSession();
+    UndoManager.setActiveTree(null);
+
+    hub = createMemoryHub();
+    main = new WindowBus('main-1', hub.channel());
+    got = [];
+    main.onAny(m => got.push(m));
+    session = new Map();
+    sat = new SatelliteClient({ kind: 'table', treeId: TREE, windowId: SAT, newId: false }, {
+        bus: new WindowBus(SAT, hub.channel()),
+        storage: { getItem: k => session.get(k) ?? null, setItem: (k, v) => { session.set(k, v); } },
+        locks: noLocks(),
+        closeSelf: () => {},
+        hasFocus: () => true,
+        bounds: () => undefined,
+    });
+});
+
+afterEach(() => {
+    sat.stop();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+});
+
+function expectNoStorage(): void {
+    expect(writes.save).not.toHaveBeenCalled();
+    expect(writes.note).not.toHaveBeenCalled();
+    expect(writes.storeSet).not.toHaveBeenCalled();
+    expect(writes.storeTogether).not.toHaveBeenCalled();
+    expect(writes.storeDelete).not.toHaveBeenCalled();
+    expect(writes.undoPush).not.toHaveBeenCalled();
+    expect(writes.localSet).not.toHaveBeenCalled();
+    expect(writes.idbOpen).not.toHaveBeenCalled();
+}
+
+describe('start', () => {
+    it('says hello for its tree, takes the main window\'s tree into DataManager, and stores nothing', async () => {
+        const trees = vi.fn();
+        sat.on('tree', trees);
+        await connect();
+        expect(of('hello')).toEqual([expect.objectContaining({ windowId: SAT, kind: 'table', treeId: TREE })]);
+        expect(sat.connection).toBe('connected');
+        expect(sat.revision).toBe(100);
+        expect(DataManager.getCurrentTreeId()).toBe(TREE);
+        expect(DataManager.getPerson('p1' as PersonId)!.firstName).toBe('Bořivoj');
+        expect(DataManager.isWindowCopy()).toBe(true);
+        expect(trees).toHaveBeenCalledWith(expect.objectContaining({ treeId: TREE, name: 'Hrachovcovi', switchedFrom: null, afterConflict: false }));
+        expectNoStorage();
+    });
+});
+
+describe('edits', () => {
+    it('an edit here goes to the main window with the revision it was made on, and nothing is stored here', async () => {
+        await connect();
+        const p = DataManager.createPerson({ firstName: 'Zdislava', lastName: 'Okurková', gender: 'female' });
+        await settle();
+        const edit = of('edit');
+        expect(edit).toHaveLength(1);
+        expect(edit[0]).toMatchObject({ windowId: SAT, treeId: TREE, baseRevision: 100 });
+        expect(edit[0].label).toBe(DataManager.lastUndoDescription() ?? edit[0].label);
+        expect(Object.keys((JSON.parse(edit[0].json) as StromData).persons)).toEqual(expect.arrayContaining(['p1', p.id]));
+        expect(DataManager.getPerson(p.id)).toBeTruthy();   // the copy shows it at once
+        expectNoStorage();
+
+        main.post({ type: 'edit-result', to: SAT, editId: edit[0].editId, ok: true, revision: 101 });
+        await settle();
+        expect(sat.revision).toBe(101);
+        expect(sat.pendingEdits).toBe(0);
+    });
+
+    it('edits wait for one another: the second goes on the revision the first one got', async () => {
+        await connect();
+        DataManager.createPerson({ firstName: 'Zdislava', lastName: 'Okurková', gender: 'female' });
+        DataManager.createPerson({ firstName: 'Kvetoslav', lastName: 'Okurka', gender: 'male' });
+        await settle();
+        expect(of('edit')).toHaveLength(1);
+        main.post({ type: 'edit-result', to: SAT, editId: of('edit')[0].editId, ok: true, revision: 101 });
+        await settle();
+        expect(of('edit')).toHaveLength(2);
+        expect(of('edit')[1].baseRevision).toBe(101);
+        expect(Object.keys((JSON.parse(of('edit')[1].json) as StromData).persons)).toHaveLength(3);
+    });
+
+    it('a refused edit drops what waited behind it; the fresh tree that follows is marked as after a conflict', async () => {
+        await connect();
+        const conflicts = vi.fn();
+        const trees = vi.fn();
+        sat.on('conflict', conflicts);
+        sat.on('tree', trees);
+        DataManager.createPerson({ firstName: 'Zdislava', lastName: 'Okurková', gender: 'female' });
+        DataManager.createPerson({ firstName: 'Kvetoslav', lastName: 'Okurka', gender: 'male' });
+        await settle();
+        main.post({ type: 'edit-result', to: SAT, editId: of('edit')[0].editId, ok: false, revision: 102, reason: 'revision' });
+        await settle();
+        expect(conflicts).toHaveBeenCalledWith({ reason: 'revision' });
+        expect(sat.pendingEdits).toBe(0);
+        expect(of('edit')).toHaveLength(1);
+
+        main.post({ type: 'tree', to: SAT, treeId: TREE, name: 'Hrachovcovi', revision: 102, json: treeJson(['p1', 'Bořivoj'], ['p2', 'Ctibor']) });
+        await settle();
+        expect(trees).toHaveBeenLastCalledWith(expect.objectContaining({ revision: 102, afterConflict: true }));
+        expect(DataManager.getAllPersons().map(x => x.firstName).sort()).toEqual(['Bořivoj', 'Ctibor']);
+    });
+
+    it('undo and redo are the main window\'s', async () => {
+        await connect();
+        expect(DataManager.canUndo()).toBe(true);
+        expect(DataManager.undo()).toBeNull();
+        await settle();
+        expect(of('undo')).toHaveLength(1);
+        expectNoStorage();
+    });
+});
+
+describe('patches', () => {
+    it('a newer patch replaces the copy; an older one or another tree\'s is ignored', async () => {
+        await connect();
+        main.post({ type: 'patch', treeId: TREE, revision: 105, json: treeJson(['p1', 'Bořivoj Ctibor']) });
+        await settle();
+        expect(DataManager.getPerson('p1' as PersonId)!.firstName).toBe('Bořivoj Ctibor');
+        expect(sat.revision).toBe(105);
+        main.post({ type: 'patch', treeId: TREE, revision: 104, json: treeJson(['p1', 'old']) });
+        main.post({ type: 'patch', treeId: 'other' as TreeId, revision: 200, json: treeJson(['p1', 'other']) });
+        await settle();
+        expect(DataManager.getPerson('p1' as PersonId)!.firstName).toBe('Bořivoj Ctibor');
+        expectNoStorage();
+    });
+
+    it('waits while an edit of this window is on its way: the copy keeps showing the edit until the main window answers', async () => {
+        await connect();
+        const p = DataManager.createPerson({ firstName: 'Zdislava', lastName: 'Okurková', gender: 'female' });
+        await settle();
+        // The main window changed the tree before the edit reached it: its patch must not take the edit off the copy...
+        main.post({ type: 'patch', treeId: TREE, revision: 101, json: treeJson(['p1', 'Bořivoj'], ['p9', 'Ctibor']) });
+        await settle();
+        expect(DataManager.getPerson(p.id)).toBeTruthy();
+        expect(DataManager.getPerson('p9' as PersonId)).toBeFalsy();
+        expect(sat.revision).toBe(100);
+        // ...the edit is refused, and the main window's tree comes whole.
+        main.post({ type: 'edit-result', to: SAT, editId: of('edit')[0].editId, ok: false, revision: 101, reason: 'revision' });
+        main.post({ type: 'tree', to: SAT, treeId: TREE, name: 'Hrachovcovi', revision: 101, json: treeJson(['p1', 'Bořivoj'], ['p9', 'Ctibor']) });
+        await settle();
+        expect(sat.revision).toBe(101);
+        expect(DataManager.getAllPersons().map(x => x.firstName).sort()).toEqual(['Bořivoj', 'Ctibor']);
+    });
+
+    it('a patch held for an edit the main window then saved is not applied over it', async () => {
+        await connect();
+        const p = DataManager.createPerson({ firstName: 'Zdislava', lastName: 'Okurková', gender: 'female' });
+        await settle();
+        main.post({ type: 'edit-result', to: SAT, editId: of('edit')[0].editId, ok: true, revision: 101 });
+        main.post({ type: 'patch', treeId: TREE, revision: 101, json: treeJson(['p1', 'Bořivoj'], [p.id, 'Zdislava']) });
+        main.post({ type: 'patch', treeId: TREE, revision: 102, json: treeJson(['p1', 'Bořivoj'], [p.id, 'Zdislava'], ['p9', 'Ctibor']) });
+        await settle();
+        expect(sat.revision).toBe(102);
+        expect(DataManager.getAllPersons()).toHaveLength(3);
+    });
+
+    it('waits while a staged dialog is open; comes in when it is cancelled', async () => {
+        await connect();
+        expect(DataManager.beginEditSession()).toBe(true);
+        main.post({ type: 'patch', treeId: TREE, revision: 101, json: treeJson(['p1', 'Bořivoj'], ['p9', 'Ctibor']) });
+        await settle();
+        expect(DataManager.getPerson('p9' as PersonId)).toBeFalsy();
+        DataManager.rollbackEditSession();
+        expect(DataManager.getPerson('p9' as PersonId)!.firstName).toBe('Ctibor');
+        expect(sat.revision).toBe(101);
+        expectNoStorage();
+    });
+});
+
+describe('the main window\'s state', () => {
+    it('a tree following a live research is read-only here', async () => {
+        await connect();
+        expect(DataManager.isTreeLocked()).toBe(false);
+        main.post({ type: 'status', ...status({ live: true, readOnly: true }) });
+        await settle();
+        expect(sat.readOnly()).toBe(true);
+        expect(DataManager.isTreeLocked()).toBe(true);
+        expect(DataManager.canUndo()).toBe(false);
+    });
+
+    it('the main window quiet for 3 s and its lock free: closed, and nothing can be edited', async () => {
+        const conn = vi.fn();
+        sat.on('connection', conn);
+        await connect();
+        await settle(MAIN_SILENCE_MS + 1000);
+        expect(sat.connection).toBe('main-closed');
+        expect(conn).toHaveBeenLastCalledWith('main-closed');
+        expect(DataManager.isTreeLocked()).toBe(true);
+    });
+
+    it('a quiet main window that still holds its lock is not closed', async () => {
+        const held: LocksLike = { request: (_n, _o, cb) => Promise.resolve(cb(null)), query: async () => ({ held: [{ name: 'strom-main' }] }) };
+        sat.stop();
+        sat = new SatelliteClient({ kind: 'table', treeId: TREE, windowId: SAT, newId: false }, { bus: new WindowBus(SAT, hub.channel()), storage: null, locks: held, closeSelf: () => {}, hasFocus: () => true, bounds: () => undefined });
+        await connect();
+        await settle(MAIN_SILENCE_MS + 2000);
+        expect(sat.connection).toBe('connected');
+    });
+});
+
+describe('selection', () => {
+    it('followed: sent with its origin, taken from others; off: neither', async () => {
+        await connect();
+        const selected = vi.fn();
+        sat.on('select', selected);
+        sat.announceSelection('p1');
+        main.post({ type: 'select', personId: 'p2', treeId: TREE, origin: 'main-1' });
+        await settle();
+        expect(of('select')).toEqual([expect.objectContaining({ personId: 'p1', origin: SAT, treeId: TREE })]);
+        expect(selected).toHaveBeenCalledWith({ personId: 'p2', origin: 'main-1' });
+
+        sat.followSelection = false;
+        expect(session.get(followSelectionKey(SAT))).toBe('0');
+        sat.announceSelection('p3');
+        main.post({ type: 'select', personId: 'p4', treeId: TREE, origin: 'main-1' });
+        await settle();
+        expect(of('select')).toHaveLength(1);
+        expect(selected).toHaveBeenCalledTimes(1);
+    });
+
+    it('a selection taken from another window is not sent back', async () => {
+        await connect();
+        sat.on('select', ({ personId }) => sat.announceSelection(personId));   // the view selects it, as a click would
+        main.post({ type: 'select', personId: 'p2', treeId: TREE, origin: 'main-1' });
+        await settle();
+        expect(of('select')).toHaveLength(0);
+    });
+});

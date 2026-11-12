@@ -37,6 +37,8 @@ const EXCEPTIONS: Record<'en' | 'cs' | 'de' | 'pl', Set<string>> = {
         'snapshots.restoreConfirm', 'mediaQueue.browserOnly', 'mediaQueue.bridgeDownSince', 'mediaQueue.staleSub',
         // "Sie" the parents folded aside for shown children.
         'focus.parentsFoldedBody',
+        // "Sie" the window management permission.
+        'win.screenDenied',
         // The sample message the sender writes to a relative.
         'share.messagePlaceholder']),
     // The sample message the sender writes to a relative.

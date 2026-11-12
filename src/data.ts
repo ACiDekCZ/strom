@@ -95,10 +95,33 @@ function dropUndefinedKeys(obj: object): void {
     }
 }
 
-/** What a 'strom:data-changed' event may tell: a live load from the source, with the data shown before it. */
-export interface DataChangedDetail {
-    source: 'live';
-    previous: StromData;
+/**
+ * What a 'strom:data-changed' event may tell: a live load from the source, with
+ * the data shown before it; or the tree as another window of the app sent it
+ * (spec 079: an edit made in a satellite window, or the main window's state
+ * arriving in a satellite).
+ */
+export type DataChangedDetail =
+    | { source: 'live'; previous: StromData }
+    | { source: 'window' };
+
+/**
+ * Where a satellite window's edits go instead of storage and the undo history
+ * (spec 079 §0): the main window saves them. DataManager calls it; the
+ * satellite client (src/windows/satellite.ts) implements it.
+ */
+export interface WindowEditSink {
+    /** An undoable mutation was committed here (already applied to this copy); `label` names the step. */
+    edit(label: string): void;
+    /** Undo / redo run in the main window, from its history. */
+    undo(): void;
+    redo(): void;
+    canUndo(): boolean;
+    canRedo(): boolean;
+    /** The copy may not be edited (the main window follows a research, the tree is locked there, or it is closed). */
+    readOnly(): boolean;
+    /** A staged dialog ended (committed or rolled back): data held back meanwhile may come in. */
+    sessionEnded(): void;
 }
 
 /** Import action types for view mode */
@@ -419,6 +442,14 @@ class DataManagerClass {
      * updates arrive through replaceWithSourceData().
      */
     private liveTreeId: TreeId | null = null;
+    /**
+     * Set in a satellite window (spec 079): the tree comes from the main
+     * window, and every save goes back to it as an edit — never to storage,
+     * the tree index or the undo history of this window.
+     */
+    private windowSink: WindowEditSink | null = null;
+    /** Called after every save of the open tree (and every undo/redo); see onTreeSaved(). */
+    private saveListeners = new Set<() => void>();
     private embeddedEnvelope: EmbeddedDataEnvelope | null = null;
     /** Trees this window already kept a backup of when another window saved over them. */
     private otherWindowSnapshots = new Set<TreeId>();
@@ -613,6 +644,7 @@ class DataManagerClass {
      * Check if the active tree is locked
      */
     isTreeLocked(): boolean {
+        if (this.windowSink?.readOnly()) return true;
         if (this.liveTreeId !== null && this.liveTreeId === this.currentTreeId) return true;
         if (this.isNewerData()) return true;
         const meta = TreeManager.getActiveTreeMetadata();
@@ -1187,6 +1219,11 @@ class DataManagerClass {
     /** An edit of the user's reached storage: the tree now differs from its last file copy. */
     private noteUserChange(): void {
         if (this.isReadOnly() || this.editSession || !this.currentTreeId) return;
+        if (this.windowSink) {
+            // A satellite keeps no tree index: only the signal (the table's "saved" mark).
+            if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('strom:user-change', { detail: { treeId: this.currentTreeId } }));
+            return;
+        }
         TreeManager.noteUserChange(this.currentTreeId);
     }
 
@@ -1209,6 +1246,10 @@ class DataManagerClass {
 
     private save(): void {
         this.revision++;
+        // A satellite window never stores: its undoable edits go to the main
+        // window (commitMutation); a save that is no user's edit (the focus
+        // remembered, a rollback to the main window's state) stays here.
+        if (this.windowSink) return;
         // Never save in view mode (read-only), over locked data (the
         // in-memory tree is a stand-in) or over a newer app's tree
         // (TreeManager would refuse both anyway).
@@ -1218,7 +1259,94 @@ class DataManagerClass {
 
         if (this.currentTreeId) {
             TreeManager.saveTreeData(this.currentTreeId, this.data);
+            this.notifySaved();
         }
+    }
+
+    /**
+     * Listen to every save of the open tree and every undo/redo (the main
+     * window's registry of satellite windows: their copies follow). Returns
+     * the unsubscribe.
+     */
+    onTreeSaved(cb: () => void): () => void {
+        this.saveListeners.add(cb);
+        return () => { this.saveListeners.delete(cb); };
+    }
+
+    private notifySaved(): void {
+        for (const cb of [...this.saveListeners]) {
+            try { cb(); } catch (err) { console.error('save listener failed', err); }
+        }
+    }
+
+    // ==================== WINDOWS (spec 079) ====================
+
+    /** Turn this DataManager into a satellite window's copy (null: back to a normal window). */
+    setWindowSink(sink: WindowEditSink | null): void {
+        this.windowSink = sink;
+    }
+
+    /** This window is a satellite: its tree is a copy of the main window's. */
+    isWindowCopy(): boolean {
+        return this.windowSink !== null;
+    }
+
+    /**
+     * Satellite: take the tree as the main window sent it (a JSON string of
+     * the whole data). No storage is read or written; the undo history stays
+     * the main window's. A staged dialog is not overwritten — the caller
+     * holds the data back until it ends (isEditSessionActive()).
+     */
+    loadFromWindow(treeId: TreeId, json: string): void {
+        this.currentTreeId = treeId;
+        this.data = migrateData(JSON.parse(json) as StromData);
+        this.pendingBefore = null;
+        this.revision++;
+        CrossTree.invalidateCacheForTree(treeId);
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent<DataChangedDetail>('strom:data-changed', { detail: { source: 'window' } }));
+        }
+    }
+
+    /** The open tree's data as one JSON string (what a satellite sends with an edit). */
+    windowDataJson(): string {
+        return JSON.stringify(this.data);
+    }
+
+    /**
+     * Main window: the open tree as stored, as one JSON string (what the
+     * satellites get). A staged dialog's changes are not stored yet: its
+     * starting state is sent instead.
+     */
+    storedDataJson(): string {
+        return JSON.stringify(this.editSession ? this.editSession.before : this.data);
+    }
+
+    /**
+     * Main window: an edit made in a satellite window (spec 079 §2): the
+     * tree's whole data as the satellite has it after the edit. Saved as an
+     * edit of this window — one undo step named `label`, stored, logged — so
+     * Undo here (or from any satellite) takes it back. Refused (false) when
+     * nothing may be edited now or a staged dialog is open here.
+     */
+    applyWindowEdit(json: string, label: string): boolean {
+        if (this.windowSink || this.isReadOnly() || !this.currentTreeId) return false;
+        if (this.isTreeLocked() || this.editSession || this.batchActive) return false;
+        let next: StromData;
+        try {
+            next = migrateData(JSON.parse(json) as StromData);
+        } catch {
+            return false;
+        }
+        this.beginMutation();
+        this.data = next;
+        this.commitMutation(label, true);
+        AuditLogManager.log(this.currentTreeId, 'window.edit', label);
+        CrossTree.invalidateCacheForTree(this.currentTreeId);
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent<DataChangedDetail>('strom:data-changed', { detail: { source: 'window' } }));
+        }
+        return true;
     }
 
     // ==================== UNDO / REDO ====================
@@ -1232,7 +1360,8 @@ class DataManagerClass {
         // changed here: refuse before anything changes (defense in depth —
         // the UI hides every edit entry point).
         if (this.isLocked() || this.isNewerData()) throw new DataLockedError();
-        if (this.viewMode) return;
+        // A satellite keeps no undo history (the main window does).
+        if (this.viewMode || this.windowSink) return;
         // Inside a batch the pre-state was captured once by beginBatch; the inner
         // mutations must not re-snapshot (that would split the batch into steps).
         if (this.batchActive) return;
@@ -1249,6 +1378,16 @@ class DataManagerClass {
         if (this.batchActive) {
             this.batchDirty = true;
             if (this.batchFirstDescription === null) this.batchFirstDescription = description;
+            return;
+        }
+        if (this.windowSink) {
+            // A satellite: the main window saves the edit and keeps its undo step.
+            this.pendingBefore = null;
+            this.save();
+            this.noteUserChange();
+            this.windowSink.edit(description);
+            this.onUndoRedoChanged?.();
+            if (!silent) this.onMutationCommitted?.(description);
             return;
         }
         UndoManager.setActiveTree(this.currentTreeId);
@@ -1402,6 +1541,7 @@ class DataManagerClass {
         AuditLogManager.flushHold();
         this.batchDepth = 1;   // an operation left unbalanced must not keep it open
         this.commitBatch(description, false);
+        this.windowSink?.sessionEnded();
     }
 
     /**
@@ -1415,11 +1555,14 @@ class DataManagerClass {
         this.editSession = null;
         this.resetBatchState();
         AuditLogManager.dropHold();
-        if (this.currentTreeId !== s.treeId) return false;
-        if (JSON.stringify(this.data) === JSON.stringify(s.before)) return false;
+        if (this.currentTreeId !== s.treeId || JSON.stringify(this.data) === JSON.stringify(s.before)) {
+            this.windowSink?.sessionEnded();
+            return false;
+        }
         this.data = s.before;
         this.save();
         if (this.currentTreeId) CrossTree.invalidateCacheForTree(this.currentTreeId);
+        this.windowSink?.sessionEnded();
         return true;
     }
 
@@ -1520,12 +1663,14 @@ class DataManagerClass {
     }
 
     canUndo(): boolean {
+        if (this.windowSink) return this.windowSink.canUndo();
         if (this.isLocked() || this.isNewerData()) return false;
         UndoManager.setActiveTree(this.currentTreeId);
         return UndoManager.canUndo();
     }
 
     canRedo(): boolean {
+        if (this.windowSink) return this.windowSink.canRedo();
         if (this.isLocked() || this.isNewerData()) return false;
         UndoManager.setActiveTree(this.currentTreeId);
         return UndoManager.canRedo();
@@ -1536,6 +1681,11 @@ class DataManagerClass {
      * description (for the toast), or null when there is nothing to undo.
      */
     undo(): { description: string } | null {
+        // A satellite: the main window undoes from its history; the result comes back as its data.
+        if (this.windowSink) {
+            if (!this.editSession) this.windowSink.undo();
+            return null;
+        }
         if (this.isReadOnly() || !this.currentTreeId) return null;
         // A staged dialog is open: its own Save/Discard settle the data.
         if (this.editSession) return null;
@@ -1551,6 +1701,10 @@ class DataManagerClass {
 
     /** Replay the last undone snapshot. Symmetric to undo(). */
     redo(): { description: string } | null {
+        if (this.windowSink) {
+            if (!this.editSession) this.windowSink.redo();
+            return null;
+        }
         if (this.isReadOnly() || !this.currentTreeId) return null;
         // A staged dialog is open: its own Save/Discard settle the data.
         if (this.editSession) return null;
@@ -1573,6 +1727,7 @@ class DataManagerClass {
             TreeManager.saveTreeData(this.currentTreeId, this.data);
             CrossTree.invalidateCacheForTree(this.currentTreeId);
             this.noteUserChange();
+            this.notifySaved();
         }
     }
 
