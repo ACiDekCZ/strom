@@ -8,6 +8,9 @@
 
 - **Tabulka v samostatném okně** (na počítači s myší): ⧉ vedle přepínače pohledů, ⧉ v liště Tabulky, Ctrl/⌘+klik, prostřední tlačítko nebo kontextová nabídka na *Tabulka* otevřou tabulku v samostatném okně, třeba na druhém monitoru, a hlavní okno zůstane na svém pohledu. Okno převezme řádky, filtry, hledání, uložený pohled i řazení. Úpravy v něm uloží hlavní okno, jsou v jeho *Zpět* a hned se ukážou ve všech oknech; vybraná osoba je mezi okny sdílená (*Sledovat výběr*, výchozí zapnuto). Při živém sledování výzkumu je okno jen ke čtení; po zavření hlavního okna drží poslední stav jen ke čtení a nabízí *Otevřít Strom* nebo *Udělat hlavním*. ⧉ ukazuje počet otevřených oken, přenese okno do popředí nebo zavře všechna; okno zablokované prohlížečem se ohlásí se *Zkusit znovu*.
 - **Druhá karta aplikace** už neotevře plnou druhou kopii, která mohla přepsat seznam stromů a nastavení: oznámí, že Strom už je otevřený, a nabídne *Přepnout tam* nebo *Otevřít jako další okno*; odkazy otevřené v ní (osoba, hledání, odkazy výzkumu) dostane hlavní okno právě jednou. Titulek okna nese jméno otevřeného stromu.
+- **Telefon a tablet**: dolní lišta je Rodina | Potomci | + | *Tabulka* | Více, *Časová osa* je ve Více vedle *Vějíře* a *Mapy*. Na telefonu je legenda dole u hrany a Zpět / Vpřed nad ní (Rodina, Vějíř). Ve Více je *Celá obrazovka*, kde ji prohlížeč umí; Safari na iPhonu místo ní ukáže cestu na plochu. Prezentace nechá zapnutou celou obrazovku, která byla zapnutá před ní.
+- **Tabulka**: ukotvené sloupce jdou seřadit libovolně, *Jméno* nemusí být první; posun, který nejde, se nenabízí, a *vyplněno* je v prvním sloupci.
+- **Opravy**: *Co se pošle* otevřené hned po obnovení stránky ukazuje stejný seznam jako před ním, ne *Přesný seznam úprav tu teď nejde spočítat*.
 
 ## 3.27.0
 
