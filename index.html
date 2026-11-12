@@ -7416,14 +7416,51 @@
             padding: 16px; background: var(--bg); color: var(--text);
         }
         .second-tab-card {
-            width: 100%; max-width: 470px; box-sizing: border-box; padding: 28px 24px;
+            width: 100%; max-width: 470px; box-sizing: border-box; padding: 28px 30px;
+            display: flex; flex-direction: column; gap: 14px;
             background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
         }
-        .second-tab-title { margin: 0 0 8px; font-size: 20px; line-height: 1.3; }
-        .second-tab-note { margin: 0; color: var(--text-secondary, var(--text)); line-height: 1.5; }
+        .second-tab-brand { font-family: var(--font-serif); font-size: 20px; font-weight: 600; line-height: 1.2; }
+        .second-tab-forwarded {
+            display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px;
+            background: var(--primary-soft); font-size: 13.5px; line-height: 1.4;
+        }
+        .second-tab-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--primary); }
+        .second-tab-title { margin: 0; font-size: 19px; font-weight: 600; line-height: 1.3; text-wrap: pretty; overflow-wrap: anywhere; }
+        .second-tab-note { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--text-light); text-wrap: pretty; }
+        .second-tab-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+        .second-tab-btn {
+            min-height: 36px; padding: 6px 16px; box-sizing: border-box; max-width: 100%;
+            display: inline-flex; align-items: center; justify-content: center; text-align: center;
+            border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text);
+            font: inherit; font-size: 14px; font-weight: 600; line-height: 1.25; cursor: pointer;
+        }
+        .second-tab-btn--primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+        .second-tab-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .second-tab-btn:disabled { opacity: 0.6; cursor: default; }
+        @media (hover: hover) {
+            .second-tab-btn:not(:disabled):hover { background: var(--surface-2); }
+            .second-tab-btn--primary:not(:disabled):hover { background: var(--primary-dark); border-color: var(--primary-dark); }
+        }
+        .second-tab-failed {
+            margin: 0; padding-top: 10px; border-top: 1px solid var(--divider);
+            font-size: 13px; line-height: 1.5; color: var(--text-light); text-wrap: pretty;
+        }
+        .second-tab-failed[hidden], .second-tab-forwarded[hidden] { display: none; }
+        /* Touch: every button a finger's target (tablet and phone). */
+        @media (pointer: coarse) { .second-tab-btn { min-height: 44px; } }
+        /* Tablet: the card as on the desktop, its padding a little narrower. */
+        @media (min-width: 641px) and (max-width: 1024px) { .second-tab-card { padding: 26px 26px; } }
+        /* Phone: the buttons below each other across the card, 44 px. */
         @media (max-width: 640px) {
             .second-tab-card { padding: 22px 18px; }
-            .second-tab-title { font-size: 18px; }
+            .second-tab-actions { flex-direction: column; }
+            .second-tab-btn { width: 100%; min-height: 44px; }
+        }
+        /* A phone held sideways: the card from the top, the page scrolls when it is taller. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            main.second-tab { align-items: flex-start; }
+            .second-tab-card { padding: 18px 22px; gap: 10px; }
         }
         .empty-state {
             position: absolute;

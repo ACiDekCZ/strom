@@ -6,7 +6,8 @@
  *   as the app does them, links other windows pass on);
  * - satellite: its name and address, the client, launches of the installed
  *   app that reach it (passed on to the main window, never handled here);
- * - second tab: the screen that says the app is open elsewhere (S2 makes it whole).
+ * - second tab: the screen that says the app is open elsewhere, its link and
+ *   launches passed on to the main window (second-tab.ts).
  */
 
 import { UI } from '../ui.js';
@@ -15,6 +16,10 @@ import { WindowBus } from './window-bus.js';
 import { WindowRegistry, dataManagerHost } from './window-registry.js';
 import { SatelliteClient } from './satellite.js';
 import { MAIN_WINDOW_NAME, newWindowId, satelliteWindowName, type SatelliteParams } from './window-role.js';
+import { openForwardedLink, type ForwardedLink, type LinkOpenerDeps } from './window-link.js';
+import { SecondTab, renderSecondTab, removeSecondTabScreen } from './second-tab.js';
+import { DataManager } from '../data.js';
+import { TreeManager } from '../tree-manager.js';
 
 /** The main window's registry (null in any other window). */
 let registry: WindowRegistry | null = null;
@@ -28,16 +33,42 @@ interface FileHandleLike {
     getFile?: () => Promise<File>;
 }
 
-/** Open what another window passed on: an address of the research, files of the installed app. */
-export function openForwardedLink(link: { search?: string; files?: unknown[] }): void {
-    if (link.search) UI.openExternalRequest(new URLSearchParams(link.search));
-    for (const handle of (link.files ?? []) as FileHandleLike[]) {
-        if (!handle || typeof handle.getFile !== 'function') continue;
-        void handle.getFile().then(
+/** How the main window opens a link: the handlers its own start uses (main.ts, research-ui, deep links). */
+const appLinkOpener: LinkOpenerDeps = {
+    currentTree: () => {
+        const id = DataManager.getCurrentTreeId();
+        if (!id) return null;
+        return { id, researchId: TreeManager.getTreeMetadata(id)?.research?.id ?? null };
+    },
+    pickTree: (params) => {
+        const tree = TreeManager.getTreeFromUrl(params);
+        return tree ? { id: tree.id, researchId: tree.research?.id ?? null } : null;
+    },
+    switchTree: (treeId) => UI.switchToTree(treeId),
+    externalRequest: (params) => UI.openExternalRequest(params),
+    search: (query) => UI.handleSearchResults(DataManager.searchPersons(query), query),
+    deepLink: (link, matches) => UI.openDeepLink(link, matches),
+    openFile: (handle) => {
+        const h = handle as FileHandleLike | null;
+        if (!h || typeof h.getFile !== 'function') return;
+        void h.getFile().then(
             (file) => UI.openGedcomFile(file),
             (err) => console.warn('Forwarded file unreadable', err),
         );
-    }
+    },
+};
+
+/** Open what another window passed on: an address (a person, a search, the research's requests), files of the installed app. */
+export function openLinkFromWindow(link: ForwardedLink): Promise<void> {
+    return openForwardedLink(link, appLinkOpener).catch((err) => console.warn('Forwarded link not opened', err));
+}
+
+/**
+ * The main window opens links of other windows from now on (after its first
+ * render, as its own address's): those that came before are opened now.
+ */
+export function openLinksFromOtherWindows(): void {
+    registry?.setLinkHandler((link) => { void openLinkFromWindow(link); });
 }
 
 /** The main window: its name (other windows find it by it) and the registry of satellites. */
@@ -51,7 +82,6 @@ export function startMainWindow(): WindowRegistry {
             redo: () => UI.performRedo(),
         }),
     });
-    registry.setLinkHandler((link) => openForwardedLink(link));
     registry.start();
     return registry;
 }
@@ -63,11 +93,11 @@ interface LaunchParamsLike {
 }
 
 /**
- * Launches of the installed app that reach a satellite (the window last used):
- * the main window opens them; this one asks it to the front and says so. The
+ * Launches of the installed app that reach a window which does not open them
+ * (a satellite, a second tab): `forward` passes each to the main window. The
  * launch that opened this window (its own address) is not one.
  */
-export function forwardLaunches(client: SatelliteClient, startSearch: string): void {
+export function forwardLaunches(forward: (link: ForwardedLink) => void, startSearch: string): void {
     const lq = (window as unknown as { launchQueue?: { setConsumer?: (consumer: (params: LaunchParamsLike) => void) => void } }).launchQueue;
     if (!lq || typeof lq.setConsumer !== 'function') return;
     let startupSeen = false;
@@ -82,13 +112,20 @@ export function forwardLaunches(client: SatelliteClient, startSearch: string): v
             startupSeen = true;
             const link = { ...(search && !isStartup ? { search } : {}), ...(files.length ? { files } : {}) };
             if (!link.search && !link.files) return;
-            client.forwardLink(link);
-            void client.requestMainFocus();
-            UI.showToast(strings.win.linkForwarded, 4000);
+            forward(link);
         });
     } catch (err) {
         console.warn('launchQueue unavailable', err);
     }
+}
+
+/** A satellite's launches: the main window opens them; it is asked to the front and this window says so. */
+export function forwardSatelliteLaunches(client: SatelliteClient, startSearch: string): void {
+    forwardLaunches((link) => {
+        client.forwardLink(link);
+        void client.requestMainFocus();
+        UI.showToast(strings.win.linkForwarded, 4000);
+    }, startSearch);
 }
 
 /**
@@ -109,23 +146,20 @@ export function startSatelliteClient(params: SatelliteParams): SatelliteClient {
 
 /**
  * Another tab while the main window is open (§5): nothing is loaded or
- * stored; only the screen saying so (its actions come with S2).
+ * stored; the screen saying so, its link and launches passed on to the main
+ * window. "Open as another window" removes the screen and `startSatellite`
+ * starts the app as a satellite here (no reload).
  */
-export function showSecondTab(): void {
-    const html = document.documentElement;
-    html.classList.add('window-second-tab');
-    html.classList.remove('app-booting', 'app-loading', 'external-opening');
-    const main = document.createElement('main');
-    main.className = 'second-tab';
-    const card = document.createElement('div');
-    card.className = 'second-tab-card';
-    const title = document.createElement('h1');
-    title.className = 'second-tab-title';
-    title.textContent = strings.win.alreadyOpen;
-    const note = document.createElement('p');
-    note.className = 'second-tab-note';
-    note.textContent = strings.win.alreadyOpenNote;
-    card.append(title, note);
-    main.append(card);
-    document.body.append(main);
+export function showSecondTab(startSatellite: (params: SatelliteParams) => void): SecondTab {
+    const startSearch = window.location.search;
+    const tab = new SecondTab({
+        becomeSatellite: (params) => {
+            removeSecondTabScreen();
+            startSatellite(params);
+        },
+    });
+    tab.start();
+    renderSecondTab(tab);
+    forwardLaunches((link) => tab.forwardLink(link), startSearch);
+    return tab;
 }

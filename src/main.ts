@@ -32,7 +32,7 @@ import { keepLifelineChipsFor } from './lifeline-view.js';
 import { parseDeepLink, deepLinkTreeMatches, stripDeepLinkParams } from './deep-link.js';
 import { shouldRegisterServiceWorker, registerServiceWorker, linkManifest, isBetaBuild, appModeFor, captureInstallPrompt, INSTALL_AVAILABILITY_EVENT, isSafariOnComputer, safariAppName } from './pwa.js';
 import { decideWindowRole, getWindowRole, setWindowRole, satelliteViewMode, type SatelliteParams } from './windows/window-role.js';
-import { startMainWindow, startSatelliteClient, forwardLaunches, showSecondTab } from './windows/window-start.js';
+import { startMainWindow, startSatelliteClient, forwardSatelliteLaunches, showSecondTab, openLinksFromOtherWindows } from './windows/window-start.js';
 import { windowTitle } from './windows/window-title.js';
 import type { SatelliteClient } from './windows/satellite.js';
 
@@ -349,9 +349,40 @@ function startSatelliteWindow(params: SatelliteParams, debugOptions: DebugOption
     client.on('status', followReadOnly);
     client.on('connection', followReadOnly);
     client.start();
-    forwardLaunches(client, window.location.search);
+    forwardSatelliteLaunches(client, window.location.search);
     updateWindowTitle();
     console.log(`Strom v${APP_VERSION} initialized (window ${params.windowId})`);
+}
+
+/**
+ * What every window that shows the app needs before its views: the UI's
+ * strings, the dialogs' skeleton, the modules on window.Strom (the password
+ * prompt's buttons). Returns the debug options of the address.
+ */
+function initShell(): DebugOptions {
+    // Initialize UI strings from strings.ts
+    UI.initializeStrings();
+
+    // Unify all dialogs onto the flex skeleton (fixed header + scrolling body +
+    // fixed actions) and watch for dynamically inserted modals.
+    initModalSkeleton();
+
+    // Expose modules globally early (needed for password prompt buttons)
+    window.Strom = {
+        DataManager,
+        TreeManager,
+        TreeRenderer,
+        UI,
+        ZoomPan,
+        AppExporter,
+        MergerUI,
+        SettingsManager,
+        TreePreview,
+        TreeCompare
+    };
+
+    // Parse debug options from URL
+    return parseDebugOptions();
 }
 
 /** IndexedDB could not be opened: say so instead of a blank page (S22). */
@@ -378,7 +409,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (role.role === 'satellite' || role.role === 'second-tab') SettingsManager.setReadOnly(true);
     if (role.role === 'second-tab') {
         SettingsManager.init();
-        showSecondTab();
+        updateWindowTitle();
+        // "Open as another window": this tab starts as a satellite, without a reload.
+        showSecondTab((params) => {
+            setWindowRole('satellite');
+            startSatelliteWindow(params, initShell());
+        });
         console.log(`Strom v${APP_VERSION}: open in another window`);
         return;
     }
@@ -406,29 +442,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // keeps none: the main window logs the edits it saves for it.
     if (!satellite) AuditLogManager.init();
 
-    // Initialize UI strings from strings.ts
-    UI.initializeStrings();
-
-    // Unify all dialogs onto the flex skeleton (fixed header + scrolling body +
-    // fixed actions) and watch for dynamically inserted modals.
-    initModalSkeleton();
-
-    // Expose modules globally early (needed for password prompt buttons)
-    window.Strom = {
-        DataManager,
-        TreeManager,
-        TreeRenderer,
-        UI,
-        ZoomPan,
-        AppExporter,
-        MergerUI,
-        SettingsManager,
-        TreePreview,
-        TreeCompare
-    };
-
-    // Parse debug options from URL
-    const debugOptions = parseDebugOptions();
+    const debugOptions = initShell();
 
     if (satellite) {
         startSatelliteWindow(satellite, debugOptions);
@@ -629,6 +643,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             );
             void UI.openDeepLink(startDeepLink, matches);
         }
+        // Links other windows passed on (a second tab's ?person=, a satellite's launch): from now on, as this window's own.
+        openLinksFromOtherWindows();
 
         // Strom Research: light the "New" marker, maybe the one-time 3.0 card.
         UI.researchPromoAfterFirstRender();
