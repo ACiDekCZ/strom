@@ -15,7 +15,9 @@ import { strings } from '../strings.js';
 import { WindowBus } from './window-bus.js';
 import { WindowRegistry, dataManagerHost } from './window-registry.js';
 import { SatelliteClient } from './satellite.js';
-import { MAIN_WINDOW_NAME, newWindowId, satelliteWindowName, type SatelliteParams } from './window-role.js';
+import { MAIN_WINDOW_NAME, newWindowId, satelliteViewMode, satelliteWindowName, tryBecomeMain, type SatelliteParams } from './window-role.js';
+import { becomeMain, writeBecomeMainMark } from './become-main.js';
+import { recordReloadPoint } from '../resume-view.js';
 import { openForwardedLink, type ForwardedLink, type LinkOpenerDeps } from './window-link.js';
 import { SecondTab, renderSecondTab, removeSecondTabScreen } from './second-tab.js';
 import { DataManager } from '../data.js';
@@ -188,9 +190,69 @@ export function showSecondTab(startSatellite: (params: SatelliteParams) => void)
             removeSecondTabScreen();
             startSatellite(params);
         },
+        // The main window closed (§5): this tab starts as the main window, with the link it did not pass on.
+        becomeMain: (search) => becomeMain({
+            tryLock: () => tryBecomeMain(),
+            prepare: () => prepareMainStart({ tree: null, search }),
+            restart: () => window.location.reload(),
+        }),
     });
     tab.start();
     renderSecondTab(tab);
     forwardLaunches((link) => tab.forwardLink(link), startSearch);
     return tab;
+}
+
+/**
+ * What a window writes before it starts again as the main window (§3.3, §5):
+ * the mark (the new page tries again for the lock a moment), the reload point
+ * and the Table's state of a satellite, its address without `okno=`.
+ */
+function prepareMainStart(opts: { tree: string | null; search?: string | null; table?: unknown }): void {
+    writeBecomeMainMark({ tree: opts.tree, ...(opts.table !== undefined ? { table: opts.table } : {}), at: Date.now() });
+    try {
+        const url = new URL(window.location.href);
+        if (opts.search) url.search = opts.search;
+        else url.search = opts.tree ? `?tree=${encodeURIComponent(opts.tree)}` : '';
+        url.hash = '';
+        history.replaceState(null, '', url.toString());
+    } catch { /* the address stays */ }
+}
+
+/**
+ * "Make this the main window" in a satellite (§3.3): the lock taken (another
+ * window has it: nothing happens), then the window starts again as the main
+ * one — its tree from storage (the saved state, newer than this copy may be),
+ * its view (the reload point) and the Table's state kept. The opener's live
+ * session copied into this window is not its own and goes.
+ */
+export function makeSatelliteMain(client: SatelliteClient, kind: SatelliteParams['kind']): Promise<boolean> {
+    return becomeMain({
+        tryLock: () => tryBecomeMain(),
+        prepare: () => {
+            const tree = client.treeId;
+            const view = satelliteViewMode(kind);
+            const person = TreeRenderer.getFocusPersonId();
+            if (tree && person) recordReloadPoint({ tree, person, view });
+            try { sessionStorage.removeItem('strom.live'); } catch { /* no storage */ }
+            prepareMainStart({ tree, table: view === 'table' ? UI.tableWindowState() : undefined });
+        },
+        restart: () => window.location.reload(),
+    });
+}
+
+/**
+ * "Open Strom" in a satellite whose main window closed (§3.3): a new main
+ * window at the app's own address (its path kept: a file opened from disk,
+ * /strom.html), without this window's session (`noopener`).
+ */
+export function openMainWindow(): void {
+    let href = './';
+    try {
+        const url = new URL(window.location.href);
+        url.search = '';
+        url.hash = '';
+        href = url.toString();
+    } catch { /* the folder */ }
+    try { window.open(href, MAIN_WINDOW_NAME, 'noopener'); } catch (err) { console.warn('Main window not opened', err); }
 }

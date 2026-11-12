@@ -191,7 +191,7 @@ describe('edits', () => {
         await settle();
         main.post({ type: 'edit-result', to: SAT, editId: of('edit')[0].editId, ok: false, revision: 102, reason: 'revision' });
         await settle();
-        expect(conflicts).toHaveBeenCalledWith({ reason: 'revision' });
+        expect(conflicts).toHaveBeenCalledWith({ reason: 'revision', drafts: [] });
         expect(sat.pendingEdits).toBe(0);
         expect(of('edit')).toHaveLength(1);
 
@@ -199,6 +199,19 @@ describe('edits', () => {
         await settle();
         expect(trees).toHaveBeenLastCalledWith(expect.objectContaining({ revision: 102, afterConflict: true }));
         expect(DataManager.getAllPersons().map(x => x.firstName).sort()).toEqual(['Bořivoj', 'Ctibor']);
+    });
+
+    it('a refused edit hands back the drafts of its editors, the sent one and those that waited', async () => {
+        await connect();
+        const conflicts = vi.fn();
+        sat.on('conflict', conflicts);
+        DataManager.runWithEditContext({ kind: 'cell', text: 'first' }, () => { DataManager.createPerson({ firstName: 'Zdislava', lastName: 'Okurková', gender: 'female' }); });
+        DataManager.createPerson({ firstName: 'Bez', lastName: 'Konceptu', gender: 'male' });
+        DataManager.runWithEditContext({ kind: 'cell', text: 'third' }, () => { DataManager.createPerson({ firstName: 'Kvetoslav', lastName: 'Okurka', gender: 'male' }); });
+        await settle();
+        main.post({ type: 'edit-result', to: SAT, editId: of('edit')[0].editId, ok: false, revision: 102, reason: 'revision' });
+        await settle();
+        expect(conflicts).toHaveBeenCalledWith({ reason: 'revision', drafts: [{ kind: 'cell', text: 'first' }, { kind: 'cell', text: 'third' }] });
     });
 
     it('undo and redo are the main window\'s', async () => {

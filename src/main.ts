@@ -31,8 +31,12 @@ import { collectPoolGarbage } from './media-pool.js';
 import { keepLifelineChipsFor } from './lifeline-view.js';
 import { parseDeepLink, deepLinkTreeMatches, stripDeepLinkParams } from './deep-link.js';
 import { shouldRegisterServiceWorker, registerServiceWorker, linkManifest, isBetaBuild, appModeFor, captureInstallPrompt, INSTALL_AVAILABILITY_EVENT, isSafariOnComputer, safariAppName } from './pwa.js';
-import { decideWindowRole, getWindowRole, setWindowRole, satelliteViewMode, type SatelliteParams } from './windows/window-role.js';
-import { startMainWindow, startSatelliteClient, startSatelliteSelection, forwardSatelliteLaunches, showSecondTab, openLinksFromOtherWindows } from './windows/window-start.js';
+import { decideWindowRole, getWindowRole, setWindowRole, satelliteViewMode, tryBecomeMain, type SatelliteParams } from './windows/window-role.js';
+import { startMainWindow, startSatelliteClient, startSatelliteSelection, forwardSatelliteLaunches, showSecondTab, openLinksFromOtherWindows, makeSatelliteMain, openMainWindow } from './windows/window-start.js';
+import { mountSatStates } from './windows/sat-states.js';
+import { wireWindowDrafts } from './windows/window-drafts.js';
+import { peekBecomeMainMark, retryBecomeMain, takeBecomeMainMark } from './windows/become-main.js';
+import { formatLiveClock } from './live-time.js';
 import { initWindowControls } from './windows/window-controls.js';
 import { windowTitle } from './windows/window-title.js';
 import { mountSatHeader } from './windows/sat-header.js';
@@ -332,6 +336,22 @@ function startSatelliteWindow(params: SatelliteParams, debugOptions: DebugOption
         },
     });
     startSatelliteSelection(client);
+    // Its states under the header or in place of the view (§3).
+    const states = mountSatStates(document, client, {
+        goToMain: () => { void client.requestMainFocus(); },
+        openStrom: () => openMainWindow(),
+        makeMain: () => { void makeSatelliteMain(client, params.kind); },
+        closeWindow: () => window.close(),
+        toast: (message, ms) => UI.showToast(message, ms),
+        formatTime: (ts) => formatLiveClock(ts, Date.now(), SettingsManager.getLanguage()),
+        content: () => document.getElementById('tree-container'),
+    });
+    // A refused edit's draft comes back once the fresh tree is in (§3.4, 3d).
+    wireWindowDrafts(client, {
+        reopenCell: (draft) => UI.tableReopenDraft(draft),
+        reopenPerson: (draft) => UI.reopenPersonDraft(draft),
+        markOpenCell: () => UI.tableMarkOpenDraft(),
+    });
 
     // The shell (as in the main window, without the tree switcher, files, research and the app's offers).
     ZoomPan.init();
@@ -362,6 +382,7 @@ function startSatelliteWindow(params: SatelliteParams, debugOptions: DebugOption
         if (SettingsManager.getLanguage() !== languageBefore) UI.setLanguage(SettingsManager.getLanguage());
         else TreeRenderer.render();
         header.refresh();
+        states.refresh();
         updateWindowTitle();
     });
 
@@ -442,7 +463,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // The window's role, before anything is read or stored (spec 079 §0): a
     // satellite and a second tab never write the settings, the tree index or a tree.
-    const role = await decideWindowRole({ embedded: hasEmbeddedData });
+    // A satellite or a second tab starting again as the main window (spec 079 §3.3, §5): the lock
+    // its previous page released may not be free yet at this moment.
+    const becomeMark = hasEmbeddedData ? null : peekBecomeMainMark();
+    let role = await decideWindowRole({ embedded: hasEmbeddedData });
+    if (role.role === 'second-tab' && becomeMark) {
+        const lock = await retryBecomeMain(() => tryBecomeMain());
+        if (lock) role = { role: 'main', lock };
+    }
     setWindowRole(role.role);
     const satellite = role.role === 'satellite' ? role.satellite ?? null : null;
     if (role.role === 'satellite' || role.role === 'second-tab') SettingsManager.setReadOnly(true);
@@ -519,6 +547,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (err) {
         showStartupError(err);
         return;
+    }
+    // A satellite that became the main window keeps its Table's state (§3.3; its view: the reload point).
+    const becameMain = takeBecomeMainMark();
+    if (role.role === 'main' && becameMain?.tree && becameMain.table !== undefined && DataManager.getCurrentTreeId() === becameMain.tree) {
+        UI.setTableWindowStart(becameMain.tree, becameMain.table);
     }
     // The main window: the satellites get their tree from here (spec 079 §0).
     // ⧉ after the view tabs, the indicator of open windows, the Table tab's shortcuts (§1, §4).

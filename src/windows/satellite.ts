@@ -46,8 +46,12 @@ export interface SatelliteEvents {
     data: { treeId: TreeId; revision: number; source: 'tree' | 'patch' };
     /** The main window's status (§3.2 live, §3.6 locked, undo/redo availability). */
     status: WindowStatus;
-    /** An edit of this window was not applied (§3.4); the fresh tree follows. */
-    conflict: { reason?: EditRefusal };
+    /**
+     * An edit of this window was not applied (§3.4); the fresh tree follows.
+     * `drafts`: the editors' contexts of the refused edit and of those
+     * dropped behind it (DataManager.runWithEditContext), oldest first.
+     */
+    conflict: { reason?: EditRefusal; drafts: unknown[] };
     /** An edit of this window was saved by the main window. */
     saved: { revision: number };
     /** The tree was renamed in the main window (its status carries the new name). */
@@ -94,6 +98,7 @@ export interface SatelliteClientOptions {
 interface QueuedEdit {
     json: string;
     label: string;
+    context?: unknown;
 }
 
 export class SatelliteClient {
@@ -125,7 +130,7 @@ export class SatelliteClient {
     private gone = false;
 
     private readonly queue: QueuedEdit[] = [];
-    private inFlight: { editId: string } | null = null;
+    private inFlight: { editId: string; context?: unknown } | null = null;
     private heldTree: MessageOf<'tree'> | null = null;
     private heldPatch: MessageOf<'patch'> | null = null;
     private conflictPending = false;
@@ -164,6 +169,10 @@ export class SatelliteClient {
     get hasTree(): boolean { return this._treeId !== null && this._revision >= 0 && !this.gone; }
     /** Edits sent or waiting for the main window. */
     get pendingEdits(): number { return this.queue.length + (this.inFlight ? 1 : 0); }
+    /** The tree of this window was deleted in the main window (§3.5b). */
+    get treeGone(): boolean { return this.gone; }
+    /** When the main window was last heard (its status): the copy was current then (§3.3 "as of"). */
+    get lastHeardAt(): number { return this.lastHeard; }
 
     /** Nothing may be edited here now (§3.2, §3.3, §3.6). */
     readOnly(): boolean {
@@ -193,7 +202,7 @@ export class SatelliteClient {
         if (this.started) return;
         this.started = true;
         const sink: WindowEditSink = {
-            edit: (label) => this.queueEdit(label),
+            edit: (label, context) => this.queueEdit(label, context),
             undo: () => this.undo(),
             redo: () => this.redo(),
             canUndo: () => !this.readOnly() && !!this._status?.canUndo,
@@ -423,9 +432,9 @@ export class SatelliteClient {
         }
     }
 
-    private queueEdit(label: string): void {
+    private queueEdit(label: string, context?: unknown): void {
         if (!this.hasTree) return;
-        this.queue.push({ json: this.data.windowDataJson(), label });
+        this.queue.push({ json: this.data.windowDataJson(), label, ...(context !== undefined ? { context } : {}) });
         this.sendNext();
     }
 
@@ -433,12 +442,13 @@ export class SatelliteClient {
         if (this.inFlight || this.queue.length === 0 || !this.mainId || !this._treeId) return;
         const next = this.queue.shift()!;
         const editId = newWindowId();
-        this.inFlight = { editId };
+        this.inFlight = { editId, ...(next.context !== undefined ? { context: next.context } : {}) };
         this.bus.post({ type: 'edit', windowId: this.windowId, editId, treeId: this._treeId, baseRevision: this._revision, json: next.json, label: next.label });
     }
 
     private onEditResult(m: MessageOf<'edit-result'>): void {
-        if (!this.inFlight || m.editId !== this.inFlight.editId) return;
+        const sent = this.inFlight;
+        if (!sent || m.editId !== sent.editId) return;
         this.inFlight = null;
         if (m.ok) {
             this._revision = Math.max(this._revision, m.revision);
@@ -448,10 +458,11 @@ export class SatelliteClient {
             return;
         }
         // Built on a state the main window no longer has: what waited behind it goes too; the fresh tree follows.
+        const drafts = [sent.context, ...this.queue.map(q => q.context)].filter(c => c !== undefined);
         this.queue.length = 0;
         this.heldPatch = null;
         this.conflictPending = true;
-        this.emit('conflict', { reason: m.reason });
+        this.emit('conflict', { reason: m.reason, drafts });
     }
 
     private onSelect(m: MessageOf<'select'>): void {

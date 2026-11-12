@@ -13,7 +13,8 @@ import { WindowBus, createMemoryHub, FOCUS_WAIT_MS } from '../window-bus.js';
 import { WindowRegistry, type MainWindowHost } from '../window-registry.js';
 import { SecondTab, MAIN_STATUS_WAIT_MS } from '../second-tab.js';
 import { openForwardedLink, type LinkOpenerDeps, type ForwardedLink } from '../window-link.js';
-import type { SatelliteParams } from '../window-role.js';
+import type { SatelliteParams, LocksLike } from '../window-role.js';
+import { MAIN_SILENCE_MS } from '../satellite.js';
 
 const TREE = 'tree-main' as TreeId;
 
@@ -233,5 +234,74 @@ describe('"Open as another window"', () => {
         expect(params.windowId).toMatch(/^[0-9a-f]{8}$/);
         expect(became).toEqual([params]);
         expect(replaced).toEqual([`https://stromapp.info/run/?okno=table&tree=${TREE}&w=${params.windowId}`]);
+    });
+});
+
+describe('the main window closed (§5)', () => {
+    function locks(held: () => boolean): LocksLike {
+        return {
+            request: (_n, _o, cb) => Promise.resolve(cb(null)),
+            query: async () => ({ held: held() ? [{ name: 'strom-main' }] : [] }),
+        };
+    }
+
+    function takeoverTab(held: () => boolean, became: (string | null)[], result: () => boolean, search = ''): SecondTab {
+        const t = new SecondTab({
+            bus: new WindowBus('tab-1', hub.channel()),
+            search,
+            href: () => `https://stromapp.info/run/${search}`,
+            replaceUrl: () => {},
+            locks: locks(held),
+            becomeMain: async (link) => { became.push(link); return result(); },
+        });
+        t.start();
+        return t;
+    }
+
+    it('no status for MAIN_SILENCE_MS and the lock free: the tab becomes the main window, with the link it did not pass on', async () => {
+        const became: (string | null)[] = [];
+        const t = takeoverTab(() => false, became, () => true, '?person=P0012');
+        await settle(MAIN_SILENCE_MS - 500);
+        expect(became).toEqual([]);
+        await settle(1500);
+        expect(became).toEqual(['?person=P0012']);
+        t.stop();
+    });
+
+    it('a main window reloading (F5) holds the lock again and is heard: nothing happens', async () => {
+        startMain();
+        let held = true;
+        const became: (string | null)[] = [];
+        const t = takeoverTab(() => held, became, () => true);
+        await settle(1000);
+        // The reload: the old page says goodbye and lets the lock go; the new one takes it at once.
+        registry.stop();
+        held = false;
+        await settle(300);
+        held = true;
+        startMain();
+        await settle(MAIN_SILENCE_MS * 3);
+        expect(became).toEqual([]);
+        t.stop();
+    });
+
+    it('a quiet main window that holds its lock (a hidden tab) stays the main window', async () => {
+        const became: (string | null)[] = [];
+        const t = takeoverTab(() => true, became, () => true);
+        await settle(MAIN_SILENCE_MS * 3);
+        expect(became).toEqual([]);
+        t.stop();
+    });
+
+    it('another window was quicker: the tab waits and tries again only after another silence', async () => {
+        const became: (string | null)[] = [];
+        const t = takeoverTab(() => false, became, () => false);
+        await settle(MAIN_SILENCE_MS + 1100);
+        expect(became).toHaveLength(1);
+        await settle(1000);
+        expect(became).toHaveLength(1);
+        await settle(MAIN_SILENCE_MS);
+        expect(became).toHaveLength(2);
+        t.stop();
     });
 });

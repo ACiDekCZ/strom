@@ -117,8 +117,12 @@ const WINDOW_STATE_KEYS = ['lastFocusPersonId', 'lastFocusDepthUp', 'lastFocusDe
  * satellite client (src/windows/satellite.ts) implements it.
  */
 export interface WindowEditSink {
-    /** An undoable mutation was committed here (already applied to this copy); `label` names the step. */
-    edit(label: string): void;
+    /**
+     * An undoable mutation was committed here (already applied to this copy);
+     * `label` names the step, `context` is what the editor said about it
+     * (runWithEditContext: what to bring back if the main window refuses it).
+     */
+    edit(label: string, context?: unknown): void;
     /** Undo / redo run in the main window, from its history. */
     undo(): void;
     redo(): void;
@@ -1308,6 +1312,23 @@ class DataManagerClass {
         this.windowSink = sink;
     }
 
+    private windowEditContext: unknown = null;
+
+    /**
+     * Satellite: the edits `fn` commits carry `context` to the window sink —
+     * what an editor needs to bring the user's text back when the main window
+     * refuses the edit (spec 079 §3.4: a cell's draft, the person dialog's fields).
+     */
+    runWithEditContext<T>(context: unknown, fn: () => T): T {
+        const prev = this.windowEditContext;
+        this.windowEditContext = context;
+        try {
+            return fn();
+        } finally {
+            this.windowEditContext = prev;
+        }
+    }
+
     /** This window is a satellite: its tree is a copy of the main window's. */
     isWindowCopy(): boolean {
         return this.windowSink !== null;
@@ -1414,7 +1435,7 @@ class DataManagerClass {
             this.pendingBefore = null;
             this.save();
             this.noteUserChange();
-            this.windowSink.edit(description);
+            this.windowSink.edit(description, this.windowEditContext ?? undefined);
             this.onUndoRedoChanged?.();
             if (!silent) this.onMutationCommitted?.(description);
             return;

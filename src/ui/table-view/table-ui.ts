@@ -85,6 +85,7 @@ import {
 } from './table-checks.js';
 import { conflictScope } from '../person-research-ui.js';
 import { lineCell, lineKey, type GridLine } from './table-subrows.js';
+import { cellDraft, type CellDraft } from '../../windows/window-drafts.js';
 import { cellText, markHtml, type CellConflictMark, type CellIssueMark } from './table-grid.js';
 import { bubbleHeading, bubbleHtml, citesHtml, closeTableBubble, legendHtml, openBubblePanel, sheetElement, type BubbleCite } from './table-bubble.js';
 import { bridgeChanges, changedKeys, familyKeys, keepOrder, namesList, rowKeysFor, watchEdit } from './table-refresh.js';
@@ -1840,8 +1841,29 @@ export const tableMethods = uiModule({
             label: strings.table.cell.editLabel(columnLabel(col)),
             ...(t.input === 'place' ? { list: 'places-datalist' } : {}),
             ...(t.input === 'select' ? { options: editOptionsOf(t) ?? [] } : {}),
-            save: (text) => this.tableSaveCell(t, text),
+            // A satellite's edit carries the cell and its text: refused by the main window, the draft comes back (spec 079 §3.4).
+            save: (text) => DataManager.runWithEditContext(
+                DataManager.isWindowCopy() ? cellDraft(treeKey(), stateOf(treeKey()).rowType, lineKey(line), col.id, text) : null,
+                () => this.tableSaveCell(t, text),
+            ),
         };
+    },
+
+    /**
+     * A cell's edit the main window refused (spec 079 §3.4, 3d): the fresh tree
+     * is in; the editor opens again over that cell with the text typed, as a
+     * kept draft (Enter saves it on the fresh tree, Esc drops it). An editor
+     * open meanwhile stays and is framed. False when the cell is not shown.
+     */
+    tableReopenDraft(draft: CellDraft): boolean {
+        if (TreeRenderer.getViewMode() !== 'table' || !mounted || treeKey() !== draft.tree) return false;
+        if (stateOf(draft.tree).rowType !== draft.rowType) return false;
+        return mounted.grid.reopenDraft(draft.key, draft.colId, draft.text, strings.win.draftKept);
+    },
+
+    /** A cell's editor open when the fresh tree came after a refused edit: it stays, framed as a draft (§3.4). */
+    tableMarkOpenDraft(): boolean {
+        return !!mounted && mounted.grid.markOpenDraft(strings.win.draftKept);
     },
 
     /**

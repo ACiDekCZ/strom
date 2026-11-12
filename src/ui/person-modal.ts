@@ -4,6 +4,7 @@
  */
 
 import { DataManager, auditPersonName } from '../data.js';
+import { readFormFields, writeFormFields, type PersonDraft } from '../windows/window-drafts.js';
 import { placeKey } from '../places.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
@@ -853,6 +854,7 @@ export const personModalMethods = uiModule({
     showEditPersonModal(id: PersonId): void {
         const person = DataManager.getPerson(id);
         if (!person) return;
+        document.querySelectorAll('#person-modal .pm-window-conflict').forEach(n => n.remove());
 
         this.currentId = id;
         // A new card: the timeline's chips start from the tree's default (K4.5).
@@ -1731,7 +1733,12 @@ export const personModalMethods = uiModule({
         if (this.currentId) {
             // Update existing — person fields and quick events are ONE undo step.
             const id = this.currentId;
-            DataManager.runBatch(strings.undo.editPerson(auditPersonName(DataManager.getPerson(id))), () => {
+            // A satellite's edit carries the form: refused by the main window, the dialog opens again with it (spec 079 §3.4).
+            const modalEl = document.getElementById('person-modal');
+            const draft: PersonDraft | null = DataManager.isWindowCopy() && modalEl
+                ? { kind: 'person', tree: DataManager.getCurrentTreeId() ?? '', personId: id, fields: readFormFields(modalEl) }
+                : null;
+            DataManager.runWithEditContext(draft, () => DataManager.runBatch(strings.undo.editPerson(auditPersonName(DataManager.getPerson(id))), () => {
                 DataManager.updatePerson(id, {
                     firstName,
                     lastName,
@@ -1764,7 +1771,7 @@ export const personModalMethods = uiModule({
                 if (!snapshot || residence !== snapshot.residence.trim()) {
                     this.syncQuickEvent(id, 'residence', 'place', residence);
                 }
-            });
+            }));
         } else {
             // Create new — create + details + quick events are ONE undo step.
             const story = this.collectStory(undefined);
@@ -1886,7 +1893,32 @@ export const personModalMethods = uiModule({
         this.forceCloseModal();
     },
 
+    /**
+     * The person dialog's edit the main window refused (spec 079 §3.4): the
+     * fresh tree is in; the dialog opens again for that person with the fields
+     * as they were typed and the conflict said at its top. Save sends a new
+     * edit. False when the person is not in this tree.
+     */
+    reopenPersonDraft(draft: PersonDraft): boolean {
+        const id = draft.personId as PersonId;
+        if (DataManager.getCurrentTreeId() !== draft.tree || !DataManager.getPerson(id)) return false;
+        this.showEditPersonModal(id);
+        const modal = document.getElementById('person-modal');
+        if (!modal?.classList.contains('active')) return false;
+        writeFormFields(modal, draft.fields);
+        const header = modal.querySelector('.pm-header');
+        if (header) {
+            const notice = document.createElement('p');
+            notice.className = 'form-notice pm-window-conflict';
+            notice.setAttribute('role', 'alert');
+            notice.textContent = strings.win.editConflict;
+            header.after(notice);
+        }
+        return true;
+    },
+
     forceCloseModal(): void {
+        document.querySelectorAll('#person-modal .pm-window-conflict').forEach(n => n.remove());
         this.closePersonModalRodMenu();
         this.closeResearchConflictPanel({ focus: false });
         this.closeLifelineHistoryPopups();

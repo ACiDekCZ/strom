@@ -1659,6 +1659,56 @@ export class TableGrid {
         return !!this.editor;
     }
 
+    /** The open editor's row and column (null: none open). */
+    editingCell(): { key: string; colId: string } | null {
+        const ed = this.editor;
+        return ed ? { key: ed.key, colId: ed.colId } : null;
+    }
+
+    /**
+     * A cell's text the tree did not take (spec 079 §3.4: the edit was refused,
+     * the tree is fresh): the editor opens again over the cell with that text,
+     * framed as a draft with `note` under it — Enter saves it on the fresh
+     * tree, Esc drops it. An open editor (another cell) is kept as it is and
+     * framed instead. False when the row or the column is not drawn.
+     */
+    reopenDraft(key: string, colId: string, text: string, note: string): boolean {
+        if (this.markOpenDraft(note)) return true;
+        const input = this.input;
+        const at = this.lines.findIndex(l => lineKey(l) === key);
+        const col = input ? input.columns.findIndex(c => c.id === colId) : -1;
+        if (at < 0 || col < 0) return false;
+        this.focusCell(at, col);
+        if (!this.startEditAt(at, col) || !this.editor) return false;
+        const field = (this.editor as { input: HTMLInputElement | HTMLSelectElement }).input;
+        field.value = text;
+        if (field instanceof HTMLInputElement) field.select();
+        this.markDraft(note);
+        return true;
+    }
+
+    /** The open editor framed as a kept draft (false: none is open). */
+    markOpenDraft(note: string): boolean {
+        if (!this.editor) return false;
+        this.markDraft(note);
+        return true;
+    }
+
+    /** The open editor framed as a kept draft, its note under the cell. */
+    private markDraft(note: string): void {
+        const ed = this.editor;
+        if (!ed) return;
+        ed.box.classList.add('is-draft-kept');
+        let bubble = ed.box.querySelector<HTMLElement>('.tv-draft-kept');
+        if (!bubble) {
+            bubble = document.createElement('div');
+            bubble.className = 'tv-draft-kept';
+            bubble.setAttribute('role', 'status');
+            ed.box.append(bubble);
+        }
+        bubble.textContent = note;
+    }
+
     /** A drawn line's cell edited in place, by the line's index and the column's drawn position. */
     private startEditAt(at: number, col: number): boolean {
         const line = this.lines[at];

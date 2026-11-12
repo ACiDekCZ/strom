@@ -11,11 +11,18 @@
  * A link in its address (?person= ?search= ?live= ?send= ?import-url= …) and
  * launches of the installed app go to the main window, each exactly once,
  * as soon as the main window is heard (its status); the address is cleaned.
+ *
+ * The main window closed (no status for MAIN_SILENCE_MS and no window holds
+ * its lock — a reload of the main window is heard again well before): the tab
+ * takes the lock and starts as the main window itself (`becomeMain`); a link
+ * that did not reach the main window goes with it. Another window took the
+ * lock first: the tab stays and waits for it.
  */
 
 import { strings } from '../strings.js';
 import { WindowBus, FOCUS_WAIT_MS } from './window-bus.js';
-import { newWindowId, satelliteUrl, type SatelliteKind, type SatelliteParams } from './window-role.js';
+import { isMainAlive, newWindowId, satelliteUrl, type LocksLike, type SatelliteKind, type SatelliteParams } from './window-role.js';
+import { MAIN_SILENCE_MS } from './satellite.js';
 import { addressWithoutLink, linkToForward, type ForwardedLink } from './window-link.js';
 import type { TreeId } from '../types.js';
 
@@ -32,6 +39,12 @@ export interface SecondTabOptions {
     replaceUrl?: (url: string) => void;
     /** The tab starts as a satellite with these parameters (the address already says so). */
     becomeSatellite?: (params: SatelliteParams) => void;
+    /**
+     * The main window is gone: take its lock and start as the main window
+     * (`search`: a link it did not get). False: another window has the lock.
+     */
+    becomeMain?: (search: string | null) => Promise<boolean>;
+    locks?: LocksLike | null;
 }
 
 type Listener = () => void;
@@ -49,6 +62,11 @@ export class SecondTab {
     private mainTree: TreeId | null = null;
     private focusWaiter: (() => void) | null = null;
     private stopped = false;
+    private readonly becomeMainFn: ((search: string | null) => Promise<boolean>) | null;
+    private readonly locks: LocksLike | null | undefined;
+    private lastHeard = Date.now();
+    private watchdog: ReturnType<typeof setInterval> | null = null;
+    private probing = false;
     /** Links passed on to the main window so far. */
     forwarded = 0;
 
@@ -57,6 +75,8 @@ export class SecondTab {
         this.href = opts.href ?? (() => window.location.href);
         this.replaceUrl = opts.replaceUrl ?? ((url) => history.replaceState(null, '', url));
         this.becomeSatelliteFn = opts.becomeSatellite ?? (() => {});
+        this.becomeMainFn = opts.becomeMain ?? null;
+        this.locks = opts.locks;
         const search = opts.search ?? (typeof location !== 'undefined' ? location.search : '');
         const link = linkToForward(search);
         if (link) {
@@ -71,6 +91,7 @@ export class SecondTab {
         const b = this.bus;
         this.unsubscribe.push(
             b.on('status', m => {
+                this.lastHeard = Date.now();
                 this.mainId = m.from;
                 this.mainTree = m.treeId;
                 this.flush();
@@ -79,11 +100,15 @@ export class SecondTab {
             b.on('main-bye', m => { if (m.from === this.mainId) this.mainId = null; }),
             b.on('focused', m => { if (m.from === this.mainId) this.focusWaiter?.(); }),
         );
+        this.lastHeard = Date.now();
+        if (this.becomeMainFn) this.watchdog = setInterval(() => this.checkMain(), 1000);
     }
 
     stop(): void {
         if (this.stopped) return;
         this.stopped = true;
+        if (this.watchdog) clearInterval(this.watchdog);
+        this.watchdog = null;
         for (const u of this.unsubscribe.splice(0)) u();
         this.bus.close();
     }
@@ -139,6 +164,25 @@ export class SecondTab {
         this.stop();
         this.becomeSatelliteFn(params);
         return params;
+    }
+
+    /**
+     * No status for MAIN_SILENCE_MS: when no window holds the lock either, the
+     * main window is gone and this tab becomes it. A hidden main window's
+     * slowed heartbeat keeps its lock (alive); a reloading one is heard again first.
+     */
+    private checkMain(): void {
+        if (this.stopped || this.probing || !this.becomeMainFn || Date.now() - this.lastHeard < MAIN_SILENCE_MS) return;
+        this.probing = true;
+        void isMainAlive(this.locks === undefined ? undefined : this.locks).then(async (alive) => {
+            if (this.stopped || Date.now() - this.lastHeard < MAIN_SILENCE_MS || alive !== false) return;
+            this.mainId = null;
+            const link = this.pending.find(l => l.search)?.search ?? null;
+            const became = await this.becomeMainFn!(link);
+            // Another window was quicker: it is the main window now and will be heard.
+            if (!became) this.lastHeard = Date.now();
+            else if (this.watchdog) { clearInterval(this.watchdog); this.watchdog = null; }
+        }).finally(() => { this.probing = false; });
     }
 
     /** Resolves true once the main window is heard (now, or within MAIN_STATUS_WAIT_MS). */
