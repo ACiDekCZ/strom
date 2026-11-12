@@ -10,6 +10,7 @@ import { card, openApp } from './helpers.js';
  * every satellite is read-only under the amber strip. Two windows of one view
  * and one of another live side by side, each with its own centre. Nothing a
  * satellite does reaches the storage, and the stored trees lose nothing.
+ * On a phone nothing of the windows shows.
  */
 
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
@@ -269,4 +270,139 @@ test('two Maps and a Family: the person\'s places marked from the main window, a
 
     for (const w of [mapA, mapB, fam]) expect(await writesOf(w)).toEqual([]);
     expect(errors).toEqual([]);
+});
+
+const person = (id: string, firstName: string, lastName: string, extra: Record<string, unknown> = {}) =>
+    ({ id, firstName, lastName, gender: 'male', isPlaceholder: false, partnerships: [], parentIds: [], childIds: [], ...extra });
+
+/** localStorage and every record of the trees' database, as they are stored. */
+const snapshot = (p: Page) => p.evaluate(() => new Promise<{ local: Record<string, string | null>; db: Record<string, Record<string, string>> }>((resolve, reject) => {
+    const local: Record<string, string | null> = {};
+    for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i)!; local[k] = localStorage.getItem(k); }
+    const req = indexedDB.open('strom-db');
+    req.onsuccess = () => {
+        const db = req.result;
+        const names = Array.from(db.objectStoreNames);
+        const tx = db.transaction(names, 'readonly');
+        const out: Record<string, Record<string, string>> = {};
+        for (const name of names) {
+            out[name] = {};
+            const cur = tx.objectStore(name).openCursor();
+            cur.onsuccess = () => {
+                const c = cur.result;
+                if (!c) return;
+                out[name][String(c.key)] = JSON.stringify(c.value);
+                c.continue();
+            };
+        }
+        tx.oncomplete = () => { db.close(); resolve({ local, db: out }); };
+        tx.onerror = () => reject(tx.error);
+    };
+    req.onerror = () => reject(req.error);
+}));
+
+test('no data lost: the satellites store nothing; the main window stores their edits in the tree they belong to, every other record as it was', async ({ page, context }) => {
+    test.setTimeout(90_000);
+    const sample = await openMain(page, context);
+    // A second stored tree beside the sample one.
+    const other = await page.evaluate(async ({ persons }) => {
+        const dm = window.Strom.DataManager;
+        await dm.importAsNewTree({ persons, partnerships: {} } as never, 'Vrtišek');
+        const id = dm.getCurrentTreeId() as string;
+        return id;
+    }, { persons: { v: person('v', 'Bořivoj', 'Vrtišek', { birthDate: '1850-03-01' }), c: person('c', 'Celestýn', 'Vrtišek', { birthDate: '1875-06-07' }) } });
+    await page.evaluate((id) => window.Strom.DataManager.switchTree(id as never), sample);
+    await expect(card(page, 'Johan')).toBeVisible();
+    await page.waitForTimeout(800);
+    const before = await snapshot(page);
+    expect(before.db.trees[other]).toBeTruthy();
+    const storedBefore = await page.evaluate((id) => window.Strom.TreeManager.getTreeData(id as never), sample);
+
+    const errors: string[] = [];
+    const fam = await opened(page, fromMenu(page, 'family'), 'family', errors);
+    const map = await opened(page, fromMenu(page, 'map'), 'map', errors);
+    const [erik, ida] = [await personId(page, 'Erik', 'Berg'), await personId(page, 'Ida', 'Strand')];
+    await renameInDialog(fam, erik, 'Ermenrich');
+    await expect.poll(() => nameOf(page, erik)).toBe('Ermenrich');
+    await renameInDialog(map, ida, 'Hartwiga');
+    await expect.poll(() => nameOf(page, ida)).toBe('Hartwiga');
+    await expect.poll(() => nameOf(fam, ida)).toBe('Hartwiga');
+    await page.waitForTimeout(800);
+    const after = await snapshot(page);
+
+    // Nothing of the satellites' reached the storage.
+    for (const w of [fam, map]) expect(await writesOf(w)).toEqual([]);
+    // localStorage as it was; the stores the edits do not touch as they were.
+    expect(after.local).toEqual(before.local);
+    for (const store of Object.keys(before.db).filter(n => n !== 'trees' && n !== 'snapshots')) {
+        expect(after.db[store], store).toEqual(before.db[store]);
+    }
+    // Backups: added to, none changed or removed.
+    for (const [k, v] of Object.entries(before.db.snapshots)) expect(after.db.snapshots[k], k).toBe(v);
+    // The trees: the other one as it was, the index with both and nothing changed but the sample's dates and size.
+    expect(after.db.trees[other]).toBe(before.db.trees[other]);
+    expect(Object.keys(after.db.trees).sort()).toEqual(Object.keys(before.db.trees).sort());
+    const meta = (raw: string) => {
+        const index = JSON.parse(raw) as { activeTreeId: string; trees: { id: string; lastModifiedAt?: string; changedAt?: string; sizeBytes?: number }[] };
+        return {
+            ...index,
+            trees: index.trees.map(({ lastModifiedAt, changedAt, sizeBytes, ...t }) => (t.id === sample ? t : { ...t, lastModifiedAt, changedAt, sizeBytes })),
+        };
+    };
+    expect(meta(after.db.trees._index)).toEqual(meta(before.db.trees._index));
+    // The sample tree as stored: as before but for the two names, and as the main window has it.
+    type Stored = { persons: Record<string, { firstName: string }> };
+    const storedAfter = await page.evaluate((id) => window.Strom.TreeManager.getTreeData(id as never), sample) as Stored;
+    expect(storedAfter.persons[erik].firstName).toBe('Ermenrich');
+    expect(storedAfter.persons[ida].firstName).toBe('Hartwiga');
+    const expected = JSON.parse(JSON.stringify(storedBefore)) as Stored;
+    expected.persons[erik].firstName = 'Ermenrich';
+    expected.persons[ida].firstName = 'Hartwiga';
+    expect(storedAfter).toEqual(expected);
+    expect(await page.evaluate(() => window.Strom.DataManager.getData().persons)).toEqual(storedAfter.persons);
+
+    // Undo twice from a satellite: the tree stored as it was.
+    await map.locator('#toolbar-undo-btn').click();
+    await expect.poll(() => nameOf(page, ida)).toBe('Ida');
+    await map.locator('#toolbar-undo-btn').click();
+    await expect.poll(() => nameOf(page, erik)).toBe('Erik');
+    await expect.poll(async () => JSON.stringify((await page.evaluate((id) => window.Strom.TreeManager.getTreeData(id as never), sample) as Stored).persons))
+        .toBe(JSON.stringify((storedBefore as Stored).persons));
+    for (const w of [fam, map]) expect(await writesOf(w)).toEqual([]);
+    expect(errors).toEqual([]);
+});
+
+// A phone (390, touch, a mobile browser): nothing of the windows anywhere.
+test.describe('phone (390, touch)', () => {
+    test.use({
+        viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true,
+        userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Mobile Safari/537.36',
+    });
+
+    test('no ⧉ in any view, Ctrl+click on a view tab just switches, no window opens', async ({ page, context }) => {
+        await openApp(page);
+        await page.getByRole('button', { name: 'Try a sample tree' }).click();
+        await expect(card(page, 'Johan')).toBeVisible();
+        let popups = 0;
+        context.on('page', () => { popups++; });
+        for (const view of ['family', 'descendants', 'timeline', 'fan', 'map', 'table']) {
+            await page.evaluate((v) => window.Strom.UI.setDisplayViewMode(v), view);
+            await expect.poll(() => page.evaluate(() => window.Strom.TreeRenderer.getViewMode())).toBe(view);
+            await expect(page.locator('#view-window-wrap')).toBeHidden();
+            for (const b of await page.locator('#view-window-btn, .table-bar__window').all()) await expect(b).toBeHidden();
+        }
+        // The bottom bar's view tabs: Ctrl+click just switches; the middle button and the context menu open no window.
+        await page.evaluate(() => window.Strom.UI.setDisplayViewMode('family'));
+        const tab = page.locator('#bb-view-descendants');
+        await expect(tab).toBeVisible();
+        await expect(tab).not.toHaveAttribute('title', /new window/);
+        await tab.click({ modifiers: ['ControlOrMeta'] });
+        await expect.poll(() => page.evaluate(() => window.Strom.TreeRenderer.getViewMode())).toBe('descendants');
+        await page.locator('#bb-view-family').click({ button: 'middle' });
+        await page.locator('#bb-view-family').dispatchEvent('contextmenu');
+        await expect(page.locator('.view-window-ctx')).toHaveCount(0);
+        await page.waitForTimeout(300);
+        expect(popups).toBe(0);
+        expect(await page.evaluate(() => window.Strom.Windows?.size ?? 0)).toBe(0);
+    });
 });
