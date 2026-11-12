@@ -55,6 +55,8 @@ let prevCopy: { treeId: string; base: StromData | null; fp: string } | null = nu
 let loading: string | null = null;
 let loadingDone: Promise<void> | null = null;
 let memo: { treeId: string; key: string; list: PersonChange[] } | null = null;
+/** Counts the panel's closes: an open waiting for the copy goes on only while nothing closed or opened it meanwhile. */
+let panelSeq = 0;
 /** The changes beyond the people, against the base they were told from. */
 let otherMemo: { base: StromData; key: string; other: OtherChanges } | null = null;
 /** The changes beyond the people when the open tree is in step with the research: none. */
@@ -464,11 +466,19 @@ export const researchChangesMethods = uiModule({
     // ==================== THE PANEL ====================
 
     /** Open "What will be sent" / "What was written" under the toolbar's button (or the ⋯ button). */
-    showResearchChanges(mode: 'send' | 'written', opts: { confirm?: boolean; inexact?: boolean } = {}): void {
+    showResearchChanges(mode: 'send' | 'written', opts: { confirm?: boolean; inexact?: boolean } = {}, waited = false): void {
         this.closeActionsMenu();
         this.closeResearchChanges();
         const ctx = this.researchSyncLink();
         if (!ctx) return;
+        // The copy of the research's version not read yet (the first ask after a page load): opened once it is,
+        // so the list is the one shown before the reload, not "cannot be told exactly". A close or another
+        // open meanwhile wins.
+        if (mode === 'send' && !waited && !opts.inexact && this.researchChangesNow() === null && loading === ctx.treeId && loadingDone) {
+            const seq = panelSeq;
+            void loadingDone.then(() => { if (panelSeq === seq) this.showResearchChanges(mode, opts, true); });
+            return;
+        }
         const c = strings.changes;
         const s = strings.sync;
         const clock = (iso: string | undefined): string => {
@@ -838,6 +848,7 @@ export const researchChangesMethods = uiModule({
     },
 
     closeResearchChanges(): void {
+        panelSeq++;
         document.getElementById(PANEL_ID)?.remove();
         document.getElementById('research-sync-send-more')?.setAttribute('aria-expanded', 'false');
         document.removeEventListener('pointerdown', closeOnOutside, true);

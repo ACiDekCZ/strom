@@ -234,6 +234,29 @@ test.describe('changes per person', () => {
         await expect(page.locator('#research-sync-send-more')).toHaveCount(0);
         expect(await page.evaluate(() => window.Strom.UI.researchChangesNow())).toEqual([]);
     });
+
+    test('What will be sent opened first thing after a reload says what it said before it, not "cannot be told exactly"', async ({ page }) => {
+        await openResearch(page);
+        await fakeBridge(page);
+        await poll(page);
+        const panel = page.locator('#research-changes-panel');
+        const shown = async () => {
+            // The panel is the first thing to ask for the changes (the copy of the research's version not read yet).
+            await page.evaluate(() => window.Strom.UI.researchSyncAction('showChanges'));
+            await expect(panel.locator('.research-changes-title')).toHaveText('What will be sent');
+            const sub = await panel.locator('.research-changes-sub').textContent();
+            const inexact = await panel.locator('.research-changes-inexact').count();
+            await page.keyboard.press('Escape');
+            await expect(panel).toHaveCount(0);
+            return { sub, inexact };
+        };
+        const before = await shown();
+        expect(before.sub).toMatch(/^0 people · changed since /);
+        expect(before.inexact).toBe(0);
+        await page.reload();
+        await expect(card(page, 'Jan')).toBeVisible();
+        expect(await shown()).toEqual(before);
+    });
 });
 
 test.describe('changes per person after a send the research took nothing from', () => {
