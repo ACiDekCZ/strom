@@ -12,7 +12,7 @@
  *   sixth window and every further one: a toast that windows need memory.
  *
  * Shown only where windows are offered (window-open.ts): nothing on a phone,
- * with touch or in an exported file.
+ * a tablet's system (Android, iOS, iPadOS) or in an exported file.
  */
 
 import { UI } from '../ui.js';

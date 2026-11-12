@@ -3,7 +3,8 @@ import { openApp, seedTree, type SeedPerson } from './helpers.js';
 
 /**
  * Open in a new window (spec 079 §1, §4): ⧉ beside the view tabs only in the
- * main window with a mouse, wider than a phone, not in an exported file;
+ * main window on a computer's system (also with a touch screen; not Android,
+ * iOS or iPadOS), wider than a phone, not in an exported file;
  * Ctrl/Cmd+click, the middle button and the context menu (right click,
  * Shift+F10) on the Table tab open it in a new window and the main window
  * stays where it is; the Table's own ⧉ hands its state over (saved view,
@@ -237,16 +238,54 @@ test.describe('tablet width with a mouse (1024)', () => {
     });
 });
 
-test.describe('touch screen (1440)', () => {
-    test.use({ viewport: { width: 1440, height: 900 }, hasTouch: true });
+const UA_WINDOWS = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36';
+const UA_ANDROID_TABLET = 'Mozilla/5.0 (Linux; Android 14; SM-X710) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36';
+const UA_MAC_SAFARI = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15';
+
+/** No ⧉ anywhere, and Ctrl+click on the Table tab just switches. */
+async function expectNoWindows(page: Page): Promise<void> {
+    await expect(page.locator('#view-window-wrap')).toBeHidden();
+    await expect(tableTab(page)).not.toHaveAttribute('title', /new window/);
+    await tableTab(page).click({ modifiers: ['ControlOrMeta'] });
+    await expect(tableTab(page)).toHaveClass(/active/);
+    expect(await page.evaluate(() => window.Strom.Windows?.size)).toBe(0);
+    await expect(tv(page, '.tv-grid')).toBeVisible();
+    await expect(tv(page, '.table-bar__window')).toBeHidden();
+}
+
+// Tester, 12 Nov 2026: a Surface (Windows, touch screen) reports its primary
+// pointer as touch; ⧉ follows the system, not the pointer.
+test.describe('a computer with a touch screen (1280, Windows)', () => {
+    test.use({ viewport: { width: 1280, height: 800 }, hasTouch: true, userAgent: UA_WINDOWS });
+
+    test('⧉ is there although the pointer is coarse; Ctrl+click on the Table tab opens a window', async ({ page }) => {
+        await openMain(page);
+        expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches && !matchMedia('(hover: hover)').matches)).toBe(true);
+        await expect(windowBtn(page)).toBeVisible();
+        const sat = await popupOf(page, () => tableTab(page).click({ modifiers: ['ControlOrMeta'] }));
+        await expect(page.locator('#view-mode-family')).toHaveClass(/active/);
+        await sat.close();
+        await page.evaluate(() => window.Strom.UI.setDisplayViewMode('table'));
+        await expect(tv(page, '.table-bar__window')).toBeVisible();
+    });
+});
+
+test.describe('an Android tablet (1280)', () => {
+    test.use({ viewport: { width: 1280, height: 800 }, hasTouch: true, userAgent: UA_ANDROID_TABLET });
 
     test('no ⧉, and Ctrl+click on the Table tab just switches', async ({ page }) => {
         await openMain(page);
-        await expect(page.locator('#view-window-wrap')).toBeHidden();
-        await tableTab(page).click({ modifiers: ['ControlOrMeta'] });
-        await expect(tableTab(page)).toHaveClass(/active/);
-        expect(await page.evaluate(() => window.Strom.Windows?.size)).toBe(0);
-        await expect(tv(page, '.table-bar__window')).toBeHidden();
+        await expectNoWindows(page);
+    });
+});
+
+test.describe('an iPad asking for desktop pages as a Mac (1280)', () => {
+    test.use({ viewport: { width: 1280, height: 800 }, hasTouch: true, userAgent: UA_MAC_SAFARI });
+
+    test('no ⧉ (its touch points tell it from a Mac)', async ({ page }) => {
+        await page.addInitScript(() => { Object.defineProperty(Navigator.prototype, 'maxTouchPoints', { get: () => 5, configurable: true }); });
+        await openMain(page);
+        await expectNoWindows(page);
     });
 });
 

@@ -1452,7 +1452,7 @@ export const tableMethods = uiModule({
         if (el && TreeRenderer.getViewMode() === 'table') this.renderTableView(el);
     },
 
-    /** ⧉ in the Table's bar follows whether windows are offered (a resize, the pointer). */
+    /** ⧉ in the Table's bar follows whether windows are offered (a resize). */
     syncTableWindowButton(): void {
         if (mounted) mounted.windowBtn.hidden = !canOpenWindows();
     },
