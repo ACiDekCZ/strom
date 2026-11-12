@@ -2,6 +2,13 @@
 
 English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md) · [Polski](CHANGELOG.pl.md)
 
+## 3.28.0
+
+*This version is in preparation; this section grows with every test version.*
+
+- **Table in its own window** (on a computer with a mouse): ⧉ beside the view switch, ⧉ in the Table's bar, Ctrl/⌘+click, a middle click or the context menu on *Table* open the table in a separate window, for example on a second screen, while the main window stays on its view. The window keeps the table's rows, filters, search, saved view and sorting. Edits made there are saved by the main window, go into its *Undo* and show in every window at once; the selected person is shared between the windows (*Follow selection*, on by default). While research is followed live the window is read-only; when the main window is closed it keeps the last state read-only and offers *Open Strom* or *Make this the main window*. ⧉ shows how many windows are open, brings one to the front or closes them all; a window the browser blocked says so with *Try again*.
+- **A second tab of the app** no longer opens a full second copy that could overwrite the list of trees and the settings: it says Strom is already open and offers *Switch there* or *Open as another window*; links opened in it (a person, a search, research links) go to the main window once. The window title names the open tree.
+
 ## 3.27.0
 
 *Released 12 November 2026.*

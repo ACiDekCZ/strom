@@ -4,6 +4,13 @@
 
 Lista zmian po polsku zaczyna się od wersji 3.21.0; starsze wersje są opisane [po angielsku](CHANGELOG.md).
 
+## 3.28.0
+
+*Ta wersja jest w przygotowaniu; ta sekcja rośnie z każdą wersją testową.*
+
+- **Tabela w osobnym oknie** (na komputerze z myszą): ⧉ obok przełącznika widoków, ⧉ na pasku Tabeli, Ctrl/⌘+klik, środkowy przycisk lub menu kontekstowe na *Tabela* otwierają tabelę w osobnym oknie, np. na drugim monitorze, a okno główne zostaje przy swoim widoku. Okno przejmuje wiersze, filtry, wyszukiwanie, zapisany widok i sortowanie. Zmiany w nim zapisuje okno główne, są w jego *Cofnij* i od razu widać je we wszystkich oknach; wybrana osoba jest współdzielona między oknami (*Śledź wybór*, domyślnie włączone). Podczas śledzenia badania na żywo okno jest tylko do odczytu; po zamknięciu okna głównego zachowuje ostatni stan tylko do odczytu i proponuje *Otwórz Strom* lub *Ustaw jako główne*. ⧉ pokazuje liczbę otwartych okien, przenosi okno na wierzch lub zamyka wszystkie; okno zablokowane przez przeglądarkę zgłasza się z *Spróbuj ponownie*.
+- **Druga karta aplikacji** nie otwiera już pełnej drugiej kopii, która mogła nadpisać listę drzew i ustawienia: informuje, że Strom jest już otwarty, i proponuje *Przełącz tam* lub *Otwórz jako kolejne okno*; otwarte w niej linki (osoba, wyszukiwanie, linki badania) trafiają do okna głównego dokładnie raz. Tytuł okna podaje nazwę otwartego drzewa.
+
 ## 3.27.0
 
 *Wydano 12 listopada 2026.*

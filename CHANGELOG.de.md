@@ -2,6 +2,13 @@
 
 [English](CHANGELOG.md) · [Čeština](CHANGELOG.cs.md) · Deutsch · [Polski](CHANGELOG.pl.md)
 
+## 3.28.0
+
+*Diese Version ist in Vorbereitung; dieser Abschnitt wächst mit jeder Testversion.*
+
+- **Tabelle in einem eigenen Fenster** (am Computer mit Maus): ⧉ neben der Ansichtsumschaltung, ⧉ in der Leiste der Tabelle, Strg/⌘+Klick, ein Mittelklick oder das Kontextmenü auf *Tabelle* öffnen die Tabelle in einem eigenen Fenster, etwa auf einem zweiten Bildschirm, und das Hauptfenster bleibt bei seiner Ansicht. Das Fenster übernimmt Zeilen, Filter, Suche, gespeicherte Ansicht und Sortierung. Änderungen darin speichert das Hauptfenster, sie stehen in seinem *Rückgängig* und erscheinen sofort in allen Fenstern; die ausgewählte Person wird zwischen den Fenstern geteilt (*Auswahl folgen*, standardmäßig an). Während die Forschung live verfolgt wird, ist das Fenster schreibgeschützt; nach dem Schließen des Hauptfensters behält es den letzten Stand schreibgeschützt und bietet *Strom öffnen* oder *Zum Hauptfenster machen*. ⧉ zeigt die Zahl der offenen Fenster, holt eines nach vorne oder schließt alle; ein vom Browser blockiertes Fenster wird mit *Erneut versuchen* gemeldet.
+- **Ein zweiter Tab der App** öffnet keine vollständige zweite Kopie mehr, die die Liste der Stammbäume und die Einstellungen überschreiben konnte: Er meldet, dass Strom bereits geöffnet ist, und bietet *Dorthin wechseln* oder *Als weiteres Fenster öffnen*; darin geöffnete Links (eine Person, eine Suche, Forschungslinks) erhält das Hauptfenster genau einmal. Der Fenstertitel nennt den geöffneten Stammbaum.
+
 ## 3.27.0
 
 *Veröffentlicht am 12. November 2026.*
