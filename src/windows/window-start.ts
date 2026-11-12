@@ -232,7 +232,8 @@ export function makeSatelliteMain(client: SatelliteClient, kind: SatelliteParams
         prepare: () => {
             const tree = client.treeId;
             const view = satelliteViewMode(kind);
-            const person = TreeRenderer.getFocusPersonId();
+            // The reload point needs a person: the focus, else the first one of the tree (the Table keeps its own row).
+            const person = TreeRenderer.getFocusPersonId() ?? DataManager.getAllPersons().find(p => !p.isPlaceholder)?.id ?? null;
             if (tree && person) recordReloadPoint({ tree, person, view });
             try { sessionStorage.removeItem('strom.live'); } catch { /* no storage */ }
             prepareMainStart({ tree, table: view === 'table' ? UI.tableWindowState() : undefined });

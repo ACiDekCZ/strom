@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
     chooseStartView, parseLastViews, recordLastView, readLastView, forgetLastView, LAST_VIEW_STORAGE_KEY,
     parseReloadPoint, recordReloadPoint, peekReloadPoint, takeReloadPoint, isReloadNavigation,
-    resetReloadPointForTests, RELOAD_STORAGE_KEY,
+    resetReloadPointForTests, RELOAD_STORAGE_KEY, startedAgainAsMain,
 } from '../resume-view';
 import { migrateData } from '../data';
 
@@ -107,6 +107,15 @@ describe('reload point (1101)', () => {
         expect(takeReloadPoint()).toEqual({ tree: 't_a', person: 'p_1', view: 'fan', up: 3, down: 1 });
         // A later tree load (a switch) follows the settings.
         expect(peekReloadPoint()).toBeNull();
+        expect(takeReloadPoint()).toBeNull();
+    });
+
+    it('a window starting again as the main one (spec 079 §3.3) uses it whatever the navigation says, once', () => {
+        recordReloadPoint({ tree: 't_a', person: 'p_1', view: 'table' });
+        navigation(null);
+        expect(peekReloadPoint()).toBeNull();
+        startedAgainAsMain();
+        expect(takeReloadPoint()).toEqual({ tree: 't_a', person: 'p_1', view: 'table' });
         expect(takeReloadPoint()).toBeNull();
     });
 

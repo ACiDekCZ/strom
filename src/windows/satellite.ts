@@ -81,6 +81,10 @@ export const HELLO_RETRY_MS = 1000;
 
 /** How long without the main window's status before the satellite checks whether it is gone (§3.3). */
 export const MAIN_SILENCE_MS = 3000;
+/** What stands in for a locked tree's copy. */
+const EMPTY_TREE_JSON = '{"persons":{},"partnerships":{}}';
+/** How often the silence is checked (a closed main window is said within 2–3.5 s: the heartbeat is 1 s). */
+export const MAIN_CHECK_MS = 500;
 
 export interface SatelliteClientOptions {
     bus?: WindowBus;
@@ -231,7 +235,7 @@ export class SatelliteClient {
             this.unsubscribe.push(() => window.removeEventListener('pagehide', bye));
         }
         this.lastHeard = Date.now();
-        this.watchdog = setInterval(() => this.checkMain(), 1000);
+        this.watchdog = setInterval(() => this.checkMain(), MAIN_CHECK_MS);
         this.hello();
     }
 
@@ -347,7 +351,24 @@ export class SatelliteClient {
         }
         this.setConnection('connected');
         if (this.hasTree && !status.treeExists && status.treeId === null) this.markGone();
+        if (status.locked && this.hasTree) this.dropLockedCopy();
         this.emit('status', status);
+    }
+
+    /**
+     * The tree was locked in the main window (§3.6): this window's copy goes
+     * too (no data of a locked tree stays shown or in memory); the main window
+     * sends the tree anew after the unlock.
+     */
+    private dropLockedCopy(): void {
+        const treeId = this._treeId!;
+        this.queue.length = 0;
+        this.inFlight = null;
+        this.heldTree = null;
+        this.heldPatch = null;
+        this._revision = -1;
+        this.data.loadFromWindow(treeId, EMPTY_TREE_JSON);
+        this.emit('data', { treeId, revision: -1, source: 'tree' });
     }
 
     private checkMain(): void {

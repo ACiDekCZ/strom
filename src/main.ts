@@ -37,6 +37,7 @@ import { mountSatStates } from './windows/sat-states.js';
 import { wireWindowDrafts } from './windows/window-drafts.js';
 import { peekBecomeMainMark, retryBecomeMain, takeBecomeMainMark } from './windows/become-main.js';
 import { formatLiveClock } from './live-time.js';
+import { startedAgainAsMain } from './resume-view.js';
 import { initWindowControls } from './windows/window-controls.js';
 import { windowTitle } from './windows/window-title.js';
 import { mountSatHeader } from './windows/sat-header.js';
@@ -466,6 +467,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     // A satellite or a second tab starting again as the main window (spec 079 §3.3, §5): the lock
     // its previous page released may not be free yet at this moment.
     const becomeMark = hasEmbeddedData ? null : peekBecomeMainMark();
+    // Its view and person as before (the reload point it wrote).
+    if (becomeMark) startedAgainAsMain();
     let role = await decideWindowRole({ embedded: hasEmbeddedData });
     if (role.role === 'second-tab' && becomeMark) {
         const lock = await retryBecomeMain(() => tryBecomeMain());

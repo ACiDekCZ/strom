@@ -282,6 +282,23 @@ describe('patches', () => {
 });
 
 describe('the main window\'s state', () => {
+    it('a tree locked in the main window: the copy goes; after the unlock the tree comes again (no switch)', async () => {
+        await connect(treeJson(['p1', 'Bořivoj'], ['p2', 'Ctibor']));
+        const trees = vi.fn();
+        sat.on('tree', trees);
+        main.post({ type: 'status', ...status({ locked: true, readOnly: true }) });
+        await settle();
+        expect(DataManager.getAllPersons()).toHaveLength(0);
+        expect(sat.hasTree).toBe(false);
+        expect(sat.treeId).toBe(TREE);
+        main.post({ type: 'tree', treeId: TREE, name: 'Hrachovcovi', revision: 101, json: treeJson(['p1', 'Bořivoj'], ['p2', 'Ctibor']) });
+        await settle();
+        expect(sat.hasTree).toBe(true);
+        expect(DataManager.getAllPersons()).toHaveLength(2);
+        expect(trees).toHaveBeenLastCalledWith(expect.objectContaining({ switchedFrom: null, afterConflict: false }));
+        expectNoStorage();
+    });
+
     it('a tree following a live research is read-only here', async () => {
         await connect();
         expect(DataManager.isTreeLocked()).toBe(false);

@@ -111,10 +111,19 @@ export function isReloadNavigation(): boolean {
 }
 
 let reloadPointUsed = false;
+let startedAgain = false;
+
+/**
+ * This page is a window starting again as the main one (spec 079 §3.3): its
+ * reload point counts as after a reload, whatever the navigation says.
+ */
+export function startedAgainAsMain(): void {
+    startedAgain = true;
+}
 
 /** The reload point while it still counts: a reload, before the first tree load used it. */
 export function peekReloadPoint(): ReloadPoint | null {
-    if (reloadPointUsed || !isReloadNavigation()) return null;
+    if (reloadPointUsed || (!startedAgain && !isReloadNavigation())) return null;
     try { return parseReloadPoint(sessionStorage.getItem(RELOAD_STORAGE_KEY)); } catch { return null; }
 }
 
@@ -128,4 +137,5 @@ export function takeReloadPoint(): ReloadPoint | null {
 /** Tests: the page starts again. */
 export function resetReloadPointForTests(): void {
     reloadPointUsed = false;
+    startedAgain = false;
 }

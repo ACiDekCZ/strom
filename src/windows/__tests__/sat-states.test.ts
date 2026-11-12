@@ -39,8 +39,10 @@ describe('satelliteScreen', () => {
         expect(screen({ gone: true, live: true })).toMatchObject({ strip: null, empty: 'gone' });
     });
 
-    it('6 locked: the state in place of the content and no strip 2; a closed main window shows its copy as of then', () => {
-        expect(screen({ locked: true, awaitingTree: true, live: true })).toEqual({ strip: null, empty: 'locked', loading: false, muted: true });
+    it('6 locked: the state in place of the content and no strip 2; closed meanwhile, the amber strip over it', () => {
+        expect(screen({ locked: true, hasTree: false, awaitingTree: true, live: true })).toEqual({ strip: null, empty: 'locked', loading: false, muted: true });
+        expect(screen({ locked: true, hasTree: false, connection: 'main-closed' })).toMatchObject({ strip: 'closed', empty: 'locked', loading: false });
+        // A status that said locked before the main window closed, a copy still here: it is shown as of then.
         expect(screen({ locked: true, connection: 'main-closed' })).toMatchObject({ strip: 'closed', empty: null, loading: false });
     });
 });

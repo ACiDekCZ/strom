@@ -35,7 +35,7 @@ export interface SatScreenInput {
     gone: boolean;
     live: boolean;
     locked: boolean;
-    /** The tree was locked since the copy came: it shows again when the main window sends it anew. */
+    /** The tree was locked since the copy came: it shows again when the main window sends it anew (the copy is dropped meanwhile). */
     awaitingTree: boolean;
 }
 
@@ -53,7 +53,7 @@ export function satelliteScreen(s: SatScreenInput): SatScreen {
     const closed = s.connection === 'main-closed';
     let empty: SatEmpty = null;
     if (s.gone) empty = 'gone';
-    else if (s.locked && !closed) empty = 'locked';
+    else if (s.locked && (!closed || !s.hasTree)) empty = 'locked';
     const loading = !empty && (!s.hasTree || s.awaitingTree);
     let strip: SatStrip = null;
     if (closed) strip = 'closed';
