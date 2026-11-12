@@ -32,6 +32,7 @@ function deps(mode = 'family'): SelectionDeps & { share: TableSelectionShare | n
         setWindowSelected: (id: string | null) => { d.calls.push(`ring:${id}`); },
         glideTo: (id: string) => { d.calls.push(`glide:${id}`); },
         reveal: (id: string) => { d.calls.push(`reveal:${id}`); },
+        recenter: (id: string) => { d.calls.push(`recenter:${id}`); return id !== 'gone'; },
     };
     return d;
 }
@@ -113,6 +114,46 @@ describe('the main window', () => {
         window.dispatchEvent(new CustomEvent('strom:focus-changed', { detail: { personId: 'p3' } }));
         expect(announced).toEqual(['p7', 'p2']);
         expect(d.share).toBeNull();
+    });
+});
+
+describe('another window\'s selection in a window set to switch (K2.1)', () => {
+    it('Family, Descendants and the Fan make the person their centre, without the ring', () => {
+        for (const mode of ['family', 'descendants', 'fan']) {
+            const d = deps(mode);
+            applySharedSelection('p1', d, doc({ left: 760, right: 920, top: 100, bottom: 180 }), 'switch');
+            expect(d.calls).toEqual(['ring:null', 'recenter:p1']);
+        }
+    });
+
+    it('a person not in the tree or none: nothing but the ring gone', () => {
+        const d = deps('descendants');
+        applySharedSelection('gone', d, doc(null), 'switch');
+        applySharedSelection(null, d, doc(null), 'switch');
+        expect(d.calls).toEqual(['ring:null', 'recenter:gone', 'ring:null']);
+    });
+
+    it('the Timeline, the Map and the Table only mark', () => {
+        expect((() => { const d = deps('timeline'); applySharedSelection('p1', d, doc(null), 'switch'); return d.calls; })()).toEqual(['ring:p1', 'reveal:p1']);
+        expect((() => { const d = deps('map'); applySharedSelection('p1', d, doc(null), 'switch'); return d.calls; })()).toEqual(['ring:p1', 'reveal:p1']);
+        expect((() => { const d = deps('table'); applySharedSelection('p1', d, doc(null), 'switch'); return d.calls; })()).toEqual(['ring:p1', 'table:p1']);
+    });
+
+    it('a satellite takes the mode it has when the choice comes', () => {
+        let mode = 'switch';
+        let onSelect: ((p: { personId: string | null; origin: string }) => void) | null = null;
+        const client = {
+            followSelection: true,
+            get followMode() { return mode; },
+            announceSelection: () => {},
+            on: (e: string, cb: (p: { personId: string | null; origin: string }) => void) => { if (e === 'select') onSelect = cb; return () => {}; },
+        } as unknown as SatelliteClient;
+        const d = deps('descendants');
+        wireSatelliteSelection(client, d);
+        onSelect!({ personId: 'p1', origin: 'main-1' });
+        mode = 'mark';
+        onSelect!({ personId: 'p2', origin: 'main-1' });
+        expect(d.calls).toEqual(['ring:null', 'recenter:p1', 'ring:p2']);
     });
 });
 

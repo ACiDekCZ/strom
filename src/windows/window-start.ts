@@ -120,7 +120,25 @@ function selectionDeps(): SelectionDeps {
         setWindowSelected: (id) => TreeRenderer.setWindowSelected(id),
         glideTo: (id) => { ZoomPan.glideToPerson(id); },
         reveal: (id) => TreeRenderer.revealWindowSelected(id),
+        recenter: (id) => recenterOn(id),
     };
+}
+
+/**
+ * Another window's choice made this window's centre (spec 079 K2.1), as the
+ * card's Focus does: the new focus's depth; the family chart glides to the
+ * card with its zoom kept, Descendants and the Fan place it as their Focus
+ * does. Nothing is stored in the tree (the main window does not change).
+ */
+function recenterOn(id: PersonId): boolean {
+    if (!DataManager.getPerson(id)) return false;
+    if (TreeRenderer.getViewMode() === 'family') {
+        const scale = ZoomPan.getScale();
+        void TreeRenderer.setFocus(id, false, (pid) => { ZoomPan.glideToPerson(pid, scale); });
+    } else {
+        void TreeRenderer.setFocus(id, false);
+    }
+    return true;
 }
 
 /** A satellite's side of the shared selection (spec 079 §2). */

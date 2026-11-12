@@ -1,5 +1,5 @@
 import { test, expect, Page, BrowserContext } from '@playwright/test';
-import { card, openApp } from './helpers.js';
+import { card, openApp, setFollowMode } from './helpers.js';
 
 /**
  * Several windows of the chart views and the Map at once (spec 079 K2): the
@@ -151,6 +151,8 @@ test('Family twice and Descendants at once: an edit in one window is saved by th
     await page.locator('#toolbar-undo-btn').click();
     for (const w of [famA, famB, desc]) await expect.poll(() => hasOttwin(w)).toBe(false);
 
+    // Mark only in every satellite (Family and Descendants switch their centre by default, K2.1).
+    for (const w of [famA, famB, desc]) await setFollowMode(w, 'mark');
     // The selection: Focus on a card in Family A → selected in the main window and ringed in B and Descendants.
     const ida = await personId(page, 'Ida', 'Strand');
     await card(famA, 'Ida').click();
@@ -168,8 +170,7 @@ test('Family twice and Descendants at once: an edit in one window is saved by th
     expect(await focusOf(famA)).toBe(ida);
 
     // "Follow selection" off in Family B: it neither takes the main window's choice nor sends its own.
-    await famB.locator('.sat-follow').click();
-    await expect(famB.locator('.sat-follow')).toHaveAttribute('aria-checked', 'false');
+    await setFollowMode(famB, 'off');
     await chooseIn(page, johan);
     await expect(ringed(famA, johan)).toHaveCount(1);
     await expect(ringed(desc, johan)).toHaveCount(1);
@@ -226,19 +227,20 @@ test('two Maps and a Family: the person\'s places marked from the main window, a
     expect(who).toBeTruthy();
     await mapA.locator('.map-popup-close').click();
 
-    // Main → the maps: the person's places marked in both, a card ringed in Family.
+    // Main → the maps: the person's places marked in both; Family (switch, K2.1) takes the person as its centre.
     await chooseIn(page, who);
     for (const m of [mapA, mapB]) await expect(m.locator('#map-container .map-marker.map-marker-window-selected')).not.toHaveCount(0);
-    await expect(ringed(fam, who)).toHaveCount(1);
+    await expect.poll(() => focusOf(fam)).toBe(who);
+    await expect(ringed(fam, who)).toHaveCount(0);
 
-    // Map A → the rest: a person picked in its bubble is selected in the main window, marked in Map B, ringed in Family.
+    // Map A → the rest: a person picked in its bubble is selected in the main window, marked in Map B, Family's centre.
     await mapA.locator('#map-container .map-marker').first().locator('.map-marker-dot').click();
     const picked = (await mapA.locator('.map-popup .map-popup-person[data-person-id]').evaluateAll(els => els.map(e => (e as HTMLElement).dataset.personId!))).find(id => id !== who)!;
     expect(picked).toBeTruthy();
     await mapA.locator(`.map-popup .map-popup-person[data-person-id="${picked}"]`).first().click();
     await expect.poll(() => selectedIn(page)).toBe(picked);
     await expect.poll(() => selectedIn(mapB)).toBe(picked);
-    await expect(ringed(fam, picked)).toHaveCount(1);
+    await expect.poll(() => focusOf(fam)).toBe(picked);
     expect(await mapA.evaluate(() => window.Strom.TreeRenderer.getViewMode())).toBe('map');
     expect(await focusOf(page)).toBe(who);
 

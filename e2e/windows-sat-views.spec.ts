@@ -1,5 +1,5 @@
 import { test, expect, Page, BrowserContext } from '@playwright/test';
-import { card, openApp, seedSetting } from './helpers.js';
+import { card, openApp, seedSetting, setFollowMode } from './helpers.js';
 
 /**
  * A satellite's header in K2 (spec 079 §2, 2a–2f): the tree's name, the view
@@ -247,12 +247,30 @@ test.describe('the header fits (de)', () => {
             await page.setViewportSize({ width: 1440, height: 900 });
             const treeId = await openMain(page, context, LONG_NAME);
             const sat = await openSatellite(context, treeId, 'descendants', `sv1${width}`, { width, height: 700 });
-            await expect(sat.locator('.sat-follow')).toHaveAttribute('aria-label', 'Auswahl folgen');
+            await expect(sat.locator('.sat-follow')).toHaveAttribute('aria-label', 'Auswahl folgen: wechseln');
             await expect(another(sat)).toHaveAccessibleName('Weiteres Fenster öffnen');
             if (width >= 960) await expect(segment(sat)).toBeVisible();
             else await expect(viewBtn(sat)).toBeVisible();
-            await expect(sat.locator('.sat-follow-label')).toBeVisible({ visible: width > 640 });
+            // The name beside the mode, but next to the view tabs below 1200 px and on a phone width.
+            await expect(sat.locator('.sat-follow-label')).toBeVisible({ visible: width >= 1200 || (width > 640 && width < 960) });
+            await expect(sat.locator('.sat-follow-state')).toBeVisible({ visible: width > 640 });
             await headerFits(sat);
+            // "Follow selection" (K2.1): its longest mode fits too; its menu stays inside the window, nothing in it cut.
+            await setFollowMode(sat, 'mark');
+            await headerFits(sat);
+            await sat.locator('.sat-follow').click();
+            const m = await sat.locator('.sat-follow-menu').evaluate((menu) => {
+                const b = menu.getBoundingClientRect();
+                const cut = [...menu.querySelectorAll<HTMLElement>('.view-window-item-label, .sat-follow-item-note')]
+                    .filter(el => el.scrollWidth > el.clientWidth + 0.5).map(el => el.textContent);
+                return { left: b.left, right: b.right, bottom: b.bottom, vw: innerWidth, vh: innerHeight, cut, items: menu.querySelectorAll('[role="menuitemradio"]').length };
+            });
+            expect(m.items).toBe(3);
+            expect(m.left).toBeGreaterThanOrEqual(0);
+            expect(m.right).toBeLessThanOrEqual(m.vw);
+            expect(m.bottom).toBeLessThanOrEqual(m.vh);
+            expect(m.cut).toEqual([]);
+            await sat.keyboard.press('Escape');
             if (width === 390) {
                 expect(await sat.locator('.sat-header-title').evaluate(el => el.scrollWidth > el.clientWidth && getComputedStyle(el).textOverflow === 'ellipsis'), 'the long name is cut with an ellipsis').toBe(true);
             }

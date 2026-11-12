@@ -21,6 +21,7 @@ import { DataManager, type WindowEditSink } from '../data.js';
 import type { TreeId } from '../types.js';
 import { WindowBus, answerWhenFocused, FOCUS_WAIT_MS, type MessageOf, type WindowStatus, type EditRefusal, type WindowBounds } from './window-bus.js';
 import { isMainAlive, MAIN_WINDOW_NAME, newWindowId, type LocksLike, type SatelliteParams, type SatelliteKind } from './window-role.js';
+import { effectiveFollowMode, followChoiceToStore, parseFollowChoice, type FollowMode } from './follow-mode.js';
 
 /** Where the satellite's copy of the tree lives (DataManager; a test may pass its own). */
 export interface SatelliteDataTarget {
@@ -60,8 +61,10 @@ export interface SatelliteEvents {
     'tree-gone': { treeId: TreeId | null };
     /** Another window selected a person (only while following the selection). */
     select: { personId: string | null; origin: string };
-    /** "Follow selection" was switched in this window (off: the mark of another window's choice goes). */
+    /** "Follow selection" was switched on or off in this window (off: the mark of another window's choice goes). */
     follow: boolean;
+    /** The window's "Follow selection" mode changed (a choice in the header, K2.1). */
+    'follow-mode': FollowMode;
     /** The main window asks this window to close (§4 ×). */
     close: Record<string, never>;
     /**
@@ -195,14 +198,27 @@ export class SatelliteClient {
         return this._connection !== 'connected' || !this.hasTree || !s || s.readOnly || s.live || s.locked;
     }
 
-    get followSelection(): boolean {
-        try { return this.storage?.getItem(followSelectionKey(this.windowId)) !== '0'; } catch { return true; }
+    /** What another window's choice does here (K2.1): the window's choice, else its view's default. */
+    get followMode(): FollowMode {
+        return effectiveFollowMode(this.followChoice(), this._kind);
     }
 
-    set followSelection(on: boolean) {
-        const was = this.followSelection;
-        try { this.storage?.setItem(followSelectionKey(this.windowId), on ? '1' : '0'); } catch { /* no storage */ }
-        if (on !== was) this.emit('follow', on);
+    set followMode(mode: FollowMode) {
+        const wasMode = this.followMode;
+        const wasOn = this.followSelection;
+        try { this.storage?.setItem(followSelectionKey(this.windowId), followChoiceToStore(mode, this._kind)); } catch { /* no storage */ }
+        const on = this.followSelection;
+        if (on !== wasOn) this.emit('follow', on);
+        if (this.followMode !== wasMode) this.emit('follow-mode', this.followMode);
+    }
+
+    /** The window sends and takes the selection (any mode but off). */
+    get followSelection(): boolean {
+        return this.followMode !== 'off';
+    }
+
+    private followChoice(): FollowMode | null {
+        try { return parseFollowChoice(this.storage?.getItem(followSelectionKey(this.windowId))); } catch { return null; }
     }
 
     on<K extends keyof SatelliteEvents>(event: K, cb: Listener<K>): () => void {
@@ -269,7 +285,10 @@ export class SatelliteClient {
      */
     setKind(kind: SatelliteKind): void {
         if (kind === this._kind) return;
+        const wasMode = this.followMode;
         this._kind = kind;
+        // The view's default (or a switch of a view that cannot move its centre) may change what a choice does here.
+        if (this.followMode !== wasMode) this.emit('follow-mode', this.followMode);
         if (this.started) this.bus.post({ type: 'view', windowId: this.windowId, kind });
     }
 

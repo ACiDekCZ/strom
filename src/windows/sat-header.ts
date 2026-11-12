@@ -4,7 +4,8 @@
  * app menu, Research, Settings, the phone's bottom bar). From the left: the
  * tree's name, the view switcher (K2: the view tabs from 960 px, below them
  * one button "{view} ▾" with a menu of the six views; it switches this
- * window only), a flexible gap, "Follow selection", a divider, Undo and Redo
+ * window only), a flexible gap, "Follow selection" (a button with a menu of
+ * its modes, K2.1: switch / mark only / off), a divider, Undo and Redo
  * (the main window's undo, available by its status) and ⧉ "Open another
  * window" (K2).
  */
@@ -12,6 +13,7 @@
 import { strings } from '../strings.js';
 import type { SatelliteKind } from './window-role.js';
 import { satelliteKindLabel } from './window-title.js';
+import { followModesFor, type FollowMode } from './follow-mode.js';
 
 /** From this window width the view switcher is the view tabs; below it one button with a menu (§2 K2, 2e). */
 export const SAT_SEGMENT_MIN_WIDTH = 960;
@@ -23,8 +25,8 @@ export const SAT_VIEWS: readonly SatelliteKind[] = ['family', 'descendants', 'ti
 export interface SatHeaderClient {
     readonly treeName: string;
     readonly hasTree: boolean;
-    followSelection: boolean;
-    on(event: 'status' | 'tree' | 'tree-gone' | 'renamed' | 'connection', cb: () => void): () => void;
+    followMode: FollowMode;
+    on(event: 'status' | 'tree' | 'tree-gone' | 'renamed' | 'connection' | 'follow-mode', cb: () => void): () => void;
 }
 
 export interface SatHeaderOptions {
@@ -40,7 +42,7 @@ export interface SatHeaderOptions {
     redo: () => void;
     /** Undo/Redo's state and tooltips (the toolbar's own refresh, by the button ids). */
     refreshUndoRedo: () => void;
-    /** "Follow selection" was switched. */
+    /** "Follow selection" got another mode. */
     onFollowChange?: () => void;
 }
 
@@ -95,12 +97,11 @@ export function mountSatHeader(doc: Document, client: SatHeaderClient, opts: Sat
     const spacer = doc.createElement('span');
     spacer.className = 'sat-header-spacer';
 
-    const follow = doc.createElement('button');
-    follow.type = 'button';
-    follow.className = 'sat-follow';
-    follow.setAttribute('role', 'switch');
-    follow.innerHTML = '<span class="sat-follow-track" aria-hidden="true"><span class="sat-follow-knob"></span></span>'
-        + '<span class="sat-follow-label"></span>';
+    const follow = createFollowControl(doc, opts.kind, () => client.followMode, (mode) => {
+        client.followMode = mode;
+        follow.refresh();
+        opts.onFollowChange?.();
+    });
 
     const divider = doc.createElement('span');
     divider.className = 'sat-header-divider';
@@ -134,7 +135,7 @@ export function mountSatHeader(doc: Document, client: SatHeaderClient, opts: Sat
 
     header.append(title);
     if (switcher) header.append(switcher.segment, switcher.button);
-    header.append(spacer, follow, divider, undo, redo);
+    header.append(spacer, follow.button, divider, undo, redo);
     if (another) header.append(another);
     doc.body.prepend(header);
 
@@ -144,13 +145,6 @@ export function mountSatHeader(doc: Document, client: SatHeaderClient, opts: Sat
         title.title = text;
         title.hidden = !text;
     };
-    const syncFollow = (): void => {
-        const on = client.followSelection;
-        follow.querySelector('.sat-follow-label')!.textContent = strings.win.followSelection;
-        follow.setAttribute('aria-label', strings.win.followSelection);
-        follow.setAttribute('aria-checked', on ? 'true' : 'false');
-        follow.title = on ? strings.win.followSelectionOn : strings.win.followSelectionOff;
-    };
     const syncAnother = (): void => {
         if (!another) return;
         const why = opts.anotherBlocked?.() ?? '';
@@ -158,18 +152,171 @@ export function mountSatHeader(doc: Document, client: SatHeaderClient, opts: Sat
         another.setAttribute('aria-label', strings.win.openAnother);
         another.title = why || strings.win.openAnother;
     };
-    follow.addEventListener('click', () => {
-        client.followSelection = !client.followSelection;
-        syncFollow();
-        opts.onFollowChange?.();
-    });
 
     const sync = (): void => { syncTitle(); syncAnother(); opts.refreshUndoRedo(); };
     for (const ev of ['status', 'tree', 'tree-gone', 'renamed', 'connection'] as const) client.on(ev, sync);
-    const refresh = (): void => { syncTitle(); switcher?.refresh(); syncFollow(); syncAnother(); opts.refreshUndoRedo(); };
-    if (win && switcher) win.addEventListener('resize', () => switcher.closeMenu(false));
+    client.on('follow-mode', () => follow.refresh());
+    const refresh = (): void => { syncTitle(); switcher?.refresh(); follow.refresh(); syncAnother(); opts.refreshUndoRedo(); };
+    if (win) {
+        win.addEventListener('resize', () => {
+            switcher?.closeMenu(false);
+            follow.closeMenu(false);
+        });
+    }
     refresh();
     return { el: header, refresh };
+}
+
+/** A mode's name in the header ("switch"), lower case as it follows "Follow selection:". */
+export function followModeName(mode: FollowMode): string {
+    if (mode === 'switch') return strings.win.followModeSwitch;
+    if (mode === 'mark') return strings.win.followModeMark;
+    return strings.win.followModeOff;
+}
+
+/** What a mode does, the menu's second line and the button's tooltip. */
+export function followModeNote(mode: FollowMode): string {
+    if (mode === 'switch') return strings.win.followModeSwitchNote;
+    if (mode === 'mark') return strings.win.followModeMarkNote;
+    return strings.win.followSelectionOff;
+}
+
+function capitalize(text: string): string {
+    return text ? text.charAt(0).toLocaleUpperCase() + text.slice(1) : text;
+}
+
+interface FollowControl {
+    button: HTMLButtonElement;
+    refresh(): void;
+    closeMenu(returnFocus: boolean): void;
+}
+
+/**
+ * "Follow selection: {mode} ▾" (K2.1) with a menu of the view's modes, each
+ * with a line saying what it does. On a phone width the button keeps its
+ * mark and caret (the whole name stays its aria-label).
+ */
+function createFollowControl(
+    doc: Document,
+    kind: () => SatelliteKind,
+    current: () => FollowMode,
+    choose: (mode: FollowMode) => void,
+): FollowControl {
+    const button = doc.createElement('button');
+    button.type = 'button';
+    button.className = 'sat-follow';
+    button.setAttribute('aria-haspopup', 'menu');
+    button.setAttribute('aria-expanded', 'false');
+    button.innerHTML = '<span class="sat-follow-mark" aria-hidden="true"></span>'
+        + '<span class="sat-follow-label"></span>'
+        + '<span class="sat-follow-state"></span>'
+        + '<span class="sat-view-btn-caret" aria-hidden="true">▾</span>';
+
+    let menu: HTMLElement | null = null;
+    const items = (): HTMLElement[] => (menu ? [...menu.querySelectorAll<HTMLElement>('[role="menuitemradio"]')] : []);
+    const onOutside = (e: Event): void => {
+        const t = e.target as Node | null;
+        if (menu && t && !menu.contains(t) && !button.contains(t)) closeMenu(false);
+    };
+    function closeMenu(returnFocus: boolean): void {
+        if (!menu) return;
+        menu.remove();
+        menu = null;
+        button.setAttribute('aria-expanded', 'false');
+        button.classList.remove('is-open');
+        doc.removeEventListener('pointerdown', onOutside, true);
+        if (returnFocus) button.focus();
+    }
+    const openMenu = (focus: 'current' | 'first' | 'last'): void => {
+        if (menu) return;
+        const m = doc.createElement('div');
+        m.className = 'view-window-menu sat-follow-menu';
+        m.setAttribute('role', 'menu');
+        m.setAttribute('aria-label', strings.win.followSelection);
+        const head = doc.createElement('div');
+        head.className = 'view-window-head';
+        head.textContent = strings.win.followSelection;
+        m.appendChild(head);
+        const now = current();
+        const modes = followModesFor(kind());
+        for (const mode of modes) {
+            const item = doc.createElement('button');
+            item.type = 'button';
+            item.className = 'view-window-item sat-follow-item';
+            item.setAttribute('role', 'menuitemradio');
+            item.setAttribute('aria-checked', mode === now ? 'true' : 'false');
+            item.dataset.mode = mode;
+            const mark = doc.createElement('span');
+            mark.className = 'sat-follow-mark';
+            mark.dataset.mode = mode;
+            mark.setAttribute('aria-hidden', 'true');
+            const text = doc.createElement('span');
+            text.className = 'sat-follow-item-text';
+            const label = doc.createElement('span');
+            label.className = 'view-window-item-label';
+            label.textContent = capitalize(followModeName(mode));
+            const note = doc.createElement('span');
+            note.className = 'sat-follow-item-note';
+            note.textContent = followModeNote(mode);
+            text.append(label, note);
+            item.append(mark, text);
+            item.addEventListener('click', () => {
+                closeMenu(true);
+                if (mode !== current()) choose(mode);
+            });
+            m.appendChild(item);
+        }
+        m.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
+                closeMenu(true);
+                return;
+            }
+            if (e.key === 'Tab') { closeMenu(false); return; }
+            const list = items();
+            const next = menuKeyTarget(e.key, list.indexOf(doc.activeElement as HTMLElement), list.length);
+            if (next < 0) return;
+            e.preventDefault();
+            list[next].focus();
+        });
+        doc.body.appendChild(m);
+        const r = button.getBoundingClientRect();
+        const view = doc.defaultView;
+        const vw = view?.innerWidth ?? 320;
+        const width = Math.min(300, vw - 16);
+        const left = Math.max(8, Math.min(r.right - width, vw - width - 8));
+        m.style.width = `${width}px`;
+        m.style.top = `${Math.round(r.bottom + 6)}px`;
+        m.style.left = `${Math.round(left)}px`;
+        m.style.maxHeight = `calc(100vh - ${Math.round(r.bottom + 6)}px - 12px)`;
+        menu = m;
+        button.setAttribute('aria-expanded', 'true');
+        button.classList.add('is-open');
+        doc.addEventListener('pointerdown', onOutside, true);
+        const list = items();
+        const at = focus === 'first' ? 0 : focus === 'last' ? list.length - 1 : Math.max(0, modes.indexOf(now));
+        list[at]?.focus();
+    };
+    button.addEventListener('click', () => { if (menu) closeMenu(false); else openMenu('current'); });
+    button.addEventListener('keydown', (e) => {
+        if (menu) return;
+        if (e.key === 'ArrowDown') { e.preventDefault(); openMenu('first'); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); openMenu('last'); }
+    });
+
+    const refresh = (): void => {
+        const mode = current();
+        const name = followModeName(mode);
+        button.dataset.mode = mode;
+        button.querySelector<HTMLElement>('.sat-follow-mark')!.dataset.mode = mode;
+        button.querySelector('.sat-follow-label')!.textContent = `${strings.win.followSelection}:`;
+        button.querySelector('.sat-follow-state')!.textContent = name;
+        button.setAttribute('aria-label', strings.win.followSelectionState(name));
+        button.title = followModeNote(mode);
+        if (menu) closeMenu(false);
+    };
+    return { button, refresh, closeMenu };
 }
 
 interface Switcher {

@@ -373,16 +373,76 @@ describe('selection', () => {
 
         const follow = vi.fn();
         sat.on('follow', follow);
-        sat.followSelection = false;
-        expect(session.get(followSelectionKey(SAT))).toBe('0');
+        sat.followMode = 'off';
+        expect(session.get(followSelectionKey(SAT))).toBe('off');
         // Said once, as it changes (the views drop the mark of the last choice taken).
-        sat.followSelection = false;
+        sat.followMode = 'off';
         expect(follow.mock.calls).toEqual([[false]]);
         sat.announceSelection('p3');
         main.post({ type: 'select', personId: 'p4', treeId: TREE, origin: 'main-1' });
         await settle();
         expect(of('select')).toHaveLength(1);
         expect(selected).toHaveBeenCalledTimes(1);
+    });
+
+    it('the mode (K2.1): the view\'s default until one is chosen, kept for the window; switch only where the centre can move', async () => {
+        const modes = vi.fn();
+        const on = vi.fn();
+        sat.on('follow-mode', modes);
+        sat.on('follow', on);
+        expect(sat.kind).toBe('table');
+        expect(sat.followMode).toBe('mark');
+        sat.setKind('descendants');
+        expect(sat.followMode).toBe('switch');
+        sat.setKind('fan');
+        sat.setKind('family');
+        expect(modes.mock.calls).toEqual([['switch']]);
+        // Chosen: kept across views; the view's default again drops the choice.
+        sat.followMode = 'mark';
+        expect(session.get(followSelectionKey(SAT))).toBe('mark');
+        sat.setKind('descendants');
+        expect(sat.followMode).toBe('mark');
+        sat.followMode = 'switch';
+        expect(session.get(followSelectionKey(SAT))).toBe('');
+        // A stored switch in a view that cannot move its centre only marks.
+        session.set(followSelectionKey(SAT), 'switch');
+        sat.setKind('map');
+        expect(sat.followMode).toBe('mark');
+        expect(on).not.toHaveBeenCalled();
+        // Before K2.1: '0' off, '1' the view's default.
+        session.set(followSelectionKey(SAT), '0');
+        expect(sat.followMode).toBe('off');
+        expect(sat.followSelection).toBe(false);
+        session.set(followSelectionKey(SAT), '1');
+        sat.setKind('fan');
+        expect(sat.followMode).toBe('switch');
+        // A reload (another client of the same window) reads the choice.
+        sat.followMode = 'off';
+        const again = new SatelliteClient({ kind: 'fan', treeId: TREE, windowId: SAT, newId: false }, { bus: new WindowBus(SAT, hub.channel()), storage: { getItem: k => session.get(k) ?? null, setItem: () => {} }, locks: noLocks(), closeSelf: () => {}, hasFocus: () => true, bounds: () => undefined });
+        expect(again.followMode).toBe('off');
+    });
+
+    it('two windows set to switch: a choice taken and made the centre is not sent on (no loop)', async () => {
+        await connect();
+        sat.setKind('descendants');
+        const other = new SatelliteClient({ kind: 'family', treeId: TREE, windowId: 'ef56ab78', newId: false }, { bus: new WindowBus('ef56ab78', hub.channel()), storage: null, locks: noLocks(), closeSelf: () => {}, hasFocus: () => true, bounds: () => undefined });
+        other.start();
+        await settle();
+        main.post({ type: 'tree', to: 'ef56ab78', treeId: TREE, name: 'Hrachovcovi', revision: 100, json: treeJson(['p1', 'Bořivoj']) });
+        await settle();
+        expect(sat.followMode).toBe('switch');
+        expect(other.followMode).toBe('switch');
+        // The new centre says itself as a click's would (strom:focus-changed → announceSelection).
+        sat.on('select', ({ personId }) => sat.announceSelection(personId));
+        other.on('select', ({ personId }) => other.announceSelection(personId));
+        main.post({ type: 'select', personId: 'p2', treeId: TREE, origin: 'main-1' });
+        await settle();
+        expect(of('select')).toHaveLength(0);
+        // A choice of one of them reaches the other, which does not send it back.
+        sat.announceSelection('p3');
+        await settle();
+        expect(of('select').map(m => m.origin)).toEqual([SAT]);
+        other.stop();
     });
 
     it('a selection taken from another window is not sent back', async () => {

@@ -470,3 +470,16 @@ export async function openTreeStructure(page: Page, scope?: Locator): Promise<Lo
     await expect(group).toBeVisible();
     return group;
 }
+
+/** A satellite's "Follow selection" mode (spec 079 K2.1): switch, mark or off. */
+export function followModeOf(page: Page): Promise<string | null> {
+    return page.locator('.sat-follow').getAttribute('data-mode');
+}
+
+/** Choose a satellite's "Follow selection" mode in its header's menu. */
+export async function setFollowMode(page: Page, mode: 'switch' | 'mark' | 'off'): Promise<void> {
+    if (await followModeOf(page) === mode) return;
+    await page.locator('.sat-follow').click();
+    await page.locator(`.sat-follow-menu [role="menuitemradio"][data-mode="${mode}"]`).click();
+    await expect(page.locator('.sat-follow')).toHaveAttribute('data-mode', mode);
+}

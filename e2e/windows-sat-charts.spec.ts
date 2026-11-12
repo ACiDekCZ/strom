@@ -1,5 +1,5 @@
 import { test, expect, Page, BrowserContext } from '@playwright/test';
-import { card, openApp } from './helpers.js';
+import { card, openApp, setFollowMode } from './helpers.js';
 
 /**
  * The views drawn in a satellite window (spec 079 K2): Family, Descendants,
@@ -238,6 +238,8 @@ test('the selection between the main window and a chart satellite: the card, the
     await page.waitForTimeout(300);
     expect(await selectedIn(page)).toBeNull();
     const satFocus = await focusOf(sat);
+    // Mark only (the Family's default switches its centre, K2.1).
+    await setFollowMode(sat, 'mark');
 
     // Main → satellite: the card's ring; the satellite's centre stays.
     const other = (await focusOf(page)) === erik ? thomas : erik;
@@ -270,8 +272,7 @@ test('the selection between the main window and a chart satellite: the card, the
     await expect.poll(() => selectedIn(page)).toBe(ancestor);
 
     // "Follow selection" off: nothing sent, nothing taken.
-    await sat.locator('.sat-follow').click();
-    await expect(sat.locator('.sat-follow')).toHaveAttribute('aria-checked', 'false');
+    await setFollowMode(sat, 'off');
     await chooseIn(page, thomas);
     await page.waitForTimeout(400);
     await expect(sat.locator('#timeline-container .timeline-bar.window-selected')).toHaveCount(0);
@@ -389,24 +390,21 @@ test('"Follow selection" off drops the mark of the last choice taken in every vi
     const treeId = await openMain(page, context);
     const [johan, erik] = [await personId(page, 'Johan', 'Berg'), await personId(page, 'Erik', 'Berg')];
     const sat = await openSatellite(context, treeId, 'family', 'cv31aa', []);
-    const follow = sat.locator('.sat-follow');
     const view = (name: string) => sat.locator('.sat-view-segment').getByRole('button', { name, exact: true }).click();
     /** The main window chooses `id` (a new choice: someone else first). */
     const choose = async (id: string) => {
         await chooseIn(page, id === johan ? erik : johan);
         await chooseIn(page, id);
     };
-    const followOn = async () => {
-        if (await follow.getAttribute('aria-checked') === 'false') await follow.click();
-        await expect(follow).toHaveAttribute('aria-checked', 'true');
-    };
+    const followOn = () => setFollowMode(sat, 'mark');
+    const followOff = () => setFollowMode(sat, 'off');
+    await followOn();
 
     // Family: the card's ring.
     await choose(erik);
     const ring = sat.locator(`.person-card.window-selected[data-id="${erik}"]`);
     await expect(ring).toHaveCount(1);
-    await follow.click();
-    await expect(follow).toHaveAttribute('aria-checked', 'false');
+    await followOff();
     await expect(sat.locator('.person-card.window-selected')).toHaveCount(0);
     expect(await selectedIn(sat)).toBeNull();
 
@@ -417,7 +415,7 @@ test('"Follow selection" off drops the mark of the last choice taken in every vi
     const ancestor = await sat.evaluate(() => document.querySelector<SVGElement>('#fan-chart .fan-sector[data-fan-kind="anc"][data-fan-person]')!.dataset.fanPerson!);
     await choose(ancestor);
     await expect(sat.locator('#fan-chart path.fan-mark')).not.toHaveCount(0);
-    await follow.click();
+    await followOff();
     await expect(sat.locator('#fan-chart path.fan-mark')).toHaveCount(0);
 
     // Timeline: the row.
@@ -426,7 +424,7 @@ test('"Follow selection" off drops the mark of the last choice taken in every vi
     await followOn();
     await choose(ancestor);
     await expect(sat.locator(`#timeline-container .timeline-bar.window-selected[data-person-id="${ancestor}"]`)).toHaveCount(1);
-    await follow.click();
+    await followOff();
     await expect(sat.locator('#timeline-container .timeline-bar.window-selected')).toHaveCount(0);
 
     // Map: the person's places.
@@ -435,7 +433,7 @@ test('"Follow selection" off drops the mark of the last choice taken in every vi
     await followOn();
     await choose(johan);
     await expect(sat.locator('#map-container .map-marker.map-marker-window-selected')).not.toHaveCount(0);
-    await follow.click();
+    await followOff();
     await expect(sat.locator('#map-container .map-marker-window-selected')).toHaveCount(0);
 
     // Table: the row stays the selected one, without the shared look.
@@ -444,7 +442,7 @@ test('"Follow selection" off drops the mark of the last choice taken in every vi
     await choose(erik);
     const row = sat.locator(`#table-container .tv-body .tv-row[data-key="p:${erik}"]`);
     await expect(row).toHaveClass(/is-shared/);
-    await follow.click();
+    await followOff();
     await expect(row).not.toHaveClass(/is-shared/);
     await expect(sat.locator('#table-container .tv-row.is-shared')).toHaveCount(0);
 });

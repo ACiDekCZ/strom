@@ -1,5 +1,5 @@
 import { test, expect, Page, BrowserContext } from '@playwright/test';
-import { card, openApp } from './helpers.js';
+import { card, openApp, setFollowMode } from './helpers.js';
 
 /**
  * The satellite window (spec 079 §2): its header in place of the toolbar
@@ -86,8 +86,10 @@ test.describe('desktop (1440)', () => {
         const sat = await openSatellite(context, treeId);
         await expect(sat.locator('header.sat-header')).toBeVisible();
         await expect(sat.locator('.sat-header-title')).toHaveText('Vrtišek');
-        await expect(sat.locator('.sat-follow')).toHaveAttribute('role', 'switch');
-        await expect(sat.locator('.sat-follow')).toHaveAttribute('aria-checked', 'true');
+        // The Table only marks another window's choice (K2.1).
+        await expect(sat.locator('.sat-follow')).toHaveAttribute('aria-haspopup', 'menu');
+        await expect(sat.locator('.sat-follow')).toHaveAttribute('data-mode', 'mark');
+        await expect(sat.locator('.sat-follow')).toHaveAttribute('aria-label', 'Follow selection: mark only');
         // Not mounted at all (not only hidden).
         for (const sel of ['.toolbar', '#bottom-bar', '.tree-switcher', '#research-menu-row', '#actions-settings-row', '#research-sync-pill']) {
             await expect(sat.locator(sel), sel).toHaveCount(0);
@@ -125,8 +127,7 @@ test.describe('desktop (1440)', () => {
         expect(await scrollTop(sat)).toBeGreaterThan(0);
 
         // Off: kept for this window over a reload.
-        await sat.locator('.sat-follow').click();
-        await expect(sat.locator('.sat-follow')).toHaveAttribute('aria-checked', 'false');
+        await setFollowMode(sat, 'off');
         await sat.reload();
         await expect(tv(sat, '.tv-status-ro')).toBeHidden();
         // The window's own Table state is kept over the reload too: its row, in view.
@@ -134,7 +135,7 @@ test.describe('desktop (1440)', () => {
         await expect(row(sat, LAST)).toBeInViewport();
         await tv(sat, '.tv-grid').evaluate(el => { el.scrollTop = 0; });
         await expect(row(sat, 'v')).toBeVisible();
-        await expect(sat.locator('.sat-follow')).toHaveAttribute('aria-checked', 'false');
+        await expect(sat.locator('.sat-follow')).toHaveAttribute('data-mode', 'off');
 
         // Nothing sent: a row chosen here rings no card in the main window.
         await page.evaluate(() => window.Strom.TreeRenderer.setWindowSelected(null));

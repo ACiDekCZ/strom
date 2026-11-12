@@ -7438,25 +7438,30 @@
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
         .sat-header-spacer { flex: 1 1 auto; min-width: 2px; }
+        /* "Follow selection: {mode} ▾" (K2.1) with a menu of its modes; the mark says the mode:
+           filled = switch (the centre moves), ring = mark only, dashed grey = off. */
         .sat-follow {
-            flex: none; display: inline-flex; align-items: center; gap: 8px;
-            height: 32px; padding: 0 8px; margin: 0;
-            border: none; border-radius: 8px; background: transparent;
-            color: var(--text); font: inherit; font-size: 13px; cursor: pointer;
+            flex: none; display: inline-flex; align-items: center; gap: 6px;
+            height: 30px; padding: 0 8px; margin: 0; box-sizing: border-box;
+            border: 1px solid transparent; border-radius: 8px; background: transparent;
+            color: var(--text); font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer;
         }
-        .sat-follow-track {
-            position: relative; flex: none; width: 28px; height: 16px;
-            border-radius: 999px; background: var(--border);
-            transition: background-color .15s;
+        .sat-follow.is-open { background: var(--hover-bg); }
+        .sat-follow-mark {
+            flex: none; box-sizing: border-box; width: 12px; height: 12px; border-radius: 50%;
+            border: 2px solid var(--primary); background: transparent;
         }
-        .sat-follow[aria-checked="true"] .sat-follow-track { background: var(--primary); }
-        .sat-follow-knob {
-            position: absolute; top: 2px; left: 2px; width: 12px; height: 12px;
-            border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .25);
-            transition: left .15s;
-        }
-        .sat-follow[aria-checked="true"] .sat-follow-knob { left: 14px; }
-        .sat-follow-label { white-space: nowrap; }
+        .sat-follow-mark[data-mode="switch"] { background: var(--primary); }
+        .sat-follow-mark[data-mode="off"] { border-color: var(--text-faint); border-style: dashed; }
+        .sat-follow-label { flex: none; color: var(--text-light); }
+        .sat-follow-state { flex: none; font-weight: 500; }
+        /* Beside the view tabs (960–1199 px) the mode alone; its full name stays the aria-label and the menu's heading. */
+        @media (min-width: 960px) and (max-width: 1199px) { .sat-follow-label { display: none; } }
+        .sat-follow-menu .sat-follow-item { height: auto; min-height: 44px; padding: 6px 12px; align-items: flex-start; gap: 10px; }
+        .sat-follow-menu .sat-follow-item .sat-follow-mark { margin-top: 3px; }
+        .sat-follow-item-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+        .sat-follow-item-note { font-size: 12px; line-height: 1.35; color: var(--text-light); white-space: normal; }
+        .sat-follow-menu .sat-follow-item[aria-checked="true"] .view-window-item-label { font-weight: 600; }
         .sat-header-divider { flex: none; width: 1px; height: 20px; background: var(--border); }
         .sat-icon-btn {
             flex: none; display: inline-flex; align-items: center; justify-content: center;
@@ -7491,21 +7496,18 @@
             .sat-icon-btn:not(:disabled):hover { background: var(--hover-bg); }
             .sat-another:not(:disabled):hover { color: var(--text); border-color: var(--primary); }
         }
-        @media (prefers-reduced-motion: reduce) {
-            .sat-follow-track, .sat-follow-knob { transition: none; }
-        }
         /* Tablet: the same header (it has room from 641 px). */
         @media (min-width: 641px) and (max-width: 1024px) {
             .sat-header { gap: 8px; }
         }
-        /* Phone: the switch alone (its name stays its aria-label), 44 px targets for touch. */
+        /* Phone: the mode's mark and caret alone (the whole name stays its aria-label), 44 px targets for touch. */
         @media (max-width: 640px) {
             .sat-header { gap: 6px; padding: 0 6px 0 12px; }
-            .sat-follow { padding: 0 2px; }
-            .sat-follow-label { display: none; }
+            .sat-follow { padding: 0 6px; }
+            .sat-follow-label, .sat-follow-state { display: none; }
         }
         @media (pointer: coarse) {
-            .sat-follow { min-width: 44px; justify-content: center; }
+            .sat-follow { min-width: 44px; height: 40px; justify-content: center; }
             .sat-icon-btn { width: 44px; height: 44px; }
             .sat-view-btn { height: 40px; }
         }

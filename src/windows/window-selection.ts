@@ -8,13 +8,17 @@
  * their places, each moving only when none is in view. A choice is a new
  * focus (a card, a sector, a row) or a person picked on the map. A satellite
  * with "Follow selection" off neither sends nor takes it (SatelliteClient);
- * the main window always follows.
+ * the main window always follows and only marks. A satellite set to
+ * "switch" (K2.1, the default of Family, Descendants and the Fan) moves its
+ * centre to the person instead, as its card's Focus does; the centre it
+ * takes this way is not sent on (no loop between two such windows).
  */
 
 import type { PersonId } from '../types.js';
 import type { WindowRegistry } from './window-registry.js';
 import type { SatelliteClient } from './satellite.js';
 import type { TableSelectionShare } from '../ui/table-view/table-ui.js';
+import { viewRecenters, type FollowMode } from './follow-mode.js';
 
 /** A person picked in a view without a new focus (a satellite's map): `detail.personId`. */
 export const PERSON_CHOSEN_EVENT = 'strom:person-chosen';
@@ -30,6 +34,12 @@ export interface SelectionDeps {
     glideTo(personId: PersonId): void;
     /** The Fan, the Timeline, the Map: show the person's mark, moving only when none is in view. */
     reveal(personId: PersonId): void;
+    /**
+     * Make the person this window's centre as its Focus does (the depth of a
+     * new focus, the window's zoom kept, smoothly); false when the person is
+     * not in the tree (nothing happens).
+     */
+    recenter(personId: PersonId): boolean;
 }
 
 /** Whether a drawn card of the person stands wholly inside the chart's area; null: not drawn. */
@@ -43,8 +53,17 @@ export function cardInView(doc: Document, personId: string): boolean | null {
     return r.left >= c.left && r.right <= c.right && r.top >= c.top && r.bottom <= c.bottom;
 }
 
-/** Take another window's selection into this window's view. */
-export function applySharedSelection(personId: string | null, deps: SelectionDeps, doc: Document = document): void {
+/**
+ * Take another window's selection into this window's view: marked, or with
+ * `switch` in a view that can move its centre, made the centre.
+ */
+export function applySharedSelection(personId: string | null, deps: SelectionDeps, doc: Document = document, follow: FollowMode = 'mark'): void {
+    if (follow === 'switch' && viewRecenters(deps.viewMode())) {
+        // The centre itself says the person: no ring of another window's choice.
+        deps.setWindowSelected(null);
+        if (personId) deps.recenter(personId as PersonId);
+        return;
+    }
     deps.setWindowSelected(personId as PersonId | null);
     const mode = deps.viewMode();
     if (mode === 'table') {
@@ -105,7 +124,7 @@ export function wireSatelliteSelection(client: SatelliteClient, deps: SelectionD
     };
     window.addEventListener('strom:focus-changed', onFocus);
     window.addEventListener(PERSON_CHOSEN_EVENT, onChosen);
-    const off = client.on('select', ({ personId }) => applySharedSelection(personId, deps));
+    const off = client.on('select', ({ personId }) => applySharedSelection(personId, deps, undefined, client.followMode));
     // "Follow selection" off: the mark of the last choice taken goes from every view (the card's ring, the
     // Fan's outline, the Timeline's row, the Map's places); the Table's row keeps its place without the shared look.
     const offFollow = client.on('follow', (on) => { if (!on) deps.setWindowSelected(null); });
