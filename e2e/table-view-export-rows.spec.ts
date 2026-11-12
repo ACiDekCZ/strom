@@ -121,8 +121,7 @@ test.describe('phone (390)', () => {
         await page.clock.setFixedTime(new Date('2026-06-15T10:00:00Z'));
         await openApp(page);
         await seedTree(page, FAMILY, 'Oskvelt', 'c');
-        await page.locator('#bb-view-more').tap();
-        await page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: 'Table' }).tap();
+        await page.locator('#bb-view-table').tap();
         await expect(status(page)).toHaveText('7 of 7 people');
         await page.locator('#table-container .tv-search-q').fill('Prellwin');
         await expect(status(page)).toHaveText('1 of 7 people');

@@ -86,7 +86,11 @@ export const slideshowMethods = uiModule({
         this.slideshowActive = true;
 
         document.body.classList.add('slideshow-mode');
-        void document.documentElement.requestFullscreen?.().catch(() => { /* not allowed — run windowed */ });
+        // Full screen turned on before the show (More › Full screen) stays on after it (spec 082 K1.3).
+        this.slideshowKeepsFullscreen = !!document.fullscreenElement;
+        if (!this.slideshowKeepsFullscreen) {
+            void document.documentElement.requestFullscreen?.().catch(() => { /* not allowed — run windowed */ });
+        }
         this.renderSlideshowStop();
     },
 
@@ -97,7 +101,8 @@ export const slideshowMethods = uiModule({
         document.body.classList.remove('slideshow-mode');
         document.querySelectorAll('.person-card.slideshow-current')
             .forEach(c => c.classList.remove('slideshow-current'));
-        if (document.fullscreenElement) void document.exitFullscreen?.().catch(() => { /* ignore */ });
+        if (document.fullscreenElement && !this.slideshowKeepsFullscreen) void document.exitFullscreen?.().catch(() => { /* ignore */ });
+        this.slideshowKeepsFullscreen = false;
         // Leave the user where the tour ended, framed as usual.
         const current = this.slideshowStops[this.slideshowIndex];
         if (current) TreeRenderer.setFocus(current);

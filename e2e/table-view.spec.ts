@@ -248,10 +248,11 @@ test.describe('phone (390)', () => {
             b: { firstName: 'Tamsa', lastName: 'Morastin', gender: 'female', partners: ['a'] },
             c: { firstName: 'Belko', lastName: 'Kvelden', parents: ['a', 'b'] },
         }, 'Kvelden', 'a');
-        await page.locator('#bb-view-more').tap();
-        await page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: 'Table' }).tap();
+        await page.locator('#bb-view-table').tap();
         await expect(page.locator('#table-container')).toBeVisible();
-        await expect(page.locator('#bb-view-more')).toHaveClass(/active/);
+        // The Table has its own tab on the bar (spec 082 K1.1): it lights up, More does not.
+        await expect(page.locator('#bb-view-table')).toHaveClass(/active/);
+        await expect(page.locator('#bb-view-more')).not.toHaveClass(/active/);
         await expect(page.locator('#table-container .tv-status-count')).toHaveText('3 of 3 people');
 
         const typeBtn = page.locator('#table-container .tv-rowtype-btn');
@@ -274,8 +275,7 @@ test.describe('phone (390)', () => {
     test('no text of a cell is cut at its top or bottom on a phone (T54)', async ({ page }) => {
         await openApp(page);
         await seedTree(page, INKY, 'Pýchrož', 'a');
-        await page.locator('#bb-view-more').tap();
-        await page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: 'Table' }).tap();
+        await page.locator('#bb-view-table').tap();
         await expect(page.locator('#table-container .tv-body .tv-row[data-key="p:a#u2"]')).toBeVisible();
         expect(await clippedTexts(page)).toEqual([]);
     });

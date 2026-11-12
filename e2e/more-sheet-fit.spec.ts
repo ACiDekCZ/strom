@@ -2,7 +2,7 @@ import { test, expect, Page } from '@playwright/test';
 import { openApp } from './helpers.js';
 
 /**
- * T52: on a phone the tiles of More (Undo | Redo, View: Fan | Map | Table,
+ * T52: on a phone the tiles of More (Undo | Redo, View: Fan | Map | Timeline,
  * Settings | How Strom works | About) keep their names inside: a long name
  * (de, pl) wraps inside its tile instead of running out of it, and no two
  * tiles of a row overlap.
@@ -39,7 +39,7 @@ for (const width of [360, 390]) {
                 await expect(page.locator('#sheet-help')).toBeVisible();
                 await expect(page.locator('.bottom-sheet-overlay')).toHaveClass(/active/);
                 const boxes = await tiles(page);
-                // Undo | Redo, Fan | Map | Table, Settings | How Strom works | About.
+                // Undo | Redo, Fan | Map | Timeline, Settings | How Strom works | About.
                 expect(boxes.length).toBe(8);
                 for (const t of boxes) {
                     expect(t.btnScroll, `${t.text}: tile overflows`).toBeLessThanOrEqual(t.btnClient);

@@ -394,6 +394,8 @@ export class UIClass {
      * cards to fly to; null means the show ran in the view it started in.
      */
     slideshowReturnView: ViewMode | null = null;
+    /** Full screen was on before the show started: its end leaves it on. */
+    slideshowKeepsFullscreen = false;
 
     // Map view. mapCenter null = not framed yet (the next draw fits the places).
     mapScope: MapScope = 'view';

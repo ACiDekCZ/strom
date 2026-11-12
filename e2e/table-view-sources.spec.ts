@@ -52,8 +52,7 @@ async function openTable(page: Page, phone = false, sources: Record<string, unkn
     }, { persons: PERSONS, partnerships: PARTNERSHIPS, sources });
     await expect(card(page, 'Kvido')).toBeVisible();
     if (phone) {
-        await page.locator('#bb-view-more').tap();
-        await page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: 'Table' }).tap();
+        await page.locator('#bb-view-table').tap();
     } else {
         await page.locator('#view-mode-table').click();
     }

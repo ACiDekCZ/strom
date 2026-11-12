@@ -186,8 +186,8 @@ test.describe('view mode: Actions and More carry what an exported page can do', 
         await expect(sheet).toBeVisible();
         await expect(page.locator('#sheet-undo')).toHaveCount(0);
         const rows = (await sheet.locator('.bottom-sheet-items > .bottom-sheet-item').allInnerTexts()).map(t => t.replace(/\s+/g, ' ').trim());
-        // "For the family ›" as in editing (menu 1020 D18).
-        expect(rows.map(r => r.replace(/\s*\d+$/, ''))).toEqual(['Anniversaries', 'For the family ›', 'Tree overview']);
+        // "For the family ›" as in editing (menu 1020 D18); Full screen where the browser offers it (spec 082 K1.3).
+        expect(rows.map(r => r.replace(/\s*\d+$/, ''))).toEqual(['Anniversaries', 'For the family ›', 'Tree overview', 'Full screen']);
         await expect(sheet.locator('.bottom-sheet-pair').last().locator('.bottom-sheet-item')).toHaveText(['Settings', 'How Strom works', 'About Strom']);
         await page.locator('#sheet-family').click();
         await page.locator('#sheet-book').click();

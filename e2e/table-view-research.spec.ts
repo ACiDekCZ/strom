@@ -430,8 +430,7 @@ test.describe('research bubbles on a phone (16y)', () => {
         await openApp(page);
         await dropGed(page, GED);
         await expect(card(page, 'Karel')).toBeVisible();
-        await page.locator('#bb-view-more').tap();
-        await page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: 'Table' }).tap();
+        await page.locator('#bb-view-table').tap();
         await expect(page.locator('#table-container .tv-grid[role="treegrid"]')).toBeVisible();
         const id = await page.evaluate(() => window.Strom.DataManager.getAllPersons().find(p => p.refn === 'P0006')!.id);
         const mark = page.locator(`#table-container .tv-body .tv-row[data-key="p:${id}"] .tv-conf`).first();
@@ -611,8 +610,7 @@ test.describe('research chips on a phone (16z)', () => {
         await openApp(page);
         await dropGed(page, GED);
         await expect(card(page, 'Karel')).toBeVisible();
-        await page.locator('#bb-view-more').tap();
-        await page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: 'Table' }).tap();
+        await page.locator('#bb-view-table').tap();
         await expect(status(page)).toHaveText('13 of 13 people');
         await page.locator('#table-container .tv-filters-btn').tap();
         const sheet = page.locator('.tv-fsheet');
@@ -637,8 +635,7 @@ test.describe('research chips on a phone (16z)', () => {
         await openApp(page);
         await dropGed(page, GED.replace('2 NAME Klikvové z Rebarborova', '2 NAME Klikvové z Rebarborova a Bezinkové z Ostružinova u Malinova'));
         await expect(card(page, 'Karel')).toBeVisible();
-        await page.locator('#bb-view-more').tap();
-        await page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: 'Table' }).tap();
+        await page.locator('#bb-view-table').tap();
         await page.locator('#table-container .tv-filters-btn').tap();
         const row = page.locator('.tv-fsheet label.tv-fs-row:has(input[data-chip="line:G0002"])');
         await expect(row).toBeVisible();

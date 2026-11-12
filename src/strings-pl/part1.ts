@@ -57,7 +57,11 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         export: 'Eksport',
         import: 'Import',
         newTree: 'Nowe drzewo',
-        more: 'Więcej'
+        more: 'Więcej',
+        fullscreen: 'Pełny ekran',
+        fullscreenExit: 'Zamknij pełny ekran',
+        fullscreenIos: 'Pełny ekran…',
+        fullscreenIosText: 'Ta przeglądarka nie udostępnia stronom internetowym pełnego ekranu. Strom dodany do ekranu początkowego (Udostępnij → Do ekranu początkowego) otwiera się bez pasków przeglądarki. Aplikacja na ekranie początkowym ma jednak własną, oddzielną pamięć: drzewo trafia do niej przez eksport tutaj i import w aplikacji.'
     },
 
     // Empty state

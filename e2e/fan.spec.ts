@@ -121,7 +121,7 @@ test.describe('mobile', () => {
         await createFirstPerson(page, 'Jan', 'Novak');
 
         // The three primary views are bottom-bar tabs.
-        for (const m of ['family', 'descendants', 'timeline']) {
+        for (const m of ['family', 'descendants', 'table']) {
             await expect(page.locator(`#bb-view-${m}`)).toBeVisible();
         }
         // Fan lives in the More sheet.

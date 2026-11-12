@@ -96,8 +96,7 @@ test.describe('phone (390)', () => {
 
     test('XLSX from ⋯ → Export in the sheet', async ({ page }) => {
         await openTable(page);
-        await page.locator('#bb-view-more').tap();
-        await page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: 'Table' }).tap();
+        await page.locator('#bb-view-table').tap();
         await expect(status(page)).toHaveText('4 of 4 people');
         await page.locator('#table-container .tv-more-menu-btn').tap();
         await page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: 'Export' }).tap();

@@ -42,8 +42,7 @@ async function openTable(page: Page, phone = false, family = FAMILY): Promise<vo
     await openApp(page);
     await seedTree(page, family, 'Wrenhallow', 'f');
     if (phone) {
-        await page.locator('#bb-view-more').tap();
-        await page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: 'Table' }).tap();
+        await page.locator('#bb-view-table').tap();
     } else {
         await page.locator('#view-mode-table').click();
     }

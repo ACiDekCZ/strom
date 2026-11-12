@@ -141,8 +141,8 @@ test('the bottom bar carries the three primary views + a raised FAB', async ({ p
 
     const bar = page.locator('#bottom-bar');
     await expect(bar).toBeVisible();
-    // Three primary view tabs live on the bar (fan/map moved to the More sheet).
-    for (const id of ['bb-view-family', 'bb-view-descendants', 'bb-view-timeline', 'bb-view-more']) {
+    // Three primary view tabs live on the bar (fan, map and timeline are in the More sheet; spec 082 K1.1).
+    for (const id of ['bb-view-family', 'bb-view-descendants', 'bb-view-table', 'bb-view-more']) {
         await expect(page.locator(`#${id}`)).toBeVisible();
     }
     // The old hamburger is gone.
@@ -154,15 +154,23 @@ test('the bottom bar carries the three primary views + a raised FAB', async ({ p
     await expect(page.locator('#person-modal')).toBeVisible();
 });
 
-test('a bottom-bar tab switches the view and lights up copper', async ({ page }) => {
+test('a bottom-bar tab switches the view and lights up copper; the timeline from More lights up More (spec 082 K1.1)', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
 
-    await page.locator('#bb-view-timeline').tap();
-    await expect(page.locator('#bb-view-timeline')).toHaveClass(/active/);
+    await expect(page.locator('#bb-view-timeline')).toHaveCount(0);
+    await page.locator('#bb-view-table').tap();
+    await expect(page.locator('#bb-view-table')).toHaveClass(/active/);
     await expect(page.locator('#bb-view-family')).not.toHaveClass(/active/);
-    // Timeline view is now on screen.
+    await expect(page.locator('#bb-view-more')).not.toHaveClass(/active/);
+    await expect(page.locator('#table-container')).toBeVisible();
+
+    // The timeline is a tile of More's View row: it lights up More, not a tab of its own.
+    await page.locator('#bb-view-more').tap();
+    await page.locator('.bottom-sheet-menu .bottom-sheet-pair[aria-label="View"] .bottom-sheet-item', { hasText: 'Timeline' }).tap();
     await expect(page.locator('#timeline-container')).toBeVisible();
+    await expect(page.locator('#bb-view-more')).toHaveClass(/active/);
+    await expect(page.locator('#bb-view-table')).not.toHaveClass(/active/);
 });
 
 test('the "More" sheet (menu 1020 §7): Undo|Redo tiles, content, For the family ›, View tiles, the Tree row, Settings|How Strom works|About tiles', async ({ page }) => {
@@ -190,9 +198,9 @@ test('the "More" sheet (menu 1020 §7): Undo|Redo tiles, content, For the family
     await expect(sheet.locator('.bottom-sheet-section')).toHaveCount(0);
     const rows = (await sheet.locator('.bottom-sheet-items > .bottom-sheet-item:not(.bottom-sheet-storage-row)').allInnerTexts()).map(t => t.replace(/\s+/g, ' ').trim());
     // "Ancestor research · New" only while it is new (menu 1020 §1.1); seen here: in the tree's sheet.
-    expect(rows).toEqual(['Anniversaries', 'Export…', 'For the family ›', 'Tree: My Family Tree ›', 'Add family…']);
+    expect(rows).toEqual(['Anniversaries', 'Export…', 'For the family ›', 'Full screen', 'Tree: My Family Tree ›', 'Add family…']);
     await expect(pairs.nth(1)).toHaveAttribute('aria-label', 'View');
-    await expect(pairs.nth(1).locator('.bottom-sheet-item')).toHaveText(['Fan', 'Map', 'Table']);
+    await expect(pairs.nth(1).locator('.bottom-sheet-item')).toHaveText(['Fan', 'Map', 'Timeline']);
     await expect(pairs.nth(2).locator('.bottom-sheet-item')).toHaveText(['Settings', 'How Strom works', 'About Strom']);
     // Tree management left the first level (Tree › and the tree switcher carry it).
     await expect(sheet.locator('.bottom-sheet-item', { hasText: 'Manage trees' })).toHaveCount(0);
@@ -303,6 +311,9 @@ test.describe('More on a small phone and held sideways', () => {
         expect(undo.height).toBeGreaterThanOrEqual(44);
         const tree = (await sheet.locator('.bottom-sheet-tree-row').boundingBox())!;
         expect(tree.height).toBeLessThan(46);
+        // Full screen joins the View line as a fourth tile (spec 082 K1.3): no extra row to scroll to.
+        await expect(sheet.locator('.bottom-sheet-pair[aria-label="View"] .bottom-sheet-item'))
+            .toHaveText(['Fan', 'Map', 'Timeline', 'Full screen']);
         await expect.poll(() => sheet.evaluate(el => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(1);
     });
 });
@@ -398,7 +409,7 @@ test('bottom-bar tabs, the FAB and sheet rows meet the 44px touch target', async
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
 
-    for (const sel of ['#bb-view-family', '#bb-view-descendants', '#bb-view-timeline', '#bb-view-more']) {
+    for (const sel of ['#bb-view-family', '#bb-view-descendants', '#bb-view-table', '#bb-view-more']) {
         const box = (await page.locator(sel).boundingBox())!;
         expect(box.height, `${sel} height`).toBeGreaterThanOrEqual(44);
     }

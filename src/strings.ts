@@ -255,7 +255,11 @@ const stringsEN = {
         export: 'Export',
         import: 'Import',
         newTree: 'New tree',
-        more: 'More'
+        more: 'More',
+        fullscreen: 'Full screen',
+        fullscreenExit: 'Exit full screen',
+        fullscreenIos: 'Full screen…',
+        fullscreenIosText: 'This browser does not offer web pages a full screen. Strom added to the Home Screen (Share → Add to Home Screen) opens without the browser’s bars. The app on the Home Screen has its own separate storage, though: a tree gets there by exporting it here and importing it in the app.'
     },
 
     // Empty state
@@ -1468,7 +1472,7 @@ const stringsEN = {
         step3: 'A new person is added here. A whole family at once (parents, partner, children) comes from the card menu: Add → Family…',
         step4: 'The focus panel shows who the tree centres on and how many generations of ancestors (↑) and descendants (↓) are visible; − and + change that.',
         step5: 'Switch views: Family, Descendants, Timeline, the ancestor Fan or the Map.',
-        step5Bar: 'Switch views: Family, Descendants and Timeline are here; the ancestor Fan and the Map are under More.',
+        step5Bar: 'Switch views: Family, Descendants and Table are here; the ancestor Fan, the Map and the Timeline are under More.',
         step6: 'Zoom in, zoom out, reset the view or fit the whole tree — the canvas can also be dragged and zoomed with the mouse wheel; the 0 key resets the view.',
         step6Touch: 'Zoom in, zoom out, reset the view or fit the whole tree — the canvas can also be dragged with a finger and pinched to zoom.',
         step7: 'Search for anyone by name, and use the funnel to filter by surname, place, birth years, gender or living status.',
@@ -4210,10 +4214,6 @@ const stringsEN = {
         viewLinksNote: (n: number) => `View-only links (${n}) are not included`,
     },
 
-    // Focus mode
-    nav: {
-        timelineShort: 'Timeline',
-    },
     depth: {
         toggle: 'Number of generations',
     },
@@ -9076,7 +9076,11 @@ const stringsCZ: StringsType = {
         export: 'Export',
         import: 'Import',
         newTree: 'Nový strom',
-        more: 'Více'
+        more: 'Více',
+        fullscreen: 'Celá obrazovka',
+        fullscreenExit: 'Ukončit celou obrazovku',
+        fullscreenIos: 'Celá obrazovka…',
+        fullscreenIosText: 'Tento prohlížeč webovým stránkám celou obrazovku nenabízí. Strom přidaný na plochu (Sdílet → Přidat na plochu) se otevírá bez lišt prohlížeče. Aplikace na ploše má ale vlastní oddělené úložiště: strom se do ní dostane exportem tady a importem v aplikaci.'
     },
 
     // Empty state
@@ -10248,7 +10252,7 @@ const stringsCZ: StringsType = {
         step3: 'Tady se přidává nová osoba. Celou rodinu najednou (rodiče, partnera, děti) přidá nabídka karty: Přidat → Rodinu…',
         step4: 'Panel fokusu ukazuje, na koho je strom zaměřený a kolik generací předků (↑) a potomků (↓) je vidět; − a + to mění.',
         step5: 'Přepínání pohledů: Rodina, Potomci, Časová osa, Vějíř předků nebo Mapa.',
-        step5Bar: 'Přepínání pohledů: Rodina, Potomci a Časová osa jsou tady; Vějíř předků a Mapa jsou ve Více.',
+        step5Bar: 'Přepínání pohledů: Rodina, Potomci a Tabulka jsou tady; Vějíř předků, Mapa a Časová osa jsou ve Více.',
         step6: 'Přiblížit, oddálit, výchozí pohled nebo celý strom na obrazovku — plátno jde také táhnout myší a přibližovat kolečkem; klávesa 0 vrátí výchozí pohled.',
         step6Touch: 'Přiblížit, oddálit, výchozí pohled nebo celý strom na obrazovku — plátno jde také posouvat prstem a přibližovat roztažením dvou prstů.',
         step7: 'Hledání kohokoli podle jména; trychtýř filtruje podle příjmení, místa, let narození, pohlaví nebo žijící/zemřelí.',
@@ -12962,10 +12966,6 @@ const stringsCZ: StringsType = {
         viewLinksNote: (n: number) => `Připojení jen v zobrazení (${n}) se do výstupu nepřenášejí`,
     },
 
-    // Focus mode
-    nav: {
-        timelineShort: 'Čas. osa',
-    },
     depth: {
         toggle: 'Počet generací',
     },
@@ -17764,7 +17764,11 @@ const stringsDE: StringsType = {
         export: 'Export',
         import: 'Import',
         newTree: 'Neuer Stammbaum',
-        more: 'Mehr'
+        more: 'Mehr',
+        fullscreen: 'Vollbild',
+        fullscreenExit: 'Vollbild beenden',
+        fullscreenIos: 'Vollbild…',
+        fullscreenIosText: 'Dieser Browser bietet Webseiten kein Vollbild an. Strom auf dem Home-Bildschirm (Teilen → Zum Home-Bildschirm) öffnet sich ohne die Leisten des Browsers. Die App dort hat aber einen eigenen, getrennten Speicher: Ein Stammbaum kommt hinein, indem er hier exportiert und in der App importiert wird.'
     },
 
     // Empty state
@@ -18928,7 +18932,7 @@ const stringsDE: StringsType = {
         step3: 'Hier kommt eine neue Person hinzu. Eine ganze Familie auf einmal (Eltern, Partner, Kinder) fügt das Kartenmenü hinzu: Hinzufügen → Familie…',
         step4: 'Das Fokus-Panel zeigt, auf wen der Stammbaum zentriert ist und wie viele Generationen an Vorfahren (↑) und Nachkommen (↓) sichtbar sind; − und + ändern das.',
         step5: 'Ansichten wechseln: Familie, Nachkommen, Zeitleiste, der Ahnen-Fächer oder die Karte.',
-        step5Bar: 'Ansichten wechseln: Familie, Nachkommen und Zeitleiste sind hier; der Ahnen-Fächer und die Karte stehen unter Mehr.',
+        step5Bar: 'Ansichten wechseln: Familie, Nachkommen und Tabelle sind hier; der Ahnen-Fächer, die Karte und die Zeitleiste stehen unter Mehr.',
         step6: 'Vergrößern, verkleinern, Ansicht zurücksetzen oder den ganzen Stammbaum einpassen — die Arbeitsfläche lässt sich auch mit der Maus ziehen und mit dem Mausrad zoomen; die Taste 0 setzt die Ansicht zurück.',
         step6Touch: 'Vergrößern, verkleinern, Ansicht zurücksetzen oder den ganzen Stammbaum einpassen — die Arbeitsfläche lässt sich auch mit dem Finger verschieben und mit zwei Fingern zoomen.',
         step7: 'Jemanden nach Namen suchen und mit dem Trichter nach Nachname, Ort, Geburtsjahren, Geschlecht oder Lebendstatus filtern.',
@@ -21625,10 +21629,6 @@ const stringsDE: StringsType = {
         viewLinksNote: (n: number) => `Nur angezeigte Verbindungen (${n}) werden nicht übernommen`,
     },
 
-    // Focus mode
-    nav: {
-        timelineShort: 'Zeitleiste',
-    },
     depth: {
         toggle: 'Anzahl der Generationen',
     },

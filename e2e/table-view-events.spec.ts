@@ -51,8 +51,8 @@ async function openTable(page: Page, phone = false, family = FAMILY, people = '5
     await openApp(page);
     await seedTree(page, family, 'Želvíř', 'c');
     if (phone) {
-        await page.locator('#bb-view-more').tap();
-        await page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: table }).tap();
+        await expect(page.locator('#bb-view-table')).toContainText(table);
+        await page.locator('#bb-view-table').tap();
     } else {
         await page.locator('#view-mode-table').click();
     }

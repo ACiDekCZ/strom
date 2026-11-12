@@ -2,7 +2,7 @@ import type { StringsType } from '../strings.js';
 import { nPl, plPl, joinAndPl, relationPl } from './helpers.js';
 
 export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationships' | 'card' | 'buttons' | 'dialog'
-    | 'gender' | 'partnershipStatus' | 'parentRelType' | 'export' | 'nav' | 'depth' | 'rodView' | 'focus'
+    | 'gender' | 'partnershipStatus' | 'parentRelType' | 'export' | 'depth' | 'rodView' | 'focus'
     | 'generationLabels' | 'treeOverview' | 'branchTabs' | 'search' | 'deepLink' | 'searchFilters' | 'personPicker'
     | 'errors' | 'storageSafety' | 'addChild' | 'uiTips' | 'about' | 'gedcom' | 'gedcomNotes' | 'saveCurrent'
     | 'validation'> = {
@@ -233,10 +233,6 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
         viewLinksNote: (n: number) => `Połączenia tylko w widoku (${n}) nie są przenoszone do wyniku`,
     },
 
-    // Focus mode
-    nav: {
-        timelineShort: 'Oś czasu',
-    },
     depth: {
         toggle: 'Liczba pokoleń',
     },

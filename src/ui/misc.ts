@@ -8,6 +8,7 @@ import { initDialogFocus } from './dialog-focus.js';
 import { initClosedPopups } from './closed-popups.js';
 import { initSheetSlide } from './sheet-slide.js';
 import { initKeyboardAccess } from './keyboard-access.js';
+import { syncTreeLegendLift } from './legend-lift.js';
 import { DataManager, auditPersonName } from '../data.js';
 import { announcedResearchLinks, researchLinksEnabled, setResearchLinksEnabled } from '../research-device.js';
 import { TreeManager } from '../tree-manager.js';
@@ -523,11 +524,11 @@ export const miscMethods = uiModule({
         // ⧉ and its menu ("this view", the Table tab's tooltip in the language now; spec 079 §1).
         refreshWindowControls();
         // Mobile bottom bar: three primary view tabs plus "More" (fan, map and
-        // table live in the More sheet, so More lights up while one is active).
+        // timeline live in the More sheet, so More lights up while one is active; spec 082 K1.1).
         document.getElementById('bb-view-family')?.classList.toggle('active', mode === 'family');
         document.getElementById('bb-view-descendants')?.classList.toggle('active', mode === 'descendants');
-        document.getElementById('bb-view-timeline')?.classList.toggle('active', mode === 'timeline');
-        document.getElementById('bb-view-more')?.classList.toggle('active', mode === 'fan' || mode === 'map' || mode === 'table');
+        document.getElementById('bb-view-table')?.classList.toggle('active', mode === 'table');
+        document.getElementById('bb-view-more')?.classList.toggle('active', mode === 'fan' || mode === 'map' || mode === 'timeline');
 
         const badge = document.getElementById('descendants-badge');
         const text = document.getElementById('descendants-badge-text');
@@ -592,8 +593,9 @@ export const miscMethods = uiModule({
         const treeLegend = document.getElementById('tree-legend');
         if (treeLegend) {
             const hasPersons = DataManager.getAllPersons().length > 0;
-            treeLegend.style.display = (cardsShown && hasPersons
-                && SettingsManager.isBranchLegendEnabled()) ? 'flex' : 'none';
+            const shown = cardsShown && hasPersons && SettingsManager.isBranchLegendEnabled();
+            treeLegend.style.display = shown ? 'flex' : 'none';
+            syncTreeLegendLift(treeLegend, shown);
         }
         // The ring of an unknown sex is explained only when such a person is in view.
         const unknownItem = document.getElementById('legend-unknown');

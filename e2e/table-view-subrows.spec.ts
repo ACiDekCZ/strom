@@ -115,8 +115,7 @@ test.describe('phone (390)', () => {
     test('sub-rows on a phone: tapping the toggle collapses and expands, nothing runs over the width', async ({ page }) => {
         await openApp(page);
         await seedTree(page, FAMILY, 'Quillmaren', 'h');
-        await page.locator('#bb-view-more').tap();
-        await page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: 'Table' }).tap();
+        await page.locator('#bb-view-table').tap();
         await expect(grid(page)).toBeVisible();
 
         const main = row(page, 'p:h');

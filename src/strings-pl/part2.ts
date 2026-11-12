@@ -151,7 +151,7 @@ export const plPart2: Pick<StringsType, 'crop' | 'importImages' | 'imageViewer' 
         step3: 'Tutaj dodaje się nową osobę. Całą rodzinę naraz (rodziców, partnera, dzieci) dodaje menu karty: Dodaj → Rodzinę…',
         step4: 'Panel centrum pokazuje, na kim skupia się drzewo i ile pokoleń przodków (↑) i potomków (↓) jest widocznych; − i + to zmieniają.',
         step5: 'Przełączanie widoków: Rodzina, Potomkowie, Oś czasu, Wachlarz przodków lub Mapa.',
-        step5Bar: 'Przełączanie widoków: Rodzina, Potomkowie i Oś czasu są tutaj; Wachlarz przodków i Mapa są w Więcej.',
+        step5Bar: 'Przełączanie widoków: Rodzina, Potomkowie i Tabela są tutaj; Wachlarz przodków, Mapa i Oś czasu są w Więcej.',
         step6: 'Powiększanie, pomniejszanie, widok domyślny lub całe drzewo na ekranie – obszar drzewa można też przeciągać myszą i powiększać kółkiem; klawisz 0 przywraca widok domyślny.',
         step6Touch: 'Powiększanie, pomniejszanie, widok domyślny lub całe drzewo na ekranie – obszar drzewa można też przesuwać palcem i powiększać, rozsuwając dwa palce.',
         step7: 'Wyszukiwanie dowolnej osoby po imieniu i nazwisku; lejek filtruje według nazwiska, miejsca, lat urodzenia, płci lub statusu żyjący/zmarły.',

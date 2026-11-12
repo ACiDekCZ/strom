@@ -239,8 +239,7 @@ test.describe('phone (390)', () => {
     test('the Columns sheet: groups, ↑ ↓ on checked columns, collapsing a group; no −/+ in the grid', async ({ page }) => {
         await openApp(page);
         await seedTree(page, FAMILY, 'Kvelden', 'a');
-        await page.locator('#bb-view-more').tap();
-        await page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: 'Table' }).tap();
+        await page.locator('#bb-view-table').tap();
         await expect(page.locator('#table-container .tv-grid')).toBeVisible();
         await expect(page.locator('#table-container .tv-group-toggle')).toHaveCount(0);
 

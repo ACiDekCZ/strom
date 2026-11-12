@@ -27,8 +27,7 @@ async function openTable(page: Page, people: Record<string, SeedPerson>, phone: 
     await openApp(page);
     await seedTree(page, people, 'Kvelden', 'a');
     if (phone) {
-        await page.locator('#bb-view-more').click();
-        await page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: 'Table' }).click();
+        await page.locator('#bb-view-table').click();
     } else {
         await page.locator('#view-mode-table').click();
     }
@@ -70,8 +69,7 @@ async function openMarked(page: Page, phone: boolean, lang = 'cs'): Promise<void
     }, { persons, partnerships });
     await expect(card(page, 'Veslin')).toBeVisible();
     if (phone) {
-        await page.locator('#bb-view-more').tap();
-        await page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: lang === 'cs' ? 'Tabulka' : 'Table' }).tap();
+        await page.locator('#bb-view-table').tap();
     } else {
         await page.locator('#view-mode-table').click();
     }
@@ -180,8 +178,8 @@ for (const [label, viewport] of [['390', { width: 390, height: 844 }], ['844 × 
                 await seedSetting(page, 'language', lang);
                 await openApp(page);
                 await seedTree(page, FAMILY, 'Kvelden', 'a');
-                await page.locator('#bb-view-more').click();
-                await page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: more }).click();
+                await page.locator('#bb-view-table').click();
+                await expect(page.locator('#bb-view-table')).toContainText(more);
                 const head = tv(page, '.tv-headrow [data-col="name"]');
                 await expect(head.locator('.tv-cell-text')).toHaveText(name);
                 await expect(head.locator('.tv-head-all')).toHaveText(collapse);

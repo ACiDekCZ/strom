@@ -93,11 +93,16 @@ test('the branch stripe follows the card\'s rounded corners, also on the focused
     for (const s of shapes) expect(s, s.focused ? 'focused card' : 'card').toMatchObject({ radius: true, left: true, width: true, height: true });
 });
 
-/** The legend pill and back / forward share the bottom-left corner: the pill stands above the buttons (T32). */
+/**
+ * The legend pill and back / forward share the bottom-left corner. On a desktop and a tablet the pill stands
+ * above the buttons (T32); on a phone the pill stays at the bottom edge and the buttons stand above it
+ * (spec 082 K1.2, T44).
+ */
 for (const vp of [{ name: 'desktop', width: 1280, height: 800 }, { name: 'tablet', width: 820, height: 1180 }, { name: 'phone', width: 390, height: 844 }]) {
     test.describe(`legend and back on ${vp.name}`, () => {
         test.use({ viewport: { width: vp.width, height: vp.height } });
         test(`the legend never covers back / forward (${vp.name})`, async ({ page }) => {
+            const phone = vp.name === 'phone';
             await openApp(page);
             await page.getByRole('button', { name: 'Try a sample tree' }).click();
             await expect(card(page, 'Johan')).toBeVisible();
@@ -112,18 +117,29 @@ for (const vp of [{ name: 'desktop', width: 1280, height: 800 }, { name: 'tablet
             });
             const back = page.locator('#focus-back-btn');
             await expect(back).toBeVisible();
-            const b = (await back.boundingBox())!;
+            /** The button and the legend apart, in the order of the viewport. */
+            const apart = async (nav: typeof back): Promise<void> => {
+                await expect.poll(async () => {
+                    const b = (await nav.boundingBox())!;
+                    const l = (await legend.boundingBox())!;
+                    return phone ? b.y + b.height <= l.y : l.y + l.height <= b.y;
+                }).toBe(true);
+            };
+            await apart(back);
             const l = (await legend.boundingBox())!;
-            expect(l.y + l.height).toBeLessThanOrEqual(b.y);
-            // Same left edge as before: only lifted.
+            // Same left edge as before; on a phone the legend stays where it was, elsewhere it is only lifted.
             expect(Math.round(l.x)).toBe(Math.round(before.x));
-            // Back to the first focus: forward alone still keeps the legend up.
+            if (phone) {
+                expect(Math.round(l.y)).toBe(Math.round(before.y));
+                // At the bottom edge: just above the bottom bar.
+                const bar = (await page.locator('#bottom-bar').boundingBox())!;
+                expect(bar.y - (l.y + l.height)).toBeLessThanOrEqual(16);
+            }
+            // Back to the first focus: forward alone keeps the same order.
             await page.evaluate(() => window.Strom.TreeRenderer.goBack());
             const fwd = page.locator('#focus-forward-btn');
             await expect(fwd).toBeVisible();
-            const f = (await fwd.boundingBox())!;
-            const l2 = (await legend.boundingBox())!;
-            expect(l2.y + l2.height).toBeLessThanOrEqual(f.y);
+            await apart(fwd);
         });
     });
 }

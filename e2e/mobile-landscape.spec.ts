@@ -14,7 +14,7 @@ async function sample(page: Page): Promise<void> {
     await expect(page.locator('#toolbar-focus-name')).not.toHaveText('');
 }
 
-test('the side bar: 76px on the left, the tabs top to bottom with the FAB in the middle, a short Timeline', async ({ page }) => {
+test('the side bar: 76px on the left, the tabs top to bottom with the FAB in the middle, the Table among them', async ({ page }) => {
     await sample(page);
     const bar = (await page.locator('#bottom-bar').boundingBox())!;
     expect(bar.x).toBe(0);
@@ -23,11 +23,10 @@ test('the side bar: 76px on the left, the tabs top to bottom with the FAB in the
     const ys = await page.locator('#bottom-bar > button').evaluateAll(els => els.map(el => ({
         id: el.id, y: Math.round(el.getBoundingClientRect().y), h: el.getBoundingClientRect().height,
     })));
-    expect(ys.map(b => b.id)).toEqual(['bb-view-family', 'bb-view-descendants', 'bottom-bar-fab', 'bb-view-timeline', 'bb-view-more']);
+    expect(ys.map(b => b.id)).toEqual(['bb-view-family', 'bb-view-descendants', 'bottom-bar-fab', 'bb-view-table', 'bb-view-more']);
     for (let i = 1; i < ys.length; i++) expect(ys[i].y).toBeGreaterThan(ys[i - 1].y);
     for (const b of ys) expect(Math.round(b.h)).toBeGreaterThanOrEqual(44);
-    await expect(page.locator('#bb-view-timeline .bottom-bar-label-short')).toHaveText('Timeline');
-    await expect(page.locator('#bb-view-timeline .bottom-bar-label-full')).toBeHidden();
+    await expect(page.locator('#bb-view-table .bottom-bar-label')).toHaveText('Table');
     // The active tab: a line on its left.
     const active = await page.locator('#bb-view-family').evaluate(el => getComputedStyle(el).borderLeftWidth);
     expect(active).toBe('2px');
@@ -150,7 +149,7 @@ test('back stands beside the side bar, not under it', async ({ page }) => {
     expect(b.y + b.height).toBeLessThanOrEqual(390);
 });
 
-test('the legend stands beside the side bar and above back, never under the bar or over the button (T29, T32)', async ({ page }) => {
+test('the legend stands beside the side bar at the bottom, back above it, never under the bar or over the button (T29, T44)', async ({ page }) => {
     await sample(page);
     await page.evaluate(() => window.Strom.UI.toggleBranchLegend(true));
     const legend = page.locator('#tree-legend');
@@ -166,12 +165,19 @@ test('the legend stands beside the side bar and above back, never under the bar 
     });
     const back = page.locator('#focus-back-btn');
     await expect(back).toBeVisible();
+    const before = l;
+    // The legend stays at the bottom edge; the button stands above it (spec 082 K1.2).
+    await expect.poll(async () => {
+        const bb = (await back.boundingBox())!;
+        return bb.y + bb.height <= (await legend.boundingBox())!.y;
+    }).toBe(true);
     const b = (await back.boundingBox())!;
     l = (await legend.boundingBox())!;
     expect(l.x).toBeGreaterThanOrEqual(bar.x + bar.width);
-    // The legend ends above the button: nothing of the button hides behind it.
-    expect(l.y + l.height).toBeLessThanOrEqual(b.y);
-    expect(l.y).toBeGreaterThanOrEqual(44);
+    expect(Math.round(l.y)).toBe(Math.round(before.y));
+    expect(b.x).toBeGreaterThanOrEqual(bar.x + bar.width);
+    // Under the header (44px), not behind it.
+    expect(b.y).toBeGreaterThanOrEqual(44);
 });
 
 for (const size of [{ width: 640, height: 360 }, { width: 844, height: 390 }]) {

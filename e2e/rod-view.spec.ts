@@ -343,7 +343,7 @@ test.describe('the phone', () => {
         await expect(page.locator('.bottom-sheet-person [data-action="rod-clear"]')).toBeVisible();
         await page.keyboard.press('Escape');
 
-        await page.locator('#bb-view-timeline').click();
+        await page.evaluate(() => window.Strom.UI.setDisplayViewMode('timeline'));
         await page.locator('#bb-view-more').click();
         await expect(page.locator('.bottom-sheet-more')).toBeVisible();
         await expect(page.locator('#sheet-rod')).toHaveCount(0);

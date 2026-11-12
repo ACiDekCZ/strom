@@ -15,7 +15,8 @@ import { TreeRenderer } from '../renderer.js';
 import { TreeManager } from '../tree-manager.js';
 import { DataManager } from '../data.js';
 import { ZoomPan, CARD_PAN_THRESHOLD_PX } from '../zoom.js';
-import { isPhoneBar, MQ_PHONE_LANDSCAPE } from '../breakpoints.js';
+import { isPhoneBar, isTabletOrMobile, MQ_PHONE_LANDSCAPE } from '../breakpoints.js';
+import { currentFullscreenOffer, toggleFullscreen } from './fullscreen.js';
 import { menuItemBody, menuItemAria, PersonMenuAction } from './context-menu.js';
 import { shownName, shownNameFull, nameHtml } from '../person-name.js';
 import type { ResearchSheetGroup } from './research-actions-ui.js';
@@ -439,18 +440,32 @@ export const bottomSheetMethods = uiModule({
             ] });
         }
 
-        // 5) View: Fan | Map | Table tiles (no bottom-bar tab of their own); on a phone under them the
+        // 5) View: Fan | Map | Timeline tiles (no bottom-bar tab of their own); on a phone under them the
         //    family line's choice (spec 039 §5.1: not on the timeline and the map, nor in a tree
         //    without a line; a tablet has it in its top bar).
         const rod = getSelectedRod();
         const rodRow: ValueRow | undefined = isPhoneBar() && mode !== 'timeline' && mode !== 'map' && mode !== 'table' && rodPickerOffered()
             ? { label: s.rodView.row, value: rod ? rodLabel(rod) : s.familyPages.wholeTree, id: 'sheet-rod', run: () => this.showRodPickerSheet() }
             : undefined;
+        // Full screen (spec 082 K1.3): only in the bottom-bar regime; on an iPhone the way to the Home Screen.
+        // Held sideways the sheet has no height to spare: there it joins the View line as a fourth tile.
+        const fullscreen = isTabletOrMobile() ? currentFullscreenOffer() : null;
+        const fullscreenRow: MenuRow | null = fullscreen ? {
+            id: 'sheet-fullscreen',
+            label: fullscreen === 'exit' ? s.mobileMenu.fullscreenExit
+                : fullscreen === 'ios-hint' ? s.mobileMenu.fullscreenIos : s.mobileMenu.fullscreen,
+            run: fullscreen === 'ios-hint'
+                ? () => { void this.showAlert(s.mobileMenu.fullscreenIosText, 'info', s.mobileMenu.fullscreen); }
+                : () => toggleFullscreen(),
+        } : null;
+        const sideways = typeof matchMedia === 'function' && matchMedia(MQ_PHONE_LANDSCAPE).matches;
         blocks.push({ divider: true, rows: [], pairLabel: s.menu.sectionView, pair: [
             { label: s.viewModeSwitch.fan, run: () => this.setDisplayViewMode('fan'), active: mode === 'fan' },
             { label: s.viewModeSwitch.map, run: () => this.setDisplayViewMode('map'), active: mode === 'map' },
-            { label: s.viewModeSwitch.table, run: () => this.setDisplayViewMode('table'), active: mode === 'table' },
+            { label: s.viewModeSwitch.timeline, run: () => this.setDisplayViewMode('timeline'), active: mode === 'timeline' },
+            ...(fullscreenRow && sideways ? [fullscreenRow] : []),
         ], valueRow: rodRow });
+        if (fullscreenRow && !sideways) blocks.push({ rows: [fullscreenRow] });
 
         // 6) [Ancestor research · New] · "Tree: {name} ›" (every whole-tree action) · Add family.
         // ("AI ancestor research" only where the research group is not: it is this tree's research.)
