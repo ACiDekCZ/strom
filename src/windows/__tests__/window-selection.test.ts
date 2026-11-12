@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { applySharedSelection, wireMainSelection, wireSatelliteSelection, cardInView, type SelectionDeps } from '../window-selection.js';
+import { applySharedSelection, wireMainSelection, wireSatelliteSelection, cardInView, PERSON_CHOSEN_EVENT, type SelectionDeps } from '../window-selection.js';
 import type { WindowRegistry } from '../window-registry.js';
 import type { SatelliteClient } from '../satellite.js';
 import type { TableSelectionShare } from '../../ui/table-view/table-ui.js';
@@ -31,6 +31,7 @@ function deps(mode = 'family'): SelectionDeps & { share: TableSelectionShare | n
         tableSharedSelect: (id: string | null) => { d.calls.push(`table:${id}`); },
         setWindowSelected: (id: string | null) => { d.calls.push(`ring:${id}`); },
         glideTo: (id: string) => { d.calls.push(`glide:${id}`); },
+        reveal: (id: string) => { d.calls.push(`reveal:${id}`); },
     };
     return d;
 }
@@ -60,6 +61,21 @@ describe('another window\'s selection here', () => {
         const absent = deps('family');
         applySharedSelection('p1', absent, doc(null));
         expect(absent.calls).toEqual(['ring:p1']);
+    });
+
+    it('the Fan, the Timeline and the Map: the person\'s mark, moved to by the view itself; none: only the mark goes', () => {
+        for (const mode of ['fan', 'timeline', 'map']) {
+            const d = deps(mode);
+            applySharedSelection('p1', d, doc(null));
+            expect(d.calls).toEqual(['ring:p1', 'reveal:p1']);
+            const none = deps(mode);
+            applySharedSelection(null, none, doc(null));
+            expect(none.calls).toEqual(['ring:null']);
+        }
+        // A view without a person's mark (the Overview): the ring only.
+        const other = deps('overview');
+        applySharedSelection('p1', other, doc(null));
+        expect(other.calls).toEqual(['ring:p1']);
     });
 
     it('a card half under the bar counts as out of view', () => {
@@ -119,5 +135,27 @@ describe('a satellite', () => {
         expect(announced).toEqual(['p4']);
         onSelect!({ personId: 'p5', origin: 'main-1' });
         expect(d.calls).toEqual(['ring:p5', 'table:p5']);
+    });
+
+    it('a new focus of its chart goes out and drops the ring; a person picked on its map goes out with the ring kept; unwired: nothing', () => {
+        const announced: string[] = [];
+        const client = {
+            followSelection: true,
+            announceSelection: (id: string) => { announced.push(id); },
+            on: () => () => {},
+        } as unknown as SatelliteClient;
+        const d = deps('family');
+        const stop = wireSatelliteSelection(client, d);
+        window.dispatchEvent(new CustomEvent('strom:focus-changed', { detail: { personId: 'p2' } }));
+        expect(announced).toEqual(['p2']);
+        expect(d.calls).toEqual(['ring:null']);
+        window.dispatchEvent(new CustomEvent(PERSON_CHOSEN_EVENT, { detail: { personId: 'p3' } }));
+        expect(announced).toEqual(['p2', 'p3']);
+        expect(d.calls).toEqual(['ring:null']);
+        stop();
+        window.dispatchEvent(new CustomEvent('strom:focus-changed', { detail: { personId: 'p4' } }));
+        window.dispatchEvent(new CustomEvent(PERSON_CHOSEN_EVENT, { detail: { personId: 'p5' } }));
+        expect(announced).toEqual(['p2', 'p3']);
+        expect(d.share).toBeNull();
     });
 });

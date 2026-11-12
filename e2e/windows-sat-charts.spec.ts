@@ -222,3 +222,105 @@ test('read-only while the main window follows a research or is closed: no edit, 
     await expect(menu(sat).locator('[data-action="view"]')).toBeVisible();
     await expect(editRows()).toHaveCount(0);
 });
+
+const focusOf = (p: Page) => p.evaluate(() => window.Strom.TreeRenderer.getFocusPersonId() as string | null);
+const selectedIn = (p: Page) => p.evaluate(() => window.Strom.TreeRenderer.getWindowSelected() as string | null);
+const chooseIn = (p: Page, id: string) => p.evaluate(async (pid) => { await window.Strom.TreeRenderer.setFocus(pid as never); }, id);
+
+test('the selection between the main window and a chart satellite: the card, the sector, the row; a focus here goes out', async ({ page, context }) => {
+    test.setTimeout(60_000);
+    const treeId = await openMain(page, context);
+    const sat = await openSatellite(context, treeId, 'family', 'cv21aa', []);
+    const [johan, erik, thomas] = [await personId(page, 'Johan', 'Berg'), await personId(page, 'Erik', 'Berg'), await personId(page, 'Thomas', 'Berg')];
+    // Opening the window chose nobody.
+    await page.waitForTimeout(300);
+    expect(await selectedIn(page)).toBeNull();
+    const satFocus = await focusOf(sat);
+
+    // Main → satellite: the card's ring; the satellite's centre stays.
+    const other = (await focusOf(page)) === erik ? thomas : erik;
+    await chooseIn(page, other);
+    await expect(sat.locator(`.person-card.window-selected[data-id="${other}"]`)).toHaveCount(1);
+    expect(await focusOf(sat)).toBe(satFocus);
+
+    // Satellite → main: Focus in the person menu; the main window's centre stays, the ring here goes.
+    const mainFocus = await focusOf(page);
+    await card(sat, 'Johan').click();
+    await menu(sat).locator('[data-action="focus"]').click();
+    await expect.poll(() => selectedIn(page)).toBe(johan);
+    expect(await focusOf(page)).toBe(mainFocus);
+    await expect(sat.locator('.person-card.window-selected')).toHaveCount(0);
+
+    // The Fan: the person's sectors outlined; the Timeline: their row.
+    await sat.locator('.sat-view-segment').getByRole('button', { name: 'Fan' }).click();
+    await expect(sat.locator('#fan-chart .fan-sector').first()).toBeVisible();
+    const ancestor = await sat.evaluate(() => document.querySelector<SVGElement>('#fan-chart .fan-sector[data-fan-kind="anc"][data-fan-person]')!.dataset.fanPerson!);
+    await chooseIn(page, ancestor);
+    await expect(sat.locator('#fan-chart path.fan-mark')).not.toHaveCount(0);
+    await sat.locator('.sat-view-segment').getByRole('button', { name: 'Timeline' }).click();
+    await expect(sat.locator(`#timeline-container .timeline-bar.window-selected[data-person-id="${ancestor}"]`)).toHaveCount(1);
+    await chooseIn(page, johan === mainFocus ? erik : johan);
+    await expect(sat.locator('#timeline-container .timeline-bar.window-selected')).toHaveCount(1);
+    await expect(sat.locator(`#timeline-container .timeline-bar.window-selected[data-person-id="${ancestor}"]`)).toHaveCount(0);
+    // A row clicked here goes out.
+    await sat.locator(`#timeline-container .timeline-bar[data-person-id="${ancestor}"]`).click();
+    await expect.poll(() => selectedIn(page)).toBe(ancestor);
+
+    // "Follow selection" off: nothing sent, nothing taken.
+    await sat.locator('.sat-follow').click();
+    await expect(sat.locator('.sat-follow')).toHaveAttribute('aria-checked', 'false');
+    await chooseIn(page, thomas);
+    await page.waitForTimeout(400);
+    await expect(sat.locator('#timeline-container .timeline-bar.window-selected')).toHaveCount(0);
+    await page.evaluate(() => window.Strom.TreeRenderer.setWindowSelected(null));
+    await sat.locator(`#timeline-container .timeline-bar[data-person-id="${erik}"]`).click();
+    await page.waitForTimeout(400);
+    expect(await selectedIn(page)).toBeNull();
+});
+
+test('a Map satellite: the person\'s places marked, the map moved only when none is in view; a person picked there is selected, the view stays', async ({ page, context }) => {
+    test.setTimeout(60_000);
+    const treeId = await openMain(page, context);
+    const sat = await openSatellite(context, treeId, 'map', 'cv22aa', []);
+    const marker = sat.locator('#map-container .map-marker');
+    await expect(marker.first()).toBeVisible();
+    // Someone with a place on this map (the main window's focus is no new choice).
+    await marker.first().locator('.map-marker-dot').click();
+    const people = await sat.locator('.map-popup .map-popup-person[data-person-id]').evaluateAll(els => els.map(e => (e as HTMLElement).dataset.personId!));
+    const mainFocus = await focusOf(page);
+    const who = people.find(id => id !== mainFocus)!;
+    expect(who).toBeTruthy();
+    await sat.locator('.map-popup-close').click();
+
+    // Main → the map: the places marked; in view, the map stays.
+    const center = () => sat.evaluate(() => JSON.stringify((window.Strom.UI as unknown as { mapCenter: unknown }).mapCenter));
+    const zoom = () => sat.evaluate(() => (window.Strom.UI as unknown as { mapZoom: number }).mapZoom);
+    const before = await center();
+    await chooseIn(page, who);
+    await expect(sat.locator('#map-container .map-marker.map-marker-window-selected')).not.toHaveCount(0);
+    expect(await center()).toBe(before);
+
+    // Out of view: the map moves to them, its zoom kept.
+    await sat.evaluate(() => {
+        const ui = window.Strom.UI as unknown as { mapCenter: unknown; zoomMap(d: number): void };
+        ui.mapCenter = { lat: -45, lon: 170 };
+        ui.zoomMap(0);
+    });
+    await expect(sat.locator('#map-container .map-marker-window-selected')).toHaveCount(0);
+    const z = await zoom();
+    await page.evaluate(() => window.Strom.TreeRenderer.setWindowSelected(null));
+    await chooseIn(page, mainFocus!);
+    await chooseIn(page, who);
+    await expect(sat.locator('#map-container .map-marker.map-marker-window-selected')).not.toHaveCount(0);
+    await expect(sat.locator('#map-container .map-marker.map-marker-window-selected').first()).toBeInViewport();
+    expect(await zoom()).toBe(z);
+
+    // A person picked in the map's bubble: selected in the main window, the satellite stays on its map.
+    await marker.first().locator('.map-marker-dot').click();
+    const picked = await sat.locator('.map-popup .map-popup-person[data-person-id]').first().getAttribute('data-person-id');
+    await sat.locator('.map-popup .map-popup-person[data-person-id]').first().click();
+    await expect.poll(() => selectedIn(page)).toBe(picked);
+    expect(await sat.evaluate(() => window.Strom.TreeRenderer.getViewMode())).toBe('map');
+    expect(await focusOf(page)).toBe(who);
+    await expect(sat.locator('#map-container .map-marker.map-marker-window-selected')).not.toHaveCount(0);
+});

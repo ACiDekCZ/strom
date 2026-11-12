@@ -9641,6 +9641,9 @@
         @media (hover: hover) { .timeline-bar:hover .tl-bar-rect { filter: brightness(0.92); } }
         .timeline-bar.focused .tl-bar-rect { stroke: var(--primary); stroke-width: 2.5; }
         .timeline-bar.focused .tl-name { font-weight: 700; }
+        /* The person selected in another window (spec 079 §2): the card's ring as an outline of the bar. */
+        .timeline-bar.window-selected .tl-bar-rect { stroke: var(--primary); stroke-width: 3; }
+        .timeline-bar.window-selected .tl-name { font-weight: 700; }
         @media (max-width: 640px) {
             /* The narrow label column is for NAMES; the bar shows the era. */
             .tl-name .tl-yr { display: none; }
@@ -10703,6 +10706,15 @@
         .map-marker-fresh .map-marker-dot {
             box-shadow: 0 0 0 3px var(--primary, #4a7c59), var(--shadow-sm);
         }
+        /* A place of the person selected in another window (spec 079 §2): bigger,
+           ringed outside its white border, above its neighbours, its name shown. */
+        .map-marker.map-marker-window-selected { z-index: 2; }
+        .map-marker-window-selected .map-marker-dot {
+            transform: scale(1.3);
+            box-shadow: 0 0 0 3px var(--primary, #4a7c59), var(--shadow-sm);
+        }
+        .map-marker-window-selected .map-marker-label.is-crowded { opacity: 1; }
+        @media (hover: hover) { .map-marker-window-selected .map-marker-dot:hover { transform: scale(1.4); } }
         .map-marker-label {
             position: absolute;
             top: calc(100% + 2px);

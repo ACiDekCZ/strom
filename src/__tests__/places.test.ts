@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import { placeKey, collectPlaces, placeList, placesWithVariants, renamePlace, orphanedPlaceKeys,
     sortPlacesByName, sortPlacesForManager, isPlacesSort, readPlacesSort, DEFAULT_PLACES_SORT, placeFilterText, placeMatchesFilter,
-    MapKind, countPlaceUses, compareHouses, houseKey, groupTownPoints, MappedPlaceInput, TownPoint,
+    MapKind, countPlaceUses, compareHouses, houseKey, groupTownPoints, MappedPlaceInput, TownPoint, mapPointHasPerson,
     splitPlaceHouses, placeTownGroups, townHousePlaces, townOfPlace } from '../places.js';
 import { StromData, Person, PersonId, PartnershipId, Partnership, PlaceGeo } from '../types.js';
 
@@ -364,6 +364,19 @@ describe('groupTownPoints', () => {
         const data = treeWith([person('h', { birthPlace: 'Bělokamen čp. 4', birthAddress: 'čp. 4' }), person('e', { birthPlace: 'Bělokamen' })], [],
             { [placeKey('Bělokamen čp. 4')]: exact(49.2), [placeKey('Bělokamen')]: exact(49.1) });
         expect(groupTownPoints(mapped(data)).map(p => p.type)).toEqual(['place', 'place']);
+    });
+
+    it('a person\'s points (another window\'s selection on the map): a place by its people, a town by its houses and the town itself', () => {
+        const data = treeWith([
+            person('e', { birthPlace: 'Bělokamen', birthAddress: 'čp. 16' }),
+            person('f', { deathPlace: 'Bělokamen' }),
+            person('g', { birthPlace: 'Lhotín' }),
+        ], [], { [placeKey('Bělokamen')]: exact(49), [placeKey('Lhotín')]: exact(48) });
+        const points = groupTownPoints(mapped(data));
+        const town = points.find(p => p.type === 'town')!;
+        const lhotin = points.find(p => p.key === placeKey('Lhotín'))!;
+        expect([mapPointHasPerson(town, 'e'), mapPointHasPerson(town, 'f'), mapPointHasPerson(town, 'g')]).toEqual([true, true, false]);
+        expect([mapPointHasPerson(lhotin, 'g'), mapPointHasPerson(lhotin, 'e')]).toEqual([true, false]);
     });
 });
 

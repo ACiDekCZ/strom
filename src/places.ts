@@ -507,6 +507,12 @@ export interface TownPoint {
 
 export type MapPoint = PlacePoint | TownPoint;
 
+/** Whether a person has a fact at a map point (a town's: at one of its houses or at the town itself). */
+export function mapPointHasPerson(point: MapPoint, personId: string): boolean {
+    if (point.type === 'place') return point.usage.personIds.includes(personId as PersonId);
+    return point.noHouse.has(personId as PersonId) || point.houses.some(h => h.persons.has(personId as PersonId));
+}
+
 /** The prefix of a town point's key and of showPlacesManager's town target. */
 export const TOWN_POINT_PREFIX = 'town:';
 

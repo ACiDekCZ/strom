@@ -116,6 +116,7 @@ function selectionDeps(): SelectionDeps {
         tableSharedSelect: (id) => UI.tableSharedSelect(id),
         setWindowSelected: (id) => TreeRenderer.setWindowSelected(id),
         glideTo: (id) => { ZoomPan.glideToPerson(id); },
+        reveal: (id) => TreeRenderer.revealWindowSelected(id),
     };
 }
 

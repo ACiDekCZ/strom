@@ -4194,12 +4194,53 @@ class TreeRendererClass {
         this.descendantsFullFamilies = enabled;
     }
 
-    /** The person selected in another window (null: none); their card gets its ring now and at every draw. */
+    /**
+     * The person selected in another window (null: none), marked now and at
+     * every draw: their card's ring, their sectors of the Fan, their row of
+     * the Timeline, their places on the Map.
+     */
     setWindowSelected(id: PersonId | null): void {
+        const changed = id !== this.windowSelectedId;
         this.windowSelectedId = id;
         document.querySelectorAll<HTMLElement>('.person-card').forEach(card => {
             card.classList.toggle('window-selected', !!id && card.dataset.id === id);
         });
+        this.markTimelineWindowSelected();
+        if (!changed) return;
+        if (this.viewMode === 'fan') this.fanView?.redraw();
+        if (this.viewMode === 'map') UI.revealMapPerson(null);
+    }
+
+    /** The Timeline's row of the person selected in another window. */
+    private markTimelineWindowSelected(): SVGGElement | null {
+        const id = this.windowSelectedId;
+        let row: SVGGElement | null = null;
+        document.querySelectorAll<SVGGElement>('#timeline-container .timeline-bar[data-person-id]').forEach(g => {
+            const on = !!id && g.dataset.personId === id;
+            g.classList.toggle('window-selected', on);
+            if (on) row = g;
+        });
+        return row;
+    }
+
+    /**
+     * Another window's selection in the Fan, the Timeline or the Map (spec
+     * 079 §2): marked, and the view moves (its zoom kept) only when the mark
+     * is out of view; the focus never changes.
+     */
+    revealWindowSelected(id: PersonId): void {
+        if (this.viewMode === 'fan') {
+            this.fanView?.revealPerson(id);
+        } else if (this.viewMode === 'timeline') {
+            const row = this.markTimelineWindowSelected();
+            const box = document.getElementById('timeline-container');
+            if (!row || !box) return;
+            const r = row.getBoundingClientRect(), c = box.getBoundingClientRect();
+            if (r.top < c.top) box.scrollBy({ top: r.top - c.top - 8, behavior: 'smooth' });
+            else if (r.bottom > c.bottom) box.scrollBy({ top: r.bottom - c.bottom + 8, behavior: 'smooth' });
+        } else if (this.viewMode === 'map') {
+            UI.revealMapPerson(id);
+        }
     }
 
     getWindowSelected(): PersonId | null {
@@ -6625,6 +6666,7 @@ class TreeRendererClass {
                 ], { subtitle: menu.sub, overlayClass: 'fan-menu-sheet', onClose }),
                 hideMenuSheet: () => UI.hideBottomSheet(),
                 remembersPrefs: () => !DataManager.isWindowCopy(),
+                windowSelected: () => this.windowSelectedId,
             });
         }
         this.fanView.render(container);
@@ -6706,6 +6748,7 @@ class TreeRendererClass {
         // A redraw keeps the keyboard on the history cluster it was on.
         const focusedCluster = (document.activeElement as Element | null)?.closest?.('#timeline-container .tl-hist')?.getAttribute('data-hist-ids');
         container.innerHTML = html;
+        this.markTimelineWindowSelected();
         if (focusedCluster) {
             container.querySelector<SVGGElement>(`.tl-hist[data-hist-ids="${CSS.escape(focusedCluster)}"]`)?.focus({ preventScroll: true });
         }

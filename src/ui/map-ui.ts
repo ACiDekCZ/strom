@@ -27,7 +27,10 @@ import { placeGeoHash } from '../place-records.js';
 import { PersonId, PlaceGeo } from '../types.js';
 import {
     collectPlaces, placeKey, PlaceUsage, MapKind, MAP_KINDS, isMapKind, groupTownPoints, knownStreets, MapPoint, TownPoint,
+    mapPointHasPerson,
 } from '../places.js';
+import { getWindowRole } from '../windows/window-role.js';
+import { PERSON_CHOSEN_EVENT } from '../windows/window-selection.js';
 import { KIND_MARK, houseMatches, kindMarks } from '../map-bubble.js';
 import { MQ_MOBILE } from '../breakpoints.js';
 import { collectDatedPlacePoints, DatedPlaceHarvest } from '../map-time.js';
@@ -662,8 +665,44 @@ export const mapMethods = uiModule({
             const check = id?.state === 'check' ? this.mapCheckReason(id, lang) : undefined;
             return this.mapMarkerHtml(info, persons, false, width, height, check);
         }).join('');
+        this.markMapWindowSelected(layer, points);
         declutterMapLabels(layer);
         this.positionMapFollow(container);
+    },
+
+    /** The places of the person selected in another window (spec 079 §2): their markers bigger, ringed. */
+    markMapWindowSelected(layer: HTMLElement, points: MapPoint[]): void {
+        const id = TreeRenderer.getWindowSelected();
+        const keys = new Set(id ? points.filter(p => mapPointHasPerson(p, id)).map(p => this.mapMarkerInfo(p).key) : []);
+        layer.querySelectorAll<HTMLElement>('.map-marker[data-key]').forEach(m => {
+            m.classList.toggle('map-marker-window-selected', keys.has(m.dataset.key ?? ''));
+        });
+    },
+
+    /**
+     * A person selected in another window, on the map: their places marked;
+     * the map moves (its zoom kept) only when none of them is in view. Null:
+     * the marks go.
+     */
+    revealMapPerson(personId: string | null): void {
+        const container = document.getElementById('map-container');
+        const layer = container?.querySelector<HTMLElement>('.map-markers');
+        if (!container || !layer || !this.mapCenter || this.mapTimeOn) return;
+        const points = this.mapPoints();
+        this.markMapWindowSelected(layer, points);
+        if (!personId) return;
+        const own = points.filter(p => mapPointHasPerson(p, personId));
+        if (own.length === 0) return;
+        const { width, height } = this.mapViewportSize(container);
+        const inView = own.some(p => {
+            const at = pointInViewport(p.geo, this.mapCenter!, this.mapZoom, width, height);
+            return at.x >= 0 && at.x <= width && at.y >= 0 && at.y <= height;
+        });
+        if (inView) return;
+        this.mapCenter = fitBounds(own.map(p => p.geo), width, height).center;
+        this.closeMapPopup();
+        this.drawMapTiles(container);
+        this.drawMapMarkers(container, this.mapPlaces());
     },
 
     /**
@@ -1315,9 +1354,18 @@ export const mapMethods = uiModule({
         }
     },
 
-    /** Clicking a person on the map takes you to them in the family view. */
+    /**
+     * Clicking a person on the map takes the view to them in the family view.
+     * A satellite's map selects them instead (spec 079 §2): their places
+     * marked, the choice shared; the view switcher leads to the family.
+     */
     focusFromMap(personId: string): void {
         this.closeMapPopup();
+        if (getWindowRole() === 'satellite') {
+            TreeRenderer.setWindowSelected(personId as PersonId);
+            window.dispatchEvent(new CustomEvent(PERSON_CHOSEN_EVENT, { detail: { personId } }));
+            return;
+        }
         TreeRenderer.presetViewMode('family');
         TreeRenderer.setFocus(personId as PersonId);
     },
