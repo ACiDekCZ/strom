@@ -10,7 +10,7 @@
 - **Ein zweiter Tab der App** öffnet keine vollständige zweite Kopie mehr, die die Liste der Stammbäume und die Einstellungen überschreiben konnte: Er meldet, dass Strom bereits geöffnet ist, und bietet *Dorthin wechseln* oder *Als weiteres Fenster öffnen*; darin geöffnete Links (eine Person, eine Suche, Forschungslinks) erhält das Hauptfenster genau einmal. Der Fenstertitel nennt den geöffneten Stammbaum.
 - **Telefon und Tablet**: Die untere Leiste lautet Familie | Nachkommen | + | *Tabelle* | Mehr, die *Zeitleiste* ist unter Mehr neben *Fächer* und *Karte*. Auf dem Telefon liegt die Legende am unteren Rand und Zurück / Vor darüber (Familie, Fächer). Mehr bietet *Vollbild*, wo der Browser es erlaubt; Safari auf dem iPhone zeigt stattdessen den Weg zum Home-Bildschirm. Eine Diashow lässt ein vorher eingeschaltetes Vollbild an.
 - **Tabelle**: Fixierte Spalten lassen sich beliebig ordnen, *Name* muss nicht zuerst stehen; eine Verschiebung, die nicht geht, wird nicht mehr angeboten, und *ausgefüllt* steht in der ersten Spalte.
-- **Korrekturen**: *Was gesendet wird* zeigt direkt nach dem Neuladen der Seite dieselbe Liste wie davor, nicht *Die genaue Liste der Änderungen lässt sich hier gerade nicht ermitteln*.
+- **Korrekturen**: Die ohne Verfolgen geöffnete *Forschungsübersicht* schließt wieder mit ⤡ (und ×): Das Forschungspanel liegt nach beendetem Verfolgen nicht mehr über der Schaltfläche. *Verfolgung beenden* in der Übersicht beendet nur das Verfolgen; die Übersicht bleibt offen. Der Wechsel zu einer anderen Ansicht schließt die ohne Verfolgen geöffnete Übersicht. *Was gesendet wird* zeigt direkt nach dem Neuladen der Seite dieselbe Liste wie davor, nicht *Die genaue Liste der Änderungen lässt sich hier gerade nicht ermitteln*.
 
 ## 3.27.0
 

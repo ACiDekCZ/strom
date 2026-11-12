@@ -10,7 +10,7 @@ English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md) · [Polski
 - **A second tab of the app** no longer opens a full second copy that could overwrite the list of trees and the settings: it says Strom is already open and offers *Switch there* or *Open as another window*; links opened in it (a person, a search, research links) go to the main window once. The window title names the open tree.
 - **Phone and tablet**: the bottom bar reads Family | Descendants | + | *Table* | More, the *Timeline* moved to More beside *Fan* and *Map*. On a phone the legend sits at the bottom edge and back / forward stand above it (family view, fan). More offers *Full screen* where the browser allows it; Safari on an iPhone gets the way to the Home Screen instead. A slideshow keeps full screen that was on before it.
 - **Table**: pinned columns can be put in any order, *Name* need not be first; a move that cannot be made is no longer offered, and *filled* stands in the first column.
-- **Fixes**: *What will be sent* opened right after reloading the page shows the same list as before, not *The exact list of changes cannot be told here right now*.
+- **Fixes**: *Research overview* opened without following closes again with ⤡ (and ×): the research's panel no longer lies over the button after following ended. *Stop following* in the overview only ends following; the overview stays open. Switching to another view closes the overview opened without following. *What will be sent* opened right after reloading the page shows the same list as before, not *The exact list of changes cannot be told here right now*.
 
 ## 3.27.0
 

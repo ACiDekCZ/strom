@@ -284,3 +284,117 @@ test.describe('the Research overview on a phone held sideways', () => {
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     });
 });
+
+/**
+ * Closing the overview without following (1112): only its ⤡, × or Escape
+ * close it (and another view); "Stop following" in it only ends following.
+ * A research panel shown beside it (an ended following's, or the one without
+ * following) lay over ⤡ and took its click: a drawn overview hides it.
+ */
+test.describe('closing the Research overview without following', () => {
+    /** The research's stream: its hello, for following started from the strip. */
+    async function stream(page: Page): Promise<void> {
+        await page.route(`${BRIDGE}/events*`, route => route.fulfill({
+            status: 200, headers: { 'access-control-allow-origin': '*', 'content-type': 'text/event-stream' },
+            body: `event: hello\ndata: ${JSON.stringify({ tree: { id: UUID, name: 'Fíškovi' }, head: HEAD, links: LINKS, accepts: ACCEPTS, working: [], waiting: WAITING, queue: QUEUE, researches: DIRECTIONS })}\n\n`,
+        }));
+    }
+
+    /** Followed from the overview's strip. */
+    async function followFromStrip(page: Page): Promise<void> {
+        await strip(page).locator('.research-overview__follow-live').click();
+        await expect.poll(() => following(page), { timeout: 10000 }).toBe(true);
+    }
+
+    const panel = (page: Page) => page.locator('#live-panel');
+
+    /** ⤡ takes the click (nothing lies over it), the overview goes and the next ask of the bridge leaves it closed. */
+    async function closeStaysClosed(page: Page): Promise<void> {
+        const close = ov(page).locator('.research-overview__close');
+        const hit = await close.evaluate((b) => {
+            const r = b.getBoundingClientRect();
+            return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) === b;
+        });
+        expect(hit).toBe(true);
+        await close.click();
+        await expect(ov(page)).toHaveCount(0);
+        await poll(page);
+        await poll(page);
+        await expect(ov(page)).toHaveCount(0);
+        expect(await following(page)).toBe(false);
+    }
+
+    test('after following ended by itself: its panel hides under the overview, ⤡ closes it and it stays closed', async ({ page }) => {
+        const bridge = await researchTree(page);
+        await stream(page);
+        await page.evaluate(() => { (globalThis as { __LIVE_GRACE_MS?: number }).__LIVE_GRACE_MS = 0; });
+        await openFromMenu(page);
+        await followFromStrip(page);
+        // The bridge goes away: following ends, its panel says so (with Close).
+        bridge.down = true;
+        await page.clock.setFixedTime(new Date(NOW.getTime() + 120_000));
+        await expect.poll(() => following(page), { timeout: 20000 }).toBe(false);
+        await expect(panel(page)).toHaveClass(/\bended\b/);
+        await expect(panel(page)).toBeVisible();
+        // Back: the overview without following hides the panel (it lay over ⤡).
+        bridge.down = false;
+        await poll(page);
+        await openFromMenu(page);
+        await expect(strip(page)).toBeVisible();
+        await expect(panel(page)).toBeHidden();
+        await closeStaysClosed(page);
+        // The ended following's panel as it was.
+        await expect(panel(page)).toBeVisible();
+        await expect(panel(page)).toHaveClass(/\bended\b/);
+    });
+
+    test('the research panel without following hides under the overview; ⤡ closes it, at 1440 and 1024', async ({ page }) => {
+        await researchTree(page);
+        for (const width of [1440, 1024]) {
+            await page.setViewportSize({ width, height: 900 });
+            await page.evaluate(() => window.Strom.UI.openResearchIdlePanel(window.Strom.UI.activeResearchId()!));
+            await expect(panel(page)).toBeVisible();
+            await page.evaluate(() => window.Strom.UI.openResearchOverview());
+            await expect(ov(page)).toBeVisible();
+            await expect(panel(page)).toBeHidden();
+            await closeStaysClosed(page);
+            await expect(panel(page)).toBeVisible();
+        }
+    });
+
+    test('Escape and another view close it as ⤡ does; the next ask leaves it closed', async ({ page }) => {
+        await researchTree(page);
+        await openFromMenu(page);
+        await page.keyboard.press('Escape');
+        await expect(ov(page)).toHaveCount(0);
+        await poll(page);
+        await expect(ov(page)).toHaveCount(0);
+        await openFromMenu(page);
+        await page.locator('#view-mode-timeline').click();
+        await expect(ov(page)).toHaveCount(0);
+        await poll(page);
+        await expect(ov(page)).toHaveCount(0);
+        // The same view again changes nothing.
+        await openFromMenu(page);
+        await page.locator('#view-mode-timeline').click();
+        await expect(ov(page)).toBeVisible();
+    });
+
+    test('"Stop following" in the overview ends following only: the overview stays, without following, and ⤡ closes it', async ({ page }) => {
+        await researchTree(page);
+        await stream(page);
+        await openFromMenu(page);
+        await followFromStrip(page);
+        // Followed: another view keeps the overview.
+        await page.locator('#view-mode-timeline').click();
+        await expect(ov(page)).toBeVisible();
+        await page.locator('#view-mode-family').click();
+        await ov(page).locator('.research-overview__head .live-panel-action').click();
+        expect(await following(page)).toBe(false);
+        await expect(ov(page)).toBeVisible();
+        await expect(ov(page).locator('.research-overview__head .live-panel-action')).toHaveCount(0);
+        await expect(strip(page).locator('.research-overview__follow-live')).toHaveText('Follow live');
+        expect(await readOnly(page)).toBe(false);
+        await closeStaysClosed(page);
+    });
+});

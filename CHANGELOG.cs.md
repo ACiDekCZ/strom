@@ -10,7 +10,7 @@
 - **Druhá karta aplikace** už neotevře plnou druhou kopii, která mohla přepsat seznam stromů a nastavení: oznámí, že Strom už je otevřený, a nabídne *Přepnout tam* nebo *Otevřít jako další okno*; odkazy otevřené v ní (osoba, hledání, odkazy výzkumu) dostane hlavní okno právě jednou. Titulek okna nese jméno otevřeného stromu.
 - **Telefon a tablet**: dolní lišta je Rodina | Potomci | + | *Tabulka* | Více, *Časová osa* je ve Více vedle *Vějíře* a *Mapy*. Na telefonu je legenda dole u hrany a Zpět / Vpřed nad ní (Rodina, Vějíř). Ve Více je *Celá obrazovka*, kde ji prohlížeč umí; Safari na iPhonu místo ní ukáže cestu na plochu. Prezentace nechá zapnutou celou obrazovku, která byla zapnutá před ní.
 - **Tabulka**: ukotvené sloupce jdou seřadit libovolně, *Jméno* nemusí být první; posun, který nejde, se nenabízí, a *vyplněno* je v prvním sloupci.
-- **Opravy**: *Co se pošle* otevřené hned po obnovení stránky ukazuje stejný seznam jako před ním, ne *Přesný seznam úprav tu teď nejde spočítat*.
+- **Opravy**: *Přehled výzkumu* otevřený bez sledování jde znovu zavřít tlačítkem ⤡ (i ×): panel výzkumu už po skončeném sledování neleží přes tlačítko. *Ukončit sledování* v Přehledu jen ukončí sledování a Přehled zůstane otevřený. Přepnutí na jiný pohled Přehled otevřený bez sledování zavře. *Co se pošle* otevřené hned po obnovení stránky ukazuje stejný seznam jako před ním, ne *Přesný seznam úprav tu teď nejde spočítat*.
 
 ## 3.27.0
 

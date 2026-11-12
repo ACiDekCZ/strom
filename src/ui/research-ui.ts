@@ -277,7 +277,16 @@ const PANEL_CHANGES = 5;
 
 /** The small panel hides on another tree and while the overview (which shows the same) is drawn. */
 function livePanelHidden(s: LiveSession): boolean {
-    return DataManager.getCurrentTreeId() !== s.treeId || (s.overview && !s.ended);
+    return DataManager.getCurrentTreeId() !== s.treeId || (s.overview && !s.ended) || viewingShown();
+}
+
+/**
+ * The overview open without following on the tree on screen: it hides the
+ * panel (an ended following's, or the one without following) as a followed
+ * research's overview does; the panel lay over its ⤡ and took its click.
+ */
+function viewingShown(): boolean {
+    return !!viewing && viewing.treeId === DataManager.getCurrentTreeId();
 }
 
 /** Whether a panel section is folded: the user's choice, else the panel's own. */
@@ -2812,7 +2821,8 @@ export const researchUiMethods = uiModule({
         if (!v) return;
         if (DataManager.getCurrentTreeId() !== v.treeId || this.activeResearchId() !== v.researchId || (live && !live.ended)) {
             this.closeOverviewViewing();
-            if (draw) this.renderResearchOverview();
+            // The panel it hid shows again (and the overview goes with the redraw).
+            if (draw) this.renderLivePanel();
             return;
         }
         const status = onComputer() ? this.researchStatusOf(v.researchId) : null;
@@ -3751,7 +3761,10 @@ export const researchUiMethods = uiModule({
     stopLiveFollow(silent = false): void {
         const s = live;
         if (!s) return;
-        this.endLiveFollow(s, 'stopped');
+        // "Stop following" asked with the overview open: it stays (an end the app makes closes it).
+        const keepOverview = !silent && !s.ended && s.overview
+            && DataManager.getCurrentTreeId() === s.treeId && this.isResearchOverviewOpen();
+        this.endLiveFollow(s, 'stopped', { keepOverview });
         if (silent) return;
         this.showToast(strings.research.stopped);
         // The one-time "How should changes go?" right away, not at a later click (063 U3 A7).
@@ -3759,7 +3772,7 @@ export const researchUiMethods = uiModule({
     },
 
     /** End a session: close the stream, lift read-only, keep the last state. */
-    endLiveFollow(s: LiveSession, reason: 'ended' | 'other' | 'stopped'): void {
+    endLiveFollow(s: LiveSession, reason: 'ended' | 'other' | 'stopped', opts: { keepOverview?: boolean } = {}): void {
         if (live !== s) return;
         forgetLiveBridge();
         resetQueueLists();
@@ -3777,6 +3790,9 @@ export const researchUiMethods = uiModule({
         if (followNote?.treeId === s.treeId) clearFollowNote();
         if (reason === 'stopped') {
             live = null;
+            // Stopped with its overview open: following ends, the overview stays, now without following
+            // (only its ⤡, × or Escape close it).
+            if (opts.keepOverview) this.openOverviewViewing();
         } else if (!wasEnded && reason === 'other') {
             this.showToast(strings.research.liveOtherTree, 6000);
         }
@@ -3807,7 +3823,7 @@ export const researchUiMethods = uiModule({
         if (!panel) return;
         // The same rule as the panel's own redraw: a drawn overview hides it.
         if (live) panel.hidden = livePanelHidden(live);
-        else if (idlePanel) panel.hidden = this.activeResearchId() !== idlePanel;
+        else if (idlePanel) panel.hidden = this.activeResearchId() !== idlePanel || viewingShown();
     },
 
     /** The panel element (created on first use). */
@@ -4832,7 +4848,8 @@ export const researchUiMethods = uiModule({
         panel.setAttribute('aria-label', r.panelIdle);
         panel.classList.remove('ended', 'collapsed');
         panel.classList.add('idle');
-        panel.hidden = this.activeResearchId() !== researchId;
+        // The overview open without following shows the same (and the panel lay over its ⤡).
+        panel.hidden = this.activeResearchId() !== researchId || viewingShown();
         panel.replaceChildren();
 
         const head = el('div', 'live-panel-head');

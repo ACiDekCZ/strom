@@ -387,6 +387,12 @@ export const researchOverviewMethods = uiModule({
         this.renderLivePanel();
     },
 
+    /** Another view chosen: the overview open without following closes as by its ⤡ (a followed research's stays). */
+    researchOverviewViewSwitched(): void {
+        if (!this.isResearchOverviewOpen() || followedOverview()) return;
+        if (overviewViewing()) this.closeResearchOverview();
+    },
+
     /** Narrow the tree's area beside the docked overview, keeping the view's middle in the middle. */
     setResearchOverviewDocked(on: boolean): void {
         if (document.body.classList.contains('overview-docked') === on) return;

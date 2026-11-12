@@ -493,6 +493,8 @@ export const miscMethods = uiModule({
     // ==================== DISPLAY VIEW MODE (family / descendants) ====================
 
     setDisplayViewMode(mode: ViewMode): void {
+        // The Research overview open without following closes with a switch, as by its ⤡.
+        if (mode !== TreeRenderer.getViewMode()) this.researchOverviewViewSwitched();
         TreeRenderer.setViewMode(mode); // re-renders + calls updateViewModeUI
     },
 
