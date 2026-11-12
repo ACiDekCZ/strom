@@ -353,7 +353,9 @@ function readFanSetting<T>(key: string, parse: (v: string) => T | null, fallback
     } catch { return fallback; }
 }
 
+/** A fan setting kept on the device; a satellite window keeps its own in its memory only (spec 079 §0). */
 function writeFanSetting(key: string, value: string): void {
+    if (DataManager.isWindowCopy()) return;
     try { localStorage.setItem(key, value); } catch { /* ignore */ }
 }
 
@@ -6622,6 +6624,7 @@ class TreeRendererClass {
                     { divider: true, rows: [{ label: strings.fan.menuCancel, run: () => { /* closes */ }, id: 'fan-menu-cancel' }] },
                 ], { subtitle: menu.sub, overlayClass: 'fan-menu-sheet', onClose }),
                 hideMenuSheet: () => UI.hideBottomSheet(),
+                remembersPrefs: () => !DataManager.isWindowCopy(),
             });
         }
         this.fanView.render(container);

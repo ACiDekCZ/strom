@@ -82,6 +82,8 @@ export interface FanViewHost {
     menuSheet(menu: FanMenuSpec, onClose: () => void): void;
     /** Close that sheet. */
     hideMenuSheet(): void;
+    /** The view's own choices (the legend open) are kept on the device; a satellite window keeps them in its memory only. */
+    remembersPrefs?(): boolean;
 }
 
 /** One sector's menu (§5.4). */
@@ -1207,7 +1209,9 @@ export class FanViewController {
 
     private toggleLegend(): void {
         this.legendOpen = !this.legendOpen;
-        try { localStorage.setItem(FAN_STORAGE_KEYS.legendOpen, this.legendOpen ? '1' : '0'); } catch { /* ignore */ }
+        if (this.host.remembersPrefs?.() !== false) {
+            try { localStorage.setItem(FAN_STORAGE_KEYS.legendOpen, this.legendOpen ? '1' : '0'); } catch { /* ignore */ }
+        }
         this.renderLegend();
     }
 
