@@ -320,6 +320,21 @@ const appViewStateTarget: ViewStateTarget = {
     centerView: () => TreeRenderer.centerForViewMode(),
 };
 
+/**
+ * The starting state a new window of `kind` gets from this window (§1 "What
+ * is carried over"; the main window's ⧉ and a satellite's alike).
+ */
+export function windowStartState(kind: SatelliteKind): unknown {
+    if (kind !== 'table') return captureAppViewState(kind);
+    const state = UI.tableWindowState();
+    // From another view: the person selected here is the selected row there.
+    if (TreeRenderer.getViewMode() !== 'table' && state.rowType === 'persons') {
+        const focus = TreeRenderer.getFocusPersonId();
+        if (focus) state.selected = `p:${focus}`;
+    }
+    return state;
+}
+
 /** The main window's state of its views for a new window of `kind` (undefined: the Table's is table-ui's). */
 export function captureAppViewState(kind: SatelliteKind): ViewWindowState | undefined {
     return captureViewState(kind, appViewStateSource);

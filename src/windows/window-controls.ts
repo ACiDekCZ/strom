@@ -22,7 +22,7 @@ import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import type { WindowRegistry, WindowEntry } from './window-registry.js';
-import { captureAppViewState } from './window-start.js';
+import { windowStartState } from './window-start.js';
 import type { SatelliteKind } from './window-role.js';
 import {
     canOpenWindows, onWindowOfferChange, openInNewWindow, setViewModeCheck, setWindowControlsRefresher, setWindowOpener,
@@ -70,25 +70,13 @@ function isMac(): boolean {
 
 // ---- opening ----
 
-/** The starting state a new window of `kind` gets from this window (§1 "What is carried over"). */
-function initialStateFor(kind: SatelliteKind): unknown {
-    if (kind !== 'table') return captureAppViewState(kind);
-    const state = UI.tableWindowState();
-    // From another view: the person selected here is the selected row there.
-    if (TreeRenderer.getViewMode() !== 'table' && state.rowType === 'persons') {
-        const focus = TreeRenderer.getFocusPersonId();
-        if (focus) state.selected = `p:${focus}`;
-    }
-    return state;
-}
-
 /**
  * Open a satellite window (from a click's handler only). Blocked by the
  * browser: the toast with "Try again" (a new click, a new permission).
  */
 function openWindow(kind: SatelliteKind, initial?: unknown): void {
     if (!registry) return;
-    const start = initial !== undefined ? initial : initialStateFor(kind);
+    const start = initial !== undefined ? initial : windowStartState(kind);
     const before = registry.size;
     const id = registry.openSatellite(kind, start);
     if (!id) {

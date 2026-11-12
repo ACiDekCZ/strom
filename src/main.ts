@@ -31,7 +31,7 @@ import { collectPoolGarbage } from './media-pool.js';
 import { keepLifelineChipsFor } from './lifeline-view.js';
 import { parseDeepLink, deepLinkTreeMatches, stripDeepLinkParams } from './deep-link.js';
 import { shouldRegisterServiceWorker, registerServiceWorker, linkManifest, isBetaBuild, appModeFor, captureInstallPrompt, INSTALL_AVAILABILITY_EVENT, isSafariOnComputer, safariAppName } from './pwa.js';
-import { decideWindowRole, getWindowRole, setWindowRole, satelliteViewMode, tryBecomeMain, type SatelliteParams } from './windows/window-role.js';
+import { decideWindowRole, getWindowRole, setWindowRole, satelliteViewMode, tryBecomeMain, type SatelliteKind, type SatelliteParams } from './windows/window-role.js';
 import { startMainWindow, startSatelliteClient, startSatelliteSelection, forwardSatelliteLaunches, showSecondTab, openLinksFromOtherWindows, makeSatelliteMain, openMainWindow, wireSatelliteViewStart } from './windows/window-start.js';
 import { mountSatStates } from './windows/sat-states.js';
 import { wireWindowDrafts } from './windows/window-drafts.js';
@@ -40,7 +40,9 @@ import { formatLiveClock } from './live-time.js';
 import { startedAgainAsMain } from './resume-view.js';
 import { initWindowControls } from './windows/window-controls.js';
 import { windowTitle } from './windows/window-title.js';
-import { mountSatHeader } from './windows/sat-header.js';
+import { mountSatHeader, SAT_VIEWS } from './windows/sat-header.js';
+import { followSatelliteView, openAnotherWindow } from './windows/sat-views.js';
+import { currentSystem, isDesktopSystem, setWindowControlsRefresher } from './windows/window-open.js';
 import type { SatelliteClient } from './windows/satellite.js';
 import type { WindowRegistry } from './windows/window-registry.js';
 
@@ -326,7 +328,17 @@ function startSatelliteWindow(params: SatelliteParams, debugOptions: DebugOption
     satelliteClient = client;
     // The header in place of the toolbar (§2): the toolbar and the bottom bar are not mounted.
     const header = mountSatHeader(document, client, {
-        kind: params.kind,
+        kind: () => client.kind,
+        // K2: the view switcher (this window only) and ⧉ "Open another window" on a computer's system (§1).
+        ...(SAT_VIEWS.includes(params.kind) ? { switchView: (kind: SatelliteKind) => TreeRenderer.setViewMode(satelliteViewMode(kind)) } : {}),
+        ...(isDesktopSystem(currentSystem()) ? {
+            openAnother: () => openAnotherWindow(client),
+            // Without the main window (§3.3) no window can join: its tooltip says why.
+            anotherBlocked: () => {
+                if (client.connection === 'main-closed') return strings.win.mainClosed(formatLiveClock(client.lastHeardAt, Date.now(), SettingsManager.getLanguage()));
+                return client.connection === 'connected' && client.hasTree ? '' : strings.win.openAnother;
+            },
+        } : {}),
         undo: () => UI.performUndo(),
         redo: () => UI.performRedo(),
         refreshUndoRedo: () => UI.refreshUndoRedoToolbar(),
@@ -343,7 +355,7 @@ function startSatelliteWindow(params: SatelliteParams, debugOptions: DebugOption
     const states = mountSatStates(document, client, {
         goToMain: () => { void client.requestMainFocus(); },
         openStrom: () => openMainWindow(),
-        makeMain: () => { void makeSatelliteMain(client, params.kind); },
+        makeMain: () => { void makeSatelliteMain(client, client.kind); },
         closeWindow: () => window.close(),
         toast: (message, ms) => UI.showToast(message, ms),
         formatTime: (ts) => formatLiveClock(ts, Date.now(), SettingsManager.getLanguage()),
@@ -368,6 +380,13 @@ function startSatelliteWindow(params: SatelliteParams, debugOptions: DebugOption
     UI.initSearch();
     UI.initHistoryManage();
     if (debugOptions.enabled) TreeRenderer.setDebugOptions(debugOptions);
+
+    // The view switched in this window (K2): its address, the main window's list, the header and the title follow.
+    setWindowControlsRefresher(followSatelliteView(client, (kind) => {
+        satelliteKind = kind;
+        header.refresh();
+        updateWindowTitle();
+    }));
 
     // The view's state carried from the main window (§1): its person, generations, zoom, the map's frame.
     const applyViewStart = wireSatelliteViewStart(client);

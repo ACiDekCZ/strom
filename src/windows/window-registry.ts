@@ -93,7 +93,24 @@ interface Entry extends WindowEntry {
     win: Window | null;
     initial?: unknown;
     initSent: boolean;
+    /**
+     * Another satellite of this window's browsing context opened it (§2 ⧉):
+     * `window.open('', its name)` finds it, so it can be brought forward
+     * and closed as one this window opened.
+     */
+    reachable?: boolean;
 }
+
+/** A window a satellite opened, until its hello (§2 ⧉). */
+interface Spawned {
+    kind: SatelliteKind;
+    state?: unknown;
+    reachable: boolean;
+    at: number;
+}
+
+/** A window a satellite opened that has not said hello by then is forgotten (blocked meanwhile, closed at once). */
+export const SPAWN_FORGET_MS = 60000;
 
 /** Window size per kind (§1 openSatellite). */
 export const DEFAULT_WINDOW_SIZE: Record<SatelliteKind, { width: number; height: number }> = {
@@ -118,7 +135,8 @@ export interface ScreenGeometry {
     availHeight: number;
 }
 
-function currentGeometry(): ScreenGeometry | null {
+/** This window and its screen now (null outside a browser). */
+export function currentGeometry(): ScreenGeometry | null {
     if (typeof window === 'undefined' || typeof screen === 'undefined') return null;
     const s = screen as Screen & { availLeft?: number; availTop?: number };
     return {
@@ -168,6 +186,7 @@ export class WindowRegistry {
     private readonly openWindowFn: (url: string, name: string, features: string) => Window | null;
     private readonly geometry: () => ScreenGeometry | null;
     private readonly entries = new Map<string, Entry>();
+    private readonly spawned = new Map<string, Spawned>();
     private readonly changeListeners = new Set<() => void>();
     private readonly selectHandlers = new Set<SelectHandler>();
     private linkHandler: LinkHandler | null = null;
@@ -215,6 +234,8 @@ export class WindowRegistry {
             b.on('undo', () => { this.host.undo(); this.sync(); }),
             b.on('redo', () => { this.host.redo(); this.sync(); }),
             b.on('bye', m => this.onBye(m)),
+            b.on('view', m => this.onView(m)),
+            b.on('spawn', m => this.onSpawn(m)),
             b.on('select', m => this.handleSelect(m)),
             b.on('focus-req', m => this.onFocusRequest(m.from)),
             b.on('focused', m => this.focusWaiters.get(m.from)?.()),
@@ -304,6 +325,10 @@ export class WindowRegistry {
     focusWindow(id: string): Promise<boolean> {
         const entry = this.entries.get(id);
         if (!entry) return Promise.resolve(false);
+        // A window another satellite opened: found by its name (only one known to live: else a blank one would open).
+        if (!entry.win && entry.reachable && entry.connected) {
+            try { entry.win = this.openWindowFn('', satelliteWindowName(id), ''); } catch { entry.win = null; }
+        }
         try { entry.win?.focus(); } catch { /* a closed window */ }
         const answered = this.waitFocused(id);
         this.bus.post({ type: 'focus-req', to: id });
@@ -473,7 +498,17 @@ export class WindowRegistry {
 
     private onHello(m: MessageOf<'hello'>): void {
         const id = m.windowId || m.from;
-        const entry: Entry = this.entries.get(id) ?? { id, kind: m.kind, treeId: m.treeId, opened: false, connected: false, win: null, initSent: false };
+        let entry = this.entries.get(id);
+        if (!entry) {
+            entry = { id, kind: m.kind, treeId: m.treeId, opened: false, connected: false, win: null, initSent: false };
+            // Opened by another satellite: its starting state, as for a window opened here.
+            const spawn = this.spawned.get(id);
+            if (spawn) {
+                this.spawned.delete(id);
+                if (spawn.state !== undefined) entry.initial = spawn.state;
+                entry.reachable = spawn.reachable;
+            }
+        }
         entry.kind = m.kind;
         entry.treeId = m.treeId;
         entry.connected = true;
@@ -504,6 +539,28 @@ export class WindowRegistry {
         this.checkRevision();
         this.bus.post({ type: 'edit-result', to: m.from, editId: m.editId, ok: true, revision: this.rev });
         this.postStatus(false);
+    }
+
+    /** A satellite switched its view (§2 K2): the list names the new one. */
+    private onView(m: MessageOf<'view'>): void {
+        const entry = this.entries.get(m.windowId || m.from);
+        if (!entry || entry.kind === m.kind) return;
+        entry.kind = m.kind;
+        this.emitChange();
+    }
+
+    /**
+     * A satellite opened another window itself (§2 ⧉): noted until its hello,
+     * which then gets `state` as `init`. Reachable by its name when the
+     * opener is (a window opened here, or by such a window).
+     */
+    private onSpawn(m: MessageOf<'spawn'>): void {
+        const now = Date.now();
+        for (const [id, s] of this.spawned) if (now - s.at > SPAWN_FORGET_MS) this.spawned.delete(id);
+        if (!m.windowId || this.entries.has(m.windowId)) return;
+        const opener = this.entries.get(m.from);
+        const reachable = !!opener && (opener.opened || !!opener.reachable);
+        this.spawned.set(m.windowId, { kind: m.kind, ...(m.state !== undefined ? { state: m.state } : {}), reachable, at: now });
     }
 
     private onBye(m: MessageOf<'bye'>): void {

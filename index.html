@@ -7460,11 +7460,32 @@
             border: none; border-radius: 8px; background: transparent; color: var(--text); cursor: pointer;
         }
         .sat-icon-btn:disabled { opacity: .4; cursor: default; }
+        /* ⧉ Open another window (K2): 32 px, outlined. */
+        .sat-another { box-sizing: border-box; border: 1px solid var(--border); color: var(--text-light); font-size: 15px; line-height: 1; }
+        /* The view switcher (K2, 2a/2d/2e): the view tabs from 960 px (the toolbar's own
+           classes, 26 px high), below that one button "{view} ▾" (30 px) with a menu. */
+        .sat-header .sat-view-segment { flex: none; align-self: center; height: 26px; margin-left: 0; }
+        .sat-header .sat-view-segment button { height: 26px; padding: 0 10px; font-family: inherit; font-size: 13px; }
+        .sat-view-btn {
+            flex: none; display: inline-flex; align-items: center; gap: 6px;
+            height: 30px; padding: 0 10px; margin: 0; box-sizing: border-box;
+            border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
+            color: var(--text); font: inherit; font-size: 13px; font-weight: 500; white-space: nowrap; cursor: pointer;
+        }
+        .sat-view-btn-caret { font-size: 10px; color: var(--text-light); }
+        .sat-view-btn.is-open { background: var(--hover-bg); }
+        @media (min-width: 960px) { .sat-view-btn { display: none; } }
+        @media (max-width: 959px) { .sat-header .sat-view-segment { display: none; } }
+        .sat-view-menu .view-window-item[aria-checked="true"] .view-window-item-label { font-weight: 600; }
         .sat-follow:focus-visible,
+        .sat-view-btn:focus-visible,
+        .sat-view-segment button:focus-visible,
         .sat-icon-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         @media (hover: hover) {
             .sat-follow:hover,
+            .sat-view-btn:hover,
             .sat-icon-btn:not(:disabled):hover { background: var(--hover-bg); }
+            .sat-another:not(:disabled):hover { color: var(--text); border-color: var(--primary); }
         }
         @media (prefers-reduced-motion: reduce) {
             .sat-follow-track, .sat-follow-knob { transition: none; }
@@ -7482,6 +7503,7 @@
         @media (pointer: coarse) {
             .sat-follow { min-width: 44px; justify-content: center; }
             .sat-icon-btn { width: 44px; height: 44px; }
+            .sat-view-btn { height: 40px; }
         }
         /* A phone held sideways: the header keeps 48 px and the safe areas. */
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
@@ -7493,6 +7515,8 @@
            window greyed. */
         html.sat-muted .sat-follow,
         html.sat-muted .sat-header-divider,
+        html.sat-muted .sat-view-segment,
+        html.sat-muted .sat-view-btn,
         html.sat-muted .sat-icon-btn { opacity: .45; }
         .sat-strip {
             position: fixed; top: 48px; left: 0; right: 0; z-index: 99;

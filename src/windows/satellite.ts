@@ -107,7 +107,6 @@ interface QueuedEdit {
 
 export class SatelliteClient {
     readonly windowId: string;
-    readonly kind: SatelliteKind;
     /** The tree the window was opened for (the main window may send another). */
     readonly requestedTreeId: TreeId | null;
     private readonly bus: WindowBus;
@@ -120,6 +119,7 @@ export class SatelliteClient {
     private readonly listeners = new Map<keyof SatelliteEvents, Set<(p: unknown) => void>>();
     private readonly unsubscribe: (() => void)[] = [];
 
+    private _kind: SatelliteKind;
     private _treeId: TreeId | null = null;
     private _treeName = '';
     private _revision = -1;
@@ -148,7 +148,7 @@ export class SatelliteClient {
 
     constructor(params: SatelliteParams, opts: SatelliteClientOptions = {}) {
         this.windowId = params.windowId;
-        this.kind = params.kind;
+        this._kind = params.kind;
         this.requestedTreeId = params.treeId;
         this.bus = opts.bus ?? new WindowBus(params.windowId);
         this.data = opts.data ?? DataManager;
@@ -161,6 +161,8 @@ export class SatelliteClient {
 
     // ---- state ----
 
+    /** The view this window shows now (switched in its header, §2 K2). */
+    get kind(): SatelliteKind { return this._kind; }
     get treeId(): TreeId | null { return this._treeId; }
     get treeName(): string { return this._treeName; }
     /** The window revision of the copy (-1 before the first tree). */
@@ -250,6 +252,25 @@ export class SatelliteClient {
 
     // ---- actions ----
 
+    /**
+     * This window switched its view (§2 K2): the main window's list names
+     * the new one, and a hello after its reload says it too.
+     */
+    setKind(kind: SatelliteKind): void {
+        if (kind === this._kind) return;
+        this._kind = kind;
+        if (this.started) this.bus.post({ type: 'view', windowId: this.windowId, kind });
+    }
+
+    /**
+     * This window opened another one itself (§2 ⧉): the main window lists it
+     * at its hello and hands it `state` as its starting state (`init`), as
+     * for a window it opened.
+     */
+    announceSpawn(windowId: string, kind: SatelliteKind, state: unknown): void {
+        this.bus.post({ type: 'spawn', windowId, kind, treeId: this._treeId ?? this.requestedTreeId, ...(state !== undefined ? { state } : {}) });
+    }
+
     undo(): void {
         if (this.mainId && !this.readOnly()) this.bus.post({ type: 'undo' });
     }
@@ -320,7 +341,7 @@ export class SatelliteClient {
 
     private hello(): void {
         this.helloAt = Date.now();
-        this.bus.post({ type: 'hello', windowId: this.windowId, kind: this.kind, treeId: this._treeId ?? this.requestedTreeId });
+        this.bus.post({ type: 'hello', windowId: this.windowId, kind: this._kind, treeId: this._treeId ?? this.requestedTreeId });
     }
 
     private setConnection(c: SatelliteConnection): void {

@@ -3696,6 +3696,7 @@ class TreeRendererClass {
      */
     presetViewMode(mode: ViewMode): void {
         if (this.viewMode === mode) return;
+        if (this.windowView) this.windowView = mode;
         this.viewMode = mode;
         this.resetChildrenShown();
         this.persistViewMode();
@@ -3703,7 +3704,8 @@ class TreeRendererClass {
 
     /**
      * A satellite window's view (spec 079 §2): every tree load opens it, and
-     * nothing of it is remembered (the main window's last view stays).
+     * nothing of it is remembered (the main window's last view stays). A
+     * switch of the view in the window (setViewMode) becomes its view.
      */
     setWindowView(mode: ViewMode): void {
         this.windowView = mode;
@@ -3736,6 +3738,8 @@ class TreeRendererClass {
         // the table's active row's person goes along, and the table opens at the focus.
         const fromTable = this.viewMode === 'table' ? UI.tableFocusPerson?.(this.focusPersonId) ?? null : null;
         if (mode === 'table') UI.tableTakeFocus?.(this.focusPersonId);
+        // A satellite window's view is switched in its header (spec 079 §2 K2): another tree opens in it too.
+        if (this.windowView) this.windowView = mode;
         this.viewMode = mode;
         this.resetChildrenShown();
         this.persistViewMode();

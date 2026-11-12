@@ -82,6 +82,13 @@ export type WindowMessageBody =
     | { type: 'research-menu'; to: string; reqId: string; items: unknown[] }
     /** main → overview window: the research's state (§6, K3). */
     | { type: 'research-state'; state: unknown }
+    /** sat → main: the window switched its view (its kind in the main window's list, its address). */
+    | { type: 'view'; windowId: string; kind: SatelliteKind }
+    /**
+     * sat → main: this window opened another one itself (§2 ⧉ "Open another
+     * window"); its starting state goes to it as `init` after its hello.
+     */
+    | { type: 'spawn'; windowId: string; kind: SatelliteKind; treeId: TreeId | null; state?: unknown }
     /** sat → main: the window is going away. */
     | { type: 'bye'; windowId: string; bounds?: WindowBounds }
     /** main → all: the main window is going away. */
@@ -107,7 +114,7 @@ export interface ChannelLike {
 }
 
 const TYPES = new Set<string>(['hello', 'init', 'tree', 'patch', 'edit', 'edit-result', 'select', 'undo', 'redo', 'status',
-    'focus-req', 'focused', 'research-action', 'research-menu-req', 'research-menu', 'research-state', 'bye', 'main-bye', 'link', 'close']);
+    'focus-req', 'focused', 'research-action', 'research-menu-req', 'research-menu', 'research-state', 'view', 'spawn', 'bye', 'main-bye', 'link', 'close']);
 
 function isWindowMessage(data: unknown): data is WindowMessage {
     if (!data || typeof data !== 'object') return false;

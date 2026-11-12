@@ -85,7 +85,7 @@ test.describe('desktop (1440)', () => {
         const treeId = await openMain(page);
         const sat = await openSatellite(context, treeId);
         await expect(sat.locator('header.sat-header')).toBeVisible();
-        await expect(sat.locator('.sat-header-title')).toHaveText('Vrtišek · Table');
+        await expect(sat.locator('.sat-header-title')).toHaveText('Vrtišek');
         await expect(sat.locator('.sat-follow')).toHaveAttribute('role', 'switch');
         await expect(sat.locator('.sat-follow')).toHaveAttribute('aria-checked', 'true');
         // Not mounted at all (not only hidden).
@@ -97,7 +97,7 @@ test.describe('desktop (1440)', () => {
 
         // A rename in the main window reaches the header and the title.
         await page.evaluate((id) => window.Strom.TreeManager.renameTree(id as never, 'Vrtišek z Pažitkova'), treeId);
-        await expect(sat.locator('.sat-header-title')).toHaveText('Vrtišek z Pažitkova · Table');
+        await expect(sat.locator('.sat-header-title')).toHaveText('Vrtišek z Pažitkova');
         await expect(sat).toHaveTitle('Table – Vrtišek z Pažitkova – Strom');
         await sat.close();
     });

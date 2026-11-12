@@ -45,7 +45,8 @@ export function isDesktopSystem(info: SystemInfo): boolean {
     return platform === 'windows' || platform === 'macos' || platform === 'linux' || platform === 'chrome os' || platform === 'chromeos';
 }
 
-function currentSystem(): SystemInfo {
+/** This browser's system (navigator). */
+export function currentSystem(): SystemInfo {
     if (typeof navigator === 'undefined') return { userAgent: '', maxTouchPoints: 0 };
     const uaData = (navigator as Navigator & { userAgentData?: { mobile?: boolean; platform?: string } }).userAgentData;
     return {
