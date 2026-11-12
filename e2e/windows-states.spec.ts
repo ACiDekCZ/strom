@@ -266,6 +266,9 @@ test.describe('desktop (1440)', () => {
         await expect(tv(sat, '.tv-editor-input')).toHaveValue('Kapustov');
         await expect(tv(sat, '.tv-draft-kept')).toHaveText('Draft kept · Enter applies, Esc discards');
         await expect(tv(sat, '.tv-editor-input')).toBeFocused();
+        // The refused edit has no Undo: not in a pill, not riding in the toast.
+        await expect(toast(sat, 'The tree changed in another window meanwhile.').getByRole('button', { name: 'Undo' })).toHaveCount(0);
+        await expect(sat.locator('.undo-toast')).toHaveCount(0);
 
         // Esc discards it.
         await tv(sat, '.tv-editor-input').press('Escape');

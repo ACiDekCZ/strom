@@ -337,6 +337,8 @@ function startSatelliteWindow(params: SatelliteParams, debugOptions: DebugOption
         },
     });
     startSatelliteSelection(client);
+    // A refused edit was not applied: its Undo pill (standing or waiting) goes before the toast says so.
+    client.on('conflict', () => UI.dismissUndoToast());
     // Its states under the header or in place of the view (§3).
     const states = mountSatStates(document, client, {
         goToMain: () => { void client.requestMainFocus(); },
