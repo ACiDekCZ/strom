@@ -135,3 +135,90 @@ test('every view draws in a satellite without an error, and the window stores no
     // The main window's settings: the map's kinds as before.
     expect(await page.evaluate(() => window.Strom.SettingsManager.getMapKinds())).toContain('birth');
 });
+
+const menu = (p: Page) => p.locator('.context-menu.person-menu');
+const nameOf = (p: Page, id: string) => p.evaluate((pid) => window.Strom.DataManager.getPerson(pid as never)?.firstName ?? null, id);
+
+test('a Family satellite edits through the main window, in Undo of both; Focus and Descendants change this window only', async ({ page, context }) => {
+    test.setTimeout(60_000);
+    const treeId = await openMain(page, context);
+    const errors: string[] = [];
+    const sat = await openSatellite(context, treeId, 'family', 'cv11aa', errors);
+    const johan = await personId(page, 'Johan', 'Berg');
+    const mainFocus = await page.evaluate(() => window.Strom.TreeRenderer.getFocusPersonId());
+
+    // The person dialog: saved by the main window, shown in both.
+    await card(sat, 'Johan').click();
+    await expect(menu(sat).locator('[data-action="focus"]')).toBeVisible();
+    await expect(menu(sat).locator('[data-action="descendants"]')).toBeVisible();
+    await menu(sat).locator('[data-action="edit"]').click();
+    await sat.locator('#input-firstname').fill('Johannes');
+    await sat.locator('.modal').filter({ has: sat.locator('#input-firstname') }).getByRole('button', { name: 'Save', exact: true }).click();
+    await expect.poll(() => nameOf(page, johan)).toBe('Johannes');
+    await expect(card(sat, 'Johannes')).toBeVisible();
+    await expect(card(page, 'Johannes')).toBeVisible();
+    // In the main window's Undo; the satellite's Undo takes it back in both.
+    await expect(page.locator('#toolbar-undo-btn')).toBeEnabled();
+    await sat.locator('#toolbar-undo-btn').click();
+    await expect.poll(() => nameOf(page, johan)).toBe('Johan');
+    await expect.poll(() => nameOf(sat, johan)).toBe('Johan');
+
+    // Add a child from the card's menu: the main window saves it; its Undo takes it back in the satellite too.
+    await card(sat, 'Johan').click();
+    await menu(sat).locator('[data-action="child"]').click();
+    const rel = sat.locator('#relation-modal');
+    await expect(rel).toBeVisible();
+    await rel.locator('#rel-firstname').fill('Ottokar');
+    await rel.locator('#rel-submit-btn').click();
+    await expect(rel).toBeHidden();
+    await expect.poll(() => page.evaluate(() => window.Strom.DataManager.getAllPersons().some(p => p.firstName === 'Ottokar'))).toBe(true);
+    await page.locator('#toolbar-undo-btn').click();
+    await expect.poll(() => sat.evaluate(() => window.Strom.DataManager.getAllPersons().some(p => p.firstName === 'Ottokar'))).toBe(false);
+
+    // Focus and Descendants: this window's centre and view, the main window's stay.
+    await card(sat, 'Johan').click();
+    await menu(sat).locator('[data-action="focus"]').click();
+    await expect.poll(() => sat.evaluate(() => window.Strom.TreeRenderer.getFocusPersonId())).toBe(johan);
+    await card(sat, 'Johan').click();
+    await menu(sat).locator('[data-action="descendants"]').click();
+    await expect.poll(() => sat.evaluate(() => window.Strom.TreeRenderer.getViewMode())).toBe('descendants');
+    expect(await page.evaluate(() => [window.Strom.TreeRenderer.getFocusPersonId(), window.Strom.TreeRenderer.getViewMode()])).toEqual([mainFocus, 'family']);
+    expect(await writesOf(sat)).toEqual([]);
+    expect(errors).toEqual([]);
+});
+
+test('read-only while the main window follows a research or is closed: no edit, no add, the record only to look at', async ({ page, context }) => {
+    test.setTimeout(60_000);
+    const treeId = await openMain(page, context);
+    const sat = await openSatellite(context, treeId, 'family', 'cv12aa', []);
+    const johan = await personId(page, 'Johan', 'Berg');
+    const editRows = () => menu(sat).locator('[data-action="edit"], [data-action="add"], [data-action="child"], [data-action="parent"], [data-action="partner"], [data-action="delete"]');
+
+    // The main window follows a research (its status says so).
+    await page.evaluate(() => {
+        (window.Strom.DataManager as unknown as { isLiveFollowing(): boolean }).isLiveFollowing = () => true;
+        window.dispatchEvent(new CustomEvent('strom:data-changed'));
+    });
+    await expect.poll(() => sat.evaluate(() => window.Strom.DataManager.isTreeLocked())).toBe(true);
+    await card(sat, 'Johan').click();
+    await expect(menu(sat).locator('[data-action="view"]')).toBeVisible();
+    await expect(editRows()).toHaveCount(0);
+    // Focus stays (this window's view).
+    await expect(menu(sat).locator('[data-action="focus"]')).toBeVisible();
+    await sat.keyboard.press('Escape');
+    // An edit tried anyway is refused: the data stay.
+    await sat.evaluate((id) => { window.Strom.DataManager.updatePerson(id as never, { firstName: 'Johannes' } as never); }, johan);
+    expect(await nameOf(page, johan)).toBe('Johan');
+
+    // Following ends; then the main window closes.
+    await page.evaluate(() => {
+        (window.Strom.DataManager as unknown as { isLiveFollowing(): boolean }).isLiveFollowing = () => false;
+        window.dispatchEvent(new CustomEvent('strom:data-changed'));
+    });
+    await expect.poll(() => sat.evaluate(() => window.Strom.DataManager.isTreeLocked())).toBe(false);
+    await page.close();
+    await expect.poll(() => sat.evaluate(() => window.Strom.DataManager.isTreeLocked())).toBe(true);
+    await card(sat, 'Johan').click();
+    await expect(menu(sat).locator('[data-action="view"]')).toBeVisible();
+    await expect(editRows()).toHaveCount(0);
+});

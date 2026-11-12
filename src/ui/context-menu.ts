@@ -96,24 +96,33 @@ export interface PersonMenuAction {
     glyph?: string;
 }
 
-/** A satellite's person menu leaves out the rows of the chart (spec 079 §2: one view per window, K1 the Table). */
+/** Rows that move a chart, its focus or its view: a satellite's Table has no chart to move (spec 079 K1). */
 function isChartRow(a: PersonMenuAction): boolean {
-    return !!a.kind || !!a.lead || a.action.startsWith('view-link-') || a.action === LINE_JUMP_PARENTS_ACTION
-        || a.action === LINE_JUMP_CHILDREN_ACTION || a.action.startsWith(ROD_ONLY_ACTION) || a.action === ROD_CLEAR_ACTION
-        || a.action === 'rod-only' || a.action === 'toggle-children'
-        // Following a research is the main window's (its research, its bridge).
-        || a.action === 'live-stop';
+    return !!a.kind || !!a.lead || a.action === LINE_JUMP_PARENTS_ACTION || a.action === LINE_JUMP_CHILDREN_ACTION
+        || a.action === 'toggle-children';
 }
 
 /**
- * The person menu as this window offers it: a satellite shows one view of
- * the main window's tree, so the rows that move a chart or its focus, or
- * switch the view, are not there (Focus, Descendants, the rows shown in
- * place, the view links, "Only the X line", stop following).
+ * Rows a satellite never offers (spec 079 §2): the view links and "Only the
+ * X line" (views of the main window's research), and stop following (its
+ * research, its bridge).
+ */
+function isMainWindowRow(a: PersonMenuAction): boolean {
+    return a.action.startsWith('view-link-') || a.action.startsWith(ROD_ONLY_ACTION) || a.action === ROD_CLEAR_ACTION
+        || a.action === 'rod-only' || a.action === 'live-stop';
+}
+
+/**
+ * The person menu as this window offers it. A satellite shows one view at
+ * a time (K2): on a chart its rows stay (Focus, Descendants, the rows shown
+ * in place, the jumps — they change this window only); in its Table the
+ * rows of the chart are not there. The rows of the main window's research
+ * views never are.
  */
 function forWindow(items: PersonMenuAction[]): PersonMenuAction[] {
     if (getWindowRole() !== 'satellite') return items;
-    const out = items.filter(a => !isChartRow(a));
+    const table = TreeRenderer.getViewMode() === 'table';
+    const out = items.filter(a => !isMainWindowRow(a) && !(table && isChartRow(a)));
     return out.map((a, i) => (i === 0 && a.divider ? { ...a, divider: false } : a));
 }
 
