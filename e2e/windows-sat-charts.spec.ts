@@ -324,3 +324,59 @@ test('a Map satellite: the person\'s places marked, the map moved only when none
     expect(await focusOf(page)).toBe(who);
     await expect(sat.locator('#map-container .map-marker.map-marker-window-selected')).not.toHaveCount(0);
 });
+
+test('a card\'s person menu in a Family satellite: the research rows run by the main window; with it closed, greyed under their own heading', async ({ page, context }) => {
+    test.setTimeout(60_000);
+    const treeId = await openMain(page, context);
+    await page.evaluate(() => {
+        const ui = window.Strom.UI as unknown as Record<string, unknown>;
+        const ran: string[] = [];
+        (window as unknown as { __ran: string[] }).__ran = ran;
+        ui.personResearchMenuItems = () => [{ action: 'research-check', label: 'Check the records', badge: 'ai' }];
+        const run = ui.runPersonMenuAction as (p: string, a: string) => void;
+        ui.runPersonMenuAction = function (this: unknown, p: string, a: string) {
+            if (a === 'research-check') { ran.push(`${p} ${a}`); return; }
+            run.call(this, p, a);
+        };
+    });
+    const sat = await openSatellite(context, treeId, 'family', 'cv31aa', []);
+    const johan = await personId(page, 'Johan', 'Berg');
+
+    await card(sat, 'Johan').click();
+    await expect(menu(sat).locator('.win-research-head')).toHaveText('Research · runs in the main window');
+    await menu(sat).locator('[data-action="win-research:research-check"]').click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __ran: string[] }).__ran)).toEqual([`${johan} research-check`]);
+
+    await page.close();
+    await expect.poll(() => sat.evaluate(() => window.Strom.DataManager.isTreeLocked())).toBe(true);
+    await card(sat, 'Johan').click();
+    await expect(menu(sat).locator('.win-research-head')).toHaveText('Research · main window only');
+    await expect(menu(sat).getByRole('menuitem', { name: /Check the records/ })).toHaveAttribute('aria-disabled', 'true');
+});
+
+test('photos: shown in a satellite; an edit there keeps every photo of the stored tree', async ({ page, context }) => {
+    test.setTimeout(60_000);
+    const treeId = await openMain(page, context);
+    const photos = (p: Page) => p.evaluate(() => Object.fromEntries(window.Strom.DataManager.getAllPersons()
+        .filter(x => x.photo).map(x => [x.id, x.photo as string])));
+    const before = await photos(page);
+    // Long enough to be kept in the media pool when stored (data: URLs, not pool references, in memory).
+    expect(Object.values(before).some(v => v.startsWith('data:') && v.length >= 1024)).toBe(true);
+
+    const sat = await openSatellite(context, treeId, 'family', 'cv32aa', []);
+    expect(await photos(sat)).toEqual(before);
+    const img = sat.locator('.person-card img').first();
+    await expect(img).toBeVisible();
+    await expect.poll(() => img.evaluate(i => (i as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+
+    // An edit of a name in the satellite, saved by the main window.
+    const erik = await personId(page, 'Erik', 'Berg');
+    await sat.evaluate((id) => { window.Strom.DataManager.updatePerson(id as never, { firstName: 'Erich' } as never); }, erik);
+    await expect.poll(() => nameOf(page, erik)).toBe('Erich');
+    await sat.close();
+
+    // The stored tree, read again: every photo as it was.
+    await page.reload();
+    await expect(card(page, 'Erich')).toBeVisible();
+    expect(await photos(page)).toEqual(before);
+});
