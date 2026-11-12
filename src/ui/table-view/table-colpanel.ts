@@ -30,6 +30,9 @@ export interface ColumnPanelHandlers {
     onClose(): void;
 }
 
+/** The place of an arrow not offered (a move at the end of its run): the other arrow stays where it was. */
+const MOVE_GAP = '<span class="tv-cp-move tv-cp-move-gap" aria-hidden="true"></span>';
+
 function esc(text: string): string {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
@@ -133,12 +136,16 @@ export class ColumnPanel {
             if (all) { handlers.onGroupShown(all.dataset.group!, all.getAttribute('aria-pressed') !== 'true'); return; }
             const collapse = t.closest<HTMLElement>('.tv-cp-gcollapse');
             if (collapse) { handlers.onCollapse(collapse.dataset.group!, collapse.getAttribute('aria-pressed') !== 'true'); return; }
-            const move = t.closest<HTMLElement>('.tv-cp-move');
-            if (move && move.getAttribute('aria-disabled') !== 'true') {
-                const sel = `.tv-cp-move[data-col="${move.dataset.col}"][data-dir="${move.dataset.dir}"]`;
-                handlers.onMove(move.dataset.col!, move.dataset.dir === 'up' ? -1 : 1);
-                // A click need not focus a button (Safari): the arrows stay under the pointer and the keys.
-                this.list.querySelector<HTMLElement>(sel)?.focus({ preventScroll: true });
+            const move = t.closest<HTMLElement>('.tv-cp-move[data-col]');
+            if (move) {
+                const col = move.dataset.col!;
+                handlers.onMove(col, move.dataset.dir === 'up' ? -1 : 1);
+                // A click need not focus a button (Safari): the arrows stay under the pointer and the keys;
+                // at the end of its run the arrow is gone, the other one (or the checkbox) takes the focus.
+                const item = this.list.querySelector<HTMLElement>(`.tv-cp-item[data-col="${col}"]`);
+                (item?.querySelector<HTMLElement>(`.tv-cp-move[data-dir="${move.dataset.dir}"]`)
+                    ?? item?.querySelector<HTMLElement>('.tv-cp-move[data-dir]')
+                    ?? item?.querySelector<HTMLElement>('.tv-cp-check'))?.focus({ preventScroll: true });
             }
         });
         this.list.addEventListener('keydown', (e) => {
@@ -202,11 +209,12 @@ export class ColumnPanel {
                         + `<label class="tv-cp-label"><input type="checkbox" class="tv-cp-check" data-col="${esc(col.id)}"${on ? ' checked' : ''}${locked ? ' disabled' : ''}>`
                         + `<span class="tv-cp-name">${esc(name)}</span></label>`
                         + (pinned.has(col.id) ? `<span class="tv-cp-note">${esc(strings.table.pinnedLabel)}</span>` : '')
-                        + (on && !locked
-                            ? `<button type="button" class="tv-cp-move" data-col="${esc(col.id)}" data-dir="up" aria-label="${esc(`${strings.table.moveUp}: ${name}`)}"${up ? '' : ' aria-disabled="true"'}>↑</button>`
-                            + `<button type="button" class="tv-cp-move" data-col="${esc(col.id)}" data-dir="down" aria-label="${esc(`${strings.table.moveDown}: ${name}`)}"${down ? '' : ' aria-disabled="true"'}>↓</button>`
+                        // Only a move that can be made is offered (spec 082 K2.1); a lone arrow keeps its place.
+                        + (up || down
+                            ? (up ? `<button type="button" class="tv-cp-move" data-col="${esc(col.id)}" data-dir="up" aria-label="${esc(`${strings.table.moveUp}: ${name}`)}">↑</button>` : MOVE_GAP)
+                            + (down ? `<button type="button" class="tv-cp-move" data-col="${esc(col.id)}" data-dir="down" aria-label="${esc(`${strings.table.moveDown}: ${name}`)}">↓</button>` : MOVE_GAP)
                             : '')
-                        + (on && !locked && !this.phone ? '<span class="tv-cp-grip" aria-hidden="true">⠿</span>' : '')
+                        + ((up || down) && !this.phone ? '<span class="tv-cp-grip" aria-hidden="true">⠿</span>' : '')
                         + '</li>';
                 }
                 html += '</ul>';

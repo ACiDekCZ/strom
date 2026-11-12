@@ -67,7 +67,7 @@ export interface CoverageCell {
     low: boolean;
     /** "{a} of {b}" ("average of {n}" for a completeness column). */
     title: string;
-    /** The cell is the row's label ("filled", in the name column). */
+    /** The cell is the row's label ("filled", in the first column). */
     label?: boolean;
 }
 
@@ -77,7 +77,7 @@ export function coverageCell(c: Coverage): CoverageCell {
     return { text: `${c.percent} %`, low: c.percent < 50, title };
 }
 
-/** The coverage row's label cell (§6.1: "filled" in the name column). */
+/** The coverage row's label cell (§6.1: "filled" in the first column, spec 082 K2.1). */
 export function coverageLabel(): CoverageCell {
     return { text: strings.table.coverage, low: false, title: '', label: true };
 }

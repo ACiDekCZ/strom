@@ -234,8 +234,9 @@ let mounted: Mounted | null = null;
 /** The coverage row's cells (§6.1) for the rows last drawn; computed when a column is first drawn. */
 let coverage: { rows: readonly TableRow[]; cells: Map<string, CoverageCell> } | null = null;
 
-function coverageOf(m: TableModel, type: RowType, rows: readonly TableRow[], col: ColumnDef, pass: UnionPredicate | null): CoverageCell {
-    if (col.id === lockedColumn(type)) return coverageLabel();
+/** A column's coverage cell; the first drawn column (`firstId`, whichever it is; spec 082 K2.1) carries the row's label. */
+function coverageOf(m: TableModel, rows: readonly TableRow[], col: ColumnDef, pass: UnionPredicate | null, firstId: string | undefined): CoverageCell {
+    if (col.id === firstId) return coverageLabel();
     // §16.2: the research's signals are not facts to fill in.
     if (col.group === 'research') return { text: '–', low: false, title: strings.table.na };
     if (!coverage || coverage.rows !== rows) coverage = { rows, cells: new Map() };
@@ -889,7 +890,7 @@ export const tableMethods = uiModule({
             liveOff: research ? new Set(display.columns
                 .filter(c => c.group === 'research' && (c.id === 'rTasks' || c.id === 'rAgent') && researchColumnLiveOff(research, c.id as ResearchColumnId))
                 .map(c => c.id)) : undefined,
-            coverage: st.coverageRow ? (col) => coverageOf(m, type, rows, col, pass) : undefined,
+            coverage: st.coverageRow ? (col) => coverageOf(m, rows, col, pass, display.columns[0]?.id) : undefined,
             selected: st.selected,
             selectedShared: !!selectionShare?.active(),
             label: `${strings.viewModeSwitch.table} – ${strings.table.rows[type]}`,

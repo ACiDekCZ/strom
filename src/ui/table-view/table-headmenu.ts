@@ -4,9 +4,10 @@
  * On top the column's whole name (and what a computed one is computed
  * from), then: sort ascending / descending / add to sort · filter, only
  * empty, only filled (when part C2 gives the filter) · pin left or unpin ·
- * move left / right · hide. `headMenuItems` builds the entries without the
- * DOM; `openHeadMenu` shows them as a menu under the head cell (a computer
- * and a tablet; a phone shows them in a sheet, table-ui.ts).
+ * move left / right (only a move that can be made) · hide. `headMenuItems`
+ * builds the entries without the DOM; `openHeadMenu` shows them as a menu
+ * under the head cell (a computer and a tablet; a phone shows them in a
+ * sheet, table-ui.ts).
  */
 
 import { strings } from '../../strings.js';
@@ -67,12 +68,10 @@ export function headMenuItems(ctx: HeadMenuContext): HeadMenuEntry[] {
     const place: HeadMenuItem[] = [];
     if (ctx.pinned && !ctx.locked) place.push({ id: 'unpin', label: t.unpin, icon: '⇥', run: ctx.unpin });
     else if (!ctx.pinned && ctx.canPin) place.push({ id: 'pin', label: t.pin, icon: '⇤', run: ctx.pin });
-    if (!ctx.locked) {
-        place.push(
-            { id: 'moveLeft', label: t.moveLeft, icon: '←', hint: 'Alt + ←', disabled: !ctx.canMoveLeft, run: () => ctx.move(-1) },
-            { id: 'moveRight', label: t.moveRight, icon: '→', hint: 'Alt + →', disabled: !ctx.canMoveRight, run: () => ctx.move(1) },
-            { id: 'hide', label: t.hide, icon: '×', run: ctx.hide });
-    }
+    // A move that cannot be made is not offered (spec 082 K2.1), the locked column's too.
+    if (ctx.canMoveLeft) place.push({ id: 'moveLeft', label: t.moveLeft, icon: '←', hint: 'Alt + ←', run: () => ctx.move(-1) });
+    if (ctx.canMoveRight) place.push({ id: 'moveRight', label: t.moveRight, icon: '→', hint: 'Alt + →', run: () => ctx.move(1) });
+    if (!ctx.locked) place.push({ id: 'hide', label: t.hide, icon: '×', run: ctx.hide });
     if (place.length) out.push(SEP, ...place);
     return out;
 }

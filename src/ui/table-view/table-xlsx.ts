@@ -24,7 +24,6 @@ import { columnCoverage, coverageCell, coverageLabel } from './table-coverage.js
 import { isPlaceColumn, type CellFinding, type CheckIndex } from './table-checks.js';
 import { buildExportTable, type ExportLine, type TableCsvInput } from './table-export.js';
 import type { CellValue, TableRow } from './table-model.js';
-import { lockedColumn } from './table-state.js';
 import { coverageUnionsOf } from './table-subrows.js';
 
 export interface TableXlsxInput extends TableCsvInput {
@@ -133,9 +132,11 @@ export function buildTableXlsx(input: TableXlsxInput): TableXlsx {
     // Row 2: the head; row 3: the coverage row (§6.1) over the rows written.
     const head: XlsxCell[] = t.head.map(text => ({ text, style: XLSX_STYLE.bold }));
     const unitsOf = coverageUnionsOf(input.pass);
+    // The row's label in the first column, whichever it is (spec 082 K2.1).
+    const labelAt = t.columns.findIndex(c => !!c);
     const coverage: (XlsxCell | null)[] = t.columns.map((c, i) => {
         if (!c) return null;
-        if (c.id === lockedColumn(input.type)) return { text: coverageLabel().text, style: XLSX_STYLE.faint };
+        if (i === labelAt) return { text: coverageLabel().text, style: XLSX_STYLE.faint };
         const cov = columnCoverage(input.model, input.rows, c, unitsOf);
         const cell = coverageCell(cov);
         const style = cell.low ? XLSX_STYLE.bold : XLSX_STYLE.faint;

@@ -39,7 +39,7 @@
 import { strings } from '../../strings.js';
 import { cellPlainText, columnLabel, groupLabel, type ColumnDef, type SortSpec } from './table-columns.js';
 import { rowKey, type CellName, type CellSeverity, type CellValue, type ResearchCellDetail, type ResearchSignal, type RowType, type TableModel, type TableRow } from './table-model.js';
-import { columnRun, groupRuns, MIN_COLUMN_WIDTH, type CollapsedBand } from './table-state.js';
+import { columnRun, groupRuns, lockedColumn, MIN_COLUMN_WIDTH, type CollapsedBand } from './table-state.js';
 import { columnOffsets, columnWindow, lineOffsets, lineWindow, type ColumnWindow } from './table-window.js';
 import { lineCell, lineKey, lineLevel, plainLines, type GridLine } from './table-subrows.js';
 import type { CoverageCell } from './table-coverage.js';
@@ -1398,13 +1398,18 @@ export class TableGrid {
     }
 
     /**
-     * The column that carries the row's tail: the first; in the Events table
-     * the person or couple when it is pinned (the narrow Type keeps its text, §14.1).
+     * The column that carries the row's tail: the locked one (the name), wherever
+     * it stands in the pinned zone (spec 082 K2.1); in the Events table the person
+     * or couple when it is pinned (the narrow Type keeps its text, §14.1).
      */
     private tailColumn(input: GridInput): number {
-        if (input.type !== 'events') return 0;
-        const at = input.columns.findIndex(c => c.id === 'evWho');
-        return at > 0 && at < input.pinned ? at : 0;
+        if (input.type === 'events') {
+            const who = input.columns.findIndex(c => c.id === 'evWho');
+            if (who >= 0 && who < input.pinned) return who;
+        }
+        const lock = lockedColumn(input.type);
+        const at = input.columns.findIndex((c, i) => c.id === lock && !input.bands?.[i]);
+        return at >= 0 ? at : 0;
     }
 
     /**

@@ -4,7 +4,7 @@
  * pinning, collapsed groups and the setup a saved view keeps.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import {
     applyColumnSetup, canMoveColumn, canPinColumn, catalogColumns, columnRun, columnSetupOf, defaultTypeState, displayColumns,
     groupRuns, hideColumn, lockedColumn, moveColumnBy, moveColumnRun, moveColumnTo, normalizeColumns, pinColumn, resetColumns,
@@ -12,6 +12,15 @@ import {
     type RowTypeState,
 } from '../ui/table-view/table-state.js';
 import { stickyLefts } from '../ui/table-view/table-window.js';
+import { headMenuItems, SEP, type HeadMenuContext } from '../ui/table-view/table-headmenu.js';
+import { buildExportTable } from '../ui/table-view/table-export.js';
+import { buildTableXlsx } from '../ui/table-view/table-xlsx.js';
+import { buildTableModel } from '../ui/table-view/table-model.js';
+import { columnById, type ColumnDef } from '../ui/table-view/table-columns.js';
+import { columnName } from '../xlsx.js';
+import { readXlsx } from './helpers/xlsx-read.js';
+import { setLanguage } from '../strings.js';
+import type { PersonId, StromData } from '../types.js';
 
 const people = (): RowTypeState => defaultTypeState('persons');
 
@@ -69,7 +78,9 @@ describe('table columns: order', () => {
         expect(columnRun(['person', 'birth', 'birth', 'death', 'death'], 1, 0)).toEqual([0, 0]);
         // A pinned birth column and a scrolling one are apart.
         expect(columnRun(['person', 'birth', 'birth', 'birth'], 2, 2)).toEqual([2, 3]);
-        expect(columnRun(['person', 'birth', 'birth', 'birth'], 2, 1)).toEqual([1, 1]);
+        // In the pinned zone any place (spec 082 K2.1), the name's too.
+        expect(columnRun(['person', 'birth', 'birth', 'birth'], 2, 1)).toEqual([0, 1]);
+        expect(columnRun(['person', 'birth', 'birth', 'birth'], 2, 0)).toEqual([0, 1]);
 
         const st = people();
         expect(canMoveColumn('persons', st, 'bDate', -1)).toBe(false);
@@ -192,5 +203,136 @@ describe('table columns: sorting from the header menu', () => {
         expect(st.sort).toEqual([{ col: 'dDate', dir: 'desc' }, { col: 'name', dir: 'asc' }]);
         sortAdd(st, 'dDate');
         expect(st.sort[0]).toEqual({ col: 'dDate', dir: 'asc' });
+    });
+});
+
+describe('table columns: the pinned zone in any order (spec 082 K2.1)', () => {
+    /** name · bPlace · wDate pinned, the rest scrolling. */
+    const pinnedThree = (): RowTypeState => {
+        const st = people();
+        pinColumn('persons', st, 'bPlace');
+        pinColumn('persons', st, 'wDate');
+        return st;
+    };
+
+    it('any pinned column moves anywhere in the zone, the name too; nothing crosses the zone\'s edge', () => {
+        const st = pinnedThree();
+        expect(st.columns.slice(0, 3)).toEqual(['name', 'bPlace', 'wDate']);
+        expect(canMoveColumn('persons', st, 'name', -1)).toBe(false);
+        expect(canMoveColumn('persons', st, 'name', 1)).toBe(true);
+        expect(moveColumnBy('persons', st, 'name', 1)).toBe(true);
+        expect(st.columns.slice(0, 3)).toEqual(['bPlace', 'name', 'wDate']);
+        // Across groups within the zone.
+        expect(moveColumnBy('persons', st, 'wDate', -2)).toBe(true);
+        expect(st.columns.slice(0, 3)).toEqual(['wDate', 'bPlace', 'name']);
+        expect(st.pinned).toBe(3);
+        // Out of the zone or into it: refused.
+        expect(canMoveColumn('persons', st, 'name', 1)).toBe(false);
+        expect(moveColumnBy('persons', st, 'name', 1)).toBe(false);
+        expect(moveColumnTo('persons', st, 'bDate', 'bPlace')).toBe(false);
+        expect(canMoveColumn('persons', st, 'bDate', -1)).toBe(false);
+        // The scrolling zone keeps its rules: within the group only.
+        expect(moveColumnBy('persons', st, 'dDate', -1)).toBe(false);
+        // The panel's drag in the zone.
+        expect(moveColumnTo('persons', st, 'name', 'wDate')).toBe(true);
+        expect(st.columns.slice(0, 3)).toEqual(['name', 'wDate', 'bPlace']);
+    });
+
+    it('a name not first stays pinned and shown; pinning goes behind the last pinned; normalizing keeps the zone\'s order', () => {
+        const st = pinnedThree();
+        moveColumnBy('persons', st, 'name', 2);
+        expect(st.columns.slice(0, 3)).toEqual(['bPlace', 'wDate', 'name']);
+        expect(hideColumn('persons', st, 'name')).toBe(false);
+        expect(unpinColumn('persons', st, 'name')).toBe(false);
+        expect(pinColumn('persons', st, 'dDate')).toBe(true);
+        expect(st.columns.slice(0, 4)).toEqual(['bPlace', 'wDate', 'name', 'dDate']);
+        // Unpinning the first column leaves the name pinned where it is.
+        expect(unpinColumn('persons', st, 'bPlace')).toBe(true);
+        expect(st.columns.slice(0, 3)).toEqual(['wDate', 'name', 'dDate']);
+        expect(st.pinned).toBe(3);
+        // A setup round-trips with the name in the middle.
+        const other = people();
+        applyColumnSetup('persons', other, columnSetupOf(st));
+        expect(other.columns).toEqual(st.columns);
+        expect(other.pinned).toBe(3);
+
+        // Normalizing: the zone's order kept; a missing name or a name out of the zone goes first into it.
+        const kept: RowTypeState = { ...people(), columns: ['bDate', 'name', 'dDate'], pinned: 2 };
+        normalizeColumns('persons', kept);
+        expect(kept.columns).toEqual(['bDate', 'name', 'dDate']);
+        expect(kept.pinned).toBe(2);
+        const missing: RowTypeState = { ...people(), columns: ['bDate', 'dDate'], pinned: 1 };
+        normalizeColumns('persons', missing);
+        expect(missing.columns).toEqual(['name', 'bDate', 'dDate']);
+        expect(missing.pinned).toBe(2);
+        const outside: RowTypeState = { ...people(), columns: ['bDate', 'dDate', 'name'], pinned: 1 };
+        normalizeColumns('persons', outside);
+        expect(outside.columns).toEqual(['name', 'bDate', 'dDate']);
+        expect(outside.pinned).toBe(2);
+    });
+
+    it('the header menu offers only a move that can be made, never greyed; no empty part', () => {
+        const noop = (): void => {};
+        const ctx = (over: Partial<HeadMenuContext>): HeadMenuContext => ({
+            pinned: false, locked: false, canPin: false, canMoveLeft: false, canMoveRight: false,
+            sortAsc: noop, sortDesc: noop, sortAdd: noop, pin: noop, unpin: noop, move: noop, hide: noop, ...over,
+        });
+        const ids = (c: HeadMenuContext): (string | null)[] => headMenuItems(c).map(e => (e === SEP ? null : e.id));
+        const items = (c: HeadMenuContext) => headMenuItems(c).filter((e): e is Exclude<typeof e, null> => e !== SEP);
+
+        // At the start of its group: only right.
+        expect(ids(ctx({ canMoveRight: true }))).toEqual(['sortAsc', 'sortDesc', 'sortAdd', null, 'moveRight', 'hide']);
+        // The name alone pinned: no move, no hide, no unpin, no separator at the end.
+        expect(ids(ctx({ pinned: true, locked: true }))).toEqual(['sortAsc', 'sortDesc', 'sortAdd']);
+        // The name in a zone of three: both moves, still no hide or unpin.
+        expect(ids(ctx({ pinned: true, locked: true, canMoveLeft: true, canMoveRight: true })))
+            .toEqual(['sortAsc', 'sortDesc', 'sortAdd', null, 'moveLeft', 'moveRight']);
+        for (const c of [ctx({}), ctx({ canMoveLeft: true }), ctx({ pinned: true, locked: true })]) {
+            expect(items(c).some(e => e.disabled)).toBe(false);
+        }
+    });
+});
+
+describe('table columns: export and coverage with the name elsewhere (spec 082 K2.1)', () => {
+    beforeAll(() => setLanguage('en'));
+
+    /** A man of two unions (the export's "Union" column) and his wives. */
+    function model() {
+        const person = (id: string, firstName: string, gender: 'male' | 'female', extra: Record<string, unknown> = {}) =>
+            ({ id, firstName, lastName: 'Vorlenz', gender, isPlaceholder: false, partnerships: [], parentIds: [], childIds: [], ...extra });
+        const data = {
+            persons: {
+                a: person('a', 'Ambrož', 'male', { birthDate: '1830', partnerships: ['u1', 'u2'] }),
+                b: person('b', 'Rozálie', 'female', { birthDate: '1832', partnerships: ['u1'] }),
+                c: person('c', 'Kordula', 'female', { partnerships: ['u2'] }),
+            },
+            partnerships: {
+                u1: { id: 'u1', person1Id: 'a', person2Id: 'b', childIds: [], status: 'married', startDate: '1855' },
+                u2: { id: 'u2', person1Id: 'a', person2Id: 'c', childIds: [], status: 'married', startDate: '1866' },
+            },
+        } as unknown as StromData;
+        return buildTableModel(data, { rev: 1, homeId: 'a' as PersonId, lang: 'en', year: 2026, reliability: { researchTree: false, originFeature: false } });
+    }
+    const cols = (ids: string[]): ColumnDef[] => ids.map(id => columnById('persons', id)!);
+
+    it('the export\'s Union column follows the name wherever it stands; the XLSX coverage label is in the first column', () => {
+        const m = model();
+        const columns = cols(['bDate', 'name', 'wDate']);
+        const t = buildExportTable({ model: m, type: 'persons', rows: m.persons, columns });
+        expect(t.head).toEqual(['Birth date', 'Full name', 'Union', 'Marriage date']);
+        expect(t.unionAt).toBe(2);
+        const amb = t.lines.filter(l => l.row.kind === 'person' && l.row.id === 'a');
+        expect(amb.map(l => l.texts[2])).toEqual(['1 of 2', '2 of 2']);
+        // The continuation line: the union's column only.
+        expect(amb[1].texts[1]).toBe('');
+        expect(amb[1].texts[3]).not.toBe('');
+
+        const out = buildTableXlsx({ model: m, type: 'persons', rows: m.persons, columns, pinned: 2, sheetName: 'People', when: new Date('2026-06-15T10:00:00Z') });
+        const read = readXlsx(out.bytes);
+        const cov = Array.from({ length: 4 }, (_v, i) => read.cell(`${columnName(i)}3`)?.text ?? '');
+        expect(cov[0]).toBe('filled');
+        expect(cov[1]).not.toBe('filled');
+        // The name pinned with its Union column: three columns frozen.
+        expect(read.sheet).toMatch(/<pane xSplit="3"/);
     });
 });

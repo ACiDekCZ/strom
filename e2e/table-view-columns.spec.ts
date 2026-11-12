@@ -77,7 +77,10 @@ test.describe('desktop (1440)', () => {
         // ↑ on the focused column moves it back; past its group it does not go.
         await panel.getByRole('button', { name: 'Move up: Birth date' }).click();
         expect((await headOrder(page)).slice(1, 3)).toEqual(['bDate', 'bPlace']);
-        await expect(panel.getByRole('button', { name: 'Move up: Birth date' })).toHaveAttribute('aria-disabled', 'true');
+        // A move that cannot be made is not offered (spec 082 K2.1): no ↑ at the start of the group, ↓ keeps its place.
+        await expect(panel.getByRole('button', { name: 'Move up: Birth date' })).toHaveCount(0);
+        await expect(panel.locator('.tv-cp-item[data-col="bDate"] .tv-cp-move-gap')).toHaveCount(1);
+        await expect(panel.locator('.tv-cp-item[data-col="bDate"] .tv-cp-move[aria-disabled]')).toHaveCount(0);
 
         // "all" checks the whole group.
         await panel.getByRole('button', { name: 'All columns: Birth and baptism' }).click();
@@ -213,6 +216,79 @@ test.describe('desktop (1440)', () => {
         await expect(page.locator('.tv-drop-line')).toHaveCount(0);
         const order = await headOrder(page);
         expect(order.slice(order.indexOf('wAge'), order.indexOf('wAge') + 3)).toEqual(['wAge', 'partner', 'wDate']);
+    });
+
+    test('in the pinned zone any column moves, the name too; "filled" stays in the first column (spec 082 K2.1)', async ({ page }) => {
+        await openApp(page);
+        await seedTree(page, FAMILY, 'Kvelden', 'a');
+        await openTable(page);
+        const covFirst = () => page.locator('#table-container .tv-covrow .tv-covcell').first();
+        await expect(covFirst()).toHaveText('filled');
+
+        // The name alone pinned: its menu has no move, no hide, no unpin and no empty part.
+        await head(page, 'name').click({ button: 'right' });
+        let menu = page.getByRole('menu', { name: 'Full name' });
+        await expect(menu).toBeVisible();
+        await expect(menu.getByRole('menuitem', { name: /^Move (left|right)/ })).toHaveCount(0);
+        await expect(menu.getByRole('menuitem', { name: 'Hide column' })).toHaveCount(0);
+        await expect(menu.locator('.tv-menu-sep + .tv-menu-sep, .tv-menu-sep:last-child')).toHaveCount(0);
+        await page.keyboard.press('Escape');
+
+        // Pin Birthplace and Marriage date: name · bPlace · wDate.
+        for (const [col, label] of [['bPlace', 'Birthplace'], ['wDate', 'Marriage date']] as const) {
+            await head(page, col).click({ button: 'right' });
+            await page.getByRole('menu', { name: label }).getByRole('menuitem', { name: 'Pin left' }).click();
+        }
+        expect((await headOrder(page)).slice(0, 3)).toEqual(['name', 'bPlace', 'wDate']);
+
+        // The name moves right from its menu (only Move right is offered).
+        await head(page, 'name').click({ button: 'right' });
+        menu = page.getByRole('menu', { name: 'Full name' });
+        await expect(menu.getByRole('menuitem', { name: 'Move left' })).toHaveCount(0);
+        await menu.getByRole('menuitem', { name: 'Move right' }).click();
+        expect((await headOrder(page)).slice(0, 3)).toEqual(['bPlace', 'name', 'wDate']);
+        await expect(head(page, 'name')).toHaveClass(/tv-pinned/);
+        // "filled" is in the first column now, the name gets its own share.
+        await expect(covFirst()).toHaveText('filled');
+        await expect(covFirst()).toHaveAttribute('data-col', 'bPlace');
+        await expect(page.locator('#table-container .tv-covrow .tv-covcell[data-col="name"]')).toHaveText(/%/);
+        // The row's actions stay in the name's cell, not over the narrow first column.
+        const firstRow = page.locator('#table-container .tv-body .tv-row').first();
+        await expect(firstRow.locator('.tv-name .tv-acts')).toHaveCount(1);
+        await expect(firstRow.locator('[aria-colindex="1"] .tv-acts')).toHaveCount(0);
+
+        // Alt+← on Marriage date crosses groups within the zone, to the front.
+        await head(page, 'wDate').focus();
+        await page.keyboard.press('Alt+ArrowLeft');
+        await page.keyboard.press('Alt+ArrowLeft');
+        expect((await headOrder(page)).slice(0, 4)).toEqual(['wDate', 'bPlace', 'name', 'bDate']);
+        // Not out of the zone: the last pinned has no Move right, the first scrolling no Move left.
+        await head(page, 'name').click({ button: 'right' });
+        menu = page.getByRole('menu', { name: 'Full name' });
+        await expect(menu.getByRole('menuitem', { name: 'Move right' })).toHaveCount(0);
+        await expect(menu.getByRole('menuitem', { name: 'Move left' })).toHaveCount(1);
+        await page.keyboard.press('Escape');
+        await head(page, 'name').focus();
+        await page.keyboard.press('Alt+ArrowRight');
+        expect((await headOrder(page)).slice(0, 4)).toEqual(['wDate', 'bPlace', 'name', 'bDate']);
+
+        // The group row over the zone: one cell per run, each over its own columns.
+        const pinnedGroups = await page.locator('#table-container .tv-grouprow .tv-groupcell[data-pinned]').evaluateAll(els => els.map(el => (el as HTMLElement).dataset.start + '-' + (el as HTMLElement).dataset.end));
+        expect(pinnedGroups).toEqual(['0-0', '1-1', '2-2']);
+
+        // The Columns panel: the name has ↑ (and a gap for ↓), its checkbox still locked.
+        await page.locator('#table-container .tv-cols-btn').click();
+        const panel = page.getByRole('dialog', { name: 'Columns' });
+        await panel.getByRole('button', { name: /^Person\b/ }).click();
+        await expect(panel.getByRole('checkbox', { name: 'Full name', exact: true })).toBeDisabled();
+        await expect(panel.getByRole('button', { name: 'Move down: Full name' })).toHaveCount(0);
+        await panel.getByRole('button', { name: 'Move up: Full name' }).click();
+        expect((await headOrder(page)).slice(0, 3)).toEqual(['wDate', 'name', 'bPlace']);
+        await panel.getByRole('button', { name: 'Move up: Full name' }).click();
+        expect((await headOrder(page)).slice(0, 3)).toEqual(['name', 'wDate', 'bPlace']);
+        // At the start ↑ is gone; the focus went to ↓.
+        await expect(panel.getByRole('button', { name: 'Move up: Full name' })).toHaveCount(0);
+        await expect(panel.getByRole('button', { name: 'Move down: Full name' })).toBeFocused();
     });
 
     test('German column names wrap to two lines at most, the whole name in the title', async ({ page }) => {

@@ -123,7 +123,9 @@ function groupOrder(type: RowType): Map<string, number> {
 
 /**
  * Keep only columns the catalog knows (P1), each once; the locked column
- * first and pinned; `pinned` within bounds. Run before every operation.
+ * shown and pinned (first when it was not pinned; within the pinned zone it
+ * may stand anywhere, spec 082 K2.1); `pinned` within bounds. Run before
+ * every operation.
  */
 export function normalizeColumns(type: RowType, st: RowTypeState): void {
     const known = catalogIndex(type);
@@ -131,11 +133,11 @@ export function normalizeColumns(type: RowType, st: RowTypeState): void {
     const lock = lockedColumn(type);
     const pinnedIds = new Set(st.columns.slice(0, st.pinned));
     const cols = st.columns.filter(id => known.has(id) && !seen.has(id) && (seen.add(id), true));
-    const rest = cols.filter(id => id !== lock);
-    const pinned = rest.filter(id => pinnedIds.has(id));
-    const scrolling = rest.filter(id => !pinnedIds.has(id));
-    st.columns = [lock, ...pinned, ...scrolling];
-    st.pinned = 1 + pinned.length;
+    const pinned = cols.filter(id => pinnedIds.has(id));
+    if (!pinned.includes(lock)) pinned.unshift(lock);
+    const scrolling = cols.filter(id => !pinnedIds.has(id) && id !== lock);
+    st.columns = [...pinned, ...scrolling];
+    st.pinned = pinned.length;
     st.collapsedGroups = [...new Set(st.collapsedGroups ?? [])];
 }
 
@@ -144,18 +146,17 @@ function groupOf(type: RowType, id: string): string {
 }
 
 /**
- * The run of positions a column at `i` may move within (§4.5): neighbours of
- * the same group in the same zone (pinned or scrolling), never before the
- * locked first column. `groups` are the groups in shown order.
+ * The run of positions a column at `i` may move within (§4.5): in the pinned
+ * zone any of its places (the locked column too, spec 082 K2.1); in the
+ * scrolling zone the neighbours of the same group. `groups` are the groups in
+ * shown order.
  */
-export function columnRun(groups: readonly string[], pinned: number, i: number, locked = 1): [number, number] {
-    if (i < locked) return [i, i];
-    const zoneStart = i < pinned ? locked : Math.max(pinned, locked);
-    const zoneEnd = i < pinned ? pinned - 1 : groups.length - 1;
+export function columnRun(groups: readonly string[], pinned: number, i: number): [number, number] {
+    if (i < pinned) return [0, pinned - 1];
     let a = i;
-    while (a - 1 >= zoneStart && groups[a - 1] === groups[i]) a--;
+    while (a - 1 >= pinned && groups[a - 1] === groups[i]) a--;
     let b = i;
-    while (b + 1 <= zoneEnd && groups[b + 1] === groups[i]) b++;
+    while (b + 1 <= groups.length - 1 && groups[b + 1] === groups[i]) b++;
     return [a, b];
 }
 
@@ -236,7 +237,7 @@ export function setGroupShown(type: RowType, st: RowTypeState, group: string, on
     return changed;
 }
 
-/** Whether a column can move one step (−1 left/up, +1 right/down) within its group. */
+/** Whether a column can move one step (−1 left/up, +1 right/down) within its run (`columnRun`). */
 export function canMoveColumn(type: RowType, st: RowTypeState, id: string, dir: -1 | 1): boolean {
     normalizeColumns(type, st);
     const i = st.columns.indexOf(id);
@@ -245,7 +246,7 @@ export function canMoveColumn(type: RowType, st: RowTypeState, id: string, dir: 
     return dir < 0 ? i > a : i < b;
 }
 
-/** Move a column by `offset` positions, within its group and zone only (§4.5). */
+/** Move a column by `offset` positions within its run (§4.5): the pinned zone, else its group in the scrolling zone. */
 export function moveColumnBy(type: RowType, st: RowTypeState, id: string, offset: number): boolean {
     normalizeColumns(type, st);
     const i = st.columns.indexOf(id);
