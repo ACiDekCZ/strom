@@ -6,8 +6,9 @@ import { openApp, seedTree, type SeedPerson } from './helpers.js';
  * main window on a computer's system (also with a touch screen; not Android,
  * iOS or iPadOS), wider than a phone, not in an exported file;
  * Ctrl/Cmd+click, the middle button and the context menu (right click,
- * Shift+F10) on the Table tab open it in a new window and the main window
- * stays where it is; the Table's own ⧉ hands its state over (saved view,
+ * Shift+F10) on any view tab (Family, Descendants, Timeline, Fan, Map,
+ * Table; at a tablet's width the bottom bar's tabs) open that view in a new
+ * window and the main window stays where it is; the Table's own ⧉ hands its state over (saved view,
  * filters, search, sort, selected row); with windows open ⧉ says how many and
  * its menu lists them (×, Close all); a window the browser blocks is said with
  * Try again; from five windows on the menu and a toast say what it costs.
@@ -43,11 +44,11 @@ async function stubWindows(page: Page, blocked = false): Promise<void> {
     }, blocked);
 }
 
-/** A click that opens a satellite: the popup it opened, loaded as a Table window. */
-async function popupOf(page: Page, click: () => Promise<void>): Promise<Page> {
+/** A click that opens a satellite: the popup it opened, loaded as a window of `kind` (the Table by default). */
+async function popupOf(page: Page, click: () => Promise<void>, kind = 'table'): Promise<Page> {
     const [popup] = await Promise.all([page.waitForEvent('popup'), click()]);
     await popup.waitForLoadState('domcontentloaded');
-    expect(popup.url()).toContain('okno=table');
+    expect(popup.url()).toContain(`okno=${kind}`);
     return popup;
 }
 
@@ -58,9 +59,10 @@ test.describe('desktop (1440)', () => {
         await openMain(page);
         await expect(windowBtn(page)).toBeVisible();
         await expect(windowBtn(page)).toHaveAccessibleName('Open in a new window');
-        // The hint is on the Table tab only.
+        // The hint is on every view tab.
         await expect(tableTab(page)).toHaveAttribute('title', /^Table · (Ctrl|⌘)\+click: in a new window$/);
-        await expect(page.locator('#view-mode-family')).not.toHaveAttribute('title', /new window/);
+        await expect(page.locator('#view-mode-family')).toHaveAttribute('title', /^Family · (Ctrl|⌘)\+click: in a new window$/);
+        await expect(page.locator('#view-mode-map')).toHaveAttribute('title', /^Map · (Ctrl|⌘)\+click: in a new window$/);
 
         const stays = async () => {
             await expect(page.locator('#view-mode-family')).toHaveClass(/active/);
@@ -89,6 +91,46 @@ test.describe('desktop (1440)', () => {
 
         await expect.poll(() => page.evaluate(() => window.Strom.Windows?.size)).toBe(4);
         for (const p of [p1, p2, p3, p4]) await p.close();
+    });
+
+    test('every view tab opens its view in a window: Ctrl/Cmd+click and the middle button on Family and Map, the context menu on Fan; ⧉ lists the six views', async ({ page }) => {
+        await openMain(page);
+        await page.evaluate(() => window.Strom.UI.setDisplayViewMode('descendants'));
+        const stays = async () => {
+            await expect(page.locator('#view-mode-descendants')).toHaveClass(/active/);
+            await expect(page.locator('#view-mode-family')).not.toHaveClass(/active/);
+            await expect(page.locator('#view-mode-map')).not.toHaveClass(/active/);
+        };
+        const fam = page.locator('#view-mode-family');
+        const map = page.locator('#view-mode-map');
+        const p1 = await popupOf(page, () => fam.click({ modifiers: ['ControlOrMeta'] }), 'family');
+        await stays();
+        const p2 = await popupOf(page, () => fam.click({ button: 'middle' }), 'family');
+        await stays();
+        const p3 = await popupOf(page, () => map.click({ modifiers: ['ControlOrMeta'] }), 'map');
+        await stays();
+        const p4 = await popupOf(page, () => map.click({ button: 'middle' }), 'map');
+        await stays();
+
+        await page.locator('#view-mode-fan').click({ button: 'right' });
+        const ctx = page.locator('.view-window-ctx');
+        await expect(ctx.getByRole('menuitem')).toHaveText(/Fan in a new window/);
+        const p5 = await popupOf(page, () => ctx.getByRole('menuitem').click(), 'fan');
+        await stays();
+
+        // ⧉'s menu: the six views in the tabs' order, "this view" at the one shown here.
+        await windowBtn(page).click();
+        const items = windowMenu(page).locator('.view-window-item');
+        await expect(items).toHaveCount(6);
+        expect(await items.evaluateAll(els => els.map(e => (e as HTMLElement).dataset.view)))
+            .toEqual(['family', 'descendants', 'timeline', 'fan', 'map', 'table']);
+        await expect(windowMenu(page).locator('.view-window-item-note')).toHaveCount(1);
+        await expect(windowMenu(page).locator('.view-window-item[data-view="descendants"] .view-window-item-note')).toHaveText('this view');
+        const p6 = await popupOf(page, () => windowMenu(page).locator('.view-window-item[data-view="timeline"]').click(), 'timeline');
+        await stays();
+
+        await expect.poll(() => page.evaluate(() => window.Strom.Windows?.size)).toBe(6);
+        for (const p of [p1, p2, p3, p4, p5, p6]) await p.close();
     });
 
     test('the Table\'s ⧉ hands its saved view, filters, search, sort and selected row to the new window', async ({ page }) => {
@@ -216,11 +258,34 @@ test.describe('tablet width with a mouse (1024)', () => {
         await expect(windowBtn(page)).toBeVisible();
         await windowBtn(page).focus();
         await page.keyboard.press('ArrowDown');
+        await expect(windowMenu(page).locator('.view-window-item[data-view="family"]')).toBeFocused();
+        await page.keyboard.press('End');
         const item = windowMenu(page).locator('.view-window-item[data-view="table"]');
         await expect(item).toBeFocused();
         const sat = await popupOf(page, () => page.keyboard.press('Enter'));
         await expect(page.locator('#view-window-btn .view-window-count')).toHaveText('1');
         await sat.close();
+    });
+
+    test('the bottom bar\'s view tabs: Ctrl/Cmd+click opens a window, the context menu stands above the tab', async ({ page }) => {
+        await openMain(page);
+        const desc = page.locator('#bb-view-descendants');
+        await expect(desc).toBeVisible();
+        await expect(desc).toHaveAttribute('title', /^Descendants · (Ctrl|⌘)\+click: in a new window$/);
+        const sat = await popupOf(page, () => desc.click({ modifiers: ['ControlOrMeta'] }), 'descendants');
+        await expect(page.locator('#bb-view-family')).toHaveClass(/active/);
+        await expect(desc).not.toHaveClass(/active/);
+        await sat.close();
+
+        await page.locator('#bb-view-table').click({ button: 'right' });
+        const ctx = page.locator('.view-window-ctx');
+        await expect(ctx.getByRole('menuitem')).toHaveText(/Table in a new window/);
+        const m = (await ctx.boundingBox())!;
+        const tab = (await page.locator('#bb-view-table').boundingBox())!;
+        expect(m.y + m.height).toBeLessThanOrEqual(tab.y);
+        await page.keyboard.press('Escape');
+        await expect(ctx).toHaveCount(0);
+        await expect(page.locator('#bb-view-family')).toHaveClass(/active/);
     });
 
     test('the Table\'s ⧉ stays in the bar\'s first row beside Export (in de)', async ({ page }) => {
@@ -246,6 +311,7 @@ const UA_MAC_SAFARI = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebK
 async function expectNoWindows(page: Page): Promise<void> {
     await expect(page.locator('#view-window-wrap')).toBeHidden();
     await expect(tableTab(page)).not.toHaveAttribute('title', /new window/);
+    await expect(page.locator('#view-mode-family')).not.toHaveAttribute('title', /new window/);
     await tableTab(page).click({ modifiers: ['ControlOrMeta'] });
     await expect(tableTab(page)).toHaveClass(/active/);
     expect(await page.evaluate(() => window.Strom.Windows?.size)).toBe(0);

@@ -1,13 +1,14 @@
 /**
- * The main window's window controls (spec 079 §1, §4; K1: the Table):
+ * The main window's window controls (spec 079 §1, §4; every view but the book):
  *
  * - ⧉ after the view tabs (`#view-window-btn`): its menu opens a view in a
  *   new window; with satellites open it is the indicator ("⧉ 2 more
  *   windows", below 1280 px the number alone) and its menu lists them first
  *   (Bring to front, ×, Close all; from 5 windows an amber note);
- * - the Table tab of the view tabs: Ctrl/Cmd+click and the middle button
- *   open it in a new window, a right click (Shift+F10, the Menu key) offers
- *   it in a small menu; this window keeps its view;
+ * - every tab of the view tabs (and of the bottom bar at a tablet's width):
+ *   Ctrl/Cmd+click and the middle button open its view in a new window, a
+ *   right click (Shift+F10, the Menu key) offers it in a small menu; this
+ *   window keeps its view;
  * - a window the browser blocked: a toast with "Try again" (10 s); the
  *   sixth window and every further one: a toast that windows need memory.
  *
@@ -35,8 +36,8 @@ export const BLOCKED_TOAST_MS = 10000;
 /** The many-windows toast after an opening (4e). */
 export const MANY_TOAST_MS = 6000;
 
-/** The views K1 opens in a window (K2 adds the others). */
-const WINDOW_VIEWS: readonly SatelliteKind[] = ['table'];
+/** The views that open in a window, in the order of the view tabs (not the book: it is not a view of its own). */
+export const WINDOW_VIEWS: readonly SatelliteKind[] = ['family', 'descendants', 'timeline', 'fan', 'map', 'table'];
 
 let registry: WindowRegistry | null = null;
 let menu: HTMLElement | null = null;
@@ -133,15 +134,16 @@ function updateButton(): void {
     updateSegmentTitles();
 }
 
-/** The Table tab's tooltip names the shortcut, only where windows are offered (§1). */
+/** The view tabs' tooltips name the shortcut, only where windows are offered (§1). */
 function updateSegmentTitles(): void {
     const offered = canOpenWindows();
     for (const kind of WINDOW_VIEWS) {
-        const tab = document.getElementById(`view-mode-${kind}`);
-        if (!tab) continue;
         const name = windowKindLabel(kind);
-        if (offered) tab.title = isMac() ? strings.win.segmentHintMac(name) : strings.win.segmentHint(name);
-        else tab.removeAttribute('title');
+        for (const tab of [document.getElementById(`view-mode-${kind}`), document.getElementById(`bb-view-${kind}`)]) {
+            if (!tab) continue;
+            if (offered) tab.title = isMac() ? strings.win.segmentHintMac(name) : strings.win.segmentHint(name);
+            else tab.removeAttribute('title');
+        }
     }
 }
 
@@ -392,6 +394,9 @@ function openCtxMenu(tab: HTMLElement, kind: SatelliteKind): void {
     document.body.appendChild(m);
     placeMenu(m, tab, 260);
     m.style.maxHeight = '';
+    // A tab of the bottom bar: the menu stands above it.
+    const r = tab.getBoundingClientRect();
+    if (r.bottom + 6 + m.offsetHeight > window.innerHeight - 8) m.style.top = `${Math.max(8, Math.round(r.top - 6 - m.offsetHeight))}px`;
     tab.classList.add('is-window-ctx');
     ctxMenu = { el: m, anchor: tab };
     item.focus();
@@ -412,17 +417,22 @@ function closeCtxMenu(returnFocus: boolean): void {
     if (returnFocus) anchor.focus();
 }
 
-/** The view tab of `kind` (one K1 opens in a window), or null. */
-function windowTabOf(target: EventTarget | null): { tab: HTMLElement; kind: SatelliteKind } | null {
-    const tab = (target as Element | null)?.closest?.<HTMLElement>('#view-mode-segment > button') ?? null;
+/** The view tab (of the view tabs or the bottom bar; not More) of a view that opens in a window, or null. */
+export function windowTabOf(target: EventTarget | null): { tab: HTMLElement; kind: SatelliteKind } | null {
+    const tab = (target as Element | null)?.closest?.<HTMLElement>('#view-mode-segment > button, #bottom-bar > button[id^="bb-view-"]') ?? null;
     if (!tab) return null;
-    const kind = tab.id.replace(/^view-mode-/, '') as SatelliteKind;
+    const kind = tab.id.replace(/^(view-mode|bb-view)-/, '') as SatelliteKind;
     return WINDOW_VIEWS.includes(kind) ? { tab, kind } : null;
 }
 
 function wireSegment(): void {
-    const seg = document.getElementById('view-mode-segment');
-    if (!seg) return;
+    for (const id of ['view-mode-segment', 'bottom-bar']) {
+        const seg = document.getElementById(id);
+        if (seg) wireTabs(seg);
+    }
+}
+
+function wireTabs(seg: HTMLElement): void {
     // Capture: before the tab's own click switches this window's view.
     seg.addEventListener('click', (e) => {
         if (!(e.ctrlKey || e.metaKey) || !canOpenWindows()) return;
