@@ -60,6 +60,8 @@ export interface SatelliteEvents {
     'tree-gone': { treeId: TreeId | null };
     /** Another window selected a person (only while following the selection). */
     select: { personId: string | null; origin: string };
+    /** "Follow selection" was switched in this window (off: the mark of another window's choice goes). */
+    follow: boolean;
     /** The main window asks this window to close (§4 ×). */
     close: Record<string, never>;
     /**
@@ -198,7 +200,9 @@ export class SatelliteClient {
     }
 
     set followSelection(on: boolean) {
+        const was = this.followSelection;
         try { this.storage?.setItem(followSelectionKey(this.windowId), on ? '1' : '0'); } catch { /* no storage */ }
+        if (on !== was) this.emit('follow', on);
     }
 
     on<K extends keyof SatelliteEvents>(event: K, cb: Listener<K>): () => void {

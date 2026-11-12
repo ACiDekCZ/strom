@@ -371,8 +371,13 @@ describe('selection', () => {
         expect(of('select')).toEqual([expect.objectContaining({ personId: 'p1', origin: SAT, treeId: TREE })]);
         expect(selected).toHaveBeenCalledWith({ personId: 'p2', origin: 'main-1' });
 
+        const follow = vi.fn();
+        sat.on('follow', follow);
         sat.followSelection = false;
         expect(session.get(followSelectionKey(SAT))).toBe('0');
+        // Said once, as it changes (the views drop the mark of the last choice taken).
+        sat.followSelection = false;
+        expect(follow.mock.calls).toEqual([[false]]);
         sat.announceSelection('p3');
         main.post({ type: 'select', personId: 'p4', treeId: TREE, origin: 'main-1' });
         await settle();

@@ -383,3 +383,68 @@ test('photos: shown in a satellite; an edit there keeps every photo of the store
     await expect(card(page, 'Erich')).toBeVisible();
     expect(await photos(page)).toEqual(before);
 });
+
+test('"Follow selection" off drops the mark of the last choice taken in every view: the ring, the sectors, the row, the places, the Table\'s shared look', async ({ page, context }) => {
+    test.setTimeout(60_000);
+    const treeId = await openMain(page, context);
+    const [johan, erik] = [await personId(page, 'Johan', 'Berg'), await personId(page, 'Erik', 'Berg')];
+    const sat = await openSatellite(context, treeId, 'family', 'cv31aa', []);
+    const follow = sat.locator('.sat-follow');
+    const view = (name: string) => sat.locator('.sat-view-segment').getByRole('button', { name, exact: true }).click();
+    /** The main window chooses `id` (a new choice: someone else first). */
+    const choose = async (id: string) => {
+        await chooseIn(page, id === johan ? erik : johan);
+        await chooseIn(page, id);
+    };
+    const followOn = async () => {
+        if (await follow.getAttribute('aria-checked') === 'false') await follow.click();
+        await expect(follow).toHaveAttribute('aria-checked', 'true');
+    };
+
+    // Family: the card's ring.
+    await choose(erik);
+    const ring = sat.locator(`.person-card.window-selected[data-id="${erik}"]`);
+    await expect(ring).toHaveCount(1);
+    await follow.click();
+    await expect(follow).toHaveAttribute('aria-checked', 'false');
+    await expect(sat.locator('.person-card.window-selected')).toHaveCount(0);
+    expect(await selectedIn(sat)).toBeNull();
+
+    // Fan: the person's sectors outlined.
+    await view('Fan');
+    await expect(sat.locator('#fan-chart .fan-sector').first()).toBeVisible();
+    await followOn();
+    const ancestor = await sat.evaluate(() => document.querySelector<SVGElement>('#fan-chart .fan-sector[data-fan-kind="anc"][data-fan-person]')!.dataset.fanPerson!);
+    await choose(ancestor);
+    await expect(sat.locator('#fan-chart path.fan-mark')).not.toHaveCount(0);
+    await follow.click();
+    await expect(sat.locator('#fan-chart path.fan-mark')).toHaveCount(0);
+
+    // Timeline: the row.
+    await view('Timeline');
+    await expect(sat.locator('#timeline-container .timeline-bar').first()).toBeVisible();
+    await followOn();
+    await choose(ancestor);
+    await expect(sat.locator(`#timeline-container .timeline-bar.window-selected[data-person-id="${ancestor}"]`)).toHaveCount(1);
+    await follow.click();
+    await expect(sat.locator('#timeline-container .timeline-bar.window-selected')).toHaveCount(0);
+
+    // Map: the person's places.
+    await view('Map');
+    await expect(sat.locator('#map-container .map-marker').first()).toBeVisible();
+    await followOn();
+    await choose(johan);
+    await expect(sat.locator('#map-container .map-marker.map-marker-window-selected')).not.toHaveCount(0);
+    await follow.click();
+    await expect(sat.locator('#map-container .map-marker-window-selected')).toHaveCount(0);
+
+    // Table: the row stays the selected one, without the shared look.
+    await view('Table');
+    await followOn();
+    await choose(erik);
+    const row = sat.locator(`#table-container .tv-body .tv-row[data-key="p:${erik}"]`);
+    await expect(row).toHaveClass(/is-shared/);
+    await follow.click();
+    await expect(row).not.toHaveClass(/is-shared/);
+    await expect(sat.locator('#table-container .tv-row.is-shared')).toHaveCount(0);
+});

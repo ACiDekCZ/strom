@@ -124,7 +124,7 @@ describe('a satellite', () => {
         const client = {
             get followSelection() { return follow; },
             announceSelection: (id: string) => { announced.push(id); },
-            on: (_e: string, cb: (p: { personId: string | null; origin: string }) => void) => { onSelect = cb; return () => {}; },
+            on: (e: string, cb: (p: { personId: string | null; origin: string }) => void) => { if (e === 'select') onSelect = cb; return () => {}; },
         } as unknown as SatelliteClient;
         const d = deps('table');
         wireSatelliteSelection(client, d);
@@ -157,5 +157,24 @@ describe('a satellite', () => {
         window.dispatchEvent(new CustomEvent(PERSON_CHOSEN_EVENT, { detail: { personId: 'p5' } }));
         expect(announced).toEqual(['p2', 'p3']);
         expect(d.share).toBeNull();
+    });
+
+    it('"Follow selection" off drops the mark of the last choice taken; on again: nothing changes', () => {
+        const listeners = new Map<string, (p: unknown) => void>();
+        const client = {
+            followSelection: true,
+            announceSelection: () => {},
+            on: (e: string, cb: (p: unknown) => void) => { listeners.set(e, cb); return () => { listeners.delete(e); }; },
+        } as unknown as SatelliteClient;
+        const d = deps('timeline');
+        const stop = wireSatelliteSelection(client, d);
+        listeners.get('select')!({ personId: 'p6', origin: 'main-1' });
+        expect(d.calls).toEqual(['ring:p6', 'reveal:p6']);
+        listeners.get('follow')!(false);
+        expect(d.calls).toEqual(['ring:p6', 'reveal:p6', 'ring:null']);
+        listeners.get('follow')!(true);
+        expect(d.calls).toHaveLength(3);
+        stop();
+        expect(listeners.has('follow')).toBe(false);
     });
 });

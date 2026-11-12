@@ -106,10 +106,14 @@ export function wireSatelliteSelection(client: SatelliteClient, deps: SelectionD
     window.addEventListener('strom:focus-changed', onFocus);
     window.addEventListener(PERSON_CHOSEN_EVENT, onChosen);
     const off = client.on('select', ({ personId }) => applySharedSelection(personId, deps));
+    // "Follow selection" off: the mark of the last choice taken goes from every view (the card's ring, the
+    // Fan's outline, the Timeline's row, the Map's places); the Table's row keeps its place without the shared look.
+    const offFollow = client.on('follow', (on) => { if (!on) deps.setWindowSelected(null); });
     return () => {
         window.removeEventListener('strom:focus-changed', onFocus);
         window.removeEventListener(PERSON_CHOSEN_EVENT, onChosen);
         off();
+        offFollow();
         deps.setTableSelectionShare(null);
     };
 }
