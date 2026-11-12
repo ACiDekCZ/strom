@@ -1171,6 +1171,23 @@ class ZoomPanClass {
         this.settleAnimation();
     }
 
+    /** The world point in the middle of the view (what another window of the view centres on, spec 079 §1). */
+    viewCenterWorld(): { x: number; y: number } {
+        const { width, height } = this.getViewportSize();
+        return { x: (width / 2 - this.tx) / this.scale, y: (height / 2 - this.ty) / this.scale };
+    }
+
+    /**
+     * A satellite window's start (spec 079 §1): the scale and the world point
+     * in the middle of the view as the main window had them (the scale kept
+     * within this window's limits).
+     */
+    restoreView(scale: number, worldX: number, worldY: number): void {
+        this.settleAnimation();
+        this.scale = Math.max(this.zoomFloor(), Math.min(MAX_SCALE, scale));
+        this.centerOnWorldPoint(worldX, worldY);
+    }
+
     /** Center the viewport on a world-space point, keeping the current scale. */
     centerOnWorldPoint(worldX: number, worldY: number): void {
         this.settleAnimation();

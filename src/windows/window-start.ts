@@ -27,6 +27,13 @@ import { ZoomPan } from '../zoom.js';
 import { PERSON_MENU_ACTION, runSatelliteResearchRow, SatelliteResearchMenu, setSatelliteResearchMenu } from './window-research-menu.js';
 import type { PersonId } from '../types.js';
 import { wireMainSelection, wireSatelliteSelection, type SelectionDeps } from './window-selection.js';
+import { SettingsManager } from '../settings.js';
+import type { MapKind } from '../places.js';
+import type { SatelliteKind } from './window-role.js';
+import {
+    applyViewStateAfterDraw, applyViewStateBeforeDraw, captureViewState, parseViewState,
+    type ViewStateSource, type ViewStateTarget, type ViewWindowState,
+} from './view-window-state.js';
 
 /** The main window's registry (null in any other window). */
 let registry: WindowRegistry | null = null;
@@ -256,4 +263,97 @@ export function openMainWindow(): void {
         href = url.toString();
     } catch { /* the folder */ }
     try { window.open(href, MAIN_WINDOW_NAME, 'noopener'); } catch (err) { console.warn('Main window not opened', err); }
+}
+
+// ---- the state a new window of a view takes over (spec 079 §1) ----
+
+/** The main window's views, as a new window of a view takes them over. */
+const appViewStateSource: ViewStateSource = {
+    viewMode: () => TreeRenderer.getViewMode(),
+    focus: () => TreeRenderer.getFocusPersonId(),
+    tableFocus: () => UI.tableFocusPerson(TreeRenderer.getFocusPersonId()),
+    windowSelected: () => TreeRenderer.getWindowSelected(),
+    depthUp: () => TreeRenderer.getFocusDepthUp(),
+    depthDown: () => TreeRenderer.getFocusDepthDown(),
+    chartZoom: () => {
+        const view = TreeRenderer.getViewMode();
+        if (view !== 'family' && view !== 'descendants') return null;
+        const { width, height } = ZoomPan.getViewportSize();
+        if (!width || !height) return null;
+        const middle = ZoomPan.viewCenterWorld();
+        return { scale: ZoomPan.getScale(), x: middle.x, y: middle.y };
+    },
+    fullFamilies: () => TreeRenderer.isDescendantsFullFamilies(),
+    fan: () => ({
+        generations: TreeRenderer.getFanGenerations(),
+        descGenerations: TreeRenderer.getFanDescGenerations(),
+        shape: TreeRenderer.getFanShape(),
+        colorMode: TreeRenderer.getFanColorMode(),
+    }),
+    map: () => ({
+        scope: UI.mapScope,
+        center: UI.mapCenter ? { lat: UI.mapCenter.lat, lon: UI.mapCenter.lon } : null,
+        zoom: UI.mapZoom,
+        kinds: SettingsManager.getMapKinds(),
+        time: { on: UI.mapTimeOn, year: UI.mapTimeYear },
+    }),
+};
+
+/** A satellite's views, as they take the main window's state over (nothing stored). */
+const appViewStateTarget: ViewStateTarget = {
+    hasPerson: (id) => !!DataManager.getPerson(id) && !DataManager.getPerson(id)?.isPlaceholder,
+    setFocus: (id, up, down) => TreeRenderer.setWindowStart(id, up, down),
+    setWindowSelected: (id) => TreeRenderer.setWindowSelected(id),
+    setFullFamilies: (on) => TreeRenderer.setDescendantsFullFamilies(on),
+    setFan: (fan) => TreeRenderer.setWindowFan(fan),
+    setMap: (m) => {
+        UI.mapScope = m.scope;
+        UI.mapCenter = m.center ? { lat: m.center.lat, lon: m.center.lon } : null;
+        UI.mapZoom = m.zoom;
+        // The kinds are this device's: the same here unless changed meanwhile (a satellite keeps them in its memory).
+        const kinds = m.kinds as MapKind[];
+        if (kinds.length && kinds.join() !== SettingsManager.getMapKinds().join()) SettingsManager.setMapKinds(kinds);
+        UI.mapTimeOn = m.time.on;
+        UI.mapTimeYear = m.time.year;
+    },
+    restoreZoom: (zoom) => ZoomPan.restoreView(zoom.scale, zoom.x, zoom.y),
+    centerView: () => TreeRenderer.centerForViewMode(),
+};
+
+/** The main window's state of its views for a new window of `kind` (undefined: the Table's is table-ui's). */
+export function captureAppViewState(kind: SatelliteKind): ViewWindowState | undefined {
+    return captureViewState(kind, appViewStateSource);
+}
+
+/**
+ * A satellite of a view: the state the main window sent (`init`, before the
+ * tree) is applied at its first tree, after the tree's default person was
+ * chosen and before the drawing (the returned function, called there); after
+ * the drawing Family and Descendants take the zoom and middle, or centre as
+ * they would on their own (also at another tree, a reload of the window).
+ */
+export function wireSatelliteViewStart(client: SatelliteClient): () => void {
+    let start: ViewWindowState | null = null;
+    let applied = false;
+    let drawnTree: string | null = null;
+    client.on('init', ({ kind, state }) => {
+        if (!applied && drawnTree === null) start = parseViewState(kind, state);
+    });
+    client.on('tree', ({ treeId }) => {
+        if (treeId === drawnTree) return;
+        drawnTree = treeId;
+        const state = applied ? start : null;
+        start = null;
+        // Only the charts frame themselves after drawing (the Table, the fan, the timeline and the map do it while drawing).
+        const view = TreeRenderer.getViewMode();
+        if (view !== 'family' && view !== 'descendants') return;
+        void TreeRenderer.renderAsync().then(() => applyViewStateAfterDraw(state, TreeRenderer.getViewMode(), appViewStateTarget));
+    });
+    return () => {
+        if (applied || drawnTree !== null || !start) return;
+        applied = true;
+        // The main window switched trees meanwhile: its state was another tree's.
+        if (client.requestedTreeId && DataManager.getCurrentTreeId() !== client.requestedTreeId) { start = null; return; }
+        applyViewStateBeforeDraw(start, appViewStateTarget);
+    };
 }

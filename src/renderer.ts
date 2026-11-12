@@ -3710,6 +3710,25 @@ class TreeRendererClass {
         this.viewMode = mode;
     }
 
+    /**
+     * A satellite window's start (spec 079 §1): the person in the centre and
+     * the generations the main window had, before the first drawing. Nothing
+     * is stored and the view history stays empty (the window's own from now).
+     */
+    setWindowStart(personId: PersonId, up: number, down: number): void {
+        this.focusPersonId = personId;
+        this.focusDepthUp = up;
+        this.focusDepthDown = down;
+    }
+
+    /** A satellite window's start: the fan as the main window had it, kept in this window only (nothing stored). */
+    setWindowFan(fan: { generations: number; descGenerations: number; shape: string; colorMode: string }): void {
+        if (Number.isFinite(fan.generations)) this.fanGenerations = Math.max(FAN_MIN_GENERATIONS, Math.min(FAN_MAX_GENERATIONS, Math.floor(fan.generations)));
+        if (Number.isFinite(fan.descGenerations)) this.fanDescGenerations = Math.max(FAN_MIN_DESC_GENERATIONS, Math.min(FAN_MAX_DESC_GENERATIONS, Math.floor(fan.descGenerations)));
+        if ((FAN_SHAPES as readonly string[]).includes(fan.shape)) this.fanShape = fan.shape as FanShape;
+        if ((FAN_COLOR_MODES as readonly string[]).includes(fan.colorMode)) this.fanColorMode = fan.colorMode as FanColorMode;
+    }
+
     /** Switch the display view mode and re-render. Persisted per tree. */
     setViewMode(mode: ViewMode): void {
         if (this.viewMode === mode) return;

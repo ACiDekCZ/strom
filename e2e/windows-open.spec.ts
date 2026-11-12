@@ -133,6 +133,53 @@ test.describe('desktop (1440)', () => {
         for (const p of [p1, p2, p3, p4, p5, p6]) await p.close();
     });
 
+    test('a window of Family takes the person in the centre, the generations, the zoom and the middle; one of Map its frame and layers', async ({ page }) => {
+        await openMain(page);
+        await page.evaluate(async () => {
+            await window.Strom.TreeRenderer.setFocus('e' as never);
+            window.Strom.TreeRenderer.setFocusDepth(1, 1);
+        });
+        await expect(page.locator('#tree-canvas .person-card[data-id="e"]')).toBeVisible();
+        // Zoomed out a little, the middle a bit off the focus.
+        const main = await page.evaluate(() => {
+            const zp = window.Strom.ZoomPan;
+            const mid = zp.viewCenterWorld();
+            zp.restoreView(0.62, mid.x + 40, mid.y + 25);
+            return { scale: zp.getScale(), mid: zp.viewCenterWorld() };
+        });
+        const sat = await popupOf(page, () => page.locator('#view-mode-family').click({ modifiers: ['ControlOrMeta'] }), 'family');
+        await expect(sat.locator('#tree-canvas .person-card[data-id="e"]')).toBeVisible();
+        expect(await sat.evaluate(() => window.Strom.TreeRenderer.getFocusPersonId())).toBe('e');
+        expect(await sat.evaluate(() => [window.Strom.TreeRenderer.getFocusDepthUp(), window.Strom.TreeRenderer.getFocusDepthDown()])).toEqual([1, 1]);
+        await expect.poll(() => sat.evaluate(() => window.Strom.ZoomPan.getScale())).toBeCloseTo(main.scale, 3);
+        const mid = await sat.evaluate(() => window.Strom.ZoomPan.viewCenterWorld());
+        expect(Math.abs(mid.x - main.mid.x)).toBeLessThan(2);
+        expect(Math.abs(mid.y - main.mid.y)).toBeLessThan(2);
+        // The main window keeps its own.
+        expect(await page.evaluate(() => window.Strom.TreeRenderer.getFocusPersonId())).toBe('e');
+        await sat.close();
+
+        // The map: its centre, zoom, what it shows and the kinds of places.
+        await page.evaluate(() => window.Strom.UI.setDisplayViewMode('map'));
+        await page.evaluate(() => {
+            const ui = window.Strom.UI as unknown as { mapCenter: unknown; mapZoom: number; mapScope: string };
+            ui.mapCenter = { lat: 49.2, lon: 16.6 };
+            ui.mapZoom = 8;
+            ui.mapScope = 'tree';
+            window.Strom.SettingsManager.setMapKinds(['birth', 'wedding']);
+        });
+        const satMap = await popupOf(page, () => page.locator('#view-mode-map').click({ modifiers: ['ControlOrMeta'] }), 'map');
+        await expect(satMap.locator('#map-container')).toBeVisible();
+        await expect.poll(() => satMap.evaluate(() => {
+            const ui = window.Strom.UI as unknown as { mapCenter: { lat: number; lon: number } | null; mapZoom: number; mapScope: string };
+            return { center: ui.mapCenter && { lat: ui.mapCenter.lat, lon: ui.mapCenter.lon }, zoom: ui.mapZoom, scope: ui.mapScope };
+        })).toEqual({ center: { lat: 49.2, lon: 16.6 }, zoom: 8, scope: 'tree' });
+        expect(await satMap.evaluate(() => window.Strom.SettingsManager.getMapKinds())).toEqual(['birth', 'wedding']);
+        expect(await satMap.evaluate(() => window.Strom.TreeRenderer.getFocusPersonId())).toBe('e');
+        await expect(page.locator('#view-mode-map')).toHaveClass(/active/);
+        await satMap.close();
+    });
+
     test('the Table\'s ⧉ hands its saved view, filters, search, sort and selected row to the new window', async ({ page }) => {
         await openMain(page);
         await tableTab(page).click();

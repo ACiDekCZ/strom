@@ -32,7 +32,7 @@ import { keepLifelineChipsFor } from './lifeline-view.js';
 import { parseDeepLink, deepLinkTreeMatches, stripDeepLinkParams } from './deep-link.js';
 import { shouldRegisterServiceWorker, registerServiceWorker, linkManifest, isBetaBuild, appModeFor, captureInstallPrompt, INSTALL_AVAILABILITY_EVENT, isSafariOnComputer, safariAppName } from './pwa.js';
 import { decideWindowRole, getWindowRole, setWindowRole, satelliteViewMode, tryBecomeMain, type SatelliteParams } from './windows/window-role.js';
-import { startMainWindow, startSatelliteClient, startSatelliteSelection, forwardSatelliteLaunches, showSecondTab, openLinksFromOtherWindows, makeSatelliteMain, openMainWindow } from './windows/window-start.js';
+import { startMainWindow, startSatelliteClient, startSatelliteSelection, forwardSatelliteLaunches, showSecondTab, openLinksFromOtherWindows, makeSatelliteMain, openMainWindow, wireSatelliteViewStart } from './windows/window-start.js';
 import { mountSatStates } from './windows/sat-states.js';
 import { wireWindowDrafts } from './windows/window-drafts.js';
 import { peekBecomeMainMark, retryBecomeMain, takeBecomeMainMark } from './windows/become-main.js';
@@ -369,13 +369,17 @@ function startSatelliteWindow(params: SatelliteParams, debugOptions: DebugOption
     UI.initHistoryManage();
     if (debugOptions.enabled) TreeRenderer.setDebugOptions(debugOptions);
 
-    // Another tree (the first one, a switch in the main window): its default person, before the drawing below.
+    // The view's state carried from the main window (§1): its person, generations, zoom, the map's frame.
+    const applyViewStart = wireSatelliteViewStart(client);
+    // Another tree (the first one, a switch in the main window): its default person, before the drawing below;
+    // at the first tree the main window's person and the view's state instead.
     let shownTree: TreeId | null = null;
     window.addEventListener('strom:data-changed', () => {
         const treeId = DataManager.getCurrentTreeId();
         if (treeId === shownTree) return;
         shownTree = treeId;
         TreeRenderer.restoreFromSession();
+        applyViewStart();
     });
     registerAppListeners();
     UI.initOnlineIndicator();
