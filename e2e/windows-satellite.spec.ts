@@ -129,6 +129,10 @@ test.describe('desktop (1440)', () => {
         await expect(sat.locator('.sat-follow')).toHaveAttribute('aria-checked', 'false');
         await sat.reload();
         await expect(tv(sat, '.tv-status-ro')).toBeHidden();
+        // The window's own Table state is kept over the reload too: its row, in view.
+        await expect(row(sat, LAST)).toHaveAttribute('aria-selected', 'true');
+        await expect(row(sat, LAST)).toBeInViewport();
+        await tv(sat, '.tv-grid').evaluate(el => { el.scrollTop = 0; });
         await expect(row(sat, 'v')).toBeVisible();
         await expect(sat.locator('.sat-follow')).toHaveAttribute('aria-checked', 'false');
 

@@ -147,6 +147,37 @@ describe('opening and hello', () => {
     });
 });
 
+describe('the main window\'s person with the tree', () => {
+    it('a reloaded satellite and every window after a switch of trees get the person in the centre here with the tree', async () => {
+        registry.stop();
+        let focus: { personId: string; depthUp: number; depthDown: number } | null = { personId: 'p-zdislava', depthUp: 2, depthDown: 1 };
+        registry = new WindowRegistry({
+            bus: new WindowBus('main-3', hub.channel()),
+            host: dataManagerHost({ treeName: () => treeName, treeExists: () => true, focusSelf: () => {}, hasFocus: () => true, focus: () => focus }),
+            openWindow: () => fakeWindow() as unknown as Window,
+            geometry: () => null,
+        });
+        registry.start();
+        const sat = listener(hub, 'sat-f5');
+        sat.bus.post({ type: 'hello', windowId: 'sat-f5', kind: 'family', treeId: TREE });
+        await settle();
+        expect(sat.of('tree')[0]).toMatchObject({ to: 'sat-f5', treeId: TREE, focus: { personId: 'p-zdislava', depthUp: 2, depthDown: 1 } });
+
+        // Another tree opened here: its person goes with it to every window.
+        (DataManager as unknown as { currentTreeId: TreeId }).currentTreeId = 'reg-tree-2' as TreeId;
+        focus = { personId: 'p-other', depthUp: 3, depthDown: 2 };
+        await settle(1000);
+        await settle(PATCH_INTERVAL_MS);
+        expect(last(sat.of('tree'))).toMatchObject({ treeId: 'reg-tree-2', replaces: { treeId: TREE }, focus: { personId: 'p-other', depthUp: 3, depthDown: 2 } });
+
+        // No person here: the tree goes without one.
+        focus = null;
+        sat.bus.post({ type: 'hello', windowId: 'sat-f5', kind: 'family', treeId: 'reg-tree-2' as TreeId });
+        await settle();
+        expect(last(sat.of('tree'))).not.toHaveProperty('focus');
+    });
+});
+
 describe('edits from a satellite', () => {
     it('on the present revision: saved as an edit here, an undo step with its label, a patch to all, revision + 1', async () => {
         const sat = await connect();

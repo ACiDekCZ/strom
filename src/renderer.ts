@@ -4347,6 +4347,9 @@ class TreeRendererClass {
             if (toolbarFocus) toolbarFocus.style.display = 'none';
             if (toolbarFocusName) toolbarFocusName.textContent = '';
             if (toolbarFocusCount) toolbarFocusCount.textContent = '';
+            // No name of a tree gone from view stays behind (a locked tree's copy in a satellite).
+            if (focusName) focusName.textContent = '';
+            if (focusCount) focusCount.textContent = '';
             return;
         }
 

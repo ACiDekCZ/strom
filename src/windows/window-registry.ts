@@ -45,6 +45,8 @@ export interface MainWindowHost {
     onSaved(cb: () => void): () => void;
     focusSelf(): void;
     hasFocus(): boolean;
+    /** The person in the centre and its generations (sent with the tree: where a satellite without a state starts); null: none. */
+    focus?(): { personId: string; depthUp: number; depthDown: number } | null;
 }
 
 /** The main window as DataManager and TreeManager have it. */
@@ -71,6 +73,7 @@ export function dataManagerHost(overrides: Partial<MainWindowHost> = {}): MainWi
         onSaved: (cb) => DataManager.onTreeSaved(cb),
         focusSelf: () => { if (typeof window !== 'undefined') window.focus(); },
         hasFocus: () => typeof document !== 'undefined' && document.hasFocus(),
+        focus: () => null,
         ...overrides,
     };
 }
@@ -445,7 +448,7 @@ export class WindowRegistry {
             this.bus.post({ type: 'patch', treeId, revision: this.rev, json });
         } else {
             const replaces = prev?.treeId && prev.treeId !== treeId ? { treeId: prev.treeId, exists: this.host.treeExists(prev.treeId) } : undefined;
-            this.bus.post({ type: 'tree', treeId, name: this.host.treeName(treeId), revision: this.rev, json, ...(replaces ? { replaces } : {}) });
+            this.bus.post({ type: 'tree', treeId, name: this.host.treeName(treeId), revision: this.rev, json, ...(replaces ? { replaces } : {}), ...this.focusField() });
         }
         this.postStatus(false);
     }
@@ -454,8 +457,15 @@ export class WindowRegistry {
     private sendTreeTo(to: string): void {
         const treeId = this.host.treeId();
         if (!treeId || this.host.locked()) return;   // the status says why
-        this.bus.post({ type: 'tree', to, treeId, name: this.host.treeName(treeId), revision: this.rev, json: this.host.storedJson() });
+        this.bus.post({ type: 'tree', to, treeId, name: this.host.treeName(treeId), revision: this.rev, json: this.host.storedJson(), ...this.focusField() });
         if (!this.lastSent) this.lastSent = { treeId, withData: true };
+    }
+
+    /** The person in the centre here, with the tree (a satellite without a state of its own starts there). */
+    private focusField(): { focus?: { personId: string; depthUp: number; depthDown: number } } {
+        let focus: { personId: string; depthUp: number; depthDown: number } | null = null;
+        try { focus = this.host.focus?.() ?? null; } catch { /* none */ }
+        return focus ? { focus } : {};
     }
 
     private status(): WindowStatus {

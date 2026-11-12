@@ -31,8 +31,9 @@ import { SettingsManager } from '../settings.js';
 import type { MapKind } from '../places.js';
 import type { SatelliteKind } from './window-role.js';
 import {
-    applyViewStateAfterDraw, applyViewStateBeforeDraw, captureViewState, parseViewState,
-    type ViewStateSource, type ViewStateTarget, type ViewWindowState,
+    applyViewStateAfterDraw, applyViewStateBeforeDraw, captureViewState, chooseWindowStart, parseMainFocus, parseViewState,
+    readStoredWindowState, storedWindowStateJson, windowStateKey,
+    type StoredWindowState, type ViewStateSource, type ViewStateTarget, type ViewWindowState,
 } from './view-window-state.js';
 
 /** The main window's registry (null in any other window). */
@@ -94,6 +95,8 @@ export function startMainWindow(): WindowRegistry {
             // As the app's own Undo: the drawing, the toolbar and the toast follow.
             undo: () => UI.performUndo(),
             redo: () => UI.performRedo(),
+            // Where a satellite without a state of its own starts (its reload, another tree).
+            focus: () => mainFocusNow(),
         }),
     });
     registry.start();
@@ -268,6 +271,13 @@ export function openMainWindow(): void {
 
 // ---- the state a new window of a view takes over (spec 079 §1) ----
 
+/** This window's person in the centre (the Table's: its active row's person) and its generations. */
+function mainFocusNow(): { personId: string; depthUp: number; depthDown: number } | null {
+    const personId = appViewStateSource.viewMode() === 'table' ? appViewStateSource.tableFocus() ?? appViewStateSource.focus() : appViewStateSource.focus();
+    if (!personId) return null;
+    return { personId, depthUp: TreeRenderer.getFocusDepthUp(), depthDown: TreeRenderer.getFocusDepthDown() };
+}
+
 /** The main window's views, as a new window of a view takes them over. */
 const appViewStateSource: ViewStateSource = {
     viewMode: () => TreeRenderer.getViewMode(),
@@ -342,34 +352,86 @@ export function captureAppViewState(kind: SatelliteKind): ViewWindowState | unde
 }
 
 /**
- * A satellite of a view: the state the main window sent (`init`, before the
- * tree) is applied at its first tree, after the tree's default person was
- * chosen and before the drawing (the returned function, called there); after
- * the drawing Family and Descendants take the zoom and middle, or centre as
- * they would on their own (also at another tree, a reload of the window).
+ * A satellite's start of every tree it gets (the returned function, called
+ * after the tree's default person was chosen and before the drawing):
+ *
+ * - its first tree: the state the main window sent (`init`, before the
+ *   tree), else the state this window kept over its reload (`kept`, the
+ *   same tree) — its person, generations, the view's own settings;
+ * - a state whose person the tree no longer has counts as none; without a
+ *   person of a state (a reload without one, another tree from the main
+ *   window) the main window's person in the centre, sent with the tree —
+ *   never the tree's first person with all its family for want of a state;
+ * - after the drawing Family and Descendants take the zoom and middle of
+ *   the state, or centre as they would on their own.
  */
-export function wireSatelliteViewStart(client: SatelliteClient): () => void {
-    let start: ViewWindowState | null = null;
-    let applied = false;
+export function wireSatelliteViewStart(client: SatelliteClient, kept: StoredWindowState | null = null): () => void {
+    let init: ViewWindowState | null = null;
+    let first = true;
+    let afterDraw: ViewWindowState | null = null;
     let drawnTree: string | null = null;
     client.on('init', ({ kind, state }) => {
-        if (!applied && drawnTree === null) start = parseViewState(kind, state);
+        if (first) init = parseViewState(kind, state);
     });
     client.on('tree', ({ treeId }) => {
         if (treeId === drawnTree) return;
         drawnTree = treeId;
-        const state = applied ? start : null;
-        start = null;
+        const state = afterDraw;
+        afterDraw = null;
         // Only the charts frame themselves after drawing (the Table, the fan, the timeline and the map do it while drawing).
         const view = TreeRenderer.getViewMode();
         if (view !== 'family' && view !== 'descendants') return;
         void TreeRenderer.renderAsync().then(() => applyViewStateAfterDraw(state, TreeRenderer.getViewMode(), appViewStateTarget));
     });
     return () => {
-        if (applied || drawnTree !== null || !start) return;
-        applied = true;
-        // The main window switched trees meanwhile: its state was another tree's.
-        if (client.requestedTreeId && DataManager.getCurrentTreeId() !== client.requestedTreeId) { start = null; return; }
-        applyViewStateBeforeDraw(start, appViewStateTarget);
+        const treeId = DataManager.getCurrentTreeId();
+        let state: ViewWindowState | null = null;
+        if (first) {
+            first = false;
+            // The main window switched trees meanwhile: its state was another tree's.
+            if (init) state = client.requestedTreeId && treeId !== client.requestedTreeId ? null : init;
+            else if (kept && kept.tree === treeId) state = parseViewState(kept.kind, kept.state);
+            init = null;
+        }
+        const start = chooseWindowStart(state, parseMainFocus(client.mainFocus), appViewStateTarget.hasPerson);
+        if (start.focus) appViewStateTarget.setFocus(start.focus.personId, start.focus.depthUp, start.focus.depthDown);
+        if (start.state) applyViewStateBeforeDraw(start.state, appViewStateTarget);
+        afterDraw = start.state;
     };
+}
+
+/**
+ * What a satellite kept of itself for its reload (§1): its tree, view and
+ * the view's state, read once at its start; null when there is none for the
+ * view of its address.
+ */
+export function keptSatelliteState(windowId: string, kind: SatelliteKind): StoredWindowState | null {
+    let raw: string | null = null;
+    try { raw = sessionStorage.getItem(windowStateKey(windowId)); } catch { /* no storage */ }
+    return readStoredWindowState(raw, kind);
+}
+
+/**
+ * A satellite keeps its own state for its reload (F5, the window restored by
+ * the browser) in its sessionStorage — written as the page goes or is
+ * hidden; never localStorage or IndexedDB: the person in the centre, the
+ * generations, the zoom and middle, the fan's and the map's settings, or the
+ * Table's row type, view, filters, sort and row.
+ */
+export function keepSatelliteState(client: SatelliteClient): void {
+    const save = (): void => {
+        if (!client.hasTree) return;
+        const kind = client.kind;
+        let json: string | null = null;
+        try {
+            const state = kind === 'table' ? UI.tableWindowState() : captureAppViewState(kind);
+            json = storedWindowStateJson(client.treeId, kind, state);
+        } catch (err) {
+            console.warn('Window state not kept', err);
+        }
+        if (!json) return;
+        try { sessionStorage.setItem(windowStateKey(client.windowId), json); } catch { /* no storage */ }
+    };
+    window.addEventListener('pagehide', save);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') save(); });
 }

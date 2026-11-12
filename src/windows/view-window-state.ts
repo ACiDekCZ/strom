@@ -217,3 +217,75 @@ export function applyViewStateAfterDraw(state: ViewWindowState | null, view: str
     if (state && (state.view === 'family' || state.view === 'descendants') && state.zoom) target.restoreZoom(state.zoom);
     else target.centerView();
 }
+
+// ---- a satellite's own state over its reload, and its start without one ----
+
+/**
+ * sessionStorage key of a satellite's own state (§1, its reload): written
+ * when the page goes (F5, closed), read at its next start. sessionStorage is
+ * the window's own; nothing goes to localStorage or IndexedDB.
+ */
+export function windowStateKey(windowId: string): string {
+    return `strom.win.state.${windowId}`;
+}
+
+/** What a satellite keeps of itself over its reload: its tree, its view and the view's state. */
+export interface StoredWindowState {
+    tree: string;
+    kind: SatelliteKind;
+    state: unknown;
+}
+
+/** The record written for the window's reload (null: nothing to keep: no tree, no state). */
+export function storedWindowStateJson(tree: string | null, kind: SatelliteKind, state: unknown): string | null {
+    if (!tree || state === undefined || state === null) return null;
+    const rec: StoredWindowState = { tree, kind, state };
+    return JSON.stringify(rec);
+}
+
+/**
+ * The state the window kept for itself, when it is one of `kind` (the view
+ * shown before the reload is the address's) for the tree `tree`; else null.
+ */
+export function readStoredWindowState(raw: string | null, kind: SatelliteKind): StoredWindowState | null {
+    if (!raw) return null;
+    let rec: unknown;
+    try { rec = JSON.parse(raw); } catch { return null; }
+    if (!isObj(rec) || typeof rec.tree !== 'string' || !rec.tree || rec.kind !== kind || rec.state === undefined || rec.state === null) return null;
+    return { tree: rec.tree, kind, state: rec.state };
+}
+
+/** The main window's person in the centre, sent with its tree (a window without a state of its own starts there). */
+export interface MainFocus {
+    personId: PersonId;
+    depthUp: number;
+    depthDown: number;
+}
+
+/** The main window's person as it came over the channel (null: none, or not one). */
+export function parseMainFocus(raw: unknown): MainFocus | null {
+    if (!isObj(raw)) return null;
+    const personId = idOrNull(raw.personId);
+    if (!personId || !num(raw.depthUp) || !num(raw.depthDown)) return null;
+    return { personId, depthUp: Math.max(0, Math.floor(raw.depthUp)), depthDown: Math.max(0, Math.floor(raw.depthDown)) };
+}
+
+/**
+ * How a satellite starts a tree (the first one, a reload, another tree from
+ * the main window): with its state (from the main window's `init` or kept
+ * over its reload) when its person is still in the tree; a state whose person
+ * is gone counts as none. Without a person of the state, the main window's
+ * person, when the tree has it. Neither: the tree's default person, as the
+ * main window chooses it (`focus` null, nothing to apply) — never a start
+ * that would draw the first person's whole family for want of a state.
+ */
+export function chooseWindowStart(
+    state: ViewWindowState | null,
+    mainFocus: MainFocus | null,
+    hasPerson: (id: PersonId) => boolean,
+): { state: ViewWindowState | null; focus: MainFocus | null } {
+    const usable = state && (!state.focus || hasPerson(state.focus)) ? state : null;
+    if (usable?.focus) return { state: usable, focus: null };
+    const focus = mainFocus && hasPerson(mainFocus.personId) ? mainFocus : null;
+    return { state: usable, focus };
+}

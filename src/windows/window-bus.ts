@@ -54,8 +54,11 @@ export type WindowMessageBody =
      * main → sat: the whole open tree (unlocked). To one window (`to`) after
      * its hello or a refused edit; to all after a tree switch. `replaces`: the
      * tree sent before it, and whether that one still exists (deleted: §3.5b).
+     * `focus`: the main window's person in the centre and its generations
+     * (`{ personId, depthUp, depthDown }`), where a window without a state of
+     * its own starts.
      */
-    | { type: 'tree'; to?: string; treeId: TreeId; name: string; revision: number; json: string; replaces?: { treeId: TreeId; exists: boolean } }
+    | { type: 'tree'; to?: string; treeId: TreeId; name: string; revision: number; json: string; replaces?: { treeId: TreeId; exists: boolean }; focus?: unknown }
     /** main → all: the tree after a save (any: own edit, a satellite's, undo, the research). */
     | { type: 'patch'; treeId: TreeId; revision: number; json: string }
     /** sat → main: an edit made on the copy of revision `baseRevision`; `json` = the whole data after it. */

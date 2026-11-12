@@ -146,6 +146,22 @@ describe('start', () => {
         expect(trees).toHaveBeenCalledWith(expect.objectContaining({ treeId: TREE, name: 'Hrachovcovi', switchedFrom: null, afterConflict: false }));
         expectNoStorage();
     });
+
+    it('the main window\'s person sent with a tree is there when the copy loads (its start reads it)', async () => {
+        const seen: unknown[] = [];
+        const load = DataManager.loadFromWindow.bind(DataManager);
+        vi.spyOn(DataManager, 'loadFromWindow').mockImplementation((treeId, json) => { seen.push(sat.mainFocus); load(treeId, json); });
+        sat.start();
+        await settle();
+        main.post({ type: 'status', ...status() });
+        main.post({ type: 'tree', to: SAT, treeId: TREE, name: 'Hrachovcovi', revision: 100, json: treeJson(['p1', 'Bořivoj']), focus: { personId: 'p1', depthUp: 2, depthDown: 1 } });
+        await settle();
+        expect(seen).toEqual([{ personId: 'p1', depthUp: 2, depthDown: 1 }]);
+        // A tree without one: none.
+        main.post({ type: 'tree', to: SAT, treeId: 'sat-tree-2' as TreeId, name: 'Jiní', revision: 101, json: treeJson(['p2', 'Ctibor']) });
+        await settle();
+        expect(seen[1]).toBeNull();
+    });
 });
 
 describe('edits', () => {

@@ -230,8 +230,10 @@ const chooseIn = (p: Page, id: string) => p.evaluate(async (pid) => { await wind
 test('the selection between the main window and a chart satellite: the card, the sector, the row; a focus here goes out', async ({ page, context }) => {
     test.setTimeout(60_000);
     const treeId = await openMain(page, context);
-    const sat = await openSatellite(context, treeId, 'family', 'cv21aa', []);
     const [johan, erik, thomas] = [await personId(page, 'Johan', 'Berg'), await personId(page, 'Erik', 'Berg'), await personId(page, 'Thomas', 'Berg')];
+    // The main window on Erik: a window opened without a state starts there (Johan a new choice in it).
+    await chooseIn(page, erik);
+    const sat = await openSatellite(context, treeId, 'family', 'cv21aa', []);
     // Opening the window chose nobody.
     await page.waitForTimeout(300);
     expect(await selectedIn(page)).toBeNull();
@@ -245,6 +247,7 @@ test('the selection between the main window and a chart satellite: the card, the
 
     // Satellite → main: Focus in the person menu; the main window's centre stays, the ring here goes.
     const mainFocus = await focusOf(page);
+    await sat.evaluate((id) => window.Strom.ZoomPan.centerOnPerson(id as never), johan);
     await card(sat, 'Johan').click();
     await menu(sat).locator('[data-action="focus"]').click();
     await expect.poll(() => selectedIn(page)).toBe(johan);

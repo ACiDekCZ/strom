@@ -8,7 +8,8 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-    applyViewStateAfterDraw, applyViewStateBeforeDraw, captureViewState, parseViewState,
+    applyViewStateAfterDraw, applyViewStateBeforeDraw, captureViewState, chooseWindowStart, parseMainFocus, parseViewState,
+    readStoredWindowState, storedWindowStateJson, windowStateKey,
     type ViewStateSource, type ViewStateTarget, type ViewWindowState,
 } from '../view-window-state.js';
 import type { PersonId } from '../../types.js';
@@ -145,5 +146,65 @@ describe('applying it in the new window', () => {
         const map = target();
         applyViewStateAfterDraw(captureViewState('map', source())!, 'map', map.t);
         expect(map.calls).toEqual([]);
+    });
+});
+
+describe('a satellite\'s own state over its reload', () => {
+    it('kept per window under its own key, read back for the view of its address only', () => {
+        expect(windowStateKey('ab12cd34')).toBe('strom.win.state.ab12cd34');
+        const state = captureViewState('family', source({ focus: () => P('p2') }));
+        const json = storedWindowStateJson('tree-1', 'family', state);
+        expect(json).not.toBeNull();
+        const back = readStoredWindowState(json, 'family');
+        expect(back).toEqual({ tree: 'tree-1', kind: 'family', state: JSON.parse(JSON.stringify(state)) });
+        // Read as the window's state, as the main window's would be: the same person, generations and zoom.
+        expect(parseViewState('family', back!.state)).toEqual(state);
+        // Another view in the address (switched, not reloaded since): not this one's.
+        expect(readStoredWindowState(json, 'map')).toBeNull();
+        // The Table's own state is kept the same way.
+        expect(readStoredWindowState(storedWindowStateJson('tree-1', 'table', { rowType: 'persons' }), 'table')).toEqual({ tree: 'tree-1', kind: 'table', state: { rowType: 'persons' } });
+    });
+
+    it('nothing kept without a tree or a state; nothing read from a broken record', () => {
+        expect(storedWindowStateJson(null, 'family', captureViewState('family', source()))).toBeNull();
+        expect(storedWindowStateJson('tree-1', 'overview', undefined)).toBeNull();
+        expect(readStoredWindowState(null, 'family')).toBeNull();
+        expect(readStoredWindowState('{not json', 'family')).toBeNull();
+        expect(readStoredWindowState('{"kind":"family","state":{}}', 'family')).toBeNull();
+        expect(readStoredWindowState('{"tree":"t","kind":"family"}', 'family')).toBeNull();
+    });
+});
+
+describe('the start of a tree in a satellite', () => {
+    const has = (...ids: string[]) => (id: PersonId) => ids.includes(id);
+    const main = { personId: P('p7'), depthUp: 2, depthDown: 1 };
+
+    it('its own state, when the tree still has its person (the main window\'s person not needed)', () => {
+        const state = captureViewState('family', source())!;
+        expect(chooseWindowStart(state, main, has('p1', 'p7'))).toEqual({ state, focus: null });
+    });
+
+    it('a state whose person is gone counts as none: the main window\'s person', () => {
+        const state = captureViewState('family', source())!;
+        expect(chooseWindowStart(state, main, has('p7'))).toEqual({ state: null, focus: main });
+    });
+
+    it('no state (a reload without one, another tree): the main window\'s person, never the first person', () => {
+        expect(chooseWindowStart(null, main, has('p7'))).toEqual({ state: null, focus: main });
+        // A state without a person (the main window had none): its settings, the main window's person.
+        const fan = captureViewState('fan', source({ focus: () => null }))!;
+        expect(chooseWindowStart(fan, main, has('p7'))).toEqual({ state: fan, focus: main });
+    });
+
+    it('neither: the tree\'s default person (nothing to apply)', () => {
+        expect(chooseWindowStart(null, null, has('p1'))).toEqual({ state: null, focus: null });
+        expect(chooseWindowStart(null, main, has('p1'))).toEqual({ state: null, focus: null });
+    });
+
+    it('the main window\'s person as it comes over the channel', () => {
+        expect(parseMainFocus({ personId: 'p7', depthUp: 2.6, depthDown: -1 })).toEqual({ personId: 'p7', depthUp: 2, depthDown: 0 });
+        expect(parseMainFocus(null)).toBeNull();
+        expect(parseMainFocus({ personId: '', depthUp: 1, depthDown: 1 })).toBeNull();
+        expect(parseMainFocus({ personId: 'p7', depthUp: 'x', depthDown: 1 })).toBeNull();
     });
 });

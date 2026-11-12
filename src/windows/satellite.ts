@@ -126,6 +126,7 @@ export class SatelliteClient {
     private _status: WindowStatus | null = null;
     private _connection: SatelliteConnection = 'connecting';
     private _init: { kind: SatelliteKind; state: unknown } | null = null;
+    private _mainFocus: unknown = null;
     private mainId: string | null = null;
     private lastHeard = 0;
     private helloAt = -Infinity;
@@ -171,6 +172,12 @@ export class SatelliteClient {
     get connection(): SatelliteConnection { return this._connection; }
     /** The starting state, when it came before a listener did. */
     get initState(): { kind: SatelliteKind; state: unknown } | null { return this._init; }
+    /**
+     * The main window's person in the centre as it came with the last tree
+     * (raw; parseMainFocus): set before the copy is loaded, so the start of
+     * that tree may read it.
+     */
+    get mainFocus(): unknown { return this._mainFocus; }
     /** The copy has a tree. */
     get hasTree(): boolean { return this._treeId !== null && this._revision >= 0 && !this.gone; }
     /** Edits sent or waiting for the main window. */
@@ -437,6 +444,7 @@ export class SatelliteClient {
         this.gone = false;
         this.queue.length = 0;
         this.inFlight = null;
+        this._mainFocus = m.focus ?? null;
         this.data.loadFromWindow(m.treeId, m.json);
         this._treeId = m.treeId;
         this._treeName = m.name;
