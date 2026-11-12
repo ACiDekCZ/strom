@@ -89,25 +89,33 @@ async function cell(page: Page, key: string, colId: string) {
 
 const birthPlace = (page: Page, id: string) => page.evaluate((pid) => window.Strom.DataManager.getPerson(pid as never)?.birthPlace, id);
 
-/** The main window's registry posts no messages of `type` until `release` (a patch held back: the satellite edits on an old revision). */
-async function holdMessages(main: Page, type: string, delayMs: number | null): Promise<void> {
-    await main.evaluate(({ type, delayMs }) => {
+/**
+ * The main window's registry posts no messages of `type`: `null` drops them (a patch held back: the
+ * satellite edits on an old revision), `'release'` keeps them until `releaseMessages` posts them.
+ */
+async function holdMessages(main: Page, type: string, hold: null | 'release'): Promise<void> {
+    await main.evaluate(({ type, hold }) => {
         const reg = window.Strom.Windows as unknown as { bus: { post: (m: { type: string }) => void } };
-        const w = window as unknown as { __origPost?: (m: { type: string }) => void };
+        const w = window as unknown as { __origPost?: (m: { type: string }) => void; __held?: { type: string }[] };
         w.__origPost ??= reg.bus.post.bind(reg.bus);
+        w.__held = [];
         const post = w.__origPost;
         reg.bus.post = (m) => {
             if (m.type !== type) { post(m); return; }
-            if (delayMs !== null) setTimeout(() => post(m), delayMs);
+            if (hold === 'release') w.__held!.push(m);
         };
-    }, { type, delayMs });
+    }, { type, hold });
 }
 
+/** The registry posts as before; what `holdMessages(…, 'release')` kept goes now. */
 async function releaseMessages(main: Page): Promise<void> {
     await main.evaluate(() => {
         const reg = window.Strom.Windows as unknown as { bus: { post: (m: unknown) => void } };
-        const w = window as unknown as { __origPost?: (m: unknown) => void };
+        const w = window as unknown as { __origPost?: (m: unknown) => void; __held?: unknown[] };
         if (w.__origPost) reg.bus.post = w.__origPost;
+        const held = w.__held ?? [];
+        w.__held = [];
+        for (const m of held) reg.bus.post(m);
     });
 }
 
@@ -117,7 +125,8 @@ test.describe('desktop (1440)', () => {
     test('1 loading: the skeleton until the tree comes, its label only after 300 ms, the header muted', async ({ page, context }) => {
         await installClock(context);
         const treeId = await openMain(page);
-        await holdMessages(page, 'tree', 1500);
+        // The tree comes only when the test lets it (after the label), whatever time the satellite takes to start.
+        await holdMessages(page, 'tree', 'release');
         const sat = await context.newPage();
         await sat.addInitScript(() => {
             const log: { what: string; at: number }[] = [];
@@ -139,6 +148,7 @@ test.describe('desktop (1440)', () => {
         const at = (what: string) => log.find(l => l.what === what)!.at;
         expect(at('label') - at('skeleton')).toBeGreaterThanOrEqual(250);
 
+        await releaseMessages(page);
         await expect(tv(sat, '.tv-status-count')).toHaveText('3 of 3 people');
         await expect(skeleton(sat)).toBeHidden();
         await expect(sat.locator('html')).not.toHaveClass(/\bsat-muted\b/);

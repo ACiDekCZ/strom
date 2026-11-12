@@ -9688,11 +9688,14 @@
         .table-view { --tv-row-h: 32px; --tv-group-h: 26px; --tv-head-h: 44px; --tv-cov-h: 24px; }
         .tv-bar { flex: none; background: var(--surface); border-bottom: 1px solid var(--border); }
         .tv-bar-row1 {
-            display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
+            display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px;
             min-height: 52px; padding: 8px 16px; box-sizing: border-box;
         }
-        /* The spacer gives one of its two gaps back (room for ⧉ after Export, spec 079 §1). */
-        .tv-bar-spacer { flex: 1 1 auto; margin-right: -12px; }
+        /* The spacer gives one of its two gaps back (room for ⧉ after Export, spec 079 §1). The row's
+           10 px gaps, the row types' 12 px, the view's 6 px and 10 px inside the buttons leave room
+           for text set a little wider (Linux renders the same font wider): four row types in de, a
+           changed view's buttons, the search at 160 px, Columns, Export and ⧉ stay one row at 1440. */
+        .tv-bar-spacer { flex: 1 1 auto; margin-right: -10px; }
         .tv-bar-row2 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 44px; padding: 0 16px; box-sizing: border-box; border-top: 1px solid var(--divider); }
         .tv-bar-row2[hidden], .tv-slot:empty { display: none; }
         /* §8.3 search in the bar; §8.1 the quick chips in row 2 (one line; what does not fit goes into More filters). */
@@ -9788,7 +9791,7 @@
         .tv-fs-clear[hidden] { display: none; }
         /* Row type: a segmented radio group (§2), "People 38". */
         .tv-rowtype { display: inline-flex; border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; background: var(--surface-2); }
-        .tv-rowtype .segment-btn { padding: 0 14px; height: 34px; font-size: 13px; white-space: nowrap; border-radius: 0; }
+        .tv-rowtype .segment-btn { padding: 0 12px; height: 34px; font-size: 13px; white-space: nowrap; border-radius: 0; }
         .tv-rowtype .segment-btn.active { font-weight: 600; }
         .tv-rowtype-count { margin-left: 6px; font-variant-numeric: tabular-nums; opacity: 0.85; }
         .tv-rowtype-btn {
@@ -10058,14 +10061,14 @@
         .tv-menu-hint { flex: none; font-size: 11.5px; color: var(--text-faint); }
         /* §4.4 the Columns button and panel (a sheet from the bottom on a phone). */
         .tv-cols-btn {
-            display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; white-space: nowrap;
+            display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px; white-space: nowrap;
             border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text);
             font-size: 13px; font-weight: 600; cursor: pointer;
         }
         .tv-cols-btn[aria-expanded="true"] { border-color: var(--primary); background: var(--primary-soft); }
         .tv-cols-count { font-weight: 400; color: var(--text-light); font-variant-numeric: tabular-nums; }
         /* §9.2 the view picker ("View  Overview ▾", "● changed", Save · Save as new · Discard changes); §11.1 Export. */
-        .tv-slot-view { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 0 1 auto; }
+        .tv-slot-view { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 0 1 auto; }
         .tv-view-label { font-size: 12px; color: var(--text-faint); white-space: nowrap; }
         .tv-view-btn {
             display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 260px; height: 32px; padding: 0 10px;
@@ -10081,7 +10084,7 @@
         }
         .tv-view-changed.is-note { cursor: help; text-decoration: underline dotted; text-underline-offset: 3px; }
         .tv-view-act {
-            flex: none; height: 32px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--r-md);
+            flex: none; height: 32px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--r-md);
             background: var(--surface); color: var(--text); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
         }
         .tv-view-discard {
@@ -10090,13 +10093,13 @@
         }
         .tv-view-changed[hidden], .tv-view-act[hidden], .tv-view-discard[hidden], .tv-view-dot[hidden] { display: none; }
         .tv-export-btn {
-            display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; white-space: nowrap;
+            display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px; white-space: nowrap;
             border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text);
             font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
         }
         /* ⧉ Open in a new window (spec 079 §1, 1c): an icon square as tall as Columns and Export, 6 px after
            Export; with the spacer's gap given back a changed view's buttons still fit one row at 1440 in de. */
-        .tv-slot-window { display: flex; margin-left: -6px; }
+        .tv-slot-window { display: flex; margin-left: -4px; }
         .tv-slot-window:has(> .tv-window-btn[hidden]) { display: none; }
         /* A tablet's width with a mouse (641–1024): the search gives way to 120 px, so ⧉ stays in the row. */
         @media (min-width: 641px) and (max-width: 1024px) {

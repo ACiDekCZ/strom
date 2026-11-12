@@ -35,15 +35,25 @@ async function fanOn(page: Page, name: string): Promise<void> {
     await expect(fan.locator('.fan-focus')).toContainText(name);
 }
 
+/**
+ * The start is over once the first render ran (html.app-booting gone): the
+ * view and the person are chosen before it. .app-loading goes earlier (when
+ * the tree is in memory), before the start reads more from the database.
+ */
+async function started(page: Page): Promise<void> {
+    await expect(page.locator('html')).not.toHaveClass(/app-loading/);
+    await expect(page.locator('html')).not.toHaveClass(/app-booting/);
+}
+
 /** A new start in the same tab (an address opened again, not a reload). */
 async function reopen(page: Page, query = ''): Promise<void> {
     await page.goto(`/strom.html${query}`);
-    await expect(page.locator('html')).not.toHaveClass(/app-loading/);
+    await started(page);
 }
 
 async function reloadPage(page: Page): Promise<void> {
     await page.reload();
-    await expect(page.locator('html')).not.toHaveClass(/app-loading/);
+    await started(page);
 }
 
 const treeId = (page: Page, name: string) => page.evaluate(
