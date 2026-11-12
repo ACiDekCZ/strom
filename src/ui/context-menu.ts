@@ -21,6 +21,8 @@ import { menuOffersLineJumps } from '../card-tap.js';
 import { personStoryChapterCount } from '../story-text.js';
 import { LineageIndex, RodId, realRodMembers, rodOf, spouseRodsOf } from '../lineage.js';
 import { clearRodSelection, getSelectedRod, rodIndex, setRodSelection } from './rod-view.js';
+import { getWindowRole } from '../windows/window-role.js';
+import { satelliteResearchMenu, WIN_RESEARCH_PREFIX } from '../windows/window-research-menu.js';
 
 /** The menu action of a row that moves the view to a child drawn elsewhere (+ the child's id). */
 const CHILD_ELSEWHERE_ACTION = 'child-elsewhere:';
@@ -67,6 +69,10 @@ export interface PersonMenuAction {
     strong?: boolean;
     /** Greyed and not run, still read out (`aria-disabled`): "Edit" while following a research. */
     disabled?: boolean;
+    /** Faded (with `disabled`): the research's rows of a satellite while the main window is closed (spec 079 §2). */
+    dim?: boolean;
+    /** A section's heading before the item's own heading (a satellite's "Research · runs in the main window"). */
+    section?: string;
     /** Looks like a link (the "Stop following" under a greyed "Edit"). */
     link?: boolean;
     /** Above everything else, also above the bottom sheet's tiles (a ghost's own block). */
@@ -88,6 +94,27 @@ export interface PersonMenuAction {
      * more" row: the glyph's column empty).
      */
     glyph?: string;
+}
+
+/** A satellite's person menu leaves out the rows of the chart (spec 079 §2: one view per window, K1 the Table). */
+function isChartRow(a: PersonMenuAction): boolean {
+    return !!a.kind || !!a.lead || a.action.startsWith('view-link-') || a.action === LINE_JUMP_PARENTS_ACTION
+        || a.action === LINE_JUMP_CHILDREN_ACTION || a.action.startsWith(ROD_ONLY_ACTION) || a.action === ROD_CLEAR_ACTION
+        || a.action === 'rod-only' || a.action === 'toggle-children'
+        // Following a research is the main window's (its research, its bridge).
+        || a.action === 'live-stop';
+}
+
+/**
+ * The person menu as this window offers it: a satellite shows one view of
+ * the main window's tree, so the rows that move a chart or its focus, or
+ * switch the view, are not there (Focus, Descendants, the rows shown in
+ * place, the view links, "Only the X line", stop following).
+ */
+function forWindow(items: PersonMenuAction[]): PersonMenuAction[] {
+    if (getWindowRole() !== 'satellite') return items;
+    const out = items.filter(a => !isChartRow(a));
+    return out.map((a, i) => (i === 0 && a.divider ? { ...a, divider: false } : a));
 }
 
 /** The person menu with the rows of the view links: a ghost's block on top, the rest right after "Focus". */
@@ -232,32 +259,15 @@ export const contextMenuMethods = uiModule({
             return out;
         };
 
-        // "Research ›": what the research knows, then its actions — on every
-        // variant of the menu (nothing there changes the app).
-        // The person's signals above already lead there with the conflicts and the question (signal-knows).
-        const signals = TreeRenderer.cardSignalsFor(personId);
-        const knows = signals && (signals.conflicts > 0 || signals.question) ? null : this.personResearchKnows(personId);
-        const researchActions = this.personResearchActions(personId);
-        // Files about the person, to the research (right after what it knows).
-        // In an archive whose materials are shown: "Add material…" (it is kept, not sent to an agent).
-        const addsMaterial = this.materialsListOn() && !!this.materialsContext() && !this.materialsContext()?.agent;
-        const material: PersonMenuAction[] = !isViewMode && this.materialAvailable()
-            ? [{ action: 'research-material', label: addsMaterial ? strings.material.add : strings.material.send }] : [];
-        // Read a document about the person: right under the material, only when reading can start now.
-        if (!isViewMode && this.readDocumentReady()) {
-            material.push({ action: 'research-read', label: strings.read.menuPerson, note: strings.read.menuSub, badge: 'ai' });
-        }
-        const head = [...(knows ? [knows] : []), ...material];
-        // The directions the person is in, first, a line under them (spec 038 §5.1 a).
-        const inLine = this.personInLineItems(personId);
-        const rest = [
-            ...head,
-            ...researchActions.map((a, i) => (i === 0 && head.length ? { ...a, divider: true } : a)),
-        ];
-        const research = submenuRow('research', strings.research.personSection, [
-            ...inLine,
-            ...rest.map((a, i) => (i === 0 && inLine.length ? { ...a, divider: true } : a)),
-        ]);
+        // "Research ›" (on every variant of the menu: nothing there changes the app). A satellite
+        // window shows the main window's rows, run there (spec 079 §2, 2g).
+        const satResearch = satelliteResearchMenu();
+        const research = satResearch
+            ? satResearch.rows(personId)
+            : submenuRow('research', strings.research.personSection, this.personResearchMenuItems(personId));
+        // A satellite's rows stand last, under their own heading (not in a group with "More ›").
+        const researchInGroup = satResearch ? [] : research;
+        const researchAfter = satResearch ? research : [];
 
         // Linked in the view only: never a change of the data, so offered in every variant.
         const vl = this.personViewLinkMenu(personId);
@@ -278,7 +288,7 @@ export const contextMenuMethods = uiModule({
         const { index, labels } = rodIndex();
         const rodRows = rodMenuRows(index, labels, personId, getSelectedRod());
         if (isViewMode) {
-            return withViewLinkRows([
+            return forWindow(withViewLinkRows([
                 { action: 'focus', label: c.focus, kind: 'focus' },
                 ...children,
                 ...readItems(false),
@@ -288,10 +298,10 @@ export const contextMenuMethods = uiModule({
                     { action: 'archives', label: c.archives },
                 ]),
                 ...group(research),
-            ], vl);
+            ], vl));
         }
         if (isPersonLocked) {
-            return withViewLinkRows([
+            return forWindow(withViewLinkRows([
                 { action: 'focus', label: c.focus, kind: 'focus' },
                 ...children,
                 // Read-only look at the record (the edit form in its locked mode).
@@ -304,13 +314,14 @@ export const contextMenuMethods = uiModule({
                 ...readItems(false),
                 ...rodRows,
                 ...group([
-                    ...research,
+                    ...researchInGroup,
                     ...(isTreeLocked ? [] : [{ action: 'toggle-lock', label: strings.lock.unlockPerson }]),
                 ]),
-            ], vl);
+                ...researchAfter,
+            ], vl));
         }
         const chip = (action: string, label: string, ariaLabel: string): PersonMenuAction => ({ action, label, ariaLabel });
-        return withViewLinkRows([
+        return forWindow(withViewLinkRows([
             { action: 'focus', label: c.focus, kind: 'focus' },
             ...children,
             { action: 'edit', label: c.edit },
@@ -331,14 +342,15 @@ export const contextMenuMethods = uiModule({
                 { action: 'archives', label: c.archives },
             ]),
             ...group([
-                ...research,
+                ...researchInGroup,
                 ...submenuRow('more', c.more, [
                     { action: 'toggle-lock', label: strings.lock.lockPerson },
                     { action: 'merge', label: `${strings.personMerge.mergeWith}...` },
                     { action: 'delete', label: c.delete, danger: true, divider: true },
                 ]),
             ]),
-        ], vl);
+            ...researchAfter,
+        ], vl));
     },
 
     /**
@@ -446,8 +458,47 @@ export const contextMenuMethods = uiModule({
             });
     },
 
+    /**
+     * The rows of "Research ›" for a person: what the research knows, then
+     * its actions (the directions the person is in first). A satellite
+     * window asks the main window for them (spec 079 §2).
+     */
+    personResearchMenuItems(personId: PersonId): PersonMenuAction[] {
+        const isViewMode = DataManager.isReadOnly();
+        // "Research ›": what the research knows, then its actions — on every
+        // variant of the menu (nothing there changes the app).
+        // The person's signals above already lead there with the conflicts and the question (signal-knows).
+        const signals = TreeRenderer.cardSignalsFor(personId);
+        const knows = signals && (signals.conflicts > 0 || signals.question) ? null : this.personResearchKnows(personId);
+        const researchActions = this.personResearchActions(personId);
+        // Files about the person, to the research (right after what it knows).
+        // In an archive whose materials are shown: "Add material…" (it is kept, not sent to an agent).
+        const addsMaterial = this.materialsListOn() && !!this.materialsContext() && !this.materialsContext()?.agent;
+        const material: PersonMenuAction[] = !isViewMode && this.materialAvailable()
+            ? [{ action: 'research-material', label: addsMaterial ? strings.material.add : strings.material.send }] : [];
+        // Read a document about the person: right under the material, only when reading can start now.
+        if (!isViewMode && this.readDocumentReady()) {
+            material.push({ action: 'research-read', label: strings.read.menuPerson, note: strings.read.menuSub, badge: 'ai' });
+        }
+        const head = [...(knows ? [knows] : []), ...material];
+        // The directions the person is in, first, a line under them (spec 038 §5.1 a).
+        const inLine = this.personInLineItems(personId);
+        const rest = [
+            ...head,
+            ...researchActions.map((a, i) => (i === 0 && head.length ? { ...a, divider: true } : a)),
+        ];
+        return [
+            ...inLine,
+            ...rest.map((a, i) => (i === 0 && inLine.length ? { ...a, divider: true } : a)),
+        ];
+    },
+
     /** Run a person menu action (shared by context menu + bottom sheet). */
     runPersonMenuAction(personId: PersonId, action: string): void {
+        if (action.startsWith(WIN_RESEARCH_PREFIX)) {
+            satelliteResearchMenu()?.run(personId, action.slice(WIN_RESEARCH_PREFIX.length));
+            return;
+        }
         if (action.startsWith('view-link-')) {
             this.runViewLinkMenuAction(personId, action);
             return;
@@ -619,7 +670,8 @@ export const contextMenuMethods = uiModule({
     contextMenuItemsHtml(items: PersonMenuAction[]): string {
         return items.map((a, i) => {
             const divider = a.divider ? '<div class="context-menu-divider"></div>' : '';
-            const header = a.header ? `<div class="menu-section-header" role="presentation">${this.escapeHtml(a.header)}</div>` : '';
+            const header = (a.section ? `<div class="menu-section-header win-research-head" role="presentation">${this.escapeHtml(a.section)}</div>` : '')
+                + (a.header ? `<div class="menu-section-header" role="presentation">${this.escapeHtml(a.header)}</div>` : '');
             // A state, not an action: read out, never reached by the arrows, nothing to run.
             if (a.caption) {
                 return `${divider}${header}<div class="menu-caption" role="menuitem" aria-disabled="true"><span class="view-link-icon" aria-hidden="true"></span><span>${this.escapeHtml(a.label)}</span></div>`;
@@ -638,7 +690,8 @@ export const contextMenuMethods = uiModule({
             const cls = a.danger ? 'context-menu-item danger' : a.strong ? 'context-menu-item is-strong'
                 : a.disabled ? 'context-menu-item is-disabled' : a.link ? 'context-menu-item is-link' : 'context-menu-item';
             // Greyed: reached by the arrows and read out, nothing to run (no data-action).
-            if (a.disabled) return `${divider}${header}<div class="${cls}" role="menuitem" tabindex="-1" aria-disabled="true"${menuItemAria(a)}>${menuItemBody(a)}</div>`;
+            const dimCls = a.dim ? `${cls} is-dim` : cls;
+            if (a.disabled) return `${divider}${header}<div class="${dimCls}" role="menuitem" tabindex="-1" aria-disabled="true"${menuItemAria(a)}>${menuItemBody(a)}</div>`;
             return `${divider}${header}<div class="${cls}" role="menuitem" tabindex="-1" data-action="${a.action}"${menuItemAria(a)}>${menuItemBody(a)}</div>`;
         }).join('');
     },
@@ -646,6 +699,13 @@ export const contextMenuMethods = uiModule({
     showContextMenu(personId: PersonId, event: MouseEvent): void {
         event.preventDefault();
         event.stopPropagation();
+
+        // A satellite asks the main window for the research's rows first (at most RESEARCH_MENU_WAIT_MS).
+        const satResearch = satelliteResearchMenu();
+        if (satResearch?.needsFetch(personId)) {
+            void satResearch.fetch(personId).then(() => this.showContextMenu(personId, event));
+            return;
+        }
 
         // Touch devices and the bottom-navigation regime (≤ 1024px): the person
         // menu opens as a bottom sheet (same action list), like the "More" menu.

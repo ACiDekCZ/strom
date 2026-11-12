@@ -32,9 +32,10 @@ import { keepLifelineChipsFor } from './lifeline-view.js';
 import { parseDeepLink, deepLinkTreeMatches, stripDeepLinkParams } from './deep-link.js';
 import { shouldRegisterServiceWorker, registerServiceWorker, linkManifest, isBetaBuild, appModeFor, captureInstallPrompt, INSTALL_AVAILABILITY_EVENT, isSafariOnComputer, safariAppName } from './pwa.js';
 import { decideWindowRole, getWindowRole, setWindowRole, satelliteViewMode, type SatelliteParams } from './windows/window-role.js';
-import { startMainWindow, startSatelliteClient, forwardSatelliteLaunches, showSecondTab, openLinksFromOtherWindows } from './windows/window-start.js';
+import { startMainWindow, startSatelliteClient, startSatelliteSelection, forwardSatelliteLaunches, showSecondTab, openLinksFromOtherWindows } from './windows/window-start.js';
 import { initWindowControls } from './windows/window-controls.js';
 import { windowTitle } from './windows/window-title.js';
+import { mountSatHeader } from './windows/sat-header.js';
 import type { SatelliteClient } from './windows/satellite.js';
 import type { WindowRegistry } from './windows/window-registry.js';
 
@@ -318,6 +319,19 @@ function startSatelliteWindow(params: SatelliteParams, debugOptions: DebugOption
     TreeRenderer.setWindowView(satelliteViewMode(params.kind));
     const client = startSatelliteClient(params);
     satelliteClient = client;
+    // The header in place of the toolbar (§2): the toolbar and the bottom bar are not mounted.
+    const header = mountSatHeader(document, client, {
+        kind: params.kind,
+        undo: () => UI.performUndo(),
+        redo: () => UI.performRedo(),
+        refreshUndoRedo: () => UI.refreshUndoRedoToolbar(),
+        // The selected row's shared look follows the switch.
+        onFollowChange: () => {
+            const table = document.getElementById('table-container');
+            if (table && TreeRenderer.getViewMode() === 'table') UI.renderTableView(table);
+        },
+    });
+    startSatelliteSelection(client);
 
     // The shell (as in the main window, without the tree switcher, files, research and the app's offers).
     ZoomPan.init();
@@ -347,6 +361,7 @@ function startSatelliteWindow(params: SatelliteParams, debugOptions: DebugOption
     SettingsManager.watchOtherWindows(({ languageBefore }) => {
         if (SettingsManager.getLanguage() !== languageBefore) UI.setLanguage(SettingsManager.getLanguage());
         else TreeRenderer.render();
+        header.refresh();
         updateWindowTitle();
     });
 
@@ -355,6 +370,7 @@ function startSatelliteWindow(params: SatelliteParams, debugOptions: DebugOption
         updateWindowTitle();
     });
     client.on('tree-gone', () => updateWindowTitle());
+    client.on('renamed', () => updateWindowTitle());
     // The Table's state carried from the main window (§1): its row type, view, filters, sort, search and row.
     client.on('init', ({ kind, state }) => {
         if (kind === 'table') UI.setTableWindowStart(client.requestedTreeId ?? '', state);

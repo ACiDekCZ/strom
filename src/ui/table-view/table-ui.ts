@@ -56,6 +56,7 @@ import { fanZoomModifier } from '../../fan-zoom.js';
 import { createBar, createStatus, createWindowButton, updateBar, updateResearchStatus, updateStatus } from './table-bar.js';
 import { applyTableWindowState, readTableWindowState, tableWindowStateOf, type TableWindowState } from './table-window-state.js';
 import { canOpenWindows, openInNewWindow } from '../../windows/window-open.js';
+import { getWindowRole } from '../../windows/window-role.js';
 import {
     canMoveColumn, canPinColumn, catalogColumns, displayColumns, hideColumn, lockedColumn, moveColumnBy, moveColumnRun, moveColumnTo,
     filterChanged, normalizeColumns, pinColumn, resetColumns, setColumnWidth, setGroupCollapsed, setGroupShown, showColumn, sortAdd, sortClick,
@@ -204,6 +205,18 @@ let focusOnEnter: { tree: string; person: PersonId } | null = null;
  */
 let windowStart: { tree: string; state: TableWindowState } | null = null;
 let revealOnDraw: string | null = null;
+
+/**
+ * The selection shared with other windows (spec 079 §2): whether it is
+ * shared now (the selected row's look) and who hears this window's choice.
+ */
+export interface TableSelectionShare {
+    active(): boolean;
+    announce(personId: PersonId): void;
+}
+let selectionShare: TableSelectionShare | null = null;
+/** Another window's selection that came during a cell's edit: taken when the edit ends. */
+let pendingShared: { person: PersonId | null } | null = null;
 
 /** The people a row is about, the main one first: a person; a union's partners; an event's people; a source none. */
 function rowPeople(row: TableRow): PersonId[] {
@@ -454,6 +467,14 @@ function viewRows(
     return result;
 }
 
+/**
+ * ⌖ Show in tree leaves the Table for the family chart: a satellite window
+ * shows one view (spec 079 §2, K1), so it has no such action.
+ */
+function treeActionOffered(): boolean {
+    return getWindowRole() !== 'satellite';
+}
+
 /** The row's person (a union row: its first partner). */
 function personOfRow(row: TableRow): PersonId | null {
     return rowPersonId(row);
@@ -638,10 +659,21 @@ export const tableMethods = uiModule({
                     s.types[s.rowType].top = top;
                     s.types[s.rowType].left = left;
                 },
-                onSelect: (key) => {
+                onSelect: (key, row) => {
                     const s = stateOf(treeKey());
                     s.types[s.rowType].selected = key;
+                    // Another window's selection waiting for an edit is older than this one.
+                    pendingShared = null;
                     this.renderTableView(container);
+                    const person = row ? personOfRow(row) : null;
+                    if (person) selectionShare?.announce(person);
+                },
+                onEditClosed: () => {
+                    // After the editor's own steps (Tab opens the next one: the selection keeps waiting).
+                    queueMicrotask(() => {
+                        if (!pendingShared || mounted?.grid.isEditing()) return;
+                        this.tableSharedSelect(pendingShared.person);
+                    });
                 },
                 onRowClick: (line, cell) => { if (isPhoneBar() || isCoarsePointer()) this.showTableRowSheet(line, cell); },
                 // §6.2 by touch: the completeness bubble on a tap of its cell (a mouse has its title).
@@ -851,13 +883,14 @@ export const tableMethods = uiModule({
                 ? { title: strings.table.noMatch, text: strings.table.applies(summary), action: strings.table.clearFilters }
                 : null,
             lines, subRows: persons, unionsButton, stale,
-            actions: phone ? null : { edit: !tableReadOnly() },
+            actions: phone ? null : { edit: !tableReadOnly(), tree: treeActionOffered() },
             editableAt: !phone && this.tableInlineEdit() ? (line, col) => !!this.tableEditTarget(line, col) : undefined,
             liveOff: research ? new Set(display.columns
                 .filter(c => c.group === 'research' && (c.id === 'rTasks' || c.id === 'rAgent') && researchColumnLiveOff(research, c.id as ResearchColumnId))
                 .map(c => c.id)) : undefined,
             coverage: st.coverageRow ? (col) => coverageOf(m, type, rows, col, pass) : undefined,
             selected: st.selected,
+            selectedShared: !!selectionShare?.active(),
             label: `${strings.viewModeSwitch.table} – ${strings.table.rows[type]}`,
             conflictAt: research ? (line, col, value) => conflictMarkAt(research, m, line, col, value) : undefined,
             researchAt: research ? researchCellOpens : undefined,
@@ -1446,6 +1479,45 @@ export const tableMethods = uiModule({
         mounted?.grid.revealKey(key);
     },
 
+    /** Who shares the Table's selection with other windows (spec 079 §2); null: no one. */
+    setTableSelectionShare(share: TableSelectionShare | null): void {
+        selectionShare = share;
+    },
+
+    /**
+     * A person selected in another window (spec 079 §2): their row here is
+     * the selected one (the row kept if it is theirs), scrolled to only when
+     * out of view. During a cell's edit it waits for the edit's end; a person
+     * the view leaves out: no row is selected, nothing said.
+     */
+    tableSharedSelect(personId: string | null): void {
+        if (mounted?.grid.isEditing()) {
+            pendingShared = { person: personId as PersonId | null };
+            return;
+        }
+        pendingShared = null;
+        if (!personId) return;
+        const pid = personId as PersonId;
+        const tree = treeKey();
+        const state = stateOf(tree);
+        const type = state.rowType;
+        // Sources are about no one: their table keeps its row.
+        if (type === 'sources') return;
+        const st = state.types[type];
+        const el = document.getElementById('table-container');
+        const shown = el && TreeRenderer.getViewMode() === 'table' && view && view.tree === tree && view.type === type;
+        if (!shown) {
+            if (type === 'persons') st.selected = `p:${pid}`;
+            return;
+        }
+        const rows = view!.result.rows;
+        const current = st.selected ? rows.find(r => rowKey(r) === st.selected) : undefined;
+        const row = current && rowPeople(current).includes(pid) ? current : rows.find(r => rowPeople(r).includes(pid));
+        st.selected = row ? rowKey(row) : null;
+        this.renderTableView(el!);
+        if (row) mounted?.grid.revealKeyNearest(rowKey(row));
+    },
+
     // -----------------------------------------------------------------------
     // The row's actions (§10)
 
@@ -1460,6 +1532,7 @@ export const tableMethods = uiModule({
         if (!personId || !DataManager.getPerson(personId)) return;
         closeHeadMenu();
         if (action === 'tree') {
+            if (!treeActionOffered()) return;
             // The only action that leaves the table: the family diagram with the person in the middle (as the search does).
             TreeRenderer.presetViewMode('family');
             TreeRenderer.setFocus(personId);
@@ -1656,10 +1729,8 @@ export const tableMethods = uiModule({
         const entries: MenuEntry[] = cellPart.length ? [...cellPart, SEP] : [];
         if (src) entries.push({ id: 'open', label: t.act.openSource, icon: '▤', hint: 'Enter', run: run('open') });
         else {
-            entries.push(
-                { id: 'tree', label: t.act.tree, icon: '⌖', run: run('tree') },
-                { id: 'open', label: t.act.open, icon: '▤', hint: 'Enter', run: run('open') },
-            );
+            if (treeActionOffered()) entries.push({ id: 'tree', label: t.act.tree, icon: '⌖', run: run('tree') });
+            entries.push({ id: 'open', label: t.act.open, icon: '▤', hint: 'Enter', run: run('open') });
         }
         if (!tableReadOnly()) entries.push({ id: 'edit', label: t.act.edit, icon: '✎', hint: t.dblClickHint, run: run('edit') });
         if (line.kind === 'row' && line.expanded !== null) {
@@ -1691,7 +1762,7 @@ export const tableMethods = uiModule({
         const ro = tableReadOnly();
         const run = (a: RowAction, l: GridLine = line) => () => this.tableRowAction(a, l);
         const rows = [
-            { label: t.act.tree, icon: '⌖', run: run('tree') },
+            ...(treeActionOffered() ? [{ label: t.act.tree, icon: '⌖', run: run('tree') }] : []),
             { label: t.act.open, icon: '▤', run: run('open') },
         ];
         if (!ro) rows.push({ label: t.act.edit, icon: '✎', run: run('edit') });

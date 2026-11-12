@@ -1048,6 +1048,12 @@
             pointer-events: none;
         }
         .actions-menu-dropdown .menu-section-header:first-child { padding-top: 6px; }
+        /* A satellite's research rows (spec 079 §2, 2g): run by the main window. */
+        .menu-section-header.win-research-head,
+        .bottom-sheet-section.win-research-head {
+            font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent-text);
+        }
+        .menu-section-header.win-research-head { padding: 4px 12px 2px; }
 
         /* "Tree: {name}" submenu at the very bottom of the ⋯ actions menu. The
            row carries a faint tinted background; the flyout opens to the LEFT
@@ -1379,6 +1385,11 @@
         .person-card.highlighted {
             box-shadow: 0 0 0 3px var(--accent), 0 4px 12px rgba(0,0,0,0.15) !important;
             z-index: 50;
+        }
+        /* The person selected in another window (spec 079 §2): the ring stays until the selection moves. */
+        .person-card.window-selected {
+            box-shadow: 0 0 0 3px var(--primary), 0 4px 12px rgba(0,0,0,0.15) !important;
+            z-index: 49;
         }
 
         /* ==================== TREE CONTAINER ==================== */
@@ -7404,10 +7415,78 @@
 
         /* ==================== WINDOWS (spec 079) ==================== */
         /* A satellite window shows one view of the main window's tree: the
-           app's toolbar and bottom bar are not its (its own header: §2). */
+           app's toolbar and bottom bar are not its (not mounted; until the
+           header replaces them they stay out of sight). Its own header: §2. */
         html.window-satellite .toolbar,
         html.window-satellite .bottom-bar { display: none !important; }
-        html.window-satellite #tree-container { top: 0; bottom: 0; }
+        html.window-satellite #tree-container { top: 48px !important; bottom: 0 !important; left: 0 !important; right: 0 !important; }
+        .sat-header {
+            position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+            height: 48px; box-sizing: border-box;
+            display: flex; align-items: center; gap: 10px;
+            padding: 0 10px 0 16px;
+            background: var(--toolbar-bg); color: var(--text);
+            border-bottom: 1px solid var(--border);
+        }
+        .sat-header-title {
+            flex: 0 1 auto; min-width: 0;
+            font-size: 14px; font-weight: 600; line-height: 1.2;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .sat-header-spacer { flex: 1 1 auto; min-width: 2px; }
+        .sat-follow {
+            flex: none; display: inline-flex; align-items: center; gap: 8px;
+            height: 32px; padding: 0 8px; margin: 0;
+            border: none; border-radius: 8px; background: transparent;
+            color: var(--text); font: inherit; font-size: 13px; cursor: pointer;
+        }
+        .sat-follow-track {
+            position: relative; flex: none; width: 28px; height: 16px;
+            border-radius: 999px; background: var(--border);
+            transition: background-color .15s;
+        }
+        .sat-follow[aria-checked="true"] .sat-follow-track { background: var(--primary); }
+        .sat-follow-knob {
+            position: absolute; top: 2px; left: 2px; width: 12px; height: 12px;
+            border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .25);
+            transition: left .15s;
+        }
+        .sat-follow[aria-checked="true"] .sat-follow-knob { left: 14px; }
+        .sat-follow-label { white-space: nowrap; }
+        .sat-header-divider { flex: none; width: 1px; height: 20px; background: var(--border); }
+        .sat-icon-btn {
+            flex: none; display: inline-flex; align-items: center; justify-content: center;
+            width: 32px; height: 32px; padding: 0; margin: 0;
+            border: none; border-radius: 8px; background: transparent; color: var(--text); cursor: pointer;
+        }
+        .sat-icon-btn:disabled { opacity: .4; cursor: default; }
+        .sat-follow:focus-visible,
+        .sat-icon-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        @media (hover: hover) {
+            .sat-follow:hover,
+            .sat-icon-btn:not(:disabled):hover { background: var(--hover-bg); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .sat-follow-track, .sat-follow-knob { transition: none; }
+        }
+        /* Tablet: the same header (it has room from 641 px). */
+        @media (min-width: 641px) and (max-width: 1024px) {
+            .sat-header { gap: 8px; }
+        }
+        /* Phone: the switch alone (its name stays its aria-label), 44 px targets for touch. */
+        @media (max-width: 640px) {
+            .sat-header { gap: 6px; padding: 0 6px 0 12px; }
+            .sat-follow { padding: 0 2px; }
+            .sat-follow-label { display: none; }
+        }
+        @media (pointer: coarse) {
+            .sat-follow { min-width: 44px; justify-content: center; }
+            .sat-icon-btn { width: 44px; height: 44px; }
+        }
+        /* A phone held sideways: the header keeps 48 px and the safe areas. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .sat-header { padding-left: calc(12px + env(safe-area-inset-left, 0px)); padding-right: calc(6px + env(safe-area-inset-right, 0px)); }
+        }
         /* Another tab while the main window is open (§5): only its screen. */
         html.window-second-tab body > :not(main.second-tab) { display: none !important; }
         main.second-tab {
@@ -9673,6 +9752,9 @@
             background: var(--surface); border-bottom: 1px solid var(--divider);
         }
         .tv-body .tv-row[aria-selected="true"] { background: var(--line-selected-bg); }
+        /* A selection shared with other windows (spec 079 §2): a soft fill and a 3 px stripe on the left (kept by the pinned cell). */
+        .tv-body .tv-row.is-shared[aria-selected="true"] { background: var(--primary-soft); }
+        .tv-body .tv-row.is-shared > .tv-cell:first-child { box-shadow: inset 3px 0 0 var(--primary); }
         .tv-name { font-family: var(--font-serif); font-size: 14px; }
         .tv-row.is-home .tv-name { font-weight: 600; }
         /* §14.1: names in a cell. A tree's person is a link (opens the person); a participant's name offers its filter. */
@@ -10251,6 +10333,7 @@
             .tv-empty .empty-block-action:hover { background: var(--primary-dark); }
             .tv-body .tv-row:hover { background: var(--surface-2); }
             .tv-body .tv-row[aria-selected="true"]:hover { background: var(--line-selected-bg); }
+            .tv-body .tv-row.is-shared[aria-selected="true"]:hover { background: var(--primary-soft); }
             .tv-body .tv-row:hover .tv-acts { display: inline-flex; }
             .tv-body .tv-row:hover > .tv-cell:has(> .tv-acts) { padding-right: 100px; }
             .tv-act:hover { color: var(--text); border-color: var(--primary); }
@@ -13403,6 +13486,8 @@
         :is(.context-menu-item, .bottom-sheet-item).is-disabled .menu-item-label { min-width: 0; }
         :is(.context-menu-item, .bottom-sheet-item).is-disabled .menu-item-note { max-width: 260px; overflow-wrap: anywhere; }
         .context-menu-item.is-disabled:active, .bottom-sheet-item.is-disabled:active { background: none; }
+        /* A satellite's research rows while the main window is closed (spec 079 §2, 2g). */
+        :is(.context-menu-item, .bottom-sheet-item).is-dim { opacity: .45; }
         @media (hover: hover) { .context-menu-item.is-disabled:hover { background: none; } }
         :is(.context-menu-item, .bottom-sheet-item).is-link {
             color: var(--primary-dark); text-decoration: underline; text-underline-offset: 2px;

@@ -4,7 +4,7 @@
  * `storage` event.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { SettingsManager } from '../settings.js';
+import { SettingsManager, CARD_SIGNALS_KEY, MAP_KINDS_KEY } from '../settings.js';
 import { SETTINGS_KEY } from '../types.js';
 
 let store: Map<string, string>;
@@ -45,6 +45,24 @@ describe('settings in a satellite or a second tab', () => {
         expect(writes).toEqual([]);
         expect(SettingsManager.getTheme()).toBe('dark');
         expect(JSON.parse(store.get(SETTINGS_KEY)!)).toEqual({ theme: 'light' });
+    });
+
+    it('card signals and map kinds changed here are kept in the window, not stored', () => {
+        store.set(CARD_SIGNALS_KEY, JSON.stringify({ v: 2, status: true }));
+        store.set(MAP_KINDS_KEY, JSON.stringify(['birth', 'death']));
+        SettingsManager.setCardSignal('status', false);
+        SettingsManager.setMapKinds(['death']);
+        expect(SettingsManager.getCardSignals().status).toBe(false);
+        expect(SettingsManager.getMapKinds()).toEqual(['death']);
+        expect(writes).toEqual([]);
+        expect(JSON.parse(store.get(CARD_SIGNALS_KEY)!).status).toBe(true);
+        expect(JSON.parse(store.get(MAP_KINDS_KEY)!)).toEqual(['birth', 'death']);
+        // The main window stores them: its values win, as for the other settings.
+        const stop = SettingsManager.watchOtherWindows(() => {});
+        listeners.forEach(l => l({ key: CARD_SIGNALS_KEY }));
+        expect(SettingsManager.getCardSignals().status).toBe(true);
+        expect(SettingsManager.getMapKinds()).toEqual(['birth', 'death']);
+        stop();
     });
 
     it('follows what the main window stores: read again, the theme at once, the language told', () => {

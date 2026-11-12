@@ -33,7 +33,7 @@ function treeJson(...names: [string, string][]): string {
 }
 
 function status(over: Partial<WindowStatus> = {}): WindowStatus {
-    return { live: false, locked: false, readOnly: false, researchState: null, treeExists: true, treeId: TREE, revision: 100, canUndo: true, canRedo: false, windows: [SAT], ...over };
+    return { live: false, locked: false, readOnly: false, researchState: null, treeExists: true, treeId: TREE, treeName: 'Hrachovcovi', revision: 100, canUndo: true, canRedo: false, windows: [SAT], ...over };
 }
 
 function noLocks(): LocksLike {
@@ -279,6 +279,21 @@ describe('the main window\'s state', () => {
         expect(DataManager.canUndo()).toBe(false);
     });
 
+    it('the tree renamed in the main window: the name follows its status', async () => {
+        const renamed = vi.fn();
+        sat.on('renamed', renamed);
+        await connect();
+        expect(sat.treeName).toBe('Hrachovcovi');
+        main.post({ type: 'status', ...status({ treeName: 'Hrachovcovi z Pažitkova' }) });
+        await settle();
+        expect(sat.treeName).toBe('Hrachovcovi z Pažitkova');
+        expect(renamed).toHaveBeenCalledWith('Hrachovcovi z Pažitkova');
+        // Another tree's status does not rename this one.
+        main.post({ type: 'status', ...status({ treeId: 'tree-other' as TreeId, treeName: 'Jiný' }) });
+        await settle();
+        expect(sat.treeName).toBe('Hrachovcovi z Pažitkova');
+    });
+
     it('the main window quiet for 3 s and its lock free: closed, and nothing can be edited', async () => {
         const conn = vi.fn();
         sat.on('connection', conn);
@@ -325,6 +340,23 @@ describe('selection', () => {
         main.post({ type: 'select', personId: 'p2', treeId: TREE, origin: 'main-1' });
         await settle();
         expect(of('select')).toHaveLength(0);
+    });
+});
+
+describe('the person menu\'s research rows', () => {
+    it('asked from the main window: its answer to this window, none when it is silent', async () => {
+        await connect();
+        const asked = sat.requestResearchMenu('p1', 300);
+        await settle();
+        const req = of('research-menu-req')[0];
+        expect(req).toMatchObject({ personId: 'p1', treeId: TREE });
+        main.post({ type: 'research-menu', to: SAT, reqId: req.reqId, items: [{ action: 'research-review', label: 'Review' }] });
+        await settle();
+        await expect(asked).resolves.toEqual([{ action: 'research-review', label: 'Review' }]);
+
+        const silent = sat.requestResearchMenu('p1', 300);
+        await settle(301);
+        await expect(silent).resolves.toBeNull();
     });
 });
 

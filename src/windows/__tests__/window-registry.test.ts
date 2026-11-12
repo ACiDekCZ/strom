@@ -48,6 +48,7 @@ function fakeWindow(): FakeWin {
 let hub: ReturnType<typeof createMemoryHub>;
 let registry: WindowRegistry;
 let saveSpy: ReturnType<typeof vi.spyOn>;
+let treeName = 'Okurkovi';
 let opened: { url: string; name: string; features: string; win: FakeWin }[];
 
 async function settle(ms = 0): Promise<void> {
@@ -62,13 +63,14 @@ beforeEach(() => {
     saveSpy = vi.spyOn(TreeManager, 'saveTreeData').mockImplementation(() => {});
     vi.spyOn(AuditLogManager, 'log').mockImplementation(() => {});
     resetData();
+    treeName = 'Okurkovi';
     DataManager.createPerson({ firstName: 'Zdislava', lastName: 'Okurková', gender: 'female' });
     UndoManager.clear();
     hub = createMemoryHub();
     opened = [];
     registry = new WindowRegistry({
         bus: new WindowBus('main-1', hub.channel()),
-        host: dataManagerHost({ treeName: () => 'Okurkovi', treeExists: () => true, focusSelf: () => {}, hasFocus: () => true }),
+        host: dataManagerHost({ treeName: () => treeName, treeExists: () => true, focusSelf: () => {}, hasFocus: () => true }),
         openWindow: (url, name, features) => {
             const win = fakeWindow();
             opened.push({ url, name, features, win });
@@ -126,6 +128,14 @@ describe('opening and hello', () => {
         expect(last(sat.of('status'))).toMatchObject({ treeId: TREE, treeExists: true, live: false, locked: false, windows: [sat.id] });
         expect(other.of('tree')).toHaveLength(0);
         expect(registry.list()[0].connected).toBe(true);
+    });
+
+    it('the status names the open tree; a rename reaches the windows', async () => {
+        const sat = await connect();
+        expect(last(sat.of('status'))).toMatchObject({ treeId: TREE, treeName: 'Okurkovi' });
+        treeName = 'Okurkovi z Vranova';
+        await settle(1000);
+        expect(last(sat.of('status'))).toMatchObject({ treeId: TREE, treeName: 'Okurkovi z Vranova' });
     });
 
     it('the starting state goes once: a reloaded satellite keeps its own', async () => {
@@ -307,6 +317,21 @@ describe('selection', () => {
 });
 
 describe('links and research actions from other windows', () => {
+    it('a satellite\'s person menu gets the research rows listed here, only that window; another tree\'s: none', async () => {
+        const sat = listener(hub, 'sat-r');
+        const other = listener(hub, 'bystander');
+        const rows = [{ action: 'research-review', label: 'Review', external: true }];
+        registry.setResearchMenuProvider((personId) => (personId === 'p1' ? rows : []));
+        sat.bus.post({ type: 'research-menu-req', reqId: 'r1', personId: 'p1', treeId: TREE });
+        sat.bus.post({ type: 'research-menu-req', reqId: 'r2', personId: 'p1', treeId: 'another-tree' as TreeId });
+        await settle();
+        expect(sat.of('research-menu')).toEqual([
+            expect.objectContaining({ to: 'sat-r', reqId: 'r1', items: rows }),
+            expect.objectContaining({ to: 'sat-r', reqId: 'r2', items: [] }),
+        ]);
+        expect(other.of('research-menu')).toHaveLength(0);
+    });
+
     it('wait for their handler, then go to it once', async () => {
         const tab = listener(hub, 'tab2');
         tab.bus.post({ type: 'link', search: '?person=p7' });

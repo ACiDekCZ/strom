@@ -172,6 +172,7 @@ export class WindowRegistry {
     private readonly selectHandlers = new Set<SelectHandler>();
     private linkHandler: LinkHandler | null = null;
     private researchHandler: ResearchActionHandler | null = null;
+    private researchMenuProvider: ((personId: string) => unknown[]) | null = null;
     private readonly heldLinks: { link: { search?: string; files?: unknown[] }; from: string }[] = [];
     private readonly heldActions: { action: string; args: unknown; from: string }[] = [];
     private readonly focusWaiters = new Map<string, () => void>();
@@ -219,6 +220,7 @@ export class WindowRegistry {
             b.on('focused', m => this.focusWaiters.get(m.from)?.()),
             b.on('link', m => this.onLink({ search: m.search, files: m.files }, m.from)),
             b.on('research-action', m => this.onResearchAction(m.action, m.args, m.from)),
+            b.on('research-menu-req', m => this.onResearchMenuRequest(m)),
             this.host.onSaved(() => this.sync()),
         );
         if (typeof window !== 'undefined') {
@@ -226,10 +228,12 @@ export class WindowRegistry {
             const bye = () => this.bus.post({ type: 'main-bye' });
             window.addEventListener('strom:data-changed', sync);
             window.addEventListener('strom:tree-switched', sync);
+            window.addEventListener('strom:tree-renamed', sync);
             window.addEventListener('pagehide', bye);
             this.unsubscribe.push(() => {
                 window.removeEventListener('strom:data-changed', sync);
                 window.removeEventListener('strom:tree-switched', sync);
+                window.removeEventListener('strom:tree-renamed', sync);
                 window.removeEventListener('pagehide', bye);
             });
         }
@@ -345,6 +349,11 @@ export class WindowRegistry {
         if (cb) for (const l of this.heldLinks.splice(0)) cb(l.link, l.from);
     }
 
+    /** Who lists the research's rows of a person's menu for a satellite (§2, 2g); none: no rows. */
+    setResearchMenuProvider(cb: ((personId: string) => unknown[]) | null): void {
+        this.researchMenuProvider = cb;
+    }
+
     /** Who runs a research action asked for by a satellite (§2, §6). */
     setResearchActionHandler(cb: ResearchActionHandler | null): void {
         this.researchHandler = cb;
@@ -433,6 +442,7 @@ export class WindowRegistry {
             researchState: this.host.researchState(),
             treeExists: !!treeId && this.host.treeExists(treeId),
             treeId,
+            treeName: treeId ? this.host.treeName(treeId) : '',
             revision: this.rev,
             canUndo: this.host.canUndo(),
             canRedo: this.host.canRedo(),
@@ -523,6 +533,14 @@ export class WindowRegistry {
     private onLink(link: { search?: string; files?: unknown[] }, from: string): void {
         if (this.linkHandler) this.linkHandler(link, from);
         else this.heldLinks.push({ link, from });
+    }
+
+    private onResearchMenuRequest(m: MessageOf<'research-menu-req'>): void {
+        let items: unknown[] = [];
+        if (this.researchMenuProvider && (!m.treeId || m.treeId === this.host.treeId())) {
+            try { items = this.researchMenuProvider(m.personId); } catch (err) { console.error('research menu failed', err); }
+        }
+        this.bus.post({ type: 'research-menu', to: m.from, reqId: m.reqId, items });
     }
 
     private onResearchAction(action: string, args: unknown, from: string): void {

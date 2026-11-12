@@ -28,6 +28,8 @@ export interface WindowStatus {
     treeExists: boolean;
     /** The tree open in the main window and its window revision. */
     treeId: TreeId | null;
+    /** The open tree's name, as renamed meanwhile (the satellites' titles follow it). */
+    treeName: string;
     revision: number;
     canUndo: boolean;
     canRedo: boolean;
@@ -72,6 +74,12 @@ export type WindowMessageBody =
     | { type: 'focused'; to: string }
     /** sat / overview → main: a research action to run in the main window (§2, §6). */
     | { type: 'research-action'; action: string; args?: unknown }
+    /**
+     * sat → main: the research's rows of the person menu (§2, 2g), as the
+     * main window offers them now; the answer goes to that window only.
+     */
+    | { type: 'research-menu-req'; reqId: string; personId: string; treeId: TreeId | null }
+    | { type: 'research-menu'; to: string; reqId: string; items: unknown[] }
     /** main → overview window: the research's state (§6, K3). */
     | { type: 'research-state'; state: unknown }
     /** sat → main: the window is going away. */
@@ -99,7 +107,7 @@ export interface ChannelLike {
 }
 
 const TYPES = new Set<string>(['hello', 'init', 'tree', 'patch', 'edit', 'edit-result', 'select', 'undo', 'redo', 'status',
-    'focus-req', 'focused', 'research-action', 'research-state', 'bye', 'main-bye', 'link', 'close']);
+    'focus-req', 'focused', 'research-action', 'research-menu-req', 'research-menu', 'research-state', 'bye', 'main-bye', 'link', 'close']);
 
 function isWindowMessage(data: unknown): data is WindowMessage {
     if (!data || typeof data !== 'object') return false;

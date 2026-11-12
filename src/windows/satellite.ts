@@ -50,6 +50,8 @@ export interface SatelliteEvents {
     conflict: { reason?: EditRefusal };
     /** An edit of this window was saved by the main window. */
     saved: { revision: number };
+    /** The tree was renamed in the main window (its status carries the new name). */
+    renamed: string;
     /** The tree of this window was deleted in the main window (§3.5b). */
     'tree-gone': { treeId: TreeId | null };
     /** Another window selected a person (only while following the selection). */
@@ -132,6 +134,8 @@ export class SatelliteClient {
     private applyingRemoteSelection = false;
     private focusWaiter: (() => void) | null = null;
     private started = false;
+    private menuReqs = 0;
+    private readonly menuWaiters = new Map<string, (items: unknown[]) => void>();
 
     constructor(params: SatelliteParams, opts: SatelliteClientOptions = {}) {
         this.windowId = params.windowId;
@@ -210,6 +214,7 @@ export class SatelliteClient {
             b.on('focus-req', m => this.onFocusRequest(m.from)),
             b.on('focused', m => { if (m.from === this.mainId) this.focusWaiter?.(); }),
             b.on('close', () => { this.emit('close', {}); this.closeSelf(); }),
+            b.on('research-menu', m => this.menuWaiters.get(m.reqId)?.(Array.isArray(m.items) ? m.items : [])),
         );
         if (typeof window !== 'undefined') {
             const bye = () => this.bus.post({ type: 'bye', windowId: this.windowId, bounds: this.bounds() });
@@ -273,6 +278,20 @@ export class SatelliteClient {
         this.bus.post({ type: 'link', ...link });
     }
 
+    /**
+     * The research's rows of a person's menu as the main window offers them
+     * (§2, 2g); null when it does not answer within `waitMs` (closed, busy).
+     */
+    requestResearchMenu(personId: string, waitMs: number): Promise<unknown[] | null> {
+        if (this._connection !== 'connected') return Promise.resolve(null);
+        const reqId = `${this.windowId}:${++this.menuReqs}`;
+        return new Promise((resolve) => {
+            const timer = setTimeout(() => { this.menuWaiters.delete(reqId); resolve(null); }, waitMs);
+            this.menuWaiters.set(reqId, (items) => { clearTimeout(timer); this.menuWaiters.delete(reqId); resolve(items); });
+            this.bus.post({ type: 'research-menu-req', reqId, personId, treeId: this._treeId });
+        });
+    }
+
     /** A research action: the main window runs it (§2 person menu). */
     researchAction(action: string, args?: unknown): void {
         this.bus.post({ type: 'research-action', action, args });
@@ -312,6 +331,11 @@ export class SatelliteClient {
         // (not again while the last one may still be on its way).
         if (!status.windows.includes(this.windowId) && Date.now() - this.helloAt > HELLO_RETRY_MS) this.hello();
         this._status = status;
+        // The tree renamed in the main window: the title and the header follow.
+        if (this.hasTree && status.treeId === this._treeId && status.treeName && status.treeName !== this._treeName) {
+            this._treeName = status.treeName;
+            this.emit('renamed', status.treeName);
+        }
         this.setConnection('connected');
         if (this.hasTree && !status.treeExists && status.treeId === null) this.markGone();
         this.emit('status', status);

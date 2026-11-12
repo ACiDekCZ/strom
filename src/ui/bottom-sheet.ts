@@ -21,6 +21,7 @@ import { shownName, shownNameFull, nameHtml } from '../person-name.js';
 import type { ResearchSheetGroup } from './research-actions-ui.js';
 import { researchTrialTagHtml } from './research-tree-settings-ui.js';
 import { getSelectedRod, rodLabel, rodPickerOffered } from './rod-view.js';
+import { satelliteResearchMenu } from '../windows/window-research-menu.js';
 
 /** A row / section in a menu-style bottom sheet (the "More" and "Tree" sheets). */
 interface MenuRow {
@@ -103,6 +104,12 @@ export const bottomSheetMethods = uiModule({
      * "More ›") turns the sheet into that page (‹ Back returns).
      */
     showPersonBottomSheet(personId: PersonId, fromCard = false): void {
+        // A satellite asks the main window for the research's rows first (at most RESEARCH_MENU_WAIT_MS).
+        const satResearch = satelliteResearchMenu();
+        if (satResearch?.needsFetch(personId)) {
+            void satResearch.fetch(personId).then(() => this.showPersonBottomSheet(personId, fromCard));
+            return;
+        }
         this.noteBottomSheetTrigger();
         this.hideBottomSheet();
         const actions = this.getPersonMenuActions(personId, fromCard);
@@ -125,7 +132,8 @@ export const bottomSheetMethods = uiModule({
 
         const itemHtml = (a: PersonMenuAction, index: number): string => {
             const divider = a.divider ? '<div class="bottom-sheet-divider" role="separator"></div>' : '';
-            const header = a.header ? `<div class="bottom-sheet-section" role="presentation">${esc(a.header)}</div>` : '';
+            const header = (a.section ? `<div class="bottom-sheet-section win-research-head" role="presentation">${esc(a.section)}</div>` : '')
+                + (a.header ? `<div class="bottom-sheet-section" role="presentation">${esc(a.header)}</div>` : '');
             if (a.caption) {
                 return `${divider}${header}<div class="bottom-sheet-caption" role="menuitem" aria-disabled="true"><span class="view-link-icon" aria-hidden="true"></span><span>${esc(a.label)}</span></div>`;
             }
@@ -137,7 +145,8 @@ export const bottomSheetMethods = uiModule({
                 : a.disabled ? 'bottom-sheet-item is-disabled' : a.link ? 'bottom-sheet-item is-link' : 'bottom-sheet-item';
             const note = a.sheetNote ? `<p class="bottom-sheet-row-note">${esc(a.sheetNote)}</p>` : '';
             // Greyed: read out, a tap runs nothing and the sheet stays (no data-action).
-            if (a.disabled) return `${divider}${header}<button type="button" class="${cls}" role="menuitem" aria-disabled="true"${menuItemAria(a)}>${menuItemBody(a)}</button>${note}`;
+            const dimCls = a.dim ? `${cls} is-dim` : cls;
+            if (a.disabled) return `${divider}${header}<button type="button" class="${dimCls}" role="menuitem" aria-disabled="true"${menuItemAria(a)}>${menuItemBody(a)}</button>${note}`;
             return `${divider}${header}<button type="button" class="${cls}" role="menuitem" data-action="${esc(a.action)}"${menuItemAria(a)}>${menuItemBody(a)}</button>${note}`;
         };
         const tilesHtml = tiles.length === 0 ? '' : `<div class="sheet-tiles" style="--tiles: ${tiles.length}">`

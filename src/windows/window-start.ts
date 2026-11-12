@@ -20,6 +20,11 @@ import { openForwardedLink, type ForwardedLink, type LinkOpenerDeps } from './wi
 import { SecondTab, renderSecondTab, removeSecondTabScreen } from './second-tab.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
+import { TreeRenderer } from '../renderer.js';
+import { ZoomPan } from '../zoom.js';
+import { PERSON_MENU_ACTION, runSatelliteResearchRow, SatelliteResearchMenu, setSatelliteResearchMenu } from './window-research-menu.js';
+import type { PersonId } from '../types.js';
+import { wireMainSelection, wireSatelliteSelection, type SelectionDeps } from './window-selection.js';
 
 /** The main window's registry (null in any other window). */
 let registry: WindowRegistry | null = null;
@@ -83,7 +88,33 @@ export function startMainWindow(): WindowRegistry {
         }),
     });
     registry.start();
+    wireMainSelection(registry, selectionDeps());
+    // The person menu's research rows of a satellite (§2, 2g): listed and run here, as this window's own menu.
+    const researchItems = (personId: string) => (DataManager.getPerson(personId as PersonId) ? UI.personResearchMenuItems(personId as PersonId) : null);
+    registry.setResearchMenuProvider((personId) => researchItems(personId) ?? []);
+    registry.setResearchActionHandler((action, args) => {
+        if (action !== PERSON_MENU_ACTION) return;
+        runSatelliteResearchRow(args, { items: researchItems, run: (personId, a) => UI.runPersonMenuAction(personId as PersonId, a) });
+    });
     return registry;
+}
+
+/** The app's side of the shared selection (spec 079 §2). */
+function selectionDeps(): SelectionDeps {
+    return {
+        viewMode: () => TreeRenderer.getViewMode(),
+        setTableSelectionShare: (share) => UI.setTableSelectionShare(share),
+        tableSharedSelect: (id) => UI.tableSharedSelect(id),
+        setWindowSelected: (id) => TreeRenderer.setWindowSelected(id),
+        glideTo: (id) => { ZoomPan.glideToPerson(id); },
+    };
+}
+
+/** A satellite's side of the shared selection (spec 079 §2). */
+export function startSatelliteSelection(client: SatelliteClient): void {
+    wireSatelliteSelection(client, selectionDeps());
+    // The person menu's research rows come from the main window and run there (§2, 2g).
+    setSatelliteResearchMenu(new SatelliteResearchMenu(client));
 }
 
 /** A launch as launchQueue hands it over. */

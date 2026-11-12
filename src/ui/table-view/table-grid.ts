@@ -63,6 +63,8 @@ export interface GridInput {
     homeId: string | null;
     /** The selected row's key (rowKey), if any. */
     selected: string | null;
+    /** The selected row is shared with other windows (spec 079 §2): its own look. */
+    selectedShared?: boolean;
     /** The grid's accessible name. */
     label: string;
     /** The lines drawn (§3: rows with their union sub-rows); default one line per row. */
@@ -92,7 +94,7 @@ export interface GridInput {
     /** Rows kept after a change that no longer pass the filter (§10.3, their row keys). */
     stale?: ReadonlySet<string>;
     /** The action icons in the first column (§10.1; `edit` false: read-only); none on a phone (10b). */
-    actions?: { edit: boolean } | null;
+    actions?: { edit: boolean; tree?: boolean } | null;
     /** Live-only research columns while the research is not followed (§16.2: the head's dashed "live" tag). */
     liveOff?: ReadonlySet<string>;
     /** An open research conflict on a fact's cell (§16.3): ≠ before its value; null: none. */
@@ -169,6 +171,8 @@ export interface GridHandlers {
     onScroll?(top: number, left: number): void;
     /** A row was selected (a click, ↑ ↓; a sub-row selects its person); null: Escape cleared it. */
     onSelect?(key: string | null, row: TableRow | null): void;
+    /** A cell's editor closed (saved, Esc, blur): what waited for the edit may come now. */
+    onEditClosed?(): void;
     /** A line was clicked or tapped, after its selection (a phone opens the row's sheet, 10b); the cell it was on. */
     onRowClick?(line: GridLine, cell: GridCellRef | null): void;
     /** A row's action (§10.1): its icon, Enter (open), a double click (edit). */
@@ -1279,6 +1283,7 @@ export class TableGrid {
             if (input.stale?.has(rk)) cls += ' is-stale';
             if (line.kind === 'row') {
                 attrs += ` aria-selected="${rowSelected ? 'true' : 'false'}"`;
+                if (rowSelected && input.selectedShared) cls += ' is-shared';
                 if (line.expanded !== null) attrs += ` aria-expanded="${line.expanded}"`;
                 if (line.expanded === false && row.kind === 'person') {
                     attrs += ` aria-label="${esc(strings.table.a11y.collapsed(personName(row.person), line.n))}"`;
@@ -1422,7 +1427,7 @@ export class TableGrid {
             // A source is not in the tree (§14.2): Open source and Edit, both its dialog.
             html += line.row.kind === 'source'
                 ? `<span class="tv-acts">${b('open', '▤', t.openSource)}${acts.edit ? b('edit', '✎', t.edit) : ''}</span>`
-                : `<span class="tv-acts">${b('tree', '⌖', t.tree)}${b('open', '▤', t.open)}${acts.edit ? b('edit', '✎', t.edit) : ''}</span>`;
+                : `<span class="tv-acts">${acts.tree === false ? '' : b('tree', '⌖', t.tree)}${b('open', '▤', t.open)}${acts.edit ? b('edit', '✎', t.edit) : ''}</span>`;
         }
         return html;
     }
@@ -1775,6 +1780,7 @@ export class TableGrid {
         this.editor = null;
         ed.box.remove();
         if (refocus) this.focusActive(true);
+        this.handlers.onEditClosed?.();
     }
 
     /** The editor's line or column is gone (another filter, view or table): closed unsaved; else placed again. */
@@ -1819,6 +1825,26 @@ export class TableGrid {
         if (tops[at] < this.el.scrollTop || tops[at + 1] > this.el.scrollTop + view) {
             this.el.scrollTop = Math.max(0, tops[at] - Math.round(view / 3));
         }
+        this.activeKey = key;
+        this.activeCol = 0;
+        this.cellChosen = false;
+        this.bodyKey = '';
+        this.draw();
+    }
+
+    /**
+     * Scroll a row into view only when it is out of it, by the nearest edge
+     * (spec 079 §2: a selection from another window; never scrollIntoView),
+     * and draw.
+     */
+    revealKeyNearest(key: string): void {
+        const at = this.lines.findIndex(l => lineKey(l) === key);
+        if (at < 0) return;
+        const tops = this.lineTops(this.rowHeight());
+        const headH = this.head.offsetHeight;
+        const el = this.el;
+        if (tops[at] < el.scrollTop) el.scrollTop = tops[at];
+        else if (tops[at + 1] + headH > el.scrollTop + el.clientHeight) el.scrollTop = Math.max(0, tops[at + 1] + headH - el.clientHeight);
         this.activeKey = key;
         this.activeCol = 0;
         this.cellChosen = false;

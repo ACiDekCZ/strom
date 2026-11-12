@@ -458,6 +458,8 @@ class TreeRendererClass {
     private viewStandIn: ViewStandIn | null = null;
     /** Search highlight: hits get 'search-hit', everyone else 'search-dim'. */
     private highlightIds: Set<PersonId> | null = null;
+    /** The person selected in another window (spec 079 §2): their card's ring, the focus unchanged. */
+    private windowSelectedId: PersonId | null = null;
     /** What a live load tells the rest of the app (setLiveHooks). */
     private liveHooks: LiveRenderHooks = {};
     /** Each card's content as drawn (cardSignature): a live load keeps a card whose content is the same. */
@@ -1803,11 +1805,16 @@ class TreeRendererClass {
 
         // Children shown in place belong to the view they were shown in
         // (a focus from the history brings back the ones it had)
-        if (this.focusPersonId !== personId) this.resetChildrenShown();
+        const focusChanged = this.focusPersonId !== personId;
+        if (focusChanged) this.resetChildrenShown();
         const pendingShown = this.pendingShown;
         this.pendingShown = null;
         if (pendingShown && this.viewMode === 'family') this.applyShownSnapshot(pendingShown);
         this.focusPersonId = personId;
+        // Other windows follow the person chosen here (spec 079 §2).
+        if (focusChanged && personId && typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('strom:focus-changed', { detail: { personId } }));
+        }
 
         // Set default depth to max available when focusing on a new person
         if (personId) {
@@ -4162,6 +4169,18 @@ class TreeRendererClass {
         this.descendantsFullFamilies = enabled;
     }
 
+    /** The person selected in another window (null: none); their card gets its ring now and at every draw. */
+    setWindowSelected(id: PersonId | null): void {
+        this.windowSelectedId = id;
+        document.querySelectorAll<HTMLElement>('.person-card').forEach(card => {
+            card.classList.toggle('window-selected', !!id && card.dataset.id === id);
+        });
+    }
+
+    getWindowSelected(): PersonId | null {
+        return this.windowSelectedId;
+    }
+
     /**
      * Highlight a set of persons in the tree (search results): matched cards get
      * 'search-hit', all others 'search-dim'. Pass null to clear. Pure DOM class
@@ -4536,6 +4555,7 @@ class TreeRendererClass {
             if (this.focusPersonId && id === this.focusPersonId) {
                 classes += ' focused';
             }
+            if (this.windowSelectedId && id === this.windowSelectedId) classes += ' window-selected';
             // Add locked class if person is locked
             if (DataManager.isPersonLocked(id)) {
                 classes += ' locked';

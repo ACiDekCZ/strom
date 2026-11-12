@@ -64,7 +64,7 @@ export interface LifelineDefaults {
 }
 
 /** Per device, apart from the other settings. */
-const CARD_SIGNALS_KEY = 'strom-card-signals';
+export const CARD_SIGNALS_KEY = 'strom-card-signals';
 
 /** The kinds of places the map shows (spec 031 §1), per device, apart from the other settings. */
 export const MAP_KINDS_KEY = 'strom.map.kinds';
@@ -89,6 +89,12 @@ class SettingsManagerClass {
      */
     private readOnly = false;
 
+    /** Card signals changed in a read-only window: kept here, never stored. */
+    private localCardSignals: Record<string, unknown> | null = null;
+
+    /** The map's kinds changed in a read-only window: kept here, never stored. */
+    private localMapKinds: MapKind[] | null = null;
+
     init(): void {
         this.load();
         this.applyTheme();
@@ -101,6 +107,7 @@ class SettingsManagerClass {
     /** Settings only read in this window (spec 079 §0); set before init. */
     setReadOnly(on: boolean): void {
         this.readOnly = on;
+        if (!on) { this.localCardSignals = null; this.localMapKinds = null; }
     }
 
     isReadOnly(): boolean {
@@ -117,6 +124,9 @@ class SettingsManagerClass {
             if (e.key !== null && e.key !== SETTINGS_KEY && e.key !== CARD_SIGNALS_KEY && e.key !== MAP_KINDS_KEY) return;
             const languageBefore = this.settings.language;
             this.settings = { ...DEFAULT_SETTINGS };
+            // What the main window stores wins over a change made here, as for the other settings.
+            this.localCardSignals = null;
+            this.localMapKinds = null;
             this.load();
             this.applyTheme();
             onChange({ languageBefore });
@@ -657,6 +667,7 @@ class SettingsManagerClass {
 
     /** The stored card signals as they are (older builds' keys kept), brought to version 2 once (spec 066 P4 §8). */
     private loadCardSignals(): Record<string, unknown> {
+        if (this.localCardSignals) return this.localCardSignals;
         let parsed: Record<string, unknown> = {};
         try {
             const raw: unknown = JSON.parse(localStorage.getItem(CARD_SIGNALS_KEY) ?? '{}');
@@ -685,7 +696,7 @@ class SettingsManagerClass {
 
     setCardSignal(key: keyof CardSignals, on: boolean): void {
         const next = { ...this.loadCardSignals(), ...this.getCardSignals(), [key]: on, v: CARD_SIGNALS_VERSION };
-        if (this.readOnly) return;
+        if (this.readOnly) { this.localCardSignals = next; return; }
         try { localStorage.setItem(CARD_SIGNALS_KEY, JSON.stringify(next)); } catch { /* not kept */ }
     }
 
@@ -695,6 +706,7 @@ class SettingsManagerClass {
      * reads as all four (at least one kind always stays on).
      */
     getMapKinds(): MapKind[] {
+        if (this.localMapKinds) return [...this.localMapKinds];
         try {
             const parsed: unknown = JSON.parse(localStorage.getItem(MAP_KINDS_KEY) ?? 'null');
             if (Array.isArray(parsed)) {
@@ -708,7 +720,7 @@ class SettingsManagerClass {
     /** Remember the map's kinds for this device; an empty list is kept as all four. */
     setMapKinds(kinds: readonly MapKind[]): void {
         const on = MAP_KINDS.filter(k => kinds.includes(k));
-        if (this.readOnly) return;
+        if (this.readOnly) { this.localMapKinds = on.length ? on : [...MAP_KINDS]; return; }
         try { localStorage.setItem(MAP_KINDS_KEY, JSON.stringify(on.length ? on : [...MAP_KINDS])); } catch { /* not kept */ }
     }
 
