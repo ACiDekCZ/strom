@@ -102,7 +102,7 @@ describe('opening and hello', () => {
     it('opens the window by the address and name of §1 and lists it', () => {
         const id = registry.openSatellite('table', { rowType: 'persons' });
         expect(id).toMatch(/^[0-9a-f]{8}$/);
-        expect(opened[0].url).toBe(`./?okno=table&tree=${TREE}&w=${id}`);
+        expect(opened[0].url).toBe(`?okno=table&tree=${TREE}&w=${id}`);
         expect(opened[0].name).toBe(`strom-w-${id}`);
         expect(opened[0].features).toBe('popup,width=1200,height=800,left=1000,top=0');
         expect(registry.list()).toEqual([expect.objectContaining({ id, kind: 'table', opened: true, connected: false })]);

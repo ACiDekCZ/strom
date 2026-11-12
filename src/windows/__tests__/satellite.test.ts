@@ -15,7 +15,7 @@ import { StorageManager } from '../../storage.js';
 import { AuditLogManager } from '../../audit-log.js';
 import { UndoManager } from '../../undo.js';
 import type { StromData, TreeId, Person, PersonId } from '../../types.js';
-import { WindowBus, createMemoryHub, type WindowMessage, type WindowStatus } from '../window-bus.js';
+import { WindowBus, createMemoryHub, FOCUS_WAIT_MS, type WindowMessage, type WindowStatus } from '../window-bus.js';
 import { SatelliteClient, followSelectionKey, MAIN_SILENCE_MS } from '../satellite.js';
 import type { LocksLike } from '../window-role.js';
 
@@ -325,5 +325,39 @@ describe('selection', () => {
         main.post({ type: 'select', personId: 'p2', treeId: TREE, origin: 'main-1' });
         await settle();
         expect(of('select')).toHaveLength(0);
+    });
+});
+
+describe('bring to front', () => {
+    function satWithFocus(hasFocus: () => boolean): SatelliteClient {
+        sat.stop();
+        sat = new SatelliteClient({ kind: 'table', treeId: TREE, windowId: SAT, newId: false }, {
+            bus: new WindowBus(SAT, hub.channel()), storage: null, locks: noLocks(), closeSelf: () => {}, hasFocus, bounds: () => undefined,
+        });
+        return sat;
+    }
+
+    it('not forward when the main window gives up: the window asks for attention (its title is marked)', async () => {
+        const s = satWithFocus(() => false);
+        await connect();
+        const attention = vi.fn();
+        s.on('attention', attention);
+        main.post({ type: 'focus-req', to: SAT });
+        await settle(FOCUS_WAIT_MS - 10);
+        expect(attention).not.toHaveBeenCalled();
+        await settle(20);
+        expect(attention).toHaveBeenCalledTimes(1);
+        expect(of('focused')).toHaveLength(0);
+    });
+
+    it('forward: it says so and asks for nothing', async () => {
+        const s = satWithFocus(() => true);
+        await connect();
+        const attention = vi.fn();
+        s.on('attention', attention);
+        main.post({ type: 'focus-req', to: SAT });
+        await settle(FOCUS_WAIT_MS + 50);
+        expect(of('focused')).toHaveLength(1);
+        expect(attention).not.toHaveBeenCalled();
     });
 });

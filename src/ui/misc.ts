@@ -3,6 +3,7 @@
  * see src/ui/module.ts for the composition pattern.
  */
 
+import { refreshWindowControls } from '../windows/window-open.js';
 import { initDialogFocus } from './dialog-focus.js';
 import { initClosedPopups } from './closed-popups.js';
 import { initSheetSlide } from './sheet-slide.js';
@@ -519,6 +520,8 @@ export const miscMethods = uiModule({
         for (const m of ['family', 'descendants', 'timeline', 'fan', 'map', 'table']) {
             document.getElementById(`view-mode-${m}`)?.classList.toggle('active', mode === m);
         }
+        // ⧉ and its menu ("this view", the Table tab's tooltip in the language now; spec 079 §1).
+        refreshWindowControls();
         // Mobile bottom bar: three primary view tabs plus "More" (fan, map and
         // table live in the More sheet, so More lights up while one is active).
         document.getElementById('bb-view-family')?.classList.toggle('active', mode === 'family');

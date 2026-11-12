@@ -33,8 +33,10 @@ import { parseDeepLink, deepLinkTreeMatches, stripDeepLinkParams } from './deep-
 import { shouldRegisterServiceWorker, registerServiceWorker, linkManifest, isBetaBuild, appModeFor, captureInstallPrompt, INSTALL_AVAILABILITY_EVENT, isSafariOnComputer, safariAppName } from './pwa.js';
 import { decideWindowRole, getWindowRole, setWindowRole, satelliteViewMode, type SatelliteParams } from './windows/window-role.js';
 import { startMainWindow, startSatelliteClient, forwardSatelliteLaunches, showSecondTab, openLinksFromOtherWindows } from './windows/window-start.js';
+import { initWindowControls } from './windows/window-controls.js';
 import { windowTitle } from './windows/window-title.js';
 import type { SatelliteClient } from './windows/satellite.js';
+import type { WindowRegistry } from './windows/window-registry.js';
 
 // Make modules available globally for HTML event handlers
 declare global {
@@ -50,6 +52,8 @@ declare global {
             SettingsManager: typeof SettingsManager;
             TreePreview: typeof TreePreview;
             TreeCompare: typeof TreeCompare;
+            /** The main window's registry of its satellite windows (spec 079; absent in other windows). */
+            Windows?: WindowRegistry;
         };
     }
 }
@@ -271,6 +275,18 @@ function registerAppListeners(): void {
 /** The satellite's client (null in any other window). */
 let satelliteClient: SatelliteClient | null = null;
 let satelliteKind: SatelliteParams['kind'] | null = null;
+/** "● " before the title for a while: the main window could not bring this window forward (§4, 4c). */
+let titleMark = false;
+let titleMarkTimer: ReturnType<typeof setTimeout> | null = null;
+/** How long the mark stands. */
+const TITLE_MARK_MS = 3000;
+
+function markWindowTitle(): void {
+    titleMark = true;
+    if (titleMarkTimer) clearTimeout(titleMarkTimer);
+    titleMarkTimer = setTimeout(() => { titleMark = false; titleMarkTimer = null; updateWindowTitle(); }, TITLE_MARK_MS);
+    updateWindowTitle();
+}
 
 /** The window's title by its role, its tree (and a satellite's view); again at every switch or rename. */
 function updateWindowTitle(): void {
@@ -285,7 +301,8 @@ function updateWindowTitle(): void {
         for (const _ in DataManager.getData().persons) { hasPeople = true; break; }
         treeName = id && hasPeople ? TreeManager.getTreeMetadata(id)?.name ?? '' : '';
     }
-    document.title = windowTitle({ role, kind: satelliteKind, treeName, beta: isBetaBuild(APP_MODE) });
+    const title = windowTitle({ role, kind: satelliteKind, treeName, beta: isBetaBuild(APP_MODE) });
+    document.title = titleMark ? `● ${title}` : title;
 }
 
 /**
@@ -338,6 +355,12 @@ function startSatelliteWindow(params: SatelliteParams, debugOptions: DebugOption
         updateWindowTitle();
     });
     client.on('tree-gone', () => updateWindowTitle());
+    // The Table's state carried from the main window (§1): its row type, view, filters, sort, search and row.
+    client.on('init', ({ kind, state }) => {
+        if (kind === 'table') UI.setTableWindowStart(client.requestedTreeId ?? '', state);
+    });
+    // Asked forward without getting the focus: the title is marked for a while, to be found among the windows.
+    client.on('attention', () => markWindowTitle());
     // Whether anything may be edited here follows the connection and the main window's status (§3).
     let readOnly = client.readOnly();
     const followReadOnly = (): void => {
@@ -482,7 +505,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
     }
     // The main window: the satellites get their tree from here (spec 079 §0).
-    if (role.role === 'main') startMainWindow();
+    // ⧉ after the view tabs, the indicator of open windows, the Table tab's shortcuts (§1, §4).
+    if (role.role === 'main') {
+        const windows = startMainWindow();
+        window.Strom.Windows = windows;
+        initWindowControls(windows);
+    }
     // Its title names the open tree, as switched or renamed.
     updateWindowTitle();
     if (role.role === 'main') {

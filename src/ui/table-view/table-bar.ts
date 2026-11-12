@@ -3,7 +3,8 @@
  *
  * Row 1: the row type (a segmented radio group; on a phone a button that
  * opens a sheet), then slots the later parts fill (the view picker §9, search
- * §8, Columns §4, Export §11) and the phone's ⋯ (§12, which takes Columns and
+ * §8, Columns §4, Export §11), "Open in a new window" (⧉, spec 079 §1; not on a
+ * phone nor in a window opened so) and the phone's ⋯ (§12, which takes Columns and
  * Export). Row 2 holds the filter chips (§8; hidden while empty) — the slot
  * whose content the selection bar of a later phase replaces (§15). The status line under the grid: "N of M people", the sort, and the
  * Marks button (§7, hidden until it has its bubble).
@@ -52,6 +53,7 @@ export function createBar(handlers: BarHandlers): HTMLElement {
         + '<div class="tv-slot tv-slot-search"></div>'
         + '<div class="tv-slot tv-slot-cols"></div>'
         + '<div class="tv-slot tv-slot-export"></div>'
+        + '<div class="tv-slot tv-slot-window"></div>'
         + '<div class="tv-slot tv-slot-more">'
         + `<button type="button" class="tv-more-menu-btn" aria-haspopup="menu" aria-label="${esc(strings.table.moreActions)}" title="${esc(strings.table.moreActions)}">⋯</button>`
         + '</div>'
@@ -92,6 +94,22 @@ export function updateBar(bar: HTMLElement, type: RowType, counts: Record<RowTyp
     const label = strings.table.rows[type];
     btn.textContent = `${label} · ${counts[type]} ▾`;
     btn.setAttribute('aria-label', `${strings.table.rowType}: ${strings.table.rowTypeAria(label, counts[type])}`);
+}
+
+/**
+ * ⧉ "Open in a new window" (spec 079 §1, 1c): an icon button as square as
+ * Columns and Export are tall; shown only where windows are offered.
+ */
+export function createWindowButton(onClick: () => void): HTMLButtonElement {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'tv-window-btn table-bar__window';
+    btn.hidden = true;
+    btn.innerHTML = '<span aria-hidden="true">⧉</span>';
+    btn.setAttribute('aria-label', strings.win.openInNewWindow);
+    btn.title = strings.win.openInNewWindow;
+    btn.addEventListener('click', onClick);
+    return btn;
 }
 
 /** The status line's skeleton. */

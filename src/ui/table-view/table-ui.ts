@@ -53,7 +53,9 @@ import { TableGrid, type CellEditSpec, type GridCellRef, type RowAction } from '
 import { editChangeOf, editOptionsOf, editTargetOf, editValueOf, type EditTarget } from './table-edit.js';
 import { cellChoices, copyPlainText } from './table-cell.js';
 import { fanZoomModifier } from '../../fan-zoom.js';
-import { createBar, createStatus, updateBar, updateResearchStatus, updateStatus } from './table-bar.js';
+import { createBar, createStatus, createWindowButton, updateBar, updateResearchStatus, updateStatus } from './table-bar.js';
+import { applyTableWindowState, readTableWindowState, tableWindowStateOf, type TableWindowState } from './table-window-state.js';
+import { canOpenWindows, openInNewWindow } from '../../windows/window-open.js';
 import {
     canMoveColumn, canPinColumn, catalogColumns, displayColumns, hideColumn, lockedColumn, moveColumnBy, moveColumnRun, moveColumnTo,
     filterChanged, normalizeColumns, pinColumn, resetColumns, setColumnWidth, setGroupCollapsed, setGroupShown, showColumn, sortAdd, sortClick,
@@ -116,6 +118,8 @@ interface Mounted {
     views: ViewBar;
     /** The bar's Export button (§11.1). */
     exportBtn: HTMLButtonElement;
+    /** ⧉ "Open in a new window" (spec 079 §1; hidden where windows are not offered). */
+    windowBtn: HTMLButtonElement;
     /** The state drawn in place of the grid (§13a, 13e–13g). */
     empty: HTMLElement;
     /** Its kind as last drawn (the content changes only with it). */
@@ -193,6 +197,13 @@ function personNameOf(personId: PersonId): () => string {
 }
 /** The person in focus when the table was entered (spec 073 U9): the next draw makes their row the active one. */
 let focusOnEnter: { tree: string; person: PersonId } | null = null;
+/**
+ * A window opened from another window's Table (spec 079 §1): the state it
+ * carried, taken over when this tree's table state is first read; then its
+ * selected row is scrolled to at the next draw (`revealOnDraw`, the tree).
+ */
+let windowStart: { tree: string; state: TableWindowState } | null = null;
+let revealOnDraw: string | null = null;
 
 /** The people a row is about, the main one first: a person; a union's partners; an event's people; a source none. */
 function rowPeople(row: TableRow): PersonId[] {
@@ -383,7 +394,17 @@ function storedViews(): readonly TableView[] | undefined {
 function stateOf(tree: string): TableState {
     const state = tableStateFor(tree);
     if (!state.restored) restoreTableState(state, tree ? readTableWork(tree) : null, storedViews());
+    if (windowStart && windowStart.tree === tree) takeWindowStart(state);
     return state;
+}
+
+/** The state another window's Table carried (spec 079 §1), over this tree's table as it was left. */
+function takeWindowStart(state: TableState): void {
+    const start = windowStart;
+    if (!start) return;
+    windowStart = null;
+    applyTableWindowState(state, start.state, storedViews());
+    revealOnDraw = start.tree;
 }
 
 /** The working state last written, so a draw writes only a change. */
@@ -724,6 +745,9 @@ export const tableMethods = uiModule({
             exportBtn.innerHTML = `${strings.table.export}<span class="tv-export-caret" aria-hidden="true">▾</span>`;
             exportBtn.addEventListener('click', () => this.showTableExport());
             bar.querySelector('.tv-slot-export')!.appendChild(exportBtn);
+            // ⧉ (spec 079 §1, 1c): the Table with its state in a new window; this window stays on the Table.
+            const windowBtn = createWindowButton(() => { openInNewWindow('table', this.tableWindowState()); });
+            bar.querySelector('.tv-slot-window')!.appendChild(windowBtn);
             const empty = document.createElement('div');
             empty.className = 'tv-empty';
             empty.hidden = true;
@@ -749,13 +773,14 @@ export const tableMethods = uiModule({
             }) : null;
             barWatch?.observe(bar);
             mounted = {
-                container, lang, bar, bulk, grid, status, colsBtn, drawn: '', display: null, filters, filterState: null, views, exportBtn,
+                container, lang, bar, bulk, grid, status, colsBtn, drawn: '', display: null, filters, filterState: null, views, exportBtn, windowBtn,
                 empty, emptyKey: '', unionsButton: null,
             };
         }
 
         const counts = rowCounts(m);
         const phone = isPhoneBar();
+        mounted.windowBtn.hidden = !canOpenWindows();
         normalizeColumns(type, st);
         const display = displayColumns(type, st, phone);
         mounted.display = display;
@@ -773,6 +798,11 @@ export const tableMethods = uiModule({
                 st.selected = row ? rowKey(row) : null;
                 revealFocus = st.selected;
             }
+        }
+        // A window opened with another window's Table: its selected row in view.
+        if (revealOnDraw === tree) {
+            revealOnDraw = null;
+            if (!revealFocus && st.selected && rows.some(r => rowKey(r) === st.selected)) revealFocus = st.selected;
         }
         const persons = type === 'persons';
         const lines = persons ? buildLines(rows, { collapse: st.unions, pass, revealed: new Set(st.revealedUnions) }) : undefined;
@@ -1364,6 +1394,32 @@ export const tableMethods = uiModule({
         const people = rowPeople(row).filter(id => !!DataManager.getPerson(id));
         if (focus && people.includes(focus)) return focus;
         return people[0] ?? null;
+    },
+
+    /** The Table's state for a new window (spec 079 §1): row type, view, filters, sort, search, selected row. */
+    tableWindowState(): TableWindowState {
+        return tableWindowStateOf(stateOf(treeKey()), storedViews());
+    },
+
+    /**
+     * This window was opened with another window's Table state (spec 079 §1,
+     * the satellite's `init`): taken over when the tree's table is first
+     * read, or now (drawn again) when it was read already.
+     */
+    setTableWindowStart(treeId: string, raw: unknown): void {
+        const state = readTableWindowState(raw);
+        if (!state || !treeId) return;
+        windowStart = { tree: treeId, state };
+        if (!tableStateFor(treeId).restored) return;
+        if (treeKey() !== treeId) return;
+        stateOf(treeId);
+        const el = document.getElementById('table-container');
+        if (el && TreeRenderer.getViewMode() === 'table') this.renderTableView(el);
+    },
+
+    /** ⧉ in the Table's bar follows whether windows are offered (a resize, the pointer). */
+    syncTableWindowButton(): void {
+        if (mounted) mounted.windowBtn.hidden = !canOpenWindows();
     },
 
     /**

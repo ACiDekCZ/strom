@@ -302,7 +302,9 @@ async function probeFit(page: Page) {
         const pill = document.querySelector('.toolbar .tree-switcher-btn') as HTMLElement;
         const pr = pill.getBoundingClientRect();
         const sw = (document.querySelector('.toolbar .tree-switcher') as HTMLElement).getBoundingClientRect();
-        const search = (document.querySelector('.toolbar .search-container') as HTMLElement).getBoundingClientRect();
+        // The search field, or the magnifier it folded into (toolbar-squeeze-3; e.g. de with ⧉ for windows).
+        const folded = tb.classList.contains('toolbar-squeeze-3');
+        const search = (document.querySelector(folded ? '.toolbar .search-open-btn' : '.toolbar .search-container') as HTMLElement).getBoundingClientRect();
         return {
             // The toolbar holds its content: nothing scrolls past its edge.
             overflow: tb.scrollWidth - tb.clientWidth,

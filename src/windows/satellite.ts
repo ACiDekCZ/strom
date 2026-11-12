@@ -56,6 +56,11 @@ export interface SatelliteEvents {
     select: { personId: string | null; origin: string };
     /** The main window asks this window to close (§4 ×). */
     close: Record<string, never>;
+    /**
+     * The main window asked this window forward and it did not get the focus
+     * within FOCUS_WAIT_MS (§4, 4c): the window marks its title for a while.
+     */
+    attention: Record<string, never>;
 }
 
 type Listener<K extends keyof SatelliteEvents> = (payload: SatelliteEvents[K]) => void;
@@ -439,7 +444,12 @@ export class SatelliteClient {
 
     private onFocusRequest(from: string): void {
         try { if (typeof window !== 'undefined') window.focus(); } catch { /* not allowed */ }
-        void answerWhenFocused(this.bus, from, this.hasFocus);
+        let answered = false;
+        void answerWhenFocused(this.bus, from, this.hasFocus).then((ok) => { answered = ok; });
+        // As the main window decides (400 ms): not forward by then, the title is marked.
+        setTimeout(() => {
+            if (!answered && !this.hasFocus()) this.emit('attention', {});
+        }, FOCUS_WAIT_MS);
     }
 }
 

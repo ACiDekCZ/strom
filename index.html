@@ -9507,7 +9507,8 @@
             display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
             min-height: 52px; padding: 8px 16px; box-sizing: border-box;
         }
-        .tv-bar-spacer { flex: 1 1 auto; }
+        /* The spacer gives one of its two gaps back (room for ⧉ after Export, spec 079 §1). */
+        .tv-bar-spacer { flex: 1 1 auto; margin-right: -12px; }
         .tv-bar-row2 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 44px; padding: 0 16px; box-sizing: border-box; border-top: 1px solid var(--divider); }
         .tv-bar-row2[hidden], .tv-slot:empty { display: none; }
         /* §8.3 search in the bar; §8.1 the quick chips in row 2 (one line; what does not fit goes into More filters). */
@@ -9906,6 +9907,22 @@
             border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text);
             font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
         }
+        /* ⧉ Open in a new window (spec 079 §1, 1c): an icon square as tall as Columns and Export, 6 px after
+           Export; with the spacer's gap given back a changed view's buttons still fit one row at 1440 in de. */
+        .tv-slot-window { display: flex; margin-left: -6px; }
+        .tv-slot-window:has(> .tv-window-btn[hidden]) { display: none; }
+        /* A tablet's width with a mouse (641–1024): the search gives way to 120 px, so ⧉ stays in the row. */
+        @media (min-width: 641px) and (max-width: 1024px) {
+            .tv-bar-row1:has(.tv-window-btn:not([hidden])) .tv-slot-search { flex-basis: 120px; }
+        }
+        .tv-window-btn {
+            display: inline-flex; align-items: center; justify-content: center; flex: none;
+            width: 34px; height: 34px; padding: 0; box-sizing: border-box;
+            border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text-light);
+            font: inherit; font-size: 15px; line-height: 1; cursor: pointer;
+        }
+        .tv-window-btn[hidden] { display: none; }
+        .tv-window-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
         .tv-menu-heading {
             padding: 6px 14px 2px; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-faint);
         }
@@ -10243,6 +10260,7 @@
             .tv-menu-item:not([aria-disabled="true"]):hover { background: var(--surface-2); }
             .tv-cols-btn:hover { border-color: var(--primary); }
             .tv-view-btn:hover, .tv-view-act:hover, .tv-export-btn:hover { border-color: var(--primary); }
+            .tv-window-btn:hover { border-color: var(--primary); color: var(--text); }
             .tv-view-discard:hover { color: var(--text); }
             .export-table-link:hover { text-decoration: underline; }
             .tv-cp-item:hover { background: var(--surface-2); }
@@ -10344,7 +10362,7 @@
             .tv-ff-values { max-height: none; }
             .tv-nomatch { padding: 28px 12px; }
             /* 12a row 1: the row type · the view (grows, "…") · ⋯ with Columns and Export; row 2: search · Filters. */
-            .tv-slot-cols, .tv-slot-export, .tv-bar-spacer { display: none; }
+            .tv-slot-cols, .tv-slot-export, .tv-slot-window, .tv-bar-spacer { display: none; }
             .tv-slot-more { display: flex; flex: none; }
             .tv-empty { padding: 32px 16px; }
             .tv-empty .empty-block-title { font-size: 21px; }
@@ -12337,6 +12355,85 @@
         /* Hovering the active tab keeps its copper indicator, not the flat
            hover text colour. */
         @media (hover: hover) { .view-mode-segment button.active:hover { color: var(--accent); background: transparent; } }
+        /* A view tab while its small "… in a new window" menu is open (spec 079 §1, 1b). */
+        .view-mode-segment button.is-window-ctx { background: var(--hover-bg); }
+        @media (hover: hover) { .view-mode-segment button.is-window-ctx:hover { background: var(--hover-bg); } }
+        /* ⧉ after the view tabs (spec 079 §1, 1a): an outlined 30 px square, always there with
+           a mouse; with windows open it is their indicator (§4, 4a): green outline, the count. */
+        .view-window-wrap { display: flex; align-items: center; flex-shrink: 0; margin-left: 6px; }
+        .view-window-wrap[hidden] { display: none !important; }
+        .toolbar .view-window-btn {
+            display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+            box-sizing: border-box; min-width: 30px; height: 30px; padding: 0;
+            border: 1px solid var(--border); border-radius: var(--r-md);
+            background: transparent; color: var(--text-light); font-size: 13px; line-height: 1;
+        }
+        .toolbar .view-window-btn .view-window-icon { font-size: 15px; line-height: 1; }
+        .toolbar .view-window-btn.has-windows { padding: 0 10px; border-color: var(--primary); background: var(--primary-soft); color: var(--text); }
+        .toolbar .view-window-btn .view-window-count { font-size: 13px; font-weight: 600; white-space: nowrap; }
+        .toolbar .view-window-btn .view-window-count[hidden] { display: none; }
+        .toolbar .view-window-btn.is-open { background: var(--hover-bg); border-color: var(--text-faint); }
+        .toolbar .view-window-btn.has-windows.is-open { background: var(--primary-soft); border-color: var(--primary); }
+        .toolbar .view-window-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        @media (hover: hover) {
+            .toolbar .view-window-btn:hover { background: var(--hover-bg); color: var(--text); border-color: var(--primary); }
+            .toolbar .view-window-btn.has-windows:hover { background: var(--primary-soft); }
+        }
+        /* The menu (1a, 4a–4c, 4f): under ⧉ (or a view tab, 260 px), kept inside the window;
+           it scrolls inside when it reaches the bottom (4b). */
+        .view-window-menu {
+            position: fixed; z-index: 300; box-sizing: border-box;
+            display: flex; flex-direction: column; padding: 6px 0; overflow-y: auto; overscroll-behavior: contain;
+            background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 10px;
+            box-shadow: var(--shadow-lg); font-size: 13px;
+        }
+        .view-window-head {
+            padding: 6px 12px 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+            color: var(--text-faint);
+        }
+        .view-window-many {
+            margin: 2px 10px 6px; padding: 8px 10px; border-radius: 8px;
+            background: var(--warning-soft); color: var(--warning-text); font-size: 12.5px; line-height: 1.45;
+        }
+        .view-window-row { display: flex; flex-direction: column; padding: 0 6px 0 12px; }
+        .view-window-line { display: flex; align-items: center; gap: 4px; min-height: 34px; }
+        .view-window-name { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .view-window-name strong { font-weight: 600; }
+        .view-window-tree { color: var(--text-light); }
+        .view-window-front, .view-window-close, .view-window-closeall, .view-window-item {
+            border: none; background: transparent; font: inherit; cursor: pointer; transition: none;
+        }
+        .view-window-front {
+            flex: none; height: 28px; padding: 0 8px; border-radius: 6px;
+            color: var(--primary); font-size: 12.5px; font-weight: 500; white-space: nowrap;
+        }
+        .view-window-row.is-focus-failed .view-window-front { background: var(--hover-bg); }
+        .view-window-close {
+            flex: none; display: inline-flex; align-items: center; justify-content: center;
+            width: 28px; height: 28px; padding: 0; border-radius: 6px; color: var(--text-light); font-size: 15px;
+        }
+        .view-window-failed { padding: 0 8px 6px 0; font-size: 12px; line-height: 1.4; color: var(--text-light); }
+        .view-window-foot { display: flex; justify-content: flex-end; padding: 2px 8px 6px; }
+        .view-window-closeall {
+            padding: 2px 6px; border-radius: 6px; font-size: 12.5px; color: var(--text-light);
+            text-decoration: underline; text-underline-offset: 2px;
+        }
+        .view-window-sep { height: 1px; margin: 2px 0 4px; background: var(--divider); }
+        .view-window-item {
+            display: flex; align-items: center; gap: 8px; width: 100%; height: 32px; padding: 0 12px; box-sizing: border-box;
+            color: var(--text); font-size: 13px; text-align: left;
+        }
+        .view-window-item-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .view-window-item-note { flex: none; font-size: 11.5px; color: var(--text-faint); }
+        .view-window-item-icon { flex: none; font-size: 14px; color: var(--text-light); }
+        .view-window-menu :is(.view-window-front, .view-window-close, .view-window-closeall, .view-window-item):focus-visible {
+            outline: none; background: var(--surface-2); box-shadow: inset 0 0 0 2px var(--primary);
+        }
+        @media (hover: hover) {
+            .view-window-item:hover, .view-window-close:hover { background: var(--hover-bg); color: var(--text); }
+            .view-window-front:hover { background: var(--hover-bg); }
+            .view-window-closeall:hover { color: var(--text); }
+        }
         /* The family line's choice (spec 039 §1): the tree pages' "Line X ▾"
            (src/family-pages-css.ts) before the view tabs, which then follow 6px
            after it; the list's rows are buttons here (not the toolbar's green
@@ -27131,6 +27228,12 @@
             <button id="view-mode-fan" onclick="window.Strom.UI.setDisplayViewMode('fan')" data-i18n="viewModeSwitch.fan"></button>
             <button id="view-mode-map" onclick="window.Strom.UI.setDisplayViewMode('map')" data-i18n="viewModeSwitch.map"></button>
             <button id="view-mode-table" onclick="window.Strom.UI.setDisplayViewMode('table')" data-i18n="viewModeSwitch.table"></button>
+        </div>
+
+        <!-- ⧉ Open in a new window, and the indicator of the open windows (spec 079 §1, §4):
+             shown by src/windows/window-controls.ts in the main window with a mouse, wider than a phone -->
+        <div class="view-window-wrap" id="view-window-wrap" hidden>
+            <button type="button" id="view-window-btn" class="view-window-btn" aria-haspopup="menu" aria-expanded="false" data-i18n-aria-label="win.openInNewWindow" data-i18n-title="win.openInNewWindow"><span class="view-window-icon" aria-hidden="true">⧉</span><span class="view-window-count" aria-hidden="true" hidden></span></button>
         </div>
 
         <!-- Undo / Redo (R3) — desktop-only ghost icon buttons; the mobile "More"

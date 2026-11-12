@@ -79,13 +79,17 @@ export function satelliteViewMode(kind: SatelliteKind): ViewMode {
     return kind === 'overview' ? 'table' : kind;
 }
 
-/** The address of a satellite window, relative to the app ('./?okno=…'). */
+/**
+ * The address of a satellite window: the app's own address with `?okno=…`
+ * (only the query, so the path stays — `/run/`, `/strom.html` or a file
+ * opened from disk; `./` would open the folder instead of the file).
+ */
 export function satelliteUrl(kind: SatelliteKind, treeId: TreeId | null, windowId: string): string {
     const params = new URLSearchParams();
     params.set('okno', kind);
     if (treeId) params.set('tree', treeId);
     params.set('w', windowId);
-    return `./?${params.toString()}`;
+    return `?${params.toString()}`;
 }
 
 /** The lock, held until released (the main window never releases it: closing the window does). */

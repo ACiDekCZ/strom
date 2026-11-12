@@ -83,8 +83,15 @@ describe('window role at start', () => {
 describe('satellite address', () => {
     it('round-trips kind, tree and window id', () => {
         const url = satelliteUrl('table', 'tree-1' as TreeId, 'w1234567');
-        expect(url.startsWith('./?')).toBe(true);
-        expect(parseSatelliteParams(url.slice(2))).toEqual({ kind: 'table', treeId: 'tree-1', windowId: 'w1234567', newId: false });
+        expect(url.startsWith('?')).toBe(true);
+        expect(parseSatelliteParams(url)).toEqual({ kind: 'table', treeId: 'tree-1', windowId: 'w1234567', newId: false });
+    });
+
+    it('keeps the app\'s own address: the web app, a file served by name, a file opened from disk', () => {
+        const url = satelliteUrl('table', 'tree-1' as TreeId, 'w1234567');
+        expect(new URL(url, 'https://stromapp.info/run/').pathname).toBe('/run/');
+        expect(new URL(url, 'http://127.0.0.1:8742/strom.html').pathname).toBe('/strom.html');
+        expect(new URL(url, 'file:///Users/someone/Desktop/strom.html?x=1').href).toBe('file:///Users/someone/Desktop/strom.html?okno=table&tree=tree-1&w=w1234567');
     });
 
     it('a kind this version does not know opens the Table; the overview shows the Table until it has its window', () => {
