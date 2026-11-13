@@ -12,7 +12,7 @@
  * timeline: they are views of the other person's event.
  */
 
-import { Person, PersonId, PartnershipId, ParticipantRole, StromData, LifeEvent, CoupleEvent, Gender } from './types.js';
+import { Person, PersonId, PartnershipId, ParticipantRole, StromData, LifeEvent, CoupleEvent, Gender, CitationQuay, EventRoleAt } from './types.js';
 import { MARRIAGE_EVENT_ID, type SharedEventIndex } from './shared-events.js';
 import { extraParticipantRole, type ExtraParticipantRole } from './godparents.js';
 import { yearOf, yearFraction } from './dates.js';
@@ -207,4 +207,75 @@ export function derivedRoleWord(d: Pick<DerivedParticipation, 'role' | 'extra' |
 function shortNote(note: string): string {
     const first = note.split(/[,;—]/)[0].trim() || note.trim();
     return first.length > 40 ? `${first.slice(0, 39).trimEnd()}…` : first;
+}
+
+/** The own event a part is recorded as (spec 085 §6): a godparent's, a wedding witness's. */
+export type OwnRecordType = 'godparent' | 'weddingWitness';
+
+/**
+ * Which own event a part can be kept as: a godparent (at a baptism or any
+ * other act) as a godparent event, a witness at the wedding itself as a
+ * wedding witness event; other parts have no own type (null).
+ */
+export function ownRecordType(d: Pick<DerivedParticipation, 'role' | 'extra' | 'eventId' | 'partnershipId'>): OwnRecordType | null {
+    if (d.extra) return null;
+    if (d.role === 'godparent') return 'godparent';
+    if (d.role === 'witness' && d.partnershipId && d.eventId === MARRIAGE_EVENT_ID) return 'weddingWitness';
+    return null;
+}
+
+/** A new own event prefilled from the event the person took part in (created only on Save). */
+export interface OwnRecordPrefill {
+    type: OwnRecordType;
+    date?: string;
+    place?: string;
+    /** The same sources as the event's citations, each with its own QUAY (the page lives in the source). */
+    sourceIds?: string[];
+    citationQuay?: CitationQuay<'sourceIds'>;
+    roleAt: EventRoleAt;
+}
+
+/**
+ * The prefill of an own record of a part: the type, the date and place of
+ * the event, copies of its citations, and roleAt naming the event (whose it
+ * is, its type and id). Null when the part has no own type or the event is gone.
+ */
+export function ownRecordPrefill(data: StromData, d: Pick<DerivedParticipation, 'role' | 'extra' | 'eventId' | 'partnershipId' | 'ownerPersonId'>): OwnRecordPrefill | null {
+    const type = ownRecordType(d);
+    if (!type) return null;
+    const t: ParticipationTarget = { ownerPersonId: d.ownerPersonId, partnershipId: d.partnershipId, eventId: d.eventId };
+    const ev = targetEvent(data, t);
+    if (!ev) return null;
+    const union = !t.ownerPersonId && t.partnershipId ? data.partnerships[t.partnershipId] : undefined;
+    const cited = t.eventId === MARRIAGE_EVENT_ID && union
+        ? { sourceIds: union.sourceIds, quay: union.citationQuay?.sourceIds }
+        : { sourceIds: (ev.event as LifeEvent | CoupleEvent | undefined)?.sourceIds, quay: (ev.event as LifeEvent | CoupleEvent | undefined)?.citationQuay?.sourceIds };
+    const sources = [...new Set(cited.sourceIds ?? [])].filter(id => !!data.sources?.[id]);
+    const quay = cited.quay ? Object.fromEntries(Object.entries(cited.quay).filter(([id]) => sources.includes(id))) : {};
+    const role: ParticipantRole = type === 'godparent' ? 'godparent' : 'witness';
+    return {
+        type,
+        ...(ev.date ? { date: ev.date } : {}),
+        ...(ev.place ? { place: ev.place } : {}),
+        ...(sources.length ? { sourceIds: sources } : {}),
+        ...(Object.keys(quay).length ? { citationQuay: { sourceIds: quay } } : {}),
+        roleAt: {
+            role,
+            ...(t.ownerPersonId ? { personId: t.ownerPersonId } : { partnershipId: t.partnershipId }),
+            eventType: ev.type,
+            eventId: t.eventId,
+        },
+    };
+}
+
+/** The persons an own record's roleAt points at: the event's person (all of a share's), or the couple. */
+export function roleAtSubjects(data: StromData, index: SharedEventIndex, at: EventRoleAt): PersonId[] {
+    if (at.personId) {
+        const ev = at.eventId ? data.persons[at.personId]?.events?.find(e => e.id === at.eventId) : undefined;
+        const share = ev?.shareId ? index.shares.get(ev.shareId) : undefined;
+        const all = share ? [...new Set(share.map(c => c.personId))] : [at.personId];
+        return all.filter(pid => realPerson(data, pid));
+    }
+    const union = at.partnershipId ? data.partnerships[at.partnershipId] : undefined;
+    return union ? [union.person1Id, union.person2Id].filter(pid => realPerson(data, pid)) : [];
 }

@@ -505,6 +505,8 @@ export class UIClass {
     eventEditorSnapshot: string | null = null;
     /** The event editor's "Shared with" draft (src/ui/shared-event-ui.ts); null for a couple's event. */
     sharedDraft: SharedDraft | null = null;
+    /** A new own record of a part at another's event, prefilled until Save (src/ui/derived-rows-ui.ts, spec 085 §6c). */
+    recordOwnDraft: import('../derived-participations.js').OwnRecordPrefill | null = null;
     /** A large household shows all its rows (not only the first five). */
     sharedShowAll = false;
     /** The shared event's person picker while open. */

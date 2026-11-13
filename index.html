@@ -4240,6 +4240,33 @@
             border-top: 1px solid var(--divider);
         }
         .shared-banner[hidden] { display: none; }
+        /* An own record prefilled from another's event (spec 085 §6c): a quiet grey bar under the header. */
+        .event-prefill-bar {
+            flex-basis: calc(100% + 48px); margin: 12px -24px -12px; padding: 9px 24px;
+            background: var(--surface-2); color: var(--text-light); border-top: 1px solid var(--border);
+            font-size: 13px; line-height: 1.4; overflow-wrap: anywhere;
+        }
+        .event-prefill-bar[hidden], .event-roleat[hidden] { display: none; }
+        .event-roleat-label { display: block; font-size: 12px; color: var(--text-light); margin-bottom: 6px; font-weight: 500; }
+        .event-roleat-value {
+            display: flex; align-items: center; gap: 8px; min-height: 38px; padding: 6px 10px; box-sizing: border-box;
+            border: 1px dashed var(--border); border-radius: var(--r-md, 6px); background: var(--surface-2);
+            font-size: 14px; color: var(--text); overflow-wrap: anywhere;
+        }
+        .event-roleat-value .chain-glyph { flex: none; color: var(--text-faint); }
+        .event-roleat-text { min-width: 0; }
+        .event-roleat-meta { color: var(--text-light); font-size: 13px; }
+        /* An own record's line under it in the list of events: whose event it belongs to. */
+        .ref-line {
+            display: flex; align-items: baseline; gap: 6px; margin-top: 2px;
+            font-size: 13px; line-height: 1.45; color: var(--text-light);
+        }
+        .ref-line .chain-glyph { flex: none; color: var(--text-faint); transform: translateY(2px); }
+        .ref-line-text { min-width: 0; overflow-wrap: anywhere; }
+        @media (pointer: coarse) { .ref-line { line-height: 1.9; } }
+        @media (max-width: 640px) {
+            .event-prefill-bar { flex-basis: calc(100% + 32px); margin: 10px -16px -12px; padding: 9px 16px; }
+        }
         .shared-banner .shared-event-mark { flex: none; }
         .shared-banner-text { min-width: 0; overflow-wrap: anywhere; }
         .event-type-lock-hint { margin: 6px 0 0; }
@@ -30022,12 +30049,19 @@
                 <div class="shared-banner" id="event-shared-banner" role="status" hidden><svg class="shared-event-mark" width="18" height="14" viewBox="0 0 18 14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="6" cy="7" r="5"/><circle cx="12" cy="7" r="5"/></svg><span class="shared-banner-text"></span></div>
                 <!-- Its copies differ (spec 085 4g): under the banner, Compare opens the Unify dialog. -->
                 <div class="shared-diff" id="event-shared-diff" role="status" hidden><span class="shared-diff-text"><span class="shared-diff-dot" aria-hidden="true"></span><span class="shared-diff-msg"></span></span><button type="button" class="link-button shared-diff-link" onclick="window.Strom.UI.compareSharedFromEditor()" data-i18n="events.sharedCompare"></button></div>
+                <!-- An own record of a part at another's event, prefilled from it (spec 085 §6c). -->
+                <div class="event-prefill-bar" id="event-prefill-bar" role="status" hidden></div>
             </div>
             <div class="form-group">
                 <label for="input-event-type" data-i18n="events.type"></label>
                 <select id="input-event-type" aria-describedby="event-type-lock-hint"></select>
                 <p class="event-status-note" id="event-status-note" hidden></p>
                 <p class="field-hint event-type-lock-hint" id="event-type-lock-hint" hidden></p>
+            </div>
+            <!-- Whose event a godparent's or a wedding witness's own event belongs to (roleAt, spec 085 §6c): read only. -->
+            <div class="form-group event-roleat" id="event-roleat-group" hidden>
+                <span class="event-roleat-label" id="event-roleat-label"></span>
+                <div class="event-roleat-value" id="event-roleat-value" role="group" aria-labelledby="event-roleat-label"></div>
             </div>
             <div class="form-group" id="event-custom-label-group" style="display:none;">
                 <label for="input-event-custom-label" data-i18n="events.customLabel"></label>
