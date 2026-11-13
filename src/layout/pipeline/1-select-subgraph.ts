@@ -119,9 +119,7 @@ export function selectSubgraph(input: SelectSubgraphInput): GraphSelection {
                     if (auntUncle) {
                         for (const cousinId of auntUncle.childIds) {
                             // Only add if in a partnership.childIds
-                            const isInPartnership = Object.values(data.partnerships).some(
-                                p => p.childIds.includes(cousinId)
-                            );
+                            const isInPartnership = inSomePartnership(data, cousinId);
                             if (!isInPartnership) continue;
 
                             if (!persons.has(cousinId)) {
@@ -154,6 +152,20 @@ export function selectSubgraph(input: SelectSubgraphInput): GraphSelection {
         depthLimitPersons: depthLimit,
         ancestorLimitPersons: ancestorLimit
     };
+}
+
+/**
+ * Whether a child is among the children of some partnership: looked up
+ * among its parents' partnerships first (where a child normally stands),
+ * the whole data only when not found there.
+ */
+function inSomePartnership(data: StromData, childId: PersonId): boolean {
+    for (const parentId of data.persons[childId]?.parentIds ?? []) {
+        for (const u of data.persons[parentId]?.partnerships ?? []) {
+            if (data.partnerships[u]?.childIds.includes(childId)) return true;
+        }
+    }
+    return Object.values(data.partnerships).some(p => p.childIds.includes(childId));
 }
 
 /**
@@ -213,9 +225,7 @@ function addDescendantsRecursive(
     for (const childId of person.childIds) {
         if (!persons.has(childId)) {
             // Only add if child is in at least one partnership.childIds
-            const isInPartnership = Object.values(data.partnerships).some(
-                p => p.childIds.includes(childId)
-            );
+            const isInPartnership = inSomePartnership(data, childId);
             if (!isInPartnership) continue;
 
             persons.add(childId);
@@ -329,9 +339,7 @@ function getSiblings(data: StromData, personId: PersonId): Person[] {
             for (const childId of parent.childIds) {
                 if (childId !== personId) {
                     // Only include if in at least one partnership.childIds
-                    const isInPartnership = Object.values(data.partnerships).some(
-                        p => p.childIds.includes(childId)
-                    );
+                    const isInPartnership = inSomePartnership(data, childId);
                     if (isInPartnership) {
                         siblingIds.add(childId);
                     }

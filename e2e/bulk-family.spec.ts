@@ -150,14 +150,54 @@ test('the menu row expands children and siblings in one step: +n new cards, one 
     expect(await shownCount(page)).toBe(stepsBefore);
 });
 
-test('another depth: the step stays drawn, the row offers again', async ({ page }) => {
+test('another depth ends the step: its cards go, the switch offers "+n" of the new depth (fewer and more generations)', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    const data = JSON.parse(readFileSync(join(process.cwd(), 'test', 'edge-ancestor-children.json'), 'utf-8'));
-    await setupData(page, data, 'focus', 6, 1);
-    await page.evaluate(() => window.Strom.TreeRenderer.showBulkFamily('focus' as never, 'b'));
-    expect(await page.evaluate(() => window.Strom.TreeRenderer.bulkStepOf('focus' as never)?.source)).toBe('b');
-    await page.evaluate(() => window.Strom.TreeRenderer.setFocusDepth(5, 1));
-    await expect.poll(() => page.evaluate(() => window.Strom.TreeRenderer.bulkStepOf('focus' as never))).toBeNull();
+    await setupData(page, bigTree(3), 'q', 4, 1);
+    await page.mouse.move(5, 500);
+    const sw = shownSwitch(page);
+    // A family shown by its card's tab before the step (a great-grandfather's: the siblings of a grandparent) stays through another depth
+    const single = 'pfff';
+    await page.evaluate(id => window.Strom.TreeRenderer.toggleChildrenShown(id as never), single);
+    await expect.poll(() => shownCount(page)).toBe(1);
+    const withSingle = Object.keys(await screenRects(page)).sort();
+    await expect(sw).toHaveAttribute('data-state', 'offer');
+    await sw.click();
+    await expect(sw).toHaveAttribute('data-state', 'on');
+    expect(await shownCount(page)).toBe(2);
+    const stepCards = Object.keys(await screenRects(page)).filter(id => !withSingle.includes(id));
+    expect(stepCards.length).toBeGreaterThan(0);
+
+    const steppers = page.locator('#focus-controls .depth-stepper');
+    for (const [dir, depth] of [[-1, 3], [1, 4]] as const) {
+        if (dir === 1) {
+            // The step again at depth 3, then one generation more
+            await sw.click();
+            await expect(sw).toHaveAttribute('data-state', 'on');
+        }
+        await steppers.first().locator(`.depth-stepper-btn[data-step="${dir}"]`).click();
+        await expect.poll(() => page.evaluate(() => window.Strom.TreeRenderer.getFocusDepthUp())).toBe(depth);
+        // The step is gone: no card of it, the single family stays, the switch offers the new depth's "+n"
+        await expect(sw).toHaveAttribute('data-state', 'offer');
+        expect(await page.evaluate(() => window.Strom.TreeRenderer.bulkStepOf('q' as never))).toBeNull();
+        expect(await shownCount(page)).toBe(1);
+        expect(await page.evaluate(id => window.Strom.TreeRenderer.isChildrenShown(id as never), single)).toBe(true);
+        await page.waitForTimeout(700);
+        const cards = Object.keys(await screenRects(page));
+        if (depth === 4) expect(cards.sort()).toEqual(withSingle);
+        else for (const id of cards) expect(withSingle.includes(id), id).toBe(true);
+        const n = await page.evaluate(() => window.Strom.TreeRenderer.bulkFamilyCount('q' as never));
+        expect(n).toBeGreaterThan(0);
+        await expect(sw.locator('.bulk-family-count')).toHaveText(`+${n}`);
+        // The count of the new depth is the number of cards its step adds
+        if (dir === -1) {
+            await sw.click();
+            await expect(sw).toHaveAttribute('data-state', 'on');
+            await page.waitForTimeout(700);
+            expect(Object.keys(await screenRects(page)).filter(id => !cards.includes(id)).length).toBe(n);
+            await sw.click();
+            await expect(sw).toHaveAttribute('data-state', 'offer');
+        }
+    }
 });
 
 test('over 150 people a bubble asks first; Cancel and Esc leave the view as it was, "Expand +n" adds them', async ({ page }) => {
@@ -290,25 +330,24 @@ test('the switch after the depth steppers: "+n" adds n new cards in one layout, 
     expect(await shownCount(page)).toBe(stepsBefore);
 });
 
-test('the switch after another depth: a step, one more generation up, "+n" again with what the deeper view lacks', async ({ page }) => {
+test('the switch after the families of its step closed by their tabs: "+n" again with what is missing', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await setupData(page, bigTree(2), 'q', 3, 1);
+    const data = JSON.parse(readFileSync(join(process.cwd(), 'test', 'edge-ancestor-children.json'), 'utf-8'));
+    await setupData(page, data, 'focus', 6, 1);
     const sw = shownSwitch(page);
     await expect(sw).toHaveAttribute('data-state', 'offer');
+    const n = await page.evaluate(() => window.Strom.TreeRenderer.bulkFamilyCount('focus' as never));
     await sw.click();
     await expect(sw).toHaveAttribute('data-state', 'on');
-    await page.locator('#focus-controls .depth-stepper').first().locator('.depth-stepper-btn[data-step="1"]').click();
+    // The step's couple closed by its tabs, one parent after the other (each a new step):
+    // the other parent still draws the children, then nothing does
+    const parents = await page.evaluate(() => [...(window.Strom.TreeRenderer as unknown as { bulkShownFor: Map<string, unknown> }).bulkShownFor.keys()]);
+    expect(parents.sort()).toEqual(['f_m_f_m_f_f', 'f_m_f_m_f_m']);
+    await page.evaluate(id => window.Strom.TreeRenderer.toggleChildrenShown(id as never), parents[0]);
+    await expect(sw).toHaveAttribute('data-state', 'on');
+    await page.evaluate(id => window.Strom.TreeRenderer.toggleChildrenShown(id as never), parents[1]);
     await expect(sw).toHaveAttribute('data-state', 'offer');
-    const n = await page.evaluate(() => window.Strom.TreeRenderer.bulkFamilyCount('q' as never));
-    expect(n).toBeGreaterThan(0);
     await expect(sw.locator('.bulk-family-count')).toHaveText(`+${n}`);
-    // One family of the step closed alone (its tab, a new step): the switch offers what is missing again
-    const one = await page.evaluate(() => [...(window.Strom.TreeRenderer as unknown as { bulkShownFor: Map<string, unknown> }).bulkShownFor.keys()][0]);
-    await page.evaluate(id => window.Strom.TreeRenderer.toggleChildrenShown(id as never), one);
-    await expect(sw).toHaveAttribute('data-state', 'offer');
-    const left = await page.evaluate(() => window.Strom.TreeRenderer.bulkFamilyCount('q' as never));
-    expect(left).toBeGreaterThan(0);
-    await expect(sw.locator('.bulk-family-count')).toHaveText(`+${left}`);
 });
 
 test('the switch with nothing to add and no step is muted and does nothing', async ({ page }) => {
@@ -359,9 +398,23 @@ test('over 150 people the switch asks first in a bubble under it; Cancel leaves 
     await expect(bubble).toHaveCount(0);
 
     await sw.click();
+    // "about k screen widths": the step's own layout at today's zoom, rounded up
+    const k = Number((await bubble.locator('.bulk-bubble-body').textContent())!.match(/about (\d+) screen/)![1]);
     await bubble.locator('[data-pick="all"]').click();
     await expect(sw).toHaveAttribute('data-state', 'on');
     await expect.poll(async () => Object.keys(await screenRects(page)).length).toBe(before + n);
+    await page.waitForTimeout(700);
+    const measured = await page.evaluate(() => {
+        let left = Infinity, right = -Infinity;
+        for (const c of document.querySelectorAll<HTMLElement>('#tree-canvas .person-card[data-id]')) {
+            const r = c.getBoundingClientRect();
+            left = Math.min(left, r.left);
+            right = Math.max(right, r.right);
+        }
+        return (right - left) / document.getElementById('tree-container')!.clientWidth;
+    });
+    expect(k).toBe(Math.ceil(measured));
+    expect(k).toBeGreaterThan(1);
 });
 
 test('tablet: the switch in the toolbar is the icon and "+n" with a 44px target; a phone has none', async ({ page }) => {

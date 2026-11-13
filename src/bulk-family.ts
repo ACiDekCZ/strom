@@ -9,13 +9,12 @@
  *
  * Pure functions over the data and what the view draws (`inView`): the
  * person menu counts the people a step adds when it opens, the focus bar's
- * switch after every render, both without a layout.
+ * switch after every render, both without routing or drawing (bulkNewIds).
  */
 
-import type { PartnershipId, PersonId, StromData } from './types.js';
+import type { PersonId, StromData } from './types.js';
 import { hiddenChildIds } from './marriage-order.js';
-import { expandChildrenInSelection } from './layout/pipeline/1-select-subgraph.js';
-import { isDiagramStandIn } from './layout/pipeline/placeholders.js';
+import { drawnPersonIds, type PipelineInput } from './layout/pipeline/index.js';
 
 /** Who one step shows: the persons whose children come, the persons whose siblings come. */
 export interface BulkFamily {
@@ -88,44 +87,18 @@ export function bulkParents(data: StromData, family: BulkFamily, inView: (id: Pe
 
 /**
  * The people a step with `parents` brings into view, each once (the count
- * of the menu row and the switch), worked out as children shown in place
- * come (expandChildrenInSelection), without a layout: the children not
- * drawn; the other partner of each of the parents' marriages with
- * children; the partners of the children (all of them with every partner
- * drawn, `allPartners`, else the one the standard mode draws); then, from
- * each of them, the children and partners the depth holds already (`held`,
- * `heldUnion`: the view's own selection, drawn once their parent or partner
- * is). Never an
- * empty "?" stand-in (not drawn as a card). `drawn`, `drawnUnions`: the
- * persons and marriages the view draws.
+ * of the menu row and the switch): the cards a layout of the view (`input`,
+ * the view's own layout input) draws with the children of `parents` shown
+ * too and `drawn` (the cards drawn now) does not hold, worked out by
+ * drawnPersonIds (steps 1 to 5 of the pipeline, no routing or drawing): the
+ * children, the other parent of their marriages, the partners the view
+ * draws with them and what the depth holds below them, as the layout then
+ * draws them. The view's folds are the input's.
  */
-export function bulkNewIds(data: StromData, parents: readonly PersonId[], drawn: ReadonlySet<PersonId>,
-    drawnUnions: ReadonlySet<PartnershipId>, allPartners: boolean, held: (id: PersonId) => boolean = () => false,
-    heldUnion: (id: PartnershipId) => boolean = () => false): PersonId[] {
+export function bulkNewIds(input: PipelineInput, parents: readonly PersonId[], drawn: ReadonlySet<PersonId>): PersonId[] {
     if (parents.length === 0) return [];
-    const selection = {
-        persons: new Set(drawn), partnerships: new Set(drawnUnions),
-        focusPersonId: parents[0], maxAncestorGen: 0, maxDescendantGen: 0,
-    };
-    expandChildrenInSelection(data, selection, parents, allPartners);
-    const card = (id: PersonId) => !!data.persons[id] && !isDiagramStandIn(data, id);
-    const out = new Set([...selection.persons].filter(id => !drawn.has(id) && card(id)));
-    const queue = [...out];
-    while (queue.length > 0) {
-        const person = data.persons[queue.pop()!];
-        if (!person) continue;
-        const near = [...person.childIds, ...person.partnerships.flatMap(u => {
-            const p = data.partnerships[u];
-            // A childless marriage beside another one stays behind the card's "▸ ∞"
-            return p && heldUnion(u) && (p.childIds.length > 0 || person.partnerships.length === 1) ? [p.person1Id, p.person2Id] : [];
-        })];
-        for (const id of near) {
-            if (out.has(id) || drawn.has(id) || !held(id) || !card(id)) continue;
-            out.add(id);
-            queue.push(id);
-        }
-    }
-    return [...out];
+    const shown = [...(input.expandChildrenOf ?? []), ...parents.filter(q => !input.expandChildrenOf?.includes(q))];
+    return [...drawnPersonIds({ ...input, expandChildrenOf: shown })].filter(id => !drawn.has(id));
 }
 
 /**

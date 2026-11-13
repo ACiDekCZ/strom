@@ -41,6 +41,7 @@ import {
     computeLayout,
     StromLayoutEngine,
     LayoutRequest,
+    PipelineInput,
     Connection,
     SpouseLine,
     OmittedEdge,
@@ -544,8 +545,11 @@ class TreeRendererClass {
     private bulkShownFor = new Map<PersonId, BulkStep>();
     /** The last step of children and siblings at once (BulkStep.seq). */
     private bulkSeq = 0;
-    /** The depth's selection a bulk count reads (bulkHeld), per render. */
-    private bulkHeldCache: { seq: number; focus: PersonId | null; persons: ReadonlySet<PersonId>; partnerships: ReadonlySet<PartnershipId> } | null = null;
+    /** The plans of children and siblings at once worked out for the view as drawn (bulkFamilyPlan), by person and generations. */
+    private bulkPlanCache: { positions: ReadonlyMap<PersonId, Position>; request: LayoutRequest | null; shown: readonly PersonId[];
+        plans: Map<string, { family: BulkFamily; parents: PersonId[]; newIds: PersonId[] }> } | null = null;
+    /** The request of the screen's last layout (computeTreeLayout): a step's count lays out the same view with it. */
+    private screenLayoutRequest: LayoutRequest | null = null;
     /**
      * Parents shown in place beyond the depth (§4, the "▸ parents" of an
      * ancestor at the edge of the depth, PipelineInput.extraDepthFor): the
@@ -1220,6 +1224,9 @@ class TreeRendererClass {
             ...(!descendantsOnly && this.partnersShownUnions.size > 0
                 ? { showPartnerUnions: this.partnersShownIds.flatMap(id => this.partnersShownUnions.get(id) ?? []) } : {}),
         };
+
+        // The screen's own layout: a step of children and siblings at once counts with it
+        if (debug) this.screenLayoutRequest = request;
 
         // Use debug pipeline if debug mode is enabled
         if (debug && this.debugOptions?.enabled) {
@@ -2372,39 +2379,47 @@ class TreeRendererClass {
      * What a step of children and siblings at once for `personId` would do
      * in this view (none outside the family view or for a card not drawn):
      * who (collectBulkFamily), the persons whose children it shows (the ones
-     * shown already and the safety net's left out), the people it adds.
-     * `maxGeneration`: only the siblings up to that many generations above
-     * (bulk.two).
+     * shown already and the safety net's left out), the people it adds (the
+     * cards the view would draw then and does not now, bulkNewIds: the
+     * screen's own layout request with the step's children shown, worked
+     * out once per drawing). `maxGeneration`: only the siblings up to that
+     * many generations above (bulk.two).
      */
     bulkFamilyPlan(personId: PersonId, maxGeneration = Infinity): { family: BulkFamily; parents: PersonId[]; newIds: PersonId[] } {
         const empty = { family: { childrenOf: new Set<PersonId>(), siblingsOf: new Set<PersonId>() }, parents: [], newIds: [] };
         if (this.viewMode !== 'family' || !this.positions.has(personId)) return empty;
+        const cache = this.bulkPlanCache;
+        if (!cache || cache.positions !== this.positions || cache.request !== this.screenLayoutRequest || cache.shown !== this.childrenShownIds) {
+            this.bulkPlanCache = { positions: this.positions, request: this.screenLayoutRequest, shown: this.childrenShownIds, plans: new Map() };
+        }
+        const key = `${personId}\u0000${maxGeneration}`;
+        const cached = this.bulkPlanCache!.plans.get(key);
+        if (cached) return cached;
         const data = DataManager.getData();
         const inView = (id: PersonId) => this.positions.has(id);
         const family = collectBulkFamily(data, personId, inView, maxGeneration);
         const parents = bulkParents(data, family, inView, q => !this.childrenShownIds.includes(q) && !this.childrenUnshowable.has(q));
-        const unions = new Set(this.spouseLines.flatMap(l => l.partnershipId ? [l.partnershipId] : []));
-        const held = this.bulkHeld();
-        return {
-            family, parents, newIds: bulkNewIds(data, parents, new Set(this.positions.keys()), unions, this.showAllPartnerships,
-                id => held.persons.has(id), u => held.partnerships.has(u)),
-        };
+        const input = this.bulkLayoutInput(parents);
+        const plan = { family, parents, newIds: input ? bulkNewIds(input, parents, new Set(this.positions.keys())) : [] };
+        this.bulkPlanCache!.plans.set(key, plan);
+        return plan;
     }
 
     /**
-     * What the depth of this view holds (selectSubgraph, no layout), once per
-     * render: the people a bulk step's new cards bring along (a sibling's
-     * children the depth reaches) are drawn once that card is.
+     * The screen's layout input with the children of `parents` shown too
+     * (null without a screen layout or parents). The view's folds stand,
+     * except the ancestors of a person whose parents show their children
+     * (never folded then, planShownChildrenFolding); `withFolds` false: none
+     * (the planner decides them, as a step's own layout does).
      */
-    private bulkHeld(): { persons: ReadonlySet<PersonId>; partnerships: ReadonlySet<PartnershipId> } {
-        if (this.bulkHeldCache?.seq === this.renderSeq && this.bulkHeldCache.focus === this.focusPersonId) return this.bulkHeldCache;
-        const selection = selectSubgraph({
-            data: DataManager.getData(), focusPersonId: this.focusPersonId!,
-            ancestorDepth: this.focusDepthUp, descendantDepth: this.focusDepthDown,
-            includeSpouseAncestors: false, includeParentSiblings: true, includeParentSiblingDescendants: true,
-        });
-        this.bulkHeldCache = { seq: this.renderSeq, focus: this.focusPersonId, persons: selection.persons, partnerships: selection.partnerships };
-        return this.bulkHeldCache;
+    private bulkLayoutInput(parents: readonly PersonId[], withFolds = true): PipelineInput | null {
+        const request = this.screenLayoutRequest;
+        if (!request || parents.length === 0) return null;
+        const shown = [...(request.expandChildrenOf ?? []), ...parents];
+        const folds = withFolds ? [...this.foldedFor.keys()].filter(id =>
+            !(request.data.persons[id]?.parentIds ?? []).some(q => shown.includes(q))) : [];
+        const { foldAncestorsOf: _none, ...input } = pipelineInputFromRequest(request);
+        return { ...input, expandChildrenOf: shown, ...(folds.length > 0 ? { foldAncestorsOf: folds } : {}) };
     }
 
     /** How many people a step of children and siblings at once for `personId` adds (the menu row's and the switch's "+n"). */
@@ -2441,31 +2456,21 @@ class TreeRendererClass {
     }
 
     /**
-     * Rough width of the view after a step (the bubble over 150): the widest
-     * row with the people the step adds, in screen widths at today's zoom
-     * (cards × (card width + gap) / canvas width, rounded up).
+     * How wide the view grows with a step (the bubble over 150): the step's
+     * own layout worked out (no drawing; rare, a step over 150 people), its
+     * width in screen widths at today's zoom, rounded up.
      */
     bulkFamilyScreens(personId: PersonId, maxGeneration = Infinity): number {
-        const { parents, newIds } = this.bulkFamilyPlan(personId, maxGeneration);
-        const data = DataManager.getData();
-        const rowOf = (y: number) => Math.round(y);
-        const rows = new Map<number, number>();
-        for (const pos of this.positions.values()) rows.set(rowOf(pos.y), (rows.get(rowOf(pos.y)) ?? 0) + 1);
-        const ys = [...rows.keys()].sort((a, b) => a - b);
-        const steps = ys.slice(1).map((y, i) => y - ys[i]).filter(d => d > 0).sort((a, b) => a - b);
-        const rowStep = steps[0] ?? this.config.cardHeight + this.config.verticalGap;
-        const fresh = new Set(newIds);
-        for (const id of newIds) {
-            const q = parents.find(p => (data.persons[p]?.childIds ?? []).includes(id));
-            const at = q ? this.positions.get(q) : undefined;
-            if (!at) continue;
-            const sibling = (data.persons[q!]?.childIds ?? []).map(c => this.positions.get(c)).find(p => !!p);
-            const y = rowOf(sibling ? sibling.y : at.y + rowStep);
-            rows.set(y, (rows.get(y) ?? 0) + 1);
-        }
-        const widest = Math.max(0, ...rows.values());
-        const width = widest * (this.config.cardWidth + this.config.horizontalGap) * ZoomPan.getScale();
+        const input = this.bulkLayoutInput(this.bulkFamilyPlan(personId, maxGeneration).parents, false);
         const canvas = document.getElementById('tree-container')?.clientWidth || window.innerWidth || 1;
+        if (!input) return 1;
+        const { positions } = planShownChildrenFolding(input).result;
+        let left = Infinity, right = -Infinity;
+        for (const pos of positions.values()) {
+            left = Math.min(left, pos.x);
+            right = Math.max(right, pos.x + this.config.cardWidth);
+        }
+        const width = right > left ? (right - left) * ZoomPan.getScale() : 0;
         return Math.max(1, Math.ceil(width / canvas));
     }
 
@@ -2614,33 +2619,8 @@ class TreeRendererClass {
             for (const [q, b] of this.parentsInvolved(p, this.parentsBroughtIn.get(p) ?? new Set())) if (!involved.has(q)) involved.set(q, b);
         }
         for (const p of closingPartners) if (!involved.has(p)) involved.set(p, this.partnersBroughtIn.get(p) ?? new Set());
-        this.childrenShownIds = this.childrenShownIds.filter(id => !closing.has(id));
-        for (const id of closing) {
-            this.childrenVisibleBefore.delete(id);
-            this.childrenBroughtIn.delete(id);
-            this.childrenZoom.delete(id);
-            this.bulkShownFor.delete(id);
-        }
-        for (const [p, parents] of this.siblingsShownFor) {
-            if (parents.some(q => closing.has(q))) this.siblingsShownFor.delete(p);
-        }
         const anchorScreen = this.childrenAnchorScreen.get(anchorId) ?? this.parentsAnchorScreen.get(anchorId) ?? this.partnersAnchorScreen.get(anchorId);
-        for (const id of closing) this.childrenAnchorScreen.delete(id);
-        this.parentsShownIds = this.parentsShownIds.filter(id => !closingParents.has(id));
-        for (const id of closingParents) {
-            this.parentsBroughtIn.delete(id);
-            this.parentsWithSiblings.delete(id);
-            this.parentsZoom.delete(id);
-            this.parentsAnchorScreen.delete(id);
-        }
-        this.partnersShownIds = this.partnersShownIds.filter(id => !closingPartners.has(id));
-        for (const id of closingPartners) {
-            this.partnersBroughtIn.delete(id);
-            this.partnersZoom.delete(id);
-            this.partnersAnchorScreen.delete(id);
-            this.partnersShownUnions.delete(id);
-            this.partnersOffered.delete(id);
-        }
+        this.forgetShown(closing, closingParents, closingPartners);
         await this.renderInternal();
         const shift = this.keepCardInPlace(anchorId, beforeAll, restoreView);
         // §5: the scale before the first of these clicks, when the last one's zoom still stands
@@ -2649,6 +2629,54 @@ class TreeRendererClass {
         // (zooms around other cards moved it on the screen; the pivot that lands it there)
         const pivot = restoreView && zoomTo !== null && anchorScreen ? this.landingPivot(anchorId, anchorScreen, zoomTo) : null;
         this.playChildrenTransition(scene, 'close', anchorId, shift, involved, zoomTo, undefined, pivot);
+    }
+
+    /**
+     * Leave out the children shown for `children`, the parents shown for
+     * `parents` and the other partners shown for `partners` (no render, no
+     * step of the history): what closing them (closeShown) or another depth
+     * (forgetBulkSteps) does to the view's state.
+     */
+    private forgetShown(children: ReadonlySet<PersonId>, parents: ReadonlySet<PersonId>, partners: ReadonlySet<PersonId>): void {
+        this.childrenShownIds = this.childrenShownIds.filter(id => !children.has(id));
+        for (const id of children) {
+            this.childrenVisibleBefore.delete(id);
+            this.childrenBroughtIn.delete(id);
+            this.childrenZoom.delete(id);
+            this.childrenAnchorScreen.delete(id);
+            this.bulkShownFor.delete(id);
+        }
+        for (const [p, qs] of this.siblingsShownFor) {
+            if (qs.some(q => children.has(q))) this.siblingsShownFor.delete(p);
+        }
+        this.parentsShownIds = this.parentsShownIds.filter(id => !parents.has(id));
+        for (const id of parents) {
+            this.parentsBroughtIn.delete(id);
+            this.parentsWithSiblings.delete(id);
+            this.parentsZoom.delete(id);
+            this.parentsAnchorScreen.delete(id);
+        }
+        this.partnersShownIds = this.partnersShownIds.filter(id => !partners.has(id));
+        for (const id of partners) {
+            this.partnersBroughtIn.delete(id);
+            this.partnersZoom.delete(id);
+            this.partnersAnchorScreen.delete(id);
+            this.partnersShownUnions.delete(id);
+            this.partnersOffered.delete(id);
+        }
+    }
+
+    /**
+     * Another depth (decision 5: a step of children and siblings at once is
+     * one-off, a new focus or another depth ends it): every such step, (a)
+     * and (b), goes with what closes with it (the expansions on the cards it
+     * brought, shownClosing); the families shown card by card stay. No step
+     * of the history (the history does not keep the depth).
+     */
+    private forgetBulkSteps(): void {
+        if (this.bulkShownFor.size === 0) return;
+        const { children, parents, partners } = this.shownClosing([...this.bulkShownFor.keys()], []);
+        this.forgetShown(children, parents, partners);
     }
 
     /**
@@ -3821,6 +3849,7 @@ class TreeRendererClass {
     }
 
     setFocusDepth(up: number, down: number): void {
+        if (up !== this.focusDepthUp || down !== this.focusDepthDown) this.forgetBulkSteps();
         this.focusDepthUp = up;
         this.focusDepthDown = down;
 

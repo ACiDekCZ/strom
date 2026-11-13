@@ -10,7 +10,7 @@
  * Partners are ordered: male left, otherwise alphabetically by ID.
  */
 
-import { PersonId, PartnershipId, StromData, coupleSides } from '../../types.js';
+import { PersonId, PartnershipId, Partnership, StromData, coupleSides } from '../../types.js';
 import { compareMarriages, marriageDates } from '../../marriage-order.js';
 import {
     BuildModelInput,
@@ -229,10 +229,11 @@ export function buildLayoutModel(input: BuildModelInput): LayoutModel {
                     return child && child.parentIds.includes(personId);
                 }
                 // Only include if child's parent partnership includes this person
-                return Object.values(data.partnerships).some(p =>
-                    p.childIds.includes(childId) &&
-                    (p.person1Id === personId || p.person2Id === personId)
-                );
+                // (its own partnerships first, the whole data only when not found there)
+                const ofUnion = (p: { childIds: PersonId[]; person1Id: PersonId; person2Id: PersonId } | undefined) => !!p &&
+                    p.childIds.includes(childId) && (p.person1Id === personId || p.person2Id === personId);
+                return person.partnerships.some(u => ofUnion(data.partnerships[u]))
+                    || Object.values(data.partnerships).some(ofUnion);
             });
 
         // Sort children
@@ -310,6 +311,22 @@ function collectLineagePartnerships(
     const result = new Set<PartnershipId>();
     const visited = new Set<PersonId>();
     const queue: PersonId[] = [focusPersonId];
+    // The partnerships each child stands in, read once
+    let unionsOfChild: Map<PersonId, Partnership[]> | null = null;
+    const unionsOf = (childId: PersonId): Partnership[] => {
+        if (!unionsOfChild) {
+            unionsOfChild = new Map();
+            for (const partnershipId in data.partnerships) {
+                const partnership = data.partnerships[partnershipId as PartnershipId];
+                for (const c of partnership.childIds) {
+                    const list = unionsOfChild.get(c);
+                    if (list) list.push(partnership);
+                    else unionsOfChild.set(c, [partnership]);
+                }
+            }
+        }
+        return unionsOfChild.get(childId) ?? [];
+    };
 
     while (queue.length > 0) {
         const childId = queue.shift()!;
@@ -319,9 +336,7 @@ function collectLineagePartnerships(
         const child = data.persons[childId];
         if (!child || child.parentIds.length === 0) continue;
 
-        for (const partnershipId in data.partnerships) {
-            const partnership = data.partnerships[partnershipId as PartnershipId];
-            if (!partnership.childIds.includes(childId)) continue;
+        for (const partnership of unionsOf(childId)) {
             // Only a partnership of the recorded parents counts as the line
             if (!child.parentIds.includes(partnership.person1Id) &&
                 !child.parentIds.includes(partnership.person2Id)) {

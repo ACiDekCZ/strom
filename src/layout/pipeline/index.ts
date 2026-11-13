@@ -561,18 +561,31 @@ export function runLayoutPipeline(input: PipelineInput): LayoutResult {
     return (compact.omittedEdges?.length ?? 0) < omitted ? compact : result;
 }
 
-function runLayoutPipelineOnce(input: PipelineInput): LayoutResult {
+/** What step 1 and the in-place expansions leave for the layout (selectStage). */
+interface SelectedStage {
+    data: StromData;
+    viewLayer: ReturnType<typeof buildViewLayer> | null;
+    selection: GraphSelection;
+    effectivePolicy: DisplayPolicy;
+    hiddenPersonIds: Set<PersonId>;
+    extraDepthDrawn: PersonId[];
+}
+
+/**
+ * Step 1 with everything that changes who is drawn before the layout model:
+ * the view links, the parents beyond the depth, the auto-expanded partners,
+ * the children and partners shown in place, the folded ancestors and the
+ * empty "?" stand-ins. Null when nobody is selected.
+ */
+function selectStage(input: PipelineInput): SelectedStage | null {
     const {
         data: inputData,
         focusPersonId,
-        config,
         ancestorDepth,
         descendantDepth,
         includeSpouseAncestors,
         includeParentSiblings,
         includeParentSiblingDescendants,
-        maxIterations = 20,
-        tolerance = 0.5,
         displayPolicy = DEFAULT_DISPLAY_POLICY
     } = input;
 
@@ -596,11 +609,7 @@ function runLayoutPipelineOnce(input: PipelineInput): LayoutResult {
     const extraDepthDrawn = input.extraDepthFor?.length
         ? extendAncestorDepth(data, selection, input.extraDepthFor, () => drawnWithoutExtraDepth(input)) : [];
 
-    // Early return if no persons selected
-    if (selection.persons.size === 0) {
-        return emptyResult();
-    }
-
+    if (selection.persons.size === 0) return null;
     // Auto-expand: find persons at gen >= -1 with multiple partnerships,
     // plus deep direct-line ancestors whose extra spouses render as appendages
     let effectivePolicy = displayPolicy;
@@ -649,6 +658,42 @@ function runLayoutPipelineOnce(input: PipelineInput): LayoutResult {
 
     // Empty "?" stand-ins are not drawn (T11)
     const hiddenPersonIds = hidePlaceholders(data, selection, focusPersonId);
+
+    return { data, viewLayer, selection, effectivePolicy, hiddenPersonIds, extraDepthDrawn };
+}
+
+/**
+ * The persons a layout of `input` draws (the keys of its positions) without
+ * the costly part of it: steps 1 to 5, the persons placed in a block (a
+ * selected person no block of the focus reaches is not drawn), the empty
+ * "?" stand-ins left out. The view's folds are the input's
+ * (foldAncestorsOf), not planned. Children and siblings at once counts the
+ * people a step adds with it (bulk-family.ts).
+ */
+export function drawnPersonIds(input: PipelineInput): Set<PersonId> {
+    const stage = selectStage(input);
+    if (!stage) return new Set();
+    const { data, selection, effectivePolicy, hiddenPersonIds } = stage;
+    const model = buildLayoutModel({ data, selection, focusPersonId: input.focusPersonId, displayPolicy: effectivePolicy });
+    if (hiddenPersonIds.size > 0) model.hiddenPersonIds = hiddenPersonIds;
+    const genModel = assignGenerations({ model, focusPersonId: input.focusPersonId });
+    const measured = measureSubtrees({ genModel, config: input.config, focusPersonId: input.focusPersonId, expandChildrenOf: input.expandChildrenOf });
+    const { personX } = placeX({ measured, config: input.config });
+    return new Set([...model.persons.keys()].filter(id => !hiddenPersonIds.has(id) && personX.has(id) && genModel.personGen.has(id)));
+}
+
+function runLayoutPipelineOnce(input: PipelineInput): LayoutResult {
+    const {
+        focusPersonId,
+        config,
+        maxIterations = 20,
+        tolerance = 0.5,
+    } = input;
+
+    const stage = selectStage(input);
+    // Early return if no persons selected
+    if (!stage) return emptyResult();
+    const { data, viewLayer, selection, effectivePolicy, hiddenPersonIds, extraDepthDrawn } = stage;
 
     // Step 2: Build layout model
     const model = buildLayoutModel({

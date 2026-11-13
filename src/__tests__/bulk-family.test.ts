@@ -2,18 +2,23 @@
  * Children and siblings at once (src/bulk-family.ts): who a step shows
  * (collectBulkFamily), the persons whose children it shows (bulkParents)
  * and the people it adds (bulkNewIds); on the fixtures with a real layout
- * the count is the number of new cards and the layout invariants hold after
- * the step.
+ * the count is exactly the number of new cards (every person as focus, also
+ * "Only 2 ancestor generations", and an invented family of about 3 000
+ * people at the depths 4 to 6), it stays cheap, and the layout invariants
+ * hold after the step.
  */
 
 import { describe, it, expect } from 'vitest';
+import { existsSync } from 'fs';
+import { join } from 'path';
 import { loadFixture } from '../layout/__tests__/helpers/loadFixture.js';
-import { planShownChildrenFolding } from '../layout/pipeline/index.js';
-import { selectSubgraph } from '../layout/pipeline/1-select-subgraph.js';
+import { planShownChildrenFolding, type PipelineInput } from '../layout/pipeline/index.js';
 import { assertNoNodeOverlap, assertValidPositions } from '../layout/__tests__/helpers/assertions.js';
 import { auditGeometry } from '../layout/__tests__/helpers/geometryAudit.js';
-import { DEFAULT_LAYOUT_CONFIG, type PartnershipId, type PersonId, type StromData } from '../types.js';
+import { DEFAULT_LAYOUT_CONFIG, type PersonId, type StromData } from '../types.js';
 import { bulkAddedKeys, bulkBroughtInByParent, bulkNewIds, bulkParents, collectBulkFamily, BULK_TWO_GENERATIONS } from '../bulk-family.js';
+import { syntheticBigFamily } from './helpers/synthetic-big-family.js';
+import { budgetReport, measureAgainstBudget } from './helpers/perf-budget.js';
 
 const P = (id: string) => id as PersonId;
 
@@ -94,14 +99,21 @@ describe('collectBulkFamily', () => {
         expect(f.childrenOf.size + f.siblingsOf.size).toBe(0);
     });
 
-    it('shows the children of each parent once and counts each new person once, partners included', () => {
+    it('shows the children of each parent once', () => {
         const f = collectBulkFamily(data, P('me'), inView);
-        const parents = bulkParents(data, f, inView);
-        expect(parents).toEqual(['me', 'dad', 'mom', 'gp1', 'gp2']);
-        const unions = new Set(['u_gp', 'u_dm'] as PartnershipId[]);
-        // sis once (child of dad and mom); wife comes with the children of me; the uncle with one partner or both
-        expect(bulkNewIds(data, parents, drawn, unions, false).sort()).toEqual(['aunt1', 'kid1', 'kid2', 'sis', 'uncle', 'wife']);
-        expect(bulkNewIds(data, parents, drawn, unions, true).sort()).toEqual(['aunt1', 'aunt2', 'kid1', 'kid2', 'sis', 'uncle', 'wife']);
+        expect(bulkParents(data, f, inView)).toEqual(['me', 'dad', 'mom', 'gp1', 'gp2']);
+    });
+
+    it('counts each new person once, partners included, as the layout then draws them', () => {
+        for (const autoExpand of [false, true]) {
+            const input = viewInput(data, P('kid1'), 3, 0, autoExpand);
+            const before = new Set(planShownChildrenFolding(input).result.positions.keys());
+            const inViewNow = (id: PersonId) => before.has(id);
+            const parents = bulkParents(data, collectBulkFamily(data, P('kid1'), inViewNow), inViewNow);
+            expect(parents).toEqual(['gp1', 'gp2']);
+            // The uncle with the partner the standard display draws, or both
+            expect(bulkNewIds(input, parents, before).sort()).toEqual(autoExpand ? ['aunt1', 'aunt2', 'uncle'] : ['aunt1', 'uncle']);
+        }
     });
 
     it('leaves out the persons whose children are shown already', () => {
@@ -119,6 +131,34 @@ describe('collectBulkFamily', () => {
         expect([...by.get(P('gp1'))!].sort()).toEqual(['aunt1', 'uncle']);
     });
 });
+
+/** The family view's layout input (the screen's: aunts, uncles and cousins in, no spouse ancestors). */
+function viewInput(data: StromData, focus: PersonId, up: number, down: number, autoExpand: boolean, shown: readonly PersonId[] = []): PipelineInput {
+    return {
+        data, focusPersonId: focus, config: DEFAULT_LAYOUT_CONFIG, ancestorDepth: up, descendantDepth: down,
+        includeSpouseAncestors: false, includeParentSiblings: true, includeParentSiblingDescendants: true,
+        displayPolicy: { mode: autoExpand ? 'expanded' : 'standard', autoExpand },
+        ...(shown.length ? { expandChildrenOf: shown } : {}),
+    };
+}
+
+/**
+ * A step for `focus` in the view: the count (bulkNewIds) and the cards the
+ * step's real layout (with its folds planned) draws that the view did not.
+ * Null when the step has nothing to show.
+ */
+function stepOf(data: StromData, focus: PersonId, up: number, down: number, autoExpand: boolean, maxGeneration = Infinity) {
+    const input = viewInput(data, focus, up, down, autoExpand);
+    const before = planShownChildrenFolding(input).result;
+    const drawn = new Set(before.positions.keys());
+    const inView = (id: PersonId) => drawn.has(id);
+    const parents = bulkParents(data, collectBulkFamily(data, focus, inView, maxGeneration), inView);
+    if (parents.length === 0) return null;
+    const n = bulkNewIds(input, parents, drawn);
+    const planned = planShownChildrenFolding(viewInput(data, focus, up, down, autoExpand, parents));
+    const fresh = [...planned.result.positions.keys()].filter(id => !drawn.has(id));
+    return { n, fresh, planned, parents, drawn };
+}
 
 describe('children and siblings at once on the fixtures', () => {
     const config = DEFAULT_LAYOUT_CONFIG;
@@ -139,19 +179,11 @@ describe('children and siblings at once on the fixtures', () => {
     for (const [fixture, focus, depth] of cases) {
         for (const autoExpand of [false, true]) {
             it(`${fixture} ${focus} depth ${depth} ${autoExpand ? 'expanded' : 'standard'}: count = new cards, invariants hold`, () => {
-                const data = loadFixture(fixture);
-                const before = plan(data, P(focus), depth, autoExpand).result;
-                const drawn = new Set(before.positions.keys());
-                const inView = (id: PersonId) => drawn.has(id);
-                const f = collectBulkFamily(data, P(focus), inView);
-                const parents = bulkParents(data, f, inView);
-                const unions = new Set(before.spouseLines.flatMap(l => l.partnershipId ? [l.partnershipId] : []));
-                const held = selectSubgraph({ data, focusPersonId: P(focus), ancestorDepth: depth, descendantDepth: depth,
-                    includeSpouseAncestors: false, includeParentSiblings: true, includeParentSiblingDescendants: true });
-                const newIds = bulkNewIds(data, parents, drawn, unions, autoExpand, id => held.persons.has(id), u => held.partnerships.has(u));
-                const after = plan(data, P(focus), depth, autoExpand, parents).result;
-                const brought = [...after.positions.keys()].filter(id => !drawn.has(id));
-                expect(newIds.sort()).toEqual(brought.sort());
+                const step = stepOf(loadFixture(fixture), P(focus), depth, depth, autoExpand);
+                // (the expanded display of comprehensive draws the whole family already)
+                if (!step) return;
+                expect(step.n.sort()).toEqual(step.fresh.sort());
+                const after = step.planned.result;
                 assertValidPositions(after.positions);
                 assertNoNodeOverlap(after.positions, config.cardWidth, config.cardHeight);
                 expect(auditGeometry(after, config)).toEqual([]);
@@ -159,32 +191,95 @@ describe('children and siblings at once on the fixtures', () => {
         }
     }
 
-    // Every person as focus: the count is the number of new cards, nothing folds
-    for (const fixture of ['comprehensive', 'etalon-stress-all', 'edge-aunts-wide-family', 'etalon-deep-both']) {
-        it(`${fixture}, every person as focus: count = new cards`, () => {
+    // Every person as focus, the whole step and "Only 2 ancestor generations":
+    // the count is exactly the number of new cards (the fixtures where an
+    // estimate of the count went wrong among them: a childless partner, a
+    // shown child's family, the demo tree, the author's own tree when here)
+    const everyone = ['comprehensive', 'etalon-stress-all', 'edge-aunts-wide-family', 'etalon-deep-both',
+        'edge-childless-partners', 'edge-shown-child-family', 'devel-demo', 'edge-ancestor-children', 'real-large'];
+    for (const fixture of everyone) {
+        const present = existsSync(join(process.cwd(), 'test', `${fixture}.json`));
+        it.skipIf(!present)(`${fixture}, every person as focus: count = new cards, no tolerance`, () => {
             const data = loadFixture(fixture);
             const failures: string[] = [];
+            let steps = 0;
             for (const focus of Object.keys(data.persons) as PersonId[]) {
                 for (const autoExpand of [false, true]) {
-                    const before = plan(data, focus, 4, autoExpand).result;
-                    const drawn = new Set(before.positions.keys());
-                    const inView = (id: PersonId) => drawn.has(id);
-                    const parents = bulkParents(data, collectBulkFamily(data, focus, inView), inView);
-                    if (parents.length === 0) continue;
-                    const held = selectSubgraph({ data, focusPersonId: focus, ancestorDepth: 4, descendantDepth: 4,
-                        includeSpouseAncestors: false, includeParentSiblings: true, includeParentSiblingDescendants: true });
-                    const unions = new Set(before.spouseLines.flatMap(l => l.partnershipId ? [l.partnershipId] : []));
-                    const n = bulkNewIds(data, parents, drawn, unions, autoExpand, id => held.persons.has(id), u => held.partnerships.has(u));
-                    const planned = plan(data, focus, 4, autoExpand, parents);
-                    const fresh = [...planned.result.positions.keys()].filter(id => !drawn.has(id));
-                    if (n.length !== fresh.length || planned.foldedFor.size > 0) {
-                        failures.push(`${focus} ${autoExpand ? 'expanded' : 'standard'}: n ${n.length}, new ${fresh.length}, folded ${planned.foldedFor.size}`);
+                    for (const maxGeneration of [Infinity, BULK_TWO_GENERATIONS]) {
+                        const step = stepOf(data, focus, 4, 4, autoExpand, maxGeneration);
+                        if (!step) continue;
+                        steps++;
+                        const n = new Set(step.n), fresh = new Set(step.fresh);
+                        if (n.size !== fresh.size || [...n].some(id => !fresh.has(id))) {
+                            failures.push(`${focus} ${autoExpand ? 'expanded' : 'standard'} ${maxGeneration}: n ${n.size}, new ${fresh.size}`);
+                        }
                     }
                 }
             }
+            expect(steps).toBeGreaterThan(0);
             expect(failures).toEqual([]);
+        }, 120_000);
+    }
+
+    // The fixtures of the first version: a step from scratch folds no ancestor
+    for (const fixture of ['comprehensive', 'etalon-stress-all', 'edge-aunts-wide-family', 'etalon-deep-both']) {
+        it(`${fixture}, every person as focus: nothing folds`, () => {
+            const data = loadFixture(fixture);
+            const folded: string[] = [];
+            for (const focus of Object.keys(data.persons) as PersonId[]) {
+                for (const autoExpand of [false, true]) {
+                    const step = stepOf(data, focus, 4, 4, autoExpand);
+                    if (step && step.planned.foldedFor.size > 0) folded.push(`${focus} ${autoExpand}`);
+                }
+            }
+            expect(folded).toEqual([]);
         });
     }
+
+    // An invented family of about 3 000 people, the youngest as focus and some
+    // of the ancestors' line: exact at the depths 4 to 6, both displays
+    it('an invented family of 3 000 people at the depths 4 to 6: count = new cards, no tolerance', () => {
+        const data = syntheticBigFamily();
+        expect(Object.keys(data.persons).length).toBeGreaterThan(3000);
+        const failures: string[] = [];
+        for (const focus of ['z', 'af', 'amf', 'z_c1'].map(P)) {
+            for (const depth of [4, 5, 6]) {
+                for (const autoExpand of [false, true]) {
+                    for (const maxGeneration of [Infinity, BULK_TWO_GENERATIONS]) {
+                        const step = stepOf(data, focus, depth, 1, autoExpand, maxGeneration);
+                        if (!step) { failures.push(`${focus} ${depth}: no step`); continue; }
+                        if (step.n.length !== step.fresh.length || step.n.some(id => !step.fresh.includes(id))) {
+                            failures.push(`${focus} depth ${depth} ${autoExpand ? 'expanded' : 'standard'} ${maxGeneration}: n ${step.n.length}, new ${step.fresh.length}`);
+                        }
+                    }
+                }
+            }
+        }
+        expect(failures).toEqual([]);
+    }, 120_000);
+
+    // The count after every drawing (the switch) stays in single milliseconds
+    // on that family at depth 6: judged against a calibration run right
+    // before it (helpers/perf-budget.ts), so a busy machine does not fail it
+    it('the count on 3 000 people at depth 6 takes a few milliseconds', () => {
+        const data = syntheticBigFamily();
+        const input = viewInput(data, P('z'), 6, 1, false);
+        const drawn = new Set(planShownChildrenFolding(input).result.positions.keys());
+        const inView = (id: PersonId) => drawn.has(id);
+        let n = 0;
+        const count = () => {
+            const parents = bulkParents(data, collectBulkFamily(data, P('z'), inView), inView);
+            n = bulkNewIds(input, parents, drawn).length;
+        };
+        count();
+        expect(n).toBeGreaterThan(150);
+        const BUDGET_MS = 10;
+        const m = measureAgainstBudget(count, {
+            budgetMs: BUDGET_MS, calibrationRounds: 2, referenceMs: 11, minPairs: 3, maxPairs: 15, maxWallMs: 20_000,
+        });
+        console.log(budgetReport('children and siblings count, 3 000 people, depth 6', m, BUDGET_MS));
+        if (m.judged) expect(m.ms).toBeLessThan(BUDGET_MS);
+    }, 120_000);
 
     for (const autoExpand of [false, true]) {
         for (const maxGeneration of [BULK_TWO_GENERATIONS, Infinity]) {
@@ -200,8 +295,7 @@ describe('children and siblings at once on the fixtures', () => {
                 const drawn = new Set(before.positions.keys());
                 const inView = (id: PersonId) => drawn.has(id);
                 const parents = bulkParents(data, collectBulkFamily(data, P('q'), inView, maxGeneration), inView);
-                const unions = new Set(before.spouseLines.flatMap(l => l.partnershipId ? [l.partnershipId] : []));
-                const newIds = bulkNewIds(data, parents, drawn, unions, autoExpand);
+                const newIds = bulkNewIds(input([]), parents, drawn);
                 const planned = planShownChildrenFolding(input(parents));
                 expect([...planned.foldedFor]).toEqual([]);
                 const after = planned.result;
