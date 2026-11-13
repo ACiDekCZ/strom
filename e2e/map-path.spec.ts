@@ -443,7 +443,11 @@ test('the legend lists the quarters with an unknown grandparent and the eighths,
     await expect(rows).toHaveCount(2);
     await expect(rows.nth(0).locator('.map-lines-name')).toHaveText('1 · Quillfen');
     await expect(rows.nth(1).locator('.map-lines-name')).toHaveText('3 · Zandmeer');
-    await expect(legend.locator('.map-lines-row.is-unknown').first()).toHaveText('2 · father’s father’s mother – unknown');
+    // An eighth's row: the count under the name, its relation only in the title and the label.
+    await expect(rows.nth(0).locator('.map-lines-sub')).toHaveText('1 ancestor');
+    await expect(rows.nth(0)).toHaveAttribute('title', "father's father's father");
+    await expect(rows.nth(0)).toHaveAttribute('aria-label', "1 · Quillfen · father's father's father · 1 ancestor");
+    await expect(legend.locator('.map-lines-row.is-unknown').first()).toHaveText("2 · father's father's mother – unknown");
     await expect(page.locator('path.map-path-line[data-cls="e0"]')).toHaveCount(1);
     await expect(page.locator('path.map-path-line[data-cls="e2"]')).toHaveCount(1);
     await legend.getByRole('button', { name: 'Quarters' }).click();

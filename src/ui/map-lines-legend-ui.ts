@@ -99,10 +99,10 @@ export const mapLinesLegendMethods = uiModule({
             </div>`;
 
         // A row of a known line: its swatch (the line's pattern), surname and "relation · N ancestors".
-        const row = (i: number, cls: LineClass, name: string, sub: string, label: string): string => {
+        const row = (i: number, cls: LineClass, name: string, sub: string, label: string, title = ''): string => {
             const pinned = this.mapLineFocus === i;
             const state = hi === null ? '' : hi === i ? ' is-focus' : ' is-dim';
-            return `<button type="button" class="map-lines-row${state}" data-line="${i}" data-cls="${cls}" aria-pressed="${pinned}" aria-label="${esc(label)}">`
+            return `<button type="button" class="map-lines-row${state}" data-line="${i}" data-cls="${cls}" aria-pressed="${pinned}" aria-label="${esc(label)}"${title ? ` title="${esc(title)}"` : ''}>`
                 + `<span class="map-lines-swatch" aria-hidden="true" style="background: ${lineSwatch(cls, true)};"></span>`
                 + `<span class="map-lines-text"><span class="map-lines-name">${esc(name)}</span><span class="map-lines-sub">${esc(sub)}</span></span></button>`;
         };
@@ -129,8 +129,10 @@ export const mapLinesLegendMethods = uiModule({
                         const e = qi * 2 + j;
                         const b = model.eighths[e];
                         const relE = eighthRel(e);
+                        // "1 · Surname" over "6 ancestors"; the relation only in the title and the label.
                         parts.push(b
-                            ? row(e, branchClass('eighth', e), `${e + 1} · ${b.surname}`, m.linesRow(relE, b.count), `${e + 1} · ${b.surname} · ${m.linesRow(relE, b.count)}`)
+                            ? row(e, branchClass('eighth', e), `${e + 1} · ${b.surname}`, m.linesAncestors(b.count),
+                                `${e + 1} · ${b.surname} · ${m.linesRow(relE, b.count)}`, relE)
                             : unknown(`${e + 1} · ${m.linesUnknown(relE, j === 1)}`));
                     }
                 });

@@ -49,7 +49,7 @@ describe('numbers and the rest', () => {
         expect(map('cs').linesUnknown('otcova matka', true)).toBe('otcova matka – neznámá');
         expect(map('cs').linesUnknown('matčin otec', false)).toBe('matčin otec – neznámý');
         expect(map('pl').linesUnknown('matka ojca', true)).toBe('matka ojca – nieznana');
-        expect(map('en').linesUnknown('father’s mother', true)).toBe('father’s mother – unknown');
+        expect(map('en').linesUnknown("father's mother", true)).toBe("father's mother – unknown");
     });
 
     it('the end of the path names the kind of its place and the year', () => {
@@ -70,5 +70,16 @@ describe('numbers and the rest', () => {
         }
         expect(map('cs').lineE10).toBe('otec otcovy matky');
         expect(map('pl').lineE13).toBe('matka ojca matki');
+    });
+
+    it('the English relations of the eighths and the path take the straight apostrophe of the quarters', () => {
+        const en = map('en');
+        expect(en.lineE8).toBe("father's father's father");
+        expect(en.lineE15).toBe("mother's mother's mother");
+        expect(en.pathFromPage).toBe("Ancestors' path on the map");
+        expect(getStringsForLang('en').fan.lineFatherFather).toBe("father's father");
+        for (const text of [en.lineE8, en.lineE9, en.lineE10, en.lineE11, en.lineE12, en.lineE13, en.lineE14, en.lineE15, en.pathFromPage, en.timeTipText]) {
+            expect(text).not.toContain('’');
+        }
     });
 });
