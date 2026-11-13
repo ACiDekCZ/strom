@@ -154,6 +154,13 @@ export function settlePendingHypotheses(researchId: string, hypotheses: Readonly
     return done;
 }
 
+/** The overview's own window (K3): a research's waits as the main window said them, in place of those kept here. */
+export function replacePendingHypotheses(researchId: string, waits: Readonly<Record<string, PendingHypothesis>>): void {
+    const prefix = `${researchId.toLowerCase()}|`;
+    for (const k of [...pending.keys()]) if (k.startsWith(prefix)) pending.delete(k);
+    for (const [id, p] of Object.entries(waits)) pending.set(key(researchId, id), p);
+}
+
 /** Forget every wait (tests; a tree closed). */
 export function clearPendingHypotheses(researchId?: string): void {
     if (researchId === undefined) { pending.clear(); return; }

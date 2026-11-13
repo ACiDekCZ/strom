@@ -19420,6 +19420,60 @@
             .research-overview__window { position: relative; }
             .research-overview__window::before { content: ""; position: absolute; inset: -6px -1px; }
         }
+        /* The overview in a window of its own (spec 079 K3, §6): the whole window, its own head
+           (no ⤡, ×, ⧉ or "Follow in"), the tiles across, the sections in two columns from 1100 px
+           (now, waiting, lines | progress, queue, knows), one column below in the overview's order. */
+        html.window-overview #tree-container,
+        html.window-overview .control-block,
+        html.window-overview #focus-controls,
+        html.window-overview #tree-legend,
+        html.window-overview .focus-nav-btn,
+        html.window-overview #otd-card,
+        html.window-overview #descendants-badge,
+        html.window-overview #collab-bar,
+        html.window-overview #collab-badge,
+        html.window-overview #live-panel { display: none !important; }
+        html.window-overview body { background: var(--surface); }
+        .research-overview--window { inset: 0; z-index: 1; border: 0; }
+        .research-overview__head--window { padding: 12px 14px 12px 16px; background: var(--surface); }
+        .research-overview__head--window .research-overview__title { font-size: 15px; font-weight: 600; }
+        .research-overview__head--window > .live-follow-btn,
+        .research-overview__head--window > .research-overview__more { width: 32px; height: 32px; }
+        /* Two classes: dialogs style every button. */
+        .research-overview__head--window > .research-overview__stop,
+        .research-overview__head--window > .research-overview__follow-live {
+            flex: none; height: 32px; min-height: 0; margin: 0; padding: 0 12px; box-sizing: border-box;
+            border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); box-shadow: none;
+            color: var(--text); font: inherit; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer;
+        }
+        @media (hover: hover) {
+            .research-overview__head--window > .research-overview__stop:hover,
+            .research-overview__head--window > .research-overview__follow-live:hover { background: var(--hover-bg); }
+        }
+        .research-overview__head--window > .research-overview__stop:focus-visible,
+        .research-overview__head--window > .research-overview__follow-live:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .research-overview__window-note {
+            margin: 0; padding: 6px 16px; font-size: 12.5px; color: var(--text-light);
+            border-bottom: 1px solid var(--divider); overflow-wrap: anywhere;
+        }
+        .research-overview__cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 32px; align-items: start; }
+        .research-overview__col { min-width: 0; }
+        /* A touch screen: 44px tall targets in the head. */
+        @media (pointer: coarse) {
+            .research-overview__head--window > .live-follow-btn,
+            .research-overview__head--window > .research-overview__more { width: 44px; height: 44px; }
+            .research-overview__head--window > .research-overview__stop,
+            .research-overview__head--window > .research-overview__follow-live { height: 44px; }
+        }
+        /* A narrow window (a phone's width): the name under the title wraps, the head's buttons stay on its line. */
+        @media (max-width: 640px) {
+            .research-overview__head--window { padding: 10px 10px 10px 14px; gap: 8px; }
+            .research-overview__head--window > .research-overview__follow-live { padding: 0 10px; }
+        }
+        /* Sideways on a phone: a lower head. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .research-overview__head--window { padding-top: 6px; padding-bottom: 6px; }
+        }
         .live-sec-more[aria-expanded="true"] { background: var(--hover-bg); color: var(--text); }
         @media (hover: hover) { .live-sec-more:hover { color: var(--text); background: var(--hover-bg); } }
         .live-sec-more:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }

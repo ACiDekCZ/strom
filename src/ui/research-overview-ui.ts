@@ -75,7 +75,7 @@ const MAX_STEPS = 20;
 const browserNotedInHead = new Set<string>();
 
 type Filter = 'all' | Exclude<LiveChangeKind, 'other'>;
-type Mode = 'docked' | 'overlay' | 'sheet';
+type Mode = 'docked' | 'overlay' | 'sheet' | 'window';
 
 let filter: Filter = 'all';
 /** When the overview was opened (changes after it are marked new for a moment). */
@@ -85,8 +85,36 @@ const toggledGroups = new Set<string>();
 /** The card lit up by hovering a change row. */
 let hovered: HTMLElement | null = null;
 
-/** A phone (≤ 640 px) and a phone held sideways get the full-screen sheet. */
+/**
+ * The overview in a window of its own (spec 079 K3, §6): drawn there over the
+ * main window's snapshot, its research actions asked of the main window
+ * (null: the overview of the main window).
+ */
+export interface OverviewOwnWindow {
+    /** The open tree's name (the head says "{tree} · Research overview"). */
+    treeName(): string;
+    /** A row hovered: its card lit up in the main window's tree (null: none). */
+    hover(id: PersonId | null): void;
+}
+let ownWindow: OverviewOwnWindow | null = null;
+/** The last card asked to light up from the window (asked once per row, not per mouse move). */
+let ownWindowHovered: PersonId | null = null;
+
+/** This window shows the overview alone (K3; null: the main window's overview). */
+export function setOverviewOwnWindow(w: OverviewOwnWindow | null): void {
+    ownWindow = w;
+    ownWindowHovered = null;
+}
+
+/** Two columns in the overview's own window from this width on (§6), else one. */
+export const OVERVIEW_WINDOW_COLS_MIN = 1100;
+
+/** Where a section stands in the window's two columns: now, waiting and lines left; progress, queue and knows right. */
+const WINDOW_LEFT: ReadonlySet<PrefKey> = new Set<PrefKey>(['working', 'waiting', 'directions']);
+
+/** The overview's own window, a phone (≤ 640 px) and a phone held sideways (the full-screen sheet). */
 function overviewMode(): Mode {
+    if (ownWindow) return 'window';
     if (window.matchMedia?.(MQ_PHONE_BAR).matches) return 'sheet';
     return window.innerWidth >= 1280 ? 'docked' : 'overlay';
 }
@@ -138,6 +166,12 @@ function hhmm(ts: number): string {
 
 /** Light a card up while its change row is hovered (in this window, or in the overview's own window: K3). */
 export function hoverCard(id: PersonId | null): void {
+    if (ownWindow) {
+        if (id === ownWindowHovered) return;
+        ownWindowHovered = id;
+        ownWindow.hover(id);
+        return;
+    }
     hovered?.classList.remove('overview-hover');
     hovered = id ? document.querySelector<HTMLElement>(`.person-card[data-id="${CSS.escape(id)}"]`) : null;
     hovered?.classList.add('overview-hover');
@@ -374,6 +408,8 @@ export const researchOverviewMethods = uiModule({
 
     /** ⤡ (and Escape): back to the small panel; following goes on. Without following: the overview closes. */
     closeResearchOverview(): void {
+        // The overview's own window has no ⤡: it closes as a window.
+        if (ownWindow) return;
         const s = drawnSession();
         if (!s) return;
         s.overview = false;
@@ -465,9 +501,14 @@ export const researchOverviewMethods = uiModule({
             holdFollowNoteIn(root, 'overview');
             document.body.appendChild(root);
         }
-        root.className = `research-overview research-overview--${mode}`;
+        // The own window's two columns from 1100 px (§6): a resize across it draws anew (the window's start listens).
+        const twoCols = mode === 'window' && window.innerWidth >= OVERVIEW_WINDOW_COLS_MIN;
+        root.className = `research-overview research-overview--${mode}${twoCols ? ' research-overview--cols' : ''}`;
         root.dataset.form = `${mode === 'sheet'}:${window.innerWidth >= 1280}`;
-        if (mode === 'sheet') {
+        if (mode === 'window') {
+            root.setAttribute('role', 'main');
+            root.removeAttribute('aria-modal');
+        } else if (mode === 'sheet') {
             root.setAttribute('role', 'dialog');
             root.setAttribute('aria-modal', 'true');
         } else {
@@ -484,48 +525,58 @@ export const researchOverviewMethods = uiModule({
         // Head: state dot, title over a line with the research's name and
         // Stop, then the follow switch and ⤡ / ×. Stop on the name's line
         // keeps the title whole in the 400px overlay and on a phone.
-        const head = el('div', 'research-overview__head');
-        head.appendChild(el('span', `live-dot live-dot--still${source === 'tree' ? ' live-dot--off' : ''}`));
-        const titles = el('div', 'research-overview__titles');
-        const sub = el('div', 'research-overview__sub');
-        // A long name is cut short beside Stop and the head's buttons: whole on hover.
-        sub.appendChild(el('span', 'research-overview__name', s.name)).title = s.name;
-        titles.append(el('h2', 'research-overview__title', L.overviewTitle), sub);
-        head.appendChild(titles);
-        const close = el('button', 'research-overview__close', mode === 'sheet' ? '×' : '⤡');
-        close.type = 'button';
-        close.setAttribute('aria-label', mode === 'sheet' ? r.close : L.closeOverview);
-        close.title = mode === 'sheet' ? r.close : L.closeOverview;
-        close.onclick = () => this.closeResearchOverview();
-        // Following: Stop and the follow switch (the full-screen sheet covers the tree: no switch there).
-        if (source === 'live') {
-            const stop = el('button', 'live-panel-action', r.stop);
-            stop.type = 'button';
-            stop.onclick = () => this.stopLiveFollow();
-            sub.append(stop);
+        // The own window has a head of its own (§6): no ⤡, ×, ⧉ or "Follow in".
+        const head = mode === 'window' ? this.overviewWindowHead(s, source) : el('div', 'research-overview__head');
+        if (mode === 'window') {
+            root.appendChild(head);
+            // Without following, the bridge answering: what "Follow live" does, under the head (6b).
+            if (source === 'bridge' && !this.activeResearchAgentless()) {
+                root.appendChild(el('p', 'research-overview__window-note', L.followNote));
+            }
+        } else {
+            head.appendChild(el('span', `live-dot live-dot--still${source === 'tree' ? ' live-dot--off' : ''}`));
+            head.appendChild(el('span', `live-dot live-dot--still${source === 'tree' ? ' live-dot--off' : ''}`));
+            const titles = el('div', 'research-overview__titles');
+            const sub = el('div', 'research-overview__sub');
+            // A long name is cut short beside Stop and the head's buttons: whole on hover.
+            sub.appendChild(el('span', 'research-overview__name', s.name)).title = s.name;
+            titles.append(el('h2', 'research-overview__title', L.overviewTitle), sub);
+            head.appendChild(titles);
+            const close = el('button', 'research-overview__close', mode === 'sheet' ? '×' : '⤡');
+            close.type = 'button';
+            close.setAttribute('aria-label', mode === 'sheet' ? r.close : L.closeOverview);
+            close.title = mode === 'sheet' ? r.close : L.closeOverview;
+            close.onclick = () => this.closeResearchOverview();
+            // Following: Stop and the follow switch (the full-screen sheet covers the tree: no switch there).
+            if (source === 'live') {
+                const stop = el('button', 'live-panel-action', r.stop);
+                stop.type = 'button';
+                stop.onclick = () => this.stopLiveFollow();
+                sub.append(stop);
+            }
+            const follow = mode === 'sheet' || source !== 'live' ? null : this.liveFollowButton('overview');
+            // "Awaiting action" hidden: its count stays in sight; a click shows it here until the overview closes.
+            if (sectionPref('waiting') === 'hidden' && s.waiting.length > 0) {
+                const chip = waitingChip(s, () => this.showOverviewWaiting());
+                if (chip) sub.append(chip);
+            }
+            if (follow) head.appendChild(follow);
+            // Customize panel: after the follow switch, before ⤡ / ×.
+            head.appendChild(this.liveSectionMoreButton('research-overview__more', 'overview'));
+            // ⧉ the overview in a window of its own (spec 079 §6, K3): beside ⋯, not on a phone or a touch screen.
+            if (mode !== 'sheet' && canOpenWindows()) head.appendChild(this.overviewWindowButton());
+            head.appendChild(close);
+            root.appendChild(head);
+            // Without following, the bridge answering: "Follow live" and what it does, under the head (§7.3).
+            if (source === 'bridge' && viewed) {
+                const strip = this.overviewFollowStrip(viewed);
+                if (strip) root.appendChild(strip);
+            }
+            // Following on: "Follow in: Family / Fan / Map" under the head (in the phone's sheet too: a phone
+            // held sideways keeps the strip to one row and has it only here).
+            const followView = source === 'live' ? this.liveFollowViewRow('overview') : null;
+            if (followView) root.appendChild(followView);
         }
-        const follow = mode === 'sheet' || source !== 'live' ? null : this.liveFollowButton('overview');
-        // "Awaiting action" hidden: its count stays in sight; a click shows it here until the overview closes.
-        if (sectionPref('waiting') === 'hidden' && s.waiting.length > 0) {
-            const chip = waitingChip(s, () => this.showOverviewWaiting());
-            if (chip) sub.append(chip);
-        }
-        if (follow) head.appendChild(follow);
-        // Customize panel: after the follow switch, before ⤡ / ×.
-        head.appendChild(this.liveSectionMoreButton('research-overview__more', 'overview'));
-        // ⧉ the overview in a window of its own (spec 079 §6, K3): beside ⋯, not on a phone or a touch screen.
-        if (mode !== 'sheet' && canOpenWindows()) head.appendChild(this.overviewWindowButton());
-        head.appendChild(close);
-        root.appendChild(head);
-        // Without following, the bridge answering: "Follow live" and what it does, under the head (§7.3).
-        if (source === 'bridge' && viewed) {
-            const strip = this.overviewFollowStrip(viewed);
-            if (strip) root.appendChild(strip);
-        }
-        // Following on: "Follow in: Family / Fan / Map" under the head (in the phone's sheet too: a phone
-        // held sideways keeps the strip to one row and has it only here).
-        const followView = source === 'live' ? this.liveFollowViewRow('overview') : null;
-        if (followView) root.appendChild(followView);
 
         const body = el('div', 'research-overview__body');
         root.appendChild(body);
@@ -574,15 +625,21 @@ export const researchOverviewMethods = uiModule({
         }
         // Without the bridge only what the tree holds: the agent's work comes once the research runs.
         const fromTree = source === 'tree';
+        // The own window's two columns (§6): now, waiting and lines left, progress, queue and knows right,
+        // each in the sections' order; a hidden section leaves its column shorter.
+        let host = body;
+        const cols = twoCols ? body.appendChild(el('div', 'research-overview__cols')) : null;
+        const left = cols?.appendChild(el('div', 'research-overview__col research-overview__col--left')) ?? null;
+        const right = cols?.appendChild(el('div', 'research-overview__col research-overview__col--right')) ?? null;
         const draw: Record<PrefKey, () => void> = {
             working: () => {
                 if (fromTree) return;
-                if (shown('now')) this.appendOverviewNow(body, s, fold('now'), mode);
+                if (shown('now')) this.appendOverviewNow(host, s, fold('now'), mode);
             },
             waiting: () => {
                 if (s.waiting.length === 0 || !shown('waiting')) return;
                 if (fromTree) {
-                    this.appendOverviewWaitingAsOf(body, s, fold('waiting'), mode, viewed?.waitingAt ?? 0);
+                    this.appendOverviewWaitingAsOf(host, s, fold('waiting'), mode, viewed?.waitingAt ?? 0);
                     return;
                 }
                 const f = fold('waiting');
@@ -593,25 +650,28 @@ export const researchOverviewMethods = uiModule({
                 } else {
                     noteWaitingShown(s);
                 }
-                this.appendOverviewWaiting(body, s, f, mode);
+                this.appendOverviewWaiting(host, s, f, mode);
             },
             directions: () => {
                 if (!shown('directions')) return;
-                if (fromTree) this.appendOverviewSkeletonLines(body, fold('directions'));
-                else this.appendOverviewDirections(body, s, fold('directions'), mode, shown('now'));
+                if (fromTree) this.appendOverviewSkeletonLines(host, fold('directions'));
+                else this.appendOverviewDirections(host, s, fold('directions'), mode, shown('now'));
             },
             changes: () => {
-                if (!fromTree && shown('timeline')) this.appendOverviewTimeline(body, s, fold('timeline'), mode);
+                if (!fromTree && shown('timeline')) this.appendOverviewTimeline(host, s, fold('timeline'), mode);
             },
             queue: () => {
-                if (!fromTree && !s.ended && shown('queue')) this.appendQueueSection(body, s, fold('queue'), 20, L.queueTitle, true);
+                if (!fromTree && !s.ended && shown('queue')) this.appendQueueSection(host, s, fold('queue'), 20, L.queueTitle, true);
             },
             knows: () => {
-                if (shown('knows')) this.appendOverviewKnows(body, fold('knows'), mode);
+                if (shown('knows')) this.appendOverviewKnows(host, fold('knows'), mode);
             },
         };
         // In the sections' order (one for the overview and the panel).
-        for (const key of sectionOrder()) draw[key]();
+        for (const key of sectionOrder()) {
+            host = left && right ? (WINDOW_LEFT.has(key) ? left : right) : body;
+            draw[key]();
+        }
         // The research not running (on a computer): one line names what comes once it runs (not on a phone,
         // whose state says the agent's work is seen on the computer; none when all of it is hidden).
         if (fromTree && onComputer()) {
@@ -1863,6 +1923,45 @@ export const researchOverviewMethods = uiModule({
         const s = drawnSession();
         if (!s) return;
         if (sectionCollapsed(key) || sectionPref(key) === 'hidden') s.overviewShown.add(key);
+    },
+
+    /**
+     * The head of the overview's own window (§6, 6a/6b/6f): the state dot,
+     * "{tree} · Research overview" over the research's name, then by the
+     * state ◎ and Stop (following) or "Follow live" (viewed through the
+     * bridge), and ⋯ Edit panel. It closes as a window: no ⤡, × or ⧉.
+     */
+    overviewWindowHead(s: LiveSession, source: OverviewSourceKind): HTMLElement {
+        const L = strings.live;
+        const r = strings.research;
+        const head = el('div', 'research-overview__head research-overview__head--window');
+        head.appendChild(el('span', `live-dot live-dot--still${source === 'live' ? '' : ' live-dot--off'}`));
+        const titles = el('div', 'research-overview__titles');
+        titles.appendChild(el('h1', 'research-overview__title', strings.win.overviewHead(ownWindow?.treeName() ?? '', L.overviewTitle)));
+        const sub = titles.appendChild(el('div', 'research-overview__sub'));
+        sub.appendChild(el('span', 'research-overview__name', s.name)).title = s.name;
+        // "Awaiting action" hidden: its count stays in sight; a click shows it until the window closes.
+        if (sectionPref('waiting') === 'hidden' && s.waiting.length > 0) {
+            const chip = waitingChip(s, () => this.showOverviewWaiting());
+            if (chip) sub.append(chip);
+        }
+        head.appendChild(titles);
+        if (source === 'live') {
+            const follow = this.liveFollowButton('overview');
+            if (follow) head.appendChild(follow);
+            const stop = el('button', 'live-panel-action research-overview__stop', r.stop);
+            stop.type = 'button';
+            stop.onclick = () => this.stopLiveFollow();
+            head.appendChild(stop);
+        } else if (source === 'bridge' && !this.activeResearchAgentless()) {
+            const follow = el('button', 'research-overview__follow-live research-overview__follow-live--head', r.followLive);
+            follow.type = 'button';
+            follow.title = L.followNote;
+            follow.onclick = () => this.startFollowLive('overview');
+            head.appendChild(follow);
+        }
+        head.appendChild(this.liveSectionMoreButton('research-overview__more', 'overview'));
+        return head;
     },
 
     /**

@@ -33,7 +33,7 @@ import { lastBridgeStatus } from './research-sync-ui.js';
 import { uiModule } from './module.js';
 import type { UIClass } from './index.js';
 
-type Mode = 'docked' | 'overlay' | 'sheet';
+type Mode = 'docked' | 'overlay' | 'sheet' | 'window';
 
 /** One hypothesis of a list that accepts proposals at once. */
 export interface HypothesisAcceptEntry {

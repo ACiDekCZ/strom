@@ -30,7 +30,7 @@ import { bridgeBase } from './history-ui.js';
 import { QueueList, requestQueueList, retryQueueList } from '../research-queue-pages.js';
 import { activeDirections, directionRefusedText, holdForBridge, setQueueDirectionFilter } from './research-directions-ui.js';
 
-type Mode = 'docked' | 'overlay' | 'sheet';
+type Mode = 'docked' | 'overlay' | 'sheet' | 'window';
 
 /** "Outside the directions" unfolded (null: as the research suggests – open while a growing branch waits for an answer). */
 let outOpen: boolean | null = null;

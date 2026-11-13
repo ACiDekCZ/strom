@@ -247,6 +247,12 @@ export function acceptBatch(researchId: string): AcceptBatch | null {
     return batches.get(researchId.toLowerCase()) ?? null;
 }
 
+/** The overview's own window (K3): the list as the main window said it (null: none). */
+export function setAcceptBatch(researchId: string, b: AcceptBatch | null): void {
+    if (b) batches.set(researchId.toLowerCase(), b);
+    else batches.delete(researchId.toLowerCase());
+}
+
 /** A list asked now: it replaces the one before (and its rows' outcomes). */
 export function startAcceptBatch(researchId: string, ids: readonly string[], url: string, now: number): AcceptBatch {
     const b: AcceptBatch = { ids: [...ids], url, since: now, outcomes: new Map(), done: false };

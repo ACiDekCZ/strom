@@ -1621,6 +1621,7 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         noResearch: 'To drzewo nie ma badania',
         noResearchNote: (t: string) => `Okno główne przełączyło się na drzewo ${t}, które nie ma badania.`,
         overviewInWindow: 'Przegląd badania jest w osobnym oknie · kliknięcie przeniesie je na wierzch',
+        overviewHead: (t: string, v: string) => (t ? `${t} · ${v}` : v),
         restoreWindows: (n: number) => `Przywróć okna (${n})`,
         restoreDismiss: 'Ukryj',
         screen: 'Ekran',

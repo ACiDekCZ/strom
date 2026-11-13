@@ -1511,9 +1511,22 @@ export function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: st
     return node;
 }
 
+/**
+ * The Research overview in a window of its own (spec 079 K3): what it draws,
+ * taken from the main window's snapshot (null: this is not that window).
+ * Its session is the followed one or the viewed one; nothing here follows or
+ * asks a bridge for it.
+ */
+let windowDrawn: { live: LiveSession | null; viewing: OverviewViewing | null } | null = null;
+
+/** The overview window's research as the main window last said it (null: not that window). */
+export function setOverviewWindowDrawn(d: { live: LiveSession | null; viewing: OverviewViewing | null } | null): void {
+    windowDrawn = d;
+}
+
 /** The followed research (null: none), for the overview. */
 export function liveSession(): LiveSession | null {
-    return live;
+    return windowDrawn ? windowDrawn.live : live;
 }
 
 /**
@@ -1549,13 +1562,15 @@ let viewing: OverviewViewing | null = null;
 
 /** The overview open without following (null: not open, or open while following). */
 export function overviewViewing(): OverviewViewing | null {
-    return viewing;
+    return windowDrawn ? windowDrawn.viewing : viewing;
 }
 
 /** What the overview and its sections act on: the followed research, else the one viewed through its bridge. */
 export function researchSession(): LiveSession | null {
-    if (live && !live.ended) return live;
-    return viewing?.kind === 'bridge' ? viewing.session : null;
+    const l = liveSession();
+    if (l && !l.ended) return l;
+    const v = overviewViewing();
+    return v?.kind === 'bridge' ? v.session : null;
 }
 
 /** No bridge known (the overview drawn from the tree). */

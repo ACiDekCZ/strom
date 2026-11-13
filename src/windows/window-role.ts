@@ -72,11 +72,12 @@ export function parseSatelliteParams(search: string): SatelliteParams | null {
 }
 
 /**
- * The view a satellite of this kind shows. The research overview has no
- * window of its own before K3: until then it opens the Table.
+ * The view a satellite of this kind stands for. The research overview's
+ * window (K3) draws no tree view: as the main window ("Make this the main
+ * window") it starts in the Family chart.
  */
 export function satelliteViewMode(kind: SatelliteKind): ViewMode {
-    return kind === 'overview' ? 'table' : kind;
+    return kind === 'overview' ? 'family' : kind;
 }
 
 /**

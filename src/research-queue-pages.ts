@@ -172,14 +172,74 @@ export function queueListsSnapshot(): { rev: string; lists: QueueList[] } | null
     };
 }
 
+/**
+ * The Research overview in a window of its own (K3): its lists are the main
+ * window's (each snapshot brings them) and what it asks goes there; nothing
+ * is read from a bridge here.
+ */
+export interface QueueRemote {
+    ask(what: 'list' | 'more' | 'retry', filter: QueueFilter, slot: QueueSlot, seed?: { items: LiveQueueItem[]; total: number }): void;
+}
+let remote: QueueRemote | null = null;
+/** A list asked from the main window and not in its snapshot yet: not asked again for this long. */
+const REMOTE_ASK_MS = 3000;
+const remoteAsked = new Map<string, number>();
+
+/** The lists come from the main window and asks go there (null: read from the bridge, as everywhere else). */
+export function setQueueRemote(r: QueueRemote | null): void {
+    resetQueueLists();
+    remoteAsked.clear();
+    remote = r;
+}
+
+/** The main window's lists as its snapshot says them (null: none read). */
+export function applyQueueSnapshot(snap: { rev: string; lists: QueueList[] } | null): void {
+    if (!remote) return;
+    const before = new Map(lists);
+    lists.clear();
+    listsRev = snap?.rev ?? '';
+    for (const l of snap?.lists ?? []) {
+        lists.set(l.key, { ...l, filter: { ...l.filter }, items: [...l.items] });
+        remoteAsked.delete(l.key);
+    }
+    // Asked a moment ago and not there yet: still waited for.
+    for (const [key, l] of before) {
+        const at = remoteAsked.get(key);
+        if (!lists.has(key) && at !== undefined && Date.now() - at < REMOTE_ASK_MS) lists.set(key, l);
+    }
+}
+
+function askRemote(r: QueueRemote, what: 'list' | 'more' | 'retry', filter: QueueFilter, slot: QueueSlot,
+    seed?: { items: LiveQueueItem[]; total: number }): QueueList {
+    const key = queueFilterKey(filter);
+    touched?.add(slot);
+    slots.set(slot, key);
+    let l = lists.get(key);
+    if (what === 'list' && l) return l;
+    const at = remoteAsked.get(key);
+    const waited = what === 'list' && at !== undefined && Date.now() - at < REMOTE_ASK_MS;
+    if (!l) {
+        l = { key, filter, items: [], total: null, next: 0, rev: listsRev, loading: true, error: null };
+        lists.set(key, l);
+    } else {
+        l.loading = true;
+        l.error = null;
+    }
+    if (waited) return l;
+    remoteAsked.set(key, Date.now());
+    r.ask(what, filter, slot, seed);
+    return l;
+}
+
 /** The list of `filter` read from `base` (null: not asked yet, or another bridge). */
 export function queueList(base: string, filter: QueueFilter): QueueList | null {
+    if (remote) return lists.get(queueFilterKey(filter)) ?? null;
     return base && base === listsBase ? lists.get(queueFilterKey(filter)) ?? null : null;
 }
 
 /** A task of any list read (the ⋯ menu of a task past the status's window). */
 export function queueListItem(base: string, id: string): LiveQueueItem | null {
-    if (!base || base !== listsBase) return null;
+    if (!remote && (!base || base !== listsBase)) return null;
     for (const l of lists.values()) {
         const q = l.items.find(x => x.id === id);
         if (q) return q;
@@ -233,6 +293,7 @@ export function releaseQueueSlot(slot: QueueSlot): void {
  */
 export function requestQueueList(base: string, filter: QueueFilter, slot: QueueSlot,
     seed?: { items: LiveQueueItem[]; total: number }): QueueList {
+    if (remote) return askRemote(remote, 'list', filter, slot, seed);
     forBase(base);
     const key = queueFilterKey(filter);
     touched?.add(slot);
@@ -251,6 +312,10 @@ export function requestQueueList(base: string, filter: QueueFilter, slot: QueueS
 /** Read the list's next page ("Load more"); nothing past QUEUE_ROWS_CAP or the end. */
 export function loadMoreQueueList(base: string, filter: QueueFilter, slot: QueueSlot,
     seed?: { items: LiveQueueItem[]; total: number }): void {
+    if (remote) {
+        askRemote(remote, 'more', filter, slot, seed);
+        return;
+    }
     const l = requestQueueList(base, filter, slot, seed);
     if (l.loading) return;
     const from = l.error && l.total === null ? 0 : l.next;
@@ -262,6 +327,10 @@ export function loadMoreQueueList(base: string, filter: QueueFilter, slot: Queue
 
 /** Try a failed list again. */
 export function retryQueueList(base: string, filter: QueueFilter, slot: QueueSlot): void {
+    if (remote) {
+        askRemote(remote, 'retry', filter, slot);
+        return;
+    }
     const l = requestQueueList(base, filter, slot);
     if (l.loading) return;
     l.error = null;
@@ -301,6 +370,7 @@ async function readPage(base: string, l: QueueList, from: number, count: number)
  * print already stays.
  */
 export function noteQueueRev(base: string, rev: string): void {
+    if (remote) return;
     forBase(base);
     if (!rev || rev === listsRev) return;
     listsRev = rev;

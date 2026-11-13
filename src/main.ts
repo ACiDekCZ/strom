@@ -12,6 +12,8 @@ import { installCardTapTarget } from './card-tap.js';
 import { AppExporter } from './export.js';
 import { MergerUI } from './merge/index.js';
 import { SettingsManager } from './settings.js';
+import { guardOverviewWindowNetwork, startOverviewWindowView } from './ui/overview-window-view.js';
+import { OVERVIEW_WINDOW_COLS_MIN } from './ui/research-overview-ui.js';
 import { AuditLogManager } from './audit-log.js';
 import { TreePreview, TreeCompare } from './tree-preview.js';
 import { initModalSkeleton } from './ui/modal-skeleton.js';
@@ -445,6 +447,57 @@ function startSatelliteWindow(params: SatelliteParams, debugOptions: DebugOption
 }
 
 /**
+ * The Research overview in a window of its own (spec 079 K3, §6): no tree
+ * view, no header of the views, only the overview drawn over the main
+ * window's snapshot (`research-state`). Its research actions go to the main
+ * window; it never follows the research, asks its bridge or writes the
+ * tree's storage (only "⋯ Edit panel" keeps its choice, as everywhere).
+ */
+function startOverviewWindow(params: SatelliteParams): void {
+    document.documentElement.classList.add('window-satellite', 'window-overview');
+    satelliteKind = params.kind;
+    guardOverviewWindowNetwork();
+    const client = startSatelliteClient(params);
+    satelliteClient = client;
+    const view = startOverviewWindowView(UI, {
+        send: (action, args) => client.researchAction(action, args),
+        ask: (action, args, waitMs) => client.researchActionResult(action, args, waitMs),
+        focusMain: () => { void client.requestMainFocus(); },
+    }, () => (client.hasTree ? client.treeName : ''));
+    client.on('research-state', (raw) => {
+        if (view.apply(raw)) document.documentElement.classList.remove('app-loading');
+    });
+    // The tree's people and sources (What the research knows, the tiles) and its name in the head.
+    window.addEventListener('strom:data-changed', () => view.render());
+    client.on('tree', () => {
+        document.documentElement.classList.remove('app-loading');
+        updateWindowTitle();
+    });
+    client.on('tree-gone', () => updateWindowTitle());
+    client.on('renamed', () => {
+        updateWindowTitle();
+        view.render();
+    });
+    client.on('attention', () => markWindowTitle());
+    // Two columns from 1100 px, one below (§6): drawn again across it.
+    window.matchMedia?.(`(min-width: ${OVERVIEW_WINDOW_COLS_MIN}px)`).addEventListener?.('change', () => view.render());
+    UI.installStatusTipHost();
+    // The settings are the main window's: its language and theme show here too.
+    SettingsManager.watchOtherWindows(({ languageBefore }) => {
+        if (SettingsManager.getLanguage() !== languageBefore) {
+            SettingsManager.setLanguage(SettingsManager.getLanguage());
+            UI.initializeStrings();
+        }
+        view.render();
+        updateWindowTitle();
+    });
+    client.start();
+    forwardSatelliteLaunches(client, window.location.search);
+    updateWindowTitle();
+    console.log(`Strom v${APP_VERSION} initialized (overview window ${params.windowId})`);
+}
+
+/**
  * What every window that shows the app needs before its views: the UI's
  * strings, the dialogs' skeleton, the modules on window.Strom (the password
  * prompt's buttons). Returns the debug options of the address.
@@ -512,7 +565,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         // "Open as another window": this tab starts as a satellite, without a reload.
         showSecondTab((params) => {
             setWindowRole('satellite');
-            startSatelliteWindow(params, initShell());
+            const debug = initShell();
+            if (params.kind === 'overview') startOverviewWindow(params);
+            else startSatelliteWindow(params, debug);
         });
         console.log(`Strom v${APP_VERSION}: open in another window`);
         return;
@@ -543,6 +598,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const debugOptions = initShell();
 
+    if (satellite?.kind === 'overview') {
+        startOverviewWindow(satellite);
+        return;
+    }
     if (satellite) {
         startSatelliteWindow(satellite, debugOptions);
         return;

@@ -27,7 +27,7 @@ import {
 } from '../research-directions.js';
 import { DirectionStateDo, DirectionWriteRefused, directionRetryHelps, setDirectionState, writeDirectionOrder } from '../research-directions-write.js';
 
-type Mode = 'docked' | 'overlay' | 'sheet';
+type Mode = 'docked' | 'overlay' | 'sheet' | 'window';
 
 /** The direction whose detail is open (one at a time). */
 let expanded: string | null = null;
@@ -273,6 +273,27 @@ export function directionsWindowState(s: LiveSession | null): OverviewLinesState
         problems: [...rowProblems].map(([id, p]) => ({ id, text: p.text, tone: p.tone, retry: !!p.retry })),
         archive: !!base && archiveSaid === base,
     };
+}
+
+/**
+ * The overview's own window (K3): the lines' state as the main window said it
+ * (the selection, an order on its way, rows waiting or refused). Its "Try
+ * again" asks the main window (`retry`); the bridge's address is never here,
+ * so what was said for it stands for the window's empty one.
+ */
+export function applyDirectionsWindowState(st: OverviewLinesState, s: LiveSession | null, retry: (id: string) => void): void {
+    queueFilter = st.selected || 'all';
+    queueFilterTree = queueFilter === 'all' ? null : s?.treeId ?? null;
+    const base = s?.bridge.base ?? '';
+    pendingOrder = st.pendingOrder ? { base, order: [...st.pendingOrder], moved: pendingOrder?.moved ?? '' } : null;
+    orderSaving = st.orderSaving;
+    rowsBusy.clear();
+    for (const id of st.busy) rowsBusy.add(id);
+    rowProblems.clear();
+    for (const p of st.problems) {
+        rowProblems.set(p.id, { text: p.text, tone: p.tone, ...(p.retry ? { retry: () => retry(p.id) } : {}) });
+    }
+    archiveSaid = st.archive ? base : null;
 }
 
 /** "Try again" at a line whose write was refused (asked from the overview's window); false: nothing to try. */

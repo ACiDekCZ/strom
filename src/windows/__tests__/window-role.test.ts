@@ -94,10 +94,11 @@ describe('satellite address', () => {
         expect(new URL(url, 'file:///Users/someone/Desktop/strom.html?x=1').href).toBe('file:///Users/someone/Desktop/strom.html?okno=table&tree=tree-1&w=w1234567');
     });
 
-    it('a kind this version does not know opens the Table; the overview shows the Table until it has its window', () => {
+    it('a kind this version does not know opens the Table; the overview window stands for no tree view (as the main window: Family)', () => {
         expect(parseSatelliteParams('?okno=chart3d&w=abcd1234')!.kind).toBe('table');
         expect(parseSatelliteParams('?okno=fan&w=abcd1234')!.kind).toBe('fan');
-        expect(satelliteViewMode('overview')).toBe('table');
+        expect(parseSatelliteParams('?okno=overview&w=abcd1234')!.kind).toBe('overview');
+        expect(satelliteViewMode('overview')).toBe('family');
         expect(satelliteViewMode('map')).toBe('map');
     });
 
