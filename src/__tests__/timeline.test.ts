@@ -4,7 +4,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { computeTimelineModel, yearToFraction, axisTicks, axisLabelStep, clusterTimelineHistory, timelineHistoryYears, TimelineHistoryItem } from '../timeline.js';
-import { buildTimelineSvg, buildTimelinePosterSvg, historyRowHeight, historyClusterGap } from '../timeline-chart.js';
+import { buildTimelineSvg, buildTimelinePosterSvg, historyRowHeight, historyClusterGap, placeSharedLabels } from '../timeline-chart.js';
 import { StromData, PersonId, PartnershipId, Person, Partnership, Gender, LifeEvent } from '../types.js';
 
 interface POpts {
@@ -532,6 +532,43 @@ describe('a shared event on the family timeline (spec 085 §2e)', () => {
         const svg = buildTimelineSvg(model, { esc, width: 1440, rowH: 30, labelW: 160, mode: 'screen' });
         expect(svg).not.toContain('tl-shared');
         expect(svg).toContain('<title>Census (1921)</title>');
+    });
+
+    it('labels of marks close together: none over a mark or another label, beside its own mark; "…" only without room (A-N3)', () => {
+        // Census 1921 over rows 1–4 and 6–7, residence 1930 over rows 4, 5 and 8, emigration 1925 over rows 6–7 (the reported family).
+        const rowH = 28, TOP = 40;
+        const barTop = (i: number) => TOP + i * rowH + (rowH - 14) / 2;
+        const mark = (x: number, runs: [number, number][], label: string) => ({
+            x, label, rows: runs.flatMap(([a, b]) => Array.from({ length: b - a + 1 }, (_, k) => a + k)),
+            bars: runs.map(([a, b]) => ({ x1: x - 7, y1: barTop(a) - 3, x2: x + 7, y2: barTop(b) + 17 })),
+            links: runs.slice(1).map(([a], k) => ({ x1: x - 1, y1: barTop(runs[k][1]) + 17, x2: x + 1, y2: barTop(a) - 3 })),
+        });
+        const measure = (t: string) => t.length * 7;
+        const at = (pxPerYear: number, plotX1: number) => {
+            const x = (y: number) => 96 + (y - 1840) * pxPerYear;
+            const marks = [mark(x(1921), [[1, 4], [6, 7]], 'Census 1921'), mark(x(1930), [[4, 5], [8, 8]], 'Residence 1930'), mark(x(1925), [[6, 7]], 'Emigration 1925')];
+            const spots = placeSharedLabels(marks, { rowH, rowCount: 9, plotX0: 96, plotX1, measure });
+            const boxes = spots.map(s => s && { x1: s.x1, y1: s.baseline - 11.5, x2: s.x1 + measure(s.text), y2: s.baseline + 3.5 });
+            const hit = (a: { x1: number; y1: number; x2: number; y2: number }, b: typeof a) => a.x1 < b.x2 && b.x1 < a.x2 && a.y1 < b.y2 && b.y1 < a.y2;
+            boxes.forEach((b, i) => {
+                expect(b, marks[i].label).toBeTruthy();
+                for (const m of marks) for (const r of [...m.bars, ...m.links]) expect(hit(b!, r), `${marks[i].label} over ${m.label}`).toBe(false);
+                boxes.forEach((o, j) => { if (j !== i) expect(hit(b!, o!)).toBe(false); });
+                expect(b!.x1).toBeGreaterThanOrEqual(96);
+                expect(b!.x2).toBeLessThanOrEqual(plotX1);
+                expect(Math.max(0, b!.x1 - (marks[i].x + 7), marks[i].x - 7 - b!.x2)).toBeLessThanOrEqual(30);
+            });
+            return spots;
+        };
+        // Wide: the census centred above its top row, all whole.
+        const wide = at(4.4, 1008);
+        expect(wide.map(s => s!.text)).toEqual(['Census 1921', 'Residence 1930', 'Emigration 1925']);
+        expect(wide[0]!.x1 + measure('Census 1921') / 2).toBeCloseTo(96 + 81 * 4.4, 5);
+        // A phone: still none over another, whole where there is room.
+        at(1.45, 374);
+        // No room for the whole label anywhere near its mark: cut with "…".
+        const tight = placeSharedLabels([mark(110, [[0, 1]], 'Emigration 1925'), mark(130, [[0, 1]], 'Census 1921')], { rowH, rowCount: 2, plotX0: 96, plotX1: 200, measure });
+        expect(tight[0]!.text).toMatch(/^Em.*…$/);
     });
 
     it('a living person under privacy has no events, so is not in the mark (the poster)', () => {

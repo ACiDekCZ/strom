@@ -18,7 +18,7 @@ import { LifeEvent, LifeEventType, PersonId, Person, Gender } from '../types.js'
 import { strings, getCurrentLanguage } from '../strings.js';
 import { SELECTABLE_EVENT_TYPES, eventIsShareable } from '../events.js';
 import { formatFlexDate, normalizeDateInput, yearOf, formatDateForInput } from '../dates.js';
-import { sharedEventMarkSvg } from '../icons.js';
+import { sharedEventMarkSvg, iconSvg } from '../icons.js';
 import { shownName } from '../person-name.js';
 import { findRelationship } from '../kinship.js';
 import { filterAndSort } from '../person-picker.js';
@@ -261,8 +261,8 @@ export const sharedEventMethods = uiModule({
     sharedRoleCellHtml(name: string, role: string, custom: boolean): string {
         const e = strings.events;
         return `<div class="sw-role">${custom
-            ? `<span class="sw-role-text"><input type="text" class="sw-role-input" value="${esc(role)}" placeholder="${esc(e.sharedRolePlaceholder)}" aria-label="${esc(e.sharedRowRole(name))}" autocomplete="off">`
-                + `<button type="button" class="sw-role-back" aria-label="${esc(e.sharedRoleBack)}">▾</button></span>`
+            ? `<span class="sw-role-text"><input type="text" class="sw-role-input" value="${esc(role)}"${role ? ` title="${esc(role)}"` : ''} placeholder="${esc(e.sharedRolePlaceholder)}" aria-label="${esc(e.sharedRowRole(name))}" autocomplete="off">`
+                + `<button type="button" class="sw-role-back" aria-label="${esc(e.sharedRoleBack)}">${iconSvg('chevron-down', { size: 16 })}</button></span>`
             : `<select class="sw-role-select" aria-label="${esc(e.sharedRowRole(name))}">`
                 + `<option value="">${esc(e.sharedRoleDefault)}</option><option value="other">${esc(e.sharedRoleOther)}</option></select>`}</div>`;
     },
@@ -324,7 +324,8 @@ export const sharedEventMethods = uiModule({
         const select = rowEl.querySelector<HTMLSelectElement>('.sw-role-select');
         select?.addEventListener('change', () => { if (select.value === 'other') swap(true); });
         const input = rowEl.querySelector<HTMLInputElement>('.sw-role-input');
-        input?.addEventListener('input', () => { row.role = input.value; });
+        // A role longer than the field ends in "…"; its title holds it whole.
+        input?.addEventListener('input', () => { row.role = input.value; input.title = input.value; });
         rowEl.querySelector('.sw-role-back')?.addEventListener('click', () => { row.role = ''; swap(false); });
     },
 

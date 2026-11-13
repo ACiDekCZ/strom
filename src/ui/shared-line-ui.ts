@@ -40,7 +40,10 @@ export const sharedLineMethods = uiModule({
         root.querySelectorAll<HTMLElement>('.shared-line').forEach(line => {
             line.addEventListener('click', (e: MouseEvent) => {
                 e.stopPropagation();
-                const name = (e.target as HTMLElement).closest<HTMLElement>('.shared-line-name');
+                // A name, or the touch target around it (its item, the comma included).
+                const target = e.target as HTMLElement;
+                const name = target.closest<HTMLElement>('.shared-line-name')
+                    ?? target.closest<HTMLElement>('.shared-line-item')?.querySelector<HTMLElement>('.shared-line-name');
                 if (name?.dataset.sharedPerson) {
                     this.openLifelinePerson(name.dataset.sharedPerson as PersonId);
                     return;

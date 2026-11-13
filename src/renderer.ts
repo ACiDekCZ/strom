@@ -6906,6 +6906,17 @@ class TreeRendererClass {
 
     /** The timeline's last markup (a redraw with nothing new leaves the DOM alone). */
     private timelineHtml = '';
+    private timelineMeasureCtx: CanvasRenderingContext2D | null | undefined;
+
+    /** A shared mark's label width in the timeline's own font (semibold 11.5 px), for placing it beside other marks. */
+    private timelineLabelMeasure(container: HTMLElement): ((text: string) => number) | undefined {
+        if (this.timelineMeasureCtx === undefined) this.timelineMeasureCtx = document.createElement('canvas').getContext('2d');
+        const ctx = this.timelineMeasureCtx;
+        if (!ctx) return undefined;
+        ctx.font = `600 11.5px ${getComputedStyle(container).fontFamily || 'sans-serif'}`;
+        // A pixel more than measured: the label's halo and a rounding of the drawn text.
+        return (text) => Math.ceil(ctx.measureText(text).width) + 1;
+    }
 
     private renderTimeline(container: HTMLElement): void {
         // Delegate bar clicks once (safe against odd person ids in JSON imports).
@@ -6971,6 +6982,7 @@ class TreeRendererClass {
             femaleColor: 'var(--female)',
             unknownColor: 'var(--unknown)',
             narrow: isMobile,
+            measureLabel: this.timelineLabelMeasure(container),
         });
 
         // Nothing changed (a status that brought nothing new for the row): the DOM stays.

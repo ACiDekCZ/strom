@@ -19,6 +19,7 @@ import {
 } from './timeline.js';
 import { strings } from './strings.js';
 import { historyKindSvg } from './history-symbols.js';
+import { graphemes } from './text-clip.js';
 import {
     posterFooterSvg, posterFooterHeight, PosterFooterMeta, POSTER_PADDING, POSTER_FONT, POSTER_BG,
 } from './export-image.js';
@@ -78,6 +79,8 @@ export interface TimelineSvgOptions {
     unknownColor?: string;
     /** A phone's narrow layout: the history row 26 px, its clusters 22 px apart, its label without the name. */
     narrow?: boolean;
+    /** A shared mark's label width in px as drawn (screen: measured in the page's font); default an estimate. */
+    measureLabel?: (text: string) => number;
 }
 
 /** The history row's height (DEV symboly-dejin §9): 28 px, a phone 26 px. */
@@ -177,16 +180,30 @@ function sharedMarkLabel(m: TimelineSharedMark): string {
     return `${eventLabelFor({ year: m.year, type: m.type, ...(m.customLabel ? { customLabel: m.customLabel } : {}) })} ${m.year}`;
 }
 
-/**
- * A shared event's one mark across the rows of its persons (spec 085 §2e):
- * a 14 px wide rounded bar over each run of adjacent rows in it, a thin line
- * past the rows between that are not, the label once above the top. The
- * mark lets clicks through to the rows; its label names the persons.
- */
-function sharedMarkSvg(
-    m: TimelineSharedMark, rows: readonly TimelineRow[], opts: TimelineSvgOptions, xOf: (y: number) => number, plot: { x0: number; x1: number },
-): string {
-    const { esc, rowH } = opts;
+/** The shared marks' label font size (px), as `.tl-shared-label` sets it. */
+const SHARED_LABEL_FS = 11.5;
+/** A label's box around its baseline: the ascent above, the descent and halo below. */
+const SHARED_LABEL_ASC = 11.5;
+const SHARED_LABEL_DESC = 3.5;
+/** Room kept between a label and a mark or another label. */
+const SHARED_LABEL_PAD = 2;
+/** A label beside its mark keeps at most this far from it (px), so it still reads as its own. */
+const SHARED_LABEL_REACH = 30;
+
+interface Box { x1: number; y1: number; x2: number; y2: number }
+
+const boxesOverlap = (a: Box, b: Box): boolean => a.x1 < b.x2 && b.x1 < a.x2 && a.y1 < b.y2 && b.y1 < a.y2;
+
+/** One shared mark's geometry: the bars over its runs of rows, the links between them. */
+interface SharedMarkGeom {
+    mark: TimelineSharedMark;
+    x: number;
+    bars: Box[];
+    links: Box[];
+    label: string;
+}
+
+function sharedMarkGeom(m: TimelineSharedMark, rowH: number, xOf: (y: number) => number): SharedMarkGeom {
     const x = xOf(m.year);
     const barTop = (i: number): number => TOP + i * rowH + (rowH - 14) / 2;
     const runs: [number, number][] = [];
@@ -195,22 +212,100 @@ function sharedMarkSvg(
         if (last && last[1] === i - 1) last[1] = i;
         else runs.push([i, i]);
     }
-    const bars = runs.map(([a, b]) => {
-        const y1 = barTop(a) - 3, y2 = barTop(b) + 17;
-        return `<rect class="tl-shared-mark" x="${(x - 7).toFixed(1)}" y="${y1.toFixed(1)}" width="14" height="${(y2 - y1).toFixed(1)}" rx="7"/>`;
-    }).join('');
-    const links = runs.slice(1).map(([a], k) => {
-        const from = barTop(runs[k][1]) + 17, to = barTop(a) - 3;
-        return `<line class="tl-shared-link" x1="${x.toFixed(1)}" y1="${from.toFixed(1)}" x2="${x.toFixed(1)}" y2="${to.toFixed(1)}"/>`;
-    }).join('');
-    const label = sharedMarkLabel(m);
-    // Centred over the mark, kept inside the plot.
-    const half = label.length * 11.5 * 0.3;
-    const lx = Math.min(Math.max(x, plot.x0 + half), plot.x1 - half);
+    const bars = runs.map(([a, b]) => ({ x1: x - 7, y1: barTop(a) - 3, x2: x + 7, y2: barTop(b) + 17 }));
+    const links = runs.slice(1).map(([a], k) => ({ x1: x - 1, y1: barTop(runs[k][1]) + 17, x2: x + 1, y2: barTop(a) - 3 }));
+    return { mark: m, x, bars, links, label: sharedMarkLabel(m) };
+}
+
+/** Where a mark's label goes: its text (cut short with "…" when nothing longer fits) and its box. */
+interface SharedLabelSpot { text: string; x1: number; baseline: number }
+
+/**
+ * Places the marks' labels so that none lies over a mark (its own included)
+ * or over another label: centred above the mark's top row when that is
+ * free, else beside the mark (right, then left) in the gap above one of its
+ * rows or below its last, the nearest such spot first; only when no spot
+ * holds the whole label, the longest text cut with "…" that fits; none at
+ * all when not even a few characters do (the tooltip still names it).
+ */
+export function placeSharedLabels(
+    geoms: readonly { x: number; bars: readonly Box[]; links: readonly Box[]; label: string; rows: readonly number[] }[],
+    o: { rowH: number; rowCount: number; plotX0: number; plotX1: number; measure: (text: string) => number },
+): (SharedLabelSpot | null)[] {
+    const obstacles: Box[] = geoms.flatMap(g => [...g.bars, ...g.links]);
+    const placed: Box[] = [];
+    const out: (SharedLabelSpot | null)[] = geoms.map(() => null);
+    const baselineOf = (gap: number): number => TOP + gap * o.rowH + (o.rowH - 14) / 2 - 6.5;
+    const order = geoms.map((g, i) => i).sort((a, b) => (geoms[a].rows[0] - geoms[b].rows[0]) || (geoms[a].x - geoms[b].x));
+    for (const i of order) {
+        const g = geoms[i];
+        const first = g.rows[0], last = g.rows[g.rows.length - 1];
+        const fit = (text: string): { spot: SharedLabelSpot; box: Box } | null => {
+            const w = o.measure(text);
+            if (w > o.plotX1 - o.plotX0) return null;
+            let best: { spot: SharedLabelSpot; box: Box; cost: number } | null = null;
+            for (let gap = first; gap <= Math.min(last + 1, o.rowCount); gap++) {
+                const baseline = baselineOf(gap);
+                const y1 = baseline - SHARED_LABEL_ASC, y2 = baseline + SHARED_LABEL_DESC;
+                const inBand = [...obstacles, ...placed].filter(b => b.y1 < y2 && y1 < b.y2);
+                // Left edges to try: centred on the mark, right after each thing in the band, before each.
+                const lefts = new Set<number>([g.x - w / 2]);
+                for (const b of inBand) {
+                    lefts.add(b.x2 + SHARED_LABEL_PAD);
+                    lefts.add(b.x1 - SHARED_LABEL_PAD - w);
+                }
+                for (const raw of lefts) {
+                    const x1 = Math.min(Math.max(raw, o.plotX0), o.plotX1 - w);
+                    const box = { x1, y1, x2: x1 + w, y2 };
+                    // Apart from the mark: no nearer than its bar's edge allows, no farther than the reach.
+                    const away = Math.max(0, x1 - (g.x + 7), (g.x - 7) - (x1 + w));
+                    if (away > SHARED_LABEL_REACH) continue;
+                    const grown = { x1: box.x1 - SHARED_LABEL_PAD / 2, y1, x2: box.x2 + SHARED_LABEL_PAD / 2, y2 };
+                    if (inBand.some(b => boxesOverlap(grown, b))) continue;
+                    const cost = Math.abs(x1 + w / 2 - g.x) + (gap === first ? 0 : 20 + 4 * (gap - first));
+                    if (!best || cost < best.cost - 0.01) best = { spot: { text, x1, baseline }, box, cost };
+                }
+            }
+            return best;
+        };
+        let got = fit(g.label);
+        if (!got) {
+            const chars = graphemes(g.label);
+            for (let n = chars.length - 1; n >= 4 && !got; n--) got = fit(`${chars.slice(0, n).join('').trimEnd()}…`);
+        }
+        if (got) {
+            out[i] = got.spot;
+            placed.push(got.box);
+        }
+    }
+    return out;
+}
+
+/** A label's width (px) without a measure: a little wider than the app's sans at 11.5 px semibold. */
+function estimateLabelWidth(text: string): number {
+    return graphemes(text).length * SHARED_LABEL_FS * 0.62;
+}
+
+/**
+ * A shared event's one mark across the rows of its persons (spec 085 §2e):
+ * a 14 px wide rounded bar over each run of adjacent rows in it, a thin line
+ * past the rows between that are not, the label once near the top where it
+ * covers no mark and no other label. The mark lets clicks through to the
+ * rows; its label names the persons.
+ */
+function sharedMarkSvg(g: SharedMarkGeom, spot: SharedLabelSpot | null, rows: readonly TimelineRow[], opts: TimelineSvgOptions): string {
+    const { esc } = opts;
+    const m = g.mark;
+    const bars = g.bars.map(b =>
+        `<rect class="tl-shared-mark" x="${b.x1.toFixed(1)}" y="${b.y1.toFixed(1)}" width="14" height="${(b.y2 - b.y1).toFixed(1)}" rx="7"/>`).join('');
+    const links = g.links.map(b =>
+        `<line class="tl-shared-link" x1="${g.x.toFixed(1)}" y1="${b.y1.toFixed(1)}" x2="${g.x.toFixed(1)}" y2="${b.y2.toFixed(1)}"/>`).join('');
     const who = m.rows.map(i => rows[i]?.name ?? '').filter(Boolean).join(', ');
+    const text = spot
+        ? `<text class="tl-shared-label" x="${spot.x1.toFixed(1)}" y="${spot.baseline.toFixed(1)}" text-anchor="start">${esc(spot.text)}</text>`
+        : '';
     return `<g class="tl-shared" data-share="${esc(m.shareId)}"><g class="tl-shared-bars" pointer-events="none">${links}${bars}</g>`
-        + `<g class="tl-shared-tip"><title>${esc(`${label}: ${who}`)}</title>`
-        + `<text class="tl-shared-label" x="${lx.toFixed(1)}" y="${(barTop(m.rows[0]) - 6).toFixed(1)}" text-anchor="middle">${esc(label)}</text></g></g>`;
+        + `<g class="tl-shared-tip"><title>${esc(`${g.label}: ${who}`)}</title>${text}</g></g>`;
 }
 
 /** SVG for one timeline row (name label + life-bar + event dots). */
@@ -308,7 +403,11 @@ export function buildTimelineSvg(model: TimelineModel, opts: TimelineSvgOptions)
     // A shared event of two rows or more: one mark instead of the rows' dots, drawn over them (spec 085 §2e).
     const shared = model.shared ?? [];
     const marked = new Set(shared.map(m => m.shareId));
-    const marks = shared.map(m => sharedMarkSvg(m, model.rows, opts, xOf, { x0: plotX0, x1: plotX0 + plotW })).join('');
+    const geoms = shared.map(m => sharedMarkGeom(m, ROW_H, xOf));
+    const spots = placeSharedLabels(geoms.map(g => ({ ...g, rows: g.mark.rows })), {
+        rowH: ROW_H, rowCount: model.rows.length, plotX0, plotX1: plotX0 + plotW, measure: opts.measureLabel ?? estimateLabelWidth,
+    });
+    const marks = geoms.map((g, i) => sharedMarkSvg(g, spots[i], model.rows, opts)).join('');
     const rowsSvg = model.rows.map((r, i) => rowSvg(r, i, opts, xOf, marked)).join('') + marks;
     // Shifted by the history row; print drops the row and the shift (index.html @media print).
     const rows = hist ? `<g class="tl-rows" transform="translate(0 ${histH})">${rowsSvg}</g>` : rowsSvg;

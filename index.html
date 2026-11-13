@@ -4309,12 +4309,16 @@
         .sw-role { grid-area: r; min-width: 0; }
         #event-shared-section .sw-role select, #event-shared-section .sw-role input { width: 100%; min-width: 0; height: 32px; padding: 4px 8px; font-size: 13.5px; }
         .sw-role-text { position: relative; display: block; }
-        #event-shared-section .sw-role-text input { padding-right: 30px; }
-        .sw-role-back {
+        /* A role of its own looks like the role lists beside it: a longer one ends in "…" (its title holds it whole),
+           the chevron back to the list sits where a list has its arrow. */
+        #event-shared-section .sw-role-text input { padding-right: 30px; text-overflow: ellipsis; white-space: nowrap; overflow: hidden; }
+        .sw-role-text button.sw-role-back {
             position: absolute; right: 2px; top: 50%; transform: translateY(-50%);
-            width: 28px; height: 28px; border: none; background: none; color: var(--text-light);
-            cursor: pointer; border-radius: 6px; font-size: 12px;
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 28px; height: 28px; min-height: 0; padding: 0; border: none; background: none; color: var(--text);
+            cursor: pointer; border-radius: 6px;
         }
+        .sw-role-back svg { display: block; flex: none; }
         .sw-age { grid-area: a; }
         #event-shared-section .sw-age input { width: 100%; height: 32px; padding: 4px 8px; text-align: right; font-size: 13.5px; }
         #event-shared-section .sw-row--warn .sw-age input { border-color: var(--warn-line); background: var(--warn-soft); }
@@ -4349,7 +4353,7 @@
         .sw-caret { font-size: 11px; }
         @media (hover: hover) {
             .sw-menu-btn:hover { background: var(--surface-2); }
-            .sw-role-back:hover { background: var(--surface-2); }
+            .sw-role-text button.sw-role-back:hover { background: var(--surface-2); }
             .sw-menu-item:hover { background: var(--surface-2); }
             .spk-row:not(.is-already):hover { background: var(--surface-2); }
             #shared-picker-modal .spk-create-row:hover { background: var(--surface-2); }
@@ -4392,7 +4396,8 @@
         @media (pointer: coarse) {
             .sw-menu-btn { width: 44px; height: 44px; }
             #event-shared-section .sw-role select, #event-shared-section .sw-role input, #event-shared-section .sw-age input { height: 44px; }
-            .sw-role-back { width: 40px; height: 40px; }
+            .sw-role-text button.sw-role-back { width: 40px; height: 40px; }
+            #event-shared-section .sw-role-text input { padding-right: 42px; }
             .sw-menu-item { min-height: 48px; }
             .shared-with .sw-add, .shared-with--empty .sw-add-link { min-height: 44px; }
             .sw-name .sw-person, .sw-more-link { min-height: 44px; }
@@ -7190,7 +7195,12 @@
         }
         @media (pointer: coarse) {
             .shared-line { line-height: 1.9; }
-            .shared-line button.shared-line-name { padding: 4px 0; }
+            /* A name's touch target is 44 px tall around its line, not a taller box in it:
+               the comma stays right after the name and "with" on its baseline (the tap opens the name, ui/shared-line-ui.ts). */
+            .shared-line-item:has(> .shared-line-name) { position: relative; }
+            .shared-line-item:has(> .shared-line-name)::before {
+                content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 44px; transform: translateY(-50%);
+            }
         }
         @media (max-width: 640px) {
             .shared-line { font-size: 13.5px; }
