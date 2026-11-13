@@ -351,6 +351,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         valRecurringGodparentByName: 'dopasowanie według imienia',
         valSharedCopiesDiffer: 'Wspólne wydarzenia',
         valNameLink: 'Chrzestni i świadkowie z nazwiska, którzy prawdopodobnie są w drzewie',
+        valSeparateSameEvent: 'Wydarzenia zapisane osobno u kilku osób',
         valOrphanedParticipantRef: 'Uczestnik zdarzenia odwołuje się do osoby, która już nie istnieje',
         valOrphanedParticipantDetail: (person: string, event: string, who: string) =>
             `${person} · ${event}: ${who}`,

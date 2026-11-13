@@ -678,6 +678,91 @@ export function findSeparateCopies(
     return out;
 }
 
+/** One event recorded separately at several persons, which Data quality offers to join (spec 085 K1.6 b). */
+export interface SeparateSameEventGroup {
+    /** The group as it is found again after a change: the match key (sameEventKey) and the house. */
+    key: string;
+    /**
+     * The record the others join: a copy of the share already there (the
+     * others join that share, no new one), else one of the records (the first
+     * with a house written, else the first).
+     */
+    target: { personId: PersonId; event: LifeEvent };
+    /** The share the records join, null when none is there yet (the join makes one). */
+    shareId: string | null;
+    /** Each person's own record that joins (ownSameEvent of the target), one per person, in the tree's order. */
+    records: { personId: PersonId; event: LifeEvent }[];
+    /** Everyone in the joined event: the share's persons (or the target's person), then those of `records`. */
+    persons: PersonId[];
+}
+
+/**
+ * The events recorded separately at several persons across the tree (spec
+ * 085 K1.6 b), by the one match of "the same event" (sameEventKey, then
+ * sameEventAddress): the records with one key are a group; when they name
+ * two different houses or more, each house is a group of its own and a
+ * record without a house joins none of them (it could be either). A group
+ * with a share joins its records to that share (the first share of the
+ * group; persons in a share of the group already are not joined again);
+ * without one it needs two persons at least. Nothing is changed here: the
+ * groups are leads, joined only on a person's word
+ * (DataManager.joinSeparateSameEvent).
+ */
+export function findSeparateSameEvents(data: StromData): SeparateSameEventGroup[] {
+    type Entry = { personId: PersonId; event: LifeEvent };
+    const buckets = new Map<string, Entry[]>();
+    const seenShares = new Set<string>();
+    for (const [pid, person] of Object.entries(data.persons) as [PersonId, Person][]) {
+        for (const ev of person?.events ?? []) {
+            // A share stands in its group once, by its first copy.
+            if (ev.shareId) {
+                if (seenShares.has(ev.shareId)) continue;
+                seenShares.add(ev.shareId);
+            }
+            const key = sameEventKey(ev);
+            if (key === null) continue;
+            let list = buckets.get(key);
+            if (!list) buckets.set(key, list = []);
+            list.push({ personId: pid, event: ev });
+        }
+    }
+    let copies: Map<string, { personId: PersonId }[]> | null = null;
+    const personsOf = (shareId: string): PersonId[] => {
+        copies ??= allShareCopies(data);
+        return [...new Set((copies.get(shareId) ?? []).map(c => c.personId))];
+    };
+    const groups: SeparateSameEventGroup[] = [];
+    for (const [key, entries] of buckets) {
+        if (entries.length < 2) continue;
+        const houses = [...new Set(entries.map(e => foldText(e.event.address)).filter(h => h))];
+        const parts = houses.length <= 1
+            ? [{ house: houses[0] ?? '', entries }]
+            : houses.map(h => ({ house: h, entries: entries.filter(e => foldText(e.event.address) === h) }));
+        for (const part of parts) {
+            const shared = part.entries.filter(e => e.event.shareId);
+            const target = shared[0] ?? part.entries.find(e => foldText(e.event.address)) ?? part.entries[0];
+            const persons = target.event.shareId ? personsOf(target.event.shareId) : [target.personId];
+            const taken = new Set<PersonId>(persons);
+            for (const s of shared) for (const pid of personsOf(s.event.shareId!)) taken.add(pid);
+            const records: Entry[] = [];
+            for (const e of part.entries) {
+                if (e.event.shareId || taken.has(e.personId)) continue;
+                // The record the join takes is the one the match finds (the same as saveSharedEvent's).
+                const own = ownSameEvent(data.persons[e.personId], target.event);
+                if (!own) continue;
+                taken.add(e.personId);
+                records.push({ personId: e.personId, event: own });
+            }
+            if (records.length === 0) continue;
+            groups.push({
+                key: `${key}\u0000${part.house}`, target, shareId: target.event.shareId ?? null, records,
+                persons: [...persons, ...records.map(r => r.personId)],
+            });
+        }
+    }
+    return groups;
+}
+
 /** An event of a person merge's preview (spec 085 §7, 7a). */
 export interface PersonMergeShareRow {
     /**

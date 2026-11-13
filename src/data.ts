@@ -79,6 +79,7 @@ import {
     SHARED_EVENT_COMMON_FIELDS, applyEventFields, buildSharedEventIndex, cleanEventShares, commonFieldsOf, newShareIdFor,
     personSharedEvents, shareCopiesOf, tidyShares, MARRIAGE_EVENT_ID,
     applyPersonMergeShares, personMergeShares, PersonMergeShareChoices, ownSameEvent, fillSameEventAddress, SameEventFields,
+    findSeparateSameEvents,
 } from './shared-events.js';
 import { eventIsShareable } from './events.js';
 import { buildPersonNameIndex, type ParticipantRef, type PersonNameIndex } from './participant-match.js';
@@ -2808,6 +2809,24 @@ class DataManagerClass {
         const personIds: PersonId[] = [];
         for (const c of final) if (!personIds.includes(c.personId)) personIds.push(c.personId);
         return { shareId, personIds, attached };
+    }
+
+    /**
+     * Join an event recorded separately at several persons (Data quality,
+     * spec 085 K1.6 b): the group of findSeparateSameEvents with this key, as
+     * the tree has it now, becomes one shared event — its records get one
+     * share id (the share there already, else a new one), each keeping its
+     * age and own fields; common fields that differ stay for Unify, only a
+     * house written at some records alone reaches the others. One undo step
+     * (saveSharedEvent). Null: no such group now, or the save was refused (a
+     * locked person).
+     */
+    joinSeparateSameEvent(key: string): SharedEventSaveResult | null {
+        const group = findSeparateSameEvents(this.data).find(g => g.key === key);
+        if (!group) return null;
+        return this.saveSharedEvent(group.target.personId, group.target.event.id, {
+            common: {}, add: group.records.map(r => r.personId),
+        });
     }
 
     /**

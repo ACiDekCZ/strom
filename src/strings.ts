@@ -5112,6 +5112,17 @@ const stringsEN = {
         nameLinkTitle: (n: number) => `Godparents and witnesses by name who are probably in the tree · ${n}`,
         nameLinkHint: 'Nothing is linked automatically and the recorded name stays in the event. Once linked, the event shows in that person’s life.',
         nameLinkBack: 'Back',
+        // The same event recorded separately at several persons (spec 085 K1.6 b)
+        sameJoinLead: (ev: string, n: number) => `${ev} – recorded separately for ${n} ${plural('en', n, 'person', 'people')}.`,
+        sameJoinSummary: (n: number) => n === 1
+            ? '1 event is recorded separately for several people.'
+            : `${n} events are recorded separately for several people.`,
+        sameJoinReview: 'Review one by one',
+        sameJoin: 'Join into one event',
+        sameJoinTitle: (n: number) => `Events recorded separately for several people · ${n}`,
+        sameJoinHint: 'Nothing is joined automatically. Once joined, it is one shared event; each person’s age and own details stay. When the common details differ, Make copies match is offered.',
+        sameJoinToShare: (n: number) => `Joins the shared event of ${n} ${plural('en', n, 'person', 'people')}.`,
+        sameJoinDone: (ev: string, n: number) => `${ev}: joined into one event for ${n} ${plural('en', n, 'person', 'people')}.`,
         later: 'Later',
         rejectedCount: (n: number) => `Rejected ones are not offered again (${n}).`,
         sharedDiffersOne: (ev: string, name: string, field: string, val: string, other: string) => `${ev} · ${name}: ${field} differs (${val}; others ${other}).`,
@@ -5515,6 +5526,7 @@ const stringsEN = {
         valRecurringGodparentByName: 'matched by name',
         valSharedCopiesDiffer: 'Shared events',
         valNameLink: 'Godparents and witnesses by name who are probably in the tree',
+        valSeparateSameEvent: 'Events recorded separately for several people',
         valOrphanedParticipantRef: 'Event participant links to a person who no longer exists',
         valOrphanedParticipantDetail: (person: string, event: string, who: string) =>
             `${person} · ${event}: ${who}`,
@@ -14142,6 +14154,15 @@ const stringsCZ: StringsType = {
         nameLinkTitle: (n: number) => `Kmotři a svědci jménem, kteří jsou nejspíš ve stromu · ${n}`,
         nameLinkHint: 'Nic se nepropojí samo a zapsané jméno v události zůstane. Po propojení se událost ukáže v životě té osoby.',
         nameLinkBack: 'Zpět',
+        // Stejná událost zapsaná zvlášť u více osob (spec 085 K1.6 b)
+        sameJoinLead: (ev: string, n: number) => `${ev} – zapsáno zvlášť u ${n} ${plural('cs', n, 'osoby', 'osob', 'osob')}.`,
+        sameJoinSummary: (n: number) => `${n} ${plural('cs', n, 'událost je zapsaná', 'události jsou zapsané', 'událostí je zapsaných')} zvlášť u více osob.`,
+        sameJoinReview: 'Projít po jedné',
+        sameJoin: 'Spojit do jedné události',
+        sameJoinTitle: (n: number) => `Události zapsané zvlášť u více osob · ${n}`,
+        sameJoinHint: 'Nic se nespojí samo. Po spojení je to jedna společná událost; věk a vlastní údaje každé osoby zůstanou. Liší-li se společné údaje, nabídne se Sjednotit kopie.',
+        sameJoinToShare: (n: number) => `Připojí se ke společné události ${n} ${plural('cs', n, 'osoby', 'osob', 'osob')}.`,
+        sameJoinDone: (ev: string, n: number) => `${ev}: spojeno do jedné události u ${n} ${plural('cs', n, 'osoby', 'osob', 'osob')}.`,
         later: 'Později',
         rejectedCount: (n: number) => `Odmítnuté se znovu nenabízejí (${n}).`,
         sharedDiffersOne: (ev: string, name: string, field: string, val: string, other: string) => `${ev} · ${name}: ${field} se liší (${val}, u ostatních ${other}).`,
@@ -14540,6 +14561,7 @@ const stringsCZ: StringsType = {
         valRecurringGodparentByName: 'shoda podle jména',
         valSharedCopiesDiffer: 'Společné události',
         valNameLink: 'Kmotři a svědci jménem, kteří jsou nejspíš ve stromu',
+        valSeparateSameEvent: 'Události zapsané zvlášť u více osob',
         valOrphanedParticipantRef: 'Účastník události odkazuje na osobu, která už neexistuje',
         valOrphanedParticipantDetail: (person: string, event: string, who: string) =>
             `${person} · ${event}: ${who}`,
@@ -23083,6 +23105,15 @@ const stringsDE: StringsType = {
         nameLinkTitle: (n: number) => `Namentliche Paten und Zeugen, die wohl im Stammbaum sind · ${n}`,
         nameLinkHint: 'Nichts wird automatisch verknüpft, der eingetragene Name bleibt im Ereignis. Nach dem Verknüpfen erscheint das Ereignis im Leben dieser Person.',
         nameLinkBack: 'Zurück',
+        // Dasselbe Ereignis bei mehreren Personen getrennt eingetragen (spec 085 K1.6 b)
+        sameJoinLead: (ev: string, n: number) => `${ev} – bei ${n} ${plural('de', n, 'Person', 'Personen')} getrennt eingetragen.`,
+        sameJoinSummary: (n: number) => `${n} ${plural('de', n, 'Ereignis ist', 'Ereignisse sind')} bei mehreren Personen getrennt eingetragen.`,
+        sameJoinReview: 'Einzeln durchgehen',
+        sameJoin: 'Zu einem Ereignis verbinden',
+        sameJoinTitle: (n: number) => `Bei mehreren Personen getrennt eingetragene Ereignisse · ${n}`,
+        sameJoinHint: 'Nichts wird automatisch verbunden. Danach ist es ein gemeinsames Ereignis; Alter und eigene Angaben jeder Person bleiben. Weichen gemeinsame Angaben ab, wird Kopien angleichen angeboten.',
+        sameJoinToShare: (n: number) => `Wird dem gemeinsamen Ereignis von ${n} ${plural('de', n, 'Person', 'Personen')} angeschlossen.`,
+        sameJoinDone: (ev: string, n: number) => `${ev}: bei ${n} ${plural('de', n, 'Person', 'Personen')} zu einem Ereignis verbunden.`,
         later: 'Später',
         rejectedCount: (n: number) => `Abgelehnte werden nicht wieder angeboten (${n}).`,
         sharedDiffersOne: (ev: string, name: string, field: string, val: string, other: string) => `${ev} · ${name}: ${field} weicht ab (${val}, bei den anderen ${other}).`,
@@ -23464,6 +23495,7 @@ const stringsDE: StringsType = {
         valRecurringGodparentByName: 'nach Namen abgeglichen',
         valSharedCopiesDiffer: 'Gemeinsame Ereignisse',
         valNameLink: 'Namentliche Paten und Zeugen, die wohl im Stammbaum sind',
+        valSeparateSameEvent: 'Bei mehreren Personen getrennt eingetragene Ereignisse',
         valOrphanedParticipantRef: 'Ereignisbeteiligter verweist auf eine nicht mehr vorhandene Person',
         valOrphanedParticipantDetail: (person: string, event: string, who: string) =>
             `${person} · ${event}: ${who}`,

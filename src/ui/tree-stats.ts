@@ -104,6 +104,10 @@ interface ValidationView {
     nameLinks: boolean;
     /** Leads put off with Later: hidden until the dialog closes. */
     nameLinkLater: Set<string>;
+    /** The list of events recorded separately at several persons is shown in place of the check (spec 085 K1.6 b). */
+    sameJoins: boolean;
+    /** Those events put off with Later: hidden until the dialog closes. */
+    sameJoinLater: Set<string>;
 }
 
 /** A long group (≥ 50 rows) shows its rows by this many. */
@@ -174,7 +178,7 @@ export const treeStatsMethods = uiModule({
         this.endDismissToastRoom();
         view = {
             treeId, sections: {}, groups: new Map(), shown: new Map(), dismissedOpen: false, asideOpen: new Set(), toastTimer: null,
-            nameLinks: false, nameLinkLater: new Set(),
+            nameLinks: false, nameLinkLater: new Set(), sameJoins: false, sameJoinLater: new Set(),
         };
         if (opts.leads) view.sections = { problem: false, trace: true };
         if (opts.focus?.dismissed) view.dismissedOpen = true;
@@ -277,6 +281,9 @@ export const treeStatsMethods = uiModule({
         // A lead of the list linked or put off: the keyboard goes on with the next one.
         else if (focusKey && view?.nameLinks) {
             (content.querySelector<HTMLElement>('.vq-namelink-link') ?? content.querySelector<HTMLElement>('.vq-namelink-back'))
+                ?.focus({ preventScroll: true });
+        } else if (focusKey && view?.sameJoins) {
+            (content.querySelector<HTMLElement>('.vq-samejoin-join') ?? content.querySelector<HTMLElement>('.vq-samejoin-back'))
                 ?.focus({ preventScroll: true });
         }
     },
@@ -405,6 +412,30 @@ export const treeStatsMethods = uiModule({
                         const key = view?.nameLinks ? 'nameLinkBack' : 'nameLinkReview';
                         content.querySelector<HTMLElement>(`[data-focus-key="${key}"]`)?.focus({ preventScroll: true });
                     });
+                    return;
+                }
+                case 'sameJoinReview':
+                case 'sameJoinBack': {
+                    view.sameJoins = el.dataset.vq === 'sameJoinReview';
+                    void this.refreshTreeValidationDialog(treeId).then(() => {
+                        const scroller = content.closest<HTMLElement>('.modal-content') ?? content;
+                        scroller.scrollTop = 0;
+                        const key = view?.sameJoins ? 'sameJoinBack' : 'sameJoinReview';
+                        content.querySelector<HTMLElement>(`[data-focus-key="${key}"]`)?.focus({ preventScroll: true });
+                    });
+                    return;
+                }
+                case 'sameJoin': {
+                    const group = this.sameJoinGroupAt(el.dataset.i);
+                    if (!group || this.treeValidationReadOnly(treeId)) return;
+                    void inTree(() => this.joinSameEventFromQuality(group.key, redraw));
+                    return;
+                }
+                case 'sameJoinLater': {
+                    const group = this.sameJoinGroupAt(el.dataset.i);
+                    if (!group) return;
+                    view.sameJoinLater.add(group.key);
+                    redraw();
                     return;
                 }
                 case 'nameLinkLink': {
@@ -592,11 +623,15 @@ export const treeStatsMethods = uiModule({
         const esc = (t: string): string => this.escapeHtml(t);
         const v: ValidationView = view && view.treeId === treeId ? view
             : { treeId, sections: {}, groups: new Map(), shown: new Map(), dismissedOpen: false, asideOpen: new Set(), toastTimer: null,
-                nameLinks: false, nameLinkLater: new Set() };
+                nameLinks: false, nameLinkLater: new Set(), sameJoins: false, sameJoinLater: new Set() };
         const ro = this.treeValidationReadOnly(treeId);
         // Review one by one: the godparents and witnesses by name in place of the check (spec 085 6g).
         if (v.nameLinks) {
             return (ro ? `<p class="vq-readonly">${esc(s.valReadOnly)}</p>` : '') + this.nameLinkListHtml(treeData, v.nameLinkLater, ro);
+        }
+        // Review one by one: the events recorded separately at several persons (spec 085 K1.6 b).
+        if (v.sameJoins) {
+            return (ro ? `<p class="vq-readonly">${esc(s.valReadOnly)}</p>` : '') + this.sameJoinListHtml(treeData, v.sameJoinLater, ro);
         }
         const shown = this.treeValidationShown(result, treeData, treeId);
         const counts = validationCounts(shown.issues);
@@ -659,6 +694,11 @@ export const treeStatsMethods = uiModule({
                     // The godparents and witnesses by name: one sentence and Review one by one (spec 085 4c).
                     if (group.type === 'nameLink' && group.issues.length > 0) {
                         html += this.nameLinkTraceHtml(group.issues.length);
+                        continue;
+                    }
+                    // The same event recorded separately at several persons: named with Join, or Review one by one (K1.6 b).
+                    if (group.type === 'separateSameEvent' && group.issues.length > 0) {
+                        html += this.sameJoinTraceHtml(treeData, ro);
                         continue;
                     }
                     html += this.validationGroupHtml(group, v, treeData, treeId, ro, indexOf, shown.aside.get(group.type) ?? []);

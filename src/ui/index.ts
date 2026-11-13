@@ -56,6 +56,7 @@ import { sharedEventMethods } from './shared-event-ui.js';
 import { sharedLineMethods } from './shared-line-ui.js';
 import { derivedRowsMethods } from './derived-rows-ui.js';
 import { nameLinkMethods } from './name-link-ui.js';
+import { sameEventJoinMethods } from './same-event-join-ui.js';
 import { sharedUnifyMethods, type SharedUnifyState } from './shared-unify-ui.js';
 import type { SharedDraft } from '../shared-event-editor.js';
 import { coupleEventsMethods } from './couple-events-ui.js';
@@ -620,6 +621,9 @@ Object.assign(UIClass.prototype, derivedRowsMethods);
 type NameLinkMethods = typeof nameLinkMethods;
 export interface UIClass extends NameLinkMethods {}
 Object.assign(UIClass.prototype, nameLinkMethods);
+type SameEventJoinMethods = typeof sameEventJoinMethods;
+export interface UIClass extends SameEventJoinMethods {}
+Object.assign(UIClass.prototype, sameEventJoinMethods);
 type SharedUnifyMethods = typeof sharedUnifyMethods;
 export interface UIClass extends SharedUnifyMethods {}
 Object.assign(UIClass.prototype, sharedUnifyMethods);

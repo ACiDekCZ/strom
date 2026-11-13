@@ -10,7 +10,7 @@ import { godparentLeads } from './godparents.js';
 import { strings } from './strings.js';
 import { shownNameOrEmpty } from './person-name.js';
 import { readRecordedAge, recordedAgeGap } from './recorded-age.js';
-import { findDivergentShares } from './shared-events.js';
+import { findDivergentShares, findSeparateSameEvents } from './shared-events.js';
 import { divergenceSentence, divergentPersons } from './shared-divergence.js';
 import { nameLinkLeads, type ParticipantRef } from './participant-match.js';
 
@@ -121,6 +121,7 @@ export function validateTreeData(data: StromData): ValidationResult {
     checkRecurringGodparents(data, addIssue);
     checkSharedCopies(data, addIssue);
     checkNameLinks(data, addIssue);
+    checkSeparateSameEvents(data, addIssue);
     checkImportMerges(data, addIssue);
 
     const stats = {
@@ -1423,6 +1424,20 @@ function checkNameLinks(data: StromData, addIssue: AddIssue): void {
     }
 }
 
+/**
+ * The same event recorded separately at several persons (spec 085 K1.6 b):
+ * a lead, one finding for each group of findSeparateSameEvents, never joined
+ * by itself (Data quality offers Join into one event).
+ */
+function checkSeparateSameEvents(data: StromData, addIssue: AddIssue): void {
+    for (const g of findSeparateSameEvents(data)) {
+        const ev = g.target.event;
+        addIssue('info', 'separateSameEvent',
+            `${ev.type === 'custom' ? ev.customLabel ?? '' : ev.type} ${ev.date ?? ''}, ${ev.place ?? ''} is recorded separately for ${g.persons.length} persons`,
+            g.persons);
+    }
+}
+
 function getPersonName(person: Person | undefined): string {
     if (!person) return '(unknown)';
     return shownNameOrEmpty(person) || '(unnamed)';
@@ -1488,6 +1503,7 @@ const VALIDATION_TYPE_KEYS: Record<string, string> = {
     'recurringGodparent': 'valRecurringGodparent',
     'sharedCopiesDiffer': 'valSharedCopiesDiffer',
     'nameLink': 'valNameLink',
+    'separateSameEvent': 'valSeparateSameEvent',
     'photoUnsafeData': 'valPhotoUnsafeData',
     'importMerge': 'valImportMerge',
 };
