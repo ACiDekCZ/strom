@@ -1607,6 +1607,31 @@ export function researchSession(): LiveSession | null {
     return v?.kind === 'bridge' ? v.session : null;
 }
 
+/**
+ * The small panel of a followed research, folded or open, kept on this device
+ * for every research ('1' open, '0' folded; anything else is open): a new
+ * following, another research and a reload take it. Only the panel's arrow
+ * writes it, never a phone (its strip opens the overview sheet). Without
+ * storage (a private window) it lasts while the page is open.
+ */
+const MINI_OPEN_KEY = 'strom-research-mini-open';
+let miniFoldedInMemory = false;
+
+function miniPanelFolded(): boolean {
+    try {
+        return localStorage.getItem(MINI_OPEN_KEY) === '0';
+    } catch {
+        return miniFoldedInMemory;
+    }
+}
+
+function rememberMiniPanelFolded(folded: boolean): void {
+    miniFoldedInMemory = folded;
+    try {
+        localStorage.setItem(MINI_OPEN_KEY, folded ? '0' : '1');
+    } catch { /* storage unavailable: kept in memory */ }
+}
+
 /** No bridge known (the overview drawn from the tree). */
 const EMPTY_BRIDGE: LiveBridgeUrls = { base: '', status: '', ged: '', events: '', log: '' };
 
@@ -3414,7 +3439,7 @@ export const researchUiMethods = uiModule({
                 adds: [],
                 recent: status.recent,
                 ended: false,
-                collapsed: isMobile(),
+                collapsed: isMobile() || miniPanelFolded(),
                 seenChanges: 0,
                 es: null,
                 timer: null,
@@ -3427,7 +3452,6 @@ export const researchUiMethods = uiModule({
             const viewed = !!viewing?.follow && viewing.treeId === treeId;
             viewing = null;
             live.overview = viewed || this.researchOverviewRemembered();
-            if (live.overview) live.collapsed = false;
             // Pages of the queue read through the bridge redraw the overview when they come.
             resetQueueLists();
             if (live.queueCounts) noteQueueRev(bridge.base, live.queueCounts.rev);
@@ -3929,6 +3953,8 @@ export const researchUiMethods = uiModule({
     toggleLivePanel(): void {
         if (!live) return;
         live.collapsed = !live.collapsed;
+        // The phone's strip opens the overview sheet: its state is not the small panel's.
+        if (!isMobile()) rememberMiniPanelFolded(live.collapsed);
         if (live.collapsed) {
             live.seenChanges = live.changes.length;
             waitingFocus = null;

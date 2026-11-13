@@ -247,6 +247,56 @@ test.describe('small live panel', () => {
         await expect(waiting).toHaveAttribute('aria-expanded', 'false');
         await expect(waiting).toHaveAccessibleName(/^Awaiting action · 3\s*,\s*1 new/);
     });
+
+    test('folded by its arrow, the panel stays folded after a reload and for another research; unfolded, it opens so after a reload; a phone neither reads nor writes it', async ({ page }) => {
+        await follow(page);
+        const panel = page.locator('#live-panel');
+        const toggle = panel.locator('.live-panel-toggle');
+        const stored = () => page.evaluate(() => localStorage.getItem('strom-research-mini-open'));
+        // Unfolded by default (nothing kept yet).
+        await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        expect(await stored()).toBeNull();
+
+        await toggle.click();
+        await expect(panel).toHaveClass(/\bcollapsed\b/);
+        expect(await stored()).toBe('0');
+        await page.reload();
+        await expect(panel.locator('.live-panel-toggle')).toHaveAttribute('aria-expanded', 'false');
+        await expect(panel).toHaveClass(/\bcollapsed\b/);
+
+        // Following another research: folded too (one choice for all researches).
+        const OTHER = '9d1e4b7a-2c3f-4e8a-b5d6-7f0a1b2c3d4e';
+        const BRIDGE2 = 'http://127.0.0.1:5997/fedcba9876543210fedcba9876543210';
+        const otherGed = ['0 HEAD', '1 SOUR STROM_RESEARCH', '1 DATE 27 SEP 2026', `1 _STROM_TREE ${OTHER}`, '1 CHAR UTF-8', '1 NOTE Kvítkovi',
+            '0 @P0001@ INDI', '1 NAME Bořivoj /Kvítek/', '1 SEX M', '1 REFN P0001', '0 TRLR'].join('\n');
+        await page.route(`${BRIDGE2}/**`, async (route) => {
+            const path = new URL(route.request().url()).pathname;
+            if (path.endsWith('/status')) {
+                return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' },
+                    body: JSON.stringify({ tree: { id: OTHER, name: 'Kvítkovi' }, head: 'k1', persons: 1, working: [], waiting: [], links: ALL }) });
+            }
+            if (path.endsWith('/tree.ged')) return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/plain; charset=utf-8' }, body: otherGed });
+            if (path.endsWith('/events')) return new Promise(() => {});
+            return route.fulfill({ status: 404, headers: cors, body: '' });
+        });
+        await page.evaluate((url) => window.Strom.UI.openExternalRequest(new URLSearchParams({ live: url })), BRIDGE2);
+        await expect(panel.locator('.live-panel-title')).toHaveText('Kvítkovi');
+        await expect(panel.locator('.live-panel-toggle')).toHaveAttribute('aria-expanded', 'false');
+
+        // Unfolded by the arrow: open after a reload.
+        await panel.locator('.live-panel-toggle').click();
+        await expect(panel).not.toHaveClass(/\bcollapsed\b/);
+        expect(await stored()).toBe('1');
+        await page.reload();
+        await expect(panel.locator('.live-panel-toggle')).toHaveAttribute('aria-expanded', 'true');
+
+        // A phone: its strip opens the overview sheet; the kept choice stays as it was.
+        await page.setViewportSize({ width: 390, height: 844 });
+        await expect(panel).toHaveClass(/phone-strip/);
+        await panel.locator('.live-panel-toggle').click();
+        await expect(page.locator('#research-overview')).toHaveClass(/research-overview--sheet/);
+        expect(await stored()).toBe('1');
+    });
 });
 
 /** Choose how sections show (spec 044) as Customize panel does: the record, then its event. */
