@@ -11032,6 +11032,271 @@
             color: var(--text-color, #222);
         }
 
+        /* The ancestors' path to one person (spec 054 §1–§2). The bar wraps: the
+           "Path to a person…" button at its end, the caption line under the slider. */
+        .map-timebar { flex-wrap: wrap; width: min(720px, calc(100% - 32px)); }
+        .map-timebar .map-time-range { flex: 1 1 140px; }
+        .map-time-play:disabled { opacity: 0.4; cursor: not-allowed; }
+        .map-time-range:disabled { cursor: not-allowed; opacity: 0.5; }
+        .map-path-btn {
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            height: 36px;
+            padding: 0 12px;
+            box-sizing: border-box;
+            border: 1.5px solid var(--primary);
+            border-radius: 8px;
+            background: var(--surface);
+            color: var(--primary-dark);
+            font-size: 13px;
+            font-weight: 600;
+            white-space: nowrap;
+            cursor: pointer;
+        }
+        .map-path-btn[hidden] { display: none; }
+        .map-path-btn.is-open { background: var(--primary-soft); }
+        .map-path-btn-mark { font-size: 15px; line-height: 1; }
+        @media (hover: hover) { .map-path-btn:hover { background: var(--primary-soft); } }
+        .map-time-caption {
+            flex: 1 1 100%;
+            min-width: 0;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 4px 10px;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+        .map-time-caption[hidden] { display: none; }
+        .map-time-caption-text { min-width: 0; overflow-wrap: anywhere; }
+        .map-time-caption-text.is-strong { color: var(--text); font-weight: 600; }
+        .map-time-caption-other {
+            padding: 0;
+            border: none;
+            background: none;
+            color: var(--primary-dark);
+            font: inherit;
+            font-weight: 600;
+            white-space: nowrap;
+            cursor: pointer;
+        }
+        /* The chosen person's chip, in the scope's place: a dark pill, the name cut with an ellipsis. */
+        .map-path-chip {
+            display: flex;
+            align-items: stretch;
+            min-width: 0;
+            height: 36px;
+            box-sizing: border-box;
+            border-radius: 999px;
+            background: var(--text);
+            color: var(--surface);
+            box-shadow: 0 4px 14px rgba(0,0,0,0.2);
+            font-size: 13px;
+        }
+        .map-path-chip[hidden], .map-scope[hidden] { display: none; }
+        .map-path-chip-open {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            min-width: 0;
+            padding: 0 6px 0 12px;
+            border: none;
+            border-radius: 999px 0 0 999px;
+            background: none;
+            color: inherit;
+            font: inherit;
+            cursor: pointer;
+        }
+        .map-path-chip-mark { flex: none; font-size: 15px; line-height: 1; }
+        .map-path-chip-pre { flex: none; white-space: nowrap; opacity: 0.78; }
+        .map-path-chip-name { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 700; }
+        .map-path-chip-caret { flex: none; font-size: 10px; opacity: 0.7; }
+        .map-path-chip-clear {
+            flex: none;
+            width: 36px;
+            padding: 0;
+            border: none;
+            border-left: 1px solid rgba(128,128,128,0.45);
+            border-radius: 0 999px 999px 0;
+            background: none;
+            color: inherit;
+            font-size: 18px;
+            line-height: 1;
+            cursor: pointer;
+        }
+        @media (hover: hover) {
+            .map-path-chip-open:hover, .map-path-chip-clear:hover { background: rgba(128,128,128,0.25); }
+        }
+        .map-path-chip-open:focus-visible, .map-path-chip-clear:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        /* The ancestors' points: 13 px, fresh 18 px with a halo, split 17 px; the border in the surface colour. */
+        .map-marker-dot.map-path-dot {
+            min-width: 0;
+            padding: 0;
+            box-sizing: border-box;
+            border: 2px solid var(--surface);
+            border-radius: 50%;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            position: relative;
+        }
+        .map-path-point.is-fresh .map-path-dot { box-shadow: 0 0 0 5px rgba(128,128,128,0.28), 0 1px 3px rgba(0,0,0,0.3); }
+        /* A small point keeps a finger-sized hit area. */
+        .map-path-dot::before { content: ''; position: absolute; inset: -8px; border-radius: 50%; }
+        @media (pointer: coarse) { .map-path-dot::before { inset: -14px; } }
+        /* The target: a 30 px ring, dashed and faint before the end of the bar, solid with a halo at the end. */
+        .map-path-target {
+            position: absolute;
+            z-index: 2;
+            width: 0;
+            height: 0;
+            pointer-events: none;
+            opacity: 0.5;
+        }
+        .map-path-target.is-reached { opacity: 1; }
+        .map-path-target-ring {
+            position: absolute;
+            left: -15px;
+            top: -15px;
+            width: 30px;
+            height: 30px;
+            box-sizing: border-box;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 3px dashed var(--text);
+            border-radius: 50%;
+        }
+        .map-path-target.is-reached .map-path-target-ring {
+            border-style: solid;
+            background: var(--surface);
+            box-shadow: 0 0 0 6px rgba(128,128,128,0.25), 0 2px 8px rgba(0,0,0,0.3);
+        }
+        .map-path-target-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--text); }
+        .map-path-target-label {
+            position: absolute;
+            left: 0;
+            bottom: 22px;
+            transform: translateX(-50%);
+            max-width: 280px;
+            padding: 3px 8px;
+            box-sizing: border-box;
+            border-radius: 6px;
+            background: var(--text);
+            color: var(--surface);
+            font-size: 12px;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        /* The choice of a person: a popover beside its opener; a sheet on a phone or a touch screen. */
+        .map-path-picker {
+            position: absolute;
+            z-index: 9;
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
+            max-height: 420px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: var(--surface);
+            color: var(--text);
+            box-shadow: 0 14px 40px rgba(20,16,8,0.28);
+        }
+        .map-path-picker--sheet {
+            left: 0;
+            right: 0;
+            bottom: 0;
+            width: auto;
+            max-height: 80%;
+            border-radius: 18px 18px 0 0;
+        }
+        .map-path-picker--sheet.map-path-picker--land { max-height: 96%; }
+        .map-path-picker-grip { flex: none; align-self: center; width: 40px; height: 4px; margin: 8px 0 0; border-radius: 2px; background: var(--border); }
+        .map-path-picker-inner { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
+        .path-picker-head { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 12px 12px 10px; border-bottom: 1px solid var(--divider); }
+        .path-picker-title-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .path-picker-title { font-size: 14px; font-weight: 600; }
+        .path-picker-close {
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            border: none;
+            border-radius: 6px;
+            background: none;
+            color: var(--text-faint);
+            font-size: 20px;
+            line-height: 1;
+            cursor: pointer;
+        }
+        .path-picker-field {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            height: 38px;
+            padding: 0 10px;
+            box-sizing: border-box;
+            border: 1.5px solid var(--primary);
+            border-radius: 8px;
+            background: var(--bg);
+        }
+        .path-picker-glass { color: var(--text-muted); font-size: 15px; }
+        .path-picker-input {
+            flex: 1 1 auto;
+            min-width: 0;
+            border: 0;
+            outline: 0;
+            background: transparent;
+            color: var(--text);
+            font-size: 14px;
+        }
+        .path-picker-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 6px; }
+        .path-picker-group { padding: 6px 8px 2px; font-size: 12px; font-weight: 600; color: var(--text-muted); }
+        .path-picker-row {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 1px;
+            min-height: 38px;
+            padding: 6px 8px;
+            box-sizing: border-box;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        .path-picker-row.is-chosen { background: var(--primary-soft); }
+        .path-picker-row.is-off { cursor: not-allowed; }
+        .path-picker-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        @media (hover: hover) { .path-picker-row:not(.is-off):not(.is-chosen):hover { background: var(--surface-2); } }
+        .path-picker-name { font-size: 13.5px; font-weight: 600; overflow-wrap: anywhere; }
+        .path-picker-row.is-off .path-picker-name { color: var(--text-faint); }
+        .path-picker-sub { font-size: 12px; color: var(--text-muted); }
+        .path-picker-foot { padding: 8px 8px 4px; font-size: 12px; color: var(--text-muted); }
+        @media (pointer: coarse) {
+            .map-path-btn { height: 44px; }
+            .map-path-chip { height: 44px; }
+            .map-path-chip-clear { width: 44px; }
+            .path-picker-field { height: 46px; }
+            .path-picker-row { min-height: 48px; }
+            .path-picker-close { width: 44px; height: 44px; }
+        }
+        @media (max-width: 640px) {
+            .map-path-btn { flex-basis: 100%; height: 44px; }
+            .map-path-target-label { max-width: 220px; }
+        }
+        /* A phone held sideways: the button is the ◎ alone, the chip without "Path to:". */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .map-path-btn { flex-basis: auto; width: 40px; height: 40px; padding: 0; }
+            .map-path-btn-text { display: none; }
+            .map-path-chip { height: 40px; }
+            .map-path-chip-clear { width: 40px; }
+            .map-path-chip-pre { display: none; }
+            .map-time-caption { display: none; }
+            .map-path-target-label { max-width: 220px; }
+        }
+
         .map-status {
             position: absolute;
             left: 50%;

@@ -105,7 +105,7 @@ interface MapMarkerInfo {
  * point's dot (kept by people, most first). A hidden name stays in the
  * marker's accessible name and shows on hover or focus. Phones show no names.
  */
-function declutterMapLabels(layer: HTMLElement): void {
+export function declutterMapLabels(layer: HTMLElement): void {
     if (window.matchMedia(MQ_MOBILE).matches) return;
     const markers = Array.from(layer.querySelectorAll<HTMLElement>('.map-marker'));
     if (markers.length < 2) return;
@@ -131,7 +131,7 @@ export const mapMethods = uiModule({
     mapPlaces(): MappedPlace[] {
         const data = DataManager.getData();
         const filter: ReadonlySet<PersonId> | undefined =
-            this.mapScope === 'tree' ? undefined : TreeRenderer.getVisiblePersonIds();
+            this.mapEffectiveScope() === 'tree' ? undefined : TreeRenderer.getVisiblePersonIds();
 
         const mapped: MappedPlace[] = [];
         for (const p of this.mapSpellings(collectPlaces(data, filter, this.mapKinds())).places) {
@@ -144,7 +144,7 @@ export const mapMethods = uiModule({
     mapMissingPlaces(): { key: string; usage: PlaceUsage }[] {
         const data = DataManager.getData();
         const filter: ReadonlySet<PersonId> | undefined =
-            this.mapScope === 'tree' ? undefined : TreeRenderer.getVisiblePersonIds();
+            this.mapEffectiveScope() === 'tree' ? undefined : TreeRenderer.getVisiblePersonIds();
         return this.mapSpellings(collectPlaces(data, filter, this.mapKinds())).places
             .filter(p => !p.geo)
             .map(({ key, usage }) => ({ key, usage }))
@@ -202,12 +202,21 @@ export const mapMethods = uiModule({
                         <button type="button" id="map-scope-view" onclick="window.Strom.UI.setMapScope('view')">${strings.map.scopeView}</button>
                         <button type="button" id="map-scope-tree" onclick="window.Strom.UI.setMapScope('tree')">${strings.map.scopeTree}</button>
                     </div>
+                    <div class="map-path-chip" hidden>
+                        <button type="button" class="map-path-chip-open" title="${strings.map.pathChange}" aria-haspopup="dialog" aria-expanded="false"
+                                onclick="window.Strom.UI.openMapPathPicker('chip')"><span class="map-path-chip-mark" aria-hidden="true">◎</span><span class="map-path-chip-pre">${strings.map.pathChip}</span><strong class="map-path-chip-name"></strong><span class="map-path-chip-caret" aria-hidden="true">▾</span></button>
+                        <button type="button" class="map-path-chip-clear" aria-label="${strings.map.pathClear}" title="${strings.map.pathClear}"
+                                onclick="window.Strom.UI.clearMapPath()">×</button>
+                    </div>
                     ${this.mapKindsHtml()}
                 </div>
                 <div class="map-timebar" id="map-timebar" hidden>
                     <button type="button" class="map-time-play" aria-label="${strings.map.timePlay}" title="${strings.map.timePlay}">${iconSvg('play')}</button>
                     <input type="range" class="map-time-range" aria-label="${strings.map.timeYear}" value="0" min="0" max="0">
                     <span class="map-time-year">0</span>
+                    <button type="button" class="map-path-btn" aria-label="${strings.map.pathPick}" title="${strings.map.pathPick}" aria-haspopup="dialog" aria-expanded="false"
+                            onclick="window.Strom.UI.openMapPathPicker('bar')"><span class="map-path-btn-mark" aria-hidden="true">◎</span><span class="map-path-btn-text">${strings.map.pathPick}</span></button>
+                    <div class="map-time-caption" aria-live="polite" hidden></div>
                 </div>
                 <div class="map-status" id="map-status"></div>
                 <a class="map-attribution" href="${TILE_ATTRIBUTION_URL}" target="_blank" rel="noopener noreferrer">${TILE_ATTRIBUTION}</a>`;
@@ -399,6 +408,11 @@ export const mapMethods = uiModule({
             const map = document.getElementById('map-container');
             if (!map || map.getClientRects().length === 0) return;
             if (document.querySelector('.modal-overlay.active')) return;
+            if (this.mapPathPickerOpen()) {
+                e.preventDefault();
+                this.closeMapPathPicker(true);
+                return;
+            }
             if (kindsMenuOpen) {
                 e.preventDefault();
                 this.toggleMapKindsMenu(false);
@@ -511,11 +525,13 @@ export const mapMethods = uiModule({
 
         // In time mode the family path is drawn from the births: without them
         // the bar says why the lines are gone, so it does not look broken.
-        const pathNote = this.mapTimeOn && !this.mapKinds().has('birth') ? ` ${strings.map.noFamilyPath}` : '';
+        const pathOn = this.mapPathOn();
+        const pathNote = this.mapTimeOn && !pathOn && !this.mapKinds().has('birth') ? ` ${strings.map.noFamilyPath}` : '';
 
         // In time mode, own up to places that carry no date and so cannot appear
         // on the timeline — honesty instead of a silently emptier map.
-        if (this.mapTimeOn) {
+        // With the ancestors' path the ones off the timeline are the legend's (its foot).
+        if (this.mapTimeOn && !pathOn) {
             const undated = this.mapTimeHarvest().undatedPlaceCount;
             if (undated > 0) {
                 box.innerHTML = `
@@ -747,7 +763,7 @@ export const mapMethods = uiModule({
     mapTimeHarvest(): DatedPlaceHarvest {
         const data = DataManager.getData();
         const filter: ReadonlySet<PersonId> | undefined =
-            this.mapScope === 'tree' ? undefined : TreeRenderer.getVisiblePersonIds();
+            this.mapEffectiveScope() === 'tree' ? undefined : TreeRenderer.getVisiblePersonIds();
         return collectDatedPlacePoints(data, filter, this.mapKinds());
     },
 
@@ -790,7 +806,7 @@ export const mapMethods = uiModule({
         const data = DataManager.getData();
         const places = data.places ?? {};
         const filter: ReadonlySet<PersonId> | undefined =
-            this.mapScope === 'tree' ? undefined : TreeRenderer.getVisiblePersonIds();
+            this.mapEffectiveScope() === 'tree' ? undefined : TreeRenderer.getVisiblePersonIds();
         const kept = (id: PersonId): boolean => !filter || filter.has(id);
 
         const byKey = new Map<string, { from: PlaceGeo; to: PlaceGeo; opacity: number }>();
@@ -829,6 +845,8 @@ export const mapMethods = uiModule({
         const markers = container.querySelector('.map-markers') as HTMLElement | null;
         const lines = container.querySelector('.map-lines') as SVGElement | null;
         if (!markers || !this.mapCenter) return;
+        // A chosen person: the ancestors' path in the colours of their lines.
+        if (this.mapPathOn()) { this.drawMapPathLayer(container); return; }
         const { width, height } = this.mapViewportSize(container);
         const year = this.mapTimeYear;
 
@@ -878,18 +896,34 @@ export const mapMethods = uiModule({
 
         const bar = document.getElementById('map-timebar');
         if (bar) bar.hidden = !this.mapTimeOn;
+        this.renderMapPathChip();
         if (!this.mapTimeOn || !hasData) return;
 
+        // With the ancestors' path: its range (yearFrom → yearTo); none when no ancestor is on the map.
+        const pathOn = this.mapPathOn();
+        const bounds = this.mapTimeBounds();
         const range = document.querySelector('.map-time-range') as HTMLInputElement | null;
-        if (range) {
-            range.min = String(harvest.minYear);
-            range.max = String(harvest.maxYear);
+        const play = document.querySelector('.map-time-play') as HTMLButtonElement | null;
+        if (bounds) {
             // Keep the slider inside the (possibly re-scoped) range.
-            this.mapTimeYear = Math.min(harvest.maxYear!, Math.max(harvest.minYear!, this.mapTimeYear));
-            range.value = String(this.mapTimeYear);
+            this.mapTimeYear = Math.min(bounds.max, Math.max(bounds.min, this.mapTimeYear));
         }
+        if (range) {
+            range.min = String(bounds?.min ?? this.mapTimeYear);
+            range.max = String(bounds?.max ?? this.mapTimeYear);
+            range.value = String(this.mapTimeYear);
+            range.disabled = !bounds;
+        }
+        if (play) {
+            play.disabled = !bounds;
+            play.setAttribute('aria-disabled', String(!bounds));
+        }
+        const pathBtn = document.querySelector('#map-container .map-path-btn') as HTMLElement | null;
+        if (pathBtn) pathBtn.hidden = pathOn;
+        bar?.classList.toggle('has-path', pathOn);
         this.updateMapTimeLabel();
         this.updateMapTimePlayIcon();
+        this.renderMapTimeCaption();
     },
 
     updateMapTimeLabel(): void {
@@ -921,7 +955,12 @@ export const mapMethods = uiModule({
         range?.addEventListener('input', () => {
             this.mapTimeYear = Number(range.value);
             this.updateMapTimeLabel();
+            this.renderMapTimeCaption();
             redraw();   // rAF-throttled, same as panning
+        });
+        // The path's dead end: "Choose another person" opens the choice above the bar.
+        container.querySelector('.map-time-caption')?.addEventListener('click', (e: Event) => {
+            if ((e.target as HTMLElement).closest('.map-time-caption-other')) this.openMapPathPicker('bar');
         });
         const play = container.querySelector('.map-time-play') as HTMLButtonElement | null;
         play?.addEventListener('click', () => this.toggleMapTimePlay());
@@ -935,12 +974,19 @@ export const mapMethods = uiModule({
             this.mapTimeYear = harvest.minYear;   // begin at the beginning of the story
         }
         this.setMapTimeOn(!this.mapTimeOn);
+        // Back on with a chosen person: its path from its beginning.
+        const bounds = this.mapTimeOn && this.mapPathOn() ? this.mapTimeBounds() : null;
+        if (bounds) {
+            this.mapTimeYear = bounds.min;
+            this.refreshMapPath();
+        }
     },
 
     /** Turn the mode on/off, tidying playback and redrawing the map. */
     setMapTimeOn(on: boolean): void {
         this.mapTimeOn = on;
         if (!on) this.stopMapTimePlay();
+        if (!on) this.closeMapPathPicker(false);
         this.closeMapPopup();
         const container = document.getElementById('map-container');
         this.renderMapTimeControls();
@@ -952,23 +998,24 @@ export const mapMethods = uiModule({
     toggleMapTimePlay(): void {
         if (this.mapTimePlaying) { this.stopMapTimePlay(); return; }
         if (!this.mapTimeOn) return;
-        const harvest = this.mapTimeHarvest();
-        if (harvest.maxYear === null || harvest.minYear === null) return;
+        const bounds = this.mapTimeBounds();
+        if (!bounds) return;
         // Reaching the end and pressing play again replays from the start.
-        if (this.mapTimeYear >= harvest.maxYear) this.mapTimeYear = harvest.minYear;
+        if (this.mapTimeYear >= bounds.max) this.mapTimeYear = bounds.min;
         this.mapTimePlaying = true;
         this.updateMapTimePlayIcon();
         this.mapTimeTimer = window.setInterval(() => {
-            const h = this.mapTimeHarvest();
+            const b = this.mapTimeBounds();
             const el = document.getElementById('map-container');
             // Stop when the map is left, the mode is off, or the data is gone.
-            if (!this.mapTimeOn || !el || el.style.display === 'none' || h.maxYear === null) {
+            if (!this.mapTimeOn || !el || el.style.display === 'none' || !b) {
                 this.stopMapTimePlay();
                 return;
             }
-            if (this.mapTimeYear >= h.maxYear) { this.stopMapTimePlay(); return; }
+            if (this.mapTimeYear >= b.max) { this.stopMapTimePlay(); return; }
             this.mapTimeYear++;
             this.syncMapTimeControls();
+            this.renderMapTimeCaption();
             this.drawMapMarkers(el, []);
         }, 120);
     },
@@ -1338,7 +1385,7 @@ export const mapMethods = uiModule({
             // A button the bubble re-rendered under the click ("+ N more") is
             // no longer in the page: that click was inside the bubble.
             if (!(e.target as Node).isConnected) return;
-            if ((e.target as HTMLElement).closest('.map-marker, .map-marker-work, .map-follow-notices, .follow-legend-host, .map-popup, .map-controls, .map-topleft, .map-status, .map-timebar, .map-tiles-notice, .map-attribution')) return;
+            if ((e.target as HTMLElement).closest('.map-marker, .map-marker-work, .map-follow-notices, .follow-legend-host, .map-popup, .map-path-picker, .map-controls, .map-topleft, .map-status, .map-timebar, .map-tiles-notice, .map-attribution')) return;
             if (downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 6) return;
             this.closeMapPopup();
         });
@@ -1383,6 +1430,8 @@ export const mapMethods = uiModule({
         const container = document.getElementById('map-container');
         if (!container) return;
         if (byUser) this.noteMapMovedByUser();
+        // With the ancestors' path the Fit button frames the path.
+        if (this.mapPathOn()) { this.fitMapToPath(); return; }
         const places = this.mapPlaces();
         if (places.length === 0) return;
         const { width, height } = this.mapViewportSize(container);
@@ -1443,7 +1492,7 @@ export const mapMethods = uiModule({
         };
 
         container.addEventListener('pointerdown', (e: PointerEvent) => {
-            if ((e.target as HTMLElement).closest('.map-marker, .map-marker-work, .map-follow-notices, .follow-legend-host, .map-popup, .map-controls, .map-topleft, .map-status, .map-timebar, .map-tiles-notice')) return;
+            if ((e.target as HTMLElement).closest('.map-marker, .map-marker-work, .map-follow-notices, .follow-legend-host, .map-popup, .map-path-picker, .map-controls, .map-topleft, .map-status, .map-timebar, .map-tiles-notice')) return;
             pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
             if (pointers.size === 1) dragFrom = { x: e.clientX, y: e.clientY };
             try { container.setPointerCapture(e.pointerId); } catch { /* not capturable */ }
@@ -1519,6 +1568,8 @@ export const mapMethods = uiModule({
 
         container.addEventListener('wheel', (e: WheelEvent) => {
             if (!this.mapCenter) return;
+            // The choice of a person scrolls its own list.
+            if ((e.target as HTMLElement).closest('.map-path-picker')) return;
             e.preventDefault();
             this.noteMapMovedByUser();
             const rect = container.getBoundingClientRect();

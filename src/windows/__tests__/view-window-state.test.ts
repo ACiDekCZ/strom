@@ -97,6 +97,15 @@ describe('the state as it comes over the channel', () => {
         expect(viaChannel('map', s)).toMatchObject({ center: null, zoom: 5, scope: 'view' });
     });
 
+    it('the ancestors\' path travels with the time layer: its person, line mode and colours; a broken one is dropped', () => {
+        const time = { on: true, year: 1900, path: P('p2'), mode: 'eighth' as const, colors: false };
+        const s = captureViewState('map', source({ map: () => ({ scope: 'view', center: null, zoom: 5, kinds: [], time }) }));
+        expect(viaChannel('map', s)).toMatchObject({ time });
+        const broken = { ...s!, time: { on: true, year: 1900, path: 42, mode: 'fifth', colors: 'yes' } };
+        expect(parseViewState('map', JSON.parse(JSON.stringify(broken)))).toMatchObject({ time: { on: true, year: 1900 } });
+        expect((parseViewState('map', JSON.parse(JSON.stringify(broken))) as { time: object }).time).toEqual({ on: true, year: 1900 });
+    });
+
     it('another view\'s state, a broken one or none: the window opens on its own', () => {
         expect(parseViewState('map', captureViewState('family', source()))).toBeNull();
         expect(parseViewState('family', null)).toBeNull();

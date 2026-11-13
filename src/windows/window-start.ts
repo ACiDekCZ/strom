@@ -334,7 +334,10 @@ const appViewStateSource: ViewStateSource = {
         center: UI.mapCenter ? { lat: UI.mapCenter.lat, lon: UI.mapCenter.lon } : null,
         zoom: UI.mapZoom,
         kinds: SettingsManager.getMapKinds(),
-        time: { on: UI.mapTimeOn, year: UI.mapTimeYear },
+        time: {
+            on: UI.mapTimeOn, year: UI.mapTimeYear,
+            ...(UI.mapPathTarget ? { path: UI.mapPathTarget, mode: UI.mapLineMode, colors: UI.mapLineColors } : {}),
+        },
     }),
 };
 
@@ -354,6 +357,9 @@ const appViewStateTarget: ViewStateTarget = {
         if (kinds.length && kinds.join() !== SettingsManager.getMapKinds().join()) SettingsManager.setMapKinds(kinds);
         UI.mapTimeOn = m.time.on;
         UI.mapTimeYear = m.time.year;
+        UI.mapPathTarget = m.time.path && DataManager.getPerson(m.time.path) ? m.time.path : null;
+        UI.mapLineMode = m.time.mode ?? 'quarter';
+        UI.mapLineColors = m.time.colors ?? true;
     },
     restoreZoom: (zoom) => ZoomPan.restoreView(zoom.scale, zoom.x, zoom.y),
     centerView: () => TreeRenderer.centerForViewMode(),

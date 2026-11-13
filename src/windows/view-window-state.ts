@@ -69,8 +69,11 @@ export interface MapWindowState extends ViewStateBase {
     center: { lat: number; lon: number } | null;
     zoom: number;
     kinds: string[];
-    time: { on: boolean; year: number };
+    /** The time layer; `path`: the person the ancestors' path runs to, `mode`/`colors`: its line colours (spec 054). */
+    time: MapTimeState;
 }
+
+export interface MapTimeState { on: boolean; year: number; path?: PersonId; mode?: 'quarter' | 'eighth'; colors?: boolean }
 
 /** The starting state of a new window of a view (one type for every view but the Table). */
 export type ViewWindowState = ChartWindowState | FanWindowState | TimelineWindowState | MapWindowState;
@@ -89,7 +92,7 @@ export interface ViewStateSource {
     chartZoom(): ChartZoom | null;
     fullFamilies(): boolean;
     fan(): { generations: number; descGenerations: number; shape: string; colorMode: string };
-    map(): { scope: 'view' | 'tree'; center: { lat: number; lon: number } | null; zoom: number; kinds: string[]; time: { on: boolean; year: number } };
+    map(): { scope: 'view' | 'tree'; center: { lat: number; lon: number } | null; zoom: number; kinds: string[]; time: MapTimeState };
 }
 
 /** What a satellite applies the state to. */
@@ -174,7 +177,13 @@ export function parseViewState(kind: SatelliteKind, raw: unknown): ViewWindowSta
             const c = raw.center;
             const center = isObj(c) && num(c.lat) && num(c.lon) ? { lat: c.lat, lon: c.lon } : null;
             const t = raw.time;
-            const time = isObj(t) && typeof t.on === 'boolean' && num(t.year) ? { on: t.on, year: t.year } : { on: false, year: 0 };
+            const time: MapTimeState = isObj(t) && typeof t.on === 'boolean' && num(t.year) ? { on: t.on, year: t.year } : { on: false, year: 0 };
+            if (isObj(t)) {
+                const path = idOrNull(t.path);
+                if (path) time.path = path;
+                if (t.mode === 'quarter' || t.mode === 'eighth') time.mode = t.mode;
+                if (typeof t.colors === 'boolean') time.colors = t.colors;
+            }
             const kinds = Array.isArray(raw.kinds) ? raw.kinds.filter((k): k is string => typeof k === 'string') : [];
             if (!num(raw.zoom)) return null;
             return { ...base, view: 'map', scope: raw.scope === 'tree' ? 'tree' : 'view', center, zoom: raw.zoom, kinds, time };

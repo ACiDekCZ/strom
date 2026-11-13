@@ -757,3 +757,161 @@ export class MultiPersonPicker {
         this.container.innerHTML = '';
     }
 }
+
+/**
+ * The path mode (Migration over time, spec 054 §1): choose the person the
+ * ancestors' path runs to. A title with a close button, a search field and
+ * at most `limit` rows — no list of everyone (a big tree has thousands); an
+ * empty field shows the last focused person. Each row says how many
+ * ancestors are on the map; a person with none is greyed out and cannot be
+ * chosen. The counts are asked lazily, only for the rows shown (the caller
+ * caches them by id).
+ */
+export interface PathPersonPickerOptions {
+    mode: 'path';
+    container: HTMLElement;
+    persons?: Person[];
+    data?: StromData;
+    /** The person in the tree's focus ("Last focused" on an empty field). */
+    recentId?: PersonId | null;
+    /** The person chosen now (its row highlighted). */
+    selectedId?: PersonId | null;
+    /** Distinct ancestors on the map of a person (0 = cannot be chosen). */
+    onMapCount: (id: PersonId) => number;
+    onSelect: (id: PersonId) => void;
+    onClose: () => void;
+    /** At most this many found rows (default 30). */
+    limit?: number;
+}
+
+export class PathPersonPicker {
+    private options: PathPersonPickerOptions;
+    private container: HTMLElement;
+    private input!: HTMLInputElement;
+    private list!: HTMLElement;
+    private allPersons: Person[];
+    private rows: { person: Person; count: number }[] = [];
+
+    constructor(options: PathPersonPickerOptions) {
+        this.options = { limit: 30, ...options };
+        this.container = options.container;
+        this.allPersons = (options.persons ?? DataManager.getAllPersons()).filter(p => !p.isPlaceholder);
+        this.build();
+    }
+
+    private esc(text: string): string {
+        return (text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    private searchData(): StromData | null {
+        if (this.options.data) return this.options.data;
+        try { return DataManager.getData(); } catch { return null; }
+    }
+
+    private build(): void {
+        const m = strings.map;
+        this.container.classList.add('path-picker');
+        this.container.innerHTML = `
+            <div class="path-picker-head">
+                <div class="path-picker-title-row">
+                    <span class="path-picker-title" id="path-picker-title">${this.esc(m.pathPickTitle)}</span>
+                    <button type="button" class="path-picker-close" aria-label="${this.esc(strings.buttons.close)}" title="${this.esc(strings.buttons.close)}">&times;</button>
+                </div>
+                <label class="path-picker-field">
+                    <span class="path-picker-glass" aria-hidden="true">⌕</span>
+                    <input type="search" class="path-picker-input" placeholder="${this.esc(m.pathPickPlaceholder)}" aria-label="${this.esc(m.pathPickPlaceholder)}"
+                           autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+                </label>
+            </div>
+            <div class="path-picker-body">
+                <div class="path-picker-list" role="listbox" aria-labelledby="path-picker-title"></div>
+                <div class="path-picker-foot">${this.esc(m.pathPickWholeTree)}</div>
+            </div>`;
+        this.input = this.container.querySelector('.path-picker-input') as HTMLInputElement;
+        this.list = this.container.querySelector('.path-picker-list') as HTMLElement;
+        this.container.querySelector('.path-picker-close')?.addEventListener('click', () => this.options.onClose());
+        this.input.addEventListener('input', () => this.render());
+        this.input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const first = this.rows.find(r => r.count > 0);
+                if (first) this.options.onSelect(first.person.id);
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                this.rowEls()[0]?.focus();
+            }
+        });
+        this.container.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
+                this.options.onClose();
+            }
+        });
+        this.list.addEventListener('click', (e) => {
+            const row = (e.target as HTMLElement).closest<HTMLElement>('.path-picker-row');
+            if (!row || row.getAttribute('aria-disabled') === 'true') return;
+            this.options.onSelect(row.dataset.id as PersonId);
+        });
+        this.list.addEventListener('keydown', (e) => {
+            const rows = this.rowEls();
+            const i = rows.indexOf(document.activeElement as HTMLElement);
+            if (i < 0) return;
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (e.key === 'ArrowUp' && i === 0) { this.input.focus(); return; }
+                rows[Math.min(rows.length - 1, Math.max(0, i + (e.key === 'ArrowDown' ? 1 : -1)))]?.focus();
+            }
+        });
+        this.render();
+    }
+
+    private rowEls(): HTMLElement[] {
+        return Array.from(this.list.querySelectorAll<HTMLElement>('.path-picker-row'));
+    }
+
+    private render(): void {
+        const m = strings.map;
+        const query = this.input.value.trim();
+        let found: Person[];
+        if (query) {
+            found = filterAndSort(query, this.allPersons, this.searchData()).slice(0, this.options.limit);
+        } else {
+            const recent = this.options.recentId ? this.allPersons.find(p => p.id === this.options.recentId) : undefined;
+            found = recent ? [recent] : [];
+        }
+        this.rows = found.map(person => ({ person, count: this.options.onMapCount(person.id) }));
+        const head = query ? `${m.pathPickFound} (${this.rows.length})` : m.pathPickRecent;
+        const rowsHtml = this.rows.map(({ person, count }) => {
+            const year = person.birthDate ? person.birthDate.split('-')[0] : '';
+            const off = count === 0;
+            const sub = [year ? `* ${year}` : '', off ? m.pathPickNone : m.pathPickOnMap(count)].filter(Boolean).join(' · ');
+            const chosen = person.id === this.options.selectedId;
+            return `<div class="path-picker-row${off ? ' is-off' : ''}${chosen ? ' is-chosen' : ''}" role="option" tabindex="${off ? -1 : 0}"
+                        data-id="${this.esc(person.id)}" aria-selected="${chosen}" aria-disabled="${off}">
+                    <span class="path-picker-name">${nameHtml(person)}</span>
+                    <span class="path-picker-sub">${this.esc(sub)}</span>
+                </div>`;
+        }).join('');
+        this.list.innerHTML = (this.rows.length || query ? `<div class="path-picker-group">${this.esc(head)}</div>` : '')
+            + (rowsHtml || (query ? `<div class="person-picker-empty">${this.esc(strings.personPicker.noResults)}</div>` : ''));
+        this.list.querySelectorAll<HTMLElement>('.path-picker-row').forEach(row => {
+            row.addEventListener('keydown', (e) => {
+                if ((e.key === 'Enter' || e.key === ' ') && row.getAttribute('aria-disabled') !== 'true') {
+                    e.preventDefault();
+                    this.options.onSelect(row.dataset.id as PersonId);
+                }
+            });
+        });
+    }
+
+    focusInput(): void {
+        this.input.focus();
+    }
+
+    destroy(): void {
+        this.container.innerHTML = '';
+        this.container.classList.remove('path-picker');
+    }
+}

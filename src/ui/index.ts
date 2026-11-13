@@ -130,6 +130,8 @@ import { genLabelsMethods } from './gen-labels.js';
 import { anniversariesUiMethods } from './anniversaries-ui.js';
 import { slideshowMethods } from './slideshow.js';
 import { mapMethods, MapScope } from './map-ui.js';
+import { mapPathMethods } from './map-path-ui.js';
+import type { LineMode } from '../map-lines.js';
 import { tableMethods } from './table-view/table-ui.js';
 import { tableResearchMethods } from './table-view/table-research-ui.js';
 import { placesManagerMethods } from './places-manager-ui.js';
@@ -431,6 +433,20 @@ export class UIClass {
     mapTimePlaying = false;
     /** setInterval handle for playback, null when idle. Cleared on leave/toggle. */
     mapTimeTimer: number | null = null;
+    /**
+     * The ancestors' path to one person (spec 054): the person chosen, or
+     * null. While set (and the time mode on) the scope does not apply, but
+     * `mapScope` stays as it was and clearing the path brings it back.
+     */
+    mapPathTarget: PersonId | null = null;
+    /** The colours of the path by grandparent (quarter) or great-grandparent (eighth) line. */
+    mapLineMode: LineMode = 'quarter';
+    /** Off: every path line and point in --primary, the trunk still wider. */
+    mapLineColors = true;
+    /** The legend of the lines folded into its chip (a phone always starts folded). */
+    mapLegendCollapsed = false;
+    /** The pinned line of the legend (quarter or eighth index in the mode), null = none. */
+    mapLineFocus: number | null = null;
 
     // Surname-spellings dialog: what is picked, and what to return to.
     surnamePicks: string[] = [];
@@ -905,6 +921,10 @@ Object.assign(UIClass.prototype, slideshowMethods);
 type MapMethods = typeof mapMethods;
 export interface UIClass extends MapMethods {}
 Object.assign(UIClass.prototype, mapMethods);
+
+type MapPathMethods = typeof mapPathMethods;
+export interface UIClass extends MapPathMethods {}
+Object.assign(UIClass.prototype, mapPathMethods);
 
 type TableMethods = typeof tableMethods;
 export interface UIClass extends TableMethods {}
