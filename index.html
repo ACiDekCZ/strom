@@ -21051,6 +21051,11 @@
         .live-section__sum.research-overview__section-sum--search { display: inline-flex; align-items: center; justify-content: flex-end; gap: 4px; color: var(--text-light); }
         .research-overview__section-sum--search svg { flex: none; }
         .research-overview__section-sum--search .research-overview__section-sum-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        /* The picked hypotheses outside the search, said in the list's foot (a column: no growing basis there). */
+        .hp2-sum.research-overview__bulk-hidden { flex: none; }
+        .hp2-sum .hp2-drop-outside { padding: 0; font-size: 12.5px; font-weight: 600; vertical-align: baseline; }
+        /* Awaiting action's rows, found by the search: the amber tag sits in the meta line like a name. */
+        .research-overview__waiting-meta .research-overview__hit { flex: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         /* Typed or being read: the list stands, dimmed, nothing over it. */
         .research-queue--pending > .live-queue,
         .research-queue--pending > .research-overview__queue-result { opacity: .5; transition: opacity .12s; }
@@ -21088,6 +21093,11 @@
             .research-overview__queue-result .link-button,
             .live-queue-search-link { min-height: 44px; }
             .research-overview__knows-kinds .research-overview__filter { height: 32px; }
+            /* Awaiting action's kinds on touch: 32 px chips, each a 44 px target. */
+            .research-overview__waiting-filters { row-gap: 12px; }
+            .research-overview__waiting-filters .research-overview__filter { position: relative; height: 32px; }
+            .research-overview__waiting-filters .research-overview__filter::before { content: ''; position: absolute; left: 0; right: 0; top: -6px; bottom: -6px; }
+            .hp2-sum .hp2-drop-outside { display: inline-flex; align-items: center; min-height: 44px; }
         }
         @media (max-width: 640px) {
             .research-overview__queue-result { font-size: 13px; }

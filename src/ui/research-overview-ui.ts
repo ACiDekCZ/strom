@@ -52,7 +52,11 @@ import { focusQueueMoved, waitBranchText, workingWhyText } from './research-offl
 import { beginQueueSlots, endQueueSlots } from '../research-queue-pages.js';
 import { KnowsKind, knowsKindChoice, knowsKindShows } from '../knows-kind.js';
 import { activeQueueSearch } from './queue-search-ui.js';
-import { overviewSearches } from './section-search.js';
+import { overviewSearches, focusFirstSectionRow, type SectionSearch } from './section-search.js';
+import { appendSearchOutcome, keepSheetOverKeyboard, mountSectionSearch, paintSearchChip, searchHitTag, searchSummaryEl } from './section-search-view.js';
+import { fieldVisible, foldSearch2, idNumber, tokenize, type SearchDoc, type SearchHit } from '../section-search-match.js';
+import { chipCount, searchIndex, searchSection, sectionPartOpen, toggleSectionPart, type SearchIndex } from '../section-search-filter.js';
+import type { HypothesisListSearch } from './hypothesis-waiting-ui.js';
 import { PREF_KEYS, PrefKey, SectionPref, prefKeyOfOverview, sectionOrder, sectionPrefs, setSectionPref, topPrefs, topTileShown } from './live-section-prefs.js';
 import { OverviewSourceKind, afterTurnOnKeys, skeletonLines } from '../research-overview-source.js';
 import { sectionTitle } from './live-section-edit.js';
@@ -90,6 +94,8 @@ let knowsKind: KnowsKind = 'all';
 let openedAt = 0;
 /** Older change groups the user unfolded (by group key). */
 const toggledGroups = new Set<string>();
+/** Awaiting action's search index (spec 083 §1): built anew when its items change, not at each key. */
+let waitingIndex: SearchIndex<LiveWaiting> | null = null;
 /** The card lit up by hovering a change row. */
 let hovered: HTMLElement | null = null;
 
@@ -541,6 +547,7 @@ export const researchOverviewMethods = uiModule({
                 overviewSearches.reset();
                 knowsKind = 'all';
             }
+            keepSheetOverKeyboard(null);
             this.setResearchOverviewDocked(false);
             this.syncLiveSectionEditor();
             return;
@@ -565,6 +572,8 @@ export const researchOverviewMethods = uiModule({
         // The own window's two columns from 1100 px (§6): a resize across it draws anew (the window's start listens).
         const twoCols = mode === 'window' && window.innerWidth >= OVERVIEW_WINDOW_COLS_MIN;
         root.className = `research-overview research-overview--${mode}${twoCols ? ' research-overview--cols' : ''}`;
+        // A phone's sheet ends where the keyboard begins: what a section's search found stays in sight (spec 083 §3).
+        keepSheetOverKeyboard(mode === 'sheet' ? root : null);
         root.dataset.form = `${mode === 'sheet'}:${window.innerWidth >= 1280}`;
         if (mode === 'window') {
             root.setAttribute('role', 'main');
@@ -996,31 +1005,74 @@ export const researchOverviewMethods = uiModule({
         const view = s.waitingView;
         const todo = waitingTodoCount(s.waiting);
         const replies = s.waiting.length - todo;
+        // The section's search (spec 083 §1): its field from ten items, or while a text is typed; folded,
+        // the heading says the text in place of its summary.
+        const total = s.waiting.length;
+        const typed = overviewSearches.text('waiting');
+        const showField = !fold.collapsed && fieldVisible(total, typed);
+        const search: SectionSearch | null = showField ? overviewSearches.ensure({
+            section: 'waiting', mode: 'local',
+            placeholder: L.waitingSearchPlaceholder, ariaLabel: L.waitingSearchAria(r.waiting),
+            onInput: () => this.renderResearchOverview(),
+            onArrowDown: () => focusFirstSectionRow(search!),
+        }) : overviewSearches.get('waiting');
+        const toks = tokenize(search?.text ?? '');
         const host = liveSection(body, {
             ...fold, title: `${r.waiting} · ${todo}`, summary: replies > 0 ? L.waitingReplyCount(replies) : undefined, headCls: 'live-panel-heading-waiting',
             help: 'waiting',
+            ...(fold.collapsed && typed.trim() ? { summaryEl: searchSummaryEl(typed) } : {}),
         });
         host.classList.add('research-overview__waiting');
         if (view.detail && !s.waiting.some(w => w.id === view.detail)) view.detail = null;
         noteImagesArrived(s);
+        if (showField) mountSectionSearch(host, search, total);
+        const grouped = s.waiting.some(w => w.section);
+        const chips = grouped ? waitingChips(s.waiting) : [];
+        const chosen = storedWaitingFilter();
+        const filter = grouped ? effectiveWaitingFilter(s.waiting, chosen) : 'all';
+        // A filter whose last item went falls back to all (and stays there).
+        if (grouped && filter !== chosen) storeWaitingFilter(filter);
+        // The index is built when the items change (or the people's names, the language), not at each key.
+        waitingIndex = searchIndex(waitingIndex, s.waiting, [DataManager.getData().persons, getCurrentLanguage()], w => this.waitingSearchDoc(s, w));
+        const res = searchSection(waitingIndex, toks, waitingSection, chips.length > 0 ? filter : 'all');
+        const searching = res.searching;
+        // The hypotheses the search shows (the picked ones outside it stay picked) and what matched each by its number.
+        const hypoSearch: HypothesisListSearch | null = searching ? {
+            found: new Set(res.shown.filter(w => w.kind === 'hypothesis').map(w => w.id)),
+            hitOf: (id) => {
+                const w = res.shown.find(x => x.id === id);
+                return w ? res.hits.get(w) : undefined;
+            },
+        } : null;
+        let listed = false;
         const rows = (items: readonly LiveWaiting[]): HTMLElement => {
             const list = el('ul', 'research-overview__waiting-rows');
             // A hypothesis (spec 074 §9): its choices in the row, not behind a detail.
-            for (const w of items) list.appendChild(w.kind === 'hypothesis' ? this.hypothesisWaitingRow(w, mode, null) : this.overviewWaitingRow(s, w, mode));
+            for (const w of items) {
+                const hit = searching ? res.hits.get(w) : undefined;
+                list.appendChild(w.kind === 'hypothesis' ? this.hypothesisWaitingRow(w, mode, null, hit) : this.overviewWaitingRow(s, w, mode, hit));
+            }
             // Its proposals accepted at once (§10), where the research takes that.
-            return items.some(w => w.kind === 'hypothesis') ? this.hypothesisWaitingList(items, mode, list) : list;
+            if (!items.some(w => w.kind === 'hypothesis')) return list;
+            const out = this.hypothesisWaitingList(items, mode, list, hypoSearch);
+            if (out !== list) listed = true;
+            return out;
+        };
+        // Searching and no list of hypotheses drawn (none found): the picked ones are still said, with the way to drop them.
+        const outsideFoot = (): void => {
+            const rid = this.activeResearchId();
+            if (!searching || listed || !rid || !s.waiting.some(w => w.kind === 'hypothesis') || !this.hypothesesAcceptAvailable()) return;
+            const foot = this.hypothesisAcceptFootEl(rid, 'waiting', hypoSearch);
+            if (foot) host.appendChild(foot);
         };
         // An older research: no kinds, places or phases.
-        if (!s.waiting.some(w => w.section)) {
-            host.appendChild(rows(s.waiting));
+        if (!grouped) {
+            appendSearchOutcome(host, search, { searching, found: res.shown.length, total: res.total, kindLabel: null, onAllKinds: () => {} });
+            if (res.shown.length > 0) host.appendChild(rows(res.shown));
+            outsideFoot();
             return;
         }
 
-        const chips = waitingChips(s.waiting);
-        const chosen = storedWaitingFilter();
-        const filter = effectiveWaitingFilter(s.waiting, chosen);
-        // A filter whose last item went falls back to all (and stays there).
-        if (filter !== chosen) storeWaitingFilter(filter);
         if (chips.length > 0) {
             const bar = el('div', 'research-overview__filters research-overview__waiting-filters');
             bar.setAttribute('role', 'radiogroup');
@@ -1030,16 +1082,18 @@ export const researchOverviewMethods = uiModule({
                 ...chips.map(c => ({ f: c.section as WaitingFilter, label: L.waitingChips[c.section], count: c.count })),
             ];
             for (const c of all) {
-                const chip = el('button', 'research-overview__filter', `${c.label} ${c.count}`);
+                const chip = el('button', 'research-overview__filter');
+                // Searching: what was found of its kind; nothing found: dashed, in its place, still choosable.
+                const empty = paintSearchChip(chip, c.label, chipCount(res, c.f, c.count), searching);
                 chip.type = 'button';
                 chip.setAttribute('role', 'radio');
                 chip.setAttribute('aria-checked', String(filter === c.f));
                 chip.dataset.filter = c.f;
-                // A new item the filter hides: a dot on its kind.
-                if (c.f !== 'all' && filter !== 'all' && c.f !== filter
-                    && s.waiting.some(w => view.fresh.has(w.id) && waitingSection(w) === c.f)) {
+                // A new item the filter hides: a dot on its kind (not on a kind the search found nothing of).
+                if (!empty && c.f !== 'all' && filter !== 'all' && c.f !== filter
+                    && res.matched.some(w => view.fresh.has(w.id) && waitingSection(w) === c.f)) {
                     chip.classList.add('has-new');
-                    chip.setAttribute('aria-label', `${c.label} ${c.count}, ${L.waitingNewSr}`);
+                    chip.setAttribute('aria-label', `${chip.textContent}, ${L.waitingNewSr}`);
                 }
                 chip.onclick = () => {
                     storeWaitingFilter(c.f);
@@ -1051,15 +1105,25 @@ export const researchOverviewMethods = uiModule({
             }
             host.appendChild(bar);
         }
+        appendSearchOutcome(host, search, {
+            searching, found: res.shown.length, total: res.total,
+            kindLabel: filter === 'all' ? null : L.waitingChips[filter],
+            onAllKinds: () => {
+                storeWaitingFilter('all');
+                this.renderResearchOverview();
+            },
+        });
 
-        const phases = waitingPhases(s.waiting, filter);
+        // Searching: only what was found, each phase and place with a match open unless folded during the search.
+        const phases = waitingPhases(res.matched, filter);
+        const searchOpen = search?.searchOpen;
         browserNotedInHead.clear();
         for (const phase of ['todo', 'sent'] as WaitingPhase[]) {
             const groups = phases[phase];
             if (groups.length === 0) continue;
             const count = groups.reduce((n, g) => n + g.items.length, 0);
             const phaseKey = `phase:${phase}`;
-            const open = view.open.get(phaseKey) ?? phase === 'todo';
+            const open = sectionPartOpen(phaseKey, phase === 'todo', searching, view.open, searchOpen);
             const ph = el('button', 'research-overview__phase-head');
             ph.type = 'button';
             ph.dataset.phase = phase;
@@ -1068,7 +1132,7 @@ export const researchOverviewMethods = uiModule({
             chevron.setAttribute('aria-hidden', 'true');
             ph.append(chevron, el('span', 'research-overview__phase-title', `${phase === 'todo' ? L.waitingPhaseTodo : L.waitingPhaseSent} · ${count}`));
             ph.onclick = () => {
-                view.open.set(phaseKey, !open);
+                toggleSectionPart(phaseKey, open, searching, view.open, searchOpen);
                 this.renderResearchOverview();
             };
             host.appendChild(ph);
@@ -1078,15 +1142,32 @@ export const researchOverviewMethods = uiModule({
             for (const g of groups) {
                 // Every place has its heading, a lone item's too: a bare row would read as an item of the place above.
                 const key = `group:${phase}:${g.key}`;
-                const gOpen = view.open.get(key) ?? waitingGroupOpenByDefault(g.items, filter, view.fresh);
+                const gOpen = sectionPartOpen(key, waitingGroupOpenByDefault(g.items, filter, view.fresh), searching, view.open, searchOpen);
                 wrap.appendChild(this.overviewWaitingGroupHead(s, g, phase, gOpen, () => {
-                    view.open.set(key, !gOpen);
+                    toggleSectionPart(key, gOpen, searching, view.open, searchOpen);
                     this.renderResearchOverview();
                 }, mode));
                 if (gOpen) wrap.appendChild(rows(g.items));
             }
             host.appendChild(wrap);
         }
+        outsideFoot();
+    },
+
+    /**
+     * What an item of Awaiting action is searched by (spec 083 §1): its text,
+     * what it waits on, its people (names and numbers), its task, its
+     * hypothesis, its place's name, the archive and whom a letter goes to;
+     * all of it is seen in its row, its detail or its group's heading.
+     */
+    waitingSearchDoc(s: LiveSession, w: LiveWaiting): SearchDoc {
+        const people = w.kind === 'story' ? storyWaitingPeople(w).map(p => p.name) : [personByRefn(w.person)].filter((p): p is Person => !!p).map(fullName);
+        const task = researchTaskRef(w.id);
+        const hypo = w.kind === 'hypothesis' ? w.id : /\bH\d+\b/.exec(w.on)?.[0];
+        const what = w.kind === 'story' ? strings.story.nvWaitingItem : w.kind === 'branch' ? waitBranchText(w, s) : w.what;
+        const place = w.kind === 'place' ? strings.places.waiting.group : w.group?.name;
+        const hay = [what, w.on, ...people, w.person, w.partner, task, hypo, place, w.host, w.to].filter(Boolean).join(' ');
+        return { hay: foldSearch2(hay), pn: idNumber(w.person), tn: idNumber(task), hn: idNumber(hypo) };
     },
 
     /**
@@ -1218,7 +1299,7 @@ export const researchOverviewMethods = uiModule({
     },
 
     /** One waiting item: a compact row (kind, text in two lines, person, age); a click opens its detail. */
-    overviewWaitingRow(s: LiveSession, w: LiveWaiting, mode: Mode): HTMLElement {
+    overviewWaitingRow(s: LiveSession, w: LiveWaiting, mode: Mode, hit?: SearchHit): HTMLElement {
         const L = strings.live;
         const view = s.waitingView;
         const open = view.detail === w.id;
@@ -1230,6 +1311,8 @@ export const researchOverviewMethods = uiModule({
         const detailId = `ov-wait-${w.id.replace(/[^A-Za-z0-9_-]/g, '_')}`;
         const row = el('button', 'research-overview__waiting-row');
         row.type = 'button';
+        // The first row ↓ of the section's search reaches.
+        row.dataset.row = '';
         row.setAttribute('aria-expanded', String(open));
         row.setAttribute('aria-controls', detailId);
         const head = el('span', 'research-overview__waiting-what');
@@ -1239,8 +1322,18 @@ export const researchOverviewMethods = uiModule({
         head.append(w.kind === 'story' ? strings.story.nvWaitingItem : w.kind === 'branch' ? waitBranchText(w, s) : w.what);
         row.appendChild(head);
         const meta = el('span', 'research-overview__waiting-meta');
-        const people = w.kind === 'story' ? storyWaitingPeople(w).map(p => p.name) : [personByRefn(w.person)].filter((p): p is Person => !!p).map(fullName);
-        meta.appendChild(el('span', people.length > 0 ? 'research-overview__waiting-who' : 'research-overview__muted', people.length > 0 ? people.join(', ') : L.wholeResearch));
+        let people = w.kind === 'story' ? storyWaitingPeople(w).map(p => p.name) : [personByRefn(w.person)].filter((p): p is Person => !!p).map(fullName);
+        // A number the section's search matched (spec 083 §1): the amber tag, that part left out of the line.
+        if (hit?.t) meta.appendChild(searchHitTag(researchTaskRef(w.id) ?? w.id));
+        if (hit?.p && w.person) {
+            const person = personByRefn(w.person);
+            const name = person ? fullName(person) : '';
+            meta.appendChild(searchHitTag(name ? `${w.person} ${name}` : w.person));
+            if (name) people = people.filter((n, i) => n !== name || people.indexOf(n) !== i);
+            if (people.length > 0) meta.appendChild(el('span', 'research-overview__waiting-who', people.join(', ')));
+        } else {
+            meta.appendChild(el('span', people.length > 0 ? 'research-overview__waiting-who' : 'research-overview__muted', people.length > 0 ? people.join(', ') : L.wholeResearch));
+        }
         const img = imagesState(w);
         if (img) meta.appendChild(imagesShortEl(itemKey(s, w.id), img));
         if (waitingPhase(w) === 'sent') {

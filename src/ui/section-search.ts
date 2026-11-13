@@ -69,7 +69,17 @@ export class SectionSearch {
     /** The visible line "Found n of m" (`local`; `aria-hidden`, the live region says it), placed by the section. */
     readonly status: HTMLElement;
     destroyed = false;
+    /**
+     * The phases and groups folded or unfolded during the search (`local`):
+     * empty when it starts, emptied when it is cleared, so what was folded by
+     * hand before it comes back.
+     */
+    readonly searchOpen = new Map<string, boolean>();
+    /** The focus goes back to the field after a redraw (no one moved it there). */
+    restoring = false;
     private opts: SectionSearchOpts;
+    /** What was said last (`local`): the same words at the next drawing are not said again. */
+    private said = '';
     private announceTimer: ReturnType<typeof setTimeout> | null = null;
     private caret: Caret | null = null;
 
@@ -111,6 +121,7 @@ export class SectionSearch {
         const changed = (): void => {
             if (this.destroyed) return;
             clear.hidden = input.value === '';
+            if (input.value === '') this.searchOpen.clear();
             this.opts.onInput(input.value);
         };
         input.addEventListener('input', (e) => {
@@ -175,6 +186,7 @@ export class SectionSearch {
         if (this.destroyed) return;
         this.input.value = '';
         this.clearButton.hidden = true;
+        this.searchOpen.clear();
         this.silence();
         if (this.opts.onCleared) this.opts.onCleared();
         else this.opts.onInput('');
@@ -186,13 +198,16 @@ export class SectionSearch {
      * was read after a pause already). `local`: shown at once, told a screen
      * reader once the typing paused for `SECTION_SEARCH_ANNOUNCE_MS`.
      */
-    announce(msg: string): void {
+    announce(msg: string, show = true): void {
         if (this.destroyed) return;
         if (this.mode === 'remote') {
             this.live.textContent = msg;
             return;
         }
-        this.status.textContent = msg;
+        // "Nothing found" stands in its own frame: the line stays empty then.
+        this.status.textContent = show ? msg : '';
+        if (msg === this.said) return;
+        this.said = msg;
         if (this.announceTimer) clearTimeout(this.announceTimer);
         this.announceTimer = setTimeout(() => {
             this.announceTimer = null;
@@ -204,6 +219,7 @@ export class SectionSearch {
     silence(): void {
         if (this.announceTimer) clearTimeout(this.announceTimer);
         this.announceTimer = null;
+        this.said = '';
         this.live.textContent = '';
         this.status.textContent = '';
     }
@@ -230,7 +246,12 @@ export class SectionSearch {
         this.caret = null;
         const input = this.input;
         if (!was || !input.isConnected || document.activeElement === input) return;
-        input.focus({ preventScroll: true });
+        this.restoring = true;
+        try {
+            input.focus({ preventScroll: true });
+        } finally {
+            this.restoring = false;
+        }
         if (was.start !== null && was.end !== null) {
             try { input.setSelectionRange(was.start, was.end, was.dir ?? undefined); } catch { /* not a text field */ }
         }

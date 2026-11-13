@@ -381,6 +381,65 @@ describe('SectionSearches (the overview\'s registry)', () => {
         expect(reg.get('knows')).toBe(k);
     });
 
+    it('the phases and groups folded during a search are forgotten when it is cleared or emptied', async () => {
+        const { SectionSearch } = await load();
+        const s = new SectionSearch({ section: 'waiting', mode: 'local', placeholder: '', ariaLabel: '', onInput: () => {}, onArrowDown: () => false });
+        const input = s.input as unknown as FakeEl;
+        input.value = 'hrotek';
+        input.dispatchEvent(inputEvent());
+        s.searchOpen.set('group:todo:a', false);
+        // Another word: what was folded during the search stays.
+        input.value = 'hrotek p';
+        input.dispatchEvent(inputEvent());
+        expect(s.searchOpen.get('group:todo:a')).toBe(false);
+        // The field emptied by hand.
+        input.value = '';
+        input.dispatchEvent(inputEvent());
+        expect(s.searchOpen.size).toBe(0);
+        // Clear search (×, Escape).
+        input.value = 'hrotek';
+        input.dispatchEvent(inputEvent());
+        s.searchOpen.set('phase:sent', false);
+        s.clear(false);
+        expect(s.searchOpen.size).toBe(0);
+    });
+
+    it('the focus given back after a redraw is told apart from one moved there', async () => {
+        const { SectionSearches } = await load();
+        const reg = new SectionSearches();
+        const s = reg.ensure({ section: 'waiting', mode: 'local', placeholder: '', ariaLabel: '', onInput: () => {}, onArrowDown: () => false });
+        const input = s.mount(section() as unknown as HTMLElement) as unknown as FakeEl & { focus(): void };
+        const during: boolean[] = [];
+        const plain = input.focus.bind(input);
+        input.focus = () => { during.push(s.restoring); plain(); };
+        input.focus();
+        reg.noteFocus();
+        (s.box as unknown as FakeEl).remove();
+        s.mount(section() as unknown as HTMLElement);
+        expect(during).toEqual([false, true]);
+        expect(s.restoring).toBe(false);
+    });
+
+    it('announce(): nothing found stands in its own frame (the line empty); the same words are not said again', async () => {
+        vi.useFakeTimers();
+        const { SectionSearch } = await load();
+        const s = new SectionSearch({ section: 'waiting', mode: 'local', placeholder: '', ariaLabel: '', onInput: () => {}, onArrowDown: () => false });
+        s.announce('Nic nenalezeno.', false);
+        expect(s.status.textContent).toBe('');
+        vi.advanceTimersByTime(500);
+        expect(s.live.textContent).toBe('Nic nenalezeno.');
+        // A redraw with the same result (new data, nothing changed for the search): not said once more.
+        (s.live as unknown as FakeEl).textContent = 'read';
+        s.announce('Nic nenalezeno.', false);
+        vi.advanceTimersByTime(500);
+        expect(s.live.textContent).toBe('read');
+        // Cleared: the next search is said again.
+        s.clear(false);
+        s.announce('Nic nenalezeno.', false);
+        vi.advanceTimersByTime(500);
+        expect(s.live.textContent).toBe('Nic nenalezeno.');
+    });
+
     it('ensure() hands the latest drawing\'s callbacks to the kept field', async () => {
         const { SectionSearches } = await load();
         const reg = new SectionSearches();

@@ -409,6 +409,8 @@ export interface LiveFold {
  */
 export function liveSection(host: HTMLElement, o: {
     id: string; title: string; summary?: string; summaryCls?: string;
+    /** In place of `summary`: an element of its own (a folded section's search, spec 083 §1). */
+    summaryEl?: HTMLElement;
     collapsed: boolean; headCls?: string; onToggle: () => void;
     /** A control beside the heading (not inside its button). */
     aside?: HTMLElement;
@@ -428,7 +430,8 @@ export function liveSection(host: HTMLElement, o: {
     head.append(chevron, el('span', 'live-section__title', o.title));
     // A pause between the title and each chip for a screen reader (the spans would run together).
     for (const x of o.extra ?? []) head.append(el('span', 'live-section__sep', ', '), x);
-    if (o.summary) head.appendChild(el('span', `live-section__sum${o.summaryCls ? ` ${o.summaryCls}` : ''}`, o.summary));
+    if (o.summaryEl) head.appendChild(o.summaryEl);
+    else if (o.summary) head.appendChild(el('span', `live-section__sum${o.summaryCls ? ` ${o.summaryCls}` : ''}`, o.summary));
     if (o.locked) {
         head.setAttribute('aria-disabled', 'true');
         head.classList.add('is-locked');

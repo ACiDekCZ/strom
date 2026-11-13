@@ -1033,6 +1033,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         bulkSelectFound: (n: number) => `Wybierz znalezione z propozycją (${numPl(n)})`,
         bulkSelectedHidden: (n: number, m: number) => `Wybrano ${numPl(n)}, w tym ${numPl(m)} poza wyszukiwaniem.`,
         bulkDeselectHidden: 'Odznacz poza wyszukiwaniem',
+        sectionSearchQuoted: (q: string) => `„${q}”`,
         queueSearchElsewhere: (id: string, state: string) => `${id} nie ma już w kolejce (${state}).`,
         queueState: { done: 'gotowe', waiting: 'czeka na decyzję', parked: 'odłożone', dropped: 'porzucone' },
         queueSearchErr: 'Wyszukiwanie nie powiodło się, badanie nie odpowiada.',
