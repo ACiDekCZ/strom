@@ -132,7 +132,7 @@ export const personEventsMethods = uiModule({
                     eventMeta(event.date, event.place, eventOwnSubject(event)),
                     locked ? null : event.id,
                     this.participantsSummary(event), eventDetailLine(event), this.personFactMarkHtml(marks, `event:${event.id}`), origin(`event:${event.id}`),
-                    this.sharedLineHtml(this.currentId, event, !locked)));
+                    this.sharedLineHtml(this.currentId, event, !locked) + this.refLineHtml(event)));
             }
         }
 
@@ -287,10 +287,16 @@ export const personEventsMethods = uiModule({
                     <input type="text" class="participant-note" value="${esc(noteShown)}"
                            placeholder="${esc(strings.events.participantNote)}"
                            aria-label="${esc(strings.events.participantNote)}">
-                    <button type="button" class="participant-btn secondary participant-link${linked ? ' linked' : ''}"
-                            title="${esc(linked ? strings.events.participantUnlink : strings.events.participantLink)}">
-                        ${chainLinkSvg({ stroke: 'currentColor', size: 11, strokeWidth: 2 })}${linked ? ` ${esc(strings.events.participantInTree)}` : ''}
-                    </button>
+                    ${linked
+                        // Linked: a chip with a menu (open the person, record the part as their own, unlink; spec 085 6b).
+                        ? `<button type="button" class="participant-btn participant-link linked" aria-haspopup="menu" aria-expanded="false"
+                            title="${esc(strings.events.participantInTree)}" aria-label="${esc(`${strings.events.participantInTree}: ${nameShown}`)}">
+                        ${chainLinkSvg({ stroke: 'currentColor', size: 11, strokeWidth: 2 })}<span class="participant-link-text">${esc(strings.events.participantInTree)}</span><span class="participant-link-caret" aria-hidden="true">▾</span>
+                    </button>`
+                        : `<button type="button" class="participant-btn secondary participant-link"
+                            title="${esc(strings.events.participantLink)}" aria-label="${esc(strings.events.participantLink)}">
+                        ${chainLinkSvg({ stroke: 'currentColor', size: 11, strokeWidth: 2 })}
+                    </button>`}
                     <button type="button" class="participant-btn secondary participant-del"
                             title="${esc(strings.events.delete)}" aria-label="${esc(strings.events.delete)}">${iconSvg('trash')}</button>
                 </div>`;
@@ -318,7 +324,11 @@ export const personEventsMethods = uiModule({
                 // The file's role word stays in front ("Midwife — …"), as the research reads it.
                 p.note = extra && p.role === 'other' ? (value.trim() ? `${extra.word} — ${value}` : extra.word) : value;
             };
-            (row.querySelector('.participant-link') as HTMLButtonElement).onclick = () => this.toggleParticipantLink(i);
+            const link = row.querySelector('.participant-link') as HTMLButtonElement;
+            link.onclick = () => {
+                if (this.eventParticipants[i]?.personId) this.openParticipantChipMenu(link, i);
+                else void this.toggleParticipantLink(i);
+            };
             (row.querySelector('.participant-del') as HTMLButtonElement).onclick = () => {
                 this.eventParticipants.splice(i, 1);
                 this.renderEventParticipants();
@@ -441,6 +451,7 @@ export const personEventsMethods = uiModule({
     showAddEventModal(): void {
         if (!this.currentId) return;
         if (DataManager.isPersonLocked(this.currentId)) return;
+        this.resetRecordOwnEditor();
         this.coupleEventPartnershipId = null;
         this.setCoupleEditorMode(null);
         this.editingEventId = null;
@@ -462,6 +473,7 @@ export const personEventsMethods = uiModule({
         const person = DataManager.getPerson(this.currentId);
         const event = person?.events?.find(e => e.id === eventId);
         if (!event) return;
+        this.resetRecordOwnEditor();
         this.coupleEventPartnershipId = null;
         this.setCoupleEditorMode(null);
         this.editingEventId = eventId;
@@ -482,6 +494,8 @@ export const personEventsMethods = uiModule({
                 ? '' : 'none';
         }
         this.renderEventSourcesChips();
+        // An own record of a part at another's event: whose event it belongs to, read only (spec 085 6c).
+        this.renderRoleAtField(event.roleAt);
         this.openEventEditor(strings.events.editTitle);
     },
 
@@ -654,6 +668,7 @@ export const personEventsMethods = uiModule({
         this.closeSharedMenus();
         if (this.sharedPicker) this.closeSharedPicker();
         this.sharedDraft = null;
+        this.resetRecordOwnEditor();
     },
 
     /**
@@ -718,6 +733,8 @@ export const personEventsMethods = uiModule({
         const payload = this.eventPayloadFromForm(!!this.editingEventId);
         if (!payload) return false;
         const participants = this.collectEventParticipants();
+        // A part at another's event recorded as an own event: roleAt and the copied citations (spec 085 §6c).
+        const recordedOwn = this.recordOwnPayload(payload);
 
         // Shared with others (or becoming so, or no longer): one save of every copy (spec 085).
         const shared = this.saveSharedFromModal(payload, participants);
@@ -727,7 +744,10 @@ export const personEventsMethods = uiModule({
                 DataManager.updateLifeEvent(this.currentId, this.editingEventId, payload);
             } else {
                 if (participants.length > 0) payload.participants = participants;
-                DataManager.addLifeEvent(this.currentId, payload);
+                const owner = this.currentId;
+                // An own record's Undo toast says what was saved for whom (spec 085 6i).
+                if (recordedOwn) DataManager.runBatch(recordedOwn, () => DataManager.addLifeEvent(owner, payload));
+                else DataManager.addLifeEvent(owner, payload);
             }
         }
 

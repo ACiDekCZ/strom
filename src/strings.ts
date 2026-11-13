@@ -970,7 +970,6 @@ const stringsEN = {
         participantName: 'Name as written',
         participantNote: 'Detail (trade, "neighbour"…)',
         participantLink: 'Link to someone in the tree',
-        participantUnlink: 'Not this person',
         participantInTree: 'in the tree',
         roles: {
             godparent: 'Godparent',
@@ -10078,7 +10077,6 @@ const stringsCZ: StringsType = {
         participantName: 'Jméno, jak je zapsáno',
         participantNote: 'Bližší určení (řemeslo, „soused“…)',
         participantLink: 'Propojit s osobou ve stromu',
-        participantUnlink: 'Přece jen ne tato osoba',
         participantInTree: 've stromu',
         roles: {
             godparent: 'Kmotr / kmotra',
@@ -19035,7 +19033,6 @@ const stringsDE: StringsType = {
         participantName: 'Name wie geschrieben',
         participantNote: 'Detail (Gewerbe, „Nachbar“…)',
         participantLink: 'Mit jemandem im Stammbaum verknüpfen',
-        participantUnlink: 'Nicht diese Person',
         participantInTree: 'im Stammbaum',
         roles: {
             godparent: 'Pate/Patin',

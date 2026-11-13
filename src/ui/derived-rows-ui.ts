@@ -24,7 +24,7 @@ import { shownName } from '../person-name.js';
 import { MARRIAGE_EVENT_ID } from '../shared-events.js';
 import {
     DerivedParticipation, ParticipationTarget, OwnRecordPrefill, derivedParticipations, derivedRoleLabel, derivedEventWord,
-    ownRecordType, ownRecordPrefill, roleAtSubjects,
+    ownRecordType, ownRecordPrefill, roleAtSubjects, hasOwnRecordOf,
 } from '../derived-participations.js';
 import { extraParticipantRole } from '../godparents.js';
 import { uiModule } from './module.js';
@@ -95,13 +95,8 @@ export const derivedRowsMethods = uiModule({
         const names = derivedSubjectNames(d).join(', ');
         this.openSharedMenu(anchor, [
             { label: S.derivedOpen(derivedEventWord(d), names), run: () => this.openDerivedEvent(d) },
-            ...this.derivedMenuExtra(d),
+            ...this.recordOwnMenuItems(d),
         ], { width: 300, spanEl: anchor.closest<HTMLElement>('.event-row') });
-    },
-
-    /** More items of a derived row's ⋯ (§6 adds recordOwnMenuItems once the editor saves roleAt). */
-    derivedMenuExtra(_d: DerivedParticipation): { label: string; hint?: string; run: () => void }[] {
-        return [];
     },
 
     /** "Also record as an own event" in a derived row's ⋯ (§6a), for a part that has an own type. */
@@ -155,9 +150,12 @@ export const derivedRowsMethods = uiModule({
      * person's dialog opens and over it the editor of a new event, prefilled.
      */
     recordOwnPart(personId: PersonId, part: Pick<DerivedParticipation, 'role' | 'extra' | 'eventId' | 'partnershipId' | 'ownerPersonId'>): void {
-        const prefill = ownRecordPrefill(DataManager.getData(), part);
-        if (!prefill || !DataManager.getPerson(personId) || DataManager.isPersonLocked(personId)) return;
-        this.leaveEditorsThen(personId, () => this.showRecordOwnEditor(prefill));
+        if (!ownRecordPrefill(DataManager.getData(), part) || !DataManager.getPerson(personId) || DataManager.isPersonLocked(personId)) return;
+        // Taken after leaving: an editor saved on the way may have changed the event.
+        this.leaveEditorsThen(personId, () => {
+            const prefill = ownRecordPrefill(DataManager.getData(), part);
+            if (prefill) this.showRecordOwnEditor(prefill);
+        });
     },
 
     /**
@@ -335,7 +333,9 @@ export const derivedRowsMethods = uiModule({
         ];
         const part = this.participantPart(row.role, row.note);
         const type = part ? ownRecordType(part) : null;
-        if (part && type && !DataManager.isPersonLocked(pid) && ownRecordPrefill(DataManager.getData(), part)) {
+        // Offered while the person keeps no own record of this part (a second one would double it).
+        if (part && type && !DataManager.isPersonLocked(pid) && !hasOwnRecordOf(person, part)
+            && ownRecordPrefill(DataManager.getData(), part)) {
             items.push({
                 label: S.recordOwn, hint: type === 'godparent' ? S.recordOwnHintGodparent : S.recordOwnHintWitness,
                 run: () => this.recordOwnPart(pid, part),

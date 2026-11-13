@@ -745,7 +745,6 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         participantName: 'Imię i nazwisko, jak zapisano',
         participantNote: 'Bliższe określenie (rzemiosło, „sąsiad”…)',
         participantLink: 'Połącz z osobą w drzewie',
-        participantUnlink: 'Jednak nie ta osoba',
         participantInTree: 'w drzewie',
         roles: {
             godparent: 'Chrzestny / chrzestna',

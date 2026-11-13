@@ -60,7 +60,7 @@ test.describe('a part at another\'s event in one\'s own life', () => {
         // ⋯: open the baptism.
         await more.click();
         const menu = page.locator('#shared-event-menu');
-        await expect(menu.getByRole('menuitem')).toHaveText(['Open baptism (Bolemír Pšeničný)']);
+        await expect(menu.locator('.sw-menu-label')).toHaveText(['Open baptism (Bolemír Pšeničný)', 'Also record as an own event']);
         await menu.getByRole('menuitem').first().click();
         const editor = page.locator('#event-editor-modal');
         await expect(editor).toHaveClass(/active/);

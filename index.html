@@ -6665,6 +6665,14 @@
         .participant-btn.linked { background: var(--primary, #4a7c59); color: var(--on-primary); }
         /* Keep the inline chain glyph centred with the button's label text. */
         .participant-link .chain-glyph { vertical-align: -1.5px; }
+        /* A linked participant's chip opens a menu (spec 085 6b): "in the tree ▾". */
+        .participant-link.linked { display: inline-flex; align-items: center; justify-content: center; gap: 4px; border-radius: 999px; padding: 4px 9px; }
+        .participant-link.linked .chain-glyph { vertical-align: 0; flex: none; }
+        .participant-link-caret { font-size: 10px; line-height: 1; }
+        .participant-link.linked[aria-expanded="true"] { box-shadow: 0 0 0 2px var(--primary-soft, rgba(74,124,89,0.3)); }
+        @media (pointer: coarse) {
+            .participant-btn { min-height: 44px; min-width: 44px; }
+        }
         /* Mobile: one field per line beats five squeezed into 300px. */
         @media (max-width: 640px) {
             .participant-row {
@@ -6674,6 +6682,11 @@
             .participant-row select { grid-area: role; }
             .participant-row .participant-name { grid-area: name; }
             .participant-row .participant-note { grid-area: note; }
+            /* A phone: the chips are icons of 44 px, the linked one green (its menu spans the row). */
+            .participant-btn { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
+            .participant-link.linked { width: 44px; height: 44px; padding: 0; }
+            .participant-link.linked .participant-link-text, .participant-link-caret { display: none; }
+            .participant-link .chain-glyph { width: 16px; height: 16px; }
         }
 
         .archives-modal { max-width: 520px; }
