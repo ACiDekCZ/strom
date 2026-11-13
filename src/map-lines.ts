@@ -543,7 +543,7 @@ export interface PathAddition {
 /**
  * Who was added to the map exactly in `year`: ancestors (closest generation
  * first, then rel), the target last. For the line under the timebar:
- * "1823 · Josef Hrabinec · Kamenná Lhota → Zálesí u Brodku".
+ * "1893 · Ysolde Zandmeer · Mu → Kappa".
  */
 export function pathAddedIn(model: PathModel, year: number): PathAddition[] {
     const byRel = new Map(model.onMap.map(a => [a.rel, a]));
