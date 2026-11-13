@@ -8,7 +8,9 @@
  * in src/ui/research-ui.ts. Nothing here touches the DOM or storage.
  */
 
-import { StromData, Person, PersonId, PartnershipId, Partnership, ResearchLink, Source, APP_VERSION, isPrimaryName, PlaceRecordBy } from './types.js';
+import { StromData, Person, PersonId, PartnershipId, Partnership, ResearchLink, Source, APP_VERSION, isPrimaryName, PlaceRecordBy, LifeEvent, EventRoleAt } from './types.js';
+import { eventIsShareable, eventValueIsOnTag } from './events.js';
+import { SUPPORTED_LANGUAGES, getStringsForLang } from './strings.js';
 import { withoutConvertedStandIns, isPurePlaceholder } from './single-parent.js';
 import { carryOverTreeDecisions, withRejectionDetails } from './quality-dismiss.js';
 import { keepPlaceOrigins, placesWithoutMeta, isPlaceRecordId, cleanCoords } from './place-records.js';
@@ -1492,6 +1494,12 @@ export function stabilizeIds(next: StromData, previous: StromData): StromData {
     /** What an item says: all but its id and its participants' ids. */
     const said = (x: Item, remap: boolean): string => {
         const { id: _id, participants, ...rest } = x;
+        // The baptism or wedding a godparent's own event points at is found again at each reading
+        // (by its type, with a new id): the event is the same whatever id that one has now.
+        const roleAt = (rest as { roleAt?: EventRoleAt }).roleAt;
+        if (roleAt) {
+            (rest as { roleAt?: unknown }).roleAt = [roleAt.role, roleAt.personId ?? '', roleAt.partnershipId ?? '', roleAt.eventType];
+        }
         const out = { ...rest, ...(participants ? { participants: participants.map(({ id: _p, ...y }) => y) } : {}) };
         return JSON.stringify(remap ? remapIds(out, map) : out);
     };
@@ -1524,6 +1532,179 @@ export function stabilizeIds(next: StromData, previous: StromData): StromData {
     for (const [k, v] of inner) map.set(k, v);
 
     return remapIds(next, map) as StromData;
+}
+
+// ==================== SHARED EVENTS ACROSS UPDATES ====================
+
+/** The bridge feature of a research that reads, keeps and gives back `_STROM_SHARE` and `_STROM_ROLE` (spec 085). */
+export const EVENT_SHARE_FEATURE = 'event.share';
+
+/** Types of a person's own event at another's that an older research gives back as a custom event with its name. */
+const ROLE_AT_TYPES: ReadonlySet<string> = new Set(['godparent', 'weddingWitness']);
+
+/** An event's type, date, place and the value on its line, as an update is matched by them. */
+function eventMatchKey(ev: LifeEvent, type: string = ev.type, label: string = ev.type === 'custom' ? ev.customLabel ?? '' : ''): string {
+    const text = (v: string | undefined): string => (v ?? '').normalize('NFC').replace(/\s+/g, ' ').trim().toLocaleLowerCase();
+    const value = eventValueIsOnTag(ev.type) ? (ev.note ?? '').split('\n')[0] : '';
+    return [type, text(label), text(ev.date), text(ev.place), text(value)].join('\u0000');
+}
+
+/** The names a godparent / wedding witness event goes out with as `2 TYPE` (every language of the app). */
+function roleAtTypeLabels(type: string): string[] {
+    return SUPPORTED_LANGUAGES
+        .map(l => (getStringsForLang(l.code).events.types as Record<string, string | undefined>)[type] ?? '')
+        .filter(Boolean);
+}
+
+/** The keys of a previous event an event of the update may have: its own, and a custom event's of its name. */
+function previousEventKeys(ev: LifeEvent): string[] {
+    const keys = [eventMatchKey(ev)];
+    if (ROLE_AT_TYPES.has(ev.type)) for (const label of roleAtTypeLabels(ev.type)) keys.push(eventMatchKey(ev, 'custom', label));
+    return keys;
+}
+
+/**
+ * The share marks (LifeEvent.shareId with the copy's own shareRole) and a
+ * person's part at another's event (roleAt, with the godparent / wedding
+ * witness type it gives) that a research version lacks. A research without
+ * `event.share` in its `features` (not known = an older research) drops
+ * `_STROM_SHARE` and `_STROM_ROLE` under an event and gives the events back
+ * without them: each event of the update takes them from the previous state
+ * — the person matched by REFN (or the same id), the event by its type,
+ * date, place and the value on its line, only where that is unique on both
+ * sides. A copy the research changed (another date) does not match and is an
+ * ordinary event of its person; the other copies stay joined, and a share
+ * left with one copy is none. A godparent's own event comes back as a custom
+ * event with the type's name: it is the godparent event again, pointing at
+ * the person or couple it pointed at (as they are in the update) and at the
+ * same baptism or wedding when that one matches too. A mark the update has
+ * stays as it is.
+ *
+ * With the feature the research decides — unless its version has no mark at
+ * all while the previous state has some: it never got them (the tree went
+ * there while the research was older), so they stay as with an older one.
+ * Returns a new object when any event changed; neither input is changed.
+ */
+export function keepEventShares(next: StromData, previous: StromData, features: readonly string[] | null | undefined): StromData {
+    const marked = (data: StromData): boolean => Object.values(data.persons ?? {})
+        .some(p => (p?.events ?? []).some(e => !!e?.shareId || !!e?.roleAt));
+    if (!marked(previous)) return next;
+    if (features?.includes(EVENT_SHARE_FEATURE) && marked(next)) return next;
+
+    // Persons: previous id → id in the update.
+    const personMap = new Map<PersonId, PersonId>();
+    const prevByRefn = uniqueRefns(previous);
+    for (const [refn, id] of uniqueRefns(next)) {
+        const prevId = prevByRefn.get(refn);
+        if (prevId) personMap.set(prevId, id);
+    }
+    const targeted = new Set(personMap.values());
+    for (const [id, was] of Object.entries(previous.persons ?? {}) as [PersonId, Person][]) {
+        const now = next.persons?.[id];
+        if (!was || !now || personMap.has(id) || targeted.has(id)) continue;
+        if ((was.refn?.trim() ?? '') !== (now.refn?.trim() ?? '')) continue;
+        personMap.set(id, id);
+        targeted.add(id);
+    }
+
+    const partnershipIn = (prevId: PartnershipId | undefined): PartnershipId | undefined => {
+        const was = prevId ? previous.partnerships?.[prevId] : undefined;
+        const a = was ? personMap.get(was.person1Id) : undefined;
+        const b = was ? personMap.get(was.person2Id) : undefined;
+        if (!a || !b) return undefined;
+        const found = Object.values(next.partnerships ?? {}).filter(u => u
+            && ((u.person1Id === a && u.person2Id === b) || (u.person1Id === b && u.person2Id === a)));
+        return found.length === 1 ? found[0].id : undefined;
+    };
+    /** The event of the update that a previous event is, when that is unique on both sides. */
+    const counterpart = (prevEvents: readonly LifeEvent[], nextEvents: readonly LifeEvent[], ev: LifeEvent): LifeEvent | undefined => {
+        const keys = previousEventKeys(ev);
+        const own = eventMatchKey(ev);
+        if (prevEvents.filter(e => e && eventMatchKey(e) === own).length !== 1) return undefined;
+        const found = nextEvents.filter(e => e && keys.includes(eventMatchKey(e)));
+        return found.length === 1 ? found[0] : undefined;
+    };
+    /** roleAt of a previous event as it points into the update (null: whose event it was is not there). */
+    const roleAtIn = (at: EventRoleAt): EventRoleAt => {
+        const out: EventRoleAt = { role: at.role, eventType: at.eventType };
+        const personId = at.personId ? personMap.get(at.personId) : undefined;
+        const partnershipId = at.partnershipId ? partnershipIn(at.partnershipId) : undefined;
+        if (personId) out.personId = personId;
+        if (partnershipId) out.partnershipId = partnershipId;
+        if (at.eventId && personId) {
+            const wasEvent = previous.persons[at.personId!]?.events?.find(e => e.id === at.eventId);
+            const nowEvent = wasEvent
+                ? counterpart(previous.persons[at.personId!]?.events ?? [], next.persons[personId]?.events ?? [], wasEvent)
+                : undefined;
+            if (nowEvent) out.eventId = nowEvent.id;
+        } else if (at.eventId && partnershipId) {
+            if (at.eventId === 'marriage') out.eventId = at.eventId;
+            else {
+                const prevEvents = (previous.partnerships[at.partnershipId!]?.events ?? []) as unknown as LifeEvent[];
+                const nextEvents = (next.partnerships[partnershipId]?.events ?? []) as unknown as LifeEvent[];
+                const wasEvent = prevEvents.find(e => e.id === at.eventId);
+                const nowEvent = wasEvent ? counterpart(prevEvents, nextEvents, wasEvent) : undefined;
+                if (nowEvent) out.eventId = nowEvent.id;
+            }
+        }
+        return out;
+    };
+
+    let persons: StromData['persons'] | null = null;
+    const restored = new Set<string>();
+    for (const [prevId, was] of Object.entries(previous.persons ?? {}) as [PersonId, Person][]) {
+        const prevEvents = was?.events ?? [];
+        if (!prevEvents.some(e => e?.shareId || e?.roleAt)) continue;
+        const id = personMap.get(prevId);
+        const now = id ? (persons ?? next.persons)[id] : undefined;
+        if (!id || !now?.events?.length) continue;
+        let events: LifeEvent[] | null = null;
+        for (const ev of prevEvents) {
+            if (!ev?.shareId && !ev?.roleAt) continue;
+            const match = counterpart(prevEvents, now.events, ev);
+            if (!match) continue;
+            const at = (events ?? now.events).indexOf(match);
+            const copy: LifeEvent = { ...match };
+            let changed = false;
+            if (ev.shareId && !copy.shareId && eventIsShareable(copy.type)) {
+                copy.shareId = ev.shareId;
+                if (ev.shareRole?.trim()) copy.shareRole = ev.shareRole;
+                restored.add(ev.shareId);
+                changed = true;
+            }
+            if (ev.roleAt && !copy.roleAt) {
+                if (ROLE_AT_TYPES.has(ev.type) && copy.type === 'custom') {
+                    copy.type = ev.type;
+                    delete copy.customLabel;
+                }
+                copy.roleAt = roleAtIn(ev.roleAt);
+                changed = true;
+            }
+            if (!changed) continue;
+            events ??= [...now.events];
+            events[at] = copy;
+        }
+        if (!events) continue;
+        persons ??= { ...next.persons };
+        persons[id] = { ...now, events };
+    }
+    if (!persons) return next;
+
+    // A share that only one copy came back to is no share (the others changed there).
+    const counts = new Map<string, number>();
+    for (const p of Object.values(persons)) for (const e of p?.events ?? []) if (e.shareId) counts.set(e.shareId, (counts.get(e.shareId) ?? 0) + 1);
+    for (const [pid, p] of Object.entries(persons) as [PersonId, Person][]) {
+        if (!p?.events?.some(e => e.shareId && restored.has(e.shareId) && (counts.get(e.shareId) ?? 0) < 2)) continue;
+        persons[pid] = {
+            ...p,
+            events: p.events.map(e => {
+                if (!e.shareId || !restored.has(e.shareId) || (counts.get(e.shareId) ?? 0) >= 2) return e;
+                const { shareId: _s, shareRole: _r, ...rest } = e;
+                return rest as LifeEvent;
+            }),
+        };
+    }
+    return { ...next, persons };
 }
 
 // ==================== MEDIA ACROSS UPDATES ====================
