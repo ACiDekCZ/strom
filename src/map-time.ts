@@ -14,6 +14,7 @@
  */
 
 import { StromData, PersonId } from './types.js';
+import type { SharedEventIndex } from './shared-events.js';
 import { placeKey, collectPlaces, forEachPlaceFact, MapKind } from './places.js';
 import { yearOf } from './dates.js';
 
@@ -30,6 +31,8 @@ export interface DatedPoint {
     placeKey: string;
     personId: PersonId;
     kind: DatedPointKind;
+    /** A copy of a shared event (with the index): the share it belongs to (spec 085 §2f). */
+    shareId?: string;
 }
 
 export interface DatedPlaceHarvest {
@@ -70,6 +73,7 @@ export function collectDatedPlacePoints(
     data: StromData,
     personFilter?: ReadonlySet<PersonId>,
     kinds?: ReadonlySet<MapKind>,
+    shared?: SharedEventIndex,
 ): DatedPlaceHarvest {
     const kept = (id: PersonId): boolean => !personFilter || personFilter.has(id);
     const points: DatedPoint[] = [];
@@ -82,8 +86,9 @@ export function collectDatedPlacePoints(
         const key = placeKey(place);
         if (!key) return;
         // A couple's fact happened to both partners: each one in scope gets a point.
+        const shareId = shared && fact.event ? shared.shareOf.get(`${fact.persons[0]}\u0000${fact.event.id}`) : undefined;
         for (const personId of fact.persons) {
-            if (kept(personId)) points.push({ year, placeKey: key, personId, kind: fact.kind });
+            if (kept(personId)) points.push({ year, placeKey: key, personId, kind: fact.kind, ...(shareId ? { shareId } : {}) });
         }
     });
 
@@ -108,4 +113,27 @@ export function collectDatedPlacePoints(
         minYear: years.length ? Math.min(...years) : null,
         maxYear: years.length ? Math.max(...years) : null,
     };
+}
+
+/**
+ * The number on a marker of Migration over time (spec 085 §2f): its points
+ * as the bubble's rows — a person once for their own facts, a shared event
+ * once however many persons it has; a shared event of one person there (the
+ * others not yet, or out of scope) is that person's own.
+ */
+export function datedRowCount(points: readonly Pick<DatedPoint, 'personId' | 'shareId'>[]): number {
+    const people = new Set<PersonId>();
+    const shares = new Map<string, Set<PersonId>>();
+    for (const p of points) {
+        if (!p.shareId) { people.add(p.personId); continue; }
+        const set = shares.get(p.shareId) ?? new Set<PersonId>();
+        set.add(p.personId);
+        shares.set(p.shareId, set);
+    }
+    let rows = 0;
+    for (const set of shares.values()) {
+        if (set.size >= 2) rows++;
+        else set.forEach(id => people.add(id));
+    }
+    return people.size + rows;
 }

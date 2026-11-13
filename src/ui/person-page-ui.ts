@@ -656,7 +656,8 @@ export const personPageMethods = uiModule({
         }
         // A row of the places list: Enter / Space as a click.
         const row = (e.key === 'Enter' || e.key === ' ') ? (e.target as HTMLElement).closest?.<HTMLElement>('li[data-pp-map-place]') : null;
-        if (row) {
+        // A name of a shared event's line in the row is a link of its own (spec 085 §2g).
+        if (row && !(e.target as HTMLElement).closest('.pp-map-with a, .pp-map-with button')) {
             e.preventDefault();
             this.pickPersonPageMapPlace(row);
         }
@@ -696,7 +697,8 @@ export const personPageMethods = uiModule({
         // The places map (§1.4): a point or a row selects; the selected row again leads to the timeline.
         const mapPlace = target.closest<HTMLElement>('.pp-places [data-pp-map-place]');
         // A person in a row of the family pages' map of places opens the person (spec 026 §3.7).
-        if (mapPlace && !target.closest('[data-sp-open]')) { this.pickPersonPageMapPlace(mapPlace); return; }
+        // A name of a shared event's line under a row goes to that person (spec 085 §2g).
+        if (mapPlace && !target.closest('[data-sp-open], .pp-map-with [data-pp-person]')) { this.pickPersonPageMapPlace(mapPlace); return; }
         // The life chart (§2.1): a period, mark or line leads to its timeline row.
         const osa = target.closest<HTMLElement>('.pp-chart [data-pp-osa]');
         if (osa) { e.preventDefault(); this.scrollPersonPageOsa(osa.dataset.ppOsa ?? ''); return; }

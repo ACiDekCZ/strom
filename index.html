@@ -12246,6 +12246,42 @@
             font-size: 12.5px;
             cursor: pointer;
         }
+        /* A shared event (spec 085 §2f): one row however many persons it has,
+           "1921 Census · Prokop, Terezie, …", the given names as links. */
+        .map-popup-share {
+            flex: 1 0 100%;
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            min-width: 0;
+            padding: 5px 0;
+            border-top: 1px solid var(--divider);
+            font-size: 13px;
+            line-height: 1.45;
+        }
+        .map-popup-people > .map-popup-share:first-child { border-top: none; }
+        .map-popup-people.is-rows > .map-popup-share { flex: none; padding-left: 6px; padding-right: 6px; }
+        .map-popup-share .map-popup-marks { flex: none; }
+        .map-popup-share-year { flex: none; min-width: 34px; font-weight: 600; font-variant-numeric: tabular-nums; }
+        .map-popup-share-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+        .map-popup-share-what { color: var(--text-light); }
+        .map-popup-share-item { white-space: nowrap; }
+        .map-popup button.map-popup-share-name {
+            background: none; border: 0; padding: 0; margin: 0; min-height: 0; width: auto;
+            font: inherit; font-weight: 500; color: var(--primary); cursor: pointer; border-radius: 3px;
+            white-space: nowrap; max-width: calc(100% - 6px); overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; text-align: start;
+        }
+        .map-popup button.map-popup-share-name:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        @media (hover: hover) {
+            .map-popup button.map-popup-share-name:hover { text-decoration: underline; }
+        }
+        @media (pointer: coarse) {
+            .map-popup-share { line-height: 1.9; padding: 6px 0; }
+            .map-popup button.map-popup-share-name { padding: 6px 0; }
+        }
+        @media (max-width: 640px) {
+            .map-popup-share { font-size: 13.5px; }
+        }
         .map-popup-house {
             display: grid;
             grid-template-columns: 84px minmax(0, 1fr);

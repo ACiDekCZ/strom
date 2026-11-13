@@ -27,13 +27,15 @@ import { placeGeoHash } from '../place-records.js';
 import { PersonId, PlaceGeo } from '../types.js';
 import {
     collectPlaces, placeKey, PlaceUsage, MapKind, MAP_KINDS, isMapKind, groupTownPoints, knownStreets, MapPoint, TownPoint,
-    mapPointHasPerson,
+    mapPointHasPerson, mapPointRowCount, soloPersons, type PlaceShare,
 } from '../places.js';
+import { sharedNames } from '../shared-with-line.js';
+import { lifeEventLabel } from '../person-sources.js';
 import { getWindowRole } from '../windows/window-role.js';
 import { PERSON_CHOSEN_EVENT } from '../windows/window-selection.js';
 import { KIND_MARK, houseMatches, kindMarks } from '../map-bubble.js';
 import { MQ_MOBILE, MQ_PHONE_BAR } from '../breakpoints.js';
-import { collectDatedPlacePoints, DatedPlaceHarvest } from '../map-time.js';
+import { collectDatedPlacePoints, DatedPlaceHarvest, datedRowCount } from '../map-time.js';
 import { yearOf } from '../dates.js';
 import { pickMapLabels, type LabelBox } from '../map-labels.js';
 import { mapSpellingPlaces } from '../place-groups.js';
@@ -146,7 +148,9 @@ export const mapMethods = uiModule({
             this.mapEffectiveScope() === 'tree' ? undefined : TreeRenderer.getVisiblePersonIds();
 
         const mapped: MappedPlace[] = [];
-        for (const p of this.mapSpellings(collectPlaces(data, filter, this.mapKinds())).places) {
+        // A shared event is one row of a bubble, counted once (spec 085 §2f).
+        const places = collectPlaces(data, filter, this.mapKinds(), DataManager.getSharedEventIndex());
+        for (const p of this.mapSpellings(places).places) {
             if (p.geo) mapped.push({ key: p.key, usage: p.usage, geo: p.geo });
         }
         return mapped.sort((a, b) => b.usage.count - a.usage.count || a.usage.display.localeCompare(b.usage.display));
@@ -719,7 +723,8 @@ export const mapMethods = uiModule({
         const lang = getCurrentLanguage();
         layer.innerHTML = points.map(p => {
             const info = this.mapMarkerInfo(p);
-            const persons = p.type === 'town' ? p.personCount : p.usage.personIds.length;
+            // The bubble's rows: a person per own facts, a shared event once (spec 085 §2f).
+            const persons = mapPointRowCount(p);
             const id = ids.get(info.key);
             const check = id?.state === 'check' ? this.mapCheckReason(id, lang) : undefined;
             return this.mapMarkerHtml(info, persons, false, width, height, check);
@@ -807,7 +812,7 @@ export const mapMethods = uiModule({
         const data = DataManager.getData();
         const filter: ReadonlySet<PersonId> | undefined =
             this.mapEffectiveScope() === 'tree' ? undefined : TreeRenderer.getVisiblePersonIds();
-        return collectDatedPlacePoints(data, filter, this.mapKinds());
+        return collectDatedPlacePoints(data, filter, this.mapKinds(), DataManager.getSharedEventIndex());
     },
 
     /**
@@ -816,13 +821,13 @@ export const mapMethods = uiModule({
      * Places with no coordinates are dropped (nothing to draw) — matching the
      * ordinary marker rule.
      */
-    mapTimePlacesData(): (MapMarkerInfo & { points: { year: number; personId: PersonId }[] })[] {
+    mapTimePlacesData(): (MapMarkerInfo & { points: { year: number; personId: PersonId; shareId?: string }[] })[] {
         const pointOf = new Map<string, MapMarkerInfo>();
         for (const p of this.mapPoints()) {
             const info = this.mapMarkerInfo(p);
             for (const key of p.type === 'town' ? p.placeKeys : [p.key]) pointOf.set(key, info);
         }
-        const byKey = new Map<string, MapMarkerInfo & { points: { year: number; personId: PersonId }[] }>();
+        const byKey = new Map<string, MapMarkerInfo & { points: { year: number; personId: PersonId; shareId?: string }[] }>();
         for (const pt of this.mapTimeHarvest().points) {
             const base = pointOf.get(pt.placeKey);
             if (!base) continue;
@@ -831,7 +836,7 @@ export const mapMethods = uiModule({
                 tp = { ...base, points: [] };
                 byKey.set(base.key, tp);
             }
-            tp.points.push({ year: pt.year, personId: pt.personId });
+            tp.points.push({ year: pt.year, personId: pt.personId, ...(pt.shareId ? { shareId: pt.shareId } : {}) });
         }
         return [...byKey.values()];
     },
@@ -896,7 +901,8 @@ export const mapMethods = uiModule({
         markers.innerHTML = this.mapTimePlacesData().map(tp => {
             const upto = tp.points.filter(p => p.year <= year);
             if (upto.length === 0) return '';
-            const persons = new Set(upto.map(p => p.personId)).size;
+            // The bubble's rows so far: a shared event once (spec 085 §2f).
+            const persons = datedRowCount(upto);
             // "Fresh" = something happened here within the last ten years (Y−10, Y].
             const fresh = upto.some(p => p.year > year - 10);
             return this.mapMarkerHtml(tp, persons, fresh, width, height);
@@ -1321,7 +1327,7 @@ export const mapMethods = uiModule({
             ${this.mapPopupResearchHtml(point, located)}
             <div class="map-popup-body${town ? ' map-popup-houses' : ''}">
                 ${path ? path.rows : point.type === 'town' ? '' : `<div class="map-popup-people${this.mapTimeOn ? ' is-rows' : ''}">${this.mapPopupPeople(
-                    point.usage.personIds.map(id => [id, point.usage.kinds.get(id) ?? new Set<MapKind>()] as const), Infinity, '')}</div>`}
+                    [...soloPersons(point.usage)], Infinity, '')}${this.mapPopupShares(point.usage.shares ?? [])}</div>`}
             </div>
             <div class="map-popup-foot">
                 <button type="button" class="map-popup-fix" data-key="${this.escapeHtml(point.type === 'town' ? point.ownKey ?? point.key : point.key)}">${m.wrongSpot}</button>
@@ -1480,13 +1486,13 @@ export const mapMethods = uiModule({
         const rows = houses.map(h => `
             <div class="map-popup-house">
                 <div class="map-popup-house-head"><span class="map-popup-house-no">${this.escapeHtml(h.house)}</span><span class="map-popup-house-bytown">${this.escapeHtml(strings.places.onMap.byTown)}</span></div>
-                <div class="map-popup-people">${this.mapPopupPeople([...h.persons], big ? 3 : Infinity, h.key)}</div>
+                <div class="map-popup-people">${this.mapPopupPeople([...h.solo], big ? 3 : Infinity, h.key)}${this.mapPopupShares(h.shares)}</div>
             </div>`).join('');
         const none = q && houses.length === 0 ? `<p class="map-popup-none">${this.escapeHtml(m.houseSearchNone)}</p>` : '';
         const noHouse = !q && point.noHouse.size > 0 ? `
             <div class="map-popup-nohouse">
                 <div class="map-popup-nohouse-title">${this.escapeHtml(`${m.noHouseNumber} · ${m.usedBy(point.noHouse.size)}`)}</div>
-                <div class="map-popup-people">${this.mapPopupPeople([...point.noHouse], big ? 6 : Infinity, NO_HOUSE)}</div>
+                <div class="map-popup-people">${this.mapPopupPeople([...point.noHouseSolo], big ? 6 : Infinity, NO_HOUSE)}${this.mapPopupShares(point.noHouseShares)}</div>
             </div>` : '';
         body.innerHTML = rows + none + noHouse;
     },
@@ -1518,6 +1524,33 @@ export const mapMethods = uiModule({
         return html + (rest > 0
             ? `<button type="button" class="map-popup-more" data-group="${this.escapeHtml(group)}">${this.escapeHtml(m.morePeople(rest))}</button>`
             : '');
+    },
+
+    /**
+     * The shared events of a bubble (spec 085 §2f), each one row however many
+     * persons it has: "1921 Census · Prokop, Terezie, Bohumil, Anežka", the
+     * given names leading to those persons (the whole name where two share a
+     * given name), in the order of its "Shared with"; by year.
+     */
+    mapPopupShares(rows: readonly PlaceShare[]): string {
+        if (rows.length === 0) return '';
+        const esc = (t: string): string => this.escapeHtml(t);
+        const data = DataManager.getData();
+        const on = this.mapKinds();
+        const year = (r: PlaceShare): number => yearOf(r.event.date) ?? Number.MAX_SAFE_INTEGER;
+        return [...rows].sort((a, b) => year(a) - year(b)).map(r => {
+            const names = sharedNames(data, r.personIds);
+            if (names.length === 0) return '';
+            const y = yearOf(r.event.date);
+            const what = lifeEventLabel(r.event);
+            const last = names.length - 1;
+            const who = names.map((n, i) => `<span class="map-popup-share-item"><button type="button" class="map-popup-share-name" data-person-id="${esc(n.personId)}" title="${esc(n.full)}">${esc(n.text)}</button>${i < last ? ',' : ''}</span>`).join(' ');
+            const marks = kindMarks(new Set([r.kind]), on);
+            return `<div class="map-popup-share" data-share="${esc(r.shareId)}">`
+                + (marks ? `<span class="map-popup-marks" aria-hidden="true">${marks}</span>` : '')
+                + `<span class="map-popup-share-year">${y !== null ? y : ''}</span>`
+                + `<span class="map-popup-share-text"><span class="map-popup-share-what">${esc(what)} ·</span> ${who}</span></div>`;
+        }).join('');
     },
 
     /** Move the map so the point of an opened sheet stands at about 18 % of its height, above the sheet. */
@@ -1567,6 +1600,9 @@ export const mapMethods = uiModule({
         popup?.addEventListener('click', (e: Event) => {
             const target = e.target as HTMLElement;
             if (target.closest('.map-popup-close')) { this.closeMapPopup(); return; }
+            // A name of a shared event's row goes to that person (spec 085 §2f).
+            const shareName = target.closest<HTMLElement>('.map-popup-share-name');
+            if (shareName?.dataset.personId) { this.focusFromMap(shareName.dataset.personId); return; }
             const person = target.closest('.map-popup-person') as HTMLElement | null;
             if (person?.hasAttribute('aria-expanded')) { this.toggleMapPopupPerson(person); return; }
             if (person?.dataset.personId) { this.focusFromMap(person.dataset.personId); return; }

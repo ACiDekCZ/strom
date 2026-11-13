@@ -19,7 +19,8 @@
  * the house field (splitPlaceHouses).
  */
 
-import { StromData, PersonId, PlaceGeo, LifeEventType, CoupleEventType } from './types.js';
+import { StromData, PersonId, PlaceGeo, LifeEvent, LifeEventType, CoupleEventType } from './types.js';
+import type { SharedEventIndex } from './shared-events.js';
 import {
     bareNumber, foldText, houseWith, isNumberTok, KnownStreets, nameOf, numberedTown, splitStreet, streetOfHouse, tokens,
 } from './streets.js';
@@ -67,6 +68,32 @@ export interface PlaceUsage {
      * without a house (or one with no house field, the divorce).
      */
     houses: Map<PersonId, Map<string, Set<MapKind>>>;
+    /**
+     * The shared events here (spec 085 §2f), only when collected with the
+     * tree's index of shared events: each one row of the map's bubble however
+     * many persons it has. Only events of at least two persons here; a copy
+     * whose other persons are not here (out of scope, another place) counts
+     * as its person's own fact (`solo`).
+     */
+    shares?: PlaceShare[];
+    /**
+     * With `shares`: each person's facts here that are not one of them, by
+     * house as `houses` — the bubble's person rows. A person whose only fact
+     * here is a shared event has none.
+     */
+    solo?: Map<PersonId, Map<string, Set<MapKind>>>;
+}
+
+/** A shared event at a place: one row of the map's bubble (spec 085 §2f). */
+export interface PlaceShare {
+    shareId: string;
+    /** The house of its copies here as written ('' none). */
+    house: string;
+    kind: MapKind;
+    /** The first copy here (its type, label and date). */
+    event: LifeEvent;
+    /** Its persons here, in the order of its "Shared with". */
+    personIds: PersonId[];
 }
 
 /**
@@ -83,6 +110,8 @@ interface PlaceFact {
     date: string | undefined;
     kind: MapKind;
     persons: PersonId[];
+    /** A person's own event (not a couple's): the event itself. */
+    event?: LifeEvent;
     setPlace(value: string | undefined): void;
     setHouse(value: string | undefined): void;
 }
@@ -110,7 +139,7 @@ export function forEachPlaceFact(data: StromData, visit: (fact: PlaceFact) => vo
         for (const ev of person.events ?? []) {
             visit({
                 place: ev.place, house: ev.address, hasHouseField: true, date: ev.date,
-                kind: lifeEventKind(ev.type), persons: who,
+                kind: lifeEventKind(ev.type), persons: who, event: ev,
                 setPlace: v => { ev.place = v; }, setHouse: v => { ev.address = v; },
             });
         }
@@ -160,10 +189,20 @@ export function placeKey(raw: string): string {
  * fields. Without `kinds` every fact counts.
  */
 export function collectPlaces(
-    data: StromData, personFilter?: ReadonlySet<PersonId>, kinds?: ReadonlySet<MapKind>,
+    data: StromData, personFilter?: ReadonlySet<PersonId>, kinds?: ReadonlySet<MapKind>, shared?: SharedEventIndex,
 ): Map<string, PlaceUsage> {
     const out = new Map<string, PlaceUsage>();
     const kept = (id: PersonId): boolean => !personFilter || personFilter.has(id);
+    // With the index (the map, spec 085 §2f): a copy of a shared event is gathered
+    // by its share; the other facts are each person's own (`solo`).
+    const shareRows = new Map<PlaceUsage, Map<string, PlaceShare>>();
+    const addKind = (to: Map<PersonId, Map<string, Set<MapKind>>>, id: PersonId, house: string, kind: MapKind): void => {
+        const byHouse = to.get(id) ?? new Map<string, Set<MapKind>>();
+        const hk = byHouse.get(house) ?? new Set<MapKind>();
+        hk.add(kind);
+        byHouse.set(house, hk);
+        to.set(id, byHouse);
+    };
 
     forEachPlaceFact(data, fact => {
         const value = fact.place?.trim();
@@ -187,14 +226,43 @@ export function collectPlaces(
             const k = entry.kinds.get(id) ?? new Set<MapKind>();
             k.add(fact.kind);
             entry.kinds.set(id, k);
-            const byHouse = entry.houses.get(id) ?? new Map<string, Set<MapKind>>();
-            const hk = byHouse.get(house) ?? new Set<MapKind>();
-            hk.add(fact.kind);
-            byHouse.set(house, hk);
-            entry.houses.set(id, byHouse);
+            addKind(entry.houses, id, house, fact.kind);
+        }
+        if (shared) {
+            const shareId = fact.event ? shared.shareOf.get(`${who[0]}\u0000${fact.event.id}`) : undefined;
+            if (shareId && fact.event) {
+                const rows = shareRows.get(entry) ?? new Map<string, PlaceShare>();
+                const rowKey = `${shareId}\u0000${houseKey(house)}`;
+                const row = rows.get(rowKey) ?? { shareId, house, kind: fact.kind, event: fact.event, personIds: [] };
+                if (!row.personIds.includes(who[0])) row.personIds.push(who[0]);
+                rows.set(rowKey, row);
+                shareRows.set(entry, rows);
+            } else {
+                entry.solo ??= new Map();
+                for (const id of who) addKind(entry.solo, id, house, fact.kind);
+            }
         }
         out.set(key, entry);
     });
+
+    if (shared) {
+        for (const entry of out.values()) {
+            entry.solo ??= new Map();
+            const shares: PlaceShare[] = [];
+            for (const row of shareRows.get(entry)?.values() ?? []) {
+                // A copy alone here is its person's own fact.
+                if (row.personIds.length < 2) {
+                    addKind(entry.solo, row.personIds[0], row.house, row.kind);
+                    continue;
+                }
+                const order = (shared.shares.get(row.shareId) ?? []).map(c => c.personId);
+                const at = (id: PersonId): number => { const i = order.indexOf(id); return i < 0 ? order.length : i; };
+                row.personIds.sort((a, b) => at(a) - at(b));
+                shares.push(row);
+            }
+            entry.shares = shares;
+        }
+    }
 
     // The display spelling is the one used most (stable tiebreak: alphabetical).
     for (const entry of out.values()) {
@@ -471,6 +539,10 @@ export interface TownHouse {
     persons: Map<PersonId, Set<MapKind>>;
     /** The tree's places this house comes from (the town's own place for a house field there). */
     placeKeys: string[];
+    /** The bubble's person rows: `persons` without the facts that are `shares` (all of `persons` without an index). */
+    solo: Map<PersonId, Set<MapKind>>;
+    /** The shared events at this house (spec 085 §2f), each one row. */
+    shares: PlaceShare[];
 }
 
 /** A map point of one place, as today. */
@@ -500,6 +572,10 @@ export interface TownPoint {
     houses: TownHouse[];
     /** The people with a fact at the town itself without a house, with those facts' kinds. */
     noHouse: Map<PersonId, Set<MapKind>>;
+    /** `noHouse` as the bubble's person rows (see TownHouse.solo). */
+    noHouseSolo: Map<PersonId, Set<MapKind>>;
+    /** The shared events at the town without a house. */
+    noHouseShares: PlaceShare[];
     /** Distinct people in the point (houses and no house). */
     personCount: number;
     houseCount: number;
@@ -511,6 +587,37 @@ export type MapPoint = PlacePoint | TownPoint;
 export function mapPointHasPerson(point: MapPoint, personId: string): boolean {
     if (point.type === 'place') return point.usage.personIds.includes(personId as PersonId);
     return point.noHouse.has(personId as PersonId) || point.houses.some(h => h.persons.has(personId as PersonId));
+}
+
+/** A place's person rows of the bubble: each person with the kinds of their own facts (spec 085 §2f). */
+export function soloPersons(usage: PlaceUsage): Map<PersonId, Set<MapKind>> {
+    if (!usage.solo) return usage.kinds;
+    const out = new Map<PersonId, Set<MapKind>>();
+    for (const id of usage.personIds) {
+        const byHouse = usage.solo.get(id);
+        if (!byHouse) continue;
+        const set = new Set<MapKind>();
+        for (const kinds of byHouse.values()) kinds.forEach(k => set.add(k));
+        out.set(id, set);
+    }
+    return out;
+}
+
+/**
+ * The number on a point's marker: the rows of its bubble (spec 085 §2f) —
+ * a person per own facts there, a shared event once however many persons
+ * it has. A town counts each person and each shared event once over all
+ * its houses. Without shared events: its people, as before.
+ */
+export function mapPointRowCount(point: MapPoint): number {
+    if (point.type === 'place') return soloPersons(point.usage).size + (point.usage.shares?.length ?? 0);
+    const people = new Set<PersonId>(point.noHouseSolo.keys());
+    const shares = new Set<string>(point.noHouseShares.map(r => r.shareId));
+    for (const h of point.houses) {
+        for (const id of h.solo.keys()) people.add(id);
+        for (const r of h.shares) shares.add(r.shareId);
+    }
+    return people.size + shares.size;
 }
 
 /** The prefix of a town point's key and of showPlacesManager's town target. */
@@ -560,8 +667,14 @@ export function groupTownPoints(places: readonly MappedPlaceInput[], known?: Kno
     const buildTown = (townKey: string): TownPoint => {
         const own = memberOf.has(townKey) ? undefined : byKey.get(townKey);
         const list = members.get(townKey) ?? [];
-        const houses = new Map<string, { texts: Map<string, number>; persons: Map<PersonId, Set<MapKind>>; placeKeys: Set<string> }>();
+        interface HouseAcc {
+            texts: Map<string, number>; persons: Map<PersonId, Set<MapKind>>; placeKeys: Set<string>;
+            solo: Map<PersonId, Set<MapKind>>; shares: PlaceShare[];
+        }
+        const houses = new Map<string, HouseAcc>();
         const noHouse = new Map<PersonId, Set<MapKind>>();
+        const noHouseSolo = new Map<PersonId, Set<MapKind>>();
+        const noHouseShares: PlaceShare[] = [];
         const people = new Set<PersonId>();
         const addKinds = (to: Map<PersonId, Set<MapKind>>, id: PersonId, kinds: ReadonlySet<MapKind>): void => {
             const set = to.get(id) ?? new Set<MapKind>();
@@ -569,14 +682,26 @@ export function groupTownPoints(places: readonly MappedPlaceInput[], known?: Kno
             to.set(id, set);
             people.add(id);
         };
-        const addHouse = (text: string, id: PersonId, kinds: ReadonlySet<MapKind>, from: string): void => {
+        const houseOf = (text: string, from: string): HouseAcc => {
             const key = houseKey(text);
-            const h = houses.get(key) ?? { texts: new Map<string, number>(), persons: new Map(), placeKeys: new Set<string>() };
-            h.texts.set(text, (h.texts.get(text) ?? 0) + 1);
-            addKinds(h.persons, id, kinds);
+            const h = houses.get(key) ?? { texts: new Map<string, number>(), persons: new Map(), placeKeys: new Set<string>(), solo: new Map(), shares: [] };
             h.placeKeys.add(from);
             houses.set(key, h);
+            return h;
         };
+        const addHouse = (text: string, id: PersonId, kinds: ReadonlySet<MapKind>, from: string): void => {
+            const h = houseOf(text, from);
+            h.texts.set(text, (h.texts.get(text) ?? 0) + 1);
+            addKinds(h.persons, id, kinds);
+        };
+        // A shared event's row joins the same one of another place of the town (its persons added).
+        const addShare = (to: PlaceShare[], row: PlaceShare, house: string): void => {
+            const same = to.find(r => r.shareId === row.shareId);
+            if (same) { for (const id of row.personIds) if (!same.personIds.includes(id)) same.personIds.push(id); }
+            else to.push({ ...row, house, personIds: [...row.personIds] });
+        };
+        // The person rows: each person's own facts (all facts without the index).
+        const soloOf = (u: PlaceUsage): Map<PersonId, Map<string, Set<MapKind>>> => u.solo ?? u.houses;
         if (own) {
             for (const [id, byHouse] of own.usage.houses) {
                 for (const [text, kinds] of byHouse) {
@@ -584,10 +709,24 @@ export function groupTownPoints(places: readonly MappedPlaceInput[], known?: Kno
                     else addKinds(noHouse, id, kinds);
                 }
             }
+            for (const [id, byHouse] of soloOf(own.usage)) {
+                for (const [text, kinds] of byHouse) addKinds(text ? houseOf(text, own.key).solo : noHouseSolo, id, kinds);
+            }
+            for (const row of own.usage.shares ?? []) {
+                if (row.house) addShare(houseOf(row.house, own.key).shares, row, row.house);
+                else addShare(noHouseShares, row, '');
+            }
         }
         for (const { place, parsed } of list) {
             for (const [id, byHouse] of place.usage.houses) {
                 for (const [had, kinds] of byHouse) addHouse(factHouse(parsed.house, had) ?? parsed.house, id, kinds, place.key);
+            }
+            for (const [id, byHouse] of soloOf(place.usage)) {
+                for (const [had, kinds] of byHouse) addKinds(houseOf(factHouse(parsed.house, had) ?? parsed.house, place.key).solo, id, kinds);
+            }
+            for (const row of place.usage.shares ?? []) {
+                const house = factHouse(parsed.house, row.house) ?? parsed.house;
+                addShare(houseOf(house, place.key).shares, row, house);
             }
         }
         const most = (m: Map<string, number>): string =>
@@ -595,7 +734,8 @@ export function groupTownPoints(places: readonly MappedPlaceInput[], known?: Kno
         const spellings = new Map<string, number>();
         for (const { place, parsed } of list) spellings.set(parsed.town, (spellings.get(parsed.town) ?? 0) + place.usage.count);
         const houseList: TownHouse[] = [...houses.entries()].map(([key, h]) => ({
-            key, house: most(h.texts), persons: h.persons, placeKeys: [...h.placeKeys],
+            key, house: h.texts.size ? most(h.texts) : h.shares[0]?.house ?? '', persons: h.persons, placeKeys: [...h.placeKeys],
+            solo: h.solo, shares: h.shares,
         })).sort((a, b) => compareHouses(a.house, b.house));
         return {
             type: 'town',
@@ -607,6 +747,8 @@ export function groupTownPoints(places: readonly MappedPlaceInput[], known?: Kno
             placeKeys: [...(own ? [own.key] : []), ...list.map(m => m.place.key)],
             houses: houseList,
             noHouse,
+            noHouseSolo,
+            noHouseShares,
             personCount: people.size,
             houseCount: houseList.length,
         };

@@ -1945,7 +1945,8 @@ describe('a shared event on the person page (spec 085 §2b–2c)', () => {
 
     it('writes "with" and the given names as links to the persons, the line opening the editor', () => {
         const html = body(census());
-        const line = html.match(/<span class="shared-line[^"]*"[^>]*>[\s\S]*?<\/span><\/span>/)?.[0] ?? '';
+        // The timeline's line (the places list above it names the others too, without opening).
+        const line = html.match(/<span class="shared-line shared-line--open"[^>]*>[\s\S]*?<\/span><\/span>/)?.[0] ?? '';
         expect(line).toContain('data-pp-action="shared-event"');
         expect(line).toContain('data-pp-event="c_jan"');
         expect(line).toContain('spolu s');
@@ -1968,6 +1969,24 @@ describe('a shared event on the person page (spec 085 §2b–2c)', () => {
         expect(line).toContain('Rosa Fíšková');
         expect(line).not.toContain('shared-line-mark');
         expect(line).not.toContain('data-pp-action');
+    });
+
+    it('the places map keeps the person\'s own point; the place\'s row names the others (spec 085 §2g)', () => {
+        const d = census();
+        d.places = { capkov: { lat: 49.6, lon: 15.1 }, viden: { lat: 48.2, lon: 16.37 } };
+        const html = body(d);
+        const section = html.match(/<section class="pp-sec pp-sec--places[\s\S]*?<\/section>/)?.[0] ?? '';
+        const row = section.match(/<li class="pp-map-row[^"]*"[^>]*data-pp-map-place="capkov"[\s\S]*?<\/li>/)?.[0] ?? '';
+        expect(row).toContain('class="pp-map-with"');
+        expect(row).toMatch(/data-pp-person="marie"[^>]*>Marie</);
+        expect(row).toMatch(/data-pp-person="rosa"[^>]*>Rosa</);
+        // The row selects the place: the line opens no editor of its own.
+        expect(row).not.toContain('data-pp-action="shared-event"');
+        // Vídeň has no shared event: no line.
+        const other = section.match(/<li class="pp-map-row[^"]*"[^>]*data-pp-map-place="viden"[\s\S]*?<\/li>/)?.[0] ?? '';
+        expect(other).not.toContain('pp-map-with');
+        // One point per place, as before.
+        expect(section.match(/data-pp-map-place="capkov"/g)!.length).toBe(html.match(/data-pp-map-place="capkov"/g)!.length);
     });
 
     it('a living person of the event is left out under privacy', () => {

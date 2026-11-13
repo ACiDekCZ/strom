@@ -2254,7 +2254,12 @@ function histRowHtml(c: Ctx, item: LifelineHistoryItem): string {
  * the line opens the event's editor from this person's side.
  */
 function sharedLineOf(c: Ctx, pt: LifelinePoint): string {
-    const line = pt.kind === 'event' && pt.eventId ? c.page.shared?.get(pt.eventId) : undefined;
+    return pt.kind === 'event' && pt.eventId ? sharedLineFor(c, pt.eventId, true) : '';
+}
+
+/** The line of the person's event `eventId` ('' for an event of one person); `canOpen`: the line may open the editor. */
+function sharedLineFor(c: Ctx, eventId: string, canOpen: boolean): string {
+    const line = c.page.shared?.get(eventId);
     if (!line) return '';
     const print = c.opts.mode === 'print' || !!c.book;
     const nameHtml = (n: SharedWithLine['names'][number]): string => {
@@ -2264,9 +2269,9 @@ function sharedLineOf(c: Ctx, pt: LifelinePoint): string {
         if (inSet(c)) return setLinkHtml(c, 'pp-link', { person: n.personId }, text, title);
         return `<button type="button" class="pp-link" data-pp-person="${esc(n.personId)}"${title}>${text}</button>`;
     };
-    const open = c.app && c.opts.links === 'app' && !c.page.readOnly && !!pt.eventId;
+    const open = canOpen && c.app && c.opts.links === 'app' && !c.page.readOnly;
     const attrs = open
-        ? ` data-pp-action="shared-event" data-pp-event="${esc(pt.eventId!)}" title="${esc(c.S.events.sharedLineOpen)}"`
+        ? ` data-pp-action="shared-event" data-pp-event="${esc(eventId)}" title="${esc(c.S.events.sharedLineOpen)}"`
         : '';
     return sharedWithLineHtml(line, {
         lead: c.S.events.sharedLine, more: c.S.events.sharedLineMore, esc, nameHtml, mark: !print, attrs, open,
@@ -3199,6 +3204,8 @@ function personPageBodyHtml(page: PersonPageData, opts: PersonPageOptions): stri
         ...(c.app && opts.mapPath ? { path: opts.mapPath } : {}),
         // The places manager keeps one position per name and no candidates: nothing to tell.
         ambiguous: new Set<string>(),
+        // A shared event's place keeps the person's own point; its row names the others (spec 085 §2g).
+        sharedLine: eventId => sharedLineFor(c, eventId, false),
     });
     if (places) c.placeKeys = placesSectionKeys(page, kidPlaces);
     // Without the section (at most one own place) the ancestors' path keeps its link on a row of its own.

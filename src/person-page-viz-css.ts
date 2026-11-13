@@ -110,6 +110,9 @@ export const PERSON_PAGE_MAP_CSS = `
 .pp-map-badge--dot { width: 10px; height: 10px; margin: 6px 5px 0; }
 .pp-map-name { font-weight: 600; }
 .pp-map-ev { color: var(--text-light); }
+/* A shared event's "with …" line under the place's row (spec 085 §2g). */
+.pp-map-with { display: block; }
+.pp-map-with .shared-line { margin-top: 2px; font-size: 13px; }
 .pp-map-amb { color: var(--text-faint); font-size: 13px; }
 .pp-map-row--nopos { color: var(--text-light); }
 .pp-map-note { margin-top: 8px !important; color: var(--text-faint); font-size: 13px; }

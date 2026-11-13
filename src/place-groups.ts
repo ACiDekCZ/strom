@@ -330,7 +330,31 @@ export function mergePlaceUsages(display: string, usages: readonly PlaceUsage[])
             houses.set(id, into);
         }
     }
-    return { display, variants, count, personIds: people, kinds, houses };
+    const merged: PlaceUsage = { display, variants, count, personIds: people, kinds, houses };
+    // The map's rows (spec 085 §2f): each spelling's own facts, a shared event once.
+    if (usages.some(u => u.shares)) {
+        const solo: NonNullable<PlaceUsage['solo']> = new Map();
+        const shares: NonNullable<PlaceUsage['shares']> = [];
+        for (const u of usages) {
+            for (const [id, map] of u.solo ?? u.houses) {
+                const into = solo.get(id) ?? new Map();
+                for (const [h, set] of map) {
+                    const hs = into.get(h) ?? new Set();
+                    set.forEach(k => hs.add(k));
+                    into.set(h, hs);
+                }
+                solo.set(id, into);
+            }
+            for (const row of u.shares ?? []) {
+                const same = shares.find(r => r.shareId === row.shareId && r.house === row.house);
+                if (same) { for (const id of row.personIds) if (!same.personIds.includes(id)) same.personIds.push(id); }
+                else shares.push({ ...row, personIds: [...row.personIds] });
+            }
+        }
+        merged.solo = solo;
+        merged.shares = shares;
+    }
+    return merged;
 }
 
 /**
