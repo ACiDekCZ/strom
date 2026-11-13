@@ -389,6 +389,8 @@ export const personEventsMethods = uiModule({
                 ...(p.personId ? { personId: p.personId } : {}),
                 ...(p.name?.trim() ? { name: p.name.trim() } : {}),
                 ...(p.note?.trim() ? { note: p.note.trim() } : {}),
+                // "Not this person" stays with the name, so the offer is not made again (spec 085 §6).
+                ...(!p.personId && p.linkRejected?.length ? { linkRejected: [...p.linkRejected] } : {}),
             }))
             .filter(p => p.personId || p.name);
     },
