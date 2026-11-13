@@ -479,3 +479,98 @@ test.describe('the 1280 fold boundary', () => {
         }
     });
 });
+
+/**
+ * The sample tree's toolbar carries the person in the centre with both depth
+ * steppers, the family line picker ("Stammlinien ▾", spec 039) and ⧉ (spec
+ * 079). In de at 1024 px the steppers ran out of the person's group under the
+ * line picker ("Nachkommen − 6 +" half covered), the person's name squeezed
+ * away: the tablet toolbar was not measured. Every language, the tablet band
+ * and the desktop, the Family and the Descendants view, in the app's fonts
+ * and in a wide one (CI's fonts are wider than a Mac's): no two of the
+ * toolbar's controls overlap, none runs out of the toolbar, the steppers'
+ * buttons take a click where they are drawn.
+ */
+test.describe('the sample tree\'s toolbar with the line picker and ⧉', () => {
+    const WIDE_FONT = '* { font-family: Verdana, "DejaVu Sans", sans-serif !important; }';
+    const FIT_WIDTHS = [1440, 1100, 1024, 960, 900, 800, 700, 641];
+    /** The line picker's "all lines" label: the language is the one asked for. */
+    const ALL_LINES: Record<string, string> = { 'de-DE': 'Stammlinien', 'cs-CZ': 'Rody', 'en-US': 'Lines', 'pl-PL': 'Rody' };
+
+    async function toolbarAudit(page: Page) {
+        return page.evaluate(() => {
+            const tb = document.querySelector('.toolbar') as HTMLElement;
+            const tr = tb.getBoundingClientRect();
+            const visible = (el: Element): boolean => {
+                const r = el.getBoundingClientRect();
+                return r.width >= 1 && r.height >= 1 && el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true });
+            };
+            const label = (el: Element): string =>
+                `${el.id ? `#${el.id}` : `.${String((el as HTMLElement).className).split(' ')[0] || el.tagName}`}"${(el.textContent ?? '').trim().slice(0, 16)}"`;
+            // The controls a person sees: buttons and fields whole, the texts beside them.
+            const controls = Array.from(tb.querySelectorAll('button, summary, input, strong, .focus-count, .depth-stepper-label, .depth-stepper-value, .app-wordmark'))
+                .filter(el => !el.parentElement?.closest('button, summary'))
+                .filter(el => !el.closest('.sp-rodpick-pop, #view-window-menu, .person-picker-dropdown, .tree-switcher-dropdown'))
+                .filter(visible);
+            const overlaps: string[] = [];
+            for (let i = 0; i < controls.length; i++) {
+                for (let j = i + 1; j < controls.length; j++) {
+                    if (controls[i].contains(controls[j]) || controls[j].contains(controls[i])) continue;
+                    const a = controls[i].getBoundingClientRect();
+                    const b = controls[j].getBoundingClientRect();
+                    if (a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1) {
+                        overlaps.push(`${label(controls[i])} × ${label(controls[j])}`);
+                    }
+                }
+            }
+            const outside = controls.filter(el => {
+                const r = el.getBoundingClientRect();
+                return r.left < tr.left - 1 || r.right > tr.right + 1;
+            }).map(label);
+            // A stepper's buttons take the click where they are drawn (the
+            // toolbar's on a tablet, the descendants badge's in that view).
+            const covered = Array.from(document.querySelectorAll('.depth-stepper-btn')).filter(visible).filter(btn => {
+                const r = btn.getBoundingClientRect();
+                const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+                return !top || !(top === btn || btn.contains(top));
+            }).map(btn => `${btn.closest('.depth-stepper')?.querySelector('.depth-stepper-label')?.textContent?.trim() ?? ''} ${btn.textContent}`);
+            const name = document.getElementById('toolbar-focus-name') as HTMLElement;
+            const nameShown = !visible(name.parentElement!) || name.getBoundingClientRect().width + 1 >= Math.min(name.scrollWidth, 60);
+            return {
+                overlaps, outside, covered, nameShown,
+                overflow: tb.scrollWidth - tb.clientWidth,
+                linePicker: visible(document.getElementById('view-rod-picker')!),
+            };
+        });
+    }
+
+    for (const locale of ['de-DE', 'cs-CZ', 'en-US', 'pl-PL']) test.describe(locale, () => {
+        test.use({ locale });
+        test('nothing overlaps or runs over from 1440 to 641 px', async ({ page }) => {
+            test.setTimeout(90_000);
+            await page.setViewportSize({ width: 1024, height: 800 });
+            await openApp(page);
+            await page.evaluate(() => window.Strom.UI.loadDemoTree());
+            await expect(page.locator('.person-card').first()).toBeVisible();
+            await expect(page.locator('#view-rod-picker .sp-rodpick-btn')).toContainText(ALL_LINES[locale]);
+            for (const font of ['app', 'wide']) {
+                if (font === 'wide') await page.addStyleTag({ content: WIDE_FONT });
+                for (const view of ['family', 'descendants'] as const) {
+                    await page.evaluate((v) => window.Strom.UI.setDisplayViewMode(v), view);
+                    for (const width of FIT_WIDTHS) {
+                        await page.setViewportSize({ width, height: 800 });
+                        await settleLayout(page, '.toolbar-focus', '#view-rod-picker');
+                        const a = await toolbarAudit(page);
+                        const at = `${locale} ${font} font, ${view} @${width}px`;
+                        expect(a.linePicker, `${at}: the line picker is in the toolbar`).toBe(true);
+                        expect(a.overlaps, `${at}: no two controls overlap`).toEqual([]);
+                        expect(a.outside, `${at}: no control runs out of the toolbar`).toEqual([]);
+                        expect(a.overflow, `${at}: the toolbar does not overflow`).toBeLessThanOrEqual(0);
+                        expect(a.covered, `${at}: the steppers take their clicks`).toEqual([]);
+                        expect(a.nameShown, `${at}: the person's name is not squeezed away`).toBe(true);
+                    }
+                }
+            }
+        });
+    });
+});

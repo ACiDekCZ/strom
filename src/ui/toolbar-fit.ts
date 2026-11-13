@@ -32,13 +32,32 @@
  *
  * The fixed 1180–1280 px rule in index.html (a research tree, ＋ alone) stays:
  * measured on top of it, the toolbar fits and the first class is not needed there.
+ *
+ * The tablet toolbar (641–1024 px, not a phone held sideways) carries the
+ * person in the centre with its two depth steppers, then the line picker
+ * ("Stammlinien ▾") and ⧉. Its widths are fixed by media queries too, but the
+ * labels differ by language and font: in de at 1024 px the steppers ran out
+ * of the person's group under the line picker. It is measured as well; too
+ * tight is the toolbar overflowing, the person's group not holding its own
+ * controls, the person's name squeezed below TABLET_NAME_MIN_PX, or the tree
+ * switcher's pill squeezed under the search field (its name may be cut
+ * shorter than its cap: the field keeps its room first). Its steps:
+ *
+ *   1. `.toolbar-focus-short`: the steppers' words → ↑ / ↓ (their group's
+ *      title and the buttons' accessible names stay; 641–900 px always);
+ *   2. `.toolbar-focus-nocount`: no "28 of 29 people" (641–768 px always);
+ *   3. `.toolbar-squeeze-3`: the search field → the magnifier, as step 5 above.
  */
 
-import { isDesktop } from '../breakpoints.js';
+import { isDesktop, isPhoneBar, isTablet } from '../breakpoints.js';
 
 /** The steps in their order (see above). */
 export const TOOLBAR_FIT_STEPS = ['toolbar-add-compact', 'toolbar-squeeze', 'toolbar-squeeze-2', 'toolbar-squeeze-name', 'toolbar-squeeze-3'] as const;
+/** The tablet steps in their order (see above). */
+export const TOOLBAR_TABLET_FIT_STEPS = ['toolbar-focus-short', 'toolbar-focus-nocount', 'toolbar-squeeze-3'] as const;
 const HYSTERESIS_PX = 16;
+/** The person's name on the tablet toolbar keeps at least this much (or its whole width when shorter). */
+export const TABLET_NAME_MIN_PX = 64;
 /** The search input never asks for more room than this (a long placeholder may be cut). */
 export const SEARCH_ROOM_CAP_PX = 120;
 
@@ -73,6 +92,24 @@ export function searchShortfall(toolbar: HTMLElement, reserve = 0): number {
     return Math.max(0, Math.ceil(need - room));
 }
 
+/**
+ * True when the tree switcher is squeezed below its own pill (which then
+ * slides under the search field), or (with `nameCap`) its tree name is cut
+ * shorter than the name's own cap.
+ */
+function switcherSqueezed(toolbar: HTMLElement, nameCap: boolean): boolean {
+    const switcher = toolbar.querySelector<HTMLElement>('.tree-switcher');
+    const pill = switcher?.querySelector<HTMLElement>('.tree-switcher-btn');
+    if (!switcher || !pill || pill.getClientRects().length === 0) return false;
+    if (pill.getBoundingClientRect().right > switcher.getBoundingClientRect().right + 0.5) return true;
+    const name = pill.querySelector<HTMLElement>('.tree-name');
+    if (!nameCap || !name) return false;
+    // Cut by the squeeze, not by its own max-width: shorter than both its text and its cap.
+    const cap = parseFloat(getComputedStyle(name).maxWidth);
+    const wanted = Number.isFinite(cap) ? Math.min(name.scrollWidth, cap) : name.scrollWidth;
+    return name.getBoundingClientRect().width + 1 < wanted;
+}
+
 /** True when the toolbar, as laid out now, does not hold its content. */
 function tooTight(toolbar: HTMLElement, reserve: number): boolean {
     const previous = toolbar.style.paddingRight;
@@ -80,39 +117,67 @@ function tooTight(toolbar: HTMLElement, reserve: number): boolean {
         const pad = parseFloat(getComputedStyle(toolbar).paddingRight) || 0;
         toolbar.style.paddingRight = `${pad + reserve}px`;
     }
-    let tight = toolbar.scrollWidth > toolbar.clientWidth + 0.5;
-    if (!tight) {
-        const switcher = toolbar.querySelector<HTMLElement>('.tree-switcher');
-        const pill = switcher?.querySelector<HTMLElement>('.tree-switcher-btn');
-        if (switcher && pill && pill.getClientRects().length > 0) {
-            tight = pill.getBoundingClientRect().right > switcher.getBoundingClientRect().right + 0.5;
-            const name = pill.querySelector<HTMLElement>('.tree-name');
-            if (!tight && name) {
-                // Cut by the squeeze, not by its own max-width: shorter than both its text and its cap.
-                const cap = parseFloat(getComputedStyle(name).maxWidth);
-                const wanted = Number.isFinite(cap) ? Math.min(name.scrollWidth, cap) : name.scrollWidth;
-                tight = name.getBoundingClientRect().width + 1 < wanted;
-            }
+    const tight = toolbar.scrollWidth > toolbar.clientWidth + 0.5 || switcherSqueezed(toolbar, true);
+    toolbar.style.paddingRight = previous;
+    return tight || searchShortfall(toolbar, reserve) > 0;
+}
+
+/**
+ * True when the tablet toolbar, as laid out now, does not hold its content:
+ * it overflows, the person's group is narrower than its controls (they run
+ * out of it under the line picker), the name is squeezed too short, or the
+ * tree switcher's pill slides under the search field.
+ */
+function tabletTooTight(toolbar: HTMLElement, reserve: number): boolean {
+    const previous = toolbar.style.paddingRight;
+    if (reserve > 0) {
+        const pad = parseFloat(getComputedStyle(toolbar).paddingRight) || 0;
+        toolbar.style.paddingRight = `${pad + reserve}px`;
+    }
+    // The tablet's tree name may be cut short (the search field keeps its room
+    // first); only its pill sliding under the field counts.
+    let tight = toolbar.scrollWidth > toolbar.clientWidth + 0.5 || switcherSqueezed(toolbar, false);
+    const focus = toolbar.querySelector<HTMLElement>('.toolbar-focus');
+    if (!tight && focus && focus.getClientRects().length > 0) {
+        const box = focus.getBoundingClientRect();
+        for (const child of Array.from(focus.children)) {
+            if (child.getClientRects().length === 0) continue;
+            const r = child.getBoundingClientRect();
+            if (r.width > 0 && (r.right > box.right + 0.5 || r.left < box.left - 0.5)) { tight = true; break; }
+        }
+        const name = focus.querySelector<HTMLElement>('#toolbar-focus-name');
+        if (!tight && name && name.getClientRects().length > 0 && name.textContent) {
+            tight = name.getBoundingClientRect().width + 1 < Math.min(name.scrollWidth, TABLET_NAME_MIN_PX);
         }
     }
     toolbar.style.paddingRight = previous;
-    return tight || searchShortfall(toolbar, reserve) > 0;
+    return tight;
+}
+
+/** Take the steps of `steps` the toolbar needs, measured one by one. */
+function fitSteps(toolbar: HTMLElement, steps: readonly string[], tight: (reserve: number) => boolean): void {
+    const had = steps.map(step => toolbar.classList.contains(step));
+    toolbar.classList.remove(...steps);
+    for (let i = 0; i < steps.length; i++) {
+        if (!tight(had[i] ? HYSTERESIS_PX : 0)) break;
+        toolbar.classList.add(steps[i]);
+    }
 }
 
 /** Re-measure the toolbar and take as many steps as it needs. */
 export function updateToolbarFit(): void {
     const toolbar = document.querySelector<HTMLElement>('.toolbar');
     if (!toolbar) return;
-    if (!isDesktop()) {
-        toolbar.classList.remove(...TOOLBAR_FIT_STEPS);
-        nameTooltip(toolbar);
-        return;
-    }
-    const had = TOOLBAR_FIT_STEPS.map(step => toolbar.classList.contains(step));
-    toolbar.classList.remove(...TOOLBAR_FIT_STEPS);
-    for (let i = 0; i < TOOLBAR_FIT_STEPS.length; i++) {
-        if (!tooTight(toolbar, had[i] ? HYSTERESIS_PX : 0)) break;
-        toolbar.classList.add(TOOLBAR_FIT_STEPS[i]);
+    const desktopOnly = TOOLBAR_FIT_STEPS.filter(step => !(TOOLBAR_TABLET_FIT_STEPS as readonly string[]).includes(step));
+    const tabletOnly = TOOLBAR_TABLET_FIT_STEPS.filter(step => !(TOOLBAR_FIT_STEPS as readonly string[]).includes(step));
+    if (isDesktop()) {
+        toolbar.classList.remove(...tabletOnly);
+        fitSteps(toolbar, TOOLBAR_FIT_STEPS, reserve => tooTight(toolbar, reserve));
+    } else if (isTablet() && !isPhoneBar()) {
+        toolbar.classList.remove(...desktopOnly);
+        fitSteps(toolbar, TOOLBAR_TABLET_FIT_STEPS, reserve => tabletTooTight(toolbar, reserve));
+    } else {
+        toolbar.classList.remove(...TOOLBAR_FIT_STEPS, ...TOOLBAR_TABLET_FIT_STEPS);
     }
     nameTooltip(toolbar);
 }
@@ -153,5 +218,9 @@ export function initToolbarFit(): void {
     new MutationObserver(() => { observeAll(); schedule(); }).observe(toolbar, { childList: true });
     const treeName = document.getElementById('current-tree-name');
     if (treeName) new MutationObserver(schedule).observe(treeName, { childList: true, characterData: true, subtree: true });
+    // The tablet person's group can be squeezed: a new name, count or label
+    // inside it need not change its size.
+    const focus = toolbar.querySelector('.toolbar-focus');
+    if (focus) new MutationObserver(schedule).observe(focus, { childList: true, characterData: true, subtree: true });
     updateToolbarFit();
 }

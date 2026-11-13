@@ -12559,9 +12559,10 @@
         /* Fit step 4: the tree's name capped shorter ("…"; the whole name in its tooltip). */
         .toolbar.toolbar-squeeze-name .tree-switcher-btn { max-width: min(96px, 100%); }
         .toolbar.toolbar-squeeze-name .tree-switcher-btn .tree-name { max-width: 56px; }
-        /* Fit step 5 (desktop only): the search field folds to the magnifier; open, it
-           lies over the toolbar's middle. A query that holds marks the magnifier. */
-        @media (min-width: 1025px) {
+        /* Fit step 5 (desktop; the tablet's step 3, never a phone either way up):
+           the search field folds to the magnifier; open, it lies over the
+           toolbar's middle. A query that holds marks the magnifier. */
+        @media (min-width: 1025px), (min-width: 641px) and (min-height: 501px) {
             .toolbar.toolbar-squeeze-3 .search-container { display: none; }
             .toolbar.toolbar-squeeze-3 .search-open-btn {
                 display: flex; align-items: center; justify-content: center; flex: none;
@@ -12577,7 +12578,7 @@
                 width: min(360px, 60vw); margin: 0; z-index: 3;
             }
         }
-        @media (min-width: 1025px) and (hover: hover) {
+        @media (min-width: 1025px) and (hover: hover), (min-width: 641px) and (min-height: 501px) and (hover: hover) {
             .toolbar.toolbar-squeeze-3 .search-open-btn:hover { background: var(--surface-2); border-color: var(--primary); }
         }
         .view-mode-segment button.active {
@@ -23188,6 +23189,16 @@
                and the search box (min-width 100px) yields first. */
             .toolbar .toolbar-focus { min-width: min-content; }
             .toolbar .toolbar-focus strong { min-width: 64px; max-width: 110px; }
+        }
+        /* Measured steps of the same kind above 900 / 768 px (src/ui/toolbar-fit.ts):
+           a language or font whose labels do not fit (de at 1024 px) gets the
+           ↑ / ↓ glyphs, then loses the count, instead of the steppers running
+           out of the person's group under the line picker. */
+        @media (min-width: 641px) and (max-width: 1024px) {
+            .toolbar.toolbar-focus-short .toolbar-focus .depth-stepper-label-full { display: none; }
+            .toolbar.toolbar-focus-short .toolbar-focus .depth-stepper-label-short { display: inline; font-size: 13px; }
+            .toolbar.toolbar-focus-short .toolbar-focus .focus-depth { gap: 8px; }
+            .toolbar.toolbar-focus-nocount .toolbar-focus .focus-count { display: none; }
         }
         @media (min-width: 641px) and (max-width: 768px) {
             .toolbar .toolbar-focus .focus-count { display: none; }
