@@ -20,6 +20,7 @@ import {
     getLiveMotion, setLiveMotion,
 } from '../live-follow-prefs.js';
 import { PersonId, TreeId } from '../types.js';
+import { pressOnToast } from '../sheet-toasts.js';
 import { uiModule } from './module.js';
 import type { UIClass } from './index.js';
 import { el, livePanelSectionState } from './research-ui.js';
@@ -688,7 +689,8 @@ function guard(layer: () => OpenLayer | null, close: (focusBack: boolean) => voi
     const onDown = (e: Event): void => {
         const l = layer();
         const t = e.target as HTMLElement;
-        if (!l || l.root.contains(t) || opts.ignore?.(t)) return;
+        // A press on a toast over the sheet (its Undo) leaves it open (src/sheet-toasts.ts)
+        if (!l || l.root.contains(t) || opts.ignore?.(t) || pressOnToast(t)) return;
         close(true);
     };
     document.addEventListener('keydown', onKey, true);

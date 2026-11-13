@@ -22,6 +22,7 @@
 
 import { noteOverviewSectionRows } from './overview-columns-ui.js';
 import { keepTableViews } from '../table-views-data.js';
+import { pressOnToast } from '../sheet-toasts.js';
 import { setResearchActionLabel, researchActionMark } from './research-open-mark.js';
 import { DataManager, migrateData } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
@@ -5176,6 +5177,8 @@ export const researchUiMethods = uiModule({
         const onDown = (e: Event): void => {
             // A sheet's backdrop closes it on its click (a press there alone would let the click fall through).
             if (backdrop && e.target === backdrop) return;
+            // A press on a toast over the sheet (its Undo) leaves it open: else the toast would glide away under it.
+            if (pressOnToast(e.target)) return;
             if (!menu.contains(e.target as Node)) this.closeLiveTaskMenu();
         };
         document.addEventListener('keydown', onKey, true);

@@ -14615,6 +14615,14 @@
         /* A bubble opened over a standing toast hides it while it is open (round 7 §52, src/bubble-layer.ts) */
         body > .toast-under-bubble,
         #focus-toast.toast-under-bubble { visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }
+        /* A bottom sheet over its backdrop (src/sheet-toasts.ts): a toast standing when it opens waits
+           hidden under it; one coming while it is open stands over the backdrop, above the sheet
+           (its bottom set there). */
+        body > .toast-under-sheet,
+        #focus-toast.toast-under-sheet { visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }
+        body > .toast.toast-over-sheet,
+        body > .undo-toast.toast-over-sheet,
+        #focus-toast.toast-over-sheet { z-index: 2550 !important; }
         .undo-toast > .undo-toast-sep { display: none; }
         /* A message's actions (its own, "Undo", "↩ Back") are one group (round 7 §55): never broken
            between them, the whole group goes to the next line where the row is too short, and a

@@ -34,6 +34,8 @@
  * once, as before.
  */
 
+import { watchSheets } from './sheet-toasts.js';
+
 export type ToastKind = 'message' | 'undo' | 'focus';
 
 /** A toast whose button can ride in a newer message. */
@@ -213,6 +215,8 @@ function fitPill(t: HTMLElement | null): void {
 
 function install(): void {
     if (watch || typeof MutationObserver === 'undefined' || typeof document === 'undefined') return;
+    // A bottom sheet hides the toasts standing under it; one coming while it is open stands above it
+    watchSheets();
     // A message coming or going (one put away, or its `.show` taken: on its way out)
     watch = new MutationObserver(() => reconcile());
     watch.observe(document.body, { childList: true });
