@@ -97,6 +97,7 @@ import { LIVE, edgeNotchSpot, EdgeSide, liveMotionOn, cardTrailOpacity } from '.
 import { getLiveMotion } from './live-follow-prefs.js';
 import { announceLive } from './ui/live-announce.js';
 import { MOBILE_MAX, MQ_PHONE_LANDSCAPE } from './breakpoints.js';
+import { updateBulkFamilySwitches } from './ui/bulk-family-ui.js';
 import { pillUnderFinger } from './card-tap.js';
 import { showFocusToast, hideFocusToast } from './focus-toast.js';
 import { openCardMenuFromKeyboard } from './ui/keyboard-access.js';
@@ -2666,6 +2667,8 @@ class TreeRendererClass {
             if (text) text.textContent = strings.focus.hideAllShown(n);
             el.setAttribute('aria-label', strings.focus.hideAllShownAria(n));
         }
+        // The focus bar's switch "Children & siblings" counts again after every render
+        updateBulkFamilySwitches();
     }
 
     /**

@@ -1,9 +1,11 @@
 /**
  * Children and siblings at once (src/bulk-family.ts): the run of a step
- * from the person menu (a) or the focus bar's switch (b), and the bubble
+ * from the person menu (a) or the focus bar's switch (b), the bubble
  * that asks first when the step adds more than BULK_CONFIRM_ABOVE people
  * ("{n} people will be added", about k screen widths, "Expand +n", "Only 2
- * ancestor generations +m", Cancel; Esc and a click beside it cancel).
+ * ancestor generations +m", Cancel; Esc and a click beside it cancel), and
+ * the switch itself (button.bulk-family after the depth steppers of the
+ * desktop focus bar and of the tablet toolbar; none on a phone).
  */
 
 import { TreeRenderer } from '../renderer.js';
@@ -147,4 +149,71 @@ export async function runBulkFamily(personId: PersonId, source: 'a' | 'b', ancho
     beforeStep?.();
     await TreeRenderer.showBulkFamily(personId, source, maxGeneration);
     return true;
+}
+
+/** The switch's state for the focus as last drawn (updateBulkFamilySwitches). */
+export type BulkSwitchState = 'offer' | 'on' | 'none';
+
+let switchInstalled = false;
+let switchBusy = false;
+
+/**
+ * Draw the focus bar's switch "Children & siblings" for the focus after a
+ * render: "+n" while the step adds n people (offer); ✓ while the focus's
+ * step stands with nothing more to add (on, aria-pressed, a click takes the
+ * step back); muted with nothing to add and no step (none, aria-disabled).
+ * Hidden outside the family view and without a focus. A phone has no switch
+ * (CSS): the person sheet's row does the same.
+ */
+export function updateBulkFamilySwitches(): void {
+    const buttons = document.querySelectorAll<HTMLButtonElement>('button.bulk-family');
+    if (buttons.length === 0) return;
+    installBulkFamilySwitch();
+    const focus = TreeRenderer.getFocusPersonId();
+    const family = TreeRenderer.getViewMode() === 'family';
+    const st = focus && family ? TreeRenderer.bulkFamilyState(focus) : null;
+    for (const btn of buttons) {
+        btn.hidden = !st;
+        if (!st) continue;
+        btn.dataset.state = st.state;
+        btn.setAttribute('aria-pressed', String(st.state === 'on'));
+        if (st.state === 'none') btn.setAttribute('aria-disabled', 'true');
+        else btn.removeAttribute('aria-disabled');
+        const count = btn.querySelector('.bulk-family-count');
+        if (count) count.textContent = st.state === 'offer' ? `+${st.n}` : '';
+        const label = btn.querySelector('.bulk-family-label');
+        if (label) label.textContent = strings.bulk.tree;
+        btn.title = st.state === 'on' ? strings.bulk.menuOff : st.state === 'none' ? strings.bulk.treeNone : strings.bulk.treeTip;
+        btn.setAttribute('aria-label', st.state === 'offer' ? strings.bulk.treeAria(st.n) : strings.bulk.tree);
+    }
+}
+
+/** One document-level click listener serves every switch; idempotent. */
+function installBulkFamilySwitch(): void {
+    if (switchInstalled || typeof document === 'undefined') return;
+    switchInstalled = true;
+    // A press on the switch while its bubble asks closes the bubble (a press
+    // beside it); the click that follows must not open it again. Registered
+    // before any bubble's own listener, so it sees the bubble still open.
+    let pressClosed = false;
+    document.addEventListener('pointerdown', e => {
+        pressClosed = isBulkBubbleOpen() && !!(e.target as Element | null)?.closest?.('button.bulk-family');
+    }, true);
+    document.addEventListener('click', e => {
+        const btn = (e.target as Element | null)?.closest?.('button.bulk-family') as HTMLButtonElement | null;
+        if (!btn) return;
+        const closed = pressClosed;
+        pressClosed = false;
+        // A click while the bubble asks (the press closed it, or a key): as Cancel
+        if (closed) return;
+        if (isBulkBubbleOpen()) { closeBulkBubble(); return; }
+        if (btn.dataset.state === 'none' || switchBusy) return;
+        const focus = TreeRenderer.getFocusPersonId();
+        if (!focus) return;
+        switchBusy = true;
+        void runBulkFamily(focus, 'b', btn, 'below').finally(() => {
+            switchBusy = false;
+            updateBulkFamilySwitches();
+        });
+    });
 }

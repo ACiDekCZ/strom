@@ -46,7 +46,9 @@
  *   1. `.toolbar-focus-short`: the steppers' words → ↑ / ↓ (their group's
  *      title and the buttons' accessible names stay; 641–900 px always);
  *   2. `.toolbar-focus-nocount`: no "28 of 29 people" (641–768 px always);
- *   3. `.toolbar-squeeze-3`: the search field → the magnifier, as step 5 above.
+ *   3. `.toolbar-squeeze-3`: the search field → the magnifier, as step 5 above;
+ *   4. `.toolbar-focus-nobulk`: no "Children & siblings" switch (the person
+ *      menu still offers the step).
  */
 
 import { isDesktop, isPhoneBar, isTablet } from '../breakpoints.js';
@@ -54,7 +56,7 @@ import { isDesktop, isPhoneBar, isTablet } from '../breakpoints.js';
 /** The steps in their order (see above). */
 export const TOOLBAR_FIT_STEPS = ['toolbar-add-compact', 'toolbar-squeeze', 'toolbar-squeeze-2', 'toolbar-squeeze-name', 'toolbar-squeeze-3'] as const;
 /** The tablet steps in their order (see above). */
-export const TOOLBAR_TABLET_FIT_STEPS = ['toolbar-focus-short', 'toolbar-focus-nocount', 'toolbar-squeeze-3'] as const;
+export const TOOLBAR_TABLET_FIT_STEPS = ['toolbar-focus-short', 'toolbar-focus-nocount', 'toolbar-squeeze-3', 'toolbar-focus-nobulk'] as const;
 const HYSTERESIS_PX = 16;
 /** The person's name on the tablet toolbar keeps at least this much (or its whole width when shorter). */
 export const TABLET_NAME_MIN_PX = 64;
@@ -221,6 +223,7 @@ export function initToolbarFit(): void {
     // The tablet person's group can be squeezed: a new name, count or label
     // inside it need not change its size.
     const focus = toolbar.querySelector('.toolbar-focus');
-    if (focus) new MutationObserver(schedule).observe(focus, { childList: true, characterData: true, subtree: true });
+    // The switch "Children & siblings" shows and hides by its `hidden` attribute.
+    if (focus) new MutationObserver(schedule).observe(focus, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['hidden'] });
     updateToolbarFit();
 }

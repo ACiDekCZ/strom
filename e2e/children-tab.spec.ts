@@ -459,10 +459,11 @@ test('two expansions: the focus bar hides both at once, every card back where it
     await expect(cardOf(page, second!).locator('.children-tab')).toHaveAttribute('aria-pressed', 'true');
     await expect(button).toHaveText('▾Hide shown · 2');
     await expect(button).toHaveAttribute('aria-label', 'Hide everything shown here (2 expansions)');
-    // The bar's order: after the depth steppers
+    // The bar's order: after the depth steppers and the switch "Children & siblings"
     expect(await page.evaluate(() => {
         const b = document.getElementById('hide-shown-children')!;
-        return b.previousElementSibling?.classList.contains('focus-depth') ?? false;
+        const bulk = b.previousElementSibling;
+        return (bulk?.classList.contains('bulk-family') ?? false) && (bulk?.previousElementSibling?.classList.contains('focus-depth') ?? false);
     })).toBe(true);
     await button.click();
     await page.mouse.move(5, 500);

@@ -235,3 +235,166 @@ test('phone: the person sheet has the row at 52px; a tap expands', async ({ page
     await expect.poll(async () => Object.keys(await screenRects(page)).length).toBeGreaterThan(before);
     expect(await page.evaluate(() => window.Strom.TreeRenderer.bulkFamilyState('focus' as never).state)).toBe('on');
 });
+
+// ---------- the focus bar's switch (b) ----------
+
+/** The switch the window shows (the desktop focus bar's or the tablet toolbar's). */
+const shownSwitch = (page: Page) => page.locator('button.bulk-family:visible');
+
+test('the switch after the depth steppers: "+n" adds n new cards in one layout, ✓ takes the step back', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const data = JSON.parse(readFileSync(join(process.cwd(), 'test', 'edge-ancestor-children.json'), 'utf-8'));
+    await setupData(page, data, 'focus', 6, 1);
+    await page.mouse.move(5, 500);
+    const sw = shownSwitch(page);
+    await expect(sw).toHaveCount(1);
+    // In the focus bar, right after the depth steppers
+    expect(await sw.evaluate(b => b.closest('#focus-controls') !== null && b.previousElementSibling?.classList.contains('focus-depth'))).toBe(true);
+    const n = await page.evaluate(() => window.Strom.TreeRenderer.bulkFamilyCount('focus' as never));
+    expect(n).toBeGreaterThan(0);
+    await expect(sw).toHaveAttribute('data-state', 'offer');
+    await expect(sw.locator('.bulk-family-label')).toHaveText('Children & siblings');
+    await expect(sw.locator('.bulk-family-count')).toHaveText(`+${n}`);
+    await expect(sw).toHaveAttribute('aria-pressed', 'false');
+    await expect(sw).toHaveAttribute('aria-label', `Children & siblings, ${n} people to add`);
+    await expect(sw).toHaveAttribute('title', 'Show the focus person’s children and the siblings of the focus person and of the ancestors in view');
+
+    const before = await screenRects(page);
+    const stepsBefore = await shownCount(page);
+    await spyLayouts(page);
+    await sw.click();
+    await expect(sw).toHaveAttribute('data-state', 'on');
+    await page.waitForTimeout(700);
+    const after = await screenRects(page);
+    expect(Object.keys(after).filter(id => !(id in before)).length).toBe(n);
+    expect(await layoutCalls(page)).toBe(1);
+    expect(await shownCount(page)).toBe(stepsBefore + 1);
+    expect(near(after.focus, before.focus)).toBe(true);
+    expect(overlaps(after)).toEqual([]);
+    expect(await page.evaluate(() => window.Strom.TreeRenderer.bulkStepOf('focus' as never)?.source)).toBe('b');
+    // On: ✓, pressed, its title says what a click does, no count
+    await expect(sw).toHaveAttribute('aria-pressed', 'true');
+    await expect(sw.locator('.bulk-family-check')).toBeVisible();
+    await expect(sw.locator('.bulk-family-count')).toHaveText('');
+    await expect(sw).toHaveAttribute('title', 'Collapse children and siblings');
+    // The focus's menu row reads the same step
+    await cardOf(page, 'focus').click();
+    await expect(page.locator('.context-menu [data-action="bulk-family-off"]')).toBeVisible();
+    await page.keyboard.press('Escape');
+
+    // A click takes the step back: the cards as before, the switch offers again
+    await sw.click();
+    await expect(sw).toHaveAttribute('data-state', 'offer');
+    await expect.poll(async () => Object.keys(await screenRects(page)).sort()).toEqual(Object.keys(before).sort());
+    await expect(sw.locator('.bulk-family-count')).toHaveText(`+${n}`);
+    expect(await shownCount(page)).toBe(stepsBefore);
+});
+
+test('the switch after another depth: a step, one more generation up, "+n" again with what the deeper view lacks', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await setupData(page, bigTree(2), 'q', 3, 1);
+    const sw = shownSwitch(page);
+    await expect(sw).toHaveAttribute('data-state', 'offer');
+    await sw.click();
+    await expect(sw).toHaveAttribute('data-state', 'on');
+    await page.locator('#focus-controls .depth-stepper').first().locator('.depth-stepper-btn[data-step="1"]').click();
+    await expect(sw).toHaveAttribute('data-state', 'offer');
+    const n = await page.evaluate(() => window.Strom.TreeRenderer.bulkFamilyCount('q' as never));
+    expect(n).toBeGreaterThan(0);
+    await expect(sw.locator('.bulk-family-count')).toHaveText(`+${n}`);
+    // One family of the step closed alone (its tab, a new step): the switch offers what is missing again
+    const one = await page.evaluate(() => [...(window.Strom.TreeRenderer as unknown as { bulkShownFor: Map<string, unknown> }).bulkShownFor.keys()][0]);
+    await page.evaluate(id => window.Strom.TreeRenderer.toggleChildrenShown(id as never), one);
+    await expect(sw).toHaveAttribute('data-state', 'offer');
+    const left = await page.evaluate(() => window.Strom.TreeRenderer.bulkFamilyCount('q' as never));
+    expect(left).toBeGreaterThan(0);
+    await expect(sw.locator('.bulk-family-count')).toHaveText(`+${left}`);
+});
+
+test('the switch with nothing to add and no step is muted and does nothing', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const lone = {
+        persons: { solo: { id: 'solo', firstName: 'Orvel', lastName: 'Quinnaby', gender: 'male', isPlaceholder: false, partnerships: [], parentIds: [], childIds: [] } },
+        partnerships: {},
+    };
+    await setupData(page, lone, 'solo', 3, 1);
+    const sw = shownSwitch(page);
+    await expect(sw).toHaveAttribute('data-state', 'none');
+    await expect(sw).toHaveAttribute('aria-disabled', 'true');
+    await expect(sw).toHaveAttribute('title', 'All children and siblings are already shown');
+    await expect(sw.locator('.bulk-family-count')).toHaveText('');
+    await sw.click({ force: true });
+    await page.waitForTimeout(300);
+    expect(await shownCount(page)).toBe(0);
+    await expect(sw).toHaveAttribute('data-state', 'none');
+});
+
+test('over 150 people the switch asks first in a bubble under it; Cancel leaves the view, "Expand +n" adds them', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await setupData(page, bigTree(14), 'q', 4, 1);
+    await page.mouse.move(5, 500);
+    const n = await page.evaluate(() => window.Strom.TreeRenderer.bulkFamilyCount('q' as never));
+    expect(n).toBeGreaterThan(150);
+    const sw = shownSwitch(page);
+    await expect(sw.locator('.bulk-family-count')).toHaveText(`+${n}`);
+    const before = Object.keys(await screenRects(page)).length;
+
+    await sw.click();
+    const bubble = page.locator('.bulk-bubble');
+    await expect(bubble).toBeVisible();
+    await expect(bubble.locator('.bulk-bubble-title')).toHaveText(`${n} people will be added`);
+    const sb = (await sw.boundingBox())!, bb = (await bubble.boundingBox())!;
+    expect(bb.y).toBeGreaterThanOrEqual(sb.y + sb.height);
+    await bubble.locator('[data-pick="cancel"]').click();
+    await expect(bubble).toHaveCount(0);
+    expect(Object.keys(await screenRects(page)).length).toBe(before);
+    await expect(sw).toHaveAttribute('data-state', 'offer');
+
+    // A second press on the switch closes the bubble and does not open it again
+    await sw.click();
+    await expect(bubble).toBeVisible();
+    await sw.click();
+    await expect(bubble).toHaveCount(0);
+    await page.waitForTimeout(200);
+    await expect(bubble).toHaveCount(0);
+
+    await sw.click();
+    await bubble.locator('[data-pick="all"]').click();
+    await expect(sw).toHaveAttribute('data-state', 'on');
+    await expect.poll(async () => Object.keys(await screenRects(page)).length).toBe(before + n);
+});
+
+test('tablet: the switch in the toolbar is the icon and "+n" with a 44px target; a phone has none', async ({ page }) => {
+    await page.setViewportSize({ width: 1024, height: 768 });
+    const data = JSON.parse(readFileSync(join(process.cwd(), 'test', 'edge-ancestor-children.json'), 'utf-8'));
+    await setupData(page, data, 'focus', 6, 1);
+    const n = await page.evaluate(() => window.Strom.TreeRenderer.bulkFamilyCount('focus' as never));
+    expect(n).toBeGreaterThan(0);
+    const sw = shownSwitch(page);
+    await expect(sw).toHaveCount(1);
+    expect(await sw.evaluate(b => b.closest('.toolbar-focus') !== null)).toBe(true);
+    await expect(sw.locator('.bulk-family-icon')).toBeVisible();
+    await expect(sw.locator('.bulk-family-label')).toBeHidden();
+    await expect(sw.locator('.bulk-family-count')).toHaveText(`+${n}`);
+    await expect(sw).toHaveAttribute('aria-label', `Children & siblings, ${n} people to add`);
+    await expect(sw).toHaveAttribute('title', 'Show the focus person’s children and the siblings of the focus person and of the ancestors in view');
+    const box = (await sw.boundingBox())!;
+    expect(box.width).toBeGreaterThanOrEqual(44);
+    expect(await sw.evaluate(b => parseFloat(getComputedStyle(b, '::before').height) || 0)).toBeGreaterThanOrEqual(44);
+    // The toolbar holds it: nothing runs past the window or out of the person's group
+    expect(await page.evaluate(() => {
+        const t = document.querySelector<HTMLElement>('.toolbar')!;
+        const g = document.querySelector<HTMLElement>('.toolbar .toolbar-focus')!.getBoundingClientRect();
+        const b = document.querySelector<HTMLElement>('.toolbar button.bulk-family')!.getBoundingClientRect();
+        return t.scrollWidth <= t.clientWidth && b.right <= g.right + 0.5;
+    })).toBe(true);
+    await sw.click();
+    await expect(sw).toHaveAttribute('data-state', 'on');
+    await expect(sw.locator('.bulk-family-icon')).toBeHidden();
+    await expect(sw.locator('.bulk-family-check')).toBeVisible();
+
+    for (const [w, h] of [[390, 844], [844, 390]] as const) {
+        await page.setViewportSize({ width: w, height: h });
+        await expect(shownSwitch(page)).toHaveCount(0);
+    }
+});

@@ -12982,6 +12982,57 @@
         }
         .hide-shown-children[hidden],
         .hide-shown-children-chip[hidden] { display: none !important; }
+        /* Children and siblings at once (b, src/ui/bulk-family-ui.ts): the
+           switch after the depth steppers. "Children & siblings +n" while the
+           step adds people; ✓ on a soft primary while the focus's step stands
+           with nothing more to add; muted with nothing to add. The tablet
+           toolbar shows the icon and "+n" (✓ alone when on); a phone and a
+           phone held sideways have no switch (the person sheet's row). */
+        button.bulk-family {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            flex-shrink: 0;
+            height: 28px;
+            padding: 0 11px;
+            box-sizing: border-box;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--surface);
+            color: var(--text);
+            font-family: var(--font-sans);
+            font-size: 13px;
+            font-weight: 500;
+            line-height: 1;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+        }
+        .bulk-family[hidden] { display: none !important; }
+        .bulk-family-icon, .bulk-family-check { display: none; flex: none; }
+        .bulk-family-count { color: var(--primary); font-weight: 600; font-variant-numeric: tabular-nums; }
+        .bulk-family-count:empty { display: none; }
+        .bulk-family[data-state="on"] { background: var(--primary-soft); border-color: var(--primary); color: var(--primary-dark); }
+        .bulk-family[data-state="on"] .bulk-family-check { display: block; }
+        .bulk-family[data-state="none"] { color: var(--text-faint); cursor: default; }
+        .bulk-family:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        /* Under the pointer: a primary hairline; the fill stays (the toolbar's generic button hover paints it green) */
+        @media (hover: hover) {
+            .toolbar button.bulk-family:hover, button.bulk-family:hover { background: var(--surface); }
+            .toolbar button.bulk-family[data-state="on"]:hover { background: var(--primary-soft); }
+            button.bulk-family:not([data-state="none"]):hover { border-color: var(--primary); }
+        }
+        @media (min-width: 641px) and (max-width: 1024px) {
+            button.bulk-family { position: relative; height: 36px; min-width: 44px; padding: 0 10px; }
+            /* A 44px hit area over the 36px button */
+            .bulk-family::before { content: ''; position: absolute; inset: -5px -1px; }
+            .bulk-family-label { display: none; }
+            .bulk-family:not([data-state="on"]) .bulk-family-icon { display: block; }
+        }
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .bulk-family { display: none !important; }
+        }
         /* Tablet, phone and a phone held sideways: the chip, not the bar's button. */
         @media (max-width: 1024px) {
             .hide-shown-children { display: none !important; }
@@ -24393,6 +24444,7 @@
             .toolbar.toolbar-focus-short .toolbar-focus .depth-stepper-label-short { display: inline; font-size: 13px; }
             .toolbar.toolbar-focus-short .toolbar-focus .focus-depth { gap: 8px; }
             .toolbar.toolbar-focus-nocount .toolbar-focus .focus-count { display: none; }
+            .toolbar.toolbar-focus-nobulk .toolbar-focus .bulk-family { display: none !important; }
         }
         @media (min-width: 641px) and (max-width: 768px) {
             .toolbar .toolbar-focus .focus-count { display: none; }
@@ -28796,6 +28848,8 @@
                     </select>
                 </div>
             </div>
+            <!-- Children and siblings at once (b): "+n" / on ✓ / muted; filled after every render (src/ui/bulk-family-ui.ts) -->
+            <button type="button" class="bulk-family" hidden aria-pressed="false"><svg class="bulk-family-icon" width="18" height="14" viewBox="0 0 18 14" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="6" y="1" width="6" height="4.5" rx="1"/><rect x="0.7" y="8.5" width="4.6" height="4.5" rx="1" stroke-dasharray="2 1.4"/><rect x="6.7" y="8.5" width="4.6" height="4.5" rx="1"/><rect x="12.7" y="8.5" width="4.6" height="4.5" rx="1" stroke-dasharray="2 1.4"/><path d="M9 5.5v3"/></svg><svg class="bulk-family-check" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3.2 3L13 4.5"/></svg><span class="bulk-family-label"></span><span class="bulk-family-count"></span></button>
         </div>
 
         <!-- A build of the family pages in the background (1102 §7.2): its progress, then "ready"; opens the dialog -->
@@ -29211,6 +29265,8 @@
                 </select>
             </div>
         </div>
+        <!-- Children and siblings at once (b): "+n" / on ✓ / muted; filled after every render (src/ui/bulk-family-ui.ts) -->
+        <button type="button" class="bulk-family" hidden aria-pressed="false"><svg class="bulk-family-icon" width="18" height="14" viewBox="0 0 18 14" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="6" y="1" width="6" height="4.5" rx="1"/><rect x="0.7" y="8.5" width="4.6" height="4.5" rx="1" stroke-dasharray="2 1.4"/><rect x="6.7" y="8.5" width="4.6" height="4.5" rx="1"/><rect x="12.7" y="8.5" width="4.6" height="4.5" rx="1" stroke-dasharray="2 1.4"/><path d="M9 5.5v3"/></svg><svg class="bulk-family-check" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3.2 3L13 4.5"/></svg><span class="bulk-family-label"></span><span class="bulk-family-count"></span></button>
         <!-- Children shown in place (the card's children tab): hide them all at once; filled by the renderer -->
         <button type="button" id="hide-shown-children" class="hide-shown-children" hidden onclick="window.Strom.TreeRenderer.hideAllShownChildren()"><span class="hsc-glyph" aria-hidden="true">▾</span><span class="hsc-text"></span></button>
         <button type="button" class="focus-clear" onclick="window.Strom.ZoomPan.fitToScreen()" data-i18n-title="focus.showAll" data-i18n-aria-label="focus.showAll">&times;</button>
