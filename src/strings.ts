@@ -5156,6 +5156,12 @@ const stringsEN = {
         switchToNewTree: 'Switch to the new tree?',
         stats: (merged: number, added: number) =>
             `${merged} merged, ${nEn(added, 'new person', 'new people')} added`,
+        /** A shared event both merged records are in (spec 085 §7). */
+        sharedOnce: 'Once – both are in it.',
+        /** A shared event one record is in while the other has the same event of its own. */
+        sharedAttach: (n: number) => `Attach to the shared event (${nEn(n, 'person', 'people')}) – the own copy matches`,
+        /** The tree merge's summary: shared events found in both trees and joined. */
+        sharedJoined: (n: number) => `Shared events: ${n} joined`,
         noItems: 'No items to display',
         newPerson: 'New',
         selectExisting: '-- Select existing person --',
@@ -5263,6 +5269,8 @@ const stringsEN = {
     // Person merge (duplicate resolution)
     personMerge: {
         title: 'Merge people',
+        /** The shared events of the merged person (spec 085 §7). */
+        sharedTitle: 'Shared events after the merge',
         keepPerson: 'Keep',
         mergeWith: 'Merge with',
         selectPerson: 'Select person to merge with...',
@@ -14135,6 +14143,9 @@ const stringsCZ: StringsType = {
         switchToNewTree: 'Přepnout na nový strom?',
         stats: (merged: number, added: number) =>
             `Sloučeno: ${nCs(merged, 'osoba', 'osoby', 'osob')}, přidáno: ${nCs(added, 'nová osoba', 'nové osoby', 'nových osob')}`,
+        sharedOnce: 'Jednou – je u obou.',
+        sharedAttach: (n: number) => `Připojit ke společné události (${nCs(n, 'osoba', 'osoby', 'osob')}) – vlastní kopie se shoduje`,
+        sharedJoined: (n: number) => `Sdílené události: ${n} spojeno`,
         noItems: 'Žádné položky k zobrazení',
         newPerson: 'Nová',
         selectExisting: '-- Vybrat existující osobu --',
@@ -14242,6 +14253,7 @@ const stringsCZ: StringsType = {
     // Person merge (duplicate resolution)
     personMerge: {
         title: 'Sloučit osoby',
+        sharedTitle: 'Sdílené události po sloučení',
         keepPerson: 'Ponechat',
         mergeWith: 'Sloučit s',
         selectPerson: 'Vybrat osobu ke sloučení...',
@@ -23026,6 +23038,9 @@ const stringsDE: StringsType = {
         switchToNewTree: 'Zum neuen Stammbaum wechseln?',
         stats: (merged: number, added: number) =>
             `${nDe(merged, 'Person', 'Personen')} zusammengeführt, ${nDe(added, 'neue Person', 'neue Personen')} hinzugefügt`,
+        sharedOnce: 'Einmal – beide sind dabei.',
+        sharedAttach: (n: number) => `Dem gemeinsamen Ereignis anschließen (${nDe(n, 'Person', 'Personen')}) – die eigene Kopie stimmt überein`,
+        sharedJoined: (n: number) => `Gemeinsame Ereignisse: ${n} zusammengeführt`,
         noItems: 'Keine Einträge zum Anzeigen',
         newPerson: 'Neu',
         selectExisting: '-- Vorhandene Person auswählen --',
@@ -23121,6 +23136,7 @@ const stringsDE: StringsType = {
     // Person merge (duplicate resolution)
     personMerge: {
         title: 'Personen zusammenführen',
+        sharedTitle: 'Gemeinsame Ereignisse nach dem Zusammenführen',
         keepPerson: 'Behalten',
         mergeWith: 'Zusammenführen mit',
         selectPerson: 'Person zum Zusammenführen auswählen...',

@@ -548,6 +548,8 @@ export class UIClass {
     personMergeOtherId: PersonId | null = null;
     personMergeFieldResolutions: Map<string, 'keep' | 'other'> = new Map();
     personMergePartnershipResolutions: Map<PartnershipId, 'merge' | 'keep_both'> = new Map();
+    /** Shares whose matching own event the person merge keeps apart (unticked). */
+    personMergeShareDetach: Set<string> = new Set();
 
     // Import-as-new-tree flag
     importToCurrentTree: boolean = false;

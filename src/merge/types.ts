@@ -152,6 +152,8 @@ export interface MergeResult {
         added: number;         // New persons added
         skipped: number;       // Incoming persons skipped (neither merged nor added)
         partnerships: number;  // Total partnerships in result
+        /** Incoming shared events joined with one the tree holds (spec 085 §7). */
+        sharedJoined?: number;
     };
     backupKey?: string;        // localStorage key for backup
     errors?: string[];

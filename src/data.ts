@@ -78,6 +78,7 @@ import {
     SharedEventCommon, SharedEventCommonField, SharedEventEdit, SharedEventSaveResult, SharedEventIndex, PersonSharedEvent,
     SHARED_EVENT_COMMON_FIELDS, applyEventFields, buildSharedEventIndex, cleanEventShares, commonFieldsOf, newShareIdFor,
     personSharedEvents, shareCopiesOf, tidyShares,
+    applyPersonMergeShares, personMergeShares, PersonMergeShareChoices,
 } from './shared-events.js';
 import { eventIsShareable } from './events.js';
 
@@ -4486,7 +4487,8 @@ class DataManagerClass {
         keepId: PersonId,
         removeId: PersonId,
         resolvedFields: { [key: string]: string | undefined },
-        partnershipResolutions: Map<PartnershipId, 'merge' | 'keep_both'>
+        partnershipResolutions: Map<PartnershipId, 'merge' | 'keep_both'>,
+        sharedChoices: PersonMergeShareChoices = {},
     ): boolean {
         const keepPerson = this.data.persons[keepId];
         const removePerson = this.data.persons[removeId];
@@ -4494,6 +4496,9 @@ class DataManagerClass {
         if (!keepPerson || !removePerson || keepId === removeId) {
             return false;
         }
+        // Shared events both are in, or one is in while the other has the same
+        // event of its own (spec 085 §7) — read before anything moves.
+        const shareRows = personMergeShares(this.data, keepId, removeId);
 
         this.beginMutation();
 
@@ -4729,6 +4734,9 @@ class DataManagerClass {
                 if (!seen.has(ev.id)) keepPerson.events.push(ev);
             }
         }
+        // The merged person is in a shared event once; an own record of the
+        // same event joins it unless the merge was told to keep it apart.
+        const touchedShares = applyPersonMergeShares(this.data, keepPerson, shareRows, sharedChoices);
         // A citation only the removed person had keeps its own QUAY.
         for (const field of PERSON_CITATION_FIELDS) unionCitations(keepPerson, removePerson, field);
         if (removePerson.attachments && removePerson.attachments.length > 0) {
@@ -4801,7 +4809,9 @@ class DataManagerClass {
         // 7. Delete the removed person
         delete this.data.persons[removeId];
         // A link of an own record of a part at a couple's event merged away goes (spec 085).
-        tidyShares(this.data, []);
+        // A share the merge left with one copy (the two persons were its only
+        // ones) is an ordinary event.
+        tidyShares(this.data, touchedShares);
 
         // Person merge has its own completion toast — no Undo toast.
         this.commitMutation(strings.undo.mergePersons(keptName), true);

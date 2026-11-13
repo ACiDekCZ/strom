@@ -43,6 +43,10 @@ import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
 import { shownNameOrEmpty, fitNameHtml } from '../person-name.js';
+import { personMergeShares, type PersonMergeShareRow } from '../shared-events.js';
+import { lifeEventLabel } from '../person-sources.js';
+import { formatFlexDate } from '../dates.js';
+import { sharedEventMarkSvg } from '../icons.js';
 
 export const mergeUiMethods = uiModule({
     // ---- PENDING MERGES ----
@@ -198,6 +202,9 @@ export const mergeUiMethods = uiModule({
         this.personMergeOtherId = null;
         this.personMergeFieldResolutions.clear();
         this.personMergePartnershipResolutions.clear();
+        this.personMergeShareDetach.clear();
+        const sharedSection = document.getElementById('person-merge-shared');
+        if (sharedSection) sharedSection.hidden = true;
 
         const modal = document.getElementById('person-merge-modal');
         const keepDisplay = document.getElementById('person-merge-keep');
@@ -262,6 +269,7 @@ export const mergeUiMethods = uiModule({
         this.personMergeOtherId = otherId;
         this.personMergeFieldResolutions.clear();
         this.personMergePartnershipResolutions.clear();
+        this.personMergeShareDetach.clear();
 
         const previewSection = document.getElementById('person-merge-preview');
         const otherDisplay = document.getElementById('person-merge-other');
@@ -383,13 +391,75 @@ export const mergeUiMethods = uiModule({
             partnershipSection.style.display = 'none';
         }
 
+        // Shared events: in one once, an own record joining one (spec 085 §7).
+        const shareRows = this.renderPersonMergeShares(keepPerson.id, otherPerson.id);
+
         // Show no conflicts message if applicable
         if (noConflictsSection) {
-            noConflictsSection.style.display = fieldConflicts.length === 0 && partnershipConflicts.length === 0 ? 'block' : 'none';
+            const ageChoices = shareRows.filter(r => r.ageDiffers).length;
+            noConflictsSection.style.display = fieldConflicts.length === 0 && partnershipConflicts.length === 0 && ageChoices === 0 ? 'block' : 'none';
         }
 
         // Enable merge button
         if (mergeBtn) mergeBtn.disabled = false;
+    },
+
+    /**
+     * The person merge's shared events (7a): each with its date and place or
+     * age, a note for one both records are in (with the choice of the age
+     * when theirs differ) and a checkbox, ticked, for an own record joining
+     * one. Returns the rows shown.
+     */
+    renderPersonMergeShares(keepId: PersonId, otherId: PersonId): PersonMergeShareRow[] {
+        const section = document.getElementById('person-merge-shared');
+        const list = document.getElementById('person-merge-shared-list');
+        const rows = personMergeShares(DataManager.getData(), keepId, otherId);
+        if (!section || !list) return rows;
+        section.hidden = rows.length === 0;
+        const esc = (t: string) => this.escapeHtml(t);
+        list.innerHTML = rows.map(row => {
+            const ev = row.event;
+            const meta = [formatFlexDate(ev.date), row.kind === 'once' ? (ev.age ?? '').trim() : (ev.place ?? '').trim()]
+                .filter(Boolean).map(esc).join(' · ');
+            const head = `<div class="person-merge-shared-head"><span class="person-merge-shared-title">${esc(lifeEventLabel(ev))}</span>`
+                + (meta ? `<span class="person-merge-shared-meta">${meta}</span>` : '') + `</div>`;
+            if (row.kind === 'attach') {
+                return `<div class="person-merge-shared-row" data-share="${esc(row.shareId)}">${head}`
+                    + `<label class="person-merge-shared-check"><input type="checkbox" checked data-share="${esc(row.shareId)}">`
+                    + `<span>${esc(strings.merge.sharedAttach(row.persons))}</span></label></div>`;
+            }
+            const keepAge = (ev.age ?? '').trim();
+            const otherAge = (row.other.age ?? '').trim();
+            const ages = !row.ageDiffers ? '' : `<div class="person-merge-conflict-options" data-share-age="${esc(row.shareId)}">`
+                + `<div class="person-merge-conflict-label">${esc(strings.fields.age)}</div>`
+                + `<label class="person-merge-conflict-option selected" data-value="keep"><input type="radio" name="share-age-${esc(row.shareId)}" value="keep" checked>`
+                + `<span class="person-merge-conflict-value">${esc(keepAge)}</span><span class="person-merge-conflict-badge">${esc(strings.personMerge.keepValue)}</span></label>`
+                + `<label class="person-merge-conflict-option" data-value="other"><input type="radio" name="share-age-${esc(row.shareId)}" value="other">`
+                + `<span class="person-merge-conflict-value">${esc(otherAge)}</span><span class="person-merge-conflict-badge">${esc(strings.personMerge.useOther)}</span></label>`
+                + `</div>`;
+            return `<div class="person-merge-shared-row" data-share="${esc(row.shareId)}">${head}`
+                + `<span class="person-merge-shared-note">${sharedEventMarkSvg(16)}<span>${esc(strings.merge.sharedOnce)}</span></span>${ages}</div>`;
+        }).join('');
+        list.querySelectorAll<HTMLInputElement>('input[type="checkbox"][data-share]').forEach(box => {
+            box.addEventListener('change', () => {
+                const id = box.dataset.share!;
+                if (box.checked) this.personMergeShareDetach.delete(id);
+                else this.personMergeShareDetach.add(id);
+            });
+        });
+        list.querySelectorAll<HTMLElement>('[data-share-age]').forEach(group => {
+            const key = `sharedAge:${group.dataset.shareAge}`;
+            this.personMergeFieldResolutions.set(key, 'keep');
+            group.querySelectorAll<HTMLInputElement>('input[type="radio"]').forEach(radio => {
+                radio.addEventListener('change', () => {
+                    this.personMergeFieldResolutions.set(key, radio.value as 'keep' | 'other');
+                    group.querySelectorAll('.person-merge-conflict-option').forEach(opt => {
+                        opt.classList.toggle('selected', opt.getAttribute('data-value') === radio.value);
+                    });
+                });
+            });
+        });
+        return rows;
     },
 
     /**
@@ -556,7 +626,15 @@ export const mergeUiMethods = uiModule({
 
         // Build resolved field values
         const resolvedFields: { [key: string]: string | undefined } = {};
+        // The age of a shared event both records are in, as chosen.
+        const ages = new Map<string, string>();
+        const shareRows = personMergeShares(DataManager.getData(), this.personMergeKeepId, this.personMergeOtherId);
         for (const [field, resolution] of this.personMergeFieldResolutions) {
+            if (field.startsWith('sharedAge:')) {
+                const row = shareRows.find(r => r.kind === 'once' && `sharedAge:${r.shareId}` === field);
+                if (row && resolution === 'other') ages.set(row.shareId, row.other.age ?? '');
+                continue;
+            }
             if (resolution === 'other') {
                 const otherPerson = DataManager.getPerson(this.personMergeOtherId);
                 if (otherPerson) {
@@ -570,7 +648,8 @@ export const mergeUiMethods = uiModule({
             this.personMergeKeepId,
             this.personMergeOtherId,
             resolvedFields,
-            this.personMergePartnershipResolutions
+            this.personMergePartnershipResolutions,
+            { detach: new Set(this.personMergeShareDetach), ages },
         );
 
         if (success) {

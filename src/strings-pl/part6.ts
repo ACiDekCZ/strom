@@ -43,6 +43,9 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         switchToNewTree: 'Przełączyć na nowe drzewo?',
         stats: (merged: number, added: number) =>
             `Scalono: ${nPl(merged, 'osoba', 'osoby', 'osób')}, dodano: ${nPl(added, 'nowa osoba', 'nowe osoby', 'nowych osób')}`,
+        sharedOnce: 'Raz – obie osoby w nim są.',
+        sharedAttach: (n: number) => `Dołącz do wspólnego wydarzenia (${nPl(n, 'osoba', 'osoby', 'osób')}) – własna kopia jest zgodna`,
+        sharedJoined: (n: number) => `Wspólne wydarzenia: ${n} połączono`,
         noItems: 'Brak pozycji do wyświetlenia',
         newPerson: 'Nowa',
         selectExisting: '-- Wybierz istniejącą osobę --',
@@ -150,6 +153,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
     // Person merge (duplicate resolution)
     personMerge: {
         title: 'Scalanie osób',
+        sharedTitle: 'Wspólne wydarzenia po scaleniu',
         keepPerson: 'Zachowaj',
         mergeWith: 'Scal z',
         selectPerson: 'Wybierz osobę do scalenia...',

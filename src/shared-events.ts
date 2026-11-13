@@ -17,7 +17,7 @@
 import { eventIsShareable } from './events.js';
 import { yearOf } from './dates.js';
 import {
-    LifeEvent, LifeEventType, ParticipantRole, PARTICIPANT_ROLES, PersonId, PartnershipId, StromData,
+    EventParticipant, LifeEvent, LifeEventType, Person, ParticipantRole, PARTICIPANT_ROLES, PersonId, PartnershipId, StromData,
 } from './types.js';
 
 // ==================== FORMAT ====================
@@ -511,4 +511,193 @@ export function tidyShares(data: StromData, shareIds?: Iterable<string>): number
         }
     }
     return changed;
+}
+
+// ==================== ONE PERSON, TWO COPIES ====================
+
+/** Whether two participants are the same entry (the same person or name, the same role). */
+function sameParticipant(a: EventParticipant, b: EventParticipant): boolean {
+    if (a.role !== b.role) return false;
+    if (a.personId || b.personId) return a.personId === b.personId;
+    return (a.name ?? '').trim().toLocaleLowerCase() === (b.name ?? '').trim().toLocaleLowerCase();
+}
+
+/**
+ * What `into` lacks of its own fields it takes from `from`, another record of
+ * the same event at the same person: the age, the role, the research's status
+ * and any other field of its own `into` has none of; participants it does not
+ * list yet. The common fields stay (they are the shared event's).
+ */
+export function absorbCopy(into: LifeEvent, from: LifeEvent): void {
+    const rec = into as unknown as Record<string, unknown>;
+    const common = new Set<string>(SHARED_EVENT_COMMON_FIELDS);
+    for (const [k, v] of Object.entries(from)) {
+        if (k === 'id' || k === 'shareId' || k === 'participants' || common.has(k) || v === undefined) continue;
+        const has = rec[k];
+        if (has === undefined || (typeof has === 'string' && !has.trim())) rec[k] = structuredClone(v);
+    }
+    for (const part of from.participants ?? []) {
+        const list = (into.participants ??= []);
+        if (!list.some(q => sameParticipant(q, part))) list.push(structuredClone(part));
+    }
+}
+
+/**
+ * A person holding two copies of one shared event (two records of the person
+ * merged here, in a tree merge or in the research): copies whose common
+ * fields are the same are one — the first stays and takes what it lacks of
+ * the other (absorbCopy); copies that differ stay (the data check tells them,
+ * sharedCopiesDiffer). Returns the events that went.
+ */
+export function joinSameShareCopies(person: Person): LifeEvent[] {
+    const events = person.events ?? [];
+    const gone: LifeEvent[] = [];
+    const kept: LifeEvent[] = [];
+    for (const ev of events) {
+        const twin = ev.shareId ? kept.find(k => k.shareId === ev.shareId && sameCommonFields(k, ev)) : undefined;
+        if (twin) {
+            absorbCopy(twin, ev);
+            gone.push(ev);
+        } else {
+            kept.push(ev);
+        }
+    }
+    if (gone.length > 0) person.events = kept;
+    return gone;
+}
+
+/** An event of a person merge's preview (spec 085 §7, 7a). */
+export interface PersonMergeShareRow {
+    /**
+     * 'once': both persons are in the same shared event, the merged person is
+     * in it once; 'attach': one is in it and the other has the same event of
+     * its own (type, date, place): that copy can go and the merged person is
+     * in the shared event.
+     */
+    kind: 'once' | 'attach';
+    shareId: string;
+    /** The copy of the shared event the merged person keeps. */
+    event: LifeEvent;
+    /** 'once': the other person's copy; 'attach': the own event that goes. */
+    other: LifeEvent;
+    /** Whose `other` is (the person kept or the one merged into it). */
+    otherOf: PersonId;
+    /** The persons in the shared event now. */
+    persons: number;
+    /** 'once': both copies give an age and they differ (the merge asks which). */
+    ageDiffers: boolean;
+}
+
+/** The type, date and place of an event as a person merge matches an own event to a shared one. */
+function attachKey(ev: LifeEvent): string | null {
+    const date = (ev.date ?? '').trim();
+    const place = (ev.place ?? '').trim().toLocaleLowerCase();
+    if (!date && !place) return null;
+    return [ev.type, ev.type === 'custom' ? (ev.customLabel ?? '').trim().toLocaleLowerCase() : '', date, place].join('\u0000');
+}
+
+/**
+ * The shared events of a person merge (`removeId` merged into `keepId`):
+ * those both are in (the merged person is in it once) and those one is in
+ * while the other has the same event of its own — one such own event, of
+ * the same type, date and place (a date or a place at least). In the order
+ * of the kept person's events, then the other's.
+ */
+export function personMergeShares(data: StromData, keepId: PersonId, removeId: PersonId): PersonMergeShareRow[] {
+    const keep = data.persons[keepId];
+    const remove = data.persons[removeId];
+    if (!keep || !remove || keepId === removeId) return [];
+    const firstCopies = (events: readonly LifeEvent[]): Map<string, LifeEvent> => {
+        const out = new Map<string, LifeEvent>();
+        for (const ev of events) if (ev.shareId && !out.has(ev.shareId)) out.set(ev.shareId, ev);
+        return out;
+    };
+    const keepCopies = firstCopies(keep.events ?? []);
+    const removeCopies = firstCopies(remove.events ?? []);
+    const personsIn = (shareId: string): number => new Set(shareCopiesOf(data, shareId).map(c => c.personId)).size;
+    const rows: PersonMergeShareRow[] = [];
+    const used = new Set<LifeEvent>();
+    const attach = (shareId: string, copy: LifeEvent, ownerOfOwn: PersonId, own: readonly LifeEvent[]): void => {
+        const key = attachKey(copy);
+        if (!key) return;
+        const found = own.filter(e => !e.shareId && !used.has(e) && attachKey(e) === key);
+        if (found.length !== 1) return;
+        used.add(found[0]);
+        rows.push({ kind: 'attach', shareId, event: copy, other: found[0], otherOf: ownerOfOwn, persons: personsIn(shareId), ageDiffers: false });
+    };
+    for (const [shareId, copy] of keepCopies) {
+        const theirs = removeCopies.get(shareId);
+        if (theirs) {
+            if (!sameCommonFields(copy, theirs)) continue;
+            const a = copy.age?.trim();
+            const b = theirs.age?.trim();
+            rows.push({
+                kind: 'once', shareId, event: copy, other: theirs, otherOf: removeId,
+                persons: personsIn(shareId), ageDiffers: !!a && !!b && a !== b,
+            });
+        } else {
+            attach(shareId, copy, removeId, remove.events ?? []);
+        }
+    }
+    for (const [shareId, copy] of removeCopies) {
+        if (!keepCopies.has(shareId)) attach(shareId, copy, keepId, keep.events ?? []);
+    }
+    return rows;
+}
+
+/** What a person merge does with its shared events (see personMergeShares). */
+export interface PersonMergeShareChoices {
+    /** Shares whose matching own event stays an own event ('attach' rows not taken). */
+    detach?: ReadonlySet<string>;
+    /** The age the merged person's copy gets ('once' rows whose ages differ). */
+    ages?: ReadonlyMap<string, string>;
+}
+
+/**
+ * Apply `rows` (computed before the merge) to the merged person, whose events
+ * now hold both persons' records: an own event matching a shared one goes
+ * (unless detached) — its sources, their quality and a note or an address
+ * the shared event has none of go to every copy, its age and other own
+ * fields to the merged person's copy; two copies of one share become one
+ * (joinSameShareCopies) with the chosen age. Returns the share ids touched.
+ */
+export function applyPersonMergeShares(
+    data: StromData, person: Person, rows: readonly PersonMergeShareRow[], choices: PersonMergeShareChoices = {},
+): string[] {
+    const touched = new Set<string>();
+    const events = person.events ?? [];
+    for (const row of rows) {
+        touched.add(row.shareId);
+        if (row.kind !== 'attach' || choices.detach?.has(row.shareId)) continue;
+        const own = row.other;
+        const at = events.indexOf(own);
+        if (at < 0) continue;
+        events.splice(at, 1);
+        const copies = shareCopiesOf(data, row.shareId).map(c => c.event);
+        if (!copies.includes(row.event)) copies.push(row.event);
+        for (const copy of copies) {
+            for (const id of own.sourceIds ?? []) {
+                if (!(copy.sourceIds ?? []).includes(id)) {
+                    (copy.sourceIds ??= []).push(id);
+                    const q = own.citationQuay?.sourceIds?.[id];
+                    if (q !== undefined) {
+                        copy.citationQuay = { ...copy.citationQuay, sourceIds: { ...copy.citationQuay?.sourceIds, [id]: q } };
+                    }
+                }
+            }
+        }
+        for (const f of ['note', 'address'] as const) {
+            const text = own[f]?.trim();
+            if (text && copies.every(c => !c[f]?.trim())) for (const c of copies) c[f] = own[f];
+        }
+        absorbCopy(row.event, own);
+    }
+    joinSameShareCopies(person);
+    for (const [shareId, age] of choices.ages ?? []) {
+        const copy = (person.events ?? []).find(e => e.shareId === shareId);
+        if (!copy) continue;
+        if (age.trim()) copy.age = age;
+        else delete copy.age;
+    }
+    return [...touched];
 }

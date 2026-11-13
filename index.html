@@ -16660,6 +16660,36 @@
             border-radius: 6px;
             color: var(--text-light);
         }
+        /* Shared events after a person merge (spec 085 §7, 7a). */
+        .person-merge-shared[hidden] { display: none; }
+        .person-merge-shared-row {
+            display: flex; flex-direction: column; gap: 4px;
+            padding: 9px 0; border-top: 1px solid var(--divider);
+            min-width: 0;
+        }
+        .person-merge-shared-head {
+            display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px;
+            font-size: 14px; min-width: 0;
+        }
+        .person-merge-shared-title { font-weight: 600; overflow-wrap: anywhere; }
+        .person-merge-shared-meta { font-size: 13px; color: var(--text-light); overflow-wrap: anywhere; }
+        .person-merge-shared-note {
+            display: flex; align-items: baseline; gap: 6px;
+            font-size: 13px; color: var(--primary-dark); overflow-wrap: anywhere;
+        }
+        .person-merge-shared-note .shared-event-mark { flex: none; transform: translateY(1px); }
+        .person-merge-shared-check {
+            display: flex; align-items: center; gap: 8px;
+            font-size: 13.5px; min-height: 30px; cursor: pointer; overflow-wrap: anywhere;
+        }
+        .person-merge-shared-check input { flex: none; margin: 0; width: 18px; height: 18px; accent-color: var(--primary); }
+        .person-merge-shared-row .person-merge-conflict-options { margin-top: 4px; }
+        @media (max-width: 640px) {
+            .person-merge-shared-check { font-size: 13px; }
+        }
+        @media (pointer: coarse) {
+            .person-merge-shared-check { min-height: 44px; }
+        }
         /* person-merge conflict UI is tokenized — no dark overrides needed. */
         .merge-conflict-content {
             /* Scrolls with the modal body (unified skeleton). */
@@ -31523,6 +31553,10 @@
                 <div id="person-merge-partnership-conflicts" class="person-merge-conflicts" style="display: none;">
                     <h3 data-i18n="personMerge.partnershipConflicts">Partnership conflicts</h3>
                     <div id="person-merge-partnership-list"></div>
+                </div>
+                <div id="person-merge-shared" class="person-merge-conflicts person-merge-shared" hidden>
+                    <h3 data-i18n="personMerge.sharedTitle">Shared events after the merge</h3>
+                    <div id="person-merge-shared-list"></div>
                 </div>
                 <div id="person-merge-no-conflicts" class="person-merge-no-conflicts" style="display: none;">
                     <span class="success-icon">✓</span>

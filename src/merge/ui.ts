@@ -1499,7 +1499,8 @@ class MergerUIClass {
 
             // Show success message and offer to switch to new tree
             const stats = strings.merge.stats(result.stats.merged, result.stats.added)
-                + (result.stats.skipped > 0 ? `\n${strings.merge.skippedCount(result.stats.skipped)}` : '');
+                + (result.stats.skipped > 0 ? `\n${strings.merge.skippedCount(result.stats.skipped)}` : '')
+                + ((result.stats.sharedJoined ?? 0) > 0 ? `\n${strings.merge.sharedJoined(result.stats.sharedJoined!)}` : '');
 
             // Dispatch event to update tree list
             window.dispatchEvent(new CustomEvent('strom:merge-session-changed'));
