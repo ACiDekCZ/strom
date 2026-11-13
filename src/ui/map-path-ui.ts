@@ -16,9 +16,10 @@
  * where it was framed, except one move to the target at the end when nobody
  * moved it (panMapToPathEnd).
  *
- * Left for later parts, with their hooks here: the legend (mapPathFocusClass,
- * mapPathDrawnLines, LEGEND_WIDTH; refreshMapPath redraws the marks and the
- * caption after a change of mode or colours) and the person page's entry
+ * The legend and the path's part of a place's bubble live in
+ * map-lines-legend-ui.ts (it reads mapPathFocusClass, mapPathDrawnLines;
+ * refreshMapPath redraws the marks, the caption and the legend after a change
+ * of mode or colours). Left for a later part: the person page's entry
  * (setMapPathTarget).
  */
 
@@ -144,9 +145,10 @@ export const mapPathMethods = uiModule({
         return h.minYear !== null && h.maxYear !== null ? { min: h.minYear, max: h.maxYear } : null;
     },
 
-    /** The class the legend highlights (a pinned line), null for none. */
+    /** The class the legend highlights (a hovered row, else a pinned line), null for none. */
     mapPathFocusClass(): LineClass | null {
-        return this.mapLineFocus === null ? null : branchClass(this.mapLineMode, this.mapLineFocus);
+        const i = this.mapLineHover ?? this.mapLineFocus;
+        return i === null ? null : branchClass(this.mapLineMode, i);
     },
 
     /** Lines of the last draw: kept (≤ 400) and all at that year (the legend's "400 of 1,250 lines shown"). */
@@ -457,6 +459,7 @@ export const mapPathMethods = uiModule({
         }
         markers.innerHTML = html.join('');
         declutterMapLabels(markers);
+        this.syncMapLinesCut();
     },
 
     // ------------------------------------------------------------ playback

@@ -159,9 +159,10 @@ export function genOfRel(rel: number): number {
 
 /** The father and the mother as the fan chart chooses them. */
 function fatherMother(data: StromData, person: Person): [Person | null, Person | null] {
+    // A placeholder (the other parent of a one-parent family) is nobody: its line is unknown, not missing.
     const parents = person.parentIds
         .map(id => data.persons[id])
-        .filter((p): p is Person => !!p)
+        .filter((p): p is Person => !!p && !p.isPlaceholder)
         .slice(0, 2);
     return parentSlots(parents);
 }

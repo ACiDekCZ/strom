@@ -264,6 +264,7 @@ export const mapFollowMethods = uiModule({
         }
         this.renderMapFollowNotices(container, missing, numbered);
         this.positionMapFollow(container);
+        this.positionMapLinesLegend();
         if (targets.some(t => t.session === 1 && pulse?.has(t.row))) this.mapFollowPan(false);
     },
 

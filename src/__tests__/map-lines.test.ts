@@ -140,6 +140,19 @@ describe('missing ancestors', () => {
         expect(m.quarters[1]!.firstYear).toBeUndefined();
     });
 
+    it('a placeholder parent (the other parent of a one-parent family) is no ancestor: not missing, its line unknown', () => {
+        const d = family();
+        d.persons[id('mf')] = person('mf', 'male', [], { firstName: '', lastName: '', isPlaceholder: true });
+        d.persons[id('ffm')] = person('ffm', 'female', [], { firstName: '', lastName: '', isPlaceholder: true });
+        const m = buildPathModel(d, id('t'));
+        expect(m.missing).toEqual([]);
+        expect(rec(m, 'mf')).toEqual([]);
+        expect(rec(m, 'ffm')).toEqual([]);
+        expect(m.quarters[2]).toBeNull();
+        expect(m.eighths[1]).toBeNull();
+        expect(m.eighths[0]).toMatchObject({ rootId: 'fff' });
+    });
+
     it('a baptism or a dated residence stands in for a missing birth place and year', () => {
         const d = family();
         const fm = d.persons[id('fm')];

@@ -306,6 +306,8 @@ export const mapMethods = uiModule({
             const sr = status?.getBoundingClientRect();
             const reach = sr && sr.height > 0 ? container.getBoundingClientRect().bottom - sr.top : 0;
             container.style.setProperty('--map-status-reach', `${Math.round(reach)}px`);
+            // The legend of the path's lines reaches down to the time bar.
+            this.positionMapLinesLegend();
         };
         const ro = new ResizeObserver(update);
         bars.forEach(el => ro.observe(el));
@@ -418,6 +420,11 @@ export const mapMethods = uiModule({
             if (this.mapPathPickerOpen()) {
                 e.preventDefault();
                 this.closeMapPathPicker(true);
+                return;
+            }
+            if (this.mapLinesUndatedOpen()) {
+                e.preventDefault();
+                this.closeMapLinesUndated(true);
                 return;
             }
             if (kindsMenuOpen) {
@@ -911,6 +918,7 @@ export const mapMethods = uiModule({
         const bar = document.getElementById('map-timebar');
         if (bar) bar.hidden = !this.mapTimeOn;
         this.renderMapPathChip();
+        this.renderMapLinesLegend();
         if (!this.mapTimeOn || !hasData) return;
 
         // With the ancestors' path: its range (yearFrom → yearTo); none when no ancestor is on the map.
@@ -1154,10 +1162,16 @@ export const mapMethods = uiModule({
         key = points.some(p => p.key === key) ? key : this.mapPointKeyOf(key);
         const point = points.find(p => p.key === key)
             ?? points.find(p => p.type === 'town' && p.placeKeys.includes(key));
-        if (!point) return;
+        // The ancestors' path (spec 054): its lines met here and its people by the year shown.
+        const path = this.mapTimeOn && this.mapPathOn() ? this.mapPathBubbleParts(point?.key ?? key) : null;
+        if (!point) {
+            if (path) this.showMapPathPlace(popup, key, path, opts);
+            return;
+        }
         if (point.key !== openPoint) {
             townQuery = '';
             townExpanded = new Set();
+            this.resetMapPopupPerson();
         }
         openPoint = point.key;
         popup.classList.remove('map-work-bubble');
@@ -1178,7 +1192,8 @@ export const mapMethods = uiModule({
         const former = located ? placeFormerLine(located, name, lang) : '';
         const origin = located?.origin
             ? placeOriginBadge(located.origin, lang, located.origin === 'research' ? located.at : undefined, { small: true }) : '';
-        const big = point.type === 'town' && point.houseCount > TOWN_BIG;
+        const town = point.type === 'town' && !path;
+        const big = town && point.type === 'town' && point.houseCount > TOWN_BIG;
         const summary = point.type === 'town'
             ? m.townSummary(point.houseCount, point.personCount) + only
             : (only ? m.usedBy(point.usage.personIds.length) + only : '');
@@ -1193,7 +1208,8 @@ export const mapMethods = uiModule({
                 ${origin ? `<div class="map-popup-origin">${origin}</div>` : ''}
                 ${label ? `<div class="map-popup-label">${this.escapeHtml(label)}</div>` : ''}
                 ${former ? `<div class="map-popup-former">${this.escapeHtml(former)}</div>` : ''}
-                ${summary ? `<div class="map-popup-summary">${this.escapeHtml(summary)}</div>` : ''}
+                ${summary && !path ? `<div class="map-popup-summary">${this.escapeHtml(summary)}</div>` : ''}
+                ${path ? path.tags + path.implex : ''}
                 ${big ? `
                 <label class="map-popup-search">
                     <span class="map-popup-search-icon" aria-hidden="true">⌕</span>
@@ -1204,8 +1220,8 @@ export const mapMethods = uiModule({
                 </label>` : ''}
             </div>
             ${this.mapPopupResearchHtml(point, located)}
-            <div class="map-popup-body${point.type === 'town' ? ' map-popup-houses' : ''}">
-                ${point.type === 'town' ? '' : `<div class="map-popup-people">${this.mapPopupPeople(
+            <div class="map-popup-body${town ? ' map-popup-houses' : ''}">
+                ${path ? path.rows : point.type === 'town' ? '' : `<div class="map-popup-people${this.mapTimeOn ? ' is-rows' : ''}">${this.mapPopupPeople(
                     point.usage.personIds.map(id => [id, point.usage.kinds.get(id) ?? new Set<MapKind>()] as const), Infinity, '')}</div>`}
             </div>
             <div class="map-popup-foot">
@@ -1213,7 +1229,7 @@ export const mapMethods = uiModule({
             </div>`;
         // Following the research: the runs at work here, right under the place's head.
         this.mapPopupWork(popup, point.key);
-        if (point.type === 'town') {
+        if (town && point.type === 'town') {
             this.renderMapTownList(point);
             const input = popup.querySelector('.map-popup-search input') as HTMLInputElement | null;
             input?.addEventListener('input', () => {
@@ -1221,12 +1237,38 @@ export const mapMethods = uiModule({
                 this.renderMapTownList(point);
             });
         }
+        this.openMapPopupAt(popup, geo, opts);
+    },
+
+    /** Show the filled bubble: in the middle of the map, a phone's sheet along the bottom. */
+    openMapPopupAt(popup: HTMLElement, geo: PlaceGeo, opts: { pan?: boolean }): void {
         popup.style.display = 'flex';
         // A phone: a sheet along the bottom, and the point moves up above it; the bar steps aside meanwhile.
         const sheet = window.matchMedia(MQ_MOBILE).matches;
         popup.classList.toggle('map-popup--sheet', sheet);
         document.getElementById('map-container')?.classList.toggle('map-sheet-open', sheet);
         if (sheet && opts.pan !== false) this.panMapAboveSheet(geo);
+    },
+
+    /** A point only the ancestors' path draws (none of the scope's points): its name, lines and people. */
+    showMapPathPlace(popup: HTMLElement, key: string, path: { tags: string; implex: string; rows: string }, opts: { pan?: boolean }): void {
+        const geo = this.mapPathModel()?.points.get(key);
+        if (!geo) return;
+        if (key !== openPoint) this.resetMapPopupPerson();
+        openPoint = key;
+        popup.classList.remove('map-work-bubble');
+        const name = this.mapPathLocate().display.get(key) ?? geo.label ?? '';
+        popup.innerHTML = `
+            <div class="map-popup-grip" aria-hidden="true"></div>
+            <div class="map-popup-top">
+                <div class="map-popup-head">
+                    <strong>${this.escapeHtml(name)}</strong>
+                    <button type="button" class="map-popup-close" aria-label="${strings.buttons.close}">×</button>
+                </div>
+                ${path.tags}${path.implex}
+            </div>
+            <div class="map-popup-body">${path.rows}</div>`;
+        this.openMapPopupAt(popup, geo, opts);
     },
 
     /**
@@ -1362,6 +1404,8 @@ export const mapMethods = uiModule({
         const html = shown.map(({ person, kinds }) => {
             const name = shownName(person);
             const marks = kindMarks(kinds, on);
+            // Migration over time: a row that unfolds its actions (Person page, Path to this person).
+            if (this.mapTimeOn) return this.mapPopupPathRow(person.id, name, this.mapPopupBirthYear(person.id), '', false, marks);
             const what = MAP_KINDS.filter(k => kinds.has(k) && on.has(k)).map(k => m.kinds[k]).join(', ');
             return `
                 <button type="button" class="map-popup-person" data-person-id="${this.escapeHtml(person.id)}"
@@ -1422,7 +1466,15 @@ export const mapMethods = uiModule({
             const target = e.target as HTMLElement;
             if (target.closest('.map-popup-close')) { this.closeMapPopup(); return; }
             const person = target.closest('.map-popup-person') as HTMLElement | null;
+            if (person?.hasAttribute('aria-expanded')) { this.toggleMapPopupPerson(person); return; }
             if (person?.dataset.personId) { this.focusFromMap(person.dataset.personId); return; }
+            const pact = target.closest<HTMLElement>('.map-popup-act');
+            if (pact?.dataset.personId) {
+                const id = pact.dataset.personId as PersonId;
+                if (pact.dataset.pact === 'path') this.setMapPathTarget(id);
+                else { this.closeMapPopup(); this.showPersonPage(id); }
+                return;
+            }
             // The person a run works on: the family view, as following goes there (spec 043 §1.2).
             const worked = target.closest('.map-work-person') as HTMLElement | null;
             if (worked?.dataset.personId) {
@@ -1462,7 +1514,7 @@ export const mapMethods = uiModule({
             // A button the bubble re-rendered under the click ("+ N more") is
             // no longer in the page: that click was inside the bubble.
             if (!(e.target as Node).isConnected) return;
-            if ((e.target as HTMLElement).closest('.map-marker, .map-marker-work, .map-follow-notices, .follow-legend-host, .map-popup, .map-path-picker, .map-controls, .map-topleft, .map-status, .map-timebar, .map-tiles-notice, .map-attribution')) return;
+            if ((e.target as HTMLElement).closest('.map-marker, .map-marker-work, .map-follow-notices, .follow-legend-host, .map-popup, .map-path-picker, .map-lines-legend, .map-lines-chip, .map-lines-und, .map-controls, .map-topleft, .map-status, .map-timebar, .map-tiles-notice, .map-attribution')) return;
             if (downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 6) return;
             this.closeMapPopup();
         });
@@ -1569,7 +1621,7 @@ export const mapMethods = uiModule({
         };
 
         container.addEventListener('pointerdown', (e: PointerEvent) => {
-            if ((e.target as HTMLElement).closest('.map-marker, .map-marker-work, .map-follow-notices, .follow-legend-host, .map-popup, .map-path-picker, .map-controls, .map-topleft, .map-status, .map-timebar, .map-tiles-notice')) return;
+            if ((e.target as HTMLElement).closest('.map-marker, .map-marker-work, .map-follow-notices, .follow-legend-host, .map-popup, .map-path-picker, .map-lines-legend, .map-lines-chip, .map-lines-und, .map-controls, .map-topleft, .map-status, .map-timebar, .map-tiles-notice')) return;
             pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
             if (pointers.size === 1) dragFrom = { x: e.clientX, y: e.clientY };
             try { container.setPointerCapture(e.pointerId); } catch { /* not capturable */ }
@@ -1646,7 +1698,7 @@ export const mapMethods = uiModule({
         container.addEventListener('wheel', (e: WheelEvent) => {
             if (!this.mapCenter) return;
             // The choice of a person scrolls its own list.
-            if ((e.target as HTMLElement).closest('.map-path-picker')) return;
+            if ((e.target as HTMLElement).closest('.map-path-picker, .map-lines-legend, .map-lines-und')) return;
             e.preventDefault();
             this.noteMapMovedByUser();
             const rect = container.getBoundingClientRect();

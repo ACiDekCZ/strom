@@ -11351,6 +11351,212 @@
             .map-path-target-label { max-width: 220px; }
         }
 
+        /* The legend of the path's family lines (spec 054 §2): right, under the controls; JS sets top, right and max-height. */
+        .map-lines-legend {
+            position: absolute;
+            top: 60px;
+            right: 12px;
+            z-index: 4;
+            width: 300px;
+            max-height: calc(100% - 140px);
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            overflow: auto;
+            overscroll-behavior: contain;
+            background: var(--surface);
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            box-shadow: 0 8px 26px rgba(20,16,8,0.2);
+        }
+        @media (min-width: 1280px) { .map-lines-legend { width: 320px; } }
+        .map-lines-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 8px 6px 14px; }
+        .map-lines-title { flex: 1 1 auto; margin: 0; font-family: var(--font-serif); font-size: 16px; font-weight: 600; }
+        .map-lines-mode { display: flex; height: 28px; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+        .map-lines-mode-btn {
+            display: flex;
+            align-items: center;
+            padding: 0 9px;
+            border: none;
+            background: transparent;
+            color: var(--text);
+            font: inherit;
+            font-size: 12.5px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .map-lines-mode-btn.is-on { background: var(--primary); color: var(--on-primary); }
+        .map-lines-mode-btn[aria-disabled="true"] { opacity: 0.45; cursor: default; }
+        .map-lines-collapse {
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: none;
+            border-radius: 6px;
+            background: transparent;
+            color: var(--text-muted);
+            font-size: 15px;
+            cursor: pointer;
+        }
+        .map-lines-rows { display: flex; flex-direction: column; padding: 0 6px 6px; }
+        .map-lines-group { padding: 8px 8px 2px; font-size: 12px; font-weight: 600; color: var(--text-muted); overflow-wrap: anywhere; }
+        .map-lines-row {
+            display: grid;
+            grid-template-columns: 30px minmax(0, 1fr);
+            column-gap: 10px;
+            align-items: center;
+            min-height: 38px;
+            padding: 5px 8px;
+            box-sizing: border-box;
+            border: none;
+            border-radius: 8px;
+            background: transparent;
+            color: var(--text);
+            font: inherit;
+            text-align: left;
+        }
+        button.map-lines-row { cursor: pointer; }
+        .map-lines-row.is-focus { background: var(--surface-2); }
+        .map-lines-row.is-dim { opacity: 0.45; }
+        .map-lines-swatch { height: 5px; border-radius: 3px; box-sizing: border-box; }
+        .map-lines-row[data-cls="q2"] .map-lines-swatch { height: 6px; }
+        .map-lines-swatch.is-empty { height: 6px; border: 1.5px dashed var(--text-faint); background: transparent; }
+        .map-lines-swatch.is-trunk { height: 6px; background: var(--text); }
+        .map-lines-text { display: flex; flex-direction: column; min-width: 0; }
+        .map-lines-name { font-size: 13.5px; font-weight: 600; overflow-wrap: anywhere; }
+        .map-lines-row.is-unknown .map-lines-name, .map-lines-row.is-trunk .map-lines-name { font-weight: 400; color: var(--text-muted); }
+        .map-lines-sub { font-size: 12px; color: var(--text-muted); overflow-wrap: anywhere; }
+        .map-lines-foot {
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+            padding: 8px 14px 10px;
+            border-top: 1px solid var(--divider);
+            font-size: 12.5px;
+            line-height: 1.4;
+            color: var(--text-muted);
+            text-wrap: pretty;
+        }
+        .map-lines-foot p { margin: 0; }
+        .map-lines-cut strong { color: var(--text); font-weight: 600; }
+        .map-lines-link {
+            padding: 0;
+            border: none;
+            background: none;
+            color: var(--primary-dark);
+            font: inherit;
+            font-weight: 600;
+            white-space: nowrap;
+            cursor: pointer;
+        }
+        .map-lines-off {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-height: 28px;
+            padding: 0;
+            border: none;
+            background: none;
+            color: var(--text);
+            font: inherit;
+            text-align: left;
+            cursor: pointer;
+        }
+        .map-lines-off-box {
+            flex: none;
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+            border: 1.5px solid var(--border);
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 700;
+        }
+        .map-lines-off[aria-checked="true"] .map-lines-off-box { border-color: var(--primary); background: var(--primary); color: var(--on-primary); }
+        /* Folded: a chip with the lines' colours. */
+        .map-lines-chip {
+            position: absolute;
+            top: 60px;
+            right: 12px;
+            z-index: 4;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            height: 34px;
+            padding: 0 12px;
+            border: 1px solid var(--border);
+            border-radius: 17px;
+            background: var(--surface);
+            color: var(--text);
+            box-shadow: var(--shadow-sm, 0 2px 8px rgba(20,16,8,0.15));
+            font: inherit;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .map-lines-chip-bars { display: inline-flex; gap: 2px; }
+        .map-lines-chip-bars span { width: 5px; height: 14px; border-radius: 2px; }
+        .map-lines-chip-caret { font-size: 10px; opacity: 0.7; }
+        /* The ancestors off the timeline: left of the legend. */
+        .map-lines-und {
+            position: absolute;
+            z-index: 6;
+            width: 330px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            overflow: auto;
+            overscroll-behavior: contain;
+            background: var(--surface);
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            box-shadow: var(--shadow-lg);
+        }
+        .map-lines-und-head { display: flex; align-items: center; gap: 8px; padding: 10px 8px 6px 14px; }
+        .map-lines-und-title { flex: 1; margin: 0; font-family: var(--font-serif); font-size: 15px; font-weight: 600; }
+        .map-lines-und-close { width: 28px; height: 28px; border: none; border-radius: 6px; background: none; color: var(--text-muted); font-size: 18px; cursor: pointer; }
+        .map-lines-und-list { margin: 0; padding: 0 14px; list-style: none; }
+        .map-lines-und-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--divider); }
+        .map-lines-und-row:first-child { border-top: none; }
+        .map-lines-und-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+        .map-lines-und-name { font-size: 13.5px; font-weight: 600; overflow-wrap: anywhere; }
+        .map-lines-und-why { font-size: 12px; color: var(--text-muted); }
+        .map-lines-und-foot { margin: 0; padding: 8px 14px 10px; border-top: 1px solid var(--divider); font-size: 12.5px; color: var(--text-muted); }
+        .map-lines-legend :focus-visible, .map-lines-chip:focus-visible, .map-lines-und :focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        @media (hover: hover) {
+            .map-lines-mode-btn:not(.is-on):not([aria-disabled="true"]):hover, .map-lines-collapse:hover, .map-lines-und-close:hover { background: var(--surface-2); }
+            button.map-lines-row:hover { background: var(--surface-2); }
+            .map-lines-chip:hover { background: var(--surface-2); }
+            .map-lines-link:hover { text-decoration: underline; }
+        }
+        @media (pointer: coarse) {
+            .map-lines-mode { height: 36px; }
+            .map-lines-collapse, .map-lines-und-close { width: 44px; height: 44px; }
+            .map-lines-row { min-height: 48px; }
+            .map-lines-off { min-height: 44px; }
+            .map-lines-chip { height: 44px; border-radius: 22px; }
+            .map-lines-link { min-height: 44px; }
+        }
+        /* The bubble keeps clear of the legend. */
+        #map-container.has-lines-legend .map-popup:not(.map-popup--sheet) {
+            left: calc((100% - var(--map-legend-room, 0px)) / 2);
+            width: min(380px, calc(100% - var(--map-legend-room, 0px) - 32px));
+        }
+        /* A phone and a phone held sideways: the legend comes as a chip and a sheet of their own. */
+        @media (max-width: 640px) {
+            .map-lines-legend, .map-lines-chip, .map-lines-und { display: none; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .map-lines-legend, .map-lines-chip, .map-lines-und { display: none; }
+        }
+
         .map-status {
             position: absolute;
             left: 50%;
@@ -11585,6 +11791,59 @@
         .map-popup-house-head { min-width: 0; text-align: right; }
         .map-popup-house-head .map-popup-house-no { display: block; }
         .map-popup-house-bytown { display: block; margin-top: 2px; font-size: 10.5px; font-weight: 400; line-height: 1.25; color: var(--text-faint); }
+        /* Migration over time: a person row unfolds Person page and Path to this person; with a path, the lines met here. */
+        .map-popup-people.is-rows { display: flex; flex-direction: column; flex-wrap: nowrap; gap: 0; padding: 4px 0; }
+        .map-popup-prow { display: flex; flex-direction: column; }
+        .map-popup .map-popup-person.map-popup-person--row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            min-height: 34px;
+            padding: 4px 6px;
+            border: none;
+            border-radius: 8px;
+            background: transparent;
+            color: var(--text);
+            font-size: 13.5px;
+            text-align: left;
+        }
+        .map-popup-prow.is-open .map-popup-person--row { background: var(--surface-2); }
+        .map-popup-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; }
+        .map-popup-person-name { flex: 1; min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+        .map-popup-person-year { flex: none; font-size: 12px; color: var(--text-muted); }
+        .map-popup-person-acts { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 4px 6px 8px 26px; }
+        .map-popup-act {
+            padding: 0;
+            border: none;
+            background: none;
+            color: var(--primary-dark);
+            font: inherit;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .map-popup-lines { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+        .map-popup-line {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 2px 8px;
+            border: 1px solid var(--border);
+            border-radius: 11px;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+        .map-popup-line-swatch { flex: none; width: 20px; height: 5px; border-radius: 3px; }
+        .map-popup-implex { margin-top: 2px; font-size: 12.5px; color: var(--text-muted); }
+        @media (hover: hover) {
+            .map-popup .map-popup-person.map-popup-person--row:hover { background: var(--surface-2); color: var(--text); }
+            .map-popup-act:hover { text-decoration: underline; }
+        }
+        @media (pointer: coarse) {
+            .map-popup .map-popup-person.map-popup-person--row { min-height: 44px; }
+            .map-popup-act { min-height: 44px; }
+        }
         /* Phone: a sheet along the bottom (the point moves up above it). */
         .map-popup.map-popup--sheet {
             left: 0;

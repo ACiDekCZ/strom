@@ -131,6 +131,7 @@ import { anniversariesUiMethods } from './anniversaries-ui.js';
 import { slideshowMethods } from './slideshow.js';
 import { mapMethods, MapScope } from './map-ui.js';
 import { mapPathMethods } from './map-path-ui.js';
+import { mapLinesLegendMethods } from './map-lines-legend-ui.js';
 import type { LineMode } from '../map-lines.js';
 import { tableMethods } from './table-view/table-ui.js';
 import { tableResearchMethods } from './table-view/table-research-ui.js';
@@ -447,6 +448,8 @@ export class UIClass {
     mapLegendCollapsed = false;
     /** The pinned line of the legend (quarter or eighth index in the mode), null = none. */
     mapLineFocus: number | null = null;
+    /** The line a legend row highlights while the pointer is over it (wins over the pinned one). */
+    mapLineHover: number | null = null;
 
     // Surname-spellings dialog: what is picked, and what to return to.
     surnamePicks: string[] = [];
@@ -925,6 +928,10 @@ Object.assign(UIClass.prototype, mapMethods);
 type MapPathMethods = typeof mapPathMethods;
 export interface UIClass extends MapPathMethods {}
 Object.assign(UIClass.prototype, mapPathMethods);
+
+type MapLinesLegendMethods = typeof mapLinesLegendMethods;
+export interface UIClass extends MapLinesLegendMethods {}
+Object.assign(UIClass.prototype, mapLinesLegendMethods);
 
 type TableMethods = typeof tableMethods;
 export interface UIClass extends TableMethods {}
