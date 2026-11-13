@@ -44,6 +44,16 @@ export const FAN_STORAGE_KEYS = {
     legendOpen: 'strom-fan-legend-open',
 } as const;
 
+/** The tree view's folding of the minimap and the legend (localStorage, one choice for all trees on this device). */
+export const TREE_UI_STORAGE_KEYS = {
+    /** Minimap open: '1' / '0' (a phone held sideways without it: folded). */
+    minimapOpen: 'strom-minimap-open',
+    /** Tree legend open: '1' / '0' (a computer and a tablet; a phone never reads or writes it). */
+    legendOpen: 'strom-tree-legend-open',
+    /** JSON list of the legend's marks it has already shown open (the folded chip's dot names the others). */
+    legendSeen: 'strom-tree-legend-seen',
+} as const;
+
 /** localStorage: the fingerprint the kept copy of the research's version stands for (written at once; the copy keeps its own). */
 export const RESEARCH_COPY_FP_KEY = 'strom-research-base-fp:';
 /** localStorage: the fingerprint of the kept copy before the last written send. */

@@ -609,7 +609,10 @@ export const miscMethods = uiModule({
             legend.style.display = (cardsShown && SettingsManager.isBranchColorsEnabled()
                 && SettingsManager.isBranchLegendEnabled()) ? 'flex' : 'none';
         }
-        if (treeLegend) this.updateLegendMarks(treeLegend);
+        if (treeLegend) {
+            this.updateLegendMarks(treeLegend);
+            this.syncTreeLegendFold(treeLegend);
+        }
     },
 
     /**
@@ -622,15 +625,19 @@ export const miscMethods = uiModule({
         const has = (sel: string): boolean => !!document.querySelector(`#tree-canvas .person-card ${sel}`);
         const l = strings.card.legend;
         const rows: [string, string][] = [];
+        // The kind of each row, for the folded legend's "new mark" dot (src/ui/tree-legend.ts).
+        const kinds: string[] = [];
         for (const cls of CARD_STATUS_CLASSES) {
             if (has(`> .card-status-mark.${cls}`)) {
                 rows.push([statusMarkHtml({ cls, source: 'evidence', facts: [] }, { className: 'card-status-mark--inline' }), cardStatusLegendLabel(cls)]);
+                kinds.push(cls);
             }
         }
-        if (has('> .card-story:not(.couple):not(.draft)')) rows.push([storyFoldHtml({ kind: 'own', final: true }, true), l.storyOwn]);
-        if (has('> .card-story:is(.couple, .draft)')) rows.push([storyFoldHtml({ kind: 'couple', final: true }, true), l.storyOther]);
-        if (has(':is(.card-signal, .card-signal-stack)')) rows.push(['<span class="menu-signal-glyph" aria-hidden="true">≠</span>', l.action]);
-        if (has('.cross-tree-badge')) rows.push(['<span class="legend-cross" aria-hidden="true">⇄ 1</span>', l.cross]);
+        if (has('> .card-story:not(.couple):not(.draft)')) { rows.push([storyFoldHtml({ kind: 'own', final: true }, true), l.storyOwn]); kinds.push('story-own'); }
+        if (has('> .card-story:is(.couple, .draft)')) { rows.push([storyFoldHtml({ kind: 'couple', final: true }, true), l.storyOther]); kinds.push('story-other'); }
+        if (has(':is(.card-signal, .card-signal-stack)')) { rows.push(['<span class="menu-signal-glyph" aria-hidden="true">≠</span>', l.action]); kinds.push('action'); }
+        if (has('.cross-tree-badge')) { rows.push(['<span class="legend-cross" aria-hidden="true">⇄ 1</span>', l.cross]); kinds.push('cross'); }
+        treeLegend.dataset.marks = kinds.join(' ');
         treeLegend.classList.toggle('has-marks', rows.length > 0);
         if (rows.length === 0) { part?.remove(); return; }
         if (!part) {

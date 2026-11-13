@@ -374,6 +374,7 @@ function startSatelliteWindow(params: SatelliteParams, debugOptions: DebugOption
     installCardTapTarget();
     UI.installStatusTipHost();
     UI.initMinimap();
+    UI.initTreeLegend();
     UI.initGenLabels();
     setTreeRendererGetter(() => TreeRenderer);
     UI.initHasFallback();
@@ -711,6 +712,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Overview minimap (wires ZoomPan.onChange + canvas handlers)
     UI.initMinimap();
+    UI.initTreeLegend();
 
     // Sticky generation labels (wires ZoomPan.onChange + resize)
     UI.initGenLabels();

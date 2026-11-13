@@ -14,7 +14,9 @@ import { DataManager } from '../data.js';
 import { SettingsManager } from '../settings.js';
 import { PersonId, Position, STANDALONE_VIEWS } from '../types.js';
 import { uiModule } from './module.js';
-import { isMobile as isMobileViewport } from '../breakpoints.js';
+import { isMobile as isMobileViewport, isPhoneBar, MQ_PHONE_LANDSCAPE } from '../breakpoints.js';
+import { TREE_UI_STORAGE_KEYS } from '../storage-keys.js';
+import { strings } from '../strings.js';
 
 // Panel geometry (CSS px). Kept small; the card loop is a bare fillRect sweep.
 const MINIMAP_W = 180;
@@ -22,6 +24,29 @@ const MINIMAP_H = 120;
 const MINIMAP_PAD = 8;
 // Below this world-overflow ratio the tree fits comfortably — hide the minimap.
 const FIT_MARGIN = 1.05;
+
+/** The fold chosen on this device while storage cannot keep it (a private window): it lasts while the page is open. */
+let minimapOpenMemory: boolean | null = null;
+
+/**
+ * Whether the minimap is unfolded (spec 1112 §2): the device's choice
+ * (`strom-minimap-open`, one for all trees), open by default; a phone held
+ * sideways without a choice starts folded (open it would take a third of the height).
+ */
+export function readMinimapOpen(): boolean {
+    try {
+        const v = localStorage.getItem(TREE_UI_STORAGE_KEYS.minimapOpen);
+        if (v === '1') return true;
+        if (v === '0') return false;
+    } catch { /* storage unavailable: the memory below */ }
+    if (minimapOpenMemory !== null) return minimapOpenMemory;
+    return !(typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia(MQ_PHONE_LANDSCAPE).matches);
+}
+
+function writeMinimapOpen(open: boolean): void {
+    minimapOpenMemory = open;
+    try { localStorage.setItem(TREE_UI_STORAGE_KEYS.minimapOpen, open ? '1' : '0'); } catch { /* kept in memory */ }
+}
 
 /** What the control block holds as shown, by the decision of each part's owner. */
 const controlBlockParts = { zoom: true, minimap: false };
@@ -41,6 +66,26 @@ export function syncControlBlock(parts: Partial<typeof controlBlockParts>): void
     const block = document.querySelector<HTMLElement>('.control-block');
     if (!block) return;
     block.classList.toggle('control-block--empty', !controlBlockParts.zoom && !controlBlockParts.minimap);
+}
+
+/**
+ * The minimap's tab: shown while the minimap is offered (the setting on, the
+ * tree overflowing the view, a computer or a tablet), saying whether it folds
+ * or unfolds; the block carries `is-minimap-collapsed` while folded.
+ */
+function setMinimapFold(offered: boolean, open: boolean): void {
+    const block = document.querySelector<HTMLElement>('.control-block');
+    const tab = document.querySelector<HTMLButtonElement>('.minimap-toggle');
+    block?.classList.toggle('is-minimap-collapsed', offered && !open);
+    if (block) {
+        if (offered) block.dataset.minimapTip = open ? strings.minimap.collapse : strings.minimap.title;
+        else delete block.dataset.minimapTip;
+    }
+    if (!tab) return;
+    tab.hidden = !offered;
+    const label = open ? strings.minimap.collapse : strings.minimap.expand;
+    tab.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (tab.getAttribute('aria-label') !== label) tab.setAttribute('aria-label', label);
 }
 
 export interface WorldBox { minX: number; minY: number; maxX: number; maxY: number; }
@@ -119,6 +164,13 @@ export const minimapMethods = uiModule({
         canvas.width = MINIMAP_W;
         canvas.height = MINIMAP_H;
 
+        // The tab on the block's top edge folds the minimap away and back
+        // (outside the canvas, so a click there never moves the view).
+        document.querySelector<HTMLButtonElement>('.minimap-toggle')?.addEventListener('click', () => {
+            writeMinimapOpen(!readMinimapOpen());
+            this.updateMinimap();
+        });
+
         const toWorldAndCenter = (clientX: number, clientY: number): void => {
             const t = this.minimapTransform;
             if (!t) return;
@@ -174,7 +226,8 @@ export const minimapMethods = uiModule({
         // On mobile the control block dissolves (CSS `display: contents`), so
         // the minimap has no docked home and CSS hides it — mirror that here so
         // the JS never re-shows a detached panel.
-        const isMobile = isMobileViewport();
+        // A phone held sideways dissolves the block the same way (only ⛶ stays).
+        const isMobile = isMobileViewport() || isPhoneBar();
         // The cards as the view laid them out (a custom card's width and heights).
         const { cardWidth, cardHeight, personHeights } = TreeRenderer.getCardBox();
         const box = worldBoundingBox(positions, cardWidth, cardHeight, personHeights);
@@ -185,6 +238,7 @@ export const minimapMethods = uiModule({
             || STANDALONE_VIEWS.includes(TreeRenderer.getViewMode())) {
             panel.style.display = 'none';
             this.minimapTransform = null;
+            setMinimapFold(false, true);
             syncControlBlock({ minimap: false });
             return;
         }
@@ -198,13 +252,24 @@ export const minimapMethods = uiModule({
         if (!overflows) {
             panel.style.display = 'none';
             this.minimapTransform = null;
+            setMinimapFold(false, true);
             syncControlBlock({ minimap: false });
             return;
         }
 
-        panel.style.display = 'block';
+        // Folded: the block keeps the zoom buttons and the tab, the canvas is
+        // gone (display: none) and nothing is drawn. The block is anchored at
+        // its bottom, so the buttons stay where they were.
+        const open = readMinimapOpen();
+        setMinimapFold(true, open);
         syncControlBlock({ minimap: true });
         this.minimapBox = box;
+        if (!open) {
+            panel.style.display = 'none';
+            this.minimapTransform = null;
+            return;
+        }
+        panel.style.display = 'block';
         this.minimapTransform = computeMinimapTransform(box, MINIMAP_W, MINIMAP_H, MINIMAP_PAD);
         this.drawMinimap();
     },

@@ -7,7 +7,7 @@ const notWrittenPl = (n: number): string =>
 /** Polish past-tense ending by sex: '' (man), 'a' (woman), '(a)' (not given). */
 const sexEndPl = (sex: string | undefined): string => sex === 'female' ? 'a' : sex === 'male' ? '' : '(a)';
 
-export const plPart2: Pick<StringsType, 'crop' | 'importImages' | 'imageViewer' | 'attachments' | 'duplicates' | 'minimap'
+export const plPart2: Pick<StringsType, 'crop' | 'importImages' | 'imageViewer' | 'attachments' | 'duplicates' | 'minimap' | 'legend'
     | 'name' | 'person' | 'titles' | 'spacing' | 'marriageOrder' | 'genLabels' | 'branchColors' | 'tour' | 'anniversaries' | 'releaseNotes'
     | 'familyWizard' | 'pwa' | 'fileAccess' | 'sync' | 'researchUpdate' | 'researchImages' | 'treeSettings' | 'media'
     | 'mediaQueue' | 'batch'> = {
@@ -71,9 +71,19 @@ export const plPart2: Pick<StringsType, 'crop' | 'importImages' | 'imageViewer' 
 
     // Overview minimap
     minimap: {
-        title: 'Minimapa przeglądowa',
+        title: 'Minimapa',
+        collapse: 'Zwiń minimapę',
+        expand: 'Rozwiń minimapę',
         settingLabel: 'Minimapa',
         settingHint: 'Minimapa przeglądowa przy dużych drzewach',
+    },
+
+    // The tree legend folded into a chip and back
+    legend: {
+        title: 'Legenda',
+        collapse: 'Zwiń legendę',
+        expand: 'Rozwiń legendę',
+        newMark: 'nowy znak',
     },
 
     // A name's birth-surname note after the married surname: "Bronisława Zaremba (z d. Kowalik)".

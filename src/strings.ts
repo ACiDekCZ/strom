@@ -1410,9 +1410,19 @@ const stringsEN = {
 
     // Overview minimap
     minimap: {
-        title: 'Overview minimap',
+        title: 'Minimap',
+        collapse: 'Collapse minimap',
+        expand: 'Expand minimap',
         settingLabel: 'Minimap',
         settingHint: 'Show an overview minimap for large trees',
+    },
+
+    // The tree legend folded into a chip and back
+    legend: {
+        title: 'Legend',
+        collapse: 'Collapse legend',
+        expand: 'Expand legend',
+        newMark: 'new mark',
     },
 
     // Titles of the name shown with it (Person.titleBefore / titleAfter)
@@ -10322,9 +10332,19 @@ const stringsCZ: StringsType = {
 
     // Overview minimap
     minimap: {
-        title: 'Přehledová minimapa',
+        title: 'Minimapa',
+        collapse: 'Sbalit minimapu',
+        expand: 'Rozbalit minimapu',
         settingLabel: 'Minimapa',
         settingHint: 'Zobrazovat přehledovou minimapu u velkých stromů',
+    },
+
+    // The tree legend folded into a chip and back
+    legend: {
+        title: 'Legenda',
+        collapse: 'Sbalit legendu',
+        expand: 'Rozbalit legendu',
+        newMark: 'nová značka',
     },
 
     // Titles of the name shown with it (Person.titleBefore / titleAfter)
@@ -19128,9 +19148,19 @@ const stringsDE: StringsType = {
 
     // Overview minimap
     minimap: {
-        title: 'Übersichts-Minikarte',
+        title: 'Minikarte',
+        collapse: 'Minikarte einklappen',
+        expand: 'Minikarte ausklappen',
         settingLabel: 'Minikarte',
         settingHint: 'Eine Übersichts-Minikarte für große Stammbäume anzeigen',
+    },
+
+    // The tree legend folded into a chip and back
+    legend: {
+        title: 'Legende',
+        collapse: 'Legende einklappen',
+        expand: 'Legende ausklappen',
+        newMark: 'neues Zeichen',
     },
 
     // Titles of the name shown with it (Person.titleBefore / titleAfter)

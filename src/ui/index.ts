@@ -126,6 +126,7 @@ import { bookRodsUiMethods } from './book-rods-ui.js';
 import { lineageEditUiMethods } from './lineage-edit-ui.js';
 import { snapshotsUiMethods } from './snapshots-ui.js';
 import { minimapMethods, MinimapTransform, WorldBox } from './minimap.js';
+import { treeLegendMethods } from './tree-legend.js';
 import { genLabelsMethods } from './gen-labels.js';
 import { anniversariesUiMethods } from './anniversaries-ui.js';
 import { slideshowMethods } from './slideshow.js';
@@ -908,6 +909,10 @@ Object.assign(UIClass.prototype, snapshotsUiMethods);
 type MinimapMethods = typeof minimapMethods;
 export interface UIClass extends MinimapMethods {}
 Object.assign(UIClass.prototype, minimapMethods);
+
+type TreeLegendMethods = typeof treeLegendMethods;
+export interface UIClass extends TreeLegendMethods {}
+Object.assign(UIClass.prototype, treeLegendMethods);
 
 type GenLabelsMethods = typeof genLabelsMethods;
 export interface UIClass extends GenLabelsMethods {}
