@@ -10015,6 +10015,13 @@
         .tl-dot { fill: var(--text-color, #444); }
         .tl-dot-wedding { fill: #fff; stroke: #d4a017; stroke-width: 2; }
         .tl-arrow { fill: var(--text-light, #aaa); }
+        /* A shared event across the rows of its persons (spec 085 §2e): one mark, its label once above. */
+        .tl-shared-mark { fill: var(--primary); opacity: 0.9; }
+        .tl-shared-link { stroke: var(--primary); stroke-width: 2; opacity: 0.5; }
+        .tl-shared-label {
+            fill: var(--primary); font-size: 11.5px; font-weight: 600;
+            paint-order: stroke; stroke: var(--bg-color, #fff); stroke-width: 3px; stroke-linejoin: round;
+        }
         .tl-omitted { font-size: 12px; color: var(--text-light, #888); padding: 4px 12px; font-style: italic; }
         /* The focused person's history row (DEV symboly-dejin §9, 9a): under the axis band;
            the kind's symbol coloured by the origin, a count badge, a period's stripe. */
@@ -28237,6 +28244,9 @@
             .tl-name { color: #222 !important; }
             .tl-tick { fill: #666 !important; }
             .tl-dot { fill: #444 !important; }
+            .tl-shared-mark { fill: #3f6b4f !important; }
+            .tl-shared-link { stroke: #3f6b4f !important; }
+            .tl-shared-label { fill: #2f5a3f !important; stroke: #fff !important; }
             /* The history row is the screen's (one person's, by the focus): not printed, the rows back up. */
             .tl-hist-row { display: none !important; }
             .tl-rows { transform: none !important; }

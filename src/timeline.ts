@@ -19,6 +19,23 @@ export interface TimelineEvent {
     /** Life-event type, or 'wedding' synthesized from a partnership. */
     type: LifeEventType | 'wedding';
     customLabel?: string;
+    /** The share of an event of several persons (spec 085): drawn as one mark when two or more rows have it. */
+    shareId?: string;
+}
+
+/**
+ * One shared event across the rows of its persons (spec 085 §2e): one
+ * vertical mark instead of a dot in each row, its label once above it. Only
+ * for an event at least two rows have; a person without a row (not
+ * selected, living under privacy) is not in it.
+ */
+export interface TimelineSharedMark {
+    shareId: string;
+    year: number;
+    type: LifeEventType;
+    customLabel?: string;
+    /** The indices of the rows in it, top to bottom. */
+    rows: number[];
 }
 
 export interface TimelineRow {
@@ -74,6 +91,8 @@ export interface TimelineModel {
     omittedCount: number;
     /** The focused person's history row; absent: no row at all (no research, the layer off, no events). */
     history?: TimelineHistory;
+    /** Shared events of two rows or more, by their first row and year. */
+    shared: TimelineSharedMark[];
 }
 
 export interface TimelineModelOptions {
@@ -120,7 +139,11 @@ export function computeTimelineModel(
         for (const ev of p.events ?? []) {
             const y = yearOf(ev.date);
             if (y === null) continue;
-            events.push({ year: y, type: ev.type, ...(ev.customLabel ? { customLabel: ev.customLabel } : {}) });
+            events.push({
+                year: y, type: ev.type,
+                ...(ev.customLabel ? { customLabel: ev.customLabel } : {}),
+                ...(ev.shareId ? { shareId: ev.shareId } : {}),
+            });
         }
         for (const wy of weddingsByPerson.get(id) ?? []) {
             events.push({ year: wy, type: 'wedding' });
@@ -154,6 +177,8 @@ export function computeTimelineModel(
     };
     rows.sort((a, b) => a.startYear - b.startYear || bare(a.personId).localeCompare(bare(b.personId)) || a.personId.localeCompare(b.personId));
 
+    const shared = sharedTimelineMarks(rows);
+
     let minYear = Infinity, maxYear = -Infinity;
     for (const r of rows) {
         minYear = Math.min(minYear, r.startYear);
@@ -177,7 +202,32 @@ export function computeTimelineModel(
         rows,
         omittedCount,
         ...(history ? { history } : {}),
+        shared,
     };
+}
+
+/**
+ * The shared events of the rows (only their own events, never a scan of the
+ * tree): each share two rows or more have, in the year of its first row's copy.
+ */
+export function sharedTimelineMarks(rows: readonly TimelineRow[]): TimelineSharedMark[] {
+    const byShare = new Map<string, TimelineSharedMark>();
+    rows.forEach((r, i) => {
+        for (const ev of r.events) {
+            if (!ev.shareId || ev.type === 'wedding') continue;
+            const mark = byShare.get(ev.shareId);
+            if (!mark) {
+                byShare.set(ev.shareId, {
+                    shareId: ev.shareId, year: ev.year, type: ev.type,
+                    ...(ev.customLabel ? { customLabel: ev.customLabel } : {}), rows: [i],
+                });
+            } else if (mark.rows[mark.rows.length - 1] !== i) {
+                mark.rows.push(i);
+            }
+        }
+    });
+    return [...byShare.values()].filter(m => m.rows.length > 1)
+        .sort((a, b) => a.rows[0] - b.rows[0] || a.year - b.year || a.shareId.localeCompare(b.shareId));
 }
 
 /** A cluster of history events on the timeline's history row. */

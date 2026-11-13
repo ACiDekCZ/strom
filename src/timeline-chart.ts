@@ -14,7 +14,7 @@
  */
 
 import {
-    TimelineModel, TimelineRow, TimelineEvent, TimelineHistory, TimelineHistoryItem,
+    TimelineModel, TimelineRow, TimelineEvent, TimelineHistory, TimelineHistoryItem, TimelineSharedMark,
     yearToFraction, axisTicks, axisLabelStep, clusterTimelineHistory, timelineHistoryYears,
 } from './timeline.js';
 import { strings } from './strings.js';
@@ -50,7 +50,10 @@ const TIMELINE_LIGHT_STYLE =
     + '.tl-arrow{fill:#aaa}'
     + '.tl-name-txt{fill:#222;font-size:12px}'
     + '.tl-yr-txt{fill:#999;font-size:11px}'
-    + '.timeline-bar.focused .tl-bar-rect{stroke:#3f6b4f;stroke-width:2.5}';
+    + '.timeline-bar.focused .tl-bar-rect{stroke:#3f6b4f;stroke-width:2.5}'
+    + '.tl-shared-mark{fill:#3f6b4f;opacity:.9}'
+    + '.tl-shared-link{stroke:#3f6b4f;stroke-width:2;opacity:.5}'
+    + '.tl-shared-label{fill:#2f5a3f;font-size:11.5px;font-weight:600;paint-order:stroke;stroke:#fff;stroke-width:3px;stroke-linejoin:round}';
 
 export interface TimelineSvgOptions {
     /** Escape function for text content (renderer supplies its own). */
@@ -169,9 +172,50 @@ function rowYears(r: TimelineRow): string {
     return r.isLiving ? `${r.startYear}–` : r.endKnown ? `${r.startYear}–${r.endYear}` : `${r.startYear}–?`;
 }
 
+/** The mark's label: "Census 1921". */
+function sharedMarkLabel(m: TimelineSharedMark): string {
+    return `${eventLabelFor({ year: m.year, type: m.type, ...(m.customLabel ? { customLabel: m.customLabel } : {}) })} ${m.year}`;
+}
+
+/**
+ * A shared event's one mark across the rows of its persons (spec 085 §2e):
+ * a 14 px wide rounded bar over each run of adjacent rows in it, a thin line
+ * past the rows between that are not, the label once above the top. The
+ * mark lets clicks through to the rows; its label names the persons.
+ */
+function sharedMarkSvg(
+    m: TimelineSharedMark, rows: readonly TimelineRow[], opts: TimelineSvgOptions, xOf: (y: number) => number, plot: { x0: number; x1: number },
+): string {
+    const { esc, rowH } = opts;
+    const x = xOf(m.year);
+    const barTop = (i: number): number => TOP + i * rowH + (rowH - 14) / 2;
+    const runs: [number, number][] = [];
+    for (const i of m.rows) {
+        const last = runs[runs.length - 1];
+        if (last && last[1] === i - 1) last[1] = i;
+        else runs.push([i, i]);
+    }
+    const bars = runs.map(([a, b]) => {
+        const y1 = barTop(a) - 3, y2 = barTop(b) + 17;
+        return `<rect class="tl-shared-mark" x="${(x - 7).toFixed(1)}" y="${y1.toFixed(1)}" width="14" height="${(y2 - y1).toFixed(1)}" rx="7"/>`;
+    }).join('');
+    const links = runs.slice(1).map(([a], k) => {
+        const from = barTop(runs[k][1]) + 17, to = barTop(a) - 3;
+        return `<line class="tl-shared-link" x1="${x.toFixed(1)}" y1="${from.toFixed(1)}" x2="${x.toFixed(1)}" y2="${to.toFixed(1)}"/>`;
+    }).join('');
+    const label = sharedMarkLabel(m);
+    // Centred over the mark, kept inside the plot.
+    const half = label.length * 11.5 * 0.3;
+    const lx = Math.min(Math.max(x, plot.x0 + half), plot.x1 - half);
+    const who = m.rows.map(i => rows[i]?.name ?? '').filter(Boolean).join(', ');
+    return `<g class="tl-shared" data-share="${esc(m.shareId)}"><g class="tl-shared-bars" pointer-events="none">${links}${bars}</g>`
+        + `<text class="tl-shared-label" x="${lx.toFixed(1)}" y="${(barTop(m.rows[0]) - 6).toFixed(1)}" text-anchor="middle">`
+        + `${esc(label)}<title>${esc(`${label}: ${who}`)}</title></text></g>`;
+}
+
 /** SVG for one timeline row (name label + life-bar + event dots). */
 function rowSvg(
-    r: TimelineRow, i: number, opts: TimelineSvgOptions, xOf: (y: number) => number
+    r: TimelineRow, i: number, opts: TimelineSvgOptions, xOf: (y: number) => number, marked: ReadonlySet<string> = new Set(),
 ): string {
     const { esc, rowH, labelW, width: rowWidth, mode } = opts;
     const y = TOP + i * rowH;
@@ -190,7 +234,7 @@ function rowSvg(
     const yearsStr = rowYears(r);
     const yearsEsc = esc(yearsStr);
     const cy = (barY + 7).toFixed(1);
-    const dots = r.events.map(ev => {
+    const dots = r.events.filter(ev => !ev.shareId || !marked.has(ev.shareId)).map(ev => {
         const ex = xOf(ev.year).toFixed(1);
         const label = esc(`${eventLabelFor(ev)} (${ev.year})`);
         const cls = ev.type === 'wedding' ? 'tl-dot tl-dot-wedding' : 'tl-dot';
@@ -261,7 +305,11 @@ export function buildTimelineSvg(model: TimelineModel, opts: TimelineSvgOptions)
                 ? `<text x="${x}" y="${TOP - 14}" text-anchor="middle" class="tl-tick">${yr}</text>` : '');
     }).join('');
 
-    const rowsSvg = model.rows.map((r, i) => rowSvg(r, i, opts, xOf)).join('');
+    // A shared event of two rows or more: one mark instead of the rows' dots, drawn over them (spec 085 §2e).
+    const shared = model.shared ?? [];
+    const marked = new Set(shared.map(m => m.shareId));
+    const marks = shared.map(m => sharedMarkSvg(m, model.rows, opts, xOf, { x0: plotX0, x1: plotX0 + plotW })).join('');
+    const rowsSvg = model.rows.map((r, i) => rowSvg(r, i, opts, xOf, marked)).join('') + marks;
     // Shifted by the history row; print drops the row and the shift (index.html @media print).
     const rows = hist ? `<g class="tl-rows" transform="translate(0 ${histH})">${rowsSvg}</g>` : rowsSvg;
     // Drawn after the rows: a cluster's touch target may reach into the first row.
