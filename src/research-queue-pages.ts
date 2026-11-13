@@ -338,6 +338,57 @@ export function moveQueueItemFirst(base: string, id: string): void {
     }
 }
 
+/**
+ * A task's place as the bridge answered a write of it (`task` with its `pos`, `own` and `why` as the
+ * queue has them now): the task moved to that place in `items` and drawn as the answer says, the places
+ * of the tasks between its old place and its new one moved by one. `cut`: more tasks follow those held
+ * (a status's window, a list not read to its end); a task whose new place lies past the ones held leaves
+ * them (`out`). Without a place in the answer, or the task not held, only its row is replaced.
+ */
+export function placeQueueItem(items: LiveQueueItem[], now: LiveQueueItem, cut: boolean): { items: LiveQueueItem[]; out: boolean } {
+    const at = items.findIndex(x => x.id === now.id);
+    if (at < 0) return { items, out: false };
+    const from = items[at].pos;
+    const to = now.pos;
+    if (from === undefined || to === undefined || items[at].state !== 'next' || now.state !== 'next') {
+        const same = [...items];
+        same[at] = now;
+        return { items: same, out: false };
+    }
+    const rest = items.filter((_, i) => i !== at).map(x => {
+        if (x.state !== 'next' || x.pos === undefined) return x;
+        let p = x.pos;
+        if (p > from) p--;
+        if (p >= to) p++;
+        return p === x.pos ? x : { ...x, pos: p };
+    });
+    const held = rest.filter(x => x.state === 'next' && x.pos !== undefined);
+    const last = held.length > 0 ? held[held.length - 1].pos! : 0;
+    let i = rest.findIndex(x => x.state === 'next' && x.pos !== undefined && x.pos > to);
+    if (i < 0) {
+        // Past the tasks held: next to the last one when its place follows it, else out of the ones held.
+        if (cut && to > last + 1) return { items: rest, out: true };
+        const lastNext = rest.reduce((n, x, k) => (x.state === 'next' ? k : n), -1);
+        i = lastNext + 1;
+    }
+    rest.splice(i, 0, now);
+    return { items: rest, out: false };
+}
+
+/**
+ * A task's place written (Undo of "Do next", `restore`): the task at the place the bridge answered in every
+ * list read that holds it, the others' places moved by one. The lists are read again with the queue's next
+ * print; this keeps the screen right meanwhile.
+ */
+export function placeQueueItemInLists(base: string, now: LiveQueueItem): void {
+    if (remote || !base || base !== listsBase) return;
+    for (const l of lists.values()) {
+        const r = placeQueueItem(l.items, now, l.next !== null);
+        if (r.out && l.next !== null) l.next = Math.max(0, l.next - 1);
+        l.items = r.items;
+    }
+}
+
 /** Abort the read of a list nothing shows any more. */
 function settleSlot(slot: QueueSlot, key: string | null): void {
     const was = slots.get(slot);

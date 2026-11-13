@@ -28,7 +28,7 @@ import {
     sanitizeTaskOrderWas, setBranchMode, setOffLineTree, setTaskOrder,
 } from '../research-directions-write.js';
 import { bridgeBase } from './history-ui.js';
-import { QueueList, moveQueueItemFirst, requestQueueList, retryQueueList } from '../research-queue-pages.js';
+import { QueueList, moveQueueItemFirst, placeQueueItem, placeQueueItemInLists, requestQueueList, retryQueueList } from '../research-queue-pages.js';
 import { activeDirections, directionRefusedText, holdForBridge, setQueueDirectionFilter } from './research-directions-ui.js';
 
 type Mode = 'docked' | 'overlay' | 'sheet' | 'window';
@@ -1208,12 +1208,20 @@ export const researchOffLineMethods = uiModule({
             }
             s.queue = s.queue.map(x => (x.id !== task && x.state === 'next' && x.pos !== undefined && (was === undefined || x.pos < was) ? { ...x, pos: x.pos + 1 } : x));
             moveQueueItemFirst(s.bridge.base, task);
+        } else if (r.task?.id === task) {
+            // Back where the bridge says it is now: its place, its tag and its sentence at once (not with the next status).
+            const placed = placeQueueItem(s.queue, r.task, s.queueMore > 0);
+            s.queue = placed.items;
+            if (placed.out) s.queueMore++;
+            placeQueueItemInLists(s.bridge.base, r.task);
         } else {
-            // Its mark as it was; its place comes with the next status.
+            // An answer without the task: its mark as it was; its place comes with the next status.
             s.queue = s.queue.map(x => {
                 if (x.id !== task) return x;
-                const { own: _own, ...rest } = x;
-                return body.was.own ? { ...rest, own: body.was.own } : rest;
+                const { own: _own, why, ...rest } = x;
+                if (body.was.own) return { ...rest, own: body.was.own, ...(why ? { why: { kind: 'own', do: body.was.own } } : {}) };
+                // Its own place's sentence goes with it (the research's reason comes with the next status).
+                return why && why.kind !== 'own' ? { ...rest, why } : rest;
             });
         }
         this.renderLivePanel();
@@ -1231,7 +1239,7 @@ export const researchOffLineMethods = uiModule({
             this.renderLivePanel();
             focusQueueMoved();
             const was = out.was;
-            this.showToast(L.queueMoved, 6000, {
+            this.showToast(L.queueMoved(task), 6000, {
                 kind: 'queue-next',
                 ...(was ? { action: { label: L.queueUndo, run: () => void this.restoreTaskPlace(task, was) } } : {}),
             });

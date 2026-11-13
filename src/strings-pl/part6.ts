@@ -1030,7 +1030,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         queueNext: 'Zrób jako następne',
         queueNextHint: 'Przyjdzie kolej po zadaniu w toku',
         queueTagNext: 'jako następne',
-        queueMoved: 'Będzie następne w kolejce.',
+        queueMoved: (id: string) => `${id} jako następne`,
         queueBridgeErr: 'Badanie nie odpowiada, kolejność się nie zmieniła.',
         queueUndo: 'Cofnij',
         knowsKindAll: 'Wszystko',

@@ -76,6 +76,15 @@ const QUEUE = [
 ];
 const NEXT = ['queue.next'];
 
+/**
+ * A research that numbers its queue (`queue.page`) and says why each task stands where it stands, as
+ * Strom Research 1.32 does: its answer to a write carries the task's place (`pos`) and reason (`why`).
+ */
+const PLACED_FEATURES = ['directions.edit', 'directions.order', 'offLine.branches', 'queue.page', 'queue.next'];
+const PLACED_QUEUE = Array.from({ length: 8 }, (_, i) => ({
+    id: `T010${i + 1}`, text: `Matriky Smrkov, svazek ${i + 1}`, state: 'next', research: 'G0001', why: { kind: 'line', research: 'G0001' },
+}));
+
 const queueRows = (page: Page) => overview(page).locator('#ov-sec-queue .live-queue > .live-queue-row[data-task]');
 const order = (page: Page) => queueRows(page).evaluateAll(rs => rs.map(r => (r as HTMLElement).dataset.task));
 const row = (page: Page, id: string) => overview(page).locator(`#ov-sec-queue .live-queue > .live-queue-row[data-task="${id}"]`);
@@ -125,7 +134,7 @@ test.describe('Do next with queue.next', () => {
         await expect(row(page, 'T0103').locator('.research-queue__tag-next')).toHaveText('next');
         await expect(row(page, 'T0103')).toHaveClass(/research-queue__row--flash/);
         await expect(row(page, 'T0103')).toBeFocused();
-        await expect(toast(page)).toContainText('Comes up next.');
+        await expect(toast(page)).toContainText('T0103 comes up next');
         await expect(toast(page).locator('.toast-action')).toHaveText('Undo');
         // The light goes after its 1.6 s.
         await expect(row(page, 'T0103')).not.toHaveClass(/research-queue__row--flash/, { timeout: 4000 });
@@ -166,6 +175,35 @@ test.describe('Do next with queue.next', () => {
         await expect.poll(() => orderWrites(b).at(-1)).toEqual(['queue/T0102', { do: 'restore', was: {} }]);
         await expect.poll(() => order(page)).toEqual(['T0101', 'T0102', 'T0103', 'T0104']);
         await expect(row(page, 'T0102').locator('.research-queue__tag-next')).toHaveCount(0);
+    });
+
+    test('Undo with a research that numbers its queue: back at its place at once, as the bridge answered (not with the next status)', async ({ page }) => {
+        const b = await followManaged(page, {
+            caps: { ...CAPS, offLineBranches: true }, features: PLACED_FEATURES, offLine: { ...OFF_LINE, branches: [] }, queue: PLACED_QUEUE, paged: true,
+        });
+        await openOverview(page);
+        await unfoldQueue(page);
+        await expect.poll(() => order(page)).toEqual(PLACED_QUEUE.map(q => q.id));
+        await expect(row(page, 'T0106').locator('.live-queue-why')).toHaveText(/^in the direction /);
+        const asks = b.statusAsks;
+        await doNext(page, 'T0106');
+        await expect.poll(() => order(page)).toEqual(['T0106', 'T0101', 'T0102', 'T0103', 'T0104', 'T0105', 'T0107', 'T0108']);
+        await expect(toast(page)).toContainText('T0106 comes up next');
+        // The status after the move read; the next one is not here yet (the app asks it only seconds later).
+        await expect.poll(() => b.statusAsks).toBeGreaterThan(asks);
+        let release = (): void => {};
+        b.statusHold = { after: b.writes.length, until: new Promise<void>(r => { release = r; }) };
+        // The research writes its tree before it answers.
+        b.orderWriteMs = 300;
+        await toast(page).locator('.toast-action', { hasText: 'Undo' }).click();
+        await expect.poll(() => orderWrites(b).at(-1)).toEqual(['queue/T0106', { do: 'restore', was: {} }]);
+        await expect.poll(() => order(page), { timeout: 1500 }).toEqual(PLACED_QUEUE.map(q => q.id));
+        await expect(row(page, 'T0106').locator('.live-queue-num')).toHaveText('6');
+        await expect(row(page, 'T0106').locator('.research-queue__tag-next')).toHaveCount(0);
+        await expect(row(page, 'T0106').locator('.live-queue-why')).toHaveText(/^in the direction /);
+        await expect(row(page, 'T0101').locator('.live-queue-num')).toHaveText('1');
+        b.statusHold = null;
+        release();
     });
 
     test('the agent at work on it: no "Do next"; taken meanwhile: said with no Undo and the queue read again', async ({ page }) => {
@@ -260,7 +298,7 @@ test.describe('Do next with queue.next', () => {
         await menu(page).locator('[data-order="next"]').click();
         await expect.poll(() => orderWrites(b)).toEqual([['queue/T0102', { do: 'next' }]]);
         await expect.poll(() => page.locator('#live-panel .live-queue > .live-queue-row[data-task]').first().getAttribute('data-task')).toBe('T0102');
-        await expect(toast(page)).toContainText('Comes up next.');
+        await expect(toast(page)).toContainText('T0102 comes up next');
     });
 
     test('a phone: the ⋯ a sheet at the bottom titled by the task, its rows 52 / 44 px', async ({ page }) => {
@@ -317,11 +355,46 @@ test.describe('Do next in the overview\'s own window', () => {
         await expect.poll(() => ov.locator('#ov-sec-queue .live-queue > .live-queue-row[data-task]').first().getAttribute('data-task')).toBe('T0103');
         await expect(winRow('T0103').locator('.research-queue__tag-next')).toHaveText('next');
         const winToast = popup.locator('.toast[data-kind="queue-next"]');
-        await expect(winToast).toContainText('Comes up next.');
+        await expect(winToast).toContainText('T0103 comes up next');
         await winToast.locator('.toast-action').click();
         await expect.poll(() => orderWrites(b).at(-1)).toEqual(['queue/T0103', { do: 'restore', was: {} }]);
         await expect.poll(() => ov.locator('#ov-sec-queue .live-queue > .live-queue-row[data-task]').first().getAttribute('data-task')).toBe('T0101');
         expect(bridgeAsks).toEqual([]);
+        await popup.close();
+    });
+
+    test('Undo with a research that numbers its queue: back at its place in the window at once, as the bridge answered', async ({ page }) => {
+        const b = await followManaged(page, {
+            caps: { ...CAPS, offLineBranches: true }, features: PLACED_FEATURES, offLine: { ...OFF_LINE, branches: [] }, queue: PLACED_QUEUE, paged: true,
+        });
+        await page.locator('#view-window-btn').click();
+        const [popup] = await Promise.all([page.waitForEvent('popup'), page.locator('#view-window-menu [data-view="overview"]').click()]);
+        await popup.waitForLoadState('domcontentloaded');
+        const ov = popup.locator('#research-overview.research-overview--window');
+        await expect(ov).toBeVisible();
+        const head = ov.locator('.live-section__head[aria-controls="ov-sec-queue"]');
+        if (await head.getAttribute('aria-expanded') === 'false') await head.click();
+        const winOrder = () => ov.locator('#ov-sec-queue .live-queue > .live-queue-row[data-task]').evaluateAll(rs => rs.map(r => (r as HTMLElement).dataset.task));
+        const winRow = (id: string) => ov.locator(`#ov-sec-queue .live-queue > .live-queue-row[data-task="${id}"]`);
+        await expect.poll(winOrder).toEqual(PLACED_QUEUE.map(q => q.id));
+        const asks = b.statusAsks;
+        await winRow('T0105').locator('.live-queue-more').click();
+        await popup.locator('#live-task-menu [data-order="next"]').click();
+        await expect.poll(() => orderWrites(b)).toEqual([['queue/T0105', { do: 'next' }]]);
+        await expect.poll(async () => (await winOrder())[0]).toBe('T0105');
+        const winToast = popup.locator('.toast[data-kind="queue-next"]');
+        await expect(winToast).toContainText('T0105 comes up next');
+        await expect.poll(() => b.statusAsks).toBeGreaterThan(asks);
+        let release = (): void => {};
+        b.statusHold = { after: b.writes.length, until: new Promise<void>(r => { release = r; }) };
+        b.orderWriteMs = 300;
+        await winToast.locator('.toast-action').click();
+        await expect.poll(() => orderWrites(b).at(-1)).toEqual(['queue/T0105', { do: 'restore', was: {} }]);
+        await expect.poll(winOrder, { timeout: 1500 }).toEqual(PLACED_QUEUE.map(q => q.id));
+        await expect(winRow('T0105').locator('.research-queue__tag-next')).toHaveCount(0);
+        await expect(winRow('T0105').locator('.live-queue-why')).toHaveText(/^in the direction /);
+        b.statusHold = null;
+        release();
         await popup.close();
     });
 });

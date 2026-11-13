@@ -11,6 +11,7 @@ import {
 import {
     setBranchMode, setOffLineTree, setTaskOrder, answerBranchWaiting, fetchBranchTasks, restoreTaskOrder, sanitizeTaskOrderWas,
 } from '../research-directions-write.js';
+import { setLanguage, strings } from '../strings.js';
 
 const BRANCH = {
     id: 'B-P0031', person: 'P0031', via: { person: 'P0017', rel: 'sibling' }, nearest: 'G0003', tasks: 14, persons: 6,
@@ -159,6 +160,22 @@ describe('writes outside the directions', () => {
         // A `was` the app cannot send back as it came is not sent.
         expect((await restoreTaskOrder(BASE, 'T0412', { own: 'first' as 'next', at: 'x' })).ok).toBe(false);
         expect(calls).toHaveLength(4);
+    });
+
+    it('queue.next: the answer to restore read as the research sends it (its place, its reason, no mark of its own)', async () => {
+        reply(200, { task: { id: 'T0086', text: 'Matriky', state: 'next', pos: 6, research: 'G0001', why: { kind: 'line', research: 'G0001' } }, was: { own: 'next', at: '2026-11-13T05:10:00Z' }, head: 'abcdef5', parent: 'abcdef4' });
+        const r = await restoreTaskOrder(BASE, 'T0086', {});
+        expect(r.ok && r.task).toEqual({ id: 'T0086', text: 'Matriky', state: 'next', pos: 6, research: 'G0001', why: { kind: 'line', research: 'G0001' } });
+    });
+
+    it('queue.next: the toast of Do next names the task, in every language without addressing anyone', () => {
+        const said = (lang: Parameters<typeof setLanguage>[0]) => {
+            setLanguage(lang);
+            return strings.live.queueMoved('T0103');
+        };
+        expect(['en', 'cs', 'de', 'pl'].map(l => said(l as Parameters<typeof setLanguage>[0])))
+            .toEqual(['T0103 comes up next', 'T0103 jako další', 'T0103 als Nächstes', 'T0103 jako następne']);
+        setLanguage('en');
     });
 
     it('queue.next: a `was` is {} or own + at, nothing else', () => {

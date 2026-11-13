@@ -93,6 +93,12 @@ export interface ManagedBridge {
     busy?: { sessions: number; runs: number };
     /** `/status.work` (absent: none sent). */
     work?: { gate: string | null; minutes: number };
+    /** Each task carries its place in the whole queue (`queue.page` with a queue read by pages): the write's answer too, as the research sends it. */
+    placed?: boolean;
+    /** How long a write of a task's place takes before its answer (the research writes its tree first; 0: at once). */
+    orderWriteMs?: number;
+    /** While set, a status asked after more than `after` writes answers only once `until` resolves (the next status not here yet). */
+    statusHold?: { after: number; until: Promise<void> } | null;
 }
 
 /** The status's window of a queue read by pages: 14 tasks up next, then up to 6 set aside. */
@@ -227,7 +233,9 @@ function answerQueueNext(b: ManagedBridge, n: NonNullable<ManagedBridge['queueNe
     if (b.paged) b.paged.rev++;
     if (b.offLine) b.offLine.ownTasks = b.queue.filter(x => x.own).length;
     const { whyBefore: _w, ...sent } = q;
-    return { status: 200, body: { task: sent, was, head: 'h1', parent: 'h1' } };
+    // The task as the queue has it now: with its place in it when the research numbers the queue.
+    const pos = b.placed ? queueWithPlaces(b).find(x => x.id === id)?.pos : undefined;
+    return { status: 200, body: { task: { ...sent, ...(pos !== undefined ? { pos } : {}) }, was, head: 'h1', parent: 'h1' } };
 }
 
 function answer(b: ManagedBridge, method: string, path: string, body: Record<string, unknown>): BridgeReply {
@@ -421,6 +429,7 @@ export async function followManaged(page: Page, opts: {
         });
     }
     const pagedFeature = !!opts.features?.includes('queue.page');
+    if (pagedFeature && b.paged) b.placed = true;
     const windowOf = (): Record<string, unknown>[] => {
         const all = queueWithPlaces(b);
         return [...all.filter(q => q.state === 'next').slice(0, QUEUE_WINDOW), ...all.filter(q => q.state === 'parked').slice(0, 6)];
@@ -449,6 +458,8 @@ export async function followManaged(page: Page, opts: {
         const path = new URL(req.url()).pathname.replace(/^\/[0-9a-f]+\//, '');
         if (path === 'status') {
             b.statusAsks++;
+            // Held: a status asked once a write came (the app's next status), not the one asked right before it.
+            if (b.statusHold && b.writes.length > b.statusHold.after) await b.statusHold.until;
             return route.fulfill(json(status()));
         }
         if (path === 'tree.ged') return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/plain; charset=utf-8' }, body: opts.ged ?? GED });
@@ -467,6 +478,7 @@ export async function followManaged(page: Page, opts: {
             const raw = req.postData();
             const body = raw ? JSON.parse(raw) as Record<string, unknown> : {};
             b.writes.push({ method: req.method(), path, body });
+            if (b.orderWriteMs && /^queue\//.test(path)) await new Promise(res => setTimeout(res, b.orderWriteMs));
             const r = b.replies.shift() ?? answer(b, req.method(), path, body);
             return route.fulfill(json(r.body, r.status, r.headers));
         }

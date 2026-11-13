@@ -11,9 +11,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
     QUEUE_PAGE, QUEUE_QUERY_MAX, QUEUE_REFRESH_MS, QUEUE_ROWS_CAP, beginQueueSlots, endQueueSlots, fetchQueuePage, loadMoreQueueList, noteQueueRev,
-    moveQueueItemFirst, onQueueListsChange, queueList, queueListItem, queueQuery, requestQueueList, resetQueueLists, retryQueueList,
+    moveQueueItemFirst, onQueueListsChange, placeQueueItem, placeQueueItemInLists, queueList, queueListItem, queueQuery, requestQueueList, resetQueueLists, retryQueueList,
 } from '../research-queue-pages.js';
-import { sanitizeLiveStatus, sanitizeQueue, sanitizeQueueCounts } from '../research-link.js';
+import { LiveQueueItem, sanitizeLiveStatus, sanitizeQueue, sanitizeQueueCounts } from '../research-link.js';
 import { budgetReport, measureAgainstBudget } from './helpers/perf-budget.js';
 
 /** One calibration round's best time on the reference machine at rest (Apple M-series laptop, vitest). */
@@ -118,6 +118,49 @@ describe('the whole queue by pages', () => {
         // Another research's lists are not touched.
         moveQueueItemFirst('http://127.0.0.1:7777/other', 'T00006');
         expect(ids({ research: 'G0001' })[0]).toBe('T00005:1');
+    });
+
+    it('Undo of Do next: the task at the place the bridge answered, tag and sentence as it says; the others\' places back', async () => {
+        queue = bigQueue(8);
+        const b = bridge(() => queue, () => rev);
+        vi.stubGlobal('fetch', b.fetchFn);
+        requestQueueList(BASE, { research: 'G0001' }, 'queue');
+        requestQueueList(BASE, { state: 'next' }, 'branch');
+        await flush();
+        const ids = (f: Parameters<typeof queueList>[1]) => queueList(BASE, f)!.items.map(q => `${q.id}:${q.pos}`);
+        moveQueueItemFirst(BASE, 'T00005');
+        // The bridge's answer to restore: its place 5 again, the direction's sentence, no mark of its own.
+        placeQueueItemInLists(BASE, { id: 'T00005', text: 'Matrika 5', state: 'next', research: 'G0001', pos: 5, why: { kind: 'line', research: 'G0001' } });
+        expect(ids({ research: 'G0001' })).toEqual(['T00002:2', 'T00003:3', 'T00005:5', 'T00006:6', 'T00008:8']);
+        expect(ids({ state: 'next' }).slice(0, 6)).toEqual(['T00001:1', 'T00002:2', 'T00003:3', 'T00004:4', 'T00005:5', 'T00006:6']);
+        const back = queueListItem(BASE, 'T00005')!;
+        expect(back.own).toBeUndefined();
+        expect(back.why).toEqual({ kind: 'line', research: 'G0001' });
+    });
+
+    it('placeQueueItem: moved up or down by its answered place; past a cut window it leaves; without a place only its row changes', () => {
+        const t = (id: string, pos?: number, extra: Partial<LiveQueueItem> = {}): LiveQueueItem =>
+            ({ id, text: id, state: 'next', ...(pos !== undefined ? { pos } : {}), ...extra });
+        const list = [t('T1', 1, { own: 'next' }), t('T2', 2), t('T3', 3), t('T4', 4), { id: 'T9', text: 'T9', state: 'parked' as const }];
+        const show = (xs: LiveQueueItem[]) => xs.map(x => `${x.id}:${x.pos ?? '-'}`);
+        // Down: from 1 to 3.
+        expect(show(placeQueueItem(list, t('T1', 3), false).items)).toEqual(['T2:1', 'T3:2', 'T1:3', 'T4:4', 'T9:-']);
+        // Up: from 4 to 2.
+        expect(show(placeQueueItem(list, t('T4', 2), false).items)).toEqual(['T1:1', 'T4:2', 'T2:3', 'T3:4', 'T9:-']);
+        // To the end of a whole list: after the last task up next, before the set-aside ones.
+        expect(show(placeQueueItem(list, t('T1', 4), false).items)).toEqual(['T2:1', 'T3:2', 'T4:3', 'T1:4', 'T9:-']);
+        // Past a cut window: out of it.
+        const out = placeQueueItem(list, t('T1', 20), true);
+        expect(out.out).toBe(true);
+        expect(show(out.items)).toEqual(['T2:1', 'T3:2', 'T4:3', 'T9:-']);
+        // Right after the last one held of a cut window: kept there.
+        expect(show(placeQueueItem(list, t('T1', 4), true).items)).toEqual(['T2:1', 'T3:2', 'T4:3', 'T1:4', 'T9:-']);
+        // No place in the answer: its row as answered, the order kept.
+        const plain = placeQueueItem(list, { id: 'T1', text: 'T1', state: 'next' }, false).items;
+        expect(show(plain)).toEqual(['T1:-', 'T2:2', 'T3:3', 'T4:4', 'T9:-']);
+        expect(plain[0].own).toBeUndefined();
+        // A task not held: nothing changes.
+        expect(placeQueueItem(list, t('T7', 2), false).items).toBe(list);
     });
 
     it('says busy for 503 and failed for a bad answer, never throws', async () => {
