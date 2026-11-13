@@ -209,3 +209,132 @@ test('Q2: two ranges of years beside the status mark go short instead of losing 
     await expect(b.locator('.meta-text')).toHaveText(/^1698–1702 – 1760/);
     await expect(b).not.toHaveAttribute('data-years-short', /./);
 });
+
+/**
+ * Every name row of every card: shown whole, or (only where the grown status
+ * mark takes the room) ending in "…" — never cut off hard. `whole` lists the
+ * rows that must show whole at this zoom.
+ */
+async function nameRows(page: Page): Promise<{ cut: string[]; hardCut: string[] }> {
+    return page.evaluate(() => {
+        const cut: string[] = [];
+        const hardCut: string[] = [];
+        for (const el of document.querySelectorAll<HTMLElement>('#tree-canvas .person-card .name-text, #tree-canvas .person-card .name-line, #tree-canvas .person-card .name-row')) {
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            let w = 0;
+            for (const r of range.getClientRects()) w = Math.max(w, r.width);
+            const box = el.getBoundingClientRect().width;
+            // Screen pixels: a quarter of a layout pixel at the scale it is drawn.
+            const scale = box / Math.max(1, el.offsetWidth);
+            if (w <= box + 0.25 * scale) continue;
+            const label = `${el.textContent} ${w.toFixed(1)}>${box.toFixed(1)}`;
+            cut.push(label);
+            if (getComputedStyle(el).textOverflow !== 'ellipsis') hardCut.push(label);
+        }
+        return { cut, hardCut };
+    });
+}
+
+test('§5: changing the zoom leaves the names whole where the status mark does not reach them, and a cut one ends in "…"', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openApp(page);
+    // A source in the tree gives every card the status mark (bottom right), which grows far out.
+    await page.evaluate(async () => {
+        const kids = ['a', 'b', 'c', 'd', 'e'];
+        const P = (id: string, firstName: string, lastName: string, gender: string, birthDate: string, extra: Record<string, unknown>) =>
+            ({ id, firstName, lastName, gender, birthDate, isPlaceholder: false, partnerships: [], parentIds: [], childIds: [], sourceIds: ['s1'], ...extra });
+        await window.Strom.DataManager.importAsNewTree({
+            persons: {
+                f: P('f', 'Hostivít', 'Zvonkovec', 'male', '1900', { partnerships: ['u1'], childIds: kids }),
+                m: P('m', 'Otylie', 'Zvonkovcová', 'female', '1902', { partnerships: ['u1'], childIds: kids }),
+                a: P('a', 'Eufrozína', 'Křemenáčová', 'female', '1925', { parentIds: ['f', 'm'] }),
+                b: P('b', 'Radegunda', 'Pomněnková-Zvonkovcová', 'female', '1927', { parentIds: ['f', 'm'] }),
+                c: P('c', 'Kunhuta', 'Slunéčková', 'female', '1929', { parentIds: ['f', 'm'] }),
+                d: P('d', 'Ermelinda', 'Bukvicová', 'female', '1931', { parentIds: ['f', 'm'] }),
+                e: P('e', 'Ota', 'Křemenáč', 'male', '1933', { parentIds: ['f', 'm'] }),
+            },
+            partnerships: { u1: { id: 'u1', person1Id: 'f', person2Id: 'm', childIds: kids, status: 'married' } },
+            sources: { s1: { id: 's1', title: 'Matrika' } },
+        } as never, 'Zvonkovec');
+        await window.Strom.TreeRenderer.setFocus('b' as never);
+    });
+    await expect(card(page, 'Kunhuta').locator(':scope > .card-status-mark')).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+    await settleFitting(page);
+    const canvas = page.locator('#tree-canvas');
+    const scale = () => page.evaluate(() => window.Strom.ZoomPan.getTransform().scale);
+    // The zoom's animation has ended: two frames apart, the same scale.
+    const settled = async () => {
+        let last = -1;
+        await expect.poll(async () => {
+            const now = await scale();
+            const same = now === last;
+            last = now;
+            return same;
+        }, { intervals: [50] }).toBe(true);
+    };
+    const whole = async () => expect.poll(async () => (await nameRows(page)).cut).toEqual([]);
+    await whole();
+    const fitted = () => page.evaluate(() => [...document.querySelectorAll<HTMLElement>('#tree-canvas .person-card .name')]
+        .map(n => `${n.querySelector('.name-text')?.getAttribute('title') ?? n.textContent} ${n.className}`).sort());
+    const fittedAt100 = await fitted();
+
+    // Out by the buttons into the far band (the mark grows, still drawn): the names above it stay whole.
+    const zoomOut = page.locator('.zoom-controls button').nth(1);
+    while (!(await canvas.evaluate(c => c.classList.contains('zoom-far')))) {
+        const before = await scale();
+        await zoomOut.click();
+        await expect.poll(scale).toBeLessThan(before);
+        await settled();
+    }
+    // Into the band where the grown mark stays below the one-line names (from 45 % to 55 %).
+    await page.locator('#tree-container').hover();
+    while (await scale() < 0.45) {
+        await page.mouse.wheel(0, -20);
+        await settled();
+    }
+    expect(await scale()).toBeLessThan(0.55);
+    await expect(canvas).toHaveClass(/\bzoom-far\b/);
+    await expect(canvas).not.toHaveClass(/\bzoom-tiny\b/);
+    // The status mark has grown from the card's bottom-right corner.
+    expect(await card(page, 'Kunhuta').locator(':scope > .card-status-mark').evaluate(m => getComputedStyle(m).transform)).not.toBe('none');
+    const far = await nameRows(page);
+    expect(far.hardCut).toEqual([]);
+    // A one-line name ends above the grown mark: nothing takes its room.
+    const oneLine = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('#tree-canvas .person-card .name:not(.name-fit-2lines) .name-text')]
+        .map(el => el.textContent ?? ''));
+    expect(oneLine.length).toBeGreaterThan(0);
+    for (const name of oneLine) expect(far.cut.some(c => c.startsWith(name))).toBe(false);
+    // Drawn again far out (any change of the tree does that): the names are fitted as at 100 %, not against the mark's room.
+    await page.evaluate(() => window.Strom.TreeRenderer.render());
+    await expect.poll(fitted).toEqual(fittedAt100);
+    expect((await nameRows(page)).hardCut).toEqual([]);
+
+    // Further out by the wheel, below 30 % the mark goes: every row has its whole width again.
+    for (let i = 0; i < 20 && !(await canvas.evaluate(c => c.classList.contains('zoom-tiny'))); i++) {
+        await page.mouse.wheel(0, 100);
+        await settled();
+    }
+    await expect(canvas).toHaveClass(/\bzoom-tiny\b/);
+    await whole();
+
+    // Deeper into the far band by the wheel (about 35 %): a row the mark reaches ends in "…", none is cut off hard.
+    while (await scale() < 0.34) {
+        await page.mouse.wheel(0, -40);
+        await settled();
+    }
+    await expect(canvas).not.toHaveClass(/\bzoom-tiny\b/);
+    expect((await nameRows(page)).hardCut).toEqual([]);
+
+    // Back to 100 % by the buttons: all whole, as before.
+    const zoomIn = page.locator('.zoom-controls button').first();
+    while (await scale() < 0.99) {
+        const before = await scale();
+        await zoomIn.click();
+        await expect.poll(scale).toBeGreaterThan(before);
+        await settled();
+    }
+    await expect(canvas).not.toHaveClass(/\bzoom-far\b/);
+    await whole();
+});

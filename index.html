@@ -1893,13 +1893,14 @@
             display: block;
             white-space: nowrap;
             overflow: hidden;
-            text-overflow: clip;
+            text-overflow: ellipsis;
             max-width: 100%;
         }
         .person-card .name.name-fit-2lines .name-row {
             display: block;
             white-space: nowrap;
             overflow: hidden;
+            text-overflow: ellipsis;
         }
         /* Row 2: life-year range + place, 11px, tabular figures. --text-light
            (not --text-faint) so the small meta clears 4.5:1 in both themes. */
@@ -14802,33 +14803,44 @@
         /* The text keeps clear of the grown mark as it does at 100 %: the
            mark is up to 20px × 0.85 / zoom wide (--far-mark-room, 6px from
            the card's edge, the text column ends 10px in) and, from 55 % down
-           to 30 %, 23–38px high, so it reaches the card's two bottom rows (in
-           compact the one name row, in a details card with fewer than two
-           lines the name too). Those rows end before it, with "…"; the rows
-           above stay whole. A margin, not padding, where the row itself clips. */
+           to 30 %, 12px × 0.85 / zoom high (19–34px), so it reaches the
+           card's bottom rows (in compact the one name row, in a details card
+           with fewer than two lines the name too). Only a row the mark
+           reaches at this zoom ends before it, with "…": --mark-gap is the
+           row's distance above the mark's bottom edge (set once per render,
+           renderer markGapRows), --far-step is 1 when the grown mark rises
+           past the row's bottom and 0 when it stays below it, so a name
+           above the mark stays whole. Below 30 % the mark goes and the rows
+           take their whole width again. A margin, not padding, where the
+           row itself clips. */
         @media screen {
             #tree-canvas.zoom-far { --far-mark-room: calc(17px / var(--tree-zoom, 1)); }
-            body:not(.view-mode-print) #tree-canvas.zoom-far .person-card.has-status .card-body:not(.card-body--custom) > :not(.name),
-            body:not(.view-mode-print) #tree-canvas.zoom-far .person-card.has-status .card-body:not(.card-body--custom) > .name:not(.name-fit-2lines),
-            body:not(.view-mode-print) #tree-canvas.zoom-far .person-card.has-status .name-fit-2lines .name-surname:not(:has(.name-row)),
-            body:not(.view-mode-print) #tree-canvas.zoom-far .person-card.has-status .name-fit-2lines .name-surname > .name-row:last-of-type {
-                margin-right: max(28px, var(--far-mark-room));
+            body:not(.view-mode-print) #tree-canvas.zoom-far:not(.zoom-tiny) .person-card.has-status .card-body:not(.card-body--custom) > :not(.name),
+            body:not(.view-mode-print) #tree-canvas.zoom-far:not(.zoom-tiny) .person-card.has-status .card-body:not(.card-body--custom) > .name:not(.name-fit-2lines),
+            body:not(.view-mode-print) #tree-canvas.zoom-far:not(.zoom-tiny) .person-card.has-status .name-fit-2lines .name-surname:not(:has(.name-row)),
+            body:not(.view-mode-print) #tree-canvas.zoom-far:not(.zoom-tiny) .person-card.has-status .name-fit-2lines .name-surname > .name-row:last-of-type {
+                --far-step: clamp(0, (10.2 / var(--tree-zoom, 1) - var(--mark-gap, 0)) * 100, 1);
+                margin-right: calc(var(--far-step) * max(28px, var(--far-mark-room)));
                 text-overflow: ellipsis;
             }
-            body:not(.view-mode-print)[data-card-density="compact"] #tree-canvas.zoom-far .person-card.has-status {
+            /* The meta row as the card's last row keeps its 28px of 100 % at any step. */
+            body:not(.view-mode-print) #tree-canvas.zoom-far:not(.zoom-tiny) .person-card.has-status .card-body:not(.card-body--custom) > .birth-date:last-child {
+                margin-right: max(28px, calc(var(--far-step) * var(--far-mark-room)));
+            }
+            body:not(.view-mode-print)[data-card-density="compact"] #tree-canvas.zoom-far:not(.zoom-tiny) .person-card.has-status {
                 padding-right: max(36px, calc(8px + var(--far-mark-room)));
             }
-            body:not(.view-mode-print)[data-card-density="compact"] #tree-canvas.zoom-far .person-card.has-status .card-body > .name { margin-right: 0; }
-            body:not(.view-mode-print) #tree-canvas.zoom-far .person-card.has-status .card-body--custom .card-lines > :nth-last-child(-n+2) {
+            body:not(.view-mode-print)[data-card-density="compact"] #tree-canvas.zoom-far:not(.zoom-tiny) .person-card.has-status .card-body > .name { margin-right: 0; }
+            body:not(.view-mode-print) #tree-canvas.zoom-far:not(.zoom-tiny) .person-card.has-status .card-body--custom .card-lines > :nth-last-child(-n+2) {
                 padding-right: max(22px, var(--far-mark-room));
             }
-            body:not(.view-mode-print) #tree-canvas.zoom-far .person-card.has-status .card-body--custom .card-lines > :nth-last-child(-n+2) :is(.card-line-row, .card-line-text) {
+            body:not(.view-mode-print) #tree-canvas.zoom-far:not(.zoom-tiny) .person-card.has-status .card-body--custom .card-lines > :nth-last-child(-n+2) :is(.card-line-row, .card-line-text) {
                 text-overflow: ellipsis;
             }
-            body:not(.view-mode-print) #tree-canvas.zoom-far .person-card.has-status.has-edge-br:not(.has-edge-room) .card-body--custom .card-lines > :last-child {
+            body:not(.view-mode-print) #tree-canvas.zoom-far:not(.zoom-tiny) .person-card.has-status.has-edge-br:not(.has-edge-room) .card-body--custom .card-lines > :last-child {
                 padding-right: max(var(--edge-br-room, 62px), var(--far-mark-room));
             }
-            body:not(.view-mode-print) #tree-canvas.zoom-far .person-card.has-status .card-body--custom:not(:has(.card-lines > :nth-child(2))) .card-head-text > .name {
+            body:not(.view-mode-print) #tree-canvas.zoom-far:not(.zoom-tiny) .person-card.has-status .card-body--custom:not(:has(.card-lines > :nth-child(2))) .card-head-text > .name {
                 margin-right: var(--far-mark-room);
             }
         }

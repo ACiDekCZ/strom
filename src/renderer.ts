@@ -5404,6 +5404,54 @@ class TreeRendererClass {
         // Fitted in the fallback font before the card fonts were in: fit again
         // once they are (the serif name is wider, it would end up clipped).
         cardFontsPending()?.then(() => { if (canvas.isConnected) this.fitCardNames(canvas); });
+        // Fitted as at 100 %, whatever the zoom: far out (.zoom-far) the rows
+        // the grown status mark reaches end before it, a matter of the zoom
+        // the CSS applies on top. Fitted against that room, a name rendered
+        // far out stayed shrunk or on two lines after zooming back in. No
+        // frame is painted between the two class changes.
+        const far = canvas.classList.contains('zoom-far');
+        if (far) canvas.classList.remove('zoom-far');
+        try {
+            this.fitCardNamesNow(canvas, only);
+            this.markGapRows(canvas, only);
+        } finally {
+            if (far) canvas.classList.add('zoom-far');
+        }
+    }
+
+    /**
+     * How far above the status mark's bottom edge each row of a card with
+     * the mark ends (--mark-gap, layout px). Far out the mark grows from
+     * that edge (12px × 0.85 / zoom); the CSS (#tree-canvas.zoom-far,
+     * --far-step) keeps only the rows it reaches clear of it, so a name above
+     * the mark stays whole at every zoom.
+     */
+    private markGapRows(canvas: HTMLElement, only?: readonly HTMLElement[]): void {
+        const cards = only
+            ? only.filter(c => c.isConnected && c.classList.contains('has-status'))
+            : [...canvas.querySelectorAll<HTMLElement>('.person-card.has-status')];
+        const gaps: Array<[HTMLElement, number]> = [];
+        for (const card of cards) {
+            const mark = card.querySelector<HTMLElement>(':scope > .card-status-mark');
+            if (!mark) continue;
+            const markBottom = mark.offsetTop + mark.offsetHeight;
+            const rows = card.querySelectorAll<HTMLElement>(
+                '.card-body:not(.card-body--custom) > *, .name-fit-2lines .name-surname, .name-fit-2lines .name-surname > .name-row');
+            for (const row of rows) {
+                let top = 0;
+                let e: HTMLElement | null = row;
+                while (e && e !== card) {
+                    top += e.offsetTop;
+                    e = e.offsetParent as HTMLElement | null;
+                }
+                if (e !== card) continue;
+                gaps.push([row, markBottom - (top + row.offsetHeight)]);
+            }
+        }
+        for (const [row, gap] of gaps) row.style.setProperty('--mark-gap', String(Math.round(gap * 100) / 100));
+    }
+
+    private fitCardNamesNow(canvas: HTMLElement, only?: readonly HTMLElement[]): void {
         // `only`: these cards (a live load's new ones), the rest stay as fitted.
         const names = only
             ? only.filter(c => c.isConnected).flatMap(c => [...c.querySelectorAll<HTMLElement>('.name')])
