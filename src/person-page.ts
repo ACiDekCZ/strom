@@ -22,7 +22,7 @@ import { placeKey, type MapKind } from './places.js';
 import { researchOpenSvg, historyKindSvg, HISTORY_KIND_OPTICAL_DY } from './history-symbols.js';
 import { researchLinkMark, type ResearchActionMark } from './research-link.js';
 import { lifelineGlyphOrDot } from './lifeline-glyphs.js';
-import { getStringsForLang, getCurrentLanguage, setLanguage, Language, PersonPageCaptionEvent, PersonPageRegister } from './strings.js';
+import { getStringsForLang, getCurrentLanguage, setLanguage, joinAnd, Language, PersonPageCaptionEvent, PersonPageRegister } from './strings.js';
 import { parseFlexDate, formatFlexDate, yearOf, ageBetween, toCanonical } from './dates.js';
 import { nameHtml, shownName, shownNameOrEmpty } from './person-name.js';
 import { asciiSlug, safeFileName } from './filenames.js';
@@ -48,6 +48,7 @@ import type { ImageRegistry } from './image-registry.js';
 import { sourceTranslation } from './source-translation.js';
 import { sourcePlaceLine } from './source-location.js';
 import { SharedWithLine, sharedIndexOf, sharedWithLine, sharedWithLineHtml } from './shared-with-line.js';
+import { type DerivedParticipation, derivedParticipations, derivedRoleLabel, derivedRoleWord, derivedEventWord } from './derived-participations.js';
 
 // ─── Interface (ZADANI §2.6) ────────────────────────────────────────────────
 
@@ -214,8 +215,12 @@ export interface PersonPageData {
     readOnly: boolean;
     /** What each content group holds (for the export dialog: a group with 0 is not offered). */
     counts: PersonPageGroupCounts;
-    /** People the person stood godparent to (their baptism names the person), with the baptism's year. */
-    godchildren: readonly { id: PersonId; year: number | null }[];
+    /**
+     * The person's parts at others' events (spec 085 §5: godparent, witness,
+     * officiant…), from the protected tree: an event of a living person under
+     * privacy is left out. Their persons are in `tree`.
+     */
+    participations: readonly DerivedParticipation[];
     /**
      * The places map's points (§1), collected from the whole protected tree (the
      * page's subset keeps too little of the children: emigrations, deaths);
@@ -496,7 +501,7 @@ export function preparePersonPageData(data: StromData, opts: PersonPageOptions, 
             personId: id, lang: opts.lang, privacy: opts.privacy, groups, research: opts.research, tree,
             living: new Set(), history: [], historyPending: false, waiting: [], storyDraft: false,
             readOnly: !!ctx.readOnly, counts: { history: 0, childEvents: 0, excerpts: 0, materials: 0, pdf: 0, sources: 0, research: 0 },
-            godchildren: [], places: [], geo: {}, rod: null, ancestors: null,
+            participations: [], places: [], geo: {}, rod: null, ancestors: null,
         };
     }
     const person: Person = structuredClone(src);
@@ -585,18 +590,15 @@ export function preparePersonPageData(data: StromData, opts: PersonPageOptions, 
         if (groups.history) history = h.items;
     }
 
-    // "Godparent to" (§0.5): baptisms anywhere in the tree naming the person as a godparent.
-    // A living godchild's events are gone with the privacy, so they never show here.
-    const godchildren: { id: PersonId; year: number | null }[] = [];
-    for (const other of Object.values(full.persons)) {
-        if (other.id === id || other.isPlaceholder) continue;
-        const bapt = (other.events ?? []).find(e => e.type === 'baptism'
-            && (e.participants ?? []).some(p => p.personId === id && p.role === 'godparent'));
-        if (!bapt) continue;
-        godchildren.push({ id: other.id, year: yearOf(bapt.date) ?? yearOf(other.birthDate) });
-        if (!tree.persons[other.id]) tree.persons[other.id] = relativeView(other, false);
+    // The parts at others' events (spec 085 §5): the timeline's derived rows and "Godparent and
+    // witness for". A living person's events are gone with the privacy; a wedding with a living
+    // partner is left out here.
+    const participations = derivedParticipations(full, sharedIndexOf(full), id, {
+        hidden: pid => opts.privacy !== 'full' && prot.living.has(pid),
+    });
+    for (const part of participations) {
+        for (const pid of part.subjects) if (!tree.persons[pid] && full.persons[pid]) tree.persons[pid] = relativeView(full.persons[pid], false);
     }
-    godchildren.sort((a, b) => (a.year ?? Infinity) - (b.year ?? Infinity) || String(a.id).localeCompare(String(b.id)));
 
     // The Ancestors fan: from the whole protected tree, not the page's subset (§8.2).
     const ancestors = ancestorFanData(full, id);
@@ -621,7 +623,7 @@ export function preparePersonPageData(data: StromData, opts: PersonPageOptions, 
         ...(ctx.changedAt ? { changedAt: ctx.changedAt } : {}),
         readOnly: !!ctx.readOnly,
         counts: { history: 0, childEvents: 0, excerpts: 0, materials: 0, pdf: 0, sources: 0, research: 0 },
-        godchildren, places, geo,
+        participations, places, geo,
         // A lineage's name is a surname: with initials or hidden names a living person's row is left out (§3.4).
         rod: rodRowShown(opts.privacy, prot.living.has(id)) ? personRodRowValue(prot.lineages, prot.rodLabels, id, opts.lang) : null,
         ancestors,
@@ -2039,6 +2041,7 @@ function pointDate(c: Ctx, pt: LifelinePoint): string | undefined {
         case 'divorce': return u?.endDate;
         case 'child': return pt.relatedId ? c.tree.persons[pt.relatedId as PersonId]?.birthDate : undefined;
         case 'event': return eventOf(c, pt)?.date;
+        case 'participation': return pt.participation?.date;
         case 'coupleEvent': return u?.events?.find(e => e.id === pt.eventId)?.date;
         case 'childEvent': {
             const kid = pt.relatedId ? c.tree.persons[pt.relatedId as PersonId] : undefined;
@@ -2082,6 +2085,8 @@ function detailsLine(c: Ctx, pt: LifelinePoint, merged?: LifelinePoint): string 
     const parts: string[] = [];
     const date = exactDate(c, pointDate(c, pt));
     if (date) parts.push(esc(date));
+    // A part at another's event: its date alone, no marks, sources or ages (spec 085 §5).
+    if (pt.kind === 'participation') return date ? `<span class="pp-dt">${esc(date)}</span>` : '';
     if (merged) {
         const md = pointDate(c, merged);
         const label = merged.eventType === 'baptism' ? P.detail.baptism : P.detail.burial;
@@ -2145,6 +2150,19 @@ function rowText(c: Ctx, pt: LifelinePoint, merged?: LifelinePoint): string {
             const text = pm.lifelineChildEvent('\u0000', '\u0001');
             return esc(text).replace('\u0000', name).replace('\u0001', esc(what)) + place;
         }
+        case 'participation': {
+            const part = pt.participation;
+            if (!part) return '';
+            const role = esc(derivedRoleLabel(part, c.person.gender, S));
+            // In the app the role opens the event at whose it is (a baptism at the child, a wedding at the couple).
+            const open = c.app && c.opts.links === 'app' && !c.page.readOnly;
+            const head = open
+                ? `<button type="button" class="pp-part-open" data-pp-action="derived-event" data-pp-event="${esc(part.eventId)}"`
+                    + (part.ownerPersonId ? ` data-pp-owner="${esc(part.ownerPersonId)}"` : ` data-pp-union="${esc(part.partnershipId ?? '')}"`)
+                    + ` title="${esc(S.events.derivedOpen(derivedEventWord(part, S), part.subjects.map(pid => nameOf(c, pid)).filter(Boolean).join(', ')))}">${role}</button>`
+                : `<span class="pp-part-role">${role}</span>`;
+            return `${head} ${participationNames(c, part)}${place}`;
+        }
         case 'coupleEvent': {
             const label = esc(coupleEventLabelIn({ type: pt.coupleType ?? 'custom', customLabel: pt.customLabel }, S));
             return `${who ? pm.lifelinePartnerEvent('\u0000', '\u0001').split('\u0000').map(s => s.split('\u0001').map(esc).join(who)).join(label) : label}${place}`;
@@ -2155,6 +2173,13 @@ function rowText(c: Ctx, pt: LifelinePoint, merged?: LifelinePoint): string {
             return `${esc(label)}${detail}${place}`;
         }
     }
+}
+
+/** The persons a part at another's event is of ("Anežka Hurdálková", "Václav Hurdálek a Ludmila Kalinová"), each a link to their page. */
+function participationNames(c: Ctx, part: DerivedParticipation): string {
+    const names = part.subjects.filter(pid => c.tree.persons[pid])
+        .map(pid => personLink(c, esc(nameOf(c, pid) || '?'), pid));
+    return names.length ? joinAnd(c.page.lang, names) : '';
 }
 
 /** A row's mark in the circle on the line: the person card's own glyph (one definition), 13 px. */
@@ -2280,7 +2305,9 @@ function sharedLineFor(c: Ctx, eventId: string, canOpen: boolean): string {
 
 function timelineHtml(c: Ctx): string {
     const { P, page, person } = c;
-    const points = computePersonLifeline(page.tree, page.personId, { childEvents: page.groups.childEvents });
+    const points = computePersonLifeline(page.tree, page.personId, {
+        childEvents: page.groups.childEvents, participations: page.participations,
+    });
     const segs = personPageTimeline(points, page.history, {
         childEvents: page.groups.childEvents, history: page.groups.history, living: page.living.has(person.id),
     });
@@ -2289,7 +2316,7 @@ function timelineHtml(c: Ctx): string {
     const rowHtml = (r: PersonPageTimelineRow): string => {
         if (r.kind === 'hist') return histRowHtml(c, r.item);
         const pt = r.point;
-        const cls = r.kind === 'kid' ? 'pp-row--kid' : 'pp-row--own';
+        const cls = r.kind === 'kid' ? 'pp-row--kid' : pt.kind === 'participation' ? 'pp-row--own pp-row--part' : 'pp-row--own';
         const ex = r.kind === 'own' ? mainExcerpt(c, pt, r.merged) : null;
         let fig = '';
         if (ex) {
@@ -2947,15 +2974,17 @@ function peopleAroundHtml(c: Ctx): string {
         group(P.people.witnesses(y), (u.participants ?? []).filter(p => p.role === 'witness'));
         group(P.people.others(y), (u.participants ?? []).filter(p => p.role !== 'witness'));
     }
-    const god = page.godchildren.filter(gc => tree.persons[gc.id] && !shielded(c, gc.id));
-    if (god.length) {
-        const items = god.slice(0, GODCHILDREN_SHOWN).map(gc => {
+    // "Godparent and witness for" (spec 085 §5b): every linked part, "Anežka Hurdálková · godparent · baptism 1909".
+    const parts = page.participations.filter(pt => pt.subjects.some(pid => tree.persons[pid]) && !pt.subjects.some(pid => shielded(c, pid)));
+    if (parts.length) {
+        const items = parts.slice(0, GODCHILDREN_SHOWN).map(pt => {
             names++;
-            return `<strong>${personLink(c, esc(nameOf(c, gc.id) || '?'), gc.id)}</strong>`
-                + ` <span class="pp-people-note">(${esc(P.people.baptismOf(gc.year !== null ? String(gc.year) : ''))})</span>`;
+            const year = yearText(pt.date);
+            const what = `${derivedRoleWord(pt, person.gender, c.S)} · ${derivedEventWord(pt, c.S)}${year ? ` ${year}` : ''}`;
+            return `<strong>${participationNames(c, pt)}</strong> <span class="pp-people-note">· ${esc(what)}</span>`;
         });
-        if (god.length > GODCHILDREN_SHOWN) items.push(`<span class="pp-people-more">${esc(P.people.more(god.length - GODCHILDREN_SHOWN))}</span>`);
-        rows.push({ label: P.people.godparentOf[genderKey(person)], items });
+        if (parts.length > GODCHILDREN_SHOWN) items.push(`<span class="pp-people-more">${esc(P.people.more(parts.length - GODCHILDREN_SHOWN))}</span>`);
+        rows.push({ label: P.people.godparentWitness[genderKey(person)], items });
     }
     if (names < 2) return '';
     // Names in a row separated by " · " (the separator is text, so a copied or read line keeps it).

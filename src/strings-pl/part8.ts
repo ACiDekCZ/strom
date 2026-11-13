@@ -740,8 +740,7 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
             othersBaptism: (y: string) => (y ? `Inni przy chrzcie ${y}` : 'Inni przy chrzcie'),
             witnesses: (y: string) => (y ? `Świadkowie ślubu ${y}` : 'Świadkowie ślubu'),
             others: (y: string) => (y ? `Inni przy ślubie ${y}` : 'Inni przy ślubie'),
-            godparentOf: { m: 'Był chrzestnym', f: 'Była chrzestną', u: 'Rodzic chrzestny' },
-            baptismOf: (y: string) => (y ? `chrzest ${y}` : 'chrzest'),
+            godparentWitness: { m: 'Chrzestny i świadek u', f: 'Chrzestna i świadek u', u: 'Chrzestny i świadek u' },
             more: (n: number) => `i inni (${n})`,
         },
         gal: {

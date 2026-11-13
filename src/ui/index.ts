@@ -54,6 +54,7 @@ import { personModalMethods } from './person-modal.js';
 import { personEventsMethods } from './person-events.js';
 import { sharedEventMethods } from './shared-event-ui.js';
 import { sharedLineMethods } from './shared-line-ui.js';
+import { derivedRowsMethods } from './derived-rows-ui.js';
 import { sharedUnifyMethods, type SharedUnifyState } from './shared-unify-ui.js';
 import type { SharedDraft } from '../shared-event-editor.js';
 import { coupleEventsMethods } from './couple-events-ui.js';
@@ -608,6 +609,9 @@ Object.assign(UIClass.prototype, sharedEventMethods);
 type SharedLineMethods = typeof sharedLineMethods;
 export interface UIClass extends SharedLineMethods {}
 Object.assign(UIClass.prototype, sharedLineMethods);
+type DerivedRowsMethods = typeof derivedRowsMethods;
+export interface UIClass extends DerivedRowsMethods {}
+Object.assign(UIClass.prototype, derivedRowsMethods);
 type SharedUnifyMethods = typeof sharedUnifyMethods;
 export interface UIClass extends SharedUnifyMethods {}
 Object.assign(UIClass.prototype, sharedUnifyMethods);

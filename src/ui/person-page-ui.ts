@@ -10,7 +10,7 @@
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { strings, getCurrentLanguage } from '../strings.js';
-import { PersonId, StromData, Attachment } from '../types.js';
+import { PersonId, PartnershipId, StromData, Attachment } from '../types.js';
 import { buildLineages, type RodId } from '../lineage.js';
 import { windowFamilyPages } from '../family-pages.js';
 import { ensureFamilyPagesAppCss } from '../family-pages-css.js';
@@ -819,6 +819,16 @@ export const personPageMethods = uiModule({
             if (!person?.events?.some(e => e.id === eventId)) return;
             this.closePersonPage({ focus: false });
             this.openEventEditorFor(personId, eventId);
+            return;
+        }
+        if (action === 'derived-event') {
+            // A part at another's event (spec 085 §5): that event where it is kept.
+            const eventId = el.dataset.ppEvent ?? '';
+            const owner = el.dataset.ppOwner as PersonId | undefined;
+            const union = el.dataset.ppUnion as PartnershipId | undefined;
+            if (!eventId || (!owner && !union)) return;
+            this.closePersonPage({ focus: false });
+            this.openDerivedEvent(owner ? { ownerPersonId: owner, eventId } : { partnershipId: union, eventId });
             return;
         }
         if (action === 'materials') {

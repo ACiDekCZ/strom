@@ -17,7 +17,7 @@ import { extraParticipantRole } from '../godparents.js';
 import { strings } from '../strings.js';
 import { SettingsManager } from '../settings.js';
 import { SELECTABLE_EVENT_TYPES, orderLifeList, eventTakesParticipants, eventValueIsOnTag } from '../events.js';
-import { formatFlexDate, normalizeDateInput, formatDateForInput } from '../dates.js';
+import { formatFlexDate, normalizeDateInput, formatDateForInput, yearOf, yearFraction } from '../dates.js';
 import { chainLinkSvg, iconSvg } from '../icons.js';
 import { uiModule } from './module.js';
 import { autoGrowAll } from './autogrow.js';
@@ -102,7 +102,22 @@ export const personEventsMethods = uiModule({
             hasBirth ? { date: person.birthDate } : null,
             hasDeath ? { date: person.deathDate } : null,
             person.events ?? []);
+        // A part at another's event (spec 085 §5) stands among the own rows by its date, undated ones last.
+        const derived = this.derivedRowsOf(this.currentId);
+        let nextDerived = 0;
+        const derivedBefore = (key: number | null): void => {
+            while (nextDerived < derived.length && (key === null || derived[nextDerived].sortKey < key)) {
+                rows.push(this.derivedRowHtml(derived[nextDerived], nextDerived, person.gender));
+                nextDerived++;
+            }
+        };
+        const keyOf = (date: string | undefined): number | null => {
+            const y = yearOf(date);
+            return y === null ? null : y + yearFraction(date);
+        };
         for (const entry of entries) {
+            const key = keyOf(entry.kind === 'birth' ? person.birthDate : entry.kind === 'death' ? person.deathDate : entry.event.date);
+            if (key !== null) derivedBefore(key);
             if (entry.kind === 'birth') {
                 rows.push(this.eventRowHtml(strings.events.types.birth,
                     eventMeta(person.birthDate, person.birthPlace), null, '',
@@ -121,6 +136,8 @@ export const personEventsMethods = uiModule({
             }
         }
 
+        derivedBefore(null);
+
         if (rows.length === 0) {
             container.innerHTML = `<div class="events-empty">${esc(strings.events.empty)}</div>`;
         } else {
@@ -134,6 +151,7 @@ export const personEventsMethods = uiModule({
                 btn.addEventListener('click', () => { void this.deleteEvent(btn.dataset.eventId ?? ''); });
             });
             this.bindSharedLines(container);
+            this.bindDerivedRows(container, derived);
         }
 
         // Add button visibility follows the lock state.

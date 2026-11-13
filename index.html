@@ -25763,6 +25763,35 @@
             }
         }
         .events-empty { color: var(--text-light); font-size: 13px; padding: 4px 0; }
+        /* A part at another's event (spec 085 §5): quieter than an own event, a dashed line under it, no marks. */
+        .event-row.derived {
+            cursor: pointer; align-items: flex-start;
+            border-bottom-style: dashed; background: transparent;
+        }
+        .event-row.derived .derived-mark { flex: none; color: var(--text-faint); padding-top: 3px; }
+        .event-row.derived .derived-mark svg { display: block; }
+        .event-row.derived .derived-head { overflow-wrap: anywhere; }
+        .event-row.derived .derived-role { font-weight: 500; color: var(--text-light); }
+        .event-row.derived .derived-names { color: var(--text); }
+        .event-row.derived .derived-meta { color: var(--text-faint); }
+        .event-row.derived .event-actions { align-self: center; }
+        .event-row.derived .event-actions button.derived-more {
+            min-width: 32px; min-height: 32px; padding: 0 6px; font-size: 17px; letter-spacing: 1px; border-radius: var(--r-md, 6px);
+        }
+        .event-row.derived:focus-visible, .event-row.derived .derived-more:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        @media (hover: hover) {
+            .event-row.derived:hover { background: var(--hover-bg); }
+            .event-row.derived:hover .derived-role { color: var(--text); }
+        }
+        @media (pointer: coarse), (max-width: 640px) {
+            .event-row.derived .event-actions button.derived-more { min-width: 44px; min-height: 44px; }
+        }
+        @media (max-width: 640px) {
+            .event-row.derived { padding: 6px 4px 6px 8px; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .event-row.derived { padding-top: 4px; padding-bottom: 4px; }
+        }
 
         /* Sources / citations */
         .sources-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }

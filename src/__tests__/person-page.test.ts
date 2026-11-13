@@ -1399,7 +1399,7 @@ describe('person page 2 (§0, §3, §4)', () => {
         // The role lives in the group's heading; each name stands alone, without a declined role after it (round 2, point 8).
         expect(sec).toContain('<dt>Kmotři při křtu 1860</dt><dd><ul><li><strong>Josef Kmotr</strong></li></ul></dd>');
         expect(sec).toContain('<dt>Svědci při sňatku 1888</dt><dd><ul><li><strong>František Svědek</strong>, soused</li></ul></dd>');
-        expect(sec).toMatch(/<dt>Byl kmotrem<\/dt><dd><ul><li><strong><button[^>]*data-pp-person="cizi"[^>]*>Tomáš Neznámý<\/button><\/strong> <span class="pp-people-note">\(křest 1870\)<\/span>/);
+        expect(sec).toMatch(/<dt>Kmotr a svědek u<\/dt><dd><ul><li><strong><button[^>]*data-pp-person="cizi"[^>]*>Tomáš Neznámý<\/button><\/strong> <span class="pp-people-note">· kmotr · křest 1870<\/span>/);
         expect(sec).not.toContain('pp-people-role');
         // After the gallery, before the notes.
         expect(html.indexOf('pp-sec-people')).toBeGreaterThan(html.indexOf('pp-sec-materials'));

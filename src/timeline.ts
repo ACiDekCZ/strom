@@ -13,6 +13,7 @@ import { eventValueIsOnTag, isPosthumousEvent } from './events.js';
 import { isLivingPerson } from './privacy.js';
 import { shownNameOrEmpty, shownNameFull } from './person-name.js';
 import type { HistoryKind, HistoryScope } from './history.js';
+import type { DerivedParticipation } from './derived-participations.js';
 
 export interface TimelineEvent {
     year: number;
@@ -272,7 +273,9 @@ export function clusterTimelineHistory(
 // ==================== PERSON LIFELINE (R2) ====================
 
 /** The kinds of dated point on a single person's life timeline. */
-export type LifelineKind = 'birth' | 'death' | 'marriage' | 'divorce' | 'child' | 'event' | 'coupleEvent' | 'childEvent';
+export type LifelineKind = 'birth' | 'death' | 'marriage' | 'divorce' | 'child' | 'event' | 'coupleEvent' | 'childEvent'
+    // A part at another's event (spec 085 §5): a derived row, not the person's own event.
+    | 'participation';
 
 /** What a child's point on a parent's timeline records (kind === 'childEvent'). */
 export type ChildLifelineEvent = 'death' | 'burial' | 'marriage' | 'divorce';
@@ -335,6 +338,8 @@ export interface LifelinePoint {
     place?: string;
     /** What the record adds: cause, age as recorded, house (this person's age at a wedding). */
     details?: { cause?: string; age?: string; address?: string };
+    /** The part at another's event (kind === 'participation'). */
+    participation?: DerivedParticipation;
 }
 
 /** The details worth a line, or nothing when none is filled. */
@@ -388,7 +393,8 @@ function personName(data: StromData, id: string | undefined): string | undefined
  * show the section (convention: hide when fewer than 2 points).
  */
 export function computePersonLifeline(
-    data: StromData, personId: string, opts: { childEvents?: boolean } = {},
+    data: StromData, personId: string,
+    opts: { childEvents?: boolean; participations?: readonly DerivedParticipation[] } = {},
 ): LifelinePoint[] {
     const person = data.persons[personId as keyof typeof data.persons];
     if (!person || person.isPlaceholder) return [];
@@ -522,6 +528,17 @@ export function computePersonLifeline(
     }
 
     if (opts.childEvents) points.push(...childLifelinePoints(data, person.childIds));
+    // The parts at others' events (derivedParticipations), dated ones only like every point.
+    for (const part of opts.participations ?? []) {
+        const y = yearOf(part.date);
+        if (y === null) continue;
+        points.push({
+            year: y, sortKey: part.sortKey, kind: 'participation', eventId: part.eventId,
+            ...(part.partnershipId ? { partnershipId: part.partnershipId } : {}),
+            ...(part.place ? { place: part.place } : {}),
+            participation: part,
+        });
+    }
 
     points.sort((a, b) => a.sortKey - b.sortKey || lifelineRank(a) - lifelineRank(b));
     return points;

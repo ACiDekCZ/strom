@@ -292,6 +292,13 @@ button.pp-chip, a.pp-chip { cursor: pointer; }
 .pp-row--kid .pp-y { font-size: 13px; font-weight: 400; color: var(--text-light); }
 .pp-row--kid .pp-mk { font-size: 15px; color: var(--text-faint); }
 .pp-row--kid .pp-t { font-size: 14px; color: var(--text-light); }
+/* A part at another's event (spec 085 §5): the chain, the role muted, a dashed line under it, no marks. */
+.pp-row--part .pp-y { font-weight: 400; color: var(--text-faint); }
+.pp-row--part .pp-mk { color: var(--text-faint); }
+.pp-row--part .pp-t { border-bottom: 1px dashed var(--border); }
+.pp-part-role { font-weight: 500; color: var(--text-light); }
+.pp .pp-part-open { font: inherit; font-weight: 500; color: var(--text-light); background: none; border: 0; padding: 0; cursor: pointer; text-align: left; text-decoration: underline dotted; text-underline-offset: 3px; }
+@media (hover: hover) { .pp .pp-part-open:hover { color: var(--primary); } }
 .pp-no-history .pp-row--hist, .pp-no-history .pp-legend, .pp-no-history .pp-legend-kinds, .pp-no-kids .pp-row--kid { display: none; }
 .pp-no-kids .pp-seg:not(.pp-seg--own):not(.pp-seg--hist), .pp-no-history .pp-seg:not(.pp-seg--own):not(.pp-seg--kid),
 .pp-no-history.pp-no-kids .pp-seg:not(.pp-seg--own) { display: none; }

@@ -129,7 +129,7 @@ export function collectPersonPlacePoints(tree: StromData, personId: PersonId, op
     for (const pt of computePersonLifeline(tree, personId)) {
         const place = pt.place?.trim();
         if (!place) continue;
-        if (pt.kind === 'child' || pt.kind === 'childEvent') continue;
+        if (pt.kind === 'child' || pt.kind === 'childEvent' || pt.kind === 'participation') continue;
         const key = placeKey(place);
         if (!key) continue;
         if ((pt.kind === 'marriage' || pt.kind === 'divorce' || pt.kind === 'coupleEvent')

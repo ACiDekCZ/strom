@@ -17,6 +17,8 @@ const CHILD = '<circle cx="12" cy="7" r="3"/><path d="M7 21c0-3 2.2-5 5-5s5 2 5 
 const DIVORCE = '<circle cx="6" cy="13" r="4"/><circle cx="18" cy="13" r="4"/><path d="M12 5v16"/>';
 const BURIAL = '<path d="M8 21V9a4 4 0 0 1 8 0v12M5 21h14"/>';
 const DOT = '<circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/>';
+// The chain of a link to someone's event (icons.ts chainLinkSvg): a part at another's event.
+const CHAIN = '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>';
 
 const EVENT_GLYPHS = new Map<string, string>(Object.entries({
     baptism: '<path d="M12 3c3 4 5 6.5 5 9a5 5 0 0 1-10 0c0-2.5 2-5 5-9z"/>',
@@ -46,6 +48,7 @@ function glyphInner(pt: Pick<LifelinePoint, 'kind' | 'eventType' | 'childEvent'>
             }
         // Only the wedding carries the rings; the couple's other events no mark.
         case 'coupleEvent': return '';
+        case 'participation': return CHAIN;
         default: return EVENT_GLYPHS.get(pt.eventType as string) ?? DOT;
     }
 }
