@@ -56,6 +56,8 @@ import { computeFamilyStats, computeCompleteness } from '../stats.js';
 import { findComponents, componentName } from '../components.js';
 import { orphanedPlaceKeys } from '../places.js';
 import { shownNameOrEmpty } from '../person-name.js';
+import { shareDivergence } from '../shared-events.js';
+import { divergenceSentence, divergenceTitle, divergentPersons } from '../shared-divergence.js';
 
 /**
  * What a finding of the tree check shows besides the app's own word: the
@@ -67,6 +69,8 @@ export interface ValidationRowExtra {
     badgeHtml?: string;
     /** The monospace detail is not shown under a verdict. */
     hideDetail?: boolean;
+    /** The row's own sentence names the people (a shared event's differing copies): no list of links. */
+    hidePeople?: boolean;
     /** Actions before "Not an error" / "Two different people" (e.g. Merge…), as trusted HTML. */
     actionsHtml?: string;
     /** Order inside the group: lower first; rows without a rank after those with one, in the app's order. */
@@ -348,6 +352,28 @@ export const treeStatsMethods = uiModule({
                 case 'loadNew':
                     void this.loadNewVersionFromValidation(treeId);
                     return;
+                case 'unifyShared': {
+                    const share = el.dataset.share ?? '';
+                    if (!share || this.treeValidationReadOnly(treeId)) return;
+                    void (async () => {
+                        if (TreeManager.getActiveTreeId() !== treeId) await this.switchToTree(treeId as TreeId);
+                        if (TreeManager.getActiveTreeId() !== treeId) return;
+                        const opener = this.divergentCopyOf(share)?.personId ?? null;
+                        this.showSharedUnify(share, opener, redraw);
+                    })();
+                    return;
+                }
+                case 'separateShared': {
+                    const share = el.dataset.share ?? '';
+                    if (!share || this.treeValidationReadOnly(treeId)) return;
+                    void inTree(() => { this.separateDivergentShared(share); });
+                    return;
+                }
+                case 'openShared': {
+                    const share = el.dataset.share ?? '';
+                    if (share) void this.openSharedFromValidation(treeId, share);
+                    return;
+                }
                 case 'more': {
                     const type = el.dataset.type ?? '';
                     view.shown.set(type, (view.shown.get(type) ?? GROUP_STEP) + GROUP_STEP);
@@ -452,7 +478,37 @@ export const treeStatsMethods = uiModule({
      * or "told apart" (set aside).
      */
     validationRowExtra(issue: ValidationIssue, treeId: string, data: StromData): ValidationRowExtra | null {
+        if (issue.type === 'sharedCopiesDiffer') return this.sharedDiffRowExtra(issue, treeId, data);
         return this.duplicateVerdictRowExtra(issue, treeId, data);
+    },
+
+    /**
+     * A shared event whose copies differ (spec 085 4c): its sentence in the
+     * UI's language ("Census 1921 · Zbyhněv Hurdálek: date differs …") and
+     * Make all match… · Separate the differing copy/copies · Open.
+     */
+    sharedDiffRowExtra(issue: ValidationIssue, treeId: string, data: StromData): ValidationRowExtra | null {
+        const d = issue.shareId ? shareDivergence(data, issue.shareId) : null;
+        if (!d) return null;
+        const esc = (t: string): string => this.escapeHtml(t);
+        const v = strings.validation;
+        const title = divergenceTitle(data, d);
+        const sentence = divergenceSentence(data, d);
+        const head = sentence.startsWith(`${title} · `) ? title : '';
+        const text = head ? sentence.slice(head.length) : sentence;
+        const share = esc(d.shareId);
+        const off = divergentPersons(d).length;
+        const actionsHtml = this.treeValidationReadOnly(treeId) ? '' : [
+            `<button type="button" class="vq-shared-unify" data-vq="unifyShared" data-share="${share}" data-focus-key="unify:${share}">${esc(v.unify)}</button>`,
+            `<button type="button" class="vq-verdict-action" data-vq="separateShared" data-share="${share}" data-focus-key="sep:${share}">${esc(off === 1 ? v.separateCopy : v.separateCopies(off))}</button>`,
+        ].join('');
+        return {
+            badgeHtml: `<div class="vq-shared-text">${head ? `<strong>${esc(head)}</strong>` : ''}${esc(text)}</div>`,
+            hideDetail: true,
+            hidePeople: true,
+            actionsHtml: actionsHtml
+                + `<button type="button" class="vq-shared-open" data-vq="openShared" data-share="${share}" data-focus-key="open:${share}">${esc(v.openEvent)}</button>`,
+        };
     },
 
     /** A line under a group's title (§3: "Assessed by the research"). */
@@ -611,7 +667,7 @@ export const treeStatsMethods = uiModule({
         const s = strings.treeManager;
         const esc = (t: string): string => this.escapeHtml(t);
         const dup = issue.type === 'possibleDuplicate';
-        const people = this.validationPeopleHtml(issue, treeData, treeId);
+        const people = extra?.hidePeople ? '' : this.validationPeopleHtml(issue, treeData, treeId);
         // The godparent's detail begins with the name the row already shows in bold.
         let detail = issue.detail ?? '';
         if (issue.subject && detail.startsWith(`${issue.subject} — `)) detail = detail.slice(issue.subject.length + 3);
@@ -698,6 +754,17 @@ export const treeStatsMethods = uiModule({
      * Focus on a person from validation dialog
      * Switches to the tree if needed and focuses on the person
      */
+    /** Open in a shared event's finding: the dialogs closed, the editor of the first differing copy from its person's side. */
+    async openSharedFromValidation(treeId: string, shareId: string): Promise<void> {
+        this.closeTreeValidationDialog();
+        if (this.isTreeOverviewOpen()) this.closeTreeOverview();
+        this.closeTreeManagerDialog();
+        if (TreeManager.getActiveTreeId() !== treeId) await this.switchToTree(treeId as TreeId);
+        if (TreeManager.getActiveTreeId() !== treeId) return;
+        const copy = this.divergentCopyOf(shareId);
+        if (copy) this.openEventEditorFor(copy.personId, copy.eventId);
+    },
+
     async focusPersonFromValidation(treeId: string, personId: string): Promise<void> {
         // Close all dialogs (the tree overview too, when validation was opened from it)
         this.closeTreeValidationDialog();

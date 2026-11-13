@@ -17,12 +17,13 @@ import { DataManager } from '../data.js';
 import { LifeEvent, LifeEventType, PersonId, Person, Gender } from '../types.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { SELECTABLE_EVENT_TYPES, eventIsShareable } from '../events.js';
-import { formatFlexDate, normalizeDateInput, yearOf } from '../dates.js';
+import { formatFlexDate, normalizeDateInput, yearOf, formatDateForInput } from '../dates.js';
 import { sharedEventMarkSvg } from '../icons.js';
 import { shownName } from '../person-name.js';
 import { findRelationship } from '../kinship.js';
 import { filterAndSort } from '../person-picker.js';
-import { sharedWith, SharedEventCommon, SharedEventOwn } from '../shared-events.js';
+import { sharedWith, shareDivergence, SharedEventCommon, SharedEventCommonField, SharedEventOwn } from '../shared-events.js';
+import { editorDivergence } from '../shared-divergence.js';
 import {
     SharedDraft, sharedDraftFor, orderDraftRows, addToDraft, takeFromDraft, sharedEditFrom,
     draftChangesPersons, sharedEventTitle, sharedSaveMessage, familyCandidates, FamilyCandidate,
@@ -48,6 +49,12 @@ function bornYear(p: Person | null | undefined): string {
     const y = yearOf(p?.birthDate);
     return y !== null ? `* ${y}` : '';
 }
+
+/** The editor's input of a common field (the amber frame of a differing copy, 4g). */
+const DIFF_INPUT: Partial<Record<SharedEventCommonField, string>> = {
+    type: 'input-event-type', customLabel: 'input-event-custom-label', date: 'input-event-date',
+    place: 'input-event-place', address: 'input-event-address', note: 'input-event-note',
+};
 
 /** The person picker's state while it is open. */
 interface SharedPickerState {
@@ -135,6 +142,7 @@ export const sharedEventMethods = uiModule({
         if (partHint) partHint.hidden = !offered;
         this.lockSharedEventTypes(shared ? rows.length : 0);
         this.renderSharedDeleteButton();
+        this.renderSharedDiff();
 
         if (!section) return;
         if (!offered || !draft) {
@@ -164,6 +172,87 @@ export const sharedEventMethods = uiModule({
             ${large ? `<button type="button" class="link-button sw-more-link">${esc(this.sharedShowAll ? e.sharedShowLess : e.sharedShowMore(rows.length - SHOWN))}</button>` : ''}
             <button type="button" class="secondary sw-add">+ ${esc(e.sharedAdd)}</button>`;
         this.wireSharedRows(section);
+    },
+
+    /**
+     * The amber bar under the banner (4g) when the stored copies of the open
+     * event differ: who differs and in what, Compare (the Unify dialog over
+     * the editor); each input of a field in which this person's copy differs
+     * from the others gets an amber frame. Saving does not overwrite the
+     * difference (only changed fields are written), it stays until Unify or
+     * Separate.
+     */
+    renderSharedDiff(): void {
+        const bar = document.getElementById('event-shared-diff');
+        const modal = document.getElementById('event-editor-modal');
+        modal?.querySelectorAll('.is-shared-diff').forEach(el => el.classList.remove('is-shared-diff'));
+        if (!bar) return;
+        const viewer = this.currentId;
+        const eventId = this.editingEventId;
+        const stored = viewer && eventId && !this.coupleEventPartnershipId
+            ? DataManager.getPerson(viewer)?.events?.find(e => e.id === eventId) ?? null : null;
+        const data = DataManager.getData();
+        const d = stored?.shareId ? shareDivergence(data, stored.shareId) : null;
+        if (!d || !viewer || !eventId) {
+            bar.hidden = true;
+            delete bar.dataset.share;
+            return;
+        }
+        const { text, fields } = editorDivergence(data, d, { personId: viewer, eventId });
+        const msg = bar.querySelector('.shared-diff-msg');
+        if (msg) msg.textContent = text;
+        const link = bar.querySelector<HTMLElement>('.shared-diff-link');
+        if (link) link.hidden = DataManager.isReadOnly() || d.copies.some(c => DataManager.isPersonLocked(c.personId));
+        bar.dataset.share = d.shareId;
+        bar.hidden = false;
+        for (const f of fields) {
+            const id = DIFF_INPUT[f];
+            if (id) document.getElementById(id)?.classList.add('is-shared-diff');
+        }
+    },
+
+    /** Compare in the amber bar: the Unify dialog over the editor, the editor brought up to date after. */
+    compareSharedFromEditor(): void {
+        const shareId = document.getElementById('event-shared-diff')?.dataset.share;
+        const viewer = this.currentId;
+        const eventId = this.editingEventId;
+        if (!shareId || !viewer || !eventId) return;
+        const dirty = this.hasEventEditorChanges();
+        const framed = [...document.querySelectorAll<HTMLElement>('#event-editor-modal .is-shared-diff')].map(el => el.id);
+        this.showSharedUnify(shareId, viewer, () => this.afterSharedUnifyInEditor(viewer, eventId, dirty, framed));
+    },
+
+    /**
+     * After Unify or Separate from the editor: untouched, the editor opens
+     * the stored event again; with unsaved changes, only the inputs that were
+     * framed take the stored value (the rest stays as typed).
+     */
+    afterSharedUnifyInEditor(viewer: PersonId, eventId: string, dirty: boolean, framed: readonly string[]): void {
+        this.renderEventsList();
+        this.renderPersonLifeline(viewer);
+        const open = document.getElementById('event-editor-modal')?.classList.contains('active');
+        if (!open || this.currentId !== viewer || this.editingEventId !== eventId) return;
+        const stored = DataManager.getPerson(viewer)?.events?.find(e => e.id === eventId);
+        if (!stored) {
+            this.forceCloseEventEditor();
+            return;
+        }
+        if (!dirty) {
+            if (this.dialogStack[this.dialogStack.length - 1] === 'event-editor-modal') this.dialogStack.pop();
+            this.showEditEventModal(eventId);
+            return;
+        }
+        const values: Record<string, string> = {
+            'input-event-type': stored.type, 'input-event-custom-label': stored.customLabel ?? '',
+            'input-event-date': formatDateForInput(stored.date), 'input-event-place': stored.place ?? '',
+            'input-event-address': stored.address ?? '', 'input-event-note': stored.note ?? '',
+        };
+        for (const id of framed) {
+            const input = document.getElementById(id) as HTMLInputElement | null;
+            if (input && id in values) input.value = values[id];
+        }
+        if (!stored.shareId) this.sharedEventInit(stored);
+        else this.renderSharedDiff();
     },
 
     /** The role cell: the list (household member / other role…) or, for a role of its own, a text field with ▾ back to the list. */
@@ -560,7 +649,8 @@ export const sharedEventMethods = uiModule({
             cause: payload.cause || undefined,
             participants: participants ?? [],
         };
-        const edit = sharedEditFrom(draft, common, viewerOwn);
+        // Only what was changed: a differing copy keeps its value (4g).
+        const edit = sharedEditFrom(draft, common, viewerOwn, stored);
         const after = [viewer, ...draft.rows.map(r => r.personId)];
         const msg = sharedSaveMessage(draft, after);
         const title = sharedEventTitle({ type: payload.type, customLabel: payload.customLabel, date: payload.date }, strings.events.types[payload.type]);

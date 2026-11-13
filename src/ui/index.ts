@@ -54,6 +54,7 @@ import { personModalMethods } from './person-modal.js';
 import { personEventsMethods } from './person-events.js';
 import { sharedEventMethods } from './shared-event-ui.js';
 import { sharedLineMethods } from './shared-line-ui.js';
+import { sharedUnifyMethods, type SharedUnifyState } from './shared-unify-ui.js';
 import type { SharedDraft } from '../shared-event-editor.js';
 import { coupleEventsMethods } from './couple-events-ui.js';
 import { sourcesMethods, CitationContext, ExcerptDraft } from './sources.js';
@@ -507,6 +508,8 @@ export class UIClass {
     sharedShowAll = false;
     /** The shared event's person picker while open. */
     sharedPicker: { chosen: PersonId[]; query: string; creating: boolean } | null = null;
+    /** The Unify dialog of a shared event's differing copies while open (src/ui/shared-unify-ui.ts). */
+    sharedUnify: SharedUnifyState | null = null;
     /** The button whose shared-event menu is open. */
     sharedMenuOwner: HTMLElement | null = null;
     /** Where the open shared-event menu's button stood (top, px) when it opened. */
@@ -603,6 +606,9 @@ Object.assign(UIClass.prototype, sharedEventMethods);
 type SharedLineMethods = typeof sharedLineMethods;
 export interface UIClass extends SharedLineMethods {}
 Object.assign(UIClass.prototype, sharedLineMethods);
+type SharedUnifyMethods = typeof sharedUnifyMethods;
+export interface UIClass extends SharedUnifyMethods {}
+Object.assign(UIClass.prototype, sharedUnifyMethods);
 
 type CoupleEventsMethods = typeof coupleEventsMethods;
 export interface UIClass extends CoupleEventsMethods {}

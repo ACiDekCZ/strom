@@ -1220,6 +1220,12 @@ export const miscMethods = uiModule({
                         return;
                     }
 
+                    // The Unify dialog of a shared event: close only itself.
+                    if (currentDialog === 'shared-unify-modal') {
+                        this.closeSharedUnify();
+                        return;
+                    }
+
                     // The shared event's person picker: close only itself.
                     if (currentDialog === 'shared-picker-modal') {
                         this.closeSharedPicker();

@@ -8,7 +8,7 @@
  */
 
 import { StromData, PersonId, LifeEvent, Person } from './types.js';
-import { SharedEventCommon, SharedEventEdit, SharedEventOwn } from './shared-events.js';
+import { SharedEventCommon, SharedEventEdit, SharedEventOwn, SharedEventCommonField, applyEventFields, commonFieldKey } from './shared-events.js';
 import { yearOf } from './dates.js';
 
 /** One other person of the event in the editor. */
@@ -84,8 +84,28 @@ export function takeFromDraft(draft: SharedDraft, personId: PersonId, separate: 
     else draft.removed.push(personId);
 }
 
-/** The edit DataManager.saveSharedEvent gets: common fields, each person's own, who is added, removed, separated. */
-export function sharedEditFrom(draft: SharedDraft, common: SharedEventCommon, viewerOwn: SharedEventOwn): SharedEventEdit {
+/**
+ * The common fields the editor changed against the stored copy (spec 085
+ * 4g): a field left as the copy has it is not written, so a value another
+ * copy has otherwise stays until Unify or Separate.
+ */
+export function changedCommonFields(stored: LifeEvent, common: SharedEventCommon): SharedEventCommon {
+    const after: LifeEvent = structuredClone(stored);
+    applyEventFields(after, common);
+    const out: SharedEventCommon = {};
+    for (const key of Object.keys(common) as SharedEventCommonField[]) {
+        if (commonFieldKey(after, key) !== commonFieldKey(stored, key)) (out as Record<string, unknown>)[key] = common[key];
+    }
+    return out;
+}
+
+/**
+ * The edit DataManager.saveSharedEvent gets: common fields, each person's
+ * own, who is added, removed, separated. With the `stored` copy of an event
+ * shared already, only the common fields changed against it (changedCommonFields).
+ */
+export function sharedEditFrom(draft: SharedDraft, common: SharedEventCommon, viewerOwn: SharedEventOwn, stored?: LifeEvent | null): SharedEventEdit {
+    if (stored?.shareId) common = changedCommonFields(stored, common);
     const own = new Map<PersonId, SharedEventOwn>();
     own.set(draft.viewerId, viewerOwn);
     for (const row of draft.rows) {

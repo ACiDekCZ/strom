@@ -159,3 +159,107 @@ export function divergenceSentence(data: StromData, d: ShareDivergence, lang?: L
 export function divergentPersons(d: ShareDivergence): PersonId[] {
     return [...new Set(divergentCopies(d).map(c => c.personId))];
 }
+
+/** A field's word as a label at the start of a line ("Date"). */
+function capital(text: string, lang?: Lang): string {
+    return text ? text.charAt(0).toLocaleUpperCase(lang ?? undefined) + text.slice(1) : text;
+}
+
+/** The persons of some copies, each once, in their order. */
+function personsOf(copies: readonly ShareCopyRef[]): PersonId[] {
+    return [...new Set(copies.map(c => c.personId))];
+}
+
+/** Persons' shown names joined ("Kvido Hurdálek, Radegunda Hurdálková"). */
+function namesOf(data: StromData, ids: readonly PersonId[]): string {
+    return ids.map(id => { const p = data.persons[id]; return p ? shownNameOrEmpty(p) || id : id; }).join(', ');
+}
+
+/** One value a field can be unified to: its text and the persons whose copy has it. */
+export interface UnifyOption {
+    /** The value's index in the field's `values` (the choice). */
+    index: number;
+    text: string;
+    personIds: PersonId[];
+    names: string;
+}
+
+/** One field of the Unify dialog. */
+export interface UnifyField {
+    field: SharedEventCommonField;
+    label: string;
+    options: UnifyOption[];
+}
+
+/** The Unify dialog's content (4d–4f) without the DOM. */
+export interface UnifyModel {
+    title: string;
+    lead: string;
+    fields: UnifyField[];
+    /** "Same: … Age, research status and verification …" under the fields. */
+    same: string;
+    /** "Take everything from:" (from three differing fields on): the persons to pick; null below that. */
+    takeAll: { personId: PersonId; name: string }[] | null;
+    /** The persons whose copies differ: "Separate the differing copy/copies (n)" takes theirs out. */
+    separatePersons: PersonId[];
+    separateLabel: string;
+    /** The persons holding a copy (the Unify button's count). */
+    persons: number;
+    goLabel: string;
+}
+
+/** From this many differing fields on, the dialog offers "Take everything from" (4e). */
+export const UNIFY_TAKE_ALL_FROM = 3;
+
+/** The Unify dialog's content for a share whose copies differ. */
+export function unifyModel(data: StromData, d: ShareDivergence, lang?: Lang): UnifyModel {
+    const s = S(lang);
+    const v = s.validation;
+    const persons = personsOf(d.copies);
+    const off = divergentPersons(d);
+    const fields: UnifyField[] = d.fields.map(f => ({
+        field: f.field,
+        label: capital(v.sharedFields[f.field], lang),
+        options: f.values.map((value, index) => {
+            const ids = personsOf(value.copies);
+            return { index, text: fieldValueText(data, f.field, value.value, lang), personIds: ids, names: namesOf(data, ids) };
+        }),
+    }));
+    const same = sameFields(d);
+    return {
+        title: v.unifyTitle(divergenceTitle(data, d, lang)),
+        lead: v.unifyLead(persons.length, off.length),
+        fields,
+        same: v.unifySame(same.length ? fieldLabels(same, lang) : '–'),
+        takeAll: d.fields.length >= UNIFY_TAKE_ALL_FROM ? persons.map(id => ({ personId: id, name: namesOf(data, [id]) })) : null,
+        separatePersons: off,
+        separateLabel: off.length === 1 ? v.separateCopy : v.separateCopies(off.length),
+        persons: persons.length,
+        goLabel: v.unifyGo(persons.length),
+    };
+}
+
+/**
+ * The event editor's amber bar (4g) for the copy `viewer` opened: "Copy
+ * differs: Zbyhněv Hurdálek (date 16 Feb 1921)." for one differing copy,
+ * "Copies differ: …" with the names and the fields for several; `fields`
+ * are those in which the viewer's own copy is not on the leading value
+ * (their inputs get the amber frame).
+ */
+export function editorDivergence(data: StromData, d: ShareDivergence, viewer: ShareCopyRef, lang?: Lang): { text: string; fields: SharedEventCommonField[] } {
+    const s = S(lang);
+    const off = divergentCopies(d);
+    let name: string;
+    let what: string;
+    if (off.length === 1) {
+        const k = refKey(off[0]);
+        name = namesOf(data, [off[0].personId]);
+        what = fieldsOfCopy(d, off[0])
+            .map(f => `${s.validation.sharedFields[f.field]} ${fieldValueText(data, f.field, f.values.find(x => x.copies.some(c => refKey(c) === k))?.value, lang)}`)
+            .join(', ');
+    } else {
+        name = namesOf(data, personsOf(off));
+        what = fieldLabels(d.fields.map(f => f.field), lang);
+    }
+    return { text: s.events.sharedDiffers(name, what), fields: fieldsOfCopy(d, viewer).map(f => f.field) };
+}

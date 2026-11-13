@@ -343,25 +343,35 @@ export interface ShareDivergence {
 export function findDivergentShares(data: StromData): ShareDivergence[] {
     const out: ShareDivergence[] = [];
     for (const [shareId, copies] of allShareCopies(data)) {
-        if (copies.length < 2) continue;
-        const fields: ShareFieldDivergence[] = [];
-        for (const field of SHARED_EVENT_COMMON_FIELDS) {
-            const byKey = new Map<string, ShareFieldValue>();
-            for (const c of copies) {
-                const key = commonFieldKey(c.event, field);
-                let entry = byKey.get(key);
-                if (!entry) byKey.set(key, entry = { value: structuredClone(c.event[field]), copies: [] });
-                entry.copies.push({ personId: c.personId, eventId: c.event.id });
-            }
-            if (byKey.size < 2) continue;
-            const values = [...byKey.values()];
-            values.sort((a, b) => b.copies.length - a.copies.length);
-            fields.push({ field, values });
-        }
-        if (fields.length === 0) continue;
-        out.push({ shareId, copies: copies.map(c => ({ personId: c.personId, eventId: c.event.id })), fields });
+        const d = divergenceOfCopies(shareId, copies);
+        if (d) out.push(d);
     }
     return out;
+}
+
+/** One share's divergence (findDivergentShares); null when its copies agree or it has fewer than two. */
+export function shareDivergence(data: StromData, shareId: string): ShareDivergence | null {
+    return divergenceOfCopies(shareId, shareCopiesOf(data, shareId));
+}
+
+function divergenceOfCopies(shareId: string, copies: readonly { personId: PersonId; event: LifeEvent }[]): ShareDivergence | null {
+    if (copies.length < 2) return null;
+    const fields: ShareFieldDivergence[] = [];
+    for (const field of SHARED_EVENT_COMMON_FIELDS) {
+        const byKey = new Map<string, ShareFieldValue>();
+        for (const c of copies) {
+            const key = commonFieldKey(c.event, field);
+            let entry = byKey.get(key);
+            if (!entry) byKey.set(key, entry = { value: structuredClone(c.event[field]), copies: [] });
+            entry.copies.push({ personId: c.personId, eventId: c.event.id });
+        }
+        if (byKey.size < 2) continue;
+        const values = [...byKey.values()];
+        values.sort((a, b) => b.copies.length - a.copies.length);
+        fields.push({ field, values });
+    }
+    if (fields.length === 0) return null;
+    return { shareId, copies: copies.map(c => ({ personId: c.personId, eventId: c.event.id })), fields };
 }
 
 // ==================== CLEANING ON LOAD ====================
