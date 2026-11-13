@@ -159,6 +159,7 @@ test.describe('the Research overview in a window of its own', () => {
         const head = ov.locator('.research-overview__head--window');
         await expect(head.locator('.live-dot')).toHaveCount(1);
         await expect(head.locator('.research-overview__title')).toHaveText(/ · Research overview$/);
+        await expect(head.locator('.research-overview__title')).toHaveAttribute('title', / · Research overview$/);
         await expect(head.locator('.research-overview__stop')).toHaveText('Stop following');
         await expect(head.locator('.live-follow-btn')).toBeVisible();
         await expect(head.locator('.research-overview__more')).toBeVisible();
@@ -344,6 +345,7 @@ test.describe('the overview window\'s states', () => {
         await expect(state.locator('.sat-empty-note')).toHaveText('The main window switched to Pastiňákovi, which has no research.');
         await expect(state.getByRole('button', { name: 'Close window' })).toBeVisible();
         await expect(state.locator('.research-overview__title')).toHaveText('Pastiňákovi · Research overview');
+        await expect(state.locator('.research-overview__title')).toHaveAttribute('title', 'Pastiňákovi · Research overview');
         await expect(popup.locator('#research-overview')).toHaveCount(0);
 
         // Back: the overview draws itself again.
@@ -481,6 +483,24 @@ test.describe('the overview window\'s states', () => {
         await expect(ov.locator('.research-overview__frozen-at')).toHaveCount(0);
         await popup.close();
         await main.close();
+    });
+
+    test.describe('in German (the language as the system\'s)', () => {
+        test.use({ locale: 'de-DE' });
+        test('state 5: the strip\'s time is in the app\'s language, as each section\'s "as of"', async ({ page }) => {
+            await follow(page);
+            const popup = await openFromMenu(page);
+            const ov = popup.locator('#research-overview');
+            await expect(ov.locator('.research-overview__stop')).toBeEnabled();
+            await page.close();
+            const text = ov.locator('.research-overview__strip .sat-strip-text');
+            await expect(text).toBeVisible({ timeout: 6000 });
+            // A 24-hour time as German writes it, never "02:45 AM" (the setting "system" given to the formatter).
+            await expect(text).toHaveText(/ \d{2}:\d{2}\b/);
+            await expect(text).not.toHaveText(/\b(AM|PM)\b/i);
+            await expect(ov.locator('.live-section__head .research-overview__frozen-at').first()).not.toHaveText(/\b(AM|PM)\b/i);
+            await popup.close();
+        });
     });
 
     test('a task\'s place in the queue set from the window is written by the main window', async ({ page }) => {

@@ -23,7 +23,7 @@ import { initToolbarFit } from './ui/toolbar-fit.js';
 import { DebugOptions, DebugStep, DebugPhase } from './layout/pipeline/debug-types.js';
 import { CryptoSession } from './crypto.js';
 import { AppMode, APP_VERSION, TreeId } from './types.js';
-import { strings } from './strings.js';
+import { strings, getCurrentLanguage } from './strings.js';
 import { onTreeSavedElsewhere } from './tab-sync.js';
 import { StorageManager } from './storage.js';
 import { PERSISTENCE_EVENT } from './persistence.js';
@@ -337,7 +337,7 @@ function startSatelliteWindow(params: SatelliteParams, debugOptions: DebugOption
             openAnother: () => openAnotherWindow(client),
             // Without the main window (§3.3) no window can join: its tooltip says why.
             anotherBlocked: () => {
-                if (client.connection === 'main-closed') return strings.win.mainClosed(formatLiveClock(client.lastHeardAt, Date.now(), SettingsManager.getLanguage()));
+                if (client.connection === 'main-closed') return strings.win.mainClosed(formatLiveClock(client.lastHeardAt, Date.now(), getCurrentLanguage()));
                 return client.connection === 'connected' && client.hasTree ? '' : strings.win.openAnother;
             },
         } : {}),
@@ -360,7 +360,7 @@ function startSatelliteWindow(params: SatelliteParams, debugOptions: DebugOption
         makeMain: () => { void makeSatelliteMain(client, client.kind); },
         closeWindow: () => window.close(),
         toast: (message, ms) => UI.showToast(message, ms),
-        formatTime: (ts) => formatLiveClock(ts, Date.now(), SettingsManager.getLanguage()),
+        formatTime: (ts) => formatLiveClock(ts, Date.now(), getCurrentLanguage()),
         content: () => document.getElementById('tree-container'),
     });
     // A refused edit's draft comes back once the fresh tree is in (§3.4, 3d).
@@ -472,7 +472,7 @@ function startOverviewWindow(params: SatelliteParams): void {
         openStrom: () => openMainWindow(),
         closeWindow: () => window.close(),
         goToMain: () => { void client.requestMainFocus(); },
-        formatTime: (ts) => formatLiveClock(ts, Date.now(), SettingsManager.getLanguage()),
+        formatTime: (ts) => formatLiveClock(ts, Date.now(), getCurrentLanguage()),
     });
     client.on('research-state', (raw) => {
         if (view.apply(raw)) document.documentElement.classList.remove('app-loading');

@@ -1983,7 +1983,9 @@ export const researchOverviewMethods = uiModule({
         const head = el('div', 'research-overview__head research-overview__head--window');
         head.appendChild(el('span', `live-dot live-dot--still${source === 'live' && !frozen ? '' : ' live-dot--off'}`));
         const titles = el('div', 'research-overview__titles');
-        titles.appendChild(el('h1', 'research-overview__title', strings.win.overviewHead(ownWindow?.treeName() ?? '', L.overviewTitle)));
+        const title = strings.win.overviewHead(ownWindow?.treeName() ?? '', L.overviewTitle);
+        // Cut with an ellipsis on a narrow window: the whole title on hover.
+        titles.appendChild(el('h1', 'research-overview__title', title)).title = title;
         const sub = titles.appendChild(el('div', 'research-overview__sub'));
         sub.appendChild(el('span', 'research-overview__name', s.name)).title = s.name;
         // "Awaiting action" hidden: its count stays in sight; a click shows it until the window closes.

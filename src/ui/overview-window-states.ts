@@ -200,7 +200,8 @@ export function renderOverviewWindowState(screen: OverviewWindowScreen, treeName
     const titles = node('div', 'research-overview__titles');
     // The tree deleted: the head without it (as the satellites' title, §3.5b).
     const title = screen.content === 'gone' || !treeName ? strings.live.overviewTitle : strings.win.overviewHead(treeName, strings.live.overviewTitle);
-    titles.appendChild(node('h1', 'research-overview__title', title));
+    // Cut with an ellipsis on a narrow window: the whole title on hover.
+    titles.appendChild(node('h1', 'research-overview__title', title)).title = title;
     head.appendChild(titles);
     root.appendChild(head);
     if (screen.closed) root.appendChild(overviewClosedStrip(screen.asOf, act));
