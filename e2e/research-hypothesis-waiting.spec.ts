@@ -70,7 +70,13 @@ function hypotheses(decided: Record<string, string> = {}, many = 0): Hypo[] {
     return out;
 }
 
-function ged(opts: { head?: string; decided?: Record<string, string>; many?: number; birth?: string } = {}): string {
+/** An open conflict of Jan Brdlík's birth (the research's 3 FEB 1865 × the tree's 1865), from a register. */
+const BIRTH_CONFLICT = [
+    '1 BIRT', '2 DATE 1865', '1 _STROM_CONFLICT X0007', '2 TYPE BIRT', '2 STAT open', '2 _STROM_TAKE Y',
+    '2 VAL 3 FEB 1865', '3 SOUR @S0001@', '3 _STROM_SIDE research', '2 VAL 1865', '3 _STROM_SIDE user',
+];
+
+function ged(opts: { head?: string; decided?: Record<string, string>; many?: number; birth?: string; conflict?: boolean } = {}): string {
     const hyps = hypotheses(opts.decided, opts.many);
     const on = (refn: string): string[] => hyps.filter(h => h.on === refn).flatMap(h => [`1 _STROM_HYPO ${h.id}`, `2 TITL ${h.title}`, ...h.lines]);
     const person = (refn: string, name: string, sex: string, extra: string[] = []): string[] =>
@@ -78,11 +84,12 @@ function ged(opts: { head?: string; decided?: Record<string, string>; many?: num
     return [
         '0 HEAD', '1 SOUR STROM_RESEARCH', '2 NAME Strom Research', '1 DATE 11 NOV 2026',
         `1 _STROM_TREE ${UUID}`, `1 _STROM_HEAD ${opts.head ?? HEAD}`, `1 _STROM_LINKS ${LINKS.join(' ')}`, '1 CHAR UTF-8', '1 NOTE Brdlíkovi',
-        ...person('P0003', 'Jan /Brdlík/', 'M', opts.birth ? ['1 BIRT', `2 DATE ${opts.birth}`] : []),
+        ...person('P0003', 'Jan /Brdlík/', 'M', opts.conflict ? BIRTH_CONFLICT : opts.birth ? ['1 BIRT', `2 DATE ${opts.birth}`] : []),
         ...person('P0001', 'Vítězslav /Brdlík/', 'M'),
         ...person('P0004', 'Zbyhněv /Brdlík/', 'M'),
         ...person('P0005', 'Žofína /Stružná/', 'F'),
         ...person('P0006', 'Jan /Brdlik/', 'M'),
+        ...(opts.conflict ? ['0 @S0001@ SOUR', '1 TITL Křestní matrika Kvítkovice', '1 REFN S0001'] : []),
         '0 TRLR',
     ].join('\n');
 }
@@ -108,7 +115,7 @@ interface Setup { bridge: FakeBridge; push: () => Promise<void> }
  * until `push`: the stream drops, the app asks the status and loads a new
  * version), the overview open.
  */
-async function follow(page: Page, opts: { width?: number; features?: string[]; many?: number } = {}): Promise<Setup> {
+async function follow(page: Page, opts: { width?: number; features?: string[]; many?: number; conflict?: boolean } = {}): Promise<Setup> {
     await page.clock.install({ time: T0 });
     await page.setViewportSize({ width: opts.width ?? 1440, height: 900 });
     await page.addInitScript((announced) => {
@@ -116,7 +123,7 @@ async function follow(page: Page, opts: { width?: number; features?: string[]; m
         sessionStorage.setItem('seeded', '1');
         localStorage.setItem('strom-research-links', JSON.stringify({ actions: announced, at: new Date().toISOString() }));
     }, LINKS);
-    const text = ged({ many: opts.many });
+    const text = ged({ many: opts.many, conflict: opts.conflict });
     const bridge = await fakeBridge(page, { features: opts.features ?? ALL_FEATURES, treeGed: text, links: LINKS, waiting: waitingOf() });
     await openResearch(page, { ged: text });
     await poll(page);
@@ -329,6 +336,56 @@ test.describe('Research hypotheses in What waits and the overview', () => {
         await expect(row.locator('.live-waiting-answer')).toHaveCount(0);
         await row.locator('.hwr-more').click();
         await expect(page.locator('#person-research-modal .person-research-hypo[data-hypo="H0022"]')).toBeVisible();
+    });
+});
+
+test.describe('The kinds of What the research knows (spec 052 §3)', () => {
+    const kinds = (page: Page) => ov(page).locator('.research-overview__knows-kinds');
+    /** The section's parts in order: the chips, the lists (by their kind) and the head of the accepting. */
+    const parts = (page: Page) => ov(page).locator('#ov-sec-knows').evaluate(n => [...n.children].map(c =>
+        c.classList.contains('research-overview__knows-kinds') ? 'chips'
+            : c.classList.contains('hp2-head') ? 'head'
+            : c.classList.contains('research-overview__knows') ? `list:${(c as HTMLElement).dataset.kind ?? 'all'}:${c.children.length}`
+            : c.className.split(' ')[0]));
+
+    test('conflicts and hypotheses: All / Conflicts / Hypotheses with counts; the head over the hypotheses; All again after closing', async ({ page }) => {
+        await follow(page, { conflict: true });
+        await unfold(page, 'What the research knows');
+        await expect(kinds(page)).toHaveAttribute('role', 'radiogroup');
+        await expect(kinds(page)).toHaveAttribute('aria-label', 'Kind');
+        await expect(kinds(page).locator('[role="radio"]')).toHaveText(['All 5', 'Conflicts 1', 'Hypotheses 4']);
+        await expect(kinds(page).locator('[data-kind="all"]')).toHaveAttribute('aria-checked', 'true');
+        // All: the conflict first, the head of the accepting over the hypotheses under it.
+        expect((await parts(page)).slice(0, 4)).toEqual(['chips', 'list:con:1', 'head', 'list:hyp:4']);
+        await expect(ov(page).locator('.research-overview__knows[data-kind="con"] .hp2-box')).toHaveCount(0);
+
+        // Conflicts: no head; Hypotheses: the head on top, Select all for the rows shown.
+        await kinds(page).locator('[data-kind="con"]').click();
+        await expect(kinds(page).locator('[data-kind="con"]')).toHaveAttribute('aria-checked', 'true');
+        await expect(kinds(page).locator('[data-kind="con"]')).toBeFocused();
+        expect((await parts(page)).slice(0, 2)).toEqual(['chips', 'list:all:1']);
+        await expect(ov(page).locator('.research-overview__knows-row.is-conflict')).toHaveCount(1);
+        await expect(ov(page).locator('#ov-sec-knows .hp2-head')).toHaveCount(0);
+        await kinds(page).locator('[data-kind="hyp"]').click();
+        expect((await parts(page)).slice(0, 3)).toEqual(['chips', 'head', 'list:all:4']);
+        await expect(ov(page).locator('.research-overview__knows-row.is-conflict')).toHaveCount(0);
+        await ov(page).locator('.hp2-all').first().click();
+        await expect(ov(page).locator('.research-overview__knows ~ .hp2-foot .hp2-sum')).toContainText('2 selected.');
+
+        // The choice lasts while the overview is open: closed and opened again, All; nothing kept.
+        await ov(page).locator('.research-overview__close').click();
+        await page.evaluate(() => window.Strom.UI.openResearchOverview());
+        await unfold(page, 'What the research knows');
+        await expect(kinds(page).locator('[data-kind="all"]')).toHaveAttribute('aria-checked', 'true');
+        expect(await page.evaluate(() => JSON.stringify({ ...localStorage }))).not.toMatch(/knows.?kind/i);
+    });
+
+    test('one kind only: no chips, the list as before', async ({ page }) => {
+        await follow(page);
+        await unfold(page, 'What the research knows');
+        await expect(ov(page).locator('.research-overview__knows-row')).toHaveCount(4);
+        await expect(kinds(page)).toHaveCount(0);
+        expect((await parts(page)).slice(0, 2)).toEqual(['head', 'list:all:4']);
     });
 });
 

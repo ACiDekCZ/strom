@@ -69,7 +69,7 @@ let branchMenuCleanup: (() => void) | null = null;
 
 const OWN_MODES: readonly Exclude<OffLineMode, 'never'>[] = ['occasional', 'last', 'normal'];
 
-function personByRefn(refn: string | undefined): Person | null {
+export function personByRefn(refn: string | undefined): Person | null {
     if (!refn) return null;
     return Object.values(DataManager.getData().persons).find(p => p.refn === refn) ?? null;
 }

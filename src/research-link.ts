@@ -2629,6 +2629,8 @@ export const OFF_LINE_BRANCHES_FEATURE = 'offLine.branches';
 export const QUEUE_OWN_FEATURE = 'queue.own';
 /** `/status.features`: the whole queue by pages (`GET /queue`), each task's `pos` and `/status.queueCounts`. */
 export const QUEUE_PAGE_FEATURE = 'queue.page';
+/** `/status.features`: the queue is searched by its bridge (`GET /queue?q=`, with `q`, `match` and `elsewhere`; Strom Research 1.32). */
+export const QUEUE_SEARCH_FEATURE = 'queue.search';
 
 /** `/status.queueCounts`: tasks up next by direction and branch (absent = 0), all of them, set aside, and the order's print. */
 export interface LiveQueueCounts {

@@ -10,8 +10,8 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
-    QUEUE_PAGE, QUEUE_REFRESH_MS, QUEUE_ROWS_CAP, beginQueueSlots, endQueueSlots, fetchQueuePage, loadMoreQueueList, noteQueueRev,
-    onQueueListsChange, queueList, queueListItem, requestQueueList, resetQueueLists, retryQueueList,
+    QUEUE_PAGE, QUEUE_QUERY_MAX, QUEUE_REFRESH_MS, QUEUE_ROWS_CAP, beginQueueSlots, endQueueSlots, fetchQueuePage, loadMoreQueueList, noteQueueRev,
+    onQueueListsChange, queueList, queueListItem, queueQuery, requestQueueList, resetQueueLists, retryQueueList,
 } from '../research-queue-pages.js';
 import { sanitizeLiveStatus, sanitizeQueue, sanitizeQueueCounts } from '../research-link.js';
 import { budgetReport, measureAgainstBudget } from './helpers/perf-budget.js';
@@ -287,5 +287,137 @@ describe('the queue\'s counts and places in the status', () => {
             { id: 'T0003', text: 'c', state: 'next', pos: '3' }, { id: 'T0004', text: 'd', state: 'next', pos: 4 },
         ]);
         expect(q.map(x => x.pos)).toEqual([undefined, undefined, undefined, 4]);
+    });
+});
+
+describe('the queue searched by its bridge (queue.search)', () => {
+    interface Found { id: string; text: string; state: 'next' | 'parked'; person?: string; research?: string; pos?: number }
+    const BASE2 = 'http://127.0.0.1:7777/abc123';
+    /** 120 tasks up next, every other one about P12, and one set aside about P12. */
+    function queue(): Found[] {
+        const out: Found[] = [];
+        for (let i = 0; i < 120; i++) {
+            out.push({ id: `T${String(i + 1).padStart(4, '0')}`, text: `Matrika ${i + 1}`, state: 'next', pos: i + 1,
+                ...(i % 2 === 0 ? { person: 'P12' } : {}), research: i % 2 ? 'G0001' : 'G0002' });
+        }
+        out.push({ id: 'T0900', text: 'Odloženo', state: 'parked', person: 'P12' });
+        return out;
+    }
+    /** The bridge's `GET /queue?q=`: a task's number, a person's number or the text; `q` said back. */
+    function searchBridge(opts: { gate?: (q: string) => Promise<void>; echo?: (q: string) => string } = {}) {
+        const calls: URL[] = [];
+        const fetchFn = vi.fn(async (input: string, init?: RequestInit) => {
+            const url = new URL(input);
+            calls.push(url);
+            const p = url.searchParams;
+            const q = p.get('q') ?? '';
+            await opts.gate?.(q);
+            if (init?.signal?.aborted) throw new DOMException('aborted', 'AbortError');
+            const from = Number(p.get('from') ?? 0);
+            const count = Number(p.get('count') ?? 50);
+            const num = /^t?0*(\d+)$/i.exec(q);
+            const match: Record<string, string> = {};
+            const rows = queue().filter(t => !p.get('research') || t.research === p.get('research')).filter(t => {
+                if (!q) return true;
+                if (num && Number(t.id.slice(1)) === Number(num[1])) return (match[t.id] = 'id'), true;
+                if (/^P\d+$/i.test(q) && t.person?.toUpperCase() === q.toUpperCase()) return (match[t.id] = 'person'), true;
+                return t.text.toLowerCase().includes(q.toLowerCase());
+            });
+            const items = rows.slice(from, from + count);
+            const next = from + count < rows.length ? from + count : undefined;
+            const elsewhere = q === 'T0999' ? { id: 'T0999', state: 'done' } : undefined;
+            return new Response(JSON.stringify({
+                items, total: rows.length, from, ...(next !== undefined ? { next } : {}), rev: '3f9c2a71b0d4e8a5', head: 'f'.repeat(40),
+                ...(q ? { q: opts.echo ? opts.echo(q) : q, match, ...(elsewhere ? { elsewhere } : {}) } : {}),
+            }), { status: 200, headers: { 'content-type': 'application/json' } });
+        });
+        return { fetchFn, calls };
+    }
+
+    beforeEach(() => resetQueueLists());
+    afterEach(() => {
+        resetQueueLists();
+        vi.unstubAllGlobals();
+    });
+
+    it('sends the text trimmed and cut, with the chip\'s filter, and reads what matched', async () => {
+        const b = searchBridge();
+        vi.stubGlobal('fetch', b.fetchFn);
+        const r = await fetchQueuePage(BASE2, { research: 'G0002', q: '  P12 ' }, 0, 50);
+        expect(b.calls[0].searchParams.get('q')).toBe('P12');
+        expect(b.calls[0].searchParams.get('research')).toBe('G0002');
+        expect(r.ok && r.items.every(q => q.person === 'P12')).toBe(true);
+        expect(r.ok && Object.values(r.match ?? {}).every(m => m === 'person')).toBe(true);
+        expect(queueQuery('x'.repeat(300))).toHaveLength(QUEUE_QUERY_MAX);
+        // `task` said for a task's number is the same as `id`.
+        vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+            items: [{ id: 'T0815', text: 'a', state: 'next', pos: 3 }], total: 1, from: 0, rev: '3f9c2a71b0d4e8a5', head: 'f'.repeat(40),
+            q: '815', match: { T0815: 'task', bad: 'id', T0001: 'text' },
+        }), { status: 200 })));
+        const t = await fetchQueuePage(BASE2, { q: '815' }, 0, 50);
+        expect(t.ok && t.match).toEqual({ T0815: 'id' });
+    });
+
+    it('a number outside the queue: where it is now (only the known states)', async () => {
+        const b = searchBridge();
+        vi.stubGlobal('fetch', b.fetchFn);
+        const r = await fetchQueuePage(BASE2, { q: 'T0999' }, 0, 50);
+        expect(r.ok && [r.total, r.elsewhere]).toEqual([0, { id: 'T0999', state: 'done' }]);
+        vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+            items: [], total: 0, from: 0, rev: '3f9c2a71b0d4e8a5', head: 'f'.repeat(40), q: 'T1', elsewhere: { id: 'T1', state: 'open' },
+        }), { status: 200 })));
+        const odd = await fetchQueuePage(BASE2, { q: 'T1' }, 0, 50);
+        expect(odd.ok && odd.elsewhere).toBeUndefined();
+    });
+
+    it('an answer to another text than the one asked is not taken', async () => {
+        vi.stubGlobal('fetch', searchBridge({ echo: () => 'older' }).fetchFn);
+        expect(await fetchQueuePage(BASE2, { q: 'Matrika' }, 0, 50)).toEqual({ ok: false, code: 'aborted' });
+    });
+
+    it('a newer search replaces the older one: the older answer is never shown', async () => {
+        const gates = new Map<string, () => void>();
+        const b = searchBridge({ gate: q => new Promise<void>(r => { gates.set(q, r); }) });
+        vi.stubGlobal('fetch', b.fetchFn);
+        beginQueueSlots();
+        requestQueueList(BASE2, { q: 'Matrika 1' }, 'search');
+        endQueueSlots();
+        beginQueueSlots();
+        requestQueueList(BASE2, { q: 'Matrika 2' }, 'search');
+        endQueueSlots();
+        await flush();
+        gates.get('Matrika 2')!();
+        await flush();
+        gates.get('Matrika 1')?.();
+        await flush();
+        expect(queueList(BASE2, { q: 'Matrika 1' })).toBeNull();
+        expect(queueList(BASE2, { q: 'Matrika 2' })!.items.every(q => q.text.includes('Matrika 2'))).toBe(true);
+    });
+
+    it('more than a page found: "Load more" reads the next page with the same text', async () => {
+        const b = searchBridge();
+        vi.stubGlobal('fetch', b.fetchFn);
+        requestQueueList(BASE2, { q: 'P12' }, 'search');
+        await flush();
+        let l = queueList(BASE2, { q: 'P12' })!;
+        expect([l.items.length, l.total, l.next]).toEqual([QUEUE_PAGE, 61, QUEUE_PAGE]);
+        loadMoreQueueList(BASE2, { q: 'P12' }, 'search');
+        await flush();
+        l = queueList(BASE2, { q: 'P12' })!;
+        expect(b.calls[1].searchParams.get('q')).toBe('P12');
+        expect(b.calls[1].searchParams.get('from')).toBe(String(QUEUE_PAGE));
+        expect(l.items).toHaveLength(61);
+        expect(l.next).toBeNull();
+        // What matched on each page is kept together.
+        expect(Object.keys(l.match ?? {})).toHaveLength(61);
+    });
+
+    it('the search and the queue are two lists (a text is its own key)', () => {
+        expect(queueList(BASE2, { q: 'a' })).toBeNull();
+        vi.stubGlobal('fetch', searchBridge().fetchFn);
+        const a = requestQueueList(BASE2, { q: 'a' }, 'search');
+        const b = requestQueueList(BASE2, { q: 'b' }, 'queue');
+        expect(a.key).not.toBe(b.key);
+        expect(a.key).not.toBe(requestQueueList(BASE2, {}, 'branch').key);
     });
 });

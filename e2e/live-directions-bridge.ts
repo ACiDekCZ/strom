@@ -77,6 +77,12 @@ export interface ManagedBridge {
     paged?: { rev: number };
     /** Each `GET /queue` asked (its query, without `app`). */
     queueReads: string[];
+    /** A task's number outside the queue and its state now (`queue.search`'s `elsewhere`: done, waiting, parked, dropped). */
+    elsewhere: Record<string, string>;
+    /** Answers for the next `GET /queue` reads, first first (empty: the research's own answer). */
+    queueReplies: BridgeReply[];
+    /** While set, `GET /queue` answers only once it resolves (a search being read). */
+    queueHold: Promise<void> | null;
 }
 
 /** The status's window of a queue read by pages: 14 tasks up next, then up to 6 set aside. */
@@ -108,17 +114,52 @@ function queueCounts(b: ManagedBridge): Record<string, unknown> {
     return { research, branch, next, parked, rev: queueRev(b) };
 }
 
-/** `GET /queue?from&count&branch&research&state`, as the research answers it. */
+/** Lower case without diacritics, as the research compares a searched text. */
+const folded = (t: string): string => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+/**
+ * `queue.search`: the tasks matching `q` (a task's number T0815 / t815 / 815, a person's P12, else the text
+ * without case and diacritics), each with how it matched (`id` / `person`; nothing for the text).
+ */
+function searchQueue(rows: Record<string, unknown>[], q: string): { rows: Record<string, unknown>[]; match: Record<string, string> } {
+    const match: Record<string, string> = {};
+    const num = /^t?0*(\d+)$/i.exec(q);
+    const person = /^p0*(\d+)$/i.exec(q);
+    const found = rows.filter(t => {
+        if (num && Number(String(t.id).slice(1)) === Number(num[1])) {
+            match[String(t.id)] = 'id';
+            return true;
+        }
+        if (person && typeof t.person === 'string' && Number(t.person.slice(1)) === Number(person[1])) {
+            match[String(t.id)] = 'person';
+            return true;
+        }
+        return folded(String(t.text)).includes(folded(q));
+    });
+    return { rows: found, match };
+}
+
+/** `GET /queue?from&count&branch&research&state&q`, as the research answers it. */
 function queuePage(b: ManagedBridge, query: URLSearchParams): BridgeReply {
     const from = Number(query.get('from') ?? 0);
     const count = Math.min(100, Number(query.get('count') ?? 50));
-    const rows = queueWithPlaces(b)
+    let rows = queueWithPlaces(b)
         .filter(q => !query.get('branch') || q.branch === query.get('branch'))
         .filter(q => !query.get('research') || q.research === query.get('research'))
         .filter(q => !query.get('state') || q.state === query.get('state'));
+    const q = query.get('q');
+    let found: Record<string, unknown> = {};
+    if (q) {
+        const r = searchQueue(rows, q);
+        rows = r.rows;
+        const num = /^t?0*(\d+)$/i.exec(q);
+        const id = num ? Object.keys(b.elsewhere).find(x => Number(x.slice(1)) === Number(num[1])) : undefined;
+        found = { q, match: Object.fromEntries(Object.entries(r.match).filter(([k]) => rows.slice(from, from + count).some(t => t.id === k))),
+            ...(rows.length === 0 && id ? { elsewhere: { id, state: b.elsewhere[id] } } : {}) };
+    }
     const items = rows.slice(from, from + count);
     const next = from + count < rows.length ? from + count : undefined;
-    return { status: 200, body: { items, total: rows.length, from, ...(next !== undefined ? { next } : {}), rev: queueRev(b), head: 'h1' } };
+    return { status: 200, body: { items, total: rows.length, from, ...(next !== undefined ? { next } : {}), rev: queueRev(b), head: 'h1', ...found } };
 }
 
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
@@ -271,6 +312,8 @@ export async function followManaged(page: Page, opts: {
     people?: Record<string, string[]>;
     /** `queue` is the whole queue, read by pages (`queue.page` should be in `features`). */
     paged?: boolean;
+    /** Task numbers outside the queue and their state (`queue.search`'s `elsewhere`). */
+    elsewhere?: Record<string, string>;
 } = {}): Promise<ManagedBridge> {
     await page.setViewportSize(opts.size ?? { width: 1440, height: 900 });
     if (opts.fastReconnect) {
@@ -292,6 +335,9 @@ export async function followManaged(page: Page, opts: {
         ...(opts.people ? { people: structuredClone(opts.people) } : {}),
         ...(opts.paged ? { paged: { rev: 1 } } : {}),
         queueReads: [],
+        elsewhere: opts.elsewhere ?? {},
+        queueReplies: [],
+        queueHold: null,
     };
     const pagedFeature = !!opts.features?.includes('queue.page');
     const windowOf = (): Record<string, unknown>[] => {
@@ -330,7 +376,9 @@ export async function followManaged(page: Page, opts: {
             const query = new URL(req.url()).searchParams;
             query.delete('app');
             b.queueReads.push(query.toString());
-            return route.fulfill(json(queuePage(b, query).body));
+            if (b.queueHold) await b.queueHold;
+            const r = b.queueReplies.shift() ?? queuePage(b, query);
+            return route.fulfill(json(r.body, r.status, r.headers));
         }
         if (/^(directions|offline|queue\/|waiting\/)/.test(path)) {
             const raw = req.postData();

@@ -50,6 +50,8 @@ import { shownName, fitNameHtml } from '../person-name.js';
 import { isOpenHypothesis } from '../view-links.js';
 import { waitBranchText, workingWhyText } from './research-offline-ui.js';
 import { beginQueueSlots, endQueueSlots } from '../research-queue-pages.js';
+import { KnowsKind, knowsKindChoice, knowsKindShows } from '../knows-kind.js';
+import { activeQueueSearch, noteQueueSearchFocus, resetQueueSearch } from './queue-search-ui.js';
 import { PREF_KEYS, PrefKey, SectionPref, prefKeyOfOverview, sectionOrder, sectionPrefs, setSectionPref, topPrefs, topTileShown } from './live-section-prefs.js';
 import { OverviewSourceKind, afterTurnOnKeys, skeletonLines } from '../research-overview-source.js';
 import { sectionTitle } from './live-section-edit.js';
@@ -79,6 +81,8 @@ type Filter = 'all' | Exclude<LiveChangeKind, 'other'>;
 type Mode = 'docked' | 'overlay' | 'sheet' | 'window';
 
 let filter: Filter = 'all';
+/** The kind shown in "What the research knows" while the overview is open (All again once it closes). */
+let knowsKind: KnowsKind = 'all';
 /** When the overview was opened (changes after it are marked new for a moment). */
 let openedAt = 0;
 /** Older change groups the user unfolded (by group key). */
@@ -394,6 +398,28 @@ export const researchOverviewMethods = uiModule({
         document.querySelector<HTMLElement>('#research-overview .research-overview__close')?.focus();
     },
 
+    /**
+     * "Search the queue…" of the small panel: the overview's Queue shown
+     * unfolded until it closes (the choice stays), its heading at the top and
+     * the caret in its search field.
+     */
+    openQueueSearch(): void {
+        if (overviewInWindow()) {
+            this.openResearchOverview();
+            return;
+        }
+        if (!this.isResearchOverviewOpen()) this.openResearchOverview();
+        if (!drawnSession()) return;
+        this.unfoldOverviewSection('queue');
+        this.renderLivePanel();
+        const body = document.querySelector<HTMLElement>('#research-overview .research-overview__body');
+        const heading = body?.querySelector<HTMLElement>('[aria-controls="ov-sec-queue"]');
+        if (body && heading) body.scrollTop += heading.getBoundingClientRect().top - body.getBoundingClientRect().top - 6;
+        const input = activeQueueSearch()?.input;
+        if (input?.isConnected) input.focus({ preventScroll: true });
+        else heading?.focus({ preventScroll: true });
+    },
+
     /** "Awaiting action" in the open overview, shown until it closes (the choice stays), in view and focused. */
     showOverviewWaiting(): void {
         const s = drawnSession();
@@ -422,6 +448,9 @@ export const researchOverviewMethods = uiModule({
         // so do the sections shown whatever their choice.
         s.waitingView = newWaitingView();
         s.overviewShown.clear();
+        // The queue's search and the kind shown in "What the research knows" last while the overview is open.
+        resetQueueSearch();
+        knowsKind = 'all';
         if (s !== liveSession()) this.closeOverviewViewing();
         closeAnswerForm();
         clearImagesSeen();
@@ -484,6 +513,8 @@ export const researchOverviewMethods = uiModule({
             if (root) {
                 root.remove();
                 hoverCard(null);
+                resetQueueSearch();
+                knowsKind = 'all';
             }
             this.setResearchOverviewDocked(false);
             this.syncLiveSectionEditor();
@@ -523,6 +554,8 @@ export const researchOverviewMethods = uiModule({
         root.setAttribute('aria-label', L.overviewTitle);
         const scroller = root.querySelector<HTMLElement>('.research-overview__body');
         const scrollTop = scroller?.scrollTop ?? 0;
+        // The queue's search field is drawn again: the focus and caret it had go back to it.
+        noteQueueSearchFocus();
         root.replaceChildren();
         // The queue's pages this drawing shows (a branch unfolded, the queue's filter); the rest is let go at its end.
         beginQueueSlots();
@@ -1900,11 +1933,29 @@ export const researchOverviewMethods = uiModule({
             host.appendChild(verify!);
             return;
         }
+        // Its kinds (spec 052 §3): chips All / Conflicts / Hypotheses when both are there.
+        const choice = knowsKindChoice(conflicts, rows.length - conflicts, knowsKind);
+        if (choice.chips) host.appendChild(this.knowsKindChips(choice.kind, rows.length, conflicts));
+        const shownRows = rows.filter(r => knowsKindShows(choice.kind, r.conflict));
         // Accepting the agent's proposals at once (§10): a box before each hypothesis, the list's head and foot.
-        const accept = this.hypothesisKnowsAccept(rows.flatMap(r => r.hypo?.id ? [r.hypo.id] : []), mode);
-        if (accept?.head) host.appendChild(accept.head);
-        const list = el('ul', `live-panel-list research-overview__knows${accept ? ' has-accept' : ''}`);
-        for (const row of rows) {
+        // The head and "Select all" are about the rows shown; the conflicts alone have none.
+        const accept = choice.kind === 'con' ? null : this.hypothesisKnowsAccept(shownRows.flatMap(r => r.hypo?.id ? [r.hypo.id] : []), mode);
+        // All with both kinds: the conflicts first, the head of the accepting over the hypotheses under them.
+        const split = choice.chips && choice.kind === 'all' && !!accept?.head;
+        let list = el('ul', `live-panel-list research-overview__knows${accept ? ' has-accept' : ''}`);
+        if (accept?.head && !split) host.appendChild(accept.head);
+        for (const row of shownRows) {
+            if (split && !row.conflict && list.dataset.kind === 'con') {
+                // The first hypothesis: the conflicts' list ends, the head stands over the hypotheses' one.
+                host.appendChild(list);
+                host.appendChild(accept!.head!);
+                list = el('ul', 'live-panel-list research-overview__knows has-accept');
+                list.dataset.kind = 'hyp';
+            }
+            if (split && row.conflict && !list.dataset.kind) {
+                list.className = 'live-panel-list research-overview__knows';
+                list.dataset.kind = 'con';
+            }
             const li = el('li');
             const btn = el('button', `research-overview__knows-row${row.conflict ? ' is-conflict' : ''}`);
             btn.type = 'button';
@@ -1922,7 +1973,7 @@ export const researchOverviewMethods = uiModule({
                 this.showPersonResearchDialog(row.person.id, row.conflictId ? { conflict: row.conflictId }
                     : row.hypo?.id && this.researchHypothesisPickable(row.hypo) !== 'old' ? { hypo: { id: row.hypo.id } } : {});
             };
-            if (accept) {
+            if (accept && !(split && row.conflict)) {
                 li.classList.add('rok-item');
                 if (entry) li.appendChild(this.hypothesisAcceptBoxEl(rid!, entry, 'knows'));
                 else li.appendChild(el('span', 'hp2-box hp2-box--none')).setAttribute('aria-hidden', 'true');
@@ -1933,6 +1984,31 @@ export const researchOverviewMethods = uiModule({
         host.appendChild(list);
         if (accept?.foot) host.appendChild(accept.foot);
         if (verify) host.appendChild(verify);
+    },
+
+    /** The kind chips of "What the research knows": All / Conflicts / Hypotheses, each with its count. */
+    knowsKindChips(kind: KnowsKind, all: number, conflicts: number): HTMLElement {
+        const L = strings.live;
+        const pills = el('div', 'research-overview__filters research-overview__knows-kinds');
+        pills.setAttribute('role', 'radiogroup');
+        pills.setAttribute('aria-label', L.knowsKindAria);
+        const options: [KnowsKind, string, number][] = [
+            ['all', L.knowsKindAll, all], ['con', L.knowsKindCon, conflicts], ['hyp', L.knowsKindHyp, all - conflicts],
+        ];
+        for (const [id, label, n] of options) {
+            const chip = el('button', 'research-overview__filter', `${label} ${n}`);
+            chip.type = 'button';
+            chip.setAttribute('role', 'radio');
+            chip.setAttribute('aria-checked', String(kind === id));
+            chip.dataset.kind = id;
+            chip.onclick = () => {
+                knowsKind = id;
+                this.renderResearchOverview();
+                document.querySelector<HTMLElement>(`#research-overview .research-overview__knows-kinds [data-kind="${id}"]`)?.focus({ preventScroll: true });
+            };
+            pills.appendChild(chip);
+        }
+        return pills;
     },
 
     /** Foot: where evidence is missing (the tree overview's Data quality), Open the research (research). */

@@ -37,10 +37,31 @@ export interface QueueFilter {
     branch?: string;
     research?: string;
     state?: 'next' | 'parked';
+    /**
+     * Searched text (`queue.search`, Strom Research 1.32): the tasks the bridge finds by it, after the
+     * other filters (trimmed, 1–100 characters; never kept anywhere).
+     */
+    q?: string;
 }
 
-/** Where a list is shown: the queue's filter, a branch unfolded in its section, a branch unfolded in a direction's detail. */
-export type QueueSlot = 'queue' | 'branch' | 'helps';
+/**
+ * Where a list is shown: the queue's filter, a branch unfolded in its section, a branch unfolded in a
+ * direction's detail, the queue's search (beside the queue's own list while a search is being read).
+ */
+export type QueueSlot = 'queue' | 'branch' | 'helps' | 'search';
+
+/** How a found task matched only by a number (`match`): its own id, or its person's. */
+export type QueueMatch = 'id' | 'person';
+/** The states a searched task's number may be in outside the queue (`elsewhere.state`). */
+export const QUEUE_ELSEWHERE_STATES = ['done', 'waiting', 'parked', 'dropped'] as const;
+export type QueueElsewhereState = typeof QUEUE_ELSEWHERE_STATES[number];
+/** A searched task's number that is no longer in the queue, and what became of the task. */
+export interface QueueElsewhere {
+    id: string;
+    state: QueueElsewhereState;
+}
+/** Most characters of a searched text (the bridge refuses a longer one). */
+export const QUEUE_QUERY_MAX = 100;
 
 /** A list read from the bridge. */
 export interface QueueList {
@@ -58,19 +79,57 @@ export interface QueueList {
     loading: boolean;
     /** The last read failed: `busy` (the research works), else no answer or a refusal. */
     error: 'busy' | 'failed' | null;
+    /** A search's tasks found only by a number (by task id; absent: none, or not a search). */
+    match?: Record<string, QueueMatch>;
+    /** A search's task number no longer in the queue (absent: none, or not a search). */
+    elsewhere?: QueueElsewhere;
 }
 
 export type QueuePageResult =
-    | { ok: true; items: LiveQueueItem[]; total: number; from: number; next: number | null; rev: string; head: string }
+    | { ok: true; items: LiveQueueItem[]; total: number; from: number; next: number | null; rev: string; head: string;
+        match?: Record<string, QueueMatch>; elsewhere?: QueueElsewhere }
     | { ok: false; code: 'busy' | 'failed' | 'aborted' };
 
-/** A filter's key (`branch=B-P0004&research=…&state=…`, '' = the whole queue). */
+/** A filter's key (`branch=B-P0004&research=…&state=…&q=…`, '' = the whole queue). */
 export function queueFilterKey(f: QueueFilter): string {
     const parts: string[] = [];
     if (f.branch) parts.push(`branch=${f.branch}`);
     if (f.research) parts.push(`research=${f.research}`);
     if (f.state) parts.push(`state=${f.state}`);
+    if (f.q) parts.push(`q=${encodeURIComponent(f.q)}`);
     return parts.join('&');
+}
+
+/** A searched text as it is sent: trimmed, at most QUEUE_QUERY_MAX characters ('' = no search). */
+export function queueQuery(text: string): string {
+    return [...text.trim()].slice(0, QUEUE_QUERY_MAX).join('').trim();
+}
+
+const TASK_ID_RE = /^T\d{1,9}$/;
+
+/** `match` of a search's page, checked: task ids to 'id' / 'person' (absent: none valid). */
+function sanitizeMatch(v: unknown): Record<string, QueueMatch> | undefined {
+    const r = asRecord(v);
+    if (!r) return undefined;
+    const out: Record<string, QueueMatch> = {};
+    let n = 0;
+    for (const [id, how] of Object.entries(r)) {
+        if (n >= QUEUE_PAGE_MAX) break;
+        // `task` is the same as `id` (the number of the task matched).
+        const m = how === 'task' ? 'id' : how;
+        if (!TASK_ID_RE.test(id) || (m !== 'id' && m !== 'person')) continue;
+        out[id] = m;
+        n++;
+    }
+    return n > 0 ? out : undefined;
+}
+
+/** `elsewhere` of a search, checked (absent: none, or a state the app does not name). */
+function sanitizeElsewhere(v: unknown): QueueElsewhere | undefined {
+    const r = asRecord(v);
+    if (!r || typeof r.id !== 'string' || !TASK_ID_RE.test(r.id)) return undefined;
+    const state = (QUEUE_ELSEWHERE_STATES as readonly unknown[]).includes(r.state) ? r.state as QueueElsewhereState : null;
+    return state ? { id: r.id, state } : undefined;
 }
 
 const asRecord = (v: unknown): Record<string, unknown> | null =>
@@ -88,6 +147,8 @@ export async function fetchQueuePage(base: string, filter: QueueFilter, from: nu
     if (filter.branch) q.set('branch', filter.branch);
     if (filter.research) q.set('research', filter.research);
     if (filter.state) q.set('state', filter.state);
+    const query = filter.q ? queueQuery(filter.q) : '';
+    if (query) q.set('q', query);
     const ctl = typeof AbortController === 'function' ? new AbortController() : null;
     const timer = ctl ? setTimeout(() => ctl.abort(), QUEUE_PAGE_TIMEOUT_MS) : null;
     const onAbort = (): void => ctl?.abort();
@@ -101,7 +162,11 @@ export async function fetchQueuePage(base: string, filter: QueueFilter, from: nu
         const r = asRecord(await res.json());
         const total = asCount(r?.total);
         if (!r || total === null) return { ok: false, code: 'failed' };
+        // The answer of another search (an older one): not this list's.
+        if (query && typeof r.q === 'string' && r.q !== query) return { ok: false, code: 'aborted' };
         const next = asCount(r.next);
+        const match = query ? sanitizeMatch(r.match) : undefined;
+        const elsewhere = query ? sanitizeElsewhere(r.elsewhere) : undefined;
         return {
             ok: true,
             items: sanitizeQueue(r.items, true, true, QUEUE_PAGE_MAX),
@@ -110,6 +175,8 @@ export async function fetchQueuePage(base: string, filter: QueueFilter, from: nu
             next: next !== null && next > from ? next : null,
             rev: typeof r.rev === 'string' && /^[0-9a-f]{8,64}$/.test(r.rev) ? r.rev : '',
             head: typeof r.head === 'string' ? r.head.slice(0, 80) : '',
+            ...(match ? { match } : {}),
+            ...(elsewhere ? { elsewhere } : {}),
         };
     } catch {
         return { ok: false, code: signal?.aborted ? 'aborted' : 'failed' };
@@ -360,6 +427,15 @@ async function readPage(base: string, l: QueueList, from: number, count: number)
     l.items = (from === 0 ? page : [...l.items, ...page]).slice(0, QUEUE_ROWS_CAP);
     l.total = r.total;
     l.next = r.next !== null && l.items.length < QUEUE_ROWS_CAP ? r.next : null;
+    if (l.filter.q) {
+        const match = { ...(from === 0 ? {} : l.match), ...r.match };
+        if (Object.keys(match).length > 0) l.match = match;
+        else delete l.match;
+        if (from === 0 || r.elsewhere) {
+            if (r.elsewhere) l.elsewhere = r.elsewhere;
+            else delete l.elsewhere;
+        }
+    }
     changed();
 }
 
@@ -403,6 +479,8 @@ async function refreshShown(base: string): Promise<void> {
         let next: number | null = 0;
         let got = '';
         let failed = false;
+        let match: Record<string, QueueMatch> = {};
+        let elsewhere: QueueElsewhere | undefined;
         while (next !== null && items.length < want) {
             const r = await fetchQueuePage(base, l.filter, next, Math.min(QUEUE_PAGE_MAX, want - items.length), ctl.signal);
             if (!r.ok) { failed = true; break; }
@@ -410,6 +488,8 @@ async function refreshShown(base: string): Promise<void> {
             total = r.total;
             next = r.next;
             got = r.rev;
+            match = { ...match, ...r.match };
+            elsewhere ??= r.elsewhere;
         }
         if (running.get(key) === ctl) running.delete(key);
         if (failed || ctl.signal.aborted || lists.get(key) !== l) continue;
@@ -417,6 +497,12 @@ async function refreshShown(base: string): Promise<void> {
         l.total = total;
         l.next = next !== null && l.items.length < QUEUE_ROWS_CAP ? next : null;
         l.rev = got || rev;
+        if (l.filter.q) {
+            if (Object.keys(match).length > 0) l.match = match;
+            else delete l.match;
+            if (elsewhere) l.elsewhere = elsewhere;
+            else delete l.elsewhere;
+        }
         changed();
     }
 }

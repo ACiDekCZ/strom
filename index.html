@@ -20933,6 +20933,75 @@
         /* A task's direction, while two or more run: grey words, no colour. */
         .research-overview__dir { color: var(--text-light); font-size: 12px; font-weight: 400; }
         .research-overview__queue-filters { margin: 4px 0 8px; }
+        /* The queue searched (spec 052 §1): the field on its own row under the heading, over the chips. */
+        .research-overview__queue-search {
+            position: relative; display: flex; align-items: center; height: 32px; margin: 4px 0 6px;
+            border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface);
+        }
+        .research-overview__queue-search:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+        .research-overview__queue-search-icon { flex: none; display: inline-flex; padding: 0 6px 0 9px; color: var(--text-light); }
+        .research-overview__queue-search-input {
+            flex: 1 1 auto; min-width: 0; height: 100%; padding: 0; border: 0; outline: 0; background: none;
+            font: inherit; font-size: 14px; color: var(--text); -webkit-appearance: none; appearance: none;
+        }
+        .research-overview__queue-search-input::placeholder { color: var(--text-faint); }
+        .research-overview__queue-search-input::-webkit-search-cancel-button { display: none; }
+        .research-overview__queue-search-tail { flex: none; display: inline-flex; align-items: center; gap: 4px; padding-right: 4px; }
+        .research-overview__queue-search-spin { width: 14px; height: 14px; }
+        .research-overview__queue-search-clear {
+            width: 24px; height: 24px; padding: 0; border: 0; border-radius: var(--r-sm); background: none; cursor: pointer;
+            font: inherit; font-size: 16px; line-height: 1; color: var(--text-light);
+        }
+        @media (hover: hover) { .research-overview__queue-search-clear:hover { background: var(--hover-bg); color: var(--text); } }
+        .research-overview__queue-search-clear:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .research-overview__queue-search-live {
+            position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
+            clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+        }
+        .research-overview__queue-search + .research-overview__queue-filters { margin-top: 0; }
+        /* Typed or being read: the list stands, dimmed, nothing over it. */
+        .research-queue--pending > .live-queue,
+        .research-queue--pending > .research-overview__queue-result { opacity: .5; transition: opacity .12s; }
+        @media (prefers-reduced-motion: reduce) {
+            .research-queue--pending > .live-queue,
+            .research-queue--pending > .research-overview__queue-result { transition: none; }
+        }
+        .research-overview__queue-result {
+            display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; padding: 2px 0 4px;
+            font-size: 12.5px; color: var(--text-light);
+        }
+        .research-overview__queue-result.is-error .research-overview__queue-result-text { color: var(--text); }
+        .research-overview__queue-result .link-button { padding: 0; font-size: 13px; }
+        .live-queue-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; margin-top: 2px; }
+        .live-queue-id { font-size: 11px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+        .research-queue__match {
+            display: inline-block; padding: 0 5px; border-radius: 4px; background: var(--warning-soft); color: var(--warning-text);
+            font-size: 11px; font-weight: 600; line-height: 16px; font-variant-numeric: tabular-nums;
+        }
+        .research-queue__deferred {
+            display: inline-block; padding: 0 6px; border: 1px dashed var(--border); border-radius: 999px;
+            font-size: 11px; line-height: 16px; color: var(--text-light); white-space: nowrap;
+        }
+        .live-queue > li.live-queue-row[tabindex]:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; border-radius: var(--r-sm); }
+        /* The small panel's way into the search. */
+        .live-queue-search-link { display: block; margin-top: 4px; padding: 0; font-size: 13px; }
+        /* "What the research knows": its kinds (spec 052 §3), the chips of the queue's filter. */
+        .research-overview__knows-kinds { margin: 4px 0 8px; }
+        .research-overview__knows + .hp2-head, .research-overview__knows-kinds + .research-overview__knows { margin-top: 0; }
+        @media (pointer: coarse) {
+            .research-overview__queue-search { height: 44px; }
+            .research-overview__queue-search-input { font-size: 16px; }
+            .research-overview__queue-search-clear { width: 40px; height: 40px; }
+            .research-overview__queue-result .link-button,
+            .live-queue-search-link { min-height: 44px; }
+            .research-overview__knows-kinds .research-overview__filter { height: 32px; }
+        }
+        @media (max-width: 640px) {
+            .research-overview__queue-result { font-size: 13px; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .research-overview__queue-search { margin: 2px 0 4px; }
+        }
         .agent-mark--spin { animation: agSpin 1.4s linear infinite; }
         @media (prefers-reduced-motion: reduce) { .agent-mark--spin { animation: none; } }
         /* Phone: bigger rows, no ⋯ (the grid keeps its third column empty). */

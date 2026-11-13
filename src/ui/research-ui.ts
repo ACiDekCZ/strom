@@ -59,7 +59,7 @@ import {
     taskDirectionName, workingLineCount, workingLineGroups,
 } from './research-directions-ui.js';
 import { iconSvg } from '../icons.js';
-import { queueBranchFilter, queueWhyText, setQueueBranchFilter, taskOrderOffered, waitBranchText, workingWhyText } from './research-offline-ui.js';
+import { branchName, personByRefn, queueBranchFilter, queueWhyText, setQueueBranchFilter, taskOrderOffered, waitBranchText, workingWhyText } from './research-offline-ui.js';
 import type { TaskOrderDo } from '../research-directions-write.js';
 import { OTHER_GROUP, panelWaiting, textWithLinks, todoWaiting, waitingSection, waitingTodoCount } from '../research-waiting.js';
 import { agoShort } from '../research-others.js';
@@ -68,9 +68,12 @@ import {
     waitingSeen, watchSectionPrefsStorage, PANEL_PREF_KEYS,
 } from './live-section-prefs.js';
 import {
-    QUEUE_ROWS_CAP, QueueFilter, loadMoreQueueList, noteQueueRev, onQueueListsChange, queueList, queueListItem, requestQueueList,
+    QUEUE_ROWS_CAP, QueueFilter, QueueList, loadMoreQueueList, noteQueueRev, onQueueListsChange, queueList, queueListItem, requestQueueList,
     resetQueueLists, retryQueueList,
 } from '../research-queue-pages.js';
+import {
+    QueueSearch, activeQueueSearch, clearQueueSearch, markQueueSearchPending, queueSearchFor, queueSearchOffered, restoreQueueSearchFocus, sayQueueSearch,
+} from './queue-search-ui.js';
 import { followNotice, researchNameBeside, FOLLOW_NOTICE_MS, FOLLOW_HIGHLIGHT_MS, FollowTreeRef } from '../research-follow.js';
 import { SettingsManager } from '../settings.js';
 import { countImages, stripMedia } from '../attachments.js';
@@ -87,7 +90,7 @@ import { sourceReadings, researchSendVouches, conflictTakeovers, heldConflicts }
 import { currentAppBrowser, appBrowserName } from '../research-transfer.js';
 import { localNetworkStatus } from '../local-network.js';
 import { pendingAdopt } from './pending-adopt.js';
-import { shownNameOrEmpty, fitNameHtml } from '../person-name.js';
+import { shownName, shownNameOrEmpty, fitNameHtml } from '../person-name.js';
 import { bindSectionMenu, sectionClickSwallowed, sectionMovedNow } from './live-section-edit-ui.js';
 import { BRIDGE_ANSWER_MS } from '../bridge-ask.js';
 import { bridgeGivesEtag, bridgeGivesImagesByHash, bridgeGivesStale, staleTreeUrl, storedTreeEtag, treeFamilyPartners, treeFileState, treeReplyEtag, treeReplyHeads, treeReplyImages, TREE_GED_TIMEOUT_MS, type TreeReplyHeads } from '../research-tree-file.js';
@@ -4503,11 +4506,24 @@ export const researchUiMethods = uiModule({
         const hidden = s.queueMore + (next.length - shownNext.length) + (parked.length - shownParked.length);
 
         const sel = !directions && dirFilter !== 'all' ? s.researches.find(d => d.id === dirFilter) : undefined;
+        // The overview's queue searched through the bridge (`queue.search`): the field under the heading, once unfolded.
+        const searchable = directions && queueSearchOffered(s);
+        const search = searchable && paged ? queueSearchFor(s, () => this.renderResearchOverview()) : null;
+        // The heading's own action on its right (unfolded only), and the count in the title whenever the field or it is there.
+        const action = directions && !fold.collapsed ? this.queueHeadAction(s) : null;
+        const counted = searchable || !!action;
         const host = liveSection(body, {
-            ...fold, title, headCls: 'live-queue-toggle', help: 'queue',
-            summary: sel ? strings.otherResearch.lineQueueOf(counts ? lineCount(sel.id) : next.length, nextCount, directionGlyph(sel))
-                : L.queueCount(nextCount),
+            ...fold, title: counted ? L.queueTitleCount(title, nextCount) : title, headCls: 'live-queue-toggle', help: 'queue',
+            ...(action ? { aside: action } : {}),
+            ...(counted ? {} : {
+                summary: sel ? strings.otherResearch.lineQueueOf(counts ? lineCount(sel.id) : next.length, nextCount, directionGlyph(sel))
+                    : L.queueCount(nextCount),
+            }),
         });
+        if (search) {
+            host.appendChild(search.box);
+            restoreQueueSearchFocus();
+        }
         if (multi) {
             const pills = el('div', 'research-overview__filters research-overview__queue-filters');
             pills.setAttribute('role', 'radiogroup');
@@ -4550,8 +4566,10 @@ export const researchUiMethods = uiModule({
             pills.prepend(chip);
             pills.scrollLeft = 0;
         }
+        if (search && this.appendQueueSearchResult(host, s, search, { base, branch, dirFilter, multi })) return;
         const ul = el('ul', 'live-panel-list live-queue');
         host.appendChild(ul);
+        if (search) this.queueRowsKeys(ul, search);
         if (list && list.total === null) {
             // The filter's first page not read yet: being read, or failed (try again).
             this.appendQueueListState(ul, list.error, () => {
@@ -4575,6 +4593,8 @@ export const researchUiMethods = uiModule({
         shownNext.forEach((q, i) => {
             const li = el('li', 'live-queue-row');
             li.dataset.task = q.id;
+            // With the search: ↓ from its field comes here.
+            if (search) li.tabIndex = -1;
             const place = placeAt(q, i);
             const num = el('span', 'live-queue-num', String(place));
             if (placeOf || list) num.setAttribute('aria-label', L.branchQueuePos(place));
@@ -4613,6 +4633,7 @@ export const researchUiMethods = uiModule({
         for (const q of shownParked) {
             const li = el('li', 'live-queue-row live-queue-row--parked');
             li.dataset.task = q.id;
+            if (search) li.tabIndex = -1;
             const text = el('span', 'live-queue-text', `${r.parkedPrefix} ${q.text}`);
             const kind = queueKindTag(q);
             if (kind) text.append(' ', kind);
@@ -4681,6 +4702,215 @@ export const researchUiMethods = uiModule({
             li.appendChild(more);
             ul.appendChild(li);
         }
+        // The small panel: "Search the queue…" opens the overview's queue with the caret in its field (not on a phone).
+        if (!directions && this.canExpandLivePanel() && queueSearchOffered(s)) {
+            const link = el('button', 'link-button live-queue-search-link', L.queueSearchLink);
+            link.type = 'button';
+            link.onclick = () => this.openQueueSearch();
+            host.appendChild(link);
+        }
+    },
+
+    /**
+     * The control on the right of the overview's Queue heading (null: none). Its
+     * being there also puts the queue's count into the title ("QUEUE · 1 240").
+     */
+    queueHeadAction(_s: LiveSession): HTMLElement | null {
+        return null;
+    },
+
+    /**
+     * The search's answer under the field (`queue.search`): the line saying what
+     * was found, then its tasks. False: nothing searched (or the first answer not
+     * read yet), the queue itself is drawn (dimmed while a search is typed or read).
+     */
+    appendQueueSearchResult(host: HTMLElement, s: LiveSession, search: QueueSearch,
+        o: { base: string; branch: string | null; dirFilter: string; multi: boolean }): boolean {
+        const L = strings.live;
+        if (!search.applied) {
+            search.shown = null;
+            markQueueSearchPending(search.typing);
+            return false;
+        }
+        // The chips narrow the search too: the tasks of the chip that match the text.
+        const filter: QueueFilter = o.branch ? { branch: o.branch, q: search.applied }
+            : o.dirFilter !== 'all' ? { research: o.dirFilter, q: search.applied } : { q: search.applied };
+        const list = requestQueueList(o.base, filter, 'search');
+        const read = list.total !== null;
+        if (read) search.shown = list;
+        const failed = !read && !!list.error;
+        markQueueSearchPending(search.typing || (!read && !failed));
+        const narrowed = o.branch ? branchName(o.branch) : o.dirFilter !== 'all' ? taskDirectionName(s, o.dirFilter) : '';
+        const line = el('div', 'research-overview__queue-result');
+        const cancel = (): HTMLElement => {
+            const b = el('button', 'link-button research-overview__queue-cancel', L.queueSearchCancel);
+            b.type = 'button';
+            b.onclick = () => clearQueueSearch();
+            return b;
+        };
+        if (failed) {
+            // The bridge failed or is busy: why, and Try again; the text stays in the field.
+            line.classList.add('is-error');
+            line.appendChild(el('span', 'research-overview__queue-result-text', list.error === 'busy' ? L.queueSearchBusy : L.queueSearchErr));
+            const retry = el('button', 'link-button live-queue-retry', L.dirRetry);
+            retry.type = 'button';
+            retry.dataset.do = 'queue-retry';
+            retry.onclick = () => {
+                retryQueueList(o.base, filter, 'search');
+                this.renderResearchOverview();
+            };
+            line.appendChild(retry);
+            host.appendChild(line);
+            return true;
+        }
+        const drawn = read ? list : search.shown;
+        if (!drawn || drawn.total === null) {
+            // The first answer not read yet: the queue stays, dimmed.
+            search.shown = null;
+            return false;
+        }
+        const total = drawn.total;
+        let said: string;
+        if (total > 0 || drawn.items.length > 0) {
+            said = L.queueSearchFound(total) + (narrowed ? ` · ${L.queueSearchInDir(narrowed)}` : '');
+            line.appendChild(el('span', 'research-overview__queue-result-text', said));
+        } else if (drawn.elsewhere) {
+            // A task's number outside the queue: where it is now.
+            const state = L.queueState[drawn.elsewhere.state] ?? drawn.elsewhere.state;
+            said = L.queueSearchElsewhere(drawn.elsewhere.id, state);
+            line.append(el('span', 'research-overview__queue-result-text', said), cancel());
+        } else {
+            said = narrowed ? L.queueSearchNoneDir(narrowed) : L.queueSearchNone;
+            line.appendChild(el('span', 'research-overview__queue-result-text', said));
+            if (narrowed) {
+                // The same text in the whole queue: the chip back on All.
+                const all = el('button', 'link-button research-overview__queue-all', L.queueSearchAllDirs);
+                all.type = 'button';
+                all.onclick = () => {
+                    setQueueBranchFilter(s, null);
+                    this.setWorkingLine('all');
+                    activeQueueSearch()?.input.focus({ preventScroll: true });
+                };
+                line.appendChild(all);
+            }
+            line.appendChild(cancel());
+        }
+        host.appendChild(line);
+        if (read) sayQueueSearch(list.key, said);
+        if (drawn.items.length === 0) return true;
+        const ul = el('ul', 'live-panel-list live-queue research-overview__queue-found');
+        host.appendChild(ul);
+        this.queueRowsKeys(ul, search);
+        this.appendQueueSearchRows(ul, s, drawn, o.multi);
+        const has = drawn.items.length;
+        if (drawn === list && list.error) {
+            this.appendQueueListState(ul, list.error, () => {
+                loadMoreQueueList(o.base, filter, 'search');
+                this.renderResearchOverview();
+            });
+        } else if (drawn.next !== null && has < total && has < QUEUE_ROWS_CAP) {
+            const li = el('li', 'live-queue-row live-queue-row--more live-queue-row--load');
+            const busy = !!drawn.loading;
+            const btn = el('button', 'link-button live-queue-load', busy ? L.queueLoading : L.queueLoadMore);
+            btn.type = 'button';
+            btn.dataset.do = 'queue-more';
+            if (busy) {
+                btn.setAttribute('aria-disabled', 'true');
+                li.setAttribute('aria-busy', 'true');
+            } else if (drawn === list) {
+                btn.onclick = () => {
+                    loadMoreQueueList(o.base, filter, 'search');
+                    this.renderResearchOverview();
+                    document.querySelector<HTMLElement>('#research-overview .live-queue-load')?.focus({ preventScroll: true });
+                };
+            }
+            li.append(btn, el('span', 'live-queue-shown', L.queueShown(has, total)));
+            ul.insertBefore(li, ul.querySelector('.live-queue-row--parked'));
+        } else if (has >= QUEUE_ROWS_CAP && total > has) {
+            const li = el('li', 'live-queue-row live-queue-row--more live-queue-row--cap');
+            li.appendChild(el('span', 'live-queue-shown', L.queueCapNote(has, total)));
+            ul.insertBefore(li, ul.querySelector('.live-queue-row--parked'));
+        }
+        return true;
+    },
+
+    /** The tasks found: the queue's rows with the task's number under the text (lit when the number or the person matched). */
+    appendQueueSearchRows(ul: HTMLElement, s: LiveSession, list: QueueList, multi: boolean): void {
+        const r = strings.research;
+        const L = strings.live;
+        const canTask = this.researchLinkAvailable('task');
+        const canOrder = taskOrderOffered(s);
+        // Set-aside ones last (the research's order), without a place.
+        const items = [...list.items.filter(q => q.state === 'next'), ...list.items.filter(q => q.state === 'parked')];
+        const widest = items.reduce((m, q) => Math.max(m, q.pos ?? 0), 0);
+        if (widest >= 10) ul.style.setProperty('--live-queue-num', `${String(widest).length}ch`);
+        for (const q of items) {
+            const parked = q.state === 'parked';
+            const li = el('li', `live-queue-row${parked ? ' live-queue-row--parked' : ''}`);
+            li.dataset.task = q.id;
+            li.tabIndex = -1;
+            const place = !parked ? q.pos : undefined;
+            const num = el('span', 'live-queue-num', place !== undefined ? String(place) : '–');
+            if (place !== undefined) num.setAttribute('aria-label', L.branchQueuePos(place));
+            li.appendChild(num);
+            const text = el('span', 'live-queue-text', q.text);
+            const kind = queueKindTag(q);
+            if (kind) text.append(' ', kind);
+            const dir = multi ? taskDirectionName(s, q.research) : '';
+            if (dir) text.appendChild(el('span', 'research-overview__dir', ` · ${dir}`));
+            appendQueueNote(text, q, s);
+            // The task's number (lit when it matched), the person who matched, "deferred".
+            const how = list.match?.[q.id];
+            const meta = el('span', 'live-queue-meta');
+            meta.appendChild(el('span', how === 'id' ? 'research-queue__match' : 'live-queue-id', q.id));
+            if (how === 'person' && q.person) {
+                const p = personByRefn(q.person);
+                meta.appendChild(el('span', 'research-queue__match', p ? `${q.person} ${shownName(p)}` : q.person));
+            }
+            if (parked) meta.appendChild(el('span', 'research-queue__deferred', L.queueTagDeferred));
+            text.appendChild(meta);
+            const problem = this.taskOrderProblem(q.id);
+            if (problem) {
+                const box = el('span', 'live-queue-problem', problem);
+                box.setAttribute('role', 'alert');
+                text.appendChild(box);
+            }
+            if (this.taskOrderBusy(q.id)) li.setAttribute('aria-busy', 'true');
+            li.appendChild(text);
+            if (!parked && (canTask || canOrder)) {
+                const more = el('button', 'live-queue-more', '⋯');
+                more.type = 'button';
+                more.setAttribute('aria-label', r.taskMenu);
+                more.setAttribute('aria-haspopup', 'menu');
+                more.dataset.task = q.id;
+                more.onclick = (e) => {
+                    e.stopPropagation();
+                    this.openLiveTaskMenu(more, q.id);
+                };
+                li.appendChild(more);
+            } else if (parked && canTask) {
+                const wake = setResearchActionLabel(el('button', 'link-button live-queue-wake'), r.wake, researchLinkMark('task', { taskDo: 'wake' }));
+                wake.type = 'button';
+                wake.onclick = () => this.runLiveTask(q.id, 'wake');
+                li.appendChild(wake);
+            }
+            ul.appendChild(li);
+        }
+    },
+
+    /** The rows under the search's field: ↑/↓ from row to row, ↑ from the first back to the field. */
+    queueRowsKeys(ul: HTMLElement, search: QueueSearch): void {
+        ul.addEventListener('keydown', (e) => {
+            if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+            const row = (e.target as HTMLElement | null)?.closest<HTMLElement>('li.live-queue-row[data-task]');
+            if (!row || e.target !== row) return;
+            const rows = [...ul.querySelectorAll<HTMLElement>(':scope > li.live-queue-row[data-task]')];
+            const i = rows.indexOf(row);
+            e.preventDefault();
+            if (e.key === 'ArrowDown') rows[i + 1]?.focus();
+            else if (i > 0) rows[i - 1].focus();
+            else search.input.focus();
+        });
     },
 
     /** A list of the queue not read: "Loading tasks…", or why it failed with Try again. */
