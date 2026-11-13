@@ -141,6 +141,8 @@ export interface PersonPageOptions {
     mapKinds?: readonly MapKind[];
     /** Window: the place selected in the places map (placeKey). */
     selectedPlace?: string | null;
+    /** Window: the person's ancestors' path in Migration over time ('on', 'off' greyed out, none: no link; spec 054 §1). */
+    mapPath?: 'on' | 'off';
     /** Window: the life chart's width in px (the column, measured by the window); default 680. */
     chartWidth?: number;
     /**
@@ -3135,6 +3137,7 @@ function personPageBodyHtml(page: PersonPageData, opts: PersonPageOptions): stri
         lang: page.lang, mode: c.app ? 'app' : 'file', kidPlaces,
         ...(opts.mapKinds ? { kinds: new Set(opts.mapKinds) } : {}),
         ...(c.app && opts.selectedPlace ? { selected: opts.selectedPlace } : {}),
+        ...(c.app && opts.mapPath ? { path: opts.mapPath } : {}),
         // The places manager keeps one position per name and no candidates: nothing to tell.
         ambiguous: new Set<string>(),
     });

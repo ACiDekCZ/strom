@@ -178,6 +178,7 @@ export const mapPathMethods = uiModule({
             if (same) return;
         }
         this.closeMapPopup();
+        this.closeMapLinesSheets();
         const host = document.createElement('div');
         host.className = 'map-path-picker';
         host.setAttribute('role', 'dialog');
@@ -292,6 +293,28 @@ export const mapPathMethods = uiModule({
         this.refreshMapPath();
         this.fitMapToPath();
         (document.querySelector('#map-container .map-path-chip-open') as HTMLElement | null)?.focus();
+    },
+
+    /**
+     * Open the map in Migration over time with the path to one person (the
+     * person page's "◎ Ancestors' path on the map ›"): the view switches,
+     * the path is chosen and framed, and on a phone the toast that follows
+     * stands at the top under the chips, left of the controls
+     * (--map-path-toast-top, --map-path-toast-right).
+     */
+    openMapPathFor(id: PersonId): Promise<void> {
+        TreeRenderer.presetViewMode('map');
+        return TreeRenderer.renderAsync().then(() => {
+            this.setMapPathTarget(id);
+            // A phone's toast: under the chips, clear of the column of the controls on the right.
+            const top = document.querySelector('#map-container .map-topleft') as HTMLElement | null;
+            const controls = document.querySelector('#map-container .map-controls') as HTMLElement | null;
+            const bottom = top ? top.getBoundingClientRect().bottom : 0;
+            const left = controls && controls.offsetWidth > 0 ? controls.getBoundingClientRect().left : window.innerWidth;
+            const root = document.documentElement.style;
+            root.setProperty('--map-path-toast-top', `${Math.round(Math.max(56, bottom + 10))}px`);
+            root.setProperty('--map-path-toast-right', `${Math.round(Math.max(8, window.innerWidth - left + 10))}px`);
+        });
     },
 
     /** × on the chip: the path goes, the scope comes back, the year stays (within the scope's range). */

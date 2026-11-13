@@ -25,7 +25,7 @@ import { shownName } from '../person-name.js';
 import { yearOf } from '../dates.js';
 import { branchClass, pointClassOf, type BranchInfo, type LineClass, type LineMode, type PathModel } from '../map-lines.js';
 import { lineSwatch, lineColorVar, pointFill, sortLineClasses } from '../map-line-colors.js';
-import { MQ_PHONE_BAR } from '../breakpoints.js';
+import { MQ_MOBILE, MQ_PHONE_LANDSCAPE } from '../breakpoints.js';
 import { uiModule } from './module.js';
 
 /** The list of the ancestors off the timeline is open (beside the legend). */
@@ -33,6 +33,17 @@ let undatedOpen = false;
 let undatedOutsideBound = false;
 /** The person row of a place's bubble whose actions are shown. */
 let bubbleExpanded: PersonId | null = null;
+/** A phone: the legend's sheet is open (its chip opens it). */
+let sheetOpen = false;
+let sheetOutsideBound = false;
+/** Where the legend was last drawn: a computer or a tablet, a phone, a phone held sideways. */
+type LegendLayout = 'wide' | 'phone' | 'land';
+let lastLayout: LegendLayout | null = null;
+
+function legendLayout(): LegendLayout {
+    if (window.matchMedia(MQ_PHONE_LANDSCAPE).matches) return 'land';
+    return window.matchMedia(MQ_MOBILE).matches ? 'phone' : 'wide';
+}
 
 /** Relation of a quarter (0 = father's father … 3 = mother's mother). */
 function quarterRel(q: number): string {
@@ -195,20 +206,31 @@ export const mapLinesLegendMethods = uiModule({
     },
 
     /**
-     * Draw the legend on the map (computer and tablet): the panel, or folded
-     * its chip. Gone without the path (or without an ancestor on the map).
-     * A phone and a phone held sideways hide both (their chip and sheet are
-     * their own); CSS does that.
+     * Draw the legend on the map: on a computer and a tablet the panel, or
+     * folded its chip; on a phone the chip "Family lines (N)" left above the
+     * bar (sideways: in the top row beside the person's chip) that opens the
+     * same content as a sheet along the bottom. Gone without the path (or
+     * without an ancestor on the map).
      */
     renderMapLinesLegend(): void {
         const container = document.getElementById('map-container');
         if (!container) return;
+        const layout = legendLayout();
+        const phone = layout !== 'wide';
+        if (lastLayout !== null && lastLayout !== layout) {
+            // Another layout (a window resized, a phone turned): its own chip and panel.
+            container.querySelectorAll('.map-lines-legend, .map-lines-chip').forEach(el => el.remove());
+            if (undatedOpen) this.closeMapLinesUndated(false);
+            sheetOpen = false;
+        }
+        lastLayout = layout;
         let panel = container.querySelector<HTMLElement>('.map-lines-legend');
         let chip = container.querySelector<HTMLElement>('.map-lines-chip');
         const shown = this.mapTimeOn && this.mapLinesLegendShown();
         if (!shown) {
             panel?.remove();
             chip?.remove();
+            sheetOpen = false;
             container.classList.remove('has-lines-legend');
             this.closeMapLinesUndated(false);
             return;
@@ -220,29 +242,38 @@ export const mapLinesLegendMethods = uiModule({
             ? { act: active.dataset.act ?? '', line: active.dataset.line ?? '', mode: active.dataset.mode ?? '', chip: chip?.contains(active) ?? false }
             : null;
 
-        if (this.mapLegendCollapsed) {
-            panel?.remove();
-            panel = null;
+        const wantChip = phone || this.mapLegendCollapsed;
+        const wantPanel = phone ? sheetOpen : !this.mapLegendCollapsed;
+        if (wantChip) {
             if (!chip) {
                 const btn = document.createElement('button');
                 btn.type = 'button';
                 chip = btn;
                 chip.className = 'map-lines-chip';
                 chip.dataset.act = 'expand';
-                chip.setAttribute('aria-expanded', 'false');
-                container.appendChild(chip);
                 this.bindMapLinesLegend(chip);
             }
+            chip.classList.toggle('is-phone', phone);
+            chip.classList.toggle('is-inline', layout === 'land');
+            if (phone) chip.setAttribute('aria-haspopup', 'dialog');
+            chip.setAttribute('aria-expanded', String(phone && sheetOpen));
+            // Sideways: in the top row after the person's chip; elsewhere on the map itself.
+            const pathChip = layout === 'land' ? container.querySelector<HTMLElement>('.map-topleft .map-path-chip') : null;
+            if (pathChip) { if (pathChip.nextElementSibling !== chip) pathChip.after(chip); }
+            else if (chip.parentElement !== container) container.appendChild(chip);
             const known = knownLines(model, this.mapLineMode);
             const bars = this.mapLineColors
                 ? known.slice(0, 8).map(i => lineColorVar(branchClass(this.mapLineMode, i)))
                 : ['var(--primary)'];
             chip.innerHTML = `<span class="map-lines-chip-bars" aria-hidden="true">${bars.map(c => `<span style="background: ${c};"></span>`).join('')}</span>`
-                + `<span class="map-lines-chip-text">${this.escapeHtml(strings.map.linesChip(known.length))}</span><span class="map-lines-chip-caret" aria-hidden="true">▾</span>`;
-            this.closeMapLinesUndated(false);
+                + `<span class="map-lines-chip-text">${this.escapeHtml(strings.map.linesChip(known.length))}</span>`
+                + `<span class="map-lines-chip-caret" aria-hidden="true">${layout === 'phone' ? '▴' : '▾'}</span>`;
+            chip.hidden = phone && sheetOpen;
         } else {
             chip?.remove();
             chip = null;
+        }
+        if (wantPanel) {
             if (!panel) {
                 panel = document.createElement('section');
                 panel.className = 'map-lines-legend';
@@ -250,10 +281,18 @@ export const mapLinesLegendMethods = uiModule({
                 container.appendChild(panel);
                 this.bindMapLinesLegend(panel);
             }
-            panel.innerHTML = this.mapLinesLegendHtml();
+            panel.classList.toggle('map-lines-legend--sheet', phone);
+            panel.classList.toggle('map-lines-legend--land', layout === 'land');
+            if (phone) panel.setAttribute('role', 'dialog');
+            else panel.removeAttribute('role');
+            panel.innerHTML = (phone ? '<span class="map-lines-grip" aria-hidden="true"></span>' : '') + this.mapLinesLegendHtml({ sheet: phone });
             panel.classList.toggle('is-colorless', !this.mapLineColors);
-            if (undatedOpen) this.renderMapLinesUndated();
+        } else {
+            panel?.remove();
+            panel = null;
+            if (!phone) this.closeMapLinesUndated(false);
         }
+        if (undatedOpen) this.renderMapLinesUndated();
         container.classList.add('has-lines-legend');
         this.positionMapLinesLegend();
 
@@ -261,9 +300,49 @@ export const mapLinesLegendMethods = uiModule({
             // Folding moves the focus to the chip, unfolding to the fold button.
             const sel = was.line ? `[data-line="${was.line}"]` : was.mode ? `[data-mode="${was.mode}"]` : was.act ? `[data-act="${was.act}"]` : '';
             const target = panel && !was.chip && sel ? panel.querySelector<HTMLElement>(sel) : null;
-            if (chip) chip.focus();
+            if (chip && !chip.hidden && (was.chip || !panel)) chip.focus();
             else (target ?? panel?.querySelector<HTMLElement>('.map-lines-collapse'))?.focus();
         }
+    },
+
+    /** A phone: the legend's sheet is open. */
+    mapLinesSheetOpen(): boolean {
+        return sheetOpen && lastLayout !== 'wide';
+    },
+
+    /** A phone: open the legend's sheet; the bubble, the choice of a person and the list give way. */
+    openMapLinesSheet(): void {
+        this.closeMapPopup();
+        this.closeMapPathPicker(false);
+        this.closeMapLinesUndated(false);
+        sheetOpen = true;
+        this.renderMapLinesLegend();
+        document.querySelector<HTMLElement>('#map-container .map-lines-legend--sheet .map-lines-collapse')?.focus();
+        if (!sheetOutsideBound) {
+            sheetOutsideBound = true;
+            // A press outside the sheet (and its chip) closes it.
+            document.addEventListener('pointerdown', (e: PointerEvent) => {
+                if (!sheetOpen) return;
+                const t = e.target as Element | null;
+                if (t?.closest?.('.map-lines-legend, .map-lines-chip, .map-lines-und')) return;
+                this.closeMapLinesSheet(false);
+            }, true);
+        }
+    },
+
+    /** Close the legend's sheet; `refocus`: back to its chip. */
+    closeMapLinesSheet(refocus: boolean): void {
+        if (!sheetOpen) return;
+        sheetOpen = false;
+        this.renderMapLinesLegend();
+        if (refocus) document.querySelector<HTMLElement>('#map-container .map-lines-chip')?.focus();
+    },
+
+    /** A phone: another sheet (the bubble, the choice of a person) opens, so the legend's sheets close. */
+    closeMapLinesSheets(): void {
+        if (lastLayout === 'wide') return;
+        this.closeMapLinesUndated(false);
+        this.closeMapLinesSheet(false);
     },
 
     /**
@@ -274,10 +353,21 @@ export const mapLinesLegendMethods = uiModule({
      */
     positionMapLinesLegend(): void {
         const container = document.getElementById('map-container');
-        const el = container?.querySelector<HTMLElement>('.map-lines-legend, .map-lines-chip');
-        if (!container || !el) return;
-        if (window.matchMedia(MQ_PHONE_BAR).matches) {
+        if (!container) return;
+        // A window resized across a breakpoint: the legend of the other layout.
+        if (lastLayout !== null && legendLayout() !== lastLayout) { this.renderMapLinesLegend(); return; }
+        const el = container.querySelector<HTMLElement>('.map-lines-legend, .map-lines-chip');
+        if (!el) return;
+        if (lastLayout !== 'wide') {
             container.style.removeProperty('--map-legend-room');
+            // A phone: the chip stands 8 px above the time bar (sideways it rides in the top row).
+            const chip = container.querySelector<HTMLElement>('.map-lines-chip.is-phone:not(.is-inline)');
+            if (chip) {
+                const box = container.getBoundingClientRect();
+                const bar = container.querySelector<HTMLElement>('#map-timebar');
+                const barRect = bar && !bar.hidden ? bar.getBoundingClientRect() : null;
+                chip.style.bottom = `${Math.round(barRect && barRect.height > 0 ? box.bottom - barRect.top + 8 : 74)}px`;
+            }
             return;
         }
         const box = container.getBoundingClientRect();
@@ -315,10 +405,20 @@ export const mapLinesLegendMethods = uiModule({
                     this.setMapLineMode(btn.dataset.mode === 'eighth' ? 'eighth' : 'quarter');
                     return;
                 }
-                case 'collapse': this.setMapLegendCollapsed(true); return;
-                case 'expand': this.setMapLegendCollapsed(false); return;
+                case 'collapse':
+                    if (lastLayout !== 'wide') this.closeMapLinesSheet(true);
+                    else this.setMapLegendCollapsed(true);
+                    return;
+                case 'expand':
+                    if (lastLayout !== 'wide') this.openMapLinesSheet();
+                    else this.setMapLegendCollapsed(false);
+                    return;
                 case 'colors': this.setMapLineColors(!this.mapLineColors); return;
-                case 'undated': this.toggleMapLinesUndated(); return;
+                case 'undated':
+                    // A phone: the list takes the legend's sheet's place.
+                    if (lastLayout !== 'wide') { sheetOpen = false; this.renderMapLinesLegend(); this.openMapLinesUndated(); }
+                    else this.toggleMapLinesUndated();
+                    return;
             }
         });
         // A pointer that can hover: a row highlights its line while it is over it.
@@ -469,9 +569,13 @@ export const mapLinesLegendMethods = uiModule({
             container.appendChild(pop);
             this.bindMapLinesUndated(pop);
         }
-        pop.innerHTML = this.mapLinesUndatedHtml();
+        const sheet = lastLayout !== null && lastLayout !== 'wide';
+        pop.classList.toggle('is-sheet', sheet);
+        pop.classList.toggle('is-land', lastLayout === 'land');
+        if (sheet) pop.style.cssText = '';
+        pop.innerHTML = this.mapLinesUndatedHtml({ sheet });
         container.querySelector('.map-lines-legend [data-act="undated"]')?.setAttribute('aria-expanded', 'true');
-        this.positionMapLinesUndated();
+        if (!sheet) this.positionMapLinesUndated();
     },
 
     /** Left of the legend, at its top; over it when the map has no room beside it. */
@@ -479,7 +583,7 @@ export const mapLinesLegendMethods = uiModule({
         const container = document.getElementById('map-container');
         const pop = container?.querySelector<HTMLElement>('.map-lines-und');
         const legend = container?.querySelector<HTMLElement>('.map-lines-legend');
-        if (!container || !pop || !legend) return;
+        if (!container || !pop || !legend || pop.classList.contains('is-sheet')) return;
         const box = container.getBoundingClientRect();
         const r = legend.getBoundingClientRect();
         const width = Math.min(330, box.width - 24);
@@ -502,7 +606,8 @@ export const mapLinesLegendMethods = uiModule({
         container?.querySelector('.map-lines-und')?.remove();
         const link = container?.querySelector<HTMLElement>('.map-lines-legend [data-act="undated"]');
         link?.setAttribute('aria-expanded', 'false');
-        if (was && refocus) link?.focus();
+        // A phone: the legend's sheet gave way to the list, so its chip takes the focus.
+        if (was && refocus) (link ?? container?.querySelector<HTMLElement>('.map-lines-chip'))?.focus();
     },
 
     // ------------------------------------------------------------ the place's bubble

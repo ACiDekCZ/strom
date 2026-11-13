@@ -665,3 +665,27 @@ describe('clusterLabel: a cluster’s years', () => {
         expect(clusterLabel({ members }, cs).years).toBe('1810–2019');
     });
 });
+
+describe('the ancestors\' path from the person page (spec 054 §1)', () => {
+    const at = (html: string, needle: string): number => html.indexOf(needle);
+    const pts = () => collectPersonPlacePoints(tree(), JAN, { now: 2026 });
+
+    it('stands before "Open in map" in the app, greyed out with its sentence without an ancestor on the map, absent without ancestors and in a saved file', () => {
+        const on = placesMapHtml(pts(), GEO, { lang: 'cs', mode: 'app', kidPlaces: true, path: 'on' });
+        expect(on).toContain(`<button type="button" class="pp-act pp-map-path" data-pp-action="map:path"><span class="pp-map-path-mark" aria-hidden="true">◎</span> ${cs.map.pathFromPage} ›</button>`);
+        expect(at(on, 'data-pp-action="map:path"')).toBeLessThan(at(on, 'data-pp-action="map:open"'));
+        expect(on).not.toContain('pp-map-path-note');
+
+        const off = placesMapHtml(pts(), GEO, { lang: 'cs', mode: 'app', kidPlaces: true, path: 'off' });
+        expect(off).toContain(`data-pp-action="map:path" aria-disabled="true" aria-describedby="pp-sec-places-path-note" title="${cs.map.pathNoAncestors}"`);
+        expect(off).toContain(`<p class="pp-map-path-note" id="pp-sec-places-path-note">${cs.map.pathNoAncestors}</p>`);
+
+        for (const html of [
+            placesMapHtml(pts(), GEO, { lang: 'cs', mode: 'app', kidPlaces: true }),
+            placesMapHtml(pts(), GEO, { lang: 'cs', mode: 'file', kidPlaces: true, path: 'on' }),
+        ]) {
+            expect(html).not.toContain('map:path');
+            expect(html).not.toContain('pp-map-path-note');
+        }
+    });
+});

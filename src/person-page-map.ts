@@ -1283,6 +1283,15 @@ export interface PlacesMapCtx {
      */
     kinds?: ReadonlySet<MapKind>;
     /**
+     * The app's window: the person's ancestors' path in Migration over time
+     * (spec 054 §1, entry 3). 'on': some ancestor has a year and a place on
+     * the map, the link "◎ Ancestors' path on the map ›" before "Open in the
+     * map ›"; 'off': ancestors in the tree, none on the map yet, the link
+     * greyed out with its sentence under the heading. None: no ancestor in the
+     * tree, no link.
+     */
+    path?: 'on' | 'off';
+    /**
      * A family line's map (spec 026 §3.7): no path between the places, no
      * switch or button, a point's size by `size` (px), the list's row after
      * the place's name from `row` (HTML), the label's years the place's
@@ -1383,7 +1392,8 @@ function osaOf(p: PlannedPlace): string {
  *   - `data-pp-map-place="{placeKey}"` on points and rows: select (click / Enter);
  *   - `data-pp-osa="osa-…"` on a row: the timeline row of the place's first event;
  *   - `data-pp-switch="kidPlaces"` (app): the children's places switch, the app re-renders;
- *   - `data-pp-action="map:open"` (app): open the application map.
+ *   - `data-pp-action="map:open"` (app): open the application map;
+ *   - `data-pp-action="map:path"` (app, `ctx.path`): the ancestors' path in Migration over time.
  */
 export function placesMapHtml(points: readonly PlacePoint[], geo: Readonly<Record<string, PlaceGeo>> | undefined, ctx: PlacesMapCtx): string {
     const plan = planPlacesMap(points, geo, { kidPlaces: ctx.kidPlaces, lang: ctx.lang, ...(ctx.group ? { pointPx: ctx.group.size } : {}) });
@@ -1401,10 +1411,19 @@ export function placesMapHtml(points: readonly PlacePoint[], geo: Readonly<Recor
     if (app && mapLike && hasRel && !group) {
         tools.push(`<button type="button" class="pp-toggle" role="switch" aria-checked="${ctx.kidPlaces}" data-pp-switch="kidPlaces">${esc(M.kids)}</button>`);
     }
+    // The ancestors' path in Migration over time (spec 054 §1): greyed out while no ancestor is on the map.
+    const pathOff = ctx.path === 'off';
+    if (app && !group && ctx.path) {
+        tools.push(`<button type="button" class="pp-act pp-map-path" data-pp-action="map:path"`
+            + `${pathOff ? ` aria-disabled="true" aria-describedby="${esc(ctx.id ?? 'pp-sec-places')}-path-note" title="${esc(S.map.pathNoAncestors)}"` : ''}>`
+            + `<span class="pp-map-path-mark" aria-hidden="true">◎</span> ${esc(S.map.pathFromPage)} ›</button>`);
+    }
     if (app && mapLike && !group) tools.push(`<button type="button" class="pp-act pp-map-open" data-pp-action="map:open">${esc(M.open)}</button>`);
     const title = group ? group.title : M.title;
-    const head = title || tools.length
-        ? `<div class="pp-sec-head">${title ? `<h2>${esc(title)}</h2>` : ''}${tools.length ? `<div class="pp-toggles pp-map-tools">${tools.join('')}</div>` : ''}</div>` : '';
+    const pathNote = app && !group && pathOff
+        ? `<p class="pp-map-path-note" id="${esc(ctx.id ?? 'pp-sec-places')}-path-note">${esc(S.map.pathNoAncestors)}</p>` : '';
+    const head = (title || tools.length
+        ? `<div class="pp-sec-head">${title ? `<h2>${esc(title)}</h2>` : ''}${tools.length ? `<div class="pp-toggles pp-map-tools">${tools.join('')}</div>` : ''}</div>` : '') + pathNote;
 
     const open = `<section class="pp-sec pp-sec--places pp-places" id="${esc(id)}"`;
     const body = (pl: MapPlan): string => placesBodyHtml(pl, S, ctx, sel);

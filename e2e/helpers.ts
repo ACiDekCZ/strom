@@ -88,11 +88,13 @@ export async function stubPersistence(page: Page, granted: boolean): Promise<voi
  * "On this day" card is off unless `{ onThisDay: true }` — the fixtures and
  * the sample tree have anniversaries, and on those dates the card (shown once
  * the tree is idle) would cover the controls a suite taps, so a suite would
- * fail only on those days.
+ * fail only on those days. The one-time offer of Migration over time on the
+ * map counts as spent unless `{ mapTimeTip: true }` — it stands left of the
+ * map's controls over the points a suite presses.
  */
 export async function openApp(
     page: Page,
-    opts: { researchPromo?: boolean; fileCopyReminders?: boolean; tourOffer?: boolean; whatsNew?: boolean; onThisDay?: boolean } = {},
+    opts: { researchPromo?: boolean; fileCopyReminders?: boolean; tourOffer?: boolean; whatsNew?: boolean; onThisDay?: boolean; mapTimeTip?: boolean } = {},
 ): Promise<void> {
     if (!opts.researchPromo) await seedResearchPromoSeen(page);
     if (!opts.whatsNew) await seedWhatsNewSeen(page);
@@ -102,6 +104,13 @@ export async function openApp(
         await page.addInitScript(() => {
             try {
                 if (localStorage.getItem('strom-tour-offered') === null) localStorage.setItem('strom-tour-offered', '1');
+            } catch { /* no storage: nothing to seed */ }
+        });
+    }
+    if (!opts.mapTimeTip) {
+        await page.addInitScript(() => {
+            try {
+                if (localStorage.getItem('strom.map.timeTipSeen') === null) localStorage.setItem('strom.map.timeTipSeen', '1');
             } catch { /* no storage: nothing to seed */ }
         });
     }

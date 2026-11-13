@@ -10782,6 +10782,58 @@
         }
         .map-time-toggle.active { background: var(--primary, #4a7c59); color: var(--on-primary); }
         .map-time-toggle:disabled { opacity: 0.45; cursor: not-allowed; }
+        /* Migration over time can be found (spec 054 §4): the timer with its word, as high as the
+           other controls, the column aligned right (--map-controls-w keeps the top left clear of it). */
+        .map-controls { align-items: flex-end; }
+        .map-controls button.map-time-toggle {
+            width: auto;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 0 12px 0 10px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--primary-dark);
+            font-size: 13px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .map-controls button.map-time-toggle.active { border-color: var(--primary); background: var(--primary); color: var(--on-primary); }
+        .map-controls button.map-time-toggle.is-tip { box-shadow: 0 0 0 3px var(--primary-soft); }
+        .map-time-toggle-icon { display: inline-flex; }
+        .map-time-toggle-icon .ui-icon { width: 16px; height: 16px; }
+        /* The one-time offer of the mode: a card left of the button (a phone: across the width above the status bar). */
+        .map-time-tip {
+            position: absolute;
+            z-index: 6;
+            width: 300px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding: 12px 14px;
+            border: 1.5px solid var(--primary);
+            border-radius: 12px;
+            background: var(--surface);
+            color: var(--text);
+            box-shadow: 0 10px 30px rgba(20,16,8,0.22);
+        }
+        .map-time-tip-title { margin: 0; font-size: 14px; font-weight: 600; }
+        .map-time-tip-text { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-muted); text-wrap: pretty; }
+        .map-time-tip-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+        .map-time-tip-acts button { min-height: 32px; padding: 0 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+        .map-time-tip-try { border: 1px solid var(--primary); background: var(--primary); color: var(--on-primary); }
+        .map-time-tip-later { border: 1px solid var(--border); background: var(--surface); color: var(--text); font-weight: 500; }
+        @media (hover: hover) {
+            .map-time-tip-try:hover { filter: brightness(1.08); }
+            .map-time-tip-later:hover { background: var(--surface-2); }
+        }
+        .map-time-tip :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        @media (pointer: coarse) { .map-time-tip-acts button { min-height: 44px; } }
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .map-time-tip { left: 12px; right: 12px; top: auto; width: auto; bottom: max(62px, calc(var(--map-status-reach, 0px) + 8px)); }
+        }
         /* Top left: the scope and under it the kinds of places (spec 031 §1).
            Ends 60px from the right, clear of the zoom buttons; the box itself
            lets the map through, only its controls take clicks. */
@@ -10789,7 +10841,7 @@
             position: absolute;
             top: 12px;
             left: 12px;
-            right: 60px;
+            right: calc(var(--map-controls-w, 34px) + 22px);
             z-index: 3;
             display: flex;
             flex-direction: column;
@@ -10802,7 +10854,7 @@
            left of it, never under it, and the scope and the kinds end before them (1105). */
         @media (min-width: 641px) {
             body:has(> #live-panel:not([hidden]):not(.phone-strip)) .map-controls { right: calc(var(--live-card-right) + var(--live-card-w) + 8px); }
-            body:has(> #live-panel:not([hidden]):not(.phone-strip)) .map-topleft { right: calc(var(--live-card-right) + var(--live-card-w) + 56px); }
+            body:has(> #live-panel:not([hidden]):not(.phone-strip)) .map-topleft { right: calc(var(--live-card-right) + var(--live-card-w) + var(--map-controls-w, 34px) + 22px); }
         }
         .map-scope {
             display: flex;
@@ -11549,13 +11601,52 @@
             left: calc((100% - var(--map-legend-room, 0px)) / 2);
             width: min(380px, calc(100% - var(--map-legend-room, 0px) - 32px));
         }
-        /* A phone and a phone held sideways: the legend comes as a chip and a sheet of their own. */
+        /* A phone and a phone held sideways: the legend comes as a chip and a sheet of their own
+           (map-lines-legend-ui.ts); the panel, the chip and the popover of a wider window never show. */
         @media (max-width: 640px) {
-            .map-lines-legend, .map-lines-chip, .map-lines-und { display: none; }
+            .map-lines-legend:not(.map-lines-legend--sheet), .map-lines-chip:not(.is-phone), .map-lines-und:not(.is-sheet) { display: none; }
         }
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
-            .map-lines-legend, .map-lines-chip, .map-lines-und { display: none; }
+            .map-lines-legend:not(.map-lines-legend--sheet), .map-lines-chip:not(.is-phone), .map-lines-und:not(.is-sheet) { display: none; }
         }
+        /* The phone's chip "Family lines (N)": left, 8 px above the time bar (JS sets bottom). */
+        .map-lines-chip.is-phone {
+            top: auto;
+            right: auto;
+            left: 8px;
+            bottom: 74px;
+            max-width: calc(100% - 16px);
+            height: 40px;
+            border-radius: 20px;
+        }
+        .map-lines-chip.is-phone .map-lines-chip-text { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+        .map-lines-chip[hidden] { display: none; }
+        /* Sideways: in the top row beside the person's chip. */
+        .map-lines-chip.is-inline { position: static; flex: none; height: 40px; box-shadow: 0 4px 14px rgba(0,0,0,0.16); }
+        @media (pointer: coarse) {
+            .map-lines-chip.is-phone { height: 44px; border-radius: 22px; }
+            .map-lines-chip.is-inline { height: 40px; border-radius: 20px; }
+        }
+        /* The sheets along the bottom: the legend (82 %) and the ancestors off the timeline (80 %),
+           above the time bar and the chips; one sheet at a time. */
+        .map-lines-legend.map-lines-legend--sheet,
+        .map-lines-und.is-sheet {
+            left: 0;
+            right: 0;
+            top: auto;
+            bottom: 0;
+            width: auto;
+            z-index: 9;
+            border-bottom: none;
+            border-radius: 18px 18px 0 0;
+            box-shadow: 0 -10px 34px rgba(20,16,8,0.28);
+            padding-bottom: env(safe-area-inset-bottom, 0px);
+        }
+        .map-lines-legend.map-lines-legend--sheet { max-height: 82%; }
+        .map-lines-und.is-sheet { max-height: 80%; }
+        .map-lines-legend--sheet.map-lines-legend--land, .map-lines-und.is-sheet.is-land { max-height: 96%; }
+        .map-lines-grip { flex: none; align-self: center; width: 40px; height: 4px; margin: 8px 0 0; border-radius: 2px; background: var(--border); }
+        .map-lines-legend--sheet .map-lines-head, .map-lines-und.is-sheet .map-lines-und-head { padding-top: 6px; }
 
         .map-status {
             position: absolute;
@@ -11877,7 +11968,7 @@
             .map-marker-label { display: none; }
             .map-controls { right: 8px; }
             .map-controls button { width: 30px; height: 30px; }
-            .map-topleft { left: 8px; right: 52px; }
+            .map-topleft { left: 8px; right: calc(var(--map-controls-w, 30px) + 18px); }
             /* Narrow screens: a full-width bar. Sized to its content it shrank
                to the width of the sentence, which left no room for the buttons
                to sit next to each other. */
@@ -11917,7 +12008,9 @@
         }
         /* Sideways: the button in one row with the scope, the bubble taller. */
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
-            .map-topleft { top: 8px; left: 8px; right: 52px; flex-direction: row; }
+            .map-topleft { top: 8px; left: 8px; right: calc(var(--map-controls-w, 30px) + 18px); flex-direction: row; }
+            .map-topleft > .map-path-chip { flex: 0 1 auto; }
+            .map-topleft > .map-kinds-wrap { flex: none; }
             .map-controls { top: 8px; right: 8px; }
             .map-controls button { width: 30px; height: 30px; }
             .map-kinds-menu { width: 320px; }
@@ -25490,6 +25583,19 @@
            it opens (person editor, Materials, source viewer), like Sources. */
         #person-page-modal { z-index: 190; }
         .toast[data-kind="person-page"] { z-index: 250; }
+        /* "‹ Back to the person page" after the ancestors' path opened from it: above the
+           time bar on a computer and a tablet; on a phone at the top, under the map's chips and
+           left of its controls (--map-path-toast-top/-right, map-path-ui.ts). */
+        .toast[data-kind="map-path-back"] { z-index: 250; }
+        @media (max-width: 640px) {
+            body.map-view .toast[data-kind="map-path-back"] {
+                top: var(--map-path-toast-top, 120px); bottom: auto;
+                left: 8px; right: var(--map-path-toast-right, 56px);
+                width: auto; max-width: none;
+                transform: translateY(-16px);
+            }
+            body.map-view .toast[data-kind="map-path-back"].show { transform: translateY(0); }
+        }
         .modal.modal--page {
             position: relative;
             width: 1000px; max-width: calc(100vw - 48px); min-width: 0;

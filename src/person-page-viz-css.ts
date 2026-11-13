@@ -80,6 +80,10 @@ export const PERSON_PAGE_MAP_CSS = `
 .pp-map-ilb--dn { --ty: 1px; }
 .pp-map-tools { align-items: center; }
 .pp-map-tools .pp-act { margin-top: 0; min-height: 34px; }
+.pp-map-path { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.pp-map-path-mark { font-size: 14px; }
+.pp-map-path[aria-disabled="true"] { color: var(--text-faint); cursor: not-allowed; text-decoration: none; }
+.pp-map-path-note { margin: -8px 0 12px; font-size: 12.5px; color: var(--text-light); text-align: right; }
 .pp-places { scroll-margin-top: 12px; }
 /* The kinds of places (spec 031 P2): the main map's chips, in the page's flow above the map. */
 .pp-map-kinds { display: flex; flex-wrap: wrap; gap: 2px; width: fit-content; max-width: 100%; margin: 0 0 10px; padding: 3px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
@@ -149,6 +153,7 @@ export const PERSON_PAGE_MAP_CSS = `
   .pp-map-region.rg-d-r { left: auto; right: 16px; transform: none; }
 }
 @media (max-width: 640px) {
+  .pp-map-path-note { text-align: left; }
   .pp-map { aspect-ratio: 4 / 3; }
   .pp-map-in { left: -25%; width: 150%; }
   .lb-p-l { transform: translate(calc(-100% - var(--hw) - 5px), -50%); }

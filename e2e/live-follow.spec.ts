@@ -114,7 +114,7 @@ async function follow(page: Page, o: { size?: { width: number; height: number };
     return bridge;
 }
 
-/** Map tiles served locally (a 1×1 PNG) and the one-time tiles notice acknowledged. */
+/** Map tiles served locally (a 1×1 PNG), the one-time tiles notice acknowledged and the offer of Migration over time spent. */
 async function stubTiles(page: Page): Promise<void> {
     const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
     await page.route('**://tile.openstreetmap.org/**', route => route.fulfill({ status: 200, contentType: 'image/png', body: png }));
@@ -123,6 +123,7 @@ async function stubTiles(page: Page): Promise<void> {
         const settings = raw ? JSON.parse(raw) : {};
         settings.mapTiles = true;
         localStorage.setItem('strom-settings', JSON.stringify(settings));
+        if (localStorage.getItem('strom.map.timeTipSeen') === null) localStorage.setItem('strom.map.timeTipSeen', '1');
     });
 }
 

@@ -490,7 +490,7 @@ export const personPageMethods = uiModule({
 
     /** The options of the window's page (mode 'app') or the file's (mode 'file'). */
     personPageOptions(personId: PersonId, over: Partial<PersonPageOptions>): PersonPageOptions {
-        return {
+        const opts: PersonPageOptions = {
             personId,
             lang: getCurrentLanguage(),
             mode: 'app',
@@ -504,6 +504,21 @@ export const personPageMethods = uiModule({
             mapKinds: SettingsManager.getMapKinds(),
             ...over,
         };
+        // The window's link to the ancestors' path on the map (a saved page has none).
+        if (opts.mode === 'app' && opts.mapPath === undefined) {
+            const path = this.personPageMapPath(personId);
+            if (path) opts.mapPath = path;
+        }
+        return opts;
+    },
+
+    /** The ancestors' path of a person on the map: 'on', 'off' (ancestors, none on the map yet), null (no ancestor). */
+    personPageMapPath(personId: PersonId): 'on' | 'off' | null {
+        const person = DataManager.getPerson(personId);
+        if (!person || person.isPlaceholder) return null;
+        const model = this.mapPathModelOf(personId);
+        if (model.onMapCount > 0) return 'on';
+        return model.ancestors.length > 0 ? 'off' : null;
     },
 
     /** What the page reads from the app around the data: history layer, waiting tasks, last change, read-only. */
@@ -782,6 +797,10 @@ export const personPageMethods = uiModule({
     runPersonPageAction(action: string, el: HTMLElement): void {
         if (!state) return;
         if (action === 'map:open') { this.openPersonPageMap(); return; }
+        if (action === 'map:path') {
+            if (el.getAttribute('aria-disabled') !== 'true') this.openPersonPageMapPath();
+            return;
+        }
         const personId = state.current.personId;
         const person = DataManager.getPerson(personId);
         if (action === 'source') {
@@ -865,6 +884,34 @@ export const personPageMethods = uiModule({
         const pick = (selected ? pagePlaces.find(p => p.placeKey === selected) : undefined)
             ?? ordered.find(p => !!geo[p.placeKey]) ?? ordered[0];
         if (pick) this.openPersonPagePlace(pick.place);
+    },
+
+    /**
+     * "◎ Ancestors' path on the map ›" (spec 054 §1, entry 3): the window
+     * closes, the map opens in Migration over time with the person's path at
+     * its first year, framed once on the path; the toast brings the page back
+     * (on a phone at the top, under the map's chips).
+     */
+    openPersonPageMapPath(): void {
+        if (!state) return;
+        const personId = state.current.personId;
+        const person = DataManager.getPerson(personId);
+        if (!person || this.mapPathModelOf(personId).onMapCount === 0) return;
+        this.snapshotPersonPage();
+        const parked: PageState = { origin: state.origin, current: cloneEntry(state.current), back: state.back.map(cloneEntry) };
+        this.closePersonPage({ focus: false });
+        void this.openMapPathFor(personId).then(() => {
+            this.showToast(shownName(person), 10000, {
+                kind: 'map-path-back',
+                closable: true,
+                action: {
+                    label: `‹ ${strings.map.pathBackToPage}`,
+                    run: () => {
+                        if (DataManager.getPerson(parked.current.personId)) this.openPersonPageState(parked);
+                    },
+                },
+            });
+        });
     },
 
     /** A place: the window closes, the map (or the places manager) opens; the toast brings the page back. */

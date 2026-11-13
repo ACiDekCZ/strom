@@ -32,7 +32,7 @@ import {
 import { getWindowRole } from '../windows/window-role.js';
 import { PERSON_CHOSEN_EVENT } from '../windows/window-selection.js';
 import { KIND_MARK, houseMatches, kindMarks } from '../map-bubble.js';
-import { MQ_MOBILE } from '../breakpoints.js';
+import { MQ_MOBILE, MQ_PHONE_BAR } from '../breakpoints.js';
 import { collectDatedPlacePoints, DatedPlaceHarvest } from '../map-time.js';
 import { yearOf } from '../dates.js';
 import { pickMapLabels, type LabelBox } from '../map-labels.js';
@@ -78,6 +78,16 @@ let kindTipTimer: number | null = null;
 let mapKeysBound = false;
 /** The document-wide space bar (play/pause on the map) is bound once. */
 let mapTimeKeysBound = false;
+
+/** The one-time offer of Migration over time was spent on this device (spec 054 §4). */
+const TIME_TIP_KEY = 'strom.map.timeTipSeen';
+function mapTimeTipSeen(): boolean {
+    try { return localStorage.getItem(TIME_TIP_KEY) === '1'; } catch { return true; }
+}
+/** Spent once: written only the first time (a satellite window that turns the mode on stores nothing). */
+function markMapTimeTipSeen(): void {
+    try { if (localStorage.getItem(TIME_TIP_KEY) !== '1') localStorage.setItem(TIME_TIP_KEY, '1'); } catch { /* no storage: the offer goes with the page */ }
+}
 /** The map listens once for the tile server's refusal (its note), for every map canvas. */
 let mapTilesBound = false;
 
@@ -197,7 +207,7 @@ export const mapMethods = uiModule({
                     <button type="button" class="map-fit" onclick="window.Strom.UI.fitMapToPlaces(true)"
                             aria-label="${strings.map.fit}" title="${strings.map.fit}">⤢</button>
                     <button type="button" class="map-time-toggle" onclick="window.Strom.UI.toggleMapTime()"
-                            aria-pressed="false" aria-label="${strings.map.timeMode}" title="${strings.map.timeMode}">${iconSvg('timer')}</button>
+                            aria-pressed="false" aria-label="${strings.map.timeMode}" title="${strings.map.timeMode}"><span class="map-time-toggle-icon" aria-hidden="true">${iconSvg('timer')}</span><span class="map-time-toggle-text" aria-hidden="true">${strings.map.timeModeShort}</span></button>
                 </div>
                 <div class="map-topleft">
                     <div class="map-scope">
@@ -258,6 +268,7 @@ export const mapMethods = uiModule({
         this.drawMapTiles(container);
         this.drawMapMarkers(container, places);
         this.renderMapStatus(places);
+        this.renderMapTimeTip();
         // Following the research: where it works now and its trail, over the markers.
         this.applyMapFollowMarks();
         // The states the research knows (check marks, to confirm) come with its places.
@@ -306,11 +317,17 @@ export const mapMethods = uiModule({
             const sr = status?.getBoundingClientRect();
             const reach = sr && sr.height > 0 ? container.getBoundingClientRect().bottom - sr.top : 0;
             container.style.setProperty('--map-status-reach', `${Math.round(reach)}px`);
+            // The top left ends before the column of controls (its timer carries a word).
+            const controls = container.querySelector<HTMLElement>('.map-controls');
+            if (controls && controls.offsetWidth > 0) container.style.setProperty('--map-controls-w', `${controls.offsetWidth}px`);
             // The legend of the path's lines reaches down to the time bar.
             this.positionMapLinesLegend();
+            this.positionMapTimeTip();
         };
         const ro = new ResizeObserver(update);
         bars.forEach(el => ro.observe(el));
+        const controlsEl = container.querySelector('.map-controls');
+        if (controlsEl) ro.observe(controlsEl);
         // The canvas can be rebuilt: one window listener, pointing at the latest.
         if (!mapFloorUpdate) {
             window.addEventListener('resize', () => mapFloorUpdate?.());
@@ -425,6 +442,11 @@ export const mapMethods = uiModule({
             if (this.mapLinesUndatedOpen()) {
                 e.preventDefault();
                 this.closeMapLinesUndated(true);
+                return;
+            }
+            if (this.mapLinesSheetOpen()) {
+                e.preventDefault();
+                this.closeMapLinesSheet(true);
                 return;
             }
             if (kindsMenuOpen) {
@@ -915,6 +937,8 @@ export const mapMethods = uiModule({
             toggle.title = hasData ? strings.map.timeMode : strings.map.timeModeEmpty;
         }
 
+        // The mode on (by its button, the offer, a path): the one-time offer is spent.
+        if (this.mapTimeOn) this.dismissMapTimeTip(false);
         const bar = document.getElementById('map-timebar');
         if (bar) bar.hidden = !this.mapTimeOn;
         this.renderMapPathChip();
@@ -1036,6 +1060,76 @@ export const mapMethods = uiModule({
         this.renderMapTimeCaption();
         const container = document.getElementById('map-container');
         if (container) this.drawMapMarkers(container, []);
+    },
+
+    /**
+     * The one-time offer of Migration over time (spec 054 §4): on the map,
+     * while the mode was never on and the tree has two or more dated places
+     * with a location; a card left of the timer (a phone: across the width
+     * above the status bar), the timer ringed. "Try it" turns the mode on
+     * (no person), "Not now" closes it; either way it never comes again.
+     */
+    renderMapTimeTip(): void {
+        const container = document.getElementById('map-container');
+        if (!container) return;
+        const toggle = container.querySelector<HTMLButtonElement>('.map-time-toggle');
+        let tip = container.querySelector<HTMLElement>('.map-time-tip');
+        const show = !!toggle && !toggle.disabled && !this.mapTimeOn && !mapTimeTipSeen()
+            && SettingsManager.isMapTilesAcknowledged() && this.mapTimePlacesData().length >= 2;
+        toggle?.classList.toggle('is-tip', show);
+        if (!show) { tip?.remove(); return; }
+        if (!tip) {
+            const m = strings.map;
+            const esc = (t: string): string => this.escapeHtml(t);
+            tip = document.createElement('section');
+            tip.className = 'map-time-tip';
+            tip.setAttribute('aria-labelledby', 'map-time-tip-title');
+            tip.innerHTML = `<h3 class="map-time-tip-title" id="map-time-tip-title"><span aria-hidden="true">◷</span> ${esc(m.timeTipTitle)}</h3>`
+                + `<p class="map-time-tip-text">${esc(m.timeTipText)}</p>`
+                + `<div class="map-time-tip-acts"><button type="button" class="map-time-tip-try">${esc(m.timeTipTry)}</button>`
+                + `<button type="button" class="map-time-tip-later">${esc(m.timeTipLater)}</button></div>`;
+            tip.addEventListener('click', (e: Event) => {
+                const t = e.target as HTMLElement;
+                if (t.closest('.map-time-tip-try')) {
+                    this.dismissMapTimeTip(false);
+                    this.toggleMapTime();
+                    container.querySelector<HTMLElement>('.map-time-toggle')?.focus();
+                } else if (t.closest('.map-time-tip-later')) {
+                    this.dismissMapTimeTip(true);
+                }
+            });
+            container.appendChild(tip);
+        }
+        this.positionMapTimeTip();
+    },
+
+    /** Left of the timer, its top a little above the button's; a phone's card is placed by CSS. */
+    positionMapTimeTip(): void {
+        const container = document.getElementById('map-container');
+        const tip = container?.querySelector<HTMLElement>('.map-time-tip');
+        const toggle = container?.querySelector<HTMLElement>('.map-time-toggle');
+        if (!container || !tip || !toggle) return;
+        if (window.matchMedia(MQ_PHONE_BAR).matches) {
+            tip.style.removeProperty('right');
+            tip.style.removeProperty('top');
+            return;
+        }
+        const box = container.getBoundingClientRect();
+        const r = toggle.getBoundingClientRect();
+        tip.style.right = `${Math.round(box.right - r.left + 10)}px`;
+        tip.style.top = `${Math.round(Math.max(8, r.top - box.top - 14))}px`;
+    },
+
+    /** The offer is spent (the mode turned on or "Not now"); `refocus`: to the timer. */
+    dismissMapTimeTip(refocus: boolean): void {
+        markMapTimeTipSeen();
+        const container = document.getElementById('map-container');
+        const tip = container?.querySelector('.map-time-tip');
+        const toggle = container?.querySelector<HTMLElement>('.map-time-toggle');
+        toggle?.classList.remove('is-tip');
+        if (!tip) return;
+        tip.remove();
+        if (refocus) toggle?.focus();
     },
 
     /** Timer toggle: reveal the timebar starting at the earliest year, or hide it. */
@@ -1247,6 +1341,8 @@ export const mapMethods = uiModule({
         const sheet = window.matchMedia(MQ_MOBILE).matches;
         popup.classList.toggle('map-popup--sheet', sheet);
         document.getElementById('map-container')?.classList.toggle('map-sheet-open', sheet);
+        // One sheet at a time: the legend's sheets give way to the bubble.
+        if (sheet) this.closeMapLinesSheets();
         if (sheet && opts.pan !== false) this.panMapAboveSheet(geo);
     },
 
@@ -1286,6 +1382,7 @@ export const mapMethods = uiModule({
         const sheet = window.matchMedia(MQ_MOBILE).matches;
         popup.classList.toggle('map-popup--sheet', sheet);
         document.getElementById('map-container')?.classList.toggle('map-sheet-open', sheet);
+        if (sheet) this.closeMapLinesSheets();
         if (sheet) this.panMapAboveSheet({ lat: geo.lat, lon: geo.lon });
     },
 
@@ -1514,7 +1611,7 @@ export const mapMethods = uiModule({
             // A button the bubble re-rendered under the click ("+ N more") is
             // no longer in the page: that click was inside the bubble.
             if (!(e.target as Node).isConnected) return;
-            if ((e.target as HTMLElement).closest('.map-marker, .map-marker-work, .map-follow-notices, .follow-legend-host, .map-popup, .map-path-picker, .map-lines-legend, .map-lines-chip, .map-lines-und, .map-controls, .map-topleft, .map-status, .map-timebar, .map-tiles-notice, .map-attribution')) return;
+            if ((e.target as HTMLElement).closest('.map-marker, .map-marker-work, .map-follow-notices, .follow-legend-host, .map-popup, .map-path-picker, .map-lines-legend, .map-lines-chip, .map-lines-und, .map-time-tip, .map-controls, .map-topleft, .map-status, .map-timebar, .map-tiles-notice, .map-attribution')) return;
             if (downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 6) return;
             this.closeMapPopup();
         });
@@ -1621,7 +1718,7 @@ export const mapMethods = uiModule({
         };
 
         container.addEventListener('pointerdown', (e: PointerEvent) => {
-            if ((e.target as HTMLElement).closest('.map-marker, .map-marker-work, .map-follow-notices, .follow-legend-host, .map-popup, .map-path-picker, .map-lines-legend, .map-lines-chip, .map-lines-und, .map-controls, .map-topleft, .map-status, .map-timebar, .map-tiles-notice')) return;
+            if ((e.target as HTMLElement).closest('.map-marker, .map-marker-work, .map-follow-notices, .follow-legend-host, .map-popup, .map-path-picker, .map-lines-legend, .map-lines-chip, .map-lines-und, .map-time-tip, .map-controls, .map-topleft, .map-status, .map-timebar, .map-tiles-notice')) return;
             pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
             if (pointers.size === 1) dragFrom = { x: e.clientX, y: e.clientY };
             try { container.setPointerCapture(e.pointerId); } catch { /* not capturable */ }
@@ -1698,7 +1795,7 @@ export const mapMethods = uiModule({
         container.addEventListener('wheel', (e: WheelEvent) => {
             if (!this.mapCenter) return;
             // The choice of a person scrolls its own list.
-            if ((e.target as HTMLElement).closest('.map-path-picker, .map-lines-legend, .map-lines-und')) return;
+            if ((e.target as HTMLElement).closest('.map-path-picker, .map-lines-legend, .map-lines-und, .map-time-tip')) return;
             e.preventDefault();
             this.noteMapMovedByUser();
             const rect = container.getBoundingClientRect();

@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, seedTree, type SeedPerson } from './helpers.js';
+import { stubTiles, seedPathTree, setYear, choosePerson } from './map-path-fixture.js';
 
 /**
  * The ancestors' path to one person on the map (Migration over time with a
@@ -8,83 +8,6 @@ import { openApp, seedTree, type SeedPerson } from './helpers.js';
  * the bar's range. Tiles are stubbed and coordinates set directly on the tree,
  * so nothing reaches OpenStreetMap or a geocoder.
  */
-
-async function stubTiles(page: Page): Promise<void> {
-    const png = Buffer.from(
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
-        'base64',
-    );
-    await page.route('**://tile.openstreetmap.org/**', route =>
-        route.fulfill({ status: 200, contentType: 'image/png', body: png }));
-    await page.addInitScript(() => {
-        const raw = localStorage.getItem('strom-settings');
-        const settings = raw ? JSON.parse(raw) : {};
-        settings.mapTiles = true;
-        localStorage.setItem('strom-settings', JSON.stringify(settings));
-    });
-}
-
-/**
- * Three generations above Tamsin (born Zeta 1950):
- *   parents      Orrin Quillfen (Eta 1920), Maelis Ostrowbek (Theta 1922)
- *   grandparents Corwen Quillfen (Iota 1890), Ysolde Zandmeer (Kappa 1893)
- *   great-grand  Ansel Quillfen (Lambda 1860) → quarter 0, Ivar Zandmeer (Mu 1865) → quarter 1
- * Bram Pellwick (Zeta 1960) has no ancestors at all; Elowen Yarrowby has no
- * place of her own, her father Fennick (Eta 1900) has one.
- * The path to Tamsin therefore runs 1860 → 1950. `extra` adds or replaces people.
- */
-async function seedPathTree(page: Page, extra: Record<string, SeedPerson> = {}): Promise<void> {
-    await openApp(page);
-    await seedTree(page, {
-        tamsin: { firstName: 'Tamsin', lastName: 'Quillfen', gender: 'female', birthDate: '1950', birthPlace: 'Zeta', parents: ['orrin', 'maelis'] },
-        orrin: { firstName: 'Orrin', lastName: 'Quillfen', gender: 'male', birthDate: '1920', birthPlace: 'Eta', parents: ['corwen', 'ysolde'], partners: ['maelis'] },
-        maelis: { firstName: 'Maelis', lastName: 'Ostrowbek', gender: 'female', birthDate: '1922', birthPlace: 'Theta' },
-        corwen: { firstName: 'Corwen', lastName: 'Quillfen', gender: 'male', birthDate: '1890', birthPlace: 'Iota', parents: ['ansel'], partners: ['ysolde'] },
-        ysolde: { firstName: 'Ysolde', lastName: 'Zandmeer', gender: 'female', birthDate: '1893', birthPlace: 'Kappa', parents: ['ivar'] },
-        ansel: { firstName: 'Ansel', lastName: 'Quillfen', gender: 'male', birthDate: '1860', birthPlace: 'Lambda' },
-        ivar: { firstName: 'Ivar', lastName: 'Zandmeer', gender: 'male', birthDate: '1865', birthPlace: 'Mu' },
-        bram: { firstName: 'Bram', lastName: 'Pellwick', gender: 'male', birthDate: '1960', birthPlace: 'Zeta' },
-        elowen: { firstName: 'Elowen', lastName: 'Yarrowby', gender: 'female', birthDate: '1930', parents: ['fennick'] },
-        fennick: { firstName: 'Fennick', lastName: 'Yarrowby', gender: 'male', birthDate: '1900', birthPlace: 'Eta' },
-        ...extra,
-    });
-
-    await page.evaluate(() => {
-        window.Strom.DataManager.getData().places = {
-            zeta: { lat: 50.0, lon: 14.0 },
-            eta: { lat: 49.5, lon: 15.0 },
-            theta: { lat: 50.4, lon: 13.0 },
-            iota: { lat: 49.0, lon: 16.0 },
-            kappa: { lat: 48.8, lon: 14.5 },
-            lambda: { lat: 48.5, lon: 17.0 },
-            mu: { lat: 48.2, lon: 13.5 },
-        };
-        window.Strom.TreeRenderer.render();
-    });
-
-    await page.evaluate(() => window.Strom.UI.setDisplayViewMode('map'));
-    await page.getByRole('button', { name: 'Whole tree' }).click();
-    await expect(page.locator('.map-marker').first()).toBeVisible();
-    await page.getByRole('button', { name: 'Migration over time' }).click();
-    await expect(page.locator('#map-timebar')).toBeVisible();
-}
-
-async function setYear(page: Page, year: number): Promise<void> {
-    await page.locator('.map-time-range').evaluate((el, val) => {
-        const input = el as HTMLInputElement;
-        input.value = String(val);
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-    }, year);
-}
-
-async function choosePerson(page: Page, query: string, name: RegExp): Promise<void> {
-    await page.locator('.map-path-btn').click();
-    const picker = page.locator('.map-path-picker');
-    await expect(picker).toBeVisible();
-    await picker.locator('.path-picker-input').fill(query);
-    await picker.locator('.path-picker-row', { hasText: name }).click();
-    await expect(picker).toHaveCount(0);
-}
 
 test('a person chosen from the bar draws the coloured path, the chip replaces the scope and the bar runs from the first ancestor to the target', async ({ page }) => {
     await stubTiles(page);
@@ -607,4 +530,105 @@ test('a person row in the bubble of Migration over time unfolds the person page 
     await expect(goal).toBeVisible();
     await goal.click();
     await expect(popup.locator('.map-popup-person-acts').getByRole('button')).toHaveText(['Person page ›']);
+});
+
+test('the person page opens the ancestors\' path on the map and its toast brings the page back; the link is greyed out without an ancestor on the map and absent without ancestors', async ({ page }) => {
+    await stubTiles(page);
+    // Two places of their own each, so the page has its "Places of life".
+    await seedPathTree(page, {
+        tamsin: { firstName: 'Tamsin', lastName: 'Quillfen', gender: 'female', birthDate: '1950', birthPlace: 'Zeta', deathDate: '2010', deathPlace: 'Eta', parents: ['orrin', 'maelis'] },
+        bram: { firstName: 'Bram', lastName: 'Pellwick', gender: 'male', birthDate: '1960', birthPlace: 'Zeta', deathDate: '2020', deathPlace: 'Eta' },
+        wren: { firstName: 'Wren', lastName: 'Ashcombe', gender: 'female', birthDate: '1955', birthPlace: 'Zeta', deathDate: '2015', deathPlace: 'Eta', parents: ['odo'] },
+        odo: { firstName: 'Odo', lastName: 'Ashcombe', gender: 'male', birthDate: '1925' },
+    }, { timeOn: false });
+    await page.evaluate(() => window.Strom.UI.setDisplayViewMode('tree'));
+
+    const w = page.locator('#person-page-modal');
+    await page.evaluate(() => window.Strom.UI.showPersonPage('tamsin' as never));
+    const link = w.locator('.pp-map-path');
+    await expect(link).toHaveText("◎ Ancestors' path on the map ›");
+    await expect(link).not.toHaveAttribute('aria-disabled', 'true');
+    // Before "Open in map ›".
+    expect(await link.evaluate(el => el.nextElementSibling?.matches('[data-pp-action="map:open"]'))).toBe(true);
+    await link.click();
+
+    // The window closes, the map opens in Migration over time with the path at its first year.
+    await expect(w).toHaveCount(0);
+    await expect(page.locator('body')).toHaveClass(/map-view/);
+    await expect(page.locator('.map-path-chip-name')).toHaveText(/Tamsin Quillfen/);
+    await expect(page.locator('.map-time-year')).toHaveText('1860');
+    await expect(page.locator('.map-time-toggle')).toHaveAttribute('aria-pressed', 'true');
+    const toast = page.locator('.toast[data-kind="map-path-back"]');
+    await expect(toast).toContainText('Tamsin Quillfen');
+    await expect(toast.locator('.toast-action')).toHaveText('‹ Back to the person page');
+    // It slides in and comes to rest above the time bar.
+    const bar = (await page.locator('#map-timebar').boundingBox())!;
+    await expect.poll(async () => { const t = (await toast.boundingBox())!; return t.y + t.height <= bar.y + 1; }).toBe(true);
+    await toast.locator('.toast-action').click();
+    await expect(page.locator('#person-page-modal h1')).toContainText('Tamsin Quillfen');
+
+    // Ancestors, none of them on the map: greyed out with its sentence, and pressing it does nothing.
+    await page.evaluate(() => window.Strom.UI.showPersonPage('wren' as never));
+    await expect(w.locator('h1')).toContainText('Wren Ashcombe');
+    const off = w.locator('.pp-map-path');
+    await expect(off).toHaveAttribute('aria-disabled', 'true');
+    await expect(off).toHaveAttribute('title', 'No ancestor has a place on the map yet.');
+    await expect(w.locator('.pp-map-path-note')).toHaveText('No ancestor has a place on the map yet.');
+    await expect(off).toHaveAttribute('aria-describedby', 'pp-sec-places-path-note');
+    // aria-disabled keeps it pressable for a screen reader: the press does nothing.
+    await off.dispatchEvent('click');
+    await expect(w).toBeVisible();
+
+    // No ancestors at all: no link.
+    await page.evaluate(() => window.Strom.UI.showPersonPage('bram' as never));
+    await expect(w.locator('h1')).toContainText('Bram Pellwick');
+    await expect(w.locator('[data-pp-action="map:open"]')).toBeVisible();
+    await expect(w.locator('.pp-map-path')).toHaveCount(0);
+    await expect(w.locator('.pp-map-path-note')).toHaveCount(0);
+});
+
+test('the one-time offer of Migration over time stands left of its button; Try it turns the mode on, Not now closes it, and it never comes back', async ({ page }) => {
+    await stubTiles(page);
+    await seedPathTree(page, {}, { timeOn: false, mapTimeTip: true });
+    const tip = page.locator('.map-time-tip');
+    const toggle = page.locator('.map-time-toggle');
+    await expect(tip).toBeVisible();
+    await expect(tip.locator('h3')).toHaveText('◷ Migration over time');
+    await expect(toggle).toContainText('Over time');
+    await expect(toggle).toHaveClass(/is-tip/);
+    const tb = (await tip.boundingBox())!;
+    const bb = (await toggle.boundingBox())!;
+    expect(Math.round(tb.width)).toBe(300);
+    expect(Math.round(bb.x - (tb.x + tb.width))).toBe(10);
+
+    await tip.getByRole('button', { name: 'Try it' }).click();
+    await expect(tip).toHaveCount(0);
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    await expect(toggle).not.toHaveClass(/is-tip/);
+    await expect(page.locator('#map-timebar')).toBeVisible();
+    await expect(page.locator('.map-scope')).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem('strom.map.timeTipSeen'))).toBe('1');
+
+    // Off again and the map drawn anew: no offer.
+    await toggle.click();
+    await page.evaluate(() => window.Strom.UI.setDisplayViewMode('tree'));
+    await page.evaluate(() => window.Strom.UI.setDisplayViewMode('map'));
+    await expect(page.locator('.map-marker').first()).toBeVisible();
+    await expect(tip).toHaveCount(0);
+
+    // A fresh start: Not now closes it with the mode off, the focus back on the button, and spends it too.
+    await page.evaluate(() => localStorage.removeItem('strom.map.timeTipSeen'));
+    await page.evaluate(() => window.Strom.UI.setDisplayViewMode('tree'));
+    await page.evaluate(() => window.Strom.UI.setDisplayViewMode('map'));
+    await expect(tip).toBeVisible();
+    await tip.getByRole('button', { name: 'Not now' }).click();
+    await expect(tip).toHaveCount(0);
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    await expect(toggle).toBeFocused();
+    expect(await page.evaluate(() => localStorage.getItem('strom.map.timeTipSeen'))).toBe('1');
+    await page.reload();
+    await expect(page.locator('.toolbar')).toBeVisible();
+    await page.evaluate(() => window.Strom.UI.setDisplayViewMode('map'));
+    await expect(toggle).toBeVisible();
+    await expect(tip).toHaveCount(0);
 });
