@@ -46,9 +46,12 @@
  *   1. `.toolbar-focus-short`: the steppers' words → ↑ / ↓ (their group's
  *      title and the buttons' accessible names stay; 641–900 px always);
  *   2. `.toolbar-focus-nocount`: no "28 of 29 people" (641–768 px always);
- *   3. `.toolbar-squeeze-3`: the search field → the magnifier, as step 5 above;
- *   4. `.toolbar-focus-nobulk`: no "Children & siblings" switch (the person
- *      menu still offers the step).
+ *   3. `.toolbar-focus-nobulk`: no "Children & siblings" switch (the person
+ *      menu still offers the step); taken too while the switch leaves the
+ *      search input narrower than TABLET_SEARCH_MIN_PX (as are steps 1 and 2,
+ *      which free room for it), so finding a person keeps its room before the
+ *      switch does;
+ *   4. `.toolbar-squeeze-3`: the search field → the magnifier, as step 5 above.
  */
 
 import { isDesktop, isPhoneBar, isTablet } from '../breakpoints.js';
@@ -56,10 +59,12 @@ import { isDesktop, isPhoneBar, isTablet } from '../breakpoints.js';
 /** The steps in their order (see above). */
 export const TOOLBAR_FIT_STEPS = ['toolbar-add-compact', 'toolbar-squeeze', 'toolbar-squeeze-2', 'toolbar-squeeze-name', 'toolbar-squeeze-3'] as const;
 /** The tablet steps in their order (see above). */
-export const TOOLBAR_TABLET_FIT_STEPS = ['toolbar-focus-short', 'toolbar-focus-nocount', 'toolbar-squeeze-3', 'toolbar-focus-nobulk'] as const;
+export const TOOLBAR_TABLET_FIT_STEPS = ['toolbar-focus-short', 'toolbar-focus-nocount', 'toolbar-focus-nobulk', 'toolbar-squeeze-3'] as const;
 const HYSTERESIS_PX = 16;
 /** The person's name on the tablet toolbar keeps at least this much (or its whole width when shorter). */
 export const TABLET_NAME_MIN_PX = 64;
+/** The tablet's search input keeps at least this width beside the "Children & siblings" switch. */
+export const TABLET_SEARCH_MIN_PX = 80;
 /** The search input never asks for more room than this (a long placeholder may be cut). */
 export const SEARCH_ROOM_CAP_PX = 120;
 
@@ -156,12 +161,24 @@ function tabletTooTight(toolbar: HTMLElement, reserve: number): boolean {
     return tight;
 }
 
+/**
+ * True when the tablet's "Children & siblings" switch is shown and the search
+ * input beside it is narrower than TABLET_SEARCH_MIN_PX (`reserve` px held back).
+ */
+function bulkSqueezesSearch(toolbar: HTMLElement, reserve: number): boolean {
+    const bulk = toolbar.querySelector<HTMLElement>('.toolbar-focus .bulk-family');
+    if (!bulk || bulk.getClientRects().length === 0) return false;
+    const input = toolbar.querySelector<HTMLElement>('#toolbar-search-picker .person-picker-input');
+    if (!input || input.getClientRects().length === 0) return false;
+    return input.getBoundingClientRect().width - reserve < TABLET_SEARCH_MIN_PX;
+}
+
 /** Take the steps of `steps` the toolbar needs, measured one by one. */
-function fitSteps(toolbar: HTMLElement, steps: readonly string[], tight: (reserve: number) => boolean): void {
+function fitSteps(toolbar: HTMLElement, steps: readonly string[], tight: (reserve: number, step: string) => boolean): void {
     const had = steps.map(step => toolbar.classList.contains(step));
     toolbar.classList.remove(...steps);
     for (let i = 0; i < steps.length; i++) {
-        if (!tight(had[i] ? HYSTERESIS_PX : 0)) break;
+        if (!tight(had[i] ? HYSTERESIS_PX : 0, steps[i])) break;
         toolbar.classList.add(steps[i]);
     }
 }
@@ -177,7 +194,8 @@ export function updateToolbarFit(): void {
         fitSteps(toolbar, TOOLBAR_FIT_STEPS, reserve => tooTight(toolbar, reserve));
     } else if (isTablet() && !isPhoneBar()) {
         toolbar.classList.remove(...desktopOnly);
-        fitSteps(toolbar, TOOLBAR_TABLET_FIT_STEPS, reserve => tabletTooTight(toolbar, reserve));
+        fitSteps(toolbar, TOOLBAR_TABLET_FIT_STEPS, (reserve, step) => tabletTooTight(toolbar, reserve)
+            || (step !== 'toolbar-squeeze-3' && bulkSqueezesSearch(toolbar, reserve)));
     } else {
         toolbar.classList.remove(...TOOLBAR_FIT_STEPS, ...TOOLBAR_TABLET_FIT_STEPS);
     }
