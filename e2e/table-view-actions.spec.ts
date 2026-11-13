@@ -6,7 +6,9 @@ import { openApp, seedTree, type SeedPerson } from './helpers.js';
  * selection, Enter opens the person's page, Escape clears; the row's menu; a
  * double click edits and the saved row lights up, stays in place and, when
  * it no longer passes, dimmed with a note; ⌖ shows the person in the
- * diagram. On a phone a tap opens the row's sheet.
+ * diagram. On a phone a tap opens the row's sheet. A mouse only selects, on
+ * a touch laptop and in a narrow window too: the row's menu is the right
+ * button's (tester's report, 1113).
  */
 
 const FAMILY: Record<string, SeedPerson> = {
@@ -19,6 +21,15 @@ const FAMILY: Record<string, SeedPerson> = {
 const row = (page: Page, key: string) => page.locator(`#table-container .tv-body .tv-row[data-key="${key}"]`);
 const selected = (page: Page) => page.locator('#table-container .tv-body .tv-row[aria-selected="true"]');
 const status = (page: Page) => page.locator('#table-container .tv-status-count');
+
+async function cell(page: Page, key: string, colId: string) {
+    const head = page.locator('#table-container .tv-headrow [data-col]');
+    const ids = await head.evaluateAll(els => els.map(el => (el as HTMLElement).dataset.col ?? ''));
+    const at = ids.indexOf(colId);
+    expect(at, colId).toBeGreaterThanOrEqual(0);
+    const index = await head.nth(at).getAttribute('aria-colindex');
+    return page.locator(`#table-container .tv-body .tv-row[data-key="${key}"] [aria-colindex="${index}"]`);
+}
 
 async function openTable(page: Page, phone = false): Promise<void> {
     await page.clock.setFixedTime(new Date('2026-06-15T10:00:00Z'));
@@ -164,5 +175,66 @@ test.describe('phone (390)', () => {
 
         await items.filter({ hasText: 'Edit…' }).tap();
         await expect(page.locator('#person-modal')).toBeVisible();
+    });
+});
+
+test.describe('touch laptop with a mouse (1280, pointer: coarse)', () => {
+    test.use({ viewport: { width: 1280, height: 800 }, hasTouch: true, isMobile: true });
+
+    test('a mouse click only selects the row and the cell; a tap opens the row\'s sheet; the right button the row\'s menu', async ({ page }) => {
+        await openTable(page);
+        expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
+        const sheet = page.locator('.bottom-sheet-menu');
+        const date = await cell(page, 'p:a', 'bDate');
+        await date.click();
+        await expect(selected(page)).toHaveAttribute('data-key', 'p:a');
+        await expect(date).toBeFocused();
+        await expect(sheet).toHaveCount(0);
+        await expect(page.locator('.tv-menu')).toHaveCount(0);
+        // A second click elsewhere moves the selection, still nothing pops up.
+        await row(page, 'p:c').locator('.tv-name').click();
+        await expect(selected(page)).toHaveAttribute('data-key', 'p:c');
+        await expect(sheet).toHaveCount(0);
+
+        // A completeness cell clicked by a mouse: its title, no bubble.
+        const grid = page.locator('#table-container .tv-grid');
+        await grid.evaluate(el => { el.scrollLeft = el.scrollWidth; });
+        await (await cell(page, 'p:d', 'comp')).click();
+        await expect(selected(page)).toHaveAttribute('data-key', 'p:d');
+        await expect(page.locator('.tv-bubble')).toHaveCount(0);
+        await grid.evaluate(el => { el.scrollLeft = 0; });
+
+        // A finger: the row's sheet as before.
+        await row(page, 'p:a').locator('.tv-name').tap();
+        await expect(selected(page)).toHaveAttribute('data-key', 'p:a');
+        await expect(sheet).toBeVisible();
+        await expect(sheet).toContainText('Bertold Vranoš');
+        await page.locator('.bottom-sheet-overlay').tap({ position: { x: 20, y: 20 } });
+        await expect(sheet).toBeHidden();
+
+        // The right button: the row's menu.
+        await row(page, 'p:b').locator('.tv-name').click({ button: 'right' });
+        const menu = page.locator('.tv-menu');
+        await expect(menu).toHaveAttribute('aria-label', 'Actions: Zbyňka Kořánková');
+        await expect(selected(page)).toHaveAttribute('data-key', 'p:b');
+    });
+});
+
+test.describe('narrow window with a mouse (390)', () => {
+    test.use({ viewport: { width: 390, height: 844 } });
+
+    test('a mouse click only selects; the right button opens the row\'s sheet', async ({ page }) => {
+        await page.clock.setFixedTime(new Date('2026-06-15T10:00:00Z'));
+        await openApp(page);
+        await seedTree(page, FAMILY, 'Vranoš', 'c');
+        await page.locator('#bb-view-table').click();
+        await expect(status(page)).toHaveText('4 of 4 people');
+        const sheet = page.locator('.bottom-sheet-menu');
+        await row(page, 'p:a').locator('.tv-name').click();
+        await expect(selected(page)).toHaveAttribute('data-key', 'p:a');
+        await expect(sheet).toHaveCount(0);
+        await row(page, 'p:a').locator('.tv-name').click({ button: 'right' });
+        await expect(sheet).toBeVisible();
+        await expect(sheet).toContainText('Bertold Vranoš');
     });
 });

@@ -174,8 +174,12 @@ export interface GridHandlers {
     onSelect?(key: string | null, row: TableRow | null): void;
     /** A cell's editor closed (saved, Esc, blur): what waited for the edit may come now. */
     onEditClosed?(): void;
-    /** A line was clicked or tapped, after its selection (a phone opens the row's sheet, 10b); the cell it was on. */
-    onRowClick?(line: GridLine, cell: GridCellRef | null): void;
+    /**
+     * A line was clicked or tapped, after its selection (a tap opens the row's
+     * sheet, 10b); the cell it was on and the pointer of the click
+     * (`clickPointerType`: a mouse or a pen only selects).
+     */
+    onRowClick?(line: GridLine, cell: GridCellRef | null, pointer: string): void;
     /** A row's action (§10.1): its icon, Enter (open), a double click (edit). */
     onRowAction?(action: RowAction, line: GridLine): void;
     /**
@@ -219,8 +223,8 @@ export interface GridHandlers {
     onIssue?(line: GridLine, col: number, cell: HTMLElement): void;
     /** A person's Findings or Highest level cell with a mark was clicked or Enter was pressed on it (§7.4): the person's findings. */
     onFindings?(line: GridLine, col: number, cell: HTMLElement): void;
-    /** A tap on a completeness cell (§6.2): true when its bubble opened (touch; a mouse has the title). */
-    onComp?(line: GridLine, col: number, cell: HTMLElement): boolean;
+    /** A tap on a completeness cell (§6.2): true when its bubble opened (touch; a mouse or a pen has the title). */
+    onComp?(line: GridLine, col: number, cell: HTMLElement, pointer: string): boolean;
     /** A click on a column's head (§8.4); `add`: with Shift, a further sort key. */
     onHeadSort?(colId: string, add: boolean): void;
     /** A click on a coverage cell (§6.1: only empty / only filled). */
@@ -240,6 +244,23 @@ const FIT_ROWS = 200;
 const FIT_MAX = 480;
 
 const ROW_HEIGHT_FALLBACK = 32;
+
+/**
+ * The pointer of a click: the click's own `pointerType` where the browser
+ * gives one, else the one of the pointerdown before it (a click with a
+ * pointer behind it, `detail` > 0); '' for a click without one (keyboard,
+ * script).
+ */
+export function clickPointerType(e: MouseEvent, lastDown: string): string {
+    const own = (e as Partial<PointerEvent>).pointerType;
+    if (typeof own === 'string' && own) return own;
+    return e.detail > 0 ? lastDown : '';
+}
+
+/** A click of a mouse or a pen: it selects only, the row's sheet or a bubble is for a finger (tester's report, 1113). */
+export function isMouseLikePointer(pointer: string): boolean {
+    return pointer === 'mouse' || pointer === 'pen';
+}
 
 function esc(text: string): string {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -461,6 +482,8 @@ export class TableGrid {
     private headFocus: string | null = null;
     /** A drag or a long press just ended: the click that follows is not a click. */
     private swallowClick = false;
+    /** The pointer of the body's last pointerdown (`clickPointerType`). */
+    private lastPointerDown = '';
     private measureCtx: CanvasRenderingContext2D | null = null;
     /** The lines drawn and their tops (§3). */
     private lines: readonly GridLine[] = [];
@@ -512,7 +535,10 @@ export class TableGrid {
             this.schedule();
             this.placeEditor();
         }, { passive: true });
+        this.body.addEventListener('pointerdown', (e) => { this.lastPointerDown = e.pointerType; }, { passive: true });
         this.body.addEventListener('click', (e) => {
+            const pointer = clickPointerType(e, this.lastPointerDown);
+            this.lastPointerDown = '';
             const t = e.target as Element;
             const rowEl = t.closest<HTMLElement>('.tv-row[data-key]');
             const line = rowEl ? this.lines[Number(rowEl.dataset.index)] : undefined;
@@ -568,8 +594,8 @@ export class TableGrid {
                 return;
             }
             this.select(line);
-            if (cellEl?.querySelector('.tv-comp') && this.handlers.onComp?.(line, Number(cellEl.getAttribute('aria-colindex')) - 1, cellEl)) return;
-            this.handlers.onRowClick?.(line, this.cellRefOf(line, cellEl));
+            if (cellEl?.querySelector('.tv-comp') && this.handlers.onComp?.(line, Number(cellEl.getAttribute('aria-colindex')) - 1, cellEl, pointer)) return;
+            this.handlers.onRowClick?.(line, this.cellRefOf(line, cellEl), pointer);
         });
         // A double click edits (§10.1); the ▾/▸, the count pill and the icons are their own.
         this.body.addEventListener('dblclick', (e) => {

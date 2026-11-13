@@ -88,7 +88,7 @@ import {
 import { conflictScope } from '../person-research-ui.js';
 import { lineCell, lineKey, type GridLine } from './table-subrows.js';
 import { cellDraft, type CellDraft } from '../../windows/window-drafts.js';
-import { cellText, markHtml, type CellConflictMark, type CellIssueMark } from './table-grid.js';
+import { cellText, isMouseLikePointer, markHtml, type CellConflictMark, type CellIssueMark } from './table-grid.js';
 import { bubbleHeading, bubbleHtml, citesHtml, closeTableBubble, legendHtml, openBubblePanel, sheetElement, type BubbleCite } from './table-bubble.js';
 import { bridgeChanges, changedKeys, familyKeys, keepOrder, namesList, rowKeysFor, watchEdit } from './table-refresh.js';
 import type { DataChangedDetail } from '../../data.js';
@@ -694,10 +694,13 @@ export const tableMethods = uiModule({
                         this.tableSharedSelect(pendingShared.person);
                     });
                 },
-                onRowClick: (line, cell) => { if (isPhoneBar() || isCoarsePointer()) this.showTableRowSheet(line, cell); },
-                // §6.2 by touch: the completeness bubble on a tap of its cell (a mouse has its title).
-                onComp: (line, col, cell) => {
-                    if (!isPhoneBar() && !isCoarsePointer()) return false;
+                // A tap opens the row's sheet; a mouse or a pen only selects, on any device (its menu is the right button's).
+                onRowClick: (line, cell, pointer) => {
+                    if (!isMouseLikePointer(pointer) && (isPhoneBar() || isCoarsePointer())) this.showTableRowSheet(line, cell);
+                },
+                // §6.2 by touch: the completeness bubble on a tap of its cell (a mouse or a pen has its title).
+                onComp: (line, col, cell, pointer) => {
+                    if (isMouseLikePointer(pointer) || (!isPhoneBar() && !isCoarsePointer())) return false;
                     this.showTableCompleteness(line, col, cell);
                     return true;
                 },
