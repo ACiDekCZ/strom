@@ -243,6 +243,13 @@ button.pp-chip, a.pp-chip { cursor: pointer; }
 .pp-t { min-width: 0; padding: 6px 0 10px; font-size: 15.5px; overflow-wrap: anywhere; }
 .pp-place { color: var(--text-light); }
 .pp-dt { display: block; margin-top: 2px; font-size: 13.5px; color: var(--text-light); overflow-wrap: anywhere; }
+/* A shared event's "with …" line (spec 085 §2b): the circles, the given names as links (the whole name in the title). */
+.pp .shared-line { display: flex; align-items: baseline; gap: 6px; margin-top: 3px; font-size: 13.5px; line-height: 1.45; color: var(--text-light); }
+.pp .shared-line--open { cursor: pointer; }
+.pp .shared-line-mark { flex: none; display: inline-flex; color: var(--primary); transform: translateY(1px); }
+.pp .shared-line-mark svg { display: block; }
+.pp .shared-line-text { min-width: 0; overflow-wrap: anywhere; }
+.pp .shared-line .pp-link { color: var(--primary); font-weight: 500; text-decoration: none; }
 .pp-dtx > summary { display: block; list-style: none; cursor: pointer; }
 .pp-dtx .pp-dt { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .pp-dtx[open] .pp-dt { display: block; overflow: visible; }
@@ -397,6 +404,7 @@ span.pp-gal-thumb { cursor: default; }
   .pp-src > .pp-disc:hover, .pp-src > summary:hover { background: var(--hover-bg); }
   .pp-toggle:hover { border-color: var(--primary); }
   .pp-link:hover, .pp-act:hover { text-decoration-style: solid; }
+  .pp .shared-line .pp-link:hover { text-decoration: underline; }
 }
 @media (pointer: coarse) {
   .pp-toggle, .pp-disc--inline, .pp-chip { min-height: 44px; }
@@ -450,6 +458,7 @@ span.pp-gal-thumb { cursor: default; }
   .pp-ft-card--me { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .pp-body { overflow: visible !important; height: auto !important; }
   .pp { font-size: 11pt; gap: 18pt; max-width: none; }
+  .pp .shared-line { font-size: 10pt; }
   .pp-aka, .pp-dt, .pp-hist-meta, .pp-src-sup, .pp-src-ref, .pp-foot, .pp-fig figcaption, .pp-fig-scan { font-size: 10pt; }
   #pp-sec-timeline { break-before: page; }
   .pp-ft-link .pp-ft-name, .pp-chip-link .pp-chip-name { color: var(--text); }

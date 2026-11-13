@@ -811,6 +811,14 @@ export const personPageMethods = uiModule({
             this.showSourceViewer(id, row?.cites[0]?.ctx ?? null);
             return;
         }
+        if (action === 'shared-event') {
+            // A shared event's "with …" line (spec 085 §2b): its editor from this person's side.
+            const eventId = el.dataset.ppEvent ?? '';
+            if (!person?.events?.some(e => e.id === eventId)) return;
+            this.closePersonPage({ focus: false });
+            this.openEventEditorFor(personId, eventId);
+            return;
+        }
         if (action === 'materials') {
             if (person?.refn && this.materialsListOn()) {
                 this.openMaterials({ person: person.refn });

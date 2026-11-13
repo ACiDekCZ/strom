@@ -1931,3 +1931,56 @@ describe('the Ancestors section: a four-generation fan under the family (1031, �
         expect(anc(body(d))).toContain('asi 1830');
     });
 });
+
+describe('a shared event on the person page (spec 085 §2b–2c)', () => {
+    function census(): StromData {
+        const d = fiskTree();
+        const ev = (pid: string, age: string) => ({ id: `c_${pid}`, type: 'census' as const, date: '1900-12-31', place: 'Čapkov', age, shareId: 'sh_c1900' });
+        for (const [pid, age] of [['jan', '40'], ['marie', '35'], ['rosa', '7']] as const) {
+            const per = d.persons[pid as PersonId];
+            per.events = [...(per.events ?? []), ev(pid, age)];
+        }
+        return d;
+    }
+
+    it('writes "with" and the given names as links to the persons, the line opening the editor', () => {
+        const html = body(census());
+        const line = html.match(/<span class="shared-line[^"]*"[^>]*>[\s\S]*?<\/span><\/span>/)?.[0] ?? '';
+        expect(line).toContain('data-pp-action="shared-event"');
+        expect(line).toContain('data-pp-event="c_jan"');
+        expect(line).toContain('spolu s');
+        expect(line).toMatch(/data-pp-person="marie"[^>]*title="Marie Dvořáková"[^>]*>Marie</);
+        expect(line).toMatch(/data-pp-person="rosa"[^>]*>Rosa</);
+        expect(line).toContain('shared-line-mark');
+    });
+
+    it('a read-only page names the persons without opening the editor', () => {
+        const op = opts();
+        const html = buildPersonPageBody(preparePersonPageData(census(), op, { readOnly: true }), op);
+        expect(html).toContain('class="shared-line"');
+        expect(html).not.toContain('data-pp-action="shared-event"');
+    });
+
+    it('print writes the whole names, without the mark', () => {
+        const html = doc(census(), { mode: 'print' });
+        const line = html.match(/<span class="shared-line[^"]*"[^>]*>[\s\S]*?<\/span><\/span>/)?.[0] ?? '';
+        expect(line).toContain('Marie Dvořáková');
+        expect(line).toContain('Rosa Fíšková');
+        expect(line).not.toContain('shared-line-mark');
+        expect(line).not.toContain('data-pp-action');
+    });
+
+    it('a living person of the event is left out under privacy', () => {
+        // A lodger of the same census marked as alive.
+        const d = census();
+        d.persons['host' as PersonId] = p('host', 'Bořivoj', 'Podnájemný', 'male', { isDeceased: false,
+            events: [{ id: 'c_host', type: 'census', date: '1900-12-31', place: 'Čapkov', age: '1', shareId: 'sh_c1900' }] });
+        const full = body(d);
+        expect(full).toContain('data-pp-person="host"');
+        const op = opts({ privacy: 'initials' });
+        const line = buildPersonPageBody(preparePersonPageData(d, op), op).match(/<span class="shared-line[^"]*"[^>]*>[\s\S]*?<\/span><\/span>/)?.[0] ?? '';
+        expect(line).toContain('Marie');
+        expect(line).not.toContain('data-pp-person="host"');
+        expect(line).not.toContain('B. P.');
+    });
+});

@@ -53,6 +53,7 @@ import { bottomSheetMethods } from './bottom-sheet.js';
 import { personModalMethods } from './person-modal.js';
 import { personEventsMethods } from './person-events.js';
 import { sharedEventMethods } from './shared-event-ui.js';
+import { sharedLineMethods } from './shared-line-ui.js';
 import type { SharedDraft } from '../shared-event-editor.js';
 import { coupleEventsMethods } from './couple-events-ui.js';
 import { sourcesMethods, CitationContext, ExcerptDraft } from './sources.js';
@@ -599,6 +600,9 @@ export interface UIClass extends PersonEventsMethods {}
 export interface UIClass extends SharedEventMethods {}
 Object.assign(UIClass.prototype, personEventsMethods);
 Object.assign(UIClass.prototype, sharedEventMethods);
+type SharedLineMethods = typeof sharedLineMethods;
+export interface UIClass extends SharedLineMethods {}
+Object.assign(UIClass.prototype, sharedLineMethods);
 
 type CoupleEventsMethods = typeof coupleEventsMethods;
 export interface UIClass extends CoupleEventsMethods {}

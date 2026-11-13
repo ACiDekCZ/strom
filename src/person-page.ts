@@ -47,6 +47,7 @@ import { websiteUrl } from './about-links.js';
 import type { ImageRegistry } from './image-registry.js';
 import { sourceTranslation } from './source-translation.js';
 import { sourcePlaceLine } from './source-location.js';
+import { SharedWithLine, sharedIndexOf, sharedWithLine, sharedWithLineHtml } from './shared-with-line.js';
 
 // ─── Interface (ZADANI §2.6) ────────────────────────────────────────────────
 
@@ -231,6 +232,12 @@ export interface PersonPageData {
      * the parent links only); null: no known parent, no section.
      */
     ancestors: PersonPageAncestors | null;
+    /**
+     * The "with …" line of each shared event of the person (spec 085 §2), by
+     * the event's id: the others the reader may see (a living person under
+     * privacy is left out), whole names in print. None: no shared event.
+     */
+    shared?: ReadonlyMap<string, SharedWithLine>;
 }
 
 /** The people of the Ancestors fan and how many of them the rings show. */
@@ -513,6 +520,20 @@ export function preparePersonPageData(data: StromData, opts: PersonPageOptions, 
     for (const pid of [...fam.parents, ...fam.siblings, ...named]) {
         if (pid !== id && full.persons[pid]) tree.persons[pid] = relativeView(full.persons[pid], false);
     }
+    // A shared event's other persons (spec 085 §2): the "with …" line names them. The
+    // index is the protected tree's, made once for all its pages; a living person under
+    // privacy has no events there, so is never named (§2i).
+    const shared = new Map<string, SharedWithLine>();
+    if (person.events?.some(e => e.shareId)) {
+        const hidden = (pid: PersonId): boolean => opts.privacy !== 'full' && prot.living.has(pid);
+        const index = sharedIndexOf(full);
+        for (const ev of person.events) {
+            const line = ev.shareId ? sharedWithLine(ev, id, { data: full, index, hidden, fullNames: opts.mode === 'print' }) : null;
+            if (!line) continue;
+            shared.set(ev.id, line);
+            for (const n of line.names) if (!tree.persons[n.personId]) tree.persons[n.personId] = relativeView(full.persons[n.personId], false);
+        }
+    }
     // The parents' marriage (its year is the label between them in the family tree).
     if (fam.parents.length === 2) {
         const pu = (full.persons[fam.parents[0]]?.partnerships ?? []).map(uid => full.partnerships[uid])
@@ -604,6 +625,7 @@ export function preparePersonPageData(data: StromData, opts: PersonPageOptions, 
         // A lineage's name is a surname: with initials or hidden names a living person's row is left out (§3.4).
         rod: rodRowShown(opts.privacy, prot.living.has(id)) ? personRodRowValue(prot.lineages, prot.rodLabels, id, opts.lang) : null,
         ancestors,
+        ...(shared.size ? { shared } : {}),
     };
     page.counts = countGroups(page);
     return page;
@@ -2225,6 +2247,32 @@ function histRowHtml(c: Ctx, item: LifelineHistoryItem): string {
         + `<div class="pp-hist-meta">${meta.join('<span aria-hidden="true">·</span>')}</div></div></div></div>`;
 }
 
+/**
+ * The "with Terezie, Bohumil, Anežka" line of a shared event (spec 085 §2b):
+ * the given names lead to those persons' pages, the whole name in the
+ * title; in print the whole names, plain. In the app's window the rest of
+ * the line opens the event's editor from this person's side.
+ */
+function sharedLineOf(c: Ctx, pt: LifelinePoint): string {
+    const line = pt.kind === 'event' && pt.eventId ? c.page.shared?.get(pt.eventId) : undefined;
+    if (!line) return '';
+    const print = c.opts.mode === 'print' || !!c.book;
+    const nameHtml = (n: SharedWithLine['names'][number]): string => {
+        const text = esc(n.text);
+        const title = n.full !== n.text ? ` title="${esc(n.full)}"` : '';
+        if (!linkable(c, n.personId)) return title ? `<span${title}>${text}</span>` : text;
+        if (inSet(c)) return setLinkHtml(c, 'pp-link', { person: n.personId }, text, title);
+        return `<button type="button" class="pp-link" data-pp-person="${esc(n.personId)}"${title}>${text}</button>`;
+    };
+    const open = c.app && c.opts.links === 'app' && !c.page.readOnly && !!pt.eventId;
+    const attrs = open
+        ? ` data-pp-action="shared-event" data-pp-event="${esc(pt.eventId!)}" title="${esc(c.S.events.sharedLineOpen)}"`
+        : '';
+    return sharedWithLineHtml(line, {
+        lead: c.S.events.sharedLine, more: c.S.events.sharedLineMore, esc, nameHtml, mark: !print, attrs, open,
+    });
+}
+
 function timelineHtml(c: Ctx): string {
     const { P, page, person } = c;
     const points = computePersonLifeline(page.tree, page.personId, { childEvents: page.groups.childEvents });
@@ -2253,7 +2301,7 @@ function timelineHtml(c: Ctx): string {
         return `<div class="pp-row ${cls}"${id}>${yearCell(rowYearText(c, pt))}`
             + `<span class="pp-m"><span class="pp-mk" aria-hidden="true">${markOf(pt)}</span></span>`
             + `<div class="pp-t">${mergedId ? `<span class="pp-osa-anchor"${mergedId}></span>` : ''}`
-            + `${rowText(c, pt, r.merged)}${detailsLine(c, pt, r.merged)}${fig}</div></div>`;
+            + `${rowText(c, pt, r.merged)}${detailsLine(c, pt, r.merged)}${sharedLineOf(c, pt)}${fig}</div></div>`;
     };
     const segHtml = segs.map(s => {
         const has = new Set(s.rows.map(r => r.kind));
@@ -2308,6 +2356,8 @@ export interface PersonBookTimelineOptions {
     moreChildren: (n: number, until: number) => string;
     /** A marker after a figure's caption (the book's source number). */
     cite?: (sourceId: string) => string;
+    /** Shared events the family's "Family together" block already tells (spec 085 §2h): their rows are left out. */
+    skipShares?: ReadonlySet<string>;
 }
 
 const BOOK_MAIN_EVENTS = new Set(['baptism', 'burial', 'residence', 'occupation', 'emigration', 'immigration']);
@@ -2342,6 +2392,15 @@ export function personBookTimelineHtml(page: PersonPageData, opts: PersonPageOpt
         };
         segs = segs.map(s => ({ ...s, rows: s.rows.filter(keep) })).filter(s => s.rows.length > 0);
     }
+    const skip = o.skipShares;
+    if (skip?.size) {
+        const told = (r: PersonPageTimelineRow): boolean => {
+            if (r.kind !== 'own' || r.point.kind !== 'event') return false;
+            const share = eventOf(c, r.point)?.shareId;
+            return !!share && skip.has(share);
+        };
+        segs = segs.map(s => ({ ...s, rows: s.rows.filter(r => !told(r)) })).filter(s => s.rows.length > 0);
+    }
     if (!segs.length) return '';
     const rowHtml = (r: PersonPageTimelineRow): string => {
         if (r.kind === 'hist') {
@@ -2365,7 +2424,7 @@ export function personBookTimelineHtml(page: PersonPageData, opts: PersonPageOpt
         return `<div class="pp-row pp-row--${r.kind}">${yearCell(rowYearText(c, pt))}`
             + `<span class="pp-m"><span class="pp-mk" aria-hidden="true">${markOf(pt)}</span></span>`
             + `<div class="pp-t">${rowText(c, pt, r.merged)}${more ? ` <span class="pp-more-kids">· ${esc(more)}</span>` : ''}`
-            + `${detailsLine(c, pt, r.merged)}${fig}</div></div>`;
+            + `${detailsLine(c, pt, r.merged)}${sharedLineOf(c, pt)}${fig}</div></div>`;
     };
     return segs.map(s => {
         const title = s.titled

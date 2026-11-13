@@ -127,6 +127,8 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
 
     // Family book
     book: {
+        familyTogether: 'Rodzina razem',
+        togetherYears: (n: number) => nPl(n, 'rok', 'lata', 'lat'),
         indexSee: (a: string, b: string) => `${a} → ${b}`,
         indexMarried: (surname: string) => `po mężu ${surname}`,
         indexFormer: (surname: string) => `dawniej ${surname}`,
@@ -695,6 +697,9 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         sharedDeletedAll: (ev: string, n: number) => `${ev}: usunięto u ${nPl(n, 'osoby', 'osób', 'osób')}.`,
         sharedSeparated: (name: string) => `Kopia u osoby ${name} jest teraz osobna.`,
         sharedOnlyOne: (ev: string, name: string) => `${ev}: teraz tylko u osoby ${name}.`,
+        sharedLine: 'razem z',
+        sharedLineMore: (n: number) => `i ${n} ${plPl(n, 'inna', 'inne', 'innych')}`,
+        sharedLineOpen: 'Otwórz wspólne wydarzenie',
         occupationLabel: 'Zawód / rzemiosło',
         occupationHint: 'Tylko samo rzemiosło – „kowal”, nie „pracował w Kladnie jako kowal”. Trafia do GEDCOM jako zawód.',
         religionLabel: 'Wyznanie',

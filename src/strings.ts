@@ -344,6 +344,9 @@ const stringsEN = {
 
     // Family book
     book: {
+        // Spec 085 §2h: a shared event everyone of which is on the family's page.
+        familyTogether: 'Family together',
+        togetherYears: (n: number) => nEn(n, 'year', 'years'),
         indexSee: (a: string, b: string) => `${a} → ${b}`,
         indexMarried: (surname: string) => `married name ${surname}`,
         indexFormer: (surname: string) => `formerly ${surname}`,
@@ -917,6 +920,9 @@ const stringsEN = {
         sharedDeletedAll: (ev: string, n: number) => `${ev}: deleted for ${n} ${plural('en', n, 'person', 'people')}.`,
         sharedSeparated: (name: string) => `The copy for ${name} is now separate.`,
         sharedOnlyOne: (ev: string, name: string) => `${ev}: now only for ${name}.`,
+        sharedLine: 'with',
+        sharedLineMore: (n: number) => `and ${n} more`,
+        sharedLineOpen: 'Open the shared event',
         occupationLabel: 'Occupation / trade',
         occupationHint: 'The trade itself — "blacksmith", not "worked in Kladno as a blacksmith". It goes out as the occupation in GEDCOM.',
         religionLabel: 'Denomination',
@@ -9379,6 +9385,9 @@ const stringsCZ: StringsType = {
 
     // Family book
     book: {
+        // Spec 085 §2h: a shared event everyone of which is on the family's page.
+        familyTogether: 'Rodina spolu',
+        togetherYears: (n: number) => nCs(n, 'rok', 'roky', 'let'),
         indexSee: (a: string, b: string) => `${a} → ${b}`,
         indexMarried: (surname: string) => `provd. ${surname}`,
         indexFormer: (surname: string) => `dříve ${surname}`,
@@ -9946,6 +9955,9 @@ const stringsCZ: StringsType = {
         sharedDeletedAll: (ev: string, n: number) => `${ev}: smazáno u ${n} ${plural('cs', n, 'osoby', 'osob', 'osob')}.`,
         sharedSeparated: (name: string) => `Kopie u osoby ${name} je teď samostatná.`,
         sharedOnlyOne: (ev: string, name: string) => `${ev}: teď jen u osoby ${name}.`,
+        sharedLine: 'spolu s',
+        sharedLineMore: (n: number) => `a další ${n}`,
+        sharedLineOpen: 'Otevřít společnou událost',
         occupationLabel: 'Povolání / řemeslo',
         occupationHint: 'Jen to řemeslo — „kovář“, ne „pracoval v Kladně jako kovář“. Odchází to jako povolání v GEDCOMu.',
         religionLabel: 'Vyznání',
@@ -18273,6 +18285,9 @@ const stringsDE: StringsType = {
 
     // Family book
     book: {
+        // Spec 085 §2h: a shared event everyone of which is on the family's page.
+        familyTogether: 'Familie gemeinsam',
+        togetherYears: (n: number) => nDe(n, 'Jahr', 'Jahre'),
         indexSee: (a: string, b: string) => `${a} → ${b}`,
         indexMarried: (surname: string) => `verh. ${surname}`,
         indexFormer: (surname: string) => `früher ${surname}`,
@@ -18830,6 +18845,9 @@ const stringsDE: StringsType = {
         sharedDeletedAll: (ev: string, n: number) => `${ev}: bei ${n} ${plural('de', n, 'Person', 'Personen')} gelöscht.`,
         sharedSeparated: (name: string) => `Die Kopie bei ${name} ist jetzt eigenständig.`,
         sharedOnlyOne: (ev: string, name: string) => `${ev}: jetzt nur bei ${name}.`,
+        sharedLine: 'mit',
+        sharedLineMore: (n: number) => `und ${n} weitere`,
+        sharedLineOpen: 'Gemeinsames Ereignis öffnen',
         occupationLabel: 'Beruf / Gewerbe',
         occupationHint: 'Nur das Gewerbe selbst — „Schmied“, nicht „arbeitete in Kladno als Schmied“. Es wird als Beruf in GEDCOM ausgegeben.',
         religionLabel: 'Konfession',

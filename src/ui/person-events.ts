@@ -116,7 +116,8 @@ export const personEventsMethods = uiModule({
                 rows.push(this.eventRowHtml(eventTypeLabel(event),
                     eventMeta(event.date, event.place, eventOwnSubject(event)),
                     locked ? null : event.id,
-                    this.participantsSummary(event), eventDetailLine(event), this.personFactMarkHtml(marks, `event:${event.id}`), origin(`event:${event.id}`)));
+                    this.participantsSummary(event), eventDetailLine(event), this.personFactMarkHtml(marks, `event:${event.id}`), origin(`event:${event.id}`),
+                    this.sharedLineHtml(this.currentId, event, !locked)));
             }
         }
 
@@ -132,6 +133,7 @@ export const personEventsMethods = uiModule({
             container.querySelectorAll<HTMLElement>('.event-delete-btn[data-event-id]').forEach(btn => {
                 btn.addEventListener('click', () => { void this.deleteEvent(btn.dataset.eventId ?? ''); });
             });
+            this.bindSharedLines(container);
         }
 
         // Add button visibility follows the lock state.
@@ -157,8 +159,11 @@ export const personEventsMethods = uiModule({
         }).join('  ·  ');
     },
 
-    /** `participantsHtml`: participantsSummary's HTML (escaped already); `belowHtml`: the fact's origin rows (HTML, escaped already). */
-    eventRowHtml(typeLabel: string, meta: string, eventId: string | null, participantsHtml = '', details = '', markHtml = '', belowHtml = ''): string {
+    /**
+     * `participantsHtml`: participantsSummary's HTML (escaped already); `belowHtml`: the fact's origin rows (HTML, escaped already);
+     * `sharedHtml`: the "with …" line of a shared event (sharedLineHtml), right under the date and place.
+     */
+    eventRowHtml(typeLabel: string, meta: string, eventId: string | null, participantsHtml = '', details = '', markHtml = '', belowHtml = '', sharedHtml = ''): string {
         const actions = eventId === null ? '' : `
             <div class="event-actions">
                 <button type="button" class="event-edit-btn" title="${esc(strings.events.edit)}" aria-label="${esc(strings.events.edit)}"
@@ -175,6 +180,7 @@ export const personEventsMethods = uiModule({
             <div class="event-row${eventId === null ? ' readonly' : ''}">
                 <div class="event-main">
                     <div><span class="event-type">${esc(typeLabel)}</span>${metaHtml}${markHtml}</div>
+                    ${sharedHtml}
                     ${belowHtml}
                     ${detailsHtml}
                     ${peopleHtml}

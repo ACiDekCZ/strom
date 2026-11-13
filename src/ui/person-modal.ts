@@ -1091,6 +1091,7 @@ export const personModalMethods = uiModule({
         this.prepareLifelinePlaces(points.map(pt => pt.place));
         // A couple's event opens its editor (over this dialog) unless the tree is locked.
         const editable = !DataManager.isTreeLocked();
+        const person = DataManager.getPerson(id);
         const layer = historyView?.chipOn && historyView.history ? this.lifelineHistoryLayer(historyView.history) : null;
         body.classList.toggle('has-ranges', points.some(pt => pt.yearLabel));
         // A redraw keeps the focus on the layer's button it was on (or the head when that row went).
@@ -1104,10 +1105,13 @@ export const personModalMethods = uiModule({
             const link = pt.kind === 'coupleEvent' && editable && pt.partnershipId && pt.eventId
                 ? ` is-link" role="button" tabindex="0" data-partnership-id="${this.escapeHtml(pt.partnershipId)}" data-event-id="${this.escapeHtml(pt.eventId)}`
                 : '';
+            // A shared event: "with Terezie, Bohumil, Anežka" under it (spec 085 §2).
+            const ev = pt.kind === 'event' && pt.eventId ? person?.events?.find(e => e.id === pt.eventId) : undefined;
+            const shared = ev ? this.sharedLineHtml(id, ev, editable && !DataManager.isPersonLocked(id)) : '';
             return `<div class="pm-lifeline-row k-${pt.kind}${link}">`
                 + `<span class="pm-lifeline-year">${this.escapeHtml(pt.yearLabel ?? String(pt.year))}</span>`
                 + `<span class="pm-lifeline-glyph k-${pt.kind}">${this.lifelineGlyph(pt)}</span>`
-                + `<span class="pm-lifeline-desc">${desc}${extra
+                + `<span class="pm-lifeline-desc">${desc}${shared}${extra
                     ? `<span class="event-details-line">${this.escapeHtml(extra)}</span>` : ''}</span>`
                 + `</div>`;
         });
@@ -1122,6 +1126,7 @@ export const personModalMethods = uiModule({
             this.relinkLifelineHistoryPopup(body);
         }
         if (strip) this.bindLifelineHistoryStrip(body);
+        this.bindSharedLines(body);
         if (focusKey) {
             const again = body.querySelector<HTMLElement>(`[data-hfocus="${CSS.escape(focusKey)}"]`)
                 ?? document.getElementById('pm-lifeline-head');

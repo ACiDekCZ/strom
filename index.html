@@ -7008,6 +7008,31 @@
         /* A range ("1890–1900", a couple's residence) needs a wider year column. */
         .pm-lifeline-body.has-ranges .pm-lifeline-year { min-width: 76px; }
         .pm-lifeline-row.is-link { cursor: pointer; border-radius: var(--r-md); }
+        /* A shared event's "with …" line (spec 085 §2a–2d): under the date and place of the person's events and life. */
+        .shared-line {
+            display: flex; align-items: baseline; gap: 6px; margin-top: 2px;
+            font-size: 13px; line-height: 1.45; color: var(--text-light); font-weight: 400;
+        }
+        .shared-line--open { cursor: pointer; }
+        .shared-line-mark { flex: none; color: var(--primary); transform: translateY(1px); }
+        .shared-line-mark svg { display: block; }
+        .shared-line-text { min-width: 0; overflow-wrap: anywhere; }
+        .shared-line button.shared-line-name {
+            background: none; border: 0; padding: 0; margin: 0; min-height: 0; width: auto;
+            font: inherit; font-weight: 500; color: var(--primary); cursor: pointer; border-radius: 3px;
+        }
+        .shared-line button.shared-line-name:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        @media (hover: hover) {
+            .shared-line button.shared-line-name:hover { text-decoration: underline; }
+            .shared-line--open:hover .shared-line-text { color: var(--text); }
+        }
+        @media (pointer: coarse) {
+            .shared-line { line-height: 1.9; }
+            .shared-line button.shared-line-name { padding: 4px 0; }
+        }
+        @media (max-width: 640px) {
+            .shared-line { font-size: 13.5px; }
+        }
         @media (hover: hover) { .pm-lifeline-row.is-link:hover { background: var(--hover-bg); } }
         .pm-lifeline-row.is-link:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         .pm-lifeline-glyph.k-birth { color: var(--male, #5b7f9e); }
