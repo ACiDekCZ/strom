@@ -87,6 +87,25 @@ test.describe('Work on the queue', () => {
         await expect(btn).toBeFocused();
     });
 
+    test('German: the sentence over the buttons across the foot, both buttons in one row under it', async ({ page }) => {
+        await followManaged(page, { features: WORK, links: ['work'], queue: QUEUE, work: { gate: 'Plan 80 %', minutes: 180 } });
+        await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
+        await openOverview(page);
+        await unfoldQueue(page);
+        await workBtn(page).click();
+        const d = dialog(page);
+        await expect(d.locator('#queue-work-open')).toContainText('Terminal öffnen');
+        const confirm = (await d.locator('.queue-work__confirm').boundingBox())!;
+        const cancel = (await d.locator('#queue-work-cancel').boundingBox())!;
+        const open = (await d.locator('#queue-work-open').boundingBox())!;
+        const foot = (await d.locator('.queue-work__foot').boundingBox())!;
+        expect(cancel.y).toBeGreaterThanOrEqual(confirm.y + confirm.height);
+        expect(Math.abs((cancel.y + cancel.height / 2) - (open.y + open.height / 2))).toBeLessThan(2);
+        expect(cancel.x + cancel.width).toBeLessThanOrEqual(open.x);
+        // The whole width of the foot inside its padding (24 px a side).
+        expect(confirm.width).toBeGreaterThan(foot.width - 48 - 2);
+    });
+
     test('only n tasks: typing chooses it, 1–100, do=tasks&n=', async ({ page }) => {
         await follow(page);
         await workBtn(page).click();

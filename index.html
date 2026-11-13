@@ -20614,6 +20614,11 @@
                 left: calc(100vw - 212px); max-width: 376px; box-sizing: border-box;
             }
         }
+        /* On a computer it stands clear of the overview's footer (Missing evidence, Open research): never over its links. */
+        @media (min-width: 1025px) {
+            body.overview-docked .toast[data-kind="queue-next"] { bottom: 56px; }
+            body:has(> .research-overview--overlay) .toast[data-kind="queue-next"] { bottom: 68px; }
+        }
         @media (pointer: coarse) {
             .toast[data-kind="queue-next"] .toast-action { min-height: 44px; padding: 0 4px; }
         }
@@ -20627,7 +20632,9 @@
             border-bottom: 1px solid var(--divider); overflow-wrap: anywhere;
         }
         .live-task-menu__num { color: var(--text-light); font-weight: 400; margin-right: 2px; }
-        .live-task-menu--sheet .context-menu-item { min-height: 44px; box-sizing: border-box; justify-content: center; }
+        .live-task-menu--sheet .context-menu-item { min-height: 44px; box-sizing: border-box; }
+        /* A row with its hint is a column: centred in its height, its text at the left like the other rows. */
+        .live-task-menu--sheet .research-direction-menu__item { justify-content: center; }
         .live-task-menu--sheet .research-direction-menu__item:has(.research-direction-menu__hint) { min-height: 52px; }
         .live-task-menu--sheet .research-direction-menu__hint { max-width: none; }
         .live-panel-spend {
@@ -27120,7 +27127,8 @@
         .queue-work__first-task { font-size: 14px; color: var(--text); line-height: 1.4; overflow-wrap: anywhere; }
         .queue-work__session { margin-top: 4px; font-size: 12px; color: var(--text-light); }
         #queue-work-modal .modal .buttons.queue-work__foot { flex-wrap: wrap; align-items: center; }
-        .queue-work__confirm { flex: 1 1 180px; margin: 0 auto 0 0; font-size: 12.5px; line-height: 1.45; color: var(--text-light); }
+        /* The sentence over the buttons across the whole width, the buttons in one row under it (5d, 5f). */
+        .queue-work__confirm { flex: 1 1 100%; margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-light); }
         #queue-work-modal .modal .buttons.queue-work__foot > button { min-height: 34px; }
         @media (pointer: coarse) {
             .modal label.queue-work__opt { min-height: 44px; }

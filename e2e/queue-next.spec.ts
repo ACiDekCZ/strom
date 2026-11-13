@@ -230,6 +230,28 @@ test.describe('Do next with queue.next', () => {
         await expect.poll(() => b.queueReads.filter(q => q.includes('q=')).length).toBeGreaterThan(1);
     });
 
+    for (const width of [1440, 1200]) {
+        test(`its toast over the overview stands clear of the overview's footer (${width} px)`, async ({ page }) => {
+            await followManaged(page, { features: NEXT, queue: QUEUE, size: { width, height: 860 } });
+            await openOverview(page);
+            await unfoldQueue(page);
+            await doNext(page, 'T0103');
+            await expect(toast(page)).toBeVisible();
+            const foot = overview(page).locator('.research-overview__foot');
+            await expect(foot).toBeVisible();
+            const footTop = (await foot.boundingBox())!.y;
+            // Once in its place (it rises there): above the footer's links, within the overview.
+            await expect.poll(async () => {
+                const t = (await toast(page).boundingBox())!;
+                return Math.round(t.y + t.height);
+            }).toBeLessThanOrEqual(Math.floor(footTop) - 8);
+            const t = (await toast(page).boundingBox())!;
+            const ov = (await overview(page).boundingBox())!;
+            expect(t.x).toBeGreaterThanOrEqual(ov.x);
+            expect(t.x + t.width).toBeLessThanOrEqual(ov.x + ov.width);
+        });
+    }
+
     test('the small panel\'s queue: "Do next" first in its ⋯', async ({ page }) => {
         const b = await followManaged(page, { features: NEXT, queue: QUEUE });
         const more = page.locator('#live-panel .live-queue-more[data-task="T0102"]');
@@ -256,6 +278,13 @@ test.describe('Do next with queue.next', () => {
         expect(Math.round(box!.y + box!.height)).toBe(844);
         expect((await m.locator('[data-order="next"]').boundingBox())!.height).toBeGreaterThanOrEqual(52);
         expect((await m.locator('[data-action="park"]').boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        // Every row's text at its left, the research's Park / Drop as "Do next" (none centred).
+        const lefts = await m.locator('[data-order="next"], [data-action="park"], [data-action="drop"]').evaluateAll(items => items.map(i => {
+            const r = document.createRange();
+            r.selectNodeContents(i);
+            return Math.round(r.getClientRects()[0].left - i.getBoundingClientRect().left);
+        }));
+        expect(lefts).toEqual([16, 16, 16]);
         await expect(m.locator('[data-order="next"]')).toBeFocused();
         // Above the overview's sheet.
         const top = await page.evaluate(() => {
