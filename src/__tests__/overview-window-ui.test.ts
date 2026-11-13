@@ -136,12 +136,17 @@ describe('the window\'s actions run today\'s functions', () => {
             showPersonResearchDialog: vi.fn(), showWaitingPlaces: vi.fn(), answerResearchTask: vi.fn(),
             activeResearchLink: vi.fn(() => 'strom-research://chat?tree=R1'), launchResearchLink: vi.fn(),
             acceptHypothesisProposals: vi.fn(), markWaitingUnsent: vi.fn(async () => {}), openDirectionForm: vi.fn(),
+            showDirectionFoundInTree: vi.fn(() => true),
         });
         const s = fake.live as LiveSession;
         run(ui, { action: 'show-person', args: { personId: 'P1' } });
         expect(ui.overviewShowPerson).toHaveBeenCalledWith('P1', 'docked');
         run(ui, { action: 'show-people', args: { title: 'Changed', personIds: ['P1', 'P2'] } });
         expect(ui.startPersonHighlight).toHaveBeenCalledWith('changed', 'Changed', ['P1', 'P2'], null);
+        // What a line found: its people lit up as by its link here.
+        expect(run(ui, { action: 'direction-found', args: { directionId: 'D1' } })).toBe(true);
+        expect(ui.showDirectionFoundInTree).toHaveBeenCalledWith(s.researches[0], 'docked');
+        expect(run(ui, { action: 'direction-found', args: { directionId: 'gone' } })).toBe(false);
         run(ui, { action: 'follow-live' });
         expect(ui.startFollowLive).toHaveBeenCalledWith('overview');
         run(ui, { action: 'stop-follow' });

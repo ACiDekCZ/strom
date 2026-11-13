@@ -78,6 +78,7 @@ describe('the actions an overview window may ask for', () => {
         expect(readOverviewAction('line-move', { directionId: 'D1', move: { drop: 2 } })).toEqual({ action: 'line-move', args: { directionId: 'D1', move: { drop: 2 } } });
         expect(readOverviewAction('hover-person', { personId: null })).toEqual({ action: 'hover-person', args: { personId: null } });
         expect(readOverviewAction('turn-on', undefined)).toEqual({ action: 'turn-on' });
+        expect(readOverviewAction('direction-found', { directionId: 'D1' })).toEqual({ action: 'direction-found', args: { directionId: 'D1' } });
         expect(readOverviewAction('research-link', { link: 'chat', params: { tree: 'other', person: 'P0012' } }))
             .toEqual({ action: 'research-link', args: { link: 'chat', params: { person: 'P0012' } } });
         expect(readOverviewAction('queue-more', { filter: { state: 'next' }, slot: 'queue', seed: { items: [], total: 40 } }))

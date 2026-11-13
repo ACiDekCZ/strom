@@ -262,6 +262,8 @@ export type OverviewAction =
     | { action: 'show-people'; args: { title: string; personIds: string[] } }
     /** A line's people lit up in the tree. */
     | { action: 'show-direction'; args: { directionId: string } }
+    /** "{n} persons" of what a line found: those people lit up in the tree. */
+    | { action: 'direction-found'; args: { directionId: string } }
     /** A conflict's or hypothesis's row of "What the research knows": its person's research dialog. */
     | { action: 'person-research'; args: { personId: string; conflict?: string; hypo?: string } }
     /** "Where evidence is missing": the tree overview's Data quality. */
@@ -323,7 +325,7 @@ export type OverviewActionId = OverviewAction['action'];
 export type OverviewActionArgs<T extends OverviewActionId> = Extract<OverviewAction, { action: T }>['args'];
 
 export const OVERVIEW_ACTION_IDS = [
-    'show-person', 'show-people', 'show-direction', 'person-research', 'tree-overview', 'waiting-places', 'waiting-group-note',
+    'show-person', 'show-people', 'show-direction', 'direction-found', 'person-research', 'tree-overview', 'waiting-places', 'waiting-group-note',
     'waiting-images', 'line-edit', 'line-new',
     'hover-person', 'follow-live', 'stop-follow', 'follow-tree', 'follow-view', 'turn-on',
     'line-select', 'line-state', 'line-move', 'line-retry',
@@ -334,7 +336,7 @@ export const OVERVIEW_ACTION_IDS = [
 
 /** Actions whose result shows in the main window: the overview window asks it to the front after them. */
 export const OVERVIEW_ACTIONS_TO_MAIN: ReadonlySet<OverviewActionId> = new Set<OverviewActionId>([
-    'show-person', 'show-people', 'show-direction', 'person-research', 'tree-overview', 'waiting-places', 'waiting-group-note',
+    'show-person', 'show-people', 'show-direction', 'direction-found', 'person-research', 'tree-overview', 'waiting-places', 'waiting-group-note',
     'waiting-images', 'line-edit', 'line-new',
 ]);
 
@@ -379,6 +381,7 @@ export function readOverviewAction(action: unknown, args: unknown): OverviewActi
         case 'show-people':
             return strs(a.personIds) && typeof a.title === 'string' ? { action, args: { title: a.title, personIds: [...a.personIds] } } : null;
         case 'show-direction':
+        case 'direction-found':
         case 'line-edit':
         case 'line-select':
         case 'line-retry':

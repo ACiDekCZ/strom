@@ -27,7 +27,7 @@ import type { UIClass } from './index.js';
 import { el, setOverviewWindowDrawn, type LiveSession, type OverviewViewing } from './research-ui.js';
 import { applyDirectionsWindowState, setQueueDirectionFilter } from './research-directions-ui.js';
 import { setOverviewOwnWindow } from './research-overview-ui.js';
-import { sectionPrefs } from './live-section-prefs.js';
+import { SECTION_PREFS_EVENT, sectionPrefs, watchSectionPrefsStorage } from './live-section-prefs.js';
 import type { DirectionFormOptions } from './direction-form-ui.js';
 import type { WaitingAnswerOutcome } from './waiting-answer-form.js';
 import {
@@ -174,6 +174,10 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
             run('show-people', { title: label, personIds: [...ids] });
         },
         showDirectionInTree(d: LiveDirection): void { run('show-direction', { directionId: d.id }); },
+        showDirectionFoundInTree(d: LiveDirection): boolean {
+            run('direction-found', { directionId: d.id });
+            return true;
+        },
         showPersonResearchDialog(personId: PersonId, opts: { hypo?: { id: string }; conflict?: string } = {}): void {
             run('person-research', {
                 personId, ...(opts.conflict ? { conflict: opts.conflict } : {}), ...(opts.hypo?.id ? { hypo: opts.hypo.id } : {}),
@@ -261,6 +265,12 @@ export function startOverviewWindowView(ui: UIClass, port: OverviewWindowPort, t
         },
     });
     const render = (): void => ui.renderResearchOverview();
+    // A section's choice made here, in the main window or in Settings: drawn again (the record is shared).
+    const onPrefs = (): void => { if (state) render(); };
+    if (typeof document !== 'undefined') {
+        document.addEventListener(SECTION_PREFS_EVENT, onPrefs);
+        watchSectionPrefsStorage();
+    }
     return {
         state: () => state,
         apply(raw: unknown): boolean {
@@ -293,6 +303,7 @@ export function startOverviewWindowView(ui: UIClass, port: OverviewWindowPort, t
         },
         render,
         stop(): void {
+            if (typeof document !== 'undefined') document.removeEventListener(SECTION_PREFS_EVENT, onPrefs);
             setOverviewOwnWindow(null);
             setOverviewWindowDrawn(null);
             setQueueRemote(null);

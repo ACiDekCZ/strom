@@ -957,11 +957,7 @@ export const researchDirectionsMethods = uiModule({
                     const link = el('button', 'live-person-link', L.dirFoundPersons(found.persons));
                     link.type = 'button';
                     link.dataset.do = 'found-people';
-                    link.onclick = () => {
-                        if (mode === 'sheet') this.closeResearchOverview();
-                        selectionLit = false;
-                        this.startPersonHighlight('direction-found', d.name, people, null);
-                    };
+                    link.onclick = () => { this.showDirectionFoundInTree(d, mode); };
                     parts.appendChild(link);
                 } else {
                     const text = part === 'sessions' ? L.dirFoundSessions(found.sessions)
@@ -1616,6 +1612,19 @@ export const researchDirectionsMethods = uiModule({
         }
         if (actions.childElementCount > 0) detail.appendChild(actions);
         return detail;
+    },
+
+    /**
+     * The people of what a direction found lit up in the tree, named by the
+     * direction (false: none of them is in the tree).
+     */
+    showDirectionFoundInTree(d: LiveDirection, mode: Mode): boolean {
+        const people = (d.found?.people ?? []).map(personByRefn).filter((p): p is Person => !!p).map(p => p.id);
+        if (people.length === 0) return false;
+        if (mode === 'sheet') this.closeResearchOverview();
+        selectionLit = false;
+        this.startPersonHighlight('direction-found', d.name, people, null);
+        return true;
     },
 
     /** The direction's people lit up in the tree, named by the direction. */

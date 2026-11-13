@@ -535,7 +535,6 @@ export const researchOverviewMethods = uiModule({
             }
         } else {
             head.appendChild(el('span', `live-dot live-dot--still${source === 'tree' ? ' live-dot--off' : ''}`));
-            head.appendChild(el('span', `live-dot live-dot--still${source === 'tree' ? ' live-dot--off' : ''}`));
             const titles = el('div', 'research-overview__titles');
             const sub = el('div', 'research-overview__sub');
             // A long name is cut short beside Stop and the head's buttons: whole on hover.

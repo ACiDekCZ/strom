@@ -131,6 +131,10 @@ export const overviewWindowMethods = uiModule({
                 this.showDirectionInTree(d, 'docked');
                 return true;
             }
+            case 'direction-found': {
+                const d = line(a.args.directionId);
+                return d ? this.showDirectionFoundInTree(d, 'docked') : false;
+            }
             case 'person-research':
                 this.showPersonResearchDialog(a.args.personId as PersonId,
                     a.args.conflict ? { conflict: a.args.conflict } : a.args.hypo ? { hypo: { id: a.args.hypo } } : {});
