@@ -646,6 +646,7 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
         linesAncestors: (n: number) => ancPl(n),
         linesRow: (rel: string, n: number) => `${rel} · ${ancPl(n)}`,
         linesUnknown: (rel: string, female: boolean) => `${rel} – ${female ? 'nieznana' : 'nieznany'}`,
+        linesOffTimeline: 'poza osią czasu',
         linesTrunk: 'Pień: rodzice i dziadkowie',
         linesOff: 'Bez kolorów rodów',
         linesImplex: (name: string, year: number | undefined, lineA: string, lineB: string) =>

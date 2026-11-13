@@ -120,6 +120,12 @@ export const mapLinesLegendMethods = uiModule({
         const unknown = (name: string): string =>
             `<div class="map-lines-row is-unknown${hi !== null ? ' is-dim' : ''}"><span class="map-lines-swatch is-empty" aria-hidden="true"></span>`
             + `<span class="map-lines-text"><span class="map-lines-name">${esc(name)}</span></span></div>`;
+        // A known line none of whose ancestors is on the timeline (no date or place): muted like an
+        // unknown line, nothing to highlight, "off the timeline" in place of "0 ancestors".
+        const offTimeline = (i: number, cls: LineClass, name: string, sub: string, title = ''): string =>
+            `<div class="map-lines-row is-unknown is-off-timeline${hi !== null ? ' is-dim' : ''}" data-off-line="${i}" data-cls="${cls}"${title ? ` title="${esc(title)}"` : ''}>`
+            + `<span class="map-lines-swatch is-empty" aria-hidden="true"></span>`
+            + `<span class="map-lines-text"><span class="map-lines-name">${esc(name)}</span><span class="map-lines-sub">${esc(sub)}</span></span></div>`;
 
         let rows = '';
         if (colors) {
@@ -127,9 +133,9 @@ export const mapLinesLegendMethods = uiModule({
             if (mode === 'quarter') {
                 model.quarters.forEach((q, i) => {
                     const rel = quarterRel(i);
-                    parts.push(q
-                        ? row(i, branchClass('quarter', i), q.surname, m.linesRow(rel, q.count), `${q.surname} · ${m.linesRow(rel, q.count)}`)
-                        : unknown(m.linesUnknown(rel, i % 2 === 1)));
+                    parts.push(!q ? unknown(m.linesUnknown(rel, i % 2 === 1))
+                        : q.count === 0 ? offTimeline(i, branchClass('quarter', i), q.surname, `${rel} · ${m.linesOffTimeline}`)
+                        : row(i, branchClass('quarter', i), q.surname, m.linesRow(rel, q.count), `${q.surname} · ${m.linesRow(rel, q.count)}`));
                 });
             } else {
                 model.quarters.forEach((q, qi) => {
@@ -141,10 +147,10 @@ export const mapLinesLegendMethods = uiModule({
                         const b = model.eighths[e];
                         const relE = eighthRel(e);
                         // "1 · Surname" over "6 ancestors"; the relation only in the title and the label.
-                        parts.push(b
-                            ? row(e, branchClass('eighth', e), `${e + 1} · ${b.surname}`, m.linesAncestors(b.count),
-                                `${e + 1} · ${b.surname} · ${m.linesRow(relE, b.count)}`, relE)
-                            : unknown(`${e + 1} · ${m.linesUnknown(relE, j === 1)}`));
+                        parts.push(!b ? unknown(`${e + 1} · ${m.linesUnknown(relE, j === 1)}`)
+                            : b.count === 0 ? offTimeline(e, branchClass('eighth', e), `${e + 1} · ${b.surname}`, m.linesOffTimeline, relE)
+                            : row(e, branchClass('eighth', e), `${e + 1} · ${b.surname}`, m.linesAncestors(b.count),
+                                `${e + 1} · ${b.surname} · ${m.linesRow(relE, b.count)}`, relE));
                     }
                 });
             }

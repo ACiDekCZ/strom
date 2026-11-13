@@ -3861,6 +3861,7 @@ const stringsEN = {
         linesAncestors: (n: number) => ancEn(n),
         linesRow: (rel: string, n: number) => `${rel} · ${ancEn(n)}`,
         linesUnknown: (rel: string, _female: boolean) => `${rel} – unknown`,
+        linesOffTimeline: 'off the timeline',
         linesTrunk: 'Trunk: parents and grandparents',
         linesOff: 'No line colours',
         linesImplex: (name: string, year: number | undefined, lineA: string, lineB: string) =>
@@ -12778,6 +12779,7 @@ const stringsCZ: StringsType = {
         linesAncestors: (n: number) => ancCs(n),
         linesRow: (rel: string, n: number) => `${rel} · ${ancCs(n)}`,
         linesUnknown: (rel: string, female: boolean) => `${rel} – ${female ? 'neznámá' : 'neznámý'}`,
+        linesOffTimeline: 'mimo lištu',
         linesTrunk: 'Kmen: rodiče a prarodiče',
         linesOff: 'Bez barev rodů',
         linesImplex: (name: string, year: number | undefined, lineA: string, lineB: string) =>
@@ -21599,6 +21601,7 @@ const stringsDE: StringsType = {
         linesAncestors: (n: number) => ancDe(n),
         linesRow: (rel: string, n: number) => `${rel} · ${ancDe(n)}`,
         linesUnknown: (rel: string, _female: boolean) => `${rel} – unbekannt`,
+        linesOffTimeline: 'außerhalb der Zeitleiste',
         linesTrunk: 'Stamm: Eltern und Großeltern',
         linesOff: 'Ohne Linienfarben',
         linesImplex: (name: string, year: number | undefined, lineA: string, lineB: string) =>

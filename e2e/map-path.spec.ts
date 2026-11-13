@@ -477,6 +477,43 @@ test('the ancestors off the timeline are counted under the legend and listed wit
     await expect(page.locator('#person-page-modal')).toContainText('Hesper Corvith');
 });
 
+test('a line none of whose ancestors is on the timeline is muted in the legend and says "off the timeline" instead of "0 ancestors"', async ({ page }) => {
+    await stubTiles(page);
+    // Maelis's parents have no place: the mother's lines are known but none of their ancestors is on the timeline.
+    await seedPathTree(page, {
+        maelis: { firstName: 'Maelis', lastName: 'Ostrowbek', gender: 'female', birthDate: '1922', birthPlace: 'Theta', parents: ['tobrin', 'hesper'] },
+        tobrin: { firstName: 'Tobrin', lastName: 'Ostrowbek', gender: 'male', birthDate: '1895', partners: ['hesper'] },
+        hesper: { firstName: 'Hesper', lastName: 'Corvith', gender: 'female' },
+    });
+    await choosePerson(page, 'Quillfen', /Tamsin/);
+    const legend = page.locator('.map-lines-legend');
+    await expect(legend).toBeVisible();
+
+    // Only the lines with ancestors on the map can be highlighted.
+    await expect(legend.locator('button.map-lines-row')).toHaveCount(2);
+    const off = legend.locator('.map-lines-row.is-off-timeline');
+    await expect(off).toHaveCount(2);
+    await expect(off.nth(0)).toHaveText(["Ostrowbekmother's father · off the timeline"]);
+    await expect(off.nth(1)).toHaveText(["Corvithmother's mother · off the timeline"]);
+    await expect(legend).not.toContainText('0 ancestors');
+    // Muted like an unknown line: the name in normal weight and the muted colour, the empty dashed swatch.
+    const name = off.first().locator('.map-lines-name');
+    await expect(name).toHaveCSS('font-weight', '400');
+    const nameColor = await name.evaluate(el => getComputedStyle(el).color);
+    const knownColor = await legend.locator('button.map-lines-row .map-lines-name').first().evaluate(el => getComputedStyle(el).color);
+    expect(nameColor).not.toBe(knownColor);
+    await expect(off.first().locator('.map-lines-swatch')).toHaveCSS('border-top-style', 'dashed');
+
+    // Eighths: Ostrowbek's and Corvith's quarters have no known eighth; the known ones keep their counts.
+    await legend.getByRole('button', { name: 'Eighths' }).click();
+    await expect(legend.locator('.map-lines-row.is-off-timeline')).toHaveCount(0);
+
+    // A press on the muted row pins nothing.
+    await legend.getByRole('button', { name: 'Quarters' }).click();
+    await legend.locator('.map-lines-row.is-off-timeline').first().click();
+    await expect(legend.locator('button.map-lines-row[aria-pressed="true"]')).toHaveCount(0);
+});
+
 test('a person row in the bubble of Migration over time unfolds the person page and the path to that person; with a path the bubble shows its lines', async ({ page }) => {
     await stubTiles(page);
     await seedPathTree(page);
@@ -585,6 +622,44 @@ test('the person page opens the ancestors\' path on the map and its toast brings
     await expect(w.locator('[data-pp-action="map:open"]')).toBeVisible();
     await expect(w.locator('.pp-map-path')).toHaveCount(0);
     await expect(w.locator('.pp-map-path-note')).toHaveCount(0);
+});
+
+test('a person with one or no place of their own and ancestors on the map has the path link on a row of its own, which opens the path; without ancestors there is none', async ({ page }) => {
+    await stubTiles(page);
+    await seedPathTree(page, {}, { timeOn: false });
+    await page.evaluate(() => window.Strom.UI.setDisplayViewMode('tree'));
+    const w = page.locator('#person-page-modal');
+
+    // Elowen has no place, her father one: no "Places of life", the link on its own row.
+    await page.evaluate(() => window.Strom.UI.showPersonPage('elowen' as never));
+    await expect(w.locator('h1')).toContainText('Elowen Yarrowby');
+    await expect(w.locator('#pp-sec-places')).toHaveCount(0);
+    const row = w.locator('.pp-sec--map-path');
+    await expect(row.locator('.pp-map-path')).toHaveText("◎ Ancestors' path on the map ›");
+    await expect(row.locator('.pp-map-path')).not.toHaveAttribute('aria-disabled', 'true');
+    // Where the section would be: before the timeline.
+    expect(await row.evaluate(el => {
+        const timeline = el.parentElement?.querySelector(':scope > #pp-sec-timeline');
+        return !timeline || !!(el.compareDocumentPosition(timeline) & Node.DOCUMENT_POSITION_FOLLOWING);
+    })).toBe(true);
+
+    // Orrin has one place (Eta): the same row, and it opens his path in Migration over time.
+    await page.evaluate(() => window.Strom.UI.showPersonPage('orrin' as never));
+    await expect(w.locator('h1')).toContainText('Orrin Quillfen');
+    await expect(w.locator('#pp-sec-places')).toHaveCount(0);
+    await w.locator('.pp-sec--map-path .pp-map-path').click();
+    await expect(w).toHaveCount(0);
+    await expect(page.locator('body')).toHaveClass(/map-view/);
+    await expect(page.locator('.map-path-chip-name')).toHaveText(/Orrin Quillfen/);
+    await expect(page.locator('.map-time-toggle')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.map-time-year')).toHaveText('1860');
+
+    // Bram has one place and no ancestors: no link.
+    await page.evaluate(() => window.Strom.UI.setDisplayViewMode('tree'));
+    await page.evaluate(() => window.Strom.UI.showPersonPage('bram' as never));
+    await expect(w.locator('h1')).toContainText('Bram Pellwick');
+    await expect(w.locator('.pp-map-path')).toHaveCount(0);
+    await expect(w.locator('.pp-sec--map-path')).toHaveCount(0);
 });
 
 test('the one-time offer of Migration over time stands left of its button; Try it turns the mode on, Not now closes it, and it never comes back', async ({ page }) => {

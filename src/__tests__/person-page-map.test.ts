@@ -13,6 +13,7 @@ import {
     placePointKind, filterPlacePoints, placeKindsPresent, placeKindsKey,
 } from '../person-page-map.js';
 import { chartAnchorId } from '../person-page-chart.js';
+import { preparePersonPageData, buildPersonPageBody, PERSON_PAGE_ALL_GROUPS, type PersonPageOptions } from '../person-page.js';
 import { placeKey, MAP_KINDS, type MapKind } from '../places.js';
 import { getStringsForLang } from '../strings.js';
 import { PERSON_PAGE_MAP_CSS } from '../person-page-viz-css.js';
@@ -687,5 +688,55 @@ describe('the ancestors\' path from the person page (spec 054 §1)', () => {
             expect(html).not.toContain('map:path');
             expect(html).not.toContain('pp-map-path-note');
         }
+    });
+});
+
+describe('the ancestors\' path link without the places section (D2)', () => {
+    // Made-up people: Milada Ostricová (one place) and Nela Ostricová (none), daughters of Ota Ostrica.
+    const data = (): StromData => {
+        const persons: StromData['persons'] = {};
+        const add = (x: Person) => { persons[x.id] = x; };
+        add(p('ota', 'Ota', 'Ostrica', 'male', { birthDate: '1850', birthPlace: 'Čapkov', childIds: ['milada', 'nela'] as PersonId[] }));
+        add(p('milada', 'Milada', 'Ostricová', 'female', { birthDate: '1880', birthPlace: 'Lhotka', parentIds: ['ota'] as PersonId[] }));
+        add(p('nela', 'Nela', 'Ostricová', 'female', { parentIds: ['ota'] as PersonId[] }));
+        return { version: 11, persons, partnerships: {}, places: { ...GEO } } as unknown as StromData;
+    };
+    const body = (id: string, over: Partial<PersonPageOptions> = {}): string => {
+        const op: PersonPageOptions = {
+            personId: id as PersonId, lang: 'cs', mode: 'app', links: 'app', groups: { ...PERSON_PAGE_ALL_GROUPS },
+            privacy: 'full', toggles: { history: true, childEvents: true }, research: false, now: new Date('2026-11-13T12:00:00Z'),
+            ...over,
+        };
+        return buildPersonPageBody(preparePersonPageData(data(), op), op);
+    };
+    const count = (html: string, needle: string): number => html.split(needle).length - 1;
+
+    it('stands on a row of its own where the section would be for a person with one or no place and ancestors on the map', () => {
+        for (const id of ['milada', 'nela']) {
+            const html = body(id, { mapPath: 'on' });
+            expect(html, id).not.toContain('id="pp-sec-places"');
+            expect(count(html, 'data-pp-action="map:path"'), id).toBe(1);
+            expect(html, id).toContain(`<section class="pp-sec pp-sec--map-path"><div class="pp-toggles pp-map-tools"><button type="button" class="pp-act pp-map-path" data-pp-action="map:path"><span class="pp-map-path-mark" aria-hidden="true">◎</span> ${cs.map.pathFromPage} ›</button></div></section>`);
+            expect(html, id).not.toContain('aria-disabled="true" aria-describedby');
+        }
+    });
+
+    it('has no row while no ancestor is on the map, without ancestors and in a saved file', () => {
+        for (const html of [body('milada', { mapPath: 'off' }), body('ota'), body('milada', { mode: 'file', links: 'plain', mapPath: 'on' })]) {
+            expect(html).not.toContain('map:path');
+            expect(html).not.toContain('pp-sec--map-path');
+        }
+    });
+
+    it('keeps the link in the section\'s head (once) for a person with two or more places', () => {
+        const op: PersonPageOptions = {
+            personId: JAN, lang: 'cs', mode: 'app', links: 'app', groups: { ...PERSON_PAGE_ALL_GROUPS },
+            privacy: 'full', toggles: { history: true, childEvents: true }, research: false, now: new Date('2026-11-13T12:00:00Z'), mapPath: 'on',
+        };
+        const t = { ...tree(), places: { ...GEO } } as unknown as StromData;
+        const html = buildPersonPageBody(preparePersonPageData(t, op), op);
+        expect(html).toContain('id="pp-sec-places"');
+        expect(count(html, 'data-pp-action="map:path"')).toBe(1);
+        expect(html).not.toContain('pp-sec--map-path');
     });
 });

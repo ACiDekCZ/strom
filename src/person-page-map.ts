@@ -1384,6 +1384,26 @@ function osaOf(p: PlannedPlace): string {
 }
 
 /**
+ * "◎ Ancestors' path on the map ›" (spec 054 §1, entry 3; the window only):
+ * `noteId` greys it out (aria-disabled) with the note of that id telling why.
+ */
+function mapPathButtonHtml(S: MapStrings, noteId: string | null): string {
+    return `<button type="button" class="pp-act pp-map-path" data-pp-action="map:path"`
+        + `${noteId ? ` aria-disabled="true" aria-describedby="${esc(noteId)}" title="${esc(S.map.pathNoAncestors)}"` : ''}>`
+        + `<span class="pp-map-path-mark" aria-hidden="true">◎</span> ${esc(S.map.pathFromPage)} ›</button>`;
+}
+
+/**
+ * The ancestors' path link on its own row (D2): in the window, for a person
+ * whose places make no "Places of life" section (at most one own place) but
+ * who has ancestors on the map. Stands where that section would; no heading,
+ * no entry of the contents. Greyed out or absent paths get no row.
+ */
+export function mapPathRowHtml(lang: Language): string {
+    return `<section class="pp-sec pp-sec--map-path"><div class="pp-toggles pp-map-tools">${mapPathButtonHtml(getStringsForLang(lang), null)}</div></section>`;
+}
+
+/**
  * The "Places of life" section (§1), or '' when the person has at most one
  * place (§1.5). `points` from `collectPersonPlacePoints` (protection applied
  * there), `geo` the tree's `places` (coordinates by placeKey).
@@ -1414,9 +1434,7 @@ export function placesMapHtml(points: readonly PlacePoint[], geo: Readonly<Recor
     // The ancestors' path in Migration over time (spec 054 §1): greyed out while no ancestor is on the map.
     const pathOff = ctx.path === 'off';
     if (app && !group && ctx.path) {
-        tools.push(`<button type="button" class="pp-act pp-map-path" data-pp-action="map:path"`
-            + `${pathOff ? ` aria-disabled="true" aria-describedby="${esc(ctx.id ?? 'pp-sec-places')}-path-note" title="${esc(S.map.pathNoAncestors)}"` : ''}>`
-            + `<span class="pp-map-path-mark" aria-hidden="true">◎</span> ${esc(S.map.pathFromPage)} ›</button>`);
+        tools.push(mapPathButtonHtml(S, pathOff ? `${ctx.id ?? 'pp-sec-places'}-path-note` : null));
     }
     if (app && mapLike && !group) tools.push(`<button type="button" class="pp-act pp-map-open" data-pp-action="map:open">${esc(M.open)}</button>`);
     const title = group ? group.title : M.title;

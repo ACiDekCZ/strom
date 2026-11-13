@@ -38,7 +38,7 @@ import { PERSON_PAGE_SCRIPT, PERSON_PAGE_STORY_SCRIPT, personPageFileCss } from 
 import { findRelationship } from './kinship.js';
 import { buildLineages, rodLabels, LineageIndex, RodId } from './lineage.js';
 import { personRodRowValue, rodRowShown, RodRowValue } from './lineage-row.js';
-import { collectPersonPlacePoints, placesMapHtml, PlacePoint, PLACES_MAP_SCRIPT } from './person-page-map.js';
+import { collectPersonPlacePoints, placesMapHtml, mapPathRowHtml, PlacePoint, PLACES_MAP_SCRIPT } from './person-page-map.js';
 import { lifeChartInput, lifeChartHtml, chartAnchorId, chartHistAnchorId, LifeChartInput } from './person-page-chart.js';
 import { buildFanModel, buildFanSvg, FanBounds, FanModel } from './fan-chart.js';
 import { fanScreenSizes } from './fan-labels.js';
@@ -3142,6 +3142,8 @@ function personPageBodyHtml(page: PersonPageData, opts: PersonPageOptions): stri
         ambiguous: new Set<string>(),
     });
     if (places) c.placeKeys = placesSectionKeys(page, kidPlaces);
+    // Without the section (at most one own place) the ancestors' path keeps its link on a row of its own.
+    const mapPathRow = !places && c.app && opts.mapPath === 'on' ? mapPathRowHtml(page.lang) : '';
     c.chart = personPageChartInput(page, opts.now);
     // Order of building: the timeline places the main excerpts the sources refer to,
     // the story collects the ids the researchers' section lists.
@@ -3161,7 +3163,7 @@ function personPageBodyHtml(page: PersonPageData, opts: PersonPageOptions): stri
     const boxes = portraitLightbox(c, safeImage(c.person.photo)) + lightboxHtml(c);
     // Last: every image of the page is registered by now.
     const styles = imgStyles(c);
-    const content = `${summary}${family}${ancestors}${story}${question}${places}${timeline}${gallery}${people}${notes}${sources}${research}`;
+    const content = `${summary}${family}${ancestors}${story}${question}${places}${mapPathRow}${timeline}${gallery}${people}${notes}${sources}${research}`;
     // The file's contents on a phone and in a narrow window (§0.7): a fold under the header.
     const tocM = opts.toc && !c.app ? tocFoldHtml(personPageTocItems(content, page.lang), page.lang) : '';
     return `${open}${styles}${header}${tocM}${content}${footer}${boxes}</article>`;
