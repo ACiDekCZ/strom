@@ -503,7 +503,7 @@ describe('a shared event on the family timeline (spec 085 §2e)', () => {
     const census = (id: string): LifeEvent => ({ id: `c_${id}`, type: 'census', date: '1921-02-15', shareId: 'sh_c1921' });
     function household(): StromData {
         return data([
-            person('kvido', 'Kvido', 'male', { birthDate: '1879', deathDate: '1950', events: [census('kvido')] }),
+            person('sudivoj', 'Sudivoj', 'male', { birthDate: '1879', deathDate: '1950', events: [census('sudivoj')] }),
             person('radegunda', 'Radegunda', 'female', { birthDate: '1883', deathDate: '1955', events: [census('radegunda')] }),
             person('soused', 'Ctimír', 'male', { birthDate: '1890', deathDate: '1960' }),
             person('bohuchval', 'Bohuchval', 'male', { birthDate: '1906', deathDate: '1980', events: [census('bohuchval'), { id: 'e1', type: 'military', date: '1925' }] }),
@@ -511,14 +511,14 @@ describe('a shared event on the family timeline (spec 085 §2e)', () => {
     }
 
     it('merges the rows of the persons on the timeline into one mark, the rows between left out of it', () => {
-        const model = computeTimelineModel(household(), ['kvido', 'radegunda', 'soused', 'bohuchval'], TODAY_YEAR);
+        const model = computeTimelineModel(household(), ['sudivoj', 'radegunda', 'soused', 'bohuchval'], TODAY_YEAR);
         expect(model.shared).toEqual([{ shareId: 'sh_c1921', year: 1921, type: 'census', rows: [0, 1, 3] }]);
         const svg = buildTimelineSvg(model, { esc, width: 1440, rowH: 30, labelW: 160, mode: 'screen' });
         // One mark of two runs (rows 0–1 and 3) joined by a line past the neighbour, the label once.
         expect(svg.match(/class="tl-shared-mark"/g)).toHaveLength(2);
         expect(svg.match(/class="tl-shared-link"/g)).toHaveLength(1);
         expect(svg.match(/class="tl-shared-label"/g)).toHaveLength(1);
-        expect(svg).toContain('<title>Census 1921: Kvido X, Radegunda X, Bohuchval X</title>');
+        expect(svg).toContain('<title>Census 1921: Sudivoj X, Radegunda X, Bohuchval X</title>');
         expect(svg).toMatch(/class="tl-shared-label"[^>]*>Census 1921<\/text>/);
         // No dot of the census left in the rows; the military service keeps its dot.
         expect(svg).not.toContain('<title>Census (1921)</title>');
@@ -527,7 +527,7 @@ describe('a shared event on the family timeline (spec 085 §2e)', () => {
     });
 
     it('only the persons with a row count: one of them alone keeps the dot', () => {
-        const model = computeTimelineModel(household(), ['kvido', 'soused'], TODAY_YEAR);
+        const model = computeTimelineModel(household(), ['sudivoj', 'soused'], TODAY_YEAR);
         expect(model.shared).toEqual([]);
         const svg = buildTimelineSvg(model, { esc, width: 1440, rowH: 30, labelW: 160, mode: 'screen' });
         expect(svg).not.toContain('tl-shared');
@@ -537,7 +537,7 @@ describe('a shared event on the family timeline (spec 085 §2e)', () => {
     it('a living person under privacy has no events, so is not in the mark (the poster)', () => {
         const d = household();
         delete d.persons['radegunda' as PersonId].events;
-        const model = computeTimelineModel(d, ['kvido', 'radegunda', 'bohuchval'], TODAY_YEAR);
+        const model = computeTimelineModel(d, ['sudivoj', 'radegunda', 'bohuchval'], TODAY_YEAR);
         expect(model.shared[0].rows).toEqual([0, 2]);
         const poster = buildTimelinePosterSvg(model, { esc }, { treeName: 'T' });
         expect(poster).toContain('.tl-shared-mark{fill:#3f6b4f');

@@ -38,33 +38,33 @@ import {
 import { strings, getStringsForLang } from '../strings.js';
 
 const TREE = 'shared-events' as TreeId;
-const KVIDO = toPersonId('p_kvido');
+const SUDIVOJ = toPersonId('p_sudivoj');
 const RADEGUNDA = toPersonId('p_radegunda');
 const BOHUCHVAL = toPersonId('p_bohuchval');
 const ZBYHNEV = toPersonId('p_zbyhnev');
 const MLCOCH = toPersonId('p_mlcoch');
-const UNION = toPartnershipId('u_kvido_radegunda');
+const UNION = toPartnershipId('u_sudivoj_radegunda');
 
 function person(id: PersonId, firstName: string, lastName: string, gender: 'male' | 'female', extra: Partial<Person> = {}): Person {
     return { id, firstName, lastName, gender, isPlaceholder: false, partnerships: [], parentIds: [], childIds: [], ...extra };
 }
 
-/** A household of four and a neighbour; Kvido has the census of 1921 alone, with its source and the age. */
+/** A household of four and a neighbour; Sudivoj has the census of 1921 alone, with its source and the age. */
 function household(): StromData {
     return {
         version: STROM_DATA_VERSION,
         persons: {
-            [KVIDO]: person(KVIDO, 'Kvido', 'Hurdálek', 'male', { birthDate: '1879', partnerships: [UNION], childIds: [BOHUCHVAL, ZBYHNEV],
+            [SUDIVOJ]: person(SUDIVOJ, 'Sudivoj', 'Hurdálek', 'male', { birthDate: '1879', partnerships: [UNION], childIds: [BOHUCHVAL, ZBYHNEV],
                 events: [{ id: 'ev_1', type: 'census', date: '1921-02-15', place: 'Dolní Smyšlenice', address: 'č. 14', age: '42',
                     sourceIds: ['s1'], citationQuay: { sourceIds: { s1: 3 } }, status: 'proven' }] }),
             [RADEGUNDA]: person(RADEGUNDA, 'Radegunda', 'Hurdálková', 'female', { birthDate: '1883', partnerships: [UNION], childIds: [BOHUCHVAL, ZBYHNEV] }),
-            [BOHUCHVAL]: person(BOHUCHVAL, 'Bohuchval', 'Hurdálek', 'male', { birthDate: '1906', parentIds: [KVIDO, RADEGUNDA],
+            [BOHUCHVAL]: person(BOHUCHVAL, 'Bohuchval', 'Hurdálek', 'male', { birthDate: '1906', parentIds: [SUDIVOJ, RADEGUNDA],
                 events: [{ id: 'ev_bapt_b', type: 'baptism', date: '1906-05-02', participants: [{ id: 'pt1', role: 'godparent', personId: MLCOCH }] }] }),
-            [ZBYHNEV]: person(ZBYHNEV, 'Zbyhněv', 'Hurdálek', 'male', { birthDate: '1910', parentIds: [KVIDO, RADEGUNDA] }),
+            [ZBYHNEV]: person(ZBYHNEV, 'Zbyhněv', 'Hurdálek', 'male', { birthDate: '1910', parentIds: [SUDIVOJ, RADEGUNDA] }),
             [MLCOCH]: person(MLCOCH, 'Bohuchval', 'Mlčoch', 'male', { birthDate: '1870' }),
         },
         partnerships: {
-            [UNION]: { id: UNION, person1Id: KVIDO, person2Id: RADEGUNDA, childIds: [BOHUCHVAL, ZBYHNEV], status: 'married',
+            [UNION]: { id: UNION, person1Id: SUDIVOJ, person2Id: RADEGUNDA, childIds: [BOHUCHVAL, ZBYHNEV], status: 'married',
                 participants: [{ id: 'pt2', role: 'witness', personId: MLCOCH }] },
         },
         sources: { s1: { id: 's1', title: 'Census 1921, Dolní Smyšlenice', quality: 2 } },
@@ -90,9 +90,9 @@ const data = (): StromData => DataManager.getData();
 const eventsOf = (pid: PersonId): LifeEvent[] => data().persons[pid]?.events ?? [];
 const censusOf = (pid: PersonId): LifeEvent | undefined => eventsOf(pid).find(e => e.type === 'census');
 
-/** Kvido's census shared with Radegunda and both sons, an age each. */
+/** Sudivoj's census shared with Radegunda and both sons, an age each. */
 function shareCensus(): string {
-    const res = DataManager.saveSharedEvent(KVIDO, 'ev_1', {
+    const res = DataManager.saveSharedEvent(SUDIVOJ, 'ev_1', {
         common: {},
         own: new Map([[RADEGUNDA, { age: '38' }], [BOHUCHVAL, { age: '15' }], [ZBYHNEV, { age: '11', shareRole: 'son' }]]),
         add: [RADEGUNDA, BOHUCHVAL, ZBYHNEV],
@@ -145,7 +145,7 @@ describe('DataManager: a shared event is written to every copy in one step', () 
     it('three persons added to a census: four copies of one share, sources and citations at all, each its own age', () => {
         const shareId = shareCensus();
         expect(shareId).toMatch(/^[A-Za-z0-9]{4,16}$/);
-        for (const pid of [KVIDO, RADEGUNDA, BOHUCHVAL, ZBYHNEV]) {
+        for (const pid of [SUDIVOJ, RADEGUNDA, BOHUCHVAL, ZBYHNEV]) {
             const ev = censusOf(pid)!;
             expect(ev.shareId).toBe(shareId);
             expect(ev.date).toBe('1921-02-15');
@@ -154,17 +154,17 @@ describe('DataManager: a shared event is written to every copy in one step', () 
             expect(ev.sourceIds).toEqual(['s1']);
             expect(ev.citationQuay).toEqual({ sourceIds: { s1: 3 } });
         }
-        expect(eventsOf(KVIDO).map(e => e.age)).toEqual(['42']);
+        expect(eventsOf(SUDIVOJ).map(e => e.age)).toEqual(['42']);
         expect(censusOf(RADEGUNDA)!.age).toBe('38');
         expect(censusOf(ZBYHNEV)!.age).toBe('11');
         expect(censusOf(ZBYHNEV)!.shareRole).toBe('son');
         // A new copy: a new id, entered by hand (no status of the research).
         expect(censusOf(RADEGUNDA)!.id).not.toBe('ev_1');
         expect(censusOf(RADEGUNDA)!.status).toBeUndefined();
-        expect(censusOf(KVIDO)!.status).toBe('proven');
+        expect(censusOf(SUDIVOJ)!.status).toBe('proven');
         // One undo step takes all of it back.
         DataManager.undo();
-        expect(censusOf(KVIDO)!.shareId).toBeUndefined();
+        expect(censusOf(SUDIVOJ)!.shareId).toBeUndefined();
         expect(censusOf(RADEGUNDA)).toBeUndefined();
         expect(censusOf(ZBYHNEV)).toBeUndefined();
     });
@@ -172,36 +172,36 @@ describe('DataManager: a shared event is written to every copy in one step', () 
     it('a changed date goes to every copy; one undo brings every copy back', () => {
         shareCensus();
         const res = DataManager.saveSharedEvent(RADEGUNDA, censusOf(RADEGUNDA)!.id, { common: { date: '1921-02-16' } });
-        expect(res?.personIds).toEqual([KVIDO, RADEGUNDA, BOHUCHVAL, ZBYHNEV]);
-        for (const pid of [KVIDO, RADEGUNDA, BOHUCHVAL, ZBYHNEV]) expect(censusOf(pid)!.date).toBe('1921-02-16');
+        expect(res?.personIds).toEqual([SUDIVOJ, RADEGUNDA, BOHUCHVAL, ZBYHNEV]);
+        for (const pid of [SUDIVOJ, RADEGUNDA, BOHUCHVAL, ZBYHNEV]) expect(censusOf(pid)!.date).toBe('1921-02-16');
         // The ages stay each copy's own.
-        expect(censusOf(KVIDO)!.age).toBe('42');
+        expect(censusOf(SUDIVOJ)!.age).toBe('42');
         DataManager.undo();
-        for (const pid of [KVIDO, RADEGUNDA, BOHUCHVAL, ZBYHNEV]) expect(censusOf(pid)!.date).toBe('1921-02-15');
+        for (const pid of [SUDIVOJ, RADEGUNDA, BOHUCHVAL, ZBYHNEV]) expect(censusOf(pid)!.date).toBe('1921-02-15');
     });
 
     it('a field left out is not written: a copy that differs keeps its value', () => {
         shareCensus();
         censusOf(BOHUCHVAL)!.note = 'listed as a pupil';
-        DataManager.saveSharedEvent(KVIDO, 'ev_1', { common: { place: 'Horní Smyšlenice' } });
+        DataManager.saveSharedEvent(SUDIVOJ, 'ev_1', { common: { place: 'Horní Smyšlenice' } });
         expect(censusOf(BOHUCHVAL)!.note).toBe('listed as a pupil');
         expect(censusOf(BOHUCHVAL)!.place).toBe('Horní Smyšlenice');
     });
 
     it('removed: that copy goes, the others stay as they were', () => {
         const shareId = shareCensus();
-        const before = structuredClone([censusOf(KVIDO), censusOf(RADEGUNDA), censusOf(ZBYHNEV)]);
-        DataManager.saveSharedEvent(KVIDO, 'ev_1', { common: {}, remove: [BOHUCHVAL] });
+        const before = structuredClone([censusOf(SUDIVOJ), censusOf(RADEGUNDA), censusOf(ZBYHNEV)]);
+        DataManager.saveSharedEvent(SUDIVOJ, 'ev_1', { common: {}, remove: [BOHUCHVAL] });
         expect(censusOf(BOHUCHVAL)).toBeUndefined();
-        expect([censusOf(KVIDO), censusOf(RADEGUNDA), censusOf(ZBYHNEV)]).toEqual(before);
-        expect(censusOf(KVIDO)!.shareId).toBe(shareId);
+        expect([censusOf(SUDIVOJ), censusOf(RADEGUNDA), censusOf(ZBYHNEV)]).toEqual(before);
+        expect(censusOf(SUDIVOJ)!.shareId).toBe(shareId);
         // The baptism of Bohuchval is untouched.
         expect(eventsOf(BOHUCHVAL).map(e => e.type)).toEqual(['baptism']);
     });
 
     it('separated: the copy loses the share and keeps its values from before the edit', () => {
         shareCensus();
-        DataManager.saveSharedEvent(KVIDO, 'ev_1', { common: { date: '1921-03-01' }, separate: [ZBYHNEV] });
+        DataManager.saveSharedEvent(SUDIVOJ, 'ev_1', { common: { date: '1921-03-01' }, separate: [ZBYHNEV] });
         const z = censusOf(ZBYHNEV)!;
         expect(z.shareId).toBeUndefined();
         expect(z.shareRole).toBeUndefined();
@@ -211,21 +211,21 @@ describe('DataManager: a shared event is written to every copy in one step', () 
     });
 
     it('one copy left: the share is gone, an ordinary event', () => {
-        DataManager.saveSharedEvent(KVIDO, 'ev_1', { common: {}, add: [RADEGUNDA] });
-        expect(censusOf(KVIDO)!.shareId).toBeDefined();
-        const res = DataManager.saveSharedEvent(KVIDO, 'ev_1', { common: {}, remove: [RADEGUNDA] });
-        expect(res).toEqual({ shareId: null, personIds: [KVIDO] });
-        expect(censusOf(KVIDO)!.shareId).toBeUndefined();
+        DataManager.saveSharedEvent(SUDIVOJ, 'ev_1', { common: {}, add: [RADEGUNDA] });
+        expect(censusOf(SUDIVOJ)!.shareId).toBeDefined();
+        const res = DataManager.saveSharedEvent(SUDIVOJ, 'ev_1', { common: {}, remove: [RADEGUNDA] });
+        expect(res).toEqual({ shareId: null, personIds: [SUDIVOJ] });
+        expect(censusOf(SUDIVOJ)!.shareId).toBeUndefined();
         expect(censusOf(RADEGUNDA)).toBeUndefined();
     });
 
     it('a type that cannot be shared is refused for two copies; birth and a locked person too', () => {
         shareCensus();
-        expect(DataManager.saveSharedEvent(KVIDO, 'ev_1', { common: { type: 'baptism' } })).toBeNull();
-        expect(DataManager.updateSharedCommonField(KVIDO, 'ev_1', 'type', 'baptism')).toBe(0);
+        expect(DataManager.saveSharedEvent(SUDIVOJ, 'ev_1', { common: { type: 'baptism' } })).toBeNull();
+        expect(DataManager.updateSharedCommonField(SUDIVOJ, 'ev_1', 'type', 'baptism')).toBe(0);
         data().persons[RADEGUNDA].isLocked = true;
-        expect(DataManager.saveSharedEvent(KVIDO, 'ev_1', { common: { date: '1921' } })).toBeNull();
-        expect(censusOf(KVIDO)!.date).toBe('1921-02-15');
+        expect(DataManager.saveSharedEvent(SUDIVOJ, 'ev_1', { common: { date: '1921' } })).toBeNull();
+        expect(censusOf(SUDIVOJ)!.date).toBe('1921-02-15');
     });
 
     it('separateFromShared: own edits go to that copy alone; the rest keep the share', () => {
@@ -233,25 +233,25 @@ describe('DataManager: a shared event is written to every copy in one step', () 
         expect(DataManager.separateFromShared(RADEGUNDA, censusOf(RADEGUNDA)!.id, { note: 'away at the time' })).toBe(true);
         expect(censusOf(RADEGUNDA)!.shareId).toBeUndefined();
         expect(censusOf(RADEGUNDA)!.note).toBe('away at the time');
-        expect(censusOf(KVIDO)!.note).toBeUndefined();
-        expect(censusOf(KVIDO)!.shareId).toBe(shareId);
+        expect(censusOf(SUDIVOJ)!.note).toBeUndefined();
+        expect(censusOf(SUDIVOJ)!.shareId).toBe(shareId);
     });
 
     it('removeFromShared, then the last but one: the share goes with it', () => {
-        DataManager.saveSharedEvent(KVIDO, 'ev_1', { common: {}, add: [RADEGUNDA] });
+        DataManager.saveSharedEvent(SUDIVOJ, 'ev_1', { common: {}, add: [RADEGUNDA] });
         expect(DataManager.removeFromShared(RADEGUNDA, censusOf(RADEGUNDA)!.id)).toBe(true);
         expect(censusOf(RADEGUNDA)).toBeUndefined();
-        expect(censusOf(KVIDO)!.shareId).toBeUndefined();
+        expect(censusOf(SUDIVOJ)!.shareId).toBeUndefined();
         DataManager.undo();
-        expect(censusOf(RADEGUNDA)!.shareId).toBe(censusOf(KVIDO)!.shareId);
+        expect(censusOf(RADEGUNDA)!.shareId).toBe(censusOf(SUDIVOJ)!.shareId);
     });
 
     it('deleteSharedForAll: every copy goes in one step', () => {
         const shareId = shareCensus();
         expect(DataManager.deleteSharedForAll(shareId)).toBe(4);
-        for (const pid of [KVIDO, RADEGUNDA, BOHUCHVAL, ZBYHNEV]) expect(censusOf(pid)).toBeUndefined();
+        for (const pid of [SUDIVOJ, RADEGUNDA, BOHUCHVAL, ZBYHNEV]) expect(censusOf(pid)).toBeUndefined();
         DataManager.undo();
-        for (const pid of [KVIDO, RADEGUNDA, BOHUCHVAL, ZBYHNEV]) expect(censusOf(pid)!.shareId).toBe(shareId);
+        for (const pid of [SUDIVOJ, RADEGUNDA, BOHUCHVAL, ZBYHNEV]) expect(censusOf(pid)!.shareId).toBe(shareId);
     });
 
     it('unify and separate copies', () => {
@@ -262,38 +262,38 @@ describe('DataManager: a shared event is written to every copy in one step', () 
         expect(findDivergentShares(data())).toHaveLength(0);
         expect(DataManager.separateCopies(shareId, [BOHUCHVAL, ZBYHNEV])).toBe(2);
         expect(censusOf(BOHUCHVAL)!.shareId).toBeUndefined();
-        expect(censusOf(KVIDO)!.shareId).toBe(shareId);
+        expect(censusOf(SUDIVOJ)!.shareId).toBe(shareId);
         expect(DataManager.separateCopies(shareId, [RADEGUNDA])).toBe(1);
-        // Kvido alone: no share left.
-        expect(censusOf(KVIDO)!.shareId).toBeUndefined();
+        // Sudivoj alone: no share left.
+        expect(censusOf(SUDIVOJ)!.shareId).toBeUndefined();
     });
 
     it('updateSharedCommonField writes every copy of a shared event, one of an event alone', () => {
         shareCensus();
         expect(DataManager.updateSharedCommonField(BOHUCHVAL, censusOf(BOHUCHVAL)!.id, 'address', 'č. 15')).toBe(4);
-        for (const pid of [KVIDO, RADEGUNDA, BOHUCHVAL, ZBYHNEV]) expect(censusOf(pid)!.address).toBe('č. 15');
+        for (const pid of [SUDIVOJ, RADEGUNDA, BOHUCHVAL, ZBYHNEV]) expect(censusOf(pid)!.address).toBe('č. 15');
         expect(DataManager.updateSharedCommonField(BOHUCHVAL, censusOf(BOHUCHVAL)!.id, 'sourceIds', [])).toBe(4);
-        expect(censusOf(KVIDO)!.sourceIds).toBeUndefined();
+        expect(censusOf(SUDIVOJ)!.sourceIds).toBeUndefined();
         DataManager.undo();
-        expect(censusOf(KVIDO)!.sourceIds).toEqual(['s1']);
+        expect(censusOf(SUDIVOJ)!.sourceIds).toEqual(['s1']);
         expect(DataManager.updateSharedCommonField(BOHUCHVAL, 'ev_bapt_b', 'date', '1906-05-03')).toBe(1);
         expect(eventsOf(BOHUCHVAL).find(e => e.id === 'ev_bapt_b')!.date).toBe('1906-05-03');
     });
 
     it('deleting a person takes its copies; a share left with one copy goes; the list for the confirmation', () => {
-        DataManager.saveSharedEvent(KVIDO, 'ev_1', { common: {}, add: [ZBYHNEV] });
+        DataManager.saveSharedEvent(SUDIVOJ, 'ev_1', { common: {}, add: [ZBYHNEV] });
         const shared = DataManager.personSharedEvents(ZBYHNEV);
-        expect(shared).toEqual([expect.objectContaining({ type: 'census', year: 1921, otherPersonIds: [KVIDO] })]);
+        expect(shared).toEqual([expect.objectContaining({ type: 'census', year: 1921, otherPersonIds: [SUDIVOJ] })]);
         expect(DataManager.personSharedEvents(RADEGUNDA)).toEqual([]);
         DataManager.deletePerson(ZBYHNEV);
-        expect(censusOf(KVIDO)!.shareId).toBeUndefined();
-        expect(censusOf(KVIDO)!.date).toBe('1921-02-15');
+        expect(censusOf(SUDIVOJ)!.shareId).toBeUndefined();
+        expect(censusOf(SUDIVOJ)!.date).toBe('1921-02-15');
     });
 
     it('deleting one of four keeps the share of the other three', () => {
         const shareId = shareCensus();
         DataManager.deletePerson(ZBYHNEV);
-        for (const pid of [KVIDO, RADEGUNDA, BOHUCHVAL]) expect(censusOf(pid)!.shareId).toBe(shareId);
+        for (const pid of [SUDIVOJ, RADEGUNDA, BOHUCHVAL]) expect(censusOf(pid)!.shareId).toBe(shareId);
     });
 
     it('newShareId is unique in the open tree', () => {
@@ -310,8 +310,8 @@ describe('the index of copies and participants', () => {
     it('lists the copies in the order persons were added and the participants of every kind of event', () => {
         const shareId = shareCensus();
         const index = DataManager.getSharedEventIndex();
-        expect(index.shares.get(shareId)!.map(c => c.personId)).toEqual([KVIDO, RADEGUNDA, BOHUCHVAL, ZBYHNEV]);
-        expect(sharedWith(index, BOHUCHVAL, censusOf(BOHUCHVAL)!.id)).toEqual([KVIDO, RADEGUNDA, ZBYHNEV]);
+        expect(index.shares.get(shareId)!.map(c => c.personId)).toEqual([SUDIVOJ, RADEGUNDA, BOHUCHVAL, ZBYHNEV]);
+        expect(sharedWith(index, BOHUCHVAL, censusOf(BOHUCHVAL)!.id)).toEqual([SUDIVOJ, RADEGUNDA, ZBYHNEV]);
         expect(sharedWith(index, BOHUCHVAL, 'ev_bapt_b')).toEqual([]);
         expect(index.participations.get(MLCOCH)).toEqual([
             { ownerPersonId: BOHUCHVAL, eventId: 'ev_bapt_b', eventType: 'baptism', role: 'godparent', participantId: 'pt1' },
@@ -319,27 +319,27 @@ describe('the index of copies and participants', () => {
         ]);
         // Built once per state of the data.
         expect(DataManager.getSharedEventIndex()).toBe(index);
-        DataManager.updateSharedCommonField(KVIDO, 'ev_1', 'note', 'x');
+        DataManager.updateSharedCommonField(SUDIVOJ, 'ev_1', 'note', 'x');
         expect(DataManager.getSharedEventIndex()).not.toBe(index);
     });
 
     it('without an order of addition (an imported file), the persons\' order in the data', () => {
         const d = household();
         d.persons[ZBYHNEV].events = [{ id: 'I5-e1', type: 'residence', place: 'Dolní Smyšlenice', shareId: 'AB12' }];
-        d.persons[KVIDO].events = [{ id: 'I1-e1', type: 'residence', place: 'Dolní Smyšlenice', shareId: 'AB12' }];
-        expect(buildSharedEventIndex(d).shares.get('AB12')!.map(c => c.personId)).toEqual([KVIDO, ZBYHNEV]);
+        d.persons[SUDIVOJ].events = [{ id: 'I1-e1', type: 'residence', place: 'Dolní Smyšlenice', shareId: 'AB12' }];
+        expect(buildSharedEventIndex(d).shares.get('AB12')!.map(c => c.personId)).toEqual([SUDIVOJ, ZBYHNEV]);
     });
 
     it('two same copies at one person are one entry; a share of one person alone is none', () => {
         const d = household();
         const copy: LifeEvent = { id: 'e1', type: 'census', date: '1921', place: 'Dolní Smyšlenice', shareId: 'AB12' };
-        d.persons[KVIDO].events = [copy, { ...copy, id: 'e2', age: '41' }];
+        d.persons[SUDIVOJ].events = [copy, { ...copy, id: 'e2', age: '41' }];
         const index = buildSharedEventIndex(d);
         expect(index.shares.has('AB12')).toBe(false);
         expect(findDivergentShares(d)).toEqual([]);
         d.persons[RADEGUNDA].events = [{ ...copy, id: 'e3' }];
-        expect(buildSharedEventIndex(d).shares.get('AB12')).toEqual([{ personId: KVIDO, eventId: 'e1' }, { personId: RADEGUNDA, eventId: 'e3' }]);
-        expect(personSharedEvents(d, buildSharedEventIndex(d), KVIDO)).toHaveLength(1);
+        expect(buildSharedEventIndex(d).shares.get('AB12')).toEqual([{ personId: SUDIVOJ, eventId: 'e1' }, { personId: RADEGUNDA, eventId: 'e3' }]);
+        expect(personSharedEvents(d, buildSharedEventIndex(d), SUDIVOJ)).toHaveLength(1);
     });
 });
 
@@ -349,7 +349,7 @@ describe('findDivergentShares', () => {
     function threeCopies(): StromData {
         const d = household();
         const base: LifeEvent = { id: 'x', type: 'residence', date: '1925', place: 'Dolní Smyšlenice', sourceIds: ['s1', 's2'], shareId: 'RES1' };
-        d.persons[KVIDO].events = [{ ...base, id: 'k', age: '46', status: 'proven' }];
+        d.persons[SUDIVOJ].events = [{ ...base, id: 'k', age: '46', status: 'proven' }];
         d.persons[RADEGUNDA].events = [{ ...base, id: 'r', sourceIds: ['s2', 's1'], shareRole: 'wife', age: '42' }];
         d.persons[BOHUCHVAL].events = [{ ...base, id: 'b' }];
         return d;
@@ -364,9 +364,9 @@ describe('findDivergentShares', () => {
         d.persons[BOHUCHVAL].events![0].place = 'Horní Smyšlenice';
         expect(findDivergentShares(d)).toEqual([{
             shareId: 'RES1',
-            copies: [{ personId: KVIDO, eventId: 'k' }, { personId: RADEGUNDA, eventId: 'r' }, { personId: BOHUCHVAL, eventId: 'b' }],
+            copies: [{ personId: SUDIVOJ, eventId: 'k' }, { personId: RADEGUNDA, eventId: 'r' }, { personId: BOHUCHVAL, eventId: 'b' }],
             fields: [{ field: 'place', values: [
-                { value: 'Dolní Smyšlenice', copies: [{ personId: KVIDO, eventId: 'k' }, { personId: RADEGUNDA, eventId: 'r' }] },
+                { value: 'Dolní Smyšlenice', copies: [{ personId: SUDIVOJ, eventId: 'k' }, { personId: RADEGUNDA, eventId: 'r' }] },
                 { value: 'Horní Smyšlenice', copies: [{ personId: BOHUCHVAL, eventId: 'b' }] },
             ] }],
         }]);
@@ -374,7 +374,7 @@ describe('findDivergentShares', () => {
 
     it('more fields differ: each of them (date, note, sources, citation QUAY)', () => {
         const d = threeCopies();
-        d.persons[KVIDO].events![0].date = '1926';
+        d.persons[SUDIVOJ].events![0].date = '1926';
         d.persons[RADEGUNDA].events![0].note = 'by the mill';
         d.persons[BOHUCHVAL].events![0].sourceIds = ['s1'];
         d.persons[RADEGUNDA].events![0].citationQuay = { sourceIds: { s1: 1 } };
@@ -385,11 +385,11 @@ describe('findDivergentShares', () => {
     it('two copies at one person that differ are told like any other', () => {
         const d = household();
         const copy: LifeEvent = { id: 'e1', type: 'census', date: '1921', shareId: 'AB12' };
-        d.persons[KVIDO].events = [copy, { ...copy, id: 'e2', date: '1920' }];
+        d.persons[SUDIVOJ].events = [copy, { ...copy, id: 'e2', date: '1920' }];
         const [found] = findDivergentShares(d);
         expect(found.fields).toEqual([{ field: 'date', values: [
-            { value: '1921', copies: [{ personId: KVIDO, eventId: 'e1' }] },
-            { value: '1920', copies: [{ personId: KVIDO, eventId: 'e2' }] },
+            { value: '1921', copies: [{ personId: SUDIVOJ, eventId: 'e1' }] },
+            { value: '1920', copies: [{ personId: SUDIVOJ, eventId: 'e2' }] },
         ] }]);
     });
 });
@@ -399,7 +399,7 @@ describe('findDivergentShares', () => {
 describe('data version 20: cleaning on load', () => {
     it('an invalid share id, one of a type that is not shared and one only one copy has go; valid ones stay', () => {
         const d = household();
-        d.persons[KVIDO].events = [
+        d.persons[SUDIVOJ].events = [
             { id: 'a', type: 'census', date: '1921', shareId: 'bad id!' },
             { id: 'b', type: 'baptism', date: '1879', shareId: 'BAPT1' },
             { id: 'c', type: 'residence', date: '1930', shareId: 'LONE1', shareRole: 'head' },
@@ -410,7 +410,7 @@ describe('data version 20: cleaning on load', () => {
             { id: 'f', type: 'residence', date: '1925', shareId: 'RES1', shareRole: 'wife' },
         ];
         const loaded = migrateData(d);
-        const k = loaded.persons[KVIDO].events!;
+        const k = loaded.persons[SUDIVOJ].events!;
         expect(k.map(e => e.shareId)).toEqual([undefined, undefined, undefined, 'RES1']);
         expect(k[2].shareRole).toBeUndefined();
         expect(k[3].shareRole).toBeUndefined();
@@ -424,20 +424,20 @@ describe('data version 20: cleaning on load', () => {
             { id: 'g2', type: 'godparent', roleAt: { role: 'godparent', personId: toPersonId('p_gone'), partnershipId: 'u_gone' as PartnershipId, eventType: 'baptism' } },
             { id: 'g3', type: 'weddingWitness', roleAt: { role: 'witness', partnershipId: UNION, eventType: 'marriage', eventId: MARRIAGE_EVENT_ID } },
         ];
-        d.persons[BOHUCHVAL].events![0].participants![0].linkRejected = [KVIDO, toPersonId('p_gone')];
+        d.persons[BOHUCHVAL].events![0].participants![0].linkRejected = [SUDIVOJ, toPersonId('p_gone')];
         const loaded = migrateData(d);
         expect(loaded.persons[MLCOCH].events!.map(e => e.roleAt)).toEqual([
             { role: 'other', personId: BOHUCHVAL, eventType: 'baptism', eventId: 'ev_bapt_b' },
             { role: 'godparent', eventType: 'baptism' },
             { role: 'witness', partnershipId: UNION, eventType: 'marriage', eventId: MARRIAGE_EVENT_ID },
         ]);
-        expect(loaded.persons[BOHUCHVAL].events![0].participants![0].linkRejected).toEqual([KVIDO]);
+        expect(loaded.persons[BOHUCHVAL].events![0].participants![0].linkRejected).toEqual([SUDIVOJ]);
     });
 
     it('a tree of version 19 with the same residence at two persons and godparents by name is not changed', () => {
         const d = household();
         d.version = 19;
-        d.persons[KVIDO].events!.push({ id: 'r1', type: 'residence', date: '1925', place: 'Dolní Smyšlenice', address: 'č. 14' });
+        d.persons[SUDIVOJ].events!.push({ id: 'r1', type: 'residence', date: '1925', place: 'Dolní Smyšlenice', address: 'č. 14' });
         d.persons[RADEGUNDA].events = [{ id: 'r2', type: 'residence', date: '1925', place: 'Dolní Smyšlenice', address: 'č. 14' }];
         d.persons[ZBYHNEV].events = [{ id: 'bz', type: 'baptism', date: '1910', participants: [{ id: 'pt9', role: 'godparent', name: 'Bohuchval Mlčoch' }] }];
         const before = structuredClone(d);
@@ -466,7 +466,7 @@ describe('data version 20: a stored tree of an older version', () => {
     it('is backed up first, saved once and unchanged but for its version', async () => {
         const d = household();
         d.version = 19;
-        d.persons[KVIDO].events!.push({ id: 'r1', type: 'residence', date: '1925', place: 'Dolní Smyšlenice' });
+        d.persons[SUDIVOJ].events!.push({ id: 'r1', type: 'residence', date: '1925', place: 'Dolní Smyšlenice' });
         d.persons[RADEGUNDA].events = [{ id: 'r2', type: 'residence', date: '1925', place: 'Dolní Smyšlenice' }];
         d.persons[ZBYHNEV].events = [{ id: 'bz', type: 'baptism', participants: [{ id: 'pt9', role: 'godparent', name: 'Bohuchval Mlčoch' }] }];
         const before = structuredClone(d);
@@ -495,7 +495,7 @@ describe('data version 20: a stored tree of an older version', () => {
 describe('the new fields survive every way a tree travels', () => {
     function sharedTree(): StromData {
         const d = household();
-        d.persons[KVIDO].events![0].shareId = 'SH7K2QX';
+        d.persons[SUDIVOJ].events![0].shareId = 'SH7K2QX';
         d.persons[RADEGUNDA].events = [{ id: 'ev_2', type: 'census', date: '1921-02-15', place: 'Dolní Smyšlenice', shareId: 'SH7K2QX', shareRole: 'wife' }];
         d.persons[MLCOCH].events = [{ id: 'g', type: 'godparent', roleAt: { role: 'godparent', personId: BOHUCHVAL, eventType: 'baptism', eventId: 'ev_bapt_b' } }];
         d.persons[ZBYHNEV].events = [{ id: 'bz', type: 'baptism', participants: [{ id: 'pt9', role: 'godparent', name: 'Bohuchval Mlčoch', linkRejected: [MLCOCH] }] }];
@@ -522,7 +522,7 @@ describe('the new fields survive every way a tree travels', () => {
     it('undo restores them', () => {
         reset(sharedTree());
         const before = structuredClone(DataManager.getData().persons);
-        DataManager.updateSharedCommonField(KVIDO, 'ev_1', 'place', 'Horní Smyšlenice');
+        DataManager.updateSharedCommonField(SUDIVOJ, 'ev_1', 'place', 'Horní Smyšlenice');
         DataManager.undo();
         expect(DataManager.getData().persons).toEqual(before);
     });

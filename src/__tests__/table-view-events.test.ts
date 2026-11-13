@@ -386,7 +386,7 @@ describe('a shared event (spec 085 §4, 4a)', () => {
     /** A census of four by its share id; the neighbours' census alike in every field but another share. */
     function household(extra = 0): StromData {
         const persons: Record<string, unknown> = {
-            k: person('k', 'Kvido', 'Hurdálek', 'male', '1879-01-10', [{ id: 'ck', ...census, shareId: 'sh_a', age: '42' }]),
+            k: person('k', 'Sudivoj', 'Hurdálek', 'male', '1879-01-10', [{ id: 'ck', ...census, shareId: 'sh_a', age: '42' }]),
             r: person('r', 'Radegunda', 'Hurdálková', 'female', '1883-05-01', [{ id: 'cr', ...census, shareId: 'sh_a' }]),
             b: person('b', 'Bohuchval', 'Hurdálek', 'male', '1906-03-01', [{ id: 'cb', ...census, shareId: 'sh_a', age: '15' }]),
             z: person('z', 'Zbyhněv', 'Hurdálek', 'male', '1910-07-01', [{ id: 'cz', ...census, shareId: 'sh_a', age: '11' }]),
@@ -394,7 +394,7 @@ describe('a shared event (spec 085 §4, 4a)', () => {
             n: person('n', 'Ludiše', 'Mlčochová', 'female', '1875-01-01', [{ id: 'cn', ...census, shareId: 'sh_b' }]),
         };
         for (let i = 0; i < extra; i++) {
-            persons[`x${i}`] = person(`x${i}`, `Kvido${i}`, 'Hurdálek', 'male', '1912-01-01', [{ id: `cx${i}`, ...census, shareId: 'sh_a' }]);
+            persons[`x${i}`] = person(`x${i}`, `Sudivoj${i}`, 'Hurdálek', 'male', '1912-01-01', [{ id: `cx${i}`, ...census, shareId: 'sh_a' }]);
         }
         return { persons, partnerships: {}, sources: { s1: { id: 's1', title: 'Soupis 1921' } } } as unknown as StromData;
     }
@@ -422,9 +422,9 @@ describe('a shared event (spec 085 §4, 4a)', () => {
         const m = model(household());
         const c = cell(m, 'l:k:ck', 'evWho');
         expect(c.shared).toEqual({ count: 4, more: 0 });
-        expect(c.names!.map(n => n.text)).toEqual(['Kvido', 'Radegunda', 'Bohuchval', 'Zbyhněv']);
+        expect(c.names!.map(n => n.text)).toEqual(['Sudivoj', 'Radegunda', 'Bohuchval', 'Zbyhněv']);
         expect(c.names![1].title).toBe('Radegunda Hurdálková');
-        expect(c.text).toBe('Kvido Hurdálek, Radegunda Hurdálková, Bohuchval Hurdálek, Zbyhněv Hurdálek');
+        expect(c.text).toBe('Sudivoj Hurdálek, Radegunda Hurdálková, Bohuchval Hurdálek, Zbyhněv Hurdálek');
         const html = cellInner(c, col('evWho'));
         expect(html).toContain('tv-shared-pill');
         expect(html).toContain('4 people');
@@ -436,7 +436,7 @@ describe('a shared event (spec 085 §4, 4a)', () => {
     it('a large household: the first two names and "+N", the badge with all', () => {
         const c = cell(model(household(7)), 'l:k:ck', 'evWho');
         expect(c.shared).toEqual({ count: 11, more: 9 });
-        expect(c.names!.map(n => n.text)).toEqual(['Kvido', 'Radegunda']);
+        expect(c.names!.map(n => n.text)).toEqual(['Sudivoj', 'Radegunda']);
         const html = cellInner(c, col('evWho'));
         expect(html).toContain('+9');
         expect(html).toContain('11 people');

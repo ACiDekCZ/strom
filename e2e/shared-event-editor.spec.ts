@@ -10,14 +10,14 @@ import { openApp, cardAction, personModal } from './helpers.js';
  * mode. Invented data, a fixed clock.
  */
 
-const KVIDO = 'p_kvido';
+const SUDIVOJ = 'p_sudivoj';
 const RADEGUNDA = 'p_radegunda';
 const BOHUCHVAL = 'p_bohuchval';
 const ZBYHNEV = 'p_zbyhnev';
 
 type Ev = { id: string; type: string; date?: string; shareId?: string; shareRole?: string; age?: string; place?: string; sourceIds?: string[] };
 
-/** Kvido's household in 1921; his father died in 1914. `long`: Kvido's name and the tree's name made 30+ characters. */
+/** Sudivoj's household in 1921; his father died in 1914. `long`: Sudivoj's name and the tree's name made 30+ characters. */
 async function tree(page: Page, opts: { width?: number; height?: number; long?: boolean } = {}): Promise<void> {
     await page.clock.setFixedTime(new Date('2026-11-13T10:30:00Z'));
     await page.setViewportSize({ width: opts.width ?? 1440, height: opts.height ?? 900 });
@@ -27,27 +27,27 @@ async function tree(page: Page, opts: { width?: number; height?: number; long?: 
             ({ id, firstName, lastName, gender, isPlaceholder: false, partnerships: [], parentIds: [], childIds: [], ...extra });
         await window.Strom.DataManager.importAsNewTree({
             persons: {
-                p_kvido: p('p_kvido', long ? 'Kvido Bonifác Drahoslav' : 'Kvido', long ? 'Hurdálek-Smyšlenický' : 'Hurdálek', 'male', {
+                p_sudivoj: p('p_sudivoj', long ? 'Sudivoj Bonifác Drahoslav' : 'Sudivoj', long ? 'Hurdálek-Smyšlenický' : 'Hurdálek', 'male', {
                     birthDate: '1879', partnerships: ['u1'], childIds: ['p_bohuchval', 'p_zbyhnev'], parentIds: ['p_drahomil'],
                     events: [{ id: 'ev_1', type: 'census', date: '1921-02-15', place: 'Dolní Smyšlenice', age: '42', sourceIds: ['s1'] },
                         { id: 'ev_2', type: 'baptism', date: '1879-03-01' }] }),
                 p_radegunda: p('p_radegunda', 'Radegunda', 'Hurdálková', 'female', { birthDate: '1883', partnerships: ['u1'], childIds: ['p_bohuchval', 'p_zbyhnev'] }),
-                p_bohuchval: p('p_bohuchval', 'Bohuchval', 'Hurdálek', 'male', { birthDate: '1906', parentIds: ['p_kvido', 'p_radegunda'] }),
-                p_zbyhnev: p('p_zbyhnev', 'Zbyhněv', 'Hurdálek', 'male', { birthDate: '1910', parentIds: ['p_kvido', 'p_radegunda'] }),
-                p_drahomil: p('p_drahomil', 'Drahomil', 'Hurdálek', 'male', { birthDate: '1850', deathDate: '1914-03-02', childIds: ['p_kvido'] }),
+                p_bohuchval: p('p_bohuchval', 'Bohuchval', 'Hurdálek', 'male', { birthDate: '1906', parentIds: ['p_sudivoj', 'p_radegunda'] }),
+                p_zbyhnev: p('p_zbyhnev', 'Zbyhněv', 'Hurdálek', 'male', { birthDate: '1910', parentIds: ['p_sudivoj', 'p_radegunda'] }),
+                p_drahomil: p('p_drahomil', 'Drahomil', 'Hurdálek', 'male', { birthDate: '1850', deathDate: '1914-03-02', childIds: ['p_sudivoj'] }),
             },
             partnerships: {
-                u1: { id: 'u1', person1Id: 'p_kvido', person2Id: 'p_radegunda', childIds: ['p_bohuchval', 'p_zbyhnev'], status: 'married' },
+                u1: { id: 'u1', person1Id: 'p_sudivoj', person2Id: 'p_radegunda', childIds: ['p_bohuchval', 'p_zbyhnev'], status: 'married' },
             },
             sources: { s1: { id: 's1', title: 'Census 1921, Dolní Smyšlenice' } },
         } as never, long ? 'Rodokmen Hurdálků ze Smyšlenic 1879' : 'Hurdálek');
     }, !!opts.long);
 }
 
-/** Kvido's census shared with the household (as the data layer saves it). */
+/** Sudivoj's census shared with the household (as the data layer saves it). */
 async function share(page: Page): Promise<void> {
     await page.evaluate(() => {
-        const ok = window.Strom.DataManager.saveSharedEvent('p_kvido' as never, 'ev_1', {
+        const ok = window.Strom.DataManager.saveSharedEvent('p_sudivoj' as never, 'ev_1', {
             common: {},
             own: new Map([['p_radegunda', { age: '38' }], ['p_zbyhnev', { shareRole: 'nephew' }]]) as never,
             add: ['p_radegunda', 'p_bohuchval', 'p_zbyhnev'] as never,
@@ -83,13 +83,13 @@ async function rowMenu(page: Page, editor: Locator, pid: string, item: string): 
 test.describe('shared event in the event editor', () => {
     test('three persons added to a census: one save at four copies, the toast, and Undo takes it back', async ({ page }) => {
         await tree(page);
-        await cardAction(page, 'Kvido', 'edit');
+        await cardAction(page, 'Sudivoj', 'edit');
         const modal = personModal(page);
         await modal.locator('#events-list .event-row', { hasText: 'Census' }).locator('.event-edit-btn').click();
         const editor = page.locator('#event-editor-modal');
         await expect(editor).toBeVisible();
         // Whose side: the name and birth year under the title; not shared yet: one quiet line.
-        await expect(editor.locator('#event-editor-subtitle')).toHaveText('Kvido Hurdálek · * 1879');
+        await expect(editor.locator('#event-editor-subtitle')).toHaveText('Sudivoj Hurdálek · * 1879');
         await expect(editor.locator('#event-shared-banner')).toBeHidden();
         const section = editor.locator('#event-shared-section');
         await expect(section).toHaveText(/Shared with\s*\+ Add a person/);
@@ -110,7 +110,7 @@ test.describe('shared event in the event editor', () => {
         await expect(editor.locator('.sw-row')).toHaveCount(3);
         await expect(editor.locator('.sw-title')).toHaveText('Shared with · 3');
         await expect(editor.locator('#event-shared-banner')).toHaveText('Shared by 4 people – changes apply to everyone');
-        await expect(editor.locator('#event-age-own')).toHaveText('only Kvido');
+        await expect(editor.locator('#event-age-own')).toHaveText('only Sudivoj');
         await row(editor, RADEGUNDA).locator('.sw-age-input').fill('38');
         // A role of its own: "Other role…" turns into a text field.
         await row(editor, ZBYHNEV).locator('.sw-role-select').selectOption('other');
@@ -129,11 +129,11 @@ test.describe('shared event in the event editor', () => {
         await expect(editor).toBeHidden();
         await expect(toast(page)).toHaveText('Census 1921: saved for 4 people.');
 
-        const kvido = (await census(page, KVIDO))!;
-        expect(kvido.shareId).toBeTruthy();
+        const sudivoj = (await census(page, SUDIVOJ))!;
+        expect(sudivoj.shareId).toBeTruthy();
         for (const pid of [RADEGUNDA, BOHUCHVAL, ZBYHNEV]) {
             const c = (await census(page, pid))!;
-            expect(c.shareId).toBe(kvido.shareId);
+            expect(c.shareId).toBe(sudivoj.shareId);
             expect(c.date).toBe('1921-02-15');
             expect(c.sourceIds).toEqual(['s1']);
         }
@@ -145,7 +145,7 @@ test.describe('shared event in the event editor', () => {
         await expect(modal).not.toHaveClass(/active/);
         await page.locator('.undo-toast-btn:visible').click();
         for (const pid of [RADEGUNDA, BOHUCHVAL, ZBYHNEV]) expect(await census(page, pid)).toBeNull();
-        expect((await census(page, KVIDO))!.shareId).toBeUndefined();
+        expect((await census(page, SUDIVOJ))!.shareId).toBeUndefined();
     });
 
     test('a date changed from another copy changes all; remove and separate; the last one left', async ({ page }) => {
@@ -159,9 +159,9 @@ test.describe('shared event in the event editor', () => {
         await editor.locator('#input-event-date').fill('1 Mar 1921');
         await editor.getByRole('button', { name: 'Save', exact: true }).click();
         await expect(toast(page)).toHaveText('Census 1921: saved for 4 people.');
-        for (const pid of [KVIDO, RADEGUNDA, BOHUCHVAL, ZBYHNEV]) expect((await census(page, pid))!.date).toBe('1921-03-01');
+        for (const pid of [SUDIVOJ, RADEGUNDA, BOHUCHVAL, ZBYHNEV]) expect((await census(page, pid))!.date).toBe('1921-03-01');
 
-        editor = await openFor(page, KVIDO);
+        editor = await openFor(page, SUDIVOJ);
         await rowMenu(page, editor, BOHUCHVAL, 'Remove from the event');
         await expect(editor.locator('#event-shared-banner')).toHaveText('Shared by 3 people – changes apply to everyone');
         await rowMenu(page, editor, ZBYHNEV, 'Separate (keep an own copy)');
@@ -176,20 +176,20 @@ test.describe('shared event in the event editor', () => {
         expect((await census(page, RADEGUNDA))!.place).toBe('Horní Smyšlenice');
 
         editor = await openFor(page, RADEGUNDA);
-        await rowMenu(page, editor, KVIDO, 'Remove from the event');
+        await rowMenu(page, editor, SUDIVOJ, 'Remove from the event');
         // No one else: back to the quiet line, no banner, at once.
         await expect(editor.locator('#event-shared-section .sw-add-link')).toBeVisible();
         await expect(editor.locator('#event-shared-banner')).toBeHidden();
         await editor.getByRole('button', { name: 'Save', exact: true }).click();
         await expect(toast(page)).toHaveText('Census 1921: now only for Radegunda Hurdálková.');
         expect((await census(page, RADEGUNDA))!.shareId).toBeUndefined();
-        expect(await census(page, KVIDO)).toBeNull();
+        expect(await census(page, SUDIVOJ)).toBeNull();
     });
 
     test('Delete ▾: for this person only by the keyboard, then for all after naming them', async ({ page }) => {
         await tree(page);
         await share(page);
-        let editor = await openFor(page, KVIDO);
+        let editor = await openFor(page, SUDIVOJ);
         const del = editor.locator('#btn-delete-shared');
         await expect(del).toBeVisible();
         await del.focus();
@@ -214,7 +214,7 @@ test.describe('shared event in the event editor', () => {
         await page.keyboard.press('Enter');
         await expect(editor).toBeHidden();
         await expect(toast(page)).toHaveText('Census 1921: deleted for this person, stays for 3 others.');
-        expect(await census(page, KVIDO)).toBeNull();
+        expect(await census(page, SUDIVOJ)).toBeNull();
         expect((await census(page, RADEGUNDA))!.shareId).toBeTruthy();
 
         editor = await openFor(page, RADEGUNDA);
@@ -233,7 +233,7 @@ test.describe('shared event in the event editor', () => {
     test('types locked while shared; no "Shared with" for a baptism, a godparent or a couple’s event', async ({ page }) => {
         await tree(page);
         await share(page);
-        const editor = await openFor(page, KVIDO);
+        const editor = await openFor(page, SUDIVOJ);
         const type = editor.locator('#input-event-type');
         await expect(type.locator('optgroup')).toHaveAttribute('label', 'One person only');
         await expect(type.locator('optgroup option[value="baptism"]')).toBeDisabled();
@@ -245,7 +245,7 @@ test.describe('shared event in the event editor', () => {
         await expect(editor).toBeHidden();
 
         // A baptism of one person: nothing new but the subtitle.
-        await page.evaluate(() => window.Strom.UI.openEventEditorFor('p_kvido' as never, 'ev_2'));
+        await page.evaluate(() => window.Strom.UI.openEventEditorFor('p_sudivoj' as never, 'ev_2'));
         await expect(editor).toHaveClass(/active/);
         await expect(editor.locator('#event-shared-section')).toBeHidden();
         await expect(editor.locator('#btn-delete-shared')).toBeHidden();
@@ -272,10 +272,10 @@ test.describe('shared event in the event editor', () => {
         const confirm = page.locator('#confirmation-modal');
         await expect(confirm).toHaveClass(/active/);
         await expect(confirm.locator('.confirm-list-lead')).toHaveText('Shared events stay with the others:');
-        await expect(confirm.locator('.confirm-list li')).toHaveText(['Census 1921 (Kvido, Radegunda, Zbyhněv)']);
+        await expect(confirm.locator('.confirm-list li')).toHaveText(['Census 1921 (Sudivoj, Radegunda, Zbyhněv)']);
         await confirm.getByRole('button', { name: 'Delete person' }).click();
         await page.evaluate(() => window.Strom.DataManager.deletePerson('p_bohuchval' as never));
-        expect((await census(page, KVIDO))!.shareId).toBeTruthy();
+        expect((await census(page, SUDIVOJ))!.shareId).toBeTruthy();
     });
 });
 
@@ -292,9 +292,9 @@ test.describe('shared event: phone, German, dark', () => {
             });
             for (const scheme of ['light', 'dark'] as const) {
                 await page.emulateMedia({ colorScheme: scheme });
-                const editor = await openFor(page, KVIDO);
+                const editor = await openFor(page, SUDIVOJ);
                 await expect(editor.locator('#event-shared-banner')).toHaveText('Gemeinsames Ereignis von 4 Personen – Änderungen gelten für alle');
-                await expect(editor.locator('#event-age-own')).toHaveText('nur Kvido Bonifác Drahoslav');
+                await expect(editor.locator('#event-age-own')).toHaveText('nur Sudivoj Bonifác Drahoslav');
                 const overflow = await editor.evaluate(el => {
                     const content = el.querySelector('.modal-content') as HTMLElement;
                     const modal = el.querySelector('.modal') as HTMLElement;
@@ -360,7 +360,7 @@ test.describe('shared event: phone, German, dark', () => {
         await tree(page, { width: 844, height: 390, long: true });
         await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
         await share(page);
-        const editor = await openFor(page, KVIDO);
+        const editor = await openFor(page, SUDIVOJ);
         await expect(editor.locator('#event-shared-banner')).toBeVisible();
         const inView = async (loc: Locator) => {
             const b = (await loc.boundingBox())!;
@@ -380,7 +380,7 @@ test.describe('shared event: phone, German, dark', () => {
 
     test('a new person created in the picker joins the event', async ({ page }) => {
         await tree(page);
-        const editor = await openFor(page, KVIDO);
+        const editor = await openFor(page, SUDIVOJ);
         await editor.locator('#event-shared-section .sw-add-link').click();
         const picker = page.locator('#shared-picker-modal');
         await picker.locator('#shared-picker-search').fill('Vigilius Pokusník');

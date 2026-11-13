@@ -10,7 +10,7 @@ import { openApp, cardAction, personModal } from './helpers.js';
  * with long names. Invented data, a fixed clock.
  */
 
-/** Kvido's household at the census of 1921, shared by all four. `long`: Kvido's and Radegunda's names 30+ characters. */
+/** Sudivoj's household at the census of 1921, shared by all four. `long`: Sudivoj's and Radegunda's names 30+ characters. */
 async function household(page: Page, opts: { width?: number; height?: number; long?: boolean } = {}): Promise<void> {
     await page.clock.setFixedTime(new Date('2026-11-13T10:30:00Z'));
     await page.setViewportSize({ width: opts.width ?? 1440, height: opts.height ?? 900 });
@@ -20,19 +20,19 @@ async function household(page: Page, opts: { width?: number; height?: number; lo
             ({ id, firstName, lastName, gender, isPlaceholder: false, partnerships: [], parentIds: [], childIds: [], ...extra });
         await window.Strom.DataManager.importAsNewTree({
             persons: {
-                p_kvido: p('p_kvido', long ? 'Kvido Bonifác Drahoslav' : 'Kvido', long ? 'Hurdálek-Smyšlenický' : 'Hurdálek', 'male', {
+                p_sudivoj: p('p_sudivoj', long ? 'Sudivoj Bonifác Drahoslav' : 'Sudivoj', long ? 'Hurdálek-Smyšlenický' : 'Hurdálek', 'male', {
                     birthDate: '1879', deathDate: '1950', partnerships: ['u1'], childIds: ['p_bohuchval', 'p_zbyhnev'],
                     events: [{ id: 'ev_1', type: 'census', date: '1921-02-15', place: 'Dolní Smyšlenice', address: 'č. 14', age: '42' }] }),
-                p_radegunda: p('p_radegunda', long ? 'Radegunda Ludmila Bohuslava' : 'Radegunda', long ? 'Hurdálková-Smyšlenická' : 'Hurdálková', 'female', {
+                p_radegunda: p('p_radegunda', long ? 'Radegunda Ctibora Dobroslava' : 'Radegunda', long ? 'Hurdálková-Smyšlenická' : 'Hurdálková', 'female', {
                     birthDate: '1883', deathDate: '1955', partnerships: ['u1'], childIds: ['p_bohuchval', 'p_zbyhnev'] }),
-                p_bohuchval: p('p_bohuchval', 'Bohuchval', 'Hurdálek', 'male', { birthDate: '1906', deathDate: '1980', parentIds: ['p_kvido', 'p_radegunda'] }),
-                p_zbyhnev: p('p_zbyhnev', 'Zbyhněv', 'Hurdálek', 'male', { birthDate: '1910', deathDate: '1985', parentIds: ['p_kvido', 'p_radegunda'] }),
+                p_bohuchval: p('p_bohuchval', 'Bohuchval', 'Hurdálek', 'male', { birthDate: '1906', deathDate: '1980', parentIds: ['p_sudivoj', 'p_radegunda'] }),
+                p_zbyhnev: p('p_zbyhnev', 'Zbyhněv', 'Hurdálek', 'male', { birthDate: '1910', deathDate: '1985', parentIds: ['p_sudivoj', 'p_radegunda'] }),
             },
             partnerships: {
-                u1: { id: 'u1', person1Id: 'p_kvido', person2Id: 'p_radegunda', childIds: ['p_bohuchval', 'p_zbyhnev'], status: 'married' },
+                u1: { id: 'u1', person1Id: 'p_sudivoj', person2Id: 'p_radegunda', childIds: ['p_bohuchval', 'p_zbyhnev'], status: 'married' },
             },
         } as never, long ? 'Rodokmen Hurdálků ze Smyšlenic 1879' : 'Hurdálek');
-        const ok = window.Strom.DataManager.saveSharedEvent('p_kvido' as never, 'ev_1', {
+        const ok = window.Strom.DataManager.saveSharedEvent('p_sudivoj' as never, 'ev_1', {
             common: {},
             own: new Map([['p_radegunda', { age: '38' }], ['p_bohuchval', { age: '15' }], ['p_zbyhnev', { age: '11' }]]) as never,
             add: ['p_radegunda', 'p_bohuchval', 'p_zbyhnev'] as never,
@@ -50,7 +50,7 @@ const eventsLine = (modal: Locator) => modal.locator('#events-list .event-row', 
 test.describe('a shared event in each life', () => {
     test('the list of events: the line names the others, a name opens that person, the line opens the editor from that side', async ({ page }) => {
         await household(page);
-        await cardAction(page, 'Kvido', 'edit');
+        await cardAction(page, 'Sudivoj', 'edit');
         const modal = personModal(page);
         const line = eventsLine(modal);
         await expect(line).toHaveText('with Radegunda, Bohuchval, Zbyhněv');
@@ -63,7 +63,7 @@ test.describe('a shared event in each life', () => {
         await line.getByRole('button', { name: 'Radegunda' }).click();
         await expect(modal.locator('#pm-name')).toContainText('Radegunda Hurdálková');
         const hers = eventsLine(modal);
-        await expect(hers).toHaveText('with Kvido, Bohuchval, Zbyhněv');
+        await expect(hers).toHaveText('with Sudivoj, Bohuchval, Zbyhněv');
 
         // The rest of the line: the editor from Radegunda's side.
         await hers.locator('.shared-line-text').click({ position: { x: 4, y: 6 } });
@@ -77,19 +77,19 @@ test.describe('a shared event in each life', () => {
         await page.evaluate(async () => {
             const dm = window.Strom.DataManager;
             const id = dm.createPerson({ firstName: 'Bohuchval', lastName: 'Mlčoch', gender: 'male', birthDate: '1870', deathDate: '1930' } as never).id;
-            const kvidoEv = (dm.getData().persons as unknown as Record<string, { events?: { id: string; type: string }[] }>).p_kvido.events!.find(e => e.type === 'census')!.id;
-            if (!dm.saveSharedEvent('p_kvido' as never, kvidoEv, { common: {}, own: new Map() as never, add: [id] as never })) throw new Error('not added');
+            const sudivojEv = (dm.getData().persons as unknown as Record<string, { events?: { id: string; type: string }[] }>).p_sudivoj.events!.find(e => e.type === 'census')!.id;
+            if (!dm.saveSharedEvent('p_sudivoj' as never, sudivojEv, { common: {}, own: new Map() as never, add: [id] as never })) throw new Error('not added');
         });
-        await page.evaluate(() => window.Strom.UI.showEditPersonModal('p_kvido' as never));
+        await page.evaluate(() => window.Strom.UI.showEditPersonModal('p_sudivoj' as never));
         const line = eventsLine(personModal(page));
         await expect(line).toHaveText('with Radegunda, Bohuchval Hurdálek and 2 more');
         await page.evaluate(() => window.Strom.UI.showEditPersonModal('p_zbyhnev' as never));
-        await expect(eventsLine(personModal(page))).toHaveText('with Kvido, Radegunda and 2 more');
+        await expect(eventsLine(personModal(page))).toHaveText('with Sudivoj, Radegunda and 2 more');
     });
 
     test('the person page: given names lead to the persons\' pages, the line opens the editor', async ({ page }) => {
         await household(page);
-        await page.evaluate(() => window.Strom.UI.showPersonPage('p_kvido' as never));
+        await page.evaluate(() => window.Strom.UI.showPersonPage('p_sudivoj' as never));
         const w = page.locator('#person-page-modal');
         await expect(w).toBeVisible();
         const line = w.locator('.shared-line').first();
@@ -97,7 +97,7 @@ test.describe('a shared event in each life', () => {
         await line.getByRole('button', { name: 'Bohuchval' }).click();
         await expect(w.locator('h1')).toContainText('Bohuchval Hurdálek');
         const his = w.locator('.shared-line').first();
-        await expect(his).toHaveText('with Kvido, Radegunda, Zbyhněv');
+        await expect(his).toHaveText('with Sudivoj, Radegunda, Zbyhněv');
         await his.locator('.shared-line-text').click({ position: { x: 4, y: 6 } });
         await expect(w).toBeHidden();
         const editor = page.locator('#event-editor-modal');
@@ -127,7 +127,7 @@ test.describe('a shared event in each life', () => {
                 await page.evaluate(() => window.Strom.UI.showEditPersonModal('p_bohuchval' as never));
                 const modal = personModal(page);
                 const line = eventsLine(modal);
-                await expect(line).toHaveText('mit Kvido Bonifác Drahoslav, Radegunda Ludmila Bohuslava, Zbyhněv');
+                await expect(line).toHaveText('mit Sudivoj Bonifác Drahoslav, Radegunda Ctibora Dobroslava, Zbyhněv');
                 await line.scrollIntoViewIfNeeded();
                 const over = await modal.evaluate(el => {
                     const content = el.querySelector('.modal-content') as HTMLElement;
@@ -144,7 +144,7 @@ test.describe('a shared event in each life', () => {
                 await page.evaluate(() => window.Strom.UI.showPersonPage('p_bohuchval' as never));
                 const w = page.locator('#person-page-modal');
                 const ppLine = w.locator('.shared-line').first();
-                await expect(ppLine).toHaveText('mit Kvido Bonifác Drahoslav, Radegunda Ludmila Bohuslava, Zbyhněv');
+                await expect(ppLine).toHaveText('mit Sudivoj Bonifác Drahoslav, Radegunda Ctibora Dobroslava, Zbyhněv');
                 await ppLine.scrollIntoViewIfNeeded();
                 // The line stays inside the page's column (the ancestors' fan has its own sideways room).
                 expect(await ppLine.evaluate(el => {

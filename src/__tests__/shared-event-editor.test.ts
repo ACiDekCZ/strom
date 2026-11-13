@@ -24,37 +24,37 @@ import { StromData, Person, PersonId, TreeId, LifeEvent, STROM_DATA_VERSION, toP
 import { getStringsForLang } from '../strings.js';
 
 const TREE = 'shared-editor' as TreeId;
-const KVIDO = toPersonId('p_kvido');
+const SUDIVOJ = toPersonId('p_sudivoj');
 const RADEGUNDA = toPersonId('p_radegunda');
 const BOHUCHVAL = toPersonId('p_bohuchval');
 const ZBYHNEV = toPersonId('p_zbyhnev');
 const DRAHOMIL = toPersonId('p_drahomil');
 const EUFROZINA = toPersonId('p_eufrozina');
-const UNION = toPartnershipId('u_kvido_radegunda');
+const UNION = toPartnershipId('u_sudivoj_radegunda');
 
 function person(id: PersonId, firstName: string, lastName: string, gender: 'male' | 'female', extra: Partial<Person> = {}): Person {
     return { id, firstName, lastName, gender, isPlaceholder: false, partnerships: [], parentIds: [], childIds: [], ...extra };
 }
 
 /**
- * Kvido's household in 1921: Radegunda, two sons; Drahomil his father died
- * in 1914, Eufrozína his sister; Kvido has the census alone, a source cited.
+ * Sudivoj's household in 1921: Radegunda, two sons; Drahomil his father died
+ * in 1914, Eufrozína his sister; Sudivoj has the census alone, a source cited.
  */
 function household(): StromData {
     return {
         version: STROM_DATA_VERSION,
         persons: {
-            [KVIDO]: person(KVIDO, 'Kvido', 'Hurdálek', 'male', { birthDate: '1879', partnerships: [UNION],
+            [SUDIVOJ]: person(SUDIVOJ, 'Sudivoj', 'Hurdálek', 'male', { birthDate: '1879', partnerships: [UNION],
                 childIds: [BOHUCHVAL, ZBYHNEV], parentIds: [DRAHOMIL],
                 events: [{ id: 'ev_1', type: 'census', date: '1921-02-15', place: 'Dolní Smyšlenice', age: '42', sourceIds: ['s1'] }] }),
             [RADEGUNDA]: person(RADEGUNDA, 'Radegunda', 'Hurdálková', 'female', { birthDate: '1883', partnerships: [UNION], childIds: [BOHUCHVAL, ZBYHNEV] }),
-            [BOHUCHVAL]: person(BOHUCHVAL, 'Bohuchval', 'Hurdálek', 'male', { birthDate: '1906', parentIds: [KVIDO, RADEGUNDA] }),
-            [ZBYHNEV]: person(ZBYHNEV, 'Zbyhněv', 'Hurdálek', 'male', { birthDate: '1910', parentIds: [KVIDO, RADEGUNDA] }),
-            [DRAHOMIL]: person(DRAHOMIL, 'Drahomil', 'Hurdálek', 'male', { birthDate: '1850', deathDate: '1914-03-02', childIds: [KVIDO, EUFROZINA] }),
+            [BOHUCHVAL]: person(BOHUCHVAL, 'Bohuchval', 'Hurdálek', 'male', { birthDate: '1906', parentIds: [SUDIVOJ, RADEGUNDA] }),
+            [ZBYHNEV]: person(ZBYHNEV, 'Zbyhněv', 'Hurdálek', 'male', { birthDate: '1910', parentIds: [SUDIVOJ, RADEGUNDA] }),
+            [DRAHOMIL]: person(DRAHOMIL, 'Drahomil', 'Hurdálek', 'male', { birthDate: '1850', deathDate: '1914-03-02', childIds: [SUDIVOJ, EUFROZINA] }),
             [EUFROZINA]: person(EUFROZINA, 'Eufrozína', 'Hurdálková', 'female', { birthDate: '1925', parentIds: [DRAHOMIL] }),
         },
         partnerships: {
-            [UNION]: { id: UNION, person1Id: KVIDO, person2Id: RADEGUNDA, childIds: [BOHUCHVAL, ZBYHNEV], status: 'married' },
+            [UNION]: { id: UNION, person1Id: SUDIVOJ, person2Id: RADEGUNDA, childIds: [BOHUCHVAL, ZBYHNEV], status: 'married' },
         },
         sources: {
             s1: { id: 's1', title: 'Census 1921, Dolní Smyšlenice' },
@@ -83,10 +83,10 @@ beforeEach(() => reset());
 
 describe('the draft of persons', () => {
     it('adds three persons to a census: one save, four copies, the sources at every copy, each its own age and role', () => {
-        const ev = censusOf(KVIDO)!;
-        const draft = sharedDraftFor(DataManager.getData(), KVIDO, ev);
+        const ev = censusOf(SUDIVOJ)!;
+        const draft = sharedDraftFor(DataManager.getData(), SUDIVOJ, ev);
         expect(draft.rows).toEqual([]);
-        expect(addToDraft(draft, [RADEGUNDA, BOHUCHVAL, ZBYHNEV, RADEGUNDA, KVIDO])).toEqual([RADEGUNDA, BOHUCHVAL, ZBYHNEV]);
+        expect(addToDraft(draft, [RADEGUNDA, BOHUCHVAL, ZBYHNEV, RADEGUNDA, SUDIVOJ])).toEqual([RADEGUNDA, BOHUCHVAL, ZBYHNEV]);
         draft.rows[0].age = '38';
         draft.rows[2].role = 'lodger';
         expect(draftChangesPersons(draft)).toBe(true);
@@ -95,8 +95,8 @@ describe('the draft of persons', () => {
         expect(edit.own?.get(RADEGUNDA)).toEqual({ age: '38', shareRole: undefined });
         expect(edit.own?.get(ZBYHNEV)).toEqual({ age: undefined, shareRole: 'lodger' });
 
-        const res = DataManager.saveSharedEvent(KVIDO, 'ev_1', edit)!;
-        expect(res.personIds).toEqual([KVIDO, RADEGUNDA, BOHUCHVAL, ZBYHNEV]);
+        const res = DataManager.saveSharedEvent(SUDIVOJ, 'ev_1', edit)!;
+        expect(res.personIds).toEqual([SUDIVOJ, RADEGUNDA, BOHUCHVAL, ZBYHNEV]);
         for (const pid of res.personIds) {
             expect(censusOf(pid)?.shareId).toBe(res.shareId);
             expect(censusOf(pid)?.sourceIds).toEqual(['s1']);
@@ -106,32 +106,32 @@ describe('the draft of persons', () => {
         expect(censusOf(ZBYHNEV)?.shareRole).toBe('lodger');
         expect(censusOf(BOHUCHVAL)?.shareRole).toBeUndefined();
 
-        // Opened again from Kvido: the rows in the order of the share.
-        const again = sharedDraftFor(DataManager.getData(), KVIDO, censusOf(KVIDO)!);
-        orderDraftRows(again, sharedWith(DataManager.getSharedEventIndex(), KVIDO, 'ev_1'));
+        // Opened again from Sudivoj: the rows in the order of the share.
+        const again = sharedDraftFor(DataManager.getData(), SUDIVOJ, censusOf(SUDIVOJ)!);
+        orderDraftRows(again, sharedWith(DataManager.getSharedEventIndex(), SUDIVOJ, 'ev_1'));
         expect(again.rows.map(r => r.personId)).toEqual([RADEGUNDA, BOHUCHVAL, ZBYHNEV]);
         expect(again.rows.map(r => r.age)).toEqual(['38', '', '']);
         expect(again.originalOthers).toEqual([RADEGUNDA, BOHUCHVAL, ZBYHNEV]);
 
         // One undo step takes the whole save back.
         DataManager.undo();
-        expect(censusOf(KVIDO)?.shareId).toBeUndefined();
+        expect(censusOf(SUDIVOJ)?.shareId).toBeUndefined();
         for (const pid of [RADEGUNDA, BOHUCHVAL, ZBYHNEV]) expect(censusOf(pid)).toBeUndefined();
     });
 
     it('removes one and separates another: the removed copy is gone, the separated keeps its values from before', () => {
-        const ev = censusOf(KVIDO)!;
-        const draft = sharedDraftFor(DataManager.getData(), KVIDO, ev);
+        const ev = censusOf(SUDIVOJ)!;
+        const draft = sharedDraftFor(DataManager.getData(), SUDIVOJ, ev);
         addToDraft(draft, [RADEGUNDA, BOHUCHVAL, ZBYHNEV]);
-        DataManager.saveSharedEvent(KVIDO, 'ev_1', sharedEditFrom(draft, {}, {}));
+        DataManager.saveSharedEvent(SUDIVOJ, 'ev_1', sharedEditFrom(draft, {}, {}));
 
-        const open = sharedDraftFor(DataManager.getData(), KVIDO, censusOf(KVIDO)!);
+        const open = sharedDraftFor(DataManager.getData(), SUDIVOJ, censusOf(SUDIVOJ)!);
         takeFromDraft(open, BOHUCHVAL, false);
         takeFromDraft(open, ZBYHNEV, true);
         expect(open.removed).toEqual([BOHUCHVAL]);
         expect(open.separated).toEqual([ZBYHNEV]);
-        const res = DataManager.saveSharedEvent(KVIDO, 'ev_1', sharedEditFrom(open, { place: 'Horní Smyšlenice' }, {}))!;
-        expect(res.personIds).toEqual([KVIDO, RADEGUNDA]);
+        const res = DataManager.saveSharedEvent(SUDIVOJ, 'ev_1', sharedEditFrom(open, { place: 'Horní Smyšlenice' }, {}))!;
+        expect(res.personIds).toEqual([SUDIVOJ, RADEGUNDA]);
         expect(censusOf(BOHUCHVAL)).toBeUndefined();
         expect(censusOf(ZBYHNEV)?.shareId).toBeUndefined();
         expect(censusOf(ZBYHNEV)?.place).toBe('Dolní Smyšlenice');
@@ -140,7 +140,7 @@ describe('the draft of persons', () => {
     });
 
     it('a person added and taken out again in one editing leaves no trace', () => {
-        const draft = sharedDraftFor(DataManager.getData(), KVIDO, censusOf(KVIDO)!);
+        const draft = sharedDraftFor(DataManager.getData(), SUDIVOJ, censusOf(SUDIVOJ)!);
         addToDraft(draft, [RADEGUNDA]);
         takeFromDraft(draft, RADEGUNDA, false);
         expect(draft.rows).toEqual([]);
@@ -149,30 +149,30 @@ describe('the draft of persons', () => {
     });
 
     it('the last other person removed: an ordinary event again, "now only for …"', () => {
-        const draft = sharedDraftFor(DataManager.getData(), KVIDO, censusOf(KVIDO)!);
+        const draft = sharedDraftFor(DataManager.getData(), SUDIVOJ, censusOf(SUDIVOJ)!);
         addToDraft(draft, [RADEGUNDA]);
-        DataManager.saveSharedEvent(KVIDO, 'ev_1', sharedEditFrom(draft, {}, {}));
-        const open = sharedDraftFor(DataManager.getData(), KVIDO, censusOf(KVIDO)!);
+        DataManager.saveSharedEvent(SUDIVOJ, 'ev_1', sharedEditFrom(draft, {}, {}));
+        const open = sharedDraftFor(DataManager.getData(), SUDIVOJ, censusOf(SUDIVOJ)!);
         takeFromDraft(open, RADEGUNDA, false);
-        const res = DataManager.saveSharedEvent(KVIDO, 'ev_1', sharedEditFrom(open, {}, {}))!;
+        const res = DataManager.saveSharedEvent(SUDIVOJ, 'ev_1', sharedEditFrom(open, {}, {}))!;
         expect(res.shareId).toBeNull();
-        expect(censusOf(KVIDO)?.shareId).toBeUndefined();
-        expect(sharedSaveMessage(open, res.personIds)).toEqual({ kind: 'onlyOne', personId: KVIDO });
+        expect(censusOf(SUDIVOJ)?.shareId).toBeUndefined();
+        expect(sharedSaveMessage(open, res.personIds)).toEqual({ kind: 'onlyOne', personId: SUDIVOJ });
     });
 });
 
 describe('the message after a save', () => {
-    const base = () => sharedDraftFor(DataManager.getData(), KVIDO, censusOf(KVIDO)!);
+    const base = () => sharedDraftFor(DataManager.getData(), SUDIVOJ, censusOf(SUDIVOJ)!);
     it('persons added: saved for N; one separated alone: separate; nothing about persons: saved', () => {
         const added = base();
         addToDraft(added, [RADEGUNDA, BOHUCHVAL]);
-        expect(sharedSaveMessage(added, [KVIDO, RADEGUNDA, BOHUCHVAL])).toEqual({ kind: 'saved', count: 3 });
+        expect(sharedSaveMessage(added, [SUDIVOJ, RADEGUNDA, BOHUCHVAL])).toEqual({ kind: 'saved', count: 3 });
         const sep = { ...base(), originalOthers: [RADEGUNDA, BOHUCHVAL], rows: [{ personId: RADEGUNDA, role: '', age: '', added: false }] };
         takeFromDraft(sep, RADEGUNDA, true);
         sep.rows = [{ personId: BOHUCHVAL, role: '', age: '', added: false }];
-        expect(sharedSaveMessage(sep, [KVIDO, BOHUCHVAL])).toEqual({ kind: 'separated', personId: RADEGUNDA });
+        expect(sharedSaveMessage(sep, [SUDIVOJ, BOHUCHVAL])).toEqual({ kind: 'separated', personId: RADEGUNDA });
         const plain = { ...base(), originalOthers: [RADEGUNDA], rows: [{ personId: RADEGUNDA, role: '', age: '', added: false }] };
-        expect(sharedSaveMessage(plain, [KVIDO, RADEGUNDA])).toEqual({ kind: 'saved', count: 2 });
+        expect(sharedSaveMessage(plain, [SUDIVOJ, RADEGUNDA])).toEqual({ kind: 'saved', count: 2 });
     });
 
     it('names the event by type and year, a custom event by its label cut to 40 characters', () => {
@@ -188,7 +188,7 @@ describe('the message after a save', () => {
 
 describe('the family the picker offers', () => {
     it('partners, children, parents, siblings; those not alive on the date apart', () => {
-        const fam = familyCandidates(DataManager.getData(), KVIDO, '1921-02-15');
+        const fam = familyCandidates(DataManager.getData(), SUDIVOJ, '1921-02-15');
         expect(fam.alive.map(c => [c.personId, c.kin])).toEqual([
             [RADEGUNDA, 'partner'], [BOHUCHVAL, 'child'], [ZBYHNEV, 'child'],
         ]);
@@ -197,7 +197,7 @@ describe('the family the picker offers', () => {
     });
 
     it('no date of the event: no filter', () => {
-        const fam = familyCandidates(DataManager.getData(), KVIDO, undefined);
+        const fam = familyCandidates(DataManager.getData(), SUDIVOJ, undefined);
         expect(fam.hidden).toEqual([]);
         expect(fam.alive.map(c => c.personId)).toEqual([RADEGUNDA, BOHUCHVAL, ZBYHNEV, DRAHOMIL, EUFROZINA]);
     });
@@ -219,34 +219,34 @@ describe('the delete-person confirmation', () => {
 
 describe('a citation of a shared event', () => {
     it('goes to every copy and comes off every copy, one undo step each', () => {
-        const draft = sharedDraftFor(DataManager.getData(), KVIDO, censusOf(KVIDO)!);
+        const draft = sharedDraftFor(DataManager.getData(), SUDIVOJ, censusOf(SUDIVOJ)!);
         addToDraft(draft, [RADEGUNDA, BOHUCHVAL]);
-        DataManager.saveSharedEvent(KVIDO, 'ev_1', sharedEditFrom(draft, {}, {}));
+        DataManager.saveSharedEvent(SUDIVOJ, 'ev_1', sharedEditFrom(draft, {}, {}));
         expect(DataManager.citeEvent(RADEGUNDA, censusOf(RADEGUNDA)!.id, 's2')).toBe(true);
-        for (const pid of [KVIDO, RADEGUNDA, BOHUCHVAL]) expect(censusOf(pid)?.sourceIds).toEqual(['s1', 's2']);
-        expect(DataManager.unciteEvent(KVIDO, 'ev_1', 's1')).toBe(true);
-        for (const pid of [KVIDO, RADEGUNDA, BOHUCHVAL]) expect(censusOf(pid)?.sourceIds).toEqual(['s2']);
+        for (const pid of [SUDIVOJ, RADEGUNDA, BOHUCHVAL]) expect(censusOf(pid)?.sourceIds).toEqual(['s1', 's2']);
+        expect(DataManager.unciteEvent(SUDIVOJ, 'ev_1', 's1')).toBe(true);
+        for (const pid of [SUDIVOJ, RADEGUNDA, BOHUCHVAL]) expect(censusOf(pid)?.sourceIds).toEqual(['s2']);
         DataManager.undo();
-        for (const pid of [KVIDO, RADEGUNDA, BOHUCHVAL]) expect(censusOf(pid)?.sourceIds).toEqual(['s1', 's2']);
+        for (const pid of [SUDIVOJ, RADEGUNDA, BOHUCHVAL]) expect(censusOf(pid)?.sourceIds).toEqual(['s1', 's2']);
     });
 });
 
 describe('the quality of a citation of a shared event', () => {
     it('goes to every copy citing the source in one undo step', () => {
-        const draft = sharedDraftFor(DataManager.getData(), KVIDO, censusOf(KVIDO)!);
+        const draft = sharedDraftFor(DataManager.getData(), SUDIVOJ, censusOf(SUDIVOJ)!);
         addToDraft(draft, [RADEGUNDA, BOHUCHVAL]);
-        DataManager.saveSharedEvent(KVIDO, 'ev_1', sharedEditFrom(draft, {}, {}));
+        DataManager.saveSharedEvent(SUDIVOJ, 'ev_1', sharedEditFrom(draft, {}, {}));
         expect(DataManager.setEventCitationQuality(RADEGUNDA, censusOf(RADEGUNDA)!.id, 's1', 3)).toBe(true);
-        for (const pid of [KVIDO, RADEGUNDA, BOHUCHVAL]) expect(censusOf(pid)?.citationQuay).toEqual({ sourceIds: { s1: 3 } });
+        for (const pid of [SUDIVOJ, RADEGUNDA, BOHUCHVAL]) expect(censusOf(pid)?.citationQuay).toEqual({ sourceIds: { s1: 3 } });
         DataManager.undo();
-        for (const pid of [KVIDO, RADEGUNDA, BOHUCHVAL]) expect(censusOf(pid)?.citationQuay).toBeUndefined();
+        for (const pid of [SUDIVOJ, RADEGUNDA, BOHUCHVAL]) expect(censusOf(pid)?.citationQuay).toBeUndefined();
         // A source the event does not cite: nothing to set.
-        expect(DataManager.setEventCitationQuality(KVIDO, 'ev_1', 's2', 1)).toBe(false);
+        expect(DataManager.setEventCitationQuality(SUDIVOJ, 'ev_1', 's2', 1)).toBe(false);
     });
 
     it('an ordinary event keeps it to itself', () => {
-        expect(DataManager.setEventCitationQuality(KVIDO, 'ev_1', 's1', 2)).toBe(true);
-        expect(censusOf(KVIDO)?.citationQuay).toEqual({ sourceIds: { s1: 2 } });
+        expect(DataManager.setEventCitationQuality(SUDIVOJ, 'ev_1', 's1', 2)).toBe(true);
+        expect(censusOf(SUDIVOJ)?.citationQuay).toEqual({ sourceIds: { s1: 2 } });
         expect(censusOf(RADEGUNDA)).toBeUndefined();
     });
 });
@@ -255,18 +255,18 @@ describe('a new event saved shared', () => {
     const payload = { type: 'residence', date: '1930', place: 'Horní Smyšlenice' } as const;
 
     it('the event and every copy in one undo step', () => {
-        const before = eventsOf(KVIDO).length;
-        const draft = sharedDraftFor(DataManager.getData(), KVIDO, null);
+        const before = eventsOf(SUDIVOJ).length;
+        const draft = sharedDraftFor(DataManager.getData(), SUDIVOJ, null);
         addToDraft(draft, [RADEGUNDA, BOHUCHVAL]);
-        const res = DataManager.addSharedEvent(KVIDO, payload, sharedEditFrom(draft, {}, {}))!;
-        expect(res.result.personIds).toEqual([KVIDO, RADEGUNDA, BOHUCHVAL]);
+        const res = DataManager.addSharedEvent(SUDIVOJ, payload, sharedEditFrom(draft, {}, {}))!;
+        expect(res.result.personIds).toEqual([SUDIVOJ, RADEGUNDA, BOHUCHVAL]);
         for (const pid of res.result.personIds) {
             const copy = eventsOf(pid).find(e => e.type === 'residence');
             expect(copy?.shareId).toBe(res.result.shareId);
             expect(copy?.place).toBe('Horní Smyšlenice');
         }
         DataManager.undo();
-        expect(eventsOf(KVIDO).length).toBe(before);
+        expect(eventsOf(SUDIVOJ).length).toBe(before);
         for (const pid of [RADEGUNDA, BOHUCHVAL]) expect(eventsOf(pid)).toEqual([]);
     });
 
@@ -275,14 +275,14 @@ describe('a new event saved shared', () => {
         data.persons[BOHUCHVAL].isLocked = true;
         reset(data);
         const before = JSON.stringify(DataManager.getData());
-        const draft = sharedDraftFor(DataManager.getData(), KVIDO, null);
+        const draft = sharedDraftFor(DataManager.getData(), SUDIVOJ, null);
         addToDraft(draft, [RADEGUNDA, BOHUCHVAL]);
-        expect(DataManager.addSharedEvent(KVIDO, payload, sharedEditFrom(draft, {}, {}))).toBeNull();
+        expect(DataManager.addSharedEvent(SUDIVOJ, payload, sharedEditFrom(draft, {}, {}))).toBeNull();
         expect(JSON.stringify(DataManager.getData())).toBe(before);
         expect(DataManager.canUndo()).toBe(false);
 
         // A type of one person (a baptism) with others: refused the same way.
-        const baptism = DataManager.addSharedEvent(KVIDO, { type: 'baptism', date: '1879' }, sharedEditFrom(draft, {}, {}));
+        const baptism = DataManager.addSharedEvent(SUDIVOJ, { type: 'baptism', date: '1879' }, sharedEditFrom(draft, {}, {}));
         expect(baptism).toBeNull();
         expect(JSON.stringify(DataManager.getData())).toBe(before);
     });

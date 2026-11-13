@@ -170,7 +170,7 @@ function personsOf(copies: readonly ShareCopyRef[]): PersonId[] {
     return [...new Set(copies.map(c => c.personId))];
 }
 
-/** Persons' shown names joined ("Kvido Hurdálek, Radegunda Hurdálková"). */
+/** Persons' shown names joined ("Sudivoj Hurdálek, Radegunda Hurdálková"). */
 function namesOf(data: StromData, ids: readonly PersonId[]): string {
     return ids.map(id => { const p = data.persons[id]; return p ? shownNameOrEmpty(p) || id : id; }).join(', ');
 }

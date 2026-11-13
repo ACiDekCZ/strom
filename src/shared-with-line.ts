@@ -189,7 +189,7 @@ export function familyTogetherEvents(
 /**
  * One line of "Family together" without its full stop and footnote (§2h):
  * "<strong>Census 1921</strong>, 15 Feb 1921, Dolní Smyšlenice No. 14:
- * Kvido 42 years, Radegunda 38, Bohuchval 15, Zbyhněv 11". The exact date
+ * Sudivoj 42 years, Radegunda 38, Bohuchval 15, Zbyhněv 11". The exact date
  * only when it has more than the year (the year is in the title); the first
  * numeric age with its unit, the next ones bare; an age that is not a
  * number as written. `nameHtml` writes a person (a link or the escaped name).
