@@ -1,5 +1,6 @@
 import { test, expect, Page, Request } from '@playwright/test';
 import { fakeBridge, openResearch, poll, researchGed } from './research-bridge.js';
+import { card } from './helpers.js';
 import { CAPS, followManaged } from './live-directions-bridge.js';
 
 /**
@@ -15,8 +16,11 @@ import { CAPS, followManaged } from './live-directions-bridge.js';
  * on a tree without research (the window says so, and draws the overview
  * again back on the research's tree), the main window closed (the strip, the
  * last state frozen "as of", every action greyed and nothing sent; a new main
- * window: live again); a task's place in the queue set from the window is
- * written by the main window. Invented data only.
+ * window: live again), the tree deleted in the main window ("The tree no
+ * longer exists", Close window) or locked there ("The tree is locked", Go to
+ * the main window, nothing of the research kept; unlocked: the overview
+ * again); a task's place in the queue set from the window is written by the
+ * main window. Invented data only.
  */
 
 const UUID = '7c2e4a1b-3d5f-4e6a-8b9c-1d2e3f4a5b6c';
@@ -346,6 +350,88 @@ test.describe('the overview window\'s states', () => {
         await page.evaluate((id) => window.Strom.UI.switchToTree(id as never), researchTree);
         await expect(popup.locator('#research-overview')).toBeVisible();
         await expect(popup.locator('#research-overview #ov-sec-waiting')).toContainText('Confirm the baptism of Jan Fíšek');
+        await expect(state).toHaveCount(0);
+        await popup.close();
+    });
+
+    test('the tree deleted in the main window: "The tree no longer exists" with Close window, the next tree\'s overview not drawn', async ({ page }) => {
+        await openResearch(page, { ged: researchGed() });
+        await fakeBridge(page, { accepts: ACCEPTS, links: ['send', 'open', 'live', 'app', 'setup', 'chat'], waiting: WAITING });
+        await poll(page);
+        const researchTree = await page.evaluate(() => window.Strom.DataManager.getCurrentTreeId() as string);
+        // Another tree the main window goes to after the deletion.
+        const other = await page.evaluate(async () => {
+            const dm = window.Strom.DataManager;
+            await dm.importAsNewTree({ persons: {
+                q1: { id: 'q1', firstName: 'Kvido', lastName: 'Pastiňák', gender: 'male', partnerships: [], parentIds: [], childIds: [] },
+            }, partnerships: {} } as never, 'Pastiňákovi');
+            return dm.getCurrentTreeId() as string;
+        });
+        await page.evaluate((id) => window.Strom.UI.switchToTree(id as never), researchTree);
+        const popup = await openFromMenu(page);
+        await expect(popup.locator('#research-overview #ov-sec-waiting')).toContainText('Confirm the baptism of Jan Fíšek');
+
+        await page.evaluate(async ({ id, next }) => {
+            const { TreeManager, DataManager } = window.Strom;
+            await TreeManager.deleteTree(id as never);
+            await DataManager.switchTree(next as never);
+        }, { id: researchTree, next: other });
+        const state = popup.locator('#overview-window-state');
+        await expect(state.getByRole('heading', { name: 'The tree no longer exists' })).toBeVisible();
+        await expect(state.locator('.sat-empty-note')).toHaveText('It was deleted in the main window.');
+        // The head without the tree; nothing of the overview, nor the next tree's "no research".
+        await expect(state.locator('.research-overview__title')).toHaveText('Research overview');
+        await expect(popup.locator('#research-overview')).toHaveCount(0);
+        await expect(popup.getByText('This tree has no research')).toHaveCount(0);
+        await expect(popup.getByText('Confirm the baptism of Jan Fíšek')).toHaveCount(0);
+        const closed = popup.waitForEvent('close');
+        await state.getByRole('button', { name: 'Close window' }).click();
+        await closed;
+    });
+
+    test('the tree locked in the main window: "The tree is locked" with Go to the main window, nothing of the research kept; unlocked, the overview again', async ({ page }) => {
+        const PASSWORD = 'linden-tree-42';
+        await openResearch(page, { ged: researchGed() });
+        await fakeBridge(page, { accepts: ACCEPTS, links: ['send', 'open', 'live', 'app', 'setup', 'chat'], waiting: WAITING });
+        await poll(page);
+        await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+        const settings = page.locator('#settings-modal');
+        await settings.locator('#encryption-toggle').check();
+        const setup = page.locator('#password-setup-modal');
+        await setup.locator('#password-setup-input').fill(PASSWORD);
+        await setup.locator('#password-setup-confirm').fill(PASSWORD);
+        await setup.getByRole('button', { name: 'Save' }).click();
+        await expect(settings.locator('#encryption-status')).toHaveText('Encryption enabled');
+        await page.evaluate(() => window.Strom.TreeManager.flush());
+        await page.keyboard.press('Escape');
+        const popup = await openFromMenu(page);
+        const ov = popup.locator('#research-overview');
+        await expect(ov.locator('#ov-sec-waiting')).toContainText('Confirm the baptism of Jan Fíšek');
+
+        // The main window reloads and the password is not entered.
+        await page.reload();
+        const prompt = page.locator('#password-prompt-modal');
+        await expect(prompt).toBeVisible();
+        await prompt.getByRole('button', { name: 'Cancel' }).click();
+        await expect(page.locator('#locked-data-notice')).toBeVisible();
+
+        const state = popup.locator('#overview-window-state');
+        await expect(state.getByRole('heading', { name: 'The tree is locked' })).toBeVisible();
+        await expect(state.locator('.sat-empty-note')).toHaveText('The password is entered in the main window.');
+        await expect(state.getByRole('button', { name: 'Go to the main window' })).toBeVisible();
+        await expect(ov).toHaveCount(0);
+        await expect(popup.getByText('Confirm the baptism of Jan Fíšek')).toHaveCount(0);
+        await expect(popup.locator('.research-overview__strip')).toHaveCount(0);
+        // It stays so (the main window's locked state does not draw the research back).
+        await popup.waitForTimeout(1500);
+        await expect(ov).toHaveCount(0);
+
+        // Unlocked: the overview of the research again.
+        await page.locator('#locked-data-notice').getByRole('button', { name: 'Unlock' }).click();
+        await prompt.locator('#password-prompt-input').fill(PASSWORD);
+        await prompt.locator('#password-prompt-input').press('Enter');
+        await expect(card(page, 'Jan')).toBeVisible();
+        await expect(ov).toBeVisible();
         await expect(state).toHaveCount(0);
         await popup.close();
     });

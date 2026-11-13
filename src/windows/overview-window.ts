@@ -114,6 +114,8 @@ export interface OverviewResearchState {
     /** Opened without following (null: following, or nothing). */
     viewing: OverviewViewingData | null;
     extras: OverviewExtras;
+    /** The open tree is locked in the main window: nothing of its research is sent (the window says it is locked). */
+    locked?: boolean;
 }
 
 /** The parts of a bridge's address a snapshot never carries: the address itself and its token. */

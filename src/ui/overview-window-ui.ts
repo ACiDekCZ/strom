@@ -63,6 +63,14 @@ export const overviewWindowMethods = uiModule({
      */
     overviewWindowState(): OverviewResearchState {
         const treeId = DataManager.getCurrentTreeId();
+        // A locked tree (§3.6): its name only; nothing of its research leaves this window.
+        if (treeId && DataManager.isLocked()) {
+            return {
+                v: OVERVIEW_STATE_VERSION, at: Date.now(), treeId, treeName: TreeManager.getTreeMetadata(treeId as TreeId)?.name ?? '',
+                researchId: null, researchName: '', source: null, bridgeUp: false, session: null, viewing: null,
+                extras: emptyOverviewExtras(), locked: true,
+            };
+        }
         const researchId = treeId ? this.activeResearchId() : null;
         let w = windowSession();
         const l = liveSession();

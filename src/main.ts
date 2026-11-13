@@ -466,9 +466,12 @@ function startOverviewWindow(params: SatelliteParams): void {
     }, () => (client.hasTree ? client.treeName : ''), {
         connection: () => client.connection,
         lastHeardAt: () => client.lastHeardAt,
+        treeGone: () => client.treeGone,
+        locked: () => !!client.status?.locked,
         makeMain: () => { void makeSatelliteMain(client, client.kind); },
         openStrom: () => openMainWindow(),
         closeWindow: () => window.close(),
+        goToMain: () => { void client.requestMainFocus(); },
         formatTime: (ts) => formatLiveClock(ts, Date.now(), SettingsManager.getLanguage()),
     });
     client.on('research-state', (raw) => {
@@ -484,8 +487,22 @@ function startOverviewWindow(params: SatelliteParams): void {
     client.on('tree', () => {
         document.documentElement.classList.remove('app-loading');
         updateWindowTitle();
+        // After the tree was deleted: another tree of the main window, its overview again.
+        view.render();
     });
-    client.on('tree-gone', () => updateWindowTitle());
+    // The tree deleted (§3.5b) or locked (§3.6) in the main window: the window says so in place of the overview.
+    client.on('tree-gone', () => {
+        updateWindowTitle();
+        view.render();
+    });
+    let wasLocked = false;
+    client.on('status', () => {
+        const locked = !!client.status?.locked;
+        if (locked === wasLocked) return;
+        wasLocked = locked;
+        document.documentElement.classList.remove('app-loading');
+        view.render();
+    });
     client.on('renamed', () => {
         updateWindowTitle();
         view.render();

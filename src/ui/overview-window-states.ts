@@ -14,7 +14,13 @@
  * - main closed  — the amber strip "as of {time}" with Make this the main
  *                  window and Open Strom, the last state frozen ("as of …"
  *                  at each section) and every action greyed: nothing is
- *                  sent. The main window back (its reload): live again.
+ *                  sent. The main window back (its reload): live again;
+ * - tree gone    — the tree was deleted in the main window (§3.5b): "The
+ *                  tree no longer exists" with Close window, as the view
+ *                  satellites say it;
+ * - tree locked  — the tree is locked in the main window (§3.6): "The tree
+ *                  is locked" with Go to the main window; nothing of its
+ *                  research is kept, it comes again after the unlock.
  */
 
 import { strings } from '../strings.js';
@@ -22,7 +28,7 @@ import type { OverviewResearchState } from '../windows/overview-window.js';
 import { LOADING_LABEL_DELAY_MS } from '../windows/sat-states.js';
 
 /** What stands in the window's place of the overview. */
-export type OverviewWindowContent = 'loading' | 'no-research' | 'overview' | 'blank';
+export type OverviewWindowContent = 'loading' | 'no-research' | 'overview' | 'blank' | 'gone' | 'locked';
 
 export interface OverviewWindowScreen {
     content: OverviewWindowContent;
@@ -40,6 +46,14 @@ export interface OverviewWindowScreenInput {
     connection: 'connecting' | 'connected' | 'main-closed';
     /** When the main window was last heard (ms; 0: never). */
     lastHeardAt: number;
+    /** The tree of this window was deleted in the main window (§3.5b). */
+    gone?: boolean;
+    /**
+     * The main window's tree is locked (its status, §3.6): said while no
+     * snapshot is here; a snapshot says it itself (the main window sends one
+     * at the lock and the unlock, the status may come before or after it).
+     */
+    locked?: boolean;
 }
 
 /** What the overview window shows for its state. */
@@ -48,7 +62,10 @@ export function overviewWindowScreen(i: OverviewWindowScreenInput): OverviewWind
     const asOf = Math.max(i.state?.at ?? 0, i.lastHeardAt || 0);
     const s = i.state;
     let content: OverviewWindowContent;
-    if (!s) content = closed ? 'blank' : 'loading';
+    // As the view satellites: the tree deleted before locked, both before what the snapshot holds.
+    if (i.gone) content = 'gone';
+    else if (s ? s.locked : i.locked) content = 'locked';
+    else if (!s) content = closed ? 'blank' : 'loading';
     else if (!s.researchId) content = 'no-research';
     // The tree's research, its overview not there yet (the main window opens it): loading, unless nobody sends it now.
     else if (!s.session || !s.source) content = closed ? 'blank' : 'loading';
@@ -109,8 +126,10 @@ export interface OverviewWindowStateActions {
     makeMain(): void;
     /** "Open Strom" (§3.3): a new main window. */
     openStrom(): void;
-    /** "Close window" (no research). */
+    /** "Close window" (no research, the tree deleted). */
     closeWindow(): void;
+    /** "Go to the main window" (the tree locked). */
+    goToMain(): void;
     /** A time as the strip says it ("14:32"). */
     formatTime(ts: number): string;
 }
@@ -179,19 +198,26 @@ export function renderOverviewWindowState(screen: OverviewWindowScreen, treeName
     const head = node('div', 'research-overview__head research-overview__head--window');
     head.appendChild(node('span', 'live-dot live-dot--still live-dot--off'));
     const titles = node('div', 'research-overview__titles');
-    titles.appendChild(node('h1', 'research-overview__title', strings.win.overviewHead(treeName, strings.live.overviewTitle)));
+    // The tree deleted: the head without it (as the satellites' title, §3.5b).
+    const title = screen.content === 'gone' || !treeName ? strings.live.overviewTitle : strings.win.overviewHead(treeName, strings.live.overviewTitle);
+    titles.appendChild(node('h1', 'research-overview__title', title));
     head.appendChild(titles);
     root.appendChild(head);
     if (screen.closed) root.appendChild(overviewClosedStrip(screen.asOf, act));
 
-    if (screen.content === 'no-research') {
-        const w = strings.win;
+    const w = strings.win;
+    const emptyState = (title: string, note: string, btn: HTMLButtonElement, locked = false): void => {
         const empty = node('div', 'sat-empty');
-        const box = node('div', 'sat-empty-box');
-        const btn = stripButton('sat-empty-btn sat-empty-btn--primary', w.closeWindow, () => act.closeWindow());
-        box.append(node('h2', 'sat-empty-title', w.noResearch), node('p', 'sat-empty-note', w.noResearchNote(treeName)), btn);
+        const box = node('div', `sat-empty-box${locked ? ' sat-empty--locked' : ''}`);
+        box.append(node('h2', 'sat-empty-title', title), node('p', 'sat-empty-note', note), btn);
         empty.appendChild(box);
-        root.appendChild(empty);
+        root!.appendChild(empty);
+    };
+    const closeBtn = () => stripButton('sat-empty-btn sat-empty-btn--primary', w.closeWindow, () => act.closeWindow());
+    if (screen.content === 'no-research') emptyState(w.noResearch, w.noResearchNote(treeName), closeBtn());
+    else if (screen.content === 'gone') emptyState(w.treeGone, w.treeGoneNote, closeBtn());
+    else if (screen.content === 'locked') {
+        emptyState(w.treeLocked, w.treeLockedNote, stripButton('sat-empty-btn', w.goToMain, () => act.goToMain()), true);
     } else if (screen.content === 'loading') {
         const skeleton = node('div', 'sat-skeleton');
         skeleton.setAttribute('aria-busy', 'true');

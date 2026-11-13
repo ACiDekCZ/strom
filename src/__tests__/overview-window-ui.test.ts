@@ -122,6 +122,18 @@ describe('the state sent to the overview window', () => {
         expect(state).toMatchObject({ researchId: null, source: null, session: null });
         expect(ui.openOverviewViewing).not.toHaveBeenCalled();
     });
+
+    it('a locked tree: its name and that it is locked, nothing of its research (followed or not)', () => {
+        fake.live = liveOf();
+        vi.spyOn(DataManager, 'isLocked').mockReturnValue(true);
+        const ui = stateUi();
+        const state = overviewWindowMethods.overviewWindowState.call(ui as never);
+        expect(state).toMatchObject({ treeId: TREE, treeName: 'Okurkovi', researchId: null, researchName: '', source: null, session: null, viewing: null, locked: true });
+        expect(ui.openOverviewViewing).not.toHaveBeenCalled();
+        const text = JSON.stringify(state);
+        expect(text).not.toContain('Okurkovi research');
+        expect(text).not.toContain('W1');
+    });
 });
 
 describe('the window\'s actions run today\'s functions', () => {

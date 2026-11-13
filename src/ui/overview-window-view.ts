@@ -51,13 +51,17 @@ export interface OverviewWindowPort {
 
 /**
  * What the window knows of its main window (the satellite client) and what
- * its states offer (§3.3: Make this the main window, Open Strom; no research:
- * Close window).
+ * its states offer (§3.3: Make this the main window, Open Strom; no research
+ * or the tree deleted: Close window; the tree locked: Go to the main window).
  */
 export interface OverviewWindowHost extends OverviewWindowStateActions {
     connection(): 'connecting' | 'connected' | 'main-closed';
     /** When the main window was last heard (ms; 0: never). */
     lastHeardAt(): number;
+    /** The tree of this window was deleted in the main window (§3.5b). */
+    treeGone(): boolean;
+    /** The main window's tree is locked (its status, §3.6). */
+    locked(): boolean;
 }
 
 /**
@@ -290,7 +294,21 @@ export function startOverviewWindowView(ui: UIClass, mainPort: OverviewWindowPor
     let state: OverviewResearchState | null = null;
     const screen = (): OverviewWindowScreen => overviewWindowScreen({
         state, connection: host?.connection() ?? 'connected', lastHeardAt: host?.lastHeardAt() ?? 0,
+        gone: host?.treeGone() ?? false, locked: host?.locked() ?? false,
     });
+    /**
+     * The tree locked in the main window (§3.6): what was drawn of its
+     * research goes (not shown, not kept); the main window sends it again
+     * after the unlock. The snapshot that says so stays (it holds nothing).
+     */
+    const dropLocked = (): void => {
+        if (state && !state.locked) state = null;
+        drawnNow = null;
+        setOverviewWindowDrawn(null);
+        applyQueueSnapshot(null);
+    };
+    /** The main window's status said locked when last drawn (its snapshot may come before or after it). */
+    let statusLocked = false;
     const port = gatedOverviewPort(mainPort, () => host?.connection() === 'main-closed');
     Object.assign(ui, overviewWindowOverrides(port, () => state));
     setOverviewOwnWindow({
@@ -314,6 +332,14 @@ export function startOverviewWindowView(ui: UIClass, mainPort: OverviewWindowPor
     });
     /** The overview over the snapshot, or what stands in its place (the renderer draws nothing without a session). */
     const render = (): void => {
+        // The status turned to locked: what is drawn goes now (the main window's locked snapshot follows).
+        const lockedNow = host?.locked() ?? false;
+        if (lockedNow && !statusLocked) dropLocked();
+        statusLocked = lockedNow;
+        const sc = screen();
+        if (sc.content === 'locked') dropLocked();
+        // The tree deleted: the overview of the tree the main window shows now is not drawn here (its snapshot is kept).
+        setOverviewWindowDrawn(sc.content === 'gone' ? null : drawnNow);
         ui.renderResearchOverview();
         if (!host || typeof document === 'undefined') return;
         renderOverviewWindowState(screen(), state?.treeName || treeName(), host);
@@ -329,6 +355,12 @@ export function startOverviewWindowView(ui: UIClass, mainPort: OverviewWindowPor
         apply(raw: unknown): boolean {
             const next = readOverviewState(raw);
             if (!next) return false;
+            // A locked tree's: nothing of it is taken in.
+            if (next.locked) {
+                state = next;
+                render();
+                return true;
+            }
             const prevSession = drawnNow?.live ?? drawnNow?.viewing?.session ?? null;
             const sameResearch = !!state && state.researchId === next.researchId && state.treeId === next.treeId;
             state = next;

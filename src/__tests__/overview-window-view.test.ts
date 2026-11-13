@@ -338,8 +338,8 @@ describe('the window\'s states (§6 states 3–5)', () => {
     it('a window whose main window closed: the overview\'s controls post nothing; back: they post again', async () => {
         let connection: 'connected' | 'main-closed' = 'main-closed';
         const host: OverviewWindowHost = {
-            connection: () => connection, lastHeardAt: () => 4000,
-            makeMain: vi.fn(), openStrom: vi.fn(), closeWindow: vi.fn(), formatTime: () => '14:32',
+            connection: () => connection, lastHeardAt: () => 4000, treeGone: () => false, locked: () => false,
+            makeMain: vi.fn(), openStrom: vi.fn(), closeWindow: vi.fn(), goToMain: vi.fn(), formatTime: () => '14:32',
         };
         const ui = { renderResearchOverview: vi.fn(), openWaitingItems: vi.fn(), closeLiveTaskMenu: vi.fn() };
         const { port, sent } = portSpy();
@@ -358,6 +358,81 @@ describe('the window\'s states (§6 states 3–5)', () => {
         connection = 'connected';
         o.stopLiveFollow();
         expect(sent).toEqual([{ action: 'stop-follow', args: undefined }]);
+        view.stop();
+    });
+});
+
+describe('the tree deleted or locked in the main window (§3.5b, §3.6)', () => {
+    const screen = (state: OverviewResearchState | null, o: { gone?: boolean; locked?: boolean; connection?: 'connected' | 'main-closed' } = {}) =>
+        overviewWindowScreen({ state, connection: o.connection ?? 'connected', lastHeardAt: 0, gone: o.gone, locked: o.locked });
+    const lockedState = () => stateOf({ researchId: null, researchName: '', source: null, session: null, locked: true });
+
+    it('deleted: the state with Close window, before anything the snapshot holds (the main window\'s next tree too)', () => {
+        expect(screen(stateOf(), { gone: true }).content).toBe('gone');
+        expect(screen(null, { gone: true }).content).toBe('gone');
+        expect(screen(stateOf({ researchId: null, session: null, source: null }), { gone: true }).content).toBe('gone');
+        expect(screen(lockedState(), { gone: true }).content).toBe('gone');
+        // The main window closed meanwhile: the strip stays with it.
+        expect(screen(stateOf(), { gone: true, connection: 'main-closed' })).toMatchObject({ content: 'gone', closed: true });
+    });
+
+    it('locked: the snapshot says it; without one the status does', () => {
+        expect(screen(lockedState()).content).toBe('locked');
+        expect(screen(lockedState(), { locked: false }).content).toBe('locked');
+        expect(screen(null, { locked: true }).content).toBe('locked');
+        // The unlocked snapshot came before the status: the overview.
+        expect(screen(stateOf(), { locked: true }).content).toBe('overview');
+        expect(screen(null).content).toBe('loading');
+    });
+
+    function stateHost(over: Partial<OverviewWindowHost> = {}): OverviewWindowHost {
+        return {
+            connection: () => 'connected', lastHeardAt: () => 0, treeGone: () => false, locked: () => false,
+            makeMain: vi.fn(), openStrom: vi.fn(), closeWindow: vi.fn(), goToMain: vi.fn(), formatTime: () => '14:32',
+            ...over,
+        };
+    }
+
+    it('locked: nothing of the research is kept, the main window\'s locked snapshot is; unlocked: the overview again', () => {
+        let locked = false;
+        const host = stateHost({ locked: () => locked });
+        const ui = { renderResearchOverview: vi.fn(), openWaitingItems: vi.fn() };
+        const view = startOverviewWindowView(ui as never, portSpy().port, () => 'Okurkovi', host);
+        view.apply(stateOf());
+        expect(view.screen().content).toBe('overview');
+        // The status says locked first: what was drawn goes at once.
+        locked = true;
+        view.render();
+        expect(view.state()).toBeNull();
+        expect(view.screen().content).toBe('locked');
+        // The main window's snapshot of a locked tree: its name only.
+        expect(view.apply(lockedState())).toBe(true);
+        expect(view.state()?.locked).toBe(true);
+        expect(view.state()?.session).toBeNull();
+        expect(view.screen().content).toBe('locked');
+        // Unlocked: the snapshot comes before the status, and is drawn.
+        view.apply(stateOf({ at: 2000 }));
+        expect(view.screen().content).toBe('overview');
+        locked = false;
+        view.render();
+        expect(view.state()?.researchId).toBe('R1');
+        expect(view.screen().content).toBe('overview');
+        view.stop();
+    });
+
+    it('deleted: the snapshot of the main window\'s next tree is kept, not drawn; another tree in the window: drawn', () => {
+        let gone = false;
+        const host = stateHost({ treeGone: () => gone });
+        const ui = { renderResearchOverview: vi.fn(), openWaitingItems: vi.fn() };
+        const view = startOverviewWindowView(ui as never, portSpy().port, () => 'Okurkovi', host);
+        view.apply(stateOf());
+        gone = true;
+        view.apply(stateOf({ treeName: 'Other', researchId: null, session: null, source: null }));
+        expect(view.screen().content).toBe('gone');
+        expect(view.state()?.treeName).toBe('Other');
+        gone = false;
+        view.render();
+        expect(view.screen().content).toBe('no-research');
         view.stop();
     });
 });

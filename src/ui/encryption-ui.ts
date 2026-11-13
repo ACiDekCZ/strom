@@ -45,6 +45,7 @@ import { validateTreeData, ValidationResult as TreeValidationResult, ValidationI
 import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
+import { overviewChanged } from '../windows/overview-window.js';
 
 /** A button on a storage notice. */
 interface NoticeAction { label: string; run: () => void; /** A quiet text link instead of a button. */ link?: boolean }
@@ -615,7 +616,11 @@ export const encryptionUiMethods = uiModule({
             this.hideContextMenu();
             this.hideBottomSheet();
         }
-        if (locked !== was) this.refreshUndoRedoToolbar();
+        if (locked !== was) {
+            this.refreshUndoRedoToolbar();
+            // An overview in its own window says the tree is locked, or draws it again once it is not (spec 079 §3.6).
+            overviewChanged();
+        }
     },
 
     /**
