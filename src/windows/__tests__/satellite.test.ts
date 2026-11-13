@@ -471,6 +471,35 @@ describe('the person menu\'s research rows', () => {
     });
 });
 
+describe('the Research overview in its own window (K3)', () => {
+    it('the research\'s state from the main window reaches the view; another window\'s does not', async () => {
+        await connect();
+        const states: unknown[] = [];
+        sat.on('research-state', (st) => states.push(st));
+        main.post({ type: 'research-state', state: { v: 1, at: 5 } });
+        new WindowBus('other-sat', hub.channel()).post({ type: 'research-state', state: { v: 1, at: 6 } });
+        await settle();
+        expect(states).toEqual([{ v: 1, at: 5 }]);
+    });
+
+    it('an action whose outcome it waits for: the answer to this window, null when the main window is silent', async () => {
+        await connect();
+        const sent = sat.researchActionResult('waiting-answer', { itemId: 'W1', text: 'Yes' }, 300);
+        await settle();
+        const req = of('research-action')[0];
+        expect(req).toMatchObject({ action: 'waiting-answer', args: { itemId: 'W1', text: 'Yes' } });
+        expect(req.reqId).toBeTruthy();
+        main.post({ type: 'research-action-result', to: 'someone-else', reqId: req.reqId!, result: 'fail' });
+        main.post({ type: 'research-action-result', to: SAT, reqId: req.reqId!, result: 'saved' });
+        await settle();
+        await expect(sent).resolves.toBe('saved');
+
+        const silent = sat.researchActionResult('waiting-answer', { itemId: 'W1', text: 'Yes' }, 300);
+        await settle(301);
+        await expect(silent).resolves.toBeNull();
+    });
+});
+
 describe('bring to front', () => {
     function satWithFocus(hasFocus: () => boolean): SatelliteClient {
         sat.stop();

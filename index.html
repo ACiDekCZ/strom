@@ -19405,6 +19405,21 @@
             display: inline-flex; align-items: center; justify-content: center;
         }
         .research-overview--sheet .research-overview__more { width: 44px; height: 44px; font-size: 20px; }
+        /* ⧉ the overview in a window of its own (spec 079 K3): beside ⋯, as large. Not drawn on a phone
+           (≤ 640 px), a phone held sideways (the sheet) or a touch-only system (canOpenWindows). */
+        .research-overview__window {
+            flex: none; width: 32px; height: 32px; padding: 0; margin: 0; min-width: 0; min-height: 0;
+            border: 0; border-radius: var(--r-md); background: none; color: var(--text-light);
+            font-size: 16px; line-height: 1; cursor: pointer;
+            display: inline-flex; align-items: center; justify-content: center;
+        }
+        @media (hover: hover) { .research-overview__window:hover { color: var(--text); background: var(--hover-bg); } }
+        .research-overview__window:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        /* A computer with a touch screen (tablet width included): a 44px tall target from an invisible margin. */
+        @media (pointer: coarse) {
+            .research-overview__window { position: relative; }
+            .research-overview__window::before { content: ""; position: absolute; inset: -6px -1px; }
+        }
         .live-sec-more[aria-expanded="true"] { background: var(--hover-bg); color: var(--text); }
         @media (hover: hover) { .live-sec-more:hover { color: var(--text); background: var(--hover-bg); } }
         .live-sec-more:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }

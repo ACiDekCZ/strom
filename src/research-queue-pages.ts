@@ -160,6 +160,18 @@ export function resetQueueLists(): void {
     listsRev = '';
 }
 
+/**
+ * The lists read now, for the Research overview in its own window (K3):
+ * copies without the bridge they were read from (null: none read).
+ */
+export function queueListsSnapshot(): { rev: string; lists: QueueList[] } | null {
+    if (!listsBase) return null;
+    return {
+        rev: listsRev,
+        lists: [...lists.values()].map(l => ({ ...l, filter: { ...l.filter }, items: [...l.items] })),
+    };
+}
+
 /** The list of `filter` read from `base` (null: not asked yet, or another bridge). */
 export function queueList(base: string, filter: QueueFilter): QueueList | null {
     return base && base === listsBase ? lists.get(queueFilterKey(filter)) ?? null : null;

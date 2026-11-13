@@ -54,6 +54,8 @@ import { PREF_KEYS, PrefKey, SectionPref, prefKeyOfOverview, sectionOrder, secti
 import { OverviewSourceKind, afterTurnOnKeys, skeletonLines } from '../research-overview-source.js';
 import { sectionTitle } from './live-section-edit.js';
 import { joinAnd } from '../strings.js';
+import { canOpenWindows, openInNewWindow } from '../windows/window-open.js';
+import { focusOverviewWindow, overviewChanged, overviewInWindow } from '../windows/overview-window.js';
 
 /** The overview stays open over a reload / the next following (per device). */
 const OPEN_KEY = 'strom-live-overview-open';
@@ -134,8 +136,8 @@ function hhmm(ts: number): string {
     return new Date(ts).toLocaleTimeString(getCurrentLanguage(), { hour: 'numeric', minute: '2-digit' });
 }
 
-/** Light a card up while its change row is hovered. */
-function hoverCard(id: PersonId | null): void {
+/** Light a card up while its change row is hovered (in this window, or in the overview's own window: K3). */
+export function hoverCard(id: PersonId | null): void {
     hovered?.classList.remove('overview-hover');
     hovered = id ? document.querySelector<HTMLElement>(`.person-card[data-id="${CSS.escape(id)}"]`) : null;
     hovered?.classList.add('overview-hover');
@@ -330,6 +332,11 @@ export const researchOverviewMethods = uiModule({
      * focus on its heading.
      */
     openResearchOverview(opts: { showWaiting?: boolean } = {}): void {
+        // The overview in its own window (spec 079 6g): that window comes to the front, none opens here.
+        if (overviewInWindow()) {
+            focusOverviewWindow();
+            return;
+        }
         const s = liveSession();
         if (s && !s.ended && s.treeId === DataManager.getCurrentTreeId()) {
             s.overview = true;
@@ -406,6 +413,8 @@ export const researchOverviewMethods = uiModule({
 
     /** Draw (or remove) the overview. Called with every panel redraw. */
     renderResearchOverview(): void {
+        // What the overview shows may have changed: an overview in its own window hears it (K3).
+        overviewChanged();
         // A direction dragged: its row stays under the pointer; the redraw comes when it lands.
         if (directionDragActive()) {
             directionRedrawHeld();
@@ -417,16 +426,20 @@ export const researchOverviewMethods = uiModule({
         // The followed research's, else the open tree's viewed without following (spec 057 §7.2).
         const followed = followedOverview();
         const viewed = followed ? null : overviewViewing();
-        const s = drawnSession();
+        // The overview in its own window (6g): none is drawn here.
+        const inWindow = overviewInWindow();
+        const s = inWindow ? null : drawnSession();
         const on = !!s;
         const source: OverviewSourceKind = followed ? 'live' : viewed?.kind ?? 'tree';
         // "More actions" belongs to the open detail: gone with it.
         if (moreMenuFor && (!on || s?.waitingView.detail !== moreMenuFor)) this.closeWaitingMoreMenu();
         let root = document.getElementById('research-overview');
         if (!on || !s) {
-            // Nothing shows the queue's pages: their reads stop.
-            beginQueueSlots();
-            endQueueSlots();
+            // Nothing shows the queue's pages: their reads stop (the overview's own window asks for its own).
+            if (!inWindow) {
+                beginQueueSlots();
+                endQueueSlots();
+            }
             if (root) {
                 root.remove();
                 hoverCard(null);
@@ -500,6 +513,8 @@ export const researchOverviewMethods = uiModule({
         if (follow) head.appendChild(follow);
         // Customize panel: after the follow switch, before ⤡ / ×.
         head.appendChild(this.liveSectionMoreButton('research-overview__more', 'overview'));
+        // ⧉ the overview in a window of its own (spec 079 §6, K3): beside ⋯, not on a phone or a touch screen.
+        if (mode !== 'sheet' && canOpenWindows()) head.appendChild(this.overviewWindowButton());
         head.appendChild(close);
         root.appendChild(head);
         // Without following, the bridge answering: "Follow live" and what it does, under the head (§7.3).
@@ -1848,6 +1863,22 @@ export const researchOverviewMethods = uiModule({
         const s = drawnSession();
         if (!s) return;
         if (sectionCollapsed(key) || sectionPref(key) === 'hidden') s.overviewShown.add(key);
+    },
+
+    /**
+     * ⧉ in the overview's head: the overview opens in a window of its own and
+     * closes here (opened at once in the click: a browser blocks a window
+     * opened later). Blocked: it stays here (the opener says why).
+     */
+    overviewWindowButton(): HTMLElement {
+        const W = strings.win;
+        const btn = el('button', 'research-overview__window', '⧉');
+        btn.type = 'button';
+        btn.setAttribute('aria-label', W.openInNewWindow);
+        btn.title = W.openInNewWindow;
+        // Opened: the main window's list of windows says so, and the overview here closes (overviewWindowOpenChanged, overview-window-ui).
+        btn.onclick = () => openInNewWindow('overview');
+        return btn;
     },
 
     /** A person from the overview: centred in the tree (the sheet closes first). */

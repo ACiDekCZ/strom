@@ -23,6 +23,7 @@ import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import type { WindowRegistry, WindowEntry } from './window-registry.js';
 import { windowStartState } from './window-start.js';
+import { focusOverviewWindow, overviewInWindow } from './overview-window.js';
 import type { SatelliteKind } from './window-role.js';
 import {
     canOpenWindows, onWindowOfferChange, openInNewWindow, setViewModeCheck, setWindowControlsRefresher, setWindowOpener,
@@ -267,6 +268,23 @@ function renderMenu(): void {
         item.addEventListener('click', () => {
             closeMenu(false);
             openInNewWindow(kind);
+        });
+        menu.appendChild(item);
+    }
+    // The Research overview (K3): only for a tree with a research; open already, its window comes to the front (6g).
+    if (UI.canOpenResearchOverview()) {
+        menu.appendChild(el('div', 'view-window-sep'));
+        const item = el('button', 'view-window-item');
+        item.type = 'button';
+        item.setAttribute('role', 'menuitem');
+        item.dataset.view = 'overview';
+        item.dataset.key = 'view:overview';
+        item.appendChild(el('span', 'view-window-item-label', windowKindLabel('overview')));
+        if (overviewInWindow()) item.title = W.overviewInWindow;
+        item.addEventListener('click', () => {
+            closeMenu(false);
+            if (overviewInWindow()) focusOverviewWindow();
+            else openInNewWindow('overview');
         });
         menu.appendChild(item);
     }

@@ -30,6 +30,7 @@ import { exportDate } from './snapshots-ui.js';
 import { waitingTodoCount } from '../research-waiting.js';
 import { researchOpenMark, researchActionLabel, researchActionMark, researchMarkFlags } from './research-open-mark.js';
 import { researchOpenSvg } from '../history-symbols.js';
+import { overviewInWindow } from '../windows/overview-window.js';
 
 export { researchOpenMark } from './research-open-mark.js';
 
@@ -102,6 +103,8 @@ interface SubmenuItem {
     val?: string;
     /** It asks for attention (an update): an amber dot at the end. */
     attn?: boolean;
+    /** A tooltip (the overview's row while the overview is in its own window: a click brings it to the front). */
+    title?: string;
 }
 
 /**
@@ -196,7 +199,7 @@ function submenuItemHtml(item: SubmenuItem, desc = ''): string {
             + `<span class="research-item-label">${esc(item.link.label)}</span>${researchActionMark(item.link.mark, { sr: false })}</div>`
         : '';
     return `<div class="tree-switcher-action${item.disabled ? ' is-disabled' : ''}${item.sub ? ' research-item--two' : ''}" id="${item.id}" role="menuitem" tabindex="0"`
-        + ` aria-label="${esc(itemAria(item))}"${item.ext ? described : ''}${item.submenu ? ' aria-haspopup="menu"' : ''}${item.disabled ? ' aria-disabled="true"' : ` onclick="${itemCall(item)}"`}>`
+        + ` aria-label="${esc(itemAria(item))}"${item.title ? ` title="${esc(item.title)}"` : ''}${item.ext ? described : ''}${item.submenu ? ' aria-haspopup="menu"' : ''}${item.disabled ? ' aria-disabled="true"' : ` onclick="${itemCall(item)}"`}>`
         + (item.dot ? '<span class="research-item-dot" aria-hidden="true"></span>' : '')
         + (item.sub
             ? `<span class="research-item-label research-item-label--two"><span>${esc(item.label)}</span><span class="research-item-sub">${esc(item.sub)}</span></span>`
@@ -381,7 +384,11 @@ export const researchActionsMethods = uiModule({
         // First of all, followed or not (spec 057 §7.1): the overview, then following live — Stop while
         // following, else "Follow live" (it stays in the app: no mark; an archive has no agent to follow).
         const followingHere = this.isFollowingActiveResearch();
-        const overviewRows: SubmenuItem[] = [{ id: 'research-item-overview', label: strings.live.overviewTitle, method: 'researchActionOverview' }];
+        // The overview in its own window (spec 079 6g): the row brings that window to the front.
+        const overviewRows: SubmenuItem[] = [{
+            id: 'research-item-overview', label: strings.live.overviewTitle, method: 'researchActionOverview',
+            ...(overviewInWindow() ? { title: strings.win.overviewInWindow } : {}),
+        }];
         if (followingHere) overviewRows.push({ id: 'research-item-stop', label: r.stop, method: 'researchActionStop' });
         else if (!noAgent && this.researchLinkAvailable('live')) overviewRows.push({ id: 'research-item-live', label: r.followLive, method: 'researchActionLive' });
         if (!this.researchAnyAnnounced()) {

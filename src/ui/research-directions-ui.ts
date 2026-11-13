@@ -19,6 +19,7 @@ import { LiveDirection, LiveDirectionKind, LiveWorker, ResearchDirectionDo, rese
 import { uiModule } from './module.js';
 import { MQ_PHONE_BAR } from '../breakpoints.js';
 import { LiveFold, LiveSession, el, liveSection, researchSession, pausedText, timeEl, workingNumberBadge } from './research-ui.js';
+import type { OverviewLinesState } from '../windows/overview-window.js';
 import { shownName, fitNameHtml } from '../person-name.js';
 import {
     orderDirections, withPendingOrder, moveInOrder, dropInOrder, sameOrder, DirectionOrderWriter, DirectionMove, withBusyRetry,
@@ -256,6 +257,31 @@ let dragging: string | null = null;
 let redrawAfterDrag = false;
 /** The end confirmation's cleanup (null: none open). */
 let endPopoverCleanup: (() => void) | null = null;
+
+/**
+ * The lines' state this window holds, for the Research overview in its own
+ * window (K3): the selection, an order on its way, writes under way and
+ * refused, an archive said (nothing of the bridge's address).
+ */
+export function directionsWindowState(s: LiveSession | null): OverviewLinesState {
+    const base = s?.bridge.base ?? '';
+    return {
+        selected: queueDirectionFilter(s),
+        pendingOrder: pendingOrder && base && pendingOrder.base === base ? [...pendingOrder.order] : null,
+        orderSaving,
+        busy: [...rowsBusy],
+        problems: [...rowProblems].map(([id, p]) => ({ id, text: p.text, tone: p.tone, retry: !!p.retry })),
+        archive: !!base && archiveSaid === base,
+    };
+}
+
+/** "Try again" at a line whose write was refused (asked from the overview's window); false: nothing to try. */
+export function retryDirectionProblem(id: string): boolean {
+    const retry = rowProblems.get(id)?.retry;
+    if (!retry) return false;
+    retry();
+    return true;
+}
 
 /** Directions just created from the form: lit for 2 s (§2.7). */
 const freshDirections = new Set<string>();

@@ -75,8 +75,12 @@ export type WindowMessageBody =
     /** a request to come to the front, and its confirmation (the window got the focus). */
     | { type: 'focus-req'; to: string }
     | { type: 'focused'; to: string }
-    /** sat / overview → main: a research action to run in the main window (§2, §6). */
-    | { type: 'research-action'; action: string; args?: unknown }
+    /**
+     * sat / overview → main: a research action to run in the main window (§2,
+     * §6); with `reqId` its outcome comes back to that window only.
+     */
+    | { type: 'research-action'; action: string; args?: unknown; reqId?: string }
+    | { type: 'research-action-result'; to: string; reqId: string; result: unknown }
     /**
      * sat → main: the research's rows of the person menu (§2, 2g), as the
      * main window offers them now; the answer goes to that window only.
@@ -117,7 +121,7 @@ export interface ChannelLike {
 }
 
 const TYPES = new Set<string>(['hello', 'init', 'tree', 'patch', 'edit', 'edit-result', 'select', 'undo', 'redo', 'status',
-    'focus-req', 'focused', 'research-action', 'research-menu-req', 'research-menu', 'research-state', 'view', 'spawn', 'bye', 'main-bye', 'link', 'close']);
+    'focus-req', 'focused', 'research-action', 'research-action-result', 'research-menu-req', 'research-menu', 'research-state', 'view', 'spawn', 'bye', 'main-bye', 'link', 'close']);
 
 function isWindowMessage(data: unknown): data is WindowMessage {
     if (!data || typeof data !== 'object') return false;

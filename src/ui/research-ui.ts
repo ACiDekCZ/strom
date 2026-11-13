@@ -52,6 +52,7 @@ import { keepImports } from '../import-origin.js';
 import { uiModule } from './module.js';
 import { returnFocusAfterViewer } from './sources.js';
 import { withAppVersion, researchGedcomTitles, researchSendsReadings, researchSendsSourceFields, TitlesInGedcom, changeKind, changeAdds, sanitizeLiveLog, sourceIdsByRef, findSourceTitle, lineNewerThanLoaded, textKind, textPersonRefs, textWithoutRefs, LiveChangeKind, LiveLogEntry, LiveCommitAdds, LiveRecent, waitingAnswerPlace } from '../research-link.js';
+import { overviewInWindow } from '../windows/overview-window.js';
 import { AGENT_DONE_MS, AGENT_DONE_FADE_MS, ResearchCardInfo, setResearchCardInfoProvider } from '../card-signals.js';
 import {
     activeDirections, directionGlyph, directionsMulti, keepLineFocus, lineGlyphFor, linesMulti, queueDirectionFilter, selectedLine,
@@ -277,7 +278,8 @@ const PANEL_CHANGES = 5;
 
 /** The small panel hides on another tree and while the overview (which shows the same) is drawn. */
 function livePanelHidden(s: LiveSession): boolean {
-    return DataManager.getCurrentTreeId() !== s.treeId || (s.overview && !s.ended) || viewingShown();
+    // The overview in its own window (spec 079 6g): the small panel stays here.
+    return DataManager.getCurrentTreeId() !== s.treeId || (s.overview && !s.ended && !overviewInWindow()) || viewingShown();
 }
 
 /**
@@ -286,7 +288,8 @@ function livePanelHidden(s: LiveSession): boolean {
  * research's overview does; the panel lay over its ⤡ and took its click.
  */
 function viewingShown(): boolean {
-    return !!viewing && viewing.treeId === DataManager.getCurrentTreeId();
+    // Kept for the overview's own window (6g): nothing is drawn over the panel here.
+    return !!viewing && viewing.treeId === DataManager.getCurrentTreeId() && !overviewInWindow();
 }
 
 /** Whether a panel section is folded: the user's choice, else the panel's own. */
@@ -4230,8 +4233,10 @@ export const researchUiMethods = uiModule({
         if (this.canExpandLivePanel()) {
             const expand = el('button', 'live-panel-expand', '⤢');
             expand.type = 'button';
-            expand.setAttribute('aria-label', L.openOverview);
-            expand.title = L.openOverview;
+            // The overview in its own window (6g): ⤢ brings that window to the front.
+            const label = overviewInWindow() ? strings.win.overviewInWindow : L.openOverview;
+            expand.setAttribute('aria-label', label);
+            expand.title = label;
             expand.onclick = () => this.openResearchOverview();
             icons.appendChild(expand);
         }

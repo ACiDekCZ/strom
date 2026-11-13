@@ -108,6 +108,7 @@ import { waitingTaskMethods } from './waiting-task-ui.js';
 import { researchBrowserMethods } from './research-browser-ui.js';
 import { researchRemovedMethods } from './research-removed-ui.js';
 import { researchDirectionsMethods } from './research-directions-ui.js';
+import { overviewWindowMethods } from './overview-window-ui.js';
 import { directionFormMethods } from './direction-form-ui.js';
 import { researchOffLineMethods } from './research-offline-ui.js';
 import { liveFollowMethods } from './live-follow-ui.js';
@@ -815,6 +816,10 @@ Object.assign(UIClass.prototype, researchRemovedMethods);
 type ResearchDirectionsMethods = typeof researchDirectionsMethods;
 export interface UIClass extends ResearchDirectionsMethods {}
 Object.assign(UIClass.prototype, researchDirectionsMethods);
+
+type OverviewWindowMethods = typeof overviewWindowMethods;
+export interface UIClass extends OverviewWindowMethods {}
+Object.assign(UIClass.prototype, overviewWindowMethods);
 
 type DirectionFormMethods = typeof directionFormMethods;
 export interface UIClass extends DirectionFormMethods {}

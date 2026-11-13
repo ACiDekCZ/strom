@@ -25,6 +25,7 @@ import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
 import { PERSON_MENU_ACTION, runSatelliteResearchRow, SatelliteResearchMenu, setSatelliteResearchMenu } from './window-research-menu.js';
+import { startOverviewMain } from './overview-main.js';
 import type { PersonId } from '../types.js';
 import { wireMainSelection, wireSatelliteSelection, type SelectionDeps } from './window-selection.js';
 import { SettingsManager } from '../settings.js';
@@ -104,9 +105,18 @@ export function startMainWindow(): WindowRegistry {
     // The person menu's research rows of a satellite (§2, 2g): listed and run here, as this window's own menu.
     const researchItems = (personId: string) => (DataManager.getPerson(personId as PersonId) ? UI.personResearchMenuItems(personId as PersonId) : null);
     registry.setResearchMenuProvider((personId) => researchItems(personId) ?? []);
+    // The Research overview in a window of its own (spec 079 K3): its state sent there, its actions run here.
+    const overview = startOverviewMain(registry, {
+        state: () => UI.overviewWindowState(),
+        run: (a) => UI.runOverviewWindowAction(a),
+        openChanged: (open) => UI.overviewWindowOpenChanged(open),
+    });
     registry.setResearchActionHandler((action, args) => {
-        if (action !== PERSON_MENU_ACTION) return;
-        runSatelliteResearchRow(args, { items: researchItems, run: (personId, a) => UI.runPersonMenuAction(personId as PersonId, a) });
+        if (action === PERSON_MENU_ACTION) {
+            runSatelliteResearchRow(args, { items: researchItems, run: (personId, a) => UI.runPersonMenuAction(personId as PersonId, a) });
+            return;
+        }
+        return overview.handle(action, args).result;
     });
     return registry;
 }

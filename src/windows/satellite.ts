@@ -59,6 +59,8 @@ export interface SatelliteEvents {
     renamed: string;
     /** The tree of this window was deleted in the main window (§3.5b). */
     'tree-gone': { treeId: TreeId | null };
+    /** The research's state from the main window (K3, overview-window.ts: read it with readOverviewState). */
+    'research-state': unknown;
     /** Another window selected a person (only while following the selection). */
     select: { personId: string | null; origin: string };
     /** "Follow selection" was switched on or off in this window (off: the mark of another window's choice goes). */
@@ -151,6 +153,7 @@ export class SatelliteClient {
     private started = false;
     private menuReqs = 0;
     private readonly menuWaiters = new Map<string, (items: unknown[]) => void>();
+    private readonly actionWaiters = new Map<string, (result: unknown) => void>();
 
     constructor(params: SatelliteParams, opts: SatelliteClientOptions = {}) {
         this.windowId = params.windowId;
@@ -257,6 +260,8 @@ export class SatelliteClient {
             b.on('focused', m => { if (m.from === this.mainId) this.focusWaiter?.(); }),
             b.on('close', () => { this.emit('close', {}); this.closeSelf(); }),
             b.on('research-menu', m => this.menuWaiters.get(m.reqId)?.(Array.isArray(m.items) ? m.items : [])),
+            b.on('research-action-result', m => this.actionWaiters.get(m.reqId)?.(m.result)),
+            b.on('research-state', m => { if (!this.mainId || m.from === this.mainId) this.emit('research-state', m.state); }),
         );
         if (typeof window !== 'undefined') {
             const bye = () => this.bus.post({ type: 'bye', windowId: this.windowId, bounds: this.bounds() });
@@ -359,6 +364,21 @@ export class SatelliteClient {
     /** A research action: the main window runs it (§2 person menu). */
     researchAction(action: string, args?: unknown): void {
         this.bus.post({ type: 'research-action', action, args });
+    }
+
+    /**
+     * A research action whose outcome the window waits for (K3: an answer
+     * sent from the overview window); null when the main window does not
+     * answer within `waitMs`.
+     */
+    researchActionResult(action: string, args: unknown, waitMs: number): Promise<unknown> {
+        if (this._connection !== 'connected') return Promise.resolve(null);
+        const reqId = `${this.windowId}:a${++this.menuReqs}`;
+        return new Promise((resolve) => {
+            const timer = setTimeout(() => { this.actionWaiters.delete(reqId); resolve(null); }, waitMs);
+            this.actionWaiters.set(reqId, (result) => { clearTimeout(timer); this.actionWaiters.delete(reqId); resolve(result); });
+            this.bus.post({ type: 'research-action', action, args, reqId });
+        });
     }
 
     // ---- inside ----

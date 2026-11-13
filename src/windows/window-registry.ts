@@ -181,7 +181,9 @@ export const HEARTBEAT_MS = 1000;
 
 type SelectHandler = (personId: string | null, origin: string) => void;
 type LinkHandler = (link: { search?: string; files?: unknown[] }, from: string) => void;
-type ResearchActionHandler = (action: string, args: unknown, from: string) => void;
+/** Runs a research action; what it returns (or its promise resolves to) goes back to an action sent with `reqId`. */
+type ResearchActionHandler = (action: string, args: unknown, from: string) => unknown;
+type HeldAction = { action: string; args: unknown; from: string; reqId?: string };
 
 export class WindowRegistry {
     private readonly bus: WindowBus;
@@ -196,7 +198,8 @@ export class WindowRegistry {
     private researchHandler: ResearchActionHandler | null = null;
     private researchMenuProvider: ((personId: string) => unknown[]) | null = null;
     private readonly heldLinks: { link: { search?: string; files?: unknown[] }; from: string }[] = [];
-    private readonly heldActions: { action: string; args: unknown; from: string }[] = [];
+    private readonly heldActions: HeldAction[] = [];
+    private readonly helloListeners = new Set<(id: string, kind: SatelliteKind) => void>();
     private readonly focusWaiters = new Map<string, () => void>();
     private readonly unsubscribe: (() => void)[] = [];
 
@@ -243,7 +246,7 @@ export class WindowRegistry {
             b.on('focus-req', m => this.onFocusRequest(m.from)),
             b.on('focused', m => this.focusWaiters.get(m.from)?.()),
             b.on('link', m => this.onLink({ search: m.search, files: m.files }, m.from)),
-            b.on('research-action', m => this.onResearchAction(m.action, m.args, m.from)),
+            b.on('research-action', m => this.onResearchAction({ action: m.action, args: m.args, from: m.from, reqId: m.reqId })),
             b.on('research-menu-req', m => this.onResearchMenuRequest(m)),
             this.host.onSaved(() => this.sync()),
         );
@@ -385,7 +388,13 @@ export class WindowRegistry {
     /** Who runs a research action asked for by a satellite (§2, §6). */
     setResearchActionHandler(cb: ResearchActionHandler | null): void {
         this.researchHandler = cb;
-        if (cb) for (const a of this.heldActions.splice(0)) cb(a.action, a.args, a.from);
+        if (cb) for (const a of this.heldActions.splice(0)) this.runResearchAction(a);
+    }
+
+    /** A window said hello (a new one, or one reloaded): what only it needs now goes to it (K3: the research's state). */
+    onWindowHello(cb: (id: string, kind: SatelliteKind) => void): () => void {
+        this.helloListeners.add(cb);
+        return () => this.helloListeners.delete(cb);
     }
 
     /** The research's state for an overview window (K3). */
@@ -532,6 +541,9 @@ export class WindowRegistry {
         this.sendTreeTo(id);
         this.postStatus(true);
         this.emitChange();
+        for (const cb of [...this.helloListeners]) {
+            try { cb(id, entry.kind); } catch (err) { console.error('hello listener failed', err); }
+        }
     }
 
     private onEdit(m: MessageOf<'edit'>): void {
@@ -610,9 +622,30 @@ export class WindowRegistry {
         this.bus.post({ type: 'research-menu', to: m.from, reqId: m.reqId, items });
     }
 
-    private onResearchAction(action: string, args: unknown, from: string): void {
-        if (this.researchHandler) this.researchHandler(action, args, from);
-        else this.heldActions.push({ action, args, from });
+    private onResearchAction(a: HeldAction): void {
+        if (this.researchHandler) this.runResearchAction(a);
+        else this.heldActions.push(a);
+    }
+
+    private runResearchAction(a: HeldAction): void {
+        let result: unknown = null;
+        try {
+            result = this.researchHandler?.(a.action, a.args, a.from);
+        } catch (err) {
+            console.error('research action failed', err);
+        }
+        const reqId = a.reqId;
+        if (!reqId) return;
+        const answer = (value: unknown) => {
+            try {
+                this.bus.post({ type: 'research-action-result', to: a.from, reqId, result: value ?? null });
+            } catch (err) {
+                // An outcome a structured clone does not take: the window hears "no outcome".
+                console.error('research action result not sent', err);
+                this.bus.post({ type: 'research-action-result', to: a.from, reqId, result: null });
+            }
+        };
+        Promise.resolve(result).then(answer, (err) => { console.error('research action failed', err); answer(null); });
     }
 
     private waitFocused(id: string): Promise<boolean> {
