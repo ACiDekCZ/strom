@@ -4747,7 +4747,12 @@ const stringsEN = {
     personPicker: {
         placeholder: 'Search person...',
         noResults: 'No matching people',
-        showList: 'Show list'
+        showList: 'Show list',
+        distNone: 'no other details',
+        distChild: { f: (p: string) => `daughter of ${p}`, m: (p: string) => `son of ${p}`, u: (p: string) => `child of ${p}` },
+        distAnd: 'and',
+        distBorn: (m: string) => `born in ${m}`,
+        distLived: (m: string) => `lived in ${m}`,
     },
 
     // Errors
@@ -13598,7 +13603,12 @@ const stringsCZ: StringsType = {
     personPicker: {
         placeholder: 'Hledat osobu...',
         noResults: 'Žádné odpovídající osoby',
-        showList: 'Zobrazit seznam'
+        showList: 'Zobrazit seznam',
+        distNone: 'bez dalších údajů',
+        distChild: { f: (p: string) => `dcera: ${p}`, m: (p: string) => `syn: ${p}`, u: (p: string) => `dítě: ${p}` },
+        distAnd: 'a',
+        distBorn: (m: string) => `rodiště ${m}`,
+        distLived: (m: string) => `bydliště ${m}`,
     },
 
     // Errors
@@ -22381,7 +22391,12 @@ const stringsDE: StringsType = {
     personPicker: {
         placeholder: 'Person suchen...',
         noResults: 'Keine passenden Personen',
-        showList: 'Liste anzeigen'
+        showList: 'Liste anzeigen',
+        distNone: 'keine weiteren Angaben',
+        distChild: { f: (p: string) => `Tochter von ${p}`, m: (p: string) => `Sohn von ${p}`, u: (p: string) => `Kind von ${p}` },
+        distAnd: 'und',
+        distBorn: (m: string) => `Geburtsort ${m}`,
+        distLived: (m: string) => `Wohnort ${m}`,
     },
 
     // Errors

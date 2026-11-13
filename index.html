@@ -23953,10 +23953,44 @@
             border-bottom: 1px solid var(--divider);
             font-size: 14px;
             transition: background 0.15s;
+            /* The name row, then at most one quiet row under it. */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            box-sizing: border-box;
+            min-width: 0;
             /* One name per row; ellipsis only when the viewport cap truly bites. */
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+        }
+        .person-picker-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+        /* A row whose name repeats in the result: what tells it apart (years,
+           ⚭ partner, parents, place), the end cut with "…" — the whole line is
+           in the row's title and accessible name. */
+        .person-picker-item.has-dist {
+            min-height: 46px; padding-top: 6px; padding-bottom: 6px; gap: 1px;
+            /* The list is as wide as its names (max-content); a row with such a
+               line takes at least this much, the line itself never widens it. */
+            min-width: min(330px, calc(100vw - 32px));
+        }
+        .person-picker-dist {
+            /* No share in the list's width: as wide as the row, cut with "…". */
+            width: 0;
+            min-width: 100%;
+            font-size: 12px;
+            line-height: 1.35;
+            color: var(--text-light);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        /* Found by a detail as well: one row, "* 1820 · † 1866 Horní Smyšlenice · cholera". */
+        .person-picker-dist .person-picker-match { display: inline; margin: 0; font-size: inherit; color: inherit; }
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .person-picker-item { min-height: 48px; }
+            /* Same names on a phone: the list takes the screen's width, so the line says as much as it can. */
+            .person-picker-item.has-dist { min-height: 56px; min-width: calc(100vw - 18px); }
         }
         /* A name with its birth-surname note may take a second line. */
         .person-picker-item:has(.pn-note) { white-space: normal; }

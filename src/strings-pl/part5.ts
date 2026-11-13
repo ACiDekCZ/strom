@@ -660,7 +660,12 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
     personPicker: {
         placeholder: 'Szukaj osoby...',
         noResults: 'Brak pasujących osób',
-        showList: 'Pokaż listę'
+        showList: 'Pokaż listę',
+        distNone: 'brak innych danych',
+        distChild: { f: (p: string) => `córka: ${p}`, m: (p: string) => `syn: ${p}`, u: (p: string) => `dziecko: ${p}` },
+        distAnd: 'i',
+        distBorn: (m: string) => `miejsce urodzenia ${m}`,
+        distLived: (m: string) => `zamieszkanie ${m}`,
     },
 
     // Errors

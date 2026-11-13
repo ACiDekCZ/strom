@@ -9,8 +9,9 @@ import { DataManager } from './data.js';
 import { normalizeSearchText as normalizeText, alternateNames, nameMatchesQuery } from './name-search.js';
 import { detailMatch } from './search-filter.js';
 import { displayYear } from './dates.js';
-import { nameHtml, surnameDisplay, shownNameParts, shownSurnameIsBirth, titlesShown } from './person-name.js';
+import { nameHtml, surnameDisplay, shownName, shownNameParts, shownSurnameIsBirth, titlesShown, birthNoteText } from './person-name.js';
 import { surnameForms } from './surnames.js';
+import { PickerDistinguisher } from './picker-distinguish.js';
 
 /**
  * Sort persons by name (lastName, firstName)
@@ -120,6 +121,14 @@ export function hiddenSurnameMatchHtml(person: Person, query: string, data: Stro
     return `<div class="person-picker-match">${esc(before)}<mark>${esc(hidden.trim())}</mark>${esc(after)}</div>`;
 }
 
+/** The text of a small piece of the picker's own HTML (tags dropped, entities read). */
+function htmlToText(html: string): string {
+    if (!html) return '';
+    return html.replace(/<[^>]*>/g, '')
+        .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&')
+        .trim();
+}
+
 export interface PersonPickerOptions {
     containerId: string;
     onSelect: (personId: PersonId) => void;
@@ -150,6 +159,8 @@ export class PersonPicker {
     private isOpen: boolean = false;
     private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
     private displayedCount: number = BATCH_SIZE;
+    /** Lines telling apart the rows of the same name in the current result. */
+    private distinguisher: PickerDistinguisher | null = null;
 
     constructor(options: PersonPickerOptions) {
         this.options = {
@@ -205,6 +216,8 @@ export class PersonPicker {
         // Dropdown
         this.dropdown = document.createElement('div');
         this.dropdown.className = 'person-picker-dropdown';
+        this.dropdown.setAttribute('role', 'listbox');
+        this.dropdown.setAttribute('aria-label', this.options.placeholder || strings.personPicker.placeholder);
         this.container.appendChild(this.dropdown);
 
         // Event listeners
@@ -394,6 +407,7 @@ export class PersonPicker {
         const items = this.dropdown.querySelectorAll('.person-picker-item');
         items.forEach((item, index) => {
             item.classList.toggle('selected', index === this.selectedIndex);
+            item.setAttribute('aria-selected', String(index === this.selectedIndex));
             if (index === this.selectedIndex) {
                 item.scrollIntoView({ block: 'nearest' });
             }
@@ -428,7 +442,11 @@ export class PersonPicker {
      */
     private renderDropdown(): void {
         const query = this.input.value.trim();
-        this.filteredPersons = filterAndSort(query, this.allPersons, this.searchData(), !!this.options.searchDetails);
+        const data = this.searchData();
+        this.filteredPersons = filterAndSort(query, this.allPersons, data, !!this.options.searchDetails);
+        // Same names of the whole result are counted now; each row's line is worked out when it is drawn.
+        this.distinguisher = new PickerDistinguisher(this.filteredPersons, data, !!this.options.showBirthYear,
+            person => htmlToText(this.matchHtml(person)));
         this.selectedIndex = -1;
         this.displayedCount = BATCH_SIZE;
 
@@ -489,21 +507,46 @@ export class PersonPicker {
     }
 
     /**
-     * Render a single item
+     * Render a single item: the name (with the birth year when shown) and,
+     * under it, at most one quiet row — what tells it apart from rows of the
+     * same name, what it was found by, or both on one row.
      */
     private renderItem(person: Person, index: number): string {
         // The list shows the name with its titles; the input keeps the bare
         // name (formatPersonName), which is what the search matches.
-        const birthYear = this.options.showBirthYear && person.birthDate
-            ? `<span class="birth-year">(*${this.escapeHtml(person.birthDate.split('-')[0])})</span>`
+        const year = this.options.showBirthYear && person.birthDate ? person.birthDate.split('-')[0] : '';
+        const birthYear = year ? `<span class="birth-year">(*${this.escapeHtml(year)})</span>` : '';
+        const match = this.matchHtml(person);
+        const dist = this.distinguisher?.line(person) ?? null;
+        let below = match;
+        let label = '';
+        if (dist) {
+            const inline = match
+                ? ` · ${match.replace(/^<div class="person-picker-match">/, '<span class="person-picker-match">').replace(/<\/div>$/, '</span>')}`
+                : '';
+            below = `<div class="person-picker-dist">${this.escapeHtml(dist)}${inline}</div>`;
+            const matchText = htmlToText(match);
+            const parts = shownNameParts(person, '');
+            const note = birthNoteText(parts.birthNote);
+            const name = shownName(person) + (note ? ` (${note})` : '') + (year ? ` (*${year})` : '');
+            label = `${name}, ${dist}${matchText ? ` · ${matchText}` : ''}`;
+        }
+        const selected = index === this.selectedIndex;
+        const labelAttrs = label
+            ? ` aria-label="${this.escapeHtml(label)}" title="${this.escapeHtml(label)}"`
             : '';
 
         return `
-            <div class="person-picker-item${index === this.selectedIndex ? ' selected' : ''}"
+            <div class="person-picker-item${selected ? ' selected' : ''}${dist ? ' has-dist' : ''}" role="option" aria-selected="${selected}"${labelAttrs}
                  data-id="${this.escapeHtml(person.id)}">
-                ${nameHtml(person)} ${birthYear}${this.hiddenSurnameMatchHtml(person)}${this.detailMatchHtml(person)}
+                <span class="person-picker-name">${nameHtml(person)} ${birthYear}</span>${below}
             </div>
         `;
+    }
+
+    /** The row's found-by line (a hidden surname, a cause or a house), '' for none. */
+    private matchHtml(person: Person): string {
+        return this.hiddenSurnameMatchHtml(person) + this.detailMatchHtml(person);
     }
 
     /** Found by the surname the shown name leaves out (hiddenSurnameMatchHtml). */
