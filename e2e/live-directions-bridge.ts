@@ -83,6 +83,12 @@ export interface ManagedBridge {
     queueReplies: BridgeReply[];
     /** While set, `GET /queue` answers only once it resolves (a search being read). */
     queueHold: Promise<void> | null;
+    /**
+     * `queue.next` (in `features`): a task's own place carries when it was set (`at`), the latest
+     * "next" first, "last" ones by their time at the end; a write answers with `was`, `restore`
+     * puts it back, a task the agent works on is refused (409 `queue.doing`).
+     */
+    queueNext?: { base: string[]; at: Map<string, string>; clock: number };
 }
 
 /** The status's window of a queue read by pages: 14 tasks up next, then up to 6 set aside. */
@@ -166,6 +172,60 @@ const json = (body: unknown, status = 200, headers: Record<string, string> = {})
     ({ status, headers: { ...cors, 'content-type': 'application/json', ...headers }, body: JSON.stringify(body) });
 
 /** What the research answers to a write by itself (and what it changes). */
+/** The queue in the research's order with `queue.next`: the latest "next" first, the rest as it came, "last" ones by their time. */
+function orderQueueNext(b: ManagedBridge, n: NonNullable<ManagedBridge['queueNext']>): void {
+    const base = (q: Record<string, unknown>): number => n.base.indexOf(String(q.id));
+    const at = (q: Record<string, unknown>): string => n.at.get(String(q.id)) ?? '';
+    const next = b.queue.filter(q => q.state === 'next');
+    b.queue = [
+        ...next.filter(q => q.own === 'next').sort((x, y) => at(y).localeCompare(at(x))),
+        ...next.filter(q => !q.own).sort((x, y) => base(x) - base(y)),
+        ...next.filter(q => q.own === 'last').sort((x, y) => at(x).localeCompare(at(y))),
+        ...b.queue.filter(q => q.state !== 'next'),
+    ];
+}
+
+/** `POST /queue/<T>` with `queue.next`: next / last / default / restore, answered with the place before (`was`). */
+function answerQueueNext(b: ManagedBridge, n: NonNullable<ManagedBridge['queueNext']>, id: string, body: Record<string, unknown>): BridgeReply {
+    const q = b.queue.find(x => x.id === id);
+    if (!q || q.state !== 'next') return { status: 404, body: { error: 'queue.none' } };
+    const keys = Object.keys(body);
+    const doing = b.working.some(w => !w.paused && w.task === q.text);
+    if (doing) return { status: 409, body: { error: 'queue.doing' } };
+    const was: Record<string, unknown> = q.own ? { own: q.own, at: n.at.get(id) } : {};
+    let own: string | undefined;
+    let at: string | undefined;
+    if (body.do === 'restore' && keys.length === 2 && body.was && typeof body.was === 'object') {
+        const w = body.was as Record<string, unknown>;
+        const wk = Object.keys(w);
+        if (wk.length === 0) own = undefined;
+        else if (wk.length === 2 && (w.own === 'next' || w.own === 'last') && typeof w.at === 'string') {
+            own = w.own;
+            at = w.at;
+        } else return { status: 400, body: { error: 'queue.body' } };
+    } else if (keys.length === 1 && (body.do === 'next' || body.do === 'last')) {
+        own = body.do;
+        at = new Date(Date.UTC(2026, 10, 13, 10, 0, ++n.clock)).toISOString();
+    } else if (keys.length === 1 && body.do === 'default') own = undefined;
+    else return { status: 400, body: { error: 'queue.body' } };
+    if (own) {
+        if ((q.why as { kind?: string } | undefined)?.kind !== 'own') q.whyBefore = q.why;
+        q.own = own;
+        if (q.why || q.whyBefore) q.why = { kind: 'own', do: own };
+        n.at.set(id, at!);
+    } else {
+        delete q.own;
+        if ((q.why as { kind?: string } | undefined)?.kind === 'own') q.why = q.whyBefore ?? undefined;
+        if (q.why === undefined) delete q.why;
+        n.at.delete(id);
+    }
+    orderQueueNext(b, n);
+    if (b.paged) b.paged.rev++;
+    if (b.offLine) b.offLine.ownTasks = b.queue.filter(x => x.own).length;
+    const { whyBefore: _w, ...sent } = q;
+    return { status: 200, body: { task: sent, was, head: 'h1', parent: 'h1' } };
+}
+
 function answer(b: ManagedBridge, method: string, path: string, body: Record<string, unknown>): BridgeReply {
     const find = (id: string) => b.researches.find(d => d.id === id);
     if (method === 'GET' && path === 'directions/people') {
@@ -212,6 +272,7 @@ function answer(b: ManagedBridge, method: string, path: string, body: Record<str
         return { status: 200, body: { offLine: rest, head: 'h1', parent: 'h1' } };
     }
     const task = /^queue\/(T\d+)$/.exec(path);
+    if (task && b.queueNext) return answerQueueNext(b, b.queueNext, task[1], body);
     if (task) {
         const q = b.queue.find(x => x.id === task[1]);
         if (!q) return { status: 404, body: { error: 'queue.none' } };
@@ -339,6 +400,13 @@ export async function followManaged(page: Page, opts: {
         queueReplies: [],
         queueHold: null,
     };
+    if (opts.features?.includes('queue.next')) {
+        b.queueNext = { base: b.queue.map(q => String(q.id)), at: new Map(), clock: 0 };
+        // Tasks set by hand before, in the research's order: an earlier "next" set later, an earlier "last" set sooner.
+        b.queue.forEach((q, i) => {
+            if (q.own) b.queueNext!.at.set(String(q.id), new Date(Date.UTC(2026, 10, 13, 9, 0, q.own === 'next' ? 50 - i : i)).toISOString());
+        });
+    }
     const pagedFeature = !!opts.features?.includes('queue.page');
     const windowOf = (): Record<string, unknown>[] => {
         const all = queueWithPlaces(b);

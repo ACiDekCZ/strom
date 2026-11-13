@@ -59,7 +59,10 @@ import {
     taskDirectionName, workingLineCount, workingLineGroups,
 } from './research-directions-ui.js';
 import { iconSvg } from '../icons.js';
-import { branchName, personByRefn, queueBranchFilter, queueWhyText, setQueueBranchFilter, taskOrderOffered, waitBranchText, workingWhyText } from './research-offline-ui.js';
+import {
+    branchName, focusQueueMoved, personByRefn, queueBranchFilter, queueNextFor, queueNextOffered, queueRowFlash, queueWhyText, setQueueBranchFilter, taskOrderOffered,
+    waitBranchText, workingWhyText,
+} from './research-offline-ui.js';
 import type { TaskOrderDo } from '../research-directions-write.js';
 import { OTHER_GROUP, panelWaiting, textWithLinks, todoWaiting, waitingSection, waitingTodoCount } from '../research-waiting.js';
 import { agoShort } from '../research-others.js';
@@ -503,12 +506,33 @@ export function queueKindTag(q: Pick<LiveQueueItem, 'kind'>): HTMLElement | null
     return tag;
 }
 
+/** A task set to come next with `queue.next` (its "next" tag). */
+function queueNextTagged(q: LiveQueueItem, s: LiveSession): boolean {
+    return q.state === 'next' && q.own === 'next' && queueNextOffered(s);
+}
+
+/** A queued task's row with `queue.next`: its "next" tag after the text, lit for a while when just moved. */
+function markQueueNextRow(li: HTMLElement, text: HTMLElement, q: LiveQueueItem, s: LiveSession): void {
+    if (queueNextTagged(q, s)) text.append(' ', el('span', 'research-queue__tag-next', strings.live.queueTagNext));
+    if (queueRowFlash(q.id)) {
+        li.classList.add('research-queue__row--flash');
+        if (!li.hasAttribute('tabindex')) li.tabIndex = -1;
+    }
+}
+
+/** A queued task has its ⋯: the research's actions, a place by hand, or "Do next" for it. */
+function queueRowMenu(s: LiveSession, q: LiveQueueItem, canTask: boolean, canOrder: boolean): boolean {
+    return canTask || canOrder || (queueNextOffered(s) && queueNextFor(s, q));
+}
+
 /**
  * The note under a queued task's text (a quiet second line): why it stands
  * where it stands (a research with branches; one line, the whole sentence
  * in its title), else what an older research says of it.
  */
 function appendQueueNote(text: HTMLElement, q: LiveQueueItem, s: LiveSession): void {
+    // `queue.next`: a task set to come next carries its tag instead of the sentence.
+    if (queueNextTagged(q, s)) return;
     const why = queueWhyText(q, s);
     if (why) {
         const note = el('span', 'live-queue-note live-queue-why', why);
@@ -4170,6 +4194,7 @@ export const researchUiMethods = uiModule({
     renderLivePanel(): void {
         this.readWorkingFamilies();
         queueMicrotask(keepLineFocus());
+        queueMicrotask(focusQueueMoved);
         syncResearchCardInfo();
         // A selected line drops with the tree it was made in or the end of following.
         this.syncLineSelection();
@@ -4605,6 +4630,7 @@ export const researchUiMethods = uiModule({
             if (glyph) text.prepend(el('span', 'live-queue-dir', `${glyph} `));
             const kind = queueKindTag(q);
             if (kind) text.append(' ', kind);
+            markQueueNextRow(li, text, q, s);
             const dir = multi ? taskDirectionName(s, q.research) : '';
             if (dir) text.appendChild(el('span', 'research-overview__dir', ` · ${dir}`));
             appendQueueNote(text, q, s);
@@ -4616,7 +4642,7 @@ export const researchUiMethods = uiModule({
             }
             if (this.taskOrderBusy(q.id)) li.setAttribute('aria-busy', 'true');
             li.appendChild(text);
-            if (canTask || canOrder) {
+            if (queueRowMenu(s, q, canTask, canOrder)) {
                 const more = el('button', 'live-queue-more', '⋯');
                 more.type = 'button';
                 more.setAttribute('aria-label', r.taskMenu);
@@ -4856,6 +4882,7 @@ export const researchUiMethods = uiModule({
             const text = el('span', 'live-queue-text', q.text);
             const kind = queueKindTag(q);
             if (kind) text.append(' ', kind);
+            if (!parked) markQueueNextRow(li, text, q, s);
             const dir = multi ? taskDirectionName(s, q.research) : '';
             if (dir) text.appendChild(el('span', 'research-overview__dir', ` · ${dir}`));
             appendQueueNote(text, q, s);
@@ -4877,7 +4904,7 @@ export const researchUiMethods = uiModule({
             }
             if (this.taskOrderBusy(q.id)) li.setAttribute('aria-busy', 'true');
             li.appendChild(text);
-            if (!parked && (canTask || canOrder)) {
+            if (!parked && queueRowMenu(s, q, canTask, canOrder)) {
                 const more = el('button', 'live-queue-more', '⋯');
                 more.type = 'button';
                 more.setAttribute('aria-label', r.taskMenu);
@@ -4977,13 +5004,25 @@ export const researchUiMethods = uiModule({
         menu.setAttribute('aria-label', r.taskMenu);
         const s = liveSession();
         const q = liveQueueItem(s, task);
-        if (s && q && taskOrderOffered(s)) {
+        // `queue.next`: "Do next" (exact Undo) first, also without branches; not for a task first already, at work or set aside.
+        const nextOn = !!s && !!q && queueNextOffered(s);
+        // On a phone, with `queue.next`: a sheet at the bottom titled by the task.
+        const sheet = nextOn && !!q && window.matchMedia('(max-width: 640px)').matches;
+        if (sheet && q) {
+            menu.classList.add('live-task-menu--sheet');
+            const title = el('div', 'live-task-menu__title');
+            title.append(el('span', 'live-task-menu__num', q.id), document.createTextNode(` ${q.text}`));
+            menu.appendChild(title);
+        }
+        if (s && q && (taskOrderOffered(s) || nextOn)) {
             const L = strings.live;
-            const own: [TaskOrderDo, string, string | undefined][] = [
-                ['next', L.taskDoNext, L.taskDoNextHint],
-                ['last', L.taskDoLast, L.taskDoLastHint],
-            ];
-            if (q.own) own.push(['default', L.taskOrderReset, undefined]);
+            const own: [TaskOrderDo, string, string | undefined][] = [];
+            if (!nextOn) own.push(['next', L.taskDoNext, L.taskDoNextHint]);
+            else if (queueNextFor(s, q)) own.push(['next', L.queueNext, L.queueNextHint]);
+            if (taskOrderOffered(s)) {
+                own.push(['last', L.taskDoLast, L.taskDoLastHint]);
+                if (q.own) own.push(['default', L.taskOrderReset, undefined]);
+            }
             for (const [what, label, hint] of own) {
                 const item = el('div', 'context-menu-item research-direction-menu__item');
                 item.setAttribute('role', 'menuitem');
@@ -4992,14 +5031,14 @@ export const researchUiMethods = uiModule({
                 if (q.own === what) item.setAttribute('aria-current', 'true');
                 item.appendChild(el('span', 'research-direction-menu__label', label));
                 if (hint) item.appendChild(el('span', 'research-direction-menu__hint', hint));
-                const go = (): void => { void this.changeTaskOrder(task, what); };
+                const go = (): void => { void (nextOn && what === 'next' ? this.doTaskNext(task) : this.changeTaskOrder(task, what)); };
                 item.onclick = go;
                 item.onkeydown = (e) => {
                     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
                 };
                 menu.appendChild(item);
             }
-            if (this.researchLinkAvailable('task')) {
+            if (own.length && this.researchLinkAvailable('task')) {
                 const sep = el('div', 'context-menu-divider');
                 sep.setAttribute('role', 'separator');
                 menu.appendChild(sep);
@@ -5018,13 +5057,15 @@ export const researchUiMethods = uiModule({
         }
         document.body.appendChild(menu);
         anchor.setAttribute('aria-expanded', 'true');
-        const rect = anchor.getBoundingClientRect();
-        const left = Math.max(8, Math.min(rect.right - menu.offsetWidth, window.innerWidth - menu.offsetWidth - 8));
-        const below = rect.bottom + 4;
-        const top = below + menu.offsetHeight > window.innerHeight - 8 ? rect.top - menu.offsetHeight - 4 : below;
-        menu.style.left = `${Math.round(left)}px`;
-        menu.style.top = `${Math.round(top)}px`;
-        (menu.firstElementChild as HTMLElement | null)?.focus();
+        if (!sheet) {
+            const rect = anchor.getBoundingClientRect();
+            const left = Math.max(8, Math.min(rect.right - menu.offsetWidth, window.innerWidth - menu.offsetWidth - 8));
+            const below = rect.bottom + 4;
+            const top = below + menu.offsetHeight > window.innerHeight - 8 ? rect.top - menu.offsetHeight - 4 : below;
+            menu.style.left = `${Math.round(left)}px`;
+            menu.style.top = `${Math.round(top)}px`;
+        }
+        menu.querySelector<HTMLElement>('.context-menu-item')?.focus();
         const onKey = (e: KeyboardEvent): void => {
             if (e.key === 'Escape') {
                 e.preventDefault();

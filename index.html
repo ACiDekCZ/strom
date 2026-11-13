@@ -20335,9 +20335,19 @@
             .waiting-upload__drop, .waiting-upload__fill { transition: none; }
         }
         .research-overview__muted { color: var(--text-faint); font-size: 12px; }
-        /* The agent's text keeps a readable width; its actions go under it when both do not fit (long de labels). */
-        .research-overview__now-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
-        .research-overview__now-text { flex: 1 1 12em; min-width: 0; }
+        /* The agent's text across the whole width, its actions in a row of links under it (one row per session). */
+        .research-overview__now-row { display: flex; flex-direction: column; align-items: stretch; gap: 2px; }
+        .research-overview__now-text { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+        .research-overview__now-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0 16px; margin-top: 2px; }
+        .research-overview__now-actions > .link-button {
+            display: inline-flex; align-items: center; gap: 5px; min-height: 24px; margin: 0; padding: 0;
+            font-size: 13px; color: var(--primary); text-decoration: underline; text-underline-offset: 2px; text-align: left;
+        }
+        /* Finish and stop in the text's colour (the design), its marks as everywhere. */
+        .research-overview__now-actions > .research-overview__finish { color: var(--text); }
+        .research-overview__now-actions > .link-button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 2px; }
+        @media (hover: hover) { .research-overview__now-actions > .link-button:hover { text-decoration-thickness: 2px; } }
+        @media (pointer: coarse) { .research-overview__now-actions > .link-button { min-height: 44px; } }
         .research-overview__now .live-time { display: block; color: var(--text-faint); font-size: 12px; }
         /* Working lines (two or more at work, spec 011): a row per line, one can be selected. */
         /* The heading keeps its whole title; "All directions" goes to a row under it when both do not fit. */
@@ -20379,15 +20389,11 @@
         .live-change-meta { display: block; color: var(--text-faint); font-size: 11px; }
         .live-panel-list .live-change-meta .live-time { display: inline; font-size: inherit; }
         .live-change-dir, .live-queue-dir { color: var(--text-light); font-weight: 600; }
-        .research-overview__now-row--line { align-items: flex-start; }
+        .research-overview__now-row--line { flex-direction: row; align-items: flex-start; gap: 4px 8px; }
         .research-overview__now-row.is-selected { margin: 0 -6px; padding-left: 6px; padding-right: 6px; border-radius: 8px; }
         .research-overview__now-meta { display: block; font-size: 12px; color: var(--text-light); }
         .research-overview__now .research-overview__now-meta .live-time { display: inline; font-size: inherit; color: inherit; }
         @media (pointer: coarse) { button.live-line { min-height: 44px; } }
-        @media (max-width: 640px) {
-            .research-overview__now-row--line { flex-wrap: wrap; }
-            .research-overview__now-row--line > .link-button { margin-left: 28px; }
-        }
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .live-line { padding: 5px 6px; }
         }
@@ -20590,6 +20596,40 @@
             .live-queue-state .link-button { min-height: 44px; }
         }
         .live-task-menu { z-index: 120; min-width: 150px; }
+        /* "Do next" (queue.next): the task's tag after its text, its row lit for a while after the move. */
+        .research-queue__tag-next {
+            display: inline-block; padding: 0 6px; border-radius: 999px; vertical-align: 1px; white-space: nowrap;
+            background: var(--primary-soft); color: var(--primary); font-size: 11px; font-weight: 600; line-height: 16px;
+        }
+        .live-queue-row { transition: background-color 0.6s ease; }
+        .live-queue-row.research-queue__row--flash { background: var(--primary-soft); }
+        .live-queue-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; border-radius: 6px; }
+        @media (prefers-reduced-motion: reduce) { .live-queue-row { transition: none; } }
+        /* Its toast over the overview it was done in (a panel beside the tree, or over it). */
+        @media (min-width: 641px) {
+            body.overview-docked .toast[data-kind="queue-next"] {
+                left: calc(100vw - var(--overview-w) / 2); max-width: calc(var(--overview-w) - 24px); box-sizing: border-box;
+            }
+            body:has(> .research-overview--overlay) .toast[data-kind="queue-next"] {
+                left: calc(100vw - 212px); max-width: 376px; box-sizing: border-box;
+            }
+        }
+        @media (pointer: coarse) {
+            .toast[data-kind="queue-next"] .toast-action { min-height: 44px; padding: 0 4px; }
+        }
+        /* A phone, with queue.next: the ⋯ is a sheet at the bottom titled by the task. */
+        .live-task-menu--sheet {
+            left: 0; right: 0; bottom: 0; top: auto; min-width: 0; max-height: 70vh; z-index: 1050;
+            border-radius: 14px 14px 0 0; padding: 4px 0 calc(8px + env(safe-area-inset-bottom, 0px));
+        }
+        .live-task-menu__title {
+            padding: 12px 16px 8px; font-size: 14px; font-weight: 600; color: var(--text);
+            border-bottom: 1px solid var(--divider); overflow-wrap: anywhere;
+        }
+        .live-task-menu__num { color: var(--text-light); font-weight: 400; margin-right: 2px; }
+        .live-task-menu--sheet .context-menu-item { min-height: 44px; box-sizing: border-box; justify-content: center; }
+        .live-task-menu--sheet .research-direction-menu__item:has(.research-direction-menu__hint) { min-height: 52px; }
+        .live-task-menu--sheet .research-direction-menu__hint { max-width: none; }
         .live-panel-spend {
             display: flex; align-items: center; gap: 8px; padding: 7px 12px;
             font-size: 13px; color: var(--text-light);

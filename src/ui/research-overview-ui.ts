@@ -21,7 +21,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { Person, PersonId, ResearchHypothesis } from '../types.js';
 import { acceptBatch, acceptBatchRowResult } from '../research-hypothesis-waiting.js';
 import { computeEvidenceGaps } from '../stats.js';
-import { LiveChangeKind, LiveWaiting, ResearchActionMark, WAITING_SECTIONS, researchConflictRef, researchTaskRef, recentAddsCount, researchLinkMark } from '../research-link.js';
+import { LiveChangeKind, LiveWaiting, LiveWorker, ResearchActionMark, WAITING_SECTIONS, researchConflictRef, researchTaskRef, recentAddsCount, researchLinkMark } from '../research-link.js';
 import { waitingGroupSendable, waitingGroupHasNote, waitingSendable, waitingUnsendable, waitingFileWritable } from '../research-waiting-write.js';
 import {
     PLACES_GROUP, WaitingFilter, WaitingGroupRows, WaitingPhase, effectiveWaitingFilter, waitingActionDo, waitingChatLeads, waitingChips, waitingDaysAgo, waitingGroupChatTask,
@@ -48,7 +48,7 @@ import {
 import { conflictValueSaid, researchValueText } from './person-research-ui.js';
 import { shownName, fitNameHtml } from '../person-name.js';
 import { isOpenHypothesis } from '../view-links.js';
-import { waitBranchText, workingWhyText } from './research-offline-ui.js';
+import { focusQueueMoved, waitBranchText, workingWhyText } from './research-offline-ui.js';
 import { beginQueueSlots, endQueueSlots } from '../research-queue-pages.js';
 import { KnowsKind, knowsKindChoice, knowsKindShows } from '../knows-kind.js';
 import { activeQueueSearch, noteQueueSearchFocus, resetQueueSearch } from './queue-search-ui.js';
@@ -493,6 +493,8 @@ export const researchOverviewMethods = uiModule({
         queueMicrotask(keepLineFocus());
         queueMicrotask(keepAnswerFocus());
         queueMicrotask(keepKeyFocus());
+        // A task just moved by "Do next": focused once drawn first.
+        queueMicrotask(focusQueueMoved);
         // The followed research's, else the open tree's viewed without following (spec 057 §7.2).
         const followed = followedOverview();
         const viewed = followed ? null : overviewViewing();
@@ -1690,24 +1692,38 @@ export const researchOverviewMethods = uiModule({
             const since = timeEl(w.since, 'sincefor');
             if (since) text.appendChild(since);
             li.appendChild(text);
+            // Its actions in a row of links under the text (the text keeps the whole width).
             const person = personByRefn(w.person);
-            if (person) {
-                const show = el('button', 'link-button', L.showInTree);
-                show.type = 'button';
-                show.onclick = () => this.overviewShowPerson(person.id, mode);
-                li.appendChild(show);
-            }
-            // Finish and stop (in the research): the agent writes up what it found and closes the session.
-            const finish = mode !== 'sheet' && w.session && !w.paused ? this.activeResearchLink('finish', { session: w.session }) : null;
-            if (finish) {
-                const btn = setResearchActionLabel(el('button', 'link-button research-overview__finish'), L.finishSession, researchLinkMark('finish'));
-                btn.type = 'button';
-                btn.title = L.finishHint;
-                btn.onclick = () => this.launchResearchLink(finish);
-                li.appendChild(btn);
-            }
+            const actions = this.overviewNowActions(w, mode, person ? () => this.overviewShowPerson(person.id, mode) : null);
+            if (actions) li.appendChild(actions);
             list.appendChild(li);
         }
+    },
+
+    /**
+     * A session's actions under its text in Now: Show in tree (when it has
+     * whom to show) · Finish and stop (in the research: the agent writes up
+     * what it found and closes the session; not on the phone's sheet).
+     * Nothing to offer: no row.
+     */
+    overviewNowActions(w: LiveWorker, mode: Mode, show: (() => void) | null): HTMLElement | null {
+        const L = strings.live;
+        const row = el('div', 'research-overview__now-actions');
+        if (show) {
+            const btn = el('button', 'link-button', L.showInTree);
+            btn.type = 'button';
+            btn.onclick = show;
+            row.appendChild(btn);
+        }
+        const finish = mode !== 'sheet' && w.session && !w.paused ? this.activeResearchLink('finish', { session: w.session }) : null;
+        if (finish) {
+            const btn = setResearchActionLabel(el('button', 'link-button research-overview__finish'), L.finishSession, researchLinkMark('finish'));
+            btn.type = 'button';
+            btn.title = L.finishHint;
+            btn.onclick = () => this.launchResearchLink(finish);
+            row.appendChild(btn);
+        }
+        return row.childElementCount > 0 ? row : null;
     },
 
     /**
@@ -1726,9 +1742,22 @@ export const researchOverviewMethods = uiModule({
         li.appendChild(glyph);
         const text = el('div', 'research-overview__now-text');
         const name = g.direction?.name ?? L.dirOutside;
+        // Show in tree: the line's people lit up; work outside the directions: its person. Under the first session (or the idle line).
+        const d = g.direction;
+        const workerPerson = g.workers.map(w => personByRefn(w.person)).find((p): p is Person => !!p);
+        const show = (d ? directionPersonIds(d) : workerPerson)
+            ? () => (d ? this.showDirectionInTree(d, mode) : workerPerson && this.overviewShowPerson(workerPerson.id, mode))
+            : null;
         if (g.workers.length === 0) {
             text.appendChild(el('strong', undefined, name));
             text.appendChild(el('small', 'research-overview__now-meta', strings.otherResearch.lineIdle('')));
+            if (show) {
+                const row = el('div', 'research-overview__now-actions');
+                const btn = row.appendChild(el('button', 'link-button', L.showInTree));
+                btn.type = 'button';
+                btn.onclick = show;
+                text.appendChild(row);
+            }
         }
         g.workers.forEach((w, i) => {
             const head = el('div', 'research-overview__now-line');
@@ -1749,25 +1778,11 @@ export const researchOverviewMethods = uiModule({
             }
             parts.filter(Boolean).forEach((part, j) => meta.append(...(j > 0 ? [' · ', part] : [part])));
             text.appendChild(meta);
+            // Each session its own row of actions under its text.
+            const actions = this.overviewNowActions(w, mode, i === 0 ? show : null);
+            if (actions) text.appendChild(actions);
         });
         li.appendChild(text);
-        const d = g.direction;
-        const workerPerson = g.workers.map(w => personByRefn(w.person)).find((p): p is Person => !!p);
-        if (d ? directionPersonIds(d) : workerPerson) {
-            const show = el('button', 'link-button', L.showInTree);
-            show.type = 'button';
-            show.onclick = () => (d ? this.showDirectionInTree(d, mode) : workerPerson && this.overviewShowPerson(workerPerson.id, mode));
-            li.appendChild(show);
-        }
-        for (const w of g.workers) {
-            const finish = mode !== 'sheet' && w.session && !w.paused ? this.activeResearchLink('finish', { session: w.session }) : null;
-            if (!finish) continue;
-            const btn = setResearchActionLabel(el('button', 'link-button research-overview__finish'), L.finishSession, researchLinkMark('finish'));
-            btn.type = 'button';
-            btn.title = L.finishHint;
-            btn.onclick = () => this.launchResearchLink(finish);
-            li.appendChild(btn);
-        }
         return li;
     },
 

@@ -314,6 +314,30 @@ export function queueListItem(base: string, id: string): LiveQueueItem | null {
     return null;
 }
 
+/**
+ * "Do next" written: the task first in every list read that holds it (a search's too), marked next,
+ * and the places of the tasks before it moved one on in every list. The lists are read again
+ * with the queue's next print; this only keeps the screen right meanwhile.
+ */
+export function moveQueueItemFirst(base: string, id: string): void {
+    if (remote || !base || base !== listsBase) return;
+    let was: number | undefined;
+    for (const l of lists.values()) was ??= l.items.find(x => x.id === id)?.pos;
+    for (const l of lists.values()) {
+        const at = l.items.findIndex(x => x.id === id);
+        const items = l.items.map(x => (x.id !== id && x.state === 'next' && x.pos !== undefined && (was === undefined || x.pos < was)
+            ? { ...x, pos: x.pos + 1 } : x));
+        if (at >= 0) {
+            const [moved] = items.splice(at, 1);
+            items.unshift({
+                ...moved, own: 'next', ...(moved.why ? { why: { kind: 'own', do: 'next' } } : {}),
+                ...(moved.pos !== undefined || was !== undefined ? { pos: 1 } : {}),
+            });
+        }
+        l.items = items;
+    }
+}
+
 /** Abort the read of a list nothing shows any more. */
 function settleSlot(slot: QueueSlot, key: string | null): void {
     const was = slots.get(slot);

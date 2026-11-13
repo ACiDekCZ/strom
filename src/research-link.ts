@@ -2631,6 +2631,11 @@ export const QUEUE_OWN_FEATURE = 'queue.own';
 export const QUEUE_PAGE_FEATURE = 'queue.page';
 /** `/status.features`: the queue is searched by its bridge (`GET /queue?q=`, with `q`, `match` and `elsewhere`; Strom Research 1.32). */
 export const QUEUE_SEARCH_FEATURE = 'queue.search';
+/**
+ * `/status.features`: "Do next" puts the latest one marked on top, and a write answers what the task's place
+ * was (`was`), put back exactly by `{do: 'restore', was}` (Strom Research 1.32).
+ */
+export const QUEUE_NEXT_FEATURE = 'queue.next';
 
 /** `/status.queueCounts`: tasks up next by direction and branch (absent = 0), all of them, set aside, and the order's print. */
 export interface LiveQueueCounts {
@@ -2967,7 +2972,7 @@ function waitingHypothesisFields(r: Record<string, unknown>): Partial<LiveWaitin
 const MAX_QUEUE = 20;
 
 /** The `queue` list of the status. Untrusted input: bad items are dropped. */
-export function sanitizeQueue(value: unknown, offLine = false, branches = false, max = MAX_QUEUE): LiveQueueItem[] {
+export function sanitizeQueue(value: unknown, offLine = false, branches = false, max = MAX_QUEUE, ownPlace = branches): LiveQueueItem[] {
     if (!Array.isArray(value)) return [];
     const out: LiveQueueItem[] = [];
     for (const item of value) {
@@ -2982,9 +2987,10 @@ export function sanitizeQueue(value: unknown, offLine = false, branches = false,
         // When work outside the lines comes, and how a task helps a line: only from a research that says so.
         const off = offLine && (r.offLine === 'last' || r.offLine === 'never' || (branches && r.offLine === 'occasional')) ? r.offLine : null;
         const helps = offLine && (r.helps === 'question' || r.helps === 'joins' || r.helps === 'agent') ? r.helps : null;
-        // The branch, the own place and the reason: only from a research with branches outside the directions.
+        // The branch and the reason: only from a research with branches outside the directions.
         const branch = branches ? researchBranchRef(r.branch) : null;
-        const own = branches && (r.own === 'next' || r.own === 'last') ? r.own : null;
+        // Its own place: from a research with branches, or one whose "Do next" is offered without them (`queue.next`).
+        const own = ownPlace && (r.own === 'next' || r.own === 'last') ? r.own : null;
         const why = branches ? sanitizeQueueWhy(r.why) : null;
         // Its place in the whole queue: tasks up next only (one set aside has none).
         const pos = state === 'next' && typeof r.pos === 'number' && Number.isInteger(r.pos) && r.pos >= 1 && r.pos <= 10_000_000 ? r.pos : null;
@@ -3346,7 +3352,8 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         working: sanitizeWorking(r.working, !!features?.includes(WORKING_HELPS_FEATURE)),
         waiting: sanitizeWaiting(r.waiting, !!features?.includes(WAITING_GROUPS_FEATURE), !!features?.includes(OFF_LINE_BRANCHES_FEATURE)),
         links: sanitizeResearchLinks(r.links),
-        queue: sanitizeQueue(r.queue, !!features?.includes(TASKS_OFF_LINE_FEATURE), !!features?.includes(OFF_LINE_BRANCHES_FEATURE)),
+        queue: sanitizeQueue(r.queue, !!features?.includes(TASKS_OFF_LINE_FEATURE), !!features?.includes(OFF_LINE_BRANCHES_FEATURE), undefined,
+            !!features?.includes(OFF_LINE_BRANCHES_FEATURE) || !!features?.includes(QUEUE_NEXT_FEATURE)),
         queueMore: asCount(r.queueMore) ?? 0,
         update: sanitizeUpdate(r.update),
         spend: sanitizeSpend(r.spend, !!features?.includes(SPEND_READERS_FEATURE)),

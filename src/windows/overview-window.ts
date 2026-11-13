@@ -23,6 +23,7 @@
 import type { TreeId } from '../types.js';
 import type { LiveSession, OverviewViewing } from '../ui/research-ui.js';
 import { RESEARCH_LINK_ACTIONS, type ResearchLinkAction } from '../research-link.js';
+import { sanitizeTaskOrderWas, type TaskOrderWas } from '../research-directions-write.js';
 
 /** Raised when the snapshot's shape changes in a way an older window cannot read. */
 export const OVERVIEW_STATE_VERSION = 1;
@@ -325,8 +326,11 @@ export type OverviewAction =
     /** `seed`: the status's own tasks of the whole queue, as the overview passes them for the first "Load more". */
     | { action: 'queue-more'; args: { filter: OverviewQueueList['filter']; slot: 'queue' | 'branch' | 'helps'; seed?: { items: unknown[]; total: number } } }
     | { action: 'queue-retry'; args: { filter: OverviewQueueList['filter']; slot: 'queue' | 'branch' | 'helps' } }
-    /** A task's own place in the queue (Do next / To the end / Reset to default), written through the bridge. */
-    | { action: 'queue-order'; args: { task: string; do: 'next' | 'last' | 'default' } };
+    /**
+     * A task's own place in the queue (Do next / To the end / Reset to default), written through the bridge.
+     * With `queue.next`: "Do next" and `restore` (its Undo, back to `was`) answer with their outcome and the place before.
+     */
+    | { action: 'queue-order'; args: { task: string; do: 'next' | 'last' | 'default' } | { task: string; do: 'restore'; was: TaskOrderWas } };
 
 export type OverviewActionId = OverviewAction['action'];
 export type OverviewActionArgs<T extends OverviewActionId> = Extract<OverviewAction, { action: T }>['args'];
@@ -455,8 +459,14 @@ export function readOverviewAction(action: unknown, args: unknown): OverviewActi
             if (a.kind !== undefined && a.kind !== 'terminal' && a.kind !== 'agent') return null;
             return { action, args: { link: a.link as ResearchLinkAction, params, ...(a.kind ? { kind: a.kind as 'terminal' | 'agent' } : {}) } };
         }
-        case 'queue-order':
-            return str(a.task) && (a.do === 'next' || a.do === 'last' || a.do === 'default') ? { action, args: { task: a.task, do: a.do } } : null;
+        case 'queue-order': {
+            if (!str(a.task)) return null;
+            if (a.do === 'restore') {
+                const was = sanitizeTaskOrderWas(a.was);
+                return was ? { action, args: { task: a.task, do: 'restore', was } } : null;
+            }
+            return a.do === 'next' || a.do === 'last' || a.do === 'default' ? { action, args: { task: a.task, do: a.do } } : null;
+        }
         case 'queue-list':
         case 'queue-more':
         case 'queue-retry': {

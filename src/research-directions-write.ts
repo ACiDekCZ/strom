@@ -319,11 +319,47 @@ export function setOffLineTree(base: string, body: { mode?: OffLineMode | 'defau
 /** A task's own place in the queue. */
 export type TaskOrderDo = 'next' | 'last' | 'default';
 
+/**
+ * A task's own place before a write (`queue.next`'s `was`): none (`{}`), or next / last
+ * marked at `at`. The time is only sent back as it came (`restore`), never compared here.
+ */
+export interface TaskOrderWas {
+    own?: 'next' | 'last';
+    at?: string;
+}
+
+/** `was` as the bridge said it (null: not said, or not one it would take back). */
+export function sanitizeTaskOrderWas(v: unknown): TaskOrderWas | null {
+    const r = asRecord(v);
+    if (!r) return null;
+    const keys = Object.keys(r);
+    if (keys.length === 0) return {};
+    if (keys.length !== 2 || (r.own !== 'next' && r.own !== 'last') || typeof r.at !== 'string' || r.at.length > 40
+        || !Number.isFinite(Date.parse(r.at))) return null;
+    return { own: r.own, at: r.at };
+}
+
+/** A write of a task's place: the task as it is now, and its place before (`queue.next`; null: an older research). */
+export type TaskOrderWritten = BridgeWriteResult<{ task: LiveQueueItem | null; was: TaskOrderWas | null }>;
+
+const taskOrderAnswer = (r: Record<string, unknown>) => ({
+    task: sanitizeQueue([r.task], true, true)[0] ?? null,
+    was: sanitizeTaskOrderWas(r.was),
+});
+
 /** Set a task's own place (`POST /queue/<T…>`): next once, after everything, or back. 409 `queue.doing`: the agent works on it. */
-export function setTaskOrder(base: string, task: string, what: TaskOrderDo): Promise<BridgeWriteResult<{ task: LiveQueueItem | null }>> {
+export function setTaskOrder(base: string, task: string, what: TaskOrderDo): Promise<TaskOrderWritten> {
     const ref = researchTaskRef(task);
     if (!ref || ref !== task || !['next', 'last', 'default'].includes(what)) return Promise.resolve(notSent());
-    return researchBridgeWrite(base, 'POST', `queue/${ref}`, { do: what }, r => ({ task: sanitizeQueue([r.task], true, true)[0] ?? null }));
+    return researchBridgeWrite(base, 'POST', `queue/${ref}`, { do: what }, taskOrderAnswer);
+}
+
+/** Put a task's place back exactly as `was` said it (`POST /queue/<T…> {do: 'restore', was}`; `queue.next`). */
+export function restoreTaskOrder(base: string, task: string, was: TaskOrderWas): Promise<TaskOrderWritten> {
+    const ref = researchTaskRef(task);
+    const back = sanitizeTaskOrderWas(was);
+    if (!ref || ref !== task || !back) return Promise.resolve(notSent());
+    return researchBridgeWrite(base, 'POST', `queue/${ref}`, { do: 'restore', was: back }, taskOrderAnswer);
 }
 
 /** The answer to a growing branch in Awaiting action: add it to a direction, leave it as it is, or do not research it. */

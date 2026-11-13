@@ -18,7 +18,7 @@ import { researchHypotheses } from '../view-links.js';
 import { uiModule } from './module.js';
 import { liveSession, overviewViewing, researchSession, type LiveSession } from './research-ui.js';
 import { directionsWindowState, retryDirectionProblem } from './research-directions-ui.js';
-import { taskOrderWindowState } from './research-offline-ui.js';
+import { queueNextOffered, taskOrderWindowState } from './research-offline-ui.js';
 import { hoverCard } from './research-overview-ui.js';
 import {
     OVERVIEW_STATE_VERSION, bridgeSecrets, cloneSafe, emptyOverviewExtras, overviewChanged, overviewSessionData,
@@ -259,9 +259,14 @@ export const overviewWindowMethods = uiModule({
                 this.launchResearchLink(url, a.args.kind ?? 'terminal');
                 return true;
             }
-            case 'queue-order':
+            case 'queue-order': {
+                // `queue.next`: "Do next" and its Undo written here, the outcome (with the place before) to the window, which shows it.
+                const args = a.args;
+                if (args.do === 'restore') return this.writeTaskOrder(args.task, { do: 'restore', was: args.was });
+                if (args.do === 'next' && queueNextOffered(s)) return this.writeTaskOrder(args.task, { do: 'next' });
                 // Today's own place of a task: the bridge's write, the toast with Undo and a refusal at the task are this window's.
-                return this.changeTaskOrder(a.args.task, a.args.do);
+                return this.changeTaskOrder(args.task, args.do);
+            }
             case 'queue-list':
             case 'queue-more':
             case 'queue-retry': {

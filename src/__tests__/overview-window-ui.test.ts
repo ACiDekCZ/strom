@@ -201,6 +201,23 @@ describe('the window\'s actions run today\'s functions', () => {
         expect(changeTaskOrder).toHaveBeenCalledWith('T1', 'last');
     });
 
+    it('queue.next: Do next and its Undo from the window written here, their outcome (with the place before) answered', async () => {
+        fake.live = liveOf({ features: ['queue.next'] });
+        const out = { ok: true, was: { own: 'next', at: '2026-11-13T08:00:00Z' } };
+        const writeTaskOrder = vi.fn(async () => out);
+        const changeTaskOrder = vi.fn(async () => true);
+        const ui = fakeUi({ writeTaskOrder, changeTaskOrder });
+        await expect(run(ui, { action: 'queue-order', args: { task: 'T1', do: 'next' } })).resolves.toEqual(out);
+        expect(writeTaskOrder).toHaveBeenCalledWith('T1', { do: 'next' });
+        await run(ui, { action: 'queue-order', args: { task: 'T1', do: 'restore', was: {} } });
+        expect(writeTaskOrder).toHaveBeenLastCalledWith('T1', { do: 'restore', was: {} });
+        expect(changeTaskOrder).not.toHaveBeenCalled();
+        // Without queue.next: today's function.
+        fake.live = liveOf();
+        await run(ui, { action: 'queue-order', args: { task: 'T1', do: 'next' } });
+        expect(changeTaskOrder).toHaveBeenCalledWith('T1', 'next');
+    });
+
     it('Turn on only turns on: a research that runs is not stopped', () => {
         const toggle = vi.fn();
         const off = fakeUi({ researchLiveState: () => ({ on: false, pending: null, canStart: true, canStop: false, ended: 'stopped', note: null }), toggleResearchLive: toggle });

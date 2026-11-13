@@ -34,6 +34,7 @@ import {
 } from './overview-window-states.js';
 import type { DirectionFormOptions } from './direction-form-ui.js';
 import type { WaitingAnswerOutcome } from './waiting-answer-form.js';
+import { taskOrderOutcomeOf, type TaskOrderOutcome, type TaskOrderWrite } from './research-offline-ui.js';
 import {
     OVERVIEW_ACTIONS_TO_MAIN, emptyOverviewExtras, overviewSessionFromData, readOverviewState,
     type OverviewAction, type OverviewActionId, type OverviewResearchState,
@@ -246,6 +247,11 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
             this.closeLiveTaskMenu();
             run('queue-order', { task, do: what });
             return true;
+        },
+        // "Do next" and its Undo (`queue.next`): written by the main window, its outcome shown here (no answer: the bridge's).
+        async writeTaskOrder(task: string, body: TaskOrderWrite): Promise<TaskOrderOutcome> {
+            const r = await port.ask('queue-order', body.do === 'restore' ? { task, do: 'restore', was: body.was } : { task, do: 'next' }, OVERVIEW_ANSWER_WAIT_MS);
+            return taskOrderOutcomeOf(r) ?? { ok: false, why: 'bridge' };
         },
         taskOrderBusy(id: string): boolean { return extras().taskOrder.busy.includes(id); },
         taskOrderProblem(id: string): string { return extras().taskOrder.problems[id] ?? ''; },

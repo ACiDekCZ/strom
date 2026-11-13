@@ -86,6 +86,12 @@ describe('the actions an overview window may ask for', () => {
         // A task's own place in the queue (K3 – S2 #1): written by the main window.
         expect(readOverviewAction('queue-order', { task: 'T1', do: 'next', extra: 1 })).toEqual({ action: 'queue-order', args: { task: 'T1', do: 'next' } });
         expect(readOverviewAction('queue-order', { task: 'T1', do: 'default' })).toEqual({ action: 'queue-order', args: { task: 'T1', do: 'default' } });
+        // queue.next's Undo: the place before, as the bridge said it.
+        expect(readOverviewAction('queue-order', { task: 'T1', do: 'restore', was: { own: 'next', at: '2026-11-13T08:00:00Z' } }))
+            .toEqual({ action: 'queue-order', args: { task: 'T1', do: 'restore', was: { own: 'next', at: '2026-11-13T08:00:00Z' } } });
+        expect(readOverviewAction('queue-order', { task: 'T1', do: 'restore', was: {} })).toEqual({ action: 'queue-order', args: { task: 'T1', do: 'restore', was: {} } });
+        expect(readOverviewAction('queue-order', { task: 'T1', do: 'restore' })).toBeNull();
+        expect(readOverviewAction('queue-order', { task: 'T1', do: 'restore', was: { own: 'next' } })).toBeNull();
     });
 
     it('anything else is refused', () => {

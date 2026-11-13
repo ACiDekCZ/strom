@@ -15,7 +15,8 @@ import { DataManager } from '../data.js';
 import { strings } from '../strings.js';
 import { Person } from '../types.js';
 import {
-    LiveDirection, LiveOffLine, LiveQueueItem, LiveWaiting, LiveWorker, OFF_LINE_BRANCHES_FEATURE, OFF_LINE_MODES, OffLineBranch, OffLineMode, QUEUE_OWN_FEATURE,
+    LiveDirection, LiveOffLine, LiveQueueItem, LiveWaiting, LiveWorker, OFF_LINE_BRANCHES_FEATURE, OFF_LINE_MODES, OffLineBranch, OffLineMode, QUEUE_NEXT_FEATURE,
+    QUEUE_OWN_FEATURE,
 } from '../research-link.js';
 import { uiModule } from './module.js';
 import { LiveSession, el, liveQueueItem, liveSession, queueKindTag, queuePaged, queueNoteText } from './research-ui.js';
@@ -23,11 +24,11 @@ import { shownName, fitNameHtml } from '../person-name.js';
 import { bookYears } from '../book-blocks.js';
 import { withBusyRetry } from '../research-directions.js';
 import {
-    BranchModeWrite, BranchWaitingDo, DirectionWriteRefused, TaskOrderDo, answerBranchWaiting, directionPeopleKept, setBranchMode, setOffLineTree,
-    setTaskOrder,
+    BranchModeWrite, BranchWaitingDo, DirectionWriteRefused, TaskOrderDo, TaskOrderWas, answerBranchWaiting, directionPeopleKept, restoreTaskOrder,
+    sanitizeTaskOrderWas, setBranchMode, setOffLineTree, setTaskOrder,
 } from '../research-directions-write.js';
 import { bridgeBase } from './history-ui.js';
-import { QueueList, requestQueueList, retryQueueList } from '../research-queue-pages.js';
+import { QueueList, moveQueueItemFirst, requestQueueList, retryQueueList } from '../research-queue-pages.js';
 import { activeDirections, directionRefusedText, holdForBridge, setQueueDirectionFilter } from './research-directions-ui.js';
 
 type Mode = 'docked' | 'overlay' | 'sheet' | 'window';
@@ -256,6 +257,112 @@ export function growingBranchLine(s: LiveSession, w: LiveWaiting, b: OffLineBran
 /** A task's own place is set here: a research that takes it, its bridge answering, not an archive. */
 export function taskOrderOffered(s: LiveSession | null): boolean {
     return !!s && !s.ended && s.lostSince === null && !!s.features?.includes(QUEUE_OWN_FEATURE) && !!s.caps?.offLineBranches;
+}
+
+/** "Do next" with its exact Undo (`queue.next`): with or without branches, the bridge answering, not an archive. */
+export function queueNextOffered(s: LiveSession | null): boolean {
+    return !!s && !s.ended && s.lostSince === null && !!s.features?.includes(QUEUE_NEXT_FEATURE);
+}
+
+/**
+ * Whether "Do next" goes with a queued task: not one first already, not one
+ * the agent works on now, not one set aside. Its place: the whole queue's
+ * (`pos`), else its place among the status's tasks up next.
+ */
+export function queueNextFor(s: LiveSession, q: LiveQueueItem): boolean {
+    if (q.state !== 'next') return false;
+    const ahead = s.queue.filter(x => x.state === 'next');
+    const place = q.pos ?? (ahead.some(x => x.id === q.id) ? ahead.findIndex(x => x.id === q.id) + 1 : undefined);
+    if (place === 1) return false;
+    return !s.working.some(w => !w.paused && !!w.task && w.task === q.text);
+}
+
+/** A task's place written (main window: through the bridge; the overview's own window: asked of the main window). */
+export type TaskOrderOutcome =
+    | { ok: true; was: TaskOrderWas | null }
+    /** `taken`: the agent took it meanwhile (409 `queue.doing`); `bridge`: no answer; `refused`: said at the task. */
+    | { ok: false; why: 'taken' | 'bridge' | 'refused' };
+
+/** A task's place to write: "Do next", or back to its place before (`restore`). */
+export type TaskOrderWrite = { do: 'next' } | { do: 'restore'; was: TaskOrderWas };
+
+/** An outcome as it came from the main window (null: not one). */
+export function taskOrderOutcomeOf(v: unknown): TaskOrderOutcome | null {
+    const r = v && typeof v === 'object' ? v as Record<string, unknown> : null;
+    if (!r) return null;
+    if (r.ok === true) return { ok: true, was: r.was === null ? null : sanitizeTaskOrderWas(r.was) };
+    return r.ok === false && (r.why === 'taken' || r.why === 'bridge' || r.why === 'refused') ? { ok: false, why: r.why } : null;
+}
+
+/** How long a task moved by "Do next" stands lit. */
+export const QUEUE_FLASH_MS = 1600;
+/**
+ * The task moved last by "Do next": lit until `until`; focused once drawn
+ * first (`focus`), then kept focused over the redraws that follow while the
+ * focus has gone nowhere else (`kept`), for `QUEUE_FOCUS_KEEP_MS` at most.
+ */
+let queueMoved: { id: string; until: number; focus: boolean; kept: boolean; asked: number } | null = null;
+let queueMovedTimer: ReturnType<typeof setTimeout> | null = null;
+/** How long the focus waits for the moved task to be drawn first (the overview's own window hears it later). */
+const QUEUE_FOCUS_WAIT_MS = 4000;
+/** How long a redraw gives the focus back to the moved task's row. */
+const QUEUE_FOCUS_KEEP_MS = 30_000;
+
+/** The row of a task just moved by "Do next" is lit (its class). */
+export function queueRowFlash(id: string): boolean {
+    return !!queueMoved && queueMoved.id === id && Date.now() < queueMoved.until;
+}
+
+function markQueueMoved(id: string): void {
+    queueMoved = { id, until: Date.now() + QUEUE_FLASH_MS, focus: true, kept: false, asked: Date.now() };
+    if (queueMovedTimer) clearTimeout(queueMovedTimer);
+    queueMovedTimer = setTimeout(() => {
+        queueMovedTimer = null;
+        document.querySelectorAll('.research-queue__row--flash').forEach(e => e.classList.remove('research-queue__row--flash'));
+    }, QUEUE_FLASH_MS);
+}
+
+/** The moved task's rows shown now (the overview's first, then the panel's; a hidden panel's not). */
+function queueMovedRows(id: string): HTMLElement[] {
+    const sel = (host: string) => [...document.querySelectorAll<HTMLElement>(`${host} li.live-queue-row[data-task="${id}"]`)];
+    return [...sel('#research-overview'), ...sel('#live-panel')].filter(r => r.getClientRects().length > 0);
+}
+
+/**
+ * After a redraw: the moved task, once drawn first in its list, gets the
+ * focus and is scrolled into view; a later redraw that dropped the focus
+ * (nothing else took it) gives it back to its row.
+ */
+export function focusQueueMoved(): void {
+    const m = queueMoved;
+    if (!m) return;
+    const age = Date.now() - m.asked;
+    if (m.kept) {
+        const at = document.activeElement;
+        if (age > QUEUE_FOCUS_KEEP_MS || (at && at !== document.body && at.closest('li.live-queue-row')?.getAttribute('data-task') !== m.id)) {
+            m.kept = false;
+            return;
+        }
+        if (at && at !== document.body) return;
+        const row = queueMovedRows(m.id)[0];
+        if (row) {
+            if (!row.hasAttribute('tabindex')) row.tabIndex = -1;
+            row.focus({ preventScroll: true });
+        }
+        return;
+    }
+    if (!m.focus) return;
+    if (age > QUEUE_FOCUS_WAIT_MS) {
+        m.focus = false;
+        return;
+    }
+    const row = queueMovedRows(m.id).find(r => r.parentElement?.querySelector(':scope > li.live-queue-row[data-task]') === r);
+    if (!row) return;
+    m.focus = false;
+    m.kept = true;
+    if (!row.hasAttribute('tabindex')) row.tabIndex = -1;
+    row.scrollIntoView({ block: 'nearest' });
+    row.focus({ preventScroll: true });
 }
 
 /** What a refused task place says (the agent at work on it: its own sentence). */
@@ -1025,7 +1132,7 @@ export const researchOffLineMethods = uiModule({
     async changeTaskOrder(task: string, what: TaskOrderDo, opts: { undo?: boolean } = {}): Promise<boolean> {
         this.closeLiveTaskMenu();
         const s = liveSession();
-        if (!s || !taskOrderOffered(s) || taskBusy.has(task)) return false;
+        if (!s || !(taskOrderOffered(s) || (what === 'next' && queueNextOffered(s))) || taskBusy.has(task)) return false;
         const L = strings.live;
         const before = liveQueueItem(s, task);
         taskBusy.add(task);
@@ -1050,13 +1157,101 @@ export const researchOffLineMethods = uiModule({
         this.renderLivePanel();
         if (!opts.undo) {
             const back: TaskOrderDo = before?.own ?? 'default';
+            // With `queue.next` Undo puts it back exactly (the bridge said where it was).
+            const was = queueNextOffered(s) ? r.was : null;
             this.showToast(L.dirToastSaved, 6000, {
                 kind: 'direction',
-                action: { label: L.dirUndo, run: () => void this.changeTaskOrder(task, back, { undo: true }) },
+                action: {
+                    label: L.dirUndo,
+                    run: () => void (was ? this.restoreTaskPlace(task, was) : this.changeTaskOrder(task, back, { undo: true })),
+                },
             });
         }
         this.liveStatusSoon(s);
         return true;
+    },
+
+    /**
+     * "Do next" or its Undo through the bridge (`queue.next`), the screen kept
+     * right meanwhile: the task first in the lists drawn, its place before kept
+     * for Undo. A refusal other than the agent at work or a silent bridge is
+     * said at the task. The overview's own window asks the main window for it.
+     */
+    async writeTaskOrder(task: string, body: TaskOrderWrite): Promise<TaskOrderOutcome> {
+        const s = liveSession();
+        if (!s || !queueNextOffered(s) || taskBusy.has(task)) return { ok: false, why: 'refused' };
+        taskBusy.add(task);
+        taskProblems.delete(task);
+        this.renderLivePanel();
+        const head = await this.waitingHeadBeforeWrite(s);
+        const r = await withBusyRetry(() => (body.do === 'next' ? setTaskOrder(s.bridge.base, task, 'next') : restoreTaskOrder(s.bridge.base, task, body.was)));
+        taskBusy.delete(task);
+        if (liveSession() !== s || s.ended) return { ok: false, why: 'refused' };
+        if (!r.ok) {
+            const taken = r.errorCode === 'queue.doing';
+            const silent = r.code === 'network' || r.code === 'busy' || r.code === 'failed';
+            if (!taken && !silent) taskProblems.set(task, taskRefusedText(r));
+            this.renderLivePanel();
+            // The agent took it: the queue as the research has it now (the task goes to Now).
+            if (taken) this.liveStatusSoon(s);
+            return { ok: false, why: taken ? 'taken' : silent ? 'bridge' : 'refused' };
+        }
+        if (r.head) this.researchTakeOwnWriteHead(s.researchId, head, r.head, r.parent);
+        if (body.do === 'next') {
+            // First among the tasks up next, the places before it one on; the research's order comes with the next status.
+            const q = s.queue.find(x => x.id === task);
+            const was = q?.pos;
+            if (q) {
+                const moved: LiveQueueItem = { ...(r.task?.id === task ? r.task : q), own: 'next', ...(q.why ? { why: { kind: 'own', do: 'next' } } : {}) };
+                if (q.pos !== undefined) moved.pos = 1;
+                s.queue = [moved, ...s.queue.filter(x => x !== q)];
+            }
+            s.queue = s.queue.map(x => (x.id !== task && x.state === 'next' && x.pos !== undefined && (was === undefined || x.pos < was) ? { ...x, pos: x.pos + 1 } : x));
+            moveQueueItemFirst(s.bridge.base, task);
+        } else {
+            // Its mark as it was; its place comes with the next status.
+            s.queue = s.queue.map(x => {
+                if (x.id !== task) return x;
+                const { own: _own, ...rest } = x;
+                return body.was.own ? { ...rest, own: body.was.own } : rest;
+            });
+        }
+        this.renderLivePanel();
+        this.liveStatusSoon(s);
+        return { ok: true, was: r.was };
+    },
+
+    /** "Do next" from a task's ⋯: the task on top, lit and focused, a toast with Undo (6 s). */
+    async doTaskNext(task: string): Promise<void> {
+        this.closeLiveTaskMenu();
+        const L = strings.live;
+        const out = await this.writeTaskOrder(task, { do: 'next' });
+        if (out.ok) {
+            markQueueMoved(task);
+            this.renderLivePanel();
+            focusQueueMoved();
+            const was = out.was;
+            this.showToast(L.queueMoved, 6000, {
+                kind: 'queue-next',
+                ...(was ? { action: { label: L.queueUndo, run: () => void this.restoreTaskPlace(task, was) } } : {}),
+            });
+            return;
+        }
+        this.taskOrderRefusedToast(out.why, () => void this.doTaskNext(task));
+    },
+
+    /** Undo of "Do next" (and of a place set with `queue.next`): the task exactly where it was. */
+    async restoreTaskPlace(task: string, was: TaskOrderWas): Promise<void> {
+        if (queueMoved?.id === task) queueMoved = null;
+        const out = await this.writeTaskOrder(task, { do: 'restore', was });
+        if (!out.ok) this.taskOrderRefusedToast(out.why, () => void this.restoreTaskPlace(task, was));
+    },
+
+    /** A refused place: the agent at work on it (no Undo), or a silent bridge with Try again; others are said at the task. */
+    taskOrderRefusedToast(why: 'taken' | 'bridge' | 'refused', retry: () => void): void {
+        const L = strings.live;
+        if (why === 'taken') this.showToast(L.taskDoing, 6000, { kind: 'queue-next' });
+        else if (why === 'bridge') this.showToast(L.queueBridgeErr, 6000, { kind: 'queue-next', action: { label: L.dirRetry, run: retry } });
     },
 
     // ==================== A GROWING BRANCH IN AWAITING ACTION ====================

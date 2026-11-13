@@ -11,7 +11,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
     QUEUE_PAGE, QUEUE_QUERY_MAX, QUEUE_REFRESH_MS, QUEUE_ROWS_CAP, beginQueueSlots, endQueueSlots, fetchQueuePage, loadMoreQueueList, noteQueueRev,
-    onQueueListsChange, queueList, queueListItem, queueQuery, requestQueueList, resetQueueLists, retryQueueList,
+    moveQueueItemFirst, onQueueListsChange, queueList, queueListItem, queueQuery, requestQueueList, resetQueueLists, retryQueueList,
 } from '../research-queue-pages.js';
 import { sanitizeLiveStatus, sanitizeQueue, sanitizeQueueCounts } from '../research-link.js';
 import { budgetReport, measureAgainstBudget } from './helpers/perf-budget.js';
@@ -100,6 +100,24 @@ describe('the whole queue by pages', () => {
         await fetchQueuePage(BASE, {}, 100, 500);
         expect(b.calls[1].searchParams.get('count')).toBe('100');
         expect(b.calls[1].searchParams.get('from')).toBe('100');
+    });
+
+    it('Do next: the task first in every list drawn, with its place 1 and its mark; the places before it one on', async () => {
+        queue = bigQueue(8);
+        const b = bridge(() => queue, () => rev);
+        vi.stubGlobal('fetch', b.fetchFn);
+        requestQueueList(BASE, { research: 'G0001' }, 'queue');
+        requestQueueList(BASE, { state: 'next' }, 'branch');
+        await flush();
+        const ids = (f: Parameters<typeof queueList>[1]) => queueList(BASE, f)!.items.map(q => `${q.id}:${q.pos}`);
+        expect(ids({ research: 'G0001' })).toEqual(['T00002:2', 'T00003:3', 'T00005:5', 'T00006:6', 'T00008:8']);
+        moveQueueItemFirst(BASE, 'T00005');
+        expect(ids({ research: 'G0001' })).toEqual(['T00005:1', 'T00002:3', 'T00003:4', 'T00006:6', 'T00008:8']);
+        expect(ids({ state: 'next' }).slice(0, 6)).toEqual(['T00005:1', 'T00001:2', 'T00002:3', 'T00003:4', 'T00004:5', 'T00006:6']);
+        expect(queueListItem(BASE, 'T00005')?.own).toBe('next');
+        // Another research's lists are not touched.
+        moveQueueItemFirst('http://127.0.0.1:7777/other', 'T00006');
+        expect(ids({ research: 'G0001' })[0]).toBe('T00005:1');
     });
 
     it('says busy for 503 and failed for a bad answer, never throws', async () => {
@@ -279,6 +297,15 @@ describe('the queue\'s counts and places in the status', () => {
         expect(status([]).queueCounts).toBeUndefined();
         // A task up next keeps its place; one set aside has none.
         expect(status(['queue.page']).queue.map(q => q.pos)).toEqual([1, undefined]);
+    });
+
+    it('keeps a task\'s own place with queue.next, also without branches', () => {
+        const status = (features: string[]) => sanitizeLiveStatus({
+            tree: { id: '7c1f0e2a-1b2c-4d5e-8f90-a1b2c3d4e5f6', name: 'Fíškovi' }, head: 'h1', features,
+            queue: [{ id: 'T0001', text: 'Matriky', state: 'next', own: 'next' }, { id: 'T0002', text: 'Sčítání', state: 'next' }],
+        })!;
+        expect(status(['queue.next']).queue.map(q => q.own)).toEqual(['next', undefined]);
+        expect(status([]).queue.map(q => q.own)).toEqual([undefined, undefined]);
     });
 
     it('drops a place that is not a whole number from 1', () => {
