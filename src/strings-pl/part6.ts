@@ -350,6 +350,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
             `${name} – przy ${events} ${plPl(events, 'zdarzeniu', 'zdarzeniach', 'zdarzeniach')} ${people} ${plPl(people, 'osoby', 'osób', 'osób')} · ${whose}`,
         valRecurringGodparentByName: 'dopasowanie według imienia',
         valSharedCopiesDiffer: 'Wspólne wydarzenia',
+        valNameLink: 'Chrzestni i świadkowie z nazwiska, którzy prawdopodobnie są w drzewie',
         valOrphanedParticipantRef: 'Uczestnik zdarzenia odwołuje się do osoby, która już nie istnieje',
         valOrphanedParticipantDetail: (person: string, event: string, who: string) =>
             `${person} · ${event}: ${who}`,

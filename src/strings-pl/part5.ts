@@ -900,6 +900,16 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
     validation: {
         // A shared event whose copies differ (spec 085 §4)
         groupShared: 'Wspólne wydarzenia',
+        // Chrzestni i świadkowie z nazwiska, którzy prawdopodobnie są w drzewie (spec 085 §6, 6g)
+        nameLinkLead: (n: number) => n === 1
+            ? '1 chrzestny lub świadek zapisany z nazwiska odpowiada osobie w drzewie.'
+            : `${n} ${plPl(n, 'chrzestny', 'chrzestnych i świadków zapisanych z nazwiska odpowiada', 'chrzestnych i świadków zapisanych z nazwiska odpowiada')} osobie w drzewie.`,
+        nameLinkReview: 'Przejrzyj po kolei',
+        nameLinkTitle: (n: number) => `Chrzestni i świadkowie z nazwiska, którzy prawdopodobnie są w drzewie · ${n}`,
+        nameLinkHint: 'Nic nie łączy się samo, a zapisane imię zostaje w wydarzeniu. Po połączeniu wydarzenie pojawi się w życiu tej osoby.',
+        nameLinkBack: 'Wstecz',
+        later: 'Później',
+        rejectedCount: (n: number) => `Odrzucone nie są proponowane ponownie (${n}).`,
         sharedDiffersOne: (ev: string, name: string, field: string, val: string, other: string) => `${ev} · ${name}: ${field} się różni (${val}, u pozostałych ${other}).`,
         sharedDiffersMany: (ev: string, n: number, fields: string) => `${ev} · ${n} ${plPl(n, 'kopia się różni', 'kopie się różnią', 'kopii się różni')}: ${fields}.`,
         unify: 'Ujednolić…',

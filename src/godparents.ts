@@ -59,6 +59,11 @@ const NAME_PREFIXES = new Set([
 
 const foldWord = (t: string): string => fold(t).replace(/\./g, '');
 
+/** A name folded the way participantName's key is: no case, no diacritics, no dots, single spaces. */
+export function foldName(text: string): string {
+    return foldWord(text);
+}
+
 /**
  * The name a participant is compared by (spec 021 K1.2), and the rest of what
  * the register wrote with it.

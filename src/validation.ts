@@ -12,6 +12,7 @@ import { shownNameOrEmpty } from './person-name.js';
 import { readRecordedAge, recordedAgeGap } from './recorded-age.js';
 import { findDivergentShares } from './shared-events.js';
 import { divergenceSentence, divergentPersons } from './shared-divergence.js';
+import { nameLinkLeads, type ParticipantRef } from './participant-match.js';
 
 // ==================== ISSUE TYPES ====================
 
@@ -50,6 +51,8 @@ export interface ValidationIssue {
     field?: IssueField;
     /** sharedCopiesDiffer: the shared event (spec 085 §4) whose copies went apart. */
     shareId?: string;
+    /** nameLink: the participant recorded by name who matches persons of the tree (spec 085 §6). */
+    participant?: ParticipantRef;
 }
 
 export interface ValidationResult {
@@ -79,7 +82,7 @@ export function validateTreeData(data: StromData): ValidationResult {
         partnershipIds?: PartnershipId[],
         detail?: string,
         subject?: string,
-        extra?: Pick<ValidationIssue, 'year' | 'field' | 'shareId'>
+        extra?: Pick<ValidationIssue, 'year' | 'field' | 'shareId' | 'participant'>
     ) => {
         issues.push({
             id: `issue_${++issueId}`,
@@ -92,7 +95,8 @@ export function validateTreeData(data: StromData): ValidationResult {
             ...(subject ? { subject } : {}),
             ...(extra?.year !== undefined ? { year: extra.year } : {}),
             ...(extra?.field ? { field: extra.field } : {}),
-            ...(extra?.shareId ? { shareId: extra.shareId } : {})
+            ...(extra?.shareId ? { shareId: extra.shareId } : {}),
+            ...(extra?.participant ? { participant: extra.participant } : {})
         });
     };
 
@@ -116,6 +120,7 @@ export function validateTreeData(data: StromData): ValidationResult {
     checkPlaceSpellings(data, addIssue);
     checkRecurringGodparents(data, addIssue);
     checkSharedCopies(data, addIssue);
+    checkNameLinks(data, addIssue);
     checkImportMerges(data, addIssue);
 
     const stats = {
@@ -936,7 +941,7 @@ function checkPhotoData(data: StromData, addIssue: AddIssue): void {
 type AddIssue = (
     s: IssueSeverity, t: string, m: string,
     p?: PersonId[], pp?: PartnershipId[], detail?: string, subject?: string,
-    extra?: Pick<ValidationIssue, 'year' | 'field' | 'shareId'>
+    extra?: Pick<ValidationIssue, 'year' | 'field' | 'shareId' | 'participant'>
 ) => void;
 
 /**
@@ -1404,6 +1409,20 @@ function checkRecurringGodparents(data: StromData, addIssue: AddIssue): void {
     }
 }
 
+/**
+ * A godparent or a witness recorded by name whom persons of the tree match
+ * (spec 085 §6, K1.4): a lead, never linked by itself. One finding for each
+ * such participant; those whose candidates were all turned down are none.
+ */
+function checkNameLinks(data: StromData, addIssue: AddIssue): void {
+    for (const lead of nameLinkLeads(data)) {
+        addIssue('info', 'nameLink',
+            `${lead.name} recorded by name matches ${lead.candidates.length} person(s) of the tree`,
+            lead.subjects, lead.ref.partnershipId ? [lead.ref.partnershipId] : undefined, undefined, lead.name,
+            { participant: lead.ref });
+    }
+}
+
 function getPersonName(person: Person | undefined): string {
     if (!person) return '(unknown)';
     return shownNameOrEmpty(person) || '(unnamed)';
@@ -1468,6 +1487,7 @@ const VALIDATION_TYPE_KEYS: Record<string, string> = {
     'placeSpelling': 'valPlaceSpelling',
     'recurringGodparent': 'valRecurringGodparent',
     'sharedCopiesDiffer': 'valSharedCopiesDiffer',
+    'nameLink': 'valNameLink',
     'photoUnsafeData': 'valPhotoUnsafeData',
     'importMerge': 'valImportMerge',
 };

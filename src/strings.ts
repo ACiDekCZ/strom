@@ -5102,6 +5102,16 @@ const stringsEN = {
     validation: {
         // A shared event whose copies differ (spec 085 §4)
         groupShared: 'Shared events',
+        // Godparents and witnesses recorded by name who are probably in the tree (spec 085 §6, 6g)
+        nameLinkLead: (n: number) => n === 1
+            ? '1 godparent or witness recorded by name matches a person in the tree.'
+            : `${n} godparents and witnesses recorded by name match a person in the tree.`,
+        nameLinkReview: 'Review one by one',
+        nameLinkTitle: (n: number) => `Godparents and witnesses by name who are probably in the tree · ${n}`,
+        nameLinkHint: 'Nothing is linked automatically and the recorded name stays in the event. Once linked, the event shows in that person’s life.',
+        nameLinkBack: 'Back',
+        later: 'Later',
+        rejectedCount: (n: number) => `Rejected ones are not offered again (${n}).`,
         sharedDiffersOne: (ev: string, name: string, field: string, val: string, other: string) => `${ev} · ${name}: ${field} differs (${val}; others ${other}).`,
         sharedDiffersMany: (ev: string, n: number, fields: string) => `${ev} · ${n} copies differ: ${fields}.`,
         unify: 'Make all match…',
@@ -5502,6 +5512,7 @@ const stringsEN = {
             `${name} — at ${events} events of ${people} people · ${whose}`,
         valRecurringGodparentByName: 'matched by name',
         valSharedCopiesDiffer: 'Shared events',
+        valNameLink: 'Godparents and witnesses by name who are probably in the tree',
         valOrphanedParticipantRef: 'Event participant links to a person who no longer exists',
         valOrphanedParticipantDetail: (person: string, event: string, who: string) =>
             `${person} · ${event}: ${who}`,
@@ -14120,6 +14131,16 @@ const stringsCZ: StringsType = {
     validation: {
         // A shared event whose copies differ (spec 085 §4)
         groupShared: 'Společné události',
+        // Kmotři a svědci zapsaní jménem, kteří jsou nejspíš ve stromu (spec 085 §6, 6g)
+        nameLinkLead: (n: number) => n === 1
+            ? '1 kmotr či svědek zapsaný jménem odpovídá osobě ve stromu.'
+            : `${n} ${plural('cs', n, 'kmotr', 'kmotři a svědci zapsaní jménem odpovídají', 'kmotrů a svědků zapsaných jménem odpovídá')} osobě ve stromu.`,
+        nameLinkReview: 'Projít po jednom',
+        nameLinkTitle: (n: number) => `Kmotři a svědci jménem, kteří jsou nejspíš ve stromu · ${n}`,
+        nameLinkHint: 'Nic se nepropojí samo a zapsané jméno v události zůstane. Po propojení se událost ukáže v životě té osoby.',
+        nameLinkBack: 'Zpět',
+        later: 'Později',
+        rejectedCount: (n: number) => `Odmítnuté se znovu nenabízejí (${n}).`,
         sharedDiffersOne: (ev: string, name: string, field: string, val: string, other: string) => `${ev} · ${name}: ${field} se liší (${val}, u ostatních ${other}).`,
         sharedDiffersMany: (ev: string, n: number, fields: string) => `${ev} · ${n} ${plural('cs', n, 'kopie', 'kopie', 'kopií')} se liší: ${fields}.`,
         unify: 'Sjednotit…',
@@ -14515,6 +14536,7 @@ const stringsCZ: StringsType = {
             `${name} — u ${events} ${plural('cs', events, 'události', 'událostí', 'událostí')} ${people} ${plural('cs', people, 'osoby', 'osob', 'osob')} · ${whose}`,
         valRecurringGodparentByName: 'shoda podle jména',
         valSharedCopiesDiffer: 'Společné události',
+        valNameLink: 'Kmotři a svědci jménem, kteří jsou nejspíš ve stromu',
         valOrphanedParticipantRef: 'Účastník události odkazuje na osobu, která už neexistuje',
         valOrphanedParticipantDetail: (person: string, event: string, who: string) =>
             `${person} · ${event}: ${who}`,
@@ -23049,6 +23071,16 @@ const stringsDE: StringsType = {
     validation: {
         // A shared event whose copies differ (spec 085 §4)
         groupShared: 'Gemeinsame Ereignisse',
+        // Namentlich eingetragene Paten und Zeugen, die wohl im Stammbaum sind (spec 085 §6, 6g)
+        nameLinkLead: (n: number) => n === 1
+            ? '1 namentlich eingetragener Pate oder Zeuge entspricht einer Person im Stammbaum.'
+            : `${n} namentlich eingetragene Paten und Zeugen entsprechen einer Person im Stammbaum.`,
+        nameLinkReview: 'Einzeln durchgehen',
+        nameLinkTitle: (n: number) => `Namentliche Paten und Zeugen, die wohl im Stammbaum sind · ${n}`,
+        nameLinkHint: 'Nichts wird automatisch verknüpft, der eingetragene Name bleibt im Ereignis. Nach dem Verknüpfen erscheint das Ereignis im Leben dieser Person.',
+        nameLinkBack: 'Zurück',
+        later: 'Später',
+        rejectedCount: (n: number) => `Abgelehnte werden nicht wieder angeboten (${n}).`,
         sharedDiffersOne: (ev: string, name: string, field: string, val: string, other: string) => `${ev} · ${name}: ${field} weicht ab (${val}, bei den anderen ${other}).`,
         sharedDiffersMany: (ev: string, n: number, fields: string) => `${ev} · ${n} ${plural('de', n, 'Kopie weicht', 'Kopien weichen')} ab: ${fields}.`,
         unify: 'Angleichen…',
@@ -23427,6 +23459,7 @@ const stringsDE: StringsType = {
             `${name} — bei ${events} Ereignissen von ${people} Personen · ${whose}`,
         valRecurringGodparentByName: 'nach Namen abgeglichen',
         valSharedCopiesDiffer: 'Gemeinsame Ereignisse',
+        valNameLink: 'Namentliche Paten und Zeugen, die wohl im Stammbaum sind',
         valOrphanedParticipantRef: 'Ereignisbeteiligter verweist auf eine nicht mehr vorhandene Person',
         valOrphanedParticipantDetail: (person: string, event: string, who: string) =>
             `${person} · ${event}: ${who}`,

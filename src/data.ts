@@ -77,10 +77,12 @@ import { sanitizeTableViews } from './table-views-data.js';
 import {
     SharedEventCommon, SharedEventCommonField, SharedEventEdit, SharedEventSaveResult, SharedEventIndex, PersonSharedEvent,
     SHARED_EVENT_COMMON_FIELDS, applyEventFields, buildSharedEventIndex, cleanEventShares, commonFieldsOf, newShareIdFor,
-    personSharedEvents, shareCopiesOf, tidyShares,
+    personSharedEvents, shareCopiesOf, tidyShares, MARRIAGE_EVENT_ID,
     applyPersonMergeShares, personMergeShares, PersonMergeShareChoices,
 } from './shared-events.js';
 import { eventIsShareable } from './events.js';
+import { buildPersonNameIndex, type ParticipantRef, type PersonNameIndex } from './participant-match.js';
+import { foldName } from './godparents.js';
 
 /** Extended updates for Partnership */
 
@@ -2642,6 +2644,17 @@ class DataManagerClass {
         return index;
     }
 
+    private nameIndexCache: { data: StromData; revision: number; index: PersonNameIndex } | null = null;
+
+    /** The tree's persons by their folded names (src/participant-match.ts), built once per state of the data. */
+    getPersonNameIndex(): PersonNameIndex {
+        const c = this.nameIndexCache;
+        if (c && c.data === this.data && c.revision === this.revision) return c.index;
+        const index = buildPersonNameIndex(this.data);
+        this.nameIndexCache = { data: this.data, revision: this.revision, index };
+        return index;
+    }
+
     /** A new share id no event of the open tree carries (`[A-Za-z0-9]{8}`, opaque). */
     newShareId(): string {
         return newShareIdFor(this.data);
@@ -3240,6 +3253,7 @@ class DataManagerClass {
                 ...(p.personId ? { personId: p.personId } : {}),
                 ...(p.name?.trim() ? { name: p.name.trim() } : {}),
                 ...(p.note?.trim() ? { note: p.note.trim() } : {}),
+                ...(!p.personId && p.linkRejected?.length ? { linkRejected: [...p.linkRejected] } : {}),
             }));
         if (JSON.stringify(next) === JSON.stringify(partnership.participants ?? [])) return false;
 
@@ -3251,6 +3265,81 @@ class DataManagerClass {
         this.commitMutation(strings.undo.editPartnership(p1, p2));
         AuditLogManager.log(this.currentTreeId, 'partnership.update',
             strings.auditLog.updatedPartnership(p1, p2));
+        return true;
+    }
+
+    /**
+     * The copies of one participant recorded by name (spec 085 §6): at a
+     * person's event (every copy of a shared event, matched by the
+     * participant's id, else by its role and name), at a couple's event or
+     * among a wedding's witnesses. Null when the event or its holder cannot
+     * be changed (a locked person, a locked tree).
+     */
+    private namedParticipantCopies(ref: ParticipantRef): { parts: EventParticipant[]; undo: string } | null {
+        if (ref.ownerPersonId) {
+            const person = this.data.persons[ref.ownerPersonId];
+            const ev = person?.events?.find(e => e.id === ref.eventId);
+            const part = ev?.participants?.find(p => p.id === ref.participantId);
+            if (!person || !ev || !part || this.isPersonLocked(person.id)) return null;
+            const parts = [part];
+            if (ev.shareId) {
+                const same = (p: EventParticipant): boolean => p.id === part.id
+                    || (!p.personId && p.role === part.role && foldName(p.name ?? '') === foldName(part.name ?? ''));
+                for (const c of shareCopiesOf(this.data, ev.shareId)) {
+                    if (c.event === ev) continue;
+                    if (this.isPersonLocked(c.personId)) return null;
+                    const other = c.event.participants?.find(same);
+                    if (other) parts.push(other);
+                }
+            }
+            return { parts, undo: strings.undo.editEvent(auditPersonName(person)) };
+        }
+        const union = ref.partnershipId ? this.data.partnerships[ref.partnershipId] : undefined;
+        if (!union || this.isTreeLocked()) return null;
+        const list = ref.eventId === MARRIAGE_EVENT_ID ? union.participants : union.events?.find(e => e.id === ref.eventId)?.participants;
+        const part = list?.find(p => p.id === ref.participantId);
+        if (!part) return null;
+        return { parts: [part], undo: ref.eventId === MARRIAGE_EVENT_ID
+            ? strings.undo.editPartnership(auditPersonName(this.data.persons[union.person1Id]), auditPersonName(this.data.persons[union.person2Id]))
+            : strings.undo.editEvent(this.partnershipNames(union)) };
+    }
+
+    /**
+     * Link a participant recorded by name to a person of the tree (spec 085
+     * §6, K1.4): the name as written stays beside the link. One undo step.
+     */
+    linkNamedParticipant(ref: ParticipantRef, personId: PersonId): boolean {
+        if (!this.data.persons[personId]) return false;
+        const found = this.namedParticipantCopies(ref);
+        if (!found || found.parts.every(p => p.personId)) return false;
+        this.beginMutation();
+        for (const part of found.parts) {
+            if (part.personId) continue;
+            part.personId = personId;
+            delete part.linkRejected;
+        }
+        this.commitMutation(found.undo);
+        return true;
+    }
+
+    /**
+     * "Not this person" / "None of them" (spec 085 §6): the participant
+     * recorded by name is not these persons, and they are not offered again.
+     */
+    rejectNamedParticipant(ref: ParticipantRef, personIds: readonly PersonId[]): boolean {
+        const found = this.namedParticipantCopies(ref);
+        if (!found || personIds.length === 0) return false;
+        const add = (part: EventParticipant): boolean => {
+            const next = [...new Set([...(part.linkRejected ?? []), ...personIds])];
+            return next.length !== (part.linkRejected?.length ?? 0);
+        };
+        if (!found.parts.some(p => !p.personId && add(p))) return false;
+        this.beginMutation();
+        for (const part of found.parts) {
+            if (part.personId) continue;
+            part.linkRejected = [...new Set([...(part.linkRejected ?? []), ...personIds])];
+        }
+        this.commitMutation(found.undo);
         return true;
     }
 
