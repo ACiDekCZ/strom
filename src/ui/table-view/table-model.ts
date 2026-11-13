@@ -105,6 +105,14 @@ export interface CellValue {
     moreSources?: string[];
     /** The research's cell (spec 073 §16, table-research.ts): its mark, count, parts and exported text. */
     research?: ResearchCellDetail;
+    /**
+     * A shared event's persons (spec 085 §4, 4a): their number for the badge
+     * "4 people" and how many are not named in the cell ("+9"); the names
+     * are given names, the text the whole names (search, copy, export).
+     */
+    shared?: { count: number; more: number };
+    /** A shared event's ages, each person's own (4a): the cell opens their bubble. */
+    sharedAges?: boolean;
 }
 
 /** The research signal a cell starts with, drawn as its mark (§16.3). */
@@ -142,6 +150,8 @@ export interface CellName {
     personId?: PersonId;
     /** A participant's role (the participants' columns). */
     role?: ParticipantRole;
+    /** The whole name, when the text is shorter (a shared event's given name). */
+    title?: string;
 }
 
 export interface PersonRow {

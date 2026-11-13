@@ -10,7 +10,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import type { PersonId, StromData } from '../types.js';
 import { setLanguage } from '../strings.js';
 import { buildTableModel, rowCounts, rowKey, rowPersonId, sameRow, type EventRow, type TableModel } from '../ui/table-view/table-model.js';
-import { cellOf, cellPlainText, columnById, columnsOf, DEFAULT_VIEWS, eventTypeLabel } from '../ui/table-view/table-columns.js';
+import { cellOf, cellPlainText, columnById, columnsOf, DEFAULT_VIEWS, eventTypeLabel, sharedAgeRows } from '../ui/table-view/table-columns.js';
 import { eventEditTarget } from '../ui/table-view/table-events.js';
 import {
     activeFilterCount, availableChips, chipLabel, emptyFilter, filterRows, filterSummary, participantChip, searchQuery, setChip,
@@ -25,7 +25,7 @@ import {
 import { sanitizeTableView } from '../table-views-data.js';
 import { buildCheckIndex } from '../ui/table-view/table-checks.js';
 import { validateTreeData, type ValidationIssue } from '../validation.js';
-import { namesHtml } from '../ui/table-view/table-grid.js';
+import { cellInner, namesHtml } from '../ui/table-view/table-grid.js';
 import { rowKeysFor } from '../ui/table-view/table-refresh.js';
 
 /**
@@ -376,5 +376,83 @@ describe('the Events table on screen (§14.1)', () => {
         // The shared residence is one row, lit by any of its people.
         expect(rowKeysFor(data, 'events', ['p:b'], m.events).has('e:l:a:ra')).toBe(true);
         expect(rowKeysFor(data, 'events', ['p:b']).size).toBe(0);
+    });
+});
+
+describe('a shared event (spec 085 §4, 4a)', () => {
+    const person = (id: string, firstName: string, lastName: string, gender: 'male' | 'female', birthDate: string, events: unknown[]) =>
+        ({ id, firstName, lastName, gender, birthDate, isPlaceholder: false, partnerships: [], parentIds: [], childIds: [], events });
+    const census = { type: 'census', date: '1921-02-15', place: 'Dolní Smyšlenice', sourceIds: ['s1'] };
+    /** A census of four by its share id; the neighbours' census alike in every field but another share. */
+    function household(extra = 0): StromData {
+        const persons: Record<string, unknown> = {
+            k: person('k', 'Kvido', 'Hurdálek', 'male', '1879-01-10', [{ id: 'ck', ...census, shareId: 'sh_a', age: '42' }]),
+            r: person('r', 'Radegunda', 'Hurdálková', 'female', '1883-05-01', [{ id: 'cr', ...census, shareId: 'sh_a' }]),
+            b: person('b', 'Bohuchval', 'Hurdálek', 'male', '1906-03-01', [{ id: 'cb', ...census, shareId: 'sh_a', age: '15' }]),
+            z: person('z', 'Zbyhněv', 'Hurdálek', 'male', '1910-07-01', [{ id: 'cz', ...census, shareId: 'sh_a', age: '11' }]),
+            m: person('m', 'Bohuchval', 'Mlčoch', 'male', '1870-01-01', [{ id: 'cm', ...census, shareId: 'sh_b' }]),
+            n: person('n', 'Ludiše', 'Mlčochová', 'female', '1875-01-01', [{ id: 'cn', ...census, shareId: 'sh_b' }]),
+        };
+        for (let i = 0; i < extra; i++) {
+            persons[`x${i}`] = person(`x${i}`, `Kvido${i}`, 'Hurdálek', 'male', '1912-01-01', [{ id: `cx${i}`, ...census, shareId: 'sh_a' }]);
+        }
+        return { persons, partnerships: {}, sources: { s1: { id: 's1', title: 'Soupis 1921' } } } as unknown as StromData;
+    }
+    const model = (d: StromData) =>
+        buildTableModel(d, { rev: 1, homeId: 'k' as PersonId, lang: 'en', year: 2026, reliability: { researchTree: false, originFeature: false } });
+
+    it('the copies are one row by their share id; another share with the same content is its own row', () => {
+        const m = model(household());
+        const rows = m.events.filter(r => r.type === 'census');
+        expect(rows.map(r => r.shareId)).toEqual(['sh_a', 'sh_b']);
+        expect(rows[0].refs.map(x => x.personId)).toEqual(['k', 'r', 'b', 'z']);
+        expect(rows[1].refs.map(x => x.personId)).toEqual(['m', 'n']);
+        expect(m.eventRows.get('l:z:cz')).toBe(rows[0]);
+    });
+
+    it('two copies at one person stay two rows of that person', () => {
+        const d = household();
+        (d.persons['k' as PersonId].events as unknown[]).push({ id: 'ck2', ...census, shareId: 'sh_a' });
+        const rows = model(d).events.filter(r => r.shareId === 'sh_a');
+        expect(rows).toHaveLength(2);
+        expect(rows[1].refs).toEqual([{ personId: 'k', eventId: 'ck2' }]);
+    });
+
+    it('the Persons cell: the badge, the given names (the whole name in their title), the whole names as its text', () => {
+        const m = model(household());
+        const c = cell(m, 'l:k:ck', 'evWho');
+        expect(c.shared).toEqual({ count: 4, more: 0 });
+        expect(c.names!.map(n => n.text)).toEqual(['Kvido', 'Radegunda', 'Bohuchval', 'Zbyhněv']);
+        expect(c.names![1].title).toBe('Radegunda Hurdálková');
+        expect(c.text).toBe('Kvido Hurdálek, Radegunda Hurdálková, Bohuchval Hurdálek, Zbyhněv Hurdálek');
+        const html = cellInner(c, col('evWho'));
+        expect(html).toContain('tv-shared-pill');
+        expect(html).toContain('4 people');
+        expect(html).toContain('title="Radegunda Hurdálková"');
+        // Two persons of another share: their badge too.
+        expect(cell(m, 'l:m:cm', 'evWho').shared).toEqual({ count: 2, more: 0 });
+    });
+
+    it('a large household: the first two names and "+N", the badge with all', () => {
+        const c = cell(model(household(7)), 'l:k:ck', 'evWho');
+        expect(c.shared).toEqual({ count: 11, more: 9 });
+        expect(c.names!.map(n => n.text)).toEqual(['Kvido', 'Radegunda']);
+        const html = cellInner(c, col('evWho'));
+        expect(html).toContain('+9');
+        expect(html).toContain('11 people');
+    });
+
+    it('the ages: each one\'s own as written, else computed, "42 · 37 · 15 · 11"; the rows of the bubble', () => {
+        const m = model(household());
+        const c = cell(m, 'l:k:ck', 'evAge');
+        expect(c.text).toBe('42 · 37 · 15 · 11');
+        expect(c.sharedAges).toBe(true);
+        expect(cellInner(c, col('evAge'))).toContain('class="tv-ages"');
+        const rows = sharedAgeRows(m.ctx, m.eventRows.get('l:k:ck')!);
+        expect(rows.map(r => [r.personId, r.eventId, r.recorded, r.computed])).toEqual([
+            ['k', 'ck', '42', '42'], ['r', 'cr', '', '37'], ['b', 'cb', '15', '14'], ['z', 'cz', '11', '10'],
+        ]);
+        // A person's own event has no bubble.
+        expect(sharedAgeRows(m.ctx, model(tree()).events.find(r => r.source === 'life' && r.refs.length === 1)!)).toEqual([]);
     });
 });

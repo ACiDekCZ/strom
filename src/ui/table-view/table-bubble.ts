@@ -18,7 +18,7 @@ import { researchActionLabel } from '../research-open-mark.js';
 import { researchBubbleActions, type ResearchBubble, type ResearchBubbleAction } from './table-research-bubble.js';
 
 /** What a bubble shows (its class `tv-bubble--<kind>`). */
-export type BubbleKind = 'finding' | 'legend' | 'cites' | 'research';
+export type BubbleKind = 'finding' | 'legend' | 'cites' | 'research' | 'ages';
 
 /** One finding as the bubble shows it. */
 export interface BubbleFinding {
@@ -259,7 +259,7 @@ export function openBubblePanel(opts: {
         }
         if (e.key !== 'Tab') return;
         // The focus stays in the bubble while it is open.
-        const items = [...el.querySelectorAll<HTMLElement>('button, a[href]')];
+        const items = [...el.querySelectorAll<HTMLElement>('button, a[href], input')];
         if (!items.length) { e.preventDefault(); return; }
         const at = items.indexOf(document.activeElement as HTMLElement);
         const next = e.shiftKey ? (at <= 0 ? items.length - 1 : at - 1) : (at + 1) % items.length;

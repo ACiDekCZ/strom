@@ -26,7 +26,7 @@ import { TreeRenderer } from '../../renderer.js';
 import { isPhoneBar, isTabletOrMobile } from '../../breakpoints.js';
 import { strings, getCurrentLanguage, type Language } from '../../strings.js';
 import { uiModule } from '../module.js';
-import { cellOf, columnById, columnLabel, columnNote, dateCell, eventPersons, eventTypeLabel, setResearchOffer, type SortSpec } from './table-columns.js';
+import { cellOf, columnById, columnLabel, columnNote, dateCell, eventPersons, eventTypeLabel, setResearchOffer, sharedAgeRows, type SortSpec } from './table-columns.js';
 import {
     applyResearch, isResearchChipId, researchChipCounts, researchChipOffer, researchColumnLiveOff, researchConflictWhat, researchOffer,
     researchAgentRow, researchOpenConflicts, researchTableEnv, type ResearchChipId, type ResearchColumnId, type ResearchNewWindow, type ResearchTableEnv, type ResearchTableInput,
@@ -690,6 +690,7 @@ export const tableMethods = uiModule({
                 onEditCell: (line, cell) => this.tableEditCell(line, cell.col),
                 onName: (line, _col, name, anchor) => this.tableNameAction(line, name, anchor),
                 onMoreCites: (_line, _col, ids, anchor) => this.showTableCites(ids, anchor),
+                onSharedAges: (line, anchor) => { if (line.kind !== 'more' && line.row.kind === 'event') this.showTableSharedAges(line.row, anchor); },
                 onRowMenu: (line, anchor, cell) => this.showTableRowMenu(line, anchor, cell),
                 onIssue: (line, col, cell) => this.showTableFinding(line, col, cell),
                 onFindings: (line, col, cell) => this.showTablePersonFindings(line, col, cell),
@@ -1613,6 +1614,55 @@ export const tableMethods = uiModule({
             rect: anchor.getBoundingClientRect(), label: t.citesTitle, kind: 'cites', html: citesHtml(cites),
             focusBack: () => (anchor.isConnected ? anchor : null), scroller: mounted?.grid.el,
             onAction: (act, i) => { if (act === 'source' && list[i]) this.openTableSourceId(list[i]); },
+        });
+    },
+
+    /**
+     * A shared event's ages (spec 085 §4, 4a): a field per person with the
+     * age written in that person's copy (the computed one as its hint).
+     * Enter saves the changed ones in one undo step, Escape closes; a
+     * read-only table, an archive or a locked person shows them only.
+     */
+    showTableSharedAges(row: EventRow, anchor: HTMLElement): void {
+        closeHeadMenu();
+        const ctx = model?.ctx;
+        if (!ctx) return;
+        const rows = sharedAgeRows(ctx, row);
+        if (!rows.length) return;
+        const editable = !tableReadOnly() && !this.activeResearchArchive() && !rows.some(r => DataManager.isPersonLocked(r.personId));
+        const t = strings.table;
+        const html = `<div class="tv-ages-title">${escHtml(t.agePerPerson)}</div><div class="tv-ages-list">`
+            + rows.map((r, i) => {
+                const id = `tv-age-${i}`;
+                const value = editable
+                    ? `<input id="${id}" class="tv-ages-input" type="text" inputmode="numeric" autocomplete="off" maxlength="40" data-i="${i}"`
+                        + ` value="${escHtml(r.recorded)}" placeholder="${escHtml(r.computed)}">`
+                    : `<span class="tv-ages-value">${escHtml(r.recorded || r.computed || '–')}</span>`;
+                return `<label class="tv-ages-row" for="${id}"><span class="tv-ages-name">${escHtml(r.name)}</span>${value}</label>`;
+            }).join('') + '</div>';
+        const el = openBubblePanel({
+            rect: anchor.getBoundingClientRect(), label: t.agePerPerson, kind: 'ages', html,
+            focusBack: () => (anchor.isConnected ? anchor : null), scroller: mounted?.grid.el,
+        });
+        if (!editable) return;
+        el.querySelector<HTMLInputElement>('.tv-ages-input')?.focus({ preventScroll: true });
+        el.addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter' || !(e.target as Element).closest?.('.tv-ages-input')) return;
+            e.preventDefault();
+            const own = new Map<PersonId, { age: string | undefined }>();
+            for (const input of el.querySelectorAll<HTMLInputElement>('.tv-ages-input')) {
+                const r = rows[Number(input.dataset.i)];
+                const v = input.value.trim();
+                if (r && v !== r.recorded) own.set(r.personId, { age: v || undefined });
+            }
+            closeTableBubble(true);
+            if (!own.size) return;
+            const first = rows[0];
+            const data = DataManager.getData();
+            watching = { tree: treeKey(), name: personNameOf(first.personId), keys: watchEdit(data, rows.flatMap(r => familyKeys(data, r.personId))) };
+            if (!DataManager.saveSharedEvent(first.personId, first.eventId, { common: {}, own })) { watching = null; return; }
+            TreeRenderer.render();
+            this.refreshSearch();
         });
     },
 

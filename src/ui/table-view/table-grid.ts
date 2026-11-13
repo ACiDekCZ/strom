@@ -48,6 +48,7 @@ import { copyPlainText } from './table-cell.js';
 import { shownNameOrEmpty as personName } from '../../person-name.js';
 import { AGENT_SPIN_MS, sharedPhaseDelay } from '../../card-signals.js';
 import { PERSON_FINDINGS_COLUMNS } from './table-checks.js';
+import { sharedEventMarkSvg } from '../../icons.js';
 
 export interface GridInput {
     model: TableModel;
@@ -184,6 +185,8 @@ export interface GridHandlers {
     onName?(line: GridLine, col: ColumnDef, name: CellName, anchor: HTMLElement): void;
     /** The pill "+N" of a citation cell (§14.3): the further citations' bubble. */
     onMoreCites?(line: GridLine, col: ColumnDef, ids: readonly string[], anchor: HTMLElement): void;
+    /** A shared event's ages (spec 085 §4, 4a): their bubble. */
+    onSharedAges?(line: GridLine, anchor: HTMLElement): void;
     /** The row's menu (§10.1): a right click, Shift+F10, the menu key; the cell it is for (T54 F4). */
     onRowMenu?(line: GridLine, anchor: HTMLElement, cell: GridCellRef | null): void;
     /**
@@ -365,10 +368,28 @@ function cellValueCore(value: CellValue, col: ColumnDef, hit = ''): string {
         html += `<span class="tv-subst" title="${esc(tip)}" aria-label="${esc(tip)}">${esc(value.subst === 'bap' ? s.bapShort : s.burShort)}</span>`;
     }
     if (value.prefix) html += `<span class="tv-qual">${hit ? highlightHtml(value.prefix, hit) : esc(value.prefix)}</span>`;
+    if (value.shared && value.names?.length && !value.na) return html + sharedNamesHtml(value, hit);
     if (value.names?.length && !value.na) return html + `<span class="tv-cell-text">${namesHtml(value.names, hit)}</span>`;
+    if (value.sharedAges && !value.na) {
+        // A shared event's own ages (4a): a button that opens each one's age.
+        return html + `<button type="button" class="tv-ages" tabindex="-1" aria-haspopup="dialog" title="${esc(strings.table.agePerPerson)}">`
+            + `<span class="tv-cell-text">${hit ? highlightHtml(cellText(value), hit) : esc(cellText(value) || '–')}</span></button>`;
+    }
     if (value.link && !value.na) return html + linkHtml(value.link, hit);
     if (value.dots && !value.na) return html + readersHtml(value, hit);
     return html + `<span class="tv-cell-text">${hit && !value.na ? highlightHtml(cellText(value), hit) : esc(cellText(value))}</span>`;
+}
+
+/**
+ * The Persons cell of a shared event (spec 085 §4, 4a): the given names
+ * ("+N" for the persons not named) after the badge with the two circles
+ * and "4 people", which stays in sight when the names are cut.
+ */
+export function sharedNamesHtml(value: CellValue, hit = ''): string {
+    const s = value.shared!;
+    const more = s.more > 0 ? `<span class="tv-shared-more"> +${s.more}</span>` : '';
+    return `<span class="tv-shared"><span class="tv-shared-pill">${sharedEventMarkSvg(13)}${esc(strings.table.sharedCount(s.count))}</span>`
+        + `<span class="tv-cell-text">${namesHtml(value.names ?? [], hit)}${more}</span></span>`;
 }
 
 /**
@@ -396,9 +417,10 @@ export function readersHtml(value: CellValue, hit = ''): string {
 export function namesHtml(names: readonly CellName[], hit = ''): string {
     return names.map((n, i) => {
         const text = hit ? highlightHtml(n.text, hit) : esc(n.text);
-        if (!n.personId && !n.role) return `<span>${text}</span>`;
+        const title = n.title ? ` title="${esc(n.title)}"` : '';
+        if (!n.personId && !n.role) return `<span${title}>${text}</span>`;
         return `<button type="button" class="tv-nm${n.personId ? ' tv-nm--person' : ''}" data-ni="${i}" tabindex="-1"`
-            + `${n.role ? ' aria-haspopup="menu"' : ''}>${text}</button>`;
+            + `${n.role ? ' aria-haspopup="menu"' : ''}${title}>${text}</button>`;
     }).join(', ');
 }
 
@@ -511,6 +533,12 @@ export class TableGrid {
             if (nm && cellEl && this.nameAt(line, cellEl, nm)) return;
             const more = t.closest<HTMLElement>('.tv-cites-more');
             if (more && cellEl && this.moreCitesAt(line, cellEl, more)) return;
+            const ages = t.closest<HTMLElement>('.tv-ages');
+            if (ages && line.kind === 'row' && this.handlers.onSharedAges) {
+                this.select(line);
+                this.handlers.onSharedAges(line, ages);
+                return;
+            }
             // A web address opens its own window (§14.2); the row stays as it is.
             if (t.closest('a.tv-link')) return;
             const conf = t.closest<HTMLElement>('.tv-conf');
@@ -546,7 +574,7 @@ export class TableGrid {
         // A double click edits (§10.1); the ▾/▸, the count pill and the icons are their own.
         this.body.addEventListener('dblclick', (e) => {
             const t = e.target as Element;
-            if (t.closest('.tv-toggle, .tv-unions-pill, .tv-act, .tv-more-btn, .tv-nm, .tv-link, .tv-cites-more, .tv-conf')) return;
+            if (t.closest('.tv-toggle, .tv-unions-pill, .tv-act, .tv-more-btn, .tv-nm, .tv-link, .tv-cites-more, .tv-conf, .tv-ages')) return;
             const line = this.lineOf(t);
             if (!line || line.kind === 'more') return;
             // A cell edited in place (T54 F8) opens its editor; any other cell edits the row.
@@ -668,7 +696,7 @@ export class TableGrid {
 
     /** The names of the active cell (the one with the body's tab stop) in the tab order, the others out (§14.1). */
     private syncNameTabs(): void {
-        for (const b of this.body.querySelectorAll<HTMLElement>('.tv-nm[data-ni], .tv-link, .tv-cites-more, .tv-conf')) {
+        for (const b of this.body.querySelectorAll<HTMLElement>('.tv-nm[data-ni], .tv-link, .tv-cites-more, .tv-conf, .tv-ages')) {
             b.tabIndex = b.closest('[aria-colindex]')?.getAttribute('tabindex') === '0' ? 0 : -1;
         }
     }
@@ -1528,7 +1556,7 @@ export class TableGrid {
         if (this.copyKey(e)) return;
         if (e.altKey) return;
         // A name in a cell (§14.1) is a button: Enter and Space are its own.
-        if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.tv-nm, .tv-link, .tv-cites-more, .tv-conf')) return;
+        if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.tv-nm, .tv-link, .tv-cites-more, .tv-conf, .tv-ages')) return;
         const at = this.activeLineIndex();
         const line = this.lines[at];
         const col = Math.min(this.activeCol, input.columns.length - 1);

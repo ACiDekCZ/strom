@@ -24,6 +24,7 @@ import { safeWebUrl } from '../../validation.js';
 import { sourceEntryText } from '../../source-location.js';
 import { factCitations, sourceOnline, sourceReaders, type CitedSource } from './table-sources.js';
 import { personGodparents } from './table-events.js';
+import { givenNameOf } from '../../shared-with-line.js';
 import {
     researchCell, sourceImageCell, sourceResearchIdCell, unionResearchCell, unionResearchIdCell, type ResearchColumnId, type UnionResearchColumnId,
 } from './table-research.js';
@@ -774,10 +775,65 @@ function participantsCell(ctx: TableContext, row: TableRow, role: ParticipantRol
 }
 
 function whoCell(ctx: TableContext, row: TableRow): CellValue {
-    const persons = eventPersons(ctx, asEvent(row));
+    const r = asEvent(row);
+    const persons = eventPersons(ctx, r);
     const first = persons[0];
     const key = first ? `${(first.lastName ?? '').toLocaleLowerCase()}\u0000${(first.firstName ?? '').toLocaleLowerCase()}` : undefined;
-    return namesCell(persons.map(p => ({ text: shownNameOrEmpty(p), personId: p.id })), key);
+    const whole = namesCell(persons.map(p => ({ text: shownNameOrEmpty(p), personId: p.id })), key);
+    if (!r.shareId || persons.length < 2 || whole.empty) return whole;
+    return sharedWhoCell(persons, whole);
+}
+
+/** Up to this many persons of a shared event are named in its row; more: the first two and "+N" (4a). */
+export const SHARED_ROW_NAMES = 4;
+const SHARED_ROW_HEAD = 2;
+
+/**
+ * The Persons cell of a shared event (spec 085 §4, 4a): the given names
+ * (the whole name where two share one), the badge "4 people", from five
+ * persons on the first two and "+N". The text stays the whole names.
+ */
+function sharedWhoCell(persons: readonly Person[], whole: CellValue): CellValue {
+    const given = persons.map(p => givenNameOf(p));
+    const seen = new Map<string, number>();
+    for (const g of given) if (g) seen.set(g, (seen.get(g) ?? 0) + 1);
+    const shown = persons.length > SHARED_ROW_NAMES ? persons.slice(0, SHARED_ROW_HEAD) : persons;
+    const names: CellName[] = shown.map((p, i) => {
+        const full = shownNameOrEmpty(p);
+        const g = given[i];
+        const text = g && seen.get(g) === 1 ? g : full;
+        return { text: text || full, personId: p.id, ...(text !== full ? { title: full } : {}) };
+    }).filter(n => n.text);
+    return { ...whole, names, title: whole.text, shared: { count: persons.length, more: persons.length - shown.length } };
+}
+
+/** One person's age at a shared event (4a): as written in their copy, else computed. */
+export interface SharedAgeRow {
+    personId: PersonId;
+    eventId: string;
+    name: string;
+    /** The age written in the person's copy ('' none). */
+    recorded: string;
+    /** The age computed from the birth ('' unknown). */
+    computed: string;
+}
+
+/** A shared event's persons with their own ages, in the order of the Persons cell (4a); [] for any other row. */
+export function sharedAgeRows(ctx: TableContext, row: EventRow): SharedAgeRow[] {
+    if (row.source !== 'life' || !row.shareId) return [];
+    const persons = eventPersons(ctx, row);
+    if (persons.length < 2) return [];
+    const out: SharedAgeRow[] = [];
+    for (const p of persons) {
+        for (const ref of row.refs) {
+            if (ref.personId !== p.id) continue;
+            const ev = (p.events ?? []).find(e => e.id === ref.eventId);
+            if (!ev) continue;
+            const c = row.date ? eventAge(p, row.date) : null;
+            out.push({ personId: p.id, eventId: ref.eventId, name: shownNameOrEmpty(p), recorded: ev.age?.trim() ?? '', computed: c && !c.empty ? c.text : '' });
+        }
+    }
+    return out;
 }
 
 const DAY = 86_400_000;
@@ -805,6 +861,18 @@ function eventAge(p: Person, date: string | undefined): CellValue {
 function eventAgeCell(ctx: TableContext, row: TableRow): CellValue {
     const r = asEvent(row);
     if (r.source === 'birth') return naCell('', true);
+    const shared = sharedAgeRows(ctx, r);
+    if (shared.length) {
+        // A shared event (4a): each one's own age as written, else computed, "42 · 38 · 15 · 11".
+        const parts = shared.map(a => a.recorded || a.computed);
+        if (!parts.some(Boolean)) return { ...emptyCell(true), sharedAges: true };
+        const first = parts.find(Boolean)!;
+        const n = parseInt(first, 10);
+        return {
+            ...EMPTY, text: parts.map(t => t || '–').join(' · '), sortKey: Number.isFinite(n) ? n : first, empty: false,
+            computed: !shared.some(a => a.recorded), sharedAges: true,
+        };
+    }
     if (!r.date) return emptyCell(true);
     const persons = eventPersons(ctx, r);
     if (persons.length === 1) return eventAge(persons[0], r.date);
