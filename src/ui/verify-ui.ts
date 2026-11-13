@@ -504,7 +504,7 @@ export const verifyUiMethods = uiModule({
         const preview: NonNullable<TipState['preview']> = { loading: true };
         tipState = { tip, key: v.key, preview };
         this.verifyTipRedrawn('back');
-        void this.postResearchBridgeWrite((base, features) => postVerify(base, { fact: eid }, { features, dry: true }), { load: false })
+        void this.postResearchBridgeWrite((base, features) => postVerify(base, { fact: eid }, { features, dry: true }), { load: false, dry: true })
             .then((result) => {
                 if (tipState?.preview !== preview) return;
                 preview.loading = false;

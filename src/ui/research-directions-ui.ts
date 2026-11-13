@@ -1276,7 +1276,7 @@ export const researchDirectionsMethods = uiModule({
                 action: { label: L.dirUndo, run: () => void this.changeDirectionState(next, backTo, { undo: true, ...(before.reason ? { reason: before.reason } : {}) }) },
             });
         }
-        this.liveStatusSoon(s);
+        this.researchStatusAfterWrite(s);
         return true;
     },
 
@@ -1322,7 +1322,7 @@ export const researchDirectionsMethods = uiModule({
                 const said = r.order.length > 0 ? r.order : order;
                 s.researches = s.researches.map(x => said.includes(x.id) ? { ...x, order: said.indexOf(x.id) + 1 } : x);
                 if (!writer.waiting && pendingOrder && sameOrder(pendingOrder.order, order)) pendingOrder = null;
-                this.liveStatusSoon(s);
+                this.researchStatusAfterWrite(s);
             } else if (!writer.waiting) {
                 // The order of the last status again; the box at the row moved last tries the same order again.
                 pendingOrder = null;

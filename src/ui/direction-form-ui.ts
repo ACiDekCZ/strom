@@ -905,7 +905,7 @@ export const directionFormMethods = uiModule({
             kind: 'direction',
             ...(work ? { action: { label: L.dirWork, run: () => this.launchResearchLink(work, 'agent'), ...researchLinkFlags(work) } } : {}),
         });
-        this.liveStatusSoon(s);
+        this.researchStatusAfterWrite(s);
     },
 
     /** Save an edit: only what changed; the research's sentence about tasks moved (or Saved) with Undo. */
@@ -997,7 +997,7 @@ export const directionFormMethods = uiModule({
                 } : {}),
             });
         }
-        this.liveStatusSoon(s);
+        this.researchStatusAfterWrite(s);
         return true;
     },
 });

@@ -700,6 +700,8 @@ export const waitingPlacesMethods = uiModule({
             } else {
                 // Not followed live: the remembered list is what the research says now.
                 await this.askResearchBridge(ctx.researchId, STATUS_TIMEOUT_MS);
+                // The overview viewing it without following takes in what the bridge said (drawn below).
+                this.syncOverviewViewing(false);
             }
         }
         // A question the research no longer lists is no longer hidden here.

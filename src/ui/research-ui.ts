@@ -1636,6 +1636,19 @@ export function statusAfterWriteWay(s: LiveSession, followed: LiveSession | null
     return viewed?.kind === 'bridge' && viewed.session === s && !!s.bridge.base ? 'bridge' : null;
 }
 
+/**
+ * The research viewed through its bridge without following whose status a
+ * write of `researchId` made elsewhere (not from the overview's lists) asks
+ * at once; null: followed (its stream says it), another research, the
+ * overview drawn from the tree or not open.
+ */
+export function viewedWriteSession(researchId: string, followed: LiveSession | null, viewed: OverviewViewing | null): LiveSession | null {
+    if (followed && !followed.ended) return null;
+    const s = viewed?.kind === 'bridge' ? viewed.session : null;
+    if (!s || s.researchId.toLowerCase() !== researchId.toLowerCase()) return null;
+    return statusAfterWriteWay(s, followed, viewed) === 'bridge' ? s : null;
+}
+
 /** The followed research's whole queue is read by pages now (`queue.page`, its bridge answering). */
 export function queuePaged(s: LiveSession | null): boolean {
     if (!s || s.ended || s.lostSince !== null || !s.features?.includes(QUEUE_PAGE_FEATURE)) return false;
@@ -3565,8 +3578,9 @@ export const researchUiMethods = uiModule({
     },
 
     /**
-     * A write through the bridge changed the research `s` (a task's place):
-     * its status, so the Queue is the research's own again. Followed: as
+     * A write through the bridge changed the research `s` (a task's place,
+     * an item of Awaiting action, a line): its status, so the overview shows
+     * the research's own again. Followed: as
      * after its events (liveStatusSoon). Viewed without following (spec 057
      * §7): its bridge asked at once, not at the next regular ask, and the
      * overview takes the answer in (nothing is followed, the tree stays).
@@ -3583,6 +3597,18 @@ export const researchUiMethods = uiModule({
             // Still the overview of that research: it takes in what the bridge said (with the rest of the app).
             if (viewing === v) this.refreshResearchSyncUi();
         });
+    },
+
+    /**
+     * A write through the bridge of the research `researchId` made outside the
+     * overview's own lists (a conflict decided, a fact verified, a place
+     * answered): the overview viewing it through its bridge without following
+     * asks it at once (researchStatusAfterWrite). Followed: nothing changes
+     * here (its stream says it, as ever).
+     */
+    researchViewedStatusAfterWrite(researchId: string): void {
+        const s = viewedWriteSession(researchId, live, viewing);
+        if (s) this.researchStatusAfterWrite(s);
     },
 
     /** The bridge answered: following goes on (after a silence: say so by redrawing). */

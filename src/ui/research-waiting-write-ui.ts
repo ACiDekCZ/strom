@@ -169,7 +169,7 @@ export const researchWaitingWriteMethods = uiModule({
         }
         if (stillFollowing(s)) {
             this.reshowLiveWaiting(s);
-            this.liveStatusSoon(s);
+            this.researchStatusAfterWrite(s);
         }
         return result.ok;
     },
@@ -302,7 +302,7 @@ export const researchWaitingWriteMethods = uiModule({
             this.showWaitingNoteDialog(name, result);
         } else if (result.code === 'none' && result.status !== 200) {
             // The place (or its tasks) is gone meanwhile: nothing to show; the status says what is left.
-            this.liveStatusSoon(s);
+            this.researchStatusAfterWrite(s);
         } else {
             this.showToast(result.code === 'none' ? W.noteNone : W.noteFailed, 6000, { kind: 'waiting-failed' });
         }
@@ -403,7 +403,7 @@ export const researchWaitingWriteMethods = uiModule({
         if (taken) st.pending.set(w.id, { phase: waitingPhase(w), gone: true, until: Date.now() + WAITING_SETTLE_MS });
         if (!stillFollowing(s)) return taken ? (result.ok ? 'saved' : 'gone') : 'fail';
         if (taken) this.reshowLiveWaiting(s);
-        this.liveStatusSoon(s);
+        this.researchStatusAfterWrite(s);
         if (result.ok) {
             this.showToast(strings.live.waitingTask.answerSaved, 6000, { kind: 'waiting-answered' });
             return 'saved';
@@ -444,12 +444,12 @@ export const researchWaitingWriteMethods = uiModule({
             writeState(s).pending.set(w.id, { phase: waitingPhase(w), gone: true, until: Date.now() + WAITING_SETTLE_MS });
             if (following) {
                 this.reshowLiveWaiting(s);
-                this.liveStatusSoon(s);
+                this.researchStatusAfterWrite(s);
             }
             if (outcome.woken) this.showToast(strings.live.waitingTask.imagesAll, 6000, { kind: 'waiting-images' });
             return null;
         }
-        if (following) this.liveStatusSoon(s);
+        if (following) this.researchStatusAfterWrite(s);
         // Files not added (the same as an image taken already) are said after how it stands.
         const notes = outcome.notes.slice(0, 5).join(' ') + (outcome.notes.length > 5 ? ' …' : '');
         if (outcome.saved === 0) return notes || null;
@@ -491,7 +491,7 @@ export const researchWaitingWriteMethods = uiModule({
         this.takeWaitingWriteHead(s, before, result);
         if (result.ok) {
             this.showToast(W.fileSent, 4000, { kind: 'waiting-file-sent' });
-            if (stillFollowing(s)) this.liveStatusSoon(s);
+            if (stillFollowing(s)) this.researchStatusAfterWrite(s);
             return;
         }
         const why: Partial<Record<WaitingWriteRefused['code'], string>> = {

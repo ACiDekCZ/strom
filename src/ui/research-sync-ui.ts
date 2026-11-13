@@ -585,6 +585,8 @@ export const researchSyncMethods = uiModule({
             if (rt?.status) runtime.set(ctx.link.id, { ...rt, status: { ...rt.status, head: answer.head } });
             noteResearchBridgeStatus(ctx.link.id, null, answer.head);
         }
+        // Its "Awaiting action" as the research has it now in the overview viewed without following.
+        if (answer.ok) this.researchViewedStatusAfterWrite(ctx.link.id);
         return answer;
     },
 
@@ -622,6 +624,7 @@ export const researchSyncMethods = uiModule({
             if (rt?.status) runtime.set(ctx.link.id, { ...rt, status: { ...rt.status, head: answer.head } });
             noteResearchBridgeStatus(ctx.link.id, null, answer.head);
         }
+        if (answer.kind === 'ok') this.researchViewedStatusAfterWrite(ctx.link.id);
         return answer;
     },
 
@@ -633,10 +636,12 @@ export const researchSyncMethods = uiModule({
      * first). On an answer with a head, the research's new version is noted
      * at once and (unless `load: false`) taken quietly when it changes no
      * value here, as after a decided conflict (researchConflictKeptLoad).
+     * The overview viewing the research without following asks its status
+     * at once (not for a `dry` preview, which writes nothing).
      * Null: no bridge, or `send` threw. Never throws.
      */
     async postResearchBridgeWrite<T extends { ok: boolean }>(send: (base: string, features: readonly string[]) => Promise<T>,
-        opts: { load?: boolean } = {}): Promise<T | null> {
+        opts: { load?: boolean; dry?: boolean } = {}): Promise<T | null> {
         const ctx = this.researchSyncLink();
         const bridge = ctx ? parseLiveBridge(storedResearchBridge(ctx.link.id)?.base) : null;
         if (!ctx || !bridge) return null;
@@ -653,6 +658,8 @@ export const researchSyncMethods = uiModule({
             noteResearchBridgeStatus(ctx.link.id, null, head);
             if (opts.load !== false) void this.researchConflictKeptLoad(head).catch(() => undefined);
         }
+        // A real write (not a preview): the overview viewed without following asks the research at once.
+        if (answer?.ok && !opts.dry) this.researchViewedStatusAfterWrite(ctx.link.id);
         return answer;
     },
 

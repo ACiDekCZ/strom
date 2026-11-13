@@ -1069,7 +1069,7 @@ export const researchOffLineMethods = uiModule({
                 action: { label: L.dirUndo, run: () => void this.changeBranchMode(next, back, { undo: true }) },
             });
         }
-        this.liveStatusSoon(s);
+        this.researchStatusAfterWrite(s);
         return true;
     },
 
@@ -1369,7 +1369,7 @@ export const researchOffLineMethods = uiModule({
                 answered.add(w.id);
                 s.waiting = s.waiting.filter(x => x.id !== w.id);
                 this.renderLivePanel();
-                this.liveStatusSoon(s);
+                this.researchStatusAfterWrite(s);
                 return false;
             }
             branchProblems.set(w.id, {
@@ -1395,7 +1395,7 @@ export const researchOffLineMethods = uiModule({
             { ...before, mode: what === 'line' ? 'line' : 'never', line: what === 'line' ? line ?? before.nearest : undefined, own: true },
             branchBack(before), { undo: true }) } : undefined;
         this.showToast(message, 6000, { kind: 'direction', ...(undo ? { action: undo } : {}) });
-        this.liveStatusSoon(s);
+        this.researchStatusAfterWrite(s);
         return true;
     },
 
