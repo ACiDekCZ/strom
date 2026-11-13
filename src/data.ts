@@ -76,7 +76,7 @@ import { addPlaceAlias, sanitizePlaceAliases } from './place-groups.js';
 import { sanitizeTableViews } from './table-views-data.js';
 import {
     SharedEventCommon, SharedEventCommonField, SharedEventEdit, SharedEventSaveResult, SharedEventIndex, PersonSharedEvent,
-    applyEventFields, buildSharedEventIndex, cleanEventShares, commonFieldsOf, newShareIdFor,
+    SHARED_EVENT_COMMON_FIELDS, applyEventFields, buildSharedEventIndex, cleanEventShares, commonFieldsOf, newShareIdFor,
     personSharedEvents, shareCopiesOf, tidyShares,
 } from './shared-events.js';
 import { eventIsShareable } from './events.js';
@@ -2562,6 +2562,13 @@ class DataManagerClass {
         return newEvent;
     }
 
+    /**
+     * Change a person's event. A shared event (spec 085 §4, "edit from
+     * anywhere") takes the common fields given (type, date, place, house,
+     * note, sources, citations) into every copy and the rest (age, role,
+     * participants…) into this copy alone, as one undo step; refused when a
+     * copy's person is locked or the type cannot be shared.
+     */
     updateLifeEvent(personId: PersonId, eventId: string, updates: Partial<Omit<LifeEvent, 'id'>>): boolean {
         const person = this.data.persons[personId];
         if (!person?.events) return false;
@@ -2572,8 +2579,20 @@ class DataManagerClass {
         if (nextType === 'birth' || nextType === 'death') return false;
         const nextLabel = updates.customLabel ?? ev.customLabel;
         if (nextType === 'custom' && !nextLabel?.trim()) return false;
+        const others = ev.shareId ? shareCopiesOf(this.data, ev.shareId).filter(c => c.event !== ev) : [];
+        if (others.length > 0) {
+            if (!eventIsShareable(nextType)) return false;
+            if (others.some(c => this.isPersonLocked(c.personId))) return false;
+        }
 
         this.beginMutation();
+        if (others.length > 0) {
+            const common: SharedEventCommon = {};
+            for (const f of SHARED_EVENT_COMMON_FIELDS) {
+                if (f in updates) (common as Record<string, unknown>)[f] = updates[f];
+            }
+            for (const c of others) applyEventFields(c.event, common);
+        }
         Object.assign(ev, updates);
         // An explicit undefined means "field emptied" — drop the key, or the
         // old value would survive the save (Object.assign never removes keys).
@@ -2592,11 +2611,14 @@ class DataManagerClass {
         const person = this.data.persons[personId];
         if (!person?.events) return false;
         if (this.isPersonLocked(personId)) return false;
-        if (!person.events.some(e => e.id === eventId)) return false;
+        const gone = person.events.find(e => e.id === eventId);
+        if (!gone) return false;
 
         this.beginMutation();
         person.events = person.events.filter(e => e.id !== eventId);
         if (person.events.length === 0) delete person.events;
+        // The last other copy of a shared event is an ordinary event again (spec 085 §3).
+        if (gone.shareId) tidyShares(this.data, [gone.shareId]);
         this.commitMutation(strings.undo.removeEvent(auditPersonName(person)));
         AuditLogManager.log(this.currentTreeId, 'event.remove', strings.auditLog.removedEvent(auditPersonName(person)));
         return true;

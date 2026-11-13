@@ -897,6 +897,26 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
 
     // Validation messages
     validation: {
+        // A shared event whose copies differ (spec 085 §4)
+        groupShared: 'Wspólne wydarzenia',
+        sharedDiffersOne: (ev: string, name: string, field: string, val: string, other: string) => `${ev} · ${name}: ${field} się różni (${val}, u pozostałych ${other}).`,
+        sharedDiffersMany: (ev: string, n: number, fields: string) => `${ev} · ${n} ${plPl(n, 'kopia się różni', 'kopie się różnią', 'kopii się różni')}: ${fields}.`,
+        unify: 'Ujednolić…',
+        separateCopy: 'Odłącz różniącą się kopię',
+        separateCopies: (n: number) => `Odłącz różniące się kopie (${n})`,
+        openEvent: 'Otwórz',
+        unifyTitle: (ev: string) => `Ujednolić kopie · ${ev}`,
+        unifyLead: (n: number, m: number) => `Kopie u ${nPl(n, 'osoby', 'osób', 'osób')}, ${m} się różnią. Dla każdego pola wybiera się właściwą wartość.`,
+        unifyTakeAll: 'Weź wszystko od:',
+        unifySame: (fields: string) => `Zgodne: ${fields}. Wiek, stan badań i weryfikację każda osoba ma własne – nie są ujednolicane.`,
+        unifyGo: (n: number) => `Ujednolić u ${nPl(n, 'osoby', 'osób', 'osób')}`,
+        unified: (ev: string, n: number) => `${ev}: ujednolicono u ${nPl(n, 'osoby', 'osób', 'osób')}.`,
+        separatedCopies: (ev: string, n: number) => `${ev}: odłączono ${nPl(n, 'kopię', 'kopie', 'kopii')}.`,
+        unifyEmpty: '(puste)',
+        sharedFields: {
+            type: 'typ', customLabel: 'nazwa', date: 'data', place: 'miejsce', address: 'dom', note: 'notatka',
+            sourceIds: 'źródła', citationQuay: 'jakość cytatu',
+        },
         parseError: 'Błąd odczytu pliku',
         invalidStructure: 'Nieprawidłowa struktura pliku',
         missingPersons: 'Brak danych osób',

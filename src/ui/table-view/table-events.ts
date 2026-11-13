@@ -3,23 +3,19 @@
  *
  * One row per event of the tree: every event of a person (all types), the
  * birth and the death from a person's own fields, the wedding and the divorce
- * of a union (both partners) and every event of a couple. The same event
- * recorded at several people (spec 053: a census of a household, a move of a
- * family) is one row with all of them. Placeholder persons have no rows.
+ * of a union (both partners) and every event of a couple. A shared event
+ * (spec 085: the copies at several people carry one `shareId`) is one row
+ * with all of them. Older data without a share id: identical copies of an
+ * event a household shares (spec 053) are one row too, a guess for the view
+ * only (an edit there goes to one copy). Placeholder persons have no rows.
  */
 
 import type { CoupleEvent, CoupleEventType, EventParticipant, LifeEvent, LifeEventType, Partnership, Person, PersonId, StromData } from '../../types.js';
 import type { EventCategory, EventRef, EventRow } from './table-model.js';
+import { eventIsShareable } from '../../events.js';
 
 /** Couple events that belong to a marriage (the Marriages chip, §14.1). */
 const MARRIAGE_COUPLE_TYPES: ReadonlySet<CoupleEventType> = new Set(['engagement', 'banns', 'marriageLicence', 'marriageContract', 'marriageSettlement']);
-
-/**
- * Event types a household shares (spec 053): identical copies at several
- * people are one event. A baptism, an occupation or a title is always one
- * person's own, even when two copies look alike.
- */
-const SHARED_TYPES: ReadonlySet<LifeEventType> = new Set(['residence', 'census', 'military', 'emigration', 'immigration', 'naturalization', 'custom']);
 
 function lifeCategory(type: LifeEventType): EventCategory {
     if (type === 'birth' || type === 'baptism') return 'birth';
@@ -29,9 +25,15 @@ function lifeCategory(type: LifeEventType): EventCategory {
 
 const has = (v: string | undefined): boolean => !!v?.trim();
 
-/** The key identical copies of a shared event agree on; null: never merged. */
+/**
+ * The key a row of several people is found by: a shared event's share id;
+ * for older data without one, what identical copies of an event a household
+ * shares agree on (a baptism, an occupation or a title is always one
+ * person's own, even when two copies look alike); null: never merged.
+ */
 function shareKey(e: LifeEvent): string | null {
-    if (!SHARED_TYPES.has(e.type) || !has(e.date)) return null;
+    if (e.shareId) return `s:${e.shareId}`;
+    if (!eventIsShareable(e.type) || !has(e.date)) return null;
     const sources = [...new Set(e.sourceIds ?? [])].sort();
     if (!has(e.place) && !sources.length) return null;
     const norm = (v: string | undefined) => (v ?? '').trim();
@@ -124,6 +126,7 @@ export function buildEventRows(data: StromData): { rows: EventRow[]; byId: Map<s
                 source: 'life', type: e.type, category: lifeCategory(e.type), persons: [p], union: null, event: e,
                 refs: [{ personId: p.id, eventId: e.id } satisfies EventRef], date: e.date, place: e.place,
                 sourceIds: [...new Set(e.sourceIds ?? [])], participants: [],
+                ...(e.shareId ? { shareId: e.shareId } : {}),
             });
             mergeParticipants(r.participants, e.participants);
             add(r);

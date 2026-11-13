@@ -14,6 +14,11 @@
  * citations, counts and relations are not: a double click there still opens
  * Edit….
  *
+ * In the Events table a person's own event (not a birth, a death or a
+ * wedding: those are the People and Unions tables' cells) has its date and
+ * place edited in place; a shared event's row (spec 085) writes every copy,
+ * a row guessed from identical copies of older data is not edited there.
+ *
  * `editChangeOf` reads the field as the person dialog reads it (the same
  * `normalizeDateInput`, a place and a text trimmed) and says what changes:
  * the person's field, the first baptism or burial (its other fields and
@@ -36,7 +41,8 @@ export type EditField =
     | 'birthDate' | 'birthPlace' | 'deathDate' | 'deathPlace'
     | 'baptismDate' | 'baptismPlace' | 'burialDate' | 'burialPlace'
     | 'occupation' | 'gender' | 'refn' | 'deathCause' | 'deathAge'
-    | 'marriageDate' | 'marriagePlace' | 'marriageAge' | 'divorceDate' | 'divorcePlace' | 'unionStatus';
+    | 'marriageDate' | 'marriagePlace' | 'marriageAge' | 'divorceDate' | 'divorcePlace' | 'unionStatus'
+    | 'eventDate' | 'eventPlace';
 
 /** The field's kind: a date is read as the dialog reads it, a place offers the tree's places, a choice offers its values. */
 export type EditInput = 'text' | 'date' | 'place' | 'select';
@@ -50,6 +56,8 @@ export interface EditTarget {
     unionId: PartnershipId | null;
     /** A recorded age at the wedding: whose it is. */
     agePersonId?: PersonId;
+    /** An Events table's life event: which of the person's events (a shared one: the first copy). */
+    eventId?: string;
 }
 
 /** The People table's columns that edit a fact of the person. */
@@ -79,8 +87,8 @@ const UNION_FIELDS: Readonly<Record<string, EditField>> = {
 /** The wedding's facts: not edited in a union without a wedding (T54 G5). */
 const WEDDING_FIELDS: ReadonlySet<EditField> = new Set(['marriageDate', 'marriagePlace', 'marriageAge']);
 
-const DATE_FIELDS: ReadonlySet<EditField> = new Set(['birthDate', 'deathDate', 'baptismDate', 'burialDate', 'marriageDate', 'divorceDate']);
-const PLACE_FIELDS: ReadonlySet<EditField> = new Set(['birthPlace', 'deathPlace', 'baptismPlace', 'burialPlace', 'marriagePlace', 'divorcePlace']);
+const DATE_FIELDS: ReadonlySet<EditField> = new Set(['birthDate', 'deathDate', 'baptismDate', 'burialDate', 'marriageDate', 'divorceDate', 'eventDate']);
+const PLACE_FIELDS: ReadonlySet<EditField> = new Set(['birthPlace', 'deathPlace', 'baptismPlace', 'burialPlace', 'marriagePlace', 'divorcePlace', 'eventPlace']);
 const SELECT_FIELDS: ReadonlySet<EditField> = new Set(['gender', 'unionStatus']);
 
 /** The union form's types, in its order (relationships panel). */
@@ -102,6 +110,8 @@ function occupations(p: Person): LifeEvent[] {
     return (p.events ?? []).filter(e => e.type === 'occupation' && e.note?.trim());
 }
 
+const lifeEventOf = (p: Person, t: EditTarget): LifeEvent | undefined => (t.eventId ? (p.events ?? []).find(e => e.id === t.eventId) : undefined);
+
 const firstEvent = (p: Person, type: 'baptism' | 'burial'): LifeEvent | undefined => (p.events ?? []).find(e => e.type === type);
 
 /**
@@ -121,6 +131,15 @@ export function editTargetOf(type: RowType, line: GridLine, col: ColumnDef, ctx?
         const { p1, p2 } = ctx ? unionPartners(ctx, row) : row;
         const who = col.id === 'rec1' ? p1 : p2;
         return who ? { ...t, agePersonId: who.id } : null;
+    }
+    if (type === 'events') {
+        if (row.kind !== 'event' || row.source !== 'life' || !row.refs.length) return null;
+        // Copies matched by their content only (older data) are not one event: each is edited in its dialog.
+        if (row.refs.length > 1 && !row.shareId) return null;
+        const field: EditField | null = col.id === 'evDate' ? 'eventDate' : col.id === 'evPlace' ? 'eventPlace' : null;
+        if (!field) return null;
+        const ref = row.refs[0];
+        return { field, input: inputOf(field), personId: ref.personId, unionId: null, eventId: ref.eventId };
     }
     if (type !== 'persons' || row.kind !== 'person') return null;
     const unionField = col.unionScoped ? UNION_FIELDS[col.id] : undefined;
@@ -177,6 +196,8 @@ function storedOf(data: StromData, t: EditTarget): string {
         case 'refn': return p.refn ?? '';
         case 'deathCause': return p.deathCause ?? '';
         case 'deathAge': return p.deathAge ?? '';
+        case 'eventDate': return lifeEventOf(p, t)?.date ?? '';
+        case 'eventPlace': return lifeEventOf(p, t)?.place ?? '';
         default: return '';
     }
 }
@@ -192,6 +213,8 @@ export type EditChange =
     | { kind: 'person'; personId: PersonId; updates: Partial<Person> }
     | { kind: 'event'; personId: PersonId; type: 'baptism' | 'burial'; eventId: string | null; updates: Partial<Omit<LifeEvent, 'id'>> }
     | { kind: 'occupation'; personId: PersonId; value: string }
+    /** An Events table's life event: one common field, written to every copy of a shared event. */
+    | { kind: 'lifeEvent'; personId: PersonId; eventId: string; field: 'date' | 'place'; value: string | undefined }
     | { kind: 'union'; unionId: PartnershipId; updates: PartnershipUpdates };
 
 /** A save: the change (null: nothing changed), or what stops it. */
@@ -262,6 +285,9 @@ export function editChangeOf(data: StromData, t: EditTarget, text: string, lang?
         case 'refn': return { ok: true, change: { kind: 'person', personId, updates: { refn: value } } };
         case 'deathCause': return { ok: true, change: { kind: 'person', personId, updates: { deathCause: value } } };
         case 'deathAge': return { ok: true, change: { kind: 'person', personId, updates: { deathAge: value } } };
+        case 'eventDate': case 'eventPlace':
+            if (!t.eventId || !lifeEventOf(p, t)) return { ok: true, change: null };
+            return { ok: true, change: { kind: 'lifeEvent', personId, eventId: t.eventId, field: t.field === 'eventDate' ? 'date' : 'place', value: value || undefined } };
         default: return { ok: true, change: null };
     }
 }

@@ -923,6 +923,9 @@ const stringsEN = {
         sharedLine: 'with',
         sharedLineMore: (n: number) => `and ${n} more`,
         sharedLineOpen: 'Open the shared event',
+        sharedDiffers: (name: string, fields: string) => `Copy differs: ${name} (${fields}).`,
+        sharedCompare: 'Compare',
+        sharedCellChanged: (field: string, ev: string, n: number) => `${field}: changed for ${n} ${plural('en', n, 'person', 'people')} (${ev}).`,
         occupationLabel: 'Occupation / trade',
         occupationHint: 'The trade itself — "blacksmith", not "worked in Kladno as a blacksmith". It goes out as the occupation in GEDCOM.',
         religionLabel: 'Denomination',
@@ -5061,6 +5064,26 @@ const stringsEN = {
 
     // Validation messages
     validation: {
+        // A shared event whose copies differ (spec 085 §4)
+        groupShared: 'Shared events',
+        sharedDiffersOne: (ev: string, name: string, field: string, val: string, other: string) => `${ev} · ${name}: ${field} differs (${val}; others ${other}).`,
+        sharedDiffersMany: (ev: string, n: number, fields: string) => `${ev} · ${n} copies differ: ${fields}.`,
+        unify: 'Make all match…',
+        separateCopy: 'Separate the differing copy',
+        separateCopies: (n: number) => `Separate the differing copies (${n})`,
+        openEvent: 'Open',
+        unifyTitle: (ev: string) => `Make copies match · ${ev}`,
+        unifyLead: (n: number, m: number) => `Copies for ${n} ${plural('en', n, 'person', 'people')}, ${m} differ. The valid value is picked for each field.`,
+        unifyTakeAll: 'Take everything from:',
+        unifySame: (fields: string) => `Same: ${fields}. Age, research status and verification belong to each person and are not matched.`,
+        unifyGo: (n: number) => `Make match for ${n} ${plural('en', n, 'person', 'people')}`,
+        unified: (ev: string, n: number) => `${ev}: matched for ${n} ${plural('en', n, 'person', 'people')}.`,
+        separatedCopies: (ev: string, n: number) => `${ev}: ${n} ${plural('en', n, 'copy', 'copies')} separated.`,
+        unifyEmpty: '(empty)',
+        sharedFields: {
+            type: 'type', customLabel: 'name', date: 'date', place: 'place', address: 'house', note: 'note',
+            sourceIds: 'sources', citationQuay: 'citation quality',
+        },
         parseError: 'Error reading file',
         invalidStructure: 'Invalid file structure',
         missingPersons: 'Missing people data',
@@ -5434,6 +5457,7 @@ const stringsEN = {
         valRecurringGodparentDetail: (name: string, events: number, people: number, whose: string) =>
             `${name} — at ${events} events of ${people} people · ${whose}`,
         valRecurringGodparentByName: 'matched by name',
+        valSharedCopiesDiffer: 'Shared events',
         valOrphanedParticipantRef: 'Event participant links to a person who no longer exists',
         valOrphanedParticipantDetail: (person: string, event: string, who: string) =>
             `${person} · ${event}: ${who}`,
@@ -8777,6 +8801,9 @@ const stringsEN = {
 
     /** The Table view (spec 073): the whole tree as rows of people or unions. */
     table: {
+        sharedCount: (n: number) => `${n} ${plural('en', n, 'person', 'people')}`,
+        agePerPerson: 'Age as recorded · per person',
+        sharedDiffers: (n: number) => `differs for ${n}`,
         rows: { persons: 'People', unions: 'Unions', events: 'Events', sources: 'Sources' },
         rowType: 'Rows',
         rowTypeNote: 'Each row type keeps its own columns, filter and sort.',
@@ -9958,6 +9985,9 @@ const stringsCZ: StringsType = {
         sharedLine: 'spolu s',
         sharedLineMore: (n: number) => `a další ${n}`,
         sharedLineOpen: 'Otevřít společnou událost',
+        sharedDiffers: (name: string, fields: string) => `Kopie se liší: ${name} (${fields}).`,
+        sharedCompare: 'Porovnat',
+        sharedCellChanged: (field: string, ev: string, n: number) => `${field}: změněno u ${n} ${plural('cs', n, 'osoby', 'osob', 'osob')} (${ev}).`,
         occupationLabel: 'Povolání / řemeslo',
         occupationHint: 'Jen to řemeslo — „kovář“, ne „pracoval v Kladně jako kovář“. Odchází to jako povolání v GEDCOMu.',
         religionLabel: 'Vyznání',
@@ -14008,6 +14038,26 @@ const stringsCZ: StringsType = {
 
     // Validation messages
     validation: {
+        // A shared event whose copies differ (spec 085 §4)
+        groupShared: 'Společné události',
+        sharedDiffersOne: (ev: string, name: string, field: string, val: string, other: string) => `${ev} · ${name}: ${field} se liší (${val}, u ostatních ${other}).`,
+        sharedDiffersMany: (ev: string, n: number, fields: string) => `${ev} · ${n} ${plural('cs', n, 'kopie', 'kopie', 'kopií')} se liší: ${fields}.`,
+        unify: 'Sjednotit…',
+        separateCopy: 'Oddělit rozdílnou kopii',
+        separateCopies: (n: number) => `Oddělit rozdílné kopie (${n})`,
+        openEvent: 'Otevřít',
+        unifyTitle: (ev: string) => `Sjednotit kopie · ${ev}`,
+        unifyLead: (n: number, m: number) => `Kopie u ${n} ${plural('cs', n, 'osoby', 'osob', 'osob')}, ${m} se liší. U každého pole se vybere platná hodnota.`,
+        unifyTakeAll: 'Vzít vše podle:',
+        unifySame: (fields: string) => `Shodné: ${fields}. Věk, stav výzkumu a ověření má každá osoba svůj a nesjednocují se.`,
+        unifyGo: (n: number) => `Sjednotit u ${n} ${plural('cs', n, 'osoby', 'osob', 'osob')}`,
+        unified: (ev: string, n: number) => `${ev}: sjednoceno u ${n} ${plural('cs', n, 'osoby', 'osob', 'osob')}.`,
+        separatedCopies: (ev: string, n: number) => `${ev}: ${plural('cs', n, 'oddělena', 'odděleny', 'odděleno')} ${n} ${plural('cs', n, 'kopie', 'kopie', 'kopií')}.`,
+        unifyEmpty: '(prázdné)',
+        sharedFields: {
+            type: 'typ', customLabel: 'název', date: 'datum', place: 'místo', address: 'dům', note: 'poznámka',
+            sourceIds: 'prameny', citationQuay: 'kvalita citace',
+        },
         parseError: 'Chyba při čtení souboru',
         invalidStructure: 'Neplatná struktura souboru',
         missingPersons: 'Chybí data osob',
@@ -14380,6 +14430,7 @@ const stringsCZ: StringsType = {
         valRecurringGodparentDetail: (name: string, events: number, people: number, whose: string) =>
             `${name} — u ${events} ${plural('cs', events, 'události', 'událostí', 'událostí')} ${people} ${plural('cs', people, 'osoby', 'osob', 'osob')} · ${whose}`,
         valRecurringGodparentByName: 'shoda podle jména',
+        valSharedCopiesDiffer: 'Společné události',
         valOrphanedParticipantRef: 'Účastník události odkazuje na osobu, která už neexistuje',
         valOrphanedParticipantDetail: (person: string, event: string, who: string) =>
             `${person} · ${event}: ${who}`,
@@ -17684,6 +17735,9 @@ const stringsCZ: StringsType = {
     },
 
     table: {
+        sharedCount: (n: number) => `${n} ${plural('cs', n, 'osoba', 'osoby', 'osob')}`,
+        agePerPerson: 'Věk podle zápisu · každý svůj',
+        sharedDiffers: (n: number) => `liší se u ${n}`,
         rows: { persons: 'Osoby', unions: 'Svazky', events: 'Události', sources: 'Prameny' },
         rowType: 'Řádky',
         rowTypeNote: 'Každý typ řádků má vlastní sloupce, filtr a řazení.',
@@ -18848,6 +18902,9 @@ const stringsDE: StringsType = {
         sharedLine: 'mit',
         sharedLineMore: (n: number) => `und ${n} weitere`,
         sharedLineOpen: 'Gemeinsames Ereignis öffnen',
+        sharedDiffers: (name: string, fields: string) => `Kopie weicht ab: ${name} (${fields}).`,
+        sharedCompare: 'Vergleichen',
+        sharedCellChanged: (field: string, ev: string, n: number) => `${field}: bei ${n} ${plural('de', n, 'Person', 'Personen')} geändert (${ev}).`,
         occupationLabel: 'Beruf / Gewerbe',
         occupationHint: 'Nur das Gewerbe selbst — „Schmied“, nicht „arbeitete in Kladno als Schmied“. Es wird als Beruf in GEDCOM ausgegeben.',
         religionLabel: 'Konfession',
@@ -22871,6 +22928,26 @@ const stringsDE: StringsType = {
 
     // Validation messages
     validation: {
+        // A shared event whose copies differ (spec 085 §4)
+        groupShared: 'Gemeinsame Ereignisse',
+        sharedDiffersOne: (ev: string, name: string, field: string, val: string, other: string) => `${ev} · ${name}: ${field} weicht ab (${val}, bei den anderen ${other}).`,
+        sharedDiffersMany: (ev: string, n: number, fields: string) => `${ev} · ${n} ${plural('de', n, 'Kopie weicht', 'Kopien weichen')} ab: ${fields}.`,
+        unify: 'Angleichen…',
+        separateCopy: 'Abweichende Kopie abtrennen',
+        separateCopies: (n: number) => `Abweichende Kopien abtrennen (${n})`,
+        openEvent: 'Öffnen',
+        unifyTitle: (ev: string) => `Kopien angleichen · ${ev}`,
+        unifyLead: (n: number, m: number) => `Kopien bei ${n} ${plural('de', n, 'Person', 'Personen')}, ${m} weichen ab. Für jedes Feld wird der gültige Wert gewählt.`,
+        unifyTakeAll: 'Alles übernehmen von:',
+        unifySame: (fields: string) => `Gleich: ${fields}. Alter, Forschungsstand und Prüfung hat jede Person für sich, sie werden nicht angeglichen.`,
+        unifyGo: (n: number) => `Bei ${n} ${plural('de', n, 'Person', 'Personen')} angleichen`,
+        unified: (ev: string, n: number) => `${ev}: bei ${n} ${plural('de', n, 'Person', 'Personen')} angeglichen.`,
+        separatedCopies: (ev: string, n: number) => `${ev}: ${n} ${plural('de', n, 'Kopie', 'Kopien')} abgetrennt.`,
+        unifyEmpty: '(leer)',
+        sharedFields: {
+            type: 'Art', customLabel: 'Bezeichnung', date: 'Datum', place: 'Ort', address: 'Haus', note: 'Notiz',
+            sourceIds: 'Quellen', citationQuay: 'Zitatqualität',
+        },
         parseError: 'Fehler beim Lesen der Datei',
         invalidStructure: 'Ungültige Dateistruktur',
         missingPersons: 'Personendaten fehlen',
@@ -23226,6 +23303,7 @@ const stringsDE: StringsType = {
         valRecurringGodparentDetail: (name: string, events: number, people: number, whose: string) =>
             `${name} — bei ${events} Ereignissen von ${people} Personen · ${whose}`,
         valRecurringGodparentByName: 'nach Namen abgeglichen',
+        valSharedCopiesDiffer: 'Gemeinsame Ereignisse',
         valOrphanedParticipantRef: 'Ereignisbeteiligter verweist auf eine nicht mehr vorhandene Person',
         valOrphanedParticipantDetail: (person: string, event: string, who: string) =>
             `${person} · ${event}: ${who}`,
@@ -26510,6 +26588,9 @@ const stringsDE: StringsType = {
     },
 
     table: {
+        sharedCount: (n: number) => `${n} ${plural('de', n, 'Person', 'Personen')}`,
+        agePerPerson: 'Alter laut Eintrag · je Person',
+        sharedDiffers: (n: number) => `weicht bei ${n} ab`,
         rows: { persons: 'Personen', unions: 'Verbindungen', events: 'Ereignisse', sources: 'Quellen' },
         rowType: 'Zeilen',
         rowTypeNote: 'Jede Zeilenart behält eigene Spalten, Filter und Sortierung.',

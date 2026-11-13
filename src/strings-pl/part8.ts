@@ -1163,6 +1163,9 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         keepSources: 'Zachowaj źródła',
     },
     table: {
+        sharedCount: (n: number) => nPl(n, 'osoba', 'osoby', 'osób'),
+        agePerPerson: 'Wiek według zapisu · każdy własny',
+        sharedDiffers: (n: number) => `różni się u ${n}`,
         rows: { persons: 'Osoby', unions: 'Związki', events: 'Wydarzenia', sources: 'Źródła' },
         rowType: 'Wiersze',
         rowTypeNote: 'Każdy typ wierszy ma własne kolumny, filtr i sortowanie.',

@@ -197,6 +197,12 @@ export interface EventRow {
     event: LifeEvent | CoupleEvent | null;
     /** Each person's copy of a person's event (one for one person). */
     refs: EventRef[];
+    /**
+     * A shared event's share id (spec 085): its copies are this row, an edit
+     * of a common field goes to every copy. None for a row guessed from
+     * identical copies of older data.
+     */
+    shareId?: string;
     date?: string;
     place?: string;
     /** The sources cited on the event. */

@@ -49,6 +49,8 @@ import {
     type CellName, type CellValue, type EventRow, type RowType, type SourceRow, type TableModel, type TableRow,
 } from './table-model.js';
 import { eventEditTarget } from './table-events.js';
+import { shareCopiesOf } from '../../shared-events.js';
+import { sharedEventTitle } from '../../shared-event-editor.js';
 import { TableGrid, type CellEditSpec, type GridCellRef, type RowAction } from './table-grid.js';
 import { editChangeOf, editOptionsOf, editTargetOf, editValueOf, type EditTarget } from './table-edit.js';
 import { cellChoices, copyPlainText } from './table-cell.js';
@@ -1892,6 +1894,21 @@ export const tableMethods = uiModule({
             DataManager.runBatch(t2.editPartnership(auditPersonName(a), auditPersonName(b)), () => {
                 DataManager.updatePartnership(change.unionId, change.updates);
             });
+        } else if (change.kind === 'lifeEvent') {
+            // A shared event's common field goes to every copy (spec 085 §4), in one undo step.
+            const id = change.personId;
+            const ev = DataManager.getPerson(id)?.events?.find(e => e.id === change.eventId);
+            if (!ev) return null;
+            const copies = ev.shareId ? shareCopiesOf(data, ev.shareId) : [];
+            const ids = copies.length ? copies.map(c => c.personId) : [id];
+            watching = { tree: treeKey(), name: personNameOf(id), keys: watchEdit(data, ids.flatMap(p => familyKeys(data, p))) };
+            const n = DataManager.updateSharedCommonField(id, change.eventId, change.field, change.value);
+            if (n === 0) { watching = null; return null; }
+            if (n >= 2) {
+                const title = sharedEventTitle(ev, strings.events.types[ev.type]);
+                const field = strings.validation.sharedFields[change.field];
+                this.showToast(strings.events.sharedCellChanged(field, title, n));
+            }
         } else {
             const id = change.personId;
             watching = { tree: treeKey(), name: personNameOf(id), keys: watchEdit(data, familyKeys(data, id)) };
