@@ -53,6 +53,16 @@ export function treeShareIds(data: StromData): Set<string> {
     return ids;
 }
 
+/** New share ids none of `taken` is, each added to it (many at once: an import). */
+export function shareIdMaker(taken: Set<string>): () => string {
+    return () => {
+        for (;;) {
+            const id = randomShareId();
+            if (!taken.has(id)) { taken.add(id); return id; }
+        }
+    };
+}
+
 /** A new share id no event of the tree carries (8 characters of `[A-Za-z0-9]`, opaque). */
 export function newShareIdFor(data: StromData): string {
     const taken = treeShareIds(data);

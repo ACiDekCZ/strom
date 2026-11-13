@@ -518,6 +518,10 @@ export const importExportMethods = uiModule({
                 ...(stats.otherFamilyLinks > 0 ? [strings.gedcom.otherFamilyLinks(stats.otherFamilyLinks)] : []),
                 ...(stats.joinedFamilies > 0
                     ? [strings.gedcom.joinedFamilies(stats.joinedFamilies, keptFrom ? importProgramName(keptFrom) : undefined)] : []),
+                // Another program's shared events made into the app's (spec 085 7b).
+                ...(stats.sharedConverted > 0
+                    ? [strings.gedcom.sharedConverted(keptFrom ? importProgramName(keptFrom) : stats.sharedProgram,
+                        stats.sharedConverted, stats.sharedConvertedPersons)] : []),
             ];
             // Nothing lost and nothing to say about people: said out loud —
             // silence reads as "who knows what got lost".

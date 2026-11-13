@@ -1,5 +1,5 @@
 import type { StringsType } from '../strings.js';
-import { nPl, plPl, joinAndPl, relationPl } from './helpers.js';
+import { nPl, numPl, plPl, joinAndPl, relationPl } from './helpers.js';
 
 export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationships' | 'card' | 'buttons' | 'dialog'
     | 'gender' | 'partnershipStatus' | 'parentRelType' | 'export' | 'depth' | 'rodView' | 'focus'
@@ -781,6 +781,7 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
         joinedFamilies: (n: number, prog?: string) =>
             `Dołączono do związku tej samej pary: ${nPl(n, 'kolejny rekord rodziny', 'kolejne rekordy rodziny', 'kolejnych rekordów rodziny')} (np. drugi ślub)`
             + (prog ? `; zachowano do eksportu „Z powrotem do ${prog}”` : ''),
+        sharedConverted: (prog: string, n: number, m: number) => `Wspólne wydarzenia z ${prog}: ${numPl(n)} przeniesiono (${nPl(m, 'osoba', 'osoby', 'osób')})`,
         photos: 'Zdjęcia',
         documents: 'Dokumenty',
         excerpts: 'Wycinki',

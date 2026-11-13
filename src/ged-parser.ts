@@ -78,6 +78,11 @@ import { isGedcomDateFormOf } from './gedcom-date-form';
 import { placeKey } from './places';
 import { isPlaceRecordId, sanitizePlaceRecord, PLACE_TEXT_LIMITS } from './place-records';
 import { coupleEventTypeOfTag, eventValueIsOnTag } from './events';
+import {
+    applyShareMark, convertGedShares, isHouseholdShareRole, type PendingCoupleShars, type PendingPersonShars, type RawRoleAt,
+    type RawShareMark, roleAtEventId, roleAtEventType, roleAtRole, roleAtTypeOfTag, sharRoleWord,
+} from './ged-shares';
+import { cleanEventShares } from './shared-events';
 import { strings, getStringsForLang } from './strings';
 import { SURNAME_GROUPS_MARKER, SURNAME_REJECTIONS_MARKER, SURNAME_GROUP_SEP, formatGedcomDate } from './ged-exporter';
 
@@ -1190,6 +1195,12 @@ interface RawEvent {
     imports?: RawImportMark[];
     /** The research's origin of the event (Strom's own files only). */
     origin?: RawFactOrigin;
+    /** `2 _STROM_SHARE` (+ `3 _ROLE`): the copy of a shared event (spec 085). */
+    share?: RawShareMark;
+    /** `2 _STROM_ROLE` (+ `3 _STROM_AT`, `4 TYPE`): the person's part at another's event. */
+    roleAt?: RawRoleAt;
+    /** Another program's `2 _SHAR` / `2 _SHAN` under the event, with their roles. */
+    shars?: RawParticipant[];
 }
 
 /**
@@ -1251,6 +1262,8 @@ interface RawCoupleEvent {
     imports?: RawImportMark[];
     /** The research's origin of the event (Strom's own files only). */
     origin?: RawFactOrigin;
+    /** Another program's `2 _SHAR` / `2 _SHAN` under the event, with their roles. */
+    shars?: RawParticipant[];
 }
 
 /**
@@ -1788,6 +1801,14 @@ export interface GedcomConversionResult {
         keptTags: number;
         /** Their tags, most frequent first ("_FOO, _BAR"). Empty when none. */
         keptTagSummary: string;
+        /**
+         * Another program's shared events (`_SHAR`, spec 085 7b) made into
+         * shared events of the app, the persons in them and the program
+         * that wrote the file (its header's SOUR, else "GEDCOM").
+         */
+        sharedConverted: number;
+        sharedConvertedPersons: number;
+        sharedProgram: string;
         totalGedFamilies: number;
     };
 }
@@ -2332,8 +2353,8 @@ export const GEDCOM_READ_UNDERSCORE_TAGS: ReadonlySet<string> = new Set([
     '_GROUP', '_HELD', '_HYPO', '_INTREE', '_ISLAND', '_JOIN', '_KEY', '_LAST', '_LEFT', '_LEVEL', '_LINK', '_MARNM', '_MILI',
     '_MILT', '_MODE', '_MREL', '_NEAREST', '_NEXT', '_NORECORDS', '_ON', '_PAR', '_PART', '_PARTIAL', '_PEOPLE', '_PERS',
     '_PERSONALPHOTO', '_PICK', '_POS', '_PREV', '_PRIM', '_PRIMARY', '_PRIO', '_PROJECT_GUID', '_PROP', '_QUESTION', '_READERS',
-    '_RECORDS', '_REF', '_RELATIONSHIP_STATUS', '_REOPEN', '_RESEARCH', '_SCOPE', '_SEARCHES', '_SENT', '_SESSIONS', '_SOUR',
-    '_STAT', '_STAYS', '_STORY', '_TASK',
+    '_RECORDS', '_REF', '_RELATIONSHIP_STATUS', '_REOPEN', '_RESEARCH', '_ROLE', '_SCOPE', '_SEARCHES', '_SENT', '_SESSIONS',
+    '_SHAN', '_SHAR', '_SOUR', '_STAT', '_STAYS', '_STORY', '_TASK',
     '_TEST', '_TRIED', '_TXT', '_UID', '_UNTIL', '_UPD', '_URL', '_VAR', '_VIA', '_WHY', '_WITN', '_XREF',
 ]);
 
@@ -3028,6 +3049,13 @@ export function parseGedcom(content: string): ParsedGedcom {
     /** `2 _STROM_EID` whose `3 _TXT` may follow. */
     let openEid: { level: number; verify: RawFactVerify | null } | null = null;
     /**
+     * A shared event's line being read (spec 085): `2 _STROM_SHARE` (its
+     * `3 _ROLE` / `3 ROLE`), `2 _STROM_ROLE` (its `3 _STROM_AT` and `4 TYPE`),
+     * or another program's `2 _SHAR` / `2 _SHAN` (`3 ROLE` / `_ROLE` / `RELA`,
+     * `3 NOTE`). `sub`: the level-3 tag last read, for what is under it.
+     */
+    let openShare: { level: number; sub?: string; share?: RawShareMark; roleAt?: RawRoleAt; part?: RawParticipant } | null = null;
+    /**
      * The id lines being read (spec 066 K3.2): under `1 _STROM_IMPORT Ix` of a
      * Strom file (`entry`), or the `2 TYPE` of a level-1 `EXID`. Its deeper
      * lines are read here and nowhere else.
@@ -3448,6 +3476,54 @@ export function parseGedcom(content: string): ParsedGedcom {
         if (openPending) {
             if (level === openPending.level + 1 && tag === '_POS' && openPending.verify) openPending.verify.position = value.trim();
             continue;
+        }
+        if (openShare && level <= openShare.level) openShare = null;
+        if (openShare) {
+            const o = openShare;
+            if (level === o.level + 1) {
+                o.sub = tag;
+                if (o.share && (tag === '_ROLE' || tag === 'ROLE')) o.share.role = value;
+                else if (o.roleAt && tag === '_STROM_AT') o.roleAt.at = value.trim();
+                else if (o.part && (tag === 'ROLE' || tag === '_ROLE' || tag === 'RELA')) { if (!o.part.rela) o.part.rela = sharRoleWord(value); }
+                else if (o.part && tag === 'NOTE') o.part.note = value;
+            } else if (level === o.level + 2) {
+                const more = tag === 'CONT' ? `\n${value}` : tag === 'CONC' ? value : null;
+                if (o.share && (o.sub === '_ROLE' || o.sub === 'ROLE') && more !== null) o.share.role = (o.share.role ?? '') + more;
+                else if (o.roleAt && o.sub === '_STROM_AT' && tag === 'TYPE') o.roleAt.tag = value.trim();
+                else if (o.part && o.sub === 'NOTE' && more !== null) o.part.note = (o.part.note ?? '') + more;
+            }
+            continue;
+        }
+        if (level === 2 && currentRecord && !currentResearch && (currentType === 'INDI' || currentType === 'FAM')
+            && (tag === '_STROM_SHARE' || tag === '_STROM_ROLE' || tag === '_SHAR' || tag === '_SHAN')) {
+            // Shared events (spec 085): Strom's marks under a person's event,
+            // another program's persons of the event under any event.
+            const indi = currentType === 'INDI' ? currentRecord as GedcomIndividual : null;
+            const fam = currentType === 'FAM' ? currentRecord as GedcomFamily : null;
+            if (tag === '_STROM_SHARE' || tag === '_STROM_ROLE') {
+                if (indi && currentEvent) {
+                    currentEventSubTag = tag;
+                    if (tag === '_STROM_SHARE') openShare = { level, share: currentEvent.share = { id: value.trim() } };
+                    else openShare = { level, roleAt: currentEvent.roleAt = { role: value.trim() } };
+                    continue;
+                }
+            } else {
+                const ref = tag === '_SHAR' && GED_POINTER.test(value.trim()) ? value.trim() : undefined;
+                const name = tag === '_SHAN' && value.trim() ? value.trim() : undefined;
+                const part: RawParticipant | null = ref ? { ref } : name ? { name } : null;
+                let list: RawParticipant[] | null = null;
+                if (indi && currentEvent) { list = currentEvent.shars ??= []; currentEventSubTag = tag; }
+                else if (indi && (currentSubTag === 'BIRT' || currentSubTag === 'DEAT')) {
+                    list = currentSubTag === 'BIRT' ? indi.birthParticipants : indi.deathParticipants;
+                    currentFactSubTag = tag;
+                } else if (fam && currentFamEvent) { list = currentFamEvent.shars ??= []; currentFamEventSubTag = tag; }
+                else if (fam && currentSubTag === 'MARR') { list = fam.marriageParticipants; currentFactSubTag = tag; }
+                if (list) {
+                    if (part) list.push(part);
+                    openShare = { level, ...(part ? { part } : {}) };
+                    continue;
+                }
+            }
         }
         if ((stromResearch || stromApp) && level === 2 && currentRecord && !currentResearch && (currentType === 'INDI' || currentType === 'FAM')
             && (tag === '_STROM_CONFIRMED' || tag === '_STROM_VERIFY' || tag === '_STROM_CHECKED' || tag === '_STROM_EID')) {
@@ -5040,6 +5116,11 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
     const eventMarks = new WeakMap<LifeEvent | CoupleEvent, RawImportMark[]>();
     /** The partnership each family became (the same couple's second family: the first one's). */
     const famPartnership = new Map<string, Partnership>();
+    /** Events with household members another program named (`_SHAR`), until everyone is read (spec 085). */
+    const pendingPersonShars: PendingPersonShars[] = [];
+    const pendingCoupleShars: PendingCoupleShars[] = [];
+    /** Events with `_STROM_ROLE`, until the persons and couples they point at are read. */
+    const pendingRoleAt: { event: LifeEvent; raw: RawRoleAt }[] = [];
     /** Parent links a family's CHIL marks as imported: child, its parents there, the import. */
     const parentMarks: { childId: PersonId; parents: PersonId[]; importId: string }[] = [];
     /** Excerpts with a `_STROM_REGION` on their original, until the page attachments exist. */
@@ -5313,9 +5394,28 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
                 const evQuay = quayOf(ev.sourceRefs);
                 if (evQuay) out.citationQuay = { sourceIds: evQuay };
 
-                const parts = (ev.participants ?? [])
+                // A household member another program named under the event
+                // (`_SHAR`, role Household / Principal / none) is a copy of a
+                // shared event, made when everyone is read (convertGedShares);
+                // a witness, a godparent or another role is a participant.
+                const household: PendingPersonShars['members'] = [];
+                const shared = (ev.shars ?? []).filter(raw => {
+                    if (!raw.ref || !isHouseholdShareRole(raw.rela)) return true;
+                    const linked = personIdMap.get(raw.ref);
+                    if (linked) household.push({ personId: linked, ...(raw.rela ? { role: raw.rela } : {}) });
+                    return false;
+                });
+                const parts = [...(ev.participants ?? []), ...shared]
                     .map(toParticipant).filter((p): p is EventParticipant => !!p);
                 if (parts.length > 0) out.participants = parts;
+                if (household.length > 0) pendingPersonShars.push({ personId: person.id, event: out, members: household });
+                // Strom's own marks: the share id, the part at another's event.
+                applyShareMark(out, ev.share);
+                if (ev.roleAt) {
+                    out.type = roleAtEventType(out.type, ev.roleAt);
+                    if (out.type !== 'custom') delete out.customLabel;
+                    pendingRoleAt.push({ event: out, raw: ev.roleAt });
+                }
                 if (readMarks && ev.imports) eventMarks.set(out, ev.imports);
                 if (readOrigins && ev.origin) eventOrigins.set(out, ev.origin);
                 return out;
@@ -5624,9 +5724,19 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
                 if (refs.length > 0) out.sourceIds = refs;
                 const evQuay = quayOf(ev.sourceRefs);
                 if (evQuay) out.citationQuay = { sourceIds: evQuay };
-                const parts = (ev.participants ?? []).map(toWitness)
+                // Household members named by another program (`_SHAR`): the
+                // couple's event becomes a shared event of them all (convertGedShares).
+                const household: PendingCoupleShars['members'] = [];
+                const shared = (ev.shars ?? []).filter(raw => {
+                    if (!raw.ref || !isHouseholdShareRole(raw.rela)) return true;
+                    const linked = personIdMap.get(raw.ref);
+                    if (linked) household.push({ personId: linked, ...(raw.rela ? { role: raw.rela } : {}) });
+                    return false;
+                });
+                const parts = [...(ev.participants ?? []), ...shared].map(toWitness)
                     .filter((p): p is EventParticipant => !!p);
                 if (parts.length > 0) out.participants = parts;
+                if (household.length > 0) pendingCoupleShars.push({ partnership, event: out, members: household });
                 if (readMarks && ev.imports) eventMarks.set(out, ev.imports);
                 if (readOrigins && ev.origin) eventOrigins.set(out, ev.origin);
                 return out;
@@ -6081,6 +6191,27 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         }
     }
 
+    // A person's own part at another's event (`_STROM_ROLE`, spec 085 §6):
+    // whose event it was, by the xref, and the event itself when there is
+    // exactly one of its type there.
+    for (const { event, raw } of pendingRoleAt) {
+        const at: NonNullable<LifeEvent['roleAt']> = { role: roleAtRole(raw.role), eventType: '' };
+        const personId = raw.at ? personIdMap.get(raw.at) : undefined;
+        const partnershipId = !personId && raw.at ? famPartnership.get(raw.at)?.id : undefined;
+        if (personId) at.personId = personId;
+        else if (partnershipId) at.partnershipId = partnershipId;
+        if (personId || partnershipId) at.eventType = roleAtTypeOfTag(raw.tag, !!partnershipId, gedcomTagEventType);
+        const eventId = roleAtEventId(at, persons, partnerships);
+        if (eventId) at.eventId = eventId;
+        event.roleAt = at;
+    }
+    // Another program's shared events (`_SHAR` of household members) as copies with a share id.
+    const sharConversion = convertGedShares(persons, pendingPersonShars, pendingCoupleShars, (personId, role) => {
+        const r = relaToRole(role);
+        const note = participantNote(role, r, undefined);
+        return { id: generateParticipantId(), role: r, personId, ...(note ? { note } : {}) };
+    });
+
     // A parent alone with children (Strom's own _STROM_NO_COUPLE families): the "?" family the app keeps.
     normalizeSingleParents({ persons, partnerships } as StromData);
 
@@ -6418,6 +6549,10 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         return any;
     }
 
+    // Only valid shares of two copies or more (a copy alone, of a subtree or
+    // an edited file, is an ordinary event), roles of persons in the tree.
+    cleanEventShares(data);
+
     const result: GedcomConversionResult = {
         externalMedia,
         data,
@@ -6437,6 +6572,9 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
             skippedMedia,
             keptTags: [...keptTags.values()].reduce((a, b) => a + b, 0),
             keptTagSummary: [...keptTags.entries()].sort((a, b) => b[1] - a[1]).map(([tag]) => tag).join(', '),
+            sharedConverted: sharConversion.events,
+            sharedConvertedPersons: sharConversion.persons,
+            sharedProgram: gedcom.head?.program?.trim() || 'GEDCOM',
             totalGedFamilies: families.size
         }
     };

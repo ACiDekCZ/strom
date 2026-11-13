@@ -4954,6 +4954,8 @@ const stringsEN = {
         joinedFamilies: (n: number, prog?: string) =>
             `${n} more family ${n === 1 ? 'record' : 'records'} of the same couple (e.g. a second wedding) joined to their partnership`
             + (prog ? `; kept as written for the export “Back to ${prog}”` : ''),
+        // Another program's shared events (_SHAR) made into the app's (spec 085 7b); only when n > 0.
+        sharedConverted: (prog: string, n: number, m: number) => `Shared events from ${prog}: ${numEn(n)} converted (${nEn(m, 'person', 'people')})`,
         photos: 'Photos',
         documents: 'Documents',
         excerpts: 'Excerpts',
@@ -13925,6 +13927,7 @@ const stringsCZ: StringsType = {
                 'další záznamy rodiny téhož páru (např. druhý sňatek) jsou připojeny',
                 'dalších záznamů rodiny téhož páru (např. druhý sňatek) je připojeno')} k jejich vztahu`
             + (prog ? `; uchováno pro export „Zpět do ${prog}“` : ''),
+        sharedConverted: (prog: string, n: number, m: number) => `Sdílené události z ${prog}: ${numCs(n)} převedeno (${nCs(m, 'osoba', 'osoby', 'osob')})`,
         photos: 'Fotografie',
         documents: 'Dokumenty',
         excerpts: 'Výřezy',
@@ -22827,6 +22830,7 @@ const stringsDE: StringsType = {
         joinedFamilies: (n: number, prog?: string) =>
             `${n} ${n === 1 ? 'weiterer Familiendatensatz' : 'weitere Familiendatensätze'} desselben Paares (z. B. eine zweite Heirat) `
             + `mit dessen Partnerschaft zusammengeführt` + (prog ? `; für den Export „Zurück zu ${prog}“ aufbewahrt` : ''),
+        sharedConverted: (prog: string, n: number, m: number) => `Geteilte Ereignisse aus ${prog}: ${numDe(n)} übernommen (${nDe(m, 'Person', 'Personen')})`,
         photos: 'Fotos',
         documents: 'Dokumente',
         excerpts: 'Ausschnitte',
