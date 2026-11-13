@@ -268,6 +268,18 @@ describe('the window\'s actions run today\'s functions', () => {
         expect(changeTaskOrder).toHaveBeenCalledWith('T1', 'next');
     });
 
+    it('queue.next without following: Do next from the window written here for the research viewed through its bridge', async () => {
+        const viewed = liveOf({ features: ['queue.next'] });
+        fake.viewing = { treeId: TREE, researchId: 'R1', kind: 'bridge', session: viewed, status: null, refreshedAt: 1, working: false, agentStarted: false, logHead: '', waitingAt: 0 };
+        const out = { ok: true, was: {} };
+        const writeTaskOrder = vi.fn(async () => out);
+        const changeTaskOrder = vi.fn(async () => true);
+        const ui = fakeUi({ writeTaskOrder, changeTaskOrder });
+        await expect(run(ui, { action: 'queue-order', args: { task: 'T1', do: 'next' } })).resolves.toEqual(out);
+        expect(writeTaskOrder).toHaveBeenCalledWith('T1', { do: 'next' });
+        expect(changeTaskOrder).not.toHaveBeenCalled();
+    });
+
     it('a page of the queue or its search asked from the window is read here from the bridge and answered (queue-list)', async () => {
         const urls: string[] = [];
         vi.stubGlobal('fetch', vi.fn(async (u: string) => {

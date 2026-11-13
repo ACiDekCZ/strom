@@ -19,7 +19,7 @@ import {
     QUEUE_OWN_FEATURE, sanitizeQueue,
 } from '../research-link.js';
 import { uiModule } from './module.js';
-import { LiveSession, el, liveQueueItem, liveSession, queueKindTag, queuePaged, queueNoteText } from './research-ui.js';
+import { LiveSession, el, liveQueueItem, liveSession, queueKindTag, queuePaged, queueNoteText, researchSession } from './research-ui.js';
 import { shownName, fitNameHtml } from '../person-name.js';
 import { bookYears } from '../book-blocks.js';
 import { withBusyRetry } from '../research-directions.js';
@@ -275,6 +275,25 @@ export function queueNextFor(s: LiveSession, q: LiveQueueItem): boolean {
     const place = q.pos ?? (ahead.some(x => x.id === q.id) ? ahead.findIndex(x => x.id === q.id) + 1 : undefined);
     if (place === 1) return false;
     return !s.working.some(w => !w.paused && !!w.task && w.task === q.text);
+}
+
+/**
+ * The places a queued task's ⋯ offers to set (`s`: the research the overview
+ * acts on, followed or viewed through its bridge without following; null:
+ * none, e.g. the bridge not answering): "Do next" (`next`: with its exact
+ * Undo, `queue.next`; not for a task first already, at work or set aside),
+ * then To the end and Reset to default with `queue.own`.
+ */
+export function taskMenuOrders(s: LiveSession | null, q: LiveQueueItem | null): { next: boolean; orders: TaskOrderDo[] } {
+    const next = !!s && !!q && queueNextOffered(s);
+    if (!s || !q || !(taskOrderOffered(s) || next)) return { next, orders: [] };
+    const orders: TaskOrderDo[] = [];
+    if (!next || queueNextFor(s, q)) orders.push('next');
+    if (taskOrderOffered(s)) {
+        orders.push('last');
+        if (q.own) orders.push('default');
+    }
+    return { next, orders };
 }
 
 /** A task's place written (main window: through the bridge; the overview's own window: asked of the main window). */
@@ -1135,7 +1154,8 @@ export const researchOffLineMethods = uiModule({
      */
     async changeTaskOrder(task: string, what: TaskOrderDo, opts: { undo?: boolean } = {}): Promise<boolean> {
         this.closeLiveTaskMenu();
-        const s = liveSession();
+        // Followed, or viewed through its bridge without following (spec 057 §7): the tree stays as it is.
+        const s = researchSession();
         if (!s || !(taskOrderOffered(s) || (what === 'next' && queueNextOffered(s))) || taskBusy.has(task)) return false;
         const L = strings.live;
         const before = liveQueueItem(s, task);
@@ -1145,7 +1165,7 @@ export const researchOffLineMethods = uiModule({
         const head = await this.waitingHeadBeforeWrite(s);
         const r = await withBusyRetry(() => setTaskOrder(s.bridge.base, task, what));
         taskBusy.delete(task);
-        if (liveSession() !== s || s.ended) return false;
+        if (researchSession() !== s || s.ended) return false;
         if (!r.ok) {
             taskProblems.set(task, taskRefusedText(r));
             this.renderLivePanel();
@@ -1171,7 +1191,7 @@ export const researchOffLineMethods = uiModule({
                 },
             });
         }
-        this.liveStatusSoon(s);
+        this.researchStatusAfterWrite(s);
         return true;
     },
 
@@ -1182,7 +1202,8 @@ export const researchOffLineMethods = uiModule({
      * said at the task. The overview's own window asks the main window for it.
      */
     async writeTaskOrder(task: string, body: TaskOrderWrite): Promise<TaskOrderOutcome> {
-        const s = liveSession();
+        // Followed, or viewed through its bridge without following (spec 057 §7): the tree stays as it is.
+        const s = researchSession();
         if (!s || !queueNextOffered(s) || taskBusy.has(task)) return { ok: false, why: 'refused' };
         taskBusy.add(task);
         taskProblems.delete(task);
@@ -1190,14 +1211,14 @@ export const researchOffLineMethods = uiModule({
         const head = await this.waitingHeadBeforeWrite(s);
         const r = await withBusyRetry(() => (body.do === 'next' ? setTaskOrder(s.bridge.base, task, 'next') : restoreTaskOrder(s.bridge.base, task, body.was)));
         taskBusy.delete(task);
-        if (liveSession() !== s || s.ended) return { ok: false, why: 'refused' };
+        if (researchSession() !== s || s.ended) return { ok: false, why: 'refused' };
         if (!r.ok) {
             const taken = r.errorCode === 'queue.doing';
             const silent = r.code === 'network' || r.code === 'busy' || r.code === 'failed';
             if (!taken && !silent) taskProblems.set(task, taskRefusedText(r));
             this.renderLivePanel();
             // The agent took it: the queue as the research has it now (the task goes to Now).
-            if (taken) this.liveStatusSoon(s);
+            if (taken) this.researchStatusAfterWrite(s);
             return { ok: false, why: taken ? 'taken' : silent ? 'bridge' : 'refused' };
         }
         if (r.head) this.researchTakeOwnWriteHead(s.researchId, head, r.head, r.parent);
@@ -1229,7 +1250,7 @@ export const researchOffLineMethods = uiModule({
             });
         }
         this.renderLivePanel();
-        this.liveStatusSoon(s);
+        this.researchStatusAfterWrite(s);
         // The task as answered: the overview's own window places it in its lists read by pages.
         return { ok: true, was: r.was, task: r.task?.id === task ? r.task : null };
     },

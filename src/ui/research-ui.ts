@@ -60,7 +60,7 @@ import {
 } from './research-directions-ui.js';
 import { iconSvg } from '../icons.js';
 import {
-    branchName, focusQueueMoved, personByRefn, queueBranchFilter, queueNextFor, queueNextOffered, queueRowFlash, queueWhyText, setQueueBranchFilter, taskOrderOffered,
+    branchName, focusQueueMoved, personByRefn, queueBranchFilter, queueNextFor, queueNextOffered, queueRowFlash, queueWhyText, setQueueBranchFilter, taskMenuOrders, taskOrderOffered,
     waitBranchText, workingWhyText,
 } from './research-offline-ui.js';
 import type { TaskOrderDo } from '../research-directions-write.js';
@@ -1618,6 +1618,18 @@ function viewingSessionOf(bridge: LiveBridgeUrls, researchId: string, treeId: Tr
         overview: true, logged: false, changes: [], adds: [], recent: null, ended: false, collapsed: false, seenChanges: 0,
         es: null, timer: null, failures: 0, lostSince: null, chain: Promise.resolve(),
     };
+}
+
+/**
+ * How the status of `s` is asked after a write through its bridge: `live`
+ * (followed: its stream's way), `bridge` (the overview viewing it through
+ * its bridge without following: the bridge asked at once), or null (neither,
+ * e.g. ended, another research, or the bridge not answering).
+ */
+export function statusAfterWriteWay(s: LiveSession, followed: LiveSession | null, viewed: OverviewViewing | null): 'live' | 'bridge' | null {
+    if (s.ended) return null;
+    if (followed === s) return 'live';
+    return viewed?.kind === 'bridge' && viewed.session === s && !!s.bridge.base ? 'bridge' : null;
 }
 
 /** The followed research's whole queue is read by pages now (`queue.page`, its bridge answering). */
@@ -3548,6 +3560,27 @@ export const researchUiMethods = uiModule({
         }, wait);
     },
 
+    /**
+     * A write through the bridge changed the research `s` (a task's place):
+     * its status, so the Queue is the research's own again. Followed: as
+     * after its events (liveStatusSoon). Viewed without following (spec 057
+     * §7): its bridge asked at once, not at the next regular ask, and the
+     * overview takes the answer in (nothing is followed, the tree stays).
+     */
+    researchStatusAfterWrite(s: LiveSession): void {
+        const way = statusAfterWriteWay(s, live, viewing);
+        if (way === 'live') {
+            this.liveStatusSoon(s);
+            return;
+        }
+        if (way !== 'bridge' || !onComputer()) return;
+        const v = viewing!;
+        void this.askResearchBridge(v.researchId, BRIDGE_ANSWER_MS, s.bridge.base).then(() => {
+            // Still the overview of that research: it takes in what the bridge said (with the rest of the app).
+            if (viewing === v) this.refreshResearchSyncUi();
+        });
+    },
+
     /** The bridge answered: following goes on (after a silence: say so by redrawing). */
     liveBridgeBack(s: LiveSession): void {
         s.failures = 0;
@@ -5018,10 +5051,11 @@ export const researchUiMethods = uiModule({
         menu.dataset.task = task;
         menu.setAttribute('role', 'menu');
         menu.setAttribute('aria-label', r.taskMenu);
-        const s = liveSession();
+        // The followed research, else the one viewed through its bridge without following (spec 057 §7).
+        const s = researchSession();
         const q = liveQueueItem(s, task);
         // `queue.next`: "Do next" (exact Undo) first, also without branches; not for a task first already, at work or set aside.
-        const nextOn = !!s && !!q && queueNextOffered(s);
+        const { next: nextOn, orders } = taskMenuOrders(s, q);
         // On a phone, with `queue.next`: a sheet at the bottom titled by the task.
         const sheet = nextOn && !!q && window.matchMedia('(max-width: 640px)').matches;
         if (sheet && q) {
@@ -5034,15 +5068,14 @@ export const researchUiMethods = uiModule({
             title.append(el('span', 'live-task-menu__num', q.id), document.createTextNode(` ${q.text}`));
             menu.appendChild(title);
         }
-        if (s && q && (taskOrderOffered(s) || nextOn)) {
+        if (s && q && orders.length > 0) {
             const L = strings.live;
-            const own: [TaskOrderDo, string, string | undefined][] = [];
-            if (!nextOn) own.push(['next', L.taskDoNext, L.taskDoNextHint]);
-            else if (queueNextFor(s, q)) own.push(['next', L.queueNext, L.queueNextHint]);
-            if (taskOrderOffered(s)) {
-                own.push(['last', L.taskDoLast, L.taskDoLastHint]);
-                if (q.own) own.push(['default', L.taskOrderReset, undefined]);
-            }
+            const labels: Record<TaskOrderDo, [string, string | undefined]> = {
+                next: nextOn ? [L.queueNext, L.queueNextHint] : [L.taskDoNext, L.taskDoNextHint],
+                last: [L.taskDoLast, L.taskDoLastHint],
+                default: [L.taskOrderReset, undefined],
+            };
+            const own = orders.map(what => [what, ...labels[what]] as const);
             for (const [what, label, hint] of own) {
                 const item = el('div', 'context-menu-item research-direction-menu__item');
                 item.setAttribute('role', 'menuitem');
