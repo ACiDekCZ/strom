@@ -122,7 +122,7 @@ test.describe('desktop (1440)', () => {
     });
 });
 
-test('under the pointer, the row\'s actions get their room: a long name ends in "…" before them', async ({ page }) => {
+test('under the pointer and selected, the row\'s actions take no room from the name: they stand at the row\'s end', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.clock.setFixedTime(new Date('2026-06-15T10:00:00Z'));
     await openApp(page);
@@ -132,26 +132,41 @@ test('under the pointer, the row\'s actions get their room: a long name ends in 
     }, 'Vranoš', 'a');
     await page.locator('#view-mode-table').click();
     await expect(status(page)).toHaveText('4 of 4 people');
-    const geometry = (key: string) => row(page, key).locator('.tv-name').evaluate(cell => {
+    const geometry = (key: string) => row(page, key).evaluate(el => {
+        const cell = el.querySelector('.tv-name') as HTMLElement;
         const text = cell.querySelector('.tv-cell-text') as HTMLElement;
-        const acts = cell.querySelector('.tv-acts') as HTMLElement;
+        const acts = el.querySelector('.tv-acts') as HTMLElement;
+        const grid = el.closest('.tv-grid') as HTMLElement;
         return {
-            textRight: text.getBoundingClientRect().right,
+            textWidth: text.getBoundingClientRect().width,
+            cellRight: cell.getBoundingClientRect().right,
             actsLeft: acts.getBoundingClientRect().left,
-            cut: text.scrollWidth > text.clientWidth,
+            actsRight: acts.getBoundingClientRect().right,
+            gridRight: grid.getBoundingClientRect().left + grid.clientWidth,
+            inCell: cell.contains(acts),
             acts: getComputedStyle(acts).display,
         };
     });
-    // Not selected, under the pointer: the same room as the selected row's.
+    const rest = await geometry('p:c');
+    expect(rest.acts).toBe('none');
+    // A pointer that comes straight onto a cell where the icons stand: they stay away, its click reaches the cell.
+    const box = (await row(page, 'p:c').boundingBox())!;
+    await page.mouse.move(rest.gridRight - 30, box.y + box.height / 2);
+    expect((await geometry('p:c')).acts).toBe('none');
+    // Not selected, under the pointer: the name as wide as without it, the icons at the grid's right edge.
     await row(page, 'p:c').locator('.tv-name').hover();
     const hovered = await geometry('p:c');
     expect(hovered.acts).not.toBe('none');
-    expect(hovered.cut).toBe(true);
-    expect(hovered.textRight).toBeLessThanOrEqual(hovered.actsLeft);
+    expect(hovered.inCell).toBe(false);
+    expect(Math.abs(hovered.textWidth - rest.textWidth)).toBeLessThan(1);
+    expect(hovered.actsLeft).toBeGreaterThanOrEqual(hovered.cellRight);
+    expect(Math.abs(hovered.actsRight - hovered.gridRight)).toBeLessThan(2);
     await row(page, 'p:c').locator('.tv-name').click();
+    await page.mouse.move(700, 880);
     const chosen = await geometry('p:c');
-    expect(chosen.textRight).toBeLessThanOrEqual(chosen.actsLeft);
-    expect(Math.abs(chosen.textRight - hovered.textRight)).toBeLessThan(1);
+    expect(chosen.acts).not.toBe('none');
+    expect(Math.abs(chosen.textWidth - rest.textWidth)).toBeLessThan(1);
+    expect(chosen.actsLeft).toBeGreaterThanOrEqual(chosen.cellRight);
 });
 
 test.describe('phone (390)', () => {

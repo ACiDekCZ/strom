@@ -29,8 +29,8 @@
  * a cell, or Enter on it, asks for the finding's bubble (`onIssue`).
  *
  * The row's actions (§10.1): a click selects a row, ↑ ↓ move the selection,
- * Escape clears it; the first column carries ⌖ ▤ ✎ (under the pointer and on
- * the selected row), Enter opens the person, a double click edits, a right
+ * Escape clears it; the row's end carries ⌖ ▤ ✎ (under the pointer and on
+ * the selected row; no column narrowed for them), Enter opens the person, a double click edits, a right
  * click / Shift+F10 / the menu key ask for the row's menu. After a change a
  * row lights up for a moment (`flash`, §10.3) and a row that no longer
  * passes the filter stays dimmed with a note (`stale`).
@@ -125,8 +125,16 @@ export interface CellEditSpec {
     save(text: string): string | null;
 }
 
-/** The least width of an editor, wider than a narrow column (T54 F8: it goes over the cell's edge). */
-const EDITOR_MIN_WIDTH: Record<CellEditSpec['input'], number> = { text: 160, date: 150, place: 240, select: 150 };
+/** The width of the row's actions (§10.1): three 26 px icons, their gaps and padding. */
+const ROW_ACTIONS_ROOM = 100;
+
+/**
+ * The least width of a field edited in place (T54 F8), by its kind. A field
+ * fits its cell; only a column narrower than this gets a field this wide,
+ * floating over its neighbours with a shadow (.is-floating), so it is plain
+ * that it lies over the row's other cells for the while.
+ */
+const EDITOR_MIN_WIDTH: Record<CellEditSpec['input'], number> = { text: 100, date: 100, place: 140, select: 90 };
 
 /** The agent at a row (§16.6): at work on its task, or just done. */
 export type AgentRowState = { kind: 'working'; task: string } | { kind: 'done' };
@@ -502,6 +510,8 @@ export class TableGrid {
     private drawnRows: DrawnRow[] = [];
     /** The agent's bars stop while out of sight (§16.6). */
     private agentBars: IntersectionObserver | null = null;
+    /** The line whose action icons the pointer may show (it came onto the row away from where they stand), by its key. */
+    private armedKey: string | null = null;
     /** The rows lit after a change (row keys, §10.3) and the timer that ends it. */
     private readonly flashKeys = new Set<string>();
     private flashTimer: ReturnType<typeof setTimeout> | null = null;
@@ -536,6 +546,8 @@ export class TableGrid {
             this.placeEditor();
         }, { passive: true });
         this.body.addEventListener('pointerdown', (e) => { this.lastPointerDown = e.pointerType; }, { passive: true });
+        this.body.addEventListener('pointermove', (e) => this.armRowActions(e), { passive: true });
+        this.body.addEventListener('pointerleave', () => this.disarmRowActions(), { passive: true });
         this.body.addEventListener('click', (e) => {
             const pointer = clickPointerType(e, this.lastPointerDown);
             this.lastPointerDown = '';
@@ -835,6 +847,11 @@ export class TableGrid {
         this.body.style.height = `${tops[this.lines.length]}px`;
         const cw = columnWindow(input.widths, input.pinned, this.el.scrollLeft, this.el.clientWidth);
         if (!this.noMatch.hidden) this.noMatch.style.width = `${this.el.clientWidth}px`;
+        // A table narrower than the grid: the row's actions right after its last column, over no cell;
+        // with less room there, as far out as the grid's edge lets them.
+        const free = this.el.clientWidth - cw.total;
+        this.body.classList.toggle('has-acts-room', free >= ROW_ACTIONS_ROOM);
+        this.body.style.setProperty('--tv-acts-out', `${Math.max(0, Math.min(free, ROW_ACTIONS_ROOM))}px`);
         const rw = lineWindow(tops, Math.max(0, this.el.scrollTop - headH), Math.max(0, this.el.clientHeight - headH));
         const colKey = cw.indices.join(',');
         if (colKey !== this.headKey) {
@@ -1385,9 +1402,12 @@ export class TableGrid {
                     + `${i === tailAt ? this.rowTail(input, line) : ''}</div>`);
             }
             if (cw.after > 0) cells.push(this.spacer(cw.after));
+            const acts = this.rowActions(input, line);
+            if (acts) cells.push(acts);
             drawn.push({ key, open, cells });
         }
         this.paintBody(drawn);
+        this.armedRowEl()?.classList.add('is-acts-armed');
         this.syncNameTabs();
         this.syncActiveMark();
         if (refocus) this.focusActive(false);
@@ -1467,28 +1487,64 @@ export class TableGrid {
     }
 
     /**
-     * The end of a line's first cell (§10.1, §10.3): "no longer matches" on a
-     * stale row, then the action icons (shown by the stylesheet under the
-     * pointer and on the selected row).
+     * The row's icons stand over the end of the last cells seen (§10.1): they
+     * show under the pointer only once it has been on the row away from where
+     * they stand, so they never come up under a pointer that came for a cell
+     * there (its click reaches the cell). The selected row shows them while
+     * the pointer is elsewhere.
      */
+    private armRowActions(e: PointerEvent): void {
+        if (e.pointerType !== 'mouse' && e.pointerType !== 'pen') return;
+        const rowEl = (e.target as Element).closest<HTMLElement>('.tv-body > .tv-row');
+        const key = rowEl?.dataset.key ?? null;
+        if (key !== null && key === this.armedKey && rowEl!.classList.contains('is-acts-armed')) return;
+        if (key !== this.armedKey) this.disarmRowActions();
+        const dock = rowEl?.querySelector<HTMLElement>(':scope > .tv-acts-dock');
+        if (!rowEl || !dock || key === null) return;
+        const at = dock.getBoundingClientRect().left;
+        const out = parseFloat(this.body.style.getPropertyValue('--tv-acts-out')) || 0;
+        const from = this.body.classList.contains('has-acts-room') ? at : at + out - ROW_ACTIONS_ROOM;
+        if (key !== this.armedKey && e.clientX >= from) return;
+        rowEl.classList.add('is-acts-armed');
+        this.armedKey = key;
+    }
+
+    private disarmRowActions(): void {
+        if (this.armedKey === null) return;
+        this.armedRowEl()?.classList.remove('is-acts-armed');
+        this.armedKey = null;
+    }
+
+    /** The armed line's row as drawn now (a row drawn anew, e.g. on a selection, gets the mark back). */
+    private armedRowEl(): HTMLElement | null {
+        if (this.armedKey === null) return null;
+        for (const el of this.body.children) if ((el as HTMLElement).dataset.key === this.armedKey) return el as HTMLElement;
+        return null;
+    }
+
+    /** The end of a line's first cell (§10.3): "no longer matches" on a stale row. */
     private rowTail(input: GridInput, line: GridLine): string {
-        if (line.kind === 'more') return '';
-        let html = '';
-        if (line.kind === 'row' && input.stale?.has(rowKey(line.row))) {
-            html += `<span class="tv-stale-note">${esc(strings.table.staleRow)}</span>`;
-        }
+        if (line.kind !== 'row' || !input.stale?.has(rowKey(line.row))) return '';
+        return `<span class="tv-stale-note">${esc(strings.table.staleRow)}</span>`;
+    }
+
+    /**
+     * The row's action icons (§10.1), shown by the stylesheet under the
+     * pointer and on the selected row: at the row's end, after its cells, so
+     * no column is narrowed for them (the name keeps its whole width).
+     */
+    private rowActions(input: GridInput, line: GridLine): string {
         const acts = input.actions;
-        if (acts) {
-            const t = strings.table.act;
-            const b = (act: RowAction, icon: string, label: string): string =>
-                `<button type="button" class="tv-act" data-act="${act}" tabindex="-1" title="${esc(label)}" aria-label="${esc(label)}">`
-                + `<span aria-hidden="true">${icon}</span></button>`;
-            // A source is not in the tree (§14.2): Open source and Edit, both its dialog.
-            html += line.row.kind === 'source'
-                ? `<span class="tv-acts">${b('open', '▤', t.openSource)}${acts.edit ? b('edit', '✎', t.edit) : ''}</span>`
-                : `<span class="tv-acts">${acts.tree === false ? '' : b('tree', '⌖', t.tree)}${b('open', '▤', t.open)}${acts.edit ? b('edit', '✎', t.edit) : ''}</span>`;
-        }
-        return html;
+        if (!acts || line.kind === 'more') return '';
+        const t = strings.table.act;
+        const b = (act: RowAction, icon: string, label: string): string =>
+            `<button type="button" class="tv-act" data-act="${act}" tabindex="-1" title="${esc(label)}" aria-label="${esc(label)}">`
+            + `<span aria-hidden="true">${icon}</span></button>`;
+        // A source is not in the tree (§14.2): Open source and Edit, both its dialog.
+        const icons = line.row.kind === 'source'
+            ? `${b('open', '▤', t.openSource)}${acts.edit ? b('edit', '✎', t.edit) : ''}`
+            : `${acts.tree === false ? '' : b('tree', '⌖', t.tree)}${b('open', '▤', t.open)}${acts.edit ? b('edit', '✎', t.edit) : ''}`;
+        return `<div class="tv-acts-dock" role="gridcell"><span class="tv-acts">${icons}</span></div>`;
     }
 
     /** The name cell of the People table (§3.1, §3.2): ▾/▸ and the count pill, a sub-row's "Union k of n", the "more" button. */
@@ -1904,7 +1960,11 @@ export class TableGrid {
         this.placeEditor();
     }
 
-    /** The editor over its cell (in the scrolled area), as wide as the column and at least its kind's width. */
+    /**
+     * The editor over its cell (in the scrolled area), as wide as the column:
+     * it never lies over a neighbouring cell, except in a column narrower than
+     * its kind's least width, where it floats over them with a shadow.
+     */
     private placeEditor(): void {
         const ed = this.editor;
         const input = this.input;
@@ -1916,12 +1976,14 @@ export class TableGrid {
         const g = this.el.getBoundingClientRect();
         const r = cell.getBoundingClientRect();
         const width = Math.max(r.width, EDITOR_MIN_WIDTH[ed.spec.input]);
-        let left = r.left - g.left - this.el.clientLeft + this.el.scrollLeft;
+        const cellLeft = r.left - g.left - this.el.clientLeft + this.el.scrollLeft;
+        let left = cellLeft;
         // Wider than the room to the right: it ends at the visible edge.
         const right = this.el.scrollLeft + this.el.clientWidth;
         if (left + width > right) left = Math.max(this.el.scrollLeft, right - width);
         const top = r.top - g.top - this.el.clientTop + this.el.scrollTop;
         ed.box.style.cssText = `left:${Math.round(left)}px;top:${Math.round(top)}px;width:${Math.round(width)}px;height:${Math.round(r.height)}px`;
+        ed.box.classList.toggle('is-floating', width > r.width + 0.5 || Math.abs(left - cellLeft) > 0.5);
     }
 
     /** Scroll a row into view (§8.3: the app's person search in the table) and draw. */

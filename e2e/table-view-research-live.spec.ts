@@ -263,10 +263,15 @@ test.describe('phone (390): Research and Line right after the name (16x, 16zh)',
         await expect.poll(async () => (await headOrder(page)).slice(0, 2)).toEqual(['name', col]);
         const head = page.locator(`#table-container .tv-headrow [data-col="${col}"]`);
         await expect(head).toBeVisible();
-        const name = await page.locator('#table-container .tv-headrow [data-col="name"]').boundingBox();
-        const box = await head.boundingBox();
-        expect(Math.abs(box!.x - (name!.x + name!.width))).toBeLessThanOrEqual(1);
-        expect(box!.x + (whole ? box!.width : 60)).toBeLessThanOrEqual(390);
+        // The head may be drawn anew between two reads (a box of a replaced cell is null): both boxes read again until they hold.
+        await expect.poll(async () => {
+            const name = await page.locator('#table-container .tv-headrow [data-col="name"]').boundingBox();
+            const box = await head.boundingBox();
+            if (!name || !box) return 'not drawn';
+            if (Math.abs(box.x - (name.x + name.width)) > 1) return `gap ${box.x - (name.x + name.width)}`;
+            if (box.x + (whole ? box.width : 60) > 390) return `past the edge ${box.x + (whole ? box.width : 60)}`;
+            return 'next to the name';
+        }).toBe('next to the name');
         const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
         expect(over).toBeLessThanOrEqual(0);
     }

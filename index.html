@@ -2138,6 +2138,14 @@
         .edge-bottom-right { bottom: -9px; right: 40px; }
         .edge-right-center { top: 50%; left: 100%; transform: translate(-9px, -50%); }
         .edge-bottom-center{ bottom: -9px; left: 50%; transform: translateX(-50%); }
+        /* The bottom-right pills reach the middle: "+ child" just left of them (its right set by
+           the renderer, placeChildAddTabs), its label growing away from them. */
+        .edge-bottom-center.is-beside { left: auto; transform: none; }
+        @media (hover: hover) { .person-card:has(.edge-bottom-center.is-beside .add-btn:hover) .edge-bottom-left {
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.12s;
+        } }
 
         /* Collision budget: the card is only 188px wide, so a fully expanded
            "＋ parent" pill on the left and the branch-tabs+chain group on the
@@ -10516,15 +10524,20 @@
         .tv-body .tv-row--sub, .tv-body .tv-row--more { background: var(--sub); }
         .tv-body .tv-row.is-selected-sub { background: var(--line-selected-bg); }
         .tv-row.is-dimmed .tv-cell { opacity: 0.55; }
-        /* §10.1 row actions: in the first column, under the pointer and on the selected row (none on a phone, 10b).
-           At the cell's end; the row's name ends in "…" before them (the cell keeps them their room). */
+        /* §10.1 row actions: under the pointer and on the selected row (none on a phone, 10b), at the row's end, not in a
+           column: no column gets narrower for them. While the row goes on past the grid's right edge they stand at that
+           edge over the end of the last cells seen, on the row's background; a table narrower than the grid has them
+           right after its last column (.has-acts-room), or with less room there as far out as the edge lets them
+           (--tv-acts-out, set by the grid). */
+        .tv-acts-dock { position: sticky; right: 0; z-index: 2; flex: none; width: 0; height: 100%; background: inherit; }
         .tv-acts {
-            display: none; position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
-            align-items: center; gap: 4px; padding-left: 6px; background: inherit;
+            display: none; position: absolute; right: calc(-1 * var(--tv-acts-out, 0px)); top: 50%; transform: translateY(-50%);
+            align-items: center; gap: 4px; padding: 0 4px 0 6px; background: inherit;
         }
-        .tv-body .tv-cell:not(.tv-pinned):has(> .tv-acts) { position: relative; }
-        .tv-body .tv-row[aria-selected="true"] .tv-acts { display: inline-flex; }
-        .tv-body .tv-row[aria-selected="true"] > .tv-cell:has(> .tv-acts) { padding-right: 100px; }
+        .tv-body.has-acts-room .tv-acts { right: auto; left: 0; background: transparent; }
+        /* The selected row's icons while the pointer is elsewhere; under the pointer only on a row it came onto away from
+           them (.is-acts-armed, set by the grid), so they never come up under a pointer that came for a cell there. */
+        .tv-body .tv-row[aria-selected="true"]:not(:hover) .tv-acts { display: inline-flex; }
         .tv-act {
             width: 26px; height: 26px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
             border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text-light);
@@ -10572,8 +10585,10 @@
         /* The active cell (a click, the arrows): a quiet outline; the keyboard's focus ring stays stronger. */
         .tv-body .tv-cell.is-active-cell { outline: 1px solid color-mix(in srgb, var(--primary) 70%, transparent); outline-offset: -1px; }
         .tv-body .tv-cell:focus-visible, .tv-head-all:focus-visible, .tv-more-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
-        /* A cell edited in place (T54 F8): the field over the cell, as wide as its column or its kind's least width; the error under it. */
+        /* A cell edited in place (T54 F8): the field over its cell, as wide as its column; the error under it. Only in a column
+           narrower than its kind's least width does it float over the row's other cells, raised with a shadow. */
         .tv-editor { position: absolute; z-index: 2; box-sizing: border-box; }
+        .tv-editor.is-floating .tv-editor-input { box-shadow: var(--shadow-focus), 0 4px 14px rgba(0,0,0,0.22); }
         .tv-editor-input {
             box-sizing: border-box; width: 100%; height: 100%; margin: 0; padding: 0 8px;
             border: 2px solid var(--primary); border-radius: 0; background: var(--surface); color: var(--text);
@@ -11039,8 +11054,7 @@
             .tv-body .tv-row:hover { background: var(--surface-2); }
             .tv-body .tv-row[aria-selected="true"]:hover { background: var(--line-selected-bg); }
             .tv-body .tv-row.is-shared[aria-selected="true"]:hover { background: var(--primary-soft); }
-            .tv-body .tv-row:hover .tv-acts { display: inline-flex; }
-            .tv-body .tv-row:hover > .tv-cell:has(> .tv-acts) { padding-right: 100px; }
+            .tv-body .tv-row.is-acts-armed:hover .tv-acts { display: inline-flex; }
             .tv-act:hover { color: var(--text); border-color: var(--primary); }
             .tv-rowtype-btn:hover, .tv-legend-btn:hover { color: var(--text); border-color: var(--primary); }
             .tv-headcell:hover .tv-head-menu { opacity: 1; }
@@ -11083,8 +11097,8 @@
         @media (pointer: coarse) {
             .table-view { --tv-row-h: 36px; }
             /* Touch: a tap opens the row's sheet with 48 px actions (10b), no small icons. */
-            .tv-body .tv-row[aria-selected="true"] .tv-acts { display: none; }
-            .tv-body .tv-row[aria-selected="true"] > .tv-cell:has(> .tv-acts) { padding-right: 10px; }
+            /* (:is(…) as specific as the selected row's rule that shows them.) */
+            .tv-body .tv-row[aria-selected="true"]:is(:hover, :not(:hover)) .tv-acts { display: none; }
             .tv-rowtype .segment-btn { height: 44px; }
             .tv-legend-btn { height: 44px; }
             .tv-cols-btn, .tv-export-btn, .tv-view-btn, .tv-view-act { height: 44px; }

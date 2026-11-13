@@ -208,6 +208,9 @@ const VIEW_LABEL_LINE_ENDS = 24;
  * + 4 + 15 (the line) = 77, and 11 clear above the next row's cards.
  */
 const VIEW_LINK_ISLAND_ROOM = 88;
+/** The "+ child" tab at rest (an 18 px circle) and its gap to the bottom-right pills (index.html .card-edge). */
+const CHILD_ADD_TAB = 18;
+const CHILD_ADD_GAP = 4;
 /** How long the cards of children just shown (or one glided to) glow (ms). */
 const CHILDREN_GLOW_MS = 1600;
 /** The "▾ children" bubble stays this long after the pointer left it (ms), so the pointer can reach its rows. */
@@ -5466,6 +5469,8 @@ class TreeRendererClass {
             });
 
             // Attach event listeners to add buttons
+            // "+ child" placed clear of the bottom-right pills when the pointer comes (it shows only then).
+            if (childAddHtml && card.classList.contains('has-edge-br')) card.addEventListener('pointerenter', () => this.placeChildAddTab(card));
             card.querySelectorAll('.add-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     e.stopPropagation();
@@ -5518,6 +5523,28 @@ class TreeRendererClass {
             if (!pill || !left) continue;
             if (left.getBoundingClientRect().right + 4 > pill.getBoundingClientRect().left) card.classList.add('so-retreat');
         }
+    }
+
+    /**
+     * The "+ child" tab in the middle of a card's bottom edge, shown under a
+     * mouse: when the bottom-right pills (the sibling order "2 of 6", ⇄ N)
+     * reach the middle, it stands just left of them, anchored by its right
+     * side so its label grows away from them (the ∞ pills on the left give
+     * way while it is pointed at). Read when the pointer comes onto the card,
+     * so a render never waits for the layout.
+     */
+    private placeChildAddTab(card: HTMLElement): void {
+        const add = card.querySelector<HTMLElement>(':scope > .edge-bottom-center');
+        const pills = card.querySelector<HTMLElement>(':scope > .edge-bottom-right');
+        if (!add) return;
+        add.classList.remove('is-beside');
+        add.style.removeProperty('right');
+        if (!pills || !pills.offsetWidth) return;
+        const width = card.clientWidth;
+        const end = pills.offsetLeft - CHILD_ADD_GAP;
+        if (width / 2 + CHILD_ADD_TAB / 2 <= end) return;
+        add.classList.add('is-beside');
+        add.style.right = `${Math.round(width - end)}px`;
     }
 
     /**

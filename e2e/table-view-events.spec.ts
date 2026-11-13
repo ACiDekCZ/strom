@@ -157,6 +157,65 @@ test.describe('desktop (1440)', () => {
         await expect(page.locator('#relationships-modal')).toBeVisible();
     });
 
+    /** A census of all five, one row with its count of people (the reported row: 27 px left for the names). */
+    const censusFamily = (): Record<string, SeedPerson> => {
+        const census = (id: string, age: string) => ({ id, type: 'census', date: '1921-02-15', place: 'Smyšlenice nad Hrbitovkou', age, shareId: 'sc1921' });
+        return Object.fromEntries(Object.entries(FAMILY).map(([k, p], i) =>
+            [k, { ...p, events: [...((p.events as object[] | undefined) ?? []), census(`c${k}`, String(40 - i * 5))] }]));
+    };
+
+    test('a shared event\'s row under the pointer and selected: the person column keeps its width, the icons beside it', async ({ page }) => {
+        await openTable(page, false, censusFamily());
+        await page.locator('#table-container .tv-rowtype [data-rowtype="events"]').click();
+        const shared = page.locator('#table-container .tv-body .tv-row', { hasText: 'Census' });
+        await expect(shared).toHaveCount(1);
+        const other = row(page, 'e:l:c:bc');
+        /** The person column's room for its names (the cell without its padding) and where the row's icons start. */
+        const room = (r: typeof shared) => r.evaluate(el => {
+            const cell = el.querySelector('[aria-colindex="2"]') as HTMLElement;
+            const cs = getComputedStyle(cell);
+            const acts = el.querySelector('.tv-acts') as HTMLElement | null;
+            const shown = !!acts && getComputedStyle(acts).display !== 'none';
+            return {
+                room: cell.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight),
+                cellRight: cell.getBoundingClientRect().right,
+                actsLeft: shown ? acts!.getBoundingClientRect().left : null,
+            };
+        });
+        const rest = await room(other);
+        // Under the pointer.
+        await shared.locator('[aria-colindex="1"]').hover();
+        const hovered = await room(shared);
+        expect(hovered.actsLeft).not.toBeNull();
+        expect(hovered.room).toBe(rest.room);
+        expect(hovered.actsLeft!).toBeGreaterThanOrEqual(hovered.cellRight);
+        // Selected.
+        await shared.locator('[aria-colindex="1"]').click();
+        await expect(shared).toHaveAttribute('aria-selected', 'true');
+        await page.mouse.move(700, 880);
+        const chosen = await room(shared);
+        expect(chosen.actsLeft).not.toBeNull();
+        expect(chosen.room).toBe(rest.room);
+        expect(chosen.actsLeft!).toBeGreaterThanOrEqual(chosen.cellRight);
+        await expect(shared.locator('[aria-colindex="2"] .tv-nm--person').first()).not.toHaveText('');
+    });
+
+    test('the date edited in place stays in its cell: the field over its own cell, not over the place beside it', async ({ page }) => {
+        await openTable(page, false, censusFamily());
+        await page.locator('#table-container .tv-rowtype [data-rowtype="events"]').click();
+        const shared = page.locator('#table-container .tv-body .tv-row', { hasText: 'Census' });
+        const date = shared.locator('[aria-colindex="3"]');
+        await date.dblclick();
+        const field = page.locator('#table-container .tv-editor-input');
+        await expect(field).toBeFocused();
+        const [f, d, p] = [await field.boundingBox(), await date.boundingBox(), await shared.locator('[aria-colindex="4"]').boundingBox()];
+        expect(f!.x).toBeGreaterThanOrEqual(d!.x - 1);
+        expect(f!.x + f!.width).toBeLessThanOrEqual(p!.x + 1);
+        await expect(page.locator('#table-container .tv-editor')).not.toHaveClass(/is-floating/);
+        await field.press('Escape');
+        await expect(field).toHaveCount(0);
+    });
+
     test('an Events view saved as new opens on Events', async ({ page }) => {
         await openTable(page);
         await page.locator('#table-container .tv-rowtype [data-rowtype="events"]').click();

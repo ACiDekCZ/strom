@@ -252,10 +252,10 @@ test.describe('desktop (1440)', () => {
         await expect(covFirst()).toHaveText('filled');
         await expect(covFirst()).toHaveAttribute('data-col', 'bPlace');
         await expect(page.locator('#table-container .tv-covrow .tv-covcell[data-col="name"]')).toHaveText(/%/);
-        // The row's actions stay in the name's cell, not over the narrow first column.
+        // The row's actions stand at the row's end, not over the narrow first column.
         const firstRow = page.locator('#table-container .tv-body .tv-row').first();
-        await expect(firstRow.locator('.tv-name .tv-acts')).toHaveCount(1);
-        await expect(firstRow.locator('[aria-colindex="1"] .tv-acts')).toHaveCount(0);
+        await expect(firstRow.locator('> .tv-acts-dock .tv-acts')).toHaveCount(1);
+        await expect(firstRow.locator('[aria-colindex] .tv-acts')).toHaveCount(0);
 
         // Alt+← on Marriage date crosses groups within the zone, to the front.
         await head(page, 'wDate').focus();
