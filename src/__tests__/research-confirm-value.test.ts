@@ -21,7 +21,7 @@ import { TreeManager } from '../tree-manager.js';
 import { AuditLogManager } from '../audit-log.js';
 import { UndoManager } from '../undo.js';
 import { loadResearchCopy } from '../research-copy.js';
-import { StromData, Person, Partnership, PersonId, PartnershipId, TreeId, toPersonId, toPartnershipId } from '../types.js';
+import { StromData, Person, Partnership, PersonId, PartnershipId, TreeId, toPersonId, toPartnershipId, STROM_DATA_VERSION } from '../types.js';
 import {
     factVerifyInfo, factValueSignature, handedConfirmations, confirmationEdits, researchConfirmation,
     fillResearchConfirmedValues, hasUnvaluedResearchConfirmations,
@@ -168,8 +168,10 @@ describe('a tree stored before the value was kept', () => {
         });
         afterEach(() => { vi.restoreAllMocks(); });
 
+        // Stored at this data version: an older one is also brought up to it on reading (updateStoredData), a save of its own.
         const stored = (): StromData => {
             const d = tree(false);
+            d.version = STROM_DATA_VERSION;
             d.persons[Z].birthDate = '1852';
             return d;
         };

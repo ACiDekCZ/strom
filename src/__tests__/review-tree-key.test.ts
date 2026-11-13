@@ -44,7 +44,7 @@ import { TreeManager } from '../tree-manager.js';
 import { DataManager } from '../data.js';
 import { SettingsManager } from '../settings.js';
 import { CryptoSession, encrypt, decrypt, isEncrypted, EncryptedData } from '../crypto.js';
-import { StromData, TreeId, TreeMetadata } from '../types.js';
+import { StromData, TreeId, TreeMetadata, STROM_DATA_VERSION } from '../types.js';
 
 let encryptionOn = false;
 const events: Array<{ type: string; treeId?: string }> = [];
@@ -57,7 +57,8 @@ function tree(names: string[]): StromData {
             parentIds: [], childIds: [],
         } as never;
     });
-    return { version: 1, persons, partnerships: {} } as StromData;
+    // At this data version: an older tree is brought up to it (and saved) on reading.
+    return { version: STROM_DATA_VERSION, persons, partnerships: {} } as StromData;
 }
 
 function meta(id: string, name: string): TreeMetadata {
