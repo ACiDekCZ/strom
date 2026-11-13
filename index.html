@@ -11072,6 +11072,54 @@
         }
         .map-time-caption[hidden] { display: none; }
         .map-time-caption-text { min-width: 0; overflow-wrap: anywhere; }
+        /* Playback (spec 054 §3): the play button says its word beside the icon (not on a phone),
+           the slider sits in a column with the marks above its track and the caption under it. */
+        .map-time-play {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            width: auto;
+            min-width: 44px;
+            padding: 0 14px 0 12px;
+            font-size: 13px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .map-time-track { flex: 1 1 150px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+        .map-time-slider { position: relative; min-width: 0; }
+        .map-time-slider .map-time-range { display: block; width: 100%; margin: 0; }
+        .map-time-track .map-time-caption { flex: 0 0 auto; }
+        /* The marks: 9 px above the track's middle; --map-thumb keeps them over the thumb's travel. */
+        .map-timebar-marks {
+            --map-thumb: 16px;
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: calc(50% - 19px);
+            height: 9px;
+            pointer-events: none;
+        }
+        .map-timebar-marks[hidden] { display: none; }
+        .map-timebar-mark {
+            position: absolute;
+            top: 0;
+            width: 8px;
+            height: 9px;
+            padding: 0;
+            transform: translateX(-50%);
+            box-sizing: border-box;
+            border: 1.5px solid var(--surface);
+            border-radius: 2px;
+            cursor: pointer;
+            pointer-events: auto;
+        }
+        .map-timebar-mark:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        /* What came onto the map: the line's swatch and one line cut with an ellipsis; the target in bold. */
+        .map-time-added { flex: 1 1 auto; display: flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; }
+        .map-time-added-swatch { flex: 0 0 auto; width: 14px; height: 4px; border-radius: 2px; }
+        .map-time-added-text { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .map-time-added.is-target .map-time-added-text { color: var(--text); font-weight: 600; }
         .map-time-caption-text.is-strong { color: var(--text); font-weight: 600; }
         .map-time-caption-other {
             padding: 0;
@@ -11275,6 +11323,7 @@
         .path-picker-sub { font-size: 12px; color: var(--text-muted); }
         .path-picker-foot { padding: 8px 8px 4px; font-size: 12px; color: var(--text-muted); }
         @media (pointer: coarse) {
+            .map-timebar-mark { width: 10px; }
             .map-path-btn { height: 44px; }
             .map-path-chip { height: 44px; }
             .map-path-chip-clear { width: 44px; }
@@ -11283,11 +11332,16 @@
             .path-picker-close { width: 44px; height: 44px; }
         }
         @media (max-width: 640px) {
+            .map-time-play { width: 44px; padding: 0; }
+            .map-time-play-text { display: none; }
             .map-path-btn { flex-basis: 100%; height: 44px; }
             .map-path-target-label { max-width: 220px; }
         }
         /* A phone held sideways: the button is the ◎ alone, the chip without "Path to:". */
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .map-time-play { width: 44px; padding: 0; }
+            .map-time-play-text { display: none; }
+            .map-timebar { flex-wrap: nowrap; }
             .map-path-btn { flex-basis: auto; width: 40px; height: 40px; padding: 0; }
             .map-path-btn-text { display: none; }
             .map-path-chip { height: 40px; }

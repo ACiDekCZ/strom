@@ -9,10 +9,17 @@
  * src/map-line-colors.ts. Without a chosen person nothing here runs and the
  * map draws Migration over time as before (src/ui/map-ui.ts).
  *
- * Left for later parts, with their hooks here: the playback schedule and the
- * marks above the slider (mapTimeBounds, renderMapTimeCaption), the legend
- * (mapPathFocusClass, mapPathDrawnLines, LEGEND_WIDTH) and the person page's
- * entry (setMapPathTarget).
+ * The playback (§3): the range plays in 24 s by pathPlaySchedule (playMapPath),
+ * the marks above the slider jump to a line's earliest ancestor or the target
+ * (renderMapTimeMarks), the line under the slider says what came onto the map
+ * (renderMapTimeCaption, also the slider's aria-valuetext), and the map stays
+ * where it was framed, except one move to the target at the end when nobody
+ * moved it (panMapToPathEnd).
+ *
+ * Left for later parts, with their hooks here: the legend (mapPathFocusClass,
+ * mapPathDrawnLines, LEGEND_WIDTH; refreshMapPath redraws the marks and the
+ * caption after a change of mode or colours) and the person page's entry
+ * (setMapPathTarget).
  */
 
 import { DataManager } from '../data.js';
@@ -25,9 +32,10 @@ import { fitBounds, pointInViewport, project, unproject } from '../map.js';
 import { shownName } from '../person-name.js';
 import { PathPersonPicker } from '../person-picker.js';
 import {
-    buildPathModel, branchClass, pathPoints, pathSegments, type LineClass, type PathLocate, type PathModel,
+    buildPathModel, branchClass, pathLastAdded, pathPlaySchedule, pathPoints, pathSegments, pointClassOf,
+    type LineClass, type PathLocate, type PathModel,
 } from '../map-lines.js';
-import { LINE_FOCUS_DIM, lineStyle, pointFill, pointSize, lineColorVar } from '../map-line-colors.js';
+import { LINE_FOCUS_DIM, lineStyle, lineSwatch, pointFill, pointSize, lineColorVar } from '../map-line-colors.js';
 import { uiModule } from './module.js';
 import { declutterMapLabels, type MapScope } from './map-ui.js';
 
@@ -43,6 +51,11 @@ let picker: { ui: PathPersonPicker; host: HTMLElement; anchor: 'bar' | 'chip' } 
 let pickerOutsideBound = false;
 /** What the last draw showed: lines kept (at most 400) of all lines at that year. */
 let lastDrawn = { shown: 0, total: 0 };
+/**
+ * The view the path was framed at: while the map stands there (nobody moved
+ * or zoomed it), the end of the playback may move it once to the target.
+ */
+let framed: { target: PersonId; lat: number; lon: number; zoom: number; panned: boolean } | null = null;
 
 /** A stable side of a line's bow from its route (alternating looks random but never jumps between years). */
 function bowSide(key: string): 1 | -1 {
@@ -353,6 +366,7 @@ export const mapPathMethods = uiModule({
         const dx = left + w / 2 - width / 2, dy = top + h / 2 - height / 2;
         this.mapCenter = unproject({ x: c.x - dx, y: c.y - dy }, zoom);
         this.mapZoom = zoom;
+        framed = { target: model.targetId, lat: this.mapCenter.lat, lon: this.mapCenter.lon, zoom, panned: false };
         this.closeMapPopup();
         this.drawMapTiles(container);
         this.drawMapMarkers(container, this.mapPlaces());
@@ -445,29 +459,155 @@ export const mapPathMethods = uiModule({
         declutterMapLabels(markers);
     },
 
+    // ------------------------------------------------------------ playback
+
     /**
-     * The line under the slider. Here: the path's dead ends — no ancestor on
-     * the map ("Choose another person"), or the target without a place at the
-     * end. (What came onto the map in a year is the playback part's.)
+     * Play the path: one year per step, each lasting its share of 24 s
+     * (pathPlaySchedule: a year in which an ancestor or the target came onto
+     * the map weighs 5, an empty one 1). Stops at the target's year.
+     */
+    playMapPath(): void {
+        const model = this.mapPathModel();
+        const schedule = model ? pathPlaySchedule(model) : null;
+        if (!model || !schedule) { this.stopMapTimePlay(); return; }
+        const target = model.targetId;
+        const step = (): void => {
+            const el = document.getElementById('map-container');
+            // Stop when the map is left, the mode is off or the path changed.
+            if (!this.mapTimePlaying || !this.mapTimeOn || !el || el.style.display === 'none' || this.mapPathTarget !== target || !this.mapPathOn()) {
+                this.stopMapTimePlay();
+                return;
+            }
+            if (this.mapTimeYear >= schedule.to) { this.stopMapTimePlay(); return; }
+            this.mapTimeYear = Math.max(schedule.from, this.mapTimeYear + 1);
+            this.syncMapTimeControls();
+            this.renderMapTimeCaption();
+            this.drawMapMarkers(el, []);
+            if (this.mapTimeYear >= schedule.to) {
+                // The end: the target stands reached; it is brought into view once if nobody moved the map.
+                this.stopMapTimePlay();
+                this.panMapToPathEnd();
+                return;
+            }
+            this.mapTimeTimer = window.setTimeout(step, schedule.msOf(this.mapTimeYear));
+        };
+        this.mapTimeTimer = window.setTimeout(step, schedule.msOf(Math.max(schedule.from, this.mapTimeYear)));
+    },
+
+    /**
+     * The playback reached the target: the map does not move on its own,
+     * except once when it still stands where the path was framed and the
+     * target is out of sight (above the bar, clear of the edges).
+     */
+    panMapToPathEnd(): void {
+        const container = document.getElementById('map-container');
+        const model = this.mapPathModel();
+        if (!container || !model || !framed || framed.panned || !this.mapCenter || framed.target !== model.targetId) return;
+        if (this.mapCenter.lat !== framed.lat || this.mapCenter.lon !== framed.lon || this.mapZoom !== framed.zoom) return;
+        const geo = model.target.pointKey ? model.points.get(model.target.pointKey) : undefined;
+        if (!geo) return;
+        const { width, height } = this.mapViewportSize(container);
+        const at = pointInViewport(geo, this.mapCenter, this.mapZoom, width, height);
+        const box = container.getBoundingClientRect();
+        const bar = container.querySelector('#map-timebar') as HTMLElement | null;
+        const barRect = bar && !bar.hidden ? bar.getBoundingClientRect() : null;
+        const floor = barRect && barRect.height > 0 ? Math.min(height, barRect.top - box.top) : height;
+        const m = 24;
+        if (at.x >= m && at.x <= width - m && at.y >= m && at.y <= floor - m) return;
+        framed.panned = true;
+        // The target in the middle of the room above the bar.
+        const c = project(geo, this.mapZoom);
+        this.mapCenter = unproject({ x: c.x, y: c.y + (height - floor) / 2 }, this.mapZoom);
+        this.closeMapPopup();
+        this.drawMapTiles(container);
+        this.drawMapMarkers(container, this.mapPlaces());
+    },
+
+    /**
+     * The marks above the slider: each known quarter at the year of its
+     * earliest ancestor on the map (its colour), the target at the end. A
+     * press (or Enter) pauses and jumps there. Positions follow the track,
+     * the thumb's width off (CSS --map-thumb).
+     */
+    renderMapTimeMarks(): void {
+        const box = document.querySelector('#map-container .map-timebar-marks') as HTMLElement | null;
+        if (!box) return;
+        const model = this.mapPathModel();
+        const bounds = model ? this.mapTimeBounds() : null;
+        if (!model || !bounds) { box.hidden = true; box.innerHTML = ''; return; }
+        const esc = (t: string): string => this.escapeHtml(t);
+        const span = Math.max(1, bounds.max - bounds.min);
+        const mark = (year: number, color: string, title: string, kind: string): string => {
+            const f = Math.min(1, Math.max(0, (year - bounds.min) / span));
+            return `<button type="button" class="map-timebar-mark" data-mark="${kind}" data-year="${year}" title="${esc(title)}" aria-label="${esc(title)}"`
+                + ` style="left: calc(var(--map-thumb) / 2 + (100% - var(--map-thumb)) * ${+f.toFixed(4)}); background: ${color};"></button>`;
+        };
+        const html: string[] = [];
+        model.quarters.forEach((q, i) => {
+            if (!q || q.firstYear === undefined) return;
+            html.push(mark(q.firstYear, lineColorVar(branchClass('quarter', i), this.mapLineColors), strings.map.timeMarkTitle(q.surname, q.firstYear), `q${i}`));
+        });
+        const name = this.mapPathName();
+        const goal = model.target.kind ? strings.map.pathGoalEnd(name, bounds.max, model.target.kind) : `${name} · ${bounds.max}`;
+        html.push(mark(bounds.max, 'var(--text)', `◎ ${goal}`, 'target'));
+        box.innerHTML = html.join('');
+        box.hidden = false;
+    },
+
+    /**
+     * The line under the slider: with the path, what came onto the map last
+     * (its line's swatch, "1823 · Name · parent's place → own place", the
+     * target in bold at the end), read out as it changes (aria-live) and as
+     * the slider's aria-valuetext. Its dead ends: no ancestor on the map
+     * ("Choose another person"), or the target without a place at the end.
+     * Without the path it stays hidden (the status bar keeps its sentence).
      */
     renderMapTimeCaption(): void {
         const cap = document.querySelector('#map-container .map-time-caption') as HTMLElement | null;
+        const range = document.querySelector('#map-container .map-time-range') as HTMLInputElement | null;
         if (!cap) return;
+        const show = (html: string, key: string, valueText: string | null): void => {
+            // Rewritten only when it changes, so a screen reader hears each addition once.
+            if (cap.dataset.key !== key) { cap.innerHTML = html; cap.dataset.key = key; }
+            cap.hidden = false;
+            if (valueText === null) range?.removeAttribute('aria-valuetext');
+            else range?.setAttribute('aria-valuetext', valueText);
+        };
+        const hide = (): void => {
+            cap.hidden = true;
+            cap.innerHTML = '';
+            delete cap.dataset.key;
+            range?.removeAttribute('aria-valuetext');
+        };
         const model = this.mapPathModel();
-        if (!model) { cap.hidden = true; cap.innerHTML = ''; return; }
+        if (!model) { hide(); return; }
         const esc = (t: string): string => this.escapeHtml(t);
+        const year = this.mapTimeYear;
         if (model.onMapCount === 0) {
-            cap.innerHTML = `<span class="map-time-caption-text is-strong">${esc(strings.map.pathNoAncestors)}</span>`
-                + ` <button type="button" class="map-time-caption-other">${esc(strings.map.pathOtherPerson)}</button>`;
-            cap.hidden = false;
+            show(`<span class="map-time-caption-text is-strong">${esc(strings.map.pathNoAncestors)}</span>`
+                + ` <button type="button" class="map-time-caption-other">${esc(strings.map.pathOtherPerson)}</button>`, 'none', null);
             return;
         }
-        if (!model.target.pointKey && model.yearTo !== null && this.mapTimeYear >= model.yearTo) {
-            cap.innerHTML = `<span class="map-time-caption-text is-strong">${esc(strings.map.pathTargetNoPlace(this.mapPathName()))}</span>`;
-            cap.hidden = false;
+        if (!model.target.pointKey && model.yearTo !== null && year >= model.yearTo) {
+            const text = strings.map.pathTargetNoPlace(this.mapPathName());
+            show(`<span class="map-time-caption-text is-strong">${esc(text)}</span>`, `noplace:${text}`, `${year} · ${text}`);
             return;
         }
-        cap.hidden = true;
-        cap.innerHTML = '';
+        const last = pathLastAdded(model, year);
+        const item = last ? last.items.find(i => i.isTarget) ?? last.items[0] : undefined;
+        if (!last || !item) { hide(); return; }
+        const { display } = this.mapPathLocate();
+        const person = DataManager.getPerson(item.personId);
+        const name = item.isTarget ? this.mapPathName() : person ? shownName(person) : '';
+        const place = display.get(item.pointKey) ?? '';
+        const from = item.fromKey ? display.get(item.fromKey) : undefined;
+        const where = from && from !== place ? `${from} → ${place}` : place;
+        const text = [String(last.year), name, where].filter(Boolean).join(' · ');
+        const swatch = item.isTarget ? 'var(--text)' : lineSwatch(pointClassOf(item, this.mapLineMode), this.mapLineColors);
+        show(`<span class="map-time-added${item.isTarget ? ' is-target' : ''}">`
+            + `<span class="map-time-added-swatch" aria-hidden="true" style="background: ${swatch};"></span>`
+            + `<span class="map-time-added-text" title="${esc(text)}">${esc(text)}</span></span>`,
+        `added:${this.mapLineMode}:${this.mapLineColors}:${text}`,
+        last.year === year ? text : `${year} · ${text}`);
     },
 });

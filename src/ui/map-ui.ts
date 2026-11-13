@@ -76,6 +76,8 @@ let kindsMenuOpen = false;
 let kindTipTimer: number | null = null;
 /** Escape and the click outside the menu of kinds are listened to once, for every map canvas. */
 let mapKeysBound = false;
+/** The document-wide space bar (play/pause on the map) is bound once. */
+let mapTimeKeysBound = false;
 /** The map listens once for the tile server's refusal (its note), for every map canvas. */
 let mapTilesBound = false;
 
@@ -212,11 +214,16 @@ export const mapMethods = uiModule({
                 </div>
                 <div class="map-timebar" id="map-timebar" hidden>
                     <button type="button" class="map-time-play" aria-label="${strings.map.timePlay}" title="${strings.map.timePlay}">${iconSvg('play')}</button>
-                    <input type="range" class="map-time-range" aria-label="${strings.map.timeYear}" value="0" min="0" max="0">
+                    <div class="map-time-track">
+                        <div class="map-time-slider">
+                            <div class="map-timebar-marks" hidden></div>
+                            <input type="range" class="map-time-range" aria-label="${strings.map.timeYear}" value="0" min="0" max="0">
+                        </div>
+                        <div class="map-time-caption" aria-live="polite" hidden></div>
+                    </div>
                     <span class="map-time-year">0</span>
                     <button type="button" class="map-path-btn" aria-label="${strings.map.pathPick}" title="${strings.map.pathPick}" aria-haspopup="dialog" aria-expanded="false"
                             onclick="window.Strom.UI.openMapPathPicker('bar')"><span class="map-path-btn-mark" aria-hidden="true">◎</span><span class="map-path-btn-text">${strings.map.pathPick}</span></button>
-                    <div class="map-time-caption" aria-live="polite" hidden></div>
                 </div>
                 <div class="map-status" id="map-status"></div>
                 <a class="map-attribution" href="${TILE_ATTRIBUTION_URL}" target="_blank" rel="noopener noreferrer">${TILE_ATTRIBUTION}</a>`;
@@ -422,6 +429,13 @@ export const mapMethods = uiModule({
             if (openPoint) {
                 e.preventDefault();
                 this.closeMapPopup();
+                return;
+            }
+            // Then a pinned line of the ancestors' path lets go.
+            if (this.mapLineFocus !== null && this.mapPathOn()) {
+                e.preventDefault();
+                this.mapLineFocus = null;
+                this.refreshMapPath();
             }
         });
     },
@@ -923,6 +937,7 @@ export const mapMethods = uiModule({
         bar?.classList.toggle('has-path', pathOn);
         this.updateMapTimeLabel();
         this.updateMapTimePlayIcon();
+        this.renderMapTimeMarks();
         this.renderMapTimeCaption();
     },
 
@@ -934,8 +949,9 @@ export const mapMethods = uiModule({
     updateMapTimePlayIcon(): void {
         const play = document.querySelector('.map-time-play') as HTMLButtonElement | null;
         if (!play) return;
-        play.innerHTML = iconSvg(this.mapTimePlaying ? 'pause' : 'play');
         const label = this.mapTimePlaying ? strings.map.timePause : strings.map.timePlay;
+        // The word beside the icon on a desktop and a tablet; a phone keeps the icon alone (CSS).
+        play.innerHTML = `${iconSvg(this.mapTimePlaying ? 'pause' : 'play')}<span class="map-time-play-text" aria-hidden="true">${this.escapeHtml(label)}</span>`;
         play.setAttribute('aria-label', label);
         play.title = label;
     },
@@ -953,10 +969,31 @@ export const mapMethods = uiModule({
             });
         };
         range?.addEventListener('input', () => {
+            // Moving the slider pauses the playback at the chosen year.
+            if (this.mapTimePlaying) this.stopMapTimePlay();
             this.mapTimeYear = Number(range.value);
             this.updateMapTimeLabel();
             this.renderMapTimeCaption();
             redraw();   // rAF-throttled, same as panning
+        });
+        // The slider's keys: arrows ±1 year, PageUp/PageDown ±10, Home/End the beginning and the end.
+        range?.addEventListener('keydown', (e: KeyboardEvent) => {
+            if (e.altKey || e.ctrlKey || e.metaKey) return;
+            const bounds = this.mapTimeBounds();
+            if (!bounds || range.disabled) return;
+            const y = this.mapTimeYear;
+            const next: Record<string, number> = {
+                ArrowRight: y + 1, ArrowUp: y + 1, ArrowLeft: y - 1, ArrowDown: y - 1,
+                PageUp: y + 10, PageDown: y - 10, Home: bounds.min, End: bounds.max,
+            };
+            if (!(e.key in next)) return;
+            e.preventDefault();
+            this.setMapTimeYear(next[e.key]);
+        });
+        // A mark above the slider (a line's earliest ancestor, the target): pause and jump there.
+        container.querySelector('.map-timebar-marks')?.addEventListener('click', (e: Event) => {
+            const mark = (e.target as HTMLElement).closest('.map-timebar-mark') as HTMLElement | null;
+            if (mark?.dataset.year) this.setMapTimeYear(Number(mark.dataset.year));
         });
         // The path's dead end: "Choose another person" opens the choice above the bar.
         container.querySelector('.map-time-caption')?.addEventListener('click', (e: Event) => {
@@ -964,6 +1001,33 @@ export const mapMethods = uiModule({
         });
         const play = container.querySelector('.map-time-play') as HTMLButtonElement | null;
         play?.addEventListener('click', () => this.toggleMapTimePlay());
+        if (mapTimeKeysBound) return;
+        mapTimeKeysBound = true;
+        // The space bar anywhere on the map (not in a field, not on a button of its own) plays or pauses.
+        document.addEventListener('keydown', (e: KeyboardEvent) => {
+            if (e.key !== ' ' || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+            const map = document.getElementById('map-container');
+            if (!map || map.getClientRects().length === 0 || !this.mapTimeOn) return;
+            if (document.querySelector('.modal-overlay.active') || this.mapPathPickerOpen()) return;
+            const t = e.target as HTMLElement | null;
+            const onPage = !t || t === document.body || t === document.documentElement || map.contains(t);
+            if (!onPage) return;
+            if (t && t !== document.body && t.closest('textarea, select, button, a[href], [contenteditable=""], [contenteditable="true"], [role="button"], [role="checkbox"], input:not([type="range"])')) return;
+            e.preventDefault();
+            this.toggleMapTimePlay();
+        });
+    },
+
+    /** Set the year by hand (a key on the slider, a mark): the playback pauses, the map shows that year. */
+    setMapTimeYear(year: number): void {
+        const bounds = this.mapTimeBounds();
+        if (!this.mapTimeOn || !bounds) return;
+        if (this.mapTimePlaying) this.stopMapTimePlay();
+        this.mapTimeYear = Math.min(bounds.max, Math.max(bounds.min, Math.round(year)));
+        this.syncMapTimeControls();
+        this.renderMapTimeCaption();
+        const container = document.getElementById('map-container');
+        if (container) this.drawMapMarkers(container, []);
     },
 
     /** Timer toggle: reveal the timebar starting at the earliest year, or hide it. */
@@ -994,16 +1058,28 @@ export const mapMethods = uiModule({
         this.renderMapStatus(this.mapPlaces());
     },
 
-    /** Play/pause: step the year forward once every ~120ms until the last year. */
+    /**
+     * Play/pause. Without a chosen person the year steps forward once every
+     * ~120ms until the last year; with the ancestors' path the whole range
+     * plays in 24 s, a year in which someone came onto the map lasting five
+     * times an empty one (pathPlaySchedule), and stops at the target.
+     */
     toggleMapTimePlay(): void {
         if (this.mapTimePlaying) { this.stopMapTimePlay(); return; }
         if (!this.mapTimeOn) return;
         const bounds = this.mapTimeBounds();
         if (!bounds) return;
         // Reaching the end and pressing play again replays from the start.
-        if (this.mapTimeYear >= bounds.max) this.mapTimeYear = bounds.min;
+        if (this.mapTimeYear >= bounds.max) {
+            this.mapTimeYear = bounds.min;
+            this.syncMapTimeControls();
+            this.renderMapTimeCaption();
+            const el = document.getElementById('map-container');
+            if (el) this.drawMapMarkers(el, []);
+        }
         this.mapTimePlaying = true;
         this.updateMapTimePlayIcon();
+        if (this.mapPathOn()) { this.playMapPath(); return; }
         this.mapTimeTimer = window.setInterval(() => {
             const b = this.mapTimeBounds();
             const el = document.getElementById('map-container');
@@ -1023,6 +1099,7 @@ export const mapMethods = uiModule({
     stopMapTimePlay(): void {
         if (this.mapTimeTimer !== null) {
             clearInterval(this.mapTimeTimer);
+            clearTimeout(this.mapTimeTimer);
             this.mapTimeTimer = null;
         }
         this.mapTimePlaying = false;

@@ -218,3 +218,184 @@ test.describe('on a phone', () => {
         expect(scrollW).toBeLessThanOrEqual(390);
     });
 });
+
+/** Freeze the page's clock (installed before the app loaded): from here on time moves only by runFor. */
+async function pauseClock(page: Page): Promise<void> {
+    const now = await page.evaluate(() => Date.now());
+    await page.clock.pauseAt(now + 1000);
+}
+
+test('Play runs the path by its 24 s schedule, says what came onto the map, stops at the target and starts again from the beginning; the slider pauses it', async ({ page }) => {
+    await page.clock.install({ time: new Date('2026-06-15T10:00:00Z') });
+    await stubTiles(page);
+    await seedPathTree(page);
+    await choosePerson(page, 'Quillfen', /Tamsin/);
+    await pauseClock(page);
+
+    const year = page.locator('.map-time-year');
+    const play = page.locator('.map-time-play');
+    const caption = page.locator('.map-time-caption');
+    await expect(year).toHaveText('1860');
+    await expect(caption).toHaveAttribute('aria-live', 'polite');
+    await expect(caption).toContainText('1860 · Ansel Quillfen · Lambda');
+
+    // 1860 → 1950 with seven years in which someone came (weight 5) and 84 empty ones (weight 1):
+    // 1860 lasts ≈1008 ms, an empty year ≈202 ms, so after 2 s the bar stands at 1865.
+    await play.click();
+    await expect(play).toHaveAttribute('aria-label', 'Pause');
+    await page.clock.runFor(2000);
+    await expect(year).toHaveText('1865');
+    await expect(caption).toContainText('1865 · Ivar Zandmeer · Mu');
+    await expect(page.locator('.map-time-range')).toHaveAttribute('aria-valuetext', '1865 · Ivar Zandmeer · Mu');
+
+    // The whole range takes 24 s: it ends at the target's year, stops and shows the target reached.
+    await page.clock.runFor(24000);
+    await expect(year).toHaveText('1950');
+    await expect(play).toHaveAttribute('aria-label', 'Play');
+    await expect(page.locator('.map-path-target')).toHaveClass(/is-reached/);
+    await expect(caption.locator('.map-time-added')).toHaveClass(/is-target/);
+    await expect(caption).toContainText('1950 · Tamsin Quillfen · Eta → Zeta');
+    await page.clock.runFor(2000);
+    await expect(year).toHaveText('1950');
+
+    // Play again: from the beginning.
+    await play.click();
+    await expect(year).toHaveText('1860');
+    await page.clock.runFor(1500);
+    await expect(year).not.toHaveText('1860');
+
+    // Moving the slider pauses at the chosen year.
+    await setYear(page, 1900);
+    await expect(play).toHaveAttribute('aria-label', 'Play');
+    await page.clock.runFor(3000);
+    await expect(year).toHaveText('1900');
+    await expect(page.locator('.map-time-range')).toHaveAttribute('aria-valuetext', '1900 · 1893 · Ysolde Zandmeer · Mu → Kappa');
+});
+
+test('the marks above the slider jump to a line\'s earliest ancestor and to the target; keys move the year and the space bar plays and pauses', async ({ page }) => {
+    await page.clock.install({ time: new Date('2026-06-15T10:00:00Z') });
+    await stubTiles(page);
+    await seedPathTree(page);
+    await choosePerson(page, 'Quillfen', /Tamsin/);
+    await pauseClock(page);
+    const year = page.locator('.map-time-year');
+    const range = page.locator('.map-time-range');
+    const play = page.locator('.map-time-play');
+
+    // Two known quarters (the mother's parents are unknown) and the target.
+    const marks = page.locator('.map-timebar-mark');
+    await expect(marks).toHaveCount(3);
+    const q0 = page.locator('.map-timebar-mark[data-mark="q0"]');
+    const q1 = page.locator('.map-timebar-mark[data-mark="q1"]');
+    const goal = page.locator('.map-timebar-mark[data-mark="target"]');
+    await expect(q0).toHaveAttribute('title', 'Quillfen: earliest ancestor 1860');
+    await expect(q1).toHaveAttribute('aria-label', 'Zandmeer: earliest ancestor 1865');
+    await expect(goal).toHaveAttribute('title', '◎ Tamsin Quillfen · 1950');
+    const [b0, b1, bg, br] = await Promise.all([q0.boundingBox(), q1.boundingBox(), goal.boundingBox(), range.boundingBox()]);
+    expect(b0!.x).toBeLessThan(b1!.x);
+    expect(b1!.x).toBeLessThan(bg!.x);
+    expect(b0!.y + b0!.height).toBeLessThanOrEqual(br!.y + br!.height / 2);
+    // The marks follow the thumb's travel: the first over the start, the target over the end.
+    expect(Math.abs(b0!.x + b0!.width / 2 - (br!.x + 8))).toBeLessThanOrEqual(2);
+    expect(Math.abs(bg!.x + bg!.width / 2 - (br!.x + br!.width - 8))).toBeLessThanOrEqual(2);
+
+    // A mark pauses the playback and jumps.
+    await play.click();
+    await page.clock.runFor(500);
+    await q1.click();
+    await expect(play).toHaveAttribute('aria-label', 'Play');
+    await expect(year).toHaveText('1865');
+    await goal.focus();
+    await page.keyboard.press('Enter');
+    await expect(year).toHaveText('1950');
+
+    // Keys on the slider.
+    await range.focus();
+    await page.keyboard.press('Home');
+    await expect(year).toHaveText('1860');
+    await page.keyboard.press('PageUp');
+    await expect(year).toHaveText('1870');
+    await page.keyboard.press('ArrowRight');
+    await expect(year).toHaveText('1871');
+    await page.keyboard.press('PageDown');
+    await expect(year).toHaveText('1861');
+    await page.keyboard.press('ArrowLeft');
+    await expect(year).toHaveText('1860');
+    await page.keyboard.press('End');
+    await expect(year).toHaveText('1950');
+    await page.keyboard.press('Home');
+
+    // The space bar on the map plays and pauses: on the slider and with nothing focused.
+    await page.keyboard.press(' ');
+    await expect(play).toHaveAttribute('aria-label', 'Pause');
+    await page.keyboard.press(' ');
+    await expect(play).toHaveAttribute('aria-label', 'Play');
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await page.keyboard.press(' ');
+    await expect(play).toHaveAttribute('aria-label', 'Pause');
+    await page.keyboard.press(' ');
+    await expect(play).toHaveAttribute('aria-label', 'Play');
+
+    // Escape lets a pinned line go.
+    await page.evaluate(() => { window.Strom.UI.mapLineFocus = 1; window.Strom.UI.refreshMapPath(); });
+    await page.keyboard.press('Escape');
+    expect(await page.evaluate(() => window.Strom.UI.mapLineFocus)).toBeNull();
+});
+
+test('without a chosen person Play keeps its pace of a year every 120 ms and the bar has no marks or caption', async ({ page }) => {
+    await page.clock.install({ time: new Date('2026-06-15T10:00:00Z') });
+    await stubTiles(page);
+    await seedPathTree(page);
+    await pauseClock(page);
+    await expect(page.locator('.map-timebar-marks')).toBeHidden();
+    await expect(page.locator('.map-time-caption')).toBeHidden();
+    const year = page.locator('.map-time-year');
+    const start = Number(await year.textContent());
+    await page.locator('.map-time-play').click();
+    await page.clock.runFor(1210);
+    await expect(year).toHaveText(String(start + 10));
+});
+
+test.describe('the bar on a phone', () => {
+    test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+    test('with the path: ▶ alone at 44 px, the slider and the year in one row, what came onto the map under the slider', async ({ page }) => {
+        await stubTiles(page);
+        await seedPathTree(page);
+        await page.evaluate(() => window.Strom.UI.setMapPathTarget('tamsin' as never));
+        const play = page.locator('.map-time-play');
+        const p = (await play.boundingBox())!;
+        expect(Math.round(p.width)).toBe(44);
+        expect(Math.round(p.height)).toBeGreaterThanOrEqual(44);
+        await expect(play.locator('.map-time-play-text')).toBeHidden();
+        const r = (await page.locator('.map-time-range').boundingBox())!;
+        const y = (await page.locator('.map-time-year').boundingBox())!;
+        const cap = page.locator('.map-time-caption');
+        await expect(cap).toBeVisible();
+        const c = (await cap.boundingBox())!;
+        expect(r.x).toBeGreaterThan(p.x + p.width - 1);
+        expect(y.x).toBeGreaterThan(r.x + r.width - 1);
+        expect(c.y).toBeGreaterThanOrEqual(r.y + r.height - 1);
+        await expect(page.locator('.map-timebar-mark')).toHaveCount(3);
+        const mark = (await page.locator('.map-timebar-mark').first().boundingBox())!;
+        expect(Math.round(mark.width)).toBe(10);
+        const fits = await page.locator('#map-timebar').evaluate(el => el.scrollWidth <= el.clientWidth);
+        expect(fits).toBe(true);
+    });
+});
+
+test.describe('the bar on a phone held sideways', () => {
+    test.use({ viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true });
+
+    test('one row: ▶, the slider, the year; no caption line', async ({ page }) => {
+        await stubTiles(page);
+        await seedPathTree(page);
+        await page.evaluate(() => window.Strom.UI.setMapPathTarget('tamsin' as never));
+        const boxes = await Promise.all(['.map-time-play', '.map-time-range', '.map-time-year']
+            .map(sel => page.locator(sel).boundingBox()));
+        const mids = boxes.map(b => b!.y + b!.height / 2);
+        for (const m of mids) expect(Math.abs(m - mids[0])).toBeLessThanOrEqual(4);
+        await expect(page.locator('.map-time-caption')).toBeHidden();
+        await expect(page.locator('.map-time-range')).toHaveAttribute('aria-valuetext', '1860 · Ansel Quillfen · Lambda');
+    });
+});
