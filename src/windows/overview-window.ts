@@ -81,6 +81,26 @@ export interface OverviewExtras {
     hypotheses: { pending: Record<string, unknown>; batch: unknown | null };
     /** Tasks whose own place in the queue is being written, and what a refused one says (by task). */
     taskOrder: { busy: string[]; problems: Record<string, string> };
+    /**
+     * The tree's "Verifying" (spec 065 §10k) as the main window has it: facts waiting, Stop and the bulk
+     * verification offered (null: the research does not verify, or its bridge does not answer).
+     */
+    verify?: OverviewVerifyState | null;
+    /** The group the evidence pill lights up in the main window's tree now: its kind and the pill's name (null: none). */
+    highlight?: OverviewHighlight | null;
+}
+
+/** The tree's verification as the overview's "Verifying" block draws it. */
+export interface OverviewVerifyState {
+    waiting: number;
+    stop: boolean;
+    bulk: boolean;
+}
+
+/** A highlight of people in the main window's tree (evidence-ui's group: `changed`, `direction`, `direction-found`, …). */
+export interface OverviewHighlight {
+    kind: string;
+    label: string;
 }
 
 /** `research-state`: the overview's whole state as the main window has it now. */
@@ -229,6 +249,8 @@ export function emptyOverviewExtras(): OverviewExtras {
         lines: { selected: 'all', pendingOrder: null, orderSaving: false, busy: [], problems: [], archive: false },
         hypotheses: { pending: {}, batch: null },
         taskOrder: { busy: [], problems: {} },
+        verify: null,
+        highlight: null,
     };
 }
 
@@ -271,9 +293,15 @@ export type OverviewAction =
     /** A line's form: edit it, or a new line. */
     | { action: 'line-edit'; args: { directionId: string } }
     | { action: 'line-new'; args?: Record<string, never> }
+    /** "Verify facts in the tree…" of the tree's "Verifying": the main window's bulk dialog (spec 065 10l). */
+    | { action: 'verify-bulk'; args?: Record<string, never> }
     // ---- in the main window, it stays where it is ----
     /** A row hovered: its card lit up in the main window's tree (null: none). */
     | { action: 'hover-person'; args: { personId: string | null } }
+    /** Stop of the tree's "Verifying": the research drops what it has not begun to verify. */
+    | { action: 'verify-stop'; args?: Record<string, never> }
+    /** The main window's highlight of `kind` ends (the changes' filter left none of its people to show). */
+    | { action: 'highlight-end'; args: { kind: string } }
     /** Follow live from the overview (it stays open, followed). */
     | { action: 'follow-live'; args?: Record<string, never> }
     /** Stop following (the overview stays, without following). */
@@ -326,8 +354,8 @@ export type OverviewActionArgs<T extends OverviewActionId> = Extract<OverviewAct
 
 export const OVERVIEW_ACTION_IDS = [
     'show-person', 'show-people', 'show-direction', 'direction-found', 'person-research', 'tree-overview', 'waiting-places', 'waiting-group-note',
-    'waiting-images', 'line-edit', 'line-new',
-    'hover-person', 'follow-live', 'stop-follow', 'follow-tree', 'follow-view', 'turn-on',
+    'waiting-images', 'line-edit', 'line-new', 'verify-bulk',
+    'hover-person', 'verify-stop', 'highlight-end', 'follow-live', 'stop-follow', 'follow-tree', 'follow-view', 'turn-on',
     'line-select', 'line-state', 'line-move', 'line-retry',
     'waiting-answer', 'waiting-sent', 'waiting-unsent', 'waiting-group-sent', 'waiting-file',
     'hypothesis-ask', 'hypotheses-accept', 'answer-task', 'research-link',
@@ -337,7 +365,7 @@ export const OVERVIEW_ACTION_IDS = [
 /** Actions whose result shows in the main window: the overview window asks it to the front after them. */
 export const OVERVIEW_ACTIONS_TO_MAIN: ReadonlySet<OverviewActionId> = new Set<OverviewActionId>([
     'show-person', 'show-people', 'show-direction', 'direction-found', 'person-research', 'tree-overview', 'waiting-places', 'waiting-group-note',
-    'waiting-images', 'line-edit', 'line-new',
+    'waiting-images', 'line-edit', 'line-new', 'verify-bulk',
 ]);
 
 const str = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
@@ -402,6 +430,8 @@ export function readOverviewAction(action: unknown, args: unknown): OverviewActi
         }
         case 'tree-overview':
         case 'line-new':
+        case 'verify-bulk':
+        case 'verify-stop':
         case 'follow-live':
         case 'stop-follow':
         case 'turn-on':
@@ -415,6 +445,8 @@ export function readOverviewAction(action: unknown, args: unknown): OverviewActi
             if (a.files !== undefined && !(Array.isArray(a.files) && a.files.every(isFile))) return null;
             return { action, args: { itemId: a.itemId, ...(a.files ? { files: a.files as File[] } : {}) } };
         }
+        case 'highlight-end':
+            return str(a.kind) ? { action, args: { kind: a.kind } } : null;
         case 'hover-person':
             return a.personId === null || str(a.personId) ? { action, args: { personId: a.personId as string | null } } : null;
         case 'follow-tree':

@@ -232,6 +232,37 @@ describe('the overview\'s controls ask the main window', () => {
         expect(o.taskOrderProblem('T1')).toBe('');
     });
 
+    it('D: the tree\'s "Verifying" is the snapshot\'s; the bulk dialog opens in the main window (forward), Stop stays here', async () => {
+        const verify = { waiting: 4, stop: true, bulk: true };
+        const { o, sent, port } = overrides(stateOf({ extras: { ...emptyOverviewExtras(), verify } }));
+        expect(o.treeVerifyNow()).toEqual(verify);
+        expect(overrides().o.treeVerifyNow()).toBeNull();
+        await o.verifyStop(null);
+        expect(sent).toEqual([{ action: 'verify-stop', args: undefined }]);
+        expect(port.focusMain).not.toHaveBeenCalled();
+        o.showVerifyBulkDialog();
+        expect(sent[1]).toEqual({ action: 'verify-bulk', args: undefined });
+        expect(port.focusMain).toHaveBeenCalledTimes(1);
+    });
+
+    it('D: the main window\'s light is the snapshot\'s; its end asked there by kind; a light after a filter leaves the main window behind', () => {
+        const highlight = { kind: 'changed', label: 'Changed · Persons' };
+        const { o, sent, port } = overrides(stateOf({ extras: { ...emptyOverviewExtras(), highlight } }));
+        expect(o.evidenceHighlightKind()).toBe('changed');
+        expect(o.evidenceHighlightNow()).toEqual(highlight);
+        o.endEvidenceHighlight();
+        expect(sent).toEqual([{ action: 'highlight-end', args: { kind: 'changed' } }]);
+        o.startPersonHighlight('changed', 'Changed · Sources', ['P2'] as PersonId[], null, { quiet: true });
+        expect(sent[1]).toEqual({ action: 'show-people', args: { title: 'Changed · Sources', personIds: ['P2'] } });
+        expect(port.focusMain).not.toHaveBeenCalled();
+        // No light: nothing to end, nothing said.
+        const none = overrides();
+        expect(none.o.evidenceHighlightKind()).toBeNull();
+        expect(none.o.evidenceHighlightNow()).toBeNull();
+        none.o.endEvidenceHighlight();
+        expect(none.sent).toEqual([]);
+    });
+
     it('the main window\'s state is read from the snapshot', () => {
         const extras = { ...emptyOverviewExtras(), agentless: true, follow: { on: true, view: 'fan' as const } };
         const { o } = overrides(stateOf({ extras }));
@@ -314,6 +345,35 @@ describe('the queue\'s pages and its search in the window (spec 052 §1 there, q
         // The page came: the window drawn again (its own states with it).
         expect(ui.queueListsChanged).toHaveBeenCalled();
         expect(fetchSpy).not.toHaveBeenCalled();
+        view.stop();
+    });
+
+    it('D: Undo of Do next places the task in the window\'s pages where the main window\'s answer says, at once', async () => {
+        const ui = fakeUi();
+        const { port } = portSpy();
+        const page = [
+            { id: 'T0815', text: 'Matriky Smrkov', state: 'next', pos: 1, own: 'next' },
+            { id: 'T0001', text: 'A', state: 'next', pos: 2 },
+            { id: 'T0002', text: 'B', state: 'next', pos: 3 },
+            { id: 'T0003', text: 'C', state: 'next', pos: 4 },
+        ];
+        port.ask.mockImplementation(async (action: OverviewActionId) => (action === 'queue-list'
+            ? { ok: true, items: page, total: 4, from: 0, rev: '', head: '' }
+            : { ok: true, was: null, task: { id: 'T0815', text: 'Matriky Smrkov', state: 'next', pos: 3, why: { kind: 'research' } } }));
+        const view = startOverviewWindowView(ui as never, port, () => 'Okurkovi');
+        view.apply(paged(['queue.page', 'queue.search', 'queue.next']));
+        const { requestQueueList, queueList } = await import('../research-queue-pages.js');
+        requestQueueList('', {}, 'queue');
+        await vi.waitFor(() => expect(queueList('', {})?.total).toBe(4));
+        const o = overviewWindowOverrides(port, () => view.state()) as Record<string, (...a: unknown[]) => Promise<unknown>>;
+        const render = vi.fn();
+        const out = await o.writeTaskOrder.call({ renderResearchOverview: render }, 'T0815', { do: 'restore', was: {} });
+        expect(out).toMatchObject({ ok: true, task: { id: 'T0815', pos: 3 } });
+        expect(port.ask).toHaveBeenLastCalledWith('queue-order', { task: 'T0815', do: 'restore', was: {} }, expect.any(Number));
+        const items = queueList('', {})!.items;
+        expect(items.map(x => `${x.id}@${x.pos}`)).toEqual(['T0001@1', 'T0002@2', 'T0815@3', 'T0003@4']);
+        expect(items.find(x => x.id === 'T0815')?.own).toBeUndefined();
+        expect(render).toHaveBeenCalled();
         view.stop();
     });
 

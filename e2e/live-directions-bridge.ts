@@ -99,6 +99,10 @@ export interface ManagedBridge {
     orderWriteMs?: number;
     /** While set, a status asked after more than `after` writes answers only once `until` resolves (the next status not here yet). */
     statusHold?: { after: number; until: Promise<void> } | null;
+    /** `/status.verify` (with `verify` in `features`; absent: none sent); `POST verify/stop` drops what waits. */
+    verify?: { waiting: number };
+    /** Each `POST verify/…` asked (its path after the token). */
+    verifyAsks: string[];
 }
 
 /** The status's window of a queue read by pages: 14 tasks up next, then up to 6 set aside. */
@@ -393,6 +397,8 @@ export async function followManaged(page: Page, opts: {
     busy?: { sessions: number; runs: number };
     /** `/status.work` (absent: none sent). */
     work?: { gate: string | null; minutes: number };
+    /** `/status.verify`: facts waiting to be verified again (`verify` should be in `features`). */
+    verify?: { waiting: number };
 } = {}): Promise<ManagedBridge> {
     const links = [...ALL_LINKS, ...(opts.links ?? [])];
     await page.setViewportSize(opts.size ?? { width: 1440, height: 900 });
@@ -420,6 +426,8 @@ export async function followManaged(page: Page, opts: {
         queueHold: null,
         ...(opts.busy ? { busy: { ...opts.busy } } : {}),
         ...(opts.work ? { work: { ...opts.work } } : {}),
+        ...(opts.verify ? { verify: { ...opts.verify } } : {}),
+        verifyAsks: [],
     };
     if (opts.features?.includes('queue.next')) {
         b.queueNext = { base: b.queue.map(q => String(q.id)), at: new Map(), clock: 0 };
@@ -448,6 +456,7 @@ export async function followManaged(page: Page, opts: {
         researches: b.researches,
         ...(b.busy ? { busy: b.busy } : {}),
         ...(b.work ? { work: b.work } : {}),
+        ...(b.verify ? { verify: { waiting: b.verify.waiting, asked: 0, images: 0, permission: 0, kept: 0, confirmed: 0 } } : {}),
         ...(b.caps ? { caps: b.caps } : {}),
         ...(b.offLine ? { offLine: b.offLine } : {}),
         ...(opts.features ? { features: opts.features } : {}),
@@ -473,6 +482,15 @@ export async function followManaged(page: Page, opts: {
             if (b.queueHold) await b.queueHold;
             const r = b.queueReplies.shift() ?? queuePage(b, query);
             return route.fulfill(json(r.body, r.status, r.headers));
+        }
+        if (/^verify\//.test(path) && req.method() === 'POST') {
+            b.verifyAsks.push(path);
+            if (path === 'verify/stop' && b.verify) {
+                const dropped = b.verify.waiting;
+                b.verify.waiting = 0;
+                return route.fulfill(json({ ok: true, dropped, facts: dropped }));
+            }
+            return route.fulfill(json({ ok: false, code: 'verify.unknown' }, 400));
         }
         if (/^(directions|offline|queue\/|waiting\/)/.test(path)) {
             const raw = req.postData();

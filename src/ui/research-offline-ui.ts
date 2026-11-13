@@ -16,7 +16,7 @@ import { strings } from '../strings.js';
 import { Person } from '../types.js';
 import {
     LiveDirection, LiveOffLine, LiveQueueItem, LiveWaiting, LiveWorker, OFF_LINE_BRANCHES_FEATURE, OFF_LINE_MODES, OffLineBranch, OffLineMode, QUEUE_NEXT_FEATURE,
-    QUEUE_OWN_FEATURE,
+    QUEUE_OWN_FEATURE, sanitizeQueue,
 } from '../research-link.js';
 import { uiModule } from './module.js';
 import { LiveSession, el, liveQueueItem, liveSession, queueKindTag, queuePaged, queueNoteText } from './research-ui.js';
@@ -279,7 +279,8 @@ export function queueNextFor(s: LiveSession, q: LiveQueueItem): boolean {
 
 /** A task's place written (main window: through the bridge; the overview's own window: asked of the main window). */
 export type TaskOrderOutcome =
-    | { ok: true; was: TaskOrderWas | null }
+    /** `task`: the task as the bridge answered it (its place `pos`, tag and reason; null: the answer had none). */
+    | { ok: true; was: TaskOrderWas | null; task?: LiveQueueItem | null }
     /** `taken`: the agent took it meanwhile (409 `queue.doing`); `bridge`: no answer; `refused`: said at the task. */
     | { ok: false; why: 'taken' | 'bridge' | 'refused' };
 
@@ -290,7 +291,10 @@ export type TaskOrderWrite = { do: 'next' } | { do: 'restore'; was: TaskOrderWas
 export function taskOrderOutcomeOf(v: unknown): TaskOrderOutcome | null {
     const r = v && typeof v === 'object' ? v as Record<string, unknown> : null;
     if (!r) return null;
-    if (r.ok === true) return { ok: true, was: r.was === null ? null : sanitizeTaskOrderWas(r.was) };
+    if (r.ok === true) {
+        const task = r.task ? sanitizeQueue([r.task], true, true)[0] ?? null : null;
+        return { ok: true, was: r.was === null ? null : sanitizeTaskOrderWas(r.was), task };
+    }
     return r.ok === false && (r.why === 'taken' || r.why === 'bridge' || r.why === 'refused') ? { ok: false, why: r.why } : null;
 }
 
@@ -1226,7 +1230,8 @@ export const researchOffLineMethods = uiModule({
         }
         this.renderLivePanel();
         this.liveStatusSoon(s);
-        return { ok: true, was: r.was };
+        // The task as answered: the overview's own window places it in its lists read by pages.
+        return { ok: true, was: r.was, task: r.task?.id === task ? r.task : null };
     },
 
     /** "Do next" from a task's ⋯: the task on top, lit and focused, a toast with Undo (6 s). */

@@ -100,6 +100,32 @@ describe('the state sent to the overview window', () => {
         expect(state.session && 'es' in state.session).toBe(false);
     });
 
+    it('D: the tree\'s "Verifying" and the pill\'s light go along when there are some, null when none', () => {
+        fake.live = liveOf();
+        const none = overviewWindowMethods.overviewWindowState.call(stateUi() as never);
+        expect(none.extras.verify).toBeNull();
+        expect(none.extras.highlight).toBeNull();
+        const ui = stateUi({
+            treeVerifyNow: () => ({ waiting: 4, stop: true, bulk: true }),
+            evidenceHighlightNow: () => ({ kind: 'direction', label: 'Okurka line' }),
+        });
+        const state = overviewWindowMethods.overviewWindowState.call(ui as never);
+        expect(state.extras.verify).toEqual({ waiting: 4, stop: true, bulk: true });
+        expect(state.extras.highlight).toEqual({ kind: 'direction', label: 'Okurka line' });
+        expect(() => structuredClone(state)).not.toThrow();
+    });
+
+    it('D: a tree without research says no verification, the light of its tree still goes along', () => {
+        const ui = stateUi({
+            activeResearchId: () => null,
+            treeVerifyNow: () => ({ waiting: 4, stop: true, bulk: true }),
+            evidenceHighlightNow: () => ({ kind: 'changed', label: 'Changed' }),
+        });
+        const state = overviewWindowMethods.overviewWindowState.call(ui as never);
+        expect(state.extras.verify).toBeNull();
+        expect(state.extras.highlight).toEqual({ kind: 'changed', label: 'Changed' });
+    });
+
     it('a following that lost its bridge says so', () => {
         fake.live = liveOf({ lostSince: 5 });
         expect(overviewWindowMethods.overviewWindowState.call(stateUi() as never).bridgeUp).toBe(false);
@@ -192,6 +218,30 @@ describe('the window\'s actions run today\'s functions', () => {
         run(ui, { action: 'research-link', args: { link: 'chat', params: { person: 'P0012' }, kind: 'agent' } });
         expect(ui.activeResearchLink).toHaveBeenCalledWith('chat', { person: 'P0012' });
         expect(ui.launchResearchLink).toHaveBeenCalledWith('strom-research://chat?tree=R1', 'agent');
+    });
+
+    it('D: the bulk verification opens here, Stop is written here, each only when the research offers it', () => {
+        const showVerifyBulkDialog = vi.fn();
+        const verifyStop = vi.fn(async () => {});
+        const off = fakeUi({ verifyBulkAvailable: () => false, treeVerifyNow: () => null, showVerifyBulkDialog, verifyStop });
+        expect(run(off, { action: 'verify-bulk' })).toBe(false);
+        expect(run(off, { action: 'verify-stop' })).toBe(false);
+        expect(showVerifyBulkDialog).not.toHaveBeenCalled();
+        expect(verifyStop).not.toHaveBeenCalled();
+        const on = fakeUi({ verifyBulkAvailable: () => true, treeVerifyNow: () => ({ waiting: 3, stop: true, bulk: true }), showVerifyBulkDialog, verifyStop });
+        expect(run(on, { action: 'verify-bulk' })).toBe(true);
+        expect(showVerifyBulkDialog).toHaveBeenCalledTimes(1);
+        expect(run(on, { action: 'verify-stop' })).toBe(true);
+        expect(verifyStop).toHaveBeenCalledWith(null);
+    });
+
+    it('D: the light ends here only while it still lights the group the window named', () => {
+        const endEvidenceHighlight = vi.fn();
+        const ui = fakeUi({ evidenceHighlightKind: () => 'changed', endEvidenceHighlight });
+        expect(run(ui, { action: 'highlight-end', args: { kind: 'direction' } })).toBe(false);
+        expect(endEvidenceHighlight).not.toHaveBeenCalled();
+        expect(run(ui, { action: 'highlight-end', args: { kind: 'changed' } })).toBe(true);
+        expect(endEvidenceHighlight).toHaveBeenCalledTimes(1);
     });
 
     it('a task\'s place asked from the window is written here, with today\'s function', async () => {

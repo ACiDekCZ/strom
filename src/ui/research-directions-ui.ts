@@ -18,7 +18,7 @@ import { Person, PersonId } from '../types.js';
 import { LiveDirection, LiveDirectionKind, LiveWorker, ResearchDirectionDo, researchLinkMark } from '../research-link.js';
 import { uiModule } from './module.js';
 import { MQ_PHONE_BAR } from '../breakpoints.js';
-import { LiveFold, LiveSession, el, liveSection, researchSession, pausedText, timeEl, workingNumberBadge } from './research-ui.js';
+import { LiveFold, LiveSession, el, liveSection, researchSession, pausedText, timeEl, workingNumberBadge, lightsGroup } from './research-ui.js';
 import type { OverviewLinesState } from '../windows/overview-window.js';
 import { shownName, fitNameHtml } from '../person-name.js';
 import {
@@ -973,6 +973,7 @@ export const researchDirectionsMethods = uiModule({
                     link.type = 'button';
                     link.dataset.do = 'found-people';
                     link.onclick = () => { this.showDirectionFoundInTree(d, mode); };
+                    lightsGroup(link, 'direction-found', d.name);
                     parts.appendChild(link);
                 } else {
                     const text = part === 'sessions' ? L.dirFoundSessions(found.sessions)
@@ -1028,6 +1029,7 @@ export const researchDirectionsMethods = uiModule({
             btn.type = 'button';
             btn.dataset.do = 'show';
             btn.onclick = () => this.showDirectionInTree(d, mode);
+            lightsGroup(btn, 'direction', d.name);
             actions.appendChild(btn);
         }
         if (sheet && !view.readOnly) {
@@ -1623,6 +1625,7 @@ export const researchDirectionsMethods = uiModule({
             btn.type = 'button';
             btn.dataset.do = 'show';
             btn.onclick = () => this.showDirectionInTree(d, mode);
+            lightsGroup(btn, 'direction', d.name);
             actions.appendChild(btn);
         }
         if (actions.childElementCount > 0) detail.appendChild(actions);

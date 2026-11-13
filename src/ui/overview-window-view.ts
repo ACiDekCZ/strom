@@ -21,7 +21,7 @@ import { PLACES_ANSWER_FEATURE, PLACES_UNDO_FEATURE } from '../places-bridge.js'
 import { todoWaiting } from '../research-waiting.js';
 import { replacePendingHypotheses, type PendingHypothesis } from '../research-hypothesis-wait.js';
 import { setAcceptBatch, type AcceptBatch } from '../research-hypothesis-waiting.js';
-import { moveQueueItemFirst, noteQueueRev, onQueueListsChange, readQueuePage, resetQueueLists, setQueueRemote } from '../research-queue-pages.js';
+import { moveQueueItemFirst, noteQueueRev, placeQueueItemInLists, onQueueListsChange, readQueuePage, resetQueueLists, setQueueRemote } from '../research-queue-pages.js';
 import { BRIDGE_ANSWER_MS } from '../bridge-ask.js';
 import { strings } from '../strings.js';
 import type { UIClass } from './index.js';
@@ -169,8 +169,14 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
         researchLiveState(this: UIClass, _treeId: string) {
             return extras().liveSwitch as ReturnType<UIClass['researchLiveState']>;
         },
-        evidenceHighlightKind() { return null; },
-        endEvidenceHighlight(): void { /* the light is the main window's */ },
+        // The main window's light (the pill): what its tree lights now, as the snapshot says it.
+        evidenceHighlightKind() { return (extras().highlight?.kind ?? null) as ReturnType<UIClass['evidenceHighlightKind']>; },
+        evidenceHighlightNow() { return extras().highlight ?? null; },
+        /** The light ended (a filter with nobody left): the main window ends it, if it still lights that group. */
+        endEvidenceHighlight(): void {
+            const kind = extras().highlight?.kind;
+            if (kind) run('highlight-end', { kind });
+        },
         pauseLiveFollow(): void { /* following runs in the main window */ },
         /** Places answered through the main window's dialog: what the research's status says it takes. */
         waitingPlacesAccess() {
@@ -178,8 +184,10 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
             const canAnswer = read()?.bridgeUp === true && features.includes(PLACES_ANSWER_FEATURE);
             return { canAnswer, canUndo: canAnswer && features.includes(PLACES_UNDO_FEATURE), base: null, features, unknownAll: false };
         },
-        // The tree's verification is run from the main window (not one of the window's actions).
-        treeVerifyBlock(): HTMLElement | null { return null; },
+        // The tree's "Verifying" as the main window's snapshot says it: Stop asked there, the bulk dialog opened there.
+        treeVerifyNow() { return extras().verify ?? null; },
+        async verifyStop(): Promise<void> { run('verify-stop'); },
+        showVerifyBulkDialog(): void { run('verify-bulk'); },
         // Its own overview (no small panel here); none opened or closed here.
         renderLivePanel(this: UIClass): void { this.renderResearchOverview(); },
         openOverviewViewing(): boolean { return !!read()?.source; },
@@ -209,8 +217,11 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
         setLiveFollowView(view: FollowView): void { run('follow-view', { view }); },
         async toggleResearchLive(): Promise<void> { run('turn-on'); },
         overviewShowPerson(id: PersonId): void { run('show-person', { personId: id }); },
-        startPersonHighlight(_kind: string, label: string, ids: PersonId[]): void {
-            run('show-people', { title: label, personIds: [...ids] });
+        startPersonHighlight(_kind: string, label: string, ids: PersonId[], _recount?: unknown, opts?: { quiet?: boolean }): void {
+            const args = { title: label, personIds: [...ids] };
+            // Lit again after a filter (nobody asked anew): the main window stays where it is.
+            if (opts?.quiet) port.send('show-people', args);
+            else run('show-people', args);
         },
         showDirectionInTree(d: LiveDirection): void { run('show-direction', { directionId: d.id }); },
         showDirectionFoundInTree(d: LiveDirection): boolean {
@@ -253,11 +264,17 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
             return true;
         },
         // "Do next" and its Undo (`queue.next`): written by the main window, its outcome shown here (no answer: the bridge's).
-        async writeTaskOrder(task: string, body: TaskOrderWrite): Promise<TaskOrderOutcome> {
+        async writeTaskOrder(this: UIClass, task: string, body: TaskOrderWrite): Promise<TaskOrderOutcome> {
             const r = await port.ask('queue-order', body.do === 'restore' ? { task, do: 'restore', was: body.was } : { task, do: 'next' }, OVERVIEW_ANSWER_WAIT_MS);
             const out = taskOrderOutcomeOf(r) ?? { ok: false, why: 'bridge' };
+            if (!out.ok) return out;
             // This window's pages (a search's too): the task first meanwhile, as the main window's are; the next print reads them again.
-            if (out.ok && body.do === 'next') moveQueueItemFirst('', task);
+            if (body.do === 'next') moveQueueItemFirst('', task);
+            else if (out.task?.id === task) {
+                // Undo: back at once where the bridge's answer puts it (its place, tag and sentence), not with the next status.
+                placeQueueItemInLists('', out.task);
+                this.renderResearchOverview();
+            }
             return out;
         },
         taskOrderBusy(id: string): boolean { return extras().taskOrder.busy.includes(id); },

@@ -19509,6 +19509,11 @@
             .research-overview__off-frame > .research-overview__turn-on--frame:not(:disabled):hover { filter: brightness(1.08); }
         }
         .research-overview--window [data-greyed] { opacity: .45; cursor: default; }
+        /* The group the main window's tree lights now (the pill there): its button lit here, no change of size. */
+        .research-overview--window .is-lit[data-lights] {
+            background: var(--primary-soft); color: var(--primary-dark); font-weight: 600;
+            border-radius: 4px; box-shadow: 0 0 0 3px var(--primary-soft); text-decoration: none;
+        }
         @media (pointer: coarse) {
             .research-overview__off-frame > .research-overview__turn-on--frame { height: 44px; }
         }

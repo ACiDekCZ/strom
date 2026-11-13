@@ -103,6 +103,14 @@ describe('the actions an overview window may ask for', () => {
         expect(readOverviewAction('queue-order', { task: 'T1', do: 'restore', was: {} })).toEqual({ action: 'queue-order', args: { task: 'T1', do: 'restore', was: {} } });
         expect(readOverviewAction('queue-order', { task: 'T1', do: 'restore' })).toBeNull();
         expect(readOverviewAction('queue-order', { task: 'T1', do: 'restore', was: { own: 'next' } })).toBeNull();
+        // The tree's "Verifying" (D): the bulk dialog opens in the main window (brought forward), Stop is written there.
+        expect(readOverviewAction('verify-bulk', { extra: 1 })).toEqual({ action: 'verify-bulk' });
+        expect(readOverviewAction('verify-stop', undefined)).toEqual({ action: 'verify-stop' });
+        expect(OVERVIEW_ACTIONS_TO_MAIN.has('verify-bulk')).toBe(true);
+        expect(OVERVIEW_ACTIONS_TO_MAIN.has('verify-stop')).toBe(false);
+        // The pill's light ended (a filter with nobody left): the kind it lit.
+        expect(readOverviewAction('highlight-end', { kind: 'changed', label: 'x' })).toEqual({ action: 'highlight-end', args: { kind: 'changed' } });
+        expect(OVERVIEW_ACTIONS_TO_MAIN.has('highlight-end')).toBe(false);
     });
 
     it('anything else is refused', () => {
@@ -126,5 +134,7 @@ describe('the actions an overview window may ask for', () => {
         expect(OVERVIEW_ACTION_IDS).not.toContain('queue-more');
         expect(readOverviewAction('queue-order', { task: 'T1', do: 'first' })).toBeNull();
         expect(readOverviewAction('queue-order', { task: '', do: 'next' })).toBeNull();
+        expect(readOverviewAction('highlight-end', {})).toBeNull();
+        expect(readOverviewAction('highlight-end', { kind: 3 })).toBeNull();
     });
 });

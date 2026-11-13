@@ -31,6 +31,7 @@ import { assignGenerations } from '../generations.js';
 import { birthResearchStatus } from '../tree-overview.js';
 import { uiModule } from './module.js';
 import { clearRodSelection, rodViewDataChanged, rodViewUncovered } from './rod-view.js';
+import { overviewChanged } from '../windows/overview-window.js';
 
 /** A highlighted group of people: what it is, who, and where Next › stands. */
 interface Highlight {
@@ -111,8 +112,12 @@ export const evidenceUiMethods = uiModule({
         window.addEventListener('strom:tree-switched', () => this.refreshEvidenceHighlight());
     },
 
-    /** Highlight a group of people (dim the rest) with the pill; nobody: a toast. */
-    startPersonHighlight(kind: Highlight['kind'], label: string, ids: PersonId[], recount: (() => PersonId[]) | null): void {
+    /**
+     * Highlight a group of people (dim the rest) with the pill; nobody: a toast.
+     * `quiet`: the group followed a filter, nobody asked for it anew (the
+     * overview's own window then does not bring the main window forward).
+     */
+    startPersonHighlight(kind: Highlight['kind'], label: string, ids: PersonId[], recount: (() => PersonId[]) | null, _opts?: { quiet?: boolean }): void {
         this.listenForEvidenceChanges();
         if (ids.length === 0) {
             this.showToast(strings.treeHealth.highlightDone, 4000);
@@ -179,6 +184,11 @@ export const evidenceUiMethods = uiModule({
         return evidence?.kind ?? null;
     },
 
+    /** The group the pill highlights now, by kind and its name (null: none; the overview's own window shows it). */
+    evidenceHighlightNow(): { kind: string; label: string } | null {
+        return evidence ? { kind: evidence.kind, label: evidence.label } : null;
+    },
+
     isEvidenceHighlightOn(): boolean {
         return evidence !== null || levelsMode;
     },
@@ -231,6 +241,8 @@ export const evidenceUiMethods = uiModule({
         document.getElementById('evidence-pill')?.remove();
         // Another group ended: the chosen family line comes back from under it.
         rodViewUncovered();
+        // The overview's own window says what is lit here.
+        overviewChanged();
     },
 
     /**
@@ -250,6 +262,8 @@ export const evidenceUiMethods = uiModule({
      */
     renderEvidencePill(): void {
         if (!evidence && !levelsMode) return;
+        // The overview's own window says what is lit here (a new group, a recount).
+        overviewChanged();
         const s = strings.treeHealth;
         let pill = document.getElementById('evidence-pill');
         if (!pill) {

@@ -122,6 +122,45 @@ test.describe('the queue in the overview\'s own window (queue-list through the m
         await popup.close();
     });
 
+    test('Undo of Do next in the search\'s results: the task back at its place in the window at once, as the main window\'s answer says (not with the next status)', async ({ page }) => {
+        const b = await follow(page, [...SEARCH, 'queue.next']);
+        const { popup, asked } = await openWindow(page);
+        await unfoldQueue(popup);
+        await search(popup, 'T0815');
+        await expect(result(popup)).toHaveText('1 task found');
+        const hit = rows(popup).first();
+        await expect(hit.locator('.live-queue-num')).toHaveText('115');
+        const asks = b.statusAsks;
+        const searched = () => b.queueReads.filter(q => q.includes('q=T0815')).length;
+        const readBefore = searched();
+        await hit.locator('.live-queue-more').click();
+        await popup.locator('#live-task-menu [data-order="next"]').click();
+        await expect.poll(() => b.writes.filter(w => w.path === 'queue/T0815').map(w => w.body)).toEqual([{ do: 'next' }]);
+        await expect(hit.locator('.live-queue-num')).toHaveText('1');
+        await expect(hit.locator('.research-queue__tag-next')).toHaveText('next');
+        const toast = popup.locator('.toast[data-kind="queue-next"]');
+        await expect(toast).toContainText('T0815 comes up next');
+        await expect.poll(() => b.statusAsks).toBeGreaterThan(asks);
+        // The search read again with the queue's new order (its status came), the task still first.
+        await expect.poll(searched).toBeGreaterThan(readBefore);
+        await expect(hit.locator('.live-queue-num')).toHaveText('1');
+        // The next status held: only the answer to the Undo can put it back (no read of the search meanwhile).
+        let release = (): void => {};
+        b.statusHold = { after: b.writes.length, until: new Promise<void>(r => { release = r; }) };
+        b.orderWriteMs = 300;
+        const reads = b.queueReads.length;
+        await toast.locator('.toast-action').click();
+        await expect.poll(() => b.writes.at(-1)?.body).toEqual({ do: 'restore', was: {} });
+        await expect(hit.locator('.live-queue-num')).toHaveText('115', { timeout: 1500 });
+        await expect(hit.locator('.research-queue__tag-next')).toHaveCount(0);
+        expect(b.queueReads.length).toBe(reads);
+        await expect(field(popup)).toHaveValue('T0815');
+        b.statusHold = null;
+        release();
+        expect(asked).toEqual([]);
+        await popup.close();
+    });
+
     test('the whole queue by pages in the window: Load more past the status\'s tasks, asked of the main window', async ({ page }) => {
         const b = await follow(page);
         const { popup, asked } = await openWindow(page);

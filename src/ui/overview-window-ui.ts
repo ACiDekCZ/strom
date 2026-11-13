@@ -95,7 +95,11 @@ export const overviewWindowMethods = uiModule({
                 pending: Object.fromEntries(pendingHypothesesOf(researchId)),
                 batch: acceptBatch(researchId),
             };
+            // The tree's "Verifying" as the docked overview draws it (its Stop and bulk verification are run here).
+            extras.verify = this.treeVerifyNow();
         }
+        // What the evidence pill lights up in the tree here (the window's rows say it).
+        extras.highlight = this.evidenceHighlightNow();
         extras.follow = { on: this.isLiveFollowOn(), view: this.liveFollowView() };
         extras.lines = directionsWindowState(researchSession());
         extras.taskOrder = taskOrderWindowState();
@@ -177,6 +181,20 @@ export const overviewWindowMethods = uiModule({
                 return true;
             case 'hover-person':
                 hoverCard(a.args.personId as PersonId | null);
+                return true;
+            case 'verify-bulk':
+                // Today's "Verify facts in the tree…": its dialog here (this window comes forward).
+                if (!this.verifyBulkAvailable()) return false;
+                this.showVerifyBulkDialog();
+                return true;
+            case 'verify-stop':
+                if (!this.treeVerifyNow()?.stop) return false;
+                void this.verifyStop(null);
+                return true;
+            case 'highlight-end':
+                // Only the highlight the window saw: another one begun here since stays.
+                if (this.evidenceHighlightKind() !== a.args.kind) return false;
+                this.endEvidenceHighlight();
                 return true;
             case 'follow-live':
                 this.startFollowLive('overview');

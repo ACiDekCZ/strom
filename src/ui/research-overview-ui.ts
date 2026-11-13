@@ -39,7 +39,7 @@ import {
     LiveChangeItem, LiveFold, LiveSession, appendChangeText, el, ensureLiveTicker, liveDuration, liveSection,
     liveSession, nowHelpTopic, timeEl, appendAllHidden, noteWaitingShown, waitingChip, waitingNewChip,
     liveState, pausedText, waitsOnUser, appendLinkedText, newWaitingView, waitingKindLabel, appendFollowNote, holdFollowNoteIn,
-    markWaitingFocus, waitingWhyEl, overviewViewing, OverviewViewing, onComputer,
+    markWaitingFocus, waitingWhyEl, overviewViewing, OverviewViewing, onComputer, lightsGroup, markOverviewLit,
 } from './research-ui.js';
 import { storyWaitingPeople } from './story-compare-ui.js';
 import {
@@ -81,6 +81,8 @@ type Filter = 'all' | Exclude<LiveChangeKind, 'other'>;
 type Mode = 'docked' | 'overlay' | 'sheet' | 'window';
 
 let filter: Filter = 'all';
+/** The changed people lit again because the filter changed (not asked anew). */
+let relighting = false;
 /** The kind shown in "What the research knows" while the overview is open (All again once it closes). */
 let knowsKind: KnowsKind = 'all';
 /** When the overview was opened (changes after it are marked new for a moment). */
@@ -749,6 +751,9 @@ export const researchOverviewMethods = uiModule({
             if (names.length > 0) body.appendChild(el('p', 'research-overview__after-on', L.afterTurnOn(joinAnd(getCurrentLanguage(), names))));
         }
         this.appendOverviewFoot(root, s, mode);
+        // The own window: what the main window's tree lights now said at its button (the docked overview sits beside the pill);
+        // nothing lit once the main window is closed (its tree with it).
+        if (mode === 'window') markOverviewLit(root, frozenAt !== null ? null : this.evidenceHighlightNow());
         // The own window: every action greyed while the main window is closed, the answers while the research is off.
         if (mode === 'window') greyOverviewActions(root, frozenAt !== null ? 'all' : source === 'tree' ? 'answers' : null);
         endQueueSlots();
@@ -1730,7 +1735,7 @@ export const researchOverviewMethods = uiModule({
         const L = strings.live;
         const row = el('div', 'research-overview__now-actions');
         if (show) {
-            const btn = el('button', 'link-button', L.showInTree);
+            const btn = el('button', 'link-button research-overview__show-in-tree', L.showInTree);
             btn.type = 'button';
             btn.onclick = show;
             row.appendChild(btn);
@@ -1773,7 +1778,7 @@ export const researchOverviewMethods = uiModule({
             text.appendChild(el('small', 'research-overview__now-meta', strings.otherResearch.lineIdle('')));
             if (show) {
                 const row = el('div', 'research-overview__now-actions');
-                const btn = row.appendChild(el('button', 'link-button', L.showInTree));
+                const btn = row.appendChild(el('button', 'link-button research-overview__show-in-tree', L.showInTree));
                 btn.type = 'button';
                 btn.onclick = show;
                 text.appendChild(row);
@@ -1802,6 +1807,8 @@ export const researchOverviewMethods = uiModule({
             const actions = this.overviewNowActions(w, mode, i === 0 ? show : null);
             if (actions) text.appendChild(actions);
         });
+        // The line's people lit in the tree: its Show in tree says so in the own window.
+        if (d) for (const b of text.querySelectorAll<HTMLElement>('.research-overview__show-in-tree')) lightsGroup(b, 'direction', d.name);
         li.appendChild(text);
         return li;
     },
@@ -1839,8 +1846,10 @@ export const researchOverviewMethods = uiModule({
                 // The changed people shown in the tree follow the filter.
                 if (mode !== 'sheet' && this.evidenceHighlightKind() === 'changed') {
                     const show = document.querySelector<HTMLButtonElement>('#research-overview .research-overview__show-changed');
-                    if (show) show.click();
-                    else this.endEvidenceHighlight();
+                    if (show) {
+                        relighting = true;
+                        try { show.click(); } finally { relighting = false; }
+                    } else this.endEvidenceHighlight();
                 }
             };
             filters.appendChild(chip);
@@ -1856,8 +1865,10 @@ export const researchOverviewMethods = uiModule({
             show.type = 'button';
             show.onclick = () => {
                 if (mode === 'sheet') this.closeResearchOverview();
-                this.startPersonHighlight('changed', changedTitle, changedIds, null);
+                // Followed a filter: nobody asked anew, so the own window does not bring the main window forward.
+                this.startPersonHighlight('changed', changedTitle, changedIds, null, relighting ? { quiet: true } : undefined);
             };
+            lightsGroup(show, 'changed', changedTitle);
             bar.appendChild(show);
         }
         host.appendChild(bar);

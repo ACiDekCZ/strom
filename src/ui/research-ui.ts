@@ -5289,3 +5289,19 @@ export const researchUiMethods = uiModule({
         publishLiveStrip();
     },
 });
+
+/** A button that lights a group in the tree: which group (its kind and name, as the pill holds them). */
+export function lightsGroup(btn: HTMLElement, kind: string, name: string): void {
+    btn.dataset.lights = kind;
+    btn.dataset.lightsName = name;
+}
+
+/** The buttons whose group the main window's tree lights now are lit (`is-lit`, aria-current); the rest not. */
+export function markOverviewLit(root: HTMLElement, lit: { kind: string; label: string } | null): void {
+    for (const btn of root.querySelectorAll<HTMLElement>('[data-lights]')) {
+        const on = !!lit && btn.dataset.lights === lit.kind && btn.dataset.lightsName === lit.label;
+        btn.classList.toggle('is-lit', on);
+        if (on) btn.setAttribute('aria-current', 'true');
+        else btn.removeAttribute('aria-current');
+    }
+}
