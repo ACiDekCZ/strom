@@ -21,7 +21,12 @@ describe('counted ancestors', () => {
     it('Polish: przodek / przodkowie / przodków (12–14 przodków, 22 przodkowie)', () => {
         expect([1, 2, 5, 12, 14, 22].map(n => map('pl').linesAncestors(n))).toEqual([
             '1 przodek', '2 przodkowie', '5 przodków', '12 przodków', '14 przodków', '22 przodkowie']);
-        expect(map('pl').pathUndated(7)).toBe('7 przodków bez daty lub miejsca nie ma na osi czasu.');
+        expect([1, 2, 5, 22].map(n => map('pl').pathUndated(n))).toEqual([
+            '1 przodek bez daty lub miejsca nie jest na osi czasu.',
+            '2 przodkowie bez daty lub miejsca nie są na osi czasu.',
+            '5 przodków bez daty lub miejsca nie jest na osi czasu.',
+            '22 przodkowie bez daty lub miejsca nie są na osi czasu.']);
+        expect(map('pl').pathUndated(12)).toBe('12 przodków bez daty lub miejsca nie jest na osi czasu.');
     });
 
     it('English and German: one and other', () => {
@@ -81,5 +86,18 @@ describe('numbers and the rest', () => {
         for (const text of [en.lineE8, en.lineE9, en.lineE10, en.lineE11, en.lineE12, en.lineE13, en.lineE14, en.lineE15, en.pathFromPage, en.timeTipText]) {
             expect(text).not.toContain('’');
         }
+    });
+});
+
+describe('the name of Migration over time', () => {
+    it('is one name per language: the mode, the offer\'s title and the button\'s short form as its ending', () => {
+        for (const lang of ['en', 'cs', 'de', 'pl'] as const) {
+            const m = map(lang);
+            expect(m.timeTipTitle, lang).toBe(m.timeMode);
+            expect(m.timeMode.toLowerCase().endsWith(m.timeModeShort.toLowerCase()), lang).toBe(true);
+        }
+        expect(map('de').timeMode).toBe('Migration im Zeitverlauf');
+        expect(map('de').timeModeShort).toBe('Zeitverlauf');
+        expect(map('pl').timeMode).toBe('Migracja w czasie');
     });
 });
