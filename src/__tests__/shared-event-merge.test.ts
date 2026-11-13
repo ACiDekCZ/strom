@@ -21,8 +21,8 @@ import { TreeManager } from '../tree-manager.js';
 import { AuditLogManager } from '../audit-log.js';
 import { UndoManager } from '../undo.js';
 import { setLanguage } from '../strings.js';
-import { joinSameShareCopies, personMergeShares, shareCopiesOf } from '../shared-events.js';
-import { STROM_DATA_VERSION, toPersonId, type LifeEvent, type Person, type PersonId, type StromData, type TreeId } from '../types.js';
+import { MARRIAGE_EVENT_ID, joinSameShareCopies, personMergeShares, shareCopiesOf } from '../shared-events.js';
+import { STROM_DATA_VERSION, toPersonId, type LifeEvent, type PartnershipId, type Person, type PersonId, type StromData, type TreeId } from '../types.js';
 
 const TREE = 'shared-merge' as TreeId;
 const DOBROMIL = toPersonId('p_dobromil');
@@ -258,5 +258,61 @@ describe('tree merge with shared events', () => {
         expect(byName('Ctimíra').events![0].shareId).toBe(newId);
         expect(shareCopiesOf(result.mergedData, 'SHC1921')).toHaveLength(3);
         expect(result.stats.sharedJoined).toBe(0);
+    });
+
+    it('an incoming own godparent or witness event points at the merged couple and its events; what is gone is left out', async () => {
+        const U_EX = 'u_ex' as PartnershipId;
+        const U_IN = 'u_in' as PartnershipId;
+        const couple = (ids: [PersonId, PersonId, PersonId], unionId: PartnershipId, baptismId: string, bannsId: string): StromData => {
+            const [husband, wife, child] = ids;
+            const h = person(husband, 'Ctiboh', 'Vlčinský', 'male', []);
+            const w = person(wife, 'Lidoslava', 'Vlčinská', 'female', []);
+            const c = person(child, 'Lubomíra', 'Vlčinská', 'female', [{ id: baptismId, type: 'baptism', date: '1912-05-04', place: 'Kozinec' }]);
+            h.birthDate = '1885-02-11'; w.birthDate = '1889-09-30'; c.birthDate = '1912-05-01';
+            h.partnerships = [unionId]; w.partnerships = [unionId];
+            h.childIds = [child]; w.childIds = [child]; c.parentIds = [husband, wife];
+            return {
+                version: STROM_DATA_VERSION,
+                persons: { [husband]: h, [wife]: w, [child]: c },
+                partnerships: {
+                    [unionId]: {
+                        id: unionId, person1Id: husband, person2Id: wife, childIds: [child], status: 'married',
+                        startDate: '1910-10-15', startPlace: 'Kozinec',
+                        events: [{ id: bannsId, type: 'banns', date: '1910-09-25', place: 'Kozinec' }],
+                    },
+                },
+            } as unknown as StromData;
+        };
+        const existing = couple([toPersonId('h'), toPersonId('w'), toPersonId('c')], U_EX, 'b_ex', 'n_ex');
+        const incoming = couple([toPersonId('ih'), toPersonId('iw'), toPersonId('ic')], U_IN, 'b_in', 'n_in');
+        const godfather = person(toPersonId('ig'), 'Svatoboj', 'Ostrožný', 'male', [
+            { id: 'g1', type: 'godparent', date: '1912-05-04', roleAt: { role: 'godparent', personId: toPersonId('ic'), eventType: 'baptism', eventId: 'b_in' } },
+            { id: 'g2', type: 'weddingWitness', date: '1910-10-15', roleAt: { role: 'witness', partnershipId: U_IN, eventType: 'marriage', eventId: MARRIAGE_EVENT_ID } },
+            { id: 'g3', type: 'custom', customLabel: 'Svědek ohlášek', date: '1910-09-25', roleAt: { role: 'witness', partnershipId: U_IN, eventType: 'banns', eventId: 'n_in' } },
+            { id: 'g4', type: 'godparent', date: '1913', roleAt: { role: 'godparent', personId: toPersonId('ic'), eventType: 'baptism', eventId: 'gone' } },
+        ]);
+        godfather.birthDate = '1880-01-20';
+        incoming.persons[godfather.id] = godfather;
+
+        const result = await merge(existing, incoming);
+        const merged = result.mergedData;
+        const kazimir = Object.values(merged.persons).find(p => p.firstName === 'Svatoboj')!;
+        const at = (id: string) => kazimir.events!.find(e => e.id === id)!.roleAt;
+        expect(Object.keys(merged.partnerships)).toEqual([U_EX]);
+        expect(at('g1')).toEqual({ role: 'godparent', personId: toPersonId('c'), eventType: 'baptism', eventId: 'b_ex' });
+        expect(at('g2')).toEqual({ role: 'witness', partnershipId: U_EX, eventType: 'marriage', eventId: MARRIAGE_EVENT_ID });
+        expect(at('g3')).toEqual({ role: 'witness', partnershipId: U_EX, eventType: 'banns', eventId: 'n_ex' });
+        expect(at('g4')).toEqual({ role: 'godparent', personId: toPersonId('c'), eventType: 'baptism' });
+    });
+
+    it('an incoming own witness event of a couple that did not come along loses the couple and the event', async () => {
+        const data = household();
+        const lone = person(toPersonId('ig2'), 'Svatoboj', 'Ostrožný', 'male', [
+            { id: 'g1', type: 'weddingWitness', roleAt: { role: 'witness', partnershipId: 'u_nowhere' as PartnershipId, eventType: 'marriage', eventId: MARRIAGE_EVENT_ID } },
+        ]);
+        const incoming = { version: STROM_DATA_VERSION, persons: { [lone.id]: lone }, partnerships: {} } as unknown as StromData;
+        const result = await merge(data, incoming, 'reject');
+        const kazimir = Object.values(result.mergedData.persons).find(p => p.firstName === 'Svatoboj')!;
+        expect(kazimir.events![0].roleAt).toEqual({ role: 'witness', eventType: 'marriage' });
     });
 });

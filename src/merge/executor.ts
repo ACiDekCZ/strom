@@ -14,6 +14,7 @@ import {
     StromData,
     LifeEvent,
     EventParticipant,
+    EventRoleAt,
     CoupleEvent,
     generateLifeEventId,
     partnershipParticipants,
@@ -43,7 +44,7 @@ import { StorageManager } from '../storage.js';
 import { mergeNoteText } from './notes.js';
 import { sourcePlaceKey } from '../source-location.js';
 import { sameFileRecord } from './id-match.js';
-import { allShareCopies, joinSameShareCopies, shareIdMaker, tidyShares, treeShareIds } from '../shared-events.js';
+import { MARRIAGE_EVENT_ID, allShareCopies, joinSameShareCopies, shareIdMaker, tidyShares, treeShareIds } from '../shared-events.js';
 
 // ==================== BACKUP ====================
 
@@ -710,6 +711,8 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
         }
 
         carryAlsoChildOf(mergedData, state, mapping, unionTarget);
+        // Own godparent / witness events of the incoming tree point at the merged couples and events.
+        resolveIncomingRoleAt(mergedData, state.incomingData, unionTarget);
 
         // Update parent-child relationships for merged persons
         updateRelationships(mergedData, state, mapping);
@@ -850,10 +853,67 @@ function remapEventParticipants(
         if (ev.participants) remapParticipants(ev.participants, idMap, incomingPersons);
         // An own record of a part at another's event (spec 085 §6) follows that person,
         // or loses the link (the couple's link is checked when the tree is read).
-        if (ev.roleAt?.personId) {
-            const mapped = idMap.get(ev.roleAt.personId);
-            if (mapped) ev.roleAt.personId = mapped;
-            else delete ev.roleAt.personId;
+        if (ev.roleAt) {
+            // Whose event it pointed at in the incoming tree: the couple and the event itself are
+            // resolved once the couples are merged (resolveIncomingRoleAt).
+            incomingRoleAt.set(ev.roleAt, {
+                personId: ev.roleAt.personId, partnershipId: ev.roleAt.partnershipId, eventId: ev.roleAt.eventId,
+            });
+            if (ev.roleAt.personId) {
+                const mapped = idMap.get(ev.roleAt.personId);
+                if (mapped) ev.roleAt.personId = mapped;
+                else delete ev.roleAt.personId;
+            }
+        }
+    }
+}
+
+/** An incoming event's roleAt as the incoming tree wrote it (filled by remapEventParticipants). */
+const incomingRoleAt = new WeakMap<EventRoleAt, { personId?: PersonId; partnershipId?: PartnershipId; eventId?: string }>();
+
+/**
+ * The couple and the event an incoming own godparent / witness event points
+ * at (spec 085 §6), as they are in the merged tree: the couple where the
+ * incoming one ended up, the event the incoming one became there (the same
+ * id of the same type, else the event saying the same; a couple event by
+ * what it says first, its id may have been renamed). What cannot be found
+ * is left out, never left pointing at the incoming tree's ids.
+ */
+function resolveIncomingRoleAt(
+    merged: StromData,
+    incoming: StromData,
+    unionTarget: ReadonlyMap<PartnershipId, PartnershipId>,
+): void {
+    for (const person of Object.values(merged.persons)) {
+        for (const ev of person.events ?? []) {
+            const at = ev.roleAt;
+            const from = at ? incomingRoleAt.get(at) : undefined;
+            if (!at || !from) continue;
+            incomingRoleAt.delete(at);
+            if (from.partnershipId) {
+                const target = unionTarget.get(from.partnershipId);
+                if (target && merged.partnerships[target]) at.partnershipId = target;
+                else delete at.partnershipId;
+            }
+            if (!from.eventId) continue;
+            let eventId: string | undefined;
+            if (from.eventId === MARRIAGE_EVENT_ID) {
+                if (at.partnershipId) eventId = MARRIAGE_EVENT_ID;
+            } else if (from.personId && at.personId) {
+                const before = incoming.persons[from.personId]?.events?.find(e => e.id === from.eventId);
+                const list = merged.persons[at.personId]?.events ?? [];
+                const found = before && (list.find(e => e.id === before.id && e.type === before.type)
+                    ?? list.find(e => eventKey(e) === eventKey(before)));
+                eventId = found?.id;
+            } else if (from.partnershipId && at.partnershipId) {
+                const before = incoming.partnerships[from.partnershipId]?.events?.find(e => e.id === from.eventId);
+                const list = merged.partnerships[at.partnershipId]?.events ?? [];
+                const found = before && (list.find(e => coupleEventKey(e) === coupleEventKey(before))
+                    ?? list.find(e => e.id === before.id && e.type === before.type));
+                eventId = found?.id;
+            }
+            if (eventId) at.eventId = eventId;
+            else delete at.eventId;
         }
     }
 }
