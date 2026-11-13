@@ -983,7 +983,12 @@ export const mapMethods = uiModule({
         if (!play) return;
         const label = this.mapTimePlaying ? strings.map.timePause : strings.map.timePlay;
         // The word beside the icon on a desktop and a tablet; a phone keeps the icon alone (CSS).
-        play.innerHTML = `${iconSvg(this.mapTimePlaying ? 'pause' : 'play')}<span class="map-time-play-text" aria-hidden="true">${this.escapeHtml(label)}</span>`;
+        // Both words stand in one grid cell, the other one hidden, so the button keeps the width
+        // of the longer one in every language and the slider does not move when it changes.
+        const word = (text: string, on: boolean): string =>
+            `<span class="map-time-play-word"${on ? '' : ' data-off'}>${this.escapeHtml(text)}</span>`;
+        play.innerHTML = `${iconSvg(this.mapTimePlaying ? 'pause' : 'play')}<span class="map-time-play-text" aria-hidden="true">`
+            + `${word(strings.map.timePlay, !this.mapTimePlaying)}${word(strings.map.timePause, this.mapTimePlaying)}</span>`;
         play.setAttribute('aria-label', label);
         play.title = label;
     },

@@ -196,6 +196,36 @@ test('Play runs the path by its 24 s schedule, says what came onto the map, stop
     await expect(page.locator('.map-time-range')).toHaveAttribute('aria-valuetext', '1900 · 1893 · Ysolde Zandmeer · Mu → Kappa');
 });
 
+for (const lang of ['cs', 'de'] as const) {
+    test(`Play and Pause keep the button's width and the slider's place (${lang})`, async ({ page }) => {
+        await page.clock.install({ time: new Date('2026-06-15T10:00:00Z') });
+        await stubTiles(page);
+        await seedPathTree(page);
+        await choosePerson(page, 'Quillfen', /Tamsin/);
+        await pauseClock(page);
+        await page.evaluate((l) => window.Strom.UI.setLanguage(l as never), lang);
+
+        const play = page.locator('.map-time-play');
+        const range = page.locator('.map-time-range');
+        const measure = async () => ({
+            width: await play.evaluate(el => el.getBoundingClientRect().width),
+            left: await range.evaluate(el => el.getBoundingClientRect().left),
+        });
+        // Play and pause once, so the button carries the language's words.
+        await play.click();
+        await play.click();
+        await expect(play.locator('.map-time-play-word:not([data-off])')).toHaveText(lang === 'cs' ? 'Přehrát' : 'Abspielen');
+        const paused = await measure();
+        await play.click();
+        await expect(play.locator('.map-time-play-word:not([data-off])')).toHaveText(lang === 'cs' ? 'Pozastavit' : 'Pause');
+        const playing = await measure();
+        expect(playing.width).toBe(paused.width);
+        expect(playing.left).toBe(paused.left);
+        await play.click();
+        expect(await measure()).toEqual(paused);
+    });
+}
+
 test('the marks above the slider jump to a line\'s earliest ancestor and to the target; keys move the year and the space bar plays and pauses', async ({ page }) => {
     await page.clock.install({ time: new Date('2026-06-15T10:00:00Z') });
     await stubTiles(page);

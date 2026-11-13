@@ -11285,6 +11285,10 @@
             font-weight: 600;
             white-space: nowrap;
         }
+        /* Play and Pause share one cell: the button is as wide as the longer word, whichever shows. */
+        .map-time-play-text { display: inline-grid; justify-items: start; }
+        .map-time-play-word { grid-area: 1 / 1; }
+        .map-time-play-word[data-off] { visibility: hidden; }
         .map-time-track { flex: 1 1 150px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
         .map-time-slider { position: relative; min-width: 0; }
         .map-time-slider .map-time-range { display: block; width: 100%; margin: 0; }
