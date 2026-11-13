@@ -561,14 +561,34 @@ test.describe('pills on the bottom edge (U03a)', () => {
 });
 
 /**
- * A card of one height for the view with the ⇄ N pill: its last line keeps 62px
- * clear at the right, and its rows were wrapped that narrow, so a place either
- * fits or ends in "…" — never clipped mid-word (T30). Both styles, whole and two rows.
+ * A card of one height for the view with pills on its bottom edge (⇄ N, the
+ * sibling order, ∞): the view's height makes room for them below the text, as
+ * a card by content does, and the last line keeps the card's whole width, so a
+ * place either fits or ends in "…" — never clipped (T30). Until 1113 the last
+ * line was wrapped 62–114px narrower beside the pills: it broke inside words
+ * and made every card of the view taller. Both styles, whole and two rows.
  */
-test.describe('the ⇄ pill on a card of one height (T30)', () => {
+test.describe('pills on a card of one height (T30, 1113)', () => {
+    /** The card's text runs that a pill on its edge covers (run in the page: nothing from outside). */
+    const coveredTexts = (el: Element): string[] => {
+        type Box = { l: number; t: number; r: number; b: number };
+        const hit = (a: Box, b: Box) => a.l < b.r - 0.5 && b.l < a.r - 0.5 && a.t < b.b - 0.5 && b.t < a.b - 0.5;
+        const box = (r: DOMRect): Box => ({ l: r.left, t: r.top, r: r.right, b: r.bottom });
+        const pills = [...el.querySelectorAll<HTMLElement>('.card-edge > *')].filter(p => p.offsetWidth > 0).map(p => box(p.getBoundingClientRect()));
+        const out: string[] = [];
+        const walker = document.createTreeWalker(el.querySelector('.card-body')!, NodeFilter.SHOW_TEXT);
+        for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+            if (!n.textContent?.trim()) continue;
+            const range = document.createRange();
+            range.selectNodeContents(n);
+            for (const r of range.getClientRects()) if (pills.some(p => hit(p, box(r)))) out.push(n.textContent.trim());
+        }
+        return out;
+    };
+
     const PLACE = 'Praha - Malá Strana, kostel sv. Mikuláše';
     for (const [style, lines] of [['labels', 0], ['labels', 2], ['marks', 0], ['marks', 2]] as const) {
-        test(`${style}, ${lines === 0 ? 'whole' : 'two rows'}: the last line's rows are never clipped under the pill`, async ({ page }) => {
+        test(`${style}, ${lines === 0 ? 'whole' : 'two rows'}: the last line keeps the whole width, the pill's room is below the text`, async ({ page }) => {
             await page.setViewportSize({ width: 1440, height: 900 });
             await seedSetting(page, 'cardDensity', 'custom');
             await seedSetting(page, 'cardFields', { on: ['birth', 'death', 'marriage'], style, lines, height: 'view', fullDate: true, widthCap: 240 });
@@ -589,12 +609,12 @@ test.describe('the ⇄ pill on a card of one height (T30)', () => {
             const anna = card(page, 'Anna');
             await expect(anna.locator('.cross-tree-badge')).toBeVisible();
             await expect(anna).toHaveClass(/has-edge-br/);
-            await expect(anna).not.toHaveClass(/has-edge-room/);
+            await expect(anna).toHaveClass(/has-edge-room/);
+            await expect(anna).toHaveCSS('padding-bottom', '22px');
             await page.evaluate(() => document.fonts.ready);
             await expect.poll(() => cardBoxesMatchLayout(page)).toBe(true);
             const last = anna.locator('.card-lines > :last-child');
-            // 40px inset of the bottom edge (spec 066 P4 §2) + the pill − the card's padding
-            await expect(last).toHaveCSS('padding-right', '62px');
+            await expect(last).toHaveCSS('padding-right', '0px');
             // Every row of the last line shows whole: its text no wider than the row's box.
             await expect.poll(() => last.locator('.card-line-row').evaluateAll(rows => rows.map(row => {
                 const range = document.createRange();
@@ -602,9 +622,109 @@ test.describe('the ⇄ pill on a card of one height (T30)', () => {
                 const scale = row.getBoundingClientRect().width / Math.max(1, (row as HTMLElement).offsetWidth);
                 return range.getBoundingClientRect().width <= row.getBoundingClientRect().width + 0.5 * scale ? '' : row.textContent;
             }).filter(Boolean))).toEqual([]);
+            expect(await anna.evaluate(coveredTexts)).toEqual([]);
             const text = (await last.locator('.card-line-row').allTextContents()).join(' ');
             if (lines === 0) expect(text).toContain('Mikuláše');
             else if (!text.includes('Mikuláše')) expect(text.trimEnd().endsWith('…'), text).toBe(true);
+            // The pill's room: Anna's card is the view's tallest, so the view is 12px taller with the pill.
+            const withPill = await anna.evaluate(el => (el as HTMLElement).offsetHeight);
+            await page.evaluate(() => window.Strom.UI.toggleCrossTreeBadges(false));
+            await expect(anna.locator('.cross-tree-badge')).toHaveCount(0);
+            await expect(anna).not.toHaveClass(/has-edge-room/);
+            await expect.poll(() => cardBoxesMatchLayout(page)).toBe(true);
+            expect(withPill - await anna.evaluate(el => (el as HTMLElement).offsetHeight)).toBe(12);
         });
     }
+
+    /**
+     * The reported card (1113, invented people): a grandfather shown among his
+     * six siblings ("2 of 6") and in two other trees (⇄ 2), the death last with
+     * a long place and its cause, 240px wide.
+     */
+    test('the sibling order and ⇄ under the last line: no narrow column, no word broken, no empty band; the image export leaves the room out', async ({ page }) => {
+        const DEATH_PLACE = 'Rakovník, Husovo náměstí čp. 123';
+        const CAUSE = 'zánět plic a celkové vysílení';
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await seedSetting(page, 'cardDensity', 'custom');
+        const on = ['age', 'birth', 'baptism', 'marriage', 'death'];
+        await seedSetting(page, 'cardFields', { order: on, on, style: 'labels', lines: 0, height: 'view', cause: true, fullDate: true, widthCap: 240 });
+        await openApp(page);
+        await page.evaluate(async ([deathPlace, deathCause]) => {
+            const P = (id: string, o: Record<string, unknown>) => ({ id, gender: 'male', isPlaceholder: false, partnerships: [], parentIds: [], childIds: [], ...o });
+            const kids = ['k1', 'k2', 'k3', 'k4', 'k5', 'k6'];
+            const persons: Record<string, ReturnType<typeof P>> = {
+                f: P('f', { firstName: 'Bohumil', lastName: 'Rakovický', birthDate: '1820-02-03', partnerships: ['u0'], childIds: kids }),
+                m: P('m', { firstName: 'Ludmila', lastName: 'Rakovická', gender: 'female', birthDate: '1825-05-06', partnerships: ['u0'], childIds: kids }),
+                w: P('w', { firstName: 'Kristýna', lastName: 'Bělohlávková', gender: 'female', birthDate: '1852-07-08', partnerships: ['u1'], childIds: ['c'] }),
+                c: P('c', { firstName: 'Emil', lastName: 'Rakovický', birthDate: '1877-01-02', parentIds: ['k2', 'w'], childIds: ['e'] }),
+                e: P('e', { firstName: 'Otakar', lastName: 'Rakovický', birthDate: '1905-04-05', parentIds: ['c'] }),
+            };
+            kids.forEach((k, i) => {
+                persons[k] = P(k, { firstName: ['Vilém', 'Jaroslav', 'Anežka', 'Marie', 'Josef', 'Karel'][i], lastName: 'Rakovický',
+                    birthDate: `${1846 + i * 2}-03-1${i}`, parentIds: ['f', 'm'] });
+            });
+            Object.assign(persons.k2, {
+                birthPlace: 'Nová Ves u Rakovníka', partnerships: ['u1'], childIds: ['c'],
+                events: [{ id: 'b1', type: 'baptism', date: '1848-03-13', place: 'Nová Ves u Rakovníka, kostel sv. Václava' }],
+                deathDate: '1903-11-21', deathPlace, deathCause,
+            });
+            const partnerships = {
+                u0: { id: 'u0', person1Id: 'f', person2Id: 'm', childIds: kids, status: 'married' },
+                u1: { id: 'u1', person1Id: 'k2', person2Id: 'w', childIds: ['c'], status: 'married', startDate: '1875-02-09', startPlace: 'Stará Huť' },
+            };
+            const dm = window.Strom.DataManager;
+            for (const t of ['Rakovičtí A', 'Rakovičtí B', 'Rakovičtí C']) await dm.importAsNewTree({ persons, partnerships } as never, t);
+            await window.Strom.TreeRenderer.setFocus('e' as never);
+            window.Strom.ZoomPan.centerOnPerson('k2' as never);
+        }, [DEATH_PLACE, CAUSE] as const);
+        const jaroslav = card(page, 'Jaroslav');
+        await jaroslav.locator('.branch-tab.siblings-tab').click();
+        await expect(card(page, 'Vilém')).toBeVisible();
+        await expect(jaroslav.locator('.sibling-order-pill')).toBeVisible();
+        await expect(jaroslav.locator('.cross-tree-badge')).toContainText('2');
+        await page.evaluate(() => document.fonts.ready);
+        await expect.poll(() => cardBoxesMatchLayout(page)).toBe(true);
+        await expect(jaroslav).toHaveClass(/has-edge-room/);
+        const last = jaroslav.locator('.card-lines > :last-child');
+        await expect(last).toHaveCSS('padding-right', '0px');
+        // As wide as the card's other lines.
+        expect(await jaroslav.locator('.card-lines').evaluate(el => [...el.children].map(c => (c as HTMLElement).offsetWidth)
+            .every((w, _, all) => w === all[0]))).toBe(true);
+        // No word broken across rows: each word of the place and the cause stands whole on a row.
+        const words = await last.evaluate(el => {
+            const out: string[] = [];
+            const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+            for (let n = walker.nextNode(); n; n = walker.nextNode()) out.push(...(n.textContent ?? '').split(/\s+/).filter(Boolean));
+            return out;
+        });
+        for (const w of `${DEATH_PLACE} ${CAUSE}`.split(' ')) expect(words, w).toContain(w);
+        expect(await jaroslav.evaluate(coveredTexts)).toEqual([]);
+        // No empty band: Jaroslav's card is the view's tallest, its text ends just above the pills' room.
+        const gap = await jaroslav.evaluate(el => {
+            const c = el.getBoundingClientRect();
+            const s = c.width / (el as HTMLElement).offsetWidth;
+            return (c.bottom - el.querySelector('.card-lines > :last-child')!.getBoundingClientRect().bottom) / s;
+        });
+        expect(gap).toBeGreaterThanOrEqual(20);
+        expect(gap).toBeLessThanOrEqual(24);
+
+        // The image export draws no pills: every card 12px lower, Emil's line to his son from the bottom it draws.
+        const cards = await drawn(page);
+        const heights = new Set(cards.map(c => c.height));
+        expect(heights.size).toBe(1);
+        const svg = await posterSvg(page);
+        const rects = [...svg.matchAll(/<rect x="(-?[\d.]+)" y="(-?[\d.]+)" width="(\d+)" height="(\d+)" rx="8"/g)]
+            .map(m => ({ x: Number(m[1]), y: Number(m[2]), height: Number(m[4]) }));
+        expect(rects).toHaveLength(cards.length);
+        for (const c of cards) {
+            const r = rects.find(x => Math.abs(x.x - c.x) < 0.05 && Math.abs(x.y - c.y) < 0.05)!;
+            expect(r.height, c.name).toBe(c.height - 12);
+        }
+        const emil = byName(cards, 'Emil');
+        const stemX = emil.x + emil.width / 2;
+        const bottom = emil.y + emil.height - 12;
+        const stems = [...svg.matchAll(/<line x1="(-?[\d.]+)" y1="(-?[\d.]+)" x2="(-?[\d.]+)" y2="(-?[\d.]+)"/g)]
+            .map(m => m.slice(1, 5).map(Number)).filter(([x1, , x2]) => Math.abs(x1 - stemX) < 0.1 && Math.abs(x2 - stemX) < 0.1);
+        expect(stems.some(([, y1, , y2]) => Math.abs(Math.min(y1, y2) - bottom) < 0.1), JSON.stringify(stems)).toBe(true);
+    });
 });

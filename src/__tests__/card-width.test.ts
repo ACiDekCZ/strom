@@ -446,8 +446,10 @@ describe('the rows and the height of the custom card (U02)', () => {
     });
 });
 
-describe('the last line keeps clear of the ⇄ pill on a card of one height (T30)', () => {
-    // Width 200, date column 24: the place column is 127 (21 characters); beside the pill 127 − 34 = 93 (15).
+// The last line's reserve (lastLineReserve) is the status mark's room since 1113 (the pills keep theirs below
+// the text); the wrapping is the same for any reserve, measured here with 34px.
+describe('the last line keeps clear of a reserve at its right (T30)', () => {
+    // Width 200, date column 24: the place column is 127 (21 characters); beside the reserve 127 − 34 = 93 (15).
     const metrics = { cardWidth: 200, dateColumn: 24 };
     const width = (t: string) => t.length * 6;
 

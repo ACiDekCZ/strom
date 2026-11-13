@@ -14271,7 +14271,8 @@
             flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 0;
         }
         /* Pills on the bottom edge (∞ left, ⇄ right) reach 9px into the card:
-           a card as tall as its content was measured 12px taller for them
+           a card as tall as its content was measured 12px taller for them, a
+           view of one height made room for them below every card's text
            (src/card-width.ts CARD_EDGE_PILL_ROOM), so they cover no text. */
         body[data-card-fields] .person-card.has-edge-room { padding-bottom: 22px; }
         /* The 2px focus border sits inside the box: 1px less padding keeps the
@@ -14402,12 +14403,10 @@
         body[data-card-density="compact"] .person-card:is(.has-status, .locked) { padding-right: 36px; }
         body[data-card-density="compact"] .person-card.has-signal .lock-icon { right: 10px; }
         /* A card of details is never narrowed (its rows were measured for its
-           width): with room for the pills its text ends above them; a card of
-           one height for the view keeps its last line clear of them (its rows
-           were wrapped narrower, CARD_EDGE_PILL_RIGHT, so a place fits or ends
-           in "…", never clipped under the pill), or of the status mark alone
-           (22px, CARD_STATUS_MARK_ROOM). */
-        .person-card.has-edge-br:not(.has-edge-room) .card-body--custom .card-lines > :last-child { padding-right: var(--edge-br-room, 62px); }
+           width): with pills on its bottom edge it keeps their room below its
+           text (.has-edge-room, in either height); without them its last line
+           keeps clear of the status mark alone (its rows were wrapped 22px
+           narrower, CARD_STATUS_MARK_ROOM, so a place fits or ends in "…"). */
         .person-card.has-status-room:not(.has-edge-room) .card-body--custom .card-lines > :last-child { padding-right: 22px; }
         /* The lock in the top-right corner (B): a locked card's name ends before it ("…"). */
         body[data-card-fields] .person-card.locked .card-head-text > .name { padding-right: 5px; }
@@ -14423,8 +14422,6 @@
         .person-card.so-retreat .edge-bottom-right .sibling-order-pill { display: none; }
         .card-tooltip .tt-line.tt-so { display: none; }
         .person-card.so-retreat .card-tooltip .tt-line.tt-so { display: block; }
-        /* The same at the left for the ∞ pill ("▸ ∞ 2", CARD_EDGE_PILL_LEFT). */
-        .person-card.edge-bl-room:not(.has-edge-room) .card-body--custom .card-lines > :last-child { padding-left: 52px; }
 
         /* ==================== RESEARCH EDGE ==================== */
         /* Above a card where the tree ends: a stub whose SHAPE says what the
@@ -15460,9 +15457,6 @@
             }
             body:not(.view-mode-print) #tree-canvas.zoom-far:not(.zoom-tiny) .person-card.has-status .card-body--custom .card-lines > :nth-last-child(-n+2) :is(.card-line-row, .card-line-text) {
                 text-overflow: ellipsis;
-            }
-            body:not(.view-mode-print) #tree-canvas.zoom-far:not(.zoom-tiny) .person-card.has-status.has-edge-br:not(.has-edge-room) .card-body--custom .card-lines > :last-child {
-                padding-right: max(var(--edge-br-room, 62px), var(--far-mark-room));
             }
             body:not(.view-mode-print) #tree-canvas.zoom-far:not(.zoom-tiny) .person-card.has-status .card-body--custom:not(:has(.card-lines > :nth-child(2))) .card-head-text > .name {
                 margin-right: var(--far-mark-room);

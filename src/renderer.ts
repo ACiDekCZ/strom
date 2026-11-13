@@ -28,7 +28,7 @@ import { ViewMode, STANDALONE_VIEWS, ResearchEdgeMode, ResearchEdgeHypo } from '
 import { cardLines, CardLine, cardLineHtml, cardYears, CardLineStyle, cardDateReferences, cardAge, formatAge, isFieldCardDensity } from './card-fields.js';
 import {
     CustomCardMetrics, CardLineRows, CardHead, customCardMetrics, customCardRows, customCardViewHeight, customCardSpouseLineY,
-    measureCardTexts, cardFontsPending, CARD_HEAD_HEIGHT, CARD_EDGE_PILL_ROOM, CARD_EDGE_PILL_LEFT, CARD_STATUS_MARK_ROOM, bottomRightPillsRoom,
+    measureCardTexts, cardFontsPending, CARD_HEAD_HEIGHT, CARD_EDGE_PILL_ROOM, CARD_STATUS_MARK_ROOM,
     cardNameMaxRows, normalCardHeights, normalCardNameRows, rowSeparators, NormalCardName, CARD_LOCK_NAME_ROOM,
 } from './card-width.js';
 import { checkRecordedAge, ageBirthDate } from './recorded-age.js';
@@ -150,12 +150,10 @@ interface CustomCardsMeasure {
     heads: Map<PersonId, CardHead>;
     wrapped: boolean;
     style: CardLineStyle;
-    /** The cards measured with room for the pills on their bottom edge. */
+    /** The cards measured with room for the pills on their bottom edge (below their text, in either height). */
     edgeRoomIds: Set<PersonId>;
-    /** The cards of one height whose last line was wrapped clear of the ⇄ pill (CARD_EDGE_PILL_RIGHT). */
-    edgeRightIds: Set<PersonId>;
-    /** The cards of one height whose last line was wrapped clear of the ∞ pill (CARD_EDGE_PILL_LEFT). */
-    edgeLeftIds: Set<PersonId>;
+    /** How much the view's one card height grew for that room (0 with the height by content). */
+    viewEdgeRoom: number;
     /** The cards whose last line was wrapped clear of the status mark (CARD_STATUS_MARK_ROOM) and of no pill. */
     statusRoomIds: Set<PersonId>;
 }
@@ -388,14 +386,16 @@ class TreeRendererClass {
     private customHeads = new Map<PersonId, CardHead>();
     /**
      * The cards measured with room for pills on their bottom edge (a card of
-     * details as tall as its content grows by CARD_EDGE_PILL_ROOM, so the
-     * pills cover no text); the image export draws no pills and leaves it out.
+     * details as tall as its content grows by CARD_EDGE_PILL_ROOM, a view of
+     * one height makes that room below its text, so the pills cover no text);
+     * the image export draws no pills and leaves it out.
      */
     private edgeRoomIds = new Set<PersonId>();
-    /** The cards of one height whose last line was wrapped clear of the ⇄ pill (CARD_EDGE_PILL_RIGHT). */
-    private edgeRightIds = new Set<PersonId>();
-    /** The cards of one height whose last line was wrapped clear of the ∞ pill (CARD_EDGE_PILL_LEFT). */
-    private edgeLeftIds = new Set<PersonId>();
+    /**
+     * How much taller the view's one card height was made for the pills on
+     * bottom edges (the outputs leave it out; 0 with the height by content).
+     */
+    private viewEdgeRoom = 0;
     /** The cards whose last line was wrapped clear of the status mark alone (CARD_STATUS_MARK_ROOM). */
     private statusRoomIds = new Set<PersonId>();
     /** The other trees the last cards were matched against (the ⇄ pill); the next measure reads them. */
@@ -901,8 +901,7 @@ class TreeRendererClass {
                 });
             } else this.normalHeights = null;
             this.edgeRoomIds.clear();
-            this.edgeRightIds.clear();
-            this.edgeLeftIds.clear();
+            this.viewEdgeRoom = 0;
             this.statusRoomIds.clear();
             this.customLines.clear();
             this.customRows.clear();
@@ -1365,9 +1364,9 @@ class TreeRendererClass {
         const own = spacing === this.getLayoutSpacing();
         if (!this.focusPersonId || this.positions.size === 0 || (own && !this.viewLayer && !this.config.roomBelow)) {
             return {
-                positions: this.positions, connections: this.withoutEdgeRoom(this.connections, this.edgeRoomIds),
+                positions: this.positions, connections: this.withoutEdgeRoom(this.connections, this.config, this.edgeRoomIds, this.viewEdgeRoom),
                 spouseLines: this.spouseLines, omittedEdges: this.omittedEdges,
-                box: this.posterBox(this.config, this.edgeRoomIds), custom: this.customMetrics,
+                box: this.posterBox(this.config, this.edgeRoomIds, this.viewEdgeRoom), custom: this.customMetrics,
             };
         }
         const cached = this.outputLayoutCache.get(spacing);
@@ -1381,10 +1380,12 @@ class TreeRendererClass {
         let result = this.computeTreeLayout(descendantsOnly, [], false, config);
         let custom: CustomCardMetrics | null = null;
         let edgeRoomIds = new Set<PersonId>();
+        let viewEdgeRoom = 0;
         if (!this.viewLayer) {
             // No view link: the screen's people, their cards as the screen measured them.
             custom = this.customMetrics;
             edgeRoomIds = new Set(this.edgeRoomIds);
+            viewEdgeRoom = this.viewEdgeRoom;
         } else if (this.customMetrics) {
             const measured = this.customCardsOf(result.positions);
             const next: LayoutConfig = {
@@ -1396,26 +1397,35 @@ class TreeRendererClass {
             config = next;
             custom = measured.metrics;
             edgeRoomIds = measured.edgeRoomIds;
+            viewEdgeRoom = measured.viewEdgeRoom;
         }
         const output: OutputLayout = {
-            positions: result.positions, connections: this.withoutEdgeRoom(result.connections, edgeRoomIds),
-            spouseLines: result.spouseLines, omittedEdges: result.omittedEdges ?? [], box: this.posterBox(config, edgeRoomIds), custom,
+            positions: result.positions, connections: this.withoutEdgeRoom(result.connections, config, edgeRoomIds, viewEdgeRoom),
+            spouseLines: result.spouseLines, omittedEdges: result.omittedEdges ?? [], box: this.posterBox(config, edgeRoomIds, viewEdgeRoom), custom,
         };
         this.outputLayoutCache.set(spacing, { seq: this.renderSeq, output });
         return output;
     }
 
-    /** A line that starts at the bottom of a card drawn without its pills' room starts that much higher. */
-    private withoutEdgeRoom(connections: Connection[], edgeRoomIds: ReadonlySet<PersonId>): Connection[] {
-        return edgeRoomIds.size === 0 ? connections : connections.map(c =>
-            c.stemPersonId && edgeRoomIds.has(c.stemPersonId) ? { ...c, stemTopY: c.stemTopY - CARD_EDGE_PILL_ROOM } : c);
+    /**
+     * A line that starts at the bottom of a card drawn without its pills' room
+     * starts that much higher: by content the cards measured with it, with one
+     * height for the view every card (the view's height grew for them).
+     */
+    private withoutEdgeRoom(connections: Connection[], config: LayoutConfig, edgeRoomIds: ReadonlySet<PersonId>, viewEdgeRoom: number): Connection[] {
+        const room = (id: PersonId): number => config.personHeights ? (edgeRoomIds.has(id) ? CARD_EDGE_PILL_ROOM : 0) : viewEdgeRoom;
+        return edgeRoomIds.size === 0 ? connections : connections.map(c => {
+            const r = c.stemPersonId ? room(c.stemPersonId) : 0;
+            return r ? { ...c, stemTopY: c.stemTopY - r } : c;
+        });
     }
 
     /** The card box of a layout as the image export draws it: without the room kept for the pills on a bottom edge. */
-    private posterBox(config: LayoutConfig, edgeRoomIds: ReadonlySet<PersonId>): CardBox {
+    private posterBox(config: LayoutConfig, edgeRoomIds: ReadonlySet<PersonId>, viewEdgeRoom: number): CardBox {
         const { cardWidth, cardHeight, personHeights, spouseLineY } = config;
         const box: CardBox = { cardWidth, cardHeight, ...(personHeights ? { personHeights } : {}), ...(spouseLineY !== undefined ? { spouseLineY } : {}) };
-        if (!personHeights || edgeRoomIds.size === 0) return box;
+        if (!personHeights) return viewEdgeRoom > 0 ? { ...box, cardHeight: cardHeight - viewEdgeRoom } : box;
+        if (edgeRoomIds.size === 0) return box;
         const heights = new Map(personHeights);
         for (const id of edgeRoomIds) {
             const h = heights.get(id);
@@ -1476,8 +1486,7 @@ class TreeRendererClass {
         this.customStyle = measured.style;
         this.customHeads = measured.heads;
         this.edgeRoomIds = measured.edgeRoomIds;
-        this.edgeRightIds = measured.edgeRightIds;
-        this.edgeLeftIds = measured.edgeLeftIds;
+        this.viewEdgeRoom = measured.viewEdgeRoom;
         this.statusRoomIds = measured.statusRoomIds;
         return measured.metrics;
     }
@@ -1493,13 +1502,12 @@ class TreeRendererClass {
         const lines = new Map<PersonId, CardLine[]>();
         const ids: PersonId[] = [];
         const entries = [];
-        // A card of one height for the view keeps its last line clear of the ⇄ pill
-        // (index.html .has-edge-br) and the ∞ pill (.edge-bl-room): its rows are
-        // wrapped that much narrower.
-        const edgeRightIds = new Set<PersonId>();
-        const edgeLeftIds = new Set<PersonId>();
+        // A card with pills on its bottom edge (∞ on the left, ⇄ and the sibling
+        // order on the right) keeps their room below its text, in either height
+        // (index.html .has-edge-room): its lines keep the card's whole width.
+        const edgeRoomIds = new Set<PersonId>();
         // The status mark in the bottom-right corner (spec 066 P4 §2): a last line
-        // that may reach its height keeps 22px clear of it (pills keep more).
+        // that may reach its height keeps 22px clear of it (the pills' room covers it).
         const statusRoomIds = new Set<PersonId>();
         const signalCtx = this.signalContext();
         const visible = (pid: PersonId) => positions.has(pid);
@@ -1514,14 +1522,10 @@ class TreeRendererClass {
             const crossPill = this.hasCrossTreePill(person, this.lastCrossTrees);
             const siblingPill = this.siblingOrderCandidate(id);
             const partnersPill = this.partnersPillOf(id, visible) !== null;
-            const reserve = fields.height !== 'content' && personLines.length > 0 && (crossPill || siblingPill || partnersPill);
-            if (reserve && (crossPill || siblingPill)) edgeRightIds.add(id);
-            if (reserve && partnersPill) edgeLeftIds.add(id);
-            // The status mark: unless the pills' room already covers it (a card of one height
-            // keeps theirs on the last line; a card as tall as its content grows below its text).
-            const pillsGrow = fields.height === 'content' && (crossPill || siblingPill || partnersPill);
-            const statusRoom = personLines.length > 0 && !(reserve && (crossPill || siblingPill)) && !pillsGrow
-                && cardSignalInfo(person, signalCtx).showStatus;
+            const pills = crossPill || siblingPill || partnersPill;
+            if (pills) edgeRoomIds.add(id);
+            // The status mark: unless the pills' room below the text already covers it.
+            const statusRoom = personLines.length > 0 && !pills && cardSignalInfo(person, signalCtx).showStatus;
             if (statusRoom) statusRoomIds.add(id);
             // The birth surname under the name (src/person-name.ts): its row never widens the card.
             const birth = birthNoteText(shownNameParts(person, '?').birthNote);
@@ -1532,8 +1536,7 @@ class TreeRendererClass {
                 // A whole name on rows ends before the lock of a locked card (index.html, 5px).
                 ...(nameRows === 0 && DataManager.isPersonLocked(id) ? { nameReserve: CARD_LOCK_NAME_ROOM } : {}),
                 ...(presumed ? { years: cardYears(person, presumed.has(id)) } : {}),
-                ...(reserve || statusRoom ? { lastLineReserve: (reserve ? bottomRightPillsRoom(crossPill, siblingPill)
-                    + (partnersPill ? CARD_EDGE_PILL_LEFT : 0) : 0) + (statusRoom ? CARD_STATUS_MARK_ROOM : 0) } : {}),
+                ...(statusRoom ? { lastLineReserve: CARD_STATUS_MARK_ROOM } : {}),
             });
         }
         // The chosen width's cap (narrow / medium / wide); the poster takes this width too.
@@ -1543,24 +1546,28 @@ class TreeRendererClass {
         const { rows, heights, heads } = customCardRows(entries, metrics, measureCardTexts, fields.lines, fields.style, nameRows);
         const measured = {
             lines, rows, wrapped: fields.lines !== 1, style: fields.style,
-            heads: new Map(ids.map((id, i) => [id, heads[i]])), edgeRoomIds: new Set<PersonId>(), edgeRightIds, edgeLeftIds, statusRoomIds,
+            heads: new Map(ids.map((id, i) => [id, heads[i]])), edgeRoomIds, statusRoomIds,
         };
+        // A card with pills on its bottom edge needs CARD_EDGE_PILL_ROOM more below its text, so they cover none.
+        const withRoom = (h: number, i: number): number => edgeRoomIds.has(ids[i]) ? h + CARD_EDGE_PILL_ROOM : h;
         if (fields.height === 'content') {
             // Each card as tall as its own content; the view's height is its tallest
-            // (a band with no card, the CSS default). A card with pills on its
-            // bottom edge grows by their room, so they cover no text.
-            ids.forEach((id, i) => {
-                const pills = this.bottomEdgePills(id, visible, this.lastCrossTrees);
-                if (pills.left || pills.right) {
-                    measured.edgeRoomIds.add(id);
-                    heights[i] += CARD_EDGE_PILL_ROOM;
-                }
-            });
+            // (a band with no card, the CSS default).
+            const own = heights.map(withRoom);
             let tallest = CARD_HEAD_HEIGHT;
-            for (const h of heights) tallest = Math.max(tallest, h);
-            return { ...measured, metrics: { ...metrics, cardHeight: tallest, personHeights: new Map(ids.map((id, i) => [id, heights[i]])) } };
+            for (const h of own) tallest = Math.max(tallest, h);
+            return { ...measured, viewEdgeRoom: 0, metrics: { ...metrics, cardHeight: tallest, personHeights: new Map(ids.map((id, i) => [id, own[i]])) } };
         }
-        return { ...measured, metrics: { ...metrics, cardHeight: customCardViewHeight(fields.on.length, fields.lines, heights, fields.years, anyBirth) } };
+        // One height for the view: as tall as the tallest card with its pills' room
+        // (a one-row card is as tall as every detail on: it grows when any card has pills).
+        const plain = customCardViewHeight(fields.on.length, fields.lines, heights, fields.years, anyBirth);
+        const cardHeight = fields.lines === 1
+            ? plain + (edgeRoomIds.size > 0 ? CARD_EDGE_PILL_ROOM : 0)
+            : customCardViewHeight(fields.on.length, fields.lines, heights.map(withRoom), fields.years, anyBirth);
+        // The outputs draw no pills: without the room, unless the partner line runs
+        // through the card's middle (one row a detail), which then stays there.
+        const viewEdgeRoom = fields.lines === 1 ? 0 : cardHeight - plain;
+        return { ...measured, viewEdgeRoom, metrics: { ...metrics, cardHeight } };
     }
 
     /**
@@ -1679,19 +1686,6 @@ class TreeRendererClass {
             })
             : partnerIdsShownInPlace(data, id);
         return ids.filter(q => visible(q) && !!brought?.has(q));
-    }
-
-    /**
-     * Whether a card carries pills on its bottom edge: on the left ∞ other
-     * partners (the family view, partnersPillOf), on the right ⇄ the person
-     * in other trees or the sibling-order pill's room.
-     */
-    private bottomEdgePills(id: PersonId, visible: (pid: PersonId) => boolean,
-        crossTrees: Map<TreeId, { name: string; data: StromData }> | null): { left: boolean; right: boolean } {
-        const person = DataManager.getPerson(id);
-        if (!person) return { left: false, right: false };
-        const left = this.partnersPillOf(id, visible) !== null;
-        return { left, right: this.hasCrossTreePill(person, crossTrees) || this.siblingOrderCandidate(id) };
     }
 
     /**
@@ -4664,7 +4658,7 @@ class TreeRendererClass {
         }
         return {
             positions: this.positions,
-            connections: this.withoutEdgeRoom(this.connections, this.edgeRoomIds),
+            connections: this.withoutEdgeRoom(this.connections, this.config, this.edgeRoomIds, this.viewEdgeRoom),
             spouseLines: this.spouseLines,
             omittedEdges: this.omittedEdges,
         };
@@ -4784,10 +4778,10 @@ class TreeRendererClass {
         const cardFields = SettingsManager.getEffectiveCardFields();
         // The next measure reads the other trees the cards are matched against now (the ⇄ pill).
         this.lastCrossTrees = allTrees;
-        // Cards of details as tall as their content were measured with room for
-        // the pills on their bottom edge; a card whose pills came out otherwise
-        // (the other trees were not read yet) asks for one more render.
-        const measuresEdgeRoom = !!this.customMetrics?.personHeights;
+        // Cards of details were measured with room for the pills on their bottom
+        // edge; a card whose pills came out otherwise (the other trees were not
+        // read yet) asks for one more render.
+        const measuresEdgeRoom = !!this.customMetrics;
         let edgeRoomStale = false;
         // Marriage-order pills (T13): one per union, at most one per card, at
         // the corner pointing to the person whose marriages it counts; laid
@@ -5225,8 +5219,6 @@ class TreeRendererClass {
                 // The pills reach 9 px into the card: a card of details is measured taller for them.
                 card.classList.add('has-edge-bl');
             }
-            // A card of one height wrapped its last line clear of the ∞ pill (index.html .edge-bl-room)
-            if (this.edgeLeftIds.has(id)) card.classList.add('edge-bl-room');
             // The sibling-order pill (§3): the direct-line card out of its birth place among the shown siblings
             const siblingOrder = this.siblingOrderOf(id);
             const siblingOrderHtml = siblingOrder
@@ -5243,20 +5235,12 @@ class TreeRendererClass {
                 // The pills reach 9 px into the card, 40 px before its corner (the status mark stays there).
                 card.classList.add('has-edge-br');
             }
-            // The room on the card: where the pill stands, or where a card of one height was wrapped for it
-            if (siblingOrderHtml || (siblingRoom && this.edgeRightIds.has(id))) {
-                card.classList.add('has-edge-br');
-                card.style.setProperty('--edge-br-room', `${bottomRightPillsRoom(!!crossTreeHtml, true)}px`);
-            }
             const rightPills = !!crossTreeHtml || siblingRoom;
             // A card of details measured with the pills' room keeps its text above them (index.html .has-edge-room).
             if (this.edgeRoomIds.has(id)) card.classList.add('has-edge-room');
             // Its last line wrapped clear of the status mark alone (index.html .has-status-room).
             if (this.statusRoomIds.has(id)) card.classList.add('has-status-room');
             if (measuresEdgeRoom && this.edgeRoomIds.has(id) !== !!(hiddenIndicatorsHtml || rightPills)) edgeRoomStale = true;
-            // A card of one height: its last line wrapped clear of the ⇄ pill exactly when the pill is there.
-            if (customLines?.length && !measuresEdgeRoom && this.edgeRightIds.has(id) !== rightPills) edgeRoomStale = true;
-            if (customLines?.length && !measuresEdgeRoom && this.edgeLeftIds.has(id) !== !!hiddenIndicatorsHtml) edgeRoomStale = true;
             // The research edge above the card (a stub, or a label by the dashed line to the parents).
             const edge = this.edgeViews.get(id);
             if (edge) {

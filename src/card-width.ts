@@ -103,12 +103,11 @@ export interface CustomCardEntry<L extends CardLineText = CardLine> {
      */
     birth?: string;
     /**
-     * The room (px) the last line keeps free beside the pills on the bottom
-     * edge of a card of one height for the view: the ⇄ pill on the right
-     * (CARD_EDGE_PILL_RIGHT), the ∞ pill on the left (CARD_EDGE_PILL_LEFT),
-     * the status mark (CARD_STATUS_MARK_ROOM).
+     * The room (px) the last line keeps free beside the status mark in the
+     * bottom-right corner (CARD_STATUS_MARK_ROOM) on a card without pills on
+     * its bottom edge (those keep their room below the text, CARD_EDGE_PILL_ROOM).
      * Its rows are wrapped that much narrower, so a text either fits beside
-     * the pills or ends in "…".
+     * the mark or ends in "…".
      */
     lastLineReserve?: number;
     /** The room (px) the name's rows keep free at their right (the lock on a locked card, index.html). */
@@ -559,32 +558,14 @@ export const CARD_ROW_HEIGHT = 17;
 /** Between two details when a detail may take more than one row (the rows of one stay apart from the next). */
 export const CARD_DETAIL_GAP = 3;
 /**
- * The room a card of details as tall as its content (the height "by
- * content") takes at its bottom for the pills on its bottom edge (∞ on the
- * left, ⇄ on the right): 18px tall, they reach 9px into the card, so the card
- * grows by 12px (padding 10 → 22) and the pills cover no text.
+ * The room a card of details takes at its bottom for the pills on its bottom
+ * edge (∞ on the left, ⇄ and the sibling order on the right): 18px tall, they
+ * reach 9px into the card, so the card grows by 12px (padding 10 → 22) and the
+ * pills cover no text. With the height "by content" that card grows; with one
+ * height for the view the view's height makes room for it (1113: its last line
+ * keeps the card's whole width, never wrapped narrow beside the pills).
  */
 export const CARD_EDGE_PILL_ROOM = 12;
-/**
- * The bottom-right edge (⇄ N, then the sibling order) starts this far from
- * the card's right edge (index.html .edge-bottom-right, spec 066 P4 §2): the
- * corner itself belongs to the status mark and the story's fold.
- */
-export const CARD_EDGE_RIGHT_INSET = 40;
-/**
- * The room the last line of a card of one height for the view keeps at its
- * right for the ⇄ pill on the bottom-right edge (index.html .has-edge-br,
- * the line's padding there): the 40px inset and the "⇄ N" pill, less the
- * card's 12px padding.
- */
-export const CARD_EDGE_PILL_RIGHT = CARD_EDGE_RIGHT_INSET - 12 + 34;
-/** The same for the sibling-order pill ("2 of 5") and the 4px before it. */
-const SIBLING_ORDER_PILL_ROOM = 48;
-/** The last line's room for the pills on the bottom-right edge: ⇄ N, the sibling order, or both. */
-export function bottomRightPillsRoom(crossTree: boolean, siblingOrder: boolean): number {
-    if (!crossTree && !siblingOrder) return 0;
-    return CARD_EDGE_RIGHT_INSET - 12 + (crossTree ? 34 : 0) + (siblingOrder ? SIBLING_ORDER_PILL_ROOM + (crossTree ? 4 : 0) : 0);
-}
 /**
  * The room a line of a card of details keeps at its right where it may reach
  * the height of the status mark in the bottom-right corner (index.html
@@ -593,11 +574,6 @@ export function bottomRightPillsRoom(crossTree: boolean, siblingOrder: boolean):
 export const CARD_STATUS_MARK_ROOM = 22;
 /** The room a locked card of details keeps at the right of its name for the lock (index.html .locked .name: padding-right). */
 export const CARD_LOCK_NAME_ROOM = 5;
-/**
- * The same at the left for the ∞ pill on the bottom-left edge ("▸ ∞ 2",
- * index.html .edge-bl-room: the line's padding there).
- */
-export const CARD_EDGE_PILL_LEFT = 52;
 /** The partner line on a card taller than one row a detail: the middle of its header. */
 export const CARD_HEAD_LINE_Y = 25;
 /** The same with the years under the name: the middle of the taller header (10 + 33 / 2). */
@@ -653,7 +629,7 @@ export function customCardRows<L extends CardLineText>(entries: Iterable<CustomC
 
     if (style === 'labels') {
         const fullWidth = Math.max(1, room - (metrics.labelColumn ?? 0) - CARD_LABEL_GAP);
-        // The last line beside the ⇄ pill is that much narrower.
+        // The last line beside the status mark is that much narrower.
         const valueWidthOf = (l: L): number => Math.max(1, fullWidth - (reserveOf.get(l) ?? 0));
         // The dates first: what is left of the date's last row is the place's first.
         const dated = list.flatMap(e => e.lines.filter(l => !!l.date));
@@ -717,7 +693,7 @@ export function customCardRows<L extends CardLineText>(entries: Iterable<CustomC
                 const long = isLongCardDate(l, date, metrics.dateColumn);
                 if (long) rows.get(l)!.longDate = true;
                 // One row with a long date: the place in the room 6px after the date;
-                // the last line beside the ⇄ pill that much narrower.
+                // the last line beside the status mark that much narrower.
                 const width = Math.max(1, room - (reserveOf.get(l) ?? 0) - (l.wide ? CARD_MARK_WIDTH + CARD_COLUMN_GAP
                     : long && valueLines === 1 ? CARD_MARK_WIDTH + CARD_COLUMN_GAP + date + CARD_COLUMN_GAP
                         : cardPlaceOffset(metrics.dateColumn)));
