@@ -75,7 +75,7 @@ import {
     resetQueueLists, retryQueueList,
 } from '../research-queue-pages.js';
 import {
-    QueueSearch, activeQueueSearch, clearQueueSearch, markQueueSearchPending, queueSearchFor, queueSearchOffered, restoreQueueSearchFocus, sayQueueSearch,
+    QueueSearch, activeQueueSearch, clearQueueSearch, markQueueSearchPending, queueSearchFor, queueSearchOffered, sayQueueSearch,
 } from './queue-search-ui.js';
 import { followNotice, researchNameBeside, FOLLOW_NOTICE_MS, FOLLOW_HIGHLIGHT_MS, FollowTreeRef } from '../research-follow.js';
 import { SettingsManager } from '../settings.js';
@@ -4588,10 +4588,7 @@ export const researchUiMethods = uiModule({
                     : L.queueCount(nextCount),
             }),
         });
-        if (search) {
-            host.appendChild(search.box);
-            restoreQueueSearchFocus();
-        }
+        if (search) search.field.mount(host);
         if (multi) {
             const pills = el('div', 'research-overview__filters research-overview__queue-filters');
             pills.setAttribute('role', 'radiogroup');

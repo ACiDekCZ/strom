@@ -51,7 +51,8 @@ import { isOpenHypothesis } from '../view-links.js';
 import { focusQueueMoved, waitBranchText, workingWhyText } from './research-offline-ui.js';
 import { beginQueueSlots, endQueueSlots } from '../research-queue-pages.js';
 import { KnowsKind, knowsKindChoice, knowsKindShows } from '../knows-kind.js';
-import { activeQueueSearch, noteQueueSearchFocus, resetQueueSearch } from './queue-search-ui.js';
+import { activeQueueSearch } from './queue-search-ui.js';
+import { overviewSearches } from './section-search.js';
 import { PREF_KEYS, PrefKey, SectionPref, prefKeyOfOverview, sectionOrder, sectionPrefs, setSectionPref, topPrefs, topTileShown } from './live-section-prefs.js';
 import { OverviewSourceKind, afterTurnOnKeys, skeletonLines } from '../research-overview-source.js';
 import { sectionTitle } from './live-section-edit.js';
@@ -470,8 +471,8 @@ export const researchOverviewMethods = uiModule({
         // so do the sections shown whatever their choice.
         s.waitingView = newWaitingView();
         s.overviewShown.clear();
-        // The queue's search and the kind shown in "What the research knows" last while the overview is open.
-        resetQueueSearch();
+        // The sections' searches and the kind shown in "What the research knows" last while the overview is open.
+        overviewSearches.reset();
         knowsKind = 'all';
         if (s !== liveSession()) this.closeOverviewViewing();
         closeAnswerForm();
@@ -537,7 +538,7 @@ export const researchOverviewMethods = uiModule({
             if (root) {
                 root.remove();
                 hoverCard(null);
-                resetQueueSearch();
+                overviewSearches.reset();
                 knowsKind = 'all';
             }
             this.setResearchOverviewDocked(false);
@@ -578,8 +579,8 @@ export const researchOverviewMethods = uiModule({
         root.setAttribute('aria-label', L.overviewTitle);
         const scroller = root.querySelector<HTMLElement>('.research-overview__body');
         const scrollTop = scroller?.scrollTop ?? 0;
-        // The queue's search field is drawn again: the focus and caret it had go back to it.
-        noteQueueSearchFocus();
+        // The sections' search fields are drawn again: the focus and caret they had go back to them.
+        overviewSearches.noteFocus();
         root.replaceChildren();
         // The queue's pages this drawing shows (a branch unfolded, the queue's filter); the rest is let go at its end.
         beginQueueSlots();

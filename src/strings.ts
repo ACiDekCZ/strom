@@ -65,6 +65,20 @@ export function plural(lang: Language, n: number, one: string, few: string, othe
  * "2 parents and 1 partner", "2 rodiče a 1 partner". (Intl.ListFormat is not
  * in the ES2020 lib this project targets.)
  */
+/**
+ * The Czech preposition "z" / "ze" before a number as it is spoken: "ze"
+ * before a number read with a "s", "z" or "dv" at its start (2, 7, 17,
+ * 70–79, 100–199, 700–799, and so the thousands of them), else "z"
+ * ("ze 106", "ze 7", "z 14", "z 300").
+ */
+export function csZ(n: number): string {
+    let lead = Math.floor(Math.abs(n));
+    while (lead >= 1000) lead = Math.floor(lead / 1000);
+    const ze = lead === 2 || lead === 7 || lead === 17 || (lead >= 70 && lead <= 79)
+        || (lead >= 100 && lead <= 199) || (lead >= 700 && lead <= 799);
+    return ze ? 'ze' : 'z';
+}
+
 export function joinAnd(lang: Language, parts: string[]): string {
     const items = parts.filter(Boolean);
     if (items.length <= 1) return items[0] ?? '';
@@ -5941,6 +5955,17 @@ const stringsEN = {
         queueSearchNoneDir: (d: string) => `Nothing found in ${d}.`,
         queueSearchCancel: 'Clear search',
         queueSearchAllDirs: 'Search all directions',
+        // The search of a section of the overview (spec 083 §3); a section's name comes from its title.
+        waitingSearchPlaceholder: 'Search people, places, archives, tasks…',
+        waitingSearchAria: (section: string) => `Search ${section}`,
+        knowsSearchPlaceholder: 'Search people, conflicts, hypotheses…',
+        knowsSearchAria: (section: string) => `Search ${section}`,
+        sectionSearchFound: (n: number, total: number) => `Found ${numEn(n)} of ${numEn(total)}`,
+        sectionSearchNoneKind: (kind: string) => `Nothing found in ${kind}.`,
+        sectionSearchAllKinds: 'Search all kinds',
+        bulkSelectFound: (n: number) => `Select found with a proposal (${numEn(n)})`,
+        bulkSelectedHidden: (n: number, m: number) => `${numEn(n)} selected, ${numEn(m)} outside the search.`,
+        bulkDeselectHidden: 'Deselect outside the search',
         queueSearchElsewhere: (id: string, state: string) => `${id} is no longer in the queue (${state}).`,
         queueState: { done: 'done', waiting: 'awaiting action', parked: 'postponed', dropped: 'given up' } as Record<string, string>,
         queueSearchErr: 'Search failed; the research is not responding.',
@@ -14721,6 +14746,17 @@ const stringsCZ: StringsType = {
         queueSearchNoneDir: (d: string) => `V linii ${d} nic nenalezeno.`,
         queueSearchCancel: 'Zrušit hledání',
         queueSearchAllDirs: 'Hledat ve všech liniích',
+        // The search of a section of the overview (spec 083 §3); a section's name comes from its title.
+        waitingSearchPlaceholder: 'Hledat osobu, místo, archiv, úkol…',
+        waitingSearchAria: (section: string) => `Hledat v ${section}`,
+        knowsSearchPlaceholder: 'Hledat osobu, rozpor, hypotézu…',
+        knowsSearchAria: (section: string) => `Hledat v ${section}`,
+        sectionSearchFound: (n: number, total: number) => `Nalezeno ${numCs(n)} ${csZ(total)} ${numCs(total)}`,
+        sectionSearchNoneKind: (kind: string) => `V druhu ${kind} nic nenalezeno.`,
+        sectionSearchAllKinds: 'Hledat ve všech druzích',
+        bulkSelectFound: (n: number) => `Vybrat nalezené s návrhem (${numCs(n)})`,
+        bulkSelectedHidden: (n: number, m: number) => `Vybráno ${numCs(n)}, z toho ${numCs(m)} mimo hledání.`,
+        bulkDeselectHidden: 'Odznačit mimo hledání',
         queueSearchElsewhere: (id: string, state: string) => `${id} už ve frontě není (${state}).`,
         queueState: { done: 'hotovo', waiting: 'čeká na vyřízení', parked: 'odloženo', dropped: 'vzdáno' } as Record<string, string>,
         queueSearchErr: 'Hledání se nepovedlo, výzkum neodpovídá.',
@@ -23398,6 +23434,17 @@ const stringsDE: StringsType = {
         queueSearchNoneDir: (d: string) => `In ${d} nichts gefunden.`,
         queueSearchCancel: 'Suche aufheben',
         queueSearchAllDirs: 'In allen Richtungen suchen',
+        // The search of a section of the overview (spec 083 §3); a section's name comes from its title.
+        waitingSearchPlaceholder: 'Person, Ort, Archiv, Aufgabe suchen…',
+        waitingSearchAria: (section: string) => `In „${section}“ suchen`,
+        knowsSearchPlaceholder: 'Person, Widerspruch, Hypothese suchen…',
+        knowsSearchAria: (section: string) => `In „${section}“ suchen`,
+        sectionSearchFound: (n: number, total: number) => `${numDe(n)} von ${numDe(total)} gefunden`,
+        sectionSearchNoneKind: (kind: string) => `In der Art ${kind} nichts gefunden.`,
+        sectionSearchAllKinds: 'In allen Arten suchen',
+        bulkSelectFound: (n: number) => `Gefundene mit Vorschlag auswählen (${numDe(n)})`,
+        bulkSelectedHidden: (n: number, m: number) => `${numDe(n)} ausgewählt, davon ${numDe(m)} außerhalb der Suche.`,
+        bulkDeselectHidden: 'Auswahl außerhalb der Suche aufheben',
         queueSearchElsewhere: (id: string, state: string) => `${id} ist nicht mehr in der Warteschlange (${state}).`,
         queueState: { done: 'erledigt', waiting: 'wartet auf Bearbeitung', parked: 'zurückgestellt', dropped: 'aufgegeben' } as Record<string, string>,
         queueSearchErr: 'Die Suche ist fehlgeschlagen, die Forschung antwortet nicht.',
