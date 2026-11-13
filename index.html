@@ -20493,8 +20493,12 @@
         .hp2-box--none { display: inline-block; }
         .hp2-box--only { appearance: none; -webkit-appearance: none; box-sizing: border-box; border: 1.5px dashed var(--border); border-radius: 4px; background: var(--surface-2); }
         .hp2-note { font-size: 12px; line-height: 1.45; color: var(--text-light); }
-        .hp2-head { display: flex; justify-content: flex-end; padding: 2px 0 6px; }
-        .link-button.hp2-all { padding: 0; font-size: 12.5px; font-weight: 600; text-decoration: none; text-align: right; }
+        .hp2-head { display: flex; justify-content: flex-start; padding: 2px 0 6px; }
+        /* The bulk head (spec 083 §2): its box (empty / – / ✓) over the rows' boxes, then what it does. */
+        .hp2-all { display: inline-flex; align-items: center; gap: 10px; min-height: 28px; font-size: 13px; line-height: 1.35; color: var(--text); cursor: pointer; overflow-wrap: anywhere; }
+        .hp2-all--found { font-weight: 600; }
+        .hp2-all-box { flex: none; width: 18px; height: 18px; margin: 0; accent-color: var(--primary); cursor: pointer; }
+        .hp2-all-box:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
         .hp2-wait { margin: 0 0 8px; }
         .hp2-foot { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px solid var(--divider); }
         .hp2-sum { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-light); overflow-wrap: anywhere; }
@@ -20519,15 +20523,15 @@
         @media (hover: hover) {
             button.secondary.hwr-accept:not(:disabled):hover, button.secondary.hwr-pick:not(:disabled):hover { background: var(--primary-soft); }
             button.secondary.hwr-leave:not(:disabled):hover { background: var(--hover-bg); }
-            .link-button.hwr-more:hover, .link-button.hp2-all:hover { text-decoration: underline; }
+            .link-button.hwr-more:hover, .hp2-all:hover .hp2-all-text { text-decoration: underline; }
             button.primary.hp2-accept:hover { background: var(--primary-hover, var(--primary)); }
             .research-overview__knows-row.has-tags:hover { text-decoration: none; }
             .research-overview__knows-row.has-tags:hover .rok-text { text-decoration: underline; }
         }
         @media (pointer: coarse) {
             button.secondary.hwr-accept, button.secondary.hwr-leave, button.secondary.hwr-pick, button.primary.hp2-accept { min-height: 44px; }
-            .link-button.hwr-more, .link-button.hp2-all { display: inline-flex; align-items: center; min-height: 44px; }
-            .hp2-box { width: 22px; height: 22px; }
+            .link-button.hwr-more, .hp2-all { display: inline-flex; align-items: center; min-height: 44px; }
+            .hp2-box, .hp2-all-box { width: 22px; height: 22px; }
         }
         @media (min-width: 641px) and (max-width: 1024px) {
             .hwr-item { padding: 12px 4px; }
@@ -21056,6 +21060,9 @@
         .hp2-sum .hp2-drop-outside { padding: 0; font-size: 12.5px; font-weight: 600; vertical-align: baseline; }
         /* Awaiting action's rows, found by the search: the amber tag sits in the meta line like a name. */
         .research-overview__waiting-meta .research-overview__hit { flex: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        /* What the research knows found by a number: the amber P… before a conflict's name, H… and P… leading a hypothesis's tags. */
+        .research-overview__knows-row > .research-overview__hit { margin-right: 6px; }
+        .rok-tags > .research-overview__hit { font-size: 12px; line-height: 1.5; }
         /* Typed or being read: the list stands, dimmed, nothing over it. */
         .research-queue--pending > .live-queue,
         .research-queue--pending > .research-overview__queue-result { opacity: .5; transition: opacity .12s; }
@@ -21094,9 +21101,11 @@
             .live-queue-search-link { min-height: 44px; }
             .research-overview__knows-kinds .research-overview__filter { height: 32px; }
             /* Awaiting action's kinds on touch: 32 px chips, each a 44 px target. */
-            .research-overview__waiting-filters { row-gap: 12px; }
-            .research-overview__waiting-filters .research-overview__filter { position: relative; height: 32px; }
-            .research-overview__waiting-filters .research-overview__filter::before { content: ''; position: absolute; left: 0; right: 0; top: -6px; bottom: -6px; }
+            .research-overview__waiting-filters, .research-overview__knows-kinds { row-gap: 12px; }
+            .research-overview__waiting-filters .research-overview__filter,
+            .research-overview__knows-kinds .research-overview__filter { position: relative; height: 32px; }
+            .research-overview__waiting-filters .research-overview__filter::before,
+            .research-overview__knows-kinds .research-overview__filter::before { content: ''; position: absolute; left: 0; right: 0; top: -6px; bottom: -6px; }
             .hp2-sum .hp2-drop-outside { display: inline-flex; align-items: center; min-height: 44px; }
         }
         @media (max-width: 640px) {

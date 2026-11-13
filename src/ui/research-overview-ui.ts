@@ -21,7 +21,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { Person, PersonId, ResearchHypothesis } from '../types.js';
 import { acceptBatch, acceptBatchRowResult } from '../research-hypothesis-waiting.js';
 import { computeEvidenceGaps } from '../stats.js';
-import { LiveChangeKind, LiveWaiting, LiveWorker, ResearchActionMark, WAITING_SECTIONS, researchConflictRef, researchTaskRef, recentAddsCount, researchLinkMark } from '../research-link.js';
+import { LiveChangeKind, LiveWaiting, LiveWorker, ResearchActionMark, WAITING_SECTIONS, researchConflictRef, researchPersonRef, researchTaskRef, recentAddsCount, researchLinkMark } from '../research-link.js';
 import { waitingGroupSendable, waitingGroupHasNote, waitingSendable, waitingUnsendable, waitingFileWritable } from '../research-waiting-write.js';
 import {
     PLACES_GROUP, WaitingFilter, WaitingGroupRows, WaitingPhase, effectiveWaitingFilter, waitingActionDo, waitingChatLeads, waitingChips, waitingDaysAgo, waitingGroupChatTask,
@@ -57,6 +57,7 @@ import { appendSearchOutcome, keepSheetOverKeyboard, mountSectionSearch, paintSe
 import { fieldVisible, foldSearch2, idNumber, tokenize, type SearchDoc, type SearchHit } from '../section-search-match.js';
 import { chipCount, searchIndex, searchSection, sectionPartOpen, toggleSectionPart, type SearchIndex } from '../section-search-filter.js';
 import type { HypothesisListSearch } from './hypothesis-waiting-ui.js';
+import { knowsSearchIndex, type KnowsIndex, type KnowsSearchRow } from '../knows-search.js';
 import { PREF_KEYS, PrefKey, SectionPref, prefKeyOfOverview, sectionOrder, sectionPrefs, setSectionPref, topPrefs, topTileShown } from './live-section-prefs.js';
 import { OverviewSourceKind, afterTurnOnKeys, skeletonLines } from '../research-overview-source.js';
 import { sectionTitle } from './live-section-edit.js';
@@ -96,6 +97,8 @@ let openedAt = 0;
 const toggledGroups = new Set<string>();
 /** Awaiting action's search index (spec 083 §1): built anew when its items change, not at each key. */
 let waitingIndex: SearchIndex<LiveWaiting> | null = null;
+/** What the research knows' search index (spec 083 §2): built anew when its rows say something else. */
+let knowsIndex: KnowsIndex | null = null;
 /** The card lit up by hovering a change row. */
 let hovered: HTMLElement | null = null;
 
@@ -2041,47 +2044,101 @@ export const researchOverviewMethods = uiModule({
         }
     },
 
-    /** What the research knows across the tree: open conflicts first, then hypotheses. */
+    /**
+     * What the research knows across the tree: open conflicts first, then
+     * hypotheses. From ten rows (or while a text is typed) searched here
+     * (spec 083 §2): the field under the title, the chips counting what was
+     * found, the rows found, the bulk head and foot about the found ones, the
+     * Verifying block under it all unchanged.
+     */
     appendOverviewKnows(body: HTMLElement, fold: LiveFold, mode: Mode): void {
         const L = strings.live;
         const facts = strings.research.changeWords.facts as Record<string, string>;
-        const rows: { person: Person; text: string; conflict: boolean; conflictId?: string; hypo?: ResearchHypothesis }[] = [];
+        const rows: (KnowsSearchRow & { person: Person; text: string; conflictId?: string; hypo?: ResearchHypothesis })[] = [];
         // A list of proposals accepted at once (spec 074 §10): its rows stay, decided, with what became of each.
         const rid = this.activeResearchId();
         const batch = rid ? acceptBatch(rid) : null;
         for (const p of Object.values(DataManager.getData().persons)) {
+            const name = fullName(p);
+            const personRef = researchPersonRef(p.refn);
+            let n = 0;
             // As the research has them now: one decided from here (or read decided from its version not loaded) goes at once.
             for (const c of this.researchConflictsOf(p.id)) {
                 if (c.status === 'decided') continue;
                 const what = c.title || facts[c.fact] || c.fact;
-                rows.push({ person: p, text: `${fullName(p)} · ${what}: ${c.values.map(v => conflictValueSaid(researchValueText(c.fact, v.value))).join(' × ')}`, conflict: true,
-                    conflictId: researchConflictRef(c.id) ?? undefined });
+                const values = c.values.map(v => conflictValueSaid(researchValueText(c.fact, v.value)));
+                const conflictId = researchConflictRef(c.id) ?? undefined;
+                rows.push({ key: `c:${p.id}:${conflictId ?? n++}`, person: p, name, personRef, words: [what, ...values],
+                    text: `${name} · ${what}: ${values.join(' × ')}`, conflict: true, conflictId });
             }
             for (const h of p.research?.hypotheses ?? []) {
                 if (!isOpenHypothesis(h) && !(h.id && acceptBatchRowResult(batch, h.id))) continue;
-                rows.push({ person: p, text: `${fullName(p)} · ${L.hypothesisRow(h.title)}`, conflict: false, hypo: h });
+                rows.push({ key: `h:${p.id}:${h.id ?? n++}`, person: p, name, personRef, hypoId: h.id, words: [h.title],
+                    text: `${name} · ${L.hypothesisRow(h.title)}`, conflict: false, hypo: h });
             }
         }
         // The tree's "Verifying" (spec 065 §10k): waiting facts, Stop, the bulk verification.
         const verify = this.treeVerifyBlock(() => { if (mode === 'sheet') this.closeResearchOverview(); });
-        if (rows.length === 0 && !verify) return;
+        // The section's search: its field from ten rows, or while a text is typed (it stays while the text does).
+        const typed = overviewSearches.text('knows');
+        if (rows.length === 0 && !verify && !typed) return;
         rows.sort((a, b) => Number(b.conflict) - Number(a.conflict));
         const conflicts = rows.filter(r => r.conflict).length;
         const openHypos = rows.filter(r => r.hypo && isOpenHypothesis(r.hypo)).length;
-        const host = liveSection(body, { ...fold, title: L.knowsTitle, ...(rows.length > 0 ? { summary: L.knowsSum(conflicts, openHypos) } : {}) });
-        if (rows.length === 0) {
-            host.appendChild(verify!);
+        const showField = !fold.collapsed && fieldVisible(rows.length, typed);
+        const search: SectionSearch | null = showField ? overviewSearches.ensure({
+            section: 'knows', mode: 'local',
+            placeholder: L.knowsSearchPlaceholder, ariaLabel: L.knowsSearchAria(L.knowsTitle),
+            onInput: () => this.renderResearchOverview(),
+            onArrowDown: () => focusFirstSectionRow(search!),
+        }) : overviewSearches.get('knows');
+        const host = liveSection(body, {
+            ...fold, title: L.knowsTitle, ...(rows.length > 0 ? { summary: L.knowsSum(conflicts, openHypos) } : {}),
+            ...(fold.collapsed && typed.trim() ? { summaryEl: searchSummaryEl(typed) } : {}),
+        });
+        if (showField) mountSectionSearch(host, search, rows.length);
+        const toks = tokenize(showField ? search?.text ?? '' : '');
+        if (rows.length === 0 && toks.length === 0) {
+            if (search) appendSearchOutcome(host, search, { searching: false, found: 0, total: 0, kindLabel: null, onAllKinds: () => {} });
+            if (verify) host.appendChild(verify);
             return;
         }
         // Its kinds (spec 052 §3): chips All / Conflicts / Hypotheses when both are there.
         const choice = knowsKindChoice(conflicts, rows.length - conflicts, knowsKind);
-        if (choice.chips) host.appendChild(this.knowsKindChips(choice.kind, rows.length, conflicts));
-        const shownRows = rows.filter(r => knowsKindShows(choice.kind, r.conflict));
+        // The index is built when the rows say something else (or the language changes), not at each key.
+        knowsIndex = knowsSearchIndex(knowsIndex, rows, getCurrentLanguage());
+        const res = searchSection(knowsIndex.index, toks, key => key.startsWith('c:') ? 'con' : 'hyp', choice.kind);
+        const searching = res.searching;
+        const shownKeys = new Set(res.shown);
+        const shownRows = rows.filter(r => shownKeys.has(r.key));
+        const hitOf = (r: { key: string }): SearchHit | undefined => searching ? res.hits.get(r.key) : undefined;
+        if (choice.chips) {
+            host.appendChild(this.knowsKindChips(choice.kind, {
+                all: chipCount(res, 'all', rows.length), con: chipCount(res, 'con', conflicts), hyp: chipCount(res, 'hyp', rows.length - conflicts),
+            }, searching));
+        }
+        appendSearchOutcome(host, search, {
+            searching, found: res.shown.length, total: res.total,
+            kindLabel: choice.kind === 'con' ? L.knowsKindCon : choice.kind === 'hyp' ? L.knowsKindHyp : null,
+            onAllKinds: () => {
+                knowsKind = 'all';
+                this.renderResearchOverview();
+            },
+        });
+        // The hypotheses the search shows (the picked ones outside it stay picked) and what matched each by its number.
+        const hypoSearch: HypothesisListSearch | null = searching ? {
+            found: new Set(shownRows.flatMap(r => r.hypo?.id ? [r.hypo.id] : [])),
+            hitOf: (id) => {
+                const r = shownRows.find(x => x.hypo?.id === id);
+                return r ? hitOf(r) : undefined;
+            },
+        } : null;
         // Accepting the agent's proposals at once (§10): a box before each hypothesis, the list's head and foot.
         // The head and "Select all" are about the rows shown; the conflicts alone have none.
-        const accept = choice.kind === 'con' ? null : this.hypothesisKnowsAccept(shownRows.flatMap(r => r.hypo?.id ? [r.hypo.id] : []), mode);
-        // All with both kinds: the conflicts first, the head of the accepting over the hypotheses under them.
-        const split = choice.chips && choice.kind === 'all' && !!accept?.head;
+        const accept = choice.kind === 'con' || !shownRows.some(r => !r.conflict) ? null
+            : this.hypothesisKnowsAccept(shownRows.flatMap(r => r.hypo?.id ? [r.hypo.id] : []), mode, hypoSearch);
+        // Both kinds shown: the conflicts first, the head of the accepting over the hypotheses under them.
+        const split = !!accept?.head && shownRows.some(r => r.conflict) && shownRows.some(r => !r.conflict);
         let list = el('ul', `live-panel-list research-overview__knows${accept ? ' has-accept' : ''}`);
         if (accept?.head && !split) host.appendChild(accept.head);
         for (const row of shownRows) {
@@ -2099,11 +2156,26 @@ export const researchOverviewMethods = uiModule({
             const li = el('li');
             const btn = el('button', `research-overview__knows-row${row.conflict ? ' is-conflict' : ''}`);
             btn.type = 'button';
+            // The first row ↓ of the section's search reaches.
+            btn.dataset.row = '';
+            const hit = hitOf(row);
             const entry = row.hypo?.id ? accept?.entries.get(row.hypo.id) ?? null : null;
-            const tags = row.hypo ? this.hypothesisKnowsTagsEl(row.hypo, entry) : null;
+            let tags = row.hypo ? this.hypothesisKnowsTagsEl(row.hypo, entry) : null;
+            // A hypothesis found by its number or its person's: the amber H… and P… lead its line of tags.
+            const lead = row.hypo ? [
+                ...(hit?.h && row.hypo.id ? [searchHitTag(row.hypo.id)] : []),
+                ...(hit?.p && row.personRef ? [searchHitTag(row.personRef)] : []),
+            ] : [];
+            if (lead.length > 0) {
+                tags ??= el('span', 'rok-tags');
+                tags.prepend(...lead);
+            }
             if (tags) {
                 btn.classList.add('has-tags');
                 btn.append(el('span', 'rok-text', `${row.text} ›`), tags);
+            } else if (row.conflict && hit?.p && row.personRef) {
+                // A conflict found by its person's number: the amber P… before the name.
+                btn.append(searchHitTag(row.personRef), `${row.text} ›`);
             } else {
                 btn.textContent = `${row.text} ›`;
             }
@@ -2121,22 +2193,31 @@ export const researchOverviewMethods = uiModule({
             li.appendChild(btn);
             list.appendChild(li);
         }
-        host.appendChild(list);
+        if (shownRows.length > 0) host.appendChild(list);
         if (accept?.foot) host.appendChild(accept.foot);
+        else if (searching && !accept && rid && rows.some(r => !r.conflict) && this.hypothesesAcceptAvailable()) {
+            // Searching and no list of hypotheses drawn (none found, or Conflicts chosen): the picked ones are still said.
+            this.pruneHypothesisAcceptSelection(rid);
+            const foot = this.hypothesisAcceptFootEl(rid, 'knows', hypoSearch);
+            if (foot) host.appendChild(foot);
+        }
         if (verify) host.appendChild(verify);
     },
 
-    /** The kind chips of "What the research knows": All / Conflicts / Hypotheses, each with its count. */
-    knowsKindChips(kind: KnowsKind, all: number, conflicts: number): HTMLElement {
+    /**
+     * The kind chips of "What the research knows": All / Conflicts / Hypotheses,
+     * each with its count; while searching (spec 083 §2) what was found of
+     * each, a kind with nothing found dashed in its place, still choosable.
+     */
+    knowsKindChips(kind: KnowsKind, counts: Record<KnowsKind, number>, searching = false): HTMLElement {
         const L = strings.live;
         const pills = el('div', 'research-overview__filters research-overview__knows-kinds');
         pills.setAttribute('role', 'radiogroup');
         pills.setAttribute('aria-label', L.knowsKindAria);
-        const options: [KnowsKind, string, number][] = [
-            ['all', L.knowsKindAll, all], ['con', L.knowsKindCon, conflicts], ['hyp', L.knowsKindHyp, all - conflicts],
-        ];
-        for (const [id, label, n] of options) {
-            const chip = el('button', 'research-overview__filter', `${label} ${n}`);
+        const options: [KnowsKind, string][] = [['all', L.knowsKindAll], ['con', L.knowsKindCon], ['hyp', L.knowsKindHyp]];
+        for (const [id, label] of options) {
+            const chip = el('button', 'research-overview__filter');
+            paintSearchChip(chip, label, counts[id], searching);
             chip.type = 'button';
             chip.setAttribute('role', 'radio');
             chip.setAttribute('aria-checked', String(kind === id));

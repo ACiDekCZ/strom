@@ -29,7 +29,7 @@ import {
 } from '../research-hypothesis-waiting.js';
 import { researchActionLabel, setResearchActionLabel } from './research-open-mark.js';
 import type { SearchHit } from '../section-search-match.js';
-import { selectedOutside } from '../section-search-filter.js';
+import { bulkBoxState, selectedOutside } from '../section-search-filter.js';
 import { el, liveSession, markWaitingFocus } from './research-ui.js';
 import { lastBridgeStatus } from './research-sync-ui.js';
 import { uiModule } from './module.js';
@@ -198,8 +198,10 @@ export const hypothesisWaitingMethods = uiModule({
     /**
      * Above a list (DEV §10): while a list asked at once waits, its block
      * ("Waiting for confirmation in the research · 3 hypotheses", Open again,
-     * Stop waiting); else "Select all with a proposal" while one can still be
-     * picked. Null when neither.
+     * Stop waiting); else "Select all with a proposal" ("Select found with a
+     * proposal (n)" while searching) with its box: empty, – or ✓ over the
+     * ones with a proposal it is about. Null when none has one, or when the
+     * most taken at once is reached and some of them are not picked.
      */
     hypothesisAcceptHeadEl(rid: string, entries: readonly HypothesisAcceptEntry[], where: string,
         search: HypothesisListSearch | null = null): HTMLElement | null {
@@ -226,20 +228,29 @@ export const hypothesisWaitingMethods = uiModule({
             actions.append(again, stop);
             return block;
         }
-        const sel = acceptSelection(rid);
-        const free = entries.filter(e => e.box === 'on' && !sel.has(e.id));
-        if (free.length === 0 || acceptSelectionFull(rid)) return null;
+        // The ones with a proposal the list shows (while searching: the found ones); its box counts only them.
+        const ids = entries.filter(e => e.box === 'on').map(e => e.id);
+        if (ids.length === 0) return null;
+        const state = bulkBoxState(ids, acceptSelection(rid));
+        // The most taken at once reached: no more can be picked from here (each box still drops its own).
+        if (state !== 'all' && acceptSelectionFull(rid)) return null;
         const head = el('div', 'hp2-head');
-        // Searching (spec 083): "Select found with a proposal (n)", the ones the search shows.
-        const all = el('button', `link-button hp2-all${search ? ' hp2-all--found' : ''}`,
-            search ? strings.live.bulkSelectFound(entries.filter(e => e.box === 'on').length) : r.hypoSelectAll);
-        all.type = 'button';
-        all.dataset.focusKey = `hp2:${where}:all`;
-        all.onclick = () => {
-            selectAllAccept(rid, entries.filter(e => e.box === 'on').map(e => e.id));
+        // Searching (spec 083 §2): "Select found with a proposal (n)", the ones the search shows.
+        const all = el('label', `hp2-all${search ? ' hp2-all--found' : ''}`);
+        const box = el('input', 'hp2-all-box');
+        box.type = 'checkbox';
+        box.checked = state === 'all';
+        box.indeterminate = state === 'some';
+        box.setAttribute('aria-checked', state === 'some' ? 'mixed' : String(state === 'all'));
+        box.dataset.focusKey = `hp2:${where}:all`;
+        box.onchange = () => {
+            // All of them picked: the box drops them; else it picks the rest.
+            if (state === 'all') for (const id of ids) toggleAcceptSelection(rid, id, false);
+            else selectAllAccept(rid, ids);
             this.renderResearchOverview();
-            refocus(`hp2:${where}:accept`);
+            refocus(state === 'all' ? `hp2:${where}:all` : `hp2:${where}:accept`);
         };
+        all.append(box, el('span', 'hp2-all-text', search ? strings.live.bulkSelectFound(ids.length) : r.hypoSelectAll));
         head.appendChild(all);
         return head;
     },
@@ -535,9 +546,10 @@ export const hypothesisWaitingMethods = uiModule({
     /**
      * The hypotheses' rows of "What the research knows" with the list for
      * accepting proposals at once (where offered): which rows get a box, the
-     * list's head and foot. Null entries: no list.
+     * list's head and foot. Null entries: no list. `search`: the section is
+     * searched (`ids` are the found ones; the foot says the picked ones outside).
      */
-    hypothesisKnowsAccept(ids: readonly string[], mode: Mode): { entries: Map<string, HypothesisAcceptEntry>; head: HTMLElement | null; foot: HTMLElement | null } | null {
+    hypothesisKnowsAccept(ids: readonly string[], mode: Mode, search: HypothesisListSearch | null = null): { entries: Map<string, HypothesisAcceptEntry>; head: HTMLElement | null; foot: HTMLElement | null } | null {
         const rid = this.activeResearchId();
         if (!rid || !this.hypothesesAcceptAvailable()) return null;
         listen(this);
@@ -546,8 +558,8 @@ export const hypothesisWaitingMethods = uiModule({
         if (!entries.some(e => e.box !== 'none')) return null;
         return {
             entries: new Map(entries.map(e => [e.id, e])),
-            head: this.hypothesisAcceptHeadEl(rid, entries, 'knows'),
-            foot: this.hypothesisAcceptFootEl(rid, 'knows'),
+            head: this.hypothesisAcceptHeadEl(rid, entries, 'knows', search),
+            foot: this.hypothesisAcceptFootEl(rid, 'knows', search),
         };
     },
 });

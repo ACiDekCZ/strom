@@ -100,6 +100,18 @@ export function selectedOutside(selected: Iterable<string>, found: ReadonlySet<s
     return [...selected].filter(id => !found.has(id));
 }
 
+/** The box of a list's bulk head: none, some or all of `ids` (the ones it is about) picked. */
+export type BulkBoxState = 'none' | 'some' | 'all';
+
+/**
+ * The bulk head's box (empty / – / ✓): counted only over `ids`, the found
+ * ones with a proposal while searching (the picked ones outside do not count).
+ */
+export function bulkBoxState(ids: readonly string[], selected: ReadonlySet<string>): BulkBoxState {
+    const n = ids.filter(id => selected.has(id)).length;
+    return n === 0 ? 'none' : n === ids.length ? 'all' : 'some';
+}
+
 /**
  * The overview's sheet with the phone's keyboard up: as high as what is
  * visible of the page (`visualViewport`), from its top, so what is found
