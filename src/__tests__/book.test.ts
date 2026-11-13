@@ -597,3 +597,41 @@ function generatedTree(lines: number): StromData {
     for (let l = 0; l < lines; l++) grow(`L${l}_`, 1, 1700 + l, `Linie${String.fromCharCode(65 + (l % 26))}${l}`, []);
     return tree(persons, unions);
 }
+
+describe('Family together (spec 085 §2h)', () => {
+    /** The census of 1890 at Bohumil, Ludmila and their children Vojtěch and Anna; `extra`: one more person in it. */
+    function census(extra?: Person): StromData {
+        const d = ostruznik();
+        const ages: Record<string, string> = { f: '40', fw: '35', v: '10', a: '7' };
+        if (extra) { d.persons[extra.id] = extra; ages[extra.id] = '60'; }
+        for (const [pid, age] of Object.entries(ages)) {
+            d.persons[pid as PersonId].events = [{
+                id: `c_${pid}`, type: 'census', date: '1890-12-31', place: 'Lhota', address: 'č. 12', age, shareId: 'sh_c1890', sourceIds: ['s4'],
+            }];
+        }
+        return d;
+    }
+    const chapterOf = (html: string, no: number): string => {
+        const a = html.indexOf(`id="kap-${no}"`);
+        return a < 0 ? '' : html.slice(a, html.indexOf('</article>', a));
+    };
+
+    it('lists an event of the whole family once, with the ages and its footnote, and the partners do not repeat it', () => {
+        const html = buildFamilyBook(census(), { lang: 'cs', privacy: 'full', detail: 'all' }, ENV);
+        const ch = chapterOf(html, 1);
+        expect(ch).toContain('<div class="book-section book-together"><h3 class="book-sub">Rodina spolu</h3>');
+        expect(ch).toMatch(/<strong>Sčítání lidu 1890<\/strong>, 31\. 12\. 1890, Lhota č\. 12: Bohumil 40 let, Ludmila 35, Vojtěch 10, Anna 7\.<sup class="book-p">/);
+        // Once in the text (the life charts keep their tick, titled, as for any event).
+        expect(ch.match(/(?<!title=")Sčítání lidu/g)).toHaveLength(1);
+        expect(ch).not.toContain('class="shared-line');
+    });
+
+    it('a person outside the family: no block, each partner gets the "with" line with whole names', () => {
+        const cizi = p('cizi', 'Ctimír', 'Pokusník', 'male', { birthDate: '1830', deathDate: '1900' });
+        const html = buildFamilyBook(census(cizi), { lang: 'cs', privacy: 'full', detail: 'all' }, ENV);
+        const ch = chapterOf(html, 1);
+        expect(ch).not.toContain('book-together');
+        expect(ch).toContain('spolu s Ludmila Sejková, Vojtěch Ostružník <span class="shared-line-more">a další 2</span>');
+        expect(ch).not.toContain('shared-line-mark');
+    });
+});

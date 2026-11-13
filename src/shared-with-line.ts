@@ -16,6 +16,9 @@ import { LifeEvent, Person, PersonId, StromData } from './types.js';
 import { SharedEventIndex, buildSharedEventIndex, sharedWith } from './shared-events.js';
 import { shownNameOrEmpty, shownNameParts } from './person-name.js';
 import { sharedEventMarkSvg } from './icons.js';
+import { formatFlexDate, parseFlexDate, yearOf } from './dates.js';
+import { lifeEventLabel } from './person-sources.js';
+import type { getStringsForLang } from './strings.js';
 
 /** One person named in a "with …" line. */
 export interface SharedWithName {
@@ -179,6 +182,33 @@ export function familyTogetherEvents(
         }
     }
     return out;
+}
+
+/**
+ * One line of "Family together" without its full stop and footnote (§2h):
+ * "<strong>Census 1921</strong>, 15 Feb 1921, Dolní Smyšlenice No. 14:
+ * Kvido 42 years, Radegunda 38, Bohuchval 15, Zbyhněv 11". The exact date
+ * only when it has more than the year (the year is in the title); the first
+ * numeric age with its unit, the next ones bare; an age that is not a
+ * number as written. `nameHtml` writes a person (a link or the escaped name).
+ */
+export function familyTogetherLineHtml(
+    ft: FamilyTogetherEvent, S: ReturnType<typeof getStringsForLang>, lang: 'cs' | 'en' | 'de' | 'pl',
+    esc: (text: string) => string, nameHtml: (name: SharedWithName) => string = n => esc(n.text),
+): string {
+    const ev = ft.event;
+    const year = yearOf(ev.date);
+    const title = [lifeEventLabel(ev, S), year !== null ? String(year) : ''].filter(Boolean).join(' ');
+    const exact = parseFlexDate(ev.date)?.month ? formatFlexDate(ev.date, lang) : '';
+    const where = [ev.place?.trim(), ev.address?.trim()].filter(Boolean).join(' ');
+    let unit = false;
+    const people = ft.persons.map(n => {
+        let age = n.age;
+        if (age && /^\d+$/.test(age) && !unit) { age = S.book.togetherYears(Number(age)); unit = true; }
+        return `${nameHtml(n)}${age ? ` ${esc(age)}` : ''}`;
+    }).join(', ');
+    const head = [`<strong>${esc(title)}</strong>`, exact ? esc(exact) : '', where ? esc(where) : ''].filter(Boolean).join(', ');
+    return `${head}: ${people}`;
 }
 
 /**

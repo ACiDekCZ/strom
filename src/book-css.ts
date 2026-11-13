@@ -125,6 +125,10 @@ a { color: inherit; }
 .book-clip img { display: block; max-width: 100%; max-height: 60mm; object-fit: contain; }
 .book-clip figcaption { font-size: 9.5pt; color: #4a4438; margin-top: 3px; }
 .book-photo { width: 34mm; float: right; margin: 0 0 6px 12px; border-radius: 4px; }
+/* "Family together" (spec 085 §2h): the family's shared events once, between two rules */
+.book-together { border-top: 1px solid #e3dccd; border-bottom: 1px solid #e3dccd; padding: 2px 0 8px; break-inside: avoid; }
+.book-together .book-sub { margin-top: 8px; }
+.book-together-line { margin: 3px 0; font-size: 11pt; line-height: 1.5; }
 .book-couple-events .book-ce { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; font-size: 11pt; }
 
 /* The person page's timeline rows, set for paper */

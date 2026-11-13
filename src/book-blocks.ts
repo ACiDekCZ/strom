@@ -29,6 +29,7 @@ import {
     preparePersonPageData, stripResearchIds,
 } from './person-page.js';
 import { BookChapter, BookModel } from './book-model.js';
+import { familyTogetherEvents, familyTogetherLineHtml, sharedIndexOf } from './shared-with-line.js';
 import { BookDetail, BookLang, BookParts } from './book-options.js';
 
 export type BookMode = 'book' | 'app' | 'file';
@@ -543,7 +544,10 @@ function pageOptions(ctx: BookCtx, id: PersonId): PersonPageOptions {
 }
 
 /** One person of a family, by the detail (§4.4); a person described before gets a reference to that chapter. */
-export function personBookHtml(id: PersonId, ctx: BookCtx, opts: { chapter: number; fromRod?: { label: string; chapter?: number } } = { chapter: 0 }): string {
+export function personBookHtml(
+    id: PersonId, ctx: BookCtx,
+    opts: { chapter: number; fromRod?: { label: string; chapter?: number }; skipShares?: ReadonlySet<string> } = { chapter: 0 },
+): string {
     const B = T(ctx).book;
     const p = person(ctx, id);
     if (!p || p.isPlaceholder) return '';
@@ -577,6 +581,7 @@ export function personBookHtml(id: PersonId, ctx: BookCtx, opts: { chapter: numb
                 historyMax: ctx.parts.history ? (ctx.detail === 'all' ? 6 : 3) : 0,
                 moreChildren: B.moreChildren,
                 cite: sid => ctx.sources.cite(sid),
+                ...(opts.skipShares?.size ? { skipShares: opts.skipShares } : {}),
             }));
         }
         if (all && ctx.parts.media) {
@@ -633,6 +638,27 @@ function coupleEventsHtml(ctx: BookCtx, u: Partnership): string {
         return `<div class="book-ce"><span>${esc(date)}</span><span>${esc(text)}${ctx.sources.citeAll(ev.sourceIds)}</span></div>`;
     }).join('');
     return `<div class="book-section book-couple-events"><h3 class="book-sub">${esc(S.partnerEvents.bookTitle)}</h3>${rows}</div>`;
+}
+
+/**
+ * "Family together" (spec 085 §2h): the shared events everyone of which is
+ * in this family (the couple and their children, as far as the reader may
+ * see them), one line each with the ages and the footnote; the partners'
+ * timelines then leave these events out (`skip`).
+ */
+export function familyTogetherHtml(ctx: BookCtx, u: Partnership): { html: string; skip: ReadonlySet<string> } {
+    const S = T(ctx);
+    const members = [u.person1Id, u.person2Id, ...u.childIds].filter(id => {
+        const p = person(ctx, id);
+        return !!p && !p.isPlaceholder;
+    });
+    const list = familyTogetherEvents(ctx.tree, sharedIndexOf(ctx.tree), members, { hidden: id => shielded(ctx, id) });
+    if (!list.length) return { html: '', skip: new Set() };
+    const rows = list.map(ft => `<p class="book-together-line">${familyTogetherLineHtml(ft, S, ctx.lang, esc)}.${ctx.sources.citeAll(ft.event.sourceIds)}</p>`);
+    return {
+        html: `<div class="book-section book-together"><h3 class="book-sub">${esc(S.book.familyTogether)}</h3>${rows.join('')}</div>`,
+        skip: new Set(list.map(ft => ft.shareId)),
+    };
 }
 
 function childRelation(ctx: BookCtx, c: Person, u: Partnership): string {
@@ -717,12 +743,13 @@ export function familyChapterHtml(ch: BookChapter, ctx: BookCtx): string {
     }).join('');
     const head = `<header class="book-family-head"><div class="book-kicker">${esc(B.chapterKicker(ch.no, ch.gen))}</div>`
         + `<h2>${pairName(ctx, u)}</h2>${line}${origins}</header>`;
+    const together = familyTogetherHtml(ctx, u);
     const people = ids.map(id => {
         const fromRodId = ch.rodId && ch.memberId !== id ? birthRodNamed(ctx, id) : null;
         const fromRod = fromRodId && fromRodId !== ch.rodId
             ? { label: rodLabelOf(ctx, fromRodId), ...(ctx.model.birthChapter.get(id) ? { chapter: ctx.model.birthChapter.get(id)! } : {}) }
             : undefined;
-        return personBookHtml(id, ctx, { chapter: ch.no, ...(fromRod ? { fromRod } : {}) });
+        return personBookHtml(id, ctx, { chapter: ch.no, ...(fromRod ? { fromRod } : {}), skipShares: together.skip });
     });
     const partners = ctx.detail === 'brief' && people.length === 2
         ? `<div class="book-pair">${people.join('')}</div>` : people.join('');
@@ -743,7 +770,7 @@ export function familyChapterHtml(ch: BookChapter, ctx: BookCtx): string {
     const children = childrenHtml(ctx, u, ch);
     const sources = chapterSourcesHtml(ctx, ch.no);
     ctx.sources.chapter = 0;
-    return `<article class="book-family${ch.sub ? ' is-sub' : ''}" id="${esc(bookId(ctx, `kap-${ch.no}`))}">${head}${events}`
+    return `<article class="book-family${ch.sub ? ' is-sub' : ''}" id="${esc(bookId(ctx, `kap-${ch.no}`))}">${head}${events}${together.html}`
         + `<div class="book-section book-partners">${partners}</div>${storyHtml}${children}${sources}</article>`;
 }
 

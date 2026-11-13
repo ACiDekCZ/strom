@@ -36,6 +36,7 @@ import {
     personIndexSort, surnameFirst, ZIP_PICK_LINES,
 } from './family-pages.js';
 import { FAMILY_PAGES_CSS, PAGE_SET_SCRIPT } from './family-pages-css.js';
+import { FamilyTogetherEvent, familyTogetherEvents, familyTogetherLineHtml, sharedIndexOf } from './shared-with-line.js';
 import { RodPickerItem, rodPickKey, rodPickerHtml, rodPickerItems } from './rod-picker.js';
 import { pluralTemplates, searchPageSetIndex } from './family-pages-search.js';
 import {
@@ -1037,11 +1038,33 @@ function childCardHtml(r: Render, ctx: BookCtx, c: Person): string {
         + (note ? `<span class="sp-kid-note">${note}</span>` : '') + '</div>';
 }
 
-/** The union's sources (its own and its events'), as the book lists a chapter's. */
-function familySourcesHtml(r: Render, u: Partnership): string {
+/**
+ * The family's shared events everyone of which is on this page (spec 085
+ * §2h): the couple and the children the reader may see, one line each with
+ * the ages, the given names leading to their pages.
+ */
+function familyTogetherOf(r: Render, u: Partnership, members: readonly PersonId[]): FamilyTogetherEvent[] {
+    const tree = r.set.protectedTree.tree;
+    return familyTogetherEvents(tree, sharedIndexOf(tree), members, { hidden: id => isProtectedPerson(r.set.protectedTree, id) });
+}
+
+function familyTogetherHtml(r: Render, list: readonly FamilyTogetherEvent[]): string {
+    if (!list.length) return '';
+    const nameHtml = (n: FamilyTogetherEvent['persons'][number]): string => {
+        const slug = r.set.personSlug.get(n.personId);
+        return slug ? pageLink(r, slug, esc(n.text)) : esc(n.text);
+    };
+    const rows = list.map(ft => `<p class="sp-res sp-together">${familyTogetherLineHtml(ft, r.S, r.set.options.lang, esc, nameHtml)}.</p>`);
+    return `<section class="sp-block"><h2 class="sp-h2">${esc(r.S.book.familyTogether)}</h2>${rows.join('')}</section>`;
+}
+
+/** The union's sources (its own, its events' and those of the family's shared events), as the book lists a chapter's. */
+function familySourcesHtml(r: Render, u: Partnership, together: readonly FamilyTogetherEvent[] = []): string {
     if (!r.set.options.sources) return '';
     const sources = r.set.protectedTree.tree.sources ?? {};
-    const ids = [...new Set([...(u.sourceIds ?? []), ...(u.events ?? []).flatMap(e => e.sourceIds ?? [])])].filter(id => !!sources[id]);
+    const ids = [...new Set([
+        ...(u.sourceIds ?? []), ...(u.events ?? []).flatMap(e => e.sourceIds ?? []), ...together.flatMap(ft => ft.event.sourceIds ?? []),
+    ])].filter(id => !!sources[id]);
     const rows = ids.map(id => {
         const s = sources[id];
         // The entry's place without the book (an older source: its location as it is).
@@ -1083,8 +1106,9 @@ function familyPageHtml(r: Render, page: SetPage, ctx: BookCtx): string {
     const children = kids.length
         ? `<section class="sp-block"><h2 class="sp-h2">${esc(F.fam.kidsOf(kids.length))}</h2><div class="sp-kids-grid">${kids.map(c => childCardHtml(r, ctx, c)).join('')}</div></section>`
         : '';
-    return `<div class="sp-fam-page">${head}${partners}${marriageHtml(r, ctx, u, page.slug)}${residenceHtml(r, u)}${children}`
-        + `${familyStoryHtml(r, u, ps, page.slug)}${familySourcesHtml(r, u)}</div>`;
+    const together = familyTogetherOf(r, u, [...ps.map(p => p.id), ...kids.map(c => c.id)]);
+    return `<div class="sp-fam-page">${head}${partners}${marriageHtml(r, ctx, u, page.slug)}${residenceHtml(r, u)}${familyTogetherHtml(r, together)}${children}`
+        + `${familyStoryHtml(r, u, ps, page.slug)}${familySourcesHtml(r, u, together)}</div>`;
 }
 
 // ─── The bar and the search (§3.1, §3.4) ───────────────────────────────────

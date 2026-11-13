@@ -223,6 +223,25 @@ describe('a family\'s page (§2.2)', () => {
         expect(jj).not.toContain('Hrabanov');
     });
 
+    it('Family together (spec 085 §2h): a shared event of the whole family, the given names linked, its source listed', () => {
+        const { data, unions } = familyPagesFixture();
+        const u = data.partnerships[unions.f10];
+        const members = [u.person1Id, u.person2Id, ...u.childIds];
+        members.forEach((pid, i) => {
+            data.persons[pid].events = [...(data.persons[pid].events ?? []), {
+                id: `c_${pid}`, type: 'census', date: '1880', place: 'Lhota', age: String(40 - i * 10), shareId: 'sh_c1880', sourceIds: ['s_census'],
+            }];
+        });
+        data.sources = { ...data.sources, s_census: { id: 's_census', title: 'Sčítací arch Lhota 1880' } };
+        const set = rodsSet(data, fixtureRods(data), { privacy: 'full' });
+        const html = buildPageSetHtml(set);
+        expectWellFormed(html, set);
+        const page = section(html, set.familySlug.get(unions.f10)!);
+        expect(page).toContain('<h2 class="sp-h2">Rodina spolu</h2>');
+        expect(page).toMatch(/<p class="sp-res sp-together"><strong>Sčítání lidu 1880<\/strong>, Lhota: <a class="pp-link" href="#[^"]+">Josef<\/a> 40 let, <a class="pp-link" href="#[^"]+">Terezie<\/a> 30, <a class="pp-link" href="#[^"]+">Antonín<\/a> 20\.<\/p>/);
+        expect(page).toContain('Sčítací arch Lhota 1880');
+    });
+
     it('a couple with children and no marriage: a page without ⚭, father and mother', () => {
         const { data, unions } = familyPagesFixture();
         const u = data.partnerships[unions.f10];
