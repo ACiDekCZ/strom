@@ -1,8 +1,8 @@
 /**
  * Copies of a shared event that went apart (spec 085 §4, 4b–4g): the event
  * editor's save keeps a difference it did not touch, Unify and Separate are
- * each one undo step, the Unify dialog's and the editor bar's content.
- * Invented data.
+ * each one undo step, the Unify dialog's and the editor bar's content, and
+ * the Events table's cells that carry the finding. Invented data.
  */
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 
@@ -16,9 +16,12 @@ import { TreeManager } from '../tree-manager.js';
 import { AuditLogManager } from '../audit-log.js';
 import { UndoManager } from '../undo.js';
 import { setLanguage } from '../strings.js';
+import { validateTreeData } from '../validation.js';
 import { findDivergentShares, shareCopiesOf, shareDivergence, type SharedEventCommon } from '../shared-events.js';
 import { sharedDraftFor, sharedEditFrom } from '../shared-event-editor.js';
 import { divergentPersons, editorDivergence, unifyDefaults, unifyModel, unifyValues } from '../shared-divergence.js';
+import { buildTableModel } from '../ui/table-view/table-model.js';
+import { buildCheckIndex, issueTargets } from '../ui/table-view/table-checks.js';
 import { STROM_DATA_VERSION, toPersonId, type LifeEvent, type Person, type PersonId, type StromData, type TreeId } from '../types.js';
 
 const TREE = 'shared-unify' as TreeId;
@@ -151,5 +154,31 @@ describe('the Unify dialog and the editor bar', () => {
         expect(fromMajority.text).toContain('Zbyhněv Šmidlovský');
         expect(fromMajority.fields).toEqual([]);
         expect(editorDivergence(data, d, { personId: ZBYHNEV, eventId: 'c_z' }, 'en').fields).toEqual(['date']);
+    });
+});
+
+describe('the Events table (4b)', () => {
+    it('the finding marks the differing copy\'s cells of the differing fields only', () => {
+        const data = tree(true);
+        const issue = validateTreeData(data).issues.find(i => i.type === 'sharedCopiesDiffer')!;
+        expect(issue.shareId).toBe(SHARE);
+        const cols = issueTargets(issue, data).map(t => `${t.id}|${t.col}`).sort();
+        expect(cols).toEqual([`l:${ZBYHNEV}:c_z|evDate`, `l:${ZBYHNEV}:c_z|evPlace`, `l:${ZBYHNEV}:c_z|evValue`]);
+
+        const index = buildCheckIndex(data, [issue]);
+        const m = buildTableModel(data, { rev: 1, homeId: HOSTIVIT, lang: 'en', year: 2026, reliability: { researchTree: false, originFeature: false } });
+        const row = [...m.eventRows.values()].find(r => r.source === 'life' && r.refs.length === 3)!;
+        expect(row).toBeTruthy();
+        for (const col of ['evDate', 'evPlace', 'evValue']) {
+            expect(index.cellAll(row, col, null).map(f => f.issue.type)).toEqual(['sharedCopiesDiffer']);
+        }
+        expect(index.cellAll(row, 'evType', null)).toEqual([]);
+        expect(index.cellAll(row, 'evSource', null)).toEqual([]);
+    });
+
+    it('copies alike: no finding, no cell', () => {
+        const data = tree();
+        data.persons[ZBYHNEV]!.events![0].date = '1910-12-31';
+        expect(validateTreeData(data).issues.some(i => i.type === 'sharedCopiesDiffer')).toBe(false);
     });
 });

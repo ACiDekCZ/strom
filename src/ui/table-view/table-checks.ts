@@ -17,6 +17,8 @@ import { qualityFinding, qualityFindingKey } from '../../validation.js';
 import { dismissedKeys } from '../../quality-dismiss.js';
 import { placeKey } from '../../places.js';
 import { participantName } from '../../godparents.js';
+import { findDivergentShares, shareDivergence, type ShareDivergence, type SharedEventCommonField } from '../../shared-events.js';
+import { divergentCopies, fieldsOfCopy } from '../../shared-divergence.js';
 import { parentSlots, type ParticipantRole, type Partnership, type PartnershipId, type Person, type ResearchConflict, type StromData } from '../../types.js';
 import type { CellSeverity, EventRow, PersonRow, TableModel, TableRow } from './table-model.js';
 import { personGodparents } from './table-events.js';
@@ -108,7 +110,9 @@ function parentAgeColumn(data: StromData, child: Person | undefined, parentId: s
  * with no cell of their own (cycles, references…) give none: the finding is
  * seen in the Findings column of its people.
  */
-export function issueTargets(issue: ValidationIssue, data: StromData): CheckTarget[] {
+export function issueTargets(issue: ValidationIssue, data: StromData,
+    divergence: (shareId: string) => ShareDivergence | null = id => shareDivergence(data, id)): CheckTarget[] {
+    if (issue.type === 'sharedCopiesDiffer') return sharedTargets(issue, divergence);
     const ids = issue.personIds ?? [];
     const uid = issue.partnershipIds?.[0];
     const u = uid ? data.partnerships[uid] : undefined;
@@ -154,6 +158,28 @@ export function issueTargets(issue: ValidationIssue, data: StromData): CheckTarg
     return [];
 }
 
+/** The Events table's column of a common field of a shared event (4b). */
+const SHARED_FIELD_COLUMN: Readonly<Record<SharedEventCommonField, string>> = {
+    type: 'evType', customLabel: 'evType', date: 'evDate', place: 'evPlace', address: 'evPlace',
+    note: 'evValue', sourceIds: 'evSource', citationQuay: 'evSource',
+};
+
+/**
+ * A shared event whose copies differ (spec 085 4b): the Events table's
+ * cells of each differing copy in the columns of the fields it differs in
+ * (the row of the shared event holds every copy, so the cell is the row's).
+ */
+function sharedTargets(issue: ValidationIssue, divergence: (shareId: string) => ShareDivergence | null): CheckTarget[] {
+    const d = issue.shareId ? divergence(issue.shareId) : null;
+    if (!d) return [];
+    const out: CheckTarget[] = [];
+    for (const copy of divergentCopies(d)) {
+        const cols = new Set(fieldsOfCopy(d, copy).map(f => SHARED_FIELD_COLUMN[f.field]));
+        for (const col of cols) out.push({ rows: 'events', id: `l:${copy.personId}:${copy.eventId}`, col });
+    }
+    return out;
+}
+
 /**
  * The Events table's date cell of a person's event out of the lifespan: the
  * events of the finding's type whose date the finding's detail names
@@ -187,12 +213,19 @@ function eventCellKeys(row: EventRow, colId: string): string[] {
         if (row.source === 'marriage' && uid) return [cellKey('unions', uid, 'wDate')];
         if (row.source === 'life') return row.refs.map(r => cellKey('events', `l:${r.personId}:${r.eventId}`, 'evDate'));
     }
+    // A person's event's own cells (a shared event's differing copies, 4b): those of each copy of the row.
+    if (row.source === 'life' && LIFE_EVENT_CELLS.has(colId)) {
+        return row.refs.map(r => cellKey('events', `l:${r.personId}:${r.eventId}`, colId));
+    }
     if (colId === 'evAge') {
         if (row.source === 'death' && pid) return [cellKey('persons', pid, 'dAge')];
         if (row.source === 'marriage' && uid) return row.persons.map(p => cellKey('unions', uid, `age@${p.id}`));
     }
     return [];
 }
+
+/** The Events table's cells a finding can name on a person's event besides its date. */
+const LIFE_EVENT_CELLS: ReadonlySet<string> = new Set(['evType', 'evPlace', 'evValue', 'evSource']);
 
 /** A participant's name as recurringGodparent names it: a linked person's full name, else the written name's key. */
 function participantKeys(data: StromData, x: { personId?: string; name?: string }): string[] {
@@ -253,7 +286,7 @@ export class CheckIndex {
                 const keys = new Set([`p:${issue.subject.trim()}`, ...participantKeys(this.data, { name: issue.subject })]);
                 for (const k of keys) (this.recurring.get(k) ?? this.recurring.set(k, []).get(k)!).push(f);
             }
-            for (const t of issueTargets(issue, this.data)) {
+            for (const t of issueTargets(issue, this.data, id => this.divergence(id))) {
                 const k = cellKey(t.rows, t.id, t.col, t.union);
                 const list = this.cells.get(k);
                 if (!list) this.cells.set(k, [f]);
@@ -270,6 +303,14 @@ export class CheckIndex {
                 this.people.set(id, s);
             }
         }
+    }
+
+    /** The tree's shared events whose copies differ, by share id (computed once, when a finding needs it). */
+    private divergences: Map<string, ShareDivergence> | null = null;
+
+    private divergence(shareId: string): ShareDivergence | null {
+        if (!this.divergences) this.divergences = new Map(findDivergentShares(this.data).map(d => [d.shareId, d]));
+        return this.divergences.get(shareId) ?? null;
     }
 
     /** A person's findings (none: zeros). */

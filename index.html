@@ -10827,6 +10827,9 @@
             color: var(--text); font: inherit; font-weight: 600; cursor: pointer;
         }
         .tv-bub-link { border: none; background: none; padding: 0; height: 30px; color: var(--primary); font: inherit; font-weight: 600; cursor: pointer; }
+        /* Spec 085 4b: a shared event whose copies differ has Data quality's actions; they wrap when the bubble is narrow. */
+        .tv-bub-actions:has(.tv-bub-btn--primary) { flex-wrap: wrap; row-gap: 8px; }
+        .tv-bub-btn--primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
         .tv-bub-btn:focus-visible, .tv-bub-link:focus-visible, .tv-bub-close:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
         .tv-bub-title { padding: 4px 14px 6px; font-weight: 600; }
         .tv-bub-sep { height: 1px; margin: 6px 0; background: var(--divider); }
@@ -10949,6 +10952,7 @@
             .tv-unions-pill:hover { border-color: var(--primary); }
             .tv-more-btn:hover { text-decoration: underline; }
             .tv-bub-btn:hover { border-color: var(--primary); }
+            .tv-bub-btn--primary:hover { filter: brightness(1.08); }
             .tv-bub-link:hover { text-decoration: underline; }
             .tv-bub-close:hover { color: var(--text); }
             .tv-chip:not([aria-disabled="true"]):not(.tv-chip--col):hover, .tv-filters-btn:hover { border-color: var(--primary); }

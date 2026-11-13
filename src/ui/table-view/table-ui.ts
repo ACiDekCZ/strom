@@ -99,6 +99,8 @@ import { shownNameOrEmpty as personName } from '../../person-name.js';
 import { emptyStateHtml } from '../empty-state.js';
 import { tableEmptyState, type TableEmptyState } from './table-empty.js';
 import { sourcePlaceLine } from '../../source-location.js';
+import { shareDivergence } from '../../shared-events.js';
+import { divergenceSentence, divergentPersons } from '../../shared-divergence.js';
 
 interface Mounted {
     container: HTMLElement;
@@ -390,6 +392,19 @@ function researchCellOpens(line: GridLine, col: ColumnDef, value: CellValue): bo
     if (line.kind !== 'row' || line.row.kind !== 'person' || col.group !== 'research') return false;
     const r = value.research;
     return !!r && !value.na && !r.liveOff && (r.parts.length > 0 || r.count !== undefined || !!r.signal);
+}
+
+/**
+ * A shared event whose copies differ (spec 085 4b): its sentence as the
+ * detail ("Census 1921 · Zbyhněv Hurdálek: date differs …") and the label of
+ * Separate; nothing for other findings or when the copies agree by now.
+ */
+function sharedFinding(issue: ValidationIssue, data: StromData): { detail: string; shared: { separateLabel: string } } | null {
+    const d = issue.type === 'sharedCopiesDiffer' && issue.shareId ? shareDivergence(data, issue.shareId) : null;
+    if (!d) return null;
+    const off = divergentPersons(d).length;
+    const v = strings.validation;
+    return { detail: divergenceSentence(data, d), shared: { separateLabel: off === 1 ? v.separateCopy : v.separateCopies(off) } };
 }
 
 /** Whom or what a finding is about, as Data quality names it: the subject (a place, a godparent), else its people. */
@@ -1073,16 +1088,28 @@ export const tableMethods = uiModule({
         const findCell = (): HTMLElement | null => [...grid.el.querySelectorAll<HTMLElement>('.tv-row[data-key]')]
             .find(r => r.dataset.key === cellKey)?.querySelector<HTMLElement>(`[aria-colindex="${colPos + 1}"]`) ?? null;
         const data = DataManager.getData();
-        const shown = list.map(f => ({
-            severity: f.severity, title: translateValidationType(f.issue.type), detail: f.issue.detail ?? '',
-            ...(about ? { about: findingAbout(f.issue, data) } : {}),
-        }));
+        const shown = list.map(f => {
+            const shared = sharedFinding(f.issue, data);
+            return {
+                severity: f.severity, title: translateValidationType(f.issue.type), detail: shared?.detail ?? f.issue.detail ?? '',
+                ...(about ? { about: findingAbout(f.issue, data) } : {}),
+                ...(shared ? { shared: shared.shared } : {}),
+            };
+        });
         const act = (what: string, i: number): void => {
             const f = list[i];
             if (!f) return;
             if (what === 'dismiss') this.dismissTableFinding(f, treeId);
             else if (what === 'restore') this.restoreTableFinding(f, treeId);
-            else if (what === 'quality') {
+            else if (what === 'unify' && f.issue.shareId) {
+                const opener = this.divergentCopyOf(f.issue.shareId)?.personId ?? null;
+                this.showSharedUnify(f.issue.shareId, opener, () => this.remapTableChecks());
+            } else if (what === 'separate' && f.issue.shareId) {
+                if (this.separateDivergentShared(f.issue.shareId)) this.remapTableChecks();
+            } else if (what === 'open' && f.issue.shareId) {
+                const copy = this.divergentCopyOf(f.issue.shareId);
+                if (copy) this.openEventEditorFor(copy.personId, copy.eventId);
+            } else if (what === 'quality') {
                 void this.showTreeValidationDialog(treeId, undefined, {
                     focus: { type: f.issue.type, category: issueCategory(f.issue), dismissed: f.dismissed },
                 });

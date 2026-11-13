@@ -28,6 +28,12 @@ export interface BubbleFinding {
     detail: string;
     /** Who or what it is about (the person's list, §7.4): the subject, else the people of the finding. */
     about?: string;
+    /**
+     * A shared event whose copies differ (spec 085 4b): the actions of Data
+     * quality instead of "Not an error": Make all match… and Separate (its
+     * label says how many) and Open.
+     */
+    shared?: { separateLabel: string };
 }
 
 export interface BubbleActions {
@@ -65,7 +71,14 @@ export function bubbleHtml(findings: readonly BubbleFinding[], readOnly: boolean
         if (f.detail) html += `<div class="tv-bub-detail">${esc(f.detail)}</div>`;
         if (unusual) html += `<div class="tv-bub-note">${esc(t.dismissedNote)}</div>`;
         html += '<div class="tv-bub-actions">';
-        if (!readOnly) {
+        if (f.shared) {
+            const v = strings.validation;
+            if (!readOnly) {
+                html += `<button type="button" class="tv-bub-btn tv-bub-btn--primary" data-act="unify" data-i="${i}">${esc(v.unify)}</button>`
+                    + `<button type="button" class="tv-bub-btn" data-act="separate" data-i="${i}">${esc(f.shared.separateLabel)}</button>`;
+            }
+            html += `<button type="button" class="tv-bub-link" data-act="open" data-i="${i}">${esc(v.openEvent)}</button>`;
+        } else if (!readOnly) {
             html += `<button type="button" class="tv-bub-btn" data-act="${unusual ? 'restore' : 'dismiss'}" data-i="${i}">`
                 + `${esc(unusual ? t.reReport : t.notError)}</button>`;
         }
