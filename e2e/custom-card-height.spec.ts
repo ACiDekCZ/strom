@@ -642,7 +642,7 @@ test.describe('pills on a card of one height (T30, 1113)', () => {
      * a long place and its cause, 240px wide.
      */
     test('the sibling order and ⇄ under the last line: no narrow column, no word broken, no empty band; the image export leaves the room out', async ({ page }) => {
-        const DEATH_PLACE = 'Rakovník, Husovo náměstí čp. 123';
+        const DEATH_PLACE = 'Lhotkov, Jasanové náměstí čp. 123';
         const CAUSE = 'zánět plic a celkové vysílení';
         await page.setViewportSize({ width: 1440, height: 900 });
         await seedSetting(page, 'cardDensity', 'custom');
