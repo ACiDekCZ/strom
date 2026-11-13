@@ -1,8 +1,11 @@
 import type { StringsType } from '../strings.js';
-import { familyGenitivePl, nPl, plPl, HIT_KIND_PL } from './helpers.js';
+import { familyGenitivePl, nPl, plPl, numPl, HIT_KIND_PL } from './helpers.js';
 
 /** "5 miejsc": the place count shared by the map strings (the pack cannot read `strings` at load time). */
 const placeCountPl = (count: number): string => `${count} ${plPl(count, 'miejsce', 'miejsca', 'miejsc')}`;
+
+/** "5 przodków": an ancestor count of the map's path (spec 054). */
+const ancPl = (n: number): string => `${numPl(n)} ${plPl(n, 'przodek', 'przodkowie', 'przodków')}`;
 
 export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'tooltip' | 'placeholders' | 'archives'
     | 'kinship' | 'contextMenu' | 'viewModeSwitch' | 'places' | 'map' | 'fan' | 'timeline' | 'treeHealth'
@@ -608,6 +611,64 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
         researchElsewhere: (fix: string) => `Drzewo jest połączone z badaniem na innym komputerze. Miejscowość i dom rozdziela się tam: menu badania → Poprawki drzewa → ${fix}.`,
         researchElsewhereFix: 'Ulice i numery domów w miejscach faktów',
         hitKind: (kind: string) => HIT_KIND_PL[kind] ?? '',
+        // Droga przodków do jednej osoby w migracji w czasie (spec 054).
+        timeModeShort: 'W czasie',
+        timeTipTitle: 'Migracja w czasie',
+        timeTipText: 'Odtwarza, jak rody się przemieszczały, i pokazuje drogę przodków do jednej osoby.',
+        timeTipTry: 'Wypróbuj',
+        timeTipLater: 'Nie teraz',
+        pathPick: 'Droga do osoby…',
+        pathPickTitle: 'Droga do osoby',
+        pathPickPlaceholder: 'Imię, nazwisko lub rok',
+        pathPickRecent: 'Ostatnio wybrana',
+        pathPickFound: 'Znaleziono',
+        pathPickWholeTree: 'Szukanie w całym drzewie.',
+        pathPickOnMap: (n: number) => `${ancPl(n)} na mapie`,
+        pathPickNone: 'przodkowie jeszcze bez miejsc na mapie',
+        pathChip: 'Droga do:',
+        pathChange: 'Zmień osobę',
+        pathClear: 'Usuń drogę',
+        pathFromPage: 'Droga przodków na mapie',
+        pathThisPerson: 'Droga do tej osoby',
+        pathBackToPage: 'Wróć do strony osoby',
+        pathGoal: (name: string) => `cel: ${name}`,
+        pathGoalEnd: (name: string, year: number | undefined, kind: 'birth' | 'baptism' | 'residence') =>
+            [name, [kind === 'baptism' ? 'chrzest' : kind === 'residence' ? 'zamieszkanie' : '', year ?? ''].filter(v => v !== '').join(' ')]
+                .filter(Boolean).join(' · '),
+        pathTargetNoPlace: (name: string) => `${name} nie ma miejsca na mapie.`,
+        pathNoAncestors: 'Żaden przodek nie ma jeszcze miejsca na mapie.',
+        pathOtherPerson: 'Wybierz inną osobę',
+        linesTitle: 'Rody',
+        linesChip: (n: number) => `Rody (${n})`,
+        linesQuarters: 'Ćwiartki',
+        linesEighths: 'Ósemki',
+        linesCollapse: 'Zwiń',
+        linesAncestors: (n: number) => ancPl(n),
+        linesRow: (rel: string, n: number) => `${rel} · ${ancPl(n)}`,
+        linesUnknown: (rel: string, female: boolean) => `${rel} – ${female ? 'nieznana' : 'nieznany'}`,
+        linesTrunk: 'Pień: rodzice i dziadkowie',
+        linesOff: 'Bez kolorów rodów',
+        linesImplex: (name: string, year: number | undefined, lineA: string, lineB: string) =>
+            `↻ ${name}${year != null ? ` (${year})` : ''} jest w dwóch rodach: ${lineA} i ${lineB}.`,
+        linesImplexShort: '↻ w dwóch rodach',
+        linesCut: (shown: number, total: number) => `Pokazano ${numPl(shown)} z ${numPl(total)} linii`,
+        linesCutWhy: 'Pierwszeństwo mają bliższe pokolenia i nowo dodane linie.',
+        pathUndated: (n: number) => `${numPl(n)} ${plPl(n, 'przodka', 'przodków', 'przodków')} bez daty lub miejsca nie ma na osi czasu.`,
+        pathUndatedList: 'Lista ›',
+        pathUndatedTitle: 'Przodkowie poza osią czasu',
+        pathUndatedPlacesNote: 'Położenie miejsc uzupełnia strona',
+        missingDate: 'bez daty urodzenia',
+        missingPlace: 'bez miejsca',
+        missingBoth: 'bez daty i miejsca',
+        timeMarkTitle: (surname: string, year: number) => `${surname}: najstarszy przodek ${year}`,
+        lineE8: 'ojciec ojca ojca',
+        lineE9: 'matka ojca ojca',
+        lineE10: 'ojciec matki ojca',
+        lineE11: 'matka matki ojca',
+        lineE12: 'ojciec ojca matki',
+        lineE13: 'matka ojca matki',
+        lineE14: 'ojciec matki matki',
+        lineE15: 'matka matki matki',
     },
 
     fan: {

@@ -95,7 +95,7 @@ export function contrastRatio(a: string, b: string): number {
 // ---------------------------------------------------------------- modes
 
 /** Hues of the four grandparent lines: father's father, father's mother, mother's father, mother's mother. */
-const LINE_HUE = [50, 95, 215, 320];
+export const LINE_HUE = [50, 95, 215, 320] as const;
 /** Hues of the ten largest family lines, in order of size. */
 const ROD_HUE = [55, 145, 245, 320, 92, 195, 15, 275, 120, 345];
 
