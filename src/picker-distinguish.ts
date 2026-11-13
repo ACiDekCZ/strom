@@ -4,8 +4,8 @@
  * Rows whose shown text (name with titles and the birth-surname note, plus
  * the birth year when the list shows it) is the same as another row's of the
  * same result get a second, quiet line with the shortest details that set
- * them apart: years → ⚭ partner → parents → place. A row with a name of its
- * own stays as it was.
+ * them apart: years → ⚭ partner → parents → place, leaving out a detail the
+ * whole group shares. A row with a name of its own stays as it was.
  */
 
 import { Person, PersonId, StromData } from './types.js';
@@ -145,9 +145,12 @@ const prefixKey = (f: DistFeatures, k: number): string =>
 /**
  * The distinguishing line of a row against the other rows of its group: the
  * shortest run of details (years, partner, parents, place) that no other row
- * shares, its known parts joined with " · ". When nothing unknown sets it
- * apart, its first known detail; when nothing is known at all, "no other
- * details".
+ * shares, its known parts joined with " · ". A detail every row of the group
+ * has the same (the parents of sisters) tells nothing and is left out, so the
+ * one that does (their birthplaces) is not cut off behind it. When only an
+ * unknown detail sets the row apart, its first known detail the others do not
+ * all share; when there is none, "no other details". A row nothing sets apart
+ * from another shows all it has, shared or not.
  */
 export function distinguishLine(own: DistFeatures, others: readonly DistFeatures[]): string {
     let k = 1;
@@ -155,9 +158,15 @@ export function distinguishLine(own: DistFeatures, others: readonly DistFeatures
         const mine = prefixKey(own, k);
         if (others.every(o => prefixKey(o, k) !== mine)) break;
     }
-    let shown = own.slice(0, Math.min(k, 4)).filter((v): v is string => !!v);
+    if (k > 4) {
+        // Another row has the same details: nothing to leave out.
+        const all = own.filter((v): v is string => !!v);
+        return all.length ? all.join(' · ') : strings.personPicker.distNone;
+    }
+    const shared = own.map((v, i) => !!v && others.every(o => o[i] === v));
+    let shown = own.slice(0, k).filter((v, i): v is string => !!v && !shared[i]);
     if (!shown.length) {
-        const first = own.find(v => !!v);
+        const first = own.find((v, i) => !!v && !shared[i]);
         shown = first ? [first] : [];
     }
     return shown.length ? shown.join(' · ') : strings.personPicker.distNone;

@@ -142,3 +142,48 @@ test.describe('person search: same names on a phone', () => {
         expect(byId.al1.label).toBe('Alžběta Fikcínová (*1852), Tochter von Josef Maximilian Fikcín-Návrhář und Marie Magdalena Fikcínová-Návrhářová');
     });
 });
+
+/**
+ * Sisters of the same name and the same parents, apart only by the
+ * birthplace (1113-app-sdilena-udalost): the parents, the same for both, are
+ * left out of the line, so the birthplace is in its visible text and not cut
+ * off behind long parents' names.
+ */
+const SISTERS: Record<string, SeedPerson> = {
+    s1: { firstName: 'Alžběta Marie', lastName: 'Fikcínová-Pokusná', gender: 'female', parents: ['fa', 'mo'], birthPlace: 'Dolní Smyšlenice' },
+    s2: { firstName: 'Alžběta Marie', lastName: 'Fikcínová-Pokusná', gender: 'female', parents: ['fa', 'mo'], birthPlace: 'Horní Smyšlenice' },
+    fa: { firstName: 'Maximilián Bartoloměj', lastName: 'Hrubohorský-Zvěřinovský', partners: ['mo'] },
+    mo: { firstName: 'Alžběta', lastName: 'Hrubohorská-Zvěřinovská', gender: 'female', partners: ['fa'] },
+};
+
+for (const [locale, born] of [['de-DE', 'Geburtsort'], ['cs-CZ', 'rodiště']] as const) {
+    test.describe(`person search: sisters told apart by the birthplace (${locale})`, () => {
+        test.use({ locale, viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+        test(`phone 390px: the visible line is the birthplace, not the shared parents (${locale})`, async ({ page }) => {
+            await openApp(page);
+            await seedTree(page, SISTERS, 'Fikcinovi', 'fa');
+            await page.evaluate(() => window.Strom.UI.refreshSearch());
+            await page.locator('#search-open-btn').click();
+            await page.locator('#toolbar-search-picker .person-picker-input').fill('alž');
+            await expect(items(page).first()).toBeVisible();
+            const shown = await items(page).evaluateAll(els => els.map(el => {
+                const line = el.querySelector('.person-picker-dist') as HTMLElement | null;
+                return {
+                    id: el.getAttribute('data-id'),
+                    dist: line?.textContent?.trim() ?? null,
+                    cut: line ? line.scrollWidth > line.clientWidth : false,
+                };
+            }));
+            const byId = Object.fromEntries(shown.map(r => [r.id, r]));
+            for (const [id, place] of [['s1', 'Dolní Smyšlenice'], ['s2', 'Horní Smyšlenice']]) {
+                expect(byId[id].dist, id).toBe(`${born} ${place}`);
+                // The whole line is visible, nothing behind "…".
+                expect(byId[id].cut, id).toBe(false);
+            }
+            // The mother has a name of her own: no line.
+            expect(byId.mo.dist).toBeNull();
+            expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+        });
+    });
+}

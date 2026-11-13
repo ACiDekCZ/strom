@@ -135,9 +135,34 @@ describe('distinguishLine', () => {
             person('h2', 'Ctibor', 'Zkoušek', { gender: 'male' }),
         ], [['u1', 'h1', 'x1'], ['u2', 'h1', 'x2'], ['u3', 'h2', 'x2']]);
         const d = new PickerDistinguisher([data.persons[toPersonId('x1')], data.persons[toPersonId('x2')]], data, false);
-        expect(lineOf(d, data, 'x2')).toBe('* 1900 · ⚭ Ctibor Zkoušek');
+        // The year both have tells nothing and is left out.
+        expect(lineOf(d, data, 'x2')).toBe('⚭ Ctibor Zkoušek');
         // x1 has only the shared partner: it is still the one shown, then the next details decide.
-        expect(lineOf(d, data, 'x1')).toBe('* 1900 · ⚭ Bořek Smyšlený');
+        expect(lineOf(d, data, 'x1')).toBe('⚭ Bořek Smyšlený');
+    });
+
+    it('a detail the whole group shares is left out: sisters with the same parents, told apart by the birthplace', () => {
+        const data = tree([
+            person('s1', 'Alžběta Marie', 'Fikcínová-Pokusná', { parentIds: [toPersonId('f'), toPersonId('m')], birthPlace: 'Dolní Smyšlenice' }),
+            person('s2', 'Alžběta Marie', 'Fikcínová-Pokusná', { parentIds: [toPersonId('f'), toPersonId('m')], birthPlace: 'Horní Smyšlenice' }),
+            person('s3', 'Alžběta Marie', 'Fikcínová-Pokusná', { parentIds: [toPersonId('f'), toPersonId('m')] }),
+            person('f', 'Maximilián Bartoloměj', 'Hrubohorský-Zvěřinovský', { gender: 'male' }),
+            person('m', 'Alžběta', 'Hrubohorská-Zvěřinovská'),
+        ]);
+        const result = ['s1', 's2', 's3'].map(id => data.persons[toPersonId(id)]);
+        const d = new PickerDistinguisher(result, data, false);
+        expect(lineOf(d, data, 's1')).toBe('rodiště Dolní Smyšlenice');
+        expect(lineOf(d, data, 's2')).toBe('rodiště Horní Smyšlenice');
+        // Only an unknown birthplace sets her apart, the parents tell nothing: said so.
+        expect(lineOf(d, data, 's3')).toBe('bez dalších údajů');
+        // A detail only some of the group share still counts: the third sister has other parents.
+        const other = tree([
+            ...Object.values(data.persons).filter(p => p.id !== toPersonId('s3')),
+            person('s3', 'Alžběta Marie', 'Fikcínová-Pokusná', { birthPlace: 'Dolní Smyšlenice' }),
+        ]);
+        const d2 = new PickerDistinguisher(['s1', 's2', 's3'].map(id => other.persons[toPersonId(id)]), other, false);
+        expect(lineOf(d2, other, 's1')).toBe('dcera: Maximilián Bartoloměj Hrubohorský-Zvěřinovský a Alžběta Hrubohorská-Zvěřinovská · rodiště Dolní Smyšlenice');
+        expect(lineOf(d2, other, 's3')).toBe('rodiště Dolní Smyšlenice');
     });
 
     it('the place: the birthplace, else the latest residence; parents by the person\'s gender', () => {
@@ -159,6 +184,9 @@ describe('distinguishLine', () => {
         expect(distinguishLine([null, null, null, null], [[null, null, null, 'x']])).toBe('bez dalších údajů');
         // Nothing sets them apart: everything known is shown.
         expect(distinguishLine(['* 1900', '⚭ A', null, null], [['* 1900', '⚭ A', null, null]])).toBe('* 1900 · ⚭ A');
+        // Shared details are left out of a line that sets the row apart.
+        expect(distinguishLine(['* 1900', '⚭ A', 'p', 'x'], [['* 1900', '⚭ A', 'p', 'y']])).toBe('x');
+        expect(distinguishLine(['* 1900', null, 'p', null], [['* 1900', null, 'p', 'y']])).toBe('bez dalších údajů');
         setLanguage('en');
         expect(distinguishLine([null, null, null, null], [[null, null, null, 'x']])).toBe('no other details');
     });
