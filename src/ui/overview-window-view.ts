@@ -15,7 +15,7 @@ import type { LiveDirection, LiveWaiting } from '../research-link.js';
 import { researchSchemeUrl, researchTaskRef, RESEARCH_LINK_ACTIONS, type ResearchLinkAction, type ResearchLinkParams } from '../research-link.js';
 import { announcedResearchScheme } from '../research-device.js';
 import type { DirectionMove } from '../research-directions.js';
-import type { DirectionStateDo } from '../research-directions-write.js';
+import type { DirectionStateDo, TaskOrderDo } from '../research-directions-write.js';
 import type { FollowView } from '../live-follow-prefs.js';
 import { PLACES_ANSWER_FEATURE, PLACES_UNDO_FEATURE } from '../places-bridge.js';
 import { todoWaiting } from '../research-waiting.js';
@@ -28,6 +28,10 @@ import { el, setOverviewWindowDrawn, type LiveSession, type OverviewViewing } fr
 import { applyDirectionsWindowState, setQueueDirectionFilter } from './research-directions-ui.js';
 import { setOverviewOwnWindow } from './research-overview-ui.js';
 import { SECTION_PREFS_EVENT, sectionPrefs, watchSectionPrefsStorage } from './live-section-prefs.js';
+import {
+    overviewClosedStrip, overviewWindowScreen, renderOverviewWindowState,
+    type OverviewWindowScreen, type OverviewWindowStateActions,
+} from './overview-window-states.js';
 import type { DirectionFormOptions } from './direction-form-ui.js';
 import type { WaitingAnswerOutcome } from './waiting-answer-form.js';
 import {
@@ -43,6 +47,30 @@ export interface OverviewWindowPort {
     ask(action: OverviewActionId, args: unknown, waitMs: number): Promise<unknown>;
     /** The main window to the front (an action that shows something in its tree). */
     focusMain(): void;
+}
+
+/**
+ * What the window knows of its main window (the satellite client) and what
+ * its states offer (§3.3: Make this the main window, Open Strom; no research:
+ * Close window).
+ */
+export interface OverviewWindowHost extends OverviewWindowStateActions {
+    connection(): 'connecting' | 'connected' | 'main-closed';
+    /** When the main window was last heard (ms; 0: never). */
+    lastHeardAt(): number;
+}
+
+/**
+ * The port as the window uses it: while the main window is closed nothing
+ * is sent (every action is greyed; a call that slips through is dropped)
+ * and an asked outcome is none.
+ */
+export function gatedOverviewPort(port: OverviewWindowPort, closed: () => boolean): OverviewWindowPort {
+    return {
+        send: (action, args) => { if (!closed()) port.send(action, args); },
+        ask: (action, args, waitMs) => (closed() ? Promise.resolve(null) : port.ask(action, args, waitMs)),
+        focusMain: () => { if (!closed()) port.focusMain(); },
+    };
 }
 
 /** How long an answer sent from the window waits for the main window's outcome. */
@@ -99,8 +127,10 @@ export interface OverviewWindowView {
     state(): OverviewResearchState | null;
     /** A `research-state` heard: taken in and drawn (false: not one this window can draw). */
     apply(raw: unknown): boolean;
-    /** Draw again (a resize across two columns, the language). */
+    /** Draw again (a resize across two columns, the language, the main window closed or back). */
     render(): void;
+    /** What the window shows now (the overview, loading, no research; the main window closed). */
+    screen(): OverviewWindowScreen;
     stop(): void;
 }
 
@@ -207,8 +237,14 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
             return true;
         },
         moveDirection(id: string, move: DirectionMove | { drop: number }): void { run('line-move', { directionId: id, move }); },
-        // A task's place in the queue is not one of the window's actions (changed in the main window).
-        async changeTaskOrder(): Promise<boolean> { return false; },
+        // A task's place in the queue: written by the main window (its toast with Undo, a refusal said at the task here).
+        async changeTaskOrder(this: UIClass, task: string, what: TaskOrderDo): Promise<boolean> {
+            this.closeLiveTaskMenu();
+            run('queue-order', { task, do: what });
+            return true;
+        },
+        taskOrderBusy(id: string): boolean { return extras().taskOrder.busy.includes(id); },
+        taskOrderProblem(id: string): string { return extras().taskOrder.problems[id] ?? ''; },
         async sendWaitingAnswer(_s: LiveSession, w: LiveWaiting, text: string): Promise<WaitingAnswerOutcome> {
             const r = await port.ask('waiting-answer', { itemId: w.id, text }, OVERVIEW_ANSWER_WAIT_MS);
             return (typeof r === 'string' ? r : 'fail') as WaitingAnswerOutcome;
@@ -250,12 +286,24 @@ let drawnNow: OverviewWindowDrawn | null = null;
  * Start the overview's own window: the overrides on `ui`, the queue's lists
  * from the main window, and every `research-state` drawn as it comes.
  */
-export function startOverviewWindowView(ui: UIClass, port: OverviewWindowPort, treeName: () => string): OverviewWindowView {
+export function startOverviewWindowView(ui: UIClass, mainPort: OverviewWindowPort, treeName: () => string, host: OverviewWindowHost | null = null): OverviewWindowView {
     let state: OverviewResearchState | null = null;
+    const screen = (): OverviewWindowScreen => overviewWindowScreen({
+        state, connection: host?.connection() ?? 'connected', lastHeardAt: host?.lastHeardAt() ?? 0,
+    });
+    const port = gatedOverviewPort(mainPort, () => host?.connection() === 'main-closed');
     Object.assign(ui, overviewWindowOverrides(port, () => state));
     setOverviewOwnWindow({
         treeName,
         hover: (id) => port.send('hover-person', { personId: id }),
+        frozenAt: () => {
+            const sc = screen();
+            return sc.closed ? sc.asOf : null;
+        },
+        strip: () => {
+            const sc = screen();
+            return sc.closed && host ? overviewClosedStrip(sc.asOf, host) : null;
+        },
     });
     setQueueRemote({
         ask: (what, filter, slot, seed) => {
@@ -264,7 +312,12 @@ export function startOverviewWindowView(ui: UIClass, port: OverviewWindowPort, t
             else port.send('queue-retry', { filter, slot });
         },
     });
-    const render = (): void => ui.renderResearchOverview();
+    /** The overview over the snapshot, or what stands in its place (the renderer draws nothing without a session). */
+    const render = (): void => {
+        ui.renderResearchOverview();
+        if (!host || typeof document === 'undefined') return;
+        renderOverviewWindowState(screen(), state?.treeName || treeName(), host);
+    };
     // A section's choice made here, in the main window or in Settings: drawn again (the record is shared).
     const onPrefs = (): void => { if (state) render(); };
     if (typeof document !== 'undefined') {
@@ -302,6 +355,7 @@ export function startOverviewWindowView(ui: UIClass, port: OverviewWindowPort, t
             return true;
         },
         render,
+        screen,
         stop(): void {
             if (typeof document !== 'undefined') document.removeEventListener(SECTION_PREFS_EVENT, onPrefs);
             setOverviewOwnWindow(null);

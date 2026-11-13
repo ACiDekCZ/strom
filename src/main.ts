@@ -463,9 +463,21 @@ function startOverviewWindow(params: SatelliteParams): void {
         send: (action, args) => client.researchAction(action, args),
         ask: (action, args, waitMs) => client.researchActionResult(action, args, waitMs),
         focusMain: () => { void client.requestMainFocus(); },
-    }, () => (client.hasTree ? client.treeName : ''));
+    }, () => (client.hasTree ? client.treeName : ''), {
+        connection: () => client.connection,
+        lastHeardAt: () => client.lastHeardAt,
+        makeMain: () => { void makeSatelliteMain(client, client.kind); },
+        openStrom: () => openMainWindow(),
+        closeWindow: () => window.close(),
+        formatTime: (ts) => formatLiveClock(ts, Date.now(), SettingsManager.getLanguage()),
+    });
     client.on('research-state', (raw) => {
         if (view.apply(raw)) document.documentElement.classList.remove('app-loading');
+    });
+    // The main window closed (§3.3: the strip, the last state frozen, every action greyed) or back (live again).
+    client.on('connection', () => {
+        document.documentElement.classList.remove('app-loading');
+        view.render();
     });
     // The tree's people and sources (What the research knows, the tiles) and its name in the head.
     window.addEventListener('strom:data-changed', () => view.render());
@@ -492,6 +504,8 @@ function startOverviewWindow(params: SatelliteParams): void {
         updateWindowTitle();
     });
     client.start();
+    // Before the main window's first state: the head and the skeleton (its label after 300 ms).
+    view.render();
     forwardSatelliteLaunches(client, window.location.search);
     updateWindowTitle();
     console.log(`Strom v${APP_VERSION} initialized (overview window ${params.windowId})`);

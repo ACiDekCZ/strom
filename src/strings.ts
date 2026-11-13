@@ -9008,6 +9008,10 @@ const stringsEN = {
         overviewInWindow: 'The research overview is in a separate window · click brings it to the front',
         /** The overview window's heading: "Habrmans · Research overview" (no tree: the overview's name alone). */
         overviewHead: (t: string, v: string) => (t ? `${t} · ${v}` : v),
+        /** The overview window before the main window's first state. */
+        overviewLoading: 'Loading the research overview…',
+        /** The research not running, in the overview window (after "The research is not running · "). */
+        overviewOffNote: 'showing what is in the tree',
         restoreWindows: (n: number) => `Restore windows (${n})`,
         restoreDismiss: 'Dismiss',
         screen: 'Screen',
@@ -17706,6 +17710,8 @@ const stringsCZ: StringsType = {
         noResearchNote: (t: string) => `Hlavní okno přepnulo na strom ${t}, který výzkum nemá.`,
         overviewInWindow: 'Přehled výzkumu je v samostatném okně · klik ho přenese do popředí',
         overviewHead: (t: string, v: string) => (t ? `${t} · ${v}` : v),
+        overviewLoading: 'Načítá se přehled výzkumu…',
+        overviewOffNote: 'ukazuje se, co je ve stromu',
         restoreWindows: (n: number) => `Obnovit okna (${n})`,
         restoreDismiss: 'Nenabízet',
         screen: 'Obrazovka',
@@ -26325,6 +26331,8 @@ const stringsDE: StringsType = {
         noResearchNote: (t: string) => `Das Hauptfenster hat zu ${t} gewechselt, ohne Forschung.`,
         overviewInWindow: 'Die Forschungsübersicht ist in einem eigenen Fenster · Klick holt sie nach vorne',
         overviewHead: (t: string, v: string) => (t ? `${t} · ${v}` : v),
+        overviewLoading: 'Forschungsübersicht wird geladen…',
+        overviewOffNote: 'gezeigt wird, was im Stammbaum ist',
         restoreWindows: (n: number) => `Fenster wiederherstellen (${n})`,
         restoreDismiss: 'Ausblenden',
         screen: 'Bildschirm',

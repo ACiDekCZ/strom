@@ -182,6 +182,13 @@ describe('the window\'s actions run today\'s functions', () => {
         expect(ui.launchResearchLink).toHaveBeenCalledWith('strom-research://chat?tree=R1', 'agent');
     });
 
+    it('a task\'s place asked from the window is written here, with today\'s function', async () => {
+        fake.live = liveOf();
+        const changeTaskOrder = vi.fn(async () => true);
+        await expect(run(fakeUi({ changeTaskOrder }), { action: 'queue-order', args: { task: 'T1', do: 'last' } })).resolves.toBe(true);
+        expect(changeTaskOrder).toHaveBeenCalledWith('T1', 'last');
+    });
+
     it('Turn on only turns on: a research that runs is not stopped', () => {
         const toggle = vi.fn();
         const off = fakeUi({ researchLiveState: () => ({ on: false, pending: null, canStart: true, canStop: false, ended: 'stopped', note: null }), toggleResearchLive: toggle });

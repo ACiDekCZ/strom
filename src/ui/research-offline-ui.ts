@@ -55,6 +55,11 @@ const BRANCH_TASKS_SHOWN = 3;
 const taskProblems = new Map<string, string>();
 /** Tasks with a write of their place on its way. */
 const taskBusy = new Set<string>();
+
+/** The tasks' places being written and what a refused one says, as the overview's own window draws them (spec 079 K3). */
+export function taskOrderWindowState(): { busy: string[]; problems: Record<string, string> } {
+    return { busy: [...taskBusy], problems: Object.fromEntries(taskProblems) };
+}
 /** Growing branches answered here: hidden until the next status (item id). */
 const answered = new Set<string>();
 /** The add-to-direction picker's cleanup (null: none open). */

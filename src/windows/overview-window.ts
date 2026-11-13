@@ -89,6 +89,8 @@ export interface OverviewExtras {
     queue: { rev: string; lists: OverviewQueueList[] } | null;
     /** Hypotheses asked of the research and waiting for its answer, and the list of proposals accepted at once. */
     hypotheses: { pending: Record<string, unknown>; batch: unknown | null };
+    /** Tasks whose own place in the queue is being written, and what a refused one says (by task). */
+    taskOrder: { busy: string[]; problems: Record<string, string> };
 }
 
 /** `research-state`: the overview's whole state as the main window has it now. */
@@ -235,6 +237,7 @@ export function emptyOverviewExtras(): OverviewExtras {
         lines: { selected: 'all', pendingOrder: null, orderSaving: false, busy: [], problems: [], archive: false },
         queue: null,
         hypotheses: { pending: {}, batch: null },
+        taskOrder: { busy: [], problems: {} },
     };
 }
 
@@ -319,7 +322,9 @@ export type OverviewAction =
     | { action: 'queue-list'; args: { filter: OverviewQueueList['filter']; slot: 'queue' | 'branch' | 'helps' } }
     /** `seed`: the status's own tasks of the whole queue, as the overview passes them for the first "Load more". */
     | { action: 'queue-more'; args: { filter: OverviewQueueList['filter']; slot: 'queue' | 'branch' | 'helps'; seed?: { items: unknown[]; total: number } } }
-    | { action: 'queue-retry'; args: { filter: OverviewQueueList['filter']; slot: 'queue' | 'branch' | 'helps' } };
+    | { action: 'queue-retry'; args: { filter: OverviewQueueList['filter']; slot: 'queue' | 'branch' | 'helps' } }
+    /** A task's own place in the queue (Do next / To the end / Reset to default), written through the bridge. */
+    | { action: 'queue-order'; args: { task: string; do: 'next' | 'last' | 'default' } };
 
 export type OverviewActionId = OverviewAction['action'];
 export type OverviewActionArgs<T extends OverviewActionId> = Extract<OverviewAction, { action: T }>['args'];
@@ -331,7 +336,7 @@ export const OVERVIEW_ACTION_IDS = [
     'line-select', 'line-state', 'line-move', 'line-retry',
     'waiting-answer', 'waiting-sent', 'waiting-unsent', 'waiting-group-sent', 'waiting-file',
     'hypothesis-ask', 'hypotheses-accept', 'answer-task', 'research-link',
-    'queue-list', 'queue-more', 'queue-retry',
+    'queue-list', 'queue-more', 'queue-retry', 'queue-order',
 ] as const satisfies readonly OverviewActionId[];
 
 /** Actions whose result shows in the main window: the overview window asks it to the front after them. */
@@ -448,6 +453,8 @@ export function readOverviewAction(action: unknown, args: unknown): OverviewActi
             if (a.kind !== undefined && a.kind !== 'terminal' && a.kind !== 'agent') return null;
             return { action, args: { link: a.link as ResearchLinkAction, params, ...(a.kind ? { kind: a.kind as 'terminal' | 'agent' } : {}) } };
         }
+        case 'queue-order':
+            return str(a.task) && (a.do === 'next' || a.do === 'last' || a.do === 'default') ? { action, args: { task: a.task, do: a.do } } : null;
         case 'queue-list':
         case 'queue-more':
         case 'queue-retry': {

@@ -11,8 +11,10 @@ import type { LiveSession } from '../ui/research-ui.js';
 import type { LiveDirection, LiveWaiting } from '../research-link.js';
 import type { PersonId, TreeId } from '../types.js';
 import {
-    guardOverviewWindowNetwork, overviewWindowDrawn, overviewWindowOverrides, startOverviewWindowView, type OverviewWindowPort,
+    gatedOverviewPort, guardOverviewWindowNetwork, overviewWindowDrawn, overviewWindowOverrides, startOverviewWindowView,
+    type OverviewWindowHost, type OverviewWindowPort,
 } from '../ui/overview-window-view.js';
+import { overviewWindowScreen } from '../ui/overview-window-states.js';
 import {
     OVERVIEW_STATE_VERSION, emptyOverviewExtras, type OverviewActionId, type OverviewResearchState, type OverviewSessionData,
 } from '../windows/overview-window.js';
@@ -216,6 +218,20 @@ describe('the overview\'s controls ask the main window', () => {
         await expect(o.sendWaitingAnswer(null, W1, 'x')).resolves.toBe('fail');
     });
 
+    it('a task\'s place in the queue is asked of the main window; its write and refusal read from the snapshot', async () => {
+        const extras = { ...emptyOverviewExtras(), taskOrder: { busy: ['T2'], problems: { T3: 'The agent is at work on it' } } };
+        const { o, sent, port } = overrides(stateOf({ extras }));
+        const closeLiveTaskMenu = vi.fn();
+        await expect(o.changeTaskOrder.call({ closeLiveTaskMenu }, 'T1', 'next')).resolves.toBe(true);
+        expect(closeLiveTaskMenu).toHaveBeenCalled();
+        expect(sent).toEqual([{ action: 'queue-order', args: { task: 'T1', do: 'next' } }]);
+        expect(port.focusMain).not.toHaveBeenCalled();
+        expect(o.taskOrderBusy('T2')).toBe(true);
+        expect(o.taskOrderBusy('T1')).toBe(false);
+        expect(o.taskOrderProblem('T3')).toBe('The agent is at work on it');
+        expect(o.taskOrderProblem('T1')).toBe('');
+    });
+
     it('the main window\'s state is read from the snapshot', () => {
         const extras = { ...emptyOverviewExtras(), agentless: true, follow: { on: true, view: 'fan' as const } };
         const { o } = overrides(stateOf({ extras }));
@@ -268,5 +284,80 @@ describe('the window\'s start', () => {
         view.stop();
         doc.dispatchEvent(new CustomEvent(SECTION_PREFS_EVENT));
         expect(ui.renderResearchOverview).toHaveBeenCalledTimes(3);
+    });
+});
+
+describe('the window\'s states (§6 states 3–5)', () => {
+    const screen = (state: OverviewResearchState | null, connection: 'connecting' | 'connected' | 'main-closed' = 'connected', lastHeardAt = 0) =>
+        overviewWindowScreen({ state, connection, lastHeardAt });
+
+    it('before the main window\'s first state: loading; nobody to send it (closed): nothing but the strip', () => {
+        expect(screen(null, 'connecting')).toEqual({ content: 'loading', closed: false, asOf: 0, off: false });
+        expect(screen(null, 'main-closed', 500)).toEqual({ content: 'blank', closed: true, asOf: 500, off: false });
+    });
+
+    it('the tree\'s research while its overview is opened by the main window: loading', () => {
+        expect(screen(stateOf({ session: null, source: null })).content).toBe('loading');
+        expect(screen(stateOf({ source: null })).content).toBe('loading');
+        expect(screen(stateOf({ session: null, source: null }), 'main-closed').content).toBe('blank');
+    });
+
+    it('the main window on a tree without research (state 4): no research; with research again: the overview', () => {
+        expect(screen(stateOf({ researchId: null, session: null, source: null, treeName: 'Plain' })).content).toBe('no-research');
+        expect(screen(stateOf()).content).toBe('overview');
+    });
+
+    it('the research not running (state 3): the overview from the tree, off', () => {
+        expect(screen(stateOf({ source: 'tree', bridgeUp: false }))).toMatchObject({ content: 'overview', off: true, closed: false });
+        expect(screen(stateOf({ source: 'bridge' })).off).toBe(false);
+        expect(screen(stateOf({ source: 'live' })).off).toBe(false);
+    });
+
+    it('the main window closed (state 5): the last state frozen as of when it was last heard', () => {
+        expect(screen(stateOf({ at: 1000 }), 'main-closed', 4000)).toEqual({ content: 'overview', closed: true, asOf: 4000, off: false });
+        expect(screen(stateOf({ at: 5000 }), 'main-closed', 4000).asOf).toBe(5000);
+        // The main window back (its reload): live again.
+        expect(screen(stateOf({ at: 5000 }), 'connected', 9000).closed).toBe(false);
+    });
+
+    it('closed: nothing is sent and an asked outcome is none', async () => {
+        let closed = true;
+        const { port, sent } = portSpy();
+        const gated = gatedOverviewPort(port, () => closed);
+        gated.send('stop-follow');
+        gated.focusMain();
+        await expect(gated.ask('waiting-answer', { itemId: 'W1', text: 'x' }, 10)).resolves.toBeNull();
+        expect(sent).toEqual([]);
+        expect(port.ask).not.toHaveBeenCalled();
+        expect(port.focusMain).not.toHaveBeenCalled();
+        closed = false;
+        gated.send('stop-follow');
+        expect(sent).toEqual([{ action: 'stop-follow', args: undefined }]);
+    });
+
+    it('a window whose main window closed: the overview\'s controls post nothing; back: they post again', async () => {
+        let connection: 'connected' | 'main-closed' = 'main-closed';
+        const host: OverviewWindowHost = {
+            connection: () => connection, lastHeardAt: () => 4000,
+            makeMain: vi.fn(), openStrom: vi.fn(), closeWindow: vi.fn(), formatTime: () => '14:32',
+        };
+        const ui = { renderResearchOverview: vi.fn(), openWaitingItems: vi.fn(), closeLiveTaskMenu: vi.fn() };
+        const { port, sent } = portSpy();
+        const view = startOverviewWindowView(ui as never, port, () => 'Okurkovi', host);
+        view.apply(stateOf());
+        expect(view.screen()).toMatchObject({ content: 'overview', closed: true, asOf: 4000 });
+        const o = ui as unknown as Record<string, (...a: unknown[]) => unknown>;
+        o.stopLiveFollow();
+        o.overviewShowPerson('P1');
+        await o.toggleResearchLive();
+        await o.changeTaskOrder('T1', 'next');
+        await expect(o.sendWaitingAnswer(null, { id: 'W1' }, 'x')).resolves.toBe('fail');
+        expect(sent).toEqual([]);
+        expect(port.ask).not.toHaveBeenCalled();
+        expect(port.focusMain).not.toHaveBeenCalled();
+        connection = 'connected';
+        o.stopLiveFollow();
+        expect(sent).toEqual([{ action: 'stop-follow', args: undefined }]);
+        view.stop();
     });
 });

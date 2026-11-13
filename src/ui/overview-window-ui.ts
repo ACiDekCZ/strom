@@ -18,6 +18,7 @@ import { researchHypotheses } from '../view-links.js';
 import { uiModule } from './module.js';
 import { liveSession, overviewViewing, researchSession, type LiveSession } from './research-ui.js';
 import { directionsWindowState, retryDirectionProblem } from './research-directions-ui.js';
+import { taskOrderWindowState } from './research-offline-ui.js';
 import { hoverCard } from './research-overview-ui.js';
 import {
     OVERVIEW_STATE_VERSION, bridgeSecrets, cloneSafe, emptyOverviewExtras, overviewChanged, overviewSessionData,
@@ -90,6 +91,7 @@ export const overviewWindowMethods = uiModule({
         extras.follow = { on: this.isLiveFollowOn(), view: this.liveFollowView() };
         extras.lines = directionsWindowState(researchSession());
         extras.queue = queueListsSnapshot();
+        extras.taskOrder = taskOrderWindowState();
         const meta = treeId ? TreeManager.getTreeMetadata(treeId as TreeId) : null;
         const state: OverviewResearchState = {
             v: OVERVIEW_STATE_VERSION,
@@ -249,6 +251,9 @@ export const overviewWindowMethods = uiModule({
                 this.launchResearchLink(url, a.args.kind ?? 'terminal');
                 return true;
             }
+            case 'queue-order':
+                // Today's own place of a task: the bridge's write, the toast with Undo and a refusal at the task are this window's.
+                return this.changeTaskOrder(a.args.task, a.args.do);
             case 'queue-list':
             case 'queue-more':
             case 'queue-retry': {

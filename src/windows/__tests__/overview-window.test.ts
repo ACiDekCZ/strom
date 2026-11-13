@@ -83,6 +83,9 @@ describe('the actions an overview window may ask for', () => {
             .toEqual({ action: 'research-link', args: { link: 'chat', params: { person: 'P0012' } } });
         expect(readOverviewAction('queue-more', { filter: { state: 'next' }, slot: 'queue', seed: { items: [], total: 40 } }))
             .toEqual({ action: 'queue-more', args: { filter: { state: 'next' }, slot: 'queue', seed: { items: [], total: 40 } } });
+        // A task's own place in the queue (K3 – S2 #1): written by the main window.
+        expect(readOverviewAction('queue-order', { task: 'T1', do: 'next', extra: 1 })).toEqual({ action: 'queue-order', args: { task: 'T1', do: 'next' } });
+        expect(readOverviewAction('queue-order', { task: 'T1', do: 'default' })).toEqual({ action: 'queue-order', args: { task: 'T1', do: 'default' } });
     });
 
     it('anything else is refused', () => {
@@ -96,5 +99,7 @@ describe('the actions an overview window may ask for', () => {
         expect(readOverviewAction('research-link', { link: 'chat', params: { person: { toString: 1 } } })).toBeNull();
         expect(readOverviewAction('waiting-file', { itemId: 'W1', file: 'not a file' })).toBeNull();
         expect(readOverviewAction('queue-list', { filter: { state: 'all' }, slot: 'queue' })).toBeNull();
+        expect(readOverviewAction('queue-order', { task: 'T1', do: 'first' })).toBeNull();
+        expect(readOverviewAction('queue-order', { task: '', do: 'next' })).toBeNull();
     });
 });

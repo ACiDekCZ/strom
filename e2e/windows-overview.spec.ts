@@ -1,4 +1,6 @@
 import { test, expect, Page, Request } from '@playwright/test';
+import { fakeBridge, openResearch, poll, researchGed } from './research-bridge.js';
+import { CAPS, followManaged } from './live-directions-bridge.js';
 
 /**
  * The Research overview in a window of its own (spec 079 K3, §6): opened from
@@ -7,7 +9,14 @@ import { test, expect, Page, Request } from '@playwright/test';
  * tree, an answer to Awaiting action, Stop) are done by the main window;
  * while it is open the main window opens no overview of its own (⤢ brings the
  * window to the front); once it closes the main window behaves as before. The
- * window itself never asks the research's bridge. Invented data only.
+ * window itself never asks the research's bridge. Its states (§6 states 3–5):
+ * the research not running (what the tree holds, the answers greyed, "not
+ * running · Turn on" with Turn on done by the main window), the main window
+ * on a tree without research (the window says so, and draws the overview
+ * again back on the research's tree), the main window closed (the strip, the
+ * last state frozen "as of", every action greyed and nothing sent; a new main
+ * window: live again); a task's place in the queue set from the window is
+ * written by the main window. Invented data only.
  */
 
 const UUID = '7c2e4a1b-3d5f-4e6a-8b9c-1d2e3f4a5b6c';
@@ -236,6 +245,173 @@ test.describe('the Research overview in a window of its own', () => {
         await expect(mainOverview(page)).toBeHidden();
 
         expect(outside).toEqual([]);
+        await popup.close();
+    });
+});
+
+/** What the window posts to the main window as research actions (recorded in the window). */
+async function spyPosted(popup: Page): Promise<void> {
+    await popup.evaluate(() => {
+        const posted: unknown[] = [];
+        (window as unknown as { __posted: unknown[] }).__posted = posted;
+        const orig = BroadcastChannel.prototype.postMessage;
+        BroadcastChannel.prototype.postMessage = function (this: BroadcastChannel, m: unknown) {
+            if ((m as { type?: string } | null)?.type === 'research-action') posted.push(m);
+            return orig.call(this, m);
+        };
+    });
+}
+const posted = (popup: Page) => popup.evaluate(() => (window as unknown as { __posted: { action: string; args?: unknown }[] }).__posted);
+
+/** The overview window from the ⧉ menu (the open tree has a research). */
+async function openFromMenu(page: Page): Promise<Page> {
+    await page.locator('#view-window-btn').click();
+    return popupOf(page, () => page.locator('#view-window-menu [data-view="overview"]').click());
+}
+
+test.describe('the overview window\'s states', () => {
+    test.use({ viewport: DESKTOP });
+    const WAITING = [{ id: 'T0001', what: 'Confirm the baptism of Jan Fíšek', actions: ['answer'] }];
+    const ACCEPTS = { mode: 'research', sync: { auto: 'write' }, sources: true, verified: true, media: null };
+
+    test('state 3: the bridge stops: what the tree holds, Awaiting action as said with its answers greyed, "not running · Turn on" done by the main window', async ({ page }) => {
+        await openResearch(page, { ged: researchGed() });
+        const bridge = await fakeBridge(page, { accepts: ACCEPTS, links: ['send', 'open', 'live', 'app', 'setup', 'chat'], waiting: WAITING });
+        await poll(page);
+        const popup = await openFromMenu(page);
+        const ov = popup.locator('#research-overview');
+        // Through the bridge first: no frame.
+        await expect(ov.locator('.research-overview__follow-live--head')).toBeVisible();
+        await expect(ov.locator('.research-overview__off-frame')).toHaveCount(0);
+        await page.evaluate(() => {
+            const ui = window.Strom.UI as unknown as Record<string, unknown>;
+            const calls: unknown[] = [];
+            (window as unknown as { __turnOn: unknown[] }).__turnOn = calls;
+            ui.toggleResearchLive = async (id: unknown) => { calls.push(id); };
+        });
+
+        // It stops answering.
+        bridge.down = true;
+        await poll(page);
+        await expect(ov.locator('.research-overview__head--window .live-dot')).toHaveClass(/live-dot--off/);
+        await expect(ov.locator('.research-overview__summary')).toContainText('The research is not running');
+        // The tile has no Turn on of its own: the frame under the tiles says it.
+        await expect(ov.locator('.research-overview__summary .research-overview__turn-on')).toHaveCount(0);
+        const frame = ov.locator('.research-overview__off-frame');
+        await expect(frame.locator('.research-overview__off-text')).toHaveText('The research is not running · showing what is in the tree');
+        const turnOn = frame.getByRole('button', { name: 'Turn on' });
+        await expect(turnOn).toBeVisible();
+        // The bridge without a terminal: no mark.
+        await expect(frame.locator('.research-open-mark, .ai-badge')).toHaveCount(0);
+        // Awaiting action as said last, its answers greyed (readable, not done).
+        await expect(ov.locator('#ov-sec-waiting')).toContainText('Confirm the baptism of Jan Fíšek');
+        await expect(ov.locator('.research-overview__as-of').first()).toContainText('as of');
+        const row = ov.locator('.research-overview__waiting-item[data-id="T0001"] .research-overview__waiting-row');
+        if (await row.count() > 0 && await row.getAttribute('aria-expanded') === 'false') await row.click();
+        const greyed = ov.locator('#ov-sec-waiting [data-greyed]');
+        await expect.poll(() => greyed.count()).toBeGreaterThan(0);
+        for (const g of await greyed.all()) await expect(g).toHaveAttribute('aria-disabled', 'true');
+
+        // Turn on: done by the main window for its tree.
+        await spyPosted(popup);
+        await turnOn.click();
+        await expect.poll(() => page.evaluate(() => (window as unknown as { __turnOn: unknown[] }).__turnOn.length)).toBe(1);
+        expect((await posted(popup)).map(m => m.action)).toEqual(['turn-on']);
+        await popup.close();
+    });
+
+    test('state 4: the main window on a tree without research: the window says so; back on the research\'s tree, the overview again', async ({ page }) => {
+        await openResearch(page, { ged: researchGed() });
+        await fakeBridge(page, { accepts: ACCEPTS, links: ['send', 'open', 'live', 'app', 'setup', 'chat'], waiting: WAITING });
+        await poll(page);
+        const researchTree = await page.evaluate(() => window.Strom.DataManager.getCurrentTreeId() as string);
+        const popup = await openFromMenu(page);
+        const plain = await page.evaluate(async () => {
+            const dm = window.Strom.DataManager;
+            await dm.importAsNewTree({ persons: {
+                q1: { id: 'q1', firstName: 'Kvido', lastName: 'Pastiňák', gender: 'male', partnerships: [], parentIds: [], childIds: [] },
+            }, partnerships: {} } as never, 'Pastiňákovi');
+            return dm.getCurrentTreeId() as string;
+        });
+        await page.evaluate((id) => window.Strom.UI.switchToTree(id as never), plain);
+        const state = popup.locator('#overview-window-state');
+        await expect(state.locator('.sat-empty')).toBeVisible();
+        await expect(state.getByRole('heading', { name: 'This tree has no research' })).toBeVisible();
+        await expect(state.locator('.sat-empty-note')).toHaveText('The main window switched to Pastiňákovi, which has no research.');
+        await expect(state.getByRole('button', { name: 'Close window' })).toBeVisible();
+        await expect(state.locator('.research-overview__title')).toHaveText('Pastiňákovi · Research overview');
+        await expect(popup.locator('#research-overview')).toHaveCount(0);
+
+        // Back: the overview draws itself again.
+        await page.evaluate((id) => window.Strom.UI.switchToTree(id as never), researchTree);
+        await expect(popup.locator('#research-overview')).toBeVisible();
+        await expect(popup.locator('#research-overview #ov-sec-waiting')).toContainText('Confirm the baptism of Jan Fíšek');
+        await expect(state).toHaveCount(0);
+        await popup.close();
+    });
+
+    test('state 5: the main window closed: the strip, the last state frozen as of then, every action greyed and nothing sent; Open Strom: live again', async ({ page }) => {
+        await follow(page);
+        const popup = await openFromMenu(page);
+        const ov = popup.locator('#research-overview');
+        await expect(ov.locator('.research-overview__stop')).toBeEnabled();
+        await expect(ov.locator('.research-overview__strip')).toHaveCount(0);
+        await spyPosted(popup);
+
+        await page.close();
+        const strip = ov.locator('.research-overview__strip');
+        await expect(strip).toBeVisible({ timeout: 6000 });
+        await expect(strip.locator('.sat-strip-text')).toHaveText(/^The main window is closed · as of .+, read-only$/);
+        await expect(strip.getByRole('button', { name: 'Make this the main window' })).toBeVisible();
+        // What was shown stays, each section as of then; the head's dot off.
+        await expect(ov.locator('#ov-sec-waiting')).toContainText('Ověřit datum sňatku v oddací matrice');
+        await expect(ov.locator('.live-section__head .research-overview__frozen-at').first()).toHaveText(/^as of /);
+        await expect(ov.locator('.research-overview__head--window .live-dot')).toHaveClass(/live-dot--off/);
+        // Every action greyed: Stop, ◎, Show in tree.
+        await expect(ov.locator('.research-overview__stop')).toBeDisabled();
+        await expect(ov.locator('.research-overview__head--window .live-follow-btn')).toBeDisabled();
+        await expect(ov.locator('.research-overview__now-row .link-button', { hasText: 'Show in tree' })).toBeDisabled();
+        // A fold of this window's own still folds.
+        const foldHead = ov.locator('.live-section__head[aria-controls="ov-sec-knows"]');
+        if (await foldHead.count() > 0) {
+            const was = await foldHead.getAttribute('aria-expanded');
+            await foldHead.click();
+            await expect(ov.locator('.live-section__head[aria-controls="ov-sec-knows"]')).not.toHaveAttribute('aria-expanded', was ?? '');
+        }
+        // An action that slips through is not sent.
+        await popup.evaluate(async () => {
+            const ui = window.Strom.UI as unknown as Record<string, (...a: unknown[]) => unknown>;
+            ui.stopLiveFollow();
+            ui.overviewShowPerson('P0001');
+            await ui.toggleResearchLive('x');
+        });
+        expect(await posted(popup)).toEqual([]);
+
+        // Open Strom: a main window again; the window is live (the research viewed through its bridge there).
+        const [main] = await Promise.all([popup.context().waitForEvent('page'), strip.getByRole('button', { name: 'Open Strom' }).click()]);
+        await main.waitForLoadState('domcontentloaded');
+        await expect(ov.locator('.research-overview__strip')).toHaveCount(0, { timeout: 10_000 });
+        await expect(ov.locator('[data-greyed]')).toHaveCount(0);
+        await expect(ov.locator('.research-overview__frozen-at')).toHaveCount(0);
+        await popup.close();
+        await main.close();
+    });
+
+    test('a task\'s place in the queue set from the window is written by the main window', async ({ page }) => {
+        const b = await followManaged(page, { caps: { ...CAPS, offLineBranches: true }, features: ['queue.own'] });
+        const popup = await openFromMenu(page);
+        const ov = popup.locator('#research-overview');
+        const queue = ov.locator('.live-queue');
+        if (await ov.locator('.live-queue-toggle').count() > 0) await ov.locator('.live-queue-toggle').click();
+        await queue.locator('.live-queue-more[data-task="T0101"]').click();
+        const menu = popup.locator('#live-task-menu');
+        await expect(menu.locator('[data-order]')).toHaveText(['Do nextComes up next', 'To the endAfter everything else in the queue']);
+        await menu.locator('[data-order="next"]').click();
+        await expect(menu).toHaveCount(0);
+        // Written by the main window (its bridge, its toast with Undo); the window shows the place set.
+        await expect.poll(() => b.writes.filter(w => w.method === 'POST').map(w => [w.path, w.body])).toEqual([['queue/T0101', { do: 'next' }]]);
+        await expect(page.locator('.toast[data-kind="direction"]')).toContainText('Saved');
+        await expect(queue.locator('.live-queue-row', { hasText: 'Matriky Smrkov' }).locator('.live-queue-why')).toHaveText('set by hand: next');
         await popup.close();
     });
 });

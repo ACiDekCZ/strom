@@ -56,6 +56,7 @@ import { sectionTitle } from './live-section-edit.js';
 import { joinAnd } from '../strings.js';
 import { canOpenWindows, openInNewWindow } from '../windows/window-open.js';
 import { focusOverviewWindow, overviewChanged, overviewInWindow } from '../windows/overview-window.js';
+import { greyOverviewActions } from './overview-window-states.js';
 
 /** The overview stays open over a reload / the next following (per device). */
 const OPEN_KEY = 'strom-live-overview-open';
@@ -95,6 +96,10 @@ export interface OverviewOwnWindow {
     treeName(): string;
     /** A row hovered: its card lit up in the main window's tree (null: none). */
     hover(id: PersonId | null): void;
+    /** The main window closed (§3.3): when what is shown was last current (null: it is live). */
+    frozenAt?(): number | null;
+    /** The strip under the head while the main window is closed (null: none). */
+    strip?(): HTMLElement | null;
 }
 let ownWindow: OverviewOwnWindow | null = null;
 /** The last card asked to light up from the window (asked once per row, not per mouse move). */
@@ -526,11 +531,15 @@ export const researchOverviewMethods = uiModule({
         // Stop, then the follow switch and ⤡ / ×. Stop on the name's line
         // keeps the title whole in the 400px overlay and on a phone.
         // The own window has a head of its own (§6): no ⤡, ×, ⧉ or "Follow in".
-        const head = mode === 'window' ? this.overviewWindowHead(s, source) : el('div', 'research-overview__head');
+        const head = mode === 'window' ? this.overviewWindowHead(s, source, !!ownWindow?.frozenAt?.()) : el('div', 'research-overview__head');
+        // The main window closed (§3.3): what is shown is frozen as of then, every action greyed.
+        const frozenAt = mode === 'window' ? ownWindow?.frozenAt?.() ?? null : null;
         if (mode === 'window') {
             root.appendChild(head);
+            const closedStrip = ownWindow?.strip?.() ?? null;
+            if (closedStrip) root.appendChild(closedStrip);
             // Without following, the bridge answering: what "Follow live" does, under the head (6b).
-            if (source === 'bridge' && !this.activeResearchAgentless()) {
+            if (source === 'bridge' && !this.activeResearchAgentless() && frozenAt === null) {
                 root.appendChild(el('p', 'research-overview__window-note', L.followNote));
             }
         } else {
@@ -582,13 +591,20 @@ export const researchOverviewMethods = uiModule({
         // Which tree is followed now (after a switch), first.
         if (source === 'live') appendFollowNote(body, s);
         this.appendOverviewSummary(body, s, mode, viewed);
+        // The own window without the bridge (§6 state 3): "not running · showing what is in the tree" and Turn on.
+        if (mode === 'window' && viewed?.kind === 'tree' && onComputer()) this.appendOverviewOffFrame(body, viewed);
         if (s.update) this.appendUpdateStrip(body, s.update.version, s.busy);
 
         // A section hidden by the choice is not drawn, unless shown until the overview closes
         // (expanded, its heading says so and does not fold). A click on a heading is a lasting choice.
         const shown = (key: string): boolean => sectionPref(key) !== 'hidden' || s.overviewShown.has(key);
+        const frozenWhen = frozenAt !== null ? L.asOf(formatLiveClock(frozenAt, Date.now(), getCurrentLanguage())) : '';
         const fold = (key: string): LiveFold => {
-            const f = foldOf(key);
+            let f = foldOf(key);
+            // Frozen: each section says as of when (Awaiting action without the bridge says its own time).
+            if (frozenWhen && !(key === 'waiting' && source === 'tree')) {
+                f = { ...f, extra: [...(f.extra ?? []), el('span', 'research-overview__as-of research-overview__frozen-at', frozenWhen)] };
+            }
             const pk = prefKeyOfOverview(key);
             return pk ? { ...f, menu: (h, at) => this.openLiveSectionMenu(h, pk, 'overview', at) } : f;
         };
@@ -678,6 +694,8 @@ export const researchOverviewMethods = uiModule({
             if (names.length > 0) body.appendChild(el('p', 'research-overview__after-on', L.afterTurnOn(joinAnd(getCurrentLanguage(), names))));
         }
         this.appendOverviewFoot(root, s, mode);
+        // The own window: every action greyed while the main window is closed, the answers while the research is off.
+        if (mode === 'window') greyOverviewActions(root, frozenAt !== null ? 'all' : source === 'tree' ? 'answers' : null);
         endQueueSlots();
         body.scrollTop = scrollTop;
 
@@ -807,6 +825,8 @@ export const researchOverviewMethods = uiModule({
             return;
         }
         c.appendChild(el('div', 'research-overview__cell-value', L.notRunning));
+        // The own window says Turn on in its frame under the tiles (appendOverviewOffFrame).
+        if (ownWindow) return;
         const state = this.researchLiveState(v.treeId);
         if (state?.canStart || state?.pending === 'starting') {
             const starting = state.pending === 'starting';
@@ -820,6 +840,33 @@ export const researchOverviewMethods = uiModule({
             c.appendChild(btn);
         } else {
             c.appendChild(this.researchLiveStartHow());
+        }
+    },
+
+    /**
+     * The own window without the bridge (§6 state 3): a frame under the tiles,
+     * "The research is not running · showing what is in the tree" and Turn on
+     * (asked of the main window; the bridge without a terminal, so no mark),
+     * or the command where the research cannot take that.
+     */
+    appendOverviewOffFrame(body: HTMLElement, v: OverviewViewing): void {
+        const L = strings.live;
+        const frame = body.appendChild(el('div', 'research-overview__off-frame'));
+        frame.setAttribute('role', 'status');
+        frame.appendChild(el('span', 'research-overview__off-text', `${L.notRunning} · ${strings.win.overviewOffNote}`));
+        const state = this.researchLiveState(v.treeId);
+        if (state?.canStart || state?.pending === 'starting') {
+            const starting = state.pending === 'starting';
+            const btn = el('button', 'research-overview__turn-on research-overview__turn-on--frame', starting ? strings.researchLive.starting : L.turnOn);
+            btn.type = 'button';
+            if (starting) {
+                btn.disabled = true;
+                btn.setAttribute('aria-busy', 'true');
+            }
+            btn.onclick = () => void this.toggleResearchLive(v.treeId);
+            frame.appendChild(btn);
+        } else {
+            frame.appendChild(this.researchLiveStartHow());
         }
     },
 
@@ -1930,11 +1977,11 @@ export const researchOverviewMethods = uiModule({
      * state ◎ and Stop (following) or "Follow live" (viewed through the
      * bridge), and ⋯ Edit panel. It closes as a window: no ⤡, × or ⧉.
      */
-    overviewWindowHead(s: LiveSession, source: OverviewSourceKind): HTMLElement {
+    overviewWindowHead(s: LiveSession, source: OverviewSourceKind, frozen = false): HTMLElement {
         const L = strings.live;
         const r = strings.research;
         const head = el('div', 'research-overview__head research-overview__head--window');
-        head.appendChild(el('span', `live-dot live-dot--still${source === 'live' ? '' : ' live-dot--off'}`));
+        head.appendChild(el('span', `live-dot live-dot--still${source === 'live' && !frozen ? '' : ' live-dot--off'}`));
         const titles = el('div', 'research-overview__titles');
         titles.appendChild(el('h1', 'research-overview__title', strings.win.overviewHead(ownWindow?.treeName() ?? '', L.overviewTitle)));
         const sub = titles.appendChild(el('div', 'research-overview__sub'));
