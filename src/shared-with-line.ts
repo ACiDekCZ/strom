@@ -132,7 +132,9 @@ export interface SharedWithLineHtmlOptions {
  * by the person page's own CSS.
  */
 export function sharedWithLineHtml(line: SharedWithLine, o: SharedWithLineHtmlOptions): string {
-    const names = line.names.map(n => o.nameHtml(n)).join(', ');
+    // Each name keeps its comma (a link never leaves it at the start of the next line).
+    const last = line.names.length - 1;
+    const names = line.names.map((n, i) => `<span class="shared-line-item">${o.nameHtml(n)}${i < last ? ',' : ''}</span>`).join(' ');
     const more = line.more > 0 ? ` <span class="shared-line-more">${o.esc(o.more(line.more))}</span>` : '';
     const mark = o.mark === false ? '' : `<span class="shared-line-mark" aria-hidden="true">${sharedEventMarkSvg(16)}</span>`;
     return `<span class="shared-line${o.open ? ' shared-line--open' : ''}"${o.attrs ?? ''}>${mark}<span class="shared-line-text">${o.esc(o.lead)} ${names}${more}</span></span>`;

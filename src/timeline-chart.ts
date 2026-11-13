@@ -209,8 +209,8 @@ function sharedMarkSvg(
     const lx = Math.min(Math.max(x, plot.x0 + half), plot.x1 - half);
     const who = m.rows.map(i => rows[i]?.name ?? '').filter(Boolean).join(', ');
     return `<g class="tl-shared" data-share="${esc(m.shareId)}"><g class="tl-shared-bars" pointer-events="none">${links}${bars}</g>`
-        + `<text class="tl-shared-label" x="${lx.toFixed(1)}" y="${(barTop(m.rows[0]) - 6).toFixed(1)}" text-anchor="middle">`
-        + `${esc(label)}<title>${esc(`${label}: ${who}`)}</title></text></g>`;
+        + `<g class="tl-shared-tip"><title>${esc(`${label}: ${who}`)}</title>`
+        + `<text class="tl-shared-label" x="${lx.toFixed(1)}" y="${(barTop(m.rows[0]) - 6).toFixed(1)}" text-anchor="middle">${esc(label)}</text></g></g>`;
 }
 
 /** SVG for one timeline row (name label + life-bar + event dots). */

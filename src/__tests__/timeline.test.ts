@@ -518,7 +518,8 @@ describe('a shared event on the family timeline (spec 085 §2e)', () => {
         expect(svg.match(/class="tl-shared-mark"/g)).toHaveLength(2);
         expect(svg.match(/class="tl-shared-link"/g)).toHaveLength(1);
         expect(svg.match(/class="tl-shared-label"/g)).toHaveLength(1);
-        expect(svg).toContain('>Census 1921<title>Census 1921: Kvido X, Radegunda X, Bohuchval X</title>');
+        expect(svg).toContain('<title>Census 1921: Kvido X, Radegunda X, Bohuchval X</title>');
+        expect(svg).toMatch(/class="tl-shared-label"[^>]*>Census 1921<\/text>/);
         // No dot of the census left in the rows; the military service keeps its dot.
         expect(svg).not.toContain('<title>Census (1921)</title>');
         expect(svg.match(/class="tl-dot"/g)).toHaveLength(1);

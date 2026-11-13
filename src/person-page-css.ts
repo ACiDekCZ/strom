@@ -250,6 +250,8 @@ button.pp-chip, a.pp-chip { cursor: pointer; }
 .pp .shared-line-mark svg { display: block; }
 .pp .shared-line-text { min-width: 0; overflow-wrap: anywhere; }
 .pp .shared-line .pp-link { color: var(--primary); font-weight: 500; text-decoration: none; }
+.pp .shared-line button.pp-link { white-space: nowrap; max-width: calc(100% - 6px); overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; text-align: start; }
+.pp .shared-line-item:has(> button) { white-space: nowrap; }
 .pp-dtx > summary { display: block; list-style: none; cursor: pointer; }
 .pp-dtx .pp-dt { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .pp-dtx[open] .pp-dt { display: block; overflow: visible; }

@@ -64,7 +64,8 @@ describe('sharedWithLine', () => {
         const html = sharedWithLineHtml(line, {
             lead: 'with', more: n => `and ${n} more`, esc: t => t, nameHtml: n => `<b>${n.text}</b>`,
         });
-        expect(html).toContain('with <b>Radegunda</b>, <b>Bohuchval</b> <span class="shared-line-more">and 2 more</span>');
+        expect(html).toContain('with <span class="shared-line-item"><b>Radegunda</b>,</span> <span class="shared-line-item"><b>Bohuchval</b></span>'
+            + ' <span class="shared-line-more">and 2 more</span>');
         expect(html).toContain('shared-line-mark');
         expect(sharedWithLineHtml(line, { lead: 'with', more: () => '', esc: t => t, nameHtml: n => n.text, mark: false }))
             .not.toContain('shared-line-mark');

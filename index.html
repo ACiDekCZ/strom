@@ -7020,7 +7020,10 @@
         .shared-line button.shared-line-name {
             background: none; border: 0; padding: 0; margin: 0; min-height: 0; width: auto;
             font: inherit; font-weight: 500; color: var(--primary); cursor: pointer; border-radius: 3px;
+            /* A button never breaks inside a line: a name on one line (cut short only past the line's width), the comma after it. */
+            white-space: nowrap; max-width: calc(100% - 6px); overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; text-align: start;
         }
+        .shared-line-item { white-space: nowrap; }
         .shared-line button.shared-line-name:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         @media (hover: hover) {
             .shared-line button.shared-line-name:hover { text-decoration: underline; }
