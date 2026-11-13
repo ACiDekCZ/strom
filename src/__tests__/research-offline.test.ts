@@ -178,6 +178,21 @@ describe('writes outside the directions', () => {
         setLanguage('en');
     });
 
+    it('the queue search names a line with the word the rest of the panel uses (cs linie, pl linia; en direction, de Richtung)', () => {
+        const said = (lang: Parameters<typeof setLanguage>[0]) => {
+            setLanguage(lang);
+            const L = strings.live;
+            return [L.dirTitleEmpty, L.queueSearchInDir('Novák'), L.queueSearchNoneDir('Novák'), L.queueSearchAllDirs];
+        };
+        expect(['en', 'cs', 'de', 'pl'].map(l => said(l as Parameters<typeof setLanguage>[0]))).toEqual([
+            ['Directions', 'in Novák', 'Nothing found in Novák.', 'Search all directions'],
+            ['Linie', 'v linii Novák', 'V linii Novák nic nenalezeno.', 'Hledat ve všech liniích'],
+            ['Richtungen', 'in Novák', 'In Novák nichts gefunden.', 'In allen Richtungen suchen'],
+            ['Linie', 'w linii Novák', 'W linii Novák nic nie znaleziono.', 'Szukaj we wszystkich liniach'],
+        ]);
+        setLanguage('en');
+    });
+
     it('queue.next: a `was` is {} or own + at, nothing else', () => {
         expect(sanitizeTaskOrderWas({})).toEqual({});
         expect(sanitizeTaskOrderWas({ own: 'next', at: '2026-11-13T08:00:00Z' })).toEqual({ own: 'next', at: '2026-11-13T08:00:00Z' });
