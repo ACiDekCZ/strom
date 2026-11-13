@@ -16,10 +16,15 @@
  *   where the room above the sheet is too low for it, at the window's top.
  * Both go back to their places when the last sheet closes. A press on a
  * toast leaves the sheet open (pressOnToast).
+ *
+ * A phone's research overview is a sheet over the whole window: a toast
+ * coming while it is open stands at the window's top, clear of its actions
+ * at the bottom. A sheet opened over it (a task's ⋯) hides the toasts on the
+ * screen as any sheet does; closed, they come back over the overview.
  */
 
-/** The bottom sheets with a darkened backdrop, put on the body while they are open. */
-const SHEETS = 'body > .bottom-sheet-overlay, body > .live-sec-sheet-overlay';
+/** The bottom sheets with a darkened backdrop, put on the body while they are open; the overview's sheet. */
+const SHEETS = 'body > .bottom-sheet-overlay, body > .live-sec-sheet-overlay, body > #research-overview.research-overview--sheet';
 
 /** The app's toasts: a message, the undo pill, the focus confirmation (its container, while it holds one). */
 const TOASTS = 'body > .toast, body > .undo-toast, #focus-toast';
@@ -35,15 +40,17 @@ const GAP = 8;
 let installed = false;
 /** The sheet open now (the last one put on the body). */
 let current: HTMLElement | null = null;
-let hidden: HTMLElement[] = [];
+/** The sheets open at the last look, in the body's order. */
+let open: HTMLElement[] = [];
+/** The toasts waiting under a sheet, with the sheet that hid them. */
+const hidden = new Map<HTMLElement, HTMLElement>();
 /** The raised toasts, with the place each had of its own. */
 const raised = new Map<HTMLElement, Own>();
 let sizes: ResizeObserver | null = null;
 
-/** The open sheet: the last one on the body. */
-function openSheet(): HTMLElement | null {
-    const all = document.querySelectorAll<HTMLElement>(SHEETS);
-    return all.length > 0 ? all[all.length - 1] : null;
+/** The open sheets, in the body's order: the last one is on top. */
+function openSheets(): HTMLElement[] {
+    return [...document.querySelectorAll<HTMLElement>(SHEETS)];
 }
 
 /** The toasts on the screen now (one waiting under another too: it may come back). */
@@ -113,7 +120,7 @@ function raise(sheet: HTMLElement): void {
     const box = sheetBox(sheet);
     const vh = window.innerHeight;
     for (const t of toastsShown()) {
-        if (hidden.includes(t)) continue;
+        if (hidden.has(t)) continue;
         let own = raised.get(t);
         if (!own) {
             own = { bottom: t.style.bottom, left: t.style.left, maxWidth: t.style.maxWidth };
@@ -130,34 +137,49 @@ function raise(sheet: HTMLElement): void {
 
 /** The sheet closed: the toasts hidden under it come back, the raised ones go back to their places. */
 function restore(): void {
-    for (const t of hidden) t.classList.remove(UNDER_SHEET);
-    hidden = [];
+    for (const t of hidden.keys()) t.classList.remove(UNDER_SHEET);
+    hidden.clear();
     for (const t of [...raised.keys()]) lower(t);
     sizes?.disconnect();
 }
 
 /** Lay the toasts out for the sheet open now (none: back to their places). */
 function update(): void {
-    const sheet = openSheet();
+    const sheets = openSheets();
+    const sheet = sheets.length > 0 ? sheets[sheets.length - 1] : null;
     if (!sheet) {
         if (current) restore();
         current = null;
+        open = [];
         return;
     }
     if (sheet !== current) {
-        // A sheet opened over the toasts on the screen: they wait under it (another sheet replacing it keeps them)
-        if (!current) {
+        if (!current || sheets.includes(current)) {
+            // A sheet opened over the toasts on the screen (over another sheet too): they wait under it.
+            // A toast that came while a sheet was open stays over the first one.
             for (const t of toastsShown()) {
-                if (raised.has(t)) continue;
+                if (hidden.has(t) || (!current && raised.has(t))) continue;
+                lower(t);
                 t.classList.add(UNDER_SHEET);
-                hidden.push(t);
+                hidden.set(t, sheet);
             }
+        } else if (open.includes(sheet)) {
+            // The sheet over this one closed: the toasts it hid come back, over this one.
+            for (const [t, by] of [...hidden]) {
+                if (sheets.includes(by)) continue;
+                t.classList.remove(UNDER_SHEET);
+                hidden.delete(t);
+            }
+        } else {
+            // Another sheet replacing it keeps them.
+            for (const [t, by] of [...hidden]) if (!sheets.includes(by)) hidden.set(t, sheet);
         }
         current = sheet;
         sizes?.disconnect();
         const box = sheet.firstElementChild;
         if (sizes && box) sizes.observe(box);
     }
+    open = sheets;
     raise(sheet);
 }
 
@@ -166,7 +188,8 @@ export function watchSheets(): void {
     if (installed || typeof document === 'undefined' || typeof MutationObserver === 'undefined') return;
     installed = true;
     if (typeof ResizeObserver !== 'undefined') sizes = new ResizeObserver(() => { if (current) raise(current); });
-    current = openSheet();
+    open = openSheets();
+    current = open.length > 0 ? open[open.length - 1] : null;
     const box = current?.firstElementChild;
     if (sizes && box) sizes.observe(box);
     const watch = new MutationObserver(() => update());
@@ -174,5 +197,10 @@ export function watchSheets(): void {
     // The focus confirmation's box comes and goes inside its container (which stays)
     const focus = document.getElementById('focus-toast');
     if (focus) watch.observe(focus, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden'] });
-    window.addEventListener('resize', () => { if (current) raise(current); });
+    // The overview turns a sheet or back by the window's width (its class, not the body's children):
+    // looked at again once it is drawn for the new width.
+    window.addEventListener('resize', () => {
+        update();
+        requestAnimationFrame(() => update());
+    });
 }

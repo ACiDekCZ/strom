@@ -328,6 +328,36 @@ test.describe('Research hypotheses in What waits and the overview', () => {
         await noOverflow(page);
     });
 
+    test('a phone: a toast coming while the overview\'s sheet is open stands at the window\'s top, clear of "Accept proposals"', async ({ page }) => {
+        await follow(page, { width: 390 });
+        await expect(ov(page)).toHaveClass(/research-overview--sheet/);
+        await unfold(page, 'What the research knows');
+        await ov(page).locator('.hp2-all').first().click();
+        const accept = ov(page).locator('.research-overview__knows ~ .hp2-foot .hp2-accept');
+        await expect(accept).toContainText('Accept proposals (2)');
+        // The button at the bottom of the sheet, where a toast stands of its own.
+        await accept.evaluate(b => b.scrollIntoView({ block: 'end' }));
+        await expect.poll(async () => (await accept.boundingBox())!.y).toBeGreaterThan(900 - 120);
+
+        await page.evaluate(() => window.Strom.UI.showToast('Saved to the research', 10000));
+        const t = toast(page).filter({ hasText: 'Saved to the research' });
+        await expect(t).toBeVisible();
+        await expect(t).toHaveClass(/toast-over-sheet/);
+        // At the window's top once in its place, the button whole and at hand under it.
+        await expect.poll(async () => Math.round((await t.boundingBox())!.y)).toBe(8);
+        const [b, a] = [(await t.boundingBox())!, (await accept.boundingBox())!];
+        expect(b.y + b.height <= a.y || a.y + a.height <= b.y).toBe(true);
+        expect(await accept.evaluate(n => {
+            const r = n.getBoundingClientRect();
+            const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+            return hit !== null && (hit === n || n.contains(hit));
+        })).toBe(true);
+        // The overview closed: the toast back at its own place.
+        await page.keyboard.press('Escape');
+        await expect(ov(page)).toHaveCount(0);
+        await expect(t).not.toHaveClass(/toast-over-sheet/);
+    });
+
     test('the small panel: a hypothesis with its id and More, which opens its card', async ({ page }) => {
         await follow(page);
         await page.evaluate(() => window.Strom.UI.closeResearchOverview());

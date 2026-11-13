@@ -6,7 +6,9 @@
  * its bottom edge 8 px over the sheet's top edge, its Undo at hand. Before,
  * the toast lay between the backdrop and the sheet, its second line cut by
  * the sheet's top edge. A phone (390), a phone held sideways and a touch
- * tablet. A fake bridge with invented data (the Fíškovi of Smrkov).
+ * tablet. A phone's research overview is itself a sheet over the whole
+ * window: a toast over it stands at the window's top. A fake bridge with
+ * invented data (the Fíškovi of Smrkov).
  */
 
 import { test, expect, Page, Locator } from '@playwright/test';
@@ -94,11 +96,14 @@ test.describe('a toast and a bottom sheet: the newer one wins', () => {
         expect(top).toBeLessThan(844);
         expect(await overflow(page)).toBeLessThanOrEqual(0);
 
-        // Closed (Escape): the toast is back for the rest of its time, at its place.
+        // Closed (Escape): the toast is back for the rest of its time, over the overview's sheet
+        // (over the whole window: at its top, clear of the sheet's actions at the bottom).
         await page.keyboard.press('Escape');
         await expect(backdrop(page)).toHaveCount(0);
         await expect(opened).toBeVisible();
-        await expect(opened).not.toHaveClass(/toast-under-sheet|toast-over-sheet/);
+        await expect(opened).not.toHaveClass(/toast-under-sheet/);
+        await expect(opened).toHaveClass(/toast-over-sheet/);
+        await expect.poll(async () => Math.round((await opened.boundingBox())!.y)).toBe(8);
         await expect(more).toBeFocused();
     });
 
@@ -131,12 +136,17 @@ test.describe('a toast and a bottom sheet: the newer one wins', () => {
         await expect(menu(page)).toBeVisible();
         await expect(backdrop(page)).toHaveCount(1);
 
-        // The sheet closed: a toast still on the screen back at its own place.
+        // The sheet closed: a toast still on the screen stands over the overview's sheet, at the window's top.
         await showMessage(page, 'T0103 kept in the queue');
         const kept = message(page, 'T0103 kept in the queue');
         await expect(kept).toHaveClass(/toast-over-sheet/);
         await page.keyboard.press('Escape');
         await expect(backdrop(page)).toHaveCount(0);
+        await expect(kept).toHaveClass(/toast-over-sheet/);
+        await expect.poll(async () => Math.round((await kept.boundingBox())!.y)).toBe(8);
+        // The overview closed too: back at its own place.
+        await page.keyboard.press('Escape');
+        await expect(overview(page)).toHaveCount(0);
         await expect(kept).not.toHaveClass(/toast-over-sheet/);
         await expect.poll(() => kept.evaluate(n => (n as HTMLElement).style.bottom)).toBe('');
     });
@@ -155,9 +165,11 @@ test.describe('a toast and a bottom sheet: the newer one wins', () => {
         await expect(next).toBeVisible();
         const undo = next.locator('.toast-action', { hasText: 'Undo' });
         await expect(undo).toBeVisible();
-        // One toast on the screen: the older message replaced by it, nothing left hidden for a sheet.
+        // One toast on the screen: the older message replaced by it, nothing left hidden for a sheet;
+        // it stands over the overview's sheet (at the window's top).
         await expect(message(page, OPENED)).toBeHidden();
-        await expect(page.locator('.toast-under-sheet, .toast-over-sheet')).toHaveCount(0);
+        await expect(page.locator('.toast-under-sheet')).toHaveCount(0);
+        await expect(next).toHaveClass(/toast-over-sheet/);
         const box = (await next.boundingBox())!;
         expect(box.x).toBeGreaterThanOrEqual(0);
         expect(box.x + box.width).toBeLessThanOrEqual(390);
