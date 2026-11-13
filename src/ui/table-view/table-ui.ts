@@ -192,7 +192,7 @@ let view: {
 } | null = null;
 
 /** An edit opened from the table (§10.3): what it edits (the toast's name) and the records the edit may change, as stored before. */
-let watching: { tree: string; name: () => string; keys: Map<string, string> } | null = null;
+let watching: { tree: string; name: () => string; keys: Map<string, string>; message?: string } | null = null;
 
 /** A person's name for "Saved: {name}", read when the edit is saved. */
 function personNameOf(personId: PersonId): () => string {
@@ -1979,13 +1979,14 @@ export const tableMethods = uiModule({
             const copies = ev.shareId ? shareCopiesOf(data, ev.shareId) : [];
             const ids = copies.length ? copies.map(c => c.personId) : [id];
             watching = { tree: treeKey(), name: personNameOf(id), keys: watchEdit(data, ids.flatMap(p => familyKeys(data, p))) };
+            if (ids.length >= 2) {
+                // The toast of the save says for how many ("Date: changed for 4 people (Census 1921)."), not "Saved: {name}".
+                const title = sharedEventTitle(ev, strings.events.types[ev.type]);
+                const word = strings.validation.sharedFields[change.field];
+                watching.message = strings.events.sharedCellChanged(word.charAt(0).toLocaleUpperCase() + word.slice(1), title, ids.length);
+            }
             const n = DataManager.updateSharedCommonField(id, change.eventId, change.field, change.value);
             if (n === 0) { watching = null; return null; }
-            if (n >= 2) {
-                const title = sharedEventTitle(ev, strings.events.types[ev.type]);
-                const field = strings.validation.sharedFields[change.field];
-                this.showToast(strings.events.sharedCellChanged(field, title, n));
-            }
         } else {
             const id = change.personId;
             watching = { tree: treeKey(), name: personNameOf(id), keys: watchEdit(data, familyKeys(data, id)) };
@@ -2009,7 +2010,7 @@ export const tableMethods = uiModule({
         const changed = changedKeys(DataManager.getData(), w.keys);
         if (!changed.length) return;
         flashNext = { tree: w.tree, keys: changed };
-        this.showToast(strings.table.savedToast(w.name()));
+        this.showToast(w.message ?? strings.table.savedToast(w.name()));
     },
 
     /** A load from the research's bridge (§10.3, 10d): its rows lit and a toast whose Show selects the first. True when the table shows it. */

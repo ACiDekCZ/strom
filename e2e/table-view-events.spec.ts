@@ -137,8 +137,8 @@ test.describe('desktop (1440)', () => {
         await page.keyboard.press('Escape');
         await expect(page.locator('#person-page-modal')).toBeHidden();
 
-        // A double click on a person's event: the person dialog, the event's editor on top.
-        await col(page, 'e:l:c:bc', 3).dblclick();
+        // A double click on a person's event (its type; the date and place are edited in place): the person dialog, the event's editor on top.
+        await col(page, 'e:l:c:bc', 1).dblclick();
         await expect(page.locator('#person-modal')).toBeVisible();
         const editor = page.locator('#event-editor-modal');
         await expect(editor).toHaveClass(/active/);
