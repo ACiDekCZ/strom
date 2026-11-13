@@ -236,6 +236,11 @@ test.describe('the direction form', () => {
         await expect(f).toHaveCount(0);
         await expect(overview(page)).toBeVisible();
         await expect(more).toBeFocused();
+        // The overview drawn again (as the status read a while after a write does): the ⋯ drawn anew keeps the focus.
+        const was = await more.elementHandle();
+        await page.evaluate(() => window.Strom.UI.renderResearchOverview());
+        expect(await was!.evaluate(e => e.isConnected)).toBe(false);
+        await expect(more).toBeFocused();
     });
 
     test('a paused direction\'s edit asks its reason', async ({ page }) => {

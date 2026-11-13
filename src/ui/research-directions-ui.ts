@@ -112,13 +112,28 @@ export function setQueueDirectionFilter(id: string): void {
  * queue pill): the focused one is focused again afterwards, on the same
  * direction, so a second Enter drops a selection made from the keyboard.
  * All directions, gone with the selection, hands focus to the line it
- * dropped. Returns the step to run after the redraw (focus moved
- * elsewhere meanwhile is left alone).
+ * dropped. A control of a direction's row in the overview (its ⋯, its
+ * head, its handle, an action of the row) is focused again in the row drawn
+ * anew: a status read after a write draws the overview again a second or
+ * more later, and took the focus away from the ⋯ it went back to. Returns
+ * the step to run after the redraw (focus moved elsewhere meanwhile is left
+ * alone).
  */
 export function keepLineFocus(): () => void {
     const a = document.activeElement as HTMLElement | null;
-    const id = a?.dataset.direction;
-    if (!a || !id) return () => {};
+    if (!a) return () => {};
+    const row = a.closest<HTMLElement>('#research-overview .research-direction[data-direction]');
+    if (row && row !== a && (a.dataset.do || a.dataset.move || a.matches('.research-direction__handle, .research-direction__more, .research-direction__head'))) {
+        const rowId = row.dataset.direction!;
+        const control = focusSelector(a);
+        return () => {
+            const now = document.activeElement;
+            if (now && now !== document.body && now.isConnected) return;
+            focusDirectionControl(rowId, control);
+        };
+    }
+    const id = a.dataset.direction;
+    if (!id) return () => {};
     const sel = a.matches('#live-panel button.live-line, #live-panel .live-lines-all') ? '#live-panel button.live-line'
         : a.matches('#research-overview .research-overview__queue-filters .research-overview__filter')
             ? '#research-overview .research-overview__queue-filters .research-overview__filter' : null;
