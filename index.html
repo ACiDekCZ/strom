@@ -17173,7 +17173,8 @@
             overflow-wrap: anywhere;
         }
         /* The overview: the same gap above and below the line (under the head or "Follow in", over the summary) (1105). */
-        .research-overview__body > .live-follow-note { margin: 12px 0; border-radius: var(--r-md); border-bottom: 0; }
+        .research-overview__body > .live-follow-note,
+        .research-overview__lead > .live-follow-note { margin: 12px 0; border-radius: var(--r-md); border-bottom: 0; }
         /* An agent began while the tree was open: offered, the tree never locked by itself. */
         .live-agent-started {
             display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px;
@@ -19431,8 +19432,8 @@
             .research-overview__window::before { content: ""; position: absolute; inset: -6px -1px; }
         }
         /* The overview in a window of its own (spec 079 K3, §6): the whole window, its own head
-           (no ⤡, ×, ⧉ or "Follow in"), the tiles across, the sections in two columns from 1100 px
-           (now, waiting, lines | progress, queue, knows), one column below in the overview's order. */
+           (no ⤡, ×, ⧉ or "Follow in"), the tiles across, the sections in one column under 1100 px,
+           in two or three columns above it (spec 083 §4), always in the overview's order. */
         html.window-overview #tree-container,
         html.window-overview .control-block,
         html.window-overview #focus-controls,
@@ -19466,8 +19467,22 @@
             margin: 0; padding: 6px 16px; font-size: 12.5px; color: var(--text-light);
             border-bottom: 1px solid var(--divider); overflow-wrap: anywhere;
         }
-        .research-overview__cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 32px; align-items: start; }
-        .research-overview__col { min-width: 0; }
+        /* From 1100 px two columns, from 1600 px three (spec 083 §4): at most 660 px each, centred, each scrolled
+           by itself (the body does not scroll); what stands above the sections spans them. A long section's
+           head (heading, field, chips, what was found) sticks to its column's top until the next section. */
+        .research-overview--window.is-cols .research-overview__body {
+            display: grid; grid-template-columns: repeat(var(--ov-cols, 2), minmax(0, 660px)); grid-template-rows: minmax(0, 1fr);
+            justify-content: center; overflow: hidden; padding: 0 8px;
+        }
+        .research-overview--window.is-cols .research-overview__body.has-lead { grid-template-rows: auto minmax(0, 1fr); }
+        .research-overview__lead { grid-column: 1 / -1; min-width: 0; margin: 0 -8px; padding: 0 16px; }
+        .research-overview__col { min-width: 0; min-height: 0; overflow-x: hidden; overflow-y: auto; padding: 0 16px 24px 20px; box-sizing: border-box; outline: none; }
+        .research-overview__col + .research-overview__col { border-left: 1px solid var(--divider); }
+        .research-overview__col:focus-visible { box-shadow: inset 0 0 0 2px var(--primary); }
+        .research-overview--window.is-cols .research-overview__section-head {
+            position: sticky; top: 0; z-index: 3; background: var(--surface); box-shadow: 0 1px 0 var(--divider);
+        }
+        .research-overview--window.is-cols .research-overview__section-head.has-field { padding-bottom: 8px; }
         /* A touch screen: 44px tall targets in the head. */
         @media (pointer: coarse) {
             .research-overview__head--window > .live-follow-btn,

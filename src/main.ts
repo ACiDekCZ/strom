@@ -13,7 +13,6 @@ import { AppExporter } from './export.js';
 import { MergerUI } from './merge/index.js';
 import { SettingsManager } from './settings.js';
 import { guardOverviewWindowNetwork, startOverviewWindowView } from './ui/overview-window-view.js';
-import { OVERVIEW_WINDOW_COLS_MIN } from './ui/research-overview-ui.js';
 import { AuditLogManager } from './audit-log.js';
 import { TreePreview, TreeCompare } from './tree-preview.js';
 import { initModalSkeleton } from './ui/modal-skeleton.js';
@@ -508,8 +507,7 @@ function startOverviewWindow(params: SatelliteParams): void {
         view.render();
     });
     client.on('attention', () => markWindowTitle());
-    // Two columns from 1100 px, one below (§6): drawn again across it.
-    window.matchMedia?.(`(min-width: ${OVERVIEW_WINDOW_COLS_MIN}px)`).addEventListener?.('change', () => view.render());
+    // One, two or three columns by the width: the overview moves its sections itself (spec 083 §4), nothing drawn anew.
     UI.installStatusTipHost();
     // The settings are the main window's: its language and theme show here too.
     SettingsManager.watchOtherWindows(({ languageBefore }) => {

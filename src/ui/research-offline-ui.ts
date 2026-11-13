@@ -869,7 +869,9 @@ export const researchOffLineMethods = uiModule({
         const body = document.querySelector<HTMLElement>('#research-overview .research-overview__body');
         const heading = body?.querySelector<HTMLElement>('[aria-controls="ov-sec-queue"]');
         if (body && heading) {
-            body.scrollTop += heading.getBoundingClientRect().top - body.getBoundingClientRect().top - 6;
+            // In the overview's own window the Queue's column scrolls (spec 083 §4).
+            const scroller = heading.closest<HTMLElement>('.research-overview__col') ?? body;
+            scroller.scrollTop += heading.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 6;
         }
         document.querySelector<HTMLElement>('#research-overview .research-offline__chip')?.focus({ preventScroll: true });
     },

@@ -65,6 +65,7 @@ import { joinAnd } from '../strings.js';
 import { canOpenWindows, openInNewWindow } from '../windows/window-open.js';
 import { focusOverviewWindow, overviewChanged, overviewInWindow } from '../windows/overview-window.js';
 import { greyOverviewActions } from './overview-window-states.js';
+import { arrangeOverviewColumns, beginOverviewColumns, noteOverviewSectionRows, nodesAfter, resetOverviewColumns } from './overview-columns-ui.js';
 
 /** The overview stays open over a reload / the next following (per device). */
 const OPEN_KEY = 'strom-live-overview-open';
@@ -127,11 +128,12 @@ export function setOverviewOwnWindow(w: OverviewOwnWindow | null): void {
     ownWindowHovered = null;
 }
 
-/** Two columns in the overview's own window from this width on (§6), else one. */
-export const OVERVIEW_WINDOW_COLS_MIN = 1100;
 
-/** Where a section stands in the window's two columns: now, waiting and lines left; progress, queue and knows right. */
-const WINDOW_LEFT: ReadonlySet<PrefKey> = new Set<PrefKey>(['working', 'waiting', 'directions']);
+/** A section's heading at the top of what scrolls it: the overview's body, or its column in the own window (spec 083 §4). */
+function scrollHeadingToTop(body: HTMLElement, heading: HTMLElement): void {
+    const scroller = heading.closest<HTMLElement>('.research-overview__col') ?? body;
+    scroller.scrollTop += heading.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 6;
+}
 
 /** The overview's own window, a phone (≤ 640 px) and a phone held sideways (the full-screen sheet). */
 export function overviewMode(): Mode {
@@ -426,7 +428,7 @@ export const researchOverviewMethods = uiModule({
         this.renderLivePanel();
         const body = document.querySelector<HTMLElement>('#research-overview .research-overview__body');
         const heading = body?.querySelector<HTMLElement>('[aria-controls="ov-sec-queue"]');
-        if (body && heading) body.scrollTop += heading.getBoundingClientRect().top - body.getBoundingClientRect().top - 6;
+        if (body && heading) scrollHeadingToTop(body, heading);
         const input = activeQueueSearch()?.input;
         if (input?.isConnected) input.focus({ preventScroll: true });
         else heading?.focus({ preventScroll: true });
@@ -444,7 +446,7 @@ export const researchOverviewMethods = uiModule({
         const body = document.querySelector<HTMLElement>('#research-overview .research-overview__body');
         const heading = body?.querySelector<HTMLElement>('[aria-controls="ov-sec-waiting"]');
         if (body && heading) {
-            body.scrollTop += heading.getBoundingClientRect().top - body.getBoundingClientRect().top - 6;
+            scrollHeadingToTop(body, heading);
             heading.focus({ preventScroll: true });
         }
     },
@@ -461,7 +463,7 @@ export const researchOverviewMethods = uiModule({
         const body = document.querySelector<HTMLElement>('#research-overview .research-overview__body');
         const heading = body?.querySelector<HTMLElement>('[aria-controls="ov-sec-now"]');
         if (!body || !heading) return;
-        body.scrollTop += heading.getBoundingClientRect().top - body.getBoundingClientRect().top - 6;
+        scrollHeadingToTop(body, heading);
         const finish = body.querySelector<HTMLElement>('#ov-sec-now .research-overview__finish');
         if (finish) {
             finish.scrollIntoView?.({ block: 'nearest' });
@@ -548,6 +550,7 @@ export const researchOverviewMethods = uiModule({
                 root.remove();
                 hoverCard(null);
                 overviewSearches.reset();
+                resetOverviewColumns();
                 knowsKind = 'all';
             }
             keepSheetOverKeyboard(null);
@@ -572,9 +575,13 @@ export const researchOverviewMethods = uiModule({
             holdFollowNoteIn(root, 'overview');
             document.body.appendChild(root);
         }
-        // The own window's two columns from 1100 px (§6): a resize across it draws anew (the window's start listens).
-        const twoCols = mode === 'window' && window.innerWidth >= OVERVIEW_WINDOW_COLS_MIN;
-        root.className = `research-overview research-overview--${mode}${twoCols ? ' research-overview--cols' : ''}`;
+        // Where the body (or each of the own window's columns) was scrolled, read before the class goes:
+        // without it the columns lose their height and with it their scroll. The sections' rows are said anew.
+        const scroller = root.querySelector<HTMLElement>('.research-overview__body');
+        const scrollTop = scroller?.scrollTop ?? 0;
+        const colScroll = mode === 'window' ? beginOverviewColumns(root) : null;
+        // The own window's columns by its width (spec 083 §4) are set once the sections are drawn.
+        root.className = `research-overview research-overview--${mode}`;
         // A phone's sheet ends where the keyboard begins: what a section's search found stays in sight (spec 083 §3).
         keepSheetOverKeyboard(mode === 'sheet' ? root : null);
         root.dataset.form = `${mode === 'sheet'}:${window.innerWidth >= 1280}`;
@@ -589,8 +596,6 @@ export const researchOverviewMethods = uiModule({
             root.removeAttribute('aria-modal');
         }
         root.setAttribute('aria-label', L.overviewTitle);
-        const scroller = root.querySelector<HTMLElement>('.research-overview__body');
-        const scrollTop = scroller?.scrollTop ?? 0;
         // The sections' search fields are drawn again: the focus and caret they had go back to them.
         overviewSearches.noteFocus();
         root.replaceChildren();
@@ -710,12 +715,7 @@ export const researchOverviewMethods = uiModule({
         }
         // Without the bridge only what the tree holds: the agent's work comes once the research runs.
         const fromTree = source === 'tree';
-        // The own window's two columns (§6): now, waiting and lines left, progress, queue and knows right,
-        // each in the sections' order; a hidden section leaves its column shorter.
-        let host = body;
-        const cols = twoCols ? body.appendChild(el('div', 'research-overview__cols')) : null;
-        const left = cols?.appendChild(el('div', 'research-overview__col research-overview__col--left')) ?? null;
-        const right = cols?.appendChild(el('div', 'research-overview__col research-overview__col--right')) ?? null;
+        const host = body;
         const draw: Record<PrefKey, () => void> = {
             working: () => {
                 if (fromTree) return;
@@ -752,10 +752,13 @@ export const researchOverviewMethods = uiModule({
                 if (shown('knows')) this.appendOverviewKnows(host, fold('knows'), mode);
             },
         };
-        // In the sections' order (one for the overview and the panel).
+        // In the sections' order (one for the overview and the panel); the own window notes what each drew for its columns.
+        const drawnSections: { key: PrefKey; nodes: ChildNode[] }[] = [];
         for (const key of sectionOrder()) {
-            host = left && right ? (WINDOW_LEFT.has(key) ? left : right) : body;
+            const mark = body.lastChild;
             draw[key]();
+            const nodes = colScroll ? nodesAfter(body, mark) : [];
+            if (nodes.length > 0) drawnSections.push({ key, nodes });
         }
         // The research not running (on a computer): one line names what comes once it runs (not on a phone,
         // whose state says the agent's work is seen on the computer; none when all of it is hidden).
@@ -770,7 +773,9 @@ export const researchOverviewMethods = uiModule({
         // The own window: every action greyed while the main window is closed, the answers while the research is off.
         if (mode === 'window') greyOverviewActions(root, frozenAt !== null ? 'all' : source === 'tree' ? 'answers' : null);
         endQueueSlots();
-        body.scrollTop = scrollTop;
+        // The own window: one, two or three columns by its width, each scrolled as before.
+        if (colScroll) arrangeOverviewColumns(root, body, drawnSections, colScroll);
+        else body.scrollTop = scrollTop;
 
         this.setResearchOverviewDocked(mode === 'docked');
         ensureLiveTicker();
@@ -1039,6 +1044,11 @@ export const researchOverviewMethods = uiModule({
         waitingIndex = searchIndex(waitingIndex, s.waiting, [DataManager.getData().persons, getCurrentLanguage()], w => this.waitingSearchDoc(s, w));
         const res = searchSection(waitingIndex, toks, waitingSection, chips.length > 0 ? filter : 'all');
         const searching = res.searching;
+        // Its guessed height in the own window's columns: phases and places without the search (rows when ungrouped).
+        if (grouped) {
+            const all = waitingPhases(s.waiting, filter);
+            noteOverviewSectionRows('waiting', (['todo', 'sent'] as WaitingPhase[]).reduce((n, p) => n + (all[p].length > 0 ? 1 + all[p].length : 0), 0));
+        } else noteOverviewSectionRows('waiting', s.waiting.length);
         // The hypotheses the search shows (the picked ones outside it stay picked) and what matched each by its number.
         const hypoSearch: HypothesisListSearch | null = searching ? {
             found: new Set(res.shown.filter(w => w.kind === 'hypothesis').map(w => w.id)),
@@ -1920,6 +1930,7 @@ export const researchOverviewMethods = uiModule({
             ? groupChanges(recent).slice(0, MAX_STEPS).flatMap(g => g.items)
             : groupChanges(s.changes)[0].items;
         const older = s.changes.length - changes.length;
+        noteOverviewSectionRows('changes', changes.length);
         const host = liveSection(body, { ...fold, title: L.timeline, summary: changes.length > 0 ? String(changes.length) : undefined });
         host.classList.add('research-overview__timeline');
 
@@ -2086,6 +2097,7 @@ export const researchOverviewMethods = uiModule({
         const conflicts = rows.filter(r => r.conflict).length;
         const openHypos = rows.filter(r => r.hypo && isOpenHypothesis(r.hypo)).length;
         const showField = !fold.collapsed && fieldVisible(rows.length, typed);
+        noteOverviewSectionRows('knows', rows.length);
         const search: SectionSearch | null = showField ? overviewSearches.ensure({
             section: 'knows', mode: 'local',
             placeholder: L.knowsSearchPlaceholder, ariaLabel: L.knowsSearchAria(L.knowsTitle),

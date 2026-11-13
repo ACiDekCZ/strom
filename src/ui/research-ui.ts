@@ -20,6 +20,7 @@
  * The pure logic lives in src/research-link.ts.
  */
 
+import { noteOverviewSectionRows } from './overview-columns-ui.js';
 import { keepTableViews } from '../table-views-data.js';
 import { setResearchActionLabel, researchActionMark } from './research-open-mark.js';
 import { DataManager, migrateData } from '../data.js';
@@ -4575,6 +4576,8 @@ export const researchUiMethods = uiModule({
         const shownNext = list ? next : next.slice(0, limit);
         const shownParked = list ? parked : parked.slice(0, limit);
         const hidden = s.queueMore + (next.length - shownNext.length) + (parked.length - shownParked.length);
+        // The overview's own window guesses its height for its columns; more loaded splits them anew.
+        if (directions) noteOverviewSectionRows('queue', shownNext.length + shownParked.length, list ? list.items.length : 0);
 
         const sel = !directions && dirFilter !== 'all' ? s.researches.find(d => d.id === dirFilter) : undefined;
         // The overview's queue searched through the bridge (`queue.search`): the field under the heading, once unfolded.

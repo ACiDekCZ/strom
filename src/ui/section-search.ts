@@ -327,10 +327,20 @@ export const overviewSearches = new SectionSearches();
  * section the field is in; false when it has none.
  */
 export function focusFirstSectionRow(s: SectionSearch): boolean {
-    const body = s.box.closest<HTMLElement>('.live-section__body');
+    const body = sectionBodyOf(s.box);
     const row = body?.querySelector<HTMLElement>('[data-row]') ?? null;
     if (!row) return false;
     if (!row.hasAttribute('tabindex')) row.tabIndex = -1;
     row.focus();
     return true;
+}
+
+/**
+ * The section's body around a part of it: the field and chips stand in it,
+ * or in its sticky head over it in a column of the overview's own window
+ * (spec 083 §4).
+ */
+export function sectionBodyOf(part: Element): HTMLElement | null {
+    return part.closest<HTMLElement>('.live-section__body')
+        ?? part.closest<HTMLElement>('.research-overview__sec')?.querySelector<HTMLElement>(':scope > .live-section__body') ?? null;
 }

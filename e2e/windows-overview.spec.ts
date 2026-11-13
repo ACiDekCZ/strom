@@ -164,12 +164,13 @@ test.describe('the Research overview in a window of its own', () => {
         await expect(head.locator('.live-follow-btn')).toBeVisible();
         await expect(head.locator('.research-overview__more')).toBeVisible();
         await expect(ov.locator('.research-overview__close, .research-overview__window')).toHaveCount(0);
-        // Two columns: Now and Awaiting action left, the rest right.
-        await expect(ov).toHaveClass(/research-overview--cols/);
-        const left = ov.locator('.research-overview__col--left');
-        await expect(left.locator('.live-section__title').first()).toHaveText(/^Now/);
-        await expect(left.locator('.live-section__title').nth(1)).toHaveText(/^Awaiting action/);
-        const boxes = await ov.locator('.research-overview__col').evaluateAll(cols => cols.map(c => c.getBoundingClientRect().left));
+        // Two columns (spec 083 §4): Now first, Awaiting action after it in the reading order.
+        await expect(ov).toHaveClass(/\bis-cols\b/);
+        const cols = ov.locator('.research-overview__col');
+        await expect(cols).toHaveCount(2);
+        await expect(cols.first().locator('.live-section__title').first()).toHaveText(/^Now/);
+        await expect(cols.locator('.live-section__title', { hasText: /^Awaiting action/ })).toHaveCount(1);
+        const boxes = await cols.evaluateAll(cs => cs.map(c => c.getBoundingClientRect().left));
         expect(boxes).toHaveLength(2);
         expect(boxes[1]).toBeGreaterThan(boxes[0] + 300);
 
@@ -229,13 +230,13 @@ test.describe('the Research overview in a window of its own', () => {
 
         await popup.setViewportSize({ width: 900, height: 900 });
         const ov = popup.locator('#research-overview');
-        await expect(ov).not.toHaveClass(/research-overview--cols/);
+        await expect(ov).not.toHaveClass(/\bis-cols\b/);
         await expect(ov.locator('.research-overview__col')).toHaveCount(0);
         // Wider again: two columns.
         await popup.setViewportSize(DESKTOP);
-        await expect(ov).toHaveClass(/research-overview--cols/);
+        await expect(ov).toHaveClass(/\bis-cols\b/);
         await popup.setViewportSize({ width: 900, height: 900 });
-        await expect(ov).not.toHaveClass(/research-overview--cols/);
+        await expect(ov).not.toHaveClass(/\bis-cols\b/);
 
         // A section hidden in the main window (Settings, its panel): the window draws without it.
         await expect(ov.locator('.live-section__title', { hasText: /^Now/ })).toHaveCount(1);

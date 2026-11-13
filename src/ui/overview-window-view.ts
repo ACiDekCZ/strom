@@ -136,7 +136,7 @@ export interface OverviewWindowView {
     state(): OverviewResearchState | null;
     /** A `research-state` heard: taken in and drawn (false: not one this window can draw). */
     apply(raw: unknown): boolean;
-    /** Draw again (a resize across two columns, the language, the main window closed or back). */
+    /** Draw again (the language, the main window closed or back). */
     render(): void;
     /** What the window shows now (the overview, loading, no research; the main window closed). */
     screen(): OverviewWindowScreen;

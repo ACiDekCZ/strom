@@ -15,7 +15,7 @@ import { LiveSession, queuePaged } from './research-ui.js';
 import { QUEUE_SEARCH_FEATURE } from '../research-link.js';
 import { QUEUE_QUERY_MAX, queueQuery, type QueueList } from '../research-queue-pages.js';
 import { strings } from '../strings.js';
-import { overviewSearches, type SectionSearch } from './section-search.js';
+import { overviewSearches, sectionBodyOf, type SectionSearch } from './section-search.js';
 
 /** The pause of typing after which the text is searched. */
 export const QUEUE_SEARCH_PAUSE_MS = 300;
@@ -76,7 +76,7 @@ export function resetQueueSearch(): void {
 
 /** The section's body around the field (where the list is dimmed while a search is read). */
 function sectionOf(st: SearchState): HTMLElement | null {
-    return st.box.closest<HTMLElement>('.live-section__body');
+    return sectionBodyOf(st.box);
 }
 
 /** The search is typed or read: the indicator in the field, the list dimmed, `aria-busy` on the field. */
