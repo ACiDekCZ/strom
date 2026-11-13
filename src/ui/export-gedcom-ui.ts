@@ -11,6 +11,7 @@ import { StromData } from '../types.js';
 import { CONTENT_PRESETS, ContentOptions, PrivacyMode, countCitations, countLivingPersons, droppedSources } from '../privacy.js';
 import { backSourceRecordCount, firstResearchNoteSource } from '../ged-exporter.js';
 import { importProgramName } from '../import-next.js';
+import { allShareCopies } from '../shared-events.js';
 import { TreeManager } from '../tree-manager.js';
 import { uiModule } from './module.js';
 
@@ -34,6 +35,8 @@ interface GedcomTreeFacts {
     example: string | null;
     /** `{prog}` of the tree's latest import; null: none. */
     program: string | null;
+    /** The tree has a shared event (copies at two persons or more, spec 085). */
+    shared: boolean;
 }
 let treeFacts: GedcomTreeFacts | null = null;
 /** What each privacy mode leaves out of the measured tree's sources (sources ticked). */
@@ -142,6 +145,7 @@ export const exportGedcomMethods = uiModule({
             living: countLivingPersons(data),
             example: firstResearchNoteSource(data),
             program: last ? importProgramName(last) : null,
+            shared: [...allShareCopies(data).values()].some(copies => copies.length >= 2),
         };
         return treeFacts;
     },
@@ -150,6 +154,12 @@ export const exportGedcomMethods = uiModule({
     syncExportGedcomBack(): void {
         const s = strings.exportGed;
         const facts = purpose === null ? null : this.exportGedcomTreeFacts();
+        // A tree with shared events: how the file writes them, after the lead (spec 085 §7).
+        const hint = el('export-dialog-hint');
+        if (hint && purpose !== null) {
+            const lead = strings.encryption.exportLead.gedcom;
+            hint.textContent = facts?.shared ? `${lead} ${strings.exportHelp.sharedEvents}` : lead;
+        }
         const title = el('export-purpose-back-title');
         if (title) title.textContent = facts?.program ? s.back(facts.program) : s.backGeneric;
         const back = purpose === 'back';

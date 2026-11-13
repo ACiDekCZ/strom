@@ -29,7 +29,8 @@ import { normalizeSha256 } from './sha256.js';
 import { sourceReadState } from './source-confirm.js';
 import { regionHeader, regionToStored } from './originals.js';
 import { strings } from './strings.js';
-import { COUPLE_EVENT_TAG, eventValueIsOnTag, sortCoupleEvents } from './events.js';
+import { COUPLE_EVENT_TAG, eventIsShareable, eventValueIsOnTag, isCoupleEventType, sortCoupleEvents } from './events.js';
+import { allShareCopies, isValidShareId } from './shared-events.js';
 import { placeKey } from './places.js';
 import { GedcomNameParts, noName, PRIMARY_NAME_TAG, readGedcomName } from './gedcom-names.js';
 import { gedcomAge } from './recorded-age.js';
@@ -230,6 +231,24 @@ const EVENT_TYPE_TO_TAG: Partial<Record<LifeEventType, string>> = {
     naturalization: 'NATU', will: 'WILL', probate: 'PROB', cremation: 'CREM',
     title: 'TITL', nationality: 'NATI', census: 'CENS',
 };
+
+/**
+ * The GEDCOM tag of the event a person's own godparent / witness event
+ * belongs to (`4 TYPE` under `3 _STROM_AT`): a person's event by its tag
+ * (BAPM…, birth and death as BIRT / DEAT), a couple's wedding as MARR, its
+ * divorce as DIV and its other events by their FAM tag. Unknown: EVEN.
+ */
+export function roleAtEventTag(at: NonNullable<LifeEvent['roleAt']>): string {
+    const type = at.eventType;
+    if (at.partnershipId && !at.personId) {
+        if (type === 'marriage') return 'MARR';
+        if (type === 'divorce') return 'DIV';
+        return isCoupleEventType(type) ? COUPLE_EVENT_TAG[type] : 'EVEN';
+    }
+    if (type === 'birth') return 'BIRT';
+    if (type === 'death') return 'DEAT';
+    return EVENT_TYPE_TO_TAG[type as LifeEventType] ?? 'EVEN';
+}
 
 /** RELA values for participant roles. Godparent/Witness are the conventional ones. */
 const GEDCOM_RELA: Record<ParticipantRole, string> = {
@@ -1084,6 +1103,12 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         personIdMap.set(personId, own ? `@${own}@` : freshXref('I'));
     }
 
+    /** Copies of each shared event in this file (a share needs two to be written). */
+    const shareCounts = new Map<string, number>();
+    for (const [shareId, copies] of allShareCopies(data)) {
+        shareCounts.set(shareId, copies.filter(c => personIdMap.has(c.personId)).length);
+    }
+
     // Map all partnerships to GEDCOM IDs
     for (const partnershipId of Object.keys(data.partnerships) as PartnershipId[]) {
         const own = back.families.get(partnershipId);
@@ -1644,6 +1669,30 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
                 }
                 lines.push(`3 RELA ${GEDCOM_RELA[part.role]}`);
                 if (part.note) pushNote(lines, 3, part.note);
+            }
+
+            // One event of several persons (spec 085): each copy carries the
+            // share id, and the person's own role in it (`3 _ROLE`, the
+            // research's form; none = a member of the household). Only a
+            // share two copies of this file carry: the others may be cut
+            // out (a subtree, the living under privacy), and a copy alone
+            // is an ordinary event. Every file: another program keeps or
+            // drops the tag, and a file read back joins the copies again.
+            if (event.shareId && isValidShareId(event.shareId) && eventIsShareable(event.type)
+                && (shareCounts.get(event.shareId) ?? 0) >= 2) {
+                lines.push(`2 _STROM_SHARE ${event.shareId}`);
+                if (event.shareRole?.trim()) pushWrapped(lines, 3, '_ROLE', event.shareRole.trim());
+            }
+            // The person's own part at another's event (godparent, witness):
+            // the role, and whose event it was while that one is in the file.
+            if (event.roleAt) {
+                lines.push(`2 _STROM_ROLE ${event.roleAt.role}`);
+                const at = event.roleAt.personId ? personIdMap.get(event.roleAt.personId)
+                    : event.roleAt.partnershipId ? partnershipIdMap.get(event.roleAt.partnershipId) : undefined;
+                if (at) {
+                    lines.push(`3 _STROM_AT ${at}`);
+                    lines.push(`4 TYPE ${roleAtEventTag(event.roleAt)}`);
+                }
             }
 
             // Source citations on the event (2 SOUR @Sx@ + 3 PAGE).

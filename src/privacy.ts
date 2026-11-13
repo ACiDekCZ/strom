@@ -13,6 +13,7 @@ import { StromData, Person, Partnership, SourceExcerpt } from './types.js';
 import { strings } from './strings.js';
 import { yearOf } from './dates.js';
 import { forgetHiddenImports } from './import-origin.js';
+import { tidyShares } from './shared-events.js';
 import { stripPhotos } from './photo.js';
 import { stripAttachments, stripExcerpts } from './attachments.js';
 
@@ -488,6 +489,24 @@ export function applyLivingPrivacy(
         // The file's values of what was just hidden must not stay behind.
         forgetHiddenImports(person, true);
     }
+    // A deceased person's own godparent or witness event keeps its role but
+    // not whose event it was when that is a living person or a couple whose
+    // details went (GEDCOM's `_STROM_AT` would name them), and a shared event
+    // whose other copies went with the living is that person's own again.
+    for (const person of Object.values(copy.persons)) {
+        for (const ev of person.events ?? []) {
+            const at = ev.roleAt;
+            if (!at) continue;
+            const partnership = at.partnershipId ? copy.partnerships[at.partnershipId] : undefined;
+            if ((at.personId && living.has(at.personId))
+                || (partnership && (living.has(partnership.person1Id) || living.has(partnership.person2Id)))) {
+                delete at.personId;
+                delete at.partnershipId;
+                delete at.eventId;
+            }
+        }
+    }
+    tidyShares(copy);
     // A "?" of a loaded file (a spouse the file names without a name) goes out
     // as its record, with nothing of its own to hide but its ids there, which
     // name the person in the other program: gone when it may be living. Which

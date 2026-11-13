@@ -8798,6 +8798,10 @@ const stringsEN = {
         warnLiving: (n: number, c: number) => `For ${nEn(n, 'living person', 'living people')}, ${nEn(c, 'citation is', 'citations are')} left out. The deceased keep their sources.`,
         keepSources: 'Keep sources',
     },
+    /** A sentence of the GEDCOM export's lead for a tree with shared events (spec 085 §7). */
+    exportHelp: {
+        sharedEvents: 'A shared event is written for each person separately, with its source, so other programs can read it. Strom joins it again on the next import.',
+    },
 
     /** The Table view (spec 073): the whole tree as rows of people or unions. */
     table: {
@@ -17733,6 +17737,9 @@ const stringsCZ: StringsType = {
         warnLiving: (n: number, c: number) => `U ${nCs(n, 'žijící osoby', 'žijících osob', 'žijících osob')} ${plural('cs', c, 'se vynechá', 'se vynechají', 'se vynechá')} ${nCs(c, 'citace', 'citace', 'citací')}. Zemřelým prameny zůstanou.`,
         keepSources: 'Ponechat prameny',
     },
+    exportHelp: {
+        sharedEvents: 'Společná událost jde do souboru u každé osoby zvlášť i s pramenem, jiné programy ji tak přečtou. Strom ji při dalším importu zase spojí.',
+    },
 
     table: {
         sharedCount: (n: number) => `${n} ${plural('cs', n, 'osoba', 'osoby', 'osob')}`,
@@ -26585,6 +26592,9 @@ const stringsDE: StringsType = {
         warnLoss: (s: number, c: number) => `Die Datei wird ohne ${nDe(s, 'Quelle', 'Quellen')} und ${nDe(c, 'Zitat', 'Zitate')} sein.`,
         warnLiving: (n: number, c: number) => `Bei ${nDe(n, 'lebenden Person', 'lebenden Personen')} ${plural('de', c, 'entfällt', 'entfallen')} ${nDe(c, 'Zitat', 'Zitate')}. Verstorbene behalten ihre Quellen.`,
         keepSources: 'Quellen behalten',
+    },
+    exportHelp: {
+        sharedEvents: 'Ein gemeinsames Ereignis wird bei jeder Person einzeln mit Quelle geschrieben, so können andere Programme es lesen. Strom fügt es beim nächsten Import wieder zusammen.',
     },
 
     table: {

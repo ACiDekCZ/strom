@@ -299,3 +299,45 @@ test('phone 390: the GEDCOM dialog fills the screen, the two buttons side by sid
     await expect(pwd.locator('.export-keep-sources')).toBeVisible();
     expect(await modal.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
 });
+
+/** A household of two in a census, one event of both (spec 085). */
+async function seedSharedTree(page: Page, name: string): Promise<void> {
+    await page.evaluate(async (name) => {
+        const census = (id: string, age: string, role?: string) => ({
+            id, type: 'census', date: '1921-02-15', place: 'Medvezin', age, shareId: 'SH7K2QX', ...(role ? { shareRole: role } : {}),
+        });
+        const persons = {
+            a: {
+                id: 'a', firstName: 'Hvozdimír', lastName: 'Ostrozub', gender: 'male', isPlaceholder: false,
+                birthDate: '1879', deathDate: '1950', events: [census('ea', '42')], partnerships: [], parentIds: [], childIds: [],
+            },
+            b: {
+                id: 'b', firstName: 'Zbyhněva', lastName: 'Ostrozubová', gender: 'female', isPlaceholder: false,
+                birthDate: '1883', deathDate: '1960', events: [census('eb', '38', 'maid')], partnerships: [], parentIds: [], childIds: [],
+            },
+        };
+        await window.Strom.DataManager.importAsNewTree({ version: 20, persons, partnerships: {} } as never, name);
+        await window.Strom.TreeRenderer.setFocus('a' as never);
+    }, name);
+}
+
+const SHARED_HINT = 'A shared event is written for each person separately, with its source, so other programs can read it.';
+
+test('a tree with a shared event: the lead says how the file writes it, the file carries the share on each copy', async ({ page }) => {
+    await openApp(page);
+    await seedSharedTree(page, 'Ostrozub');
+    const pwd = await openGedcomExport(page);
+    await expect(pwd.locator('#export-dialog-hint')).toContainText('The format for other genealogy programs.');
+    await expect(pwd.locator('#export-dialog-hint')).toContainText(SHARED_HINT);
+    await pwd.locator('#export-privacy-mode').selectOption('full');
+    const ged = await download(page);
+    expect(ged.match(/^2 _STROM_SHARE SH7K2QX\r?$/gm)).toHaveLength(2);
+    expect(ged).toMatch(/2 _STROM_SHARE SH7K2QX\r?\n3 _ROLE maid/);
+});
+
+test('a tree without a shared event: the lead alone', async ({ page }) => {
+    await openApp(page);
+    await seedTree(page);
+    const pwd = await openGedcomExport(page);
+    await expect(pwd.locator('#export-dialog-hint')).toHaveText('The format for other genealogy programs. Choose what goes into the file.');
+});

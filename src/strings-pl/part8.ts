@@ -14,7 +14,7 @@ function romanPl(n: number): string {
     return tens + ones;
 }
 
-export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages' | 'help' | 'importNext' | 'exportGed' | 'table' | 'win'> = {
+export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages' | 'help' | 'importNext' | 'exportGed' | 'exportHelp' | 'table' | 'win'> = {
     history: {
         settingLabel: 'Historia na osi czasu życia',
         settingHint: 'Wydarzenia epoki i miejsc, w których osoba żyła, z wiekiem osoby. Szuka ich badanie, każde ma źródło.',
@@ -1161,6 +1161,9 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         warnLoss: (s: number, c: number) => `Plik będzie bez ${nPl(s, 'źródła', 'źródeł', 'źródeł')} i ${nPl(c, 'cytatu', 'cytatów', 'cytatów')}.`,
         warnLiving: (n: number, c: number) => `U ${nPl(n, 'żyjącej osoby', 'żyjących osób', 'żyjących osób')} ${plPl(c, 'zostanie pominięty', 'zostaną pominięte', 'zostanie pominiętych')} ${nPl(c, 'cytat', 'cytaty', 'cytatów')}. Zmarłym źródła pozostaną.`,
         keepSources: 'Zachowaj źródła',
+    },
+    exportHelp: {
+        sharedEvents: 'Wspólne wydarzenie zapisuje się u każdej osoby osobno, ze źródłem, aby inne programy mogły je odczytać. Strom przy następnym imporcie znów je połączy.',
     },
     table: {
         sharedCount: (n: number) => nPl(n, 'osoba', 'osoby', 'osób'),
