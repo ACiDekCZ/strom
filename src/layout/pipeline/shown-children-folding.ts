@@ -16,6 +16,10 @@
  *   that is not enough the other partner's too; if even that is not enough,
  *   nothing is folded for the span.
  *
+ * Never folded: a person whose parents show their children too (the fold
+ * would take those children away again; children and siblings at once
+ * shows the siblings of both partners).
+ *
  * Without children shown nothing folds and the layout is runLayoutPipeline's.
  */
 
@@ -76,11 +80,16 @@ export function planShownChildrenFolding(input: PipelineInput): ShownChildrenFol
         }
     };
 
+    // Never the ancestors of a person whose parents show their children too
+    // (children and siblings at once shows both sides): the fold would take
+    // away the children shown there
+    const keeps = (personId: PersonId): boolean => (data.persons[personId]?.parentIds ?? []).some(id => shown.includes(id));
+
     // B: the partner's parents keep an ancestor's siblings on the inner side
     const blocked = (result.innerSiblingRuns ?? []).filter(r => !r.besidePartner);
     const tried: PersonId[] = [];
     for (const r of blocked) {
-        if (foldedFor.has(r.partnerId)) continue;
+        if (foldedFor.has(r.partnerId) || keeps(r.partnerId)) continue;
         // The siblings are there because a parent of the person shows them
         const parents = data.persons[r.personId]?.parentIds ?? [];
         const shownId = shown.find(id => parents.includes(id));
@@ -106,7 +115,7 @@ export function planShownChildrenFolding(input: PipelineInput): ShownChildrenFol
         const span = coupleSpan(data, result, shownId, input.config.cardWidth);
         if (!span || span.gap <= limit) continue;
         const candidates = foldOrder(data, result, span, input.config.cardWidth)
-            .filter(id => !foldedFor.has(id));
+            .filter(id => !foldedFor.has(id) && !keeps(id));
         const added: PersonId[] = [];
         let fixed: LayoutResult | null = null;
         for (const personId of candidates) {

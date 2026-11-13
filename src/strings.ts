@@ -1425,6 +1425,22 @@ const stringsEN = {
         newMark: 'new mark',
     },
 
+    // Children and siblings at once (the family view): the person menu's row, the focus bar's switch, the bubble over 150
+    bulk: {
+        tree: 'Children & siblings',
+        treeTip: 'Show the focus person’s children and the siblings of the focus person and of the ancestors in view',
+        treeNone: 'All children and siblings are already shown',
+        treeAria: (n: number) => `Children & siblings, ${nEn(n, 'person', 'people')} to add`,
+        menu: 'Expand children and siblings',
+        menuOff: 'Collapse children and siblings',
+        menuSub: 'the person’s children, siblings of the person and of their ancestors',
+        menuAria: (n: number) => `Expand children and siblings, ${nEn(n, 'person', 'people')} to add`,
+        bigTitle: (n: number) => `${nEn(n, 'person', 'people')} will be added`,
+        bigBody: (k: number) => `The tree will grow to about ${nEn(k, 'screen width', 'screen widths')}. The zoom stays.`,
+        go: (n: number) => `Expand +${n}`,
+        two: (m: number) => `Only 2 ancestor generations +${m}`,
+    },
+
     // Titles of the name shown with it (Person.titleBefore / titleAfter)
     // A name's birth-surname note after the married surname: "Mary Smith (née Brown)".
     name: {
@@ -10347,6 +10363,21 @@ const stringsCZ: StringsType = {
         newMark: 'nová značka',
     },
 
+    bulk: {
+        tree: 'Děti a sourozenci',
+        treeTip: 'Ukázat děti fokusu a sourozence fokusu i předků v pohledu',
+        treeNone: 'Všechny děti a sourozenci už jsou vidět',
+        treeAria: (n: number) => `Děti a sourozenci, přibude ${nCs(n, 'osoba', 'osoby', 'osob')}`,
+        menu: 'Rozbalit děti a sourozence',
+        menuOff: 'Sbalit děti a sourozence',
+        menuSub: 'děti osoby, sourozenci osoby a jejích předků',
+        menuAria: (n: number) => `Rozbalit děti a sourozence, přibude ${nCs(n, 'osoba', 'osoby', 'osob')}`,
+        bigTitle: (n: number) => `${plural('cs', n, 'Přibude', 'Přibudou', 'Přibude')} ${nCs(n, 'osoba', 'osoby', 'osob')}`,
+        bigBody: (k: number) => `Strom se rozšíří asi na ${nCs(k, 'šířku', 'šířky', 'šířek')} obrazovky. Přiblížení se nemění.`,
+        go: (n: number) => `Rozbalit +${n}`,
+        two: (m: number) => `Jen 2 generace předků +${m}`,
+    },
+
     // Titles of the name shown with it (Person.titleBefore / titleAfter)
     // Rodné příjmení za příjmením po sňatku: „Marie Nováková (roz. Dvořáková)“.
     name: {
@@ -19161,6 +19192,21 @@ const stringsDE: StringsType = {
         collapse: 'Legende einklappen',
         expand: 'Legende ausklappen',
         newMark: 'neues Zeichen',
+    },
+
+    bulk: {
+        tree: 'Kinder & Geschwister',
+        treeTip: 'Kinder des Fokus sowie Geschwister des Fokus und der Vorfahren in der Ansicht zeigen',
+        treeNone: 'Alle Kinder und Geschwister sind schon sichtbar',
+        treeAria: (n: number) => `Kinder & Geschwister, ${nDe(n, 'Person kommt', 'Personen kommen')} hinzu`,
+        menu: 'Kinder und Geschwister aufklappen',
+        menuOff: 'Kinder und Geschwister zuklappen',
+        menuSub: 'Kinder der Person, Geschwister der Person und ihrer Vorfahren',
+        menuAria: (n: number) => `Kinder und Geschwister aufklappen, ${nDe(n, 'Person kommt', 'Personen kommen')} hinzu`,
+        bigTitle: (n: number) => `${nDe(n, 'Person kommt', 'Personen kommen')} hinzu`,
+        bigBody: (k: number) => `Der Baum wird etwa ${nDe(k, 'Bildschirmbreite', 'Bildschirmbreiten')} breit. Der Zoom bleibt.`,
+        go: (n: number) => `Aufklappen +${n}`,
+        two: (m: number) => `Nur 2 Vorfahrengenerationen +${m}`,
     },
 
     // Titles of the name shown with it (Person.titleBefore / titleAfter)

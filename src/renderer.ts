@@ -87,7 +87,8 @@ import {
     siblingsTabState, SiblingsTabState, newlyShownSiblingIds, siblingGroups, ShownChildrenContext, HiddenRelativesTab, unionChildIdSet, branchTabsInOrder,
     offeredPartners, OfferedPartner, childrenByUnion, childrenComeWithPartners, otherFamilyChildrenElsewhere, marriagesInOrder,
 } from './marriage-order.js';
-import { partnerIdsShownInPlace } from './layout/pipeline/1-select-subgraph.js';
+import { BulkFamily, bulkAddedKeys, bulkBroughtInByParent, bulkNewIds, bulkParents, collectBulkFamily } from './bulk-family.js';
+import { partnerIdsShownInPlace, selectSubgraph } from './layout/pipeline/1-select-subgraph.js';
 import { measureUnionOrderPills, applyUnionOrderGlyphLift, measureTabRows, rowKey, unionOrderPillKey, unionOrderPillPartsHtml, pillFontsPending, branchTabRestHtml, tabsForm, tabsFormClass, bubblePlacement, bubbleBox, touchBubbleBox, touchBubbleBounds, touchBubbleSide, bubbleOpensBelow, BUBBLE_WINDOW_MARGIN, BUBBLE_LOW_WINDOW_NAMES, BUBBLE_LOW_WINDOW_HEIGHT, bubbleNameCounts, bubbleNamesToFit } from './union-order-measure.js';
 import { prepareBubble, showBubble, hideBubble, closeOpenBubble, openBubble, openBubbleOwner } from './bubble-layer.js';
 import { LiveDiff, diffLive, liveChangeCount } from './live-diff.js';
@@ -111,7 +112,7 @@ import {
 } from './children-transition.js';
 import type { LayoutViewLayer, ViewLineFlag } from './layout/index.js';
 import { buildViewLayer } from './layout/index.js';
-import { ViewHistory, ViewHistoryEntry, ViewTransform, ViewStandIn, ShownChildrenSnapshot, emptyViewHistory, pushViewStep, stepViewHistory, sameShown, samePartnerUnions, shownKey, sameTransform, historyView } from './view-history.js';
+import { ViewHistory, ViewHistoryEntry, ViewTransform, ViewStandIn, ShownChildrenSnapshot, BulkStep, emptyViewHistory, pushViewStep, stepViewHistory, sameShown, samePartnerUnions, shownKey, sameTransform, historyView } from './view-history.js';
 
 /** A group of names in a tab's bubble: its own lines (a group label) before its names (nameGroupsHtml). */
 interface BubbleNameGroup {
@@ -533,6 +534,17 @@ class TreeRendererClass {
      * tab's look and the step; the layout knows the parents alone.
      */
     private siblingsShownFor = new Map<PersonId, PersonId[]>();
+    /**
+     * Children and siblings at once (src/bulk-family.ts): each person whose
+     * children such a step showed → the step. The persons of one step make
+     * one step of "Hide shown · n" and of the history; each still closes on
+     * its own (its tab, a new step), leaving the rest of the step shown.
+     */
+    private bulkShownFor = new Map<PersonId, BulkStep>();
+    /** The last step of children and siblings at once (BulkStep.seq). */
+    private bulkSeq = 0;
+    /** The depth's selection a bulk count reads (bulkHeld), per render. */
+    private bulkHeldCache: { seq: number; focus: PersonId | null; persons: ReadonlySet<PersonId>; partnerships: ReadonlySet<PartnershipId> } | null = null;
     /**
      * Parents shown in place beyond the depth (§4, the "▸ parents" of an
      * ancestor at the edge of the depth, PipelineInput.extraDepthFor): the
@@ -1859,6 +1871,7 @@ class TreeRendererClass {
         this.childrenUnshowable.clear();
         this.childrenBroughtIn.clear();
         this.siblingsShownFor.clear();
+        this.bulkShownFor.clear();
         this.childrenShownDrift.clear();
         this.childrenZoom.clear();
         this.childrenAnchorScreen.clear();
@@ -2286,8 +2299,12 @@ class TreeRendererClass {
      * the children it promised is left out again (the safety net,
      * childrenUnshowable); when none is left, the view comes back and no
      * step is made. After the transition the children in view glow.
+     * `bulk` (children and siblings at once, showBulkFamily): the parents
+     * make that one step; the zoom stays, and each parent keeps the cards
+     * its own children brought (it closes alone).
      */
-    private async showChildrenOf(parents: readonly PersonId[], anchorId: PersonId, siblingsOf: PersonId | null): Promise<void> {
+    private async showChildrenOf(parents: readonly PersonId[], anchorId: PersonId, siblingsOf: PersonId | null,
+        bulk: BulkStep | null = null): Promise<void> {
         this.finishChildrenTransition();
         const historyBefore = this.currentHistoryEntry();
         const scene = this.captureChildrenScene();
@@ -2301,6 +2318,7 @@ class TreeRendererClass {
         for (const q of parents) this.childrenVisibleBefore.set(q, visible.get(q)!);
         // One step (the focus bar's count) from the first render on
         if (siblingsOf) this.siblingsShownFor.set(siblingsOf, [...parents]);
+        if (bulk) for (const q of parents) this.bulkShownFor.set(q, bulk);
         this.shownStepBefore = beforeAll;
         await this.renderInternal();
         const failed = parents.filter(q => !promised.get(q)!.some(inView));
@@ -2310,6 +2328,7 @@ class TreeRendererClass {
             for (const q of failed) {
                 this.childrenVisibleBefore.delete(q);
                 this.childrenUnshowable.add(q);
+                this.bulkShownFor.delete(q);
             }
             if (siblingsOf && shown.length > 0) this.siblingsShownFor.set(siblingsOf, shown);
             else if (siblingsOf) this.siblingsShownFor.delete(siblingsOf);
@@ -2324,20 +2343,160 @@ class TreeRendererClass {
         if (historyBefore) this.pushHistoryStep({ ...historyBefore, anchorId });
         const broughtIn = new Set([...this.positions.keys()].filter(id => !beforeAll.has(id)));
         this.shownStepBefore = null;
+        const ownBroughtIn = bulk ? bulkBroughtInByParent(data, shown, broughtIn) : null;
         for (const q of shown) {
-            this.childrenBroughtIn.set(q, broughtIn);
+            this.childrenBroughtIn.set(q, ownBroughtIn?.get(q) ?? broughtIn);
             const at = screenBefore.get(q);
             if (at) this.childrenAnchorScreen.set(q, at);
         }
         const shift = this.keepCardInPlace(anchorId, beforeAll, false);
-        // §5: zoom out around the card as far as the new children need (desktop)
+        // §5: zoom out around the card as far as the new children need (desktop); never for a bulk step
         const scaleBefore = ZoomPan.getScale();
         const kids = shown.flatMap(q => newlyShownChildIds(data, q, inView, visible.get(q)!)).filter(id => id !== anchorId);
-        const zoomTo = this.childrenZoomOut(anchorId, kids);
+        const zoomTo = bulk ? null : this.childrenZoomOut(anchorId, kids);
         if (zoomTo !== null) this.childrenZoom.set(shown[0], { before: scaleBefore, after: zoomTo });
         // §6: the children in view, of every marriage, glow once the cards stand (§1: and the active tabs)
         const glow = () => this.glowShown(shown, siblingsOf);
-        this.playChildrenTransition(scene, 'open', anchorId, shift, new Map(shown.map(q => [q, broughtIn] as const)), zoomTo, glow);
+        this.playChildrenTransition(scene, 'open', anchorId, shift, new Map(shown.map(q => [q, ownBroughtIn?.get(q) ?? broughtIn] as const)), zoomTo, glow);
+    }
+
+    // ---------- children and siblings at once (src/bulk-family.ts) ----------
+
+    /** The depth a bulk step belongs to (BulkStep.depth). */
+    private bulkDepthKey(): string {
+        return `${this.focusDepthUp}/${this.focusDepthDown}`;
+    }
+
+    /**
+     * What a step of children and siblings at once for `personId` would do
+     * in this view (none outside the family view or for a card not drawn):
+     * who (collectBulkFamily), the persons whose children it shows (the ones
+     * shown already and the safety net's left out), the people it adds.
+     * `maxGeneration`: only the siblings up to that many generations above
+     * (bulk.two).
+     */
+    bulkFamilyPlan(personId: PersonId, maxGeneration = Infinity): { family: BulkFamily; parents: PersonId[]; newIds: PersonId[] } {
+        const empty = { family: { childrenOf: new Set<PersonId>(), siblingsOf: new Set<PersonId>() }, parents: [], newIds: [] };
+        if (this.viewMode !== 'family' || !this.positions.has(personId)) return empty;
+        const data = DataManager.getData();
+        const inView = (id: PersonId) => this.positions.has(id);
+        const family = collectBulkFamily(data, personId, inView, maxGeneration);
+        const parents = bulkParents(data, family, inView, q => !this.childrenShownIds.includes(q) && !this.childrenUnshowable.has(q));
+        const unions = new Set(this.spouseLines.flatMap(l => l.partnershipId ? [l.partnershipId] : []));
+        const held = this.bulkHeld();
+        return {
+            family, parents, newIds: bulkNewIds(data, parents, new Set(this.positions.keys()), unions, this.showAllPartnerships,
+                id => held.persons.has(id), u => held.partnerships.has(u)),
+        };
+    }
+
+    /**
+     * What the depth of this view holds (selectSubgraph, no layout), once per
+     * render: the people a bulk step's new cards bring along (a sibling's
+     * children the depth reaches) are drawn once that card is.
+     */
+    private bulkHeld(): { persons: ReadonlySet<PersonId>; partnerships: ReadonlySet<PartnershipId> } {
+        if (this.bulkHeldCache?.seq === this.renderSeq && this.bulkHeldCache.focus === this.focusPersonId) return this.bulkHeldCache;
+        const selection = selectSubgraph({
+            data: DataManager.getData(), focusPersonId: this.focusPersonId!,
+            ancestorDepth: this.focusDepthUp, descendantDepth: this.focusDepthDown,
+            includeSpouseAncestors: false, includeParentSiblings: true, includeParentSiblingDescendants: true,
+        });
+        this.bulkHeldCache = { seq: this.renderSeq, focus: this.focusPersonId, persons: selection.persons, partnerships: selection.partnerships };
+        return this.bulkHeldCache;
+    }
+
+    /** How many people a step of children and siblings at once for `personId` adds (the menu row's and the switch's "+n"). */
+    bulkFamilyCount(personId: PersonId, maxGeneration = Infinity): number {
+        return this.bulkFamilyPlan(personId, maxGeneration).newIds.length;
+    }
+
+    /**
+     * The person's step of children and siblings at once that still stands
+     * (the latest, made at this depth; a family of it closed alone leaves
+     * the rest of it standing), or null. (a) and (b) share it: the focus's
+     * menu row and the switch read the same step.
+     */
+    bulkStepOf(personId: PersonId): BulkStep | null {
+        let out: BulkStep | null = null;
+        const depth = this.bulkDepthKey();
+        for (const b of this.bulkShownFor.values()) {
+            if (b.personId === personId && b.depth === depth && (!out || b.seq > out.seq)) out = b;
+        }
+        return this.viewMode === 'family' ? out : null;
+    }
+
+    /**
+     * The state of children and siblings at once for `personId` (the focus
+     * bar's switch with the focus, the person menu's row): 'offer' with n
+     * people to add; 'on' with nothing to add while its step stands (a click
+     * takes the step back, undoBulkFamily); 'none' otherwise (nothing to add,
+     * no step; outside the family view too).
+     */
+    bulkFamilyState(personId: PersonId): { state: 'offer' | 'on' | 'none'; n: number; step: BulkStep | null } {
+        const n = this.bulkFamilyCount(personId);
+        const step = this.bulkStepOf(personId);
+        return { state: n > 0 ? 'offer' : step ? 'on' : 'none', n, step };
+    }
+
+    /**
+     * Rough width of the view after a step (the bubble over 150): the widest
+     * row with the people the step adds, in screen widths at today's zoom
+     * (cards × (card width + gap) / canvas width, rounded up).
+     */
+    bulkFamilyScreens(personId: PersonId, maxGeneration = Infinity): number {
+        const { parents, newIds } = this.bulkFamilyPlan(personId, maxGeneration);
+        const data = DataManager.getData();
+        const rowOf = (y: number) => Math.round(y);
+        const rows = new Map<number, number>();
+        for (const pos of this.positions.values()) rows.set(rowOf(pos.y), (rows.get(rowOf(pos.y)) ?? 0) + 1);
+        const ys = [...rows.keys()].sort((a, b) => a - b);
+        const steps = ys.slice(1).map((y, i) => y - ys[i]).filter(d => d > 0).sort((a, b) => a - b);
+        const rowStep = steps[0] ?? this.config.cardHeight + this.config.verticalGap;
+        const fresh = new Set(newIds);
+        for (const id of newIds) {
+            const q = parents.find(p => (data.persons[p]?.childIds ?? []).includes(id));
+            const at = q ? this.positions.get(q) : undefined;
+            if (!at) continue;
+            const sibling = (data.persons[q!]?.childIds ?? []).map(c => this.positions.get(c)).find(p => !!p);
+            const y = rowOf(sibling ? sibling.y : at.y + rowStep);
+            rows.set(y, (rows.get(y) ?? 0) + 1);
+        }
+        const widest = Math.max(0, ...rows.values());
+        const width = widest * (this.config.cardWidth + this.config.horizontalGap) * ZoomPan.getScale();
+        const canvas = document.getElementById('tree-container')?.clientWidth || window.innerWidth || 1;
+        return Math.max(1, Math.ceil(width / canvas));
+    }
+
+    /**
+     * Children and siblings at once for `personId` (source 'a' the person
+     * menu, 'b' the focus bar's switch): the children of every person of
+     * the plan in one layout, one render and one step of the history and
+     * of "Hide shown · n". The focus, the depth and the zoom stay; the
+     * person's card keeps its place on the screen. `maxGeneration`: bulk.two.
+     */
+    async showBulkFamily(personId: PersonId, source: 'a' | 'b', maxGeneration = Infinity): Promise<void> {
+        const { family, parents } = this.bulkFamilyPlan(personId, maxGeneration);
+        if (parents.length === 0) return;
+        const inView = (id: PersonId) => this.positions.has(id);
+        const step: BulkStep = {
+            seq: ++this.bulkSeq, source, personId, depth: this.bulkDepthKey(),
+            added: bulkAddedKeys(DataManager.getData(), family, parents, inView),
+        };
+        await this.showChildrenOf(parents, personId, null, step);
+    }
+
+    /**
+     * Take the person's standing step of children and siblings at once back
+     * (the switch "on", the menu's "Collapse children and siblings"): its
+     * families close in one render, a new step of the history; the card
+     * keeps its place.
+     */
+    async undoBulkFamily(personId: PersonId): Promise<void> {
+        const step = this.bulkStepOf(personId);
+        if (!step) return;
+        const ids = [...this.bulkShownFor].filter(([, b]) => b.seq === step.seq).map(([id]) => id);
+        await this.closeChildrenShown(ids, personId);
     }
 
     /**
@@ -2459,6 +2618,7 @@ class TreeRendererClass {
             this.childrenVisibleBefore.delete(id);
             this.childrenBroughtIn.delete(id);
             this.childrenZoom.delete(id);
+            this.bulkShownFor.delete(id);
         }
         for (const [p, parents] of this.siblingsShownFor) {
             if (parents.some(q => closing.has(q))) this.siblingsShownFor.delete(p);
@@ -2516,7 +2676,9 @@ class TreeRendererClass {
      */
     shownChildrenCount(): number {
         const grouped = new Set([...this.siblingsShownFor.values()].flat());
-        return this.childrenShownIds.filter(id => !grouped.has(id)).length + this.siblingsShownFor.size
+        for (const id of this.bulkShownFor.keys()) grouped.add(id);
+        const bulkSteps = new Set([...this.bulkShownFor.values()].map(b => b.seq)).size;
+        return this.childrenShownIds.filter(id => !grouped.has(id)).length + this.siblingsShownFor.size + bulkSteps
             + this.parentsShownIds.filter(id => !this.parentsWithSiblings.has(id)).length
             + this.partnersShownIds.length;
     }
@@ -3859,6 +4021,7 @@ class TreeRendererClass {
             shown: this.childrenShownIds.map(id => {
                 const zoom = this.childrenZoom.get(id), anchorScreen = this.childrenAnchorScreen.get(id);
                 const siblingsOf = [...this.siblingsShownFor].find(([, parents]) => parents.includes(id))?.[0];
+                const bulk = this.bulkShownFor.get(id);
                 return {
                     id,
                     visibleBefore: this.childrenVisibleBefore.get(id) ?? new Set<PersonId>(),
@@ -3866,6 +4029,7 @@ class TreeRendererClass {
                     ...(zoom ? { zoom } : {}),
                     ...(anchorScreen ? { anchorScreen } : {}),
                     ...(siblingsOf ? { siblingsOf } : {}),
+                    ...(bulk ? { bulk } : {}),
                 };
             }).concat(this.parentsShownIds.map(id => {
                 const zoom = this.parentsZoom.get(id), anchorScreen = this.parentsAnchorScreen.get(id);
@@ -3934,6 +4098,7 @@ class TreeRendererClass {
         for (const s of shown) {
             if (s.siblingsOf) this.siblingsShownFor.set(s.siblingsOf, [...(this.siblingsShownFor.get(s.siblingsOf) ?? []), s.id]);
         }
+        this.bulkShownFor = new Map(shown.filter(s => s.bulk).map(s => [s.id, s.bulk!] as const));
         if (all.length === 0) this.childrenShownDrift.clear();
     }
 

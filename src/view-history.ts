@@ -63,6 +63,29 @@ export interface ShownChildrenSnapshot {
      * the pill and the bubble offer the rest of these).
      */
     readonly partnerOffered?: readonly PartnershipId[];
+    /**
+     * Shown by a step of "children and siblings at once" (src/bulk-family.ts):
+     * the step, shared by every person whose children it showed (they make
+     * one step of "Hide shown · n", each still closes on its own).
+     */
+    readonly bulk?: BulkStep;
+}
+
+/**
+ * A step of "children and siblings at once": `source` the person menu (a)
+ * or the focus bar's switch (b), `personId` the person it was for (the card
+ * that kept its place), `depth` the ancestor and descendant depth it was
+ * made at ("up/down": another depth leaves it no longer the switch's),
+ * `added` the keys it added (persons whose children, persons whose
+ * siblings it showed; the ones shown before are not among them), `seq`
+ * which step it is.
+ */
+export interface BulkStep {
+    readonly seq: number;
+    readonly source: 'a' | 'b';
+    readonly personId: PersonId;
+    readonly depth: string;
+    readonly added: { readonly childrenOf: readonly PersonId[]; readonly siblingsOf: readonly PersonId[] };
 }
 
 /** A shown snapshot's key: children, parents and partners of one person are three steps. */

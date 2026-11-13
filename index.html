@@ -25653,6 +25653,46 @@
         .context-menu.person-menu { width: 272px; }
         .context-menu.person-menu .context-menu-header { max-width: none; }
 
+        /* Children and siblings at once (src/bulk-family.ts): the person menu's
+           row with "+n" in the primary colour and a faint line of who under
+           it; on the person sheet 52px. The bubble a big step asks in (over
+           150 people): beside the menu row, under the switch, or at the
+           window's bottom on touch. */
+        :is(.context-menu-item, .bottom-sheet-item)[data-action="bulk-family"] .menu-item-meta { color: var(--primary); font-weight: 600; }
+        :is(.context-menu-item, .bottom-sheet-item)[data-action="bulk-family"] .menu-item-note { color: var(--text-faint); text-wrap: pretty; }
+        .context-menu-item[data-action="bulk-family"].is-asking { background: var(--primary-soft); }
+        .bottom-sheet-person .bottom-sheet-item[data-action="bulk-family"] { min-height: 52px; }
+        .bulk-bubble {
+            position: fixed; z-index: 310; width: 288px; max-width: calc(100vw - 16px); box-sizing: border-box;
+            display: flex; flex-direction: column; gap: 6px; padding: 14px 16px;
+            background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 12px;
+            box-shadow: var(--shadow-lg); animation: fadeIn 0.15s ease;
+        }
+        .bulk-bubble[data-placement="bottom"] {
+            left: 50%; bottom: calc(var(--bottom-bar-h, 0px) + 16px + env(safe-area-inset-bottom, 0px)); width: min(340px, calc(100vw - 32px));
+            transform: translateX(-50%); animation: none;
+        }
+        .bulk-bubble-title { margin: 0; font-size: 15px; font-weight: 600; }
+        .bulk-bubble-body { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-light); text-wrap: pretty; }
+        .bulk-bubble-actions { display: flex; flex-direction: column; gap: 6px; padding-top: 4px; }
+        .bulk-bubble-btn {
+            min-height: 34px; padding: 4px 12px; border-radius: 8px; box-sizing: border-box;
+            font: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer;
+        }
+        .bulk-bubble-btn.primary { background: var(--primary); color: var(--on-primary); border: 1px solid var(--primary); }
+        .bulk-bubble-btn.secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+        .bulk-bubble-btn.quiet { background: transparent; color: var(--text-light); border: 1px solid transparent; }
+        .bulk-bubble-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        @media (hover: hover) {
+            .bulk-bubble-btn.primary:hover { filter: brightness(1.08); }
+            .bulk-bubble-btn.secondary:hover, .bulk-bubble-btn.quiet:hover { background: var(--hover-bg); }
+        }
+        @media (pointer: coarse) { .bulk-bubble-btn { min-height: 44px; font-size: 15px; } }
+        /* A phone held sideways: the bubble at the bottom right, clear of the tree's middle. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .bulk-bubble[data-placement="bottom"] { left: auto; right: calc(16px + env(safe-area-inset-right, 0px)); transform: none; bottom: 12px; }
+        }
+
         /* The kind column of the person menu and sheet (§2, PersonMenuAction.kind):
            an 18px mark at the row's start, as the card's tabs mark the same
            click — ▸ shows in place, ▾ hides what it showed (the row tinted),

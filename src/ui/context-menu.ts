@@ -23,6 +23,7 @@ import { LineageIndex, RodId, realRodMembers, rodOf, spouseRodsOf } from '../lin
 import { clearRodSelection, getSelectedRod, rodIndex, setRodSelection } from './rod-view.js';
 import { getWindowRole } from '../windows/window-role.js';
 import { satelliteResearchMenu, WIN_RESEARCH_PREFIX } from '../windows/window-research-menu.js';
+import { isBulkBubbleOpen, runBulkFamily } from './bulk-family-ui.js';
 
 /** The menu action of a row that moves the view to a child drawn elsewhere (+ the child's id). */
 const CHILD_ELSEWHERE_ACTION = 'child-elsewhere:';
@@ -35,6 +36,9 @@ const PARTNER_HERE_ACTION = 'partner-here:';
 const ROD_ONLY_ACTION = 'rod-only:';
 /** The menu action "Show the whole tree" on the person's chosen line. */
 const ROD_CLEAR_ACTION = 'rod-clear';
+/** The menu actions of children and siblings at once (src/bulk-family.ts): expand, collapse the standing step. */
+export const BULK_FAMILY_ACTION = 'bulk-family';
+export const BULK_FAMILY_OFF_ACTION = 'bulk-family-off';
 
 /** One entry in the person action menu (context menu / bottom sheet). */
 export interface PersonMenuAction {
@@ -99,7 +103,7 @@ export interface PersonMenuAction {
 /** Rows that move a chart, its focus or its view: a satellite's Table has no chart to move (spec 079 K1). */
 function isChartRow(a: PersonMenuAction): boolean {
     return !!a.kind || !!a.lead || a.action === LINE_JUMP_PARENTS_ACTION || a.action === LINE_JUMP_CHILDREN_ACTION
-        || a.action === 'toggle-children';
+        || a.action === 'toggle-children' || a.action === BULK_FAMILY_ACTION || a.action === BULK_FAMILY_OFF_ACTION;
 }
 
 /**
@@ -291,6 +295,8 @@ export const contextMenuMethods = uiModule({
                 kind: TreeRenderer.isChildrenShown(personId) ? 'placeOpen' as const : 'place' as const,
             }] : []),
             ...this.otherPartnersRows(personId),
+            // Under the single rows it sums up, the card's own tabs' rows kept together
+            ...this.bulkFamilyRows(personId),
         ];
         const children: PersonMenuAction[] = [...inPlace, ...this.elsewhereRows(personId)];
         // "Only the X line" (spec 039 §2.1): a view, so in every variant, after the person's own rows.
@@ -415,6 +421,26 @@ export const contextMenuMethods = uiModule({
         const via = TreeRenderer.siblingsShownParents(personId)
             .map(id => DataManager.getPerson(id)).filter((p): p is Person => p !== null).map(p => shownNameFull(p, '?')).join(', ');
         return [{ action: 'toggle-siblings', sheetTop: true, kind: 'placeOpen', label: strings.focus.hideSiblingsHere, ...(via ? { sheetNote: strings.focus.siblingsShownVia(via) } : {}) }];
+    },
+
+    /**
+     * Children and siblings at once (src/bulk-family.ts), under the rows of
+     * the children and the siblings in place: "Expand children and siblings"
+     * with how many people it adds and a line of who, or, once the person's
+     * step stands with nothing more to add, "Collapse children and siblings"
+     * (takes that step back). None outside the family view or with nothing
+     * to add and no step.
+     */
+    bulkFamilyRows(personId: PersonId): PersonMenuAction[] {
+        const { state, n } = TreeRenderer.bulkFamilyState(personId);
+        if (state === 'offer') {
+            return [{
+                action: BULK_FAMILY_ACTION, sheetTop: true, kind: 'place', label: strings.bulk.menu,
+                meta: `+${n}`, note: strings.bulk.menuSub, ariaLabel: strings.bulk.menuAria(n),
+            }];
+        }
+        if (state === 'on') return [{ action: BULK_FAMILY_OFF_ACTION, sheetTop: true, kind: 'placeOpen', label: strings.bulk.menuOff }];
+        return [];
     },
 
     /**
@@ -567,6 +593,11 @@ export const contextMenuMethods = uiModule({
                 break;
             case 'toggle-parents':
                 void TreeRenderer.toggleParentsShown(personId);
+                break;
+            // Touch: the sheet is closed already; a big step asks at the window's bottom.
+            case BULK_FAMILY_ACTION:
+            case BULK_FAMILY_OFF_ACTION:
+                void runBulkFamily(personId, 'a', null, 'bottom');
                 break;
             case 'materials':
                 this.showPersonMaterials(personId);
@@ -753,6 +784,14 @@ export const contextMenuMethods = uiModule({
 
         const run = (item: HTMLElement): void => {
             const action = item.dataset.action;
+            // Children and siblings at once: a big step asks in a bubble beside the row, the menu stays under it
+            if (action === BULK_FAMILY_ACTION) {
+                const hide = () => this.hideContextMenu();
+                void runBulkFamily(personId, 'a', item, 'beside', hide).finally(() => item.classList.remove('is-asking'));
+                if (isBulkBubbleOpen()) item.classList.add('is-asking');
+                else hide();
+                return;
+            }
             this.hideContextMenu();
             if (action) this.runPersonMenuAction(personId, action);
         };
@@ -875,6 +914,8 @@ export const contextMenuMethods = uiModule({
             if (this.contextMenu && this.contextMenu.contains(target)) return;
             if (this.contextSubmenu && this.contextSubmenu.contains(target)) return;
             if ((target as Element).closest?.('.person-card')) return;
+            // The bubble of a big step of children and siblings at once stands over the menu
+            if ((target as Element).closest?.('.bulk-bubble')) return;
             this.hideContextMenu();
         };
         setTimeout(() => {

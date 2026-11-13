@@ -7,7 +7,7 @@ const notWrittenPl = (n: number): string =>
 /** Polish past-tense ending by sex: '' (man), 'a' (woman), '(a)' (not given). */
 const sexEndPl = (sex: string | undefined): string => sex === 'female' ? 'a' : sex === 'male' ? '' : '(a)';
 
-export const plPart2: Pick<StringsType, 'crop' | 'importImages' | 'imageViewer' | 'attachments' | 'duplicates' | 'minimap' | 'legend'
+export const plPart2: Pick<StringsType, 'crop' | 'importImages' | 'imageViewer' | 'attachments' | 'duplicates' | 'minimap' | 'legend' | 'bulk'
     | 'name' | 'person' | 'titles' | 'spacing' | 'marriageOrder' | 'genLabels' | 'branchColors' | 'tour' | 'anniversaries' | 'releaseNotes'
     | 'familyWizard' | 'pwa' | 'fileAccess' | 'sync' | 'researchUpdate' | 'researchImages' | 'treeSettings' | 'media'
     | 'mediaQueue' | 'batch'> = {
@@ -84,6 +84,21 @@ export const plPart2: Pick<StringsType, 'crop' | 'importImages' | 'imageViewer' 
         collapse: 'Zwiń legendę',
         expand: 'Rozwiń legendę',
         newMark: 'nowy znak',
+    },
+
+    bulk: {
+        tree: 'Dzieci i rodzeństwo',
+        treeTip: 'Pokaż dzieci osoby w centrum oraz rodzeństwo jej i przodków w widoku',
+        treeNone: 'Wszystkie dzieci i rodzeństwo są już widoczne',
+        treeAria: (n: number) => `Dzieci i rodzeństwo, dojdzie ${nPl(n, 'osoba', 'osoby', 'osób')}`,
+        menu: 'Rozwiń dzieci i rodzeństwo',
+        menuOff: 'Zwiń dzieci i rodzeństwo',
+        menuSub: 'dzieci osoby, rodzeństwo osoby i jej przodków',
+        menuAria: (n: number) => `Rozwiń dzieci i rodzeństwo, dojdzie ${nPl(n, 'osoba', 'osoby', 'osób')}`,
+        bigTitle: (n: number) => `${plPl(n, 'Dojdzie', 'Dojdą', 'Dojdzie')} ${nPl(n, 'osoba', 'osoby', 'osób')}`,
+        bigBody: (k: number) => `Drzewo poszerzy się do ok. ${nPl(k, 'szerokości', 'szerokości', 'szerokości')} ekranu. Powiększenie się nie zmienia.`,
+        go: (n: number) => `Rozwiń +${n}`,
+        two: (m: number) => `Tylko 2 pokolenia przodków +${m}`,
     },
 
     // A name's birth-surname note after the married surname: "Bronisława Zaremba (z d. Kowalik)".
