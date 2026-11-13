@@ -11,7 +11,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
     QUEUE_PAGE, QUEUE_QUERY_MAX, QUEUE_REFRESH_MS, QUEUE_ROWS_CAP, beginQueueSlots, endQueueSlots, fetchQueuePage, loadMoreQueueList, noteQueueRev,
-    moveQueueItemFirst, onQueueListsChange, placeQueueItem, placeQueueItemInLists, queueList, queueListItem, queueQuery, requestQueueList, resetQueueLists, retryQueueList,
+    moveQueueItemFirst, onQueueListsChange, placeQueueItem, placeQueueItemInLists, queueList, queueListItem, queueQuery, queueRemote, readQueuePage, requestQueueList,
+    resetQueueLists, retryQueueList, setQueueRemote,
 } from '../research-queue-pages.js';
 import { LiveQueueItem, sanitizeLiveStatus, sanitizeQueue, sanitizeQueueCounts } from '../research-link.js';
 import { budgetReport, measureAgainstBudget } from './helpers/perf-budget.js';
@@ -489,5 +490,127 @@ describe('the queue searched by its bridge (queue.search)', () => {
         const b = requestQueueList(BASE2, { q: 'b' }, 'queue');
         expect(a.key).not.toBe(b.key);
         expect(a.key).not.toBe(requestQueueList(BASE2, {}, 'branch').key);
+    });
+});
+
+describe('the overview\'s own window: pages asked of the main window (queue-list, spec 052 §1 there)', () => {
+    type Page = Parameters<typeof readQueuePage>[0];
+    let asked: { filter: Record<string, unknown>; from: number; count: number; answer: (v: Page) => void }[];
+    let up: boolean;
+
+    beforeEach(() => {
+        asked = [];
+        up = true;
+        setQueueRemote({
+            page: (filter, from, count) => new Promise(resolve => {
+                asked.push({ filter: { ...filter }, from, count, answer: (v) => resolve(readQueuePage(v)) });
+            }),
+            up: () => up,
+        });
+        vi.stubGlobal('fetch', vi.fn(() => { throw new Error('the window asks no bridge'); }));
+    });
+    afterEach(() => {
+        setQueueRemote(null);
+        onQueueListsChange(null);
+        vi.unstubAllGlobals();
+    });
+
+    const page = (ids: string[], o: Record<string, unknown> = {}) => ({
+        ok: true, items: ids.map((id, i) => ({ id, text: `Matrika ${id}`, state: 'next', pos: i + 1 })), total: ids.length, from: 0,
+        next: null, rev: '3f9c2a71b0d4e8a5', head: 'h', ...o,
+    });
+
+    it('a search\'s pages come from the main window with what matched; Load more asks the next one; nothing is fetched here', async () => {
+        expect(queueRemote()?.up()).toBe(true);
+        requestQueueList('', { q: 'P12' }, 'search');
+        expect(asked.map(a => [a.filter, a.from, a.count])).toEqual([[{ q: 'P12' }, 0, QUEUE_PAGE]]);
+        asked[0].answer(page(['T0001', 'T0003'], { total: 3, next: 2, match: { T0001: 'person', T0003: 'person', bogus: 'id' } }));
+        await flush();
+        let l = queueList('', { q: 'P12' })!;
+        expect(l.items.map(q => q.id)).toEqual(['T0001', 'T0003']);
+        expect([l.total, l.next, l.loading, l.error]).toEqual([3, 2, false, null]);
+        expect(l.match).toEqual({ T0001: 'person', T0003: 'person' });
+        loadMoreQueueList('', { q: 'P12' }, 'search');
+        expect(asked.map(a => a.from)).toEqual([0, 2]);
+        asked[1].answer(page(['T0005'], { total: 3, from: 2, match: { T0005: 'person' } }));
+        await flush();
+        l = queueList('', { q: 'P12' })!;
+        expect(l.items.map(q => q.id)).toEqual(['T0001', 'T0003', 'T0005']);
+        expect(Object.keys(l.match ?? {})).toEqual(['T0001', 'T0003', 'T0005']);
+        expect(l.next).toBeNull();
+        expect(globalThis.fetch).not.toHaveBeenCalled();
+    });
+
+    it('an older search\'s answer that comes after a newer one is dropped', async () => {
+        beginQueueSlots();
+        requestQueueList('', { q: 'Fiš' }, 'search');
+        endQueueSlots();
+        beginQueueSlots();
+        requestQueueList('', { q: 'Fíška' }, 'search');
+        endQueueSlots();
+        expect(asked.map(a => a.filter.q)).toEqual(['Fiš', 'Fíška']);
+        asked[1].answer(page(['T0010']));
+        asked[0].answer(page(['T0020', 'T0030']));
+        await flush();
+        expect(queueList('', { q: 'Fíška' })!.items.map(q => q.id)).toEqual(['T0010']);
+        // The older one was let go when the newer took its place: nothing of it is kept.
+        expect(queueList('', { q: 'Fiš' })).toBeNull();
+    });
+
+    it('a number outside the queue, nothing found, a busy or failed main window (no answer) and Try again', async () => {
+        requestQueueList('', { q: 'T0999' }, 'search');
+        asked[0].answer({ ok: true, items: [], total: 0, from: 0, rev: '', head: '', elsewhere: { id: 'T0999', state: 'done' } });
+        await flush();
+        expect(queueList('', { q: 'T0999' })!.elsewhere).toEqual({ id: 'T0999', state: 'done' });
+        requestQueueList('', { q: 'zzz' }, 'search');
+        asked[1].answer({ ok: false, code: 'busy' });
+        await flush();
+        expect(queueList('', { q: 'zzz' })!.error).toBe('busy');
+        retryQueueList('', { q: 'zzz' }, 'search');
+        // No answer (the main window gone, or something it cannot be): failed.
+        asked[2].answer(null as unknown as Page);
+        await flush();
+        expect(queueList('', { q: 'zzz' })!.error).toBe('failed');
+        retryQueueList('', { q: 'zzz' }, 'search');
+        asked[3].answer(page([]));
+        await flush();
+        expect([queueList('', { q: 'zzz' })!.total, queueList('', { q: 'zzz' })!.error]).toEqual([0, null]);
+    });
+
+    it('the queue\'s new print reads the lists shown again through the main window', async () => {
+        vi.useFakeTimers();
+        try {
+            beginQueueSlots();
+            requestQueueList('', { q: 'Matrika' }, 'search');
+            endQueueSlots();
+            asked[0].answer(page(['T0001']));
+            await vi.advanceTimersByTimeAsync(0);
+            noteQueueRev('', '3f9c2a71b0d4e8a5');
+            noteQueueRev('', 'aaaabbbbccccdddd');
+            await vi.advanceTimersByTimeAsync(QUEUE_REFRESH_MS);
+            expect(asked.map(a => [a.filter.q, a.from])).toEqual([['Matrika', 0], ['Matrika', 0]]);
+            asked[1].answer(page(['T0002', 'T0001'], { rev: 'aaaabbbbccccdddd' }));
+            await vi.advanceTimersByTimeAsync(0);
+            expect(queueList('', { q: 'Matrika' })!.items.map(q => q.id)).toEqual(['T0002', 'T0001']);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('Do next from the window: the task first in its own lists meanwhile', async () => {
+        requestQueueList('', { q: 'Matrika' }, 'search');
+        asked[0].answer(page(['T0001', 'T0002', 'T0003']));
+        await flush();
+        moveQueueItemFirst('', 'T0003');
+        expect(queueList('', { q: 'Matrika' })!.items.map(q => [q.id, q.pos])).toEqual([['T0003', 1], ['T0001', 2], ['T0002', 3]]);
+    });
+
+    it('a page as the main window answered it is checked', () => {
+        expect(readQueuePage(undefined)).toEqual({ ok: false, code: 'failed' });
+        expect(readQueuePage({ ok: false, code: 'nonsense' })).toEqual({ ok: false, code: 'failed' });
+        expect(readQueuePage({ ok: true, items: [], from: 0 })).toEqual({ ok: false, code: 'failed' });
+        const r = readQueuePage({ ok: true, items: [{ id: 'T0001', text: 'x', state: 'next', pos: 1 }, { nonsense: true }], total: 1, from: 0, next: 0, rev: 'zz', head: 7,
+            elsewhere: { id: 'T0002', state: 'lost' } });
+        expect(r).toEqual({ ok: true, items: [expect.objectContaining({ id: 'T0001', pos: 1 })], total: 1, from: 0, next: null, rev: '', head: '' });
     });
 });

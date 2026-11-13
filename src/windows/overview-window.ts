@@ -7,13 +7,15 @@
  *   from the followed research's session, else from the open tree's research
  *   viewed without following, plus what only the main window knows (the
  *   switch that turns the research on, following in the tree, the lines'
- *   writes under way, the queue's pages read, hypotheses asked). It crosses
+ *   writes under way, hypotheses asked). It crosses
  *   as a structured clone: no EventSource, timers, promises, functions or DOM
  *   nodes, and nothing of the bridge's address or token — the window never
  *   talks to the bridge.
  * - `research-action` (overview window → main): one of `OVERVIEW_ACTION_IDS`
  *   with its arguments; the main window runs it with today's functions. An
  *   action with a `reqId` gets its outcome back (`research-action-result`).
+ *   The queue's pages and its search (`queue-list`) are such answers: the
+ *   window keeps its own lists, the main window reads each page for it.
  * - 6g: while an overview window is open the main window draws no overview
  *   of its own; ⤢ and Research › Research overview bring that window to the
  *   front. The main window's wiring tells this module (`setOverviewWindowProbe`),
@@ -24,6 +26,7 @@ import type { TreeId } from '../types.js';
 import type { LiveSession, OverviewViewing } from '../ui/research-ui.js';
 import { RESEARCH_LINK_ACTIONS, type ResearchLinkAction } from '../research-link.js';
 import { sanitizeTaskOrderWas, type TaskOrderWas } from '../research-directions-write.js';
+import { queueQuery, type QueueFilter } from '../research-queue-pages.js';
 
 /** Raised when the snapshot's shape changes in a way an older window cannot read. */
 export const OVERVIEW_STATE_VERSION = 1;
@@ -63,18 +66,6 @@ export interface OverviewLinesState {
     archive: boolean;
 }
 
-/** A list of the queue read page by page from the bridge (research-queue-pages), without the bridge's address. */
-export interface OverviewQueueList {
-    key: string;
-    filter: { branch?: string; research?: string; state?: 'next' | 'parked' };
-    items: unknown[];
-    total: number | null;
-    next: number | null;
-    rev: string;
-    loading: boolean;
-    error: 'busy' | 'failed' | null;
-}
-
 /** What the overview shows that only the main window knows. */
 export interface OverviewExtras {
     /** The switch that turns the research on and off (researchLiveState); null: none here. */
@@ -86,8 +77,6 @@ export interface OverviewExtras {
     /** ◎ following in the tree and the view it runs in. */
     follow: { on: boolean; view: 'family' | 'fan' | 'map' | null };
     lines: OverviewLinesState;
-    /** The queue's pages read through the bridge (null: none). */
-    queue: { rev: string; lists: OverviewQueueList[] } | null;
     /** Hypotheses asked of the research and waiting for its answer, and the list of proposals accepted at once. */
     hypotheses: { pending: Record<string, unknown>; batch: unknown | null };
     /** Tasks whose own place in the queue is being written, and what a refused one says (by task). */
@@ -238,7 +227,6 @@ export function emptyOverviewExtras(): OverviewExtras {
         noAgent: false,
         follow: { on: false, view: null },
         lines: { selected: 'all', pendingOrder: null, orderSaving: false, busy: [], problems: [], archive: false },
-        queue: null,
         hypotheses: { pending: {}, batch: null },
         taskOrder: { busy: [], problems: {} },
     };
@@ -321,11 +309,12 @@ export type OverviewAction =
     | { action: 'answer-task'; args: { itemId: string } }
     /** A link into the research (its mark as today): built and launched by the main window for its open tree. */
     | { action: 'research-link'; args: { link: ResearchLinkAction; params?: Record<string, unknown>; kind?: 'terminal' | 'agent' } }
-    /** The queue's pages through the bridge: a list asked, its next page, a failed read again. */
-    | { action: 'queue-list'; args: { filter: OverviewQueueList['filter']; slot: 'queue' | 'branch' | 'helps' } }
-    /** `seed`: the status's own tasks of the whole queue, as the overview passes them for the first "Load more". */
-    | { action: 'queue-more'; args: { filter: OverviewQueueList['filter']; slot: 'queue' | 'branch' | 'helps'; seed?: { items: unknown[]; total: number } } }
-    | { action: 'queue-retry'; args: { filter: OverviewQueueList['filter']; slot: 'queue' | 'branch' | 'helps' } }
+    /**
+     * One page of the queue (spec 052 §1 in the window): read by the main window from its bridge with the
+     * docked overview's function and answered (`QueuePageResult`: the tasks, `total`, `next`, a search's
+     * `match` and `elsewhere`, or why it failed). `filter.q`: the searched text (none: the queue's pages).
+     */
+    | { action: 'queue-list'; args: { filter: QueueFilter; from: number; count: number } }
     /**
      * A task's own place in the queue (Do next / To the end / Reset to default), written through the bridge.
      * With `queue.next`: "Do next" and `restore` (its Undo, back to `was`) answer with their outcome and the place before.
@@ -342,7 +331,7 @@ export const OVERVIEW_ACTION_IDS = [
     'line-select', 'line-state', 'line-move', 'line-retry',
     'waiting-answer', 'waiting-sent', 'waiting-unsent', 'waiting-group-sent', 'waiting-file',
     'hypothesis-ask', 'hypotheses-accept', 'answer-task', 'research-link',
-    'queue-list', 'queue-more', 'queue-retry', 'queue-order',
+    'queue-list', 'queue-order',
 ] as const satisfies readonly OverviewActionId[];
 
 /** Actions whose result shows in the main window: the overview window asks it to the front after them. */
@@ -355,17 +344,26 @@ const str = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
 const strs = (v: unknown): v is string[] => Array.isArray(v) && v.every(x => typeof x === 'string');
 const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {});
 const isFile = (v: unknown): v is File => typeof File !== 'undefined' && v instanceof File;
-const SLOTS = new Set(['queue', 'branch', 'helps']);
 const LINK_ACTIONS = new Set<string>(RESEARCH_LINK_ACTIONS);
 
-function queueFilter(v: unknown): OverviewQueueList['filter'] | null {
+function queueFilter(v: unknown): QueueFilter | null {
     const f = obj(v);
-    const out: OverviewQueueList['filter'] = {};
+    const out: QueueFilter = {};
     if (f.branch !== undefined) { if (!str(f.branch)) return null; out.branch = f.branch; }
     if (f.research !== undefined) { if (!str(f.research)) return null; out.research = f.research; }
     if (f.state !== undefined) { if (f.state !== 'next' && f.state !== 'parked') return null; out.state = f.state; }
+    if (f.q !== undefined) {
+        // A searched text as the bridge takes it (trimmed, at most 100 characters); an empty one: the queue's pages.
+        if (typeof f.q !== 'string') return null;
+        const q = queueQuery(f.q);
+        if (q) out.q = q;
+    }
     return out;
 }
+
+/** A page's place and size: from a task on, at most the bridge's page. */
+const pageFrom = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 10_000_000;
+const pageCount = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= 100;
 
 /** A research link's parameters: strings and lists of strings only (the main window builds the link from them). */
 function linkParams(v: unknown): Record<string, unknown> | null {
@@ -467,18 +465,10 @@ export function readOverviewAction(action: unknown, args: unknown): OverviewActi
             }
             return a.do === 'next' || a.do === 'last' || a.do === 'default' ? { action, args: { task: a.task, do: a.do } } : null;
         }
-        case 'queue-list':
-        case 'queue-more':
-        case 'queue-retry': {
+        case 'queue-list': {
             const filter = queueFilter(a.filter);
-            if (!filter || typeof a.slot !== 'string' || !SLOTS.has(a.slot)) return null;
-            const slot = a.slot as 'queue' | 'branch' | 'helps';
-            const seed = obj(a.seed);
-            if (action === 'queue-more' && a.seed !== undefined) {
-                if (!Array.isArray(seed.items) || typeof seed.total !== 'number') return null;
-                return { action, args: { filter, slot, seed: { items: [...seed.items], total: seed.total } } };
-            }
-            return { action, args: { filter, slot } } as OverviewAction;
+            if (!filter || !pageFrom(a.from) || !pageCount(a.count)) return null;
+            return { action, args: { filter, from: a.from, count: a.count } };
         }
         default:
             return null;

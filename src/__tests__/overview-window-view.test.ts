@@ -287,6 +287,53 @@ describe('the window\'s start', () => {
     });
 });
 
+describe('the queue\'s pages and its search in the window (spec 052 §1 there, queue-list)', () => {
+    function fakeUi() {
+        return { renderResearchOverview: vi.fn(), openWaitingItems: vi.fn(), queueListsChanged: vi.fn((draw: () => void) => draw()) };
+    }
+    const paged = (features: string[], o: Partial<OverviewResearchState> = {}) => stateOf({
+        session: sessionData({ features, queueCounts: { next: 120, parked: 1, research: {}, branch: {}, rev: '3f9c2a71b0d4e8a5' } } as Partial<OverviewSessionData>),
+        ...o,
+    });
+
+    it('with queue.search the window reads its queue by pages, each page asked of the main window and drawn when it comes', async () => {
+        const ui = fakeUi();
+        const { port } = portSpy();
+        port.ask.mockImplementation(async () => ({ ok: true, items: [{ id: 'T0815', text: 'Matriky', state: 'next', pos: 115 }], total: 1, from: 0, rev: '', head: '', match: { T0815: 'id' } }));
+        const fetchSpy = vi.fn();
+        vi.stubGlobal('fetch', fetchSpy);
+        const view = startOverviewWindowView(ui as never, port, () => 'Okurkovi');
+        view.apply(paged(['queue.page', 'queue.search']));
+        const { queuePaged } = await import('../ui/research-ui.js');
+        expect(queuePaged(overviewWindowDrawn(view.state()!, null).live)).toBe(true);
+        const { requestQueueList, queueList } = await import('../research-queue-pages.js');
+        requestQueueList('', { q: 'T0815' }, 'search');
+        expect(port.ask).toHaveBeenCalledWith('queue-list', { filter: { q: 'T0815' }, from: 0, count: 50 }, expect.any(Number));
+        await vi.waitFor(() => expect(queueList('', { q: 'T0815' })?.total).toBe(1));
+        expect(queueList('', { q: 'T0815' })?.match).toEqual({ T0815: 'id' });
+        // The page came: the window drawn again (its own states with it).
+        expect(ui.queueListsChanged).toHaveBeenCalled();
+        expect(fetchSpy).not.toHaveBeenCalled();
+        view.stop();
+    });
+
+    it('without queue.search, with the bridge down or the tree locked: the window\'s queue as before (no pages)', async () => {
+        const { queuePaged } = await import('../ui/research-ui.js');
+        const ui = fakeUi();
+        const view = startOverviewWindowView(ui as never, portSpy().port, () => 'Okurkovi');
+        const drawnOf = (st: OverviewResearchState) => {
+            view.apply(st);
+            return overviewWindowDrawn(st, null).live;
+        };
+        expect(queuePaged(drawnOf(paged(['queue.page'])))).toBe(false);
+        expect(queuePaged(drawnOf(paged(['queue.page', 'queue.search'], { bridgeUp: false })))).toBe(false);
+        expect(queuePaged(drawnOf(paged(['queue.page', 'queue.search'])))).toBe(true);
+        view.stop();
+        // The main window's own overview (no window): its bridge as before.
+        expect(queuePaged(drawnOf(paged(['queue.page', 'queue.search'])))).toBe(false);
+    });
+});
+
 describe('the window\'s states (§6 states 3–5)', () => {
     const screen = (state: OverviewResearchState | null, connection: 'connecting' | 'connected' | 'main-closed' = 'connected', lastHeardAt = 0) =>
         overviewWindowScreen({ state, connection, lastHeardAt });

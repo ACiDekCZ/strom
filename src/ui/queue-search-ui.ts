@@ -143,6 +143,13 @@ function firstRow(st: SearchState): HTMLElement | null {
 export function queueSearchFor(s: LiveSession, redraw: () => void): QueueSearch {
     if (current && current.treeId === s.treeId) {
         current.redraw = redraw;
+        // Greyed while the overview's own window had no main window (it is kept over the redraws): usable again until greyed anew.
+        for (const c of [current.input, current.clear]) {
+            if (!c.dataset.greyed) continue;
+            delete c.dataset.greyed;
+            c.removeAttribute('aria-disabled');
+            c.disabled = false;
+        }
         return current;
     }
     resetQueueSearch();

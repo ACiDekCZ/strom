@@ -218,6 +218,38 @@ describe('the window\'s actions run today\'s functions', () => {
         expect(changeTaskOrder).toHaveBeenCalledWith('T1', 'next');
     });
 
+    it('a page of the queue or its search asked from the window is read here from the bridge and answered (queue-list)', async () => {
+        const urls: string[] = [];
+        vi.stubGlobal('fetch', vi.fn(async (u: string) => {
+            urls.push(u);
+            return new Response(JSON.stringify({
+                items: [{ id: 'T0815', text: 'Matriky Smrkov 115', state: 'next', pos: 115 }], total: 1, from: 0, q: 'T0815',
+                match: { T0815: 'id' }, rev: '3f9c2a71b0d4e8a5', head: 'h1',
+            }), { status: 200, headers: { 'content-type': 'application/json' } });
+        }));
+        const ask: OverviewAction = { action: 'queue-list', args: { filter: { research: 'G0001', q: 'T0815' }, from: 0, count: 50 } };
+        // A research whose queue is not read by pages: no page, no request.
+        fake.live = liveOf({ features: ['queue.search'] });
+        await expect(run(fakeUi({}), ask)).resolves.toEqual({ ok: false, code: 'failed' });
+        expect(urls).toEqual([]);
+        fake.live = liveOf({ features: ['queue.page', 'queue.search'] });
+        const r = await run(fakeUi({}), ask);
+        expect(urls).toHaveLength(1);
+        expect(urls[0].startsWith(`${BASE}/queue?`)).toBe(true);
+        expect(new URL(urls[0]).searchParams.get('q')).toBe('T0815');
+        expect(new URL(urls[0]).searchParams.get('research')).toBe('G0001');
+        expect(r).toEqual({
+            ok: true, items: [expect.objectContaining({ id: 'T0815', pos: 115 })], total: 1, from: 0, next: null, rev: '3f9c2a71b0d4e8a5', head: 'h1',
+            match: { T0815: 'id' },
+        });
+        // The answer names no bridge (it crosses to the window as it is).
+        expect(JSON.stringify(r)).not.toContain('127.0.0.1');
+        // Without the bridge (following lost): no page.
+        fake.live = liveOf({ features: ['queue.page', 'queue.search'], lostSince: 1 } as Partial<LiveSession>);
+        await expect(run(fakeUi({}), ask)).resolves.toEqual({ ok: false, code: 'failed' });
+        expect(urls).toHaveLength(1);
+    });
+
     it('Turn on only turns on: a research that runs is not stopped', () => {
         const toggle = vi.fn();
         const off = fakeUi({ researchLiveState: () => ({ on: false, pending: null, canStart: true, canStop: false, ended: 'stopped', note: null }), toggleResearchLive: toggle });

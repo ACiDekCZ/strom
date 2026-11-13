@@ -84,8 +84,16 @@ describe('the actions an overview window may ask for', () => {
         // Work on the queue (spec 052 §5): the choice as text, the agent's toast in the main window.
         expect(readOverviewAction('research-link', { link: 'work', params: { workDo: 'tasks', n: '7' }, kind: 'agent' }))
             .toEqual({ action: 'research-link', args: { link: 'work', params: { workDo: 'tasks', n: '7' }, kind: 'agent' } });
-        expect(readOverviewAction('queue-more', { filter: { state: 'next' }, slot: 'queue', seed: { items: [], total: 40 } }))
-            .toEqual({ action: 'queue-more', args: { filter: { state: 'next' }, slot: 'queue', seed: { items: [], total: 40 } } });
+        // A page of the queue or of its search (spec 052 §1 in the window): the filter, the text as the bridge takes it, where and how many.
+        expect(readOverviewAction('queue-list', { filter: { state: 'next' }, from: 50, count: 50, slot: 'queue' }))
+            .toEqual({ action: 'queue-list', args: { filter: { state: 'next' }, from: 50, count: 50 } });
+        expect(readOverviewAction('queue-list', { filter: { research: 'G0002', q: '  Fíška  ' }, from: 0, count: 50 }))
+            .toEqual({ action: 'queue-list', args: { filter: { research: 'G0002', q: 'Fíška' }, from: 0, count: 50 } });
+        expect(readOverviewAction('queue-list', { filter: { q: 'x'.repeat(150) }, from: 0, count: 50 }))
+            .toEqual({ action: 'queue-list', args: { filter: { q: 'x'.repeat(100) }, from: 0, count: 50 } });
+        // An empty text: the queue's own pages.
+        expect(readOverviewAction('queue-list', { filter: { q: '   ' }, from: 0, count: 50 }))
+            .toEqual({ action: 'queue-list', args: { filter: {}, from: 0, count: 50 } });
         // A task's own place in the queue (K3 – S2 #1): written by the main window.
         expect(readOverviewAction('queue-order', { task: 'T1', do: 'next', extra: 1 })).toEqual({ action: 'queue-order', args: { task: 'T1', do: 'next' } });
         expect(readOverviewAction('queue-order', { task: 'T1', do: 'default' })).toEqual({ action: 'queue-order', args: { task: 'T1', do: 'default' } });
@@ -107,7 +115,15 @@ describe('the actions an overview window may ask for', () => {
         expect(readOverviewAction('research-link', { link: 'https://example.org' })).toBeNull();
         expect(readOverviewAction('research-link', { link: 'chat', params: { person: { toString: 1 } } })).toBeNull();
         expect(readOverviewAction('waiting-file', { itemId: 'W1', file: 'not a file' })).toBeNull();
-        expect(readOverviewAction('queue-list', { filter: { state: 'all' }, slot: 'queue' })).toBeNull();
+        expect(readOverviewAction('queue-list', { filter: { state: 'all' }, from: 0, count: 50 })).toBeNull();
+        expect(readOverviewAction('queue-list', { filter: { q: 7 }, from: 0, count: 50 })).toBeNull();
+        expect(readOverviewAction('queue-list', { filter: {}, from: -1, count: 50 })).toBeNull();
+        expect(readOverviewAction('queue-list', { filter: {}, from: 0, count: 500 })).toBeNull();
+        expect(readOverviewAction('queue-list', { filter: {}, from: 0 })).toBeNull();
+        // The lists' old asks (the pages came with the snapshot then): no longer actions.
+        expect(readOverviewAction('queue-more', { filter: {}, slot: 'queue' })).toBeNull();
+        expect(readOverviewAction('queue-retry', { filter: {}, slot: 'queue' })).toBeNull();
+        expect(OVERVIEW_ACTION_IDS).not.toContain('queue-more');
         expect(readOverviewAction('queue-order', { task: 'T1', do: 'first' })).toBeNull();
         expect(readOverviewAction('queue-order', { task: '', do: 'next' })).toBeNull();
     });

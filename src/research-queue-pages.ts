@@ -228,74 +228,67 @@ export function resetQueueLists(): void {
 }
 
 /**
- * The lists read now, for the Research overview in its own window (K3):
- * copies without the bridge they were read from (null: none read).
- */
-export function queueListsSnapshot(): { rev: string; lists: QueueList[] } | null {
-    if (!listsBase) return null;
-    return {
-        rev: listsRev,
-        lists: [...lists.values()].map(l => ({ ...l, filter: { ...l.filter }, items: [...l.items] })),
-    };
-}
-
-/**
- * The Research overview in a window of its own (K3): its lists are the main
- * window's (each snapshot brings them) and what it asks goes there; nothing
- * is read from a bridge here.
+ * The Research overview in a window of its own (K3, spec 052 §1 there): its
+ * lists are its own, but each page is asked of the main window (`queue-list`),
+ * which reads it from its bridge with `fetchQueuePage` and answers with the
+ * page; nothing is read from a bridge here.
  */
 export interface QueueRemote {
-    ask(what: 'list' | 'more' | 'retry', filter: QueueFilter, slot: QueueSlot, seed?: { items: LiveQueueItem[]; total: number }): void;
+    /** One page of a list, as `fetchQueuePage` answers it (a failed or missing answer: `failed`). */
+    page(filter: QueueFilter, from: number, count: number): Promise<QueuePageResult>;
+    /** The main window's research answers through its bridge now (its snapshot says so). */
+    up(): boolean;
 }
 let remote: QueueRemote | null = null;
-/** A list asked from the main window and not in its snapshot yet: not asked again for this long. */
-const REMOTE_ASK_MS = 3000;
-const remoteAsked = new Map<string, number>();
 
-/** The lists come from the main window and asks go there (null: read from the bridge, as everywhere else). */
+/** Pages are asked of the main window and the lists are this window's (null: read from the bridge, as everywhere else). */
 export function setQueueRemote(r: QueueRemote | null): void {
     resetQueueLists();
-    remoteAsked.clear();
     remote = r;
 }
 
-/** The main window's lists as its snapshot says them (null: none read). */
-export function applyQueueSnapshot(snap: { rev: string; lists: QueueList[] } | null): void {
-    if (!remote) return;
-    const before = new Map(lists);
-    lists.clear();
-    listsRev = snap?.rev ?? '';
-    for (const l of snap?.lists ?? []) {
-        lists.set(l.key, { ...l, filter: { ...l.filter }, items: [...l.items] });
-        remoteAsked.delete(l.key);
-    }
-    // Asked a moment ago and not there yet: still waited for.
-    for (const [key, l] of before) {
-        const at = remoteAsked.get(key);
-        if (!lists.has(key) && at !== undefined && Date.now() - at < REMOTE_ASK_MS) lists.set(key, l);
-    }
+/** The main window this window's pages are asked of (null: none, the bridge is asked directly). */
+export function queueRemote(): QueueRemote | null {
+    return remote;
 }
 
-function askRemote(r: QueueRemote, what: 'list' | 'more' | 'retry', filter: QueueFilter, slot: QueueSlot,
-    seed?: { items: LiveQueueItem[]; total: number }): QueueList {
-    const key = queueFilterKey(filter);
-    touched?.add(slot);
-    slots.set(slot, key);
-    let l = lists.get(key);
-    if (what === 'list' && l) return l;
-    const at = remoteAsked.get(key);
-    const waited = what === 'list' && at !== undefined && Date.now() - at < REMOTE_ASK_MS;
-    if (!l) {
-        l = { key, filter, items: [], total: null, next: 0, rev: listsRev, loading: true, error: null };
-        lists.set(key, l);
-    } else {
-        l.loading = true;
-        l.error = null;
-    }
-    if (waited) return l;
-    remoteAsked.set(key, Date.now());
-    r.ask(what, filter, slot, seed);
-    return l;
+/** A page as the main window answered it, checked (anything else: `failed`). */
+export function readQueuePage(v: unknown): QueuePageResult {
+    const r = asRecord(v);
+    if (!r) return { ok: false, code: 'failed' };
+    if (r.ok !== true) return { ok: false, code: r.code === 'busy' || r.code === 'aborted' ? r.code : 'failed' };
+    const total = asCount(r.total);
+    const from = asCount(r.from);
+    if (total === null || from === null) return { ok: false, code: 'failed' };
+    const next = asCount(r.next);
+    const match = sanitizeMatch(r.match);
+    const elsewhere = sanitizeElsewhere(r.elsewhere);
+    return {
+        ok: true,
+        items: sanitizeQueue(r.items, true, true, QUEUE_PAGE_MAX),
+        total,
+        from,
+        next: next !== null && next > from ? next : null,
+        rev: typeof r.rev === 'string' && /^[0-9a-f]{8,64}$/.test(r.rev) ? r.rev : '',
+        head: typeof r.head === 'string' ? r.head.slice(0, 80) : '',
+        ...(match ? { match } : {}),
+        ...(elsewhere ? { elsewhere } : {}),
+    };
+}
+
+/** One page of a list: from the bridge, or asked of the main window (an aborted read answers `aborted` at once). */
+function readOnePage(base: string, filter: QueueFilter, from: number, count: number, signal: AbortSignal): Promise<QueuePageResult> {
+    if (!remote) return fetchQueuePage(base, filter, from, count, signal);
+    const r = remote;
+    return new Promise<QueuePageResult>((resolve) => {
+        const onAbort = (): void => resolve({ ok: false, code: 'aborted' });
+        if (signal.aborted) return onAbort();
+        signal.addEventListener('abort', onAbort, { once: true });
+        r.page(filter, from, count).then(
+            (page) => resolve(signal.aborted ? { ok: false, code: 'aborted' } : page),
+            () => resolve({ ok: false, code: signal.aborted ? 'aborted' : 'failed' }),
+        ).finally(() => signal.removeEventListener('abort', onAbort));
+    });
 }
 
 /** The list of `filter` read from `base` (null: not asked yet, or another bridge). */
@@ -320,7 +313,7 @@ export function queueListItem(base: string, id: string): LiveQueueItem | null {
  * with the queue's next print; this only keeps the screen right meanwhile.
  */
 export function moveQueueItemFirst(base: string, id: string): void {
-    if (remote || !base || base !== listsBase) return;
+    if (!remote && (!base || base !== listsBase)) return;
     let was: number | undefined;
     for (const l of lists.values()) was ??= l.items.find(x => x.id === id)?.pos;
     for (const l of lists.values()) {
@@ -381,7 +374,7 @@ export function placeQueueItem(items: LiveQueueItem[], now: LiveQueueItem, cut: 
  * print; this keeps the screen right meanwhile.
  */
 export function placeQueueItemInLists(base: string, now: LiveQueueItem): void {
-    if (remote || !base || base !== listsBase) return;
+    if (!remote && (!base || base !== listsBase)) return;
     for (const l of lists.values()) {
         const r = placeQueueItem(l.items, now, l.next !== null);
         if (r.out && l.next !== null) l.next = Math.max(0, l.next - 1);
@@ -435,7 +428,6 @@ export function releaseQueueSlot(slot: QueueSlot): void {
  */
 export function requestQueueList(base: string, filter: QueueFilter, slot: QueueSlot,
     seed?: { items: LiveQueueItem[]; total: number }): QueueList {
-    if (remote) return askRemote(remote, 'list', filter, slot, seed);
     forBase(base);
     const key = queueFilterKey(filter);
     touched?.add(slot);
@@ -454,10 +446,6 @@ export function requestQueueList(base: string, filter: QueueFilter, slot: QueueS
 /** Read the list's next page ("Load more"); nothing past QUEUE_ROWS_CAP or the end. */
 export function loadMoreQueueList(base: string, filter: QueueFilter, slot: QueueSlot,
     seed?: { items: LiveQueueItem[]; total: number }): void {
-    if (remote) {
-        askRemote(remote, 'more', filter, slot, seed);
-        return;
-    }
     const l = requestQueueList(base, filter, slot, seed);
     if (l.loading) return;
     const from = l.error && l.total === null ? 0 : l.next;
@@ -469,10 +457,6 @@ export function loadMoreQueueList(base: string, filter: QueueFilter, slot: Queue
 
 /** Try a failed list again. */
 export function retryQueueList(base: string, filter: QueueFilter, slot: QueueSlot): void {
-    if (remote) {
-        askRemote(remote, 'retry', filter, slot);
-        return;
-    }
     const l = requestQueueList(base, filter, slot);
     if (l.loading) return;
     l.error = null;
@@ -485,7 +469,7 @@ async function readPage(base: string, l: QueueList, from: number, count: number)
     running.set(l.key, ctl);
     l.loading = true;
     l.error = null;
-    const r = await fetchQueuePage(base, l.filter, from, count, ctl.signal);
+    const r = await readOnePage(base, l.filter, from, count, ctl.signal);
     if (running.get(l.key) !== ctl) return;
     running.delete(l.key);
     if (lists.get(l.key) !== l) return;
@@ -521,7 +505,6 @@ async function readPage(base: string, l: QueueList, from: number, count: number)
  * print already stays.
  */
 export function noteQueueRev(base: string, rev: string): void {
-    if (remote) return;
     forBase(base);
     if (!rev || rev === listsRev) return;
     listsRev = rev;
@@ -557,7 +540,7 @@ async function refreshShown(base: string): Promise<void> {
         let match: Record<string, QueueMatch> = {};
         let elsewhere: QueueElsewhere | undefined;
         while (next !== null && items.length < want) {
-            const r = await fetchQueuePage(base, l.filter, next, Math.min(QUEUE_PAGE_MAX, want - items.length), ctl.signal);
+            const r = await readOnePage(base, l.filter, next, Math.min(QUEUE_PAGE_MAX, want - items.length), ctl.signal);
             if (!r.ok) { failed = true; break; }
             items = [...items, ...r.items];
             total = r.total;

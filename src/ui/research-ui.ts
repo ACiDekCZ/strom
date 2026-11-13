@@ -45,7 +45,7 @@ import {
     parseSendBridge, pickSendDefault, sanitizeSyncReply, researchSchemeUrl, researchTaskRef,
     ResearchLinkAction, ResearchLinkParams, LiveBridgeUrls, LiveStatus, LiveChange, LiveWorker, LiveWaiting,
     LiveQueueItem, LiveSpend, LiveIntake, LiveDirection, LiveBusy, LiveWork, ResearchCaps, BrowserInfo, LiveOffLine, ResearchHeaderInfo, ExportXrefs, ResearchAccepts, statusAgentless,
-    LiveQueueCounts, QUEUE_PAGE_FEATURE,
+    LiveQueueCounts, QUEUE_PAGE_FEATURE, QUEUE_SEARCH_FEATURE,
     researchLinkMark, researchUrlMark,
 } from '../research-link.js';
 import { keepImports } from '../import-origin.js';
@@ -71,7 +71,7 @@ import {
     waitingSeen, watchSectionPrefsStorage, PANEL_PREF_KEYS,
 } from './live-section-prefs.js';
 import {
-    QUEUE_ROWS_CAP, QueueFilter, QueueList, loadMoreQueueList, noteQueueRev, onQueueListsChange, queueList, queueListItem, requestQueueList,
+    QUEUE_ROWS_CAP, QueueFilter, QueueList, loadMoreQueueList, noteQueueRev, onQueueListsChange, queueList, queueListItem, queueRemote, requestQueueList,
     resetQueueLists, retryQueueList,
 } from '../research-queue-pages.js';
 import {
@@ -1622,7 +1622,12 @@ function viewingSessionOf(bridge: LiveBridgeUrls, researchId: string, treeId: Tr
 
 /** The followed research's whole queue is read by pages now (`queue.page`, its bridge answering). */
 export function queuePaged(s: LiveSession | null): boolean {
-    return !!s && !s.ended && s.lostSince === null && !!s.bridge.base && !!s.features?.includes(QUEUE_PAGE_FEATURE);
+    if (!s || s.ended || s.lostSince !== null || !s.features?.includes(QUEUE_PAGE_FEATURE)) return false;
+    // The overview's own window: its pages asked of the main window while its bridge answers, with the search
+    // only (spec 052 §1 there); a research without `queue.search` keeps the window's queue as before.
+    const remote = queueRemote();
+    if (remote) return remote.up() && s.features.includes(QUEUE_SEARCH_FEATURE);
+    return !!s.bridge.base;
 }
 
 /** A queued task by id: in the status's window, else in a page read past it. */
@@ -4972,11 +4977,13 @@ export const researchUiMethods = uiModule({
     },
 
     /** Pages of the queue came (or failed): the overview drawn again, the focus kept on "Load more" or moved to the rows it brought. */
-    queueListsChanged(): void {
+    queueListsChanged(draw?: () => void): void {
         const a = document.activeElement as HTMLElement | null;
         const fromLoad = !!a?.matches?.('#research-overview .live-queue-load, #research-overview .live-queue-retry');
         const before = fromLoad ? document.querySelectorAll('#research-overview .live-queue > .live-queue-row:not(.live-queue-row--more)').length : 0;
-        this.renderResearchOverview();
+        // `draw`: the overview's own window draws its states over the overview too (greyed while the main window is closed).
+        if (draw) draw();
+        else this.renderResearchOverview();
         const now = document.activeElement;
         if (!fromLoad || (now && now !== document.body && now.isConnected)) return;
         const load = document.querySelector<HTMLElement>('#research-overview .live-queue-load');

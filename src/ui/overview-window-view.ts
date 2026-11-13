@@ -21,7 +21,8 @@ import { PLACES_ANSWER_FEATURE, PLACES_UNDO_FEATURE } from '../places-bridge.js'
 import { todoWaiting } from '../research-waiting.js';
 import { replacePendingHypotheses, type PendingHypothesis } from '../research-hypothesis-wait.js';
 import { setAcceptBatch, type AcceptBatch } from '../research-hypothesis-waiting.js';
-import { applyQueueSnapshot, setQueueRemote, type QueueList } from '../research-queue-pages.js';
+import { moveQueueItemFirst, noteQueueRev, onQueueListsChange, readQueuePage, resetQueueLists, setQueueRemote } from '../research-queue-pages.js';
+import { BRIDGE_ANSWER_MS } from '../bridge-ask.js';
 import { strings } from '../strings.js';
 import type { UIClass } from './index.js';
 import { el, setOverviewWindowDrawn, type LiveSession, type OverviewViewing } from './research-ui.js';
@@ -80,6 +81,9 @@ export function gatedOverviewPort(port: OverviewWindowPort, closed: () => boolea
 
 /** How long an answer sent from the window waits for the main window's outcome. */
 export const OVERVIEW_ANSWER_WAIT_MS = 30_000;
+
+/** How long a page of the queue asked of the main window is waited for: the bridge's own time and a little more. */
+export const OVERVIEW_PAGE_WAIT_MS = BRIDGE_ANSWER_MS + 2000;
 
 /**
  * A session's fields that are this window's own view: what is unfolded and
@@ -251,7 +255,10 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
         // "Do next" and its Undo (`queue.next`): written by the main window, its outcome shown here (no answer: the bridge's).
         async writeTaskOrder(task: string, body: TaskOrderWrite): Promise<TaskOrderOutcome> {
             const r = await port.ask('queue-order', body.do === 'restore' ? { task, do: 'restore', was: body.was } : { task, do: 'next' }, OVERVIEW_ANSWER_WAIT_MS);
-            return taskOrderOutcomeOf(r) ?? { ok: false, why: 'bridge' };
+            const out = taskOrderOutcomeOf(r) ?? { ok: false, why: 'bridge' };
+            // This window's pages (a search's too): the task first meanwhile, as the main window's are; the next print reads them again.
+            if (out.ok && body.do === 'next') moveQueueItemFirst('', task);
+            return out;
         },
         taskOrderBusy(id: string): boolean { return extras().taskOrder.busy.includes(id); },
         taskOrderProblem(id: string): string { return extras().taskOrder.problems[id] ?? ''; },
@@ -312,7 +319,7 @@ export function startOverviewWindowView(ui: UIClass, mainPort: OverviewWindowPor
         if (state && !state.locked) state = null;
         drawnNow = null;
         setOverviewWindowDrawn(null);
-        applyQueueSnapshot(null);
+        resetQueueLists();
     };
     /** The main window's status said locked when last drawn (its snapshot may come before or after it). */
     let statusLocked = false;
@@ -330,12 +337,10 @@ export function startOverviewWindowView(ui: UIClass, mainPort: OverviewWindowPor
             return sc.closed && host ? overviewClosedStrip(sc.asOf, host) : null;
         },
     });
+    // The queue's pages and its search (spec 052 §1 here): this window's own lists, each page asked of the main window.
     setQueueRemote({
-        ask: (what, filter, slot, seed) => {
-            if (what === 'list') port.send('queue-list', { filter, slot });
-            else if (what === 'more') port.send('queue-more', { filter, slot, ...(seed ? { seed } : {}) });
-            else port.send('queue-retry', { filter, slot });
-        },
+        page: async (filter, from, count) => readQueuePage(await port.ask('queue-list', { filter, from, count }, OVERVIEW_PAGE_WAIT_MS)),
+        up: () => !!state && !state.locked && state.bridgeUp,
     });
     /** The overview over the snapshot, or what stands in its place (the renderer draws nothing without a session). */
     const render = (): void => {
@@ -351,6 +356,8 @@ export function startOverviewWindowView(ui: UIClass, mainPort: OverviewWindowPor
         if (!host || typeof document === 'undefined') return;
         renderOverviewWindowState(screen(), state?.treeName || treeName(), host);
     };
+    // A page came (or failed): drawn again, the focus kept on Load more or moved to the rows it brought.
+    onQueueListsChange(() => ui.queueListsChanged(render));
     // A section's choice made here, in the main window or in Settings: drawn again (the record is shared).
     const onPrefs = (): void => { if (state) render(); };
     if (typeof document !== 'undefined') {
@@ -381,7 +388,9 @@ export function startOverviewWindowView(ui: UIClass, mainPort: OverviewWindowPor
                 replacePendingHypotheses(next.researchId, next.extras.hypotheses.pending as Record<string, PendingHypothesis>);
                 setAcceptBatch(next.researchId, next.extras.hypotheses.batch as AcceptBatch | null);
             }
-            applyQueueSnapshot(next.extras.queue as { rev: string; lists: QueueList[] } | null);
+            // Another research: its pages are read anew; the queue's new print reads the lists shown again.
+            if (!sameResearch) resetQueueLists();
+            if (s?.queueCounts?.rev) noteQueueRev('', s.queueCounts.rev);
             // New to do since the last snapshot: unfolded here as while following (unless kept collapsed or hidden).
             const freshTodo = s ? todoWaiting(d.fresh) : [];
             if (s && freshTodo.length > 0) {
@@ -399,6 +408,7 @@ export function startOverviewWindowView(ui: UIClass, mainPort: OverviewWindowPor
             if (typeof document !== 'undefined') document.removeEventListener(SECTION_PREFS_EVENT, onPrefs);
             setOverviewOwnWindow(null);
             setOverviewWindowDrawn(null);
+            onQueueListsChange(null);
             setQueueRemote(null);
             drawnNow = null;
         },

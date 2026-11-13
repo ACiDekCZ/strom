@@ -13,10 +13,10 @@ import { researchTaskRef, type ResearchLinkParams } from '../research-link.js';
 import { waitingFileWritable } from '../research-waiting-write.js';
 import { pendingHypothesesOf } from '../research-hypothesis-wait.js';
 import { acceptBatch } from '../research-hypothesis-waiting.js';
-import { loadMoreQueueList, queueListsSnapshot, requestQueueList, retryQueueList } from '../research-queue-pages.js';
+import { fetchQueuePage, type QueuePageResult } from '../research-queue-pages.js';
 import { researchHypotheses } from '../view-links.js';
 import { uiModule } from './module.js';
-import { liveSession, overviewViewing, researchSession, type LiveSession } from './research-ui.js';
+import { liveSession, overviewViewing, queuePaged, researchSession, type LiveSession } from './research-ui.js';
 import { directionsWindowState, retryDirectionProblem } from './research-directions-ui.js';
 import { queueNextOffered, taskOrderWindowState } from './research-offline-ui.js';
 import { hoverCard } from './research-overview-ui.js';
@@ -98,7 +98,6 @@ export const overviewWindowMethods = uiModule({
         }
         extras.follow = { on: this.isLiveFollowOn(), view: this.liveFollowView() };
         extras.lines = directionsWindowState(researchSession());
-        extras.queue = queueListsSnapshot();
         extras.taskOrder = taskOrderWindowState();
         const meta = treeId ? TreeManager.getTreeMetadata(treeId as TreeId) : null;
         const state: OverviewResearchState = {
@@ -267,17 +266,10 @@ export const overviewWindowMethods = uiModule({
                 // Today's own place of a task: the bridge's write, the toast with Undo and a refusal at the task are this window's.
                 return this.changeTaskOrder(args.task, args.do);
             }
-            case 'queue-list':
-            case 'queue-more':
-            case 'queue-retry': {
-                const base = s?.bridge.base;
-                if (!base) return false;
-                if (a.action === 'queue-list') requestQueueList(base, a.args.filter, a.args.slot);
-                else if (a.action === 'queue-more') loadMoreQueueList(base, a.args.filter, a.args.slot, a.args.seed as Parameters<typeof loadMoreQueueList>[3]);
-                else retryQueueList(base, a.args.filter, a.args.slot);
-                // A list asked: the window hears of it now (its pages come with the lists' own redraw).
-                overviewChanged();
-                return true;
+            case 'queue-list': {
+                // A page of the queue or of its search, read from this window's bridge as the docked overview reads it.
+                if (!s || !queuePaged(s)) return Promise.resolve<QueuePageResult>({ ok: false, code: 'failed' });
+                return fetchQueuePage(s.bridge.base, a.args.filter, a.args.from, a.args.count);
             }
         }
     },
