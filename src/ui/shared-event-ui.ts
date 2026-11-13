@@ -22,7 +22,9 @@ import { sharedEventMarkSvg } from '../icons.js';
 import { shownName } from '../person-name.js';
 import { findRelationship } from '../kinship.js';
 import { filterAndSort } from '../person-picker.js';
-import { sharedWith, shareDivergence, SharedEventCommon, SharedEventCommonField, SharedEventOwn } from '../shared-events.js';
+import {
+    sharedWith, shareDivergence, ownSameEvent, SameEventFields, SharedEventCommon, SharedEventCommonField, SharedEventOwn,
+} from '../shared-events.js';
 import { editorDivergence } from '../shared-divergence.js';
 import {
     SharedDraft, sharedDraftFor, orderDraftRows, addToDraft, takeFromDraft, sharedEditFrom,
@@ -662,14 +664,46 @@ export const sharedEventMethods = uiModule({
             : e.sharedSaved(title, msg.count);
         // All or nothing: a refused save of a new event leaves no ordinary event behind.
         const eventId = this.editingEventId;
-        const ok = DataManager.runBatch(text, () => eventId
-            ? !!DataManager.saveSharedEvent(viewer, eventId, edit)
-            : !!DataManager.addSharedEvent(viewer, payload, edit));
+        let saved: { shareId: string | null; attached: PersonId[] } | null = null;
+        const ok = DataManager.runBatch(text, () => {
+            saved = eventId
+                ? DataManager.saveSharedEvent(viewer, eventId, edit)
+                : DataManager.addSharedEvent(viewer, payload, edit)?.result ?? null;
+            return !!saved;
+        });
         if (!ok) {
             this.showAlert(e.sharedSaveRefused, 'warning');
             return null;
         }
+        // Records joined with other common fields (a source, a note…): Unify, never overwritten silently (K1.6 a).
+        const done = saved as { shareId: string | null; attached: PersonId[] } | null;
+        if (done?.shareId && done.attached.length > 0 && shareDivergence(DataManager.getData(), done.shareId)) {
+            this.sharedUnifyAfterSave = { shareId: done.shareId, viewerId: viewer };
+        }
         return true;
+    },
+
+    /** After the editor closed: the Unify dialog for records a save joined that differ (sharedUnifyAfterSave). */
+    offerSharedUnifyAfterSave(): void {
+        const pending = this.sharedUnifyAfterSave;
+        this.sharedUnifyAfterSave = null;
+        if (!pending) return;
+        this.showSharedUnify(pending.shareId, pending.viewerId, () => {
+            this.renderEventsList();
+            this.renderPersonLifeline(pending.viewerId);
+        });
+    },
+
+    /** The event as the editor's form has it now: what a person's own record must match to be joined (ownSameEvent). */
+    sharedFormSameFields(): SameEventFields {
+        const type = (val('input-event-type') || 'custom') as LifeEventType;
+        return {
+            type,
+            customLabel: type === 'custom' ? val('input-event-custom-label').trim() || undefined : undefined,
+            date: normalizeDateInput(val('input-event-date')) || undefined,
+            place: val('input-event-place').trim() || undefined,
+            address: val('input-event-address').trim() || undefined,
+        };
     },
 
     // ==================== PERSON PICKER (1c, 1d, 1k) ====================
@@ -719,14 +753,19 @@ export const sharedEventMethods = uiModule({
         const inShare = new Set<PersonId>([draft.viewerId, ...draft.rows.map(r => r.personId)]);
         const date = normalizeDateInput(val('input-event-date')) || undefined;
         const q = st.query.trim();
+        const sameAs = this.sharedFormSameFields();
 
         const row = (p: Person, line: string): string => {
             const already = inShare.has(p.id);
             const on = st.chosen.includes(p.id);
+            // K1.6 a: their own record of this event joins on save, no new copy.
+            const joins = already ? null : ownSameEvent(p, sameAs);
             return `<label class="spk-row${already ? ' is-already' : ''}" data-pid="${esc(p.id)}">
                 <input type="checkbox" class="spk-check"${on ? ' checked' : ''}${already ? ' disabled' : ''}>
                 <span class="spk-text"><span class="spk-name">${esc(shownName(p))}</span>`
-                + `<span class="spk-line">${esc(already ? pp.alreadyShared : line)}</span></span></label>`;
+                + `<span class="spk-line">${esc(already ? pp.alreadyShared : line)}</span>`
+                + (joins ? `<span class="spk-line spk-joins">${esc(pp.joinsOwnRecord(this.sharedTitleOf(joins)))}</span>` : '')
+                + '</span></label>';
         };
         const kinWord = (c: FamilyCandidate): string => findRelationship(data, this.currentId!, c.personId)?.term[lang] ?? '';
         let html = '';
@@ -830,7 +869,13 @@ export const sharedEventMethods = uiModule({
         const st = this.sharedPicker;
         const draft = this.sharedDraft;
         if (!st || !draft) { this.closeSharedPicker(); return; }
-        addToDraft(draft, st.chosen);
+        const sameAs = this.sharedFormSameFields();
+        const joining = new Map<PersonId, LifeEvent>();
+        for (const pid of st.chosen) {
+            const own = ownSameEvent(DataManager.getPerson(pid), sameAs);
+            if (own) joining.set(pid, own);
+        }
+        addToDraft(draft, st.chosen, joining);
         // A new household larger than the fold shows everyone just added.
         if (draft.rows.length >= LARGE_HOUSEHOLD && st.chosen.length > 0) this.sharedShowAll = true;
         this.closeSharedPicker();

@@ -15,7 +15,7 @@
  */
 
 import { eventIsShareable } from './events.js';
-import { yearOf } from './dates.js';
+import { parseFlexDate, toCanonical, yearOf } from './dates.js';
 import {
     EventParticipant, LifeEvent, LifeEventType, Person, ParticipantRole, PARTICIPANT_ROLES, PersonId, PartnershipId, StromData,
 } from './types.js';
@@ -111,6 +111,8 @@ export interface SharedEventEdit {
 export interface SharedEventSaveResult {
     shareId: string | null;
     personIds: PersonId[];
+    /** Persons added whose own record of the same event joined (ownSameEvent) instead of a new copy. */
+    attached: PersonId[];
 }
 
 /** The value of a common field as copies are compared (empty text = none; sources as a set). */
@@ -566,6 +568,116 @@ export function joinSameShareCopies(person: Person): LifeEvent[] {
     return gone;
 }
 
+// ==================== THE SAME EVENT RECORDED SEPARATELY (K1.6) ====================
+
+/** The fields that tell whether two records are the same event (see sameEventKey). */
+export type SameEventFields = Pick<LifeEvent, 'type' | 'customLabel' | 'date' | 'place' | 'address'>;
+
+/** How strictly sameEventKey reads a record. */
+export interface SameEventOptions {
+    /**
+     * A person merge (the two records are one person's): any type, a date or
+     * a place is enough and the date need not be complete. Without it (two
+     * persons' records, spec 085 K1.6): a shareable type, a complete date
+     * (day, month and year, no "about", range or period) and a place.
+     */
+    partial?: boolean;
+}
+
+/** Text compared as the same: trimmed, one case. */
+function foldText(text: string | undefined): string {
+    return (text ?? '').trim().toLocaleLowerCase();
+}
+
+/** A complete date (day, month, year; no qualifier, range or period) in its canonical form, else null. */
+function completeDate(value: string | undefined): string | null {
+    const d = parseFlexDate(value?.trim());
+    if (!d || d.qualifier || d.end || d.period || d.day === undefined || d.month === undefined) return null;
+    return toCanonical(d);
+}
+
+/**
+ * The key two records of the same event share (spec 085 K1.6): the type (a
+ * custom event's label too), the date and the place (trimmed, one case).
+ * Null when the record cannot be matched at all: without `partial`, a type
+ * that cannot be shared, a date that is not complete or no place; with it,
+ * neither a date nor a place. The house or address is not in the key: two
+ * records with the same key are the same event when sameEventAddress agrees
+ * too (isSameEvent) — so a search over the whole tree groups by this key
+ * first and splits each group by the address.
+ */
+export function sameEventKey(ev: SameEventFields, opts: SameEventOptions = {}): string | null {
+    const label = ev.type === 'custom' ? foldText(ev.customLabel) : '';
+    const place = foldText(ev.place);
+    if (opts.partial) {
+        const date = (ev.date ?? '').trim();
+        if (!date && !place) return null;
+        return [ev.type, label, date, place].join('\u0000');
+    }
+    if (!eventIsShareable(ev.type) || (ev.type === 'custom' && !label)) return null;
+    const date = completeDate(ev.date);
+    if (!date || !place) return null;
+    return [ev.type, label, date, place].join('\u0000');
+}
+
+/**
+ * Whether two records' house or address allows them to be one event: the
+ * same (trimmed, one case), or written at one of them only (the joined
+ * event takes it, as a person merge does); two different ones never.
+ */
+export function sameEventAddress(a: Pick<LifeEvent, 'address'>, b: Pick<LifeEvent, 'address'>): boolean {
+    const x = foldText(a.address);
+    const y = foldText(b.address);
+    return !x || !y || x === y;
+}
+
+/**
+ * Records joined as one event (sameEventAddress agreed): the house written
+ * at some of them only goes to the others, as a person merge does — when
+ * they have one house between them; two different ones stay for Unify.
+ */
+export function fillSameEventAddress(events: readonly LifeEvent[]): void {
+    const written = events.filter(e => foldText(e.address));
+    if (written.length === 0 || new Set(written.map(e => foldText(e.address))).size !== 1) return;
+    for (const e of events) if (!foldText(e.address)) e.address = written[0].address;
+}
+
+/** Whether two records are the same event: the same sameEventKey (not null) and an address that agrees (sameEventAddress). */
+export function isSameEvent(a: SameEventFields, b: SameEventFields, opts: SameEventOptions = {}): boolean {
+    const key = sameEventKey(a, opts);
+    return key !== null && key === sameEventKey(b, opts) && sameEventAddress(a, b);
+}
+
+/**
+ * The person's own record of the event `ev` (spec 085 K1.6 a): the first of
+ * their events not shared with anyone that isSameEvent (strict) with `ev`,
+ * `ev` itself left out. Null when there is none. "Shared with → Add a
+ * person" joins this record instead of making a new copy.
+ */
+export function ownSameEvent(person: Person | null | undefined, ev: SameEventFields): LifeEvent | null {
+    if (sameEventKey(ev) === null) return null;
+    return (person?.events ?? []).find(e => e !== ev && !e.shareId && isSameEvent(e, ev)) ?? null;
+}
+
+/**
+ * The records of the event `ev` written separately in other lives (spec 085
+ * K1.6): each person's ownSameEvent, in the tree's order of persons, the
+ * persons of `exclude` left out. Empty when `ev` cannot be matched.
+ */
+export function findSeparateCopies(
+    data: StromData, ev: SameEventFields, exclude: Iterable<PersonId> = [],
+): { personId: PersonId; event: LifeEvent }[] {
+    if (sameEventKey(ev) === null) return [];
+    const skip = new Set(exclude);
+    const out: { personId: PersonId; event: LifeEvent }[] = [];
+    for (const [pid, person] of Object.entries(data.persons) as [PersonId, Person][]) {
+        if (skip.has(pid)) continue;
+        const own = ownSameEvent(person, ev);
+        if (own) out.push({ personId: pid, event: own });
+    }
+    return out;
+}
+
 /** An event of a person merge's preview (spec 085 §7, 7a). */
 export interface PersonMergeShareRow {
     /**
@@ -588,20 +700,13 @@ export interface PersonMergeShareRow {
     ageDiffers: boolean;
 }
 
-/** The type, date and place of an event as a person merge matches an own event to a shared one. */
-function attachKey(ev: LifeEvent): string | null {
-    const date = (ev.date ?? '').trim();
-    const place = (ev.place ?? '').trim().toLocaleLowerCase();
-    if (!date && !place) return null;
-    return [ev.type, ev.type === 'custom' ? (ev.customLabel ?? '').trim().toLocaleLowerCase() : '', date, place].join('\u0000');
-}
-
 /**
  * The shared events of a person merge (`removeId` merged into `keepId`):
  * those both are in (the merged person is in it once) and those one is in
- * while the other has the same event of its own — one such own event, of
- * the same type, date and place (a date or a place at least). In the order
- * of the kept person's events, then the other's.
+ * while the other has the same event of its own — one such own event
+ * (isSameEvent with `partial`: the two records are one person's, so a date
+ * or a place is enough). In the order of the kept person's events, then the
+ * other's.
  */
 export function personMergeShares(data: StromData, keepId: PersonId, removeId: PersonId): PersonMergeShareRow[] {
     const keep = data.persons[keepId];
@@ -618,9 +723,8 @@ export function personMergeShares(data: StromData, keepId: PersonId, removeId: P
     const rows: PersonMergeShareRow[] = [];
     const used = new Set<LifeEvent>();
     const attach = (shareId: string, copy: LifeEvent, ownerOfOwn: PersonId, own: readonly LifeEvent[]): void => {
-        const key = attachKey(copy);
-        if (!key) return;
-        const found = own.filter(e => !e.shareId && !used.has(e) && attachKey(e) === key);
+        if (sameEventKey(copy, { partial: true }) === null) return;
+        const found = own.filter(e => !e.shareId && !used.has(e) && isSameEvent(e, copy, { partial: true }));
         if (found.length !== 1) return;
         used.add(found[0]);
         rows.push({ kind: 'attach', shareId, event: copy, other: found[0], otherOf: ownerOfOwn, persons: personsIn(shareId), ageDiffers: false });

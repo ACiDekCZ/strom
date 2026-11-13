@@ -60,15 +60,21 @@ export function orderDraftRows(draft: SharedDraft, order: readonly PersonId[]): 
     draft.rows.sort((a, b) => (rank.get(a.personId) ?? Infinity) - (rank.get(b.personId) ?? Infinity));
 }
 
-/** Add persons to the draft (each once; one taken out in this editing comes back with its values). */
-export function addToDraft(draft: SharedDraft, personIds: readonly PersonId[]): PersonId[] {
+/**
+ * Add persons to the draft (each once; one taken out in this editing comes
+ * back with its values). `joining`: a person's own record of the same event
+ * (ownSameEvent, spec 085 K1.6 a) that the save joins instead of a new copy;
+ * the row starts with its age and role.
+ */
+export function addToDraft(draft: SharedDraft, personIds: readonly PersonId[], joining?: ReadonlyMap<PersonId, LifeEvent>): PersonId[] {
     const added: PersonId[] = [];
     for (const pid of personIds) {
         if (pid === draft.viewerId || draft.rows.some(r => r.personId === pid)) continue;
         const wasOriginal = draft.originalOthers.includes(pid);
         draft.removed = draft.removed.filter(p => p !== pid);
         draft.separated = draft.separated.filter(p => p !== pid);
-        draft.rows.push({ personId: pid, role: '', age: '', added: !wasOriginal });
+        const own = wasOriginal ? undefined : joining?.get(pid);
+        draft.rows.push({ personId: pid, role: own?.shareRole ?? '', age: own?.age ?? '', added: !wasOriginal });
         added.push(pid);
     }
     return added;

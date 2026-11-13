@@ -4359,18 +4359,23 @@
         #shared-picker-modal .shared-picker { width: 520px; }
         .spk-handle { display: none; }
         .spk-search { flex-basis: 100%; margin-top: 10px; width: 100%; }
-        .spk-list { min-height: 120px; }
+        /* The rows' hover band reaches 8 px past the text: the list and a group
+           give it that room as padding, so nothing overflows them. */
+        .spk-list { min-height: 120px; margin-inline: -8px; padding-inline: 8px; }
+        .spk-group { margin-inline: -8px; padding-inline: 8px; }
         .spk-head { font-size: 12.5px; font-weight: 600; color: var(--text-light); margin: 2px 0 4px; overflow-wrap: anywhere; }
         .spk-head-sub { font-weight: 400; }
-        .spk-row {
+        /* A row is a <label>: ".modal label" (display: block, 12px, a bottom margin) must not win. */
+        #shared-picker-modal label.spk-row {
             display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 4px 8px; margin: 0 -8px;
-            border-radius: 8px; cursor: pointer;
+            border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 400; color: var(--text);
         }
-        .spk-row.is-already { opacity: .6; cursor: default; }
+        #shared-picker-modal label.spk-row.is-already { opacity: .6; cursor: default; }
         .spk-check { width: 20px; height: 20px; flex: none; margin: 0; accent-color: var(--primary); }
         .spk-text { display: flex; flex-direction: column; min-width: 0; }
         .spk-name { font-size: 14.5px; font-weight: 500; overflow-wrap: anywhere; }
         .spk-line { font-size: 12.5px; color: var(--text-light); overflow-wrap: anywhere; }
+        .spk-joins { color: var(--primary); }
         .spk-hidden, .spk-note { font-size: 12.5px; color: var(--text-faint); line-height: 1.45; margin: 8px 0 0; }
         .spk-empty { font-size: 14px; color: var(--text-light); margin: 4px 0 10px; }
         #shared-picker-modal .spk-create-row {
@@ -4380,7 +4385,7 @@
         }
         .spk-create { margin-top: 12px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
         .spk-create-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 140px); gap: 8px; margin-bottom: 10px; }
-        .spk-field { display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; color: var(--text-light); min-width: 0; }
+        #shared-picker-modal label.spk-field { display: flex; flex-direction: column; gap: 3px; margin: 0; font-size: 12.5px; color: var(--text-light); min-width: 0; }
         .spk-field input, .spk-field select { width: 100%; min-width: 0; }
         .spk-footer { flex-wrap: wrap; }
         .spk-footer .spk-create-link { margin-right: auto; text-decoration: none; font-weight: 500; }
@@ -4391,7 +4396,7 @@
             .sw-menu-item { min-height: 48px; }
             .shared-with .sw-add, .shared-with--empty .sw-add-link { min-height: 44px; }
             .sw-name .sw-person, .sw-more-link { min-height: 44px; }
-            .spk-row { min-height: 56px; }
+            #shared-picker-modal label.spk-row { min-height: 56px; }
             .spk-footer button { min-height: 48px; }
             .sw-cols, .sw-row { grid-template-columns: minmax(0, 1fr) 168px 64px 44px; }
         }
@@ -4416,7 +4421,7 @@
                 width: 40px; height: 4px; border-radius: 2px; background: var(--border);
             }
             .spk-search { font-size: 16px; min-height: 44px; }
-            .spk-row { min-height: 56px; }
+            #shared-picker-modal label.spk-row { min-height: 56px; }
             .spk-footer { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
             .spk-footer .spk-create-link { grid-column: 1 / -1; margin: 0; min-height: 44px; text-align: center; }
             .spk-footer button { min-height: 48px; width: 100%; }
@@ -4425,7 +4430,7 @@
         /* A phone held sideways: little height, the sheet takes what there is. */
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             #shared-picker-modal .shared-picker { max-height: 96vh; height: auto; }
-            .spk-row { min-height: 44px; }
+            #shared-picker-modal label.spk-row { min-height: 44px; }
             .shared-banner { padding-top: 6px; padding-bottom: 6px; }
         }
         /* ===== Copies of a shared event that differ (spec 085 §4): the Unify dialog (4d–4f), the editor's amber bar (4g) ===== */

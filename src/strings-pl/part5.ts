@@ -664,6 +664,7 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
             ? `Bez 1 osoby, która nie żyła w dniu wydarzenia: ${list}.`
             : `Bez ${nPl(n, 'osoby', 'osób', 'osób')}, które nie żyły w dniu wydarzenia: ${list}.`,
         alreadyShared: 'już w „Razem z”',
+        joinsOwnRecord: (title: string) => `ma już ${title} – zostanie dołączone`,
         createPerson: 'Utwórz nową osobę',
         createNamed: (q: string) => `Utwórz nową osobę „${q}”`,
         noteHint: 'Kto nie powinien być w drzewie (lokator, służba), trafia tylko do notatki wydarzenia.',

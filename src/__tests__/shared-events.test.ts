@@ -214,7 +214,7 @@ describe('DataManager: a shared event is written to every copy in one step', () 
         DataManager.saveSharedEvent(SUDIVOJ, 'ev_1', { common: {}, add: [RADEGUNDA] });
         expect(censusOf(SUDIVOJ)!.shareId).toBeDefined();
         const res = DataManager.saveSharedEvent(SUDIVOJ, 'ev_1', { common: {}, remove: [RADEGUNDA] });
-        expect(res).toEqual({ shareId: null, personIds: [SUDIVOJ] });
+        expect(res).toEqual({ shareId: null, personIds: [SUDIVOJ], attached: [] });
         expect(censusOf(SUDIVOJ)!.shareId).toBeUndefined();
         expect(censusOf(RADEGUNDA)).toBeUndefined();
     });

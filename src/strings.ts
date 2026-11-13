@@ -4867,6 +4867,8 @@ const stringsEN = {
             ? `Without 1 person who was not alive on the event date: ${list}.`
             : `Without ${n} people who were not alive on the event date: ${list}.`,
         alreadyShared: 'already in Shared with',
+        /** A person whose own record of the same event joins on save (spec 085 K1.6 a). */
+        joinsOwnRecord: (title: string) => `already has ${title} – it will be joined`,
         createPerson: 'Create a new person',
         createNamed: (q: string) => `Create a new person “${q}”`,
         noteHint: 'Anyone who doesn’t belong in the tree (lodger, servant) goes only into the event note.',
@@ -13892,6 +13894,7 @@ const stringsCZ: StringsType = {
             ? `Bez 1 osoby, která k datu události nežila: ${list}.`
             : `Bez ${n} ${plural('cs', n, 'osoby', 'osob', 'osob')}, které k datu události nežily: ${list}.`,
         alreadyShared: 'už je ve Spolu s',
+        joinsOwnRecord: (title: string) => `už má ${title} – připojí se`,
         createPerson: 'Založit novou osobu',
         createNamed: (q: string) => `Založit novou osobu „${q}“`,
         noteHint: 'Kdo ve stromu být nemá (podnájemník, čeleď), patří jen do poznámky události.',
@@ -22843,6 +22846,7 @@ const stringsDE: StringsType = {
             ? `Ohne 1 Person, die zum Datum nicht mehr lebte: ${list}.`
             : `Ohne ${n} Personen, die zum Datum nicht mehr lebten: ${list}.`,
         alreadyShared: 'schon bei „Gemeinsam mit“',
+        joinsOwnRecord: (title: string) => `hat ${title} bereits – wird verbunden`,
         createPerson: 'Neue Person anlegen',
         createNamed: (q: string) => `Neue Person „${q}“ anlegen`,
         noteHint: 'Wer nicht in den Stammbaum gehört (Untermieter, Gesinde), kommt nur in die Notiz des Ereignisses.',

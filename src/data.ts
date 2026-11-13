@@ -78,7 +78,7 @@ import {
     SharedEventCommon, SharedEventCommonField, SharedEventEdit, SharedEventSaveResult, SharedEventIndex, PersonSharedEvent,
     SHARED_EVENT_COMMON_FIELDS, applyEventFields, buildSharedEventIndex, cleanEventShares, commonFieldsOf, newShareIdFor,
     personSharedEvents, shareCopiesOf, tidyShares, MARRIAGE_EVENT_ID,
-    applyPersonMergeShares, personMergeShares, PersonMergeShareChoices,
+    applyPersonMergeShares, personMergeShares, PersonMergeShareChoices, ownSameEvent, fillSameEventAddress, SameEventFields,
 } from './shared-events.js';
 import { eventIsShareable } from './events.js';
 import { buildPersonNameIndex, type ParticipantRef, type PersonNameIndex } from './participant-match.js';
@@ -2720,7 +2720,11 @@ class DataManagerClass {
      * entered by hand) with the common fields as the edited copy has them;
      * the copy of each person of `remove` is deleted; the copy of each person
      * of `separate` loses the share and keeps its values from before this
-     * edit. An event not shared yet gets a new share id when a person is
+     * edit. A person of `add` who has the same event of their own already
+     * (ownSameEvent, spec 085 K1.6 a) gets no new copy: that record joins
+     * the share with its own common fields (a difference stays until Unify,
+     * only a house written at some records alone reaches the others) and the
+     * values `own` gives written to it (an empty one keeps the record's). An event not shared yet gets a new share id when a person is
      * added; a share left with one copy is gone (an ordinary event).
      *
      * Refused (null): no such event, a birth or death, a custom event without
@@ -2766,15 +2770,29 @@ class DataManagerClass {
         const base = kept.find(c => c === viewerCopy) ?? kept[0];
         const common = base ? commonFieldsOf(base.event) : { ...commonFieldsOf(viewerCopy.event), ...edit.common };
         const final: { personId: PersonId; event: LifeEvent }[] = [...kept];
+        const attached: PersonId[] = [];
+        const sameAs: SameEventFields = { ...common, type: nextType };
         for (const pid of added) {
             const person = this.data.persons[pid];
+            const own = edit.own?.get(pid);
+            // K1.6 a: the same event already in their life joins (its common
+            // fields stay as they are: a difference is for Unify), no new copy;
+            // its own fields (age, role…) stay unless the edit gives a value.
+            const same = ownSameEvent(person, sameAs);
+            if (same) {
+                if (own) applyEventFields(same, Object.fromEntries(Object.entries(own).filter(([, v]) => v !== undefined)));
+                final.push({ personId: pid, event: same });
+                attached.push(pid);
+                continue;
+            }
             const event: LifeEvent = { id: generateLifeEventId(), type: nextType };
             applyEventFields(event, common);
-            const own = edit.own?.get(pid);
             if (own) applyEventFields(event, own);
             (person.events ??= []).push(event);
             final.push({ personId: pid, event });
         }
+        // A house written at some of the joined records only reaches the others (as a person merge does).
+        if (attached.length > 0) fillSameEventAddress(final.map(c => c.event));
         let shareId: string | null = null;
         if (final.length >= 2) {
             shareId = viewerCopy.event.shareId ?? final.find(c => c.event.shareId)?.event.shareId ?? newShareIdFor(this.data);
@@ -2789,7 +2807,7 @@ class DataManagerClass {
         AuditLogManager.log(this.currentTreeId, 'event.update', strings.auditLog.updatedEvent(auditPersonName(viewer)));
         const personIds: PersonId[] = [];
         for (const c of final) if (!personIds.includes(c.personId)) personIds.push(c.personId);
-        return { shareId, personIds };
+        return { shareId, personIds, attached };
     }
 
     /**

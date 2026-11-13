@@ -514,6 +514,8 @@ export class UIClass {
     sharedPicker: { chosen: PersonId[]; query: string; creating: boolean } | null = null;
     /** The Unify dialog of a shared event's differing copies while open (src/ui/shared-unify-ui.ts). */
     sharedUnify: SharedUnifyState | null = null;
+    /** A shared save joined records whose common fields differ: Unify is offered once the editor has closed (spec 085 K1.6 a). */
+    sharedUnifyAfterSave: { shareId: string; viewerId: PersonId } | null = null;
     /** The button whose shared-event menu is open. */
     sharedMenuOwner: HTMLElement | null = null;
     /** Where the open shared-event menu's button stood (top, px) when it opened. */

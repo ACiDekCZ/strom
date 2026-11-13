@@ -765,6 +765,7 @@ export const personEventsMethods = uiModule({
         this.renderPersonLifeline(personId);
         // The quick occupation/residence fields mirror the newest such event.
         this.refreshQuickFieldsFromEvents();
+        this.offerSharedUnifyAfterSave();
         return true;
     },
 
