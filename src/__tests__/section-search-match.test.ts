@@ -39,10 +39,10 @@ describe('matchDoc', () => {
     const grosshof = doc('Dotaz do archivu Pfarramt Großhof', { pn: 12 });
     const p47 = doc('Albín Hrotek P0047', { pn: 47 });
     const p470 = doc('Marie Hrotková P0470', { pn: 470 });
-    const p1047 = doc('Josef Fialka P1047', { pn: 1047 });
+    const p1047 = doc('Josef Šeřík P1047', { pn: 1047 });
     const t815 = doc('Přečíst matriku T0815', { tn: 815 });
-    const fialkova = doc('Anna Fialková · otec neznámý', { pn: 3 });
-    const fialkovaOnly = doc('Anna Fialková · matka', { pn: 4 });
+    const serikova = doc('Anna Šeříková · otec neznámý', { pn: 3 });
+    const serikovaOnly = doc('Anna Šeříková · matka', { pn: 4 });
     const conflict = doc('Josef Hrotek P0012 · narození · 1841 · 1842', { pn: 12 });
     const h22 = doc('Hypotéza H0022 Albín je syn Josefa', { hn: 22, pn: 47 });
     const h220 = doc('Hypotéza H0220', { hn: 220 });
@@ -88,15 +88,15 @@ describe('matchDoc', () => {
         expect(finds(conflict, '1843')).toBe(false);
     });
     it('every word must match, in any order', () => {
-        expect(finds(fialkova, 'fialkova otec')).toBe(true);
-        expect(finds(fialkova, 'otec fialkova')).toBe(true);
-        expect(finds(fialkovaOnly, 'fialkova otec')).toBe(false);
+        expect(finds(serikova, 'serikova otec')).toBe(true);
+        expect(finds(serikova, 'otec serikova')).toBe(true);
+        expect(finds(serikovaOnly, 'serikova otec')).toBe(false);
         expect(matchDoc(h22, tokenize('albin H22 P47'))).toEqual({ h: 1, p: 1 });
         expect(finds(h22, 'albin H23')).toBe(false);
     });
     it('commas and semicolons separate words', () => {
-        expect(finds(fialkova, 'fialkova,otec')).toBe(true);
-        expect(finds(fialkova, 'fialkova;;otec')).toBe(true);
+        expect(finds(serikova, 'serikova,otec')).toBe(true);
+        expect(finds(serikova, 'serikova;;otec')).toBe(true);
     });
 });
 
