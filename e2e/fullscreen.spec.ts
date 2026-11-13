@@ -43,7 +43,9 @@ const fs = (page: Page) => page.evaluate(() => ({
 
 async function openMore(page: Page): Promise<void> {
     await page.locator('#bb-view-more').tap();
-    await expect(page.locator('.bottom-sheet-more')).toBeVisible();
+    // `.active` comes a frame after the sheet is in the page: until then it
+    // stands its own height lower, so positions read across that frame differ.
+    await expect(page.locator('.bottom-sheet-overlay.active .bottom-sheet-more')).toBeVisible();
 }
 
 test.describe('phone', () => {
