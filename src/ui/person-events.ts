@@ -23,6 +23,7 @@ import { uiModule } from './module.js';
 import { autoGrowAll } from './autogrow.js';
 import { DETAIL_KEYS, offeredDetails, refreshDetailGroup, resetDetailGroup, renderAgeCheck, ageBirthDate, eventDetailLine } from './event-details-ui.js';
 import { shownNameOrEmpty, fitNameHtml } from '../person-name.js';
+import { sharedWith } from '../shared-events.js';
 
 /** HTML-escape a user string for safe innerHTML insertion. */
 function esc(text: string): string {
@@ -424,6 +425,7 @@ export const personEventsMethods = uiModule({
         this.populateEventTypeSelect();
         this.setEventEditorFields('baptism', '', '', '', '');
         this.renderEventParticipants();
+        this.sharedEventInit(null);
         // Citations need a saved event id — hide the section while adding.
         const src = document.getElementById('event-sources-section');
         if (src) src.style.display = 'none';
@@ -446,6 +448,7 @@ export const personEventsMethods = uiModule({
         this.setEventEditorFields(event.type, event.customLabel ?? '',
             formatDateForInput(event.date), event.place ?? '', event.note ?? '', event);
         this.renderEventParticipants();
+        this.sharedEventInit(event);
         // Citations available for an existing event — but they are a research
         // field, so the same rule as everywhere: only when asked for, unless this
         // event already cites something.
@@ -465,6 +468,7 @@ export const personEventsMethods = uiModule({
         select.innerHTML = SELECTABLE_EVENT_TYPES
             .map(t => `<option value="${t}">${esc(strings.events.types[t])}</option>`)
             .join('');
+        delete select.dataset.sharedLock;
         select.onchange = () => this.updateEventCustomLabelVisibility();
     },
 
@@ -477,6 +481,8 @@ export const personEventsMethods = uiModule({
         this.updateEventNoteLabel(select.value as LifeEventType);
         this.updateEventParticipantsVisibility(select.value as LifeEventType);
         this.updateEventDetails(select.value as LifeEventType, false);
+        // "Shared with" only for a type that can be shared (spec 085 §1).
+        if (this.sharedDraft) this.renderSharedSection();
     },
 
     /**
@@ -508,6 +514,7 @@ export const personEventsMethods = uiModule({
         const date = normalizeDateInput(val('input-event-date'));
         renderAgeCheck(document.getElementById('event-age-check'), val('input-event-age'),
             ageBirthDate(person), date || undefined);
+        this.updateSharedAgeChecks();
     },
 
     /** Offer godparents/witnesses only where a register would name them. */
@@ -590,6 +597,7 @@ export const personEventsMethods = uiModule({
             val('input-event-place'), val('input-event-note'), this.collectEventParticipants(),
             ...DETAIL_KEYS.map(k => val(`input-event-${k}`)),
             val('input-event-age-1'), val('input-event-age-2'),
+            this.sharedEditorState(),
         ]);
     },
 
@@ -619,12 +627,18 @@ export const personEventsMethods = uiModule({
         this.editingEventId = null;
         this.coupleEventPartnershipId = null;
         this.eventEditorSnapshot = null;
+        this.closeSharedMenus();
+        if (this.sharedPicker) this.closeSharedPicker();
+        this.sharedDraft = null;
     },
 
-    /** Validate and persist the event editor, then refresh the list. */
-    saveEventFromModal(): void {
-        if (this.coupleEventPartnershipId) { this.saveCoupleEventFromModal(); return; }
-        if (!this.currentId) return;
+    /**
+     * The editor's fields as an event (only the fields set; with `editing`, an
+     * emptied field as an explicit undefined, so an update removes it). Null
+     * after telling what is wrong (an invalid date, a custom event without
+     * its name).
+     */
+    eventPayloadFromForm(editing: boolean): Omit<LifeEvent, 'id'> | null {
         const typeSelect = document.getElementById('input-event-type') as HTMLSelectElement | null;
         const labelInput = document.getElementById('input-event-custom-label') as HTMLInputElement | null;
         const dateInput = document.getElementById('input-event-date') as HTMLInputElement | null;
@@ -639,11 +653,11 @@ export const personEventsMethods = uiModule({
 
         if (date === null) {
             this.showAlert(strings.personModal.invalidDate, 'warning');
-            return;
+            return null;
         }
         if (type === 'custom' && !customLabel) {
             this.showAlert(strings.events.customLabelRequired, 'warning');
-            return;
+            return null;
         }
 
         // Only carry fields that are set (keeps stored events lean).
@@ -655,11 +669,9 @@ export const personEventsMethods = uiModule({
         for (const key of DETAIL_KEYS) {
             const v = (document.getElementById(`input-event-${key}`) as HTMLInputElement | null)?.value.trim() ?? '';
             if (v) payload[key] = v;
-            else if (this.editingEventId) payload[key] = undefined;
+            else if (editing) payload[key] = undefined;
         }
-        const participants = this.collectEventParticipants();
-
-        if (this.editingEventId) {
+        if (editing) {
             // An emptied field must reach updateLifeEvent as an explicit
             // undefined — a missing key would leave the old value in place.
             if (type !== 'custom') payload.customLabel = undefined;
@@ -670,18 +682,38 @@ export const personEventsMethods = uiModule({
             // even empty — or deleting the last participant would leave the old
             // list untouched (Object.assign never removes a key). updateLifeEvent
             // strips an empty array back out so stored events stay lean.
-            payload.participants = participants;
-            DataManager.updateLifeEvent(this.currentId, this.editingEventId, payload);
-        } else {
-            if (participants.length > 0) payload.participants = participants;
-            DataManager.addLifeEvent(this.currentId, payload);
+            payload.participants = this.collectEventParticipants();
+        }
+        return payload;
+    },
+
+    /** Validate and persist the event editor, then refresh the list. False when nothing was saved (the editor stays open). */
+    saveEventFromModal(): boolean {
+        if (this.coupleEventPartnershipId) { this.saveCoupleEventFromModal(); return true; }
+        if (!this.currentId) return false;
+        const payload = this.eventPayloadFromForm(!!this.editingEventId);
+        if (!payload) return false;
+        const participants = this.collectEventParticipants();
+
+        // Shared with others (or becoming so, or no longer): one save of every copy (spec 085).
+        const shared = this.saveSharedFromModal(payload, participants);
+        if (shared === null) return false;
+        if (!shared) {
+            if (this.editingEventId) {
+                DataManager.updateLifeEvent(this.currentId, this.editingEventId, payload);
+            } else {
+                if (participants.length > 0) payload.participants = participants;
+                DataManager.addLifeEvent(this.currentId, payload);
+            }
         }
 
+        const personId = this.currentId;
         this.forceCloseEventEditor();
         this.renderEventsList();
-        this.renderPersonLifeline(this.currentId);
+        this.renderPersonLifeline(personId);
         // The quick occupation/residence fields mirror the newest such event.
         this.refreshQuickFieldsFromEvents();
+        return true;
     },
 
     /** Confirm and remove an event, then refresh the list. */
@@ -695,10 +727,19 @@ export const personEventsMethods = uiModule({
         const meta = eventMeta(event.date, event.place);
         const what = `${eventTypeLabel(event)}${meta ? ` — ${meta}` : ''}`;
         const d = strings.danger;
-        const confirmed = await this.showConfirm(`${what}\n\n${d.undoHint}`, d.deleteEventTitle(eventTypeLabel(event)),
+        // A shared event goes only from this life; the others keep it (spec 085 §3).
+        const others = event.shareId ? sharedWith(DataManager.getSharedEventIndex(), this.currentId, eventId).length : 0;
+        const lines = [what, others > 0 ? strings.events.sharedDeleteSelfHint(others) : '', d.undoHint].filter(Boolean);
+        const confirmed = await this.showConfirm(`${lines[0]}\n\n${lines.slice(1).join(' ')}`, d.deleteEventTitle(eventTypeLabel(event)),
             { confirmLabel: d.deleteEvent, variant: 'danger', note: this.researchArchiveDeleteNote() });
         if (!confirmed) return;
-        DataManager.removeLifeEvent(this.currentId, eventId);
+        if (others > 0) {
+            const personId = this.currentId;
+            DataManager.runBatch(strings.events.sharedDeletedSelf(this.sharedTitleOf(event), others),
+                () => DataManager.removeFromShared(personId, eventId));
+        } else {
+            DataManager.removeLifeEvent(this.currentId, eventId);
+        }
         this.renderEventsList();
         this.renderPersonLifeline(this.currentId);
         this.refreshQuickFieldsFromEvents();

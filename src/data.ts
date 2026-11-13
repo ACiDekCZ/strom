@@ -4,7 +4,7 @@
  */
 
 import { rewriteStorySources, storySourceIds } from './story-sources.js';
-import { cleanCitationQuay, cleanTreeCitationQuay, joinQualityOnlySources, unionCitations } from './citation-quality.js';
+import { cleanCitationQuay, cleanTreeCitationQuay, joinQualityOnlySources, setCitationQuality, unionCitations } from './citation-quality.js';
 import { normalizeSingleParents, looseSingleParents, isPurePlaceholder, fillPlaceholder, tidyPlaceholders } from './single-parent.js';
 import {
     Person,
@@ -2624,6 +2624,35 @@ class DataManagerClass {
         return newShareIdFor(this.data);
     }
 
+    /**
+     * Add a new event to a person's life shared at once with others (spec 085
+     * §1): the event and every copy saveSharedEvent makes of it in ONE undo
+     * step, or nothing at all when that edit is refused (no ordinary event is
+     * left behind).
+     */
+    addSharedEvent(personId: PersonId, event: Omit<LifeEvent, 'id'>, edit: SharedEventEdit): { event: LifeEvent; result: SharedEventSaveResult } | null {
+        const person = this.data.persons[personId];
+        if (!person || this.isReadOnly() || this.isPersonLocked(personId)) return null;
+        this.beginBatch();
+        const newEvent: LifeEvent = { ...event, id: generateLifeEventId() };
+        let result: SharedEventSaveResult | null = null;
+        try {
+            // Into the life without a step of its own: saveSharedEvent records
+            // the one step (from the batch's state before the event) or nothing.
+            (person.events ??= []).push(newEvent);
+            result = this.saveSharedEvent(personId, newEvent.id, edit);
+        } finally {
+            if (!result) {
+                person.events = (person.events ?? []).filter(e => e !== newEvent);
+                if (person.events.length === 0) delete person.events;
+            }
+            this.commitBatch(null, false);
+        }
+        if (!result) return null;
+        AuditLogManager.log(this.currentTreeId, 'event.add', strings.auditLog.addedEvent(auditPersonName(person)));
+        return { event: newEvent, result };
+    }
+
     /** A person's events shared with others (type, year, the other persons): the delete confirmation lists them. */
     personSharedEvents(personId: PersonId): PersonSharedEvent[] {
         return personSharedEvents(this.data, this.getSharedEventIndex(), personId);
@@ -3226,7 +3255,11 @@ class DataManagerClass {
             .join(' & ');
     }
 
-    /** Add a citation of `sourceId` on a person's life event. */
+    /**
+     * Add a citation of `sourceId` on a person's life event. Sources are
+     * common to a shared event (spec 085): every copy of its share gets the
+     * citation (a locked person's copy is left as it is).
+     */
     citeEvent(personId: PersonId, eventId: string, sourceId: string): boolean {
         const person = this.data.persons[personId];
         const ev = person?.events?.find(e => e.id === eventId);
@@ -3235,14 +3268,17 @@ class DataManagerClass {
         if (ev.sourceIds?.includes(sourceId)) return false;
 
         this.beginMutation();
-        if (!ev.sourceIds) ev.sourceIds = [];
-        ev.sourceIds.push(sourceId);
+        for (const c of this.eventCopies(personId, eventId) ?? [{ personId, event: ev }]) {
+            if (c.event !== ev && this.isPersonLocked(c.personId)) continue;
+            if (c.event.sourceIds?.includes(sourceId)) continue;
+            (c.event.sourceIds ??= []).push(sourceId);
+        }
         this.commitMutation(strings.undo.cite(auditPersonName(person)));
         AuditLogManager.log(this.currentTreeId, 'source.cite', strings.auditLog.citedSource(auditPersonName(person)));
         return true;
     }
 
-    /** Remove a citation of `sourceId` from a person's life event. */
+    /** Remove a citation of `sourceId` from a person's life event (from every copy of a shared one, as citeEvent). */
     unciteEvent(personId: PersonId, eventId: string, sourceId: string): boolean {
         const person = this.data.persons[personId];
         const ev = person?.events?.find(e => e.id === eventId);
@@ -3250,11 +3286,38 @@ class DataManagerClass {
         if (this.isPersonLocked(personId)) return false;
 
         this.beginMutation();
-        ev.sourceIds = ev.sourceIds.filter(id => id !== sourceId);
-        if (ev.sourceIds.length === 0) delete ev.sourceIds;
-        cleanCitationQuay(ev, ['sourceIds']);
+        for (const c of this.eventCopies(personId, eventId) ?? [{ personId, event: ev }]) {
+            if (c.event !== ev && this.isPersonLocked(c.personId)) continue;
+            if (!c.event.sourceIds?.includes(sourceId)) continue;
+            c.event.sourceIds = c.event.sourceIds.filter(id => id !== sourceId);
+            if (c.event.sourceIds.length === 0) delete c.event.sourceIds;
+            cleanCitationQuay(c.event, ['sourceIds']);
+        }
         this.commitMutation(strings.undo.uncite(auditPersonName(person)));
         AuditLogManager.log(this.currentTreeId, 'source.uncite', strings.auditLog.uncitedSource(auditPersonName(person)));
+        return true;
+    }
+
+    /**
+     * Set the quality (QUAY 0–3, undefined: none given) of the citation of
+     * `sourceId` on a person's life event. Citations are common to a shared
+     * event (spec 085): every copy citing the source gets the same quality,
+     * in one undo step (a locked person's copy is left as it is, as citeEvent).
+     */
+    setEventCitationQuality(personId: PersonId, eventId: string, sourceId: string, quay: number | undefined): boolean {
+        const person = this.data.persons[personId];
+        const ev = person?.events?.find(e => e.id === eventId);
+        if (!person || !ev?.sourceIds?.includes(sourceId)) return false;
+        if (this.isPersonLocked(personId)) return false;
+        if (quay !== undefined && !(Number.isInteger(quay) && quay >= 0 && quay <= 3)) return false;
+
+        this.beginMutation();
+        for (const c of this.eventCopies(personId, eventId) ?? [{ personId, event: ev }]) {
+            if (c.event !== ev && this.isPersonLocked(c.personId)) continue;
+            if (!c.event.sourceIds?.includes(sourceId)) continue;
+            setCitationQuality(c.event, 'sourceIds', sourceId, quay, this.data.sources);
+        }
+        this.commitMutation(strings.undo.cite(auditPersonName(person)));
         return true;
     }
 

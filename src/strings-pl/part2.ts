@@ -110,6 +110,7 @@ export const plPart2: Pick<StringsType, 'crop' | 'importImages' | 'imageViewer' 
 
     // The person editor's married surname (Person.marriedSurname) and its suggestion from the husband's surname.
     person: {
+        deleteShared: 'Wspólne wydarzenia zostaną u pozostałych:',
         marriedSurname: 'Nazwisko po ślubie',
         addMarriedSurname: '+ nazwisko po ślubie',
         suggestion: (surname: string) => `Propozycja: ${surname}`,

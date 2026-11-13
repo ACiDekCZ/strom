@@ -5,6 +5,7 @@
 
 import { setResearchOpenLabel } from './research-open-mark.js';
 import { DataManager, auditPersonName } from '../data.js';
+import { sharedEventTitle, sharedDeleteLines } from '../shared-event-editor.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
@@ -60,6 +61,12 @@ export interface ConfirmOptions {
      * its state at the confirm is in `UI.confirmChecked`.
      */
     checkbox?: { label: string; hint?: string; checked: boolean };
+    /**
+     * A list under the message (the persons a shared event disappears for,
+     * the shared events that stay with others), an optional lead before it
+     * and a sentence after it.
+     */
+    list?: { lead?: string; items: string[]; after?: string };
 }
 
 export const dialogsMethods = uiModule({
@@ -166,7 +173,12 @@ export const dialogsMethods = uiModule({
                         <span><span class="confirm-check-label">${this.escapeHtml(options.checkbox.label)}</span>${options.checkbox.hint
                             ? `<span class="confirm-check-hint">${this.escapeHtml(options.checkbox.hint)}</span>` : ''}</span>
                     </label>` : '';
-                optionsEl.innerHTML = check + note;
+                const list = options?.list && options.list.items.length > 0
+                    ? `${options.list.lead ? `<p class="confirm-list-lead">${this.escapeHtml(options.list.lead)}</p>` : ''}`
+                        + `<ul class="confirm-list">${options.list.items.map(i => `<li>${this.escapeHtml(i)}</li>`).join('')}</ul>`
+                        + `${options.list.after ? `<p class="confirm-list-after">${this.escapeHtml(options.list.after)}</p>` : ''}`
+                    : '';
+                optionsEl.innerHTML = list + check + note;
             }
             this.confirmChecked = !!options?.checkbox?.checked;
 
@@ -362,11 +374,21 @@ export const dialogsMethods = uiModule({
         const shown = (TreeRenderer.getViewLayer()?.links ?? []).filter(l => l.anchorId === personId || l.islandIds.includes(personId));
         const viewLinks = shown.map(l => strings.viewLinks.deleteNote(l.hypo, l.variant)).join(' ');
         const message = [lead, links, viewLinks, d.undoHint].filter(Boolean).join(' ');
+        // The shared events stay with the others (spec 085 §3d): "Census 1921 (Prokop, Terezie)".
+        const shared = DataManager.personSharedEvents(personId).map(se => {
+            const title = sharedEventTitle({ type: se.type, customLabel: se.customLabel,
+                date: se.year !== null ? String(se.year) : undefined }, strings.events.types[se.type]);
+            const others = se.otherPersonIds.map(id => DataManager.getPerson(id))
+                .filter((p): p is NonNullable<typeof p> => !!p)
+                .map(p => p.firstName?.trim() || shownName(p));
+            return others.length > 0 ? `${title} (${others.join(', ')})` : title;
+        });
         return this.showConfirm(message, d.deletePersonTitle(label), {
             confirmLabel: d.deletePerson,
             cancel: cancelLabel,
             variant: 'danger',
             note: this.researchArchiveDeleteNote(),
+            list: shared.length > 0 ? { lead: strings.person.deleteShared, items: sharedDeleteLines(shared) } : undefined,
         });
     },
 

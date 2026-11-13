@@ -52,6 +52,8 @@ import { bottomSheetMethods } from './bottom-sheet.js';
 
 import { personModalMethods } from './person-modal.js';
 import { personEventsMethods } from './person-events.js';
+import { sharedEventMethods } from './shared-event-ui.js';
+import type { SharedDraft } from '../shared-event-editor.js';
 import { coupleEventsMethods } from './couple-events-ui.js';
 import { sourcesMethods, CitationContext, ExcerptDraft } from './sources.js';
 import { attachmentsMethods } from './attachments-ui.js';
@@ -498,6 +500,33 @@ export class UIClass {
     returnToEditPersonId: PersonId | null = null;  // Track if we should return to edit dialog
     /** Form values of the event / source editor at open (unsaved-changes check). */
     eventEditorSnapshot: string | null = null;
+    /** The event editor's "Shared with" draft (src/ui/shared-event-ui.ts); null for a couple's event. */
+    sharedDraft: SharedDraft | null = null;
+    /** A large household shows all its rows (not only the first five). */
+    sharedShowAll = false;
+    /** The shared event's person picker while open. */
+    sharedPicker: { chosen: PersonId[]; query: string; creating: boolean } | null = null;
+    /** The button whose shared-event menu is open. */
+    sharedMenuOwner: HTMLElement | null = null;
+    /** Where the open shared-event menu's button stood (top, px) when it opened. */
+    sharedMenuAnchorTop = 0;
+    /**
+     * Closes the shared-event menu on a scroll or resize (bound once, so it
+     * can be removed); a scroll that leaves its button where it was (the
+     * dialog settling as the menu opens) keeps it.
+     */
+    sharedMenuCloser = (): void => {
+        const top = this.sharedMenuOwner?.getBoundingClientRect().top;
+        if (top !== undefined && Math.abs(top - this.sharedMenuAnchorTop) < 2) return;
+        this.closeSharedMenus();
+    };
+    /** Closes the shared-event menu on a press outside it and its button. */
+    sharedMenuOutside = (e: Event): void => {
+        const menu = document.getElementById('shared-event-menu');
+        const t = e.target as Node | null;
+        if (!menu || !t || menu.contains(t) || this.sharedMenuOwner?.contains(t)) return;
+        this.closeSharedMenus();
+    };
     sourceEditorSnapshot: string | null = null;
     /** The panel owns an open DataManager edit session (review S9). */
     relSessionOwned = false;
@@ -565,8 +594,11 @@ export interface UIClass extends PersonModalMethods {}
 Object.assign(UIClass.prototype, personModalMethods);
 
 type PersonEventsMethods = typeof personEventsMethods;
+type SharedEventMethods = typeof sharedEventMethods;
 export interface UIClass extends PersonEventsMethods {}
+export interface UIClass extends SharedEventMethods {}
 Object.assign(UIClass.prototype, personEventsMethods);
+Object.assign(UIClass.prototype, sharedEventMethods);
 
 type CoupleEventsMethods = typeof coupleEventsMethods;
 export interface UIClass extends CoupleEventsMethods {}

@@ -15,6 +15,17 @@ interface ChainLinkOptions {
 }
 
 /**
+ * The mark of a shared event (spec 085): two overlapping circles, one event
+ * of several persons. Drawn in the text colour around it.
+ */
+export function sharedEventMarkSvg(width = 18): string {
+    const height = Math.round(width * 14 / 18);
+    return `<svg class="shared-event-mark" width="${width}" height="${height}" viewBox="0 0 18 14" `
+        + `fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">`
+        + `<circle cx="6" cy="7" r="5"/><circle cx="12" cy="7" r="5"/></svg>`;
+}
+
+/**
  * A two-link chain (the classic "link"/"relationship" glyph). Returns an SVG
  * string ready to inline. Defaults follow `currentColor` so the caller controls
  * colour via CSS.

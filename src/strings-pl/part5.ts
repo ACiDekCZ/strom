@@ -658,6 +658,17 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
 
     // Person picker
     personPicker: {
+        family: 'Rodzina',
+        familyAlive: (date: string) => `żyjący w dniu ${date}`,
+        familyHidden: (n: number, list: string) => n === 1
+            ? `Bez 1 osoby, która nie żyła w dniu wydarzenia: ${list}.`
+            : `Bez ${nPl(n, 'osoby', 'osób', 'osób')}, które nie żyły w dniu wydarzenia: ${list}.`,
+        alreadyShared: 'już w „Razem z”',
+        createPerson: 'Utwórz nową osobę',
+        createNamed: (q: string) => `Utwórz nową osobę „${q}”`,
+        noteHint: 'Kto nie powinien być w drzewie (lokator, służba), trafia tylko do notatki wydarzenia.',
+        addN: (n: number) => `Dodaj (${n})`,
+        createAdd: 'Utwórz i dodaj',
         placeholder: 'Szukaj osoby...',
         noResults: 'Brak pasujących osób',
         showList: 'Pokaż listę',

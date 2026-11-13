@@ -221,6 +221,8 @@ export const coupleEventsMethods = uiModule({
         if (del) del.hidden = true;
         const status = document.getElementById('event-status-note');
         if (status) status.hidden = true;
+        // "Shared with" belongs to a person's own event (spec 085); a couple's hides it.
+        this.sharedEventInit(null, couple);
         if (!couple) return;
 
         const select = document.getElementById('input-event-type') as HTMLSelectElement | null;

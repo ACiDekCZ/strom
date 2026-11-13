@@ -1220,6 +1220,12 @@ export const miscMethods = uiModule({
                         return;
                     }
 
+                    // The shared event's person picker: close only itself.
+                    if (currentDialog === 'shared-picker-modal') {
+                        this.closeSharedPicker();
+                        return;
+                    }
+
                     // Wedding witnesses: close only itself (asking about edited
                     // rows), leaving the relationships panel underneath.
                     if (currentDialog === 'wedding-witnesses-modal') {
@@ -1241,6 +1247,8 @@ export const miscMethods = uiModule({
                             confirmModal.classList.remove('active');
                             return;
                         }
+                        // A shared-event menu open: Escape closes only the menu.
+                        if (this.closeSharedMenus()) return;
                         this.closeEventEditor();
                         return;
                     }
