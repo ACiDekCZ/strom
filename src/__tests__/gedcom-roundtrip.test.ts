@@ -814,14 +814,17 @@ describe('register-harvest tags: CHR, EVEN+TYPE, CENS', () => {
 0 TRLR
 `;
 
-    it('imports CHR as baptism, EVEN+TYPE and CENS as labelled custom events', () => {
+    it('imports CHR as baptism, EVEN+TYPE as a labelled custom event, CENS as a census', () => {
         const data = importGed(GED);
         const person = Object.values(data.persons)[0];
         const byType = (t: string) => (person.events ?? []).filter(e => e.type === t);
         expect(byType('baptism')).toHaveLength(1);
         expect(byType('baptism')[0].place).toBe('Lipany');
+        expect(byType('census')).toHaveLength(1);
+        expect(byType('census')[0]).toMatchObject({ date: '1869', place: 'Lipany 12' });
+        expect(byType('census')[0].customLabel).toBeUndefined();
         const custom = byType('custom');
-        expect(custom.map(e => e.customLabel).sort()).toEqual(['Census', 'Rychtář']);
+        expect(custom.map(e => e.customLabel).sort()).toEqual(['Rychtář']);
         const rychtar = custom.find(e => e.customLabel === 'Rychtář')!;
         expect(rychtar.date).toBe('1888');
         expect(rychtar.place).toBe('Lipany');
@@ -835,6 +838,12 @@ describe('register-harvest tags: CHR, EVEN+TYPE, CENS', () => {
         const ged = exportGed(once);
         expect(ged).toContain('1 EVEN');
         expect(ged).toContain('2 TYPE Rychtář');
+    });
+
+    it('a census goes out under its own tag, not as a labelled EVEN', () => {
+        const ged = exportGed(importGed(GED));
+        expect(ged).toMatch(/^1 CENS\n2 DATE 1869\n2 PLAC Lipany 12$/m);
+        expect(ged).not.toContain('2 TYPE Census');
     });
 });
 

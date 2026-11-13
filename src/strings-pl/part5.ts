@@ -821,7 +821,6 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
             FACT: 'Informacja',
             ALIA: 'Występuje także jako',
         } as Record<string, string>,
-        census: 'Spis ludności',
         genericEvent: 'Zdarzenie',
         altBirth: 'Urodzenie (alternatywny zapis)',
         altDeath: 'Zgon (alternatywny zapis)',

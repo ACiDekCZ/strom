@@ -139,7 +139,9 @@ export type LifeEventType =
     | 'adoption' | 'naturalization' | 'will' | 'probate'
     // What was written about the person rather than done by them.
     | 'title' | 'nationality'
-    | 'cremation';
+    | 'cremation'
+    // A census: the person as a household listed them (spec 053).
+    | 'census';
 
 /**
  * A single life event. birth/death are represented by the first-class

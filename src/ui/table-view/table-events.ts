@@ -19,7 +19,7 @@ const MARRIAGE_COUPLE_TYPES: ReadonlySet<CoupleEventType> = new Set(['engagement
  * people are one event. A baptism, an occupation or a title is always one
  * person's own, even when two copies look alike.
  */
-const SHARED_TYPES: ReadonlySet<LifeEventType> = new Set(['residence', 'military', 'emigration', 'immigration', 'naturalization', 'custom']);
+const SHARED_TYPES: ReadonlySet<LifeEventType> = new Set(['residence', 'census', 'military', 'emigration', 'immigration', 'naturalization', 'custom']);
 
 function lifeCategory(type: LifeEventType): EventCategory {
     if (type === 'birth' || type === 'baptism') return 'birth';

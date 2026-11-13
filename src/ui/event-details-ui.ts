@@ -38,7 +38,9 @@ export function offeredDetails(type: LifeEventType | 'marriage'): DetailKey[] {
         case 'birth':
         case 'baptism':
         case 'residence': return ['address'];
-        case 'marriage': return ['age', 'address'];
+        case 'marriage':
+        // A census lists the person's age and the house they lived in.
+        case 'census': return ['age', 'address'];
         default: return [];
     }
 }

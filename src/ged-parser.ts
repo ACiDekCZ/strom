@@ -949,6 +949,9 @@ const EVENT_TAG_TO_TYPE: Record<string, LifeEventType> = {
     BASM: 'batMitzvah', ORDN: 'ordination', ADOP: 'adoption', NATU: 'naturalization',
     WILL: 'will', PROB: 'probate', CREM: 'cremation',
     TITL: 'title', NATI: 'nationality',
+    // A census under INDI is the person's own census event (spec 053); under
+    // FAM it stays the couple's (coupleEventTypeOfTag).
+    CENS: 'census',
     // Import aliases. CHR (christening) is what many tools — and AI-written
     // register transcriptions — use for BAPM; CHRA is the adult form of the
     // same sacrament; GRAD is schooling reaching its end. Export always writes
@@ -4034,16 +4037,14 @@ export function parseGedcom(content: string): ParsedGedcom {
                                 }
                                 indi.events.push(ev);
                                 currentEvent = ev;
-                            } else if (tag === 'EVEN' || tag === 'CENS') {
-                                // Generic events (1 EVEN + 2 TYPE label) and
-                                // censuses become CUSTOM events — a register-
-                                // harvested GEDCOM loses nothing here.
+                            } else if (tag === 'EVEN') {
+                                // Generic events (1 EVEN + 2 TYPE label) become
+                                // CUSTOM events — a register-harvested GEDCOM
+                                // loses nothing here.
                                 const ev: RawEvent = {
                                     type: 'custom',
-                                    customLabel: tag === 'CENS'
-                                        ? strings.gedcomNotes.census
-                                        : (value || strings.gedcomNotes.genericEvent),
-                                    ...(tag === 'EVEN' && value ? { tagValue: value } : {}),
+                                    customLabel: value || strings.gedcomNotes.genericEvent,
+                                    ...(value ? { tagValue: value } : {}),
                                 };
                                 indi.events.push(ev);
                                 currentEvent = ev;

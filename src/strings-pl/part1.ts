@@ -711,6 +711,7 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
             title: 'Tytuł',
             nationality: 'Narodowość',
             cremation: 'Kremacja',
+            census: 'Spis ludności',
             custom: 'Własne'
         }
     },

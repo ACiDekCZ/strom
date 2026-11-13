@@ -14,7 +14,7 @@ import { strings } from './strings.js';
  */
 export const SELECTABLE_EVENT_TYPES: LifeEventType[] = [
     'baptism', 'confirmation', 'firstCommunion', 'barMitzvah', 'batMitzvah',
-    'education', 'occupation', 'ordination', 'residence', 'military',
+    'education', 'occupation', 'ordination', 'residence', 'census', 'military',
     'emigration', 'immigration', 'naturalization',
     'religion', 'nationality', 'title', 'adoption',
     'will', 'probate', 'burial', 'cremation', 'custom',

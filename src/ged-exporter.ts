@@ -228,7 +228,7 @@ const EVENT_TYPE_TO_TAG: Partial<Record<LifeEventType, string>> = {
     confirmation: 'CONF', firstCommunion: 'FCOM', barMitzvah: 'BARM',
     batMitzvah: 'BASM', ordination: 'ORDN', adoption: 'ADOP',
     naturalization: 'NATU', will: 'WILL', probate: 'PROB', cremation: 'CREM',
-    title: 'TITL', nationality: 'NATI',
+    title: 'TITL', nationality: 'NATI', census: 'CENS',
 };
 
 /** RELA values for participant roles. Godparent/Witness are the conventional ones. */

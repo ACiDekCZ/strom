@@ -914,6 +914,7 @@ const stringsEN = {
             title: 'Title',
             nationality: 'Nationality',
             cremation: 'Cremation',
+            census: 'Census',
             custom: 'Custom'
         }
     },
@@ -4833,7 +4834,6 @@ const stringsEN = {
             FACT: 'Fact',
             ALIA: 'Also known as',
         } as Record<string, string>,
-        census: 'Census',
         genericEvent: 'Event',
         altBirth: 'Birth (alternative record)',
         altDeath: 'Death (alternative record)',
@@ -9781,6 +9781,7 @@ const stringsCZ: StringsType = {
             title: 'Titul',
             nationality: 'Národnost',
             cremation: 'Kremace',
+            census: 'Sčítání lidu',
             custom: 'Vlastní'
         }
     },
@@ -13609,7 +13610,6 @@ const stringsCZ: StringsType = {
             FACT: 'Údaj',
             ALIA: 'Také uváděn jako',
         } as Record<string, string>,
-        census: 'Sčítání lidu',
         genericEvent: 'Událost',
         altBirth: 'Narození (alternativní záznam)',
         altDeath: 'Úmrtí (alternativní záznam)',
@@ -18509,6 +18509,7 @@ const stringsDE: StringsType = {
             title: 'Titel',
             nationality: 'Staatsangehörigkeit',
             cremation: 'Einäscherung',
+            census: 'Volkszählung',
             custom: 'Eigenes'
         }
     },
@@ -22317,7 +22318,6 @@ const stringsDE: StringsType = {
             FACT: 'Angabe',
             ALIA: 'Auch bekannt als',
         } as Record<string, string>,
-        census: 'Volkszählung',
         genericEvent: 'Ereignis',
         altBirth: 'Geburt (alternativer Eintrag)',
         altDeath: 'Tod (alternativer Eintrag)',
