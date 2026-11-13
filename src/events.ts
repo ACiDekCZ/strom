@@ -17,6 +17,8 @@ export const SELECTABLE_EVENT_TYPES: LifeEventType[] = [
     'education', 'occupation', 'ordination', 'residence', 'census', 'military',
     'emigration', 'immigration', 'naturalization',
     'religion', 'nationality', 'title', 'adoption',
+    // A part at another's event recorded as the person's own (spec 085 §6).
+    'godparent', 'weddingWitness',
     'will', 'probate', 'burial', 'cremation', 'custom',
 ];
 
@@ -30,6 +32,21 @@ export const SELECTABLE_EVENT_TYPES: LifeEventType[] = [
 const VALUE_ON_TAG_EVENT_TYPES = new Set<LifeEventType>([
     'occupation', 'religion', 'title', 'nationality',
 ]);
+
+/**
+ * Event types that can happen to several persons at once and so can be one
+ * event shared by them (spec 085 §1, LifeEvent.shareId): a census, a
+ * residence, a move, military service, a naturalization, a custom event.
+ * A birth, a baptism, a death and the other rites are each person's own.
+ */
+const SHAREABLE_EVENT_TYPES = new Set<string>([
+    'census', 'residence', 'emigration', 'immigration', 'military', 'naturalization', 'custom',
+]);
+
+/** Whether an event of this type can be shared by several persons (see SHAREABLE_EVENT_TYPES). */
+export function eventIsShareable(type: unknown): boolean {
+    return typeof type === 'string' && SHAREABLE_EVENT_TYPES.has(type);
+}
 
 /** Whether this event's note carries the fact itself (see the set above). */
 export function eventValueIsOnTag(type: LifeEventType): boolean {

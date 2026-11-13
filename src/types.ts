@@ -141,7 +141,11 @@ export type LifeEventType =
     | 'title' | 'nationality'
     | 'cremation'
     // A census: the person as a household listed them (spec 053).
-    | 'census';
+    | 'census'
+    // The person's own part at another's event (spec 085 §6): godparent at a
+    // baptism, witness at a wedding. GEDCOM EVEN + TYPE; LifeEvent.roleAt says
+    // whose event it was.
+    | 'godparent' | 'weddingWitness';
 
 /**
  * A single life event. birth/death are represented by the first-class
@@ -157,6 +161,9 @@ export type LifeEventType =
  * name is buried in a free-text note.
  */
 export type ParticipantRole = 'godparent' | 'witness' | 'officiant' | 'other';
+
+/** Every participant role, in the order the editor offers them. */
+export const PARTICIPANT_ROLES: readonly ParticipantRole[] = ['godparent', 'witness', 'officiant', 'other'];
 
 /**
  * Someone present at an event besides its subject.
@@ -175,6 +182,12 @@ export interface EventParticipant {
     name?: string;
     /** What the record says about them ("soused, kovář"). */
     note?: string;
+    /**
+     * Persons of the tree the user said this participant recorded by name is
+     * not ("Not this person", spec 085 §6, data v20): the offer to link them
+     * is not made again.
+     */
+    linkRejected?: PersonId[];
 }
 
 /**
@@ -246,6 +259,43 @@ export interface LifeEvent {
      * "Back to {prog}" writes those lines while the address is still that one.
      */
     gedcomAddress?: { value: string; lines: string[] };
+    /**
+     * One event that happened to several persons at once (a census household,
+     * a residence, a move; spec 085, data v20): each person keeps a copy of the
+     * event and the copies share this id (`[A-Za-z0-9]{4,16}` from the app,
+     * unique in the tree, opaque; GEDCOM `2 _STROM_SHARE`). The common fields
+     * (SHARED_EVENT_COMMON_FIELDS) are written to every copy at once by the
+     * DataManager's shared-event methods; age, the research's status, the
+     * confirmation, the origin marks and `shareRole` are the copy's own. Only
+     * shareable types (eventIsShareable) carry it; a group of one copy is an
+     * ordinary event and loses the id when the tree is read.
+     */
+    shareId?: string;
+    /**
+     * The person's role in a shared event as the user wrote it ("maid",
+     * "lodger"; GEDCOM `3 _ROLE` under `_STROM_SHARE`); absent = a member of
+     * the household. The copy's own field.
+     */
+    shareRole?: string;
+    /**
+     * The person's own record of a part at another's event (types 'godparent'
+     * and 'weddingWitness', spec 085 §6, data v20): the role, whose event it
+     * was (a person's or a couple's, either may be missing when the record
+     * left the tree) and its type; `eventId` points at the event itself in
+     * the app (a person's event id, or 'marriage' / a couple event id).
+     * GEDCOM `2 _STROM_ROLE` + `3 _STROM_AT` + `4 TYPE`.
+     */
+    roleAt?: EventRoleAt;
+}
+
+/** Whose event a person's own godparent / witness event belongs to (LifeEvent.roleAt). */
+export interface EventRoleAt {
+    role: ParticipantRole;
+    personId?: PersonId;
+    partnershipId?: PartnershipId;
+    /** The app's type of that event ('baptism', 'marriage', a couple event type…). */
+    eventType: string;
+    eventId?: string;
 }
 
 /**
@@ -1620,8 +1670,18 @@ export function partnershipParticipants(u: Pick<Partnership, 'participants' | 'e
  *   tree is read (src/citation-quality.ts, a backup first). An older app
  *   (v18) would show and export the source's QUAY at every citation, so the
  *   bump makes it warn first.
+ * v20 (2026-11, spec 085): one event of several persons (a census household,
+ *   a residence, a move): a copy at each person with a common
+ *   LifeEvent.shareId (+ the copy's own shareRole), written to every copy at
+ *   once (src/shared-events.ts); a person's own record of a part at
+ *   another's event (LifeEvent.roleAt, types 'godparent' / 'weddingWitness');
+ *   EventParticipant.linkRejected. Nothing is joined by itself: copies that
+ *   are the same stay separate events; invalid shares and roles are cleaned
+ *   when the tree is read, a backup is taken first. An older app (v19) would
+ *   edit one copy alone and the copies would go apart, so the bump makes it
+ *   open the tree read-only.
  */
-export const STROM_DATA_VERSION = 19;
+export const STROM_DATA_VERSION = 20;
 
 /** The rows of a saved Table view (spec 073 §2; events and sources come later). */
 export type TableViewRowType = 'persons' | 'unions' | 'events' | 'sources';

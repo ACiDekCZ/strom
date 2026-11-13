@@ -74,6 +74,12 @@ import { maxGenerations, maxGenerationsWithSiblings } from './focus-depth.js';
 import { cleanPlaceGeoMeta, sanitizePlaceRecords, sanitizePlaceRefs } from './place-records.js';
 import { addPlaceAlias, sanitizePlaceAliases } from './place-groups.js';
 import { sanitizeTableViews } from './table-views-data.js';
+import {
+    SharedEventCommon, SharedEventCommonField, SharedEventEdit, SharedEventSaveResult, SharedEventIndex, PersonSharedEvent,
+    applyEventFields, buildSharedEventIndex, cleanEventShares, commonFieldsOf, newShareIdFor,
+    personSharedEvents, shareCopiesOf, tidyShares,
+} from './shared-events.js';
+import { eventIsShareable } from './events.js';
 
 /** Extended updates for Partnership */
 
@@ -282,6 +288,9 @@ export function migrateData(data: unknown): StromData {
     // the citation; then only valid own QUAY of citations still cited stay.
     if ((typeof d.version === 'number' ? d.version : 1) < 19) joinQualityOnlySources(result);
     cleanTreeCitationQuay(result);
+    // v20 (spec 085): only valid shares of events shared by two copies or
+    // more, valid roles at another's event; nothing is joined.
+    cleanEventShares(result);
 
     // Photos/attachments/excerpts must be image (or PDF) data URLs — anything
     // else (data:text/html…) from a crafted file is dropped before it can be
@@ -2593,6 +2602,250 @@ class DataManagerClass {
         return true;
     }
 
+    // ==================== SHARED EVENTS (spec 085) ====================
+
+    private sharedIndexCache: { data: StromData; revision: number; index: SharedEventIndex } | null = null;
+
+    /**
+     * The index of shared events and linked participants of the open tree
+     * (src/shared-events.ts), built once per state of the data: when the
+     * tree is read or changed, never per drawing.
+     */
+    getSharedEventIndex(): SharedEventIndex {
+        const c = this.sharedIndexCache;
+        if (c && c.data === this.data && c.revision === this.revision) return c.index;
+        const index = buildSharedEventIndex(this.data);
+        this.sharedIndexCache = { data: this.data, revision: this.revision, index };
+        return index;
+    }
+
+    /** A new share id no event of the open tree carries (`[A-Za-z0-9]{8}`, opaque). */
+    newShareId(): string {
+        return newShareIdFor(this.data);
+    }
+
+    /** A person's events shared with others (type, year, the other persons): the delete confirmation lists them. */
+    personSharedEvents(personId: PersonId): PersonSharedEvent[] {
+        return personSharedEvents(this.data, this.getSharedEventIndex(), personId);
+    }
+
+    /** The copies an event stands for: every copy of its share, else itself. */
+    private eventCopies(personId: PersonId, eventId: string): { personId: PersonId; event: LifeEvent }[] | null {
+        const ev = this.data.persons[personId]?.events?.find(e => e.id === eventId);
+        if (!ev) return null;
+        return ev.shareId ? shareCopiesOf(this.data, ev.shareId) : [{ personId, event: ev }];
+    }
+
+    /** Take copies out of the persons' events (by identity). */
+    private dropEventCopies(copies: readonly { personId: PersonId; event: LifeEvent }[]): void {
+        for (const c of copies) {
+            const person = this.data.persons[c.personId];
+            if (!person?.events) continue;
+            person.events = person.events.filter(e => e !== c.event);
+            if (person.events.length === 0) delete person.events;
+        }
+    }
+
+    /**
+     * Save an event edited with the persons it is shared with (spec 085 §1,
+     * §3), as ONE undo step. `common` goes to every copy kept (only the
+     * fields given: a field another copy has otherwise is not overwritten
+     * unless given); `own` to each person's copy (age, role…). Each person of
+     * `add` gets a new copy (a new event id, no research status, no origin:
+     * entered by hand) with the common fields as the edited copy has them;
+     * the copy of each person of `remove` is deleted; the copy of each person
+     * of `separate` loses the share and keeps its values from before this
+     * edit. An event not shared yet gets a new share id when a person is
+     * added; a share left with one copy is gone (an ordinary event).
+     *
+     * Refused (null): no such event, a birth or death, a custom event without
+     * a label, a type that cannot be shared for two copies or more, a locked
+     * person among those it would change.
+     */
+    saveSharedEvent(viewerPersonId: PersonId, eventId: string, edit: SharedEventEdit): SharedEventSaveResult | null {
+        const viewer = this.data.persons[viewerPersonId];
+        const group = this.eventCopies(viewerPersonId, eventId);
+        if (!viewer || !group) return null;
+        const viewerCopy = group.find(c => c.personId === viewerPersonId && c.event.id === eventId)!;
+        const removeSet = new Set(edit.remove ?? []);
+        const separateSet = new Set((edit.separate ?? []).filter(pid => !removeSet.has(pid)));
+        const removed = group.filter(c => removeSet.has(c.personId));
+        const separated = group.filter(c => separateSet.has(c.personId));
+        const kept = group.filter(c => !removeSet.has(c.personId) && !separateSet.has(c.personId));
+        const inGroup = new Set(group.map(c => c.personId));
+        const added: PersonId[] = [];
+        for (const pid of edit.add ?? []) {
+            if (!this.data.persons[pid] || inGroup.has(pid) || removeSet.has(pid) || added.includes(pid)) continue;
+            added.push(pid);
+        }
+
+        const nextType = edit.common.type ?? viewerCopy.event.type;
+        if (nextType === 'birth' || nextType === 'death') return null;
+        const nextLabel = 'customLabel' in edit.common ? edit.common.customLabel : viewerCopy.event.customLabel;
+        if (nextType === 'custom' && !nextLabel?.trim()) return null;
+        if (kept.length + added.length >= 2 && !eventIsShareable(nextType)) return null;
+        const touched = new Set<PersonId>([...group.map(c => c.personId), ...added]);
+        for (const pid of touched) if (this.isPersonLocked(pid)) return null;
+
+        this.beginMutation();
+        this.dropEventCopies(removed);
+        for (const c of separated) {
+            delete c.event.shareId;
+            delete c.event.shareRole;
+        }
+        for (const c of kept) {
+            applyEventFields(c.event, edit.common);
+            const own = edit.own?.get(c.personId);
+            if (own) applyEventFields(c.event, own);
+        }
+        const base = kept.find(c => c === viewerCopy) ?? kept[0];
+        const common = base ? commonFieldsOf(base.event) : { ...commonFieldsOf(viewerCopy.event), ...edit.common };
+        const final: { personId: PersonId; event: LifeEvent }[] = [...kept];
+        for (const pid of added) {
+            const person = this.data.persons[pid];
+            const event: LifeEvent = { id: generateLifeEventId(), type: nextType };
+            applyEventFields(event, common);
+            const own = edit.own?.get(pid);
+            if (own) applyEventFields(event, own);
+            (person.events ??= []).push(event);
+            final.push({ personId: pid, event });
+        }
+        let shareId: string | null = null;
+        if (final.length >= 2) {
+            shareId = viewerCopy.event.shareId ?? final.find(c => c.event.shareId)?.event.shareId ?? newShareIdFor(this.data);
+            for (const c of final) c.event.shareId = shareId;
+        } else {
+            for (const c of final) {
+                delete c.event.shareId;
+                delete c.event.shareRole;
+            }
+        }
+        this.commitMutation(strings.undo.editEvent(auditPersonName(viewer)));
+        AuditLogManager.log(this.currentTreeId, 'event.update', strings.auditLog.updatedEvent(auditPersonName(viewer)));
+        const personIds: PersonId[] = [];
+        for (const c of final) if (!personIds.includes(c.personId)) personIds.push(c.personId);
+        return { shareId, personIds };
+    }
+
+    /**
+     * Take a person's copy out of its shared event (spec 085 §3 "Separate"):
+     * it stays the person's ordinary event, with `ownEdits` (the editor's
+     * unsaved changes) written to it alone. A share left with one copy is
+     * gone. One undo step; false when there is no such event or the person
+     * is locked.
+     */
+    separateFromShared(personId: PersonId, eventId: string, ownEdits?: Partial<Omit<LifeEvent, 'id' | 'shareId'>>): boolean {
+        const person = this.data.persons[personId];
+        const ev = person?.events?.find(e => e.id === eventId);
+        if (!person || !ev || this.isPersonLocked(personId)) return false;
+        const nextType = ownEdits?.type ?? ev.type;
+        if (nextType === 'birth' || nextType === 'death') return false;
+        const nextLabel = ownEdits && 'customLabel' in ownEdits ? ownEdits.customLabel : ev.customLabel;
+        if (nextType === 'custom' && !nextLabel?.trim()) return false;
+        const shareId = ev.shareId;
+        this.beginMutation();
+        delete ev.shareId;
+        delete ev.shareRole;
+        if (ownEdits) applyEventFields(ev, ownEdits);
+        if (shareId) tidyShares(this.data, [shareId]);
+        this.commitMutation(strings.undo.editEvent(auditPersonName(person)));
+        AuditLogManager.log(this.currentTreeId, 'event.update', strings.auditLog.updatedEvent(auditPersonName(person)));
+        return true;
+    }
+
+    /**
+     * Delete a person's copy of a shared event (spec 085 §3 "Remove"); the
+     * other copies stay as they are, a share left with one copy is gone.
+     * One undo step.
+     */
+    removeFromShared(personId: PersonId, eventId: string): boolean {
+        const person = this.data.persons[personId];
+        const ev = person?.events?.find(e => e.id === eventId);
+        if (!person || !ev || this.isPersonLocked(personId)) return false;
+        const shareId = ev.shareId;
+        this.beginMutation();
+        this.dropEventCopies([{ personId, event: ev }]);
+        if (shareId) tidyShares(this.data, [shareId]);
+        this.commitMutation(strings.undo.removeEvent(auditPersonName(person)));
+        AuditLogManager.log(this.currentTreeId, 'event.remove', strings.auditLog.removedEvent(auditPersonName(person)));
+        return true;
+    }
+
+    /** Delete every copy of a shared event (spec 085 §3 "Delete for all"); one undo step, the number of copies deleted. */
+    deleteSharedForAll(shareId: string): number {
+        const copies = shareCopiesOf(this.data, shareId);
+        if (copies.length === 0 || copies.some(c => this.isPersonLocked(c.personId))) return 0;
+        const first = this.data.persons[copies[0].personId];
+        this.beginMutation();
+        this.dropEventCopies(copies);
+        this.commitMutation(strings.undo.removeEvent(auditPersonName(first)));
+        AuditLogManager.log(this.currentTreeId, 'event.remove', strings.auditLog.removedEvent(auditPersonName(first)));
+        return copies.length;
+    }
+
+    /**
+     * Make the copies of a shared event the same again (spec 085 §4
+     * "Unify"): `values` (the common fields chosen) are written to every
+     * copy. One undo step; the number of copies, 0 when refused.
+     */
+    unifySharedCopies(shareId: string, values: SharedEventCommon): number {
+        const copies = shareCopiesOf(this.data, shareId);
+        if (copies.length === 0 || copies.some(c => this.isPersonLocked(c.personId))) return 0;
+        if (values.type !== undefined && (values.type === 'birth' || values.type === 'death' || !eventIsShareable(values.type))) return 0;
+        const first = this.data.persons[copies[0].personId];
+        this.beginMutation();
+        for (const c of copies) applyEventFields(c.event, values);
+        this.commitMutation(strings.undo.editEvent(auditPersonName(first)));
+        AuditLogManager.log(this.currentTreeId, 'event.update', strings.auditLog.updatedEvent(auditPersonName(first)));
+        return copies.length;
+    }
+
+    /**
+     * Take the copies of these persons out of a shared event (spec 085 §4
+     * "Separate copies"): each stays its person's ordinary event as it is;
+     * a share left with one copy is gone. One undo step; the number of
+     * copies separated.
+     */
+    separateCopies(shareId: string, personIds: readonly PersonId[]): number {
+        const ids = new Set(personIds);
+        const copies = shareCopiesOf(this.data, shareId).filter(c => ids.has(c.personId));
+        if (copies.length === 0 || copies.some(c => this.isPersonLocked(c.personId))) return 0;
+        const first = this.data.persons[copies[0].personId];
+        this.beginMutation();
+        for (const c of copies) {
+            delete c.event.shareId;
+            delete c.event.shareRole;
+        }
+        tidyShares(this.data, [shareId]);
+        this.commitMutation(strings.undo.editEvent(auditPersonName(first)));
+        AuditLogManager.log(this.currentTreeId, 'event.update', strings.auditLog.updatedEvent(auditPersonName(first)));
+        return copies.length;
+    }
+
+    /**
+     * Write one common field of a person's event (a Table cell, a quick
+     * edit): to every copy when it is shared, else to that event alone. One
+     * undo step; the number of copies written, 0 when refused (a type that
+     * cannot be shared for a shared event, a custom event without a label…).
+     */
+    updateSharedCommonField<F extends SharedEventCommonField>(personId: PersonId, eventId: string, field: F, value: LifeEvent[F] | undefined): number {
+        const person = this.data.persons[personId];
+        const copies = this.eventCopies(personId, eventId);
+        if (!person || !copies) return 0;
+        if (copies.some(c => this.isPersonLocked(c.personId))) return 0;
+        const ev = copies.find(c => c.personId === personId && c.event.id === eventId)!.event;
+        const nextType = field === 'type' ? value as LifeEvent['type'] | undefined : ev.type;
+        if (!nextType || nextType === 'birth' || nextType === 'death') return 0;
+        if (copies.length >= 2 && !eventIsShareable(nextType)) return 0;
+        const nextLabel = field === 'customLabel' ? value as string | undefined : ev.customLabel;
+        if (nextType === 'custom' && !nextLabel?.trim()) return 0;
+        this.beginMutation();
+        for (const c of copies) applyEventFields(c.event, { [field]: value } as SharedEventCommon);
+        this.commitMutation(strings.undo.editEvent(auditPersonName(person)));
+        AuditLogManager.log(this.currentTreeId, 'event.update', strings.auditLog.updatedEvent(auditPersonName(person)));
+        return copies.length;
+    }
+
     // ==================== FACT CONFIRMATION (spec 065) ====================
 
     /** The person or couple a fact belongs to, with its name for the undo label and the audit log. */
@@ -3234,9 +3487,14 @@ class DataManagerClass {
             for (const part of partnershipParticipants(union)) unlinkParticipant(part);
         }
 
+        // Its copies of shared events go with it; a share left with one copy
+        // is an ordinary event again (spec 085 §3).
+        const shareIds = (person.events ?? []).flatMap(e => e.shareId ? [e.shareId] : []);
         delete this.data.persons[id];
         // A stand-in left with nothing to stand for goes; a child left with one real parent gets its "?" family.
         tidyPlaceholders(this.data, others);
+        // …and the own records of a part at another's event lose the link to it.
+        tidyShares(this.data, shareIds);
         this.commitMutation(strings.undo.deletePerson(deletedName));
         // Audit log
         AuditLogManager.log(this.currentTreeId, 'person.delete', strings.auditLog.deletedPerson(deletedName));
@@ -4417,6 +4675,11 @@ class DataManagerClass {
         ];
         for (const parts of participantLists) {
             if (!parts) continue;
+            for (const part of parts) {
+                if (part.linkRejected?.includes(removeId)) {
+                    part.linkRejected = [...new Set(part.linkRejected.map(pid => pid === removeId ? keepId : pid))];
+                }
+            }
             for (let i = parts.length - 1; i >= 0; i--) {
                 if (parts[i].personId !== removeId) continue;
                 const dupe = parts.some((q, j) =>
@@ -4424,6 +4687,12 @@ class DataManagerClass {
                 if (dupe) parts.splice(i, 1);
                 else parts[i].personId = keepId;
             }
+        }
+
+        // An own record of a part at the removed person's event (spec 085 §6)
+        // now points at the kept one; a link to a couple merged away goes.
+        for (const p of Object.values(this.data.persons)) {
+            for (const ev of p.events ?? []) if (ev.roleAt?.personId === removeId) ev.roleAt.personId = keepId;
         }
 
         // 6d. Origin from a GEDCOM import (spec 066): facts and parent links
@@ -4446,6 +4715,8 @@ class DataManagerClass {
 
         // 7. Delete the removed person
         delete this.data.persons[removeId];
+        // A link of an own record of a part at a couple's event merged away goes (spec 085).
+        tidyShares(this.data, []);
 
         // Person merge has its own completion toast — no Undo toast.
         this.commitMutation(strings.undo.mergePersons(keptName), true);

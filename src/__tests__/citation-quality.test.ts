@@ -474,9 +474,21 @@ describe('a tree of 3.26: sources made only for another QUAY are joined (K1.5)',
             expect(named(result.data, 'Drahoslav').birthSourceIds).toEqual([census.id]);
         });
 
-        it('a tree with nothing to join is neither backed up nor saved', async () => {
+        it('a tree with nothing to join keeps its sources; backed up and saved once for data version 20', async () => {
             const d = read(researchGed());
             d.version = 18;
+            const sources = structuredClone(d.sources);
+            vi.spyOn(TreeManager as unknown as { readTreeRecord: () => Promise<unknown> }, 'readTreeRecord')
+                .mockResolvedValue({ status: 'ok', data: d });
+            await TreeManager.readTreeData(TREE);
+            expect(createSnapshot).toHaveBeenCalledTimes(1);
+            expect(saved).toHaveLength(1);
+            expect(saved[0].sources).toEqual(sources);
+        });
+
+        it('a v20 tree is neither backed up nor saved', async () => {
+            const d = read(researchGed());
+            d.version = 20;
             vi.spyOn(TreeManager as unknown as { readTreeRecord: () => Promise<unknown> }, 'readTreeRecord')
                 .mockResolvedValue({ status: 'ok', data: d });
             await TreeManager.readTreeData(TREE);
@@ -487,7 +499,7 @@ describe('a tree of 3.26: sources made only for another QUAY are joined (K1.5)',
 });
 
 describe('data version', () => {
-    it('is 19', () => {
-        expect(STROM_DATA_VERSION).toBe(19);
+    it('is at least 19', () => {
+        expect(STROM_DATA_VERSION).toBeGreaterThanOrEqual(19);
     });
 });

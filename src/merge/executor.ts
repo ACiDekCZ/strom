@@ -835,6 +835,13 @@ function remapEventParticipants(
 ): void {
     for (const ev of events ?? []) {
         if (ev.participants) remapParticipants(ev.participants, idMap, incomingPersons);
+        // An own record of a part at another's event (spec 085 §6) follows that person,
+        // or loses the link (the couple's link is checked when the tree is read).
+        if (ev.roleAt?.personId) {
+            const mapped = idMap.get(ev.roleAt.personId);
+            if (mapped) ev.roleAt.personId = mapped;
+            else delete ev.roleAt.personId;
+        }
     }
 }
 
@@ -852,6 +859,13 @@ function remapParticipants(
         const mapped = idMap.get(part.personId);
         if (mapped) part.personId = mapped;
         else delete part.personId;
+    }
+    // "Not this person" follows the persons rejected (spec 085 §6).
+    for (const part of participants) {
+        if (!part.linkRejected) continue;
+        const kept = [...new Set(part.linkRejected.flatMap(pid => idMap.get(pid) ?? []))];
+        if (kept.length > 0) part.linkRejected = kept;
+        else delete part.linkRejected;
     }
 }
 

@@ -37,6 +37,7 @@ import { VIEW_LINK_KEY_PREFIXES, forgetViewLinks } from './view-links.js';
 import { unknownSexFromTie, fingerprintLike, normalizeResearchId } from './research-link.js';
 import { unknownSexInResearchCopies, loadResearchCopy, rebaseResearchCopies } from './research-copy.js';
 import { joinQualityOnlySources, qualityOnlySources } from './citation-quality.js';
+import { cleanEventShares } from './shared-events.js';
 import { fillResearchConfirmedValues, hasUnvaluedResearchConfirmations } from './verify.js';
 import { requestPersistentStorage } from './persistence.js';
 import { newTieSendMode } from './research-sync.js';
@@ -185,6 +186,19 @@ function encryptedPart(raw: unknown): EncryptedData | null {
  */
 function slugify(text: string): string {
     return asciiSlug(text);
+}
+
+/**
+ * Whether a tree an older app stored is updated to this data version when it
+ * is read (TreeManagerClass.updateStoredData: a backup, then saved once): a
+ * tree of 3.26 with sources made only for another QUAY (v19), and from v20
+ * on every tree with persons (shared events, spec 085: the backup is taken
+ * even though nothing is joined, as the data version changes). An empty tree
+ * needs nothing.
+ */
+function needsDataUpdate(data: StromData, version: number): boolean {
+    if (version < 19 && qualityOnlySources(data.sources).size > 0) return true;
+    return version < 20 && Object.keys(data.persons ?? {}).length > 0;
 }
 
 class TreeManagerClass {
@@ -615,8 +629,8 @@ class TreeManagerClass {
             }
             if (tree?.research && 'sexU' in tree.research && !this.isTreeNewer(id)) result.data = await this.dropLegacySexU(id, tree, result.data);
             if (!this.isTreeNewer(id) && hasUnvaluedResearchConfirmations(result.data)) await this.valueResearchConfirmations(id, result.data);
-            if (!this.isTreeNewer(id) && version < 19 && qualityOnlySources(result.data.sources).size > 0) {
-                result.data = await this.joinQualityOnlySourcesOf(id, tree, result.data);
+            if (!this.isTreeNewer(id) && version < STROM_DATA_VERSION && needsDataUpdate(result.data, version)) {
+                result.data = await this.updateStoredData(id, tree, result.data, version);
             }
             const count = realPersonCount(result.data);
             if (tree && tree.personCount !== count) {
@@ -662,23 +676,31 @@ class TreeManagerClass {
     }
 
     /**
-     * Data version 19 (spec 077 K1.5): the sources an import of 3.26 made
-     * only for a citation of the same page with another QUAY join their entry
-     * again, the QUAY going to the citation (joinQualityOnlySources). A backup
-     * of the tree as it was is taken first; the tree is saved so. A tree in
-     * step with the research before stays in step (its fingerprint follows),
-     * and the kept copies of the research's version change the same way.
+     * A tree stored by an older app is brought to this data version once,
+     * with a backup of the tree as it was taken first ("Before the data
+     * update of a new version"); the tree is saved so, which stamps the
+     * version (no second backup on the next read).
+     * - v19 (spec 077 K1.5): the sources an import of 3.26 made only for a
+     *   citation of the same page with another QUAY join their entry again,
+     *   the QUAY going to the citation (joinQualityOnlySources);
+     * - v20 (spec 085): shared events. Nothing is joined (the same residence
+     *   at two persons stays two events, a godparent recorded by name stays
+     *   so); only invalid shares and roles are cleaned (cleanEventShares).
+     * A tree in step with the research before stays in step (its fingerprint
+     * follows), and the kept copies of the research's version change the
+     * same way.
      */
-    private async joinQualityOnlySourcesOf(id: TreeId, tree: TreeMetadata | undefined, data: StromData): Promise<StromData> {
+    private async updateStoredData(id: TreeId, tree: TreeMetadata | undefined, data: StromData, version: number): Promise<StromData> {
         try {
             await createSnapshot(id, data, 'pre-migration', Date.now(), this.backupResearchBase(id, this.researchBaseOf(id)));
         } catch (err) {
             console.warn('The backup before the data update could not be written', err);
         }
         const next = structuredClone(data);
-        joinQualityOnlySources(next);
+        const joined = version < 19 ? joinQualityOnlySources(next) : 0;
+        const cleaned = cleanEventShares(next);
         const link = tree?.research;
-        if (tree && link) await rebaseResearchCopies(id, this.followJoinedFingerprints(id, tree, link, data, next));
+        if (tree && link && joined + cleaned > 0) await rebaseResearchCopies(id, this.followJoinedFingerprints(id, tree, link, data, next));
         this.saveTreeData(id, next);
         return next;
     }

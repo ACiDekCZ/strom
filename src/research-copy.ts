@@ -12,6 +12,7 @@ import { saveBaseline, loadBaseline, deleteBaselinesForTree } from './share-base
 import { baseCopy, markOlderCopy } from './research-changes.js';
 import { unknownSexFromTie } from './research-link.js';
 import { joinQualityOnlySources } from './citation-quality.js';
+import { cleanEventShares } from './shared-events.js';
 import { RESEARCH_COPY_FP_KEY, RESEARCH_PREV_COPY_FP_KEY } from './storage-keys.js';
 
 const key = (treeId: string): string => `research-base:${treeId}`;
@@ -48,8 +49,9 @@ export async function loadResearchCopy(treeId: string, fp?: string): Promise<Str
         const base = standsFor(await loadBaseline(key(treeId)) as KeptCopy | null, fp);
         // Kept before a child with one known parent got its "?" family: the same conversion as the tree
         // had on load (same ids), so the changes per person do not show those families as weddings.
-        // Likewise the sources made only for another QUAY (data v19), joined as in the tree.
-        if (base) { normalizeSingleParents(markOlderCopy(base)); joinQualityOnlySources(base); }
+        // Likewise the sources made only for another QUAY (data v19), joined as in the tree,
+        // and the shares of events cleaned as in the tree (data v20).
+        if (base) { normalizeSingleParents(markOlderCopy(base)); joinQualityOnlySources(base); cleanEventShares(base); }
         return base;
     } catch {
         return null;
@@ -69,7 +71,7 @@ export async function saveResearchPrevCopy(treeId: string, data: StromData, fp: 
 export async function loadResearchPrevCopy(treeId: string, fp: string): Promise<StromData | null> {
     try {
         const base = standsFor(await loadBaseline(prevKey(treeId)) as KeptCopy | null, fp);
-        if (base) { normalizeSingleParents(markOlderCopy(base)); joinQualityOnlySources(base); }
+        if (base) { normalizeSingleParents(markOlderCopy(base)); joinQualityOnlySources(base); cleanEventShares(base); }
         return base;
     } catch {
         return null;

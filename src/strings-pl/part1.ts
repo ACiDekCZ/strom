@@ -712,6 +712,7 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
             nationality: 'Narodowość',
             cremation: 'Kremacja',
             census: 'Spis ludności',
+            godparent: 'Chrzestny', weddingWitness: 'Świadek ślubu',
             custom: 'Własne'
         }
     },

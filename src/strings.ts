@@ -934,6 +934,7 @@ const stringsEN = {
             nationality: 'Nationality',
             cremation: 'Cremation',
             census: 'Census',
+            godparent: 'Godparent', weddingWitness: 'Wedding witness',
             custom: 'Custom'
         }
     },
@@ -9906,6 +9907,7 @@ const stringsCZ: StringsType = {
             nationality: 'Národnost',
             cremation: 'Kremace',
             census: 'Sčítání lidu',
+            godparent: 'Kmotrovství', weddingWitness: 'Svědek při sňatku',
             custom: 'Vlastní'
         }
     },
@@ -18736,6 +18738,7 @@ const stringsDE: StringsType = {
             nationality: 'Staatsangehörigkeit',
             cremation: 'Einäscherung',
             census: 'Volkszählung',
+            godparent: 'Patenschaft', weddingWitness: 'Trauzeuge',
             custom: 'Eigenes'
         }
     },

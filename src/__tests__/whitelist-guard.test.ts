@@ -75,8 +75,19 @@ function fullTree(): Required<StromData> {
                 id: 'att1', name: 'page-57.jpg', mimeType: 'image/jpeg',
                 dataUrl: 'data:image/jpeg;base64,AA==', sizeBytes: 1,
                 original: { sha256: 'b'.repeat(64), name: 'page-57.tif', mimeType: 'image/tiff', bytes: 148_000_000, orientation: 6 },
-            }], importId: 'I1', importedValues: { firstName: { from: 'I1', value: 'Alice' } } },
-            [BOB]: person(BOB, 'Bob'),
+            }], importId: 'I1', importedValues: { firstName: { from: 'I1', value: 'Alice' } },
+            // One census of both (spec 085, data v20): the share, a role of one's own, a godparent's own
+            // record of a part at a baptism, a participant once rejected as Bob.
+            events: [
+                { id: 'ev_census_a', type: 'census', date: '1921-02-15', place: 'Kolín', age: '38', sourceIds: ['s1'], shareId: 'SH7K2QX' },
+                { id: 'ev_god_a', type: 'godparent', date: '1909-03-14', roleAt: { role: 'godparent', personId: BOB, eventType: 'baptism', eventId: 'ev_bapt_b' } },
+                { id: 'ev_wit_a', type: 'weddingWitness', roleAt: { role: 'witness', partnershipId: UNION, eventType: 'marriage', eventId: 'marriage' } },
+                { id: 'ev_bapt_a', type: 'baptism', participants: [{ id: 'pt1', role: 'godparent', name: 'Bob Novak', linkRejected: [BOB] }] },
+            ] },
+            [BOB]: { ...person(BOB, 'Bob'), events: [
+                { id: 'ev_census_b', type: 'census', date: '1921-02-15', place: 'Kolín', age: '42', sourceIds: ['s1'], shareId: 'SH7K2QX', shareRole: 'lodger' },
+                { id: 'ev_bapt_b', type: 'baptism', date: '1909-03-14' },
+            ] },
         },
         partnerships: { [UNION]: { ...partnership(), importId: 'I1' } },
         sources: {
