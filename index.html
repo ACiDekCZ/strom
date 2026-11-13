@@ -4254,6 +4254,11 @@
             font-size: 14px; color: var(--text); overflow-wrap: anywhere;
         }
         .event-roleat-value .chain-glyph { flex: none; color: var(--text-faint); }
+        /* The type of a prefilled own record is fixed: it looks read only like the field beside it. */
+        .modal select#input-event-type:disabled {
+            appearance: none; -webkit-appearance: none; opacity: 1; cursor: default;
+            border: 1px dashed var(--border); background: var(--surface-2); color: var(--text);
+        }
         .event-roleat-text { min-width: 0; }
         .event-roleat-meta { color: var(--text-light); font-size: 13px; }
         /* An own record's line under it in the list of events: whose event it belongs to. */
@@ -6687,6 +6692,53 @@
             .participant-link.linked { width: 44px; height: 44px; padding: 0; }
             .participant-link.linked .participant-link-text, .participant-link-caret { display: none; }
             .participant-link .chain-glyph { width: 16px; height: 16px; }
+        }
+        /* A participant by name who is probably someone in the tree (spec 085 6e, 6f):
+           a grey bar under the row, Link · Not this person, or the candidates one under another. */
+        .participant-offer {
+            grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-width: 0;
+            padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--r-md, 6px);
+            background: var(--surface-2); color: var(--text-light); font-size: 12.5px; line-height: 1.4;
+        }
+        .participant-offer-text { flex: 1 1 220px; min-width: 0; overflow-wrap: anywhere; }
+        .participant-offer.is-many .participant-offer-text { flex-basis: 100%; }
+        .participant-offer-btns { flex: none; display: flex; flex-wrap: wrap; gap: 6px; }
+        .participant-offer-cand {
+            flex: 1 1 100%; display: flex; align-items: center; gap: 8px; min-width: 0;
+            padding-top: 6px; border-top: 1px solid var(--border);
+        }
+        .participant-offer-who { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+        .participant-offer-name { color: var(--text); font-weight: 600; }
+        .participant-offer-meta { color: var(--text-light); }
+        .participant-row .participant-offer button {
+            flex: none; min-height: 30px; padding: 0 12px; border-radius: 6px; font-size: 12.5px; white-space: nowrap; cursor: pointer;
+        }
+        .participant-row .participant-offer .participant-offer-link { border: 1px solid var(--primary); background: var(--primary); color: var(--on-primary); font-weight: 500; }
+        .participant-row .participant-offer .participant-offer-reject { border: 1px solid var(--border); background: var(--surface); color: var(--text); }
+        .participant-row .participant-offer .participant-offer-none {
+            padding: 0 2px; border: 0; background: transparent; color: var(--text-light);
+            text-decoration: underline; text-decoration-color: var(--text-ghost); text-underline-offset: 3px;
+        }
+        .participant-row .participant-offer button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        @media (hover: hover) {
+            .participant-row .participant-offer .participant-offer-link:hover { background: var(--primary-dark); border-color: var(--primary-dark); }
+            .participant-row .participant-offer .participant-offer-reject:hover { background: var(--hover-bg); }
+            .participant-row .participant-offer .participant-offer-none:hover { background: transparent; color: var(--text); }
+        }
+        @media (pointer: coarse) {
+            .participant-row .participant-offer button { min-height: 44px; }
+        }
+        /* Phone: the buttons span the bar, each 44 px high. */
+        @media (max-width: 640px) {
+            .participant-offer { flex-direction: column; align-items: stretch; }
+            .participant-offer-text { flex-basis: auto; }
+            .participant-offer-btns { flex-direction: column; }
+            .participant-row .participant-offer button { width: 100%; min-height: 44px; }
+            .participant-offer-cand { flex-direction: column; align-items: stretch; gap: 6px; }
+        }
+        /* Phone held sideways: the bar stays on one line where it can, the targets stay 44 px. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .participant-row .participant-offer button { min-height: 44px; }
         }
 
         .archives-modal { max-width: 520px; }
@@ -17568,6 +17620,74 @@
             #tree-validation-content .vq-group-head,
             #tree-validation-content .vq-more,
             #tree-validation-content .vq-aside-head { min-height: 48px; }
+        }
+
+        /* Godparents and witnesses recorded by name who are probably in the tree (spec 085 4c, 6g, 6h):
+           a trace in Leads with Review one by one, then the list in place of the check. */
+        #tree-validation-content .vq-namelink { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 12px; background: var(--surface-2); }
+        #tree-validation-content .vq-namelink-lead { flex: 1 1 260px; min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+        #tree-validation-content .vq-namelink-lead .vq-dot { transform: translateY(-1px); }
+        #tree-validation-content .vq-namelink-lead-text { min-width: 0; font-size: 13.5px; line-height: 1.45; color: var(--text); overflow-wrap: anywhere; }
+        #tree-validation-content .vq-namelink-review,
+        #tree-validation-content .vq-namelink-link {
+            flex: none; min-height: 30px; padding: 0 12px; border: 1px solid var(--primary); border-radius: 6px;
+            background: var(--primary); color: var(--on-primary); font-size: 12.5px; font-weight: 500; white-space: nowrap; cursor: pointer;
+        }
+        #tree-validation-content .vq-namelink-list { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+        #tree-validation-content .vq-namelink-back {
+            align-self: flex-start; min-height: 30px; padding: 0 4px; border: 0; border-radius: 4px; background: transparent;
+            color: var(--primary); font-size: 13px; font-weight: 500; cursor: pointer;
+        }
+        #tree-validation-content .vq-namelink-title { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.35; color: var(--text); overflow-wrap: anywhere; }
+        #tree-validation-content .vq-namelink-hint { margin: -4px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--text-light); }
+        #tree-validation-content .vq-namelink-item {
+            display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 10px 12px;
+            border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
+        }
+        #tree-validation-content .vq-namelink-head { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+        #tree-validation-content .vq-namelink-name { font-size: 14px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+        #tree-validation-content .vq-namelink-where { font-size: 12.5px; line-height: 1.45; color: var(--text-light); overflow-wrap: anywhere; }
+        #tree-validation-content .vq-namelink-cand {
+            display: flex; align-items: center; gap: 10px; min-width: 0; padding: 7px 10px;
+            border: 1px solid var(--border); border-radius: 6px; background: var(--surface-2);
+        }
+        #tree-validation-content .vq-namelink-who { flex: 1 1 auto; min-width: 0; font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+        #tree-validation-content .vq-namelink-cname { font-weight: 600; color: var(--text); }
+        #tree-validation-content .vq-namelink-meta { color: var(--text-light); }
+        #tree-validation-content .vq-namelink-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+        #tree-validation-content .vq-namelink-reject {
+            min-height: 30px; padding: 0 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface);
+            color: var(--text); font-size: 12.5px; white-space: nowrap; cursor: pointer;
+        }
+        #tree-validation-content .vq-namelink-later {
+            min-height: 30px; padding: 0 4px; border: 0; border-radius: 4px; background: transparent; color: var(--text-light);
+            font-size: 12.5px; text-decoration: underline; text-decoration-color: var(--text-ghost); text-underline-offset: 3px; cursor: pointer;
+        }
+        #tree-validation-content .vq-namelink-rejected { margin: 0; font-size: 12.5px; color: var(--text-faint); }
+        #tree-validation-content :is(.vq-namelink-review, .vq-namelink-link, .vq-namelink-back, .vq-namelink-reject, .vq-namelink-later):focus-visible {
+            outline: 2px solid var(--primary); outline-offset: 2px;
+        }
+        @media (hover: hover) {
+            #tree-validation-content :is(.vq-namelink-review, .vq-namelink-link):hover { background: var(--primary-dark); border-color: var(--primary-dark); }
+            #tree-validation-content .vq-namelink-back:hover { text-decoration: underline; }
+            #tree-validation-content .vq-namelink-reject:hover { background: var(--hover-bg); }
+            #tree-validation-content .vq-namelink-later:hover { color: var(--text); }
+        }
+        @media (pointer: coarse) {
+            #tree-validation-content :is(.vq-namelink-review, .vq-namelink-link, .vq-namelink-back, .vq-namelink-reject, .vq-namelink-later) { min-height: 44px; }
+        }
+        /* Phone: the buttons span the item, 44 px high. */
+        @media (max-width: 640px) {
+            #tree-validation-content .vq-namelink { flex-direction: column; align-items: stretch; }
+            #tree-validation-content .vq-namelink-lead { flex-basis: auto; }
+            #tree-validation-content .vq-namelink-cand { flex-direction: column; align-items: stretch; gap: 6px; }
+            #tree-validation-content .vq-namelink-acts { flex-direction: column; align-items: stretch; }
+            #tree-validation-content :is(.vq-namelink-review, .vq-namelink-link, .vq-namelink-reject, .vq-namelink-later) { width: 100%; min-height: 44px; }
+            #tree-validation-content .vq-namelink-back { min-height: 44px; }
+        }
+        /* Phone held sideways: low heads, targets still 44 px. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            #tree-validation-content :is(.vq-namelink-review, .vq-namelink-link, .vq-namelink-reject, .vq-namelink-later, .vq-namelink-back) { min-height: 44px; }
         }
 
         /* Merge trees dialog */

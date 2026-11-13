@@ -299,6 +299,7 @@ export const personEventsMethods = uiModule({
                     </button>`}
                     <button type="button" class="participant-btn secondary participant-del"
                             title="${esc(strings.events.delete)}" aria-label="${esc(strings.events.delete)}">${iconSvg('trash')}</button>
+                    ${linked ? '' : this.participantOfferHtml(i)}
                 </div>`;
         }).join('');
 
@@ -316,7 +317,10 @@ export const personEventsMethods = uiModule({
                 }
             };
             (row.querySelector('.participant-name') as HTMLInputElement).oninput = (e) => {
-                this.eventParticipants[i].name = (e.target as HTMLInputElement).value;
+                const p = this.eventParticipants[i];
+                p.name = (e.target as HTMLInputElement).value;
+                // Persons of the tree this name may be (spec 085 §6): the bar follows the typing.
+                if (!p.personId) this.refreshParticipantOffer(row, i);
             };
             (row.querySelector('.participant-note') as HTMLInputElement).oninput = (e) => {
                 const value = (e.target as HTMLInputElement).value;
@@ -333,7 +337,9 @@ export const personEventsMethods = uiModule({
                 this.eventParticipants.splice(i, 1);
                 this.renderEventParticipants();
             };
+            this.bindParticipantOffer(row, i);
         });
+        this.wireParticipantOfferDate();
 
         // An event that names someone shows the field whatever its type is —
         // re-check here, because the rows are what decides it.

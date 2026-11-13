@@ -46,6 +46,7 @@ import {
 } from '../validation.js';
 import { visibleValidation, summaryKind, dismissalFor, dismissalKey, dismissBody } from '../quality-dismiss.js';
 import { QUALITY_CHANGED_EVENT } from './quality-ui.js';
+import { nameLinkKey } from './name-link-ui.js';
 import type { QualityDismissal } from '../types.js';
 import { isLivingPerson, inferBirthUpperBounds } from '../privacy.js';
 import * as CrossTree from '../cross-tree.js';
@@ -99,6 +100,10 @@ interface ValidationView {
     asideOpen: Set<string>;
     /** Watches the toast with Undo (the body's room under the last row ends with it). */
     toastTimer: number | null;
+    /** The list of godparents and witnesses by name is shown in place of the check (spec 085 6g). */
+    nameLinks: boolean;
+    /** Leads put off with Later: hidden until the dialog closes. */
+    nameLinkLater: Set<string>;
 }
 
 /** A long group (≥ 50 rows) shows its rows by this many. */
@@ -169,6 +174,7 @@ export const treeStatsMethods = uiModule({
         this.endDismissToastRoom();
         view = {
             treeId, sections: {}, groups: new Map(), shown: new Map(), dismissedOpen: false, asideOpen: new Set(), toastTimer: null,
+            nameLinks: false, nameLinkLater: new Set(),
         };
         if (opts.leads) view.sections = { problem: false, trace: true };
         if (opts.focus?.dismissed) view.dismissedOpen = true;
@@ -266,7 +272,13 @@ export const treeStatsMethods = uiModule({
         this.bindTreeValidationActions(content, result, treeId);
 
         scroller.scrollTop = top;
-        if (focusKey) content.querySelector<HTMLElement>(`[data-focus-key="${CSS.escape(focusKey)}"]`)?.focus({ preventScroll: true });
+        const again = focusKey ? content.querySelector<HTMLElement>(`[data-focus-key="${CSS.escape(focusKey)}"]`) : null;
+        if (again) again.focus({ preventScroll: true });
+        // A lead of the list linked or put off: the keyboard goes on with the next one.
+        else if (focusKey && view?.nameLinks) {
+            (content.querySelector<HTMLElement>('.vq-namelink-link') ?? content.querySelector<HTMLElement>('.vq-namelink-back'))
+                ?.focus({ preventScroll: true });
+        }
     },
 
     /**
@@ -384,6 +396,37 @@ export const treeStatsMethods = uiModule({
                     view.dismissedOpen = !view.dismissedOpen;
                     redraw();
                     return;
+                case 'nameLinkReview':
+                case 'nameLinkBack': {
+                    view.nameLinks = el.dataset.vq === 'nameLinkReview';
+                    void this.refreshTreeValidationDialog(treeId).then(() => {
+                        const scroller = content.closest<HTMLElement>('.modal-content') ?? content;
+                        scroller.scrollTop = 0;
+                        const key = view?.nameLinks ? 'nameLinkBack' : 'nameLinkReview';
+                        content.querySelector<HTMLElement>(`[data-focus-key="${key}"]`)?.focus({ preventScroll: true });
+                    });
+                    return;
+                }
+                case 'nameLinkLink': {
+                    const lead = this.nameLinkLeadAt(el.dataset.i);
+                    const pid = el.dataset.pid as PersonId | undefined;
+                    if (!lead || !pid || this.treeValidationReadOnly(treeId)) return;
+                    void inTree(() => this.linkNameFromList(lead, pid));
+                    return;
+                }
+                case 'nameLinkReject': {
+                    const lead = this.nameLinkLeadAt(el.dataset.i);
+                    if (!lead || this.treeValidationReadOnly(treeId)) return;
+                    void inTree(() => this.rejectNameFromList(lead));
+                    return;
+                }
+                case 'nameLinkLater': {
+                    const lead = this.nameLinkLeadAt(el.dataset.i);
+                    if (!lead) return;
+                    view.nameLinkLater.add(nameLinkKey(lead.ref));
+                    redraw();
+                    return;
+                }
                 case 'dismiss': {
                     const issue = issueAt(el);
                     if (!issue || this.treeValidationReadOnly(treeId)) return;
@@ -548,8 +591,13 @@ export const treeStatsMethods = uiModule({
         const s = strings.treeManager;
         const esc = (t: string): string => this.escapeHtml(t);
         const v: ValidationView = view && view.treeId === treeId ? view
-            : { treeId, sections: {}, groups: new Map(), shown: new Map(), dismissedOpen: false, asideOpen: new Set(), toastTimer: null };
+            : { treeId, sections: {}, groups: new Map(), shown: new Map(), dismissedOpen: false, asideOpen: new Set(), toastTimer: null,
+                nameLinks: false, nameLinkLater: new Set() };
         const ro = this.treeValidationReadOnly(treeId);
+        // Review one by one: the godparents and witnesses by name in place of the check (spec 085 6g).
+        if (v.nameLinks) {
+            return (ro ? `<p class="vq-readonly">${esc(s.valReadOnly)}</p>` : '') + this.nameLinkListHtml(treeData, v.nameLinkLater, ro);
+        }
         const shown = this.treeValidationShown(result, treeData, treeId);
         const counts = validationCounts(shown.issues);
         const sections = groupValidationIssues(shown.issues, validationGroupTitle);
@@ -608,6 +656,11 @@ export const treeStatsMethods = uiModule({
                 }
                 html += '<div class="vq-groups">';
                 for (const group of sec.groups) {
+                    // The godparents and witnesses by name: one sentence and Review one by one (spec 085 4c).
+                    if (group.type === 'nameLink' && group.issues.length > 0) {
+                        html += this.nameLinkTraceHtml(group.issues.length);
+                        continue;
+                    }
                     html += this.validationGroupHtml(group, v, treeData, treeId, ro, indexOf, shown.aside.get(group.type) ?? []);
                 }
                 html += '</div>';
