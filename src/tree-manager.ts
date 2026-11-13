@@ -38,6 +38,7 @@ import { unknownSexFromTie, fingerprintLike, normalizeResearchId } from './resea
 import { unknownSexInResearchCopies, loadResearchCopy, rebaseResearchCopies } from './research-copy.js';
 import { joinQualityOnlySources, qualityOnlySources } from './citation-quality.js';
 import { cleanEventShares } from './shared-events.js';
+import { convertLegacyCensusEvents } from './events.js';
 import { fillResearchConfirmedValues, hasUnvaluedResearchConfirmations } from './verify.js';
 import { requestPersistentStorage } from './persistence.js';
 import { newTieSendMode } from './research-sync.js';
@@ -686,6 +687,9 @@ class TreeManagerClass {
      * - v20 (spec 085): shared events. Nothing is joined (the same residence
      *   at two persons stays two events, a godparent recorded by name stays
      *   so); only invalid shares and roles are cleaned (cleanEventShares).
+     *   A person's custom event named only "Census" (how 3.27 and older read
+     *   a `1 CENS`) becomes a census, everything written at it kept
+     *   (convertLegacyCensusEvents), so the same file loaded again pairs.
      * A tree in step with the research before stays in step (its fingerprint
      * follows), and the kept copies of the research's version change the
      * same way.
@@ -698,9 +702,10 @@ class TreeManagerClass {
         }
         const next = structuredClone(data);
         const joined = version < 19 ? joinQualityOnlySources(next) : 0;
+        const censuses = version < 20 ? convertLegacyCensusEvents(next) : 0;
         const cleaned = cleanEventShares(next);
         const link = tree?.research;
-        if (tree && link && joined + cleaned > 0) await rebaseResearchCopies(id, this.followJoinedFingerprints(id, tree, link, data, next));
+        if (tree && link && joined + censuses + cleaned > 0) await rebaseResearchCopies(id, this.followJoinedFingerprints(id, tree, link, data, next));
         this.saveTreeData(id, next);
         return next;
     }

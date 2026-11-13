@@ -21,6 +21,16 @@ import {
     Partnership, PartnershipId, ParticipantRole, PARTICIPANT_ROLES, Person, PersonId,
 } from './types.js';
 
+/**
+ * "Not this person" of a godparent or a witness recorded by name
+ * (EventParticipant.linkRejected): one line per person of the file the user
+ * said they are not, under the participant's `_WITN` (or `ASSO`), pointing
+ * at that person's record — `3 _STROM_NOT_LINK @I12@`. Read back, the offer
+ * to link them is not made again; a pointer to no record of the file is
+ * dropped. Written by every GEDCOM export; another program drops the line.
+ */
+export const LINK_REJECTED_TAG = '_STROM_NOT_LINK';
+
 /** `_STROM_SHARE` as read: the id and the person's role in it. */
 export interface RawShareMark {
     id: string;

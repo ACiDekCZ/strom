@@ -42,6 +42,7 @@ import {
 } from './types.js';
 import { StorageManager } from '../storage.js';
 import { mergeNoteText } from './notes.js';
+import { censusTypeText, isLegacyCensus } from '../events.js';
 import { sourcePlaceKey } from '../source-location.js';
 import { sameFileRecord } from './id-match.js';
 import { MARRIAGE_EVENT_ID, allShareCopies, joinSameShareCopies, shareIdMaker, tidyShares, treeShareIds } from '../shared-events.js';
@@ -1030,9 +1031,20 @@ function contentKey(text: string | undefined): string {
  * What makes two events the same record: kind, date, place, label — and the
  * note, because for occupations and titles the note IS the fact
  * ("blacksmith" vs "innkeeper" with no date are two events, not one).
+ *
+ * A census is the census an older import read as a custom event: a custom
+ * event named only "Census" (a tree not updated to data version 20), and a
+ * custom event named by the census's TYPE with the rest of the note (Strom
+ * 3.27 named it so, and nothing tells it from another custom event), so the
+ * same file loaded again adds no census twice.
  */
 function eventKey(ev: LifeEvent): string {
-    return [ev.type, ev.date ?? '', contentKey(ev.place), contentKey(ev.customLabel), contentKey(ev.note)].join('\u0001');
+    const typed = censusTypeText(ev);
+    const as: Pick<LifeEvent, 'type' | 'customLabel' | 'note'> = typed
+        ? { type: 'custom', customLabel: typed.text, note: typed.note }
+        : { type: ev.type, customLabel: ev.customLabel, note: ev.note };
+    if (isLegacyCensus(as)) { as.type = 'census'; delete as.customLabel; }
+    return [as.type, ev.date ?? '', contentKey(ev.place), contentKey(as.customLabel), contentKey(as.note)].join('\u0001');
 }
 
 /**

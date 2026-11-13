@@ -29,8 +29,9 @@ import { normalizeSha256 } from './sha256.js';
 import { sourceReadState } from './source-confirm.js';
 import { regionHeader, regionToStored } from './originals.js';
 import { strings } from './strings.js';
-import { COUPLE_EVENT_TAG, eventIsShareable, eventValueIsOnTag, isCoupleEventType, sortCoupleEvents } from './events.js';
+import { COUPLE_EVENT_TAG, censusTypeText, eventIsShareable, eventValueIsOnTag, isCoupleEventType, sortCoupleEvents } from './events.js';
 import { allShareCopies, isValidShareId } from './shared-events.js';
+import { LINK_REJECTED_TAG } from './ged-shares.js';
 import { placeKey } from './places.js';
 import { GedcomNameParts, noName, PRIMARY_NAME_TAG, readGedcomName } from './gedcom-names.js';
 import { gedcomAge } from './recorded-age.js';
@@ -257,6 +258,37 @@ const GEDCOM_RELA: Record<ParticipantRole, string> = {
     officiant: 'Officiant',
     other: 'Present',
 };
+
+/**
+ * A godparent / witness at level 2 under its event. Someone in the tree goes
+ * out as ASSO pointing at their record; someone who is not (the usual case
+ * for a godparent) has no record to point at, so they go as _WITN with the
+ * name as written. Both carry the role in RELA. A participant linked to
+ * someone who is not in this export (cut out by a subtree export, removed by
+ * the privacy filter) and with no name of its own is left out: the linked
+ * person's name is deliberately NOT written instead, as that would put back
+ * what the filter took out. One recorded by
+ * name keeps the persons of the export the user said they are not
+ * (`3 _STROM_NOT_LINK @Ix@`, EventParticipant.linkRejected, read back by
+ * the parser) so the offer to link them is not made again.
+ */
+function pushParticipant(lines: string[], part: EventParticipant, personIdMap: ReadonlyMap<PersonId, string>): void {
+    const xref = part.personId ? personIdMap.get(part.personId) : undefined;
+    if (xref) {
+        lines.push(`2 ASSO ${xref}`);
+    } else if (part.name) {
+        pushWrapped(lines, 2, '_WITN', part.name);
+    } else {
+        return;
+    }
+    lines.push(`3 RELA ${GEDCOM_RELA[part.role]}`);
+    if (part.note) pushNote(lines, 3, part.note);
+    if (xref) return;
+    for (const pid of new Set(part.linkRejected ?? [])) {
+        const rejected = personIdMap.get(pid);
+        if (rejected) lines.push(`3 ${LINK_REJECTED_TAG} ${rejected}`);
+    }
+}
 
 /** _FREL/_MREL values for the child's relationship to one parent. */
 const GEDCOM_CHILD_REL: Record<ParentChildRelType, string> = {
@@ -1602,12 +1634,16 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             // "Back to {prog}": the file's e-mail addresses go back as EMAIL,
             // out of the note while it still has their line (spec 066 K3.1).
             const backEvent = back.imports.size > 0 && isBackRecord(person);
+            // A census's kind another file wrote as its TYPE goes back as TYPE, out of the note
+            // while the note still begins with it (every export: GEDCOM has the place for it).
+            const typed = censusTypeText(fileEvent);
+            const ownEvent: LifeEvent = typed ? { ...fileEvent, note: typed.note } : fileEvent;
             // …and what it wrote on the event's line goes back there, its ADDR as written.
-            const { event: valued, value: lineValue } = backEvent ? lineValueBack(fileEvent) : { event: fileEvent, value: undefined };
+            const { event: valued, value: lineValue } = backEvent ? lineValueBack(ownEvent) : { event: ownEvent, value: undefined };
             const { event, emails } = backEvent ? emailsBack(valued) : { event: valued, emails: [] };
             const addressLines = backEvent ? addressBack(event) : null;
             const tag = EVENT_TYPE_TO_TAG[event.type];
-            let typeLabel: string | null = null;
+            let typeLabel: string | null = typed?.text ?? null;
             if (!tag) {
                 typeLabel = event.type === 'custom'
                     ? (event.customLabel || strings.gedcomNotes.genericEvent)
@@ -1650,26 +1686,8 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             if (event.note && !eventValueIsOnTag(event.type)) {
                 pushNote(lines, 2, event.note);
             }
-            // Godparents / witnesses. Someone in the tree goes out as ASSO
-            // pointing at their record; someone who is not (the usual case for
-            // a godparent) has no record to point at, so they go as _WITN with
-            // the name as written. Both carry the role in RELA.
-            for (const part of event.participants ?? []) {
-                const xref = part.personId ? personIdMap.get(part.personId) : undefined;
-                if (xref) {
-                    lines.push(`2 ASSO ${xref}`);
-                } else if (part.name) {
-                    pushWrapped(lines, 2, '_WITN', part.name);
-                } else {
-                    // Linked to someone who is not in this export — cut out by a
-                    // subtree export, or removed by the privacy filter. Their
-                    // name is deliberately NOT written out instead: if the
-                    // filter took them out, naming them here would put them back.
-                    continue;
-                }
-                lines.push(`3 RELA ${GEDCOM_RELA[part.role]}`);
-                if (part.note) pushNote(lines, 3, part.note);
-            }
+            // Godparents / witnesses (see pushParticipant).
+            for (const part of event.participants ?? []) pushParticipant(lines, part, personIdMap);
 
             // One event of several persons (spec 085): each copy carries the
             // share id, and the person's own role in it (`3 _ROLE`, the
@@ -1831,18 +1849,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         // Children (those only another record of the couple has go with it, see joined)
         // Witnesses at the wedding, written like the ones on an event: in
         // the tree → ASSO at their record, otherwise _WITN with the name.
-        const pushWitness = (part: EventParticipant): void => {
-            const xref = part.personId ? personIdMap.get(part.personId) : undefined;
-            if (xref) {
-                lines.push(`2 ASSO ${xref}`);
-            } else if (part.name) {
-                pushWrapped(lines, 2, '_WITN', part.name);
-            } else {
-                return;
-            }
-            lines.push(`3 RELA ${GEDCOM_RELA[part.role]}`);
-            if (part.note) pushNote(lines, 3, part.note);
-        };
+        const pushWitness = (part: EventParticipant): void => pushParticipant(lines, part, personIdMap);
         const pushChild = (childId: PersonId): void => {
             const childGedcomId = personIdMap.get(childId);
             if (childGedcomId) {
@@ -1997,18 +2004,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
                 pushWrapped(lines, 3, 'AGE', gedcomAge(age));
             }
             if (event.note) pushNote(lines, 2, event.note);
-            for (const part of event.participants ?? []) {
-                const xref = part.personId ? personIdMap.get(part.personId) : undefined;
-                if (xref) {
-                    lines.push(`2 ASSO ${xref}`);
-                } else if (part.name) {
-                    pushWrapped(lines, 2, '_WITN', part.name);
-                } else {
-                    continue;
-                }
-                lines.push(`3 RELA ${GEDCOM_RELA[part.role]}`);
-                if (part.note) pushNote(lines, 3, part.note);
-            }
+            for (const part of event.participants ?? []) pushParticipant(lines, part, personIdMap);
             for (const srcId of event.sourceIds ?? []) pushCitation(2, srcId, { holder: event, field: 'sourceIds' });
             pushFactImport(partnership, `event:${event.id}`);
             pushFactOrigin(partnership, `event:${event.id}`);

@@ -80,7 +80,7 @@ import { isPlaceRecordId, sanitizePlaceRecord, PLACE_TEXT_LIMITS } from './place
 import { coupleEventTypeOfTag, eventValueIsOnTag } from './events';
 import {
     applyShareMark, convertGedShares, isHouseholdShareRole, type PendingCoupleShars, type PendingPersonShars, type RawRoleAt,
-    type RawShareMark, roleAtEventId, roleAtEventType, roleAtRole, roleAtTypeOfTag, sharRoleWord,
+    type RawShareMark, roleAtEventId, roleAtEventType, roleAtRole, roleAtTypeOfTag, sharRoleWord, LINK_REJECTED_TAG,
 } from './ged-shares';
 import { cleanEventShares } from './shared-events';
 import { strings, getStringsForLang } from './strings';
@@ -172,6 +172,46 @@ function participantNote(rela: string | undefined, role: ParticipantRole, note: 
  * what they are recorded as; an explicit 3 RELA read later overwrites it.
  */
 const WITNESS_RELA = 'witness';
+
+/**
+ * GEDCOM 7 writes the role under an ASSO as an enumeration (`3 ROLE GODP`),
+ * where 5.5.1 had free text in RELA. The ones the app has a role for are
+ * read as the RELA word relaToRole maps; another (FATH, NGHBR, OTHER…)
+ * keeps its name in the participant's note (gedcomNotes.assoRoles), or the
+ * text its `PHRASE` gives (`3 ROLE OTHER` / `4 PHRASE Midwife`).
+ */
+const GEDCOM7_ROLE_RELA: Readonly<Record<string, string>> = {
+    GODP: 'godparent', WITN: 'witness', CLERGY: 'clergy', OFFICIATOR: 'officiant',
+};
+
+/** `@VOID@`: GEDCOM 7's pointer to no record (the ASSO's PHRASE then names the person). */
+const VOID_POINTER = '@VOID@';
+
+/**
+ * A line under a participant (`ASSO` / `_WITN` at `level - 1`): the role
+ * (5.5.1 RELA, GEDCOM 7 ROLE), a note, the name a pointer to no record has
+ * in its PHRASE, the persons they are not. Returns the open ROLE when the
+ * line was one, so a PHRASE under it can give its text.
+ */
+function readParticipantLine(part: RawParticipant, tag: string, value: string): RawParticipant | null {
+    const text = value.trim();
+    if (tag === 'RELA') part.rela = value;
+    else if (tag === 'NOTE') part.note = value;
+    else if (tag === 'ROLE' && text) {
+        const role = text.toUpperCase();
+        part.role7 = role;
+        part.rela = GEDCOM7_ROLE_RELA[role] ?? (role === 'OTHER' ? 'other' : strings.gedcomNotes.assoRoles[role] ?? text);
+        return part;
+    } else if (tag === 'PHRASE' && text && part.ref === VOID_POINTER && !part.name) part.name = text;
+    else if (tag === LINK_REJECTED_TAG && text) (part.rejected ??= []).push(text);
+    return null;
+}
+
+/** A PHRASE under a participant's GEDCOM 7 ROLE: the role's own words, unless the role is one the app has. */
+function readRolePhrase(part: RawParticipant, value: string): void {
+    const text = value.trim();
+    if (text && !GEDCOM7_ROLE_RELA[part.role7 ?? '']) part.rela = text;
+}
 
 /**
  * A raw _STORY block becomes a Story. STAT is the author's workflow state in
@@ -1182,6 +1222,8 @@ interface RawEvent {
     participants?: RawParticipant[];
     /** `1 EVEN value`: the value on the tag line, kept when a TYPE takes the label. */
     tagValue?: string;
+    /** `2 TYPE` under a census: what kind of census it was (LifeEvent.gedcomType). */
+    typeText?: string;
     /** 2 _STROM_STATUS: the research's status of the event. */
     status?: FactStatus;
     /** 2 EMAIL under the event as written (LifeEvent.gedcomEmails). */
@@ -1309,6 +1351,10 @@ interface RawParticipant {
     /** RELA value as written, mapped to a role later. */
     rela?: string;
     note?: string;
+    /** GEDCOM 7 `ROLE` enumeration as read (upper case), see readParticipantLine. */
+    role7?: string;
+    /** `_STROM_NOT_LINK` pointers: the persons of the file this participant is not. */
+    rejected?: string[];
 }
 
 /** A level-1 `_XXX` of another program with the lines under it, as the file wrote them (spec 066 G8). */
@@ -3056,6 +3102,15 @@ export function parseGedcom(content: string): ParsedGedcom {
      */
     let openShare: { level: number; sub?: string; share?: RawShareMark; roleAt?: RawRoleAt; part?: RawParticipant } | null = null;
     /**
+     * A participant's GEDCOM 7 `ROLE` just read (`3 ROLE OTHER` under an
+     * ASSO), at its level: the `PHRASE` under it is the role's own words.
+     */
+    let openRole: { level: number; part: RawParticipant } | null = null;
+    const participantLine = (part: RawParticipant, level: number, tag: string, value: string): typeof openRole => {
+        const role = readParticipantLine(part, tag, value);
+        return role ? { level, part: role } : null;
+    };
+    /**
      * The id lines being read (spec 066 K3.2): under `1 _STROM_IMPORT Ix` of a
      * Strom file (`entry`), or the `2 TYPE` of a level-1 `EXID`. Its deeper
      * lines are read here and nowhere else.
@@ -3475,6 +3530,11 @@ export function parseGedcom(content: string): ParsedGedcom {
         if (openPending && level <= openPending.level) openPending = null;
         if (openPending) {
             if (level === openPending.level + 1 && tag === '_POS' && openPending.verify) openPending.verify.position = value.trim();
+            continue;
+        }
+        if (openRole && level <= openRole.level) openRole = null;
+        if (openRole) {
+            if (level === openRole.level + 1 && tag === 'PHRASE') readRolePhrase(openRole.part, value);
             continue;
         }
         if (openShare && level <= openShare.level) openShare = null;
@@ -4525,10 +4585,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                     } else if (currentSubTag === 'ASSO') {
                         // Role/detail of the person-level association just read.
                         const last = indi.assos[indi.assos.length - 1];
-                        if (last) {
-                            if (tag === 'RELA') last.rela = value;
-                            else if (tag === 'NOTE') last.note = value;
-                        }
+                        if (last) openRole = participantLine(last, level, tag, value);
                     } else if (currentSubTag === 'OBJE' && currentMedia) {
                         currentMediaSubTag = tag;
                         if (tag === 'TITL') currentMedia.title = value;
@@ -4570,6 +4627,13 @@ export function parseGedcom(content: string): ParsedGedcom {
                                 if (!stromResearch) currentEvent.lineValue = tagValue;
                                 delete currentEvent.tagValue;
                             }
+                        }
+                        // 1 CENS / 2 TYPE Census of Bohemia: the kind of census,
+                        // which the event's type does not say. It becomes the
+                        // first line of the note (convertToStrom), as it was the
+                        // label of a custom event before the census had a type.
+                        else if (tag === 'TYPE' && currentEvent.type === 'census' && value.trim()) {
+                            currentEvent.typeText = currentEvent.typeText ? `${currentEvent.typeText} ${value.trim()}` : value.trim();
                         }
                         else if (tag === '_STROM_STATUS') currentEvent.status = parseFactStatus(value);
                         else if (tag === 'SOUR' && value) {
@@ -4722,10 +4786,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                 } else if (currentFactSubTag === 'ASSO' || currentFactSubTag === '_WITN'
                     || currentFactSubTag === 'WITN') {
                     const last = parts?.[parts.length - 1];
-                    if (last) {
-                        if (tag === 'RELA') last.rela = value;
-                        else if (tag === 'NOTE') last.note = value;
-                    }
+                    if (last) openRole = participantLine(last, level, tag, value);
                 } else if (currentFactSubTag === 'NOTE' && (tag === 'CONT' || tag === 'CONC')) {
                     const sep = tag === 'CONT' ? '\n' : '';
                     if (indi) indi.notes += sep + value;
@@ -4742,10 +4803,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                     || currentEventSubTag === 'WITN')) {
                 // The role (and any detail) of the godparent/witness just read.
                 const last = currentEvent.participants?.[currentEvent.participants.length - 1];
-                if (last) {
-                    if (tag === 'RELA') last.rela = value;
-                    else if (tag === 'NOTE') last.note = value;
-                }
+                if (last) openRole = participantLine(last, level, tag, value);
             } else if (level === 3 && currentType === 'FAM' && currentFamEvent) {
                 // Under a couple's event: a note's continuation, a witness's
                 // role, a citation's page and quality.
@@ -4755,10 +4813,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                     ev.note = (ev.note ?? '') + (tag === 'CONT' ? '\n' : '') + value;
                 } else if (sub === 'ASSO' || sub === '_WITN' || sub === 'WITN') {
                     const last = ev.participants?.[ev.participants.length - 1];
-                    if (last) {
-                        if (tag === 'RELA') last.rela = value;
-                        else if (tag === 'NOTE') last.note = value;
-                    }
+                    if (last) openRole = participantLine(last, level, tag, value);
                 } else if (sub === 'SOUR' && currentCitationId) {
                     if (tag === 'PAGE') {
                         citePage(value);
@@ -5272,6 +5327,9 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
     // Create ID mappings (only for valid individuals)
     const personIdMap = new Map<string, PersonId>();
     const partnershipIdMap = new Map<string, PartnershipId>();
+    /** The persons a participant recorded by name is not (`_STROM_NOT_LINK`), those the file has. */
+    const rejectedOf = (raw: RawParticipant): PersonId[] =>
+        [...new Set((raw.rejected ?? []).flatMap(ref => personIdMap.get(ref) ?? []))];
 
     // Generate new IDs
     for (const [gedId] of validIndividuals) {
@@ -5362,12 +5420,14 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
             if (!linked && !raw.name) return null;
             const role = relaToRole(raw.rela);
             const note = participantNote(raw.rela, role, raw.note);
+            const rejected = linked ? [] : rejectedOf(raw);
             return {
                 id: generateParticipantId(),
                 role,
                 ...(linked ? { personId: linked } : {}),
                 ...(raw.name ? { name: raw.name } : {}),
                 ...(note ? { note } : {}),
+                ...(rejected.length > 0 ? { linkRejected: rejected } : {}),
             };
         };
 
@@ -5388,6 +5448,11 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
                 }
                 if (ev.addressLines && ev.addressValue && ev.address === ev.addressValue) {
                     out.gedcomAddress = { value: ev.addressValue, lines: ev.addressLines };
+                }
+                // The census's TYPE heads its note and goes back as TYPE.
+                if (ev.typeText && out.type === 'census') {
+                    out.note = out.note ? `${ev.typeText}\n${out.note}` : ev.typeText;
+                    out.gedcomType = ev.typeText;
                 }
                 const evRefs = mapRefs(ev.sourceRefs);
                 if (evRefs.length > 0) out.sourceIds = evRefs;
@@ -5425,10 +5490,11 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         // in this model, so a godparent joins the baptism when the person has
         // one; every other association survives as a note on the person rather
         // than being silently dropped. Unresolvable refs are dropped for the
-        // same reason as event participants above.
+        // same reason as event participants above; GEDCOM 7's pointer to no
+        // record with the name in its PHRASE is someone recorded by name.
         for (const asso of indi.assos) {
             const linked = asso.ref ? personIdMap.get(asso.ref) : undefined;
-            if (!linked) continue;
+            if (!linked && !asso.name) continue;
             const role = relaToRole(asso.rela);
             const baptism = role === 'godparent'
                 ? person.events?.find(e => e.type === 'baptism') : undefined;
@@ -5436,12 +5502,12 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
                 (baptism.participants ??= []).push({
                     id: generateParticipantId(),
                     role,
-                    personId: linked,
+                    ...(linked ? { personId: linked } : { name: asso.name }),
                     ...(asso.note ? { note: asso.note } : {}),
                 });
             } else {
-                const other = individuals.get(asso.ref!);
-                const name = `${other?.firstName ?? ''} ${other?.lastName ?? ''}`.trim() || '?';
+                const other = linked ? individuals.get(asso.ref!) : undefined;
+                const name = (other ? `${other.firstName ?? ''} ${other.lastName ?? ''}`.trim() : asso.name ?? '') || '?';
                 const label = asso.rela?.trim() || role;
                 const line = strings.gedcomNotes.association(name, label)
                     + (asso.note ? ` — ${asso.note}` : '');
@@ -5665,12 +5731,14 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         if (!linked && !raw.name) return null;
         const role = relaToRole(raw.rela);
         const note = participantNote(raw.rela, role, raw.note);
+        const rejected = linked ? [] : rejectedOf(raw);
         return {
             id: generateParticipantId(),
             role,
             ...(linked ? { personId: linked } : {}),
             ...(raw.name ? { name: raw.name } : {}),
             ...(note ? { note } : {}),
+            ...(rejected.length > 0 ? { linkRejected: rejected } : {}),
         };
     };
 

@@ -43,7 +43,7 @@ import {
     QualityDismissal,
     SurnameRejection,
 } from './types.js';
-import { isCoupleEventType } from './events.js';
+import { convertLegacyCensusEvents, isCoupleEventType } from './events.js';
 import { sanitizeGedcomDates } from './gedcom-date-form.js';
 import { strings, getCurrentLanguage, getStringsForLang, SUPPORTED_LANGUAGES } from './strings.js';
 import { TreeManager } from './tree-manager.js';
@@ -292,8 +292,10 @@ export function migrateData(data: unknown): StromData {
     // the citation; then only valid own QUAY of citations still cited stay.
     if ((typeof d.version === 'number' ? d.version : 1) < 19) joinQualityOnlySources(result);
     cleanTreeCitationQuay(result);
-    // v20 (spec 085): only valid shares of events shared by two copies or
-    // more, valid roles at another's event; nothing is joined.
+    // v20 (spec 085): a person's custom event named only "Census" (an older
+    // import's `1 CENS`) is a census; then only valid shares of events shared
+    // by two copies or more, valid roles at another's event; nothing is joined.
+    if ((typeof d.version === 'number' ? d.version : 1) < 20) convertLegacyCensusEvents(result);
     cleanEventShares(result);
 
     // Photos/attachments/excerpts must be image (or PDF) data URLs — anything

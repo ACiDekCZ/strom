@@ -254,6 +254,13 @@ export interface LifeEvent {
      */
     gedcomValue?: string;
     /**
+     * What kind of census another program's file wrote (`1 CENS` /
+     * `2 TYPE Census of Bohemia`), as written. It is the first line of the
+     * note, which is what the app shows; the GEDCOM export writes it as
+     * `2 TYPE` again while the note still begins with it.
+     */
+    gedcomType?: string;
+    /**
      * The event's ADDR as the file wrote it, from `2 ADDR` with the lines
      * under it (`3 ADR1 Ulice 5`), and the address the import read from it.
      * "Back to {prog}" writes those lines while the address is still that one.

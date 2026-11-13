@@ -4,7 +4,7 @@
  * read-only in the UI, synthesized from those fields.
  */
 
-import { CoupleEvent, CoupleEventType, LifeEvent, LifeEventType } from './types.js';
+import { CoupleEvent, CoupleEventType, LifeEvent, LifeEventType, StromData } from './types.js';
 import { dateSortKey, parseFlexDate, yearFraction, yearOf } from './dates.js';
 import { strings } from './strings.js';
 
@@ -247,4 +247,57 @@ export function sortCoupleEvents(events: readonly CoupleEvent[]): CoupleEvent[] 
             return order(a.event) - order(b.event) || a.index - b.index;
         })
         .map(x => x.event);
+}
+
+// ==================== CENSUS ====================
+
+/**
+ * The names a person's `1 CENS` got up to Strom 3.27, when the census had no
+ * type of a person's own and the import made it a custom event named in the
+ * language of the app (strings.gedcomNotes.census of en, cs, de, pl then;
+ * the same words as the census type's name now). A `2 TYPE` under it gave
+ * the custom event its text instead, which a custom event of another file's
+ * `1 EVEN` / `2 TYPE` gets too, so those are left as they are.
+ */
+const LEGACY_CENSUS_LABELS: ReadonlySet<string> = new Set(['census', 'sčítání lidu', 'volkszählung', 'spis ludności']);
+
+/** Whether a custom event is a census an older import read (see LEGACY_CENSUS_LABELS). */
+export function isLegacyCensus(ev: Pick<LifeEvent, 'type' | 'customLabel'>): boolean {
+    return ev.type === 'custom' && typeof ev.customLabel === 'string'
+        && LEGACY_CENSUS_LABELS.has(ev.customLabel.normalize('NFC').trim().toLowerCase());
+}
+
+/**
+ * Data version 20: a person's custom event named only "Census" (in one of
+ * the app's languages: an older import's `1 CENS`, or one written by hand
+ * when the census was no type of a person's own) becomes a census. Its date,
+ * place, age, house, note, citations and participants stay as they are; only
+ * the type and the label (the census type's name) change, so the same file
+ * loaded again pairs with it. Returns how many events changed.
+ */
+export function convertLegacyCensusEvents(data: StromData): number {
+    let changed = 0;
+    for (const person of Object.values(data.persons ?? {})) {
+        if (!person || !Array.isArray(person.events)) continue;
+        for (const ev of person.events) {
+            if (!ev || typeof ev !== 'object' || !isLegacyCensus(ev) || ev.roleAt) continue;
+            ev.type = 'census';
+            delete ev.customLabel;
+            changed++;
+        }
+    }
+    return changed;
+}
+
+/**
+ * A census's `2 TYPE` while its note still begins with it
+ * (LifeEvent.gedcomType): the text, and the rest of the note; null when the
+ * event has none or its note no longer starts with it.
+ */
+export function censusTypeText(ev: Pick<LifeEvent, 'type' | 'note' | 'gedcomType'>): { text: string; note?: string } | null {
+    const text = ev.gedcomType;
+    if (ev.type !== 'census' || typeof text !== 'string' || !text.trim() || typeof ev.note !== 'string') return null;
+    if (ev.note !== text && !ev.note.startsWith(`${text}\n`)) return null;
+    const rest = ev.note.slice(text.length).replace(/^\n/, '');
+    return { text, ...(rest.trim() ? { note: rest } : {}) };
 }

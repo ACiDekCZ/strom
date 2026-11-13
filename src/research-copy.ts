@@ -13,6 +13,7 @@ import { baseCopy, markOlderCopy } from './research-changes.js';
 import { unknownSexFromTie } from './research-link.js';
 import { joinQualityOnlySources } from './citation-quality.js';
 import { cleanEventShares } from './shared-events.js';
+import { convertLegacyCensusEvents } from './events.js';
 import { RESEARCH_COPY_FP_KEY, RESEARCH_PREV_COPY_FP_KEY } from './storage-keys.js';
 
 const key = (treeId: string): string => `research-base:${treeId}`;
@@ -99,7 +100,8 @@ export async function unknownSexInResearchCopies(treeId: string, sexU: unknown):
 /**
  * Data version 19 for the kept copies (spec 077 K1.5): the sources made only
  * for another QUAY join their entry in them as in the tree (the same ids), so
- * the changes per person do not show the joined citations as the user's. A
+ * the changes per person do not show the joined citations as the user's; and
+ * data version 20: an older import's custom "Census" is a census there too. A
  * copy kept for a fingerprint the tree's followed (`moved`: before → after)
  * stands for the new one after it, here and in the fingerprint this browser
  * keeps for it (localStorage, read to find the copy); any other keeps its own.
@@ -109,7 +111,9 @@ export async function rebaseResearchCopies(treeId: string, moved: ReadonlyMap<st
         try {
             const kept = await loadBaseline(k) as KeptCopy | null;
             if (kept) {
-                const joined = joinQualityOnlySources(kept) > 0;
+                // Data version 20: the older imports' censuses as in the tree (once, here: a copy
+                // the research gives later may hold a custom event named so the tree has too).
+                const joined = joinQualityOnlySources(kept) + convertLegacyCensusEvents(kept) > 0;
                 const to = kept.copyFp !== undefined ? moved.get(kept.copyFp) : undefined;
                 if (to !== undefined) kept.copyFp = to;
                 if (joined || to !== undefined) await saveBaseline(k, k, kept, Date.now());
