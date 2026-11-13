@@ -19364,9 +19364,19 @@
         body.overview-docked #tree-container { right: var(--overview-w); }
         body.overview-docked .control-block { right: calc(var(--overview-w) + 24px); }
         body.overview-docked .evidence-pill { left: calc((100vw - var(--overview-w)) / 2); }
+        /* The notices at the bottom stand over the tree beside the docked overview (Do next's over the overview, below),
+           and beside the 400 px overlay while the tree keeps room for them (from 768 px). */
+        body.overview-docked .toast { left: calc((100vw - var(--overview-w)) / 2); max-width: calc(100vw - var(--overview-w) - 24px); box-sizing: border-box; }
+        @media (min-width: 768px) {
+            body:has(> .research-overview--overlay) .toast { left: calc((100vw - 412px) / 2); max-width: calc(100vw - 436px); box-sizing: border-box; }
+        }
         .research-overview--overlay {
             top: 64px; right: 12px; bottom: 12px; width: 400px; max-width: calc(100vw - 24px); z-index: 101;
             border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--shadow-lg);
+        }
+        /* A tablet: the overview ends above the bottom bar, its footer (Missing evidence, Open research) in view. */
+        @media (max-width: 1024px) {
+            .research-overview--overlay { bottom: calc(var(--bottom-bar-h, 0px) + 12px); }
         }
         .research-overview--sheet { inset: 0; z-index: 1000; }
         @media (prefers-reduced-motion: reduce) { .research-overview--docked { animation: none; } }
@@ -20619,14 +20629,19 @@
             body.overview-docked .toast[data-kind="queue-next"] { bottom: 56px; }
             body:has(> .research-overview--overlay) .toast[data-kind="queue-next"] { bottom: 68px; }
         }
+        /* A tablet: as high over the overview's footer, which ends above the bottom bar. */
+        @media (min-width: 641px) and (max-width: 1024px) {
+            body:has(> .research-overview--overlay) .toast[data-kind="queue-next"] { bottom: calc(var(--bottom-bar-h, 0px) + 68px); }
+        }
         @media (pointer: coarse) {
             .toast[data-kind="queue-next"] .toast-action { min-height: 44px; padding: 0 4px; }
         }
-        /* A phone, with queue.next: the ⋯ is a sheet at the bottom titled by the task. */
+        /* A phone, with queue.next: the ⋯ is the app's bottom sheet (handle, darkened backdrop) titled by the task. */
         .live-task-menu--sheet {
-            left: 0; right: 0; bottom: 0; top: auto; min-width: 0; max-height: 70vh; z-index: 1050;
-            border-radius: 14px 14px 0 0; padding: 4px 0 calc(8px + env(safe-area-inset-bottom, 0px));
+            position: relative; inset: auto; min-width: 0; max-height: 70vh; z-index: auto; animation: none;
+            border-radius: 14px 14px 0 0; padding: 0 0 calc(8px + env(safe-area-inset-bottom, 0px));
         }
+        .live-task-menu--sheet > .bottom-sheet-handle { margin: 6px auto 0; }
         .live-task-menu__title {
             padding: 12px 16px 8px; font-size: 14px; font-weight: 600; color: var(--text);
             border-bottom: 1px solid var(--divider); overflow-wrap: anywhere;
@@ -21045,6 +21060,9 @@
         }
         @media (max-width: 640px) {
             .research-overview__queue-result { font-size: 13px; }
+            /* A phone: the queue's chips wrap onto more rows (1w/4b), none out of sight beside the others. */
+            .research-overview .research-overview__queue-filters { flex-wrap: wrap; overflow-x: visible; }
+            .research-overview .research-overview__queue-filters > * { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         }
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .research-overview__queue-search { margin: 2px 0 4px; }

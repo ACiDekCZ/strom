@@ -4453,7 +4453,7 @@ export const researchUiMethods = uiModule({
         if (!s.ended && s.spend && !phone) this.appendSpendFoot(panel, s.spend);
         placeLivePanel(panel);
         const again = menuTask ? panel.querySelector<HTMLElement>(`.live-queue-more[data-task="${menuTask}"]`) : null;
-        if (again && menuTask) this.openLiveTaskMenu(again, menuTask);
+        if (again && menuTask) this.openLiveTaskMenu(again, menuTask, true);
         // Too tall for the window: fold from the bottom up (by default Up next, then Changes, then Working;
         // never Waiting, never a section with a choice: one kept expanded makes the panel scroll). Not remembered.
         if (!collapsed && !panel.hidden && body.scrollHeight > body.clientHeight + 1) {
@@ -4997,8 +4997,11 @@ export const researchUiMethods = uiModule({
         if (url) this.launchResearchLink(url);
     },
 
-    /** The small ⋯ menu of a queued task: Park / Drop (in the research). Escape or a click elsewhere closes it. */
-    openLiveTaskMenu(anchor: HTMLElement, task: string): void {
+    /**
+     * The small ⋯ menu of a queued task: Park / Drop (in the research). Escape or a click elsewhere closes it.
+     * `again`: drawn anew after a panel redraw (a phone's sheet stands at once, without sliding up again).
+     */
+    openLiveTaskMenu(anchor: HTMLElement, task: string, again = false): void {
         const wasOpen = document.getElementById('live-task-menu')?.dataset.task === task;
         this.closeLiveTaskMenu();
         if (wasOpen) return;
@@ -5015,7 +5018,11 @@ export const researchUiMethods = uiModule({
         // On a phone, with `queue.next`: a sheet at the bottom titled by the task.
         const sheet = nextOn && !!q && window.matchMedia('(max-width: 640px)').matches;
         if (sheet && q) {
-            menu.classList.add('live-task-menu--sheet');
+            // The app's bottom sheet: its handle on top, over a darkened window (bottom-sheet.ts).
+            menu.classList.add('live-task-menu--sheet', 'bottom-sheet');
+            const handle = el('div', 'bottom-sheet-handle');
+            handle.setAttribute('aria-hidden', 'true');
+            menu.appendChild(handle);
             const title = el('div', 'live-task-menu__title');
             title.append(el('span', 'live-task-menu__num', q.id), document.createTextNode(` ${q.text}`));
             menu.appendChild(title);
@@ -5061,7 +5068,19 @@ export const researchUiMethods = uiModule({
             };
             menu.appendChild(item);
         }
-        document.body.appendChild(menu);
+        // A phone's sheet: over the app's darkened backdrop; a tap on it closes the sheet (focus back on the ⋯).
+        const backdrop = sheet ? el('div', 'bottom-sheet-overlay live-task-sheet') : null;
+        if (backdrop) {
+            backdrop.appendChild(menu);
+            backdrop.addEventListener('click', (e) => {
+                if (e.target !== backdrop) return;
+                this.closeLiveTaskMenu();
+                anchor.focus({ preventScroll: true });
+            });
+            if (again) backdrop.classList.add('active');
+            document.body.appendChild(backdrop);
+            if (!again) requestAnimationFrame(() => backdrop.classList.add('active'));
+        } else document.body.appendChild(menu);
         anchor.setAttribute('aria-expanded', 'true');
         if (!sheet) {
             const rect = anchor.getBoundingClientRect();
@@ -5086,6 +5105,8 @@ export const researchUiMethods = uiModule({
             }
         };
         const onDown = (e: Event): void => {
+            // A sheet's backdrop closes it on its click (a press there alone would let the click fall through).
+            if (backdrop && e.target === backdrop) return;
             if (!menu.contains(e.target as Node)) this.closeLiveTaskMenu();
         };
         document.addEventListener('keydown', onKey, true);
@@ -5104,7 +5125,8 @@ export const researchUiMethods = uiModule({
     closeLiveTaskMenu(): void {
         liveTaskMenuCleanup?.();
         liveTaskMenuCleanup = null;
-        document.getElementById('live-task-menu')?.remove();
+        const menu = document.getElementById('live-task-menu');
+        (menu?.parentElement?.classList.contains('live-task-sheet') ? menu.parentElement : menu)?.remove();
     },
 
     /** "Agent this month: 4 sessions · $3.20" at the foot of the panel, (research) to the sessions. */

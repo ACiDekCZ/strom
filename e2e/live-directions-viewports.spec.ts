@@ -130,6 +130,22 @@ test.describe('directions on every screen', () => {
         expect(directionWrites(b)[1]).toMatchObject({ body: { order: ['G0002', 'G0001', 'G0004', 'G0006'] } });
     });
 
+    test('1440 docked: the toast of the opening stands over the tree beside the overview, never over it', async ({ page }) => {
+        await follow(page, { width: 1440, height: 900 });
+        await openOverview(page);
+        await expect(overview(page)).toHaveClass(/research-overview--docked/);
+        // "Research … opened from Strom Research — 4 persons …" stays a few seconds.
+        const t = page.locator('.toast.show').filter({ hasText: 'Strom Research' });
+        await expect(t).toBeVisible();
+        const ov = (await overview(page).boundingBox())!;
+        const tree = (await page.locator('#tree-container').boundingBox())!;
+        const box = (await t.boundingBox())!;
+        expect(box.x).toBeGreaterThanOrEqual(tree.x);
+        expect(box.x + box.width).toBeLessThanOrEqual(ov.x - 12);
+        // In the middle of the tree's part of the window.
+        expect(Math.abs(box.x + box.width / 2 - (tree.x + tree.width / 2))).toBeLessThanOrEqual(1);
+    });
+
     test('1100: the 400 px overlay, the handle on hover, ⋯ 28 px, no ▲▼', async ({ page }) => {
         await follow(page, { width: 1100, height: 800 });
         await openOverview(page);
@@ -215,6 +231,33 @@ test.describe('directions on every screen', () => {
             await expect(page.locator('#research-directions-live')).toHaveText('Předci: Anna Svobodová, 2 of 4');
             await expect.poll(() => directionWrites(b).length).toBe(1);
             await noSideways(page, '820');
+        });
+
+        test('1024 tablet: the 400 px overlay ends above the bottom bar, its footer (Missing evidence, Open research) in view', async ({ page }) => {
+            await follow(page, { width: 1024, height: 768 });
+            await openOverview(page);
+            await expect(overview(page)).toHaveClass(/research-overview--overlay/);
+            const bar = page.locator('.bottom-bar');
+            await expect(bar).toBeVisible();
+            const barTop = (await bar.boundingBox())!.y;
+            const ov = (await overview(page).boundingBox())!;
+            expect(ov.y + ov.height).toBeLessThanOrEqual(barTop);
+            const foot = overview(page).locator('.research-overview__foot');
+            await expect(foot).toBeVisible();
+            const f = (await foot.boundingBox())!;
+            expect(f.y + f.height).toBeLessThanOrEqual(barTop);
+            // The toast of the opening beside it, over the tree: neither on the footer nor on the overview.
+            const t = page.locator('.toast.show').filter({ hasText: 'Strom Research' });
+            await expect(t).toBeVisible();
+            const tb = (await t.boundingBox())!;
+            expect(tb.x).toBeGreaterThanOrEqual(0);
+            expect(tb.x + tb.width).toBeLessThanOrEqual(ov.x);
+            // Its links take a tap there (neither the bar nor a toast covers them).
+            for (const link of await foot.locator('button, a').all()) {
+                const r = (await link.boundingBox())!;
+                const hit = await page.evaluate(([x, y]) => !!document.elementFromPoint(x, y)?.closest('.research-overview__foot'), [r.x + r.width / 2, r.y + r.height / 2]);
+                expect(hit, await link.textContent() ?? '').toBe(true);
+            }
         });
 
         test('390 the app on a phone without the bridge: read only, one sentence, a tap shows the direction in the tree', async ({ page }) => {

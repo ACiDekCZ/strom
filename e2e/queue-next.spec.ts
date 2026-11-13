@@ -268,7 +268,7 @@ test.describe('Do next with queue.next', () => {
         await expect.poll(() => b.queueReads.filter(q => q.includes('q=')).length).toBeGreaterThan(1);
     });
 
-    for (const width of [1440, 1200]) {
+    for (const width of [1440, 1200, 1024]) {
         test(`its toast over the overview stands clear of the overview's footer (${width} px)`, async ({ page }) => {
             await followManaged(page, { features: NEXT, queue: QUEUE, size: { width, height: 860 } });
             await openOverview(page);
@@ -310,10 +310,11 @@ test.describe('Do next with queue.next', () => {
         const m = menu(page);
         await expect(m).toHaveClass(/live-task-menu--sheet/);
         await expect(m.locator('.live-task-menu__title')).toHaveText('T0103 Pozemková kniha Smrkov');
-        const box = await m.boundingBox();
-        expect(box!.x).toBe(0);
-        expect(Math.round(box!.width)).toBe(390);
-        expect(Math.round(box!.y + box!.height)).toBe(844);
+        // Once slid up (the app's sheet rises into its place).
+        await expect.poll(async () => {
+            const box = (await m.boundingBox())!;
+            return [box.x, Math.round(box.width), Math.round(box.y + box.height)];
+        }).toEqual([0, 390, 844]);
         expect((await m.locator('[data-order="next"]').boundingBox())!.height).toBeGreaterThanOrEqual(52);
         expect((await m.locator('[data-action="park"]').boundingBox())!.height).toBeGreaterThanOrEqual(44);
         // Every row's text at its left, the research's Park / Drop as "Do next" (none centred).
@@ -330,6 +331,63 @@ test.describe('Do next with queue.next', () => {
             return document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)?.closest('#live-task-menu') !== null;
         });
         expect(top).toBe(true);
+    });
+
+    test('a phone: the ⋯ sheet over the app\'s darkened backdrop with its handle; a tap on the backdrop or Escape closes it, focus back on the ⋯', async ({ page }) => {
+        await followManaged(page, { features: NEXT, queue: QUEUE, size: { width: 390, height: 844 } });
+        await page.locator('#live-panel .live-panel-toggle').click();
+        await expect(overview(page)).toHaveClass(/research-overview--sheet/);
+        await unfoldQueue(page);
+        const more = row(page, 'T0103').locator('.live-queue-more');
+        await more.click();
+        const backdrop = page.locator('.bottom-sheet-overlay.live-task-sheet');
+        await expect(backdrop).toHaveClass(/\bactive\b/);
+        // The app's sheet: in the backdrop, its handle first, the title under it.
+        await expect(backdrop.locator('> #live-task-menu.bottom-sheet')).toBeVisible();
+        const handle = menu(page).locator('> .bottom-sheet-handle');
+        await expect(handle).toBeVisible();
+        expect(await menu(page).evaluate(m => m.firstElementChild?.classList.contains('bottom-sheet-handle'))).toBe(true);
+        const h = (await handle.boundingBox())!;
+        expect(Math.round(h.width)).toBe(40);
+        expect(h.y + h.height).toBeLessThanOrEqual((await menu(page).locator('.live-task-menu__title').boundingBox())!.y);
+        // The window darkened under it, over the overview's sheet.
+        await expect.poll(() => backdrop.evaluate(b => getComputedStyle(b).backgroundColor)).toBe('rgba(0, 0, 0, 0.35)');
+        const b = (await backdrop.boundingBox())!;
+        expect([b.x, b.y, Math.round(b.width), Math.round(b.height)]).toEqual([0, 0, 390, 844]);
+        await expect.poll(async () => {
+            const box = (await menu(page).boundingBox())!;
+            return [box.x, Math.round(box.width), Math.round(box.y + box.height)];
+        }).toEqual([0, 390, 844]);
+        // A tap on the darkened window above the sheet: closed, focus back on the ⋯.
+        await page.mouse.click(195, 80);
+        await expect(menu(page)).toHaveCount(0);
+        await expect(backdrop).toHaveCount(0);
+        await expect(more).toBeFocused();
+        await expect(more).toHaveAttribute('aria-expanded', 'false');
+        // Escape: the same.
+        await more.click();
+        await expect(menu(page).locator('[data-order="next"]')).toBeFocused();
+        await page.keyboard.press('Escape');
+        await expect(backdrop).toHaveCount(0);
+        await expect(more).toBeFocused();
+        // A tap in the sheet (its title) keeps it open.
+        await more.click();
+        await menu(page).locator('.live-task-menu__title').click();
+        await expect(menu(page)).toBeVisible();
+    });
+
+    test('a phone without queue.next: the ⋯ the small menu as before, no backdrop and no handle', async ({ page }) => {
+        await followManaged(page, { queue: QUEUE, size: { width: 390, height: 844 } });
+        await page.locator('#live-panel .live-panel-toggle').click();
+        await expect(overview(page)).toHaveClass(/research-overview--sheet/);
+        await unfoldQueue(page);
+        await row(page, 'T0103').locator('.live-queue-more').click();
+        await expect(menu(page)).toBeVisible();
+        await expect(menu(page)).not.toHaveClass(/live-task-menu--sheet|bottom-sheet/);
+        await expect(menu(page).locator('.bottom-sheet-handle, .live-task-menu__title')).toHaveCount(0);
+        await expect(page.locator('.bottom-sheet-overlay')).toHaveCount(0);
+        expect(await menu(page).evaluate(m => m.parentElement === document.body)).toBe(true);
+        expect(Math.round((await menu(page).boundingBox())!.width)).toBeLessThan(390);
     });
 });
 

@@ -462,17 +462,22 @@ test.describe('work outside the directions through the bridge', () => {
             const chip = overview(page).locator('.research-offline__chip');
             await expect(chip).toBeFocused();
             // The active narrowing first in the row, the row scrolled to its start: the whole chip in view.
+            // A phone: the chips wrap onto more rows (1w/4b), every one whole in view; a computer's row scrolls.
             const row = overview(page).locator('.research-overview__queue-filters');
+            const phone = size.width < 641;
             await expect.poll(() => row.evaluate((r) => {
                 const first = r.firstElementChild as HTMLElement;
                 const c = r.querySelector('.research-offline__chip')!.getBoundingClientRect();
                 const box = r.getBoundingClientRect();
+                const chips = [...r.children].map(k => k.getBoundingClientRect());
                 return {
                     first: first.classList.contains('research-offline__chip'),
                     wider: r.scrollWidth > r.clientWidth,
                     whole: r.scrollLeft === 0 && c.left >= box.left - 0.5 && c.right <= box.right + 0.5 && c.right <= window.innerWidth,
+                    rows: new Set(chips.map(k => Math.round(k.top))).size > 1,
+                    allIn: chips.every(k => k.left >= box.left - 0.5 && k.right <= box.right + 0.5),
                 };
-            })).toEqual({ first: true, wider: true, whole: true });
+            })).toEqual({ first: true, wider: !phone, whole: true, rows: phone, allIn: phone });
             await expect(chip).toHaveText('Branch Alois Fíšek 4 ×');
             await expect(row.locator('[role="radio"][aria-checked="true"]')).toHaveCount(0);
             // The same numbers as under the branch: the places in the whole queue.
