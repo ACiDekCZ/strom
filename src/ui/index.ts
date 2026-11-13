@@ -111,6 +111,7 @@ import { researchDirectionsMethods } from './research-directions-ui.js';
 import { overviewWindowMethods } from './overview-window-ui.js';
 import { directionFormMethods } from './direction-form-ui.js';
 import { researchOffLineMethods } from './research-offline-ui.js';
+import { queueWorkMethods } from './queue-work-dialog.js';
 import { liveFollowMethods } from './live-follow-ui.js';
 import { fanFollowMethods } from './fan-follow-ui.js';
 import { mapFollowMethods } from './map-follow-ui.js';
@@ -828,6 +829,10 @@ Object.assign(UIClass.prototype, directionFormMethods);
 type ResearchOffLineMethods = typeof researchOffLineMethods;
 export interface UIClass extends ResearchOffLineMethods {}
 Object.assign(UIClass.prototype, researchOffLineMethods);
+
+type QueueWorkMethods = typeof queueWorkMethods;
+export interface UIClass extends QueueWorkMethods {}
+Object.assign(UIClass.prototype, queueWorkMethods);
 
 type LiveFollowMethods = typeof liveFollowMethods;
 export interface UIClass extends LiveFollowMethods {}

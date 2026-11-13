@@ -27065,6 +27065,74 @@
         .live-section__headrow.live-section__headrow--m > h4.live-panel-heading { margin-top: 0; margin-bottom: 0; }
         .live-section__tail { flex: none; display: inline-flex; align-items: baseline; gap: 8px; margin-left: auto; }
         .live-section__tail > .live-lines-all { margin: 0; }
+        /* "Work on the queue…" (spec 052 §5): an outline button in the overview's Queue heading (28 px, touch 44 px),
+           or "● At work ›" while the research works; the dialog 460 px wide, 10 % of the height from the top. */
+        .live-section__tail > .queue-work-btn {
+            display: inline-flex; align-items: center; gap: 0; height: 28px; padding: 0 10px; margin: 0;
+            border: 1px solid var(--border); border-radius: 8px; background: var(--card-bg); color: var(--text);
+            font: inherit; font-size: 12.5px; font-weight: 500; line-height: 1; white-space: nowrap; cursor: pointer; align-self: center;
+        }
+        .live-section__tail > .queue-work-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .live-section__tail > .queue-work-busy {
+            display: inline-flex; align-items: center; gap: 6px; min-height: 28px; margin: 0; padding: 0;
+            font-size: 12.5px; color: var(--primary); white-space: nowrap; align-self: center;
+        }
+        .queue-work-busy .queue-work-busy__text { text-decoration: underline; text-underline-offset: 2px; }
+        .queue-work-busy .queue-work-busy__go { text-decoration: none; }
+        .queue-work-busy__dot {
+            flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--primary);
+            box-shadow: 0 0 0 3px var(--primary-soft);
+        }
+        .queue-work-busy:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 2px; }
+        @media (hover: hover) {
+            .live-section__tail > .queue-work-btn:hover { border-color: var(--primary); color: var(--primary); }
+            .queue-work-busy:hover .queue-work-busy__text { text-decoration-thickness: 2px; }
+        }
+        @media (pointer: coarse) {
+            .live-section__tail > .queue-work-btn, .live-section__tail > .queue-work-busy { min-height: 44px; height: auto; }
+        }
+        #queue-work-modal { z-index: 190; align-items: flex-start; padding: clamp(12px, 10vh, 96px) 12px 12px; }
+        #queue-work-modal .modal.queue-work {
+            width: 460px; max-width: calc(100vw - 24px); min-width: 0; border-radius: 12px;
+            max-height: calc(100vh - clamp(12px, 10vh, 96px) - 12px);
+        }
+        .queue-work__opts { display: flex; flex-direction: column; gap: 8px; }
+        .modal label.queue-work__opt {
+            display: flex; align-items: flex-start; gap: 10px; margin: 0; padding: 8px 10px; font-weight: 400;
+            border: 1px solid var(--border); border-radius: 8px; cursor: pointer;
+        }
+        .modal label.queue-work__opt.is-on { border-color: var(--primary); background: var(--primary-soft); }
+        .queue-work__opt:has(input[type="radio"]:focus-visible) { box-shadow: var(--shadow-focus); }
+        .modal .queue-work__opt input[type="radio"] { flex: none; width: 16px; height: 16px; margin: 2px 0 0; accent-color: var(--primary); }
+        .queue-work__opt-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .queue-work__opt-title { font-size: 14px; font-weight: 600; color: var(--text); line-height: 1.4; }
+        .modal .queue-work__opt-title input.queue-work__count {
+            width: 64px; height: 30px; margin: 0 4px; padding: 0 6px; font: inherit; font-weight: 600; text-align: center;
+            display: inline-block; vertical-align: middle;
+        }
+        .modal .queue-work__count[aria-invalid="true"] { border-color: var(--danger); }
+        .queue-work__opt-hint { font-size: 12.5px; line-height: 1.45; color: var(--text-light); }
+        .queue-work__nogate { font-size: 12.5px; line-height: 1.45; color: var(--warning-text); }
+        .queue-work__first {
+            margin-top: 14px; padding: 10px 12px; border: 1px solid var(--divider); border-radius: 8px; background: var(--surface-2);
+        }
+        .queue-work__first-label { font-size: 12px; color: var(--text-light); }
+        .queue-work__first-task { font-size: 14px; color: var(--text); line-height: 1.4; overflow-wrap: anywhere; }
+        .queue-work__session { margin-top: 4px; font-size: 12px; color: var(--text-light); }
+        #queue-work-modal .modal .buttons.queue-work__foot { flex-wrap: wrap; align-items: center; }
+        .queue-work__confirm { flex: 1 1 180px; margin: 0 auto 0 0; font-size: 12.5px; line-height: 1.45; color: var(--text-light); }
+        #queue-work-modal .modal .buttons.queue-work__foot > button { min-height: 34px; }
+        @media (pointer: coarse) {
+            .modal label.queue-work__opt { min-height: 44px; }
+            .modal .queue-work__opt-title input.queue-work__count { height: 44px; }
+            #queue-work-modal .modal .buttons.queue-work__foot > button { min-height: 44px; }
+        }
+        /* Narrow windows (the overview's own window) and phones: the sentence over the buttons. */
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            #queue-work-modal { padding: 12px; }
+            #queue-work-modal .modal.queue-work { max-height: calc(100vh - 24px); }
+            .queue-work__confirm { order: 1; flex-basis: auto; margin: 0; }
+        }
         /* ==== How Strom works: the help window (src/ui/help-ui.ts, 1105 §2–§8, §11) ====
            Above every other window (the Research overview, Places, the conflicts panel).
            Computer: 1040 × min(760, 100dvh − 48), the chapter list on the left of a chapter.

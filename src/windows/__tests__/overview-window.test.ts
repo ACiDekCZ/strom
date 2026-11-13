@@ -81,6 +81,9 @@ describe('the actions an overview window may ask for', () => {
         expect(readOverviewAction('direction-found', { directionId: 'D1' })).toEqual({ action: 'direction-found', args: { directionId: 'D1' } });
         expect(readOverviewAction('research-link', { link: 'chat', params: { tree: 'other', person: 'P0012' } }))
             .toEqual({ action: 'research-link', args: { link: 'chat', params: { person: 'P0012' } } });
+        // Work on the queue (spec 052 §5): the choice as text, the agent's toast in the main window.
+        expect(readOverviewAction('research-link', { link: 'work', params: { workDo: 'tasks', n: '7' }, kind: 'agent' }))
+            .toEqual({ action: 'research-link', args: { link: 'work', params: { workDo: 'tasks', n: '7' }, kind: 'agent' } });
         expect(readOverviewAction('queue-more', { filter: { state: 'next' }, slot: 'queue', seed: { items: [], total: 40 } }))
             .toEqual({ action: 'queue-more', args: { filter: { state: 'next' }, slot: 'queue', seed: { items: [], total: 40 } } });
         // A task's own place in the queue (K3 – S2 #1): written by the main window.

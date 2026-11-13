@@ -89,6 +89,10 @@ export interface ManagedBridge {
      * puts it back, a task the agent works on is refused (409 `queue.doing`).
      */
     queueNext?: { base: string[]; at: Map<string, string>; clock: number };
+    /** `/status.busy` (absent: none sent). */
+    busy?: { sessions: number; runs: number };
+    /** `/status.work` (absent: none sent). */
+    work?: { gate: string | null; minutes: number };
 }
 
 /** The status's window of a queue read by pages: 14 tasks up next, then up to 6 set aside. */
@@ -375,7 +379,14 @@ export async function followManaged(page: Page, opts: {
     paged?: boolean;
     /** Task numbers outside the queue and their state (`queue.search`'s `elsewhere`). */
     elsewhere?: Record<string, string>;
+    /** Links the research announces besides `ALL_LINKS` (seeded and in `/status.links`). */
+    links?: string[];
+    /** `/status.busy` (absent: none sent). */
+    busy?: { sessions: number; runs: number };
+    /** `/status.work` (absent: none sent). */
+    work?: { gate: string | null; minutes: number };
 } = {}): Promise<ManagedBridge> {
+    const links = [...ALL_LINKS, ...(opts.links ?? [])];
     await page.setViewportSize(opts.size ?? { width: 1440, height: 900 });
     if (opts.fastReconnect) {
         await page.addInitScript(() => { (globalThis as { __LIVE_RECONNECT_MS?: number }).__LIVE_RECONNECT_MS = 250; });
@@ -384,7 +395,7 @@ export async function followManaged(page: Page, opts: {
         if (sessionStorage.getItem('seeded')) return;
         sessionStorage.setItem('seeded', '1');
         localStorage.setItem('strom-research-links', JSON.stringify({ actions: links, at: new Date().toISOString() }));
-    }, ALL_LINKS);
+    }, links);
     const b: ManagedBridge = {
         researches: structuredClone(opts.researches ?? MANAGED_DIRECTIONS),
         caps: opts.caps === undefined ? CAPS : opts.caps,
@@ -399,6 +410,8 @@ export async function followManaged(page: Page, opts: {
         elsewhere: opts.elsewhere ?? {},
         queueReplies: [],
         queueHold: null,
+        ...(opts.busy ? { busy: { ...opts.busy } } : {}),
+        ...(opts.work ? { work: { ...opts.work } } : {}),
     };
     if (opts.features?.includes('queue.next')) {
         b.queueNext = { base: b.queue.map(q => String(q.id)), at: new Map(), clock: 0 };
@@ -422,8 +435,10 @@ export async function followManaged(page: Page, opts: {
             queueMore: Math.max(0, b.queue.filter(q => q.state === 'next').length - QUEUE_WINDOW),
             ...(pagedFeature ? { queueCounts: queueCounts(b) } : {}),
         } : { queue: b.queue.map(({ whyBefore: _w, ...q }) => q) }),
-        links: ALL_LINKS,
+        links,
         researches: b.researches,
+        ...(b.busy ? { busy: b.busy } : {}),
+        ...(b.work ? { work: b.work } : {}),
         ...(b.caps ? { caps: b.caps } : {}),
         ...(b.offLine ? { offLine: b.offLine } : {}),
         ...(opts.features ? { features: opts.features } : {}),

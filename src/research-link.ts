@@ -50,7 +50,7 @@ export const RESEARCH_LINK_ACTIONS = [
     'send', 'excerpt', 'app', 'open', 'chat', 'task', 'review', 'research',
     'new', 'update', 'sessions', 'conflict', 'story', 'sync-undo', 'setup', 'live',
     'direction', 'finish', 'media', 'archive', 'seal', 'experiment', 'history', 'fixes', 'doctor', 'places',
-    'history-kinds', 'history-align', 'hypothesis', 'hypotheses',
+    'history-kinds', 'history-align', 'hypothesis', 'hypotheses', 'work',
 ] as const;
 export type ResearchLinkAction = typeof RESEARCH_LINK_ACTIONS[number];
 
@@ -82,6 +82,8 @@ export const RESEARCH_LINK_MARKS: Readonly<Record<ResearchLinkAction, ResearchAc
     hypothesis: 'terminal', hypotheses: 'terminal',
     // The agent's work: a conversation, or a session the terminal starts with its estimate.
     chat: 'agent', history: 'agent', places: 'agent',
+    // Work on the queue (spec 052 §5): the terminal shows what runs and starts the agent's sessions on a yes.
+    work: 'agent',
 };
 
 /** What a link asks of the research besides its action (the `do=` of a task, a conflict, an experiment, a fix). */
@@ -332,6 +334,13 @@ export interface ResearchLinkParams {
     /** `places`: run the queue of places to identify (with `place`: that one place); the research asks in its terminal. */
     placesDo?: 'run';
     /**
+     * `work` (spec 052 §5, `work.link`): work on the queue automatically (`loop`, while the subscription's
+     * gate allows) or only `n` tasks (`tasks`, 1–100); the research's terminal shows what runs and asks.
+     */
+    workDo?: ResearchWorkDo;
+    /** `work` with `workDo: 'tasks'`: how many tasks (1–100; a number or its digits). */
+    n?: number | string;
+    /**
      * `history-kinds` (spec 035): the kinds of events to search — a list of kinds, `all`, `none`
      * or `all` without some (`all,-law`) — or `inherit` (the research's own value dropped).
      */
@@ -361,6 +370,18 @@ export interface ResearchLinkParams {
      * address (`do=start`), no new window and no terminal; without it the link also opens the app followed live.
      */
     liveDo?: 'start';
+}
+
+/** What a `work` link asks (spec 052 §5): automatic work, or only a number of tasks. */
+export type ResearchWorkDo = 'loop' | 'tasks';
+/** The fewest and the most tasks of "Only N tasks" (`strom run --tasks N`). */
+export const WORK_TASKS_MIN = 1;
+export const WORK_TASKS_MAX = 100;
+
+/** A number of tasks for "Only N tasks": a whole number 1–100 (as a number, or 1–3 digits), else null. */
+export function workTasksCount(value: unknown): number | null {
+    const n = typeof value === 'number' ? value : typeof value === 'string' && /^\d{1,3}$/.test(value.trim()) ? Number(value.trim()) : NaN;
+    return Number.isInteger(n) && n >= WORK_TASKS_MIN && n <= WORK_TASKS_MAX ? n : null;
 }
 
 /** Who decides the research's hypotheses (spec 060): the person (the default), or the agent on its own. */
@@ -528,6 +549,13 @@ export function researchSchemeUrl(action: ResearchLinkAction, p: ResearchLinkPar
         case 'history-align':
             // spec 035: the research's terminal shows the preview and asks; `prune=1` leads to the shared catalogues (only there).
             return p.prune ? `${base}&prune=1` : base;
+        case 'work': {
+            // spec 052 §5: the fixed `do`, and a count 1–100 only with `tasks` — nothing else.
+            if (p.workDo === 'loop') return p.n === undefined ? `${base}&do=loop` : null;
+            if (p.workDo !== 'tasks') return null;
+            const n = workTasksCount(p.n);
+            return n !== null ? `${base}&do=tasks&n=${n}` : null;
+        }
         case 'places': {
             // spec 034: the fixed `do=run`, and one place only by its record id — never a place name.
             if (p.placesDo !== 'run') return null;
@@ -2077,6 +2105,8 @@ export interface LiveStatus {
     sourceProposals?: Record<string, ReadSourceProposal>;
     /** `busy` (with `status.busy` in `features`): sessions and runs working now; absent: not said (an archive, an older research). */
     busy?: LiveBusy;
+    /** `work` (with `work.link` in `features`, spec 052 §5): the gate and a session's length; absent: not said (an archive, an older research). */
+    work?: LiveWork;
     /** `caps`: what the bridge does with the directions; absent: an older research, an archive, a research waiting for its agent. */
     caps?: ResearchCaps;
     /** `offLine` (with `offLine.branches` in `features`): work outside the directions by branches; absent: not said. */
@@ -2636,6 +2666,29 @@ export const QUEUE_SEARCH_FEATURE = 'queue.search';
  * was (`was`), put back exactly by `{do: 'restore', was}` (Strom Research 1.32).
  */
 export const QUEUE_NEXT_FEATURE = 'queue.next';
+/**
+ * `/status.features`: the link `work` (spec 052 §5) — the research's terminal works on the queue
+ * (`do=loop|tasks`) — and `/status.work` saying the gate and a session's length (Strom Research 1.32).
+ */
+export const WORK_LINK_FEATURE = 'work.link';
+/** `/status.features`: `strom run --tasks N`, so "Only N tasks" of the link `work` is offered. */
+export const RUN_TASKS_FEATURE = 'run.tasks';
+
+/** `/status.work`: the subscription's gate by its name (null: none set) and a session's length in minutes. */
+export interface LiveWork {
+    gate: string | null;
+    minutes: number;
+}
+
+/** `/status.work`, checked; null when it is not one (no gate key, or minutes not a count). */
+export function sanitizeLiveWork(value: unknown): LiveWork | null {
+    const r = asRecord(value);
+    if (!r || !('gate' in r)) return null;
+    const gate = r.gate === null ? null : cleanText(r.gate, 120);
+    if (r.gate !== null && !gate) return null;
+    const minutes = asCount(r.minutes);
+    return { gate, minutes: minutes ?? 0 };
+}
 
 /** `/status.queueCounts`: tasks up next by direction and branch (absent = 0), all of them, set aside, and the order's print. */
 export interface LiveQueueCounts {
@@ -3382,6 +3435,7 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         ...directionsRevSaid(r, features),
         ...verifyStatusSaid(r, features),
         ...(features?.includes(STATUS_BUSY_FEATURE) && sanitizeBusy(r.busy) ? { busy: sanitizeBusy(r.busy)! } : {}),
+        ...(features?.includes(WORK_LINK_FEATURE) && sanitizeLiveWork(r.work) ? { work: sanitizeLiveWork(r.work)! } : {}),
         ...(sanitizeResearchCaps(r.caps) ? { caps: sanitizeResearchCaps(r.caps)! } : {}),
         ...(features?.includes(OFF_LINE_BRANCHES_FEATURE) && sanitizeOffLine(r.offLine) ? { offLine: sanitizeOffLine(r.offLine)! } : {}),
         ...(features?.includes(QUEUE_PAGE_FEATURE) && sanitizeQueueCounts(r.queueCounts) ? { queueCounts: sanitizeQueueCounts(r.queueCounts)! } : {}),

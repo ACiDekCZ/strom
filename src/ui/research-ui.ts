@@ -44,7 +44,7 @@ import {
     humanizeChange, isGedcomFileName, isSafariBrowser,
     parseSendBridge, pickSendDefault, sanitizeSyncReply, researchSchemeUrl, researchTaskRef,
     ResearchLinkAction, ResearchLinkParams, LiveBridgeUrls, LiveStatus, LiveChange, LiveWorker, LiveWaiting,
-    LiveQueueItem, LiveSpend, LiveIntake, LiveDirection, LiveBusy, ResearchCaps, BrowserInfo, LiveOffLine, ResearchHeaderInfo, ExportXrefs, ResearchAccepts, statusAgentless,
+    LiveQueueItem, LiveSpend, LiveIntake, LiveDirection, LiveBusy, LiveWork, ResearchCaps, BrowserInfo, LiveOffLine, ResearchHeaderInfo, ExportXrefs, ResearchAccepts, statusAgentless,
     LiveQueueCounts, QUEUE_PAGE_FEATURE,
     researchLinkMark, researchUrlMark,
 } from '../research-link.js';
@@ -181,6 +181,8 @@ export interface LiveSession {
     update: { version: string } | null;
     /** Sessions and runs working now (its last status's `busy`; absent: not said). */
     busy?: LiveBusy;
+    /** The gate and a session's length for "Work on the queue…" (its last status's `work`, `work.link`; absent: not said). */
+    work?: LiveWork;
     spend: LiveSpend | null;
     lastIntake: LiveIntake | null;
     /** The research's directions (empty: an older research). */
@@ -2920,6 +2922,7 @@ export const researchUiMethods = uiModule({
         s.offLine = status.offLine;
         s.update = status.update;
         s.busy = status.busy;
+        s.work = status.work;
         s.browser = status.browser;
         s.spend = status.spend;
         s.lastIntake = status.lastIntake;
@@ -3355,6 +3358,7 @@ export const researchUiMethods = uiModule({
                 ...(status.queueCounts ? { queueCounts: status.queueCounts } : {}),
                 update: status.update,
                 ...(status.busy ? { busy: status.busy } : {}),
+                ...(status.work ? { work: status.work } : {}),
                 spend: status.spend,
                 lastIntake: status.lastIntake,
                 researches: status.researches,
@@ -3607,6 +3611,7 @@ export const researchUiMethods = uiModule({
         s.offLine = status.offLine;
         s.update = status.update;
         s.busy = status.busy;
+        s.work = status.work;
         s.browser = status.browser;
         s.spend = status.spend;
         s.lastIntake = status.lastIntake;
@@ -4741,8 +4746,9 @@ export const researchUiMethods = uiModule({
      * The control on the right of the overview's Queue heading (null: none). Its
      * being there also puts the queue's count into the title ("QUEUE · 1 240").
      */
-    queueHeadAction(_s: LiveSession): HTMLElement | null {
-        return null;
+    queueHeadAction(s: LiveSession): HTMLElement | null {
+        // "Work on the queue…" (spec 052 §5), or "At work ›" while the research works.
+        return this.queueWorkHead(s);
     },
 
     /**

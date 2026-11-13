@@ -122,7 +122,7 @@ export const OVERVIEW_WINDOW_COLS_MIN = 1100;
 const WINDOW_LEFT: ReadonlySet<PrefKey> = new Set<PrefKey>(['working', 'waiting', 'directions']);
 
 /** The overview's own window, a phone (≤ 640 px) and a phone held sideways (the full-screen sheet). */
-function overviewMode(): Mode {
+export function overviewMode(): Mode {
     if (ownWindow) return 'window';
     if (window.matchMedia?.(MQ_PHONE_BAR).matches) return 'sheet';
     return window.innerWidth >= 1280 ? 'docked' : 'overlay';
@@ -435,6 +435,26 @@ export const researchOverviewMethods = uiModule({
             body.scrollTop += heading.getBoundingClientRect().top - body.getBoundingClientRect().top - 6;
             heading.focus({ preventScroll: true });
         }
+    },
+
+    /**
+     * "At work ›" of the Queue heading (spec 052 §5): Now shown until the
+     * overview closes (the choice stays), its heading at the top and the focus
+     * on its first "Finish and stop" (else on the heading).
+     */
+    showOverviewNowFinish(): void {
+        if (!drawnSession()) return;
+        this.unfoldOverviewSection('now');
+        this.renderLivePanel();
+        const body = document.querySelector<HTMLElement>('#research-overview .research-overview__body');
+        const heading = body?.querySelector<HTMLElement>('[aria-controls="ov-sec-now"]');
+        if (!body || !heading) return;
+        body.scrollTop += heading.getBoundingClientRect().top - body.getBoundingClientRect().top - 6;
+        const finish = body.querySelector<HTMLElement>('#ov-sec-now .research-overview__finish');
+        if (finish) {
+            finish.scrollIntoView?.({ block: 'nearest' });
+            finish.focus({ preventScroll: true });
+        } else heading.focus({ preventScroll: true });
     },
 
     /** ⤡ (and Escape): back to the small panel; following goes on. Without following: the overview closes. */

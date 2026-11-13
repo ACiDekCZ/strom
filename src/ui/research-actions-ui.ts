@@ -418,6 +418,8 @@ export const researchActionsMethods = uiModule({
             first = [...overviewRows];
             if (waiting > 0) first.push({ id: 'research-item-waiting', label: r.waiting, method: 'researchActionWaiting', count: waiting });
             if (!noAgent && this.researchLinkAvailable('chat')) first.push({ id: 'research-item-chat', label: r.continueAgent, method: 'researchActionChat', ...opens(researchLinkMark('chat')) });
+            // Work on the queue (spec 052 §5): right under the agent's chat; not while the research works.
+            if (!noAgent && this.queueWorkMenuOffered()) first.push({ id: 'research-item-queue-work', label: strings.live.queueWork, method: 'researchActionWork', ...opens(researchLinkMark('work')) });
             const read = noAgent ? null : this.readMenuEntry();
             if (read) readRow = [{ id: 'research-item-read', method: 'showReadDocumentDialog', ...read, link: read.link && this.researchLinkAvailable('open') ? read.link : undefined }];
             if (this.researchLinkAvailable('open')) first.push({ id: 'research-item-open', label: r.openResearch, method: 'researchActionOpen', ...opens(researchLinkMark('open')) });

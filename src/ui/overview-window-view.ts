@@ -284,7 +284,8 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
         handOverResearchLink(url: string): void {
             const l = links.get(url);
             if (!l || !(RESEARCH_LINK_ACTIONS as readonly string[]).includes(l.link)) return;
-            port.send('research-link', { link: l.link, params: l.params });
+            // "Work on the queue…" starts the agent there: the main window says so as for its own link.
+            port.send('research-link', { link: l.link, params: l.params, ...(l.link === 'work' ? { kind: 'agent' } : {}) });
         },
     };
 }

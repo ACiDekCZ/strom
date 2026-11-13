@@ -32,8 +32,8 @@ describe('the map of research actions to their marks', () => {
             'hypothesis', 'hypotheses'] as const) {
             expect(researchLinkMark(a)).toBe('terminal');
         }
-        // An agent at work: a conversation, a place's history or the places' identification started there.
-        for (const a of ['chat', 'history', 'places'] as const) expect(researchLinkMark(a)).toBe('agent');
+        // An agent at work: a conversation, a place's history, the places' identification or the queue's work started there.
+        for (const a of ['chat', 'history', 'places', 'work'] as const) expect(researchLinkMark(a)).toBe('agent');
     });
 
     it('refines a task, a conflict and an experiment by what is asked of it', () => {
@@ -68,6 +68,9 @@ describe('the map of research actions to their marks', () => {
         expect(researchUrlMark(url('experiment', { experiment: 'regions', experimentDo: 'off' }))).toBe('none');
         expect(researchUrlMark(url('task', { task: 'T0001', taskDo: 'chat' }))).toBe('agent');
         expect(researchUrlMark(url('conflict', { conflict: 'X0007', conflictDo: 'agent' }, 'strom-research-beta'))).toBe('agent');
+        // Work on the queue (spec 052 §5): automatically or a number of tasks, both the agent's.
+        expect(researchUrlMark(url('work', { workDo: 'loop' }))).toBe('agent');
+        expect(researchUrlMark(url('work', { workDo: 'tasks', n: 7 }))).toBe('agent');
         expect(researchUrlMark('https://example.org/places')).toBeNull();
         expect(researchUrlMark('strom-research://unknown?tree=x')).toBeNull();
         expect(researchLinkFlags(url('places', { placesDo: 'run' }))).toEqual({ research: true, ai: true });
