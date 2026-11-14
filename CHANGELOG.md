@@ -2,6 +2,17 @@
 
 English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md) · [Polski](CHANGELOG.pl.md)
 
+## 3.29.0
+
+*This version is in preparation; this section grows with every test version.*
+
+- **Research overview**: while the research is not working, *Now* offers *Work on the queue…* too, with the same dialog as in the *Queue* heading (also in the overview's own window); while the agent works, *Finish and stop* stays there.
+- **Load the research version?** at a *Note* shows the difference line by line: lines kept stay plain, removed lines are struck through, added or changed lines are highlighted. A paragraph the research only added strikes nothing through.
+- **Roles of women**: a woman who reported a death or another event is named in the female form in Czech (*Oznamovatelka*), German (*Anzeigende*) and Polish (*Zgłaszająca*), in the event's row, in the person's summary and at other events; a woman officiating is *Udzielająca ślubu* in Polish, and German names the officiant *Amtsperson* everywhere.
+- **Simple icons instead of emoji**: the offline mark, the conflict mark when merging and the slideshow's pause; the number of conflicts when merging is in the language of the app.
+- **Phone**: long labels wrap instead of ending in “…” in the middle of a word: the tiles of the person sheet, the title of the tree overview and the title of the *Research overview* in its own window.
+- **Minimap and dialogs**: the minimap shows its whole picture, no longer cut off at its right and bottom edge; a dialog's body scrolled down fades out at its top instead of being cut by a hard edge.
+
 ## 3.28.0
 
 *Released 14 November 2026.*

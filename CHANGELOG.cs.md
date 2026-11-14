@@ -2,6 +2,17 @@
 
 [English](CHANGELOG.md) · Čeština · [Deutsch](CHANGELOG.de.md) · [Polski](CHANGELOG.pl.md)
 
+## 3.29.0
+
+*Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
+
+- **Přehled výzkumu**: když výzkum nepracuje, nabízí oddíl *Teď* i *Pracovat na frontě…* se stejným dialogem jako záhlaví *Fronty* (i v samostatném okně přehledu); když agent pracuje, zůstává tam *Dokončit a skončit*.
+- **Načíst verzi výzkumu?** u *Poznámky* ukazuje rozdíl po řádcích: společné řádky zůstávají obyčejné, odebrané jsou přeškrtnuté, přidané nebo změněné zvýrazněné. Odstavec, který výzkum jen přidal, nic nepřeškrtne.
+- **Role žen**: žena, která oznámila úmrtí nebo jinou událost, má ženský tvar česky (*Oznamovatelka*), německy (*Anzeigende*) i polsky (*Zgłaszająca*), v řádku události, ve shrnutí osoby i u jiných událostí; oddávající žena je polsky *Udzielająca ślubu* a němčina oddávajícího všude nazývá *Amtsperson*.
+- **Jednoduché ikony místo emoji**: značka offline, značka konfliktu při slučování a pauza prezentace; počet konfliktů při slučování je v jazyce aplikace.
+- **Telefon**: dlouhé popisky se zalamují místo „…“ uprostřed slova: dlaždice nabídky osoby, titulek přehledu stromu a titulek *Přehledu výzkumu* v samostatném okně.
+- **Minimapa a dialogy**: minimapa ukazuje celý obraz, vpravo a dole už není oříznutá; posunuté tělo dialogu nahoře plynule zeslábne místo ostrého řezu.
+
 ## 3.28.0
 
 *Vydáno 14. listopadu 2026.*

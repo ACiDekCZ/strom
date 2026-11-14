@@ -2,6 +2,17 @@
 
 [English](CHANGELOG.md) · [Čeština](CHANGELOG.cs.md) · Deutsch · [Polski](CHANGELOG.pl.md)
 
+## 3.29.0
+
+*Diese Version ist in Vorbereitung; dieser Abschnitt wächst mit jeder Testversion.*
+
+- **Forschungsübersicht**: Solange die Forschung nicht arbeitet, bietet *Jetzt* auch *An der Warteschlange arbeiten…* an, mit demselben Dialog wie die Überschrift der *Warteschlange* (auch im eigenen Fenster der Übersicht); während der Agent arbeitet, bleibt dort *Abschließen und beenden*.
+- **Version der Forschung laden?** bei einer *Notiz* zeigt den Unterschied zeilenweise: Gemeinsame Zeilen bleiben schlicht, entfernte sind durchgestrichen, hinzugefügte oder geänderte hervorgehoben. Ein Absatz, den die Forschung nur hinzugefügt hat, streicht nichts durch.
+- **Rollen von Frauen**: Eine Frau, die einen Tod oder ein anderes Ereignis angezeigt hat, steht auf Deutsch (*Anzeigende*), Tschechisch (*Oznamovatelka*) und Polnisch (*Zgłaszająca*) in der weiblichen Form, in der Zeile des Ereignisses, in der Zusammenfassung der Person und bei anderen Ereignissen; eine Frau als Trauende ist auf Polnisch *Udzielająca ślubu*, und Deutsch nennt die trauende Person überall *Amtsperson*.
+- **Einfache Symbole statt Emoji**: die Offline-Markierung, die Konfliktmarkierung beim Zusammenführen und die Pause der Diashow; die Zahl der Konflikte beim Zusammenführen steht in der Sprache der App.
+- **Telefon**: Lange Beschriftungen brechen um, statt mitten im Wort mit „…“ zu enden: die Kacheln des Personenmenüs, der Titel der Stammbaum-Übersicht und der Titel der *Forschungsübersicht* im eigenen Fenster.
+- **Minikarte und Dialoge**: Die Minikarte zeigt ihr ganzes Bild und wird rechts und unten nicht mehr abgeschnitten; der nach unten gescrollte Inhalt eines Dialogs blendet oben weich aus, statt hart abgeschnitten zu werden.
+
 ## 3.28.0
 
 *Veröffentlicht am 14. November 2026.*

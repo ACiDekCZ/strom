@@ -4,6 +4,17 @@
 
 Lista zmian po polsku zaczyna się od wersji 3.21.0; starsze wersje są opisane [po angielsku](CHANGELOG.md).
 
+## 3.29.0
+
+*Ta wersja jest w przygotowaniu; ta sekcja rośnie z każdą wersją testową.*
+
+- **Przegląd badania**: gdy badanie nie pracuje, sekcja *Teraz* oferuje też *Praca nad kolejką…*, z tym samym oknem dialogowym co nagłówek *Kolejki* (także w osobnym oknie przeglądu); gdy agent pracuje, zostaje tam *Dokończ i zakończ*.
+- **Wczytać wersję badania?** przy *Notatce* pokazuje różnicę wiersz po wierszu: wspólne wiersze zostają zwykłe, usunięte są przekreślone, dodane lub zmienione wyróżnione. Akapit, który badanie tylko dodało, niczego nie przekreśla.
+- **Role kobiet**: kobieta, która zgłosiła zgon lub inne zdarzenie, ma formę żeńską po polsku (*Zgłaszająca*), czesku (*Oznamovatelka*) i niemiecku (*Anzeigende*), w wierszu zdarzenia, w podsumowaniu osoby i przy innych zdarzeniach; kobieta udzielająca ślubu to po polsku *Udzielająca ślubu*, a po niemiecku osoba udzielająca ślubu to wszędzie *Amtsperson*.
+- **Proste ikony zamiast emoji**: znacznik offline, znacznik konfliktu przy scalaniu i pauza pokazu slajdów; liczba konfliktów przy scalaniu jest w języku aplikacji.
+- **Telefon**: długie etykiety zawijają się zamiast kończyć się „…” w środku słowa: kafelki menu osoby, tytuł przeglądu drzewa i tytuł *Przeglądu badania* w osobnym oknie.
+- **Minimapa i okna dialogowe**: minimapa pokazuje cały obraz i nie jest już przycięta z prawej i u dołu; przewinięta treść okna dialogowego u góry łagodnie zanika zamiast ostrego cięcia.
+
 ## 3.28.0
 
 *Wydano 14 listopada 2026.*
