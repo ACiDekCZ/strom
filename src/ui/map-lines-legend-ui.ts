@@ -101,11 +101,11 @@ export const mapLinesLegendMethods = uiModule({
             ? `<button type="button" class="map-lines-collapse" data-act="collapse" aria-label="${esc(strings.buttons.close)}" title="${esc(strings.buttons.close)}">×</button>`
             : `<button type="button" class="map-lines-collapse" data-act="collapse" aria-expanded="true" aria-label="${esc(m.linesCollapse)}" title="${esc(m.linesCollapse)}">▴</button>`;
         const seg = (value: LineMode, label: string, off: boolean): string =>
-            `<button type="button" class="map-lines-mode-btn${mode === value ? ' is-on' : ''}" data-act="mode" data-mode="${value}"`
+            `<button type="button" class="map-lines-mode-btn sel-opt${mode === value ? ' is-on' : ''}" data-sel-form="seg" data-act="mode" data-mode="${value}"`
             + ` aria-pressed="${mode === value}"${off ? ' aria-disabled="true"' : ''}>${esc(label)}</button>`;
         const head = `<div class="map-lines-head">
                 <h3 class="map-lines-title">${esc(m.linesTitle)}</h3>
-                <div class="map-lines-mode" role="group" aria-label="${esc(m.linesTitle)}">${seg('quarter', m.linesQuarters, false)}${seg('eighth', m.linesEighths, eighthsOff)}</div>
+                <div class="map-lines-mode sel-seg" role="group" aria-label="${esc(m.linesTitle)}">${seg('quarter', m.linesQuarters, false)}${seg('eighth', m.linesEighths, eighthsOff)}</div>
                 ${close}
             </div>`;
 

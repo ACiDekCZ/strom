@@ -446,7 +446,7 @@ export const liveFollowMethods = uiModule({
         const label = el('span', 'live-follow-view__label', strings.live.followIn);
         label.id = `live-follow-view-l-${where}`;
         row.setAttribute('aria-labelledby', label.id);
-        const seg = el('div', 'live-follow-view__seg');
+        const seg = el('div', 'live-follow-view__seg sel-seg');
         const V = strings.viewModeSwitch;
         const choose = (v: FollowView, focus: boolean): void => {
             this.setLiveFollowView(v);
@@ -454,8 +454,9 @@ export const liveFollowMethods = uiModule({
             if (focus) requestAnimationFrame(() => document.querySelector<HTMLElement>(`.live-follow-view--${where} [data-view="${v}"]`)?.focus());
         };
         FOLLOW_VIEWS.forEach((v, i) => {
-            const b = el('button', 'live-follow-view__opt', V[v]);
+            const b = el('button', 'live-follow-view__opt sel-opt', V[v]);
             b.type = 'button';
+            b.dataset.selForm = 'seg';
             b.setAttribute('role', 'radio');
             b.setAttribute('aria-checked', String(fs.view === v));
             b.tabIndex = fs.view === v ? 0 : -1;

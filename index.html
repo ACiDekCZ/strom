@@ -11918,20 +11918,15 @@
         @media (min-width: 1280px) { .map-lines-legend { width: 320px; } }
         .map-lines-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 8px 6px 14px; }
         .map-lines-title { flex: 1 1 auto; margin: 0; font-family: var(--font-serif); font-size: 16px; font-weight: 600; }
-        .map-lines-mode { display: flex; height: 28px; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+        .map-lines-mode { display: flex; height: 28px; overflow: hidden; }
         .map-lines-mode-btn {
             display: flex;
             align-items: center;
             padding: 0 9px;
-            border: none;
-            background: transparent;
-            color: var(--text);
             font: inherit;
             font-size: 12.5px;
-            font-weight: 600;
             cursor: pointer;
         }
-        .map-lines-mode-btn.is-on { background: var(--primary); color: var(--on-primary); }
         .map-lines-mode-btn[aria-disabled="true"] { opacity: 0.45; cursor: default; }
         .map-lines-collapse {
             width: 28px;
@@ -12076,7 +12071,7 @@
         .map-lines-und-foot { margin: 0; padding: 8px 14px 10px; border-top: 1px solid var(--divider); font-size: 12.5px; color: var(--text-muted); }
         .map-lines-legend :focus-visible, .map-lines-chip:focus-visible, .map-lines-und :focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         @media (hover: hover) {
-            .map-lines-mode-btn:not(.is-on):not([aria-disabled="true"]):hover, .map-lines-collapse:hover, .map-lines-und-close:hover { background: var(--surface-2); }
+            .map-lines-collapse:hover, .map-lines-und-close:hover { background: var(--surface-2); }
             button.map-lines-row:hover { background: var(--surface-2); }
             .map-lines-chip:hover { background: var(--surface-2); }
             .map-lines-link:hover { text-decoration: underline; }
@@ -20575,24 +20570,17 @@
             padding: 5px 10px 5px 14px; background: var(--surface-2); border-bottom: 1px solid var(--divider);
         }
         .live-follow-view__label { flex: 0 1 auto; min-width: 0; font-size: 12.5px; color: var(--text-light); overflow-wrap: anywhere; }
-        .live-follow-view__seg {
-            margin-left: auto; flex: none; display: flex; gap: 2px; padding: 2px; box-sizing: border-box;
-            background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
-        }
+        .live-follow-view__seg { margin-left: auto; flex: none; display: flex; box-sizing: border-box; }
         /* Two classes: dialogs style every button. */
         .live-follow-view__seg > .live-follow-view__opt {
-            height: 22px; min-width: 0; min-height: 0; margin: 0; padding: 0 9px; box-sizing: border-box;
-            border: 0; border-radius: 6px; background: none; box-shadow: none; color: var(--text);
+            height: 26px; min-width: 0; min-height: 0; margin: 0; padding: 0 9px; box-sizing: border-box;
             font: inherit; font-size: 12.5px; line-height: 1; white-space: nowrap; cursor: pointer;
         }
-        .live-follow-view__opt[aria-checked="true"] { background: var(--primary); color: var(--on-primary); font-weight: 600; box-shadow: 0 1px 2px rgba(20, 16, 8, 0.15); }
-        @media (hover: hover) { .live-follow-view__opt[aria-checked="false"]:hover { background: var(--hover-bg); } }
-        .live-follow-view__opt:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         .research-overview > .live-follow-view { padding-left: 16px; padding-right: 16px; border-top: 1px solid var(--divider); }
         /* The phone strip's second row: the segment across, 40px tall options in a 52px row. */
         .live-follow-view--phone { min-height: 52px; padding: 4px 10px 6px 14px; background: none; border-bottom: 0; border-top: 1px solid var(--divider); }
-        .live-follow-view--phone .live-follow-view__seg { flex: 1 1 auto; margin-left: 0; border-radius: 10px; background: var(--surface-2); }
-        .live-follow-view--phone .live-follow-view__seg > .live-follow-view__opt { flex: 1 1 0; min-width: 64px; height: 40px; border-radius: 8px; font-size: 13.5px; }
+        .live-follow-view--phone .live-follow-view__seg { flex: 1 1 auto; margin-left: 0; }
+        .live-follow-view--phone .live-follow-view__seg > .live-follow-view__opt { flex: 1 1 0; min-width: 64px; height: 40px; font-size: 13.5px; }
         @media (pointer: coarse) {
             .live-follow-view__seg > .live-follow-view__opt { height: 40px; }
             .live-follow-view { min-height: 48px; }
@@ -21040,22 +21028,17 @@
         .link-button.live-sec-edit__all { display: inline-flex; align-items: center; min-height: 30px; padding: 0; font-size: 13px; text-align: right; }
 
         /* The three-way segment (popover, sheet, Settings): the choice solid, the state now without one dashed. */
-        .live-sec-seg {
-            display: flex; gap: 2px; padding: 2px; min-width: 0; box-sizing: border-box;
-            border: 1px solid var(--border); border-radius: 9px; background: var(--surface-2);
-        }
+        .live-sec-seg { display: flex; min-width: 0; box-sizing: border-box; }
         /* Two classes: dialogs style every button (.modal button). */
         .live-sec-seg > .live-sec-seg__opt {
-            flex: 1 1 0; min-width: 0; height: 28px; min-height: 0; margin: 0; padding: 0 6px; box-sizing: border-box;
-            border: 1px solid transparent; border-radius: 7px; background: none; box-shadow: none; color: var(--text);
+            flex: 1 1 0; min-width: 0; height: 32px; min-height: 0; margin: 0; padding: 0 6px; box-sizing: border-box;
             font: inherit; font-size: 12.5px; line-height: 1.2; cursor: pointer;
             display: flex; align-items: center; justify-content: center;
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
         html[lang="de"] .live-sec-edit:not(.live-sec-sheet) .live-sec-seg > .live-sec-seg__opt { padding: 0 5px; font-size: 12px; }
-        .live-sec-seg > .live-sec-seg__opt[aria-checked="true"] { background: var(--primary); color: var(--on-primary); font-weight: 600; }
-        .live-sec-seg > .live-sec-seg__opt.is-current { background: var(--surface); border: 1px dashed var(--primary); font-weight: 600; }
-        @media (hover: hover) { .live-sec-seg > .live-sec-seg__opt[aria-checked="false"]:not(.is-current):hover { background: var(--hover-bg); } }
+        /* The state now (nothing chosen yet): a dashed edge inside the cell, no line of a choice. */
+        .live-sec-seg > .live-sec-seg__opt.is-current { outline: 1px dashed var(--sel-border); outline-offset: -3px; }
         .live-sec-seg__opt:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
 
         /* A section's menu. */
@@ -21149,7 +21132,7 @@
         .live-sec-set__row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; }
         .live-sec-set__row > .settings-text { flex: 1 1 140px; }
         .live-sec-seg--settings { flex: none; width: 300px; max-width: 100%; }
-        .live-sec-seg--settings > .live-sec-seg__opt { height: 30px; padding: 0 8px; font-size: 12.5px; }
+        .live-sec-seg--settings > .live-sec-seg__opt { height: 34px; padding: 0 8px; font-size: 12.5px; }
         .settings-row.live-sec-set__reset { padding: 8px 14px 10px; }
         /* The two cards of Customize panel in Settings (spec 057 §5): each row on one line. */
         #settings-group-research-follow { position: relative; }
@@ -26114,13 +26097,8 @@
         }
         .source-more[open] > summary { margin-bottom: 8px; }
         .source-transcript-input { font-family: var(--font-serif); font-size: 14px; }
-        .source-quality { display: inline-flex; border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; }
-        .source-quality button {
-            border: none; background: var(--surface); padding: 8px 14px; cursor: pointer; font: inherit;
-            font-size: 13px; color: var(--text); border-right: 1px solid var(--border);
-        }
-        .source-quality button:last-child { border-right: none; }
-        .source-quality button[aria-checked="true"] { background: var(--primary); color: var(--on-primary); }
+        .source-quality { overflow: hidden; }
+        .source-quality button { padding: 8px 14px; cursor: pointer; font: inherit; font-size: 13px; color: var(--text); }
 
         /* Person menu: a quiet number at the row's end ("Show sources  3"). */
         .menu-item-meta {
@@ -30280,10 +30258,10 @@
                 </div>
                 <div class="form-group">
                     <span class="form-label" id="source-quality-label" data-i18n="sources.reliabilityLabel"></span>
-                    <div class="source-quality" id="source-quality" role="radiogroup" aria-labelledby="source-quality-label">
-                        <button type="button" role="radio" aria-checked="false" data-quality="3" data-i18n="sources.quality3"></button>
-                        <button type="button" role="radio" aria-checked="false" data-quality="2" data-i18n="sources.quality2"></button>
-                        <button type="button" role="radio" aria-checked="false" data-quality="1" data-i18n="sources.quality1"></button>
+                    <div class="source-quality sel-seg" id="source-quality" role="radiogroup" aria-labelledby="source-quality-label">
+                        <button type="button" class="sel-opt" data-sel-form="seg" role="radio" aria-checked="false" data-quality="3" data-i18n="sources.quality3"></button>
+                        <button type="button" class="sel-opt" data-sel-form="seg" role="radio" aria-checked="false" data-quality="2" data-i18n="sources.quality2"></button>
+                        <button type="button" class="sel-opt" data-sel-form="seg" role="radio" aria-checked="false" data-quality="1" data-i18n="sources.quality1"></button>
                     </div>
                 </div>
             </details>
