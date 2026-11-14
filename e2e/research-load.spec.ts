@@ -165,3 +165,70 @@ test.describe('loading the research version: surname-variant groups', () => {
         expect(await groups(page)).toEqual([['Fíšek', 'Fyšek', 'Fischek'], ['Kmínková', 'Kminkowa']]);
     });
 });
+
+test.describe('loading the research version: a note line by line', () => {
+    const HERE_NOTE = 'Kovář v Smrkově.\n\nOženil se 1865 v Čapkově.';
+    for (const width of [1440, 390]) {
+        test(`${width} px: the research only added a paragraph – the note here not struck through, only the new paragraph marked`, async ({ page }) => {
+            await page.setViewportSize({ width, height: 900 });
+            await page.clock.install();
+            await openResearch(page);
+            const bridge = await fakeBridge(page, { accepts: ACCEPTS });
+            await poll(page);
+            await page.evaluate(() => window.Strom.UI.setResearchSendMode(window.Strom.TreeManager.getActiveTreeId()!, 'off'));
+            await page.evaluate((note) => {
+                const dm = window.Strom.DataManager;
+                const jan = (Object.values(dm.getData().persons) as any[]).find(p => p.firstName === 'Jan');
+                dm.updatePerson(jan.id, { notes: note });
+            }, HERE_NOTE);
+            bridge.head = NEW_HEAD;
+            bridge.treeGed = researchGed(NEW_HEAD, ['1 NOTE Kovář v Smrkově.', '2 CONT', '2 CONT Oženil se 1865 v Čapkově.', '2 CONT', '2 CONT Křest v matrice Smrkov, fol. 12.']);
+            await poll(page);
+            await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+            await expect(dialog(page)).toBeVisible();
+            const row = dialog(page).locator('tbody tr', { hasText: 'Note' });
+            await expect(row).toHaveCount(1);
+            const note = row.locator('.research-load-note');
+            await expect(note).toBeVisible();
+            // Nothing of the text here struck through: its lines kept as they are.
+            await expect(row.locator('.research-load-here')).toHaveCount(0);
+            await expect(note.locator('del')).toHaveCount(0);
+            await expect(note.locator('.research-load-line--same').filter({ hasText: 'Kovář v Smrkově.' })).toHaveCount(1);
+            await expect(note.locator('.research-load-line--same').filter({ hasText: 'Oženil se 1865 v Čapkově.' })).toHaveCount(1);
+            expect(await note.locator('.research-load-line--same').first().evaluate(e => getComputedStyle(e).textDecorationLine)).toBe('none');
+            // Only the new paragraph marked new.
+            const added = note.locator('ins');
+            await expect(added.filter({ hasText: /\S/ })).toHaveText(['Křest v matrice Smrkov, fol. 12.']);
+            expect(await added.last().evaluate(e => getComputedStyle(e).fontWeight)).toBe('600');
+            // Within the dialog.
+            expect(await dialog(page).locator('.modal').evaluate(e => e.scrollWidth <= e.clientWidth)).toBe(true);
+            await dialog(page).locator('#research-load-ok').click();
+            await expect.poll(() => head(page)).toBe(NEW_HEAD);
+            expect(await page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons) as any[]).find(p => p.firstName === 'Jan').notes))
+                .toBe(`${HERE_NOTE}\n\nKřest v matrice Smrkov, fol. 12.`);
+        });
+    }
+
+    test('a changed line: the old one struck through, the new one marked, the rest kept', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await page.clock.install();
+        await openResearch(page);
+        const bridge = await fakeBridge(page, { accepts: ACCEPTS });
+        await poll(page);
+        await page.evaluate(() => window.Strom.UI.setResearchSendMode(window.Strom.TreeManager.getActiveTreeId()!, 'off'));
+        await page.evaluate((note) => {
+            const dm = window.Strom.DataManager;
+            const jan = (Object.values(dm.getData().persons) as any[]).find(p => p.firstName === 'Jan');
+            dm.updatePerson(jan.id, { notes: note });
+        }, HERE_NOTE);
+        bridge.head = NEW_HEAD;
+        bridge.treeGed = researchGed(NEW_HEAD, ['1 NOTE Kovář a sedlák v Smrkově.', '2 CONT', '2 CONT Oženil se 1865 v Čapkově.']);
+        await poll(page);
+        await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+        const note = dialog(page).locator('tbody tr', { hasText: 'Note' }).locator('.research-load-note');
+        await expect(note.locator('del')).toHaveText(['Kovář v Smrkově.']);
+        await expect(note.locator('ins')).toHaveText(['Kovář a sedlák v Smrkově.']);
+        await expect(note.locator('.research-load-line--same').filter({ hasText: 'Oženil se 1865 v Čapkově.' })).toHaveCount(1);
+        expect(await note.locator('del').evaluate(e => getComputedStyle(e).textDecorationLine)).toBe('line-through');
+    });
+});

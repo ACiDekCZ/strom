@@ -20129,6 +20129,14 @@
         .research-load-field { color: var(--text-light); }
         .research-load-here { color: var(--text-light); text-decoration: line-through; }
         .research-load-there { font-weight: 600; }
+        /* A note on both sides, line by line: kept lines plain, removed struck through, added or changed marked new. */
+        .research-load-note { display: flex; flex-direction: column; gap: 1px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.45; }
+        .research-load-line { display: block; min-height: 1.45em; padding: 0 4px; margin: 0 -4px; border-radius: var(--r-tag); }
+        .research-load-line--same { color: var(--text); }
+        del.research-load-line--del { color: var(--text-light); text-decoration: line-through; }
+        ins.research-load-line--add { text-decoration: none; font-weight: 600; color: var(--text); background: var(--primary-soft); }
+        /* A blank line added or removed: a gap, not a coloured bar. */
+        .research-load-line:empty { background: none; }
         .research-load-conflict { display: inline-block; margin-left: 4px; padding: 0 6px; border-radius: var(--r-tag); background: var(--warning-soft); color: var(--warning-text); font-size: 11px; font-weight: 600; }
         /* After a conflict was decided for the research's value: what was decided, its rows tagged "decided". */
         .research-load-intro { margin: 0 0 10px; font-size: 14px; line-height: 1.5; color: var(--text-light); }

@@ -14,6 +14,7 @@ import { strings } from '../strings.js';
 import { StromData, LifeEventType, isGender } from '../types.js';
 import { diffValues, ValueChange } from '../research-changes.js';
 import { formatFlexDate } from '../dates.js';
+import { diffLines } from '../line-diff.js';
 import { uiModule } from './module.js';
 import { normalizeModal } from './modal-skeleton.js';
 
@@ -62,6 +63,23 @@ function fieldLabel(row: ValueChange): string {
     }
 }
 
+/**
+ * A note both versions have, line by line: kept lines as they are, removed
+ * ones struck through, added or changed ones marked new (the whole old text
+ * struck through read as if everything went, when the research only added a
+ * paragraph). Null: not a note on both sides (its usual "here → there").
+ */
+function noteDiffHtml(row: ValueChange): string | null {
+    if (row.field !== 'notes' || !row.here || !row.there) return null;
+    const lines = diffLines(row.here, row.there).map(part => {
+        const text = esc(part.text);
+        if (part.op === 'del') return `<del class="research-load-line research-load-line--del">${text}</del>`;
+        if (part.op === 'add') return `<ins class="research-load-line research-load-line--add">${text}</ins>`;
+        return `<span class="research-load-line research-load-line--same">${text}</span>`;
+    });
+    return `<div class="research-load-note">${lines.join('')}</div>`;
+}
+
 function valueText(row: ValueChange, value: string): string {
     if (!value) return row.field === 'person' ? '' : '–';
     if (row.field === 'gender') return isGender(value) ? strings.gender[value] : value;
@@ -99,7 +117,8 @@ export const researchLoadMethods = uiModule({
                 + `<td class="research-load-field">${esc(fieldLabel(r))}${decided?.rows(r)
                     ? ` <span class="research-load-conflict research-load-decided">${esc(s.conflictDecidedTag)}</span>`
                     : r.conflict ? ` <span class="research-load-conflict">${esc(s.conflictTag)}</span>` : ''}</td>`
-                + `<td class="research-load-change"><span class="research-load-here">${esc(here)}</span> <span aria-hidden="true">→</span> <span class="research-load-there">${esc(there)}</span></td>`
+                + `<td class="research-load-change">${noteDiffHtml(r)
+                    ?? `<span class="research-load-here">${esc(here)}</span> <span aria-hidden="true">→</span> <span class="research-load-there">${esc(there)}</span>`}</td>`
                 + '</tr>';
         };
         // A hypothesis decided (spec 074 DEV §5): its row first, "in the app" for one decided here.
