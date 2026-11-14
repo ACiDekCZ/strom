@@ -164,8 +164,10 @@ export function derivedEventWord(d: Pick<DerivedParticipation, 'eventType' | 'cu
 
 /**
  * A derived row's heading, "Godparent · baptism:" (the names follow it):
- * the role by the person's sex (godfather / godmother, witness), the type of
- * the event; a role the app has no word for is the participant's note.
+ * the role by the person's sex (godfather / godmother, a woman witness,
+ * informant or officiant; an unknown sex keeps the first form, a midwife's
+ * word has one form), the type of the event; a role the app has no word for
+ * is the participant's note.
  */
 export function derivedRoleLabel(d: Pick<DerivedParticipation, 'role' | 'extra' | 'note' | 'eventType' | 'customLabel' | 'partnershipId'>,
     gender: Gender | undefined, S: Strings = appStrings): string {
@@ -174,7 +176,10 @@ export function derivedRoleLabel(d: Pick<DerivedParticipation, 'role' | 'extra' 
     const word = derivedEventWord(d, S);
     const own = !d.partnershipId;
     if (d.extra === 'midwife') return own && d.eventType === 'baptism' ? E.derivedMidwife : E.derivedOther(E.extraRoles.midwife, word);
-    if (d.extra === 'informant') return own && d.eventType === 'death' ? E.derivedInformant : E.derivedOther(E.extraRoles.informant, word);
+    if (d.extra === 'informant') {
+        if (own && d.eventType === 'death') return f ? E.derivedInformantF : E.derivedInformant;
+        return E.derivedOther(E.derivedRoles.informant[f ? 'f' : 'm'], word);
+    }
     switch (d.role) {
         case 'godparent':
             if (d.eventType === 'baptism' && !d.partnershipId) return f ? E.derivedGodparentF : E.derivedGodparent;
@@ -183,8 +188,8 @@ export function derivedRoleLabel(d: Pick<DerivedParticipation, 'role' | 'extra' 
             if (d.eventType === 'marriage') return f ? E.derivedWitnessF : E.derivedWitness;
             return E.derivedOther(E.derivedRoles.witness[f ? 'f' : 'm'], word);
         case 'officiant':
-            if (d.eventType === 'marriage') return E.derivedOfficiant;
-            return E.derivedOther(E.roles.officiant, word);
+            if (d.eventType === 'marriage') return f ? E.derivedOfficiantF : E.derivedOfficiant;
+            return E.derivedOther(E.derivedRoles.officiant[f ? 'f' : 'm'], word);
         default:
             return E.derivedOther(d.note ? shortNote(d.note) : E.roles.other, word);
     }
@@ -194,11 +199,12 @@ export function derivedRoleLabel(d: Pick<DerivedParticipation, 'role' | 'extra' 
 export function derivedRoleWord(d: Pick<DerivedParticipation, 'role' | 'extra' | 'note'>, gender: Gender | undefined, S: Strings = appStrings): string {
     const E = S.events;
     const f = gender === 'female';
+    if (d.extra === 'informant') return E.derivedWord(E.derivedRoles.informant[f ? 'f' : 'm']);
     if (d.extra) return E.derivedWord(E.extraRoles[d.extra]);
     switch (d.role) {
         case 'godparent': return E.derivedWord(E.derivedRoles.godparent[f ? 'f' : 'm']);
         case 'witness': return E.derivedWord(E.derivedRoles.witness[f ? 'f' : 'm']);
-        case 'officiant': return E.derivedWord(E.roles.officiant);
+        case 'officiant': return E.derivedWord(E.derivedRoles.officiant[f ? 'f' : 'm']);
         default: return d.note ? shortNote(d.note) : E.derivedWord(E.roles.other);
     }
 }

@@ -11,12 +11,16 @@ import { openApp, cardAction, personModal } from './helpers.js';
  * a fixed clock.
  */
 
-/** Hostivít stood godfather at Bolemír's baptism and witnessed the wedding of Dobrohost and Radmila. */
-async function village(page: Page, opts: { width?: number; height?: number; long?: boolean } = {}): Promise<void> {
+/**
+ * Hostivít stood godfather at Bolemír's baptism and witnessed the wedding of
+ * Dobrohost and Radmila; with `informant` Jaromila Zvonková was godmother at
+ * the baptism too and reported Bolemír's death.
+ */
+async function village(page: Page, opts: { width?: number; height?: number; long?: boolean; informant?: boolean } = {}): Promise<void> {
     await page.clock.setFixedTime(new Date('2026-11-13T10:30:00Z'));
     await page.setViewportSize({ width: opts.width ?? 1440, height: opts.height ?? 900 });
     await openApp(page);
-    await page.evaluate(async (long) => {
+    await page.evaluate(async ({ long, informant }) => {
         const p = (id: string, firstName: string, lastName: string, gender: string, extra: Record<string, unknown> = {}) =>
             ({ id, firstName, lastName, gender, isPlaceholder: false, partnerships: [], parentIds: [], childIds: [], ...extra });
         await window.Strom.DataManager.importAsNewTree({
@@ -28,7 +32,11 @@ async function village(page: Page, opts: { width?: number; height?: number; long
                     birthDate: '1890-04-02', deathDate: '1950',
                     events: [{ id: 'ev_bap', type: 'baptism', date: '1890-04-03', place: 'Zvonov', participants: [
                         { id: 'g1', role: 'godparent', name: 'Hostivít Mrákota', personId: 'p_hm' },
-                    ] }] }),
+                        ...(informant ? [{ id: 'g2', role: 'godparent', personId: 'p_jz' }] : []),
+                    ] }, ...(informant ? [{ id: 'ev_death', type: 'death', date: '1950-03-01', place: 'Zvonov', participants: [
+                        { id: 'i1', role: 'other', note: 'Oznamovatel', personId: 'p_jz' },
+                    ] }] : [])] }),
+                ...(informant ? { p_jz: p('p_jz', 'Jaromila', 'Zvonková', 'female', { birthDate: '1872', deathDate: '1958' }) } : {}),
                 p_do: p('p_do', 'Dobrohost', 'Ořešník', 'male', { birthDate: '1865', deathDate: '1930', partnerships: ['u1'] }),
                 p_rp: p('p_rp', 'Radmila', 'Pšeničná', 'female', { birthDate: '1868', deathDate: '1940', partnerships: ['u1'] }),
             },
@@ -37,7 +45,7 @@ async function village(page: Page, opts: { width?: number; height?: number; long
                     participants: [{ id: 'w1', role: 'witness', personId: 'p_hm' }] },
             },
         } as never, long ? 'Rodokmen Pšeničných ze Zvonova 1850' : 'Zvonov');
-    }, !!opts.long);
+    }, { long: !!opts.long, informant: !!opts.informant });
 }
 
 test.describe('a part at another\'s event in one\'s own life', () => {
@@ -143,6 +151,55 @@ test.describe('a part at another\'s event in one\'s own life', () => {
                 if (process.env.SNIMKY_DIR) await page.screenshot({ path: `${process.env.SNIMKY_DIR}/G-people-de-${width}-${scheme}.png` });
                 await page.keyboard.press('Escape');
                 await expect(w).toBeHidden();
+            }
+        });
+    }
+
+    // A woman's part has the feminine word (the informant at a death, the godmother), in the dialog's list,
+    // the life on the person page and its summary; German also light and dark with a long tree name.
+    for (const width of [1440, 1024, 390]) {
+        test(`a woman informant at ${width}: the feminine form in Czech and German`, async ({ page }) => {
+            await village(page, { width, height: width === 390 ? 844 : 900, long: true, informant: true });
+            const words = {
+                cs: { informant: 'Oznamovatelka · úmrtí:', summary: 'Kmotra a svědkyně u', items: ['kmotra · křest 1890', 'oznamovatelka · úmrtí 1950'] },
+                de: { informant: 'Anzeigende · Tod:', summary: 'Patin und Zeugin bei', items: ['Patin · Taufe 1890', 'Anzeigende · Tod 1950'] },
+            } as const;
+            for (const lang of (width === 1024 ? ['de'] : ['cs', 'de']) as const) {
+                await page.evaluate(l => window.Strom.UI.setLanguage(l as never), lang);
+                const W = words[lang];
+                for (const scheme of (lang === 'de' ? ['light', 'dark'] : ['light']) as const) {
+                    await page.emulateMedia({ colorScheme: scheme });
+                    await page.evaluate(() => window.Strom.UI.showEditPersonModal('p_jz' as never));
+                    const modal = personModal(page);
+                    const row = modal.locator('.event-row.derived', { hasText: W.informant });
+                    await expect(row.locator('.derived-head')).toHaveText(`${W.informant} Bolemír Svatoboj Ctibor Pšeničný-Zvonovský`);
+                    await row.scrollIntoViewIfNeeded();
+                    expect(await modal.evaluate(el => {
+                        const content = el.querySelector('.modal-content') as HTMLElement;
+                        return Math.max(content.scrollWidth - content.clientWidth, document.documentElement.scrollWidth - document.documentElement.clientWidth);
+                    })).toBe(0);
+                    await page.keyboard.press('Escape');
+                    await expect(modal).toBeHidden();
+
+                    await page.evaluate(() => window.Strom.UI.showPersonPage('p_jz' as never));
+                    const w = page.locator('#person-page-modal');
+                    const part = w.locator('.pp-row--part', { hasText: W.informant });
+                    await expect(part.locator('.pp-t')).toHaveText(new RegExp(`^${W.informant} Bolemír Svatoboj Ctibor Pšeničný-Zvonovský · Zvonov`));
+                    await part.scrollIntoViewIfNeeded();
+                    expect(await part.evaluate(el => {
+                        const art = el.closest('article.pp') as HTMLElement;
+                        return Math.max(el.getBoundingClientRect().right - art.getBoundingClientRect().right, el.scrollWidth - el.clientWidth,
+                            document.documentElement.scrollWidth - document.documentElement.clientWidth);
+                    })).toBeLessThanOrEqual(0);
+                    if (process.env.SNIMKY_DIR) await page.screenshot({ path: `${process.env.SNIMKY_DIR}/3-informant-page-${lang}-${width}-${scheme}.png` });
+                    const people = w.locator('.pp-people-row', { hasText: W.summary });
+                    await expect(people.locator('li')).toHaveText(W.items.map((it, i) => new RegExp(`${i ? '^ · ' : '^'}Bolemír .+ · ${it}$`)));
+                    await people.scrollIntoViewIfNeeded();
+                    expect(await people.evaluate(el => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
+                    if (process.env.SNIMKY_DIR) await page.screenshot({ path: `${process.env.SNIMKY_DIR}/3-informant-people-${lang}-${width}-${scheme}.png` });
+                    await page.keyboard.press('Escape');
+                    await expect(w).toBeHidden();
+                }
             }
         });
     }

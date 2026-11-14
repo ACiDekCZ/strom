@@ -705,10 +705,16 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         derivedWitness: 'Świadek · ślub:',
         derivedWitnessF: 'Świadek · ślub:',
         derivedOfficiant: 'Udzielający ślubu · ślub:',
+        derivedOfficiantF: 'Udzielająca ślubu · ślub:',
         derivedMidwife: 'Akuszerka · chrzest:',
         derivedInformant: 'Zgłaszający · zgon:',
+        derivedInformantF: 'Zgłaszająca · zgon:',
         derivedOther: (role: string, type: string) => `${role} · ${type}:`,
-        derivedRoles: { godparent: { m: 'Chrzestny', f: 'Chrzestna' }, witness: { m: 'Świadek', f: 'Świadek' } },
+        // "Świadek" is the standard word for a woman too ("świadkowa" is colloquial, the bride's witness only).
+        derivedRoles: {
+            godparent: { m: 'Chrzestny', f: 'Chrzestna' }, witness: { m: 'Świadek', f: 'Świadek' },
+            officiant: { m: 'Celebrans', f: 'Celebrantka' }, informant: { m: 'Zgłaszający', f: 'Zgłaszająca' },
+        },
         derivedWord: (label: string) => label.toLowerCase(),
         marriageWord: 'ślub',
         derivedOpen: (type: string, names: string) => `Otwórz ${type} (${names})`,
