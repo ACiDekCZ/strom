@@ -145,6 +145,21 @@ const cache = new Map<string, unknown>();
 const scrollMemory = new Map<string, number>();
 /** Closes the person popover (null: none open). */
 let closePopover: (() => void) | null = null;
+/** Watches the head's height on a phone (a title on more lines): the person row sticks right under it. */
+let titlebarObserver: ResizeObserver | null = null;
+
+/** The head's height as --tov-bar-h on the dialog (CSS: the sticky person row's top on a phone). */
+function watchTitlebarHeight(overlay: HTMLElement): void {
+    titlebarObserver?.disconnect();
+    titlebarObserver = null;
+    const bar = overlay.querySelector<HTMLElement>('.tov-titlebar');
+    const modal = overlay.querySelector<HTMLElement>('.modal.tov');
+    if (!bar || !modal || typeof ResizeObserver === 'undefined') return;
+    const set = (): void => modal.style.setProperty('--tov-bar-h', `${bar.offsetHeight}px`);
+    set();
+    titlebarObserver = new ResizeObserver(set);
+    titlebarObserver.observe(bar);
+}
 /** The debounced refresh after an edit (null: none scheduled). */
 let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 /** An edit came while a question was being edited: refresh when the editor closes. */
@@ -512,6 +527,7 @@ export const treeOverviewMethods = uiModule({
         overlay.id = OVERLAY_ID;
         overlay.innerHTML = this.treeOverviewShellHtml(overviewHeader(data), open);
         document.body.appendChild(overlay);
+        watchTitlebarHeight(overlay);
         overlay.addEventListener('mousedown', (e) => {
             if (e.target === overlay) this.dismissTreeOverview();
         });
@@ -562,6 +578,8 @@ export const treeOverviewMethods = uiModule({
             if (state && scroller) scrollMemory.set(state.treeId, scroller.scrollTop);
             overlay.remove();
         }
+        titlebarObserver?.disconnect();
+        titlebarObserver = null;
         this.dialogStack = this.dialogStack.filter(id => id !== OVERLAY_ID);
         idleRun++;
         returnParent = null;
@@ -671,6 +689,7 @@ export const treeOverviewMethods = uiModule({
         if (!nums || header.persons === 0) {
             // Emptied, or no longer empty: the frame itself changes.
             overlay.innerHTML = this.treeOverviewShellHtml(header, readOpen());
+            watchTitlebarHeight(overlay);
             this.fillTreeOverviewSections(readOpen());
             restoreFocus();
             return;

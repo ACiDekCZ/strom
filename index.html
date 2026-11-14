@@ -20861,6 +20861,12 @@
         /* A narrow window (a phone's width): the name under the title wraps, the head's buttons stay on its line. */
         @media (max-width: 640px) {
             .research-overview__head--window { padding: 10px 10px 10px 14px; gap: 8px; }
+            /* The title ("<tree> · Research overview") wraps rather than "Familienforsc…"; when it and the
+               head's buttons do not fit on one line, the buttons go to a line of their own on the right. */
+            .research-overview__title { white-space: normal; overflow-wrap: break-word; line-height: 1.25; }
+            .research-overview__head--window { flex-wrap: wrap; row-gap: 6px; }
+            .research-overview__head--window > .research-overview__titles { flex: 1 1 auto; max-width: calc(100% - 20px); }
+            .research-overview__head--window > .research-overview__titles + * { margin-left: auto; }
             .research-overview__head--window > .research-overview__follow-live { padding: 0 10px; }
         }
         /* Sideways on a phone: a lower head. */
@@ -24062,11 +24068,18 @@
                 position: sticky; top: 0; z-index: 3; order: 0; min-height: 52px; padding: 0 4px 0 16px;
                 background: var(--surface); border-bottom: 1px solid var(--divider);
             }
-            .modal.tov .tov-title { font-size: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-            .tov-titlebar .tov-pages { min-height: 40px; padding: 0 10px; }
+            /* The title wraps onto more lines rather than "Stammbau…" beside the head's buttons, and the
+               tree pages' label wraps onto two; the person row sticks under the head at its height
+               (--tov-bar-h, measured in src/ui/tree-overview.ts). */
+            .tov-titlebar { gap: 8px; padding-top: 4px; padding-bottom: 4px; }
+            .modal.tov .tov-title { flex: 1 1 0; font-size: 16px; line-height: 1.25; overflow-wrap: break-word; }
+            .tov-titlebar .tov-pages {
+                flex: 0 1 auto; max-width: 8.5em; min-height: 40px; padding: 2px 8px;
+                white-space: normal; line-height: 1.2; text-align: center;
+            }
             .tov-close { width: 44px; height: 44px; }
             .tov-root {
-                position: sticky; top: 52px; z-index: 3; order: 1; padding: 8px 16px; flex-wrap: nowrap;
+                position: sticky; top: var(--tov-bar-h, 52px); z-index: 3; order: 1; padding: 8px 16px; flex-wrap: nowrap;
                 background: var(--surface); border-bottom: 1px solid var(--divider);
             }
             .tov-root-label { flex: none; }
@@ -24108,7 +24121,7 @@
             .modal.tov { width: 100vw; max-width: 100vw; height: 100%; max-height: 100%; border-radius: 0; }
             .tov-head { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 0 12px; min-height: 52px; padding: 4px 4px 4px 16px; }
             .tov-titlebar { display: contents; }
-            .modal.tov .tov-title { order: 0; flex: none; max-width: 30vw; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            .modal.tov .tov-title { order: 0; flex: none; max-width: 34vw; font-size: 15px; line-height: 1.25; overflow-wrap: break-word; }
             .tov-nums { order: 1; flex: 1 1 0; min-width: 0; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
             .tov-num-sep { display: inline; }
             .tov-num { white-space: nowrap; }
@@ -26232,7 +26245,13 @@
             background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-md, 6px);
             font-size: 14px; text-align: center;
         }
-        .sheet-tile-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+        /* A long label wraps (at a space, hyphenated in the UI language where the browser can) instead of
+           being cut with "…" in the middle of a word (de "Fokussieren", pl "Ustaw w centrum" on a phone). */
+        .sheet-tile-label { max-width: 100%; white-space: normal; overflow-wrap: break-word; hyphens: auto; line-height: 1.2; }
+        @media (max-width: 640px) {
+            .bottom-sheet-person .bottom-sheet-item.sheet-tile { padding-left: 2px; padding-right: 2px; }
+            .bottom-sheet-person .sheet-tile-label { font-size: 13px; }
+        }
         .sheet-tile-meta { font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
         .bottom-sheet-person .menu-chip-grid { padding: 4px 8px 8px; gap: 8px; }
         .bottom-sheet-person .menu-chip-grid .menu-chip { min-height: 44px; font-size: 15px; }
