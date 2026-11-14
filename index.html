@@ -2192,9 +2192,21 @@
             -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
                     mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
         }
+        /* Scrolled down: the row going under the header fades out over the
+           body's top padding instead of being cut off by a hard edge (a field
+           sliced through its middle under the header or a pinned banner). */
+        .modal-content.is-scrolled {
+            -webkit-mask-image: linear-gradient(to bottom, transparent, #000 16px);
+                    mask-image: linear-gradient(to bottom, transparent, #000 16px);
+        }
+        .modal-content.is-scrolled.is-scrollable {
+            -webkit-mask-image: linear-gradient(to bottom, transparent, #000 16px, #000 calc(100% - 24px), transparent);
+                    mask-image: linear-gradient(to bottom, transparent, #000 16px, #000 calc(100% - 24px), transparent);
+        }
         /* A mask clips fixed descendants too: off while a row menu is open
            (a scroll closes the menu), so the menu may run over the footer. */
-        .modal-content.is-scrollable:has(.tree-row-menu.open) { -webkit-mask-image: none; mask-image: none; }
+        .modal-content.is-scrollable:has(.tree-row-menu.open),
+        .modal-content.is-scrolled:has(.tree-row-menu.open) { -webkit-mask-image: none; mask-image: none; }
         /* On phones: near full-width dialogs; the flex skeleton keeps Save
            reachable, so no sticky action-bar hack is needed. */
         @media (max-width: 640px) {

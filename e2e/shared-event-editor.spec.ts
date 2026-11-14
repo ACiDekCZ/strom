@@ -356,6 +356,43 @@ test.describe('shared event: phone, German, dark', () => {
         });
     }
 
+    // The editor's scrolled body under its header and the pinned banner: at the start the
+    // top row stands whole below them; scrolled down, the row going under them fades out
+    // over the body's top padding (no field sliced by a hard edge, as in the showcase's
+    // shot); scrolled back, the top row is whole and unfaded again.
+    for (const width of [1440, 390]) {
+        test(`the top row under the header at ${width} px: whole at the start, faded out (not cut) while scrolled`, async ({ page }) => {
+            await tree(page, { width, height: width === 390 ? 844 : 640 });
+            await share(page);
+            const editor = await openFor(page, SUDIVOJ);
+            await expect(editor.locator('#event-shared-banner')).toBeVisible();
+            const body = editor.locator('.modal-content');
+            const state = () => body.evaluate((el) => {
+                const head = el.parentElement!.querySelector('.modal-header')!.getBoundingClientRect();
+                const label = document.querySelector('label[for="input-event-type"]')!.getBoundingClientRect();
+                const mask = getComputedStyle(el).maskImage || getComputedStyle(el).webkitMaskImage || 'none';
+                return { scrollTop: el.scrollTop, room: el.scrollHeight - el.clientHeight, headBottom: head.bottom, labelTop: label.top,
+                    bodyTop: el.getBoundingClientRect().top, topFade: /^linear-gradient\((rgba\(0, 0, 0, 0\)|transparent)/.test(mask) };
+            });
+            const atStart = async (when: string) => {
+                await expect.poll(async () => (await state()).topFade, `${when}: no top fade`).toBe(false);
+                const s = await state();
+                expect(s.scrollTop).toBe(0);
+                expect(s.labelTop, `${when}: the top row below the header`).toBeGreaterThanOrEqual(s.headBottom);
+                // Below the faded strip too (the body's top padding).
+                expect(s.labelTop - s.bodyTop, `${when}: the top row below the body's padding`).toBeGreaterThanOrEqual(12);
+            };
+            await atStart('opened');
+            expect((await state()).room, 'the body scrolls here').toBeGreaterThan(40);
+            await body.evaluate((el) => { el.scrollTop = 30; });
+            await expect.poll(async () => (await state()).topFade, 'scrolled down: the top fades').toBe(true);
+            await body.evaluate((el) => { el.scrollTop = el.scrollHeight; });
+            await expect.poll(async () => (await state()).topFade, 'at the end: the top fades').toBe(true);
+            await body.evaluate((el) => { el.scrollTop = 0; });
+            await atStart('scrolled back');
+        });
+    }
+
     test('a phone held sideways: the footer stays in sight, in the editor and in the picker', async ({ page }) => {
         await tree(page, { width: 844, height: 390, long: true });
         await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));

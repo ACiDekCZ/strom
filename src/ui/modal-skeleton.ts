@@ -81,13 +81,16 @@ export function normalizeModal(modal: HTMLElement): void {
 
 /**
  * Toggle an `is-scrollable` class on a `.modal-content` while more content
- * lies below the fold, driving the bottom fade hint (CSS `::after`).
+ * lies below the fold, driving the bottom fade hint (a CSS mask), and
+ * `is-scrolled` while it is scrolled down, driving the top fade (the row
+ * going under the header fades out instead of being cut).
  */
 function attachScrollHint(content: HTMLElement): void {
     const update = (): void => {
         const scrollable = content.scrollHeight - content.clientHeight > 1;
         const atBottom = content.scrollTop + content.clientHeight >= content.scrollHeight - 1;
         content.classList.toggle('is-scrollable', scrollable && !atBottom);
+        content.classList.toggle('is-scrolled', scrollable && content.scrollTop > 1);
     };
     content.addEventListener('scroll', update, { passive: true });
     if (typeof ResizeObserver !== 'undefined') {
