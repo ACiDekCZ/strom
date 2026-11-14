@@ -9399,7 +9399,9 @@
             color: var(--on-primary);
         }
 
-        /* Overview minimap (top of the control block). */
+        /* Overview minimap (top of the control block). The canvas is 180x120
+           inside the 1px edge (content-box): a border-box panel of the same
+           size cut its last 2px on the right and at the bottom. */
         .minimap-panel {
             width: 180px;
             height: 120px;
@@ -9407,7 +9409,7 @@
             overflow: hidden;
             background: var(--surface-2);
             border: 1px solid var(--divider);
-            box-sizing: border-box;
+            box-sizing: content-box;
         }
         .minimap-panel canvas {
             display: block;

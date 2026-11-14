@@ -154,4 +154,42 @@ test.describe('Minimap', () => {
             }
         }
     });
+
+    // The whole canvas shows inside the panel's 1px edge: the panel used to be
+    // 180x120 including its edge, so the 180x120 canvas lost 2px on the right
+    // and at the bottom. A phone has no minimap at all (nothing cut there).
+    for (const width of [1440, 1024, 390]) {
+        test(`the canvas is not cut by its panel @${width}px`, async ({ page }) => {
+            await page.setViewportSize({ width, height: 850 });
+            await openApp(page);
+            await page.getByRole('button', { name: 'Try a sample tree' }).click();
+            await expect(card(page, 'Johan')).toBeVisible();
+            for (let i = 0; i < 4; i++) await page.evaluate(() => window.Strom.ZoomPan.zoomIn());
+            const panel = page.locator('#minimap-panel');
+            if (width <= 640) {
+                await page.waitForTimeout(300);
+                await expect(panel).toBeHidden();
+                return;
+            }
+            await expect(panel).toBeVisible();
+            await settleLayout(page, '#minimap-panel', '.control-block');
+            const m = await page.evaluate(() => {
+                const p = document.getElementById('minimap-panel')!;
+                const c = document.getElementById('minimap-canvas') as HTMLCanvasElement;
+                const pr = p.getBoundingClientRect(), cr = c.getBoundingClientRect();
+                // The panel's visible inside (overflow: hidden clips at the padding box).
+                const inside = { left: pr.left + p.clientLeft, top: pr.top + p.clientTop,
+                    right: pr.left + p.clientLeft + p.clientWidth, bottom: pr.top + p.clientTop + p.clientHeight };
+                return { inside, canvas: { left: cr.left, top: cr.top, right: cr.right, bottom: cr.bottom, w: cr.width, h: cr.height },
+                    bitmap: { w: c.width, h: c.height } };
+            });
+            // Drawn 1:1: the canvas box is its bitmap's size.
+            expect(m.canvas.w).toBe(m.bitmap.w);
+            expect(m.canvas.h).toBe(m.bitmap.h);
+            expect(m.canvas.left).toBeGreaterThanOrEqual(m.inside.left - 0.01);
+            expect(m.canvas.top).toBeGreaterThanOrEqual(m.inside.top - 0.01);
+            expect(m.canvas.right, 'right edge of the canvas in view').toBeLessThanOrEqual(m.inside.right + 0.01);
+            expect(m.canvas.bottom, 'bottom edge of the canvas in view').toBeLessThanOrEqual(m.inside.bottom + 0.01);
+        });
+    }
 });
