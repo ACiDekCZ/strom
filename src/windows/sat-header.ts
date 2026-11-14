@@ -14,6 +14,7 @@ import { strings } from '../strings.js';
 import type { SatelliteKind } from './window-role.js';
 import { satelliteKindLabel } from './window-title.js';
 import { followModesFor, type FollowMode } from './follow-mode.js';
+import { setSelTabLabel } from '../ui/sel-css.js';
 
 /** From this window width the view switcher is the view tabs; below it one button with a menu (§2 K2, 2e). */
 export const SAT_SEGMENT_MIN_WIDTH = 960;
@@ -335,6 +336,8 @@ function createSwitcher(doc: Document, current: () => SatelliteKind, switchView:
     for (const kind of SAT_VIEWS) {
         const tab = doc.createElement('button');
         tab.type = 'button';
+        tab.className = 'sel-tab';
+        tab.dataset.selDir = 'down';
         tab.dataset.view = kind;
         tab.addEventListener('click', () => switchView(kind));
         tabs.set(kind, tab);
@@ -436,7 +439,7 @@ function createSwitcher(doc: Document, current: () => SatelliteKind, switchView:
         const now = current();
         for (const [kind, tab] of tabs) {
             const on = kind === now;
-            tab.textContent = satelliteKindLabel(kind);
+            setSelTabLabel(tab, satelliteKindLabel(kind));
             tab.classList.toggle('active', on);
             tab.setAttribute('aria-pressed', on ? 'true' : 'false');
         }

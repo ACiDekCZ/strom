@@ -2271,8 +2271,8 @@ export const readDocumentMethods = uiModule({
             const off = n === 2 && !has;
             const on = !off && (n === 2) === second;
             const label = off ? t.r2no : t.readerN(n);
-            return `<button type="button" class="read-reader-btn${on ? ' is-on' : ''}${off ? ' is-off' : ''}" data-act="reader" data-reader="${n}" aria-pressed="${on}"`
-                + `${off ? ' disabled aria-disabled="true"' : ''}><span class="read-reader-label">${esc(label)}</span></button>`;
+            return `<button type="button" class="read-reader-btn sel-tab${on ? ' is-on' : ''}${off ? ' is-off' : ''}" data-sel-dir="down" data-act="reader" data-reader="${n}" aria-pressed="${on}"`
+                + `${off ? ' disabled aria-disabled="true"' : ''}><span class="read-reader-label sel-l" data-label="${esc(label)}">${esc(label)}</span></button>`;
         };
         return `<div class="read-reader-seg" role="group" aria-label="${esc(t.readerView)}">${btn(1)}${btn(2)}</div>`;
     },

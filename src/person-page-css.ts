@@ -7,6 +7,7 @@
  */
 
 import { PERSON_PAGE_VIZ_CSS, PERSON_PAGE_VIZ_LIGHT_TOKENS } from './person-page-viz-css.js';
+import { SEL_LIGHT_DECLS, SEL_RULES_CSS } from './ui/sel-css.js';
 
 /** The light ("paper") values of the app tokens the page uses — the file's :root and print. */
 export const PERSON_PAGE_LIGHT_TOKENS = [
@@ -579,12 +580,14 @@ html.no-js .pp-fig { max-width: 100%; }
 /**
  * The whole <style> content of the saved file: the embedded font faces (as the
  * app supplies them; empty = the fallback fonts), the light tokens on :root
- * (no prefers-color-scheme: the file is always "paper"), the frame and the page.
+ * (no prefers-color-scheme: the file is always "paper"), the frame and the page,
+ * the rules a file adds (`moreCss`: the family pages'), then the selection
+ * indicator's rules last (src/ui/sel-css.ts; in the app they come from index.html).
  */
-export function personPageFileCss(fontCss = ''): string {
+export function personPageFileCss(fontCss = '', moreCss = ''): string {
     // A font face never ends the <style> element early.
     const fonts = fontCss.replace(/<\//g, '<\\/');
-    return `${fonts}\n:root { ${PERSON_PAGE_LIGHT_TOKENS} ${PERSON_PAGE_VIZ_LIGHT_TOKENS} ${FONT_STACKS} color-scheme: light; }\n${FILE_FRAME_CSS}${PERSON_PAGE_CSS}`;
+    return `${fonts}\n:root { ${PERSON_PAGE_LIGHT_TOKENS} ${PERSON_PAGE_VIZ_LIGHT_TOKENS} ${FONT_STACKS} ${SEL_LIGHT_DECLS} color-scheme: light; }\n${FILE_FRAME_CSS}${PERSON_PAGE_CSS}${moreCss}${SEL_RULES_CSS}`;
 }
 
 /**

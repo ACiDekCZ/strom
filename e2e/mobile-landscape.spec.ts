@@ -27,9 +27,9 @@ test('the side bar: 76px on the left, the tabs top to bottom with the FAB in the
     for (let i = 1; i < ys.length; i++) expect(ys[i].y).toBeGreaterThan(ys[i - 1].y);
     for (const b of ys) expect(Math.round(b.h)).toBeGreaterThanOrEqual(44);
     await expect(page.locator('#bb-view-table .bottom-bar-label')).toHaveText('Table');
-    // The active tab: a line on its left.
-    const active = await page.locator('#bb-view-family').evaluate(el => getComputedStyle(el).borderLeftWidth);
-    expect(active).toBe('2px');
+    // The active tab: a line on its left (the selection indicator's inset line, 2px).
+    const active = await page.locator('#bb-view-family').evaluate(el => getComputedStyle(el).boxShadow);
+    expect(active).toMatch(/ 2px 0px 0px 0px inset$/);
 });
 
 test('one 44px header: icon · tree name | person · ↑n · ↓n · magnifier; the tree takes the rest', async ({ page }) => {

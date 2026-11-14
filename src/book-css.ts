@@ -6,6 +6,7 @@
 
 import { PERSON_PAGE_CHART_CSS, PERSON_PAGE_VIZ_LIGHT_TOKENS } from './person-page-viz-css.js';
 import { STORY_COMPARE_CSS } from './story-compare.js';
+import { SEL_LIGHT_DECLS, SEL_RULES_CSS } from './ui/sel-css.js';
 
 /** A text as a CSS string literal: quotes, backslashes and line breaks escaped ("Rod O\"Brien"). */
 export function cssString(text: string): string {
@@ -21,7 +22,8 @@ const SANS = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
 
 export const BOOK_CSS = `
 :root { ${PERSON_PAGE_VIZ_LIGHT_TOKENS} --text: #1f1c17; --text-light: #4a4438; --text-faint: #5c5546; --accent: #8a5528; --accent-text: #8a5528;
-    --primary: #3f6b4f; --divider: #e3dccd; --pp-bg: #fffdf8; --hover-bg: #f3eee2; color-scheme: light; }
+    --primary: #3f6b4f; --divider: #e3dccd; --pp-bg: #fffdf8; --hover-bg: #f3eee2;
+    ${SEL_LIGHT_DECLS} color-scheme: light; }
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
 body { margin: 0; background: #f1ece2; color: #1f1c17; font: 12pt/1.5 'Strom Serif', Georgia, 'Times New Roman', serif; font-kerning: normal; }
@@ -232,4 +234,6 @@ ${STORY_COMPARE_CSS}
     .book-source-scan a[data-print]::after { content: attr(data-print); }
     .book-source-scan a[data-print] span { display: none; }
 }
-`;
+
+/* The selection indicator (src/ui/sel-css.ts), last: the story comparison's tabs */
+${SEL_RULES_CSS}`;

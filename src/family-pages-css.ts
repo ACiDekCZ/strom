@@ -15,6 +15,7 @@ import { PERSON_PAGE_LIGHT_TOKENS } from './person-page-css.js';
 import { PERSON_PAGE_VIZ_LIGHT_TOKENS } from './person-page-viz-css.js';
 import { PAGE_SET_SEARCH_JS } from './family-pages-search.js';
 import { rodTimelineScript } from './rod-timeline-wire.js';
+import { SEL_DARK_DECLS } from './ui/sel-css.js';
 
 /** The lineage bars' colour (light / dark), next to the person page's tokens. */
 const LIGHT_EXTRA = '--rod-bar: #9fb8a6; --sp-frame: #d0c6b2; --tint: #f1ece1; --hist: #f3e3cf;';
@@ -34,10 +35,10 @@ const DARK_TOKENS = [
     '--rod-bar: #6f8f78', '--sp-frame: #575143', '--tint: #35322a', '--hist: #4d3d2a',
 ].join('; ') + ';';
 
-/** The file's tokens: the lineage bars and the frame, the system's dark scheme. */
+/** The file's tokens: the lineage bars and the frame, the system's dark scheme (the selection indicator's dark tokens too). */
 const ROOT_CSS = `
 :root { ${LIGHT_EXTRA} }
-@media screen and (prefers-color-scheme: dark) { :root { ${DARK_TOKENS} color-scheme: dark; } }
+@media screen and (prefers-color-scheme: dark) { :root { ${DARK_TOKENS} ${SEL_DARK_DECLS} color-scheme: dark; } }
 `;
 
 /** Paper's tokens in print (the file only: the app keeps its own). */
@@ -391,8 +392,7 @@ html.sp-on main section.sp-page[id] { scroll-margin-top: 100vh; }
 .sp-results .pp-link, .sp-results a { color: var(--primary); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }
 /* The indexes (§3.5): the tabs, the alphabet, the rows, the folds. */
 .sp-tabs { display: flex; flex-wrap: wrap; gap: 0 4px; margin-top: -16px; border-bottom: 1px solid var(--border); }
-.sp-tab { display: inline-flex; align-items: center; min-height: 40px; margin-bottom: -1px; padding: 0 14px; font-size: 14.5px; color: var(--text-light); text-decoration: none; border-bottom: 2px solid transparent; }
-.sp-tab[aria-current] { color: var(--text); font-weight: 600; border-bottom-color: var(--primary); }
+.sp-tab { display: inline-flex; align-items: center; min-height: 40px; margin-bottom: -1px; padding: 0 14px; font-size: 14.5px; color: var(--text-light); text-decoration: none; }
 .sp-ix { margin-top: -12px; }
 .sp-letters { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 20px; }
 .sp-letter { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; min-width: 32px; height: 32px; padding: 0 7px; font-size: 14px; color: var(--primary); text-decoration: none; border: 1px solid var(--border); border-radius: 6px; }
@@ -625,8 +625,7 @@ export const FAMILY_PAGES_APP_CSS = FAMILY_PAGES_BODY_CSS.replace(PRINT_ROOT_CSS
 .sp-appset .sp-fbar button.sp-fbar-a[aria-current] { color: var(--text); font-weight: 600; }
 .sp-appset button.sp-menu-a { border: 0; font-size: 16px; color: var(--text); }
 .sp-appset button.sp-menu-a[aria-current] { font-weight: 600; color: var(--primary); }
-.sp-app button.sp-tab { border: 0; border-bottom: 2px solid transparent; font-size: 14.5px; color: var(--text-light); }
-.sp-app button.sp-tab[aria-current] { color: var(--text); font-weight: 600; border-bottom-color: var(--primary); }
+.sp-app button.sp-tab { border: 0; font-size: 14.5px; font-weight: 500; color: var(--text-light); }
 .sp-app button.sp-letter { font-size: 14px; color: var(--primary); }
 .sp-app button.sp-letter[aria-current] { color: var(--text); font-weight: 600; background: var(--primary-soft); border-color: var(--primary); }
 /* The window's bar over the page's column (.sp-app: 960 px, its own margins), its name where the page starts. */

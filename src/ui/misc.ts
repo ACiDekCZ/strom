@@ -1641,6 +1641,8 @@ export const miscMethods = uiModule({
             const key = el.getAttribute('data-i18n');
             if (key) {
                 el.textContent = getString(key);
+                // A tab's label holds the width of its bold cut (src/ui/sel-css.ts).
+                if (el.classList.contains('sel-l')) el.setAttribute('data-label', el.textContent);
             }
         });
 

@@ -133,12 +133,12 @@ function targetSlug(set: PageSet, target: BookLinkTarget): string {
 }
 
 /** A link to a page of the set: `<a href="#slug">` in the file, a `data-sp-open` button in the window. */
-function pageLink(r: Render, slug: string, html: string, cls = 'pp-link'): string {
+function pageLink(r: Render, slug: string, html: string, cls = 'pp-link', attrs = ''): string {
     const page = r.set.bySlug.get(slug);
     if (!page) return html;
     return r.mode === 'file'
-        ? `<a class="${cls}" href="#${esc(slug)}">${html}</a>`
-        : `<button type="button" class="${cls}" data-sp-open="${esc(pageSetAppTarget(page))}">${html}</button>`;
+        ? `<a class="${cls}"${attrs} href="#${esc(slug)}">${html}</a>`
+        : `<button type="button" class="${cls}"${attrs} data-sp-open="${esc(pageSetAppTarget(page))}">${html}</button>`;
 }
 
 function localDay(d: Date): string {
@@ -1471,7 +1471,10 @@ function indexPageHtml(r: Render, page: SetPage): string {
     const tabs = (['persons', 'families', 'surnames', 'places'] as const).map(k => {
         const slug = drawnSlug(r, r.set.indexSlug[k]);
         if (!slug) return '';
-        return k === kind ? `<span class="sp-tab" aria-current="page">${esc(F.idxTabs[k])}</span>` : pageLink(r, slug, esc(F.idxTabs[k]), 'sp-tab');
+        // The selection indicator's tab (src/ui/sel-css.ts), its label holding the bold cut's width.
+        const label = `<span class="sel-l" data-label="${esc(F.idxTabs[k])}">${esc(F.idxTabs[k])}</span>`;
+        return k === kind ? `<span class="sp-tab sel-tab" data-sel-dir="down" aria-current="page">${label}</span>`
+            : pageLink(r, slug, label, 'sp-tab sel-tab', ' data-sel-dir="down"');
     }).join('');
     let body = '';
     if (kind === 'persons') body = personsIndexHtml(r, page);
@@ -1949,7 +1952,7 @@ export async function buildPageSetFilesAsync(set: PageSet, opts: PageSetHtmlOpti
         await emit({ path, data: img.bytes });
     }
     // The styles live in the files' folder: an image is one folder up.
-    const css = `${personPageFileCss(opts.fontCss ?? '')}${FAMILY_PAGES_CSS}\n`
+    const css = `${personPageFileCss(opts.fontCss ?? '', FAMILY_PAGES_CSS)}\n`
         + set.images.css(n => files.has(n) ? `../${files.get(n)}` : '');
     await emit({ path: `${folders.files}/styl.css`, data: css });
     await emit({ path: `${folders.files}/skript.js`, data: [PERSON_PAGE_SCRIPT, PERSON_PAGE_STORY_SCRIPT, PLACES_MAP_SCRIPT, fanZoomInlineScript(), PAGE_SET_SCRIPT].join(';\n') });

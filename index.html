@@ -10583,7 +10583,7 @@
         .tv-headrow .tv-headcell[data-col="name"] .tv-head-all { min-height: 20px; order: 2; }
         .tv-headrow .tv-headcell[data-col="name"] .tv-head-menu { height: 16px; }
         /* The active cell (a click, the arrows): a quiet outline; the keyboard's focus ring stays stronger. */
-        .tv-body .tv-cell.is-active-cell { outline: 1px solid color-mix(in srgb, var(--primary) 70%, transparent); outline-offset: -1px; }
+        .tv-body .tv-cell.is-active-cell { outline: 2px solid var(--primary); outline-offset: -2px; }
         .tv-body .tv-cell:focus-visible, .tv-head-all:focus-visible, .tv-more-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         /* A cell edited in place (T54 F8): the field over its cell, as wide as its column; the error under it. Only in a column
            narrower than its kind's least width does it float over the row's other cells, raised with a shadow. */
@@ -13872,8 +13872,9 @@
             .toolbar-undo-group { display: none !important; }
         }
 
-        /* Family / Descendants view tabs — full-height, copper underline on the
-           active tab. margin-left:auto pushes the tabs (+ ⋯/settings/add) right. */
+        /* Family / Descendants view tabs — full-height .sel-tab (the selection
+           indicator: the line at the foot of the chosen tab, its bold cut held by
+           .sel-l). margin-left:auto pushes the tabs (+ ⋯/settings/add) right. */
         .view-mode-segment {
             display: inline-flex; align-self: stretch; align-items: stretch;
             margin-left: auto;
@@ -13888,17 +13889,16 @@
         .view-mode-segment button {
             border: none; background: transparent; color: var(--text-light);
             padding: 0 14px; font-size: 13px; cursor: pointer;
-            border-bottom: 2px solid transparent;
-            transition: color 0.15s, border-color 0.15s;
         }
         /* The underline tabs must stay flat on hover. The generic
            ".toolbar button:hover { background: var(--primary-dark) }" rule
            otherwise painted a dark-green fill behind the dark hover text
            (dark-on-dark) — reassert a transparent background here. */
-        @media (hover: hover) { .view-mode-segment button:hover { color: var(--text); background: transparent; } }
+        @media (hover: hover) { .view-mode-segment button:hover { background: transparent; } }
         /* Fit step 2 (measured, src/ui/toolbar-fit.ts): the toolbar is too tight with
-           ＋ alone — tighter tabs and no "/" hint, the field keeps its text. */
-        .toolbar.toolbar-squeeze .view-mode-segment button { padding: 0 9px; }
+           ＋ alone — tighter tabs and no "/" hint, the field keeps its text. Every
+           tab holds the width of its bold cut (.sel-l), so the tabs tighten to 8 px. */
+        .toolbar.toolbar-squeeze .view-mode-segment button { padding: 0 8px; }
         .toolbar.toolbar-squeeze .search-shortcut { display: none; }
         /* Fit step 4: the tree's name capped shorter ("…"; the whole name in its tooltip). */
         .toolbar.toolbar-squeeze-name .tree-switcher-btn { max-width: min(96px, 100%); }
@@ -13925,14 +13925,6 @@
         @media (min-width: 1025px) and (hover: hover), (min-width: 641px) and (min-height: 501px) and (hover: hover) {
             .toolbar.toolbar-squeeze-3 .search-open-btn:hover { background: var(--surface-2); border-color: var(--primary); }
         }
-        .view-mode-segment button.active {
-            color: var(--accent);
-            border-bottom-color: var(--accent);
-            font-weight: 600;
-        }
-        /* Hovering the active tab keeps its copper indicator, not the flat
-           hover text colour. */
-        @media (hover: hover) { .view-mode-segment button.active:hover { color: var(--accent); background: transparent; } }
         /* A view tab while its small "… in a new window" menu is open (spec 079 §1, 1b). */
         .view-mode-segment button.is-window-ctx { background: var(--hover-bg); }
         @media (hover: hover) { .view-mode-segment button.is-window-ctx:hover { background: var(--hover-bg); } }
@@ -16167,17 +16159,12 @@
             min-height: 44px;
             padding: 4px 2px 0;
             position: relative;
-            border-top: 2px solid transparent;
             -webkit-tap-highlight-color: transparent;
         }
         .bottom-bar-icon { width: 22px; height: 22px; display: block; }
         /* One line, never cut: German gets 10.5px on the narrowest phones. */
         .bottom-bar-label { font-size: 11px; line-height: 1.1; white-space: nowrap; }
         @media (max-width: 360px) { html[lang="de"] .bottom-bar-label { font-size: 10.5px; } }
-        .bottom-bar-tab.active {
-            color: var(--accent);
-            border-top-color: var(--accent);
-        }
         .bottom-bar-tab:active { background: var(--hover-bg); }
         /* Dots ride the icon itself (not the tab, whose height and safe-area
            padding vary): top-right corner of the glyph. */
@@ -19326,13 +19313,13 @@
         }
         /* Reader 1 / Reader 2 (spec 059 K6.6): whose transcription shows, on its own row of the section's head. */
         .read-reader-seg { flex: 1 1 100%; order: 5; display: flex; min-width: 0; max-width: 560px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+        /* The readers are .sel-tab (the selection indicator, src/ui/sel-css.ts): only the layout here. */
         .read-reader-btn {
             flex: 1 1 0; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; margin: 0;
-            padding: 5px 10px !important; border: 0 !important; border-radius: 0 !important; background: var(--surface) !important; color: var(--text-light) !important;
-            font-size: 12.5px; line-height: 1.3; box-shadow: none !important; min-height: 0; cursor: pointer;
+            padding: 5px 10px !important; border: 0 !important; background: var(--surface) !important;
+            font-size: 12.5px; line-height: 1.3; min-height: 0; cursor: pointer;
         }
         .read-reader-btn + .read-reader-btn { border-left: 1px solid var(--border) !important; }
-        .read-reader-btn.is-on { background: var(--primary-soft) !important; color: var(--primary) !important; font-weight: 600; box-shadow: inset 0 -2px 0 var(--primary) !important; }
         .read-reader-btn:disabled { cursor: not-allowed; opacity: 0.55; }
         .read-reader-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .read-reader-mk {
@@ -19435,10 +19422,9 @@
             content: attr(data-n); position: absolute; left: 6px; top: 0.6em; font-family: var(--font-sans); font-size: 11px; line-height: 1;
             color: var(--text-faint); font-variant-numeric: tabular-nums;
         }
-        .read-section--transcript .read-reader-seg { flex: none; order: 0; max-width: 100%; gap: 2px; padding: 2px; border-radius: 8px; background: var(--surface-2); }
-        .read-section--transcript .read-reader-btn { flex: none; border-radius: 6px !important; background: transparent !important; white-space: nowrap; }
+        .read-section--transcript .read-reader-seg { flex: none; order: 0; max-width: 100%; gap: 2px; border: 0; border-radius: 0; }
+        .read-section--transcript .read-reader-btn { flex: none; background: transparent !important; white-space: nowrap; }
         .read-section--transcript .read-reader-btn + .read-reader-btn { border-left: 0 !important; }
-        .read-section--transcript .read-reader-btn.is-on { background: var(--surface) !important; color: var(--text) !important; box-shadow: inset 0 0 0 1px var(--border) !important; }
         .read-section--transcript .read-reader-btn.is-off { font-style: italic; color: var(--text-faint) !important; opacity: 1; }
         .read-r2note { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 6px; font-size: 12.5px; line-height: 1.45; color: var(--text-light); }
         .read-r2note-key { flex: none; width: 16px; height: 12px; margin-top: 2px; box-sizing: border-box; border: 1.5px dashed var(--hist-place); border-radius: 3px; opacity: 0.55; }
@@ -19971,7 +19957,6 @@
             .read-line[tabindex]:hover { background: color-mix(in srgb, var(--primary) 20%, transparent); box-shadow: inset 3px 0 0 var(--primary); }
             .read-entry-pill:hover, .read-page-tab:hover, .read-copy:hover, .modal .read-scan-zoom:hover, .modal .read-strip-scan:hover { border-color: var(--primary) !important; }
             .modal .read-nb-toggle.is-more:hover { color: var(--text) !important; border-color: var(--text-faint) !important; }
-            .read-reader-btn:not(.is-on):not(:disabled):hover { color: var(--text) !important; background: var(--surface-2) !important; }
             .read-frame:not(.is-selected):hover { background: color-mix(in srgb, var(--primary) 8%, transparent); }
         }
         /* Desktop: "Enlarge beside the text" widens the scan's column (spec 059 P7 §7). */
@@ -25202,11 +25187,8 @@
                 padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
                 border-top: none; border-right: 1px solid var(--border);
             }
-            .bottom-bar-tab {
-                flex: 1 1 0; min-height: 44px; padding: 0 2px;
-                border-top: none; border-left: 2px solid transparent;
-            }
-            .bottom-bar-tab.active { border-left-color: var(--accent); }
+            /* The tabs' indicator turns to their left edge here (data-sel-land="side", src/ui/sel-css.ts). */
+            .bottom-bar-tab { flex: 1 1 0; min-height: 44px; padding: 0 2px; }
             .bottom-bar-label { font-size: 10px; }
             .bottom-bar-fab { width: 44px; height: 44px; margin: 2px auto; align-self: center; }
             .toolbar {
@@ -29393,6 +29375,58 @@
             .vfy-row:hover .vfy-row-title, .vfy-opt:hover .vfy-opt-title { color: var(--primary); }
             button.vfy-sec-row:hover { background: var(--surface-2); }
         }
+        /* The one selection indicator (src/ui/sel-css.ts, the same text; src/__tests__/sel-css-sync.test.ts). */
+        /* sel:start */
+:root { --sel-line: var(--text); --sel-line-w: 2px; --sel-fill: #f0e9da; --sel-fg: var(--text); --sel-border: var(--text); --sel-r: 4px; --sel-mute: var(--line-color, #b8ae99); }
+[data-theme="dark"] { --sel-fill: #3a362c; --sel-mute: var(--line-color, #5a5546); }
+.sel-tab { font-weight: 500; color: var(--text-light); }
+.sel-tab.sel-tab { border-radius: 0; }
+.sel-tab:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)), .sel-opt:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)) { color: var(--sel-fg); font-weight: 600; }
+.sel-tab > .sel-l { display: inline-grid; }
+.sel-tab > .sel-l::after { content: attr(data-label); content: attr(data-label) / ""; font-weight: 600; height: 0; overflow: hidden; visibility: hidden; white-space: inherit; }
+.sel-tab:focus-visible, .sel-opt:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; box-shadow: revert-layer; }
+.sel-tab:is(:disabled, [aria-disabled="true"]), .sel-opt:is(:disabled, [aria-disabled="true"]) { opacity: .55; cursor: default; }
+.sel-tab:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)):is(:disabled, [aria-disabled="true"]), .sel-opt:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)):is(:disabled, [aria-disabled="true"]) { --sel-line: var(--sel-mute); --sel-border: var(--sel-mute); }
+.sel-tab:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)) { box-shadow: inset 0 calc(-1 * var(--sel-line-w)) 0 var(--sel-line); }
+.sel-tab[data-sel-dir="up"]:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)) { box-shadow: inset 0 var(--sel-line-w) 0 var(--sel-line); }
+.sel-tab[data-sel-dir="side"]:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)) { box-shadow: inset var(--sel-line-w) 0 0 var(--sel-line); }
+.sel-opt { border: 1px solid var(--border, #ddd4c2); border-radius: var(--sel-r); background: var(--surface, #fffdf8); color: var(--text-light); }
+.sel-opt:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)) { border-color: var(--sel-border); box-shadow: inset 0 0 0 1px var(--sel-border); }
+.sel-seg { display: inline-flex; border: 1px solid var(--border, #ddd4c2); border-radius: var(--sel-r); }
+.sel-seg > .sel-opt { border: 0; border-radius: 0; }
+.sel-seg > .sel-opt:first-child { border-radius: calc(var(--sel-r) - 1px) 0 0 calc(var(--sel-r) - 1px); }
+.sel-seg > .sel-opt:last-child { border-radius: 0 calc(var(--sel-r) - 1px) calc(var(--sel-r) - 1px) 0; }
+.sel-seg > .sel-opt:first-child:last-child { border-radius: calc(var(--sel-r) - 1px); }
+.sel-seg > .sel-opt + .sel-opt { border-left: 1px solid var(--border, #ddd4c2); }
+.sel-seg > .sel-opt:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)) { box-shadow: inset 0 0 0 2px var(--sel-border); }
+.sel-opt[data-sel-form="row"] { border: 0; border-bottom: 1px solid var(--divider, #ece5d6); border-radius: 0; background: transparent; }
+.sel-opt[data-sel-form="row"]:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)) { background: var(--sel-fill); box-shadow: inset 0 -2px 0 var(--sel-line); }
+.sel-opt[data-sel-form="tile"] { border-radius: var(--r-md, 8px); }
+@media (hover: hover) {
+  .sel-tab:not(:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)), :is(:disabled, [aria-disabled="true"])):hover { color: var(--text); box-shadow: inset 0 -1px 0 var(--sel-mute); }
+  .sel-tab[data-sel-dir="up"]:not(:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)), :is(:disabled, [aria-disabled="true"])):hover { box-shadow: inset 0 1px 0 var(--sel-mute); }
+  .sel-tab[data-sel-dir="side"]:not(:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)), :is(:disabled, [aria-disabled="true"])):hover { box-shadow: inset 1px 0 0 var(--sel-mute); }
+  .sel-opt:not(:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)), :is(:disabled, [aria-disabled="true"])):hover { background: var(--surface-2, #f6f2ea); border-color: var(--sel-mute); }
+}
+@media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+  .sel-tab[data-sel-dir="up"][data-sel-land="side"]:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)) { box-shadow: inset var(--sel-line-w) 0 0 var(--sel-line); }
+}
+@media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) and (hover: hover) {
+  .sel-tab[data-sel-dir="up"][data-sel-land="side"]:not(:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)), :is(:disabled, [aria-disabled="true"])):hover { box-shadow: inset 1px 0 0 var(--sel-mute); }
+}
+@media (pointer: coarse) {
+  .sel-tab, .sel-opt:is([data-sel-form="seg"], [data-sel-form="row"], [data-sel-form="tile"]) { min-height: 44px; }
+  .sel-opt:is(:not([data-sel-form]), [data-sel-form="chip"]) { position: relative; }
+  .sel-opt:is(:not([data-sel-form]), [data-sel-form="chip"])::before { content: ""; position: absolute; inset: -7px 0; }
+}
+@media print {
+  .sel-tab:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)) { box-shadow: none; border-bottom: var(--sel-line-w) solid var(--sel-line); }
+  .sel-tab[data-sel-dir="up"]:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)) { box-shadow: none; border-bottom: 0; border-top: var(--sel-line-w) solid var(--sel-line); }
+  .sel-tab[data-sel-dir="side"]:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)) { box-shadow: none; border-bottom: 0; border-left: var(--sel-line-w) solid var(--sel-line); }
+  .sel-opt:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)), .sel-seg > .sel-opt:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)) { box-shadow: none; outline: 2px solid var(--sel-border); outline-offset: -2px; }
+  .sel-opt[data-sel-form="row"]:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)) { box-shadow: none; outline: 0; border-bottom: 2px solid var(--sel-line); }
+}
+        /* sel:end */
     </style>
 </head>
 <body>
@@ -29519,12 +29553,12 @@
 
         <!-- Family / Descendants view tabs (desktop) — pushed to the right -->
         <div class="view-mode-segment desktop-only" id="view-mode-segment">
-            <button id="view-mode-family" class="active" onclick="window.Strom.UI.setDisplayViewMode('family')" data-i18n="viewModeSwitch.family"></button>
-            <button id="view-mode-descendants" onclick="window.Strom.UI.setDisplayViewMode('descendants')" data-i18n="viewModeSwitch.descendants"></button>
-            <button id="view-mode-timeline" onclick="window.Strom.UI.setDisplayViewMode('timeline')" data-i18n="viewModeSwitch.timeline"></button>
-            <button id="view-mode-fan" onclick="window.Strom.UI.setDisplayViewMode('fan')" data-i18n="viewModeSwitch.fan"></button>
-            <button id="view-mode-map" onclick="window.Strom.UI.setDisplayViewMode('map')" data-i18n="viewModeSwitch.map"></button>
-            <button id="view-mode-table" onclick="window.Strom.UI.setDisplayViewMode('table')" data-i18n="viewModeSwitch.table"></button>
+            <button id="view-mode-family" class="sel-tab active" data-sel-dir="down" onclick="window.Strom.UI.setDisplayViewMode('family')"><span class="sel-l" data-i18n="viewModeSwitch.family"></span></button>
+            <button id="view-mode-descendants" class="sel-tab" data-sel-dir="down" onclick="window.Strom.UI.setDisplayViewMode('descendants')"><span class="sel-l" data-i18n="viewModeSwitch.descendants"></span></button>
+            <button id="view-mode-timeline" class="sel-tab" data-sel-dir="down" onclick="window.Strom.UI.setDisplayViewMode('timeline')"><span class="sel-l" data-i18n="viewModeSwitch.timeline"></span></button>
+            <button id="view-mode-fan" class="sel-tab" data-sel-dir="down" onclick="window.Strom.UI.setDisplayViewMode('fan')"><span class="sel-l" data-i18n="viewModeSwitch.fan"></span></button>
+            <button id="view-mode-map" class="sel-tab" data-sel-dir="down" onclick="window.Strom.UI.setDisplayViewMode('map')"><span class="sel-l" data-i18n="viewModeSwitch.map"></span></button>
+            <button id="view-mode-table" class="sel-tab" data-sel-dir="down" onclick="window.Strom.UI.setDisplayViewMode('table')"><span class="sel-l" data-i18n="viewModeSwitch.table"></span></button>
         </div>
 
         <!-- ⧉ Open in a new window, and the indicator of the open windows (spec 079 §1, §4):
@@ -29649,24 +29683,24 @@
 
     <!-- Mobile bottom navigation bar (≤1024px) — replaces the hamburger -->
     <nav id="bottom-bar" class="bottom-bar">
-        <button type="button" class="bottom-bar-tab active" id="bb-view-family" onclick="window.Strom.UI.setDisplayViewMode('family')">
+        <button type="button" class="bottom-bar-tab sel-tab active" data-sel-dir="up" data-sel-land="side" id="bb-view-family" onclick="window.Strom.UI.setDisplayViewMode('family')">
             <svg class="bottom-bar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="3"/><circle cx="16" cy="8" r="3"/><path d="M3 20c0-2.8 2.2-5 5-5s5 2.2 5 5M13 20c0-2.8 2.2-5 5-5s5 2.2 5 5"/></svg>
-            <span class="bottom-bar-label" data-i18n="viewModeSwitch.family"></span>
+            <span class="bottom-bar-label sel-l" data-i18n="viewModeSwitch.family"></span>
         </button>
-        <button type="button" class="bottom-bar-tab" id="bb-view-descendants" onclick="window.Strom.UI.setDisplayViewMode('descendants')">
+        <button type="button" class="bottom-bar-tab sel-tab" data-sel-dir="up" data-sel-land="side" id="bb-view-descendants" onclick="window.Strom.UI.setDisplayViewMode('descendants')">
             <svg class="bottom-bar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="5" r="2.5"/><circle cx="6" cy="19" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M12 7.5v4M12 11.5c0 2-2 3-4 3.5M12 11.5c0 2 2 3 4 3.5"/></svg>
-            <span class="bottom-bar-label" data-i18n="viewModeSwitch.descendants"></span>
+            <span class="bottom-bar-label sel-l" data-i18n="viewModeSwitch.descendants"></span>
         </button>
         <button type="button" class="bottom-bar-fab edit-only" id="bottom-bar-fab" onclick="window.Strom.UI.showAddPersonModal()" data-i18n-aria-label="toolbar.addPerson" data-i18n-title="toolbar.addPerson">
             <span class="bottom-bar-fab-glyph" aria-hidden="true">＋</span>
         </button>
-        <button type="button" class="bottom-bar-tab" id="bb-view-table" onclick="window.Strom.UI.setDisplayViewMode('table')">
+        <button type="button" class="bottom-bar-tab sel-tab" data-sel-dir="up" data-sel-land="side" id="bb-view-table" onclick="window.Strom.UI.setDisplayViewMode('table')">
             <svg class="bottom-bar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M3.5 14.5h17M9.5 9.5v10"/></svg>
-            <span class="bottom-bar-label" data-i18n="viewModeSwitch.table"></span>
+            <span class="bottom-bar-label sel-l" data-i18n="viewModeSwitch.table"></span>
         </button>
-        <button type="button" class="bottom-bar-tab bottom-bar-more" id="bb-view-more" onclick="window.Strom.UI.showMoreMenuSheet()">
+        <button type="button" class="bottom-bar-tab bottom-bar-more sel-tab" data-sel-dir="up" data-sel-land="side" id="bb-view-more" onclick="window.Strom.UI.showMoreMenuSheet()">
             <span class="bottom-bar-icon-wrap"><svg class="bottom-bar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg><span id="bottom-bar-more-dot" class="bottom-bar-more-dot" style="display:none;"></span><span id="bottom-bar-more-count" class="bottom-bar-more-count" aria-hidden="true" hidden></span><span id="bottom-bar-more-storage-dot" class="bottom-bar-more-dot is-storage storage-dot storage-badge" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="tri" d="M10.27 3.2a2 2 0 0 1 3.46 0l8.5 14.8A2 2 0 0 1 20.5 21h-17a2 2 0 0 1-1.73-3z"/><path class="mark" d="M12 9.5v4M12 17h.01"/></svg></span></span>
-            <span class="bottom-bar-label" data-i18n="mobileMenu.more"></span>
+            <span class="bottom-bar-label sel-l" data-i18n="mobileMenu.more"></span>
         </button>
     </nav>
 

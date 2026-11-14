@@ -180,7 +180,10 @@ export function wireStoryCompare(root: Element): void {
 
 /**
  * The comparison's look. The app's tokens when it has them (light and dark),
- * the book's paper colours otherwise.
+ * the book's paper colours otherwise. The selection indicator's rules
+ * (src/ui/sel-css.ts) are the host's: index.html in the app, BOOK_CSS in the
+ * book; never repeated here, where a copy injected after index.html would win
+ * over the app's own component rules.
  */
 export const STORY_COMPARE_CSS = `
 .sc { --sc-add-bg: var(--diff-add-bg, #e3eee5); --sc-add-text: var(--diff-add-text, #24452f); --sc-add-line: var(--diff-add-line, #3f6b4f);

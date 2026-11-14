@@ -3352,7 +3352,7 @@ export function personPageDocumentShell(lang: Language, title: string, body: str
     return `<!doctype html><html lang="${esc(lang)}" class="no-js"><head>`
         + `<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">`
         + `<meta name="generator" content="Strom"><title>${esc(title)}</title>`
-        + `<style>${personPageFileCss(fontCss)}${extras.css ?? ''}</style>`
+        + `<style>${personPageFileCss(fontCss, extras.css ?? '')}</style>`
         + `</head><body><script>document.documentElement.className='js'</script>`
         + (extras.beforeMain ?? '')
         + (toc ? `<div class="pp-file-layout">${toc}${main}</div>` : main)

@@ -147,8 +147,8 @@ describe('the indexes (§3.5)', LOADED_TIMEOUT, () => {
         const html = buildPageSetHtml(set);
         for (const slug of ['rejstrik-osoby', 'rejstrik-rodiny', 'rejstrik-prijmeni', 'rejstrik-obce']) {
             const sec = section(html, slug);
-            expect(sec.match(/class="sp-tab"/g), slug).toHaveLength(4);
-            expect(sec).toContain(`<span class="sp-tab" aria-current="page">`);
+            expect(sec.match(/class="sp-tab sel-tab"/g), slug).toHaveLength(4);
+            expect(sec).toContain(`<span class="sp-tab sel-tab" data-sel-dir="down" aria-current="page"><span class="sel-l" data-label=`);
         }
         const rod = section(html, 'rod-fisek');
         for (const slug of ['rejstrik-osoby', 'rejstrik-rodiny', 'rejstrik-prijmeni', 'rejstrik-obce']) expect(rod).toContain(`href="#${slug}"`);
