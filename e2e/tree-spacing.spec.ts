@@ -188,3 +188,30 @@ test.describe('the hint about the Compact card (§5)', () => {
         await expect(page.locator('#tree-spacing-hint')).toBeHidden();
     });
 });
+
+test.describe('the spacing segment\'s pictures', () => {
+    for (const scheme of ['light', 'dark'] as const) {
+        test(`${scheme}: the chosen option's picture takes its label's colour, the other the faint one (1113)`, async ({ page }) => {
+            await page.emulateMedia({ colorScheme: scheme });
+            await page.setViewportSize({ width: 1440, height: 900 });
+            await openApp(page);
+            await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+            const look = () => page.locator('#settings-modal .tree-spacing-options .settings-radio').evaluateAll(opts => opts.map(o => ({
+                checked: (o.querySelector('input') as HTMLInputElement).checked,
+                glyph: getComputedStyle(o.querySelector('.spacing-glyph')!).color,
+                label: getComputedStyle(o.querySelector('.spacing-opt-label')!).color,
+                ground: getComputedStyle(o).backgroundColor,
+            })));
+            for (const value of ['normal', 'dense']) {
+                await page.locator(`#settings-modal input[name="tree-spacing"][value="${value}"]`).check({ force: true });
+                const opts = await look();
+                const chosen = opts.find(o => o.checked)!;
+                const other = opts.find(o => !o.checked)!;
+                // Without a fill under the chosen option a white picture vanishes on the light ground.
+                expect(chosen.glyph).toBe(chosen.label);
+                expect(chosen.glyph).not.toBe(chosen.ground);
+                expect(other.glyph).not.toBe(chosen.glyph);
+            }
+        });
+    }
+});
