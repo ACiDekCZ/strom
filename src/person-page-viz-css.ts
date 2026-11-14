@@ -31,7 +31,7 @@ export const HIST_TOUCH_MIN_H = 24;
 
 /** The places map (§1). */
 export const PERSON_PAGE_MAP_CSS = `
-.pp-map { position: relative; aspect-ratio: 2 / 1; margin: 0 0 12px; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--map-land); }
+.pp-map { position: relative; aspect-ratio: 2 / 1; margin: 0 0 12px; border: 1px solid var(--border); border-radius: var(--r-lg, 8px); overflow: hidden; background: var(--map-land); }
 .pp-map-in { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
 .pp-map-svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: hidden; }
 .pp-map-grid { fill: none; stroke: var(--divider); stroke-width: 0.8; vector-effect: non-scaling-stroke; }

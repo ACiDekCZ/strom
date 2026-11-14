@@ -18,7 +18,7 @@ export const PERSON_PAGE_LIGHT_TOKENS = [
     '--accent-text: #8a5528', '--hover-bg: #f3eee2',
     '--hist-bg: #f5f1e7', '--hist-mark: #746c5c', '--hist-place: #3d7a8c', '--hist-local: #b5772a',
     '--hist-text: #5c5546', '--hist-place-text: #245868', '--hist-local-text: #7f5500',
-    '--r-tag: 3px',
+    '--r-sm: 4px', '--r-md: 6px', '--r-lg: 8px', '--r-tag: 3px',
 ].join('; ') + ';';
 
 /** The font stacks of the app (the file falls back to Georgia / the system sans without the embedded faces). */
@@ -34,12 +34,12 @@ const FONT_STACKS = "--font-serif: 'Strom Serif', Georgia, 'Times New Roman', se
  */
 const PERSON_PAGE_FAN_CSS = `
 .pp-anc-meta { font-size: 13px; color: var(--text-faint); font-weight: 400; font-family: var(--font-sans); }
-.pp-anc-fan { position: relative; height: calc(380px + var(--fan-grow, 0px)); margin-top: 8px; border-radius: 10px; background: var(--surface-2); overflow: hidden; outline: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.pp-anc-fan { position: relative; height: calc(380px + var(--fan-grow, 0px)); margin-top: 8px; border-radius: var(--r-lg, 8px); background: var(--surface-2); overflow: hidden; outline: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .pp-anc-fan:focus-visible { box-shadow: inset 0 0 0 2px var(--primary); }
 .pp-anc-fan .fan-svg { display: block; width: 100%; height: 100%; }
 .pp-anc-fan a { cursor: pointer; }
 .pp-anc-fan--links .fan-sector[data-fan-kind="anc"] { cursor: pointer; }
-.pp-anc-zoom { position: absolute; right: 14px; bottom: 14px; z-index: 2; display: flex; gap: 4px; padding: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-sm, 0 1px 3px rgba(43, 40, 34, 0.12)); }
+.pp-anc-zoom { position: absolute; right: 14px; bottom: 14px; z-index: 2; display: flex; gap: 4px; padding: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg, 8px); box-shadow: var(--shadow-sm, 0 1px 3px rgba(43, 40, 34, 0.12)); }
 .pp .pp-anc-zbtn { width: 40px; height: 40px; padding: 0; margin: 0; border: 0; border-radius: 8px; background: transparent; color: var(--text-light); font-family: var(--font-sans); font-size: 20px; line-height: 1; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 .pp .pp-anc-zbtn:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
 .pp-anc-hint { position: absolute; left: 50%; bottom: 14px; z-index: 3; transform: translateX(-50%); max-width: calc(100% - 28px); padding: 6px 12px; border-radius: 8px; background: rgba(43, 40, 34, 0.88); color: #fffdf8; font-family: var(--font-sans); font-size: 13px; line-height: 1.35; text-align: center; pointer-events: none; }
@@ -61,7 +61,7 @@ const PERSON_PAGE_FAN_CSS = `
   .pp-anc-fan { height: calc(236px + var(--fan-grow, 0px)); margin-inline: -16px; border-radius: 0; }
 }
 @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
-  .pp-anc-fan { height: calc(260px + var(--fan-grow, 0px)); margin-inline: 0; border-radius: 10px; }
+  .pp-anc-fan { height: calc(260px + var(--fan-grow, 0px)); margin-inline: 0; border-radius: var(--r-lg, 8px); }
 }
 @media print {
   #pp-sec-ancestors { break-inside: avoid; }
@@ -87,7 +87,7 @@ export const PERSON_PAGE_CSS = `
 .pp .pp-eyebrow, .pp .pp-kicker { font-family: var(--font-sans); font-size: 11.5px; line-height: 1.4; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-text); }
 .pp-hero { display: flex; gap: 18px; align-items: flex-start; }
 /* The portrait (§3.1): a rounded square, a click shows it large; without a photo the initials. */
-.pp-portrait { position: relative; flex: 0 0 auto; display: block; width: 128px; height: 128px; padding: 0; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; background-color: var(--surface-2); cursor: zoom-in; }
+.pp-portrait { position: relative; flex: 0 0 auto; display: block; width: 128px; height: 128px; padding: 0; border: 1px solid var(--border); border-radius: var(--r-md, 6px); overflow: hidden; background-color: var(--surface-2); cursor: zoom-in; }
 span.pp-portrait { cursor: default; }
 .pp-portrait .pp-photo { display: block; width: 100%; height: 100%; object-fit: cover; background-size: cover; background-position: center; background-repeat: no-repeat; }
 .pp-portrait-zoom { position: absolute; right: 6px; bottom: 6px; display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 6px; background: rgba(255, 253, 248, 0.92); color: #2b2822; font-size: 13px; line-height: 1; }
@@ -115,14 +115,14 @@ span.pp-pdf-name { color: var(--text); }
 .pp { --pp-bg: var(--surface); }
 .pp-body .pp { --pp-bg: var(--surface-modal); }
 /* In brief (§0.3): under the header, 3 or 4 cells. */
-.pp-sum { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; margin-top: -8px; background: var(--divider); border: 1px solid var(--divider); border-radius: 12px; overflow: hidden; }
+.pp-sum { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; margin-top: -8px; background: var(--divider); border: 1px solid var(--divider); border-radius: var(--r-lg, 8px); overflow: hidden; }
 .pp-sum--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .pp-sum-cell { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 12px 14px; background: var(--surface); }
 .pp-sum-big { font-family: var(--font-serif); font-size: 21px; font-weight: 600; line-height: 1.2; overflow-wrap: anywhere; }
 .pp-sum-lab { font-size: 12.5px; line-height: 1.35; color: var(--text-light); overflow-wrap: anywhere; }
 /* The open question (§0.4). */
 .pp > section.pp-sec--question { border-top: 0; padding-top: 0; }
-.pp-question { padding: 16px 18px; border: 1px dashed var(--border); border-radius: 12px; }
+.pp-question { padding: 16px 18px; border: 1px dashed var(--border); border-radius: var(--r-lg, 8px); }
 .pp-question-text { margin-top: 6px; font-family: var(--font-serif); font-size: 17px; line-height: 1.55; white-space: pre-line; overflow-wrap: anywhere; }
 /* People around (§0.5). */
 .pp-people { display: flex; flex-direction: column; gap: 10px; margin: 12px 0 0; }
@@ -152,7 +152,7 @@ span.pp-pdf-name { color: var(--text); }
 @container pp-ft (max-width: 496px) { .pp-ft-story-l { display: none; } .pp-ft-story-s { display: inline; } }
 .pp-rail-story { white-space: nowrap; }
 .pp-ft-nokids { color: var(--text-faint); }
-.pp-ft-card { display: flex; flex-direction: column; justify-content: center; min-width: 0; margin: 0; padding: 4px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: inherit; font: inherit; text-align: left; text-decoration: none; overflow: hidden; }
+.pp-ft-card { display: flex; flex-direction: column; justify-content: center; min-width: 0; margin: 0; padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--r-lg, 8px); background: var(--surface); color: inherit; font: inherit; text-align: left; text-decoration: none; overflow: hidden; }
 .pp-ft .pp-ft-card, .pp-ft9 .pp-ft-card { position: absolute; z-index: 2; }
 button.pp-ft-card, a.pp-ft-card { cursor: pointer; }
 .pp-ft-name { font-size: 13.5px; font-weight: 600; line-height: 1.25; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -332,7 +332,7 @@ span.pp-gal-thumb { cursor: default; }
 .pp-gal-more .pp-fold-body > .pp-gal { margin-top: 6px; }
 .pp-sec-head .pp-gal-open { margin-top: 0; }
 .pp-pdfs { display: flex; flex-direction: column; gap: 8px; margin: 16px 0 0; padding: 0; list-style: none; }
-.pp-pdf { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.pp-pdf { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--r-lg, 8px); background: var(--surface); }
 .pp-pdf-ic { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; width: 34px; height: 40px; border-radius: 4px; background: var(--surface-2); color: var(--accent-text); font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em; }
 .pp-pdf-main { display: flex; flex-direction: column; min-width: 0; }
 .pp-pdf-meta { font-size: 12px; color: var(--text-light); }
@@ -348,7 +348,7 @@ span.pp-gal-thumb { cursor: default; }
 .pp-act { display: inline-block; margin-top: 8px; padding: 0; border: 0; background: none; color: var(--primary); font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; }
 .pp .pp-src-intro { margin: 4px 0 12px; font-size: 14px; color: var(--text-light); }
 .pp-src-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
-.pp-src { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 0 14px; }
+.pp-src { border: 1px solid var(--border); border-radius: var(--r-lg, 8px); background: var(--surface); padding: 0 14px; }
 .pp-src .pp-disc { min-height: 48px; flex-wrap: nowrap; align-items: flex-start; padding: 10px 0; }
 .pp-src-lines { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .pp-src-title { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
@@ -489,7 +489,7 @@ span.pp-gal-thumb { cursor: default; }
    a single chapter has neither. Print: everything unfolded, the tinted
    surface a thin frame. */
 .pp .pp-couple-story { margin-top: 20px; scroll-margin-top: 16px; outline: none; }
-.pp .pp-couple-story--tint { padding: 20px 22px; border-radius: 14px; background: var(--card-bg-2); }
+.pp .pp-couple-story--tint { padding: 20px 22px; border-radius: var(--r-lg, 8px); background: var(--card-bg-2); }
 .pp .pp-story-kicker + .pp-couple-story, .pp .pp-story-title + .pp-couple-story { margin-top: 8px; }
 .pp .pp-couple-story:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .pp-ch-head { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
@@ -565,7 +565,7 @@ body { margin: 0; background: var(--surface); color: var(--text); font-family: v
   .pp-file-layout { display: block; padding: 0; }
   .pp-file-layout > .pp-toc { display: none; }
   .pp-file-layout > .pp-file { margin: 0 auto; }
-  .pp-toc-m { display: block; border: 1px solid var(--border); border-radius: 10px; background: var(--pp-bg); }
+  .pp-toc-m { display: block; border: 1px solid var(--border); border-radius: var(--r-lg, 8px); background: var(--pp-bg); }
   .pp-toc-m summary { display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px; box-sizing: border-box; cursor: pointer; list-style: none; font-size: 14px; font-weight: 600; color: var(--text); }
   .pp-toc-m summary::-webkit-details-marker { display: none; }
   .pp-toc-m-arr { color: var(--text-light); transition: transform .15s; }

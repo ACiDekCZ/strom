@@ -54,7 +54,7 @@ export const FAMILY_PAGES_BODY_CSS = `.pp-file.sp-file { max-width: 960px; paddi
 html:not(.sp-on) .sp-page + .sp-page { margin-top: 40px; }
 html:not(.sp-on) .sp-page + .sp-page::before { content: "#" attr(id); display: block; margin-bottom: 24px; padding-top: 8px; border-top: 1px solid var(--border); font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: var(--text-faint); text-align: center; overflow-wrap: anywhere; }
 .sp-toc-file { display: none; }
-html:not(.sp-on) .sp-toc-file { display: block; margin-bottom: 32px; padding: 18px 20px; border: 1px solid var(--border); border-radius: 12px; }
+html:not(.sp-on) .sp-toc-file { display: block; margin-bottom: 32px; padding: 18px 20px; border: 1px solid var(--border); border-radius: var(--r-lg, 8px); }
 .no-js:not(.sp-zip) .sp-fbar, .no-js .sp-map { display: none !important; }
 .no-js .sp-search, .no-js .sp-fbar-nav, .no-js .sp-fbar-lupa, .no-js .sp-fbar-menu, .no-js .sp-fbar-cancel { display: none !important; }
 .sp-toc-h { margin: 0 0 8px; font-family: var(--font-serif); font-size: 20px; font-weight: 600; }
@@ -119,12 +119,12 @@ html:not(.sp-on) .sp-toc-file { display: block; margin-bottom: 32px; padding: 18
 .sp-kids > summary { display: inline-flex; align-items: center; min-height: 28px; color: var(--text-light); cursor: pointer; }
 .sp-kid-list { margin: 2px 0; font-size: 13.5px; }
 .sp-kid { white-space: normal; }
-.sp-teaser { display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; border-radius: 12px; background: var(--surface-2); }
+.sp-teaser { display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; border-radius: var(--r-lg, 8px); background: var(--surface-2); }
 .sp-teaser-h { margin: 0; font-family: var(--font-serif); font-size: 18px; font-weight: 600; }
 .sp-btns { display: flex; flex-wrap: wrap; gap: 8px; }
 .sp-btn { min-height: 40px; display: inline-flex; align-items: center; padding: 0 14px; border-radius: 8px; border: 1px solid var(--sp-frame); background: var(--surface); color: var(--text); font: inherit; font-size: 14px; text-decoration: none; cursor: pointer; }
 .sp-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
-.sp-card { display: flex; flex-direction: column; gap: 8px; padding: 16px 18px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); font: inherit; text-align: left; text-decoration: none; cursor: pointer; min-width: 0; }
+.sp-card { display: flex; flex-direction: column; gap: 8px; padding: 16px 18px; border: 1px solid var(--border); border-radius: var(--r-lg, 8px); background: var(--surface); color: var(--text); font: inherit; text-align: left; text-decoration: none; cursor: pointer; min-width: 0; }
 .sp-card-t { font-family: var(--font-serif); font-size: 21px; font-weight: 600; overflow-wrap: anywhere; }
 .sp-card-f { font-size: 13.5px; color: var(--text-light); overflow-wrap: anywhere; }
 .sp-card-m { font-size: 13px; color: var(--text-faint); }
@@ -134,11 +134,11 @@ html:not(.sp-on) .sp-toc-file { display: block; margin-bottom: 32px; padding: 18
 .sp-cross-row { display: flex; flex-wrap: wrap; gap: 0 10px; align-items: baseline; padding: 8px 0; border-bottom: 1px solid var(--divider); font-size: 14.5px; overflow-wrap: anywhere; }
 .sp-cross-rods { font-size: 13px; color: var(--text-faint); }
 .sp-partners { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
-.sp-partner { display: flex; flex-direction: column; gap: 4px; padding: 16px 18px; border: 1px solid var(--border); border-radius: 12px; min-width: 0; }
+.sp-partner { display: flex; flex-direction: column; gap: 4px; padding: 16px 18px; border: 1px solid var(--border); border-radius: var(--r-lg, 8px); min-width: 0; }
 .sp-partner-name { font-family: var(--font-serif); font-size: 20px; font-weight: 600; line-height: 1.25; overflow-wrap: anywhere; }
 .sp-fam-page { display: flex; flex-direction: column; gap: 30px; }
 .sp-sym { color: var(--accent-text); font-weight: 400; }
-.sp-other { display: flex; flex-wrap: wrap; gap: 0 8px; align-items: baseline; padding: 10px 14px; border-radius: 10px; background: var(--card-bg-2); font-size: 14px; overflow-wrap: anywhere; }
+.sp-other { display: flex; flex-wrap: wrap; gap: 0 8px; align-items: baseline; padding: 10px 14px; border-radius: var(--r-lg, 8px); background: var(--card-bg-2); font-size: 14px; overflow-wrap: anywhere; }
 .sp-other-pre { color: var(--text-light); }
 .sp-partner { gap: 10px; }
 .sp-partner-top { display: flex; gap: 14px; align-items: flex-start; }
@@ -161,18 +161,18 @@ button.sp-clip { margin: 0; padding: 0; border: 0; background: none; font: inher
 .sp-res, .sp-src { margin: 0; font-size: 15px; overflow-wrap: anywhere; }
 .sp-src { font-size: 14px; color: var(--text-light); }
 .sp-kids-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
-.sp-kidcard { display: flex; flex-direction: column; gap: 2px; padding: 11px 13px; border: 1px solid var(--divider); border-radius: 10px; min-width: 0; overflow-wrap: anywhere; }
+.sp-kidcard { display: flex; flex-direction: column; gap: 2px; padding: 11px 13px; border: 1px solid var(--divider); border-radius: var(--r-lg, 8px); min-width: 0; overflow-wrap: anywhere; }
 .sp-kidcard--young { background: var(--card-bg-2); color: var(--text-light); }
 .sp-kid-name { font-size: 15px; font-weight: 600; }
 .sp-kid-note { font-size: 13px; color: var(--text-light); }
 .sp-story .pp-couple-story { margin: 0; }
 .sp-pfam { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
 .sp-pfam-none { margin: 0; font-size: 14px; color: var(--text-light); }
-.sp-famcard { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; width: 100%; box-sizing: border-box; padding: 12px 16px; border: 1px solid var(--border); border-radius: 10px; background: none; font: inherit; color: var(--text); text-align: left; text-decoration: none; cursor: pointer; overflow-wrap: anywhere; }
+.sp-famcard { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; width: 100%; box-sizing: border-box; padding: 12px 16px; border: 1px solid var(--border); border-radius: var(--r-lg, 8px); background: none; font: inherit; color: var(--text); text-align: left; text-decoration: none; cursor: pointer; overflow-wrap: anywhere; }
 .sp-famcard-t { font-size: 15px; font-weight: 600; }
 .sp-famcard-m { font-size: 13.5px; color: var(--text-light); }
 .sp-famcard-go { margin-left: auto; font-size: 13.5px; font-weight: 600; color: var(--primary); }
-.sp-oddil { display: flex; flex-direction: column; gap: 4px; padding: 12px 16px; border-radius: 10px; background: var(--card-bg-2); }
+.sp-oddil { display: flex; flex-direction: column; gap: 4px; padding: 12px 16px; border-radius: var(--r-lg, 8px); background: var(--card-bg-2); }
 .sp-oddil-k { font-size: 12px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; }
 .sp-oddil-t { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
 .sp-oddil-l { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; font-size: 14px; overflow-wrap: anywhere; }
@@ -260,7 +260,7 @@ button.sp-clip { margin: 0; padding: 0; border: 0; background: none; font: inher
 .sp-rods, .sp-pairs, .sp-idx { display: flex; flex-direction: column; gap: 12px; }
 .sp-rods-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
 .sp-rods-head .sp-h2 { margin: 0; }
-.sp-sort { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; border-radius: 9px; background: var(--tint, var(--surface-2)); }
+.sp-sort { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; border-radius: var(--r-lg, 8px); background: var(--tint, var(--surface-2)); }
 .sp-sort button { min-height: 32px; margin: 0; padding: 6px 10px; border: 0; border-radius: 7px; background: none; font: inherit; font-size: 13.5px; color: var(--text-light); cursor: pointer; }
 .sp-sort button[aria-checked="true"] { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgba(0, 0, 0, .12); }
 .sp-rods .sp-cards { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
@@ -307,7 +307,7 @@ button.sp-clip { margin: 0; padding: 0; border: 0; background: none; font: inher
 .sp-rodpick-btn::-webkit-details-marker { display: none; }
 .sp-rodpick-v { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .sp-rodpick-chev { color: var(--text-faint); }
-.sp-rodpick-pop { position: absolute; top: calc(100% + 6px); left: 0; z-index: 40; box-sizing: border-box; width: 380px; max-width: calc(100vw - 32px); padding: 8px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); box-shadow: 0 16px 40px rgba(20, 16, 8, .18); }
+.sp-rodpick-pop { position: absolute; top: calc(100% + 6px); left: 0; z-index: 40; box-sizing: border-box; width: 380px; max-width: calc(100vw - 32px); padding: 8px; border: 1px solid var(--border); border-radius: var(--r-lg, 8px); background: var(--surface); color: var(--text); box-shadow: var(--shadow-lg, 0 4px 14px rgba(20, 16, 8, .14)); }
 .sp-rodpick-q { box-sizing: border-box; width: 100%; height: 40px; margin: 0 0 6px; padding: 0 10px; font: inherit; font-size: 16px; color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; -webkit-appearance: none; appearance: none; }
 .sp-rodpick-q:focus { outline: 2px solid var(--primary); outline-offset: -1px; border-color: var(--primary); }
 .sp-rodpick-list { margin: 0; padding: 0; list-style: none; max-height: 360px; overflow-y: auto; overscroll-behavior: contain; }
@@ -335,7 +335,7 @@ button.sp-clip { margin: 0; padding: 0; border: 0; background: none; font: inher
   .sp-fbar--rod .sp-rodpick-btn { width: 100%; max-width: none; min-height: 40px; }
   .sp-rodpick { position: static; }
   .sp-rodpick-btn { max-width: 150px; }
-  .sp-rodpick-pop { top: 100%; left: 0; right: 0; width: auto; max-width: none; border-width: 1px 0; border-radius: 0 0 12px 12px; }
+  .sp-rodpick-pop { top: 100%; left: 0; right: 0; width: auto; max-width: none; border-width: 1px 0; border-radius: 0 0 var(--r-lg, 8px) var(--r-lg, 8px); }
   .sp-fbar--q .sp-rodpick { display: none; }
   .sp-raxis { display: none; }
   .sp-rrow-a { grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; }
@@ -481,7 +481,7 @@ html.sp-lb-open { overflow: hidden; }
 .sp-tl { display: flex; flex-direction: column; gap: 28px; }
 .sp-tl-ctl { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
 .sp-tl-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.sp-tl-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; margin: 0; padding: 0 12px; border: 1px solid var(--primary); border-radius: 17px; background: var(--tint, var(--surface-2)); font: inherit; font-size: 13.5px; color: var(--text); cursor: pointer; }
+.sp-tl-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; margin: 0; padding: 0 12px; border: 1px solid var(--primary); border-radius: var(--sel-r, 4px); background: var(--tint, var(--surface-2)); font: inherit; font-size: 13.5px; color: var(--text); cursor: pointer; }
 .sp-tl-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--primary); }
 .sp-tl-chip[data-tl-k="hist"] .sp-tl-dot { background: var(--accent-text); }
 .sp-tl-chip[aria-pressed="false"] { border-color: var(--sp-frame, var(--border)); background: transparent; color: var(--text-light); }
@@ -643,7 +643,7 @@ export const FAMILY_PAGES_APP_CSS = FAMILY_PAGES_BODY_CSS.replace(PRINT_ROOT_CSS
 .sp-app .sp-rods-s input.sp-q { width: 100%; height: 40px; padding: 0 10px 0 33px; font-size: 14px; border: 1px solid var(--border); border-radius: 8px; transition: none; }
 @media (pointer: coarse) { .sp-appset .sp-fbar input.sp-rodpick-q, .sp-app .sp-rods-s input.sp-q { height: 44px; } }
 /* The window's preparing state of a large tree (§3.3): a sliding bar and the skeleton of the cards. */
-.sp-prep { display: flex; flex-direction: column; gap: 8px; padding: 16px 18px; border-radius: 12px; background: var(--surface-2); }
+.sp-prep { display: flex; flex-direction: column; gap: 8px; padding: 16px 18px; border-radius: var(--r-lg, 8px); background: var(--surface-2); }
 .sp-prep-t { font-weight: 600; }
 .sp-prep-bar { position: relative; height: 6px; overflow: hidden; border-radius: 3px; background: var(--border); }
 .sp-prep-bar::after { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 35%; border-radius: 3px; background: var(--primary); animation: sp-prep 1.4s ease-in-out infinite; }
@@ -651,7 +651,7 @@ export const FAMILY_PAGES_APP_CSS = FAMILY_PAGES_BODY_CSS.replace(PRINT_ROOT_CSS
 @media (prefers-reduced-motion: reduce) { .sp-prep-bar::after { animation: none; width: 100%; opacity: .4; } }
 .sp-prep-note { margin: 0; font-size: 13.5px; color: var(--text-light); }
 .sp-skel { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; }
-.sp-skel > span { height: 112px; border-radius: 12px; background: var(--surface-2); }
+.sp-skel > span { height: 112px; border-radius: var(--r-lg, 8px); background: var(--surface-2); }
 /* The dialog's own label and field rules (.modal label / input) must not reach the bar's search:
    it keeps its row, its magnifier inside the field and, on a phone, stays folded until the magnifier. */
 .sp-appset .sp-fbar label.sp-search { display: flex; margin: 0; font-size: inherit; font-weight: inherit; color: var(--text-light); }

@@ -167,7 +167,7 @@ html { scroll-padding-top: 64px; }
 .book-bar-btn:focus-visible, .book-bar-icon:focus-visible, .book-more button:focus-visible, .book-side a:focus-visible { outline: 2px solid #3f6b4f; outline-offset: 1px; }
 .book-bar-toc, .book-bar-more { display: none !important; }
 .book-more { position: absolute; top: 48px; right: 10px; z-index: 30; min-width: 230px; display: flex; flex-direction: column; padding: 6px;
-    background: #fffefb; border: 1px solid #e3dccd; border-radius: 12px; box-shadow: 0 10px 30px rgba(20,16,8,.2); }
+    background: #fffefb; border: 1px solid #e3dccd; border-radius: 8px; box-shadow: 0 4px 14px rgba(20,16,8,.14); }
 .book-more[hidden] { display: none; }
 .book-more button { min-height: 44px; padding: 0 14px; border: 0; border-radius: 8px; background: none; color: #2b2822; font: 15px ${SANS}; text-align: left; cursor: pointer; }
 .book-more button[hidden] { display: none; }
@@ -192,7 +192,7 @@ html { scroll-padding-top: 64px; }
     .book-layout { display: block; }
     .book { margin: 0 auto; }
     .book-side { display: none; position: fixed; top: 52px; left: 0; bottom: 0; width: min(340px, 86vw); max-height: none; z-index: 30;
-        padding: 10px 8px 24px; background: #fffdf8; border-right: 1px solid #e3dccd; box-shadow: 6px 0 24px rgba(20,16,8,.16); }
+        padding: 10px 8px 24px; background: #fffdf8; border-right: 1px solid #e3dccd; box-shadow: 0 4px 14px rgba(20,16,8,.14); }
     body.book-toc-open .book-side { display: block; }
     .book-side-x { display: inline-flex; }
 }
@@ -210,8 +210,8 @@ html { scroll-padding-top: 64px; }
     .book { box-shadow: none; }
     .book-sheet { padding: 24px 18px; }
     .book-title-page { min-height: 70vh; }
-    .book-side { top: auto; right: 0; width: auto; max-height: 72vh; border-right: 0; border-radius: 16px 16px 0 0;
-        box-shadow: 0 -8px 30px rgba(20,16,8,.2); padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+    .book-side { top: auto; right: 0; width: auto; max-height: 72vh; border-right: 0; border-top: 1px solid #e3dccd; border-radius: 8px 8px 0 0;
+        box-shadow: 0 4px 14px rgba(20,16,8,.14); padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
     .book-side a { display: flex; align-items: center; min-height: 44px; padding-top: 0; padding-bottom: 0; }
 }
 @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) { .book-title-page { min-height: auto; } }

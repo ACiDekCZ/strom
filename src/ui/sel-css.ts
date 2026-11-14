@@ -66,7 +66,7 @@ export const SEL_RULES_CSS = `.sel-tab { font-weight: 500; color: var(--text-lig
 .sel-seg > .sel-opt${SEL} { box-shadow: inset 0 0 0 2px var(--sel-border); }
 .sel-opt[data-sel-form="row"] { border: 0; border-bottom: 1px solid var(--divider, #ece5d6); border-radius: 0; background: transparent; }
 .sel-opt[data-sel-form="row"]${SEL} { background: var(--sel-fill); box-shadow: inset 0 -2px 0 var(--sel-line); }
-.sel-opt[data-sel-form="tile"] { border-radius: var(--r-md, 8px); }
+.sel-opt[data-sel-form="tile"] { border-radius: var(--r-md, 6px); }
 @media (hover: hover) {
   .sel-tab:not(${SEL}, ${DISABLED}):hover { color: var(--text); box-shadow: inset 0 -1px 0 var(--sel-mute); }
   .sel-tab[data-sel-dir="up"]:not(${SEL}, ${DISABLED}):hover { box-shadow: inset 0 1px 0 var(--sel-mute); }

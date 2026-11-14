@@ -21,7 +21,7 @@ export function rodPagesCss(heads: readonly string[]): string {
 const SANS = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
 
 export const BOOK_CSS = `
-:root { ${PERSON_PAGE_VIZ_LIGHT_TOKENS} --r-tag: 3px; --text: #1f1c17; --text-light: #4a4438; --text-faint: #5c5546; --accent: #8a5528; --accent-text: #8a5528;
+:root { ${PERSON_PAGE_VIZ_LIGHT_TOKENS} --r-sm: 4px; --r-md: 6px; --r-lg: 8px; --r-tag: 3px; --text: #1f1c17; --text-light: #4a4438; --text-faint: #5c5546; --accent: #8a5528; --accent-text: #8a5528;
     --primary: #3f6b4f; --divider: #e3dccd; --pp-bg: #fffdf8; --hover-bg: #f3eee2;
     ${SEL_LIGHT_DECLS} color-scheme: light; }
 * { box-sizing: border-box; }
@@ -183,7 +183,7 @@ ${PERSON_PAGE_CHART_CSS}
 .book-nv { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: 0 0 12px; padding: 10px 14px; border-radius: 8px; background: #f6ecd3; color: #7f5500; font: 13px/1.45 ${SANS}; text-align: left; }
 .book-nv > span { flex: 1; min-width: 200px; }
 .book-nv-compare, .bc-btn { padding: 6px 12px; border-radius: 7px; border: 1px solid #e2cf9f; background: #fffdf8; color: #2b2822; font: 500 13px ${SANS}; cursor: pointer; text-decoration: none; }
-.book-compare { width: min(720px, 92vw); max-height: 88vh; padding: 0; border: 0; border-radius: 14px; box-shadow: 0 12px 40px rgba(20,16,8,.3); background: #fffdf8; color: #2b2822; font-family: ${SANS}; }
+.book-compare { width: min(720px, 92vw); max-height: 88vh; padding: 0; border: 1px solid #ddd4c2; border-radius: var(--r-lg, 8px); box-shadow: var(--shadow-lg, 0 4px 14px rgba(20,16,8,.14)); background: #fffdf8; color: #2b2822; font-family: ${SANS}; }
 .book-compare[open] { display: flex; flex-direction: column; }
 .book-compare::backdrop { background: rgba(20,16,8,.45); }
 .bc-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 20px 24px 14px; border-bottom: 1px solid #ece5d6; }

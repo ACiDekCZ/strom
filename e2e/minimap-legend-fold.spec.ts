@@ -164,6 +164,67 @@ test.describe('legend fold', () => {
     });
 });
 
+/**
+ * The zoom and minimap panel is set into the canvas's bottom-right corner
+ * (spec 046 A8): flush with the window's right edge and with the canvas's
+ * bottom (the window's on a computer, the bottom bar's top on a tablet), square,
+ * no shadow, an edge only on its top and left; the minimap inside it framed by a
+ * 1px divider line, square. The legend at the other corner stays clear of it,
+ * open with its card marks or folded, and keeps its height on the body for
+ * back / forward (legend-lift.ts).
+ */
+for (const viewport of [{ width: 1280, height: 800 }, { width: 1024, height: 768 }, { width: 700, height: 900 }]) {
+    test.describe(`zoom panel in the corner at ${viewport.width}`, () => {
+        test.use({ viewport });
+
+        test('flush with the canvas\'s corner, square, edged top and left; the legend clear of it', async ({ page }) => {
+            await sample(page);
+            await zoomForMinimap(page);
+            await page.evaluate(() => window.Strom.UI.toggleBranchLegend(true));
+            const legend = page.locator('#tree-legend');
+            await expect(legend).toBeVisible();
+            const g = await page.evaluate(() => {
+                const block = document.querySelector('.control-block') as HTMLElement;
+                const mini = document.getElementById('minimap-panel') as HTMLElement;
+                const bar = document.querySelector('.bottom-bar') as HTMLElement;
+                const tree = (document.getElementById('tree-container') as HTMLElement).getBoundingClientRect();
+                const r = block.getBoundingClientRect();
+                const cs = getComputedStyle(block), ms = getComputedStyle(mini);
+                const probe = document.createElement('i');
+                probe.style.color = 'var(--divider)';
+                document.body.appendChild(probe);
+                const divider = getComputedStyle(probe).color;
+                probe.remove();
+                const barTop = bar && getComputedStyle(bar).display !== 'none' ? bar.getBoundingClientRect().top : innerHeight;
+                return {
+                    right: r.right, bottom: r.bottom, vw: document.documentElement.clientWidth, barTop, treeBottom: tree.bottom,
+                    edges: [cs.borderTopWidth, cs.borderLeftWidth, cs.borderRightWidth, cs.borderBottomWidth],
+                    radius: cs.borderRadius, shadow: cs.boxShadow,
+                    mini: [ms.borderTopWidth, ms.borderTopColor === divider, ms.borderRadius],
+                };
+            });
+            expect(g.right).toBe(g.vw);
+            expect(g.bottom).toBe(g.barTop);
+            expect(g.bottom).toBe(g.treeBottom);
+            expect(g.edges).toEqual(['1px', '1px', '0px', '0px']);
+            expect(g.radius).toBe('0px');
+            expect(g.shadow).toBe('none');
+            expect(g.mini).toEqual(['1px', true, '0px']);
+
+            const apart = async () => {
+                const a = (await legend.boundingBox())!, b = (await page.locator('.control-block').boundingBox())!;
+                return a.x + a.width <= b.x || a.y + a.height <= b.y;
+            };
+            expect(await apart()).toBe(true);
+            await legend.locator('.tree-legend-toggle').click();
+            await expect(legend).toHaveClass(/is-collapsed/);
+            expect(await apart()).toBe(true);
+            await expect.poll(() => page.evaluate(() => document.body.style.getPropertyValue('--tree-legend-h')))
+                .toBe(`${Math.ceil((await legend.boundingBox())!.height)}px`);
+        });
+    });
+}
+
 for (const [label, viewport] of [['390 upright', { width: 390, height: 844 }], ['844 × 390 sideways', { width: 844, height: 390 }]] as const) {
     test.describe(`legend on a phone ${label}`, () => {
         test.use({ viewport, hasTouch: true, isMobile: true });
