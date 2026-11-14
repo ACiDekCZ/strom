@@ -238,17 +238,12 @@ test('phone held sideways: one segment of five names, no small cards, a thumb hi
     expect(new Set(boxes.map(b => b.top)).size).toBe(1);
     for (let i = 1; i < boxes.length; i++) expect(Math.abs(boxes[i].left - boxes[i - 1].right)).toBeLessThanOrEqual(1);
     for (const b of boxes) expect(b.h).toBeGreaterThanOrEqual(44);
-    // The chosen one filled, as a pressed segment button.
-    const fill = await tile(page, 'Detailed').evaluate(e => getComputedStyle(e).backgroundColor);
-    const primary = await page.evaluate(() => {
-        const probe = document.createElement('div');
-        probe.style.color = 'var(--primary)';
-        document.body.appendChild(probe);
-        const c = getComputedStyle(probe).color;
-        probe.remove();
-        return c;
-    });
-    expect(fill).toBe(primary);
+    // The chosen one framed, as a chosen segment cell (the one selection indicator: a 2 px inner frame, no fill).
+    const shadow = await tile(page, 'Detailed').evaluate(e => getComputedStyle(e).boxShadow);
+    expect(shadow).toMatch(/inset/);
+    expect(shadow).toMatch(/0px 0px 0px 2px/);
+    const other = await tile(page, 'Compact').evaluate(e => getComputedStyle(e).boxShadow);
+    expect(other).not.toMatch(/inset/);
 });
 
 /** The sentence under the row for each preset type, per language (src/strings.ts cardTypes.*Desc). */
