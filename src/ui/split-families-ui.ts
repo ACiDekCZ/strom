@@ -176,9 +176,9 @@ export const splitFamiliesMethods = uiModule({
                     <button class="close-btn" id="splitfam-close-x" aria-label="${strings.buttons.close}">&times;</button>
                 </div>
                 <p class="splitfam-intro">${s.intro}</p>
-                <div class="splitfam-mode" role="radiogroup" aria-label="${s.modeLabel}">
+                <div class="splitfam-mode sel-seg" role="radiogroup" aria-label="${s.modeLabel}">
                     ${([['surname', s.modeSurname], ['lineage', s.modeLineage], ['perspective', s.modePerspective]] as [SplitMode, string][])
-                        .map(([m, label]) => `<button type="button" class="splitfam-mode-btn${this.splitFamiliesMode === m ? ' active' : ''}"
+                        .map(([m, label]) => `<button type="button" class="splitfam-mode-btn sel-opt${this.splitFamiliesMode === m ? ' active' : ''}" data-sel-form="seg"
                             data-mode="${m}" aria-pressed="${this.splitFamiliesMode === m}">${label}</button>`).join('')}
                 </div>
                 <p class="splitfam-mode-hint">${{

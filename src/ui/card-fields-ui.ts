@@ -119,9 +119,9 @@ function samplePreview(density: CardPresetKey | 'custom', viewWidth: number | un
 function lookSegment(name: string, label: string, options: { value: string; label: string; active: boolean }[]): string {
     const id = `card-look-${name}-label`;
     const buttons = options.map(o =>
-        `<button type="button" class="segment-btn${o.active ? ' active' : ''}" data-value="${esc(o.value)}" aria-pressed="${o.active}">${esc(o.label)}</button>`).join('');
+        `<button type="button" class="segment-btn sel-opt${o.active ? ' active' : ''}" data-sel-form="seg" data-value="${esc(o.value)}" aria-pressed="${o.active}">${esc(o.label)}</button>`).join('');
     return `<span class="card-look-label" id="${id}">${esc(label)}</span>
-        <div class="segment card-look-segment card-look-${name}" role="group" aria-labelledby="${id}">${buttons}</div>`;
+        <div class="segment sel-seg card-look-segment card-look-${name}" role="group" aria-labelledby="${id}">${buttons}</div>`;
 }
 
 /**
@@ -401,9 +401,9 @@ export const cardFieldsUiMethods = uiModule({
         host.innerHTML = `
             <div class="card-fields-head">
                 <span class="settings-name">${esc(d.fieldsTitle)}</span>
-                <div class="segment card-fields-date" role="group" aria-label="${esc(d.fieldsTitle)}">
-                    <button type="button" class="segment-btn${s.fullDate ? '' : ' active'}" data-full="0" aria-pressed="${!s.fullDate}">${esc(d.yearOnly)}</button>
-                    <button type="button" class="segment-btn${s.fullDate ? ' active' : ''}" data-full="1" aria-pressed="${s.fullDate}">${esc(d.fullDate)}</button>
+                <div class="segment sel-seg card-fields-date" role="group" aria-label="${esc(d.fieldsTitle)}">
+                    <button type="button" class="segment-btn sel-opt${s.fullDate ? '' : ' active'}" data-sel-form="seg" data-full="0" aria-pressed="${!s.fullDate}">${esc(d.yearOnly)}</button>
+                    <button type="button" class="segment-btn sel-opt${s.fullDate ? ' active' : ''}" data-sel-form="seg" data-full="1" aria-pressed="${s.fullDate}">${esc(d.fullDate)}</button>
                 </div>
             </div>
             <div class="card-fields-list">${rows}</div>

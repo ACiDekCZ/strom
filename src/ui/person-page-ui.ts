@@ -1093,8 +1093,8 @@ export const personPageMethods = uiModule({
         const privacyHtml = living ? `
             <div class="ppx-sec">
                 <div class="ppx-label" id="ppx-privacy-h">${esc(X.privacy)}</div>
-                <div class="ppx-privacy" role="radiogroup" aria-labelledby="ppx-privacy-h">
-                    ${PRIVACY_MODES.map(m => `<button type="button" class="segment-btn" role="radio" data-ppx-privacy="${m}" aria-checked="false">${esc(modeLabel[m])}</button>`).join('')}
+                <div class="ppx-privacy sel-seg" role="radiogroup" aria-labelledby="ppx-privacy-h">
+                    ${PRIVACY_MODES.map(m => `<button type="button" class="segment-btn sel-opt" data-sel-form="seg" role="radio" data-ppx-privacy="${m}" aria-checked="false">${esc(modeLabel[m])}</button>`).join('')}
                 </div>
                 <p class="ppx-note">${esc(X.privacyWho(personPageLivingNames(full, DataManager.getData()).join(', ')))}</p>
             </div>` : '';

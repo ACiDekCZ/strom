@@ -210,13 +210,13 @@ export const mapMethods = uiModule({
                             aria-label="${strings.map.zoomOut}" title="${strings.map.zoomOut}">−</button>
                     <button type="button" class="map-fit" onclick="window.Strom.UI.fitMapToPlaces(true)"
                             aria-label="${strings.map.fit}" title="${strings.map.fit}">⤢</button>
-                    <button type="button" class="map-time-toggle" onclick="window.Strom.UI.toggleMapTime()"
+                    <button type="button" class="map-time-toggle sel-opt" onclick="window.Strom.UI.toggleMapTime()"
                             aria-pressed="false" aria-label="${strings.map.timeMode}" title="${strings.map.timeMode}"><span class="map-time-toggle-icon" aria-hidden="true">${iconSvg('timer')}</span><span class="map-time-toggle-text" aria-hidden="true">${strings.map.timeModeShort}</span></button>
                 </div>
                 <div class="map-topleft">
-                    <div class="map-scope">
-                        <button type="button" id="map-scope-view" onclick="window.Strom.UI.setMapScope('view')">${strings.map.scopeView}</button>
-                        <button type="button" id="map-scope-tree" onclick="window.Strom.UI.setMapScope('tree')">${strings.map.scopeTree}</button>
+                    <div class="map-scope sel-seg">
+                        <button type="button" id="map-scope-view" class="sel-opt" data-sel-form="seg" onclick="window.Strom.UI.setMapScope('view')">${strings.map.scopeView}</button>
+                        <button type="button" id="map-scope-tree" class="sel-opt" data-sel-form="seg" onclick="window.Strom.UI.setMapScope('tree')">${strings.map.scopeTree}</button>
                     </div>
                     <div class="map-path-chip" hidden>
                         <button type="button" class="map-path-chip-open" title="${strings.map.pathChange}" aria-haspopup="dialog" aria-expanded="false"

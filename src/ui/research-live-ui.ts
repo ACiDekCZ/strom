@@ -414,7 +414,7 @@ export const researchLiveMethods = uiModule({
         const name = text.appendChild(el('span', 'settings-name', L.idleName));
         name.id = 'research-live-idle-name';
         if (source) {
-            const seg = row.appendChild(el('div', 'settings-options settings-segment research-live-idle-options'));
+            const seg = row.appendChild(el('div', 'settings-options settings-segment sel-seg research-live-idle-options'));
             seg.setAttribute('role', 'radiogroup');
             seg.setAttribute('aria-labelledby', name.id);
             const options: { minutes: number; label: string }[] = [
@@ -424,7 +424,8 @@ export const researchLiveMethods = uiModule({
             // A value set in the terminal shows as it is (it is not sent back).
             if (!options.some(o => o.minutes === source.minutes)) options.push({ minutes: source.minutes, label: L.idleCustom(source.minutes) });
             for (const o of options) {
-                const label = seg.appendChild(el('label', 'settings-radio'));
+                const label = seg.appendChild(el('label', 'settings-radio sel-opt'));
+                label.dataset.selForm = 'seg';
                 const input = label.appendChild(el('input'));
                 input.type = 'radio';
                 input.name = 'research-live-idle';

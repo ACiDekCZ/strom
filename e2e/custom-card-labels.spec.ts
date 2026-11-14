@@ -405,9 +405,10 @@ test.describe('card presets (U02)', () => {
             expect(Math.abs(allBox.width - panel.width)).toBeLessThan(1);
             expect(Math.round(allBox.height)).toBeGreaterThanOrEqual(44);
             expect(await allBtn.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
-            // The pressed style stands out from the other in either theme.
-            const bg = await host.locator('.card-look-style .segment-btn').evaluateAll(bs => bs.map(b => getComputedStyle(b).backgroundColor));
-            expect(bg[0]).not.toBe(bg[1]);
+            // The pressed style stands out from the other in either theme: its
+            // selection line (an inset ring) and bold label, the fill stays.
+            const look = await host.locator('.card-look-style .segment-btn').evaluateAll(bs => bs.map(b => getComputedStyle(b).boxShadow + ' ' + getComputedStyle(b).fontWeight));
+            expect(look[0]).not.toBe(look[1]);
             expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
             expect(await page.locator('#settings-modal .modal').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
             await page.evaluate(() => window.Strom.UI.setLanguage('en'));

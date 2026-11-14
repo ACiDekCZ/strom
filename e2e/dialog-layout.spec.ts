@@ -282,7 +282,7 @@ test('1000px is a tablet: the dialog × is a 44px target (the tablet band runs t
     expect(Math.round(box.height)).toBe(44);
 });
 
-test('segment switches in dialogs: square inner buttons, the rounded container clips the outer corners (T02)', async ({ page }) => {
+test('segment switches in dialogs: square inner buttons, the outer corners follow the rounded container that clips them (T02)', async ({ page }) => {
     await openApp(page);
     await page.evaluate(() => window.Strom.UI.showAddPersonModal());
     await expect(page.locator('#person-modal')).toBeVisible();
@@ -299,11 +299,15 @@ test('segment switches in dialogs: square inner buttons, the rounded container c
         };
     }));
     const square = '0px 0px 0px 0px';
+    // The selection line (sel-css) runs inside the cell, so the end cells round
+    // their outer corners to the container's inner radius (4px - 1px border).
+    const first = '3px 0px 0px 3px';
+    const last = '0px 3px 3px 0px';
     expect(m).toEqual([
         // Male | Female | Unknown (U01)
-        { buttons: [square, square, square], container: true, clips: true },
+        { buttons: [first, square, last], container: true, clips: true },
         // Surname in use: Birth | Married (spec 024)
-        { buttons: [square, square], container: true, clips: true },
+        { buttons: [first, last], container: true, clips: true },
     ]);
 });
 

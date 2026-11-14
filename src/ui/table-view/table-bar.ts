@@ -46,7 +46,7 @@ export function createBar(handlers: BarHandlers): HTMLElement {
     const bar = document.createElement('div');
     bar.className = 'tv-bar';
     bar.innerHTML = '<div class="tv-bar-row1">'
-        + `<div class="tv-rowtype" role="radiogroup" aria-label="${esc(strings.table.rowType)}"></div>`
+        + `<div class="tv-rowtype sel-seg" role="radiogroup" aria-label="${esc(strings.table.rowType)}"></div>`
         + '<button type="button" class="tv-rowtype-btn" aria-haspopup="dialog"></button>'
         + '<div class="tv-slot tv-slot-view"></div>'
         + '<div class="tv-bar-spacer"></div>'
@@ -86,7 +86,7 @@ export function updateBar(bar: HTMLElement, type: RowType, counts: Record<RowTyp
     seg.innerHTML = ROW_TYPES.map(t => {
         const on = t === type;
         const label = strings.table.rows[t];
-        return `<button type="button" class="segment-btn${on ? ' active' : ''}" role="radio" data-rowtype="${t}"`
+        return `<button type="button" class="segment-btn sel-opt${on ? ' active' : ''}" data-sel-form="seg" role="radio" data-rowtype="${t}"`
             + ` aria-checked="${on}" tabindex="${on ? 0 : -1}" aria-label="${esc(strings.table.rowTypeAria(label, counts[t]))}">`
             + `${esc(label)}<span class="tv-rowtype-count" aria-hidden="true">${counts[t]}</span></button>`;
     }).join('');

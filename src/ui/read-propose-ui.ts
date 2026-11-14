@@ -308,7 +308,7 @@ export const readProposeMethods = uiModule({
             main += `<span class="read-p-variants${fresh ? ' is-fresh' : ''}">${esc(t.readersSay(said))}</span>`;
         }
         const seg = (choice: ProposeChoice, label: string): string =>
-            `<button type="button" role="radio" class="read-p-seg-btn${c.choice === choice ? ' is-on' : ''}" aria-checked="${c.choice === choice}"`
+            `<button type="button" role="radio" class="read-p-seg-btn sel-opt${c.choice === choice ? ' is-on' : ''}" data-sel-form="seg" aria-checked="${c.choice === choice}"`
             + ` data-act="p-choice" data-ref="${esc(p.ref)}" data-choice="${choice}">${esc(label)}</button>`;
         const linkLabel = c.choice !== 'link' && !c.candidate ? `${t.choiceLink}…` : t.choiceLink;
         const who = readName(p) || role;
@@ -318,7 +318,7 @@ export const readProposeMethods = uiModule({
                         <span class="read-p-head"><span class="read-p-role">${esc(role)}</span>${p.written ? `<span class="read-p-written">${lineMarksHtml(p.written, 0, [], '')}</span>` : ''}</span>
                         ${main}
                     </div>
-                    <div class="read-p-seg" role="radiogroup" aria-label="${esc(t.choiceGroup(who))}">${seg('new', t.choiceNew)}${seg('link', linkLabel)}${seg('skip', t.choiceSkip)}</div>
+                    <div class="read-p-seg sel-seg" role="radiogroup" aria-label="${esc(t.choiceGroup(who))}">${seg('new', t.choiceNew)}${seg('link', linkLabel)}${seg('skip', t.choiceSkip)}</div>
                 </div>`;
     },
 

@@ -3386,7 +3386,7 @@ class TreeRendererClass {
         const inView = (id: PersonId) => this.positions.has(id);
         const elsewhere = this.siblingsElsewhereOf(personId);
         const aria = (shown ? strings.focus.siblingsTabHideAria : strings.focus.siblingsTabShowAria)(fullTitle);
-        const tabHtml = `<button type="button" class="branch-tab siblings-tab kind-place${shown ? ' active' : ''}" data-action="toggle-siblings" aria-pressed="${shown}" aria-label="${this.escapeHtml(aria)}">`
+        const tabHtml = `<button type="button" class="branch-tab sel-tab siblings-tab kind-place${shown ? ' active' : ''}" data-sel-dir="down" data-action="toggle-siblings" aria-pressed="${shown}" aria-label="${this.escapeHtml(aria)}">`
             + branchTabRestHtml(shown ? 'siblingsShown' : 'siblingsHere');
         if (!shown) {
             const state = siblingsTabState(data, personId, inView, unionChildIds, this.childrenShownSet(), this.childrenUnshowable, this.shownChildrenContext());
@@ -3420,7 +3420,7 @@ class TreeRendererClass {
             .filter((p): p is Person => p !== null && !p.isPlaceholder)
             .map(p => this.bubbleItemHtml(p)) }]);
         const aria = (shown ? strings.focus.parentsTabHideAria : strings.focus.parentsTabShowAria)(fullTitle);
-        const button = `<button type="button" class="branch-tab parents-tab kind-place${shown ? ' active' : ''}" data-action="toggle-parents" aria-pressed="${shown}" aria-label="${this.escapeHtml(aria)}">`
+        const button = `<button type="button" class="branch-tab sel-tab parents-tab kind-place${shown ? ' active' : ''}" data-sel-dir="down" data-action="toggle-parents" aria-pressed="${shown}" aria-label="${this.escapeHtml(aria)}">`
             + branchTabRestHtml(shown ? 'parentsShown' : 'parentsHere');
         const body = `<div class="badge-tooltip-header">${shown ? strings.focus.parentsShownTooltip : strings.focus.hiddenParentsTooltip}</div>${items}`;
         const action = `<div class="badge-tooltip-action">${shown ? strings.focus.placeHideHint : strings.focus.placeShowHint}</div>`;
@@ -4977,7 +4977,7 @@ class TreeRendererClass {
                 const foldedByPerson = foldedBy ? DataManager.getPerson(foldedBy) : null;
                 if (foldedBy && foldedByPerson) {
                     const byName = shownNameFull(foldedByPerson, '?');
-                    tabHtml.set('parentsFolded', `<button type="button" class="branch-tab kind-place folded" data-action="unfold-parents" data-shown-id="${this.escapeHtml(foldedBy)}" aria-label="${this.escapeHtml(strings.focus.parentsFoldedAria(byName))}">`
+                    tabHtml.set('parentsFolded', `<button type="button" class="branch-tab sel-tab kind-place folded" data-sel-dir="down" data-action="unfold-parents" data-shown-id="${this.escapeHtml(foldedBy)}" aria-label="${this.escapeHtml(strings.focus.parentsFoldedAria(byName))}">`
                         + branchTabRestHtml('parentsFolded')
                         + `<div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.parentsFoldedHeader}</div>`
                         + `<div class="badge-tooltip-body">${this.escapeHtml(strings.focus.parentsFoldedBody(byName))}</div>`
@@ -5011,7 +5011,7 @@ class TreeRendererClass {
                     // before the click; after it, rows that glide to them
                     const elsewhere = this.childrenElsewhereOf(id);
                     const kind = childrenShown ? 'childrenShown' : 'children';
-                    const button = `<button type="button" class="branch-tab children-tab kind-place${childrenShown ? ' active' : ''}" data-action="toggle-children" aria-pressed="${childrenShown}" aria-label="${this.escapeHtml(aria)}">`
+                    const button = `<button type="button" class="branch-tab sel-tab children-tab kind-place${childrenShown ? ' active' : ''}" data-sel-dir="down" data-action="toggle-children" aria-pressed="${childrenShown}" aria-label="${this.escapeHtml(aria)}">`
                         + branchTabRestHtml(kind);
                     if (!childrenShown) {
                         const elsewhereLine = elsewhere.length ? `<div class="badge-tooltip-elsewhere">${this.escapeHtml(strings.focus.childrenElsewhereCount(elsewhere.length))}</div>` : '';
@@ -7152,7 +7152,7 @@ class TreeRendererClass {
         const name = self ? shownNameFull(self, '?') : '?';
         const label = (kind === 'linkParents' ? strings.focus.linkParentsAria
             : kind === 'linkChild' ? strings.focus.linkChildAria : strings.focus.linkChildrenAria)(name);
-        return `<button type="button" class="branch-tab line-link kind-jump" data-action="${toParents ? 'jump-parents' : 'jump-child'}" aria-label="${this.escapeHtml(label)}">`
+        return `<button type="button" class="branch-tab sel-tab line-link kind-jump" data-sel-dir="down" data-action="${toParents ? 'jump-parents' : 'jump-child'}" aria-label="${this.escapeHtml(label)}">`
             + `${branchTabRestHtml(kind)}<div class="badge-tooltip" aria-hidden="true"><div class="badge-tooltip-header">${this.escapeHtml(header)}</div>${items}`
             + `<div class="badge-tooltip-action">${this.escapeHtml(strings.focus.jumpHint(people.length))}</div></div></button>`;
     }
@@ -7229,7 +7229,7 @@ class TreeRendererClass {
                 : offered.length > 1 ? strings.focus.partnersPickHint : strings.focus.placeShowHint;
         const aria = (partial ? strings.focus.partnersTabRestAria : pill.shown ? strings.focus.partnersTabHideAria : strings.focus.partnersTabShowAria)(fullTitle);
         const active = pill.shown && !partial;
-        const button = `<button type="button" class="hidden-partners-btn kind-place${active ? ' active' : ''}${partial ? ' partial' : ''}" data-action="toggle-partners"`
+        const button = `<button type="button" class="hidden-partners-btn sel-tab kind-place${active ? ' active' : ''}${partial ? ' partial' : ''}" data-sel-dir="up" data-action="toggle-partners"`
             + ` aria-pressed="${partial ? 'mixed' : active}" aria-label="${this.escapeHtml(aria)}">`
             + `<span class="pill-glyph">${active ? '▾' : '▸'}</span><span class="pill-glyph">∞</span><span class="pill-count">${partial ? offered.length : pill.ids.length}</span>`;
         const body = `<div class="badge-tooltip-header">${this.escapeHtml(header)}</div>${items}`;
@@ -7277,7 +7277,7 @@ class TreeRendererClass {
         } else {
             body = `<div class="badge-tooltip-header">${strings.focus.hiddenSiblingsTooltip}</div>${this.siblingGroupsHtml(personId, siblingIds)}`;
         }
-                return `<button type="button" class="branch-tab kind-focus" data-action="focus-person" data-tab="${kind}" aria-label="${this.escapeHtml(strings.focus.focusTabAria(name))}">`
+                return `<button type="button" class="branch-tab sel-tab kind-focus" data-sel-dir="down" data-action="focus-person" data-tab="${kind}" aria-label="${this.escapeHtml(strings.focus.focusTabAria(name))}">`
             + branchTabRestHtml(kind)
             + `<div class="badge-tooltip" aria-hidden="true">${body}`
             + `<div class="badge-tooltip-body">${this.escapeHtml(strings.focus.familyOfOrigin)}</div>`

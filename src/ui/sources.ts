@@ -342,9 +342,9 @@ export const sourcesMethods = uiModule({
         }
         const s = strings.sources;
         const chip = (value: 'all' | 'unverifiedTranscript' | 'imageHeld', label: string): string =>
-            `<button type="button" class="segment-btn${this.sourcesFilter === value ? ' active' : ''}" data-filter="${value}"`
+            `<button type="button" class="segment-btn sel-opt${this.sourcesFilter === value ? ' active' : ''}" data-sel-form="seg" data-filter="${value}"`
             + ` aria-pressed="${this.sourcesFilter === value}">${esc(label)}</button>`;
-        bar.innerHTML = `<div class="segment">${chip('all', s.filterAll)
+        bar.innerHTML = `<div class="segment sel-seg">${chip('all', s.filterAll)
             + (offered ? chip('unverifiedTranscript', s.filterUnverified) : '')
             + (held ? chip('imageHeld', strings.researchImages.filter(heldCount)) : '')}</div>`;
         bar.querySelectorAll<HTMLButtonElement>('[data-filter]').forEach(btn => {
@@ -1674,7 +1674,7 @@ export const sourcesMethods = uiModule({
         ];
         seg.innerHTML = choices.map((c, i) => {
             const on = (ctx.fact ?? undefined) === c.fact;
-            return `<button type="button" class="segment-btn${on ? ' active' : ''}" role="radio" aria-checked="${on}" data-fact-index="${i}">${esc(c.label)}</button>`;
+            return `<button type="button" class="segment-btn sel-opt${on ? ' active' : ''}" data-sel-form="seg" role="radio" aria-checked="${on}" data-fact-index="${i}">${esc(c.label)}</button>`;
         }).join('');
         seg.querySelectorAll<HTMLElement>('[data-fact-index]').forEach(btn => {
             btn.addEventListener('click', () => {

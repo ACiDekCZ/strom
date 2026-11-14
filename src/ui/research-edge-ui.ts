@@ -744,7 +744,7 @@ export const researchEdgeUiMethods = uiModule({
         const stored = TreeManager.getResearchEdgeMode(treeId);
         const mode = !work && stored === 'mine' ? 'all' : stored;
         const option = (value: ResearchEdgeMode, label: string): string => `
-            <label class="settings-radio">
+            <label class="settings-radio sel-opt" data-sel-form="seg">
                 <input type="radio" name="research-edge-mode" value="${value}"${mode === value ? ' checked' : ''}>
                 <span>${esc(label)}</span>
             </label>`;
@@ -754,7 +754,7 @@ export const researchEdgeUiMethods = uiModule({
                     <span class="settings-name" id="research-edge-label">${esc(re.settingLabel)}</span>
                     <span class="settings-desc">${esc(re.settingHint)}</span>
                 </span>
-                <div class="settings-options settings-segment" role="radiogroup" aria-labelledby="research-edge-label">
+                <div class="settings-options settings-segment sel-seg" role="radiogroup" aria-labelledby="research-edge-label">
                     ${option('off', re.modeOff)}${work ? option('mine', re.modeMine) : ''}${option('all', re.modeAll)}
                 </div>
             </div>

@@ -1204,7 +1204,6 @@
             display: flex; align-items: center; justify-content: center;
         }
         .search-filter-toggle svg { display: block; }
-        .search-filter-toggle.active { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
         .search-filters {
             /* Absolutely positioned dropdown: the panel must NOT grow the
                search container in-flow — the fixed-height toolbar centers its
@@ -1321,6 +1320,8 @@
             .toolbar .search-row .search-filter-toggle, .toolbar .search-row .search-clear-btn { position: relative; }
             .toolbar .search-row .search-filter-toggle::before,
             .toolbar .search-row .search-clear-btn::before { content: ''; position: absolute; inset: -3px 0; }
+            /* The funnel keeps a 1px chip border (the selected option's edge): one px more. */
+            .toolbar .search-row .search-filter-toggle::before { inset: -4px 0; }
             body.search-active:not(.search-open) .toolbar .search-clear-btn {
                 display: flex; align-items: center; justify-content: center; flex: none;
                 width: 44px; height: 38px; padding: 0; border: none; background: none;
@@ -1383,18 +1384,12 @@
         /* The pill carries its own magnifier + "/" chip — the picker's built-in
            dropdown caret is redundant here, so hide it in the toolbar. */
         .toolbar #toolbar-search-picker .person-picker-toggle { display: none; }
-        /* Keep the toolbar filter toggle a ghost even under the dark theme
-           (the shared dark rule paints the filters-panel toggle, not this one).
-           :not(.active): this later rule ties with `.active` on specificity and
-           would strip the active green fill — leaving --on-primary (white) on a
-           transparent background, an invisible icon (user report). */
-        .toolbar .search-filter-toggle:not(.active),
-        [data-theme="dark"] .toolbar .search-filter-toggle:not(.active) { background: transparent; border: none; }
-        /* The generic ".toolbar button { color: white }" rule outranks the
-           single-class toggle selector and painted the funnel white (invisible
-           on the cream pill). Reassert a legible resting colour at higher
-           specificity; the .active state keeps its own white-on-primary. */
-        .toolbar .search-filter-toggle:not(.active) { color: var(--text-light); }
+        /* The filter toggle is a .sel-opt chip (src/ui/sel-css.ts): a ghost at rest,
+           the doubled edge when the filters are open. ".toolbar button" would paint
+           it primary with a white funnel, so its ground, edge and colour come again
+           here (the chosen state's edge and colour still win, src/ui/sel-css.ts). */
+        .toolbar .search-filter-toggle,
+        [data-theme="dark"] .toolbar .search-filter-toggle { background: transparent; border: 1px solid transparent; color: var(--text-light); }
         .search-no-results {
             padding: 12px;
             text-align: center;
@@ -2410,27 +2405,20 @@
         /* Appearance / Language render as a horizontal segment. The native input
            stays in the flow (transparent, covering its cell) so it remains
            clickable and checkable — e2e drives real radios here. */
+        /* The segment is a .sel-seg of .sel-opt cells (src/ui/sel-css.ts: the
+           frame, the hairlines and the checked cell's doubled edge). */
         .settings-segment.settings-options {
+            display: flex;
             flex-direction: row;
-            border: 1px solid var(--border);
-            border-radius: var(--r-md);
             overflow: hidden;
             gap: 0;
-            background: var(--surface-2);
         }
         .settings-segment .settings-radio {
             position: relative;
             flex: 1;
             justify-content: center;
             padding: 8px 6px;
-            border: none;
-            border-radius: 0;
-            background: transparent;
             text-align: center;
-        }
-        @media (hover: hover) { .settings-segment .settings-radio:hover { background: var(--hover-bg); } }
-        .settings-segment .settings-radio + .settings-radio {
-            border-left: 1px solid var(--border);
         }
         .settings-segment .settings-radio input[type="radio"] {
             position: absolute;
@@ -2441,14 +2429,7 @@
             opacity: 0;
             cursor: pointer;
         }
-        .settings-segment .settings-radio span { font-size: 13px; }
-        .settings-segment .settings-radio:has(input:checked) {
-            background: var(--primary);
-        }
-        .settings-segment .settings-radio:has(input:checked) span {
-            color: #fff;
-            font-weight: 600;
-        }
+        .settings-segment .settings-radio span { font-size: 13px; color: inherit; }
         .settings-segment .settings-radio:has(input:focus-visible) {
             outline: 2px solid var(--primary);
             outline-offset: -2px;
@@ -2590,7 +2571,6 @@
         .settings-segment .settings-radio span.poster-sheets {
             font-size: 11.5px; font-weight: 400; color: var(--text-faint); white-space: nowrap; font-variant-numeric: tabular-nums;
         }
-        .settings-segment .settings-radio:has(input:checked) span.poster-sheets { color: rgba(255, 255, 255, 0.85); font-weight: 400; }
         .poster-spacing .poster-sheets[hidden] { display: none; }
         .poster-spacing .tree-spacing-options .settings-radio { min-height: 42px; }
         .poster-spacing .poster-spacing-desc { margin: 6px 0 0; }
@@ -3925,12 +3905,6 @@
             text-transform: uppercase;
         }
 
-        /* Link existing button - now in button row */
-        #toggle-link-mode.active {
-            background: var(--primary);
-            border-color: var(--primary);
-            color: var(--on-primary);
-        }
         .close-btn {
             /* Never squeezed by a long title beside it (a 44 px target stays 44 px). */
             flex: none;
@@ -4737,7 +4711,7 @@
            every card far out, below the zoom's ZOOM_FAR). The words stay for
            screen readers; the bubble names the relatives. */
         .branch-tab > .pill-short { display: none; }
-        .tabs-short > .branch-tab > .pill-short { display: inline; color: var(--text-light); font-size: 10px; font-weight: 600; }
+        .tabs-short > .branch-tab > .pill-short { display: inline; color: inherit; font-size: 10px; font-weight: 600; }
         .tabs-short > .branch-tab > .pill-text,
         .tabs-glyph > .branch-tab > .pill-text,
         #tree-canvas.zoom-far .branch-tab > .pill-text {
@@ -4753,18 +4727,18 @@
         .tabs-glyph > .branch-tab,
         #tree-canvas.zoom-far .branch-tab { padding: 0 6px; gap: 0; }
 
-        /* Active branch tab ("▾ ∞" too): a filled primary pill, no copper glyph. */
-        .branch-tab.active,
-        .hidden-partners-btn.active {
-            background: var(--primary);
-            border-color: var(--primary);
-        }
-        .branch-tab.active .pill-glyph,
-        .branch-tab.active .pill-text,
-        .hidden-partners-btn.active .pill-glyph,
-        .hidden-partners-btn.active .pill-count {
-            color: var(--on-primary);
-        }
+        /* The tabs are .sel-tab (src/ui/sel-css.ts): a shown branch ("▾ ∞" too)
+           carries the line on the card's side of the tab (down on the top
+           edge, up on the bottom edge). The words take the tab's colour; one
+           weight either way (src/union-order-measure.ts measures them so), and
+           no thumb-high tab on a touch screen: the edge's own areas take the taps.
+           The tabs keep their pill shape (like the cross-tree badge beside
+           them) and a focus tab its squarer one: the shape tells the kind. */
+        .branch-tab.sel-tab, .hidden-partners-btn.sel-tab { font-weight: 600; }
+        .branch-tab.sel-tab.sel-tab, .hidden-partners-btn.sel-tab.sel-tab { border-radius: 999px; }
+        .branch-tab.kind-focus.sel-tab.sel-tab { border-radius: 4px; }
+        .branch-tab > .pill-text, .hidden-partners-btn > .pill-count { color: inherit; }
+        @media (pointer: coarse) { .branch-tab.sel-tab, .hidden-partners-btn.sel-tab { min-height: 0; } }
         .hidden-partners-btn { font-variant-numeric: tabular-nums; }
         .hidden-partners-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
         .hidden-partners-btn:focus-visible .badge-tooltip { display: block; }
@@ -5357,10 +5331,6 @@
 
         /* Branch-navigation pills live in the top-right edge slot (see
            .edge-top-right). Shape comes from the unified pill rules above. */
-        @media (hover: hover) { .branch-tab.active:hover {
-            background: var(--primary-dark);
-            border-color: var(--primary-dark);
-        } }
 
         .modal .form-group { margin-bottom: 16px; }
         .modal .form-row {
@@ -5801,18 +5771,12 @@
         /* ---- Split the whole tree into families, from the focus (N4) ---- */
         .splitfam-modal { max-width: 640px; }
         .splitfam-intro { margin: 4px 0 14px; font-size: 13px; color: var(--text-light); line-height: 1.5; }
-        /* What-counts-as-one-family toggle: ghost pill ↔ primary pill, the same
-           segment idiom as .descendants-seg. */
-        .splitfam-mode { display: flex; gap: 8px; margin: 0 0 8px; flex-wrap: wrap; }
+        /* What-counts-as-one-family toggle: a .sel-seg of .sel-opt cells (src/ui/sel-css.ts). */
+        .splitfam-mode.sel-seg { display: inline-flex; max-width: 100%; margin: 0 0 8px; overflow: hidden; }
         .splitfam-mode-btn {
-            border: 1px solid var(--border); background: transparent; color: var(--text-light);
-            border-radius: 999px; padding: 4px 14px; cursor: pointer;
+            padding: 4px 14px; cursor: pointer;
             font-size: 12px; line-height: 1.2; white-space: nowrap;
-            transition: background 0.15s, color 0.15s, border-color 0.15s;
-        }
-        @media (hover: hover) { .splitfam-mode-btn:hover { background: var(--hover-bg); } }
-        .splitfam-mode-btn.active {
-            background: var(--primary); border-color: var(--primary); color: var(--on-primary);
+            transition: background 0.15s, color 0.15s;
         }
         .splitfam-mode-hint { margin: 0 0 14px; font-size: 12px; color: var(--text-faint); line-height: 1.5; }
         /* 'From a person's view' config: depth select, base-person chips, cut list. */
@@ -7637,31 +7601,22 @@
             clip: rect(0 0 0 0);
             pointer-events: none;
         }
+        /* A segment is a .sel-seg of .sel-opt cells (the selection indicator,
+           src/ui/sel-css.ts: the frame, the hairlines, the chosen cell's doubled
+           edge, hover and disabled); only the layout here. */
         .segment {
             display: inline-flex;
-            border: 1px solid var(--border);
-            border-radius: 8px;
             overflow: hidden;
-            background: var(--surface-2);
         }
         .segment-btn {
             padding: 9px 24px;
-            border: none;
-            background: transparent;
-            color: var(--text-light);
             font-size: 14px;
             cursor: pointer;
             transition: background 0.15s, color 0.15s;
         }
-        .segment-btn + .segment-btn { border-left: 1px solid var(--border); }
-        /* Inner buttons are square: the rounded container clips the outer
-           corners (.modal button would round each one on its own). */
-        .segment .segment-btn { border-radius: 0; }
-        .segment-btn.active { background: var(--primary); color: var(--on-primary); }
-        .segment-btn:disabled { cursor: default; opacity: 0.6; }
         /* Male | Female | Unknown: across the dialog on a phone, a thumb high on touch. */
         @media (max-width: 640px) {
-            .gender-segment { display: flex; width: 100%; }
+            .segment.gender-segment { display: flex; width: 100%; }
             .gender-segment .segment-btn { flex: 1; min-width: 0; min-height: 44px; padding: 6px 8px; }
         }
         @media (pointer: coarse) {
@@ -7740,13 +7695,9 @@
         .primary-name[hidden] { display: none !important; }
         .primary-name { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; }
         .primary-name-label { font-size: 12.5px; font-weight: 500; color: var(--text-light); }
-        .primary-name-segment { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+        .segment.primary-name-segment { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
         .primary-name-segment .segment-btn { min-height: 36px; padding: 4px 10px; font-size: 13.5px; text-align: center; text-wrap: balance; }
-        .primary-name-segment .segment-btn.active { font-weight: 600; }
         .primary-name-hint { font-size: 12px; line-height: 1.4; color: var(--text-faint); text-wrap: pretty; }
-        @media (hover: hover) {
-            .primary-name-segment .segment-btn:not(.active):not(:disabled):hover { background: var(--hover-bg); color: var(--text); }
-        }
         @media (pointer: coarse) { .primary-name-segment .segment-btn { min-height: 44px; } }
         @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .primary-name-segment .segment-btn { min-height: 44px; font-size: 15px; }
@@ -10366,9 +10317,8 @@
         .tv-fs-cancel, .tv-fs-clear { font-size: 15px; }
         .tv-fs-clear[hidden] { display: none; }
         /* Row type: a segmented radio group (§2), "People 38". */
-        .tv-rowtype { display: inline-flex; border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; background: var(--surface-2); }
-        .tv-rowtype .segment-btn { padding: 0 12px; height: 34px; font-size: 13px; white-space: nowrap; border-radius: 0; }
-        .tv-rowtype .segment-btn.active { font-weight: 600; }
+        .tv-rowtype { display: inline-flex; overflow: hidden; }
+        .tv-rowtype .segment-btn { padding: 0 12px; height: 34px; font-size: 13px; white-space: nowrap; }
         .tv-rowtype-count { margin-left: 6px; font-variant-numeric: tabular-nums; opacity: 0.85; }
         .tv-rowtype-btn {
             display: none; align-items: center; gap: 6px; height: 40px; padding: 0 12px;
@@ -11140,7 +11090,7 @@
         @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .table-view { --tv-row-h: 40px; --tv-group-h: 22px; --tv-head-h: 40px; --tv-cov-h: 22px; }
             .tv-bar-row1 { padding: 6px 12px; gap: 8px; }
-            .tv-rowtype { display: none; }
+            .tv-rowtype.sel-seg { display: none; }
             .tv-rowtype-btn { display: inline-flex; }
             .tv-status { padding: 0 12px; }
             .tv-cols-btn, .tv-export-btn { height: 40px; }
@@ -11343,7 +11293,6 @@
             border-radius: 8px;
             font-size: 16px;
         }
-        .map-time-toggle.active { background: var(--primary, #4a7c59); color: var(--on-primary); }
         .map-time-toggle:disabled { opacity: 0.45; cursor: not-allowed; }
         /* Migration over time can be found (spec 054 §4): the timer with its word, as high as the
            other controls, the column aligned right (--map-controls-w keeps the top left clear of it). */
@@ -11362,7 +11311,6 @@
             font-weight: 600;
             white-space: nowrap;
         }
-        .map-controls button.map-time-toggle.active { border-color: var(--primary); background: var(--primary); color: var(--on-primary); }
         .map-controls button.map-time-toggle.is-tip { box-shadow: 0 0 0 3px var(--primary-soft); }
         .map-time-toggle-icon { display: inline-flex; }
         .map-time-toggle-icon .ui-icon { width: 16px; height: 16px; }
@@ -11419,10 +11367,10 @@
             body:has(> #live-panel:not([hidden]):not(.phone-strip)) .map-controls { right: calc(var(--live-card-right) + var(--live-card-w) + 8px); }
             body:has(> #live-panel:not([hidden]):not(.phone-strip)) .map-topleft { right: calc(var(--live-card-right) + var(--live-card-w) + var(--map-controls-w, 34px) + 22px); }
         }
-        .map-scope {
+        /* A .sel-seg (src/ui/sel-css.ts) floating over the map. */
+        .map-scope.sel-seg {
             display: flex;
             flex: none;
-            border-radius: 8px;
             overflow: hidden;
             box-shadow: var(--shadow-sm);
         }
@@ -11572,13 +11520,8 @@
         }
         .map-scope button {
             padding: 6px 12px;
-            border: none;
-            border-radius: 0;
-            background: var(--card-bg, #fff);
-            color: var(--text-color, #222);
             font-size: 13px;
         }
-        .map-scope button.active { background: var(--primary, #4a7c59); color: var(--on-primary); }
         /* One-time notice shown instead of the map (tiles come from OSM). */
         .map-tiles-notice {
             position: absolute;
@@ -13700,26 +13643,18 @@
             gap: 6px;
             margin-bottom: 10px;
         }
+        /* The presets are .sel-opt chips (src/ui/sel-css.ts); the edge again here,
+           where .modal button would take it away. */
         .content-preset {
             flex: 1 1 auto;
             padding: 6px 10px;
             font-size: 12.5px;
-            border: 1px solid var(--border);
-            border-radius: var(--r-pill);
-            background: var(--surface);
-            color: var(--text);
             cursor: pointer;
             transition: all 0.15s;
             white-space: nowrap;
         }
-        @media (hover: hover) { .content-preset:hover {
-            border-color: var(--primary);
-        } }
-        .content-preset.active {
-            background: var(--primary);
-            border-color: var(--primary);
-            color: var(--on-primary);
-        }
+        .modal .content-preset { border: 1px solid var(--border); border-radius: var(--sel-r); }
+        .modal #toggle-link-mode.sel-opt { border-radius: var(--sel-r); }
         .content-checks {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -14225,20 +14160,15 @@
         .descendants-badge-count { color: var(--text-faint); flex-shrink: 0; }
         /* "Depth − n +" stepper inside the badge (.depth-stepper, S1).
            flex-shrink:0 so the name ellipsizes first. */
-        /* Named state segment: ghost pill (blood-only) ↔ primary pill (whole
-           families). The label always describes the CURRENT state. */
+        /* Named state toggle, a .sel-opt (src/ui/sel-css.ts): plain (blood-only)
+           ↔ the doubled edge (whole families). The label always describes the
+           CURRENT state. */
         .descendants-seg {
             display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
-            border: 1px solid var(--border); background: transparent; color: var(--text-light);
-            border-radius: 999px; padding: 3px 12px 3px 9px; cursor: pointer;
+            padding: 3px 12px 3px 9px; cursor: pointer;
             font-size: 12px; line-height: 1; white-space: nowrap;
             transition: background 0.15s, color 0.15s, border-color 0.15s;
         }
-        @media (hover: hover) { .descendants-seg:hover { background: var(--hover-bg); } }
-        .descendants-seg.active {
-            background: var(--primary); border-color: var(--primary); color: var(--on-primary);
-        }
-        @media (hover: hover) { .descendants-seg.active:hover { background: var(--primary-dark); } }
         .descendants-seg .figures-glyph { flex-shrink: 0; }
         .descendants-seg-short { display: none; }
         .descendants-close {
@@ -15835,11 +15765,11 @@
             .modal label.card-field-main { display: flex; align-items: center; margin: 0; min-height: 44px; }
             .card-look-grid { grid-template-columns: minmax(0, 1fr); gap: 6px; }
             .card-look-grid .card-look-label:not(:first-child) { margin-top: 6px; }
-            .card-look-segment { display: flex; width: 100%; }
+            .segment.card-look-segment { display: flex; width: 100%; }
             .card-look-segment .segment-btn { flex: 1; min-width: 0; min-height: 44px; padding: 6px 8px; font-size: 14px; }
             /* Year only / Full date: under its title across the panel, a thumb high, as the segments below. */
             .card-fields-head { flex-direction: column; align-items: stretch; gap: 6px; }
-            .card-fields-date { display: flex; width: 100%; }
+            .segment.card-fields-date { display: flex; width: 100%; }
             .card-fields-date .segment-btn { flex: 1; min-width: 0; min-height: 44px; padding: 6px 8px; font-size: 14px; }
         }
         @media (pointer: coarse) {
@@ -16407,30 +16337,24 @@
         .merge-stat.new .merge-stat-value {
             color: var(--primary);
         }
+        /* The filter tabs are .sel-tab (src/ui/sel-css.ts: the line at the foot
+           of the chosen one) on the bar's hairline; only the layout here. */
         .merge-tabs {
             display: flex;
             gap: 4px;
             margin-bottom: 16px;
             flex-wrap: wrap;
+            border-bottom: 1px solid var(--border);
         }
         .merge-tab {
             padding: 8px 12px;
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            background: var(--surface);
-            color: var(--text);
+            border: 0;
+            background: transparent;
             font-size: 12px;
             cursor: pointer;
-            transition: all 0.15s;
+            transition: color 0.15s;
         }
-        @media (hover: hover) { .merge-tab:hover {
-            border-color: var(--primary);
-        } }
-        .merge-tab.active {
-            background: var(--primary);
-            border-color: var(--primary);
-            color: var(--on-primary);
-        }
+        /* The count keeps one weight, so a tab does not widen when chosen. */
         .tab-count {
             display: inline-block;
             padding: 0 6px;
@@ -16438,9 +16362,7 @@
             background: rgba(0,0,0,0.1);
             border-radius: 10px;
             font-size: 10px;
-        }
-        .merge-tab.active .tab-count {
-            background: rgba(255,255,255,0.3);
+            font-weight: 600;
         }
         /* Justified inner-scroll exception: the merge match list scrolls on its
            own so the filter tabs and stats above it stay visible. The modal body
@@ -16920,25 +16842,16 @@
             margin-bottom: 16px;
             flex-wrap: wrap;
         }
+        /* The steps are .sel-tab (src/ui/sel-css.ts): the current one carries the
+           line, a finished one its ✓ in the text; they are not buttons, so no hover. */
         .merge-step {
             padding: 6px 12px;
             font-size: 12px;
-            background: var(--surface-2);
-            border-radius: 14px;
-            color: var(--text-light);
-            transition: all 0.2s;
-        }
-        .merge-step.active {
-            background: var(--primary);
-            color: var(--on-primary);
-        }
-        .merge-step.complete {
-            background: transparent;
-            border: 1px solid var(--primary);
-            color: var(--primary);
-            padding: 5px 11px;
+            cursor: default;
+            transition: color 0.2s;
         }
         .merge-step.complete::before { content: '✓ '; }
+        @media (hover: hover) { .merge-progress > .merge-step.sel-tab:not(.active):hover { box-shadow: none; color: var(--text-light); } }
 
         /* Merge close confirmation */
         .merge-close-message {
@@ -19910,13 +19823,13 @@
         }
         .read-p-unsure { flex-basis: 100%; }
         .read-p-picker { min-width: 0; }
-        .read-p-seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+        /* New | Link | Skip: a .sel-seg of .sel-opt cells (src/ui/sel-css.ts); only the layout here. */
+        .read-p-seg { display: inline-flex; overflow: hidden; }
         .read-p-seg-btn {
-            padding: 4px 10px !important; border: 0 !important; border-radius: 0 !important; background: var(--surface) !important; color: var(--text-light) !important;
-            font-size: 12.5px; box-shadow: none !important; min-height: 0; white-space: nowrap; cursor: pointer;
+            padding: 4px 10px !important; border: 0 !important; border-radius: 0 !important;
+            font-size: 12.5px; min-height: 0; white-space: nowrap; cursor: pointer;
         }
         .read-p-seg-btn + .read-p-seg-btn { border-left: 1px solid var(--border) !important; }
-        .read-p-seg-btn.is-on { background: var(--primary) !important; color: var(--on-primary) !important; }
         .read-p-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
         .read-p-item label { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 5px 4px; font-size: 13.5px; cursor: pointer; }
         .read-p-item input { flex: none; margin: 0; align-self: center; }
@@ -19935,7 +19848,6 @@
         }
         @media (hover: hover) {
             .read-p-card:hover { border-color: var(--primary); }
-            .read-p-seg-btn:not(.is-on):hover { color: var(--text) !important; background: var(--surface-2) !important; }
             .read-p-second:hover { border-color: var(--primary); }
         }
         @media (max-width: 640px) {
@@ -25302,12 +25214,6 @@
             .descendants-badge .descendants-seg { order: 4; }
             .descendants-badge .descendants-seg-full { display: inline; }
             .descendants-badge .descendants-seg-short { display: none; }
-            /* Blood-only is the chip's "on" state here: primary-soft fill. */
-            .descendants-badge .descendants-seg:not(.active) {
-                border-color: var(--primary);
-                background: var(--primary-soft);
-                color: var(--primary-dark);
-            }
             .descendants-badge .descendants-seg { padding-top: 6px; padding-bottom: 6px; }
 
         }
@@ -25409,7 +25315,6 @@
             .merge-tab {
                 padding: 3px 4px;
                 font-size: 8px;
-                border-radius: 6px;
             }
             .tab-count {
                 font-size: 7px;
@@ -26700,18 +26605,17 @@
         @media (hover: hover) { .ppx-check:hover { background: var(--hover-bg); } }
         .ppx-note { margin: 6px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--text-light); }
         .ppx-note[hidden] { display: none; }
-        /* A 2 × 2 segment: one frame, hairlines between the options. */
-        .ppx-privacy {
+        /* A 2 × 2 segment (.sel-seg, src/ui/sel-css.ts): one frame, the hairlines
+           are the 1 px gaps over the frame's colour, so the cells keep no edge of their own. */
+        .modal .ppx-privacy.sel-seg {
             display: grid; grid-template-columns: 1fr 1fr; gap: 1px;
-            border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; background: var(--border);
+            overflow: hidden; background: var(--border);
         }
+        .modal .ppx-privacy.sel-seg > .sel-opt { border: 0; border-radius: 0; }
         .modal .ppx-privacy .segment-btn {
-            min-height: 40px; min-width: 0; padding: 6px 10px; border: 0; border-radius: 0;
+            min-height: 40px; min-width: 0; padding: 6px 10px;
             font-size: 13.5px; text-align: center; text-wrap: balance; overflow-wrap: anywhere;
-            background: var(--surface-2); color: var(--text-light);
         }
-        .modal .ppx-privacy .segment-btn.active { background: var(--primary); color: var(--on-primary); font-weight: 600; }
-        @media (hover: hover) { .modal .ppx-privacy .segment-btn:not(.active):hover { background: var(--hover-bg); } }
         .ppx-privacy .segment-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: -3px; }
         .ppx-size {
             display: flex; flex-direction: column; gap: 2px;
@@ -29458,7 +29362,7 @@
                 <!-- Phone, the query stays with the keyboard closed: its count and × (clears the text only) -->
                 <span id="search-query-count" class="search-query-count"></span>
                 <button type="button" id="search-clear-btn" class="search-clear-btn" onclick="window.Strom.UI.clearSearchText()" data-i18n-aria-label="search.clear" data-i18n-title="search.clear">&times;</button>
-                <button type="button" id="search-filter-toggle" class="search-filter-toggle" onclick="window.Strom.UI.toggleSearchFilters()" data-i18n-title="searchFilters.toggle" data-i18n-aria-label="searchFilters.toggle"><span id="search-filter-badge" class="search-filter-badge" hidden></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18l-7 8.5V19l-4 2.5v-8L3 5z"/></svg></button>
+                <button type="button" id="search-filter-toggle" class="search-filter-toggle sel-opt" data-sel-form="chip" onclick="window.Strom.UI.toggleSearchFilters()" data-i18n-title="searchFilters.toggle" data-i18n-aria-label="searchFilters.toggle"><span id="search-filter-badge" class="search-filter-badge" hidden></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18l-7 8.5V19l-4 2.5v-8L3 5z"/></svg></button>
             </div>
             <div id="search-filters" class="search-filters" style="display:none;">
                 <!-- Phone: the filter is a sheet from below (head, fields, fixed foot) -->
@@ -29729,7 +29633,7 @@
             <select id="descendants-depth-down" class="depth-stepper-native" hidden tabindex="-1" aria-hidden="true" onchange="window.Strom.TreeRenderer.setFocusDepth(window.Strom.TreeRenderer.getFocusDepthUp(), parseInt(this.value))">
             </select>
         </div>
-        <button type="button" id="descendants-families-toggle" class="descendants-seg" onclick="window.Strom.UI.toggleDescendantsFullFamilies()">
+        <button type="button" id="descendants-families-toggle" class="descendants-seg sel-opt" data-sel-form="chip" onclick="window.Strom.UI.toggleDescendantsFullFamilies()">
             <span class="descendants-seg-icon" aria-hidden="true"></span>
             <span class="descendants-seg-label descendants-seg-full"></span>
             <span class="descendants-seg-label descendants-seg-short"></span>
@@ -30020,9 +29924,9 @@
                                  under a filled married surname, never with the suggestion. -->
                             <div class="primary-name" id="primary-name-choice" hidden>
                                 <span class="primary-name-label" id="primary-name-label" data-i18n="person.primaryName"></span>
-                                <div class="segment primary-name-segment" role="radiogroup" aria-labelledby="primary-name-label">
-                                    <button type="button" class="segment-btn" role="radio" data-primary="birth" data-i18n="person.primaryBirth"></button>
-                                    <button type="button" class="segment-btn" role="radio" data-primary="married" data-i18n="person.primaryMarried"></button>
+                                <div class="segment sel-seg primary-name-segment" role="radiogroup" aria-labelledby="primary-name-label">
+                                    <button type="button" class="segment-btn sel-opt" data-sel-form="seg" role="radio" data-primary="birth" data-i18n="person.primaryBirth"></button>
+                                    <button type="button" class="segment-btn sel-opt" data-sel-form="seg" role="radio" data-primary="married" data-i18n="person.primaryMarried"></button>
                                 </div>
                                 <span class="primary-name-hint" data-i18n="person.primaryHint"></span>
                             </div>
@@ -30045,10 +29949,10 @@
                 </div>
                 <div class="form-group">
                     <label data-i18n="labels.gender"></label>
-                    <div class="segment gender-segment" id="gender-segment" role="group">
-                        <button type="button" class="segment-btn" data-gender="male" onclick="window.Strom.UI.setGenderFromSegment('male')" data-i18n="gender.male"></button>
-                        <button type="button" class="segment-btn" data-gender="female" onclick="window.Strom.UI.setGenderFromSegment('female')" data-i18n="gender.female"></button>
-                        <button type="button" class="segment-btn" data-gender="unknown" onclick="window.Strom.UI.setGenderFromSegment('unknown')" data-i18n="gender.unknown"></button>
+                    <div class="segment sel-seg gender-segment" id="gender-segment" role="group">
+                        <button type="button" class="segment-btn sel-opt" data-sel-form="seg" data-gender="male" onclick="window.Strom.UI.setGenderFromSegment('male')" data-i18n="gender.male"></button>
+                        <button type="button" class="segment-btn sel-opt" data-sel-form="seg" data-gender="female" onclick="window.Strom.UI.setGenderFromSegment('female')" data-i18n="gender.female"></button>
+                        <button type="button" class="segment-btn sel-opt" data-sel-form="seg" data-gender="unknown" onclick="window.Strom.UI.setGenderFromSegment('unknown')" data-i18n="gender.unknown"></button>
                     </div>
                     <select id="input-gender" class="pm-hidden-select" tabindex="-1" aria-hidden="true">
                         <option value="male" data-i18n="gender.male"></option>
@@ -30581,7 +30485,7 @@
             </div>
             <div id="source-picker-fact" class="source-picker-fact" hidden>
                 <span class="source-picker-fact-label" data-i18n="sources.pickerFactLabel"></span>
-                <div class="segment" id="source-picker-fact-segment" role="radiogroup" data-i18n-aria-label="sources.pickerFactLabel"></div>
+                <div class="segment sel-seg" id="source-picker-fact-segment" role="radiogroup" data-i18n-aria-label="sources.pickerFactLabel"></div>
             </div>
             <input type="text" id="source-picker-search" class="source-picker-search" data-i18n-placeholder="sources.searchPlaceholder" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
             <div id="source-picker-list" class="source-picker-list"></div>
@@ -30686,7 +30590,7 @@
                 </div>
             </div>
             <div class="buttons">
-                <button class="secondary" id="toggle-link-mode" data-i18n-title="relationModal.linkExistingTitle"><svg class="chain-glyph" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> <span data-i18n="relationModal.linkExisting"></span></button>
+                <button class="secondary sel-opt" data-sel-form="chip" id="toggle-link-mode" data-i18n-title="relationModal.linkExistingTitle"><svg class="chain-glyph" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> <span data-i18n="relationModal.linkExisting"></span></button>
                 <button class="secondary merge-btn-preview-wide" id="rel-preview-btn" onclick="window.Strom.UI.previewRelationPerson()" style="display:none;" aria-label="Preview" data-i18n-aria-label="treePreview.preview" data-i18n-title="treePreview.preview">👁</button>
                 <button class="secondary" data-dismiss onclick="window.Strom.UI.closeRelationModal()" data-i18n="buttons.cancel"></button>
                 <button class="primary" id="rel-submit-btn" onclick="window.Strom.UI.saveRelation()" data-i18n="buttons.add"></button>
@@ -30892,13 +30796,13 @@
                     <!-- Spacing of the tree view: Normal / Dense (spec 069 §1); the hint about the Compact card only on a small screen (§5). -->
                     <div class="settings-row settings-row-stacked tree-spacing-setting" id="tree-spacing-setting">
                         <span class="settings-name" id="settings-spacing-label" data-i18n="spacing.label"></span>
-                        <div class="settings-options settings-segment tree-spacing-options" role="radiogroup" aria-labelledby="settings-spacing-label">
-                            <label class="settings-radio">
+                        <div class="settings-options settings-segment sel-seg tree-spacing-options" role="radiogroup" aria-labelledby="settings-spacing-label">
+                            <label class="settings-radio sel-opt" data-sel-form="seg">
                                 <input type="radio" name="tree-spacing" value="normal" onchange="window.Strom.UI.setTreeSpacing('normal')">
                                 <span class="spacing-glyph spacing-glyph-normal" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
                                 <span class="spacing-opt-label" data-i18n="spacing.normal"></span>
                             </label>
-                            <label class="settings-radio">
+                            <label class="settings-radio sel-opt" data-sel-form="seg">
                                 <input type="radio" name="tree-spacing" value="dense" onchange="window.Strom.UI.setTreeSpacing('dense')">
                                 <span class="spacing-glyph spacing-glyph-dense" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
                                 <span class="spacing-opt-label" data-i18n="spacing.dense"></span>
@@ -30925,22 +30829,22 @@
                     </label>
                     <div class="settings-row settings-row-stacked surname-display-setting" id="surname-display-setting">
                         <span class="settings-name" id="settings-surname-label" data-i18n="settings.surnameDisplay"></span>
-                        <div class="settings-options settings-segment surname-display-options" role="radiogroup" aria-labelledby="settings-surname-label">
-                            <label class="settings-radio">
+                        <div class="settings-options settings-segment sel-seg surname-display-options" role="radiogroup" aria-labelledby="settings-surname-label">
+                            <label class="settings-radio sel-opt" data-sel-form="seg">
                                 <input type="radio" name="surname-display" value="birth" onchange="window.Strom.UI.setSurnameDisplay('birth')">
                                 <span class="surname-opt">
                                     <span class="surname-opt-label" data-i18n="settings.optBirth"></span>
                                     <span class="surname-opt-sample" data-surname-sample="birth"></span>
                                 </span>
                             </label>
-                            <label class="settings-radio">
+                            <label class="settings-radio sel-opt" data-sel-form="seg">
                                 <input type="radio" name="surname-display" value="both" onchange="window.Strom.UI.setSurnameDisplay('both')">
                                 <span class="surname-opt">
                                     <span class="surname-opt-label" data-i18n="settings.optBoth"></span>
                                     <span class="surname-opt-sample" data-surname-sample="both"></span>
                                 </span>
                             </label>
-                            <label class="settings-radio">
+                            <label class="settings-radio sel-opt" data-sel-form="seg">
                                 <input type="radio" name="surname-display" value="married" onchange="window.Strom.UI.setSurnameDisplay('married')">
                                 <span class="surname-opt">
                                     <span class="surname-opt-label" data-i18n="settings.optMarried"></span>
@@ -31073,24 +30977,24 @@
                 <div class="settings-group-body">
                     <div class="settings-row settings-row-stacked">
                         <span class="settings-name" id="settings-language-label" data-i18n="settings.language"></span>
-                        <div class="settings-options settings-segment" role="radiogroup" aria-labelledby="settings-language-label">
-                            <label class="settings-radio">
+                        <div class="settings-options settings-segment sel-seg" role="radiogroup" aria-labelledby="settings-language-label">
+                            <label class="settings-radio sel-opt" data-sel-form="seg">
                                 <input type="radio" name="language" value="system" onchange="window.Strom.UI.setLanguage('system')">
                                 <span data-i18n="settings.languageSystem"></span>
                             </label>
-                            <label class="settings-radio">
+                            <label class="settings-radio sel-opt" data-sel-form="seg">
                                 <input type="radio" name="language" value="en" onchange="window.Strom.UI.setLanguage('en')">
                                 <span>English</span>
                             </label>
-                            <label class="settings-radio">
+                            <label class="settings-radio sel-opt" data-sel-form="seg">
                                 <input type="radio" name="language" value="cs" onchange="window.Strom.UI.setLanguage('cs')">
                                 <span>Čeština</span>
                             </label>
-                            <label class="settings-radio">
+                            <label class="settings-radio sel-opt" data-sel-form="seg">
                                 <input type="radio" name="language" value="de" onchange="window.Strom.UI.setLanguage('de')">
                                 <span>Deutsch</span>
                             </label>
-                            <label class="settings-radio">
+                            <label class="settings-radio sel-opt" data-sel-form="seg">
                                 <input type="radio" name="language" value="pl" onchange="window.Strom.UI.setLanguage('pl')">
                                 <span>Polski</span>
                             </label>
@@ -31098,16 +31002,16 @@
                     </div>
                     <div class="settings-row settings-row-stacked">
                         <span class="settings-name" id="settings-theme-label" data-i18n="settings.theme"></span>
-                        <div class="settings-options settings-segment" role="radiogroup" aria-labelledby="settings-theme-label">
-                            <label class="settings-radio">
+                        <div class="settings-options settings-segment sel-seg" role="radiogroup" aria-labelledby="settings-theme-label">
+                            <label class="settings-radio sel-opt" data-sel-form="seg">
                                 <input type="radio" name="theme" value="system" onchange="window.Strom.UI.setTheme('system')">
                                 <span data-i18n="settings.themeSystem"></span>
                             </label>
-                            <label class="settings-radio">
+                            <label class="settings-radio sel-opt" data-sel-form="seg">
                                 <input type="radio" name="theme" value="light" onchange="window.Strom.UI.setTheme('light')">
                                 <span data-i18n="settings.themeLight"></span>
                             </label>
-                            <label class="settings-radio">
+                            <label class="settings-radio sel-opt" data-sel-form="seg">
                                 <input type="radio" name="theme" value="dark" onchange="window.Strom.UI.setTheme('dark')">
                                 <span data-i18n="settings.themeDark"></span>
                             </label>
@@ -31301,9 +31205,9 @@
                  (formats that cannot do a view are disabled then). The active
                  tree only — another tree has no view here. -->
             <div class="export-scope active-tree-only" id="export-scope">
-                <div class="segment" role="radiogroup" data-i18n-aria-label="exportMenu.scopeLabel">
-                    <button type="button" class="segment-btn" role="radio" data-scope="tree" onclick="window.Strom.UI.setExportScope('tree')" data-i18n="exportMenu.scopeWhole"></button>
-                    <button type="button" class="segment-btn" role="radio" data-scope="view" id="export-scope-view" onclick="window.Strom.UI.setExportScope('view')"></button>
+                <div class="segment sel-seg" role="radiogroup" data-i18n-aria-label="exportMenu.scopeLabel">
+                    <button type="button" class="segment-btn sel-opt" data-sel-form="seg" role="radio" data-scope="tree" onclick="window.Strom.UI.setExportScope('tree')" data-i18n="exportMenu.scopeWhole"></button>
+                    <button type="button" class="segment-btn sel-opt" data-sel-form="seg" role="radio" data-scope="view" id="export-scope-view" onclick="window.Strom.UI.setExportScope('view')"></button>
                 </div>
             </div>
             <!-- Grouped by purpose. `.active-tree-only` groups disappear whole
@@ -31458,8 +31362,8 @@
                  option the sheets it prints on when the two differ; hidden in the views with their own layout (spec 069 §4). -->
             <div class="form-group poster-spacing" id="poster-spacing">
                 <label id="poster-spacing-label" data-i18n="spacing.label"></label>
-                <div class="settings-options settings-segment tree-spacing-options" role="radiogroup" aria-labelledby="poster-spacing-label" aria-describedby="poster-spacing-desc">
-                    <label class="settings-radio">
+                <div class="settings-options settings-segment sel-seg tree-spacing-options" role="radiogroup" aria-labelledby="poster-spacing-label" aria-describedby="poster-spacing-desc">
+                    <label class="settings-radio sel-opt" data-sel-form="seg">
                         <input type="radio" name="poster-spacing" value="normal" onchange="window.Strom.UI.setPosterSpacing('normal')">
                         <span class="spacing-glyph spacing-glyph-normal" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
                         <span class="spacing-opt-text">
@@ -31467,7 +31371,7 @@
                             <span class="poster-sheets" data-spacing="normal" hidden></span>
                         </span>
                     </label>
-                    <label class="settings-radio">
+                    <label class="settings-radio sel-opt" data-sel-form="seg">
                         <input type="radio" name="poster-spacing" value="dense" onchange="window.Strom.UI.setPosterSpacing('dense')">
                         <span class="spacing-glyph spacing-glyph-dense" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
                         <span class="spacing-opt-text">
@@ -31692,9 +31596,9 @@
             <p id="merge-wizard-explanation" class="merge-wizard-explanation" data-i18n="merge.wizardExplanation"></p>
             <div id="merge-validation-banner" class="merge-validation-banner" style="display:none"></div>
             <div class="merge-progress">
-                <span id="merge-step-review" class="merge-step active" data-i18n="merge.stepReview">1. Review matches</span>
-                <span id="merge-step-resolve" class="merge-step" data-i18n="merge.stepResolve">2. Resolve conflicts</span>
-                <span id="merge-step-execute" class="merge-step" data-i18n="merge.stepExecute">3. Execute merge</span>
+                <span id="merge-step-review" class="merge-step sel-tab active" data-sel-dir="down"><span class="sel-l" data-i18n="merge.stepReview">1. Review matches</span></span>
+                <span id="merge-step-resolve" class="merge-step sel-tab" data-sel-dir="down"><span class="sel-l" data-i18n="merge.stepResolve">2. Resolve conflicts</span></span>
+                <span id="merge-step-execute" class="merge-step sel-tab" data-sel-dir="down"><span class="sel-l" data-i18n="merge.stepExecute">3. Execute merge</span></span>
             </div>
             <div class="merge-stats">
                 <div class="merge-stat">
@@ -31730,21 +31634,21 @@
                 </span>
             </label>
             <div class="merge-tabs">
-                <button class="merge-tab active" data-filter="all" onclick="window.Strom.MergerUI.setFilter('all')" data-i18n="merge.tabAll">All</button>
-                <button class="merge-tab" data-filter="high" onclick="window.Strom.MergerUI.setFilter('high')">
-                    <span data-i18n="merge.highConfidence">High</span> <span class="tab-count" id="tab-count-high">0</span>
+                <button class="merge-tab sel-tab active" data-sel-dir="down" data-filter="all" onclick="window.Strom.MergerUI.setFilter('all')"><span class="sel-l" data-i18n="merge.tabAll">All</span></button>
+                <button class="merge-tab sel-tab" data-sel-dir="down" data-filter="high" onclick="window.Strom.MergerUI.setFilter('high')">
+                    <span class="sel-l" data-i18n="merge.highConfidence">High</span> <span class="tab-count" id="tab-count-high">0</span>
                 </button>
-                <button class="merge-tab" data-filter="medium" onclick="window.Strom.MergerUI.setFilter('medium')">
-                    <span data-i18n="merge.mediumConfidence">Medium</span> <span class="tab-count" id="tab-count-medium">0</span>
+                <button class="merge-tab sel-tab" data-sel-dir="down" data-filter="medium" onclick="window.Strom.MergerUI.setFilter('medium')">
+                    <span class="sel-l" data-i18n="merge.mediumConfidence">Medium</span> <span class="tab-count" id="tab-count-medium">0</span>
                 </button>
-                <button class="merge-tab" data-filter="low" onclick="window.Strom.MergerUI.setFilter('low')">
-                    <span data-i18n="merge.lowConfidence">Low</span> <span class="tab-count" id="tab-count-low">0</span>
+                <button class="merge-tab sel-tab" data-sel-dir="down" data-filter="low" onclick="window.Strom.MergerUI.setFilter('low')">
+                    <span class="sel-l" data-i18n="merge.lowConfidence">Low</span> <span class="tab-count" id="tab-count-low">0</span>
                 </button>
-                <button class="merge-tab" data-filter="unmatched" onclick="window.Strom.MergerUI.setFilter('unmatched')">
-                    <span data-i18n="merge.statsNew">New</span> <span class="tab-count" id="tab-count-unmatched">0</span>
+                <button class="merge-tab sel-tab" data-sel-dir="down" data-filter="unmatched" onclick="window.Strom.MergerUI.setFilter('unmatched')">
+                    <span class="sel-l" data-i18n="merge.statsNew">New</span> <span class="tab-count" id="tab-count-unmatched">0</span>
                 </button>
-                <button class="merge-tab" data-filter="conflicts" onclick="window.Strom.MergerUI.setFilter('conflicts')">
-                    <span data-i18n="merge.conflicts">Conflicts</span> <span class="tab-count" id="tab-count-conflicts">0</span>
+                <button class="merge-tab sel-tab" data-sel-dir="down" data-filter="conflicts" onclick="window.Strom.MergerUI.setFilter('conflicts')">
+                    <span class="sel-l" data-i18n="merge.conflicts">Conflicts</span> <span class="tab-count" id="tab-count-conflicts">0</span>
                 </button>
             </div>
             <div class="merge-match-list" id="merge-match-list">
@@ -32381,9 +32285,9 @@
                     <button type="button" class="link-button" id="export-content-edit" aria-expanded="false" aria-controls="export-content-presets" onclick="window.Strom.UI.expandExportContent()" data-i18n="encryption.contentEdit">Edit</button>
                 </div>
                 <div class="content-presets" id="export-content-presets">
-                    <button type="button" class="content-preset" data-preset="complete" onclick="window.Strom.UI.applyExportPreset('complete')" data-i18n="privacy.presetComplete">Complete archive</button>
-                    <button type="button" class="content-preset" data-preset="small" onclick="window.Strom.UI.applyExportPreset('small')" data-i18n="privacy.presetSmall">Small file to send</button>
-                    <button type="button" class="content-preset" data-preset="skeleton" onclick="window.Strom.UI.applyExportPreset('skeleton')" data-i18n="privacy.presetSkeleton">Bare skeleton</button>
+                    <button type="button" class="content-preset sel-opt" data-sel-form="chip" data-preset="complete" onclick="window.Strom.UI.applyExportPreset('complete')" data-i18n="privacy.presetComplete">Complete archive</button>
+                    <button type="button" class="content-preset sel-opt" data-sel-form="chip" data-preset="small" onclick="window.Strom.UI.applyExportPreset('small')" data-i18n="privacy.presetSmall">Small file to send</button>
+                    <button type="button" class="content-preset sel-opt" data-sel-form="chip" data-preset="skeleton" onclick="window.Strom.UI.applyExportPreset('skeleton')" data-i18n="privacy.presetSkeleton">Bare skeleton</button>
                 </div>
                 <div class="content-checks">
                     <label class="content-check">
