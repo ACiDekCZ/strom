@@ -76,7 +76,7 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
         addSibling: '+ Dodaj rodzeństwo',
         remove: 'Usuń',
         witnesses: 'Świadkowie ślubu',
-        addWitness: '👥 Dodaj świadka',
+        addWitness: 'Dodaj świadka',
         witnessesTitle: 'Świadkowie ślubu',
         reassign: 'Przenieś…',
         reassignHeading: 'Przeniesienie do innego rodzica',

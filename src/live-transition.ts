@@ -25,7 +25,7 @@ export const LIVE = {
     linesOutMs: 80, linesIn: [200, 360] as const,
     ring: { in: 150, holdUntil: 500, outUntil: 1000, staticMs: 1600 },
     pulse: { from: 200, to: 560, ease: 'cubic-bezier(0.4, 0, 0.2, 1)', dash: 34, minLine: 48, max: 6 },
-    bloom: { from: 540, ms: 380, spread: 12, alpha: 0.45, compactSpread: 8 },
+    bloom: { from: 540, ms: 380 },
     edge: { in: [200, 400] as const, holdMs: 4000, outMs: 600, length: 36, thick: 6, corner: 8, hit: 44 },
     /** Cards beyond the view widened by this many px on each side do not animate. */
     offscreenMargin: 64,

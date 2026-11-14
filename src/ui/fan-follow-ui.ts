@@ -251,7 +251,8 @@ export const fanFollowMethods = uiModule({
             };
             const drawable = first === 'f' || !!el?.querySelector('.fan-fill');
             if (drawable) {
-                const glow = shape('fan-work-glow', 7);
+                // A sharp 2 px stroke under the line at rest (no wide halo); it only spreads for the signal.
+                const glow = shape('fan-work-glow', 2);
                 const at = Math.min(...list.map(t => pulsing.get(t.row) ?? Infinity));
                 if (motion && Number.isFinite(at)) {
                     glow.classList.add('is-pulse');

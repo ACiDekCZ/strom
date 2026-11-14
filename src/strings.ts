@@ -4244,7 +4244,7 @@ const stringsEN = {
         addSibling: '+ Add sibling',
         remove: 'Remove',
         witnesses: 'Wedding witnesses',
-        addWitness: '👥 Add witness',
+        addWitness: 'Add witness',
         witnessesTitle: 'Wedding witnesses',
         reassign: 'Reassign…',
         reassignHeading: 'Reassign to a different parent',
@@ -5646,7 +5646,7 @@ const stringsEN = {
 
     // Collaboration: send to a relative
     share: {
-        menuItem: '📩 Send to a relative',
+        menuItem: 'Send to a relative',
         menuDesc: 'One file by e-mail — they open it, add what they know, and send it back',
         passwordLabel: 'Password (optional)',
         dialogTitle: 'Send to a relative',
@@ -13320,7 +13320,7 @@ const stringsCZ: StringsType = {
         addSibling: '+ Přidat sourozence',
         remove: 'Odebrat',
         witnesses: 'Svědci sňatku',
-        addWitness: '👥 Přidat svědka',
+        addWitness: 'Přidat svědka',
         witnessesTitle: 'Svědci sňatku',
         reassign: 'Přepojit…',
         reassignHeading: 'Přepojit k jinému rodiči',
@@ -14682,7 +14682,7 @@ const stringsCZ: StringsType = {
 
     // Collaboration: send to a relative
     share: {
-        menuItem: '📩 Poslat rodině',
+        menuItem: 'Poslat rodině',
         menuDesc: 'Jeden soubor e-mailem — k otevření, doplnění a poslání zpět',
         passwordLabel: 'Heslo (volitelné)',
         dialogTitle: 'Poslat rodině',
@@ -22288,7 +22288,7 @@ const stringsDE: StringsType = {
         addSibling: '+ Geschwister hinzufügen',
         remove: 'Entfernen',
         witnesses: 'Trauzeugen',
-        addWitness: '👥 Trauzeuge hinzufügen',
+        addWitness: 'Trauzeuge hinzufügen',
         witnessesTitle: 'Trauzeugen',
         reassign: 'Umhängen…',
         reassignHeading: 'An einen anderen Elternteil umhängen',
@@ -23612,7 +23612,7 @@ const stringsDE: StringsType = {
 
     // Collaboration: send to a relative
     share: {
-        menuItem: '📩 An Verwandte senden',
+        menuItem: 'An Verwandte senden',
         menuDesc: 'Eine Datei per E-Mail — zum Öffnen, Ergänzen und Zurückschicken',
         passwordLabel: 'Passwort (optional)',
         dialogTitle: 'An Verwandte senden',

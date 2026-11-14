@@ -1827,21 +1827,8 @@
             text-decoration: none;
         }
         .about-coffee .ui-icon { color: var(--accent); }
-        /* Steam over the cup: three wisps rise slowly and fade, one after another
-           (negative delays: all three are on their way from the first frame).
-           Rising wisps may leave the icon's box, hence overflow: visible. */
+        /* Steam over the cup: three still wisps, fully drawn (no animation). */
         .about-coffee-cup { overflow: visible; }
-        .about-coffee-steam { animation: about-coffee-steam 3s ease-in-out infinite; }
-        .about-coffee-steam:nth-of-type(2) { animation-delay: -1s; }
-        .about-coffee-steam:nth-of-type(3) { animation-delay: -2s; }
-        @keyframes about-coffee-steam {
-            0% { transform: translate(0, 2px); opacity: 0; }
-            35% { opacity: 0.85; }
-            65% { transform: translate(0.6px, -1px); }
-            100% { transform: translate(-0.3px, -3.5px); opacity: 0; }
-        }
-        /* Reduced motion: the steam stands still, fully drawn. */
-        @media (prefers-reduced-motion: reduce) { .about-coffee-steam { animation: none; opacity: 1; } }
         @media (hover: hover) { .about-coffee:hover { background: var(--hover-bg); } }
         .about-coffee:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
         .person-card:active {
@@ -2074,11 +2061,11 @@
         @media (hover: hover) { .add-btn:hover {
             height: auto;
             min-height: 22px;
-            background: var(--primary);
-            color: var(--on-primary);
-            border-color: var(--primary);
+            background: var(--surface-2);
+            color: var(--text);
+            border-color: var(--text);
             padding: 4px 12px 4px 8px;
-            box-shadow: 0 2px 8px rgba(63,107,79,0.3);
+            box-shadow: none;
             z-index: 30;
         } }
         @media (hover: hover) { .add-btn:hover .add-btn-label {
@@ -4570,11 +4557,11 @@
         @media (hover: hover) { .rel-link-icon:hover {
             height: auto;
             min-height: 18px;
-            background: var(--primary);
-            color: var(--on-primary);
-            border-color: var(--primary);
+            background: var(--surface-2);
+            color: var(--text);
+            border-color: var(--text);
             padding: 4px 12px 4px 8px;
-            box-shadow: 0 2px 8px rgba(63,107,79,0.3);
+            box-shadow: none;
             z-index: 30;
         } }
         @media (hover: hover) { .rel-link-icon:hover .rel-link-label {
@@ -5052,10 +5039,10 @@
 
         /* The cards of a person's children glow for a moment (just shown, or
            while the "▾ children" bubble is open) and a card the view glided
-           to: a ring in the primary colour, coming in over 500 ms. */
+           to: a sharp 2 px ring in the primary colour, coming in over 500 ms. */
         #tree-canvas .person-card.children-glow-anim { transition: transform 0.15s, box-shadow 500ms; }
         #tree-canvas .person-card.children-glow {
-            box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 28%, transparent), var(--shadow-sm);
+            box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 28%, transparent), var(--shadow-sm);
         }
         @media (prefers-reduced-motion: reduce) {
             #tree-canvas .person-card.children-glow-anim { transition: none; }
@@ -5144,7 +5131,7 @@
            "▾ siblings", the parents' "▾ children") glow for a moment: the
            ring of the children's glow, coming in and going over 500 ms. */
         .branch-tab.tab-glow-anim { transition: box-shadow 500ms; }
-        .branch-tab.tab-glow { box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 30%, transparent); }
+        .branch-tab.tab-glow { box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 30%, transparent); }
         @media (prefers-reduced-motion: reduce) {
             .branch-tab.tab-glow-anim { transition: none; }
         }
@@ -5352,8 +5339,15 @@
             font-size: 13px;
             color: var(--text);
         }
-        .modal .form-warning .warning-icon {
+        /* The warning mark: a stroked triangle in the warning colour (no emoji); the text beside it says what. */
+        .warning-icon {
+            display: inline-flex;
             flex-shrink: 0;
+            color: var(--warning-text);
+            vertical-align: -2px;
+        }
+        .modal .form-warning .warning-icon {
+            padding-top: 1px;
         }
         .modal .optional-hint {
             font-weight: 400;
@@ -13152,9 +13146,10 @@
             color: var(--primary);
         }
 
-        /* Search highlight: hits glow (copper), everyone else dims. Class-only. */
+        /* Search highlight: hits get a sharp copper ring over a canvas-coloured
+           gap (never confused with the focus), everyone else dims. Class-only. */
         .person-card.search-hit {
-            box-shadow: 0 0 0 3px var(--accent), 0 0 12px 2px color-mix(in srgb, var(--accent) 55%, transparent);
+            box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
             z-index: 5;
         }
         .person-card.search-dim {
@@ -14038,7 +14033,8 @@
         .collab-badge {
             position: fixed; top: 64px; right: 12px; z-index: 95;
             width: 40px; height: 40px; border-radius: 50%; border: 0; cursor: pointer;
-            background: var(--primary); color: var(--on-primary); font-size: 17px; box-shadow: var(--shadow-sm);
+            display: inline-flex; align-items: center; justify-content: center; padding: 0;
+            background: var(--primary); color: var(--on-primary); box-shadow: var(--shadow-sm);
         }
         .share-welcome { text-align: center; }
         .share-welcome h2 { margin: 8px 0 4px; }
@@ -14385,7 +14381,7 @@
         .research-edge.edge-kind-proof { height: 22px; }
         .research-edge.edge-kind-proof .research-edge-line { display: none; }
         .edge-proof-drop { stroke-dasharray: 3 4; }
-        .research-edge.is-moving .research-edge-line { animation: edge-crawl 0.7s linear infinite; }
+        .research-edge.is-moving .research-edge-line { animation: edge-crawl 600ms linear 1 forwards; }
         @keyframes edge-crawl {
             from { background-position: 0 0; }
             to { background-position: 0 -7px; }
@@ -15918,30 +15914,21 @@
         /* Spotlight: the stop we are on stands out, the rest recedes. */
         body.slideshow-mode .person-card {
             opacity: 0.45; filter: saturate(0.7);
-            transition: opacity 0.6s ease, filter 0.6s ease, transform 0.6s ease, box-shadow 0.6s ease;
+            transition: opacity 0.6s ease, filter 0.6s ease, transform 0.6s ease, box-shadow 0.2s ease;
         }
         body.slideshow-mode .person-card.slideshow-current {
             opacity: 1; filter: none;
             transform: scale(1.12);
-            box-shadow: 0 0 0 3px var(--primary, #4a7c59),
-                        0 0 28px 6px rgba(74, 124, 89, 0.55),
-                        0 10px 30px rgba(0, 0, 0, 0.35);
+            box-shadow: 0 0 0 2px var(--primary, #4a7c59);
             z-index: 5;
-            animation: slideshow-pulse 2.4s ease-in-out infinite;
         }
         /* The focus ring would fight the spotlight — the slideshow decides. */
         body.slideshow-mode .person-card.focused { transform: none; }
         body.slideshow-mode .person-card.focused.slideshow-current { transform: scale(1.12); }
-        @keyframes slideshow-pulse {
-            0%, 100% { box-shadow: 0 0 0 3px var(--primary, #4a7c59),
-                        0 0 24px 4px rgba(74, 124, 89, 0.45),
-                        0 10px 30px rgba(0, 0, 0, 0.35); }
-            50%      { box-shadow: 0 0 0 3px var(--primary, #4a7c59),
-                        0 0 34px 10px rgba(74, 124, 89, 0.65),
-                        0 10px 30px rgba(0, 0, 0, 0.35); }
-        }
+        /* The ring comes in once (the box-shadow transition above) and stays while the stop lasts. */
         @media (prefers-reduced-motion: reduce) {
-            body.slideshow-mode .person-card.slideshow-current { animation: none; }
+            body.slideshow-mode .person-card,
+            body.slideshow-mode .person-card.slideshow-current { transition: none; }
         }
 
         .slideshow-caption {
@@ -16529,7 +16516,6 @@
         }
         .merge-btn-preview-wide {
             min-width: 40px;
-            font-size: 16px;
         }
         /* Person merge dialog */
         .person-merge-person {
@@ -18187,7 +18173,7 @@
             border-radius: 3px;
             background: color-mix(in srgb, var(--live-c) 16%, transparent);
         }
-        /* The light along the line (variant A): a glow running down the line to a new card. */
+        /* The light along the line (variant A): a sharp line running down to a new card, no halo. */
         .live-pulse-layer {
             position: absolute;
             top: 0; left: 0;
@@ -18195,9 +18181,8 @@
             overflow: visible;
         }
         .live-pulse-layer .live-pulse { fill: none; stroke: var(--live-c); stroke-linecap: round; stroke-linejoin: round; }
-        .live-pulse-layer .live-pulse--halo { stroke-width: 10; stroke-opacity: 0.22; }
         .live-pulse-layer .live-pulse--core { stroke-width: 3; stroke-opacity: 0.95; }
-        /* The card lights up once the light arrives (the glow is animated from the script). */
+        /* The card lights up once the light arrives: a still 2 px ring set from the script. */
         .live-bloom {
             position: absolute;
             inset: -1px;
@@ -25689,9 +25674,7 @@
             .modal .fact-origin button.fact-origin-link:hover { text-decoration-thickness: 2px; }
         }
         .fact-was-live { display: inline-flex; align-items: center; gap: 5px; color: var(--text); }
-        .fact-was-live i { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--primary); animation: fact-was-pulse 1.2s ease-in-out infinite; }
-        @keyframes fact-was-pulse { 50% { opacity: 0.35; } }
-        @media (prefers-reduced-motion: reduce) { .fact-was-live i { animation: none; } }
+        .fact-was-live i { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--primary); }
         /* Touch: 44 px targets around the small text buttons and links. */
         @media (pointer: coarse) {
             .modal .fact-origin button.fact-origin-act { min-height: 44px; }
@@ -27887,8 +27870,8 @@
         #attachment-overlay.is-animating .image-viewer-stage img { transition: transform 180ms ease-out; }
         .image-viewer-tools {
             position: absolute; top: calc(12px + env(safe-area-inset-top, 0px)); right: 12px;
-            display: flex; gap: 2px; padding: 4px; border-radius: var(--r-md);
-            background: rgba(20,20,20,0.72); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+            display: flex; gap: 2px; padding: 4px; border-radius: var(--r-sm);
+            background: rgba(20,20,20,0.88); backdrop-filter: none; -webkit-backdrop-filter: none;
         }
         .image-viewer-btn {
             min-width: 44px; height: 44px; padding: 0 8px; border: none; border-radius: var(--r-md);
@@ -27901,13 +27884,17 @@
         .image-viewer-btn:disabled { opacity: 0.35; cursor: default; background: transparent; }
         .image-viewer-level { min-width: 64px; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
         .image-viewer-close { font-size: 26px; margin-left: 4px; }
-        /* Full quality from the research: the button, the progress, the original's chip. */
+        /* Full quality from the research: the button, the progress, the original's chip.
+           A plain dark strip across the whole bottom edge, like a caption under a picture in a book
+           (no frosted glass, no rounded pill); the same in every display mode. */
         .image-viewer-media {
-            position: absolute; top: calc(12px + env(safe-area-inset-top, 0px)); left: 12px;
-            max-width: calc(100vw - 260px); display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-            padding: 6px 8px; border-radius: 22px; color: #fff; font-size: 13px;
-            background: rgba(20,20,20,0.72); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+            position: absolute; top: auto; left: 0; right: 0; bottom: 0; transform: none;
+            max-width: none; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+            padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px)); border-radius: 0; color: #fff; font-size: 13px;
+            background: rgba(20,20,20,0.88); backdrop-filter: none; -webkit-backdrop-filter: none;
         }
+        /* The zoom hint stays above the strip while the strip is shown. */
+        .image-viewer-media:not([hidden]) ~ .image-viewer-hint { bottom: calc(64px + env(safe-area-inset-bottom, 0px)); }
         .image-viewer-media[hidden] { display: none; }
         .image-viewer-media-btn {
             min-height: 32px; padding: 0 12px; border: 1px solid rgba(255,255,255,0.35); border-radius: var(--r-md);
@@ -27928,10 +27915,6 @@
         @media (max-width: 640px) {
             .image-viewer-tools { right: 8px; }
             .image-viewer-level { min-width: 56px; }
-            .image-viewer-media { left: 8px; right: 8px; top: auto; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); max-width: none; }
-        }
-        @media (min-width: 641px) and (max-width: 1024px) {
-            .image-viewer-media { max-width: calc(100vw - 250px); }
         }
         @media (prefers-reduced-motion: reduce) {
             #attachment-overlay.is-animating .image-viewer-stage img { transition: none; }
@@ -29457,7 +29440,7 @@
         <button type="button" class="collab-send" onclick="window.Strom.UI.shareBack()" data-i18n="share.collabSend"></button>
         <button type="button" class="collab-hide" onclick="window.Strom.UI.hideCollabBar()" data-i18n="share.collabHide"></button>
     </div>
-    <button id="collab-badge" class="collab-badge" style="display:none;" onclick="window.Strom.UI.showCollabBarFromBadge()" aria-label="Collaboration in progress" data-i18n-aria-label="share.collabBadgeTitle" data-i18n-title="share.collabBadgeTitle">📩</button>
+    <button id="collab-badge" class="collab-badge" style="display:none;" onclick="window.Strom.UI.showCollabBarFromBadge()" aria-label="Collaboration in progress" data-i18n-aria-label="share.collabBadgeTitle" data-i18n-title="share.collabBadgeTitle"><svg class="ui-icon collab-badge-icon" width="16" height="12" viewBox="0 0 16 12" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true" focusable="false"><rect x=".7" y=".7" width="14.6" height="10.6" rx="1"/><path d="M1.2 1.5 8 6.6l6.8-5.1"/></svg></button>
 
     <div id="descendants-badge" class="descendants-badge" style="display:none;">
         <span id="descendants-badge-text" class="descendants-badge-text"></span>
@@ -30434,7 +30417,7 @@
             </div>
             <div class="buttons">
                 <button class="secondary sel-opt" data-sel-form="chip" id="toggle-link-mode" data-i18n-title="relationModal.linkExistingTitle"><svg class="chain-glyph" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> <span data-i18n="relationModal.linkExisting"></span></button>
-                <button class="secondary merge-btn-preview-wide" id="rel-preview-btn" onclick="window.Strom.UI.previewRelationPerson()" style="display:none;" aria-label="Preview" data-i18n-aria-label="treePreview.preview" data-i18n-title="treePreview.preview">👁</button>
+                <button class="secondary merge-btn-preview-wide" id="rel-preview-btn" onclick="window.Strom.UI.previewRelationPerson()" style="display:none;" aria-label="Preview" data-i18n-aria-label="treePreview.preview" data-i18n-title="treePreview.preview" data-i18n="treePreview.preview">Preview</button>
                 <button class="secondary" data-dismiss onclick="window.Strom.UI.closeRelationModal()" data-i18n="buttons.cancel"></button>
                 <button class="primary" id="rel-submit-btn" onclick="window.Strom.UI.saveRelation()" data-i18n="buttons.add"></button>
             </div>
@@ -31522,7 +31505,7 @@
                 <div id="merge-manual-picker"></div>
             </div>
             <div class="buttons">
-                <button id="merge-manual-preview-btn" class="secondary merge-btn-preview-wide" onclick="window.Strom.MergerUI.previewManualMatch()" data-i18n-title="treePreview.preview" data-i18n-aria-label="treePreview.preview">👁</button>
+                <button id="merge-manual-preview-btn" class="secondary merge-btn-preview-wide" onclick="window.Strom.MergerUI.previewManualMatch()" data-i18n-title="treePreview.preview" data-i18n-aria-label="treePreview.preview" data-i18n="treePreview.preview">Preview</button>
                 <button class="secondary" data-dismiss onclick="window.Strom.MergerUI.closeManualMatchDialog()" data-i18n="buttons.cancel">Cancel</button>
                 <button class="primary" onclick="window.Strom.MergerUI.confirmManualMatch()" data-i18n="buttons.save">Save</button>
             </div>
@@ -31597,7 +31580,7 @@
                 <div id="person-merge-preview" class="person-merge-preview" style="display: none;">
                     <div id="person-merge-other" class="person-merge-person other"></div>
                     <p class="person-merge-warning">
-                        <span class="warning-icon">⚠️</span>
+                        <span class="warning-icon" aria-hidden="true"><svg width="15" height="14" viewBox="0 0 15 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" focusable="false"><path d="M7.5 1.2 14 12.8H1z"/><path d="M7.5 5.4v3.4M7.5 10.5v.3" stroke-linecap="round"/></svg></span>
                         <span id="person-merge-delete-info"></span>
                     </p>
                 </div>
@@ -31619,7 +31602,7 @@
                 </div>
             </div>
             <div class="buttons">
-                <button class="secondary merge-btn-preview-wide" onclick="window.Strom.UI.previewPersonMerge()" data-i18n-title="treePreview.preview" data-i18n-aria-label="treePreview.preview">👁</button>
+                <button class="secondary merge-btn-preview-wide" onclick="window.Strom.UI.previewPersonMerge()" data-i18n-title="treePreview.preview" data-i18n-aria-label="treePreview.preview" data-i18n="treePreview.preview">Preview</button>
                 <button class="secondary" data-dismiss onclick="window.Strom.UI.closePersonMergeDialog()" data-i18n="buttons.cancel">Cancel</button>
                 <button class="primary" id="person-merge-btn" onclick="window.Strom.UI.executePersonMerge()" data-i18n="personMerge.confirmMerge" disabled>Merge people</button>
             </div>
@@ -32041,7 +32024,7 @@
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closePasswordSetupDialog()">&times;</button>
             </div>
             <div class="form-warning">
-                <span class="warning-icon">⚠️</span>
+                <span class="warning-icon" aria-hidden="true"><svg width="15" height="14" viewBox="0 0 15 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" focusable="false"><path d="M7.5 1.2 14 12.8H1z"/><path d="M7.5 5.4v3.4M7.5 10.5v.3" stroke-linecap="round"/></svg></span>
                 <span data-i18n="encryption.warning">If you forget the password, your data cannot be recovered.</span>
             </div>
             <form id="password-setup-form" onsubmit="event.preventDefault(); window.Strom.UI.confirmPasswordSetup();">

@@ -64,7 +64,7 @@ export interface LiveSceneInput {
     overLimit: boolean;
     /** A phone or tablet: shorter times, fewer cards. */
     compact: boolean;
-    /** A phone: no light along the line, a smaller glow. */
+    /** A phone: no light along the line. */
     phone: boolean;
     /** The most cards that move (the children transition's cap). */
     cap: number;
@@ -302,34 +302,32 @@ export function playLiveScene(input: LiveSceneInput): LiveSceneHandle | null {
             const len = polylineLength(it.g.light);
             const dash = pulseDash(len);
             const color = input.colorOf(it.id);
-            for (const cls of ['live-pulse live-pulse--halo', 'live-pulse live-pulse--core']) {
-                const p = document.createElementNS(SVG_NS, 'path');
-                p.setAttribute('d', path);
-                p.setAttribute('class', cls);
-                p.style.setProperty('--live-c', color);
-                p.style.strokeDasharray = dash.dasharray;
-                p.style.strokeDashoffset = String(dash.from);
-                pulses.appendChild(p);
-                animations.push(p.animate([
-                    { strokeDashoffset: dash.from, opacity: 0, offset: 0 },
-                    { strokeDashoffset: dash.from, opacity: 1, offset: 0.001 },
-                    { strokeDashoffset: dash.to, opacity: 1, offset: 1 },
-                ], { duration: T(LIVE.pulse.to - LIVE.pulse.from), delay: delay + T(LIVE.pulse.from), easing: LIVE.pulse.ease, fill: 'both' }));
-            }
+            // One sharp line runs down to the card, no blurred halo around it.
+            const p = document.createElementNS(SVG_NS, 'path');
+            p.setAttribute('d', path);
+            p.setAttribute('class', 'live-pulse live-pulse--core');
+            p.style.setProperty('--live-c', color);
+            p.style.strokeDasharray = dash.dasharray;
+            p.style.strokeDashoffset = String(dash.from);
+            pulses.appendChild(p);
+            animations.push(p.animate([
+                { strokeDashoffset: dash.from, opacity: 0, offset: 0 },
+                { strokeDashoffset: dash.from, opacity: 1, offset: 0.001 },
+                { strokeDashoffset: dash.to, opacity: 1, offset: 1 },
+            ], { duration: T(LIVE.pulse.to - LIVE.pulse.from), delay: delay + T(LIVE.pulse.from), easing: LIVE.pulse.ease, fill: 'both' }));
             glowAt = delay + T(LIVE.bloom.from);
         }
         const el = it.el;
-        const spread = phone ? LIVE.bloom.compactSpread : LIVE.bloom.spread;
         const bloom = document.createElement('span');
         bloom.className = 'live-bloom';
         bloom.setAttribute('aria-hidden', 'true');
         el.appendChild(bloom);
         extras.push(bloom);
-        const glowColor = (a: number) => `color-mix(in srgb, var(--live-c) ${Math.round(a * 100)}%, transparent)`;
+        // The card lights up with a still, sharp 2 px ring in the session's colour (no spreading glow).
         animations.push(bloom.animate([
-            { boxShadow: `0 0 6px 0 ${glowColor(LIVE.bloom.alpha)}`, opacity: 1 },
-            { boxShadow: `0 0 ${6 + spread}px ${spread}px ${glowColor(0)}`, opacity: 1 },
-        ], { duration: T(LIVE.bloom.ms), delay: glowAt, easing: 'ease-out', fill: 'backwards' }));
+            { boxShadow: '0 0 0 2px var(--live-c)', opacity: 1 },
+            { boxShadow: '0 0 0 2px var(--live-c)', opacity: 1 },
+        ], { duration: T(LIVE.bloom.ms), delay: glowAt, easing: 'linear', fill: 'backwards' }));
         ringFor(el, it.id, glowAt);
     }
 

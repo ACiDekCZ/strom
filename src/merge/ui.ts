@@ -796,7 +796,7 @@ class MergerUIClass {
                     </button>
                     ${resolveBtn}
                     <button class="merge-btn-preview" data-action="compare" title="${strings.treePreview.comparePersons}" aria-label="${strings.treePreview.comparePersons}">
-                        👁
+                        ${strings.treePreview.comparePersons}
                     </button>
                 </div>
             </div>
@@ -834,7 +834,7 @@ class MergerUIClass {
                         ${isSkipped ? strings.merge.unskip : strings.merge.skip}
                     </button>
                     <button class="merge-btn-preview" data-action="preview" title="${strings.treePreview.preview}" aria-label="${strings.treePreview.preview}">
-                        👁
+                        ${strings.treePreview.preview}
                     </button>
                 </div>
             </div>

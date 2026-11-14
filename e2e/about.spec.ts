@@ -26,10 +26,10 @@ test('About shows the version and offers "Buy me a coffee" as a plain link in a 
 });
 
 /**
- * The cup on "Buy me a coffee" steams: three wisps rise one after another.
- * With reduced motion the steam stands still, fully drawn.
+ * The cup on "Buy me a coffee" has still steam: three wisps, fully drawn,
+ * with or without reduced motion (no endless animation).
  */
-test('The coffee cup in About steams; with reduced motion the steam stands still', async ({ page }) => {
+test('The coffee cup in About has still steam, with or without reduced motion', async ({ page }) => {
     // The suite runs with reduced motion (playwright.config.ts); motion back on here.
     await page.emulateMedia({ reducedMotion: 'no-preference' });
     await openApp(page);
@@ -38,16 +38,12 @@ test('The coffee cup in About steams; with reduced motion the steam stands still
     await expect(steam).toHaveCount(3);
     const anim = () => steam.evaluateAll((els) => els.map((el) => {
         const cs = getComputedStyle(el);
-        return { name: cs.animationName, delay: cs.animationDelay, opacity: cs.opacity };
+        return { name: cs.animationName, opacity: cs.opacity };
     }));
-    const moving = await anim();
-    expect(moving.map((a) => a.name)).toEqual(['about-coffee-steam', 'about-coffee-steam', 'about-coffee-steam']);
-    expect(new Set(moving.map((a) => a.delay)).size).toBe(3);
-
+    const still = [{ name: 'none', opacity: '1' }, { name: 'none', opacity: '1' }, { name: 'none', opacity: '1' }];
+    expect(await anim()).toEqual(still);
     await page.emulateMedia({ reducedMotion: 'reduce' });
-    const still = await anim();
-    expect(still.map((a) => a.name)).toEqual(['none', 'none', 'none']);
-    expect(still.map((a) => a.opacity)).toEqual(['1', '1', '1']);
+    expect(await anim()).toEqual(still);
 });
 
 /**

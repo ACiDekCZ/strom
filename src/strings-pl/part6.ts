@@ -468,7 +468,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
 
     // Collaboration: send to a relative
     share: {
-        menuItem: '📩 Wyślij rodzinie',
+        menuItem: 'Wyślij rodzinie',
         menuDesc: 'Jeden plik e-mailem – do otwarcia, uzupełnienia i odesłania',
         passwordLabel: 'Hasło (opcjonalne)',
         dialogTitle: 'Wysyłanie rodzinie',
