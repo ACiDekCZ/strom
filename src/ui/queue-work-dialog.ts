@@ -1,7 +1,8 @@
 /**
  * "Work on the queue…" (spec 052 §5, the research's `work.link` and
- * `run.tasks`, Strom Research 1.32): a button in the overview's Queue heading
- * and an item of the Research menu open a dialog that chooses how the agent
+ * `run.tasks`, Strom Research 1.32): a button in the overview's Queue heading,
+ * the same action in Now while nothing runs, and an item of the Research menu
+ * open a dialog that chooses how the agent
  * works on the queue – automatically (`do=loop`) or only a number of tasks
  * (`do=tasks&n=`) – and opens the research's terminal with that choice. The
  * app starts nothing: the terminal says what runs and asks before it starts.
@@ -271,7 +272,7 @@ export const queueWorkMethods = uiModule({
         radios.find(r => r.checked)?.focus();
     },
 
-    /** Close the dialog; `restore`: the focus back to what opened it (or the Queue's button drawn since). */
+    /** Close the dialog; `restore`: the focus back to what opened it (or its button in the overview drawn since). */
     closeQueueWorkDialog(restore = true): void {
         const overlay = document.getElementById(DIALOG_ID);
         if (!overlay) return;
@@ -280,8 +281,9 @@ export const queueWorkMethods = uiModule({
         const to = opener;
         opener = null;
         if (!restore) return;
+        const successor = ['queue-work-btn', 'research-overview__work'].find(c => to?.classList.contains(c));
         const target = to?.isConnected ? to
-            : to?.classList.contains('queue-work-btn') ? document.querySelector<HTMLElement>('#research-overview .queue-work-btn') : null;
+            : successor ? document.querySelector<HTMLElement>(`#research-overview .${successor}`) : null;
         target?.focus({ preventScroll: true });
     },
 });

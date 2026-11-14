@@ -9,7 +9,7 @@
  */
 
 import { test, expect, Page } from '@playwright/test';
-import { followManaged, launchedLinks, openOverview, overview } from './live-directions-bridge';
+import { MANAGED_AGENT, followManaged, launchedLinks, openOverview, overview } from './live-directions-bridge';
 
 const WORK = ['work.link', 'run.tasks'];
 const QUEUE = [
@@ -213,6 +213,112 @@ test.describe('Work on the queue', () => {
         expect(box.x + box.width).toBeLessThanOrEqual(800 - 12);
         // 10 % of the height from the top (12–96 px).
         expect(Math.round(box.y)).toBe(60);
+    });
+});
+
+const nowHead = (page: Page) => overview(page).locator('.live-section__head[aria-controls="ov-sec-now"]');
+const nowWork = (page: Page) => overview(page).locator('#ov-sec-now .research-overview__work');
+const nowFinish = (page: Page) => overview(page).locator('#ov-sec-now .research-overview__finish');
+
+async function unfoldNow(page: Page): Promise<void> {
+    if (await nowHead(page).getAttribute('aria-expanded') === 'false') await nowHead(page).click();
+    await expect(nowHead(page)).toHaveAttribute('aria-expanded', 'true');
+}
+
+/** Nothing runs: no session in Now, the research says it is idle. */
+const IDLE = { features: [...WORK, 'status.busy'], links: ['work'], queue: QUEUE, working: [], busy: { sessions: 0, runs: 0 } };
+/** An agent works: its session in Now, the research says so. */
+const AT_WORK = { features: [...WORK, 'status.busy'], links: ['work'], queue: QUEUE, busy: { sessions: 1, runs: 0 } };
+
+test.describe('Work on the queue in Now', () => {
+    for (const width of [1440, 1024]) {
+        test(`${width} px: offered in Now while nothing runs, the same dialog and link as the Queue's`, async ({ page }) => {
+            await followManaged(page, { ...IDLE, size: { width, height: 900 } });
+            await openOverview(page);
+            await unfoldNow(page);
+            const btn = nowWork(page);
+            await expect(btn).toBeVisible();
+            await expect(btn).toHaveText(/Work on the queue…/);
+            // The Queue's mark: the AI badge and the terminal's mark.
+            await expect(btn.locator('.research-ai-badge')).toHaveCount(1);
+            await expect(btn.locator('.research-open-mark')).toHaveCount(1);
+            await expect(nowFinish(page)).toHaveCount(0);
+            await btn.click();
+            const d = dialog(page);
+            await expect(d).toBeVisible();
+            await expect(d.locator('.queue-work__first-task')).toHaveText('T0101 Matriky Smrkov');
+            await d.getByRole('spinbutton', { name: 'Number of tasks' }).fill('3');
+            await d.locator('#queue-work-open').click();
+            await expect(page.locator('#queue-work-modal')).toHaveCount(0);
+            expect(await launchedLinks(page)).toEqual([expect.stringMatching(/^strom-research:\/\/work\?tree=[0-9a-f-]+&do=tasks&n=3$/)]);
+            await expect(nowWork(page)).toBeFocused();
+        });
+    }
+
+    test('while an agent works Now keeps Finish and stop only', async ({ page }) => {
+        await followManaged(page, AT_WORK);
+        await openOverview(page);
+        await unfoldNow(page);
+        await expect(nowFinish(page)).toBeVisible();
+        await expect(nowWork(page)).toHaveCount(0);
+    });
+
+    test('a run without a session in Now (status.busy): not offered either', async ({ page }) => {
+        await followManaged(page, { ...IDLE, busy: { sessions: 0, runs: 1 } });
+        await openOverview(page);
+        await unfoldNow(page);
+        await expect(overview(page).locator('#ov-sec-now')).toBeVisible();
+        await expect(nowWork(page)).toHaveCount(0);
+    });
+
+    test('without work.link: not offered', async ({ page }) => {
+        await followManaged(page, { ...IDLE, features: ['status.busy'] });
+        await openOverview(page);
+        await unfoldNow(page);
+        await expect(overview(page).locator('#ov-sec-now')).toBeVisible();
+        await expect(nowWork(page)).toHaveCount(0);
+    });
+
+    test('a phone (390 px): Now offers neither, as the Queue (the terminal opens on a computer)', async ({ page }) => {
+        await followManaged(page, { ...IDLE, size: { width: 390, height: 844 } });
+        await page.locator('#live-panel .live-panel-toggle').click();
+        await expect(overview(page)).toHaveClass(/research-overview--sheet/);
+        await unfoldNow(page);
+        await expect(overview(page).locator('#ov-sec-now')).toBeVisible();
+        await expect(nowWork(page)).toHaveCount(0);
+        await expect(nowFinish(page)).toHaveCount(0);
+    });
+
+    test('the overview\'s own window 390 px wide: in Now while nothing runs, the link handed to the main window; gone once an agent works', async ({ page }) => {
+        // The stream reconnects soon: the research's next status comes with its next hello.
+        const b = await followManaged(page, { ...IDLE, fastReconnect: true });
+        await page.locator('#view-window-btn').click();
+        const [popup] = await Promise.all([page.waitForEvent('popup'), page.locator('#view-window-menu [data-view="overview"]').click()]);
+        await popup.waitForLoadState('domcontentloaded');
+        await popup.setViewportSize({ width: 390, height: 844 });
+        const ov = popup.locator('#research-overview.research-overview--window');
+        await expect(ov).toBeVisible();
+        const head = ov.locator('.live-section__head[aria-controls="ov-sec-now"]');
+        if (await head.getAttribute('aria-expanded') === 'false') await head.click();
+        const btn = ov.locator('#ov-sec-now .research-overview__work');
+        await expect(btn).toBeVisible();
+        await expect(btn.locator('.research-ai-badge')).toHaveCount(1);
+        await expect(btn.locator('.research-open-mark')).toHaveCount(1);
+        // Within the window's width.
+        const box = (await btn.boundingBox())!;
+        expect(box.x + box.width).toBeLessThanOrEqual(390);
+        expect(await ov.evaluate(e => e.scrollWidth <= e.clientWidth)).toBe(true);
+        await btn.click();
+        const d = popup.locator('#queue-work-modal [role="dialog"]');
+        await expect(d).toBeVisible();
+        await d.locator('#queue-work-open').click();
+        await expect.poll(() => launchedLinks(page)).toEqual([expect.stringMatching(/^strom-research:\/\/work\?tree=[0-9a-f-]+&do=loop$/)]);
+        // The agent starts: Now shows its session and Finish and stop, no longer the offer.
+        b.working = [MANAGED_AGENT];
+        b.busy = { sessions: 1, runs: 0 };
+        await expect(ov.locator('#ov-sec-now .research-overview__finish')).toBeVisible({ timeout: 15000 });
+        await expect(btn).toHaveCount(0);
+        await popup.close();
     });
 });
 

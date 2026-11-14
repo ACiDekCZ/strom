@@ -1808,6 +1808,7 @@ export const researchOverviewMethods = uiModule({
             for (const g of groups) list.appendChild(this.overviewNowLine(g, sel === g.id, mode));
             const stopped = sel !== 'all' && !groups.some(g => g.id === sel) ? s.researches.find(d => d.id === sel) : undefined;
             if (stopped) list.appendChild(this.overviewNowLine({ id: stopped.id, direction: stopped, workers: [] }, true, mode));
+            this.appendOverviewNowWork(host, s);
             return;
         }
         if (s.working.length === 0) list.appendChild(el('li', 'live-empty', L.nobody));
@@ -1830,6 +1831,23 @@ export const researchOverviewMethods = uiModule({
             if (actions) li.appendChild(actions);
             list.appendChild(li);
         }
+        this.appendOverviewNowWork(host, s);
+    },
+
+    /**
+     * Now's "Work on the queue…" (the Queue heading's action, its mark and its
+     * conditions): offered while nothing runs, so Now starts the work as well
+     * as it finishes it. While an agent works Now keeps "Finish and stop" only.
+     */
+    appendOverviewNowWork(host: HTMLElement, s: LiveSession): void {
+        if (s.working.length > 0 || this.queueWorkOfferFor(s) !== 'offer') return;
+        const row = el('div', 'research-overview__now-actions research-overview__now-work');
+        const btn = setResearchActionLabel(el('button', 'link-button research-overview__work'), strings.live.queueWork, researchLinkMark('work'));
+        btn.type = 'button';
+        btn.setAttribute('aria-haspopup', 'dialog');
+        btn.onclick = () => this.showQueueWorkDialog(s, btn);
+        row.appendChild(btn);
+        host.appendChild(row);
     },
 
     /**
