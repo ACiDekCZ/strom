@@ -7882,8 +7882,7 @@
         .sat-follow-mark[data-mode="off"] { border-color: var(--text-faint); border-style: dashed; }
         .sat-follow-label { flex: none; color: var(--text-light); }
         .sat-follow-state { flex: none; font-weight: 500; }
-        /* Beside the view tabs (960–1199 px) the mode alone; its full name stays the aria-label and the menu's heading. */
-        @media (min-width: 960px) and (max-width: 1199px) { .sat-follow-label { display: none; } }
+        /* "Follow selection:" stays beside the view tabs too (960–1199 px): the mode's verb alone ("switch ▾") says nothing; the tree's name gives way (de at 960 px keeps about 120 px of it). */
         .sat-follow-menu .sat-follow-item { height: auto; min-height: 44px; padding: 6px 12px; align-items: flex-start; gap: 10px; }
         .sat-follow-menu .sat-follow-item .sat-follow-mark { margin-top: 3px; }
         .sat-follow-item-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }

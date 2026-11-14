@@ -251,13 +251,18 @@ test.describe('the header fits (de)', () => {
             await expect(another(sat)).toHaveAccessibleName('Weiteres Fenster öffnen');
             if (width >= 960) await expect(segment(sat)).toBeVisible();
             else await expect(viewBtn(sat)).toBeVisible();
-            // The name beside the mode, but next to the view tabs below 1200 px and on a phone width.
-            await expect(sat.locator('.sat-follow-label')).toBeVisible({ visible: width >= 1200 || (width > 640 && width < 960) });
+            // The name beside the mode wherever the mode is written, beside the view tabs too (960–1199 px:
+            // the verb alone, "wechseln ▾", says nothing); a phone width keeps the mark alone.
+            await expect(sat.locator('.sat-follow-label')).toBeVisible({ visible: width > 640 });
             await expect(sat.locator('.sat-follow-state')).toBeVisible({ visible: width > 640 });
             await headerFits(sat);
             // "Follow selection" (K2.1): its longest mode fits too; its menu stays inside the window, nothing in it cut.
             await setFollowMode(sat, 'mark');
             await headerFits(sat);
+            if (width >= 960) {
+                const titleWidth = await sat.locator('.sat-header-title').evaluate(el => el.getBoundingClientRect().width);
+                expect(titleWidth, 'beside the tabs and the whole "Follow selection:" the name still reads').toBeGreaterThan(60);
+            }
             await sat.locator('.sat-follow').click();
             const m = await sat.locator('.sat-follow-menu').evaluate((menu) => {
                 const b = menu.getBoundingClientRect();
