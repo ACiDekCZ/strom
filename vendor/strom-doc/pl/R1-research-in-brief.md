@@ -133,3 +133,65 @@ i tekście.
 - **Obowiązuje od:** badanie 1.28.0
 
 <!-- zdroj: research:src/commands/doc.ts (SEARCH_ROWS=10, --limit, ui.docs.fallback, docUrl) · src/core/doc.ts · assets/strom-doc/ (PIN) · src/agents/files.ts:188 "answer from `strom doc`" · src/cli/help.ts (help --human, poslední řádek) · CHANGELOG.cs.md 1.28.0 · commity 314ab218, 4acfb170 -->
+
+<a id="R1.9"></a>
+## R1.9 Pytania o dane drzewa: `strom query`
+
+Na pytanie o dane drzewa (ilu młynarzy jest w rodzie, kto mieszkał pod numerem 12, kto urodził się w jednym miejscu
+w jednym stuleciu) odpowiada jedno wywołanie `strom query`. Wypisuje wiersz dla każdej danej osoby: kto to jest i jak
+jest spokrewniony z osobą wyjściową, co dana mówi, gdzie, kiedy, na ile jest pewna i z jakiego źródła. Polecenie tylko
+czyta: niczego nie weryfikuje i niczego nie zapisuje.
+
+- **Granice:**
+  - dana rodziny (małżeństwo) ma wiersz dla każdego partnera. Wycofane osoby i dane nigdy, obalone dane tylko
+    z `--status disproven`;
+  - pokrewieństwo z osobą wyjściową (ustawienie `main.person`, w przeciwnym razie `--of P…`) jest słowami w języku
+    badania, ze stroną i pokoleniem, na przykład **dziadek, ze strony ojca (G3)**. G1 to osoba wyjściowa, G2 jej
+    rodzice;
+  - czyje dane (`--kin`): `ancestors` osoba wyjściowa i linia prosta; `blood` (domyślnie) przodkowie i wszyscy ich
+    potomkowie, także gałęzie boczne; `family` krewni i ich partnerzy; `all` całe drzewo;
+  - filtry obowiązują wszystkie naraz: `--kind` (rodzaj danej: OCCU, RESI, BIRT …; nieznany rodzaj zostaje odrzucony
+    z listą prawidłowych), `--occupation`, `--value` (powtórzony: którekolwiek ze słów), `--place`, `--house` (12
+    znajdzie też č. 12 i Nr. 12), `--years` (1750-1850 lub jeden rok), `--surname` (także inne formy nazwiska:
+    Horáková), `--source` (S… lub słowa tytułu), `--status`;
+  - słowo jest szukane na początku słowa w wartości, opisie lub przyczynie danej, nie w notatce, bez względu na znaki
+    diakrytyczne. Zawód jest szukany także w formach czeskich, niemieckich, łacińskich i polskich (mlynar znajdzie też
+    Müller i molitor); nagłówek wypisu wymienia te formy. `--exact` szuka tylko samego słowa;
+  - `--count` wypisuje tylko liczby osób i danych; `--by generation|kin|place|decade|surname` dzieli je na grupy
+    (według pokolenia gałęzie boczne mają własną grupę), bez `--count` wiersze według grup. Wiersze idą stronami
+    (`--limit`, najwyżej 100, `--page`); `--json` daje przy osobie także odnośnik, który otwiera ją w aplikacji Strom;
+  - osoby, które mają szukane słowo tylko gdzie indziej (imię, notatka), są liczone osobno, z poleceniem `strom find`,
+    które je znajdzie. Gdy nic się nie znajdzie, wypis proponuje `strom find` i szerszy krąg `--kin`.
+- **Tylko metodyka:** na pytanie o dane agent odpowiada jednym wywołaniem `strom query`, nie szukaniem osoba po osobie.
+  Osobę wymienia z imienia i nazwiska z ID w nawiasie (Jan Horák (P0012)), pokrewieństwo całe, tak jak podał je
+  `strom query`, nigdy skrócone, a źródło tytułem z S… w nawiasie. Przy każdej danej mówi, na ile jest pewna: jako
+  fakt tylko udokumentowaną; prawdopodobna i możliwa dana ani wskazówka nie są udokumentowane. Wiersz `strom query`
+  nie wystarczy, by stwierdzić, czyj jest zapis i kto jest kim, ani by zweryfikować lub zapisać daną: to idzie dalej
+  ze źródeł i według metodyki ([R3](R3-verification-and-citation.md), [R10](R10-people-and-hypotheses.md)).
+- **Obsługa:** terminal: `strom query`, na przykład `strom query --occupation mlynar --count --by generation`;
+  `strom app --person P…` otwiera aplikację Strom na osobie (aplikacja przed 3.21 otwiera drzewo). `strom find` nadal
+  szuka słowa w dowolnym tekście badania, a jego pomoc odsyła do `strom query`. `strom facts …` niczego nie wykonuje:
+  mówi **„strom facts” to teraz „strom query” (te same opcje)** i całe wywołanie ze `strom query`.
+- **Obowiązuje od:** badanie 1.32.0
+
+<!-- zdroj: research:src/commands/query.ts (popis, volby, KIN_SETS, FACT_GROUPS, LIST_PAGE_MAX=100, elsewhereOf, tries) · src/core/query.ts (hlavička, kinSet, SHOWN_STATUSES, ASKED_STATUSES) · src/core/occupations.ts · src/commands/analysis.ts help find („the facts recorded of people … strom query“) · src/cli/execute.ts RENAMED, renamedCommand · src/agents/files.ts AGENTS.md „Questions over the data“ · src/commands/start.ts app --person · cs.json ui.query.*, ui.error.command.renamed · test/cli/query.test.ts · CHANGELOG.cs.md 1.32.0 · spec 081 K1–K7 -->
+
+<a id="R1.9.1"></a>
+### R1.9.1 Opowieści: `strom query --story`
+
+- `--story <słowo>` wypisuje osoby i pary, w których opowieści jest to słowo: wiersz na opowieść, ze zdaniem, w którym
+  słowo jest, i ze źródłami, na których zdanie się opiera.
+- **Granice:**
+  - słowo jest szukane jak przy `--value` (bez względu na znaki diakrytyczne, z formami zawodu, `--exact`);
+    powtórzone: którekolwiek;
+  - długie zdanie jest skrócone wokół słowa. Opowieść czekająca na zatwierdzenie (także nowa wersja zatwierdzonej)
+    ma **szkic**;
+  - źródła zdania to te, które zdanie wymienia, w przeciwnym razie źródła danych opowieści z lat, o których zdanie
+    wspomina. Gdy nie da się ich ustalić, wiersz pokazuje **źródła całej opowieści**;
+  - opowieść pary ma wiersz dla każdego partnera. Pozostałe filtry wybierają osoby (te z pasującą daną); `--by` tylko
+    `generation`, `kin`, `surname`.
+- **Tylko metodyka:** opowieść opowiada dane na nowo. Agent odpowiada z danych i źródeł; opowieść tylko pokazuje, gdzie
+  szukać.
+- **Obowiązuje od:** badanie 1.32.0
+
+<!-- zdroj: research:src/commands/query.ts (--story, --by place|decade odmítnuto, storyText, storyData) · src/core/query.ts findStories (hlavička: sourcesNamed, storySources, basis sentence|story) · cs.json ui.query.story.* · src/agents/files.ts „A story retells the facts“ · CHANGELOG.cs.md 1.32.0 -->

@@ -141,3 +141,71 @@ Begriffsverzeichnis und im Text.
 - **Gilt seit:** Forschung 1.28.0
 
 <!-- zdroj: research:src/commands/doc.ts (SEARCH_ROWS=10, --limit, ui.docs.fallback, docUrl) · src/core/doc.ts · assets/strom-doc/ (PIN) · src/agents/files.ts:188 "answer from `strom doc`" · src/cli/help.ts (help --human, poslední řádek) · CHANGELOG.cs.md 1.28.0 · commity 314ab218, 4acfb170 -->
+
+<a id="R1.9"></a>
+## R1.9 Fragen an die Daten des Baums: `strom query`
+
+Eine Frage an die Daten des Baums (wie viele Müller es in der Familie gibt, wer im Haus Nr. 12 lebte, wer in einem
+Jahrhundert an einem Ort geboren wurde) beantwortet ein Aufruf von `strom query`. Er gibt eine Zeile für jede Angabe
+einer Person aus: wer es ist und wie die Person mit der Ausgangsperson verwandt ist, was die Angabe sagt, wo, wann,
+wie sicher sie ist und auf welcher Quelle sie beruht. Der Befehl liest nur: er prüft nichts und schreibt nichts.
+
+- **Grenzen:**
+  - eine Angabe einer Familie (eine Ehe) hat eine Zeile für jeden Partner. Zurückgezogene Personen und Angaben nie,
+    widerlegte Angaben nur mit `--status disproven`;
+  - die Beziehung zur Ausgangsperson (Einstellung `main.person`, sonst `--of P…`) steht in Worten in der Sprache der
+    Forschung, mit der Seite und der Generation, zum Beispiel **Großvater, väterlicherseits (G3)**. G1 ist die
+    Ausgangsperson, G2 ihre Eltern;
+  - wessen Angaben (`--kin`): `ancestors` die Ausgangsperson und die direkte Linie; `blood` (Standard) die Vorfahren
+    und alle ihre Nachkommen, auch die Seitenzweige; `family` die Blutsverwandten und ihre Partner; `all` der ganze
+    Baum;
+  - die Filter gelten alle zugleich: `--kind` (Art der Angabe: OCCU, RESI, BIRT …; eine unbekannte Art wird mit der
+    Liste der gültigen abgelehnt), `--occupation`, `--value` (wiederholt: irgendeines der Wörter), `--place`,
+    `--house` (12 findet auch č. 12 und Nr. 12), `--years` (1750-1850 oder ein Jahr), `--surname` (auch weitere Formen
+    des Nachnamens: Horáková), `--source` (S… oder Wörter des Titels), `--status`;
+  - ein Wort wird am Anfang eines Wortes im Wert, in der Bezeichnung oder in der Ursache der Angabe gesucht, nicht in
+    der Notiz, ohne Rücksicht auf diakritische Zeichen. Ein Beruf wird auch in tschechischen, deutschen, lateinischen
+    und polnischen Formen gesucht (mlynar findet auch Müller und molitor); der Kopf der Ausgabe nennt die Formen.
+    `--exact` sucht nur das Wort selbst;
+  - `--count` gibt nur die Zahlen der Personen und Angaben aus; `--by generation|kin|place|decade|surname` teilt sie
+    in Gruppen (nach Generation haben die Seitenzweige eine eigene Gruppe), ohne `--count` die Zeilen nach Gruppen. Die
+    Zeilen kommen seitenweise (`--limit`, höchstens 100, `--page`); `--json` gibt bei der Person auch den Link, der sie
+    in der Strom-App öffnet;
+  - Personen, die das gesuchte Wort nur anderswo haben (Name, Notiz), werden gesondert gezählt, mit dem Befehl
+    `strom find`, der sie findet. Wird nichts gefunden, bietet die Ausgabe `strom find` und einen weiteren Kreis
+    `--kin` an.
+- **Nur Methodik:** auf eine Frage an die Daten antwortet der Agent mit einem Aufruf von `strom query`, nicht mit einer
+  Suche Person für Person. Er nennt eine Person mit Namen und der ID in Klammern (Jan Horák (P0012)), die Beziehung
+  ganz, wie `strom query` sie gab, nie gekürzt, und eine Quelle mit ihrem Titel und der S… in Klammern. Bei jeder
+  Angabe sagt er, wie sicher sie ist: als Tatsache nur eine belegte; eine wahrscheinliche oder mögliche Angabe und ein
+  Hinweis sind nicht belegt. Eine Zeile von `strom query` reicht nicht, um zu sagen, wessen Eintrag es ist und wer wer
+  ist, noch um eine Angabe zu prüfen oder zu schreiben: das geht weiter aus den Quellen und nach der Methodik
+  ([R3](R3-verification-and-citation.md), [R10](R10-people-and-hypotheses.md)).
+- **Bedienung:** Terminal: `strom query`, zum Beispiel `strom query --occupation mlynar --count --by generation`;
+  `strom app --person P…` öffnet die Strom-App bei der Person (eine App vor 3.21 öffnet den Baum). `strom find` sucht
+  weiter ein Wort in jedem Text der Forschung, und seine Hilfe verweist auf `strom query`. `strom facts …` führt
+  nichts aus: es sagt **„strom facts“ heißt jetzt „strom query“ (dieselben Optionen)** und den ganzen Aufruf mit
+  `strom query`.
+- **Gilt seit:** Forschung 1.32.0
+
+<!-- zdroj: research:src/commands/query.ts (popis, volby, KIN_SETS, FACT_GROUPS, LIST_PAGE_MAX=100, elsewhereOf, tries) · src/core/query.ts (hlavička, kinSet, SHOWN_STATUSES, ASKED_STATUSES) · src/core/occupations.ts · src/commands/analysis.ts help find („the facts recorded of people … strom query“) · src/cli/execute.ts RENAMED, renamedCommand · src/agents/files.ts AGENTS.md „Questions over the data“ · src/commands/start.ts app --person · cs.json ui.query.*, ui.error.command.renamed · test/cli/query.test.ts · CHANGELOG.cs.md 1.32.0 · spec 081 K1–K7 -->
+
+<a id="R1.9.1"></a>
+### R1.9.1 Erzählungen: `strom query --story`
+
+- `--story <Wort>` listet die Personen und Paare auf, in deren Erzählung das Wort steht: eine Zeile je Erzählung, mit
+  dem Satz, in dem das Wort steht, und mit den Quellen, auf die sich der Satz stützt.
+- **Grenzen:**
+  - das Wort wird wie bei `--value` gesucht (ohne Rücksicht auf diakritische Zeichen, mit den Formen eines Berufs,
+    `--exact`); wiederholt: irgendeines;
+  - ein langer Satz wird um das Wort gekürzt. Eine Erzählung, die auf Freigabe wartet (auch eine neue Version einer
+    freigegebenen), hat **Entwurf**;
+  - die Quellen des Satzes sind die, die der Satz nennt, sonst die Quellen der Angaben der Erzählung aus den Jahren,
+    die der Satz erwähnt. Lassen sie sich nicht bestimmen, zeigt die Zeile **Quellen der ganzen Erzählung**;
+  - die Erzählung eines Paares hat eine Zeile für jeden Partner. Die übrigen Filter wählen die Personen (die mit
+    einer passenden Angabe); `--by` nur `generation`, `kin`, `surname`.
+- **Nur Methodik:** eine Erzählung erzählt die Angaben nach. Der Agent antwortet aus den Angaben und Quellen; eine
+  Erzählung zeigt nur, wo zu suchen ist.
+- **Gilt seit:** Forschung 1.32.0
+
+<!-- zdroj: research:src/commands/query.ts (--story, --by place|decade odmítnuto, storyText, storyData) · src/core/query.ts findStories (hlavička: sourcesNamed, storySources, basis sentence|story) · cs.json ui.query.story.* · src/agents/files.ts „A story retells the facts“ · CHANGELOG.cs.md 1.32.0 -->

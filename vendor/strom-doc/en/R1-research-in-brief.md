@@ -133,3 +133,67 @@ glossary and the text.
 - **Since:** research 1.28.0
 
 <!-- zdroj: research:src/commands/doc.ts (SEARCH_ROWS=10, --limit, ui.docs.fallback, docUrl) · src/core/doc.ts · assets/strom-doc/ (PIN) · src/agents/files.ts:188 "answer from `strom doc`" · src/cli/help.ts (help --human, poslední řádek) · CHANGELOG.cs.md 1.28.0 · commity 314ab218, 4acfb170 -->
+
+<a id="R1.9"></a>
+## R1.9 Questions over the tree's data: `strom query`
+
+A question over the tree's data (how many millers are in the family, who lived at house 12, who was born in one place
+in one century) is answered by one call of `strom query`. It prints a row for each fact of a person: who it is and how
+they are related to the main person, what the fact says, where, when, how certain it is and on what source. The
+command only reads: it verifies nothing and writes nothing.
+
+- **Limits:**
+  - a fact of a family (a marriage) has a row for each partner. Retracted persons and facts never, disproven facts
+    only with `--status disproven`;
+  - the relation to the main person (the setting `main.person`, else `--of P…`) is in words in the language of the
+    research, with the side and the generation, for example **grandfather, father's side (G3)**. G1 is the main
+    person, G2 their parents;
+  - whose facts (`--kin`): `ancestors` the main person and the direct line; `blood` (the default) the ancestors and
+    all their descendants, the side branches too; `family` the blood relatives and their partners; `all` the whole
+    tree;
+  - the filters all apply together: `--kind` (the kind of fact: OCCU, RESI, BIRT …; an unknown kind is refused with
+    the list of valid ones), `--occupation`, `--value` (repeated: any of the words), `--place`, `--house` (12 also
+    finds č. 12 and Nr. 12), `--years` (1750-1850 or one year), `--surname` (the other forms of the surname too:
+    Horáková), `--source` (S… or words of the title), `--status`;
+  - a word is looked for at the start of a word in the fact's value, label or cause, not in the note, ignoring
+    diacritics. An occupation is also looked for in its Czech, German, Latin and Polish forms (mlynar also finds
+    Müller and molitor); the head of the listing names the forms. `--exact` looks for the word itself only;
+  - `--count` prints only the numbers of persons and facts; `--by generation|kin|place|decade|surname` splits them
+    into groups (by generation the side branches have a group of their own), without `--count` the rows by group. The
+    rows come in pages (`--limit`, at most 100, `--page`); `--json` also gives each person the link that opens them in
+    the Strom app;
+  - persons who have the word only elsewhere (a name, a note) are counted apart, with the `strom find` command that
+    finds them. When nothing is found, the listing offers `strom find` and a wider `--kin`.
+- **Method only:** to a question over the data the agent answers with one call of `strom query`, not by searching
+  person by person. It names a person by name with the ID in brackets (Jan Horák (P0012)), the relation whole as
+  `strom query` gave it, never shortened, and a source by its title with the S… in brackets. For each fact it says how
+  certain it is: only a proven one as a fact; a probable or possible fact and a lead are not proven. A row of
+  `strom query` is not enough to tell whose a record is or who is who, nor to verify or record a fact: that goes on
+  from the sources and by the method ([R3](R3-verification-and-citation.md), [R10](R10-people-and-hypotheses.md)).
+- **Controls:** terminal: `strom query`, for example `strom query --occupation mlynar --count --by generation`;
+  `strom app --person P…` opens the Strom app at the person (an app before 3.21 opens the tree). `strom find` still
+  looks for a word in any text of the research, and its help points to `strom query`. `strom facts …` does nothing:
+  it says **"strom facts" is now "strom query" (the same options)** and the whole call with `strom query`.
+- **Since:** research 1.32.0
+
+<!-- zdroj: research:src/commands/query.ts (popis, volby, KIN_SETS, FACT_GROUPS, LIST_PAGE_MAX=100, elsewhereOf, tries) · src/core/query.ts (hlavička, kinSet, SHOWN_STATUSES, ASKED_STATUSES) · src/core/occupations.ts · src/commands/analysis.ts help find („the facts recorded of people … strom query“) · src/cli/execute.ts RENAMED, renamedCommand · src/agents/files.ts AGENTS.md „Questions over the data“ · src/commands/start.ts app --person · cs.json ui.query.*, ui.error.command.renamed · test/cli/query.test.ts · CHANGELOG.cs.md 1.32.0 · spec 081 K1–K7 -->
+
+<a id="R1.9.1"></a>
+### R1.9.1 Stories: `strom query --story`
+
+- `--story <word>` lists the persons and couples whose story holds the word: a row for each story, with the sentence
+  the word is in and the sources the sentence rests on.
+- **Limits:**
+  - the word is looked for as with `--value` (ignoring diacritics, with the forms of an occupation, `--exact`);
+    repeated: any of them;
+  - a long sentence is shortened around the word. A story waiting for approval (also a new version of an approved
+    one) has **draft**;
+  - the sources of the sentence are those the sentence names, else the sources of the story's facts from the years
+    the sentence mentions. When they cannot be told, the row shows **the story's sources**;
+  - a couple's story has a row for each partner. The other filters choose the persons (those with a matching fact);
+    `--by` only `generation`, `kin`, `surname`.
+- **Method only:** a story retells the facts. The agent answers from the facts and sources; a story only shows where
+  to look.
+- **Since:** research 1.32.0
+
+<!-- zdroj: research:src/commands/query.ts (--story, --by place|decade odmítnuto, storyText, storyData) · src/core/query.ts findStories (hlavička: sourcesNamed, storySources, basis sentence|story) · cs.json ui.query.story.* · src/agents/files.ts „A story retells the facts“ · CHANGELOG.cs.md 1.32.0 -->
