@@ -9612,7 +9612,12 @@
             font-weight: 600;
             white-space: nowrap;
         }
-        .offline-indicator::before { content: '⚡'; }
+        /* The mark is a crossed-out signal drawn in the text colour (an SVG mask, no emoji). */
+        .offline-indicator::before {
+            content: ''; flex: none; width: 12px; height: 12px; background: currentColor;
+            -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 2l20 20'/%3E%3Cpath d='M8.5 16.5a5 5 0 0 1 7 0'/%3E%3Cpath d='M2 8.82a15 15 0 0 1 4.17-2.65'/%3E%3Cpath d='M10.66 5c4.01-.36 8.14.9 11.34 3.76'/%3E%3Cpath d='M16.85 11.25a10 10 0 0 1 2.22 1.68'/%3E%3Cpath d='M5 13a10 10 0 0 1 5.24-2.76'/%3E%3Cpath d='M12 20h.01'/%3E%3C/svg%3E") center / contain no-repeat;
+                    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 2l20 20'/%3E%3Cpath d='M8.5 16.5a5 5 0 0 1 7 0'/%3E%3Cpath d='M2 8.82a15 15 0 0 1 4.17-2.65'/%3E%3Cpath d='M10.66 5c4.01-.36 8.14.9 11.34 3.76'/%3E%3Cpath d='M16.85 11.25a10 10 0 0 1 2.22 1.68'/%3E%3Cpath d='M5 13a10 10 0 0 1 5.24-2.76'/%3E%3Cpath d='M12 20h.01'/%3E%3C/svg%3E") center / contain no-repeat;
+        }
 
         /* 1102 §7.2: the family pages saved in the background — "Pages 62 %" with a small bar, then "Pages are ready" */
         .pages-bg-chip {
@@ -15998,6 +16003,7 @@
             width: 40px; height: 40px; border-radius: 50%; cursor: pointer;
             border: 1px solid rgba(255,255,255,0.25); background: rgba(20,20,20,0.8);
             color: #fff; font-size: 16px; line-height: 1;
+            display: inline-flex; align-items: center; justify-content: center; padding: 0;
         }
         .slideshow-hint {
             position: absolute; left: 50%; top: 20px; transform: translateX(-50%);
@@ -16442,10 +16448,15 @@
             background: var(--info-soft);
             color: var(--primary);
         }
+        /* The merge's warning mark: a stroked triangle (no emoji) in the warning text colour. */
         .conflict-indicator {
-            color: var(--warning);
-            font-size: 14px;
+            display: inline-flex;
+            align-items: center;
+            flex: none;
+            color: var(--warning-text);
         }
+        .merge-warning-mark { flex: none; color: var(--warning-text); vertical-align: -2px; }
+        .merge-validation-banner-msg .merge-warning-mark { margin-right: 6px; }
         .merge-item-conflicts {
             display: flex;
             flex-wrap: wrap;
@@ -29628,7 +29639,7 @@
         <div id="slideshow-caption" class="slideshow-caption"></div>
         <div class="slideshow-controls">
             <button type="button" onclick="window.Strom.UI.advanceSlideshow(-1)" aria-label="Previous" data-i18n-aria-label="slideshow.previous" data-i18n-title="slideshow.previous">‹</button>
-            <button type="button" id="slideshow-pause" onclick="window.Strom.UI.toggleSlideshowPause()" aria-label="Pause" data-i18n-aria-label="slideshow.pause" data-i18n-title="slideshow.pause">⏸</button>
+            <button type="button" id="slideshow-pause" onclick="window.Strom.UI.toggleSlideshowPause()" aria-label="Pause" data-i18n-aria-label="slideshow.pause" data-i18n-title="slideshow.pause"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg></button>
             <button type="button" onclick="window.Strom.UI.advanceSlideshow(1)" aria-label="Next" data-i18n-aria-label="slideshow.next" data-i18n-title="slideshow.next">›</button>
             <button type="button" onclick="window.Strom.UI.stopSlideshow()" aria-label="Exit slideshow" data-i18n-aria-label="slideshow.exit" data-i18n-title="slideshow.exit">✕</button>
         </div>

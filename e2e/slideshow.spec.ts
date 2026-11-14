@@ -38,6 +38,10 @@ test('slideshow spotlights each stop, hides the chrome and is keyboard driven', 
     // Space pauses (no auto-advance while paused, for longer than any stop).
     await page.keyboard.press(' ');
     await expect(page.locator('body')).toHaveClass(/slideshow-paused/);
+    // The pause button draws its two bars (SVG in the text colour), no ⏸ emoji.
+    const pauseBtn = page.locator('#slideshow-pause');
+    await expect(pauseBtn.locator('svg')).toHaveCount(1);
+    expect(await pauseBtn.textContent()).not.toMatch(/[\u23F8\u23EF\uFE0F]|\p{Emoji_Presentation}/u);
     const held = await page.locator('#slideshow-caption .slideshow-name').textContent();
     await page.clock.fastForward(PAST_ONE_STOP_MS);
     await expect(page.locator('#slideshow-caption .slideshow-name')).toHaveText(held!);

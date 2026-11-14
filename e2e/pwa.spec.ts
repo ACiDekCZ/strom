@@ -13,6 +13,15 @@ test('offline indicator reflects connectivity', async ({ page, context }) => {
 
     await context.setOffline(true);
     await expect(badge).toBeVisible();
+    // The mark before "Offline" is a drawn SVG (a mask in the text colour), no ⚡ emoji.
+    const mark = await badge.evaluate((el) => {
+        const cs = getComputedStyle(el, '::before');
+        return { content: cs.content, mask: cs.maskImage || cs.getPropertyValue('-webkit-mask-image'), width: cs.width };
+    });
+    expect(mark.content).not.toMatch(/[\u26A1\uFE0F]|\p{Emoji_Presentation}/u);
+    expect(mark.mask).toContain('data:image/svg+xml');
+    expect(mark.width).toBe('12px');
+    expect(await badge.textContent()).not.toMatch(/\p{Emoji_Presentation}/u);
 
     await context.setOffline(false);
     await expect(badge).toBeHidden();

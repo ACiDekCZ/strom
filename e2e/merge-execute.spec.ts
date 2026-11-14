@@ -303,6 +303,34 @@ test('tree merge conflicts: the chosen value wins for a person field and for a u
     expect(d.unions[0].childIds).toEqual([d.one('Karel').id]);
 });
 
+test('tree merge conflicts carry drawn marks, no emoji: the row\'s triangle and the plain suggestion label', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Seed', 'Person');
+
+    // Petr's death place: "Brno" here, "Brno, Morava" in the source — the longer one is suggested.
+    await seedTrees(page,
+        { name: 'Mark Target', data: treeData([
+            { id: 't_petr', firstName: 'Petr', lastName: 'Dvorak', gender: 'male', birthDate: '1890-02-02', deathPlace: 'Brno' },
+        ]) },
+        { name: 'Mark Source', data: treeData([
+            { id: 's_petr', firstName: 'Petr', lastName: 'Dvorak', gender: 'male', birthDate: '1890-02-02', deathPlace: 'Brno, Morava' },
+        ]) });
+
+    const wizard = await startMergeFromManager(page, 'Mark Source', 'Mark Target');
+    const petrRow = row(wizard, 'Petr Dvorak (*1890) ↔');
+    const mark = petrRow.locator('.conflict-indicator');
+    await expect(mark.locator('svg')).toBeVisible();
+    await expect(mark).toHaveAttribute('aria-label', 'Conflicts: 1');
+    expect(await mark.textContent()).not.toMatch(/[\u26A0\uFE0F]/);
+
+    await petrRow.locator('.merge-btn-resolve').click();
+    const dialog = page.locator('#merge-conflict-dialog');
+    await expect(dialog).toHaveClass(/active/);
+    const suggested = dialog.locator('.conflict-row[data-field="deathPlace"] .conflict-suggested');
+    await expect(suggested).toHaveText('suggested — more complete value');
+    expect(await dialog.locator('.modal-content, .modal-body').first().textContent()).not.toMatch(/[\u2726\u2728\u26A0\uFE0F]/);
+});
+
 test('tree merge manual match: an unmatched person is paired by hand and lands on the chosen existing person', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Seed', 'Person');

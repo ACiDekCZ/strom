@@ -48,9 +48,19 @@ import {
     hasPendingMerges
 } from './persistence.js';
 import { shownNameOrEmpty, fitNameHtml } from '../person-name.js';
+import { iconSvg } from '../icons.js';
 
 // Auto-save debounce delay (ms)
 const AUTO_SAVE_DELAY = 2000;
+
+/** The warning mark of the merge (no emoji): a stroked triangle in the warning colour, the text beside it says what. */
+const MERGE_WARNING_MARK = iconSvg('alert-triangle', { size: 14, className: 'merge-warning-mark' });
+
+/** A row's conflict mark: the triangle, named by its count for screen readers and on hover. */
+function conflictMark(count: number): string {
+    const label = `${strings.merge.conflicts}: ${count}`;
+    return `<span class="conflict-indicator" role="img" title="${label}" aria-label="${label}">${MERGE_WARNING_MARK}</span>`;
+}
 
 /**
  * MergerUI class - handles merge modal UI
@@ -424,7 +434,7 @@ class MergerUIClass {
         }
         banner.style.display = '';
         banner.innerHTML =
-            `<span class="merge-validation-banner-msg">⚠ ${this.escapeHtml(strings.merge.preValidationWarning(existingErrors, incomingErrors))}</span>`
+            `<span class="merge-validation-banner-msg">${MERGE_WARNING_MARK}${this.escapeHtml(strings.merge.preValidationWarning(existingErrors, incomingErrors))}</span>`
             + ` <span class="merge-validation-banner-hint">${this.escapeHtml(strings.merge.preValidationHint)}</span>`;
     }
 
@@ -754,7 +764,7 @@ class MergerUIClass {
 
         // Conflict indicator
         const hasConflicts = match.conflicts.length > 0;
-        const conflictIndicator = hasConflicts ? `<span class="conflict-indicator" title="${match.conflicts.length} conflicts">⚠</span>` : '';
+        const conflictIndicator = hasConflicts ? conflictMark(match.conflicts.length) : '';
 
         // Resolve conflicts button
         const resolveBtn = hasConflicts
@@ -1201,7 +1211,7 @@ class MergerUIClass {
             if (!c.suggestedReason) return '';
             const text = c.suggestedReason === 'more_precise_date'
                 ? strings.merge.suggestedPrecise : strings.merge.suggestedComplete;
-            return `<span class="conflict-suggested">✦ ${text}</span>`;
+            return `<span class="conflict-suggested">${text}</span>`;
         };
         content.innerHTML = match.conflicts.map(conflict => `
             <div class="conflict-row" data-field="${conflict.field}">
@@ -1285,7 +1295,7 @@ class MergerUIClass {
                     <span class="merge-item-names">
                         ${this.escapeHtml(strings.merge.partnershipConflict)}: ${this.escapeHtml(this.partnershipCoupleName(first.existingPartnershipId))}
                     </span>
-                    <span class="conflict-indicator" title="${group.length}">⚠</span>
+                    ${conflictMark(group.length)}
                 </div>
                 <div class="merge-item-conflicts">${summary}</div>
                 <div class="merge-item-actions">

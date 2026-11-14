@@ -217,5 +217,8 @@ test('merge wizard warns up-front when an input tree has validation errors', asy
     const banner = page.locator('#merge-validation-banner');
     await expect(banner).toBeVisible();
     await expect(banner).toContainText(/issue/i);
+    // The warning mark is a drawn triangle (SVG), no ⚠ emoji in the text.
+    await expect(banner.locator('svg.merge-warning-mark')).toBeVisible();
+    expect(await banner.textContent()).not.toMatch(/[\u26A0\uFE0F]/);
     await expect(wizard.locator('.merge-actions .primary')).toBeEnabled();
 });
