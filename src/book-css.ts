@@ -21,7 +21,7 @@ export function rodPagesCss(heads: readonly string[]): string {
 const SANS = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
 
 export const BOOK_CSS = `
-:root { ${PERSON_PAGE_VIZ_LIGHT_TOKENS} --text: #1f1c17; --text-light: #4a4438; --text-faint: #5c5546; --accent: #8a5528; --accent-text: #8a5528;
+:root { ${PERSON_PAGE_VIZ_LIGHT_TOKENS} --r-tag: 3px; --text: #1f1c17; --text-light: #4a4438; --text-faint: #5c5546; --accent: #8a5528; --accent-text: #8a5528;
     --primary: #3f6b4f; --divider: #e3dccd; --pp-bg: #fffdf8; --hover-bg: #f3eee2;
     ${SEL_LIGHT_DECLS} color-scheme: light; }
 * { box-sizing: border-box; }

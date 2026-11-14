@@ -3,7 +3,7 @@ import { openApp, seedTree } from './helpers.js';
 
 /**
  * The kinds of a card's tabs (GitHub #4, round 2): the look says what a
- * click does — in place (▸/▾, round), focus (◎, squarer, a toast with ↩
+ * click does — in place (▸/▾, rounded corners), focus (◎, square corners, a toast with ↩
  * after it), jump (↗ after the word, no shadow). A sister's husband (married
  * in) whose parents and brother are out of view carries one "◎ family" tab;
  * the menu marks its rows the same way. (An ancestor of the line at the edge
@@ -51,8 +51,8 @@ test('parents and a brother out of view: one "◎ family" tab in the focus look,
     await expect(family).toHaveAttribute('aria-label', 'Focus on Wolfbrecht Zwolbrack and show the family');
     // No separate parents or siblings tab beside it
     await expect(rowOf(page, 'g1').locator('.branch-tab')).toHaveCount(1);
-    // The squarer shape of a focus
-    expect(await family.evaluate(el => getComputedStyle(el).borderTopLeftRadius)).toBe('4px');
+    // The square corners of a focus (an in-place tab's are rounded: below)
+    expect(await family.evaluate(el => getComputedStyle(el).borderTopLeftRadius)).toBe('0px');
     await family.hover();
     const bubble = family.locator('.badge-tooltip');
     await expect(bubble).toBeVisible();
@@ -141,6 +141,15 @@ test('a married-in husband with children out of view: "◎ family" before "▸ c
     await expect(tabs.nth(1)).toHaveClass(/children-tab/);
     await expect(tabs.nth(1)).toHaveClass(/kind-place/);
     await expect(tabs.nth(1).locator('.pill-glyph')).toHaveText('▸');
+    // The corners tell the kind: square for a focus, rounded (no pill) in place
+    const corner = (i: number) => tabs.nth(i).evaluate(el => {
+        const cs = getComputedStyle(el);
+        return { r: parseFloat(cs.borderTopLeftRadius), h: el.getBoundingClientRect().height };
+    });
+    expect((await corner(0)).r).toBe(0);
+    const place = await corner(1);
+    expect(place.r).toBeGreaterThan(0);
+    expect(place.r).toBeLessThan(place.h / 2);
 });
 
 /**

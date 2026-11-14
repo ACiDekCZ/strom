@@ -18,6 +18,7 @@ export const PERSON_PAGE_LIGHT_TOKENS = [
     '--accent-text: #8a5528', '--hover-bg: #f3eee2',
     '--hist-bg: #f5f1e7', '--hist-mark: #746c5c', '--hist-place: #3d7a8c', '--hist-local: #b5772a',
     '--hist-text: #5c5546', '--hist-place-text: #245868', '--hist-local-text: #7f5500',
+    '--r-tag: 3px',
 ].join('; ') + ';';
 
 /** The font stacks of the app (the file falls back to Georgia / the system sans without the embedded faces). */
@@ -104,7 +105,7 @@ span.pp-portrait { cursor: default; }
 /* The family line (spec 1031 §3): in the window the names lead to the overview; a file and print say it as text. */
 .pp .pp-rod-link { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; }
 .pp-fact-rod:has(.pp-rod-link) .pp-rod-join { color: var(--text-light); }
-.pp-differs { display: inline-block; margin-left: 6px; padding: 0 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-2); color: var(--accent-text); font: inherit; font-size: 12px; line-height: 20px; text-decoration: none; cursor: pointer; white-space: nowrap; }
+.pp-differs { display: inline-block; margin-left: 6px; padding: 1px 6px; border: 1px solid var(--border); border-radius: var(--r-tag, 3px); background: var(--surface-2); color: var(--accent-text); font: inherit; font-size: 11.5px; font-weight: 600; line-height: 18px; text-decoration: none; cursor: pointer; white-space: nowrap; }
 .pp-link { display: inline; padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: inherit; text-decoration: underline dotted; text-underline-offset: 3px; cursor: pointer; }
 a.pp-link { color: inherit; }
 .pp-pdf-name { font-size: 14.5px; font-weight: 600; color: var(--primary); text-align: left; overflow-wrap: anywhere; }
@@ -179,7 +180,7 @@ button.pp-ft-card, a.pp-ft-card { cursor: pointer; }
 .pp-ft-row--open { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-height: 48px; }
 .pp-ft-row-h { font-size: 13.5px; font-weight: 600; color: var(--text-light); }
 .pp-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 0 6px; }
-.pp-chip { display: inline-flex; align-items: baseline; gap: 4px; min-height: 30px; padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: inherit; font: inherit; font-size: 13px; text-decoration: none; }
+.pp-chip { display: inline-flex; align-items: baseline; gap: 4px; min-height: 30px; padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--sel-r, 4px); background: var(--surface); color: inherit; font: inherit; font-size: 13px; text-decoration: none; }
 button.pp-chip, a.pp-chip { cursor: pointer; }
 .pp-chip-name { font-weight: 600; }
 .pp-chip-link .pp-chip-name { color: var(--primary); }
@@ -200,7 +201,7 @@ button.pp-chip, a.pp-chip { cursor: pointer; }
 .pp-coll > summary > .pp-fold-h { display: flex; flex: 1 1 auto; min-width: 0; }
 .pp-coll > summary > .pp-peek { flex: 0 0 100%; margin-top: -4px; }
 .pp-sum-main { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; flex: 1 1 auto; min-width: 0; }
-.pp .pp-draft-tag { display: inline-block; font-family: var(--font-sans); font-weight: 500; margin-left: 8px; padding: 0 8px; border-radius: 999px; background: var(--surface-2); color: var(--text-light); font-size: 11px; line-height: 18px; letter-spacing: 0; text-transform: none; vertical-align: 1px; }
+.pp .pp-draft-tag { display: inline-block; font-family: var(--font-sans); font-weight: 600; margin-left: 8px; padding: 1px 6px; border-radius: var(--r-tag, 3px); background: var(--surface-2); color: var(--text-light); font-size: 11.5px; line-height: 16px; letter-spacing: 0; text-transform: none; vertical-align: 1px; }
 .pp .pp-story-title { font-size: clamp(21px, 3.6cqi, 26px); line-height: 1.25; margin: 6px 0 12px; overflow-wrap: anywhere; hyphens: auto; }
 /* A couple's story under the person's own (Partnership.story). */
 .pp .pp-couple-story { margin-top: 24px; }
@@ -221,7 +222,7 @@ button.pp-chip, a.pp-chip { cursor: pointer; }
 .pp-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: var(--text-faint); margin-left: 4px; white-space: nowrap; }
 .pp .pp-notes-text { margin-top: 8px; font-size: 15px; white-space: pre-line; overflow-wrap: anywhere; }
 .pp-toggles { display: flex; flex-wrap: wrap; gap: 8px; }
-.pp-toggle { display: inline-flex; align-items: center; gap: 7px; min-height: 34px; padding: 0 12px; border: 1.5px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text); font: inherit; font-size: 13.5px; white-space: nowrap; cursor: pointer; }
+.pp-toggle { display: inline-flex; align-items: center; gap: 7px; min-height: 34px; padding: 0 12px; border: 1.5px solid var(--border); border-radius: var(--sel-r, 4px); background: var(--surface); color: var(--text); font: inherit; font-size: 13.5px; white-space: nowrap; cursor: pointer; }
 .pp-toggle::before { content: ''; width: 14px; height: 14px; border: 1.5px solid var(--border); border-radius: 3px; background: var(--surface); }
 .pp-toggle[aria-checked="true"] { border-color: var(--primary); background: color-mix(in oklab, var(--primary) 12%, var(--surface)); }
 .pp-toggle[aria-checked="true"]::before { content: '\\2713'; display: flex; align-items: center; justify-content: center; border-color: var(--primary); background: var(--primary); color: var(--on-primary); font-size: 11px; line-height: 1; }

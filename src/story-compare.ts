@@ -221,7 +221,7 @@ export const STORY_COMPARE_CSS = `
 .sc-para { display: flex; gap: 10px; align-items: flex-start; margin: 0 0 0.9em; }
 .sc-para p { margin: 0; }
 .sc-para ins, .sc-para del { padding: 1px 3px; }
-.sc-tag { flex-shrink: 0; margin-top: 5px; padding: 1px 7px; border-radius: 999px; font-family: var(--sc-sans); font-size: 11px; font-weight: 600; line-height: 1.5; }
+.sc-tag { flex-shrink: 0; margin-top: 5px; padding: 1px 6px; border-radius: var(--r-tag, 3px); font-family: var(--sc-sans); font-size: 11.5px; font-weight: 600; line-height: 1.5; }
 .sc-tag--add { background: var(--sc-add-bg); color: var(--sc-add-text); }
 .sc-tag--del { background: var(--sc-del-bg); color: var(--sc-del-text); }
 .sc-tag--ok { margin-top: 0; background: var(--primary-soft, #e6efe8); color: var(--primary-dark, #2d5340); }

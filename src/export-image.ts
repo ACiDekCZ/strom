@@ -102,6 +102,9 @@ function statusMarkWidth(cls: CardStatusClass): number {
     return Math.max(18, content + 8);
 }
 
+/** The corner of the card-edge marks (the screen's --r-sm, 4 px, on the 1 px hairline's middle). */
+const EDGE_PILL_RX = 3.5;
+
 /**
  * The card's status mark (spec 066 P4 §1, §7) as the screen draws it: a 12px
  * pill in the card's bottom-right corner, its frame and glyphs from the
@@ -119,7 +122,7 @@ export function statusMarkSvg(cls: CardStatusClass, right: number, bottom: numbe
     const fill = cls === 'cs-none' ? 'none' : COLORS.markBg;
     const ink = cls === 'cs-human' ? COLORS.text : cls === 'cs-none' ? COLORS.textFaint : COLORS.textLight;
     const out = [`<g class="card-status-mark" data-status="${cls}">`,
-        `<rect x="${(x + 0.5).toFixed(1)}" y="${(y + 0.5).toFixed(1)}" width="${w - 1}" height="${STATUS_MARK_H - 1}" rx="5.5" fill="${fill}" stroke="${frame}" stroke-width="1"${dash}/>`];
+        `<rect x="${(x + 0.5).toFixed(1)}" y="${(y + 0.5).toFixed(1)}" width="${w - 1}" height="${STATUS_MARK_H - 1}" rx="${EDGE_PILL_RX}" fill="${fill}" stroke="${frame}" stroke-width="1"${dash}/>`];
     const cx = x + w / 2;
     const cy = y + STATUS_MARK_H / 2;
     const dot = (dx: number, on: boolean): string =>
@@ -247,7 +250,7 @@ export function fitBirthRow(birth: string, maxW: number, width: (text: string) =
 
 /**
  * A marriage-order pill (T13) with its left edge at `x`, its top at `y`:
- * "1. ∞ 1866" in an 18px pill — the screen's .union-order-pill (its parts
+ * "1. ∞ 1866" in an 18px mark — the screen's .union-order-pill (its parts
  * where the screen's measure puts them, a 1px hairline), without its shadow;
  * with the shorter `label` the screen shows where the whole does not fit in
  * its half of the card ("2nd ∞", "2nd"), or the dense spacing's short
@@ -259,7 +262,7 @@ export function unionOrderPillSvg(b: UnionOrderBadge, m: PillMetrics, x: number,
     const base = (y + 12.5).toFixed(1);
     const font = `${LINE_FONT} font-size="10" font-weight="600" fill="${COLORS.textLight}"`;
     const parts = [
-        `<rect x="${(x + 0.5).toFixed(2)}" y="${(y + 0.5).toFixed(1)}" width="${(m.width - 1).toFixed(2)}" height="17" rx="8.5" fill="${COLORS.cardBg}" stroke="${COLORS.cardBorder}" stroke-width="1"/>`,
+        `<rect x="${(x + 0.5).toFixed(2)}" y="${(y + 0.5).toFixed(1)}" width="${(m.width - 1).toFixed(2)}" height="17" rx="${EDGE_PILL_RX}" fill="${COLORS.cardBg}" stroke="${COLORS.cardBorder}" stroke-width="1"/>`,
         `<text x="${(x + m.numX).toFixed(2)}" y="${base}" ${font}>${escapeXml(num)}</text>`,
     ];
     if (label !== 'ordinal') {
@@ -292,7 +295,7 @@ export function lineLinkLabel(kind: LineLinkTab, names: readonly string[], maxW:
 export function lineLinkPillSvg(text: string, personId: string, x: number, y: number, dimmed = false): { svg: string; width: number } {
     const width = estWidth(text, 10, true) + 16;
     const svg = `<g class="line-link-pill" data-person="${escapeXml(personId)}"${dimmed ? ' opacity="0.5"' : ''}>`
-        + `<rect x="${(x + 0.5).toFixed(2)}" y="${(y + 0.5).toFixed(1)}" width="${(width - 1).toFixed(2)}" height="17" rx="8.5" fill="${COLORS.cardBg}" stroke="${COLORS.cardBorder}" stroke-width="1"/>`
+        + `<rect x="${(x + 0.5).toFixed(2)}" y="${(y + 0.5).toFixed(1)}" width="${(width - 1).toFixed(2)}" height="17" rx="${EDGE_PILL_RX}" fill="${COLORS.cardBg}" stroke="${COLORS.cardBorder}" stroke-width="1"/>`
         + `<text x="${(x + 8).toFixed(2)}" y="${(y + 12.5).toFixed(1)}" ${LINE_FONT} font-size="10" font-weight="600" fill="${COLORS.textLight}">${escapeXml(text)}</text></g>`;
     return { svg, width };
 }

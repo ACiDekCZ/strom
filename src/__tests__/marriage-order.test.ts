@@ -158,7 +158,7 @@ describe('the image export draws the pills', () => {
         expect(w1).toContain('>1.</text>');
         expect(w1).toContain('>∞</text>');
         expect(w1).toContain('>1866</text>');
-        expect(w1).toContain('height="17" rx="8.5"');
+        expect(w1).toContain('height="17" rx="3.5"');
         expect(svg).not.toMatch(/filter|drop-shadow/);
         // On the card's top edge: the pill's top 9px above the card's top.
         const card = result.positions.get(P('W1'))!;
@@ -189,7 +189,7 @@ describe('the image export draws the pills', () => {
         expect(svg).toMatch(/<g class="union-order-pill" data-union-order="1" data-person="W1" data-toward="H">/);
         // One dimming group per dimmed card, as without the pills.
         expect((svg.match(/<g opacity="0.5">/g) || []).length).toBe(1);
-        // The cards keep their own rect (rx 8); the pills are rx 8.5.
+        // The cards keep their own rect (rx 8); the pills are rx 3.5.
         expect((plain.match(/rx="8" fill="#fffdf8"/g) || []).length).toBe(result.positions.size);
     });
 

@@ -208,8 +208,8 @@ const VIEW_LABEL_LINE_ENDS = 24;
  * + 4 + 15 (the line) = 77, and 11 clear above the next row's cards.
  */
 const VIEW_LINK_ISLAND_ROOM = 88;
-/** The "+ child" tab at rest (an 18 px circle) and its gap to the bottom-right pills (index.html .card-edge). */
-const CHILD_ADD_TAB = 18;
+/** The "+ child" tab at rest (a 22 px square) and its gap to the bottom-right pills (index.html .card-edge). */
+const CHILD_ADD_TAB = 22;
 const CHILD_ADD_GAP = 4;
 /** How long the cards of children just shown (or one glided to) glow (ms). */
 const CHILDREN_GLOW_MS = 1600;
