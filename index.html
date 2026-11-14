@@ -11373,7 +11373,7 @@
             display: flex;
             align-items: center;
             gap: 7px;
-            padding: 5px 10px 5px 8px;
+            padding: 4px 9px 4px 7px;
             font-size: 13px;
             white-space: nowrap;
             cursor: pointer;
@@ -11496,8 +11496,11 @@
             font-size: 12px;
             color: var(--text-light);
         }
+        /* The segment's and the chips' 1px frames come out of the padding: the
+           scope and the kinds stay as tall as before, clear of a place framed
+           near the map's top edge. */
         .map-scope button {
-            padding: 6px 12px;
+            padding: 5px 12px;
             font-size: 13px;
         }
         /* One-time notice shown instead of the map (tiles come from OSM). */
@@ -12476,7 +12479,7 @@
         /* Tablet: the map is the whole screen, so keep chrome smaller. */
         @media (max-width: 1024px) {
             .map-marker-label { max-width: 110px; font-size: 10px; }
-            .map-scope button { padding: 5px 10px; font-size: 12px; }
+            .map-scope button { padding: 4px 10px; font-size: 12px; }
             .map-kind { font-size: 12.5px; }
         }
         /* Mobile: labels would cover the map — the dot with the count stays,
