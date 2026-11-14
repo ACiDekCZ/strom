@@ -310,14 +310,14 @@ describe('the toolbar\'s choice of lines (§1.3, §1.4)', () => {
         expect(small.length).toBeGreaterThan(0);
         const h = html(null, 'expand');
         expect(h).toContain('class="sp-rodpick-x" aria-expanded="false"');
-        expect(h).toContain(`class="sp-rodpick-small" data-rod="${small[0].id}"`);
-        expect(h).toMatch(/class="sp-rodpick-tree" data-rod="tree" aria-current="true"/);
+        expect(h).toContain(`class="sp-rodpick-small sel-opt" data-sel-form="row" data-rod="${small[0].id}"`);
+        expect(h).toMatch(/class="sp-rodpick-tree sel-opt" data-sel-form="row" data-rod="tree" aria-current="true"/);
     });
 
     it('a small line chosen: named on the button and marked in the list', () => {
         const h = html(small[0].id as RodId, 'expand');
         expect(h).toContain(`<b>${small[0].label}</b>`);
-        expect(h).toContain('sp-rodpick-small is-cur');
+        expect(h).toContain('sp-rodpick-small sel-opt is-cur');
     });
 
     it('link (the tree pages): unchanged, no small lines, no current whole tree', () => {

@@ -92,7 +92,7 @@ describe('the index split by letters with "[?]" surnames (1102)', () => {
     it('the uncertain page: "?" named in full in the alphabet, its surnames grouped, the pager by name', () => {
         const q = letters.find(l => l.key === INDEX_UNCERTAIN)!;
         const html = pageSetSectionHtml(set, q.slug);
-        expect(html).toMatch(/<span class="sp-abc-l" aria-current="page" title="Nejisté čtení" aria-label="Nejisté čtení">\?<\/span>/);
+        expect(html).toMatch(/<span class="sp-abc-l sel-tab" data-sel-dir="down" aria-current="page" title="Nejisté čtení" aria-label="Nejisté čtení"><span class="sel-l" data-label="\?">\?<\/span><\/span>/);
         expect(html).toContain('[?]o[?]ral');
         expect(html).toContain('[?]ebrouch');
         expect(html).not.toMatch(/sp-ix-letter">\[\?\]</);
@@ -101,7 +101,7 @@ describe('the index split by letters with "[?]" surnames (1102)', () => {
         expect(html).not.toMatch(/sp-ix-forms">[^<]*\[\?\](?![a-zA-Z\[])/);
         // The other letters' pages name it too.
         const first = pageSetSectionHtml(set, letters[0].slug);
-        expect(first).toMatch(/title="Nejisté čtení" aria-label="Nejisté čtení"[^>]*>\?</);
+        expect(first).toMatch(/title="Nejisté čtení" aria-label="Nejisté čtení"[^>]*><span class="sel-l" data-label="\?">\?</);
         expect(first).not.toMatch(/sp-abc-l[^>]*>\[</);
     });
 
@@ -121,7 +121,7 @@ describe('the index on one page with "[?]" surnames (1102)', () => {
         expect(set.indexLetters.persons).toEqual([]);
         const html = pageSetSectionHtml(set, set.indexSlug.persons);
         const nav = html.match(/<nav class="sp-letters"[^]*?<\/nav>/)![0];
-        const texts = [...nav.matchAll(/>([^<>]+)<\/button>/g)].map(m => m[1]);
+        const texts = [...nav.matchAll(/>([^<>]+)<\/span><\/button>/g)].map(m => m[1]);
         expect(texts.slice(-2)).toEqual(['?', 'Bez příjmení']);
         expect(texts).not.toContain('[');
         expect(nav).toContain('title="Nejisté čtení"');

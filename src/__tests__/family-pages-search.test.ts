@@ -119,7 +119,7 @@ describe('the bar (§3.1)', LOADED_TIMEOUT, () => {
         expect(bar).toContain('class="sp-fbar-home" href="#uvod"');
         expect(bar).toContain('placeholder="Hledat jméno…"');
         expect(bar).toContain('data-sp-nav="index"');
-        expect(bar).toContain('data-sp-nav="map" class="sp-fbar-a" href="#mapa-obci"');
+        expect(bar).toContain('data-sp-nav="map" class="sp-fbar-a sel-tab" data-sel-dir="down" href="#mapa-obci"');
         expect(bar).toContain('href="#rejstrik-osoby"');
         expect(bar).toContain('href="#rejstrik-obce"');
         expect(bar).toContain('>Menu</button>');

@@ -880,7 +880,7 @@ export const researchOffLineMethods = uiModule({
     /** The chip of a narrowed queue: "Branch {name} {n} ×". */
     branchQueueChip(s: LiveSession, id: string, n: number): HTMLElement {
         const L = strings.live;
-        const chip = el('button', 'research-overview__filter research-offline__chip', `${L.branchQueueChip(branchName(id), n)} ×`);
+        const chip = el('button', 'research-overview__filter sel-opt research-offline__chip', `${L.branchQueueChip(branchName(id), n)} ×`);
         chip.type = 'button';
         chip.setAttribute('aria-pressed', 'true');
         chip.title = L.branchQueueChipClear;

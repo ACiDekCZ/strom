@@ -752,7 +752,7 @@ export const researchImagesMethods = uiModule({
         if (choice === 'all' && allOff) choice = 'app';
         fieldset.dataset.choice = choice;
         const radio = (value: SourceImagesChoice, title: string, sub: string, disabled = false): string => `
-            <label class="content-radio${choice === value ? ' is-selected' : ''}${disabled ? ' is-disabled' : ''}">
+            <label class="content-radio sel-opt${choice === value ? ' is-selected' : ''}${disabled ? ' is-disabled' : ''}" data-sel-form="row">
                 <input type="radio" name="export-source-images" value="${value}"${choice === value ? ' checked' : ''}${disabled ? ' disabled' : ''}>
                 <span class="content-radio-text"><span class="content-radio-title">${esc(title)}</span>${sub ? `<span class="content-radio-sub">${esc(sub)}</span>` : ''}</span>
             </label>`;

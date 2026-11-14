@@ -1172,7 +1172,7 @@ describe('the contents "On this page" in the file (round 3 §0.7)', () => {
         expect(html).toContain('<div class="pp-file-layout"><nav class="pp-toc" aria-label="Na stránce"><div class="pp-toc-h">Na stránce</div><ol>');
         const nav = navOf(html);
         expect(hrefs(nav)).toEqual(['pp-sec-facts', ...sectionIds(html)]);
-        expect(nav).toContain('>Rodina</a>');
+        expect(nav).toContain('>Rodina</span></a>');
         expect(nav).not.toMatch(/<script|onclick|data-pp-toc/);
         // The fold: under the header, closed, the same entries.
         const fold = html.slice(html.indexOf('<details class="pp-toc-m">'), html.indexOf('</details>', html.indexOf('<details class="pp-toc-m">')));

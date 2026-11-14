@@ -3280,7 +3280,7 @@ function tocNavHtml(items: readonly { id: string; label: string }[], lang: Langu
     if (!items.length) return '';
     const P = getStringsForLang(lang).personPage;
     return `<nav class="pp-toc" aria-label="${esc(P.toc)}"><div class="pp-toc-h">${esc(P.toc)}</div><ol>`
-        + items.map(s => `<li><a class="pp-toc-link" href="#${esc(s.id)}">${esc(s.label)}</a></li>`).join('')
+        + items.map(s => `<li><a class="pp-toc-link sel-tab" data-sel-dir="side" href="#${esc(s.id)}"><span class="sel-l" data-label="${esc(s.label)}">${esc(s.label)}</span></a></li>`).join('')
         + '</ol></nav>';
 }
 

@@ -186,7 +186,7 @@ export const queueWorkMethods = uiModule({
                     <button type="button" class="close-btn" id="queue-work-close-x" aria-label="${esc(strings.buttons.close)}">&times;</button>
                 </div>
                 <div class="queue-work__opts" role="radiogroup" aria-labelledby="queue-work-title">
-                    <label class="queue-work__opt">
+                    <label class="queue-work__opt sel-opt" data-sel-form="tile">
                         <input type="radio" name="queue-work-mode" value="loop" checked aria-labelledby="queue-work-auto" aria-describedby="queue-work-auto-hint${noGate ? ' queue-work-nogate' : ''}">
                         <span class="queue-work__opt-body">
                             <span class="queue-work__opt-title" id="queue-work-auto">${esc(L.queueWorkAuto)}</span>
@@ -195,7 +195,7 @@ export const queueWorkMethods = uiModule({
                         </span>
                     </label>
                     ${counted ? `
-                    <label class="queue-work__opt">
+                    <label class="queue-work__opt sel-opt" data-sel-form="tile">
                         <input type="radio" name="queue-work-mode" value="tasks" aria-label="${esc(`${L.queueWorkOnly} ${n0} ${L.queueWorkOnlyWord(n0)}`)}" aria-describedby="queue-work-only-hint">
                         <span class="queue-work__opt-body">
                             <span class="queue-work__opt-title" id="queue-work-only">${esc(L.queueWorkOnly)} <input type="number" class="queue-work__count" id="queue-work-count" inputmode="numeric" min="${WORK_TASKS_MIN}" max="${WORK_TASKS_MAX}" step="1" value="${n0}" aria-label="${esc(L.queueWorkCountAria)}"> <span class="queue-work__word">${esc(L.queueWorkOnlyWord(n0))}</span></span>

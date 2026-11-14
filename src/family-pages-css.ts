@@ -320,12 +320,12 @@ button.sp-clip { margin: 0; padding: 0; border: 0; background: none; font: inher
 .sp-rodpick-bar { position: relative; height: 6px; border-radius: 3px; background: var(--tint, var(--surface-2)); }
 .sp-rodpick-bar > span { position: absolute; top: 0; bottom: 0; border-radius: 3px; background: var(--rod-bar); }
 .sp-rodpick-c { text-align: right; font-size: 13px; color: var(--text-light); font-variant-numeric: tabular-nums; }
-.sp-rodpick li[aria-current] > .sp-rodpick-a { background: var(--tint, var(--surface-2)); font-weight: 600; }
+/* A line's row is a .sel-opt row (src/ui/sel-css.ts) on its <li>: the current one has the fill and the line under it. */
 .sp-rodpick-none { margin: 8px; font-size: 14px; color: var(--text-light); }
 .sp-rodpick-none[hidden] { display: none; }
 .sp-rodpick-btn:focus-visible, .sp-rodpick-a:focus-visible, .sp-sort button:focus-visible, .sp-pair-s:focus-visible, .sp-rrow-a:focus-visible, .sp-orow:focus-visible, .sp-rrows-all:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 @media (hover: hover) {
-  .sp-rodpick-a:hover, .sp-rrow-a:hover, .sp-orow:hover { background: var(--hover-bg); }
+  .sp-rrow-a:hover, .sp-orow:hover { background: var(--hover-bg); }
   .sp-rodpick-btn:hover { border-color: var(--primary); }
   .sp-pair-s:hover, .sp-rrows-all:hover { color: var(--primary); }
 }
@@ -371,7 +371,6 @@ html.sp-on main section.sp-page[id] { scroll-margin-top: 100vh; }
 .sp-ico::after { content: ""; position: absolute; right: -5px; bottom: -4px; width: 2px; height: 6px; background: currentColor; border-radius: 1px; transform: rotate(-45deg); }
 .sp-fbar-nav { display: flex; align-items: center; gap: 16px; }
 .sp-fbar-a { display: inline-flex; align-items: center; min-height: 36px; white-space: nowrap; font-size: 14px; color: var(--text-light); text-decoration: none; }
-.sp-fbar-a[aria-current] { color: var(--text); font-weight: 600; }
 .sp-fbar-cancel, .sp-fbar-lupa, .sp-fbar-menu { display: none; align-items: center; justify-content: center; flex: none; min-height: 44px; margin: 0; padding: 0 8px; font: inherit; font-size: 14px; color: var(--primary); background: none; border: 0; border-radius: 8px; cursor: pointer; }
 .sp-fbar--has .sp-fbar-cancel { display: inline-flex; }
 .sp-menu { display: none; }
@@ -396,7 +395,8 @@ html.sp-on main section.sp-page[id] { scroll-margin-top: 100vh; }
 .sp-ix { margin-top: -12px; }
 .sp-letters { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 20px; }
 .sp-letter { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; min-width: 32px; height: 32px; padding: 0 7px; font-size: 14px; color: var(--primary); text-decoration: none; border: 1px solid var(--border); border-radius: 6px; }
-.sp-letter[aria-current] { color: var(--text); font-weight: 600; background: var(--primary-soft); border-color: var(--primary); }
+/* The index's letters are tabs of the one selection indicator (src/ui/sel-css.ts): no frame, the line under the chosen one. */
+.sp-letter.sel-tab { border-color: transparent; color: var(--text-light); }
 .sp-ix-group + .sp-ix-group { margin-top: 20px; }
 .sp-ix-letter { margin: 0 0 4px; padding-bottom: 4px; font-family: var(--font-serif); font-size: 20px; font-weight: 600; border-bottom: 1px solid var(--divider); }
 .sp-ix-h2 { margin: 28px 0 8px; font-family: var(--font-serif); font-size: 18px; font-weight: 600; }
@@ -413,9 +413,7 @@ html.sp-on main section.sp-page[id] { scroll-margin-top: 100vh; }
 .sp-ix-sub { padding: 0 0 10px 16px; font-size: 14.5px; line-height: 1.8; }
 /* 1102 §7.4: an index split by letters - the alphabet (a letter without rows muted), the count, the groups by surname, "‹ K · M ›". */
 .sp-abc { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 12px; }
-.sp-abc-l { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; min-width: 32px; height: 32px; padding: 0 6px; font-size: 14px; color: var(--primary); text-decoration: none; border: 1px solid var(--border); border-radius: 6px; }
-.sp-abc-l[aria-current] { color: var(--text); font-weight: 600; background: var(--primary-soft); border-color: var(--primary); }
-.sp-abc-off { color: var(--text-faint); border-color: transparent; }
+.sp-abc-l { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; min-width: 32px; height: 32px; padding: 0 6px; font-size: 14px; text-decoration: none; }
 .sp-abc-meta { margin: 0 0 16px; font-size: 13.5px; color: var(--text-light); }
 .sp-ix-forms { margin-left: 8px; font-family: var(--font-sans, inherit); font-size: 13px; font-weight: 400; color: var(--text-light); }
 .sp-abc-pager { display: flex; align-items: center; gap: 12px; margin-top: 28px; padding-top: 12px; border-top: 1px solid var(--divider); font-size: 14.5px; }
@@ -423,16 +421,17 @@ html.sp-on main section.sp-page[id] { scroll-margin-top: 100vh; }
 .sp-abc-next { text-align: right; }
 .sp-abc-hint { flex: 1 1 auto; text-align: center; font-size: 13px; color: var(--text-faint); }
 .sp-abc-l:focus-visible, .sp-abc-step:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-@media (hover: hover) { a.sp-abc-l:hover, button.sp-abc-l:hover { background: var(--hover-bg); } a.sp-abc-step:hover, button.sp-abc-step:hover { text-decoration: underline; } }
+@media (hover: hover) { a.sp-abc-step:hover, button.sp-abc-step:hover { text-decoration: underline; } }
 @media (max-width: 640px) { .sp-abc-hint { display: none; } .sp-abc-pager { justify-content: space-between; } }
 @media (pointer: coarse) { .sp-abc-l { min-width: 44px; height: 44px; } .sp-abc-step { display: inline-flex; align-items: center; min-height: 44px; } .sp-abc-next { justify-content: flex-end; } }
 .sp-app button.sp-abc-l, .sp-app button.sp-abc-step { font: inherit; font-size: 14px; background: none; margin: 0; cursor: pointer; }
+.sp-app button.sp-abc-l { border: 0; }
 .sp-app button.sp-abc-step { border: 0; padding: 0; color: var(--primary); }
 .sp-fbar-a:focus-visible, .sp-fbar-home:focus-visible, .sp-fbar-cancel:focus-visible, .sp-fbar-lupa:focus-visible, .sp-fbar-menu:focus-visible, .sp-menu-a:focus-visible,
 .sp-tab:focus-visible, .sp-letter:focus-visible, .sp-ix-sum:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 @media (hover: hover) {
-  .sp-fbar-a:hover, .sp-fbar-home:hover, .sp-tab:hover { color: var(--text); }
-  .sp-letter:hover, .sp-menu-a:hover, .sp-fbar-lupa:hover, .sp-fbar-menu:hover, .sp-fbar-cancel:hover { background: var(--hover-bg); }
+  .sp-fbar-home:hover, .sp-tab:hover { color: var(--text); }
+  .sp-letter:not(.sel-tab):hover, .sp-fbar-lupa:hover, .sp-fbar-menu:hover, .sp-fbar-cancel:hover { background: var(--hover-bg); }
   .sp-ix-sum:hover { color: var(--primary); }
 }
 @media (min-width: 641px) and (max-width: 1024px) { .sp-fbar-in { max-width: 1016px; padding: 0 28px; } }
@@ -450,8 +449,7 @@ html.sp-on main section.sp-page[id] { scroll-margin-top: 100vh; }
   .sp-fbar--q .sp-fbar-cancel { display: inline-flex; }
   .sp-q { height: 40px; font-size: 16px; }
   .sp-menu:not([hidden]) { display: block; padding: 4px 0 8px; background: var(--surface); border-top: 1px solid var(--divider); box-shadow: 0 8px 16px rgba(0, 0, 0, .08); }
-  .sp-menu-a { box-sizing: border-box; display: flex; align-items: center; width: 100%; min-height: 48px; padding: 0 16px; font-size: 16px; color: var(--text); text-decoration: none; }
-  .sp-menu-a[aria-current] { font-weight: 600; color: var(--primary); }
+  .sp-menu-a { box-sizing: border-box; display: flex; align-items: center; width: 100%; min-height: 48px; padding: 0 16px; font-size: 16px; text-decoration: none; }
   .sp-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
   .sp-tab { flex: none; padding: 0 12px; }
 }
@@ -622,12 +620,12 @@ export const FAMILY_PAGES_APP_CSS = FAMILY_PAGES_BODY_CSS.replace(PRINT_ROOT_CSS
 }
 .sp-appset .sp-fbar button.sp-fbar-home { padding: 0; border: 0; font-family: var(--font-serif); font-size: 17px; font-weight: 600; color: var(--text); }
 .sp-appset .sp-fbar button.sp-fbar-a { padding: 0; border: 0; font-size: 14px; color: var(--text-light); }
-.sp-appset .sp-fbar button.sp-fbar-a[aria-current] { color: var(--text); font-weight: 600; }
-.sp-appset button.sp-menu-a { border: 0; font-size: 16px; color: var(--text); }
-.sp-appset button.sp-menu-a[aria-current] { font-weight: 600; color: var(--primary); }
+/* font: inherit above outweighs the indicator's cut and colour: the chosen one keeps them. */
+.sp-appset .sp-fbar button.sp-fbar-a[aria-current] { color: var(--sel-fg); font-weight: 600; }
+.sp-appset button.sp-menu-a { border: 0; font-size: 16px; }
 .sp-app button.sp-tab { border: 0; font-size: 14.5px; font-weight: 500; color: var(--text-light); }
-.sp-app button.sp-letter { font-size: 14px; color: var(--primary); }
-.sp-app button.sp-letter[aria-current] { color: var(--text); font-weight: 600; background: var(--primary-soft); border-color: var(--primary); }
+.sp-app button.sp-letter { font-size: 14px; }
+.sp-app button.sp-letter:not(.sel-tab) { color: var(--primary); }
 /* The window's bar over the page's column (.sp-app: 960 px, its own margins), its name where the page starts. */
 .sp-appset .sp-fbar-in { max-width: 960px; padding: 0 32px; }
 @media (min-width: 641px) and (max-width: 1024px) { .sp-appset .sp-fbar-in { padding: 0 24px; } }

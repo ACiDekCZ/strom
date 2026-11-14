@@ -207,7 +207,7 @@ export const historyDetailMethods = uiModule({
         const facets = detailFacets(all, f, by, d.names);
         const hiddenN = all.filter(r => r.hide !== 'none').length;
         const chip = (k: string, label: string, n: number | null, on: boolean): string =>
-            `<button type="button" class="hd-chip" data-hd="facet" data-by="${by}" data-k="${esc(k)}" aria-pressed="${on}" data-hfocus="f:${esc(k)}"`
+            `<button type="button" class="hd-chip sel-opt" data-hd="facet" data-by="${by}" data-k="${esc(k)}" aria-pressed="${on}" data-hfocus="f:${esc(k)}"`
             + `${kindChip(by, k) ? ` title="${esc(label)}"` : ''}>`
             + `${kindChip(by, k) ? historyKindSvg(k as HistoryEvent['kind'], 12) : ''}${esc(label)}${n === null ? '' : ` <span class="hd-chip-n">${n}</span>`}</button>`;
         const chips = facets.length > 1 || chosen.length
@@ -236,7 +236,7 @@ export const historyDetailMethods = uiModule({
         const periodOn = f.from !== undefined || f.to !== undefined;
         const periodLabel = periodOn ? (f.from !== undefined && f.to !== undefined ? `${f.from}–${f.to}` : f.from !== undefined ? `${f.from}–` : `–${f.to}`) : '';
         const mchip = (id: string, label: string, on: boolean, extra = ''): string =>
-            `<button type="button" class="hd-mchip${on ? ' is-on' : ''}" data-hd="${id}" data-hfocus="m:${id}"${extra}>${esc(label)}</button>`;
+            `<button type="button" class="hd-mchip sel-opt${on ? ' is-on' : ''}" data-hd="${id}" data-hfocus="m:${id}"${extra}>${esc(label)}</button>`;
         const narrow = mem.searchOpen
             ? `<div class="hd-mfilters is-search">${search.replace('data-hfocus="q"', 'data-hfocus="mq"')}`
                 + `<button type="button" class="hd-mclose" data-hd="searchClose" aria-label="${esc(strings.buttons.close)}">×</button></div>`
@@ -439,7 +439,7 @@ export const historyDetailMethods = uiModule({
             const chosen = by === 'kinds' ? f.kinds : f.places;
             const facets = detailFacets(all, f, by, dd.names);
             const chip = (attrs: string, label: string, on: boolean, n: number | null = null, kind = ''): string =>
-                `<button type="button" class="hd-chip" ${attrs} aria-pressed="${on}"${kind ? ` title="${esc(label)}"` : ''}>`
+                `<button type="button" class="hd-chip sel-opt" ${attrs} aria-pressed="${on}"${kind ? ` title="${esc(label)}"` : ''}>`
                 + `${kind ? historyKindSvg(kind as HistoryEvent['kind'], 14) : ''}${esc(label)}${n === null ? '' : ` <span class="hd-chip-n">${n}</span>`}</button>`;
             const centuries = detailCenturies(all);
             const isCentury = (c: number) => f.from === c * 100 && f.to === c * 100 + 99;

@@ -260,7 +260,7 @@ function optionsHtml(s: DialogState): string {
     // The pages of the whole tree: its lineages and the other families (spec 026 P3 §3.1).
     if (pages) hint.tree = F.treeHintPages(persons, counts.rods);
     const kinds = KINDS.filter(k => pages || k !== 'persons').map(k => {
-        return `<label class="book-kind" data-kind="${k}">`
+        return `<label class="book-kind sel-opt" data-sel-form="tile" data-kind="${k}">`
             + `<input type="radio" name="book-kind" value="${k}">`
             + `<span class="book-kind-text"><span class="book-kind-t">${esc(D.kind[k])}</span><span class="book-kind-h">${esc(hint[k])}</span></span>`
             + (k === 'tree' ? '' : `<button type="button" class="book-kind-sum" data-sub-open="sel" tabindex="-1"><span class="book-sum-v"></span><span class="book-chev" aria-hidden="true">›</span></button>`)

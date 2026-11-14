@@ -707,7 +707,10 @@ function waitingFocusIds(): ReadonlySet<string> {
 /** Light a waiting item's row when it is one of the person's the card led to. */
 export function markWaitingFocus(li: HTMLElement, w: LiveWaiting): void {
     li.dataset.waitingId = w.id;
-    if (waitingFocusIds().has(w.id)) li.classList.add('is-person-focus');
+    if (!waitingFocusIds().has(w.id)) return;
+    // Lit: a row of the one selection indicator, always in its chosen state.
+    li.classList.add('is-person-focus', 'sel-opt', 'is-selected');
+    li.dataset.selForm = 'row';
 }
 
 /** The line under a lit row that cannot be answered here (null: none). */
@@ -4661,7 +4664,7 @@ export const researchUiMethods = uiModule({
                 ...active.map(d => [d.id, d.name, lineCount(d.id)] as [string, string, number]),
             ];
             for (const [id, label, n] of options) {
-                const chip = el('button', 'research-overview__filter', `${label} ${n}`);
+                const chip = el('button', 'research-overview__filter sel-opt', `${label} ${n}`);
                 chip.type = 'button';
                 chip.setAttribute('role', 'radio');
                 chip.setAttribute('aria-checked', String(dirFilter === id));

@@ -549,6 +549,11 @@ export const bottomSheetMethods = uiModule({
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'bottom-sheet-item' + (row.danger ? ' danger' : '') + (row.active ? ' active' : '');
+            // A choice (a tree, a view): a row of the one selection indicator (a tile in a pair).
+            if (row.active !== undefined) {
+                btn.classList.add('sel-opt');
+                btn.dataset.selForm = 'row';
+            }
             if (row.id) btn.id = row.id;
             if (row.icon !== undefined) {
                 const icon = document.createElement('span');
@@ -914,7 +919,10 @@ export const bottomSheetMethods = uiModule({
                     pairRow.setAttribute('role', 'group');
                     pairRow.setAttribute('aria-label', block.pairLabel);
                 }
-                for (const row of block.pair) pairRow.appendChild(makeButton(row));
+                for (const row of block.pair) {
+                    const btn = pairRow.appendChild(makeButton(row));
+                    if (btn.classList.contains('sel-opt')) btn.dataset.selForm = 'tile';
+                }
                 list.appendChild(pairRow);
             }
             if (block.valueRow) list.appendChild(makeValueButton(block.valueRow));

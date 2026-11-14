@@ -341,7 +341,8 @@ export const searchMethods = uiModule({
         for (const person of results.slice(0, 10)) {  // Max 10 in modal
             const birthYear = person.birthDate?.split('-')[0] || '';
             const opt = document.createElement('div');
-            opt.className = 'confirm-option';
+            opt.className = 'confirm-option sel-opt';
+            opt.dataset.selForm = 'tile';
             opt.innerHTML = `
                 <input type="radio" name="search-result" value="${this.escapeHtml(person.id)}">
                 <span>${this.escapeHtml(shownName(person, ''))} ${birthYear ? `(${this.escapeHtml(birthYear)})` : ''}</span>

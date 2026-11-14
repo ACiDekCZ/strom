@@ -237,7 +237,7 @@ export const readProposeMethods = uiModule({
                     <button type="button" class="secondary read-cancel" data-act="cancel"${s.busy ? ' disabled' : ''}>${esc(t.cancel)}</button>
                 </div>`);
         } else if (this.readSecondOffered()) {
-            parts.push(`<label class="read-p-second${secondOn ? ' is-on' : ''}">
+            parts.push(`<label class="read-p-second sel-opt${secondOn ? ' is-on' : ''}">
                     <input type="checkbox" id="read-p-second" data-act="p-second"${secondOn ? ' checked' : ''}>
                     <span class="read-p-second-text"><strong>${esc(t.second)}</strong><span>${esc(t.secondSub)}</span></span>
                 </label>`);

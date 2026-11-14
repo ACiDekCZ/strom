@@ -336,7 +336,6 @@
             --follow-note-bg: #e4ede6;   /* the research panel's line about a switch of the followed tree */
             --follow-note-text: #2d5340;
             --line-selected-bg: #e4ede6;  /* the research panel's selected working line */
-            --line-selected-ring: #b9cfbf;
             --tv-pin-shadow: rgba(60, 50, 30, 0.35);  /* the table's pinned columns over scrolled ones */
             --dir-drop: var(--primary);          /* directions: drop line, handle focus ring, order spinner */
             --dir-drag-bg: var(--surface-2);     /* directions: the dragged row */
@@ -531,7 +530,6 @@
             --research-waiting-dot: #d39a52;
             --follow-note-bg: #2f3d35;
             --line-selected-bg: #2f3d35;
-            --line-selected-ring: #4d6b58;
             --tv-pin-shadow: rgba(0, 0, 0, 0.6);
             --dir-drop: #6f9c7f;
             --dir-drag-bg: #26241f;
@@ -878,7 +876,6 @@
         .tree-switcher-item .tree-item-check:empty { visibility: hidden; }
         .tree-switcher-item .tree-item-name { flex: 0 1 auto; min-width: 0; }
         .tree-switcher-dropdown.with-research { min-width: 340px; max-width: calc(100vw - 24px); }
-        .tree-switcher-dropdown.with-research .tree-switcher-item.active { background: var(--surface-2); }
         .tree-item-badges { margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: 6px; }
         /* A tree tied to a research: its kind, quietly after the name (audit 017 b-D5); the name shortens first. */
         .tree-item-kind {
@@ -3391,13 +3388,13 @@
         .hm-detail-note.is-error { color: var(--danger); }
         .hd-filters { display: flex; flex-direction: column; gap: 8px; padding: 10px 20px; border-bottom: 1px solid var(--divider); }
         .hd-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+        /* The facet chips (here, in the filter sheet and in the places' list) are .sel-opt chips (src/ui/sel-css.ts);
+           their border and corner stated over the dialog's button rule, below the chosen state's. */
         #history-modal button.hd-chip, .hd-fsheet button.hd-chip {
-            display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px; border: 1px solid var(--border); border-radius: 999px;
-            background: transparent; color: var(--text); font: inherit; font-size: 12px; white-space: nowrap; cursor: pointer;
+            display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px;
+            font: inherit; font-size: 12px; white-space: nowrap; cursor: pointer;
         }
-        #history-modal button.hd-chip[aria-pressed="true"], .hd-fsheet button.hd-chip[aria-pressed="true"] {
-            border-color: var(--primary); background: var(--primary-soft); font-weight: 600;
-        }
+        button.hd-chip.sel-opt, button.hd-mchip.sel-opt { border: 1px solid var(--border); border-radius: var(--sel-r); }
         .hd-chip-n { color: var(--text-faint); font-weight: 400; font-variant-numeric: tabular-nums; }
         .hd-filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
         #history-modal label.hd-period { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-size: 12.5px; font-weight: 400; color: var(--text-light); }
@@ -3494,8 +3491,6 @@
         .hd-fsheet .hd-range input { width: 80px; height: 36px; padding: 0 8px; }
         .hd-fsheet button.hd-fs-show { width: 100%; min-height: 44px; border-radius: 10px; font-size: 14.5px; }
         @media (hover: hover) {
-            #history-modal button.hd-chip:hover, .hd-fsheet button.hd-chip:hover { background: var(--hover-bg); }
-            #history-modal button.hd-chip[aria-pressed="true"]:hover { background: var(--primary-soft); }
             #history-modal button.hd-century-head:hover .hd-century-chev { color: var(--text); }
             #history-modal button.hd-sees:hover { text-decoration-style: solid; text-decoration-color: currentColor; }
             button.hd-menu-back:hover, button.hd-who-more:hover, button.hd-who-person:hover { background: var(--hover-bg); }
@@ -3510,10 +3505,9 @@
             }
             .hd-mfilters::-webkit-scrollbar { display: none; }
             #history-modal button.hd-mchip {
-                flex: none; height: 32px; padding: 0 11px; border: 1px solid var(--border); border-radius: 999px; background: transparent;
-                color: var(--text); font: inherit; font-size: 12.5px; white-space: nowrap; cursor: pointer;
+                flex: none; height: 32px; padding: 0 11px;
+                font: inherit; font-size: 12.5px; white-space: nowrap; cursor: pointer;
             }
-            #history-modal button.hd-mchip.is-on { border-color: var(--primary); background: var(--primary-soft); font-weight: 600; }
             .hd-mfilters.is-search { align-items: center; }
             #history-modal .hd-mfilters input.hd-search { flex: 1 1 auto; height: 32px; }
             #history-modal button.hd-mclose {
@@ -3675,7 +3669,13 @@
         .bottom-sheet-menu .bottom-sheet-item {
             font-size: 15px; min-height: 48px; justify-content: space-between;
         }
-        .bottom-sheet-menu .bottom-sheet-item.active { color: var(--primary); font-weight: 600; }
+        /* A choice (a tree, a view) is a row or a tile of the one selection indicator; the rows keep their heights. */
+        .bottom-sheet-menu .bottom-sheet-item.sel-opt[data-sel-form="row"] { min-height: 48px; }
+        .bottom-sheet-menu .bottom-sheet-item.sel-opt[data-tree-id] { min-height: 52px; }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .bottom-sheet-menu .bottom-sheet-item.sel-opt[data-tree-id] { min-height: 44px; }
+        }
+        .bottom-sheet-pair .bottom-sheet-item.sel-opt { border-color: transparent; color: inherit; }
         /* Person action sheet (card menu under 1024px / touch): same rows as
            the "More" sheet; a hairline separates the action groups. */
         .bottom-sheet-person .bottom-sheet-item { font-size: 15px; min-height: 44px; }
@@ -5916,13 +5916,11 @@
         }
         #places-modal button.hm-search-clear[hidden] { display: none; }
         #places-modal button.hd-chip {
-            flex: none; display: inline-flex; align-items: center; gap: 5px; height: 34px; padding: 0 12px; border: 1px solid var(--border);
-            border-radius: 999px; background: transparent; color: var(--text); font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer;
+            flex: none; display: inline-flex; align-items: center; gap: 5px; height: 34px; padding: 0 12px;
+            font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer;
         }
-        #places-modal button.hd-chip[aria-pressed="true"] { border-color: var(--primary); background: var(--primary-soft); font-weight: 600; }
         @media (hover: hover) {
-            #places-modal button.hm-search-clear:hover, #places-modal button.hd-chip:hover { background: var(--hover-bg); color: var(--text); }
-            #places-modal button.hd-chip[aria-pressed="true"]:hover { background: var(--primary-soft); }
+            #places-modal button.hm-search-clear:hover { background: var(--hover-bg); color: var(--text); }
         }
         /* The sort: a small select at the end of the bar (wraps under the search on a phone). */
         .modal select.places-sort {
@@ -6052,21 +6050,21 @@
         .places-summary { position: relative; display: flex; align-items: center; gap: 8px; min-width: 0; }
         .places-chips { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
         .places-total { font-size: 13px; font-weight: 600; margin-right: 4px; white-space: nowrap; }
+        /* The state chips and Select are .sel-opt chips (src/ui/sel-css.ts); border and corner over the dialog's button rule. */
         .places-modal button.places-chip {
             display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 0 10px; border: 1px solid var(--border);
-            border-radius: 999px; background: var(--surface); color: var(--text); font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap;
+            border-radius: var(--sel-r); font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap;
         }
-        .places-modal button.places-chip[aria-pressed="true"] { border-color: var(--primary); background: var(--primary-soft); font-weight: 600; }
         .places-chip-icon { font-weight: 700; color: var(--text-light); }
         .places-chip[data-filter="check"] .places-chip-icon, .places-chip[data-filter="confirm"] .places-chip-icon { color: var(--warn-text); }
         .places-chip[data-filter="research"] .places-chip-icon { color: var(--research); }
         .places-chip[data-filter="map"] .places-chip-icon { color: var(--primary-dark); }
         .places-chip-n { font-weight: 600; color: var(--text-light); }
         .places-modal button.places-select-btn, .places-modal button.places-more-btn {
-            flex: none; min-height: 30px; padding: 0 12px; border: 1px solid var(--border); border-radius: 8px;
-            background: var(--surface); color: var(--text); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+            flex: none; min-height: 30px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--sel-r);
+            font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
         }
-        .places-modal button.places-select-btn[aria-pressed="true"] { border-color: var(--primary); background: var(--primary-soft); }
+        .places-modal button.places-more-btn { background: var(--surface); color: var(--text); }
         .places-modal button.places-more-btn { padding: 0 10px; font-size: 16px; line-height: 1; }
         .places-more {
             position: absolute; top: calc(100% + 4px); right: 0; z-index: 5; width: 330px; max-width: calc(100vw - 32px);
@@ -6318,17 +6316,16 @@
         .waiting-places-name { font-family: var(--font-serif); font-size: 17px; font-weight: 600; color: var(--text); }
         .waiting-places-count { font-size: 13px; color: var(--text-light); }
         .waiting-places-bulk { display: flex; flex-wrap: wrap; gap: 8px; }
+        /* "Accept all", "Keep all" and the areas are .sel-opt chips (src/ui/sel-css.ts): on while their preview is shown. */
         .waiting-places-modal .waiting-places-bulk button {
-            min-height: 36px; padding: 0 14px; border-radius: 8px; font-size: 13.5px; white-space: normal; text-align: left;
+            min-height: 36px; padding: 0 14px; border-radius: var(--sel-r); font-size: 13.5px; white-space: normal; text-align: left;
         }
-        .waiting-places-modal .waiting-places-bulk button.is-on { border-color: var(--primary); background: var(--primary-soft); }
         .waiting-places-areas { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
         .waiting-places-areas-label { font-size: 13px; color: var(--text-light); }
         .waiting-places-modal button.waiting-places-area {
-            min-height: 0; padding: 3px 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-2);
-            color: var(--text); font: inherit; font-size: 12.5px; white-space: normal; overflow-wrap: anywhere; cursor: pointer;
+            min-height: 0; padding: 3px 9px; border: 1px solid var(--border); border-radius: var(--sel-r);
+            font: inherit; font-size: 12.5px; white-space: normal; overflow-wrap: anywhere; cursor: pointer;
         }
-        .waiting-places-modal button.waiting-places-area.is-on { border-color: var(--primary); background: var(--primary-soft); color: var(--primary-dark); }
         .waiting-places-preview {
             display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid var(--warn-line);
             border-radius: 8px; background: var(--warn-soft); color: var(--text); min-width: 0;
@@ -6510,7 +6507,6 @@
             .places-modal button.place-act.is-research:hover { color: var(--research); }
             .places-modal button.place-act.is-strong:hover { color: var(--primary-dark); }
             .places-modal button.place-find:hover { background: var(--primary-soft); }
-            .places-modal button.places-chip:hover, .places-modal button.places-select-btn:hover,
             .places-modal button.places-more-btn:hover, .places-modal button.places-more-item:not(:disabled):hover { background: var(--surface-2); }
             .places-modal button.place-look:hover, .places-modal button.place-check:hover,
             .places-modal button.places-context-act:hover { text-decoration: underline; }
@@ -8559,12 +8555,11 @@
            1024 px and lower heights) never touches them; the body starts closer to make up for it. */
         .install-steps { list-style: none; display: flex; gap: 6px; margin: 0; padding: 14px 24px 10px; flex-wrap: wrap; flex-shrink: 0; }
         .install-steps + .modal-content { padding-top: 6px; }
-        .install-step {
-            font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px;
-            background: var(--surface-2); color: var(--text-light);
-        }
-        .install-step.active { background: var(--text); color: var(--surface); }
-        .install-step.done { background: var(--primary-soft); color: var(--primary-dark); }
+        /* A step is a .sel-tab with the line down (src/ui/sel-css.ts), not clickable; a done one keeps its ✓ in the text. */
+        .install-step { font-size: 12px; padding: 3px 10px; white-space: nowrap; cursor: default; }
+        .install-step.done { color: var(--text-light); }
+        @media (hover: hover) { .install-steps > .install-step.sel-tab:not(.active):hover { box-shadow: none; color: var(--text-light); } }
+        @media (pointer: coarse) { .install-steps > .install-step.sel-tab { min-height: 0; } }
         .install-body p { margin: 0 0 12px; font-size: 14px; line-height: 1.5; color: var(--text); }
         .install-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 0 0 12px; }
         .install-card {
@@ -10234,13 +10229,13 @@
         .tv-matches:empty { display: none; }
         .tv-filters-btn { display: none; }
         .tv-chips { flex-wrap: nowrap; overflow: hidden; }
+        /* A chip is a .sel-opt chip (src/ui/sel-css.ts); a column's chip holds its own buttons, so no touch overlay. */
         .tv-chip {
             flex: none; display: inline-flex; align-items: center; height: 28px; padding: 0 11px; box-sizing: border-box; white-space: nowrap;
-            border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text-light);
             font: inherit; font-size: 12.5px; cursor: pointer;
         }
         .tv-chip[hidden] { display: none; }
-        .tv-chip.is-active { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); font-weight: 600; }
+        .tv-chips > .tv-chip--col.sel-opt::before { content: none; }
         .tv-chip[aria-disabled="true"] { color: var(--text-ghost); cursor: default; }
         .tv-chip--col { padding: 0 2px 0 0; cursor: default; }
         .tv-chip-edit, .tv-chip-x { height: 100%; border: none; background: none; color: inherit; font: inherit; cursor: pointer; }
@@ -10300,7 +10295,8 @@
             border: none; border-top: 1px solid var(--divider); background: none; color: var(--text); font: inherit; font-size: 15px; text-align: left; cursor: pointer;
         }
         .tv-fs-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .tv-fs-row.is-active .tv-fs-label { color: var(--primary); font-weight: 600; }
+        /* A chosen filter's page row: a row of the one selection indicator, keeping the sheet's lines above and its height. */
+        .tv-fs-row.tv-fs-page.sel-opt { border-bottom: 0; border-top: 1px solid var(--divider); background: none; color: var(--text); min-height: 48px; }
         /* A row with a count (a research line · 12): the name ends in "…", the count stays whole. */
         .tv-fs-label--n { display: flex; }
         .tv-fs-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -10379,10 +10375,15 @@
             position: absolute; left: 0; height: var(--tv-row-h);
             background: var(--surface); border-bottom: 1px solid var(--divider);
         }
-        .tv-body .tv-row[aria-selected="true"] { background: var(--line-selected-bg); }
-        /* A selection shared with other windows (spec 079 §2): a soft fill and a 3 px stripe on the left (kept by the pinned cell). */
-        .tv-body .tv-row.is-shared[aria-selected="true"] { background: var(--primary-soft); }
+        /* A person's row is a row of the one selection indicator; the grid keeps its fill, its text and its height. */
+        .tv-body .tv-row.sel-opt { background: var(--surface); color: inherit; min-height: 0; }
+        .tv-body .tv-row.sel-opt[aria-selected] { font-weight: inherit; }
+        /* A selection shared with other windows (spec 079 §2): the selected row with a 3 px stripe on the left (kept by the pinned cell). */
         .tv-body .tv-row.is-shared > .tv-cell:first-child { box-shadow: inset 3px 0 0 var(--primary); }
+        /* The cells paint the row's fill (background: inherit) over its line, so they carry the line too. */
+        .tv-body .tv-row.sel-opt[aria-selected="true"] > .tv-cell { box-shadow: inset 0 -2px 0 var(--sel-line); }
+        .tv-body .tv-row.is-shared.sel-opt[aria-selected="true"] > .tv-cell:first-child { box-shadow: inset 3px 0 0 var(--primary), inset 0 -2px 0 var(--sel-line); }
+        .tv-grid.is-scrolled-x .tv-body .tv-row.sel-opt[aria-selected="true"] > .tv-pinned-last:not(:first-child) { box-shadow: 6px 0 8px -6px var(--tv-pin-shadow), inset 0 -2px 0 var(--sel-line); }
         .tv-name { font-family: var(--font-serif); font-size: 14px; }
         .tv-row.is-home .tv-name { font-weight: 600; }
         /* §14.1: names in a cell. A tree's person is a link (opens the person); a participant's name offers its filter. */
@@ -10466,7 +10467,7 @@
         /* §3 union sub-rows: ▾/▸ and the count pill by the name, "Union k of n", the quiet "more" line. */
         .table-view { --tv-more-h: 26px; }
         .tv-body .tv-row--sub, .tv-body .tv-row--more { background: var(--sub); }
-        .tv-body .tv-row.is-selected-sub { background: var(--line-selected-bg); }
+        .tv-body .tv-row.is-selected-sub { background: var(--sel-fill); }
         .tv-row.is-dimmed .tv-cell { opacity: 0.55; }
         /* §10.1 row actions: under the pointer and on the selected row (none on a phone, 10b), at the row's end, not in a
            column: no column gets narrower for them. While the row goes on past the grid's right edge they stand at that
@@ -10996,8 +10997,6 @@
             .tv-empty-link:hover { text-decoration: underline; }
             .tv-empty .empty-block-action:hover { background: var(--primary-dark); }
             .tv-body .tv-row:hover { background: var(--surface-2); }
-            .tv-body .tv-row[aria-selected="true"]:hover { background: var(--line-selected-bg); }
-            .tv-body .tv-row.is-shared[aria-selected="true"]:hover { background: var(--primary-soft); }
             .tv-body .tv-row.is-acts-armed:hover .tv-acts { display: inline-flex; }
             .tv-act:hover { color: var(--text); border-color: var(--primary); }
             .tv-rowtype-btn:hover, .tv-legend-btn:hover { color: var(--text); border-color: var(--primary); }
@@ -11020,7 +11019,6 @@
             .tv-bub-btn--primary:hover { filter: brightness(1.08); }
             .tv-bub-link:hover { text-decoration: underline; }
             .tv-bub-close:hover { color: var(--text); }
-            .tv-chip:not([aria-disabled="true"]):not(.tv-chip--col):hover, .tv-filters-btn:hover { border-color: var(--primary); }
             .tv-chip-x:hover, .tv-chip-edit:hover { background: var(--surface-2); }
             .tv-nm:hover { text-decoration: underline; }
             .tv-nm--person:hover { color: var(--primary-dark); }
@@ -11101,10 +11099,8 @@
             .tv-search-q { width: 100%; flex: 1 1 auto; height: 40px; font-size: 16px; }
             .tv-filters-btn {
                 order: 11; display: inline-flex; align-items: center; flex: none; height: 40px; padding: 0 12px;
-                border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text);
                 font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap;
             }
-            .tv-filters-btn.is-active { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); }
             .tv-bar-row1::after { content: ''; order: 9; flex-basis: 100%; height: 0; }
             .tv-chips { display: none; }
             .tv-ff select, .tv-ff input[type="text"], .tv-ff input[type="number"] { height: 44px; font-size: 16px; }
@@ -13730,23 +13726,14 @@
             border-color: var(--primary);
             box-shadow: var(--shadow-focus);
         }
+        /* A .sel-opt tile (src/ui/sel-css.ts): its 1 px border, padding 1 px more. */
         #confirmation-modal .confirm-option {
             display: flex;
             align-items: center;
             gap: 10px;
-            padding: 12px;
-            border: 2px solid var(--border);
-            border-radius: 8px;
+            padding: 13px;
             cursor: pointer;
             transition: border-color 0.2s, background 0.2s;
-        }
-        @media (hover: hover) { #confirmation-modal .confirm-option:hover {
-            border-color: var(--primary);
-            background: color-mix(in srgb, var(--primary) 5%, transparent);
-        } }
-        #confirmation-modal .confirm-option.selected {
-            border-color: var(--primary);
-            background: color-mix(in srgb, var(--primary) 10%, transparent);
         }
         #confirmation-modal .confirm-option input[type="radio"] {
             width: auto;
@@ -13939,12 +13926,10 @@
         :is(.toolbar .rod-picker-host, .rod-pick-sheet) .sp-rodpick-tree button.sp-rodpick-a, :is(.toolbar .rod-picker-host, .rod-pick-sheet) button.sp-rodpick-x { grid-template-columns: minmax(0, 1fr) auto; min-height: 48px; }
         :is(.toolbar .rod-picker-host, .rod-pick-sheet) .sp-rodpick-small button.sp-rodpick-a { grid-template-columns: minmax(0, 1fr) 36px; min-height: 40px; padding-left: 36px; }
         :is(.rod-picker-host, .rod-pick-sheet) .sp-rodpick-xchev { color: var(--text-faint); }
-        :is(.toolbar .rod-picker-host, .rod-pick-sheet) li[aria-current] > button.sp-rodpick-a { background: var(--read-scan-bg); font-weight: 600; }
+        /* A line's row is a .sel-opt row on its <li> (src/ui/sel-css.ts). */
         :is(.toolbar .rod-picker-host, .rod-pick-sheet) button.sp-rodpick-first { box-shadow: inset 0 0 0 2px var(--primary); }
         :is(.toolbar .rod-picker-host, .rod-pick-sheet) button.sp-rodpick-a:focus-visible, :is(.toolbar .rod-picker-host, .rod-pick-sheet) button.sp-rodpick-x:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         @media (hover: hover) {
-            :is(.toolbar .rod-picker-host, .rod-pick-sheet) button.sp-rodpick-a:hover, :is(.toolbar .rod-picker-host, .rod-pick-sheet) button.sp-rodpick-x:hover { background: var(--hover-bg); }
-            :is(.toolbar .rod-picker-host, .rod-pick-sheet) li[aria-current] > button.sp-rodpick-a:hover { background: var(--read-scan-bg); }
         }
         @media (pointer: coarse) {
             .rod-picker-host .sp-rodpick-btn { min-height: 44px; }
@@ -15607,20 +15592,11 @@
         .modal button.card-type-tile {
             display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 4px;
             min-width: 0; margin: 0; padding: 8px 4px 7px;
-            border: 1px solid var(--border); border-radius: 10px;
-            background: var(--surface); color: var(--text-light);
+            border: 1px solid var(--border); border-radius: var(--r-md);
             font: inherit; text-align: center; cursor: pointer;
             transition: border-color 0.15s, background 0.15s;
         }
-        /* Selected: a 2px accent frame (1px border + 1px inset, so nothing moves), the soft tint. */
-        .modal button.card-type-tile[aria-checked="true"] {
-            border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); background: var(--accent-soft);
-        }
-        @media (hover: hover) {
-            .modal button.card-type-tile:hover { border-color: var(--line-color); }
-            .modal button.card-type-tile[aria-checked="true"]:hover { border-color: var(--primary); }
-        }
-        .card-type-tile:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        /* A .sel-opt tile (src/ui/sel-css.ts): the chosen one framed 2 px; border and corner stated over the dialog's button rule. */
         .card-type-thumb { display: flex; align-items: center; justify-content: center; width: 100%; height: 46px; overflow: hidden; pointer-events: none; }
         .card-type-thumb-box { display: block; position: relative; flex: none; }
         .card-type-thumb-card { position: absolute; left: 0; top: 0; transform: scale(0.25); transform-origin: 0 0; }
@@ -15628,7 +15604,7 @@
             max-width: 100%; font-size: 12px; line-height: 1.3; color: var(--text-light);
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
-        .card-type-tile[aria-checked="true"] .card-type-name { font-weight: 600; color: var(--primary-dark); }
+        .card-type-tile[aria-checked="true"] .card-type-name { font-weight: 600; color: var(--sel-fg); }
         /* The small cards are drawn as their own type whatever type the view has
            (the card rules above hang on body[data-card-density] / [data-card-fields]). */
         .card-type-thumb .person-card { position: relative; left: auto; top: auto; margin: 0; box-shadow: none; transition: none; cursor: inherit; }
@@ -15678,9 +15654,8 @@
                 border: none; border-radius: 0; background: transparent; box-shadow: none;
             }
             .modal button.card-type-tile + .card-type-tile { border-left: 1px solid var(--border); }
-            .modal button.card-type-tile[aria-checked="true"] { background: var(--primary); box-shadow: none; }
+            .modal button.card-type-tile.sel-opt[aria-checked="true"] { box-shadow: inset 0 0 0 2px var(--sel-border); }
             .card-type-name { font-size: 14px; }
-            .card-type-tile[aria-checked="true"] .card-type-name { color: var(--on-primary); }
         }
 
         /* "Details on the card" (custom density): a row per event — checkbox,
@@ -15698,13 +15673,12 @@
         .card-field-main { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0; font-size: 14px; cursor: pointer; }
         .card-field-mark { width: 14px; text-align: center; color: var(--text-faint); }
         .card-field-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+        /* A .sel-opt chip (src/ui/sel-css.ts); border and corner stated over the dialog's button rule. */
         .card-fields-settings .card-field-chip {
             font: inherit; font-size: 12px; line-height: 1.2;
-            padding: 3px 9px; border-radius: var(--r-pill);
-            border: 1px solid var(--border); background: transparent; color: var(--text-light);
+            padding: 3px 9px; border-radius: var(--sel-r); border: 1px solid var(--border);
             cursor: pointer; min-height: 0;
         }
-        .card-fields-settings .card-field-chip[aria-pressed="true"] { background: var(--primary-soft); border-color: var(--primary); color: var(--primary-dark); }
         .card-field-move { display: flex; gap: 2px; }
         .card-fields-settings .card-field-move button {
             width: 28px; height: 28px; min-width: 0; padding: 0;
@@ -16920,11 +16894,6 @@
             white-space: nowrap;
             flex-shrink: 0;
         }
-        .tree-badge.active-badge {
-            background: var(--primary);
-            border-color: var(--primary);
-            color: var(--on-primary);
-        }
         .tree-manager-item-name.clickable { cursor: pointer; }
         @media (hover: hover) { .tree-manager-item-name.clickable:hover { color: var(--primary); text-decoration: underline; } }
         .tree-manager-item-stats-row {
@@ -17042,10 +17011,8 @@
             border: 1px solid var(--border);
             transition: all 0.15s;
         }
-        .tree-manager-item.active {
-            border-color: var(--primary);
-            background: color-mix(in srgb, var(--primary) 6%, var(--surface));
-        }
+        /* A tree's row is a .sel-opt row (src/ui/sel-css.ts): the open tree has its fill and line, no dot of its own;
+           a tree waiting for a merge keeps its dashed card and dot. */
         .tree-manager-item-header {
             display: flex;
             align-items: center;
@@ -17058,9 +17025,6 @@
             border-radius: 50%;
             background: var(--text-ghost);
             flex-shrink: 0;
-        }
-        .tree-manager-item.active .tree-manager-item-indicator {
-            background: var(--primary);
         }
         .tree-manager-item.pending-merge {
             border-style: dashed;
@@ -18515,11 +18479,7 @@
         .live-panel-list li.live-waiting-row { display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; }
         .live-waiting-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
         /* One person's items the card's ! led to: first and lit (both themes by the variables). */
-        .live-panel-list li.live-waiting-row.is-person-focus {
-            padding: 6px 6px 6px 9px; border-radius: 6px;
-            background: var(--primary-soft); box-shadow: inset 3px 0 0 var(--primary);
-        }
-        .research-overview__waiting-item.is-person-focus > .research-overview__waiting-row { background: var(--primary-soft); box-shadow: inset 3px 0 0 var(--primary); }
+        .live-panel-list li.live-waiting-row.is-person-focus { padding: 6px; }
         .live-waiting-why { margin: 4px 0 0; font-size: 12px; color: var(--text-light); }
         .research-overview__waiting-item > .live-waiting-why { padding: 0 4px 6px; }
         .live-waiting-what { font-size: 14px; color: var(--text); }
@@ -19094,13 +19054,15 @@
         .read-result { flex: 1; min-width: 0; min-height: 0; display: grid; grid-template-columns: 500px minmax(0, 1fr); }
         .read-scan { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 10px; padding: 12px 16px; background: var(--read-scan-bg); border-right: 1px solid var(--border); }
         .read-entries, .read-page-tabs { flex: none; display: flex; flex-wrap: wrap; gap: 6px; }
+        /* An entry is a .sel-opt chip, a page a .sel-tab with the line down (src/ui/sel-css.ts);
+           the chip's border and corner stated over the dialog's button rule. */
         .read-entry-pill, .read-page-tab {
-            display: inline-flex; align-items: center; gap: 4px; max-width: 100%; min-width: 0; padding: 4px 10px; border-radius: 999px;
-            border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 13px; line-height: 1.3; cursor: pointer;
+            display: inline-flex; align-items: center; gap: 4px; max-width: 100%; min-width: 0; padding: 4px 10px;
+            font-size: 13px; line-height: 1.3; cursor: pointer;
             white-space: nowrap; overflow: hidden;
         }
-        .read-page-tab { border-radius: 6px; font-size: 12.5px; }
-        .read-entry-pill.is-selected, .read-page-tab.is-selected { border-color: var(--primary); background: var(--primary-soft); box-shadow: inset 0 0 0 1px var(--primary); }
+        .read-entry-pill.sel-opt { border: 1px solid var(--border); border-radius: var(--sel-r); }
+        .read-page-tab { font-size: 12.5px; }
         .read-entry-n { flex: none; font-weight: 700; }
         .read-entry-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .read-entry-name::before { content: '· '; }
@@ -19110,7 +19072,7 @@
         .read-entry-pill.is-source .read-entry-tag { color: var(--primary); font-weight: 600; }
         /* .modal button clears a pill's border; a neighbour's thin dashed one is its own (padding 1px less keeps the size). */
         .read-entries .read-entry-pill.is-neighbour { border: 1px dashed var(--text-faint); padding: 3px 9px; background: var(--surface-2); color: var(--text-light); font-size: 12.5px; }
-        .read-entries .read-entry-pill.is-neighbour.is-selected { border: 2px dashed var(--primary); background: var(--primary-soft); box-shadow: none; color: var(--text); }
+        .read-entries .read-entry-pill.is-neighbour.sel-opt.is-selected { border: 2px dashed var(--sel-border); box-shadow: none; color: var(--sel-fg); }
         /* "+ 2 neighbouring entries" quiet and dashed; "hide neighbours" a link. */
         .modal .read-nb-toggle {
             display: inline-flex; align-items: center; max-width: 100%; margin: 0; padding: 3px 10px !important; border-radius: 999px;
@@ -19119,7 +19081,7 @@
         }
         .modal .read-nb-toggle.is-less { border-color: transparent !important; color: var(--primary) !important; text-decoration: underline; text-underline-offset: 3px; }
         .modal .read-frame.is-neighbour { border: 1.2px dashed var(--text-faint); }
-        .modal .read-frame.is-neighbour.is-selected { border: 2.5px dashed var(--primary); }
+        .modal .read-frame.is-neighbour.sel-opt.is-selected { border: 2px dashed var(--sel-border); box-shadow: none; }
         .read-frame.is-neighbour:not(.is-selected) .read-frame-n { border-color: var(--text-faint); color: var(--text-light); border-style: dashed; }
         .read-scan-box { flex: 1; min-height: 0; position: relative; display: flex; }
         .read-scan-view { flex: 1; min-width: 0; min-height: 0; position: relative; overflow: auto; border-radius: var(--r-md); }
@@ -19134,8 +19096,9 @@
             position: absolute; margin: 0; padding: 0 !important; border: 1.5px solid var(--text-light); border-radius: 3px;
             background: transparent; box-shadow: none; cursor: pointer; min-height: 0; min-width: 0;
         }
-        .modal .read-frame.is-selected { border: 2.5px solid var(--primary); background: color-mix(in srgb, var(--primary) 5%, transparent); cursor: crosshair; }
-        .read-frame:focus-visible { outline: 3px solid var(--primary-soft); outline-offset: 1px; }
+        /* An entry's frame is a .sel-opt tile (src/ui/sel-css.ts) over the scan: see-through, its own corner, no touch height. */
+        .modal .read-frame.sel-opt { border-radius: 3px; background: transparent; min-height: 0; }
+        .modal .read-frame.is-selected { cursor: crosshair; }
         /* An entry of one line: no line strip, the frame itself lights up for its line (spec 059 K6.7). */
         .read-frame.is-selected.is-one-line { cursor: default; }
         .modal .read-frame.is-selected.is-lit { border-width: 3px; background: color-mix(in srgb, var(--primary) 12%, transparent); box-shadow: 0 0 0 3px var(--primary-soft); }
@@ -19143,7 +19106,7 @@
             position: absolute; top: -10px; left: -10px; width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--primary);
             background: var(--surface); color: var(--primary); font-size: 11px; font-weight: 700; line-height: 17px; text-align: center;
         }
-        .read-frame.is-selected .read-frame-n { background: var(--primary); color: var(--on-primary); }
+        .read-frame.is-selected .read-frame-n { border-color: var(--sel-border); color: var(--sel-fg); box-shadow: inset 0 0 0 1px var(--sel-border); }
         /* The chosen line (spec 059 P7 §7): a band with a bar on its left; approximate (the entry split evenly): dashed edges, no fill. */
         .read-scan-line {
             position: absolute; box-sizing: border-box; pointer-events: none;
@@ -19229,7 +19192,10 @@
         .read-transcript { margin: 0; overflow-wrap: anywhere; font-family: var(--font-serif); font-size: 18px; line-height: 1.75; color: var(--text); }
         .read-line { margin: 0 -6px; padding: 0 6px; border-radius: 4px; }
         .read-line[tabindex] { cursor: pointer; }
-        .read-line.is-active, .read-line:focus-visible { background: color-mix(in srgb, var(--primary) 20%, transparent); outline: none; box-shadow: inset 3px 0 0 var(--primary); }
+        /* A line of the first reader is a .sel-opt row (src/ui/sel-css.ts): the chosen one has the fill and the line under it;
+           still a line of text, so no rule between lines and no touch height of its own. */
+        .read-transcript .read-line.sel-opt { border-bottom: 0; }
+        @media (pointer: coarse) { .read-transcript .read-line.sel-opt { min-height: 0; } }
         mark.uncertain { background: var(--read-amber-bg); color: inherit; border-bottom: 2px dotted var(--read-amber-dot); padding: 0 1px; }
         .illegible {
             display: inline-block; padding: 0 6px; border-radius: 3px; background: var(--read-illegible-bg); color: var(--read-illegible-text);
@@ -19297,12 +19263,12 @@
         .read-nc-q { margin: 0; font-size: 14px; font-weight: 600; }
         .read-nc-t { margin: 0; font-size: 13px; color: var(--text-light); text-wrap: pretty; }
         .read-nc-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; min-width: 0; }
+        /* A .sel-opt chip (src/ui/sel-css.ts); border and corner stated over the dialog's button rule. */
         .modal .read-nc-chip {
-            display: inline-flex; align-items: center; gap: 4px; max-width: 100%; margin: 0; padding: 4px 10px; border-radius: 999px;
-            border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 13px; line-height: 1.3; cursor: pointer; white-space: nowrap;
+            display: inline-flex; align-items: center; gap: 4px; max-width: 100%; margin: 0; padding: 4px 10px; border-radius: var(--sel-r);
+            border: 1px solid var(--border); font-size: 13px; line-height: 1.3; cursor: pointer; white-space: nowrap;
             min-width: 0; overflow: hidden;
         }
-        .modal .read-nc-chip.is-selected { border-color: var(--primary); background: var(--primary-soft); box-shadow: inset 0 0 0 1px var(--primary); }
         .modal .read-nc-btn { margin: 0; white-space: nowrap; }
         .read-nc-done { margin: 0; font-size: 12.5px; color: var(--text-light); }
         /* The text: its line numbers (the rows of "To check" name them), the reader switch beside the title. */
@@ -19751,11 +19717,10 @@
         .read-p-progress-text { flex: 1 1 200px; min-width: 0; font-size: 13.5px; font-weight: 500; }
         .read-p-progress-sub { display: block; font-weight: 400; font-size: 12.5px; color: var(--text-light); }
         .read-p-progress .read-bar { flex: 1 1 140px; margin: 0; }
+        /* A .sel-opt chip (src/ui/sel-css.ts), on while its box is ticked. */
         .read-p-second {
-            display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: var(--r-md); border: 1px solid var(--border);
-            background: var(--surface); cursor: pointer;
+            display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; cursor: pointer;
         }
-        .read-p-second.is-on { border-color: var(--primary); background: var(--primary-soft); }
         .read-p-second input { flex: none; margin: 2px 0 0; }
         .read-p-second-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 13.5px; }
         .read-p-second-text span { font-size: 12.5px; color: var(--text-light); }
@@ -19825,7 +19790,6 @@
         }
         @media (hover: hover) {
             .read-p-card:hover { border-color: var(--primary); }
-            .read-p-second:hover { border-color: var(--primary); }
         }
         @media (max-width: 640px) {
             .read-p-card { grid-template-columns: minmax(0, 1fr); }
@@ -19843,10 +19807,9 @@
             .read-back, .read-p-other { min-height: 44px; }
         }
         @media (hover: hover) {
-            .read-line[tabindex]:hover { background: color-mix(in srgb, var(--primary) 20%, transparent); box-shadow: inset 3px 0 0 var(--primary); }
-            .read-entry-pill:hover, .read-page-tab:hover, .read-copy:hover, .modal .read-scan-zoom:hover, .modal .read-strip-scan:hover { border-color: var(--primary) !important; }
+            .read-copy:hover, .modal .read-scan-zoom:hover, .modal .read-strip-scan:hover { border-color: var(--primary) !important; }
             .modal .read-nb-toggle.is-more:hover { color: var(--text) !important; border-color: var(--text-faint) !important; }
-            .read-frame:not(.is-selected):hover { background: color-mix(in srgb, var(--primary) 8%, transparent); }
+            .modal .read-frame.sel-opt:not(.is-selected):hover { background: transparent; border-color: var(--text); }
         }
         /* Desktop: "Enlarge beside the text" widens the scan's column (spec 059 P7 §7). */
         @media (min-width: 1025px) {
@@ -20003,15 +19966,18 @@
         .phone-sys-text ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; }
         /* A sketch of the Windows firewall window: light like the real one, in both themes. */
         .phone-fw { background: #fff; color: #333; border: 1px solid #c9c5bd; border-radius: 4px; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 10px; overflow: hidden; }
+        /* The sketch stays light in both themes: the one selection indicator in its own colours. */
+        .phone-fw { --sel-border: #333; --sel-fg: #333; --sel-mute: #999; --border: #aaa; --surface: #fff; --text-light: #777; }
         .phone-fw-title { background: #f0f0f0; padding: 5px 8px; border-bottom: 1px solid #ddd; }
         .phone-fw-line { padding: 8px 8px 0; color: #555; line-height: 1.35; }
-        .phone-fw-opt { display: flex; align-items: center; gap: 5px; margin: 6px 5px 0; padding: 3px; color: #777; border-radius: 3px; }
-        .phone-fw-opt.is-on { color: #333; box-shadow: 0 0 0 2px var(--primary); }
+        .phone-fw-opt { display: flex; align-items: center; gap: 5px; margin: 6px 5px 0; padding: 3px; }
         .phone-fw-box { width: 10px; height: 10px; border: 1px solid #999; border-radius: 2px; font-size: 9px; line-height: 10px; text-align: center; }
         .phone-fw-opt.is-on .phone-fw-box { border-color: #333; }
         .phone-fw-buttons { display: flex; gap: 5px; justify-content: flex-end; padding: 8px; }
-        .phone-fw-btn { padding: 3px 7px; border: 1px solid #aaa; border-radius: 2px; white-space: nowrap; }
-        .phone-fw-btn.is-on { border-color: #333; box-shadow: 0 0 0 2px var(--primary); }
+        .phone-fw-btn { padding: 3px 7px; white-space: nowrap; }
+        .phone-fw-buttons > .phone-fw-btn.sel-opt { border-radius: 2px; }
+        /* A sketch, not a control: no hover tint. */
+        @media (hover: hover) { .phone-fw .sel-opt.sel-opt:not(.is-on):hover { background: var(--surface); border-color: var(--border); } }
         .phone-public { padding: 10px 14px; border-radius: 10px; background: var(--warning-soft); color: var(--warning-text); font-size: 13px; }
         .phone-state { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; }
         .phone-state > .phone-dot.is-ring { margin-top: 7px; }
@@ -21802,19 +21768,11 @@
             font: inherit; color: var(--text); text-align: left; position: relative;
         }
         button.live-line { cursor: pointer; }
-        @media (hover: hover) { button.live-line:hover { background: var(--hover-bg); } }
         button.live-line:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
-        .live-line[aria-pressed="true"], .research-overview__now-row.is-selected {
-            background: var(--line-selected-bg); box-shadow: inset 0 0 0 1px var(--line-selected-ring);
-        }
-        @media (hover: hover) { button.live-line[aria-pressed="true"]:hover { background: var(--line-selected-bg); } }
         .live-line__glyph {
             width: 20px; height: 20px; border-radius: 6px; flex: none; margin-top: 1px;
             display: inline-flex; align-items: center; justify-content: center;
             background: var(--dir-icon-bg); color: var(--dir-icon-fg); font-size: 12px; font-weight: 600; line-height: 1;
-        }
-        .live-line[aria-pressed="true"] .live-line__glyph, .research-overview__now-row.is-selected .live-line__glyph {
-            background: var(--primary); color: var(--on-primary);
         }
         .live-line--outside .live-line__glyph { background: transparent; }
         .live-line__main { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
@@ -21830,7 +21788,7 @@
         .live-panel-list .live-change-meta .live-time { display: inline; font-size: inherit; }
         .live-change-dir, .live-queue-dir { color: var(--text-light); font-weight: 600; }
         .research-overview__now-row--line { flex-direction: row; align-items: flex-start; gap: 4px 8px; }
-        .research-overview__now-row.is-selected { margin: 0 -6px; padding-left: 6px; padding-right: 6px; border-radius: 8px; }
+        .research-overview__now-row.is-selected { margin: 0 -6px; padding-left: 6px; padding-right: 6px; }
         .research-overview__now-meta { display: block; font-size: 12px; color: var(--text-light); }
         .research-overview__now .research-overview__now-meta .live-time { display: inline; font-size: inherit; color: inherit; }
         @media (pointer: coarse) { button.live-line { min-height: 44px; } }
@@ -21839,13 +21797,11 @@
         }
         .research-overview__timeline-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0 4px; }
         .research-overview__filters { display: flex; gap: 6px; overflow-x: auto; flex: 1 1 auto; min-width: 0; scrollbar-width: none; }
+        /* A filter is a .sel-opt chip (src/ui/sel-css.ts). */
         .research-overview__filter {
-            flex: none; height: 28px; padding: 0 10px; border-radius: 14px; font-size: 12px; cursor: pointer;
-            border: 1px solid var(--border); background: var(--surface); color: var(--text-light);
+            flex: none; height: 28px; padding: 0 10px; font-size: 12px; cursor: pointer;
             font-variant-numeric: tabular-nums;
         }
-        .research-overview__filter[aria-checked="true"] { background: var(--primary-soft); border-color: var(--primary); color: var(--text); font-weight: 600; }
-        .research-overview__filter:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         .research-overview__show-changed { flex: none; padding: 0; font-size: 13px; }
         .research-overview__group-head {
             display: flex; align-items: center; gap: 6px; width: 100%; margin-top: 8px; padding: 6px 0;
@@ -21875,7 +21831,6 @@
         /* A research hypothesis in What waits (spec 074 §9): its choices in the row. */
         .hwr-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 4px; }
         .hwr-item.is-fresh { box-shadow: inset 3px 0 0 var(--warning); }
-        .hwr-item.is-person-focus { background: var(--primary-soft); box-shadow: inset 3px 0 0 var(--primary); }
         .hwr-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
         .hwr-what { margin: 0; font-size: 14px; line-height: 1.4; overflow-wrap: anywhere; }
         .hwr-id { font-weight: 600; }
@@ -23602,16 +23557,15 @@
         /* The switch to the pages moved the whole tree to a lineage: said once, gone at the next change (026 §9.8). */
         /* What goes in the book: four cards 2 × 2 and the "House · later" placeholder */
         #book-modal .book-kinds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+        /* A kind is a .sel-opt tile (src/ui/sel-css.ts); in the phone's list a row (fill and a line under the chosen one). */
         #book-modal .book-kind {
-            display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px;
-            background: var(--surface); cursor: pointer; min-width: 0;
+            display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; cursor: pointer; min-width: 0;
         }
-        #book-modal .book-kind.is-on { border-color: var(--primary); box-shadow: inset 0 0 0 0.5px var(--primary); }
         #book-modal .book-kind input { margin: 3px 0 0; accent-color: var(--primary); flex: none; }
         #book-modal .book-kind-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
         #book-modal .book-kind-t { font-size: 14.5px; font-weight: 500; color: var(--text); }
         #book-modal .book-kind-h { font-size: 12.5px; color: var(--text-light); overflow-wrap: anywhere; }
-        #book-modal .book-kind--house { grid-column: 1 / -1; border-style: dashed; background: none; cursor: default; padding: 8px 14px; opacity: .8; }
+        #book-modal .book-kind--house { grid-column: 1 / -1; border: 1px dashed var(--border); border-radius: var(--r-md); background: none; cursor: default; padding: 8px 14px; opacity: .8; }
         #book-modal .book-kind--house .book-kind-h { color: var(--text-faint); }
         #book-modal .book-kind-sum { display: none; }
         #book-modal .book-sel { margin-top: 10px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
@@ -23706,7 +23660,6 @@
         #book-modal .book-dlg-foot .buttons .primary { flex: 1; min-height: 42px; font-size: 15px; font-weight: 600; }
         #book-modal .book-open-hint { margin: 10px 0 0; font-size: 12px; line-height: 1.4; text-align: center; color: var(--text-light); }
         @media (hover: hover) {
-            #book-modal .book-kind:not(.book-kind--house):hover { border-color: var(--primary); }
             #book-modal .book-rod-row:hover, #book-modal .book-step:not(:disabled):hover { background: var(--hover-bg); }
         }
         /* Narrower than 900 px: one column, the outline under the options (no title page), the estimate and button stuck below */
@@ -23739,7 +23692,8 @@
             #book-modal .book-dlg-foot .buttons [data-dismiss], #book-modal .book-open-hint { display: none; }
             #book-modal .book-dlg-foot .buttons .primary { flex: 1; min-height: 48px; }
             #book-modal .book-kinds { grid-template-columns: minmax(0, 1fr); gap: 0; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--surface); }
-            #book-modal .book-kind { min-height: 48px; align-items: center; padding: 0 14px; border: 0; border-radius: 0; box-shadow: none !important; }
+            #book-modal .book-kind { min-height: 48px; align-items: center; padding: 0 14px; border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+            #book-modal .book-kind.sel-opt.is-on { background: var(--sel-fill); box-shadow: inset 0 -2px 0 var(--sel-line); }
             #book-modal .book-kind + .book-kind { border-top: 1px solid var(--divider); }
             #book-modal .book-kind input { margin: 0; }
             #book-modal .book-kind-h { display: none; }
@@ -24853,8 +24807,7 @@
             .tree-manager-item.active .tree-open-btn { display: none !important; }
             .tree-manager-item.active .tree-opened-label {
                 display: inline-flex; align-items: center; height: 28px; padding: 0 10px;
-                border-radius: 999px; font-size: 13px; font-weight: 600;
-                color: var(--primary); background: var(--primary-soft);
+                font-size: 13px; font-weight: 600; color: var(--text-light);
                 align-self: center;
             }
             .tree-manager-footer [data-dismiss] { display: none; }
@@ -26427,9 +26380,8 @@
         @media (hover: hover) {
             .modal--page .pp-head button:hover { background: var(--hover-bg); }
             .pp-menu-item:hover { background: var(--hover-bg); }
-            .pp-toc-link:hover { color: var(--text); }
         }
-        .modal--page .pp-head button:focus-visible, .pp-menu-item:focus-visible, .pp-toc-link:focus-visible {
+        .modal--page .pp-head button:focus-visible, .pp-menu-item:focus-visible {
             outline: 2px solid var(--primary); outline-offset: 1px;
         }
         .pp-body {
@@ -26450,11 +26402,11 @@
             color: var(--accent-text); margin: 4px 0 10px 10px;
         }
         .pp-toc ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+        /* A contents link is a .sel-tab with the line on its left (src/ui/sel-css.ts). */
         .pp-toc-link {
-            display: block; padding: 5px 10px; border-radius: 6px;
-            font-size: 13.5px; color: var(--text-light); text-decoration: none; overflow-wrap: anywhere;
+            display: block; padding: 5px 10px;
+            font-size: 13.5px; text-decoration: none; overflow-wrap: anywhere;
         }
-        .pp-toc-link[aria-current="true"] { background: var(--surface-2); color: var(--text); font-weight: 600; }
         /* Wide screens (round 4 §0.8, K4-32): a wider window, the contents 150 px and 48 px off a column of up to
            960 px (text 660 px, picture blocks the whole column, see .pp-wide in the page's CSS), all centred. */
         @media screen and (min-width: 1280px) {
@@ -26756,16 +26708,12 @@
             scrollbar-width: none;
         }
         .story-chips::-webkit-scrollbar { display: none; }
+        /* A chapter is a .sel-opt chip (src/ui/sel-css.ts); border, corner and weight stated under the chosen state's. */
         .modal .story-chips button.story-chip {
             flex: 0 0 auto; width: auto; min-height: 30px; margin: 0; padding: 4px 12px;
-            border: 1px solid var(--border); border-radius: 999px; background: transparent; box-shadow: none;
-            font: 500 13px/1.3 var(--font-sans); color: var(--text-light); cursor: pointer; white-space: nowrap;
+            font-family: var(--font-sans); font-size: 13px; line-height: 1.3; cursor: pointer; white-space: nowrap;
         }
-        .modal .story-chips button.story-chip[aria-current="true"] {
-            border-color: var(--accent); background: var(--surface-2); color: var(--text);
-        }
-        .modal .story-chips button.story-chip:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
-        @media (hover: hover) { .modal .story-chips button.story-chip:hover { background: var(--hover-bg); color: var(--text); } }
+        button.story-chip.sel-opt { border: 1px solid var(--border); border-radius: var(--sel-r); font-weight: 500; }
         .story-reader-ch { scroll-margin-top: 12px; }
         .story-reader-body > .story-reader-ch { max-width: none; }
         .story-reader-ch > * { max-width: 62ch; }
@@ -27118,14 +27066,14 @@
         .content-source-images[hidden] { display: none; }
         .content-source-images { margin: 10px 0 0; padding: 0; border: 0; display: grid; gap: 6px; }
         .content-source-images legend { padding: 0; margin-bottom: 6px; font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+        /* A choice is a .sel-opt row (src/ui/sel-css.ts). */
         .content-radio, .form-group label.content-radio {
             margin: 0; font-weight: normal; color: var(--text);
             display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: start; padding: 8px 10px;
-            border: 1px solid var(--border); border-radius: var(--r-md); cursor: pointer; font-size: 14px;
+            cursor: pointer; font-size: 14px;
         }
-        .content-radio.is-selected { border-color: var(--primary); background: var(--primary-soft); }
         .content-radio.is-disabled { cursor: default; opacity: 0.75; }
-        @media (hover: hover) { .content-radio:not(.is-disabled):hover { border-color: var(--primary); } }
+        @media (hover: hover) { .content-radio.sel-opt.is-disabled:not(.is-selected):hover { background: transparent; border-color: var(--divider); } }
         .content-radio input, .form-group .content-radio input[type="radio"] { margin: 3px 0 0; width: auto; }
         .content-radio-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
         .content-radio-sub { font-size: 12.5px; color: var(--text-faint); }
@@ -27434,7 +27382,7 @@
         .content-check.is-inert, .content-source-images:disabled .content-radio { opacity: 0.55; cursor: default; }
         @media (hover: hover) {
             .content-check.is-inert:hover { background: transparent; border-color: var(--border); }
-            .content-source-images:disabled .content-radio:not(.is-selected):hover { border-color: var(--border); }
+            .content-source-images:disabled .content-radio.sel-opt:not(.is-selected):hover { background: transparent; border-color: var(--divider); }
         }
         /* Content: one summary line on phones until "Edit" expands it. */
         .export-content-summary { display: none; }
@@ -27646,13 +27594,14 @@
         .mw-tools { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
         .mw-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
         .mw-gap { flex: 1; }
+        /* A .sel-opt chip (src/ui/sel-css.ts); a filter's chip holds its own buttons, so no touch overlay. */
         .materials-window .mw-chip, .mw-pop .mw-chip {
             display: inline-flex; align-items: center; gap: 4px; height: 30px; box-sizing: border-box; padding: 0 12px;
-            border: 1px solid var(--border); border-radius: var(--r-pill); background: var(--surface); color: var(--text);
+            border: 1px solid var(--border); border-radius: var(--sel-r);
             font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer; max-width: 280px;
         }
-        .materials-window .mw-chip.is-active, .mw-pop .mw-chip.is-active { background: var(--primary-soft); border-color: var(--primary); color: var(--primary-dark); }
         .materials-window span.mw-chip.is-active, .mw-pop span.mw-chip.is-active { padding: 0 2px 0 0; cursor: default; }
+        .materials-window span.mw-chip.sel-opt::before, .mw-pop span.mw-chip.sel-opt::before { content: none; }
         .materials-window .mw-chip-main, .materials-window .mw-chip-x, .mw-pop .mw-chip-main, .mw-pop .mw-chip-x {
             border: none; background: none; color: inherit; font: inherit; padding: 0 6px 0 12px; height: 100%;
             cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; border-radius: var(--r-pill);
@@ -27670,7 +27619,6 @@
         .mw-seg-view .mw-seg-text { display: none; }
         .mw-seg-icon { font-size: 15px; line-height: 1; }
         .materials-window .mw-select { font-weight: 600; }
-        .materials-window .mw-chip:focus-visible, .materials-window .mw-seg button:focus-visible,
         .materials-window .mw-chip-main:focus-visible, .materials-window .mw-chip-x:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
 
         .materials-window-body.modal-content { display: flex; flex-direction: column; overflow: hidden; padding: 0; }
@@ -27802,8 +27750,6 @@
         @media (hover: hover) {
             .mw-tile:hover .mw-thumb { border-color: var(--text-ghost); }
             #materials-modal.can-select .mw-tile:hover .mw-check { display: flex; }
-            .materials-window .mw-chip:hover { border-color: var(--text-ghost); }
-            .materials-window .mw-chip.is-active:hover { border-color: var(--primary-dark); }
             .materials-window .mw-group-toggle:hover .mw-group-name, .materials-window .mw-folder-toggle:hover .mw-folder-name { color: var(--primary-dark); }
             .materials-window .mw-more:hover { background: var(--surface-2); color: var(--text); }
             .mw-check-row:hover { background: var(--hover-bg); }
@@ -28686,8 +28632,8 @@
             display: flex; align-items: flex-start; gap: 10px; margin: 0; padding: 8px 10px; font-weight: 400;
             border: 1px solid var(--border); border-radius: 8px; cursor: pointer;
         }
-        .modal label.queue-work__opt.is-on { border-color: var(--primary); background: var(--primary-soft); }
-        .queue-work__opt:has(input[type="radio"]:focus-visible) { box-shadow: var(--shadow-focus); }
+        /* A choice is a .sel-opt tile (src/ui/sel-css.ts): the chosen one framed 2 px; the focus an outline around it. */
+        .queue-work__opt:has(input[type="radio"]:focus-visible) { outline: 2px solid var(--primary); outline-offset: 2px; }
         .modal .queue-work__opt input[type="radio"] { flex: none; width: 16px; height: 16px; margin: 2px 0 0; accent-color: var(--primary); }
         .queue-work__opt-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
         .queue-work__opt-title { font-size: 14px; font-weight: 600; color: var(--text); line-height: 1.4; }

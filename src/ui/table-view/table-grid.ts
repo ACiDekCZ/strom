@@ -1353,7 +1353,8 @@ export class TableGrid {
             if (line.kind !== 'more' && this.flashKeys.has(rk)) cls += ' is-flash';
             if (input.stale?.has(rk)) cls += ' is-stale';
             if (line.kind === 'row') {
-                attrs += ` aria-selected="${rowSelected ? 'true' : 'false'}"`;
+                cls += ' sel-opt';
+                attrs += ` data-sel-form="row" aria-selected="${rowSelected ? 'true' : 'false'}"`;
                 if (rowSelected && input.selectedShared) cls += ' is-shared';
                 if (line.expanded !== null) attrs += ` aria-expanded="${line.expanded}"`;
                 if (line.expanded === false && row.kind === 'person') {

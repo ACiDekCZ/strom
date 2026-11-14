@@ -215,13 +215,13 @@ export const placesIdentifyMethods = uiModule({
         const ctx = this.placesResearchContext();
         const f = this.placesFilter.state;
         const chips = placeSummaryChips(summary, !!ctx.researchId).map(c => `
-            <button type="button" class="places-chip" data-filter="${c}" aria-pressed="${f === c}">
+            <button type="button" class="places-chip sel-opt" data-filter="${c}" aria-pressed="${f === c}">
                 <span class="places-chip-icon ${placeGlyphClass(CHIP_GLYPHS[c])}" aria-hidden="true">${CHIP_GLYPHS[c]}</span>${this.escapeHtml(d.chip[c])}
                 <span class="places-chip-n">${summary[c]}</span>
             </button>`).join('');
         const counts = bulkCounts(this.placesCountedIds(), this.placesLivePayload());
         const acts = ctx.canResearch ? `
-            <button type="button" class="places-select-btn" aria-pressed="${placesView.selecting}">${this.escapeHtml(placesView.selecting ? d.selectDone : d.select)}</button>
+            <button type="button" class="places-select-btn sel-opt" aria-pressed="${placesView.selecting}">${this.escapeHtml(placesView.selecting ? d.selectDone : d.select)}</button>
             <button type="button" class="places-more-btn" aria-haspopup="menu" aria-expanded="${placesView.menu}"
                 title="${this.escapeHtml(d.more)}" aria-label="${this.escapeHtml(d.more)}"><span aria-hidden="true">⋯</span></button>
             <div class="places-more" role="menu"${placesView.menu ? '' : ' hidden'}>

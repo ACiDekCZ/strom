@@ -1998,7 +1998,7 @@ export const readDocumentMethods = uiModule({
         const names = readViewLabels(res.pages);
         const tabs = res.pages.length >= 2
             ? `<div class="read-page-tabs" role="group">${res.pages.map((p, i) =>
-                `<button type="button" class="read-page-tab${p.n === pageN ? ' is-selected' : ''}" data-act="page" data-page="${p.n}" aria-pressed="${p.n === pageN}">${esc(names[i])}</button>`).join('')}</div>`
+                `<button type="button" class="read-page-tab sel-tab${p.n === pageN ? ' is-selected' : ''}" data-sel-dir="down" data-act="page" data-page="${p.n}" aria-pressed="${p.n === pageN}"><span class="sel-l" data-label="${esc(names[i])}">${esc(names[i])}</span></button>`).join('')}</div>`
             : '';
         const shownName = names[res.pages.findIndex(p => p.n === pageN)] ?? t.pageAlt(pageN);
         const url = page && base ? readPageImageUrl(base, page) : '';
@@ -2049,7 +2049,7 @@ export const readDocumentMethods = uiModule({
             const name = entryName(e);
             const tag = own ? near(k) ? t.eNb : t.eSrc : '';
             const sr = tag ? `${t.entrySr(k + 1, name)}, ${tag}` : t.entrySr(k + 1, name);
-            return `<button type="button" class="read-entry-pill${k === s.entry ? ' is-selected' : ''}${own ? near(k) ? ' is-neighbour' : ' is-source' : ''}" data-act="entry" data-entry="${k}"`
+            return `<button type="button" class="read-entry-pill sel-opt${k === s.entry ? ' is-selected' : ''}${own ? near(k) ? ' is-neighbour' : ' is-source' : ''}" data-act="entry" data-entry="${k}"`
                 + ` aria-pressed="${k === s.entry}" aria-label="${esc(sr)}" title="${esc(sr)}"><span class="read-entry-n">${esc(t.entryN(k + 1))}</span>`
                 + `${name ? `<span class="read-entry-name">${esc(middleName(name, 28))}</span>` : ''}`
                 + `${tag ? `<span class="read-entry-tag">${esc(tag)}</span>` : ''}</button>`;
@@ -2148,7 +2148,7 @@ export const readDocumentMethods = uiModule({
             const one = k === s.entry && parseTranscript(e).lines.length < 2 ? ' is-one-line' : '';
             const near = own && this.readNeighbour(res, k);
             const sr = own ? `${t.entrySr(k + 1, name)}, ${near ? t.entryNeighbour : t.entrySource}` : t.entrySr(k + 1, name);
-            return `<button type="button" class="read-frame${k === s.entry ? ' is-selected' : ''}${one}${near ? ' is-neighbour' : ''}" data-entry="${k}" style="${regionStyle(e.region)}"`
+            return `<button type="button" class="read-frame sel-opt${k === s.entry ? ' is-selected' : ''}${one}${near ? ' is-neighbour' : ''}" data-sel-form="tile" data-entry="${k}" style="${regionStyle(e.region)}"`
                 + ` aria-label="${esc(sr)}" aria-pressed="${k === s.entry}">`
                 + `${many ? `<span class="read-frame-n" aria-hidden="true">${esc(t.entryTag(k + 1))}</span>` : ''}</button>`;
         }).join('');
@@ -2189,8 +2189,8 @@ export const readDocumentMethods = uiModule({
             // The second reader's lines are its own (not reader 1's lines on the scan): no line to show there.
             const lines = view.marks.lines.map((l, j) => {
                 const marked = view.marks.places.some(p => p.line === j && !p.elsewhere && (p.kind === 'dis' || p.kind === 'chg'));
-                const cls = `read-line${marked ? ' has-variant' : ''}${!second && j === s.line ? ' is-active' : ''}`;
-                return `<div class="${cls}" data-n="${j + 1}"${second ? '' : ` data-line="${j}"${focusable}`}>${lineMarksHtml(l, j, view.marks.places, focus)}</div>`;
+                const cls = `read-line${second ? '' : ' sel-opt'}${marked ? ' has-variant' : ''}${!second && j === s.line ? ' is-active' : ''}`;
+                return `<div class="${cls}" data-n="${j + 1}"${second ? '' : ` data-sel-form="row" data-line="${j}"${focusable}`}>${lineMarksHtml(l, j, view.marks.places, focus)}</div>`;
             }).join('');
             const langs = langNames(res.doc.language);
             const r2note = second && isSource ? `<p class="read-r2note"><span class="read-r2note-key" aria-hidden="true"></span><span>${esc(t.r2note)}</span></p>` : '';
@@ -2330,7 +2330,7 @@ export const readDocumentMethods = uiModule({
         const t = strings.read;
         const chips = res.entries.map((e, k) => {
             const name = entryName(e);
-            return `<button type="button" class="read-nc-chip${k === st!.entry ? ' is-selected' : ''}" data-act="entry" data-entry="${k}" aria-pressed="${k === st!.entry}">`
+            return `<button type="button" class="read-nc-chip sel-opt${k === st!.entry ? ' is-selected' : ''}" data-act="entry" data-entry="${k}" aria-pressed="${k === st!.entry}">`
                 + `<span class="read-entry-n">${esc(t.entryN(k + 1))}</span>${name ? `<span class="read-entry-name">${esc(middleName(name, 28))}</span>` : ''}</button>`;
         }).join('');
         return `

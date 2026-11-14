@@ -1127,7 +1127,9 @@ test.describe('Read a document: the scan', () => {
     test('a click on the scan: its entry, then its line in the text; the frames told apart', async ({ page }) => {
         const { d } = await showResult(page, vlkPage(), 'P0003', VLK_FEATURES);
         const frames = d.locator('.read-frame');
-        expect(parseFloat(await frames.nth(1).evaluate(el => getComputedStyle(el).borderTopWidth))).toBeGreaterThanOrEqual(2);
+        // The chosen frame told apart by the one selection indicator's doubled border (an inset ring inside its border).
+        expect(await frames.nth(1).evaluate(el => getComputedStyle(el).boxShadow)).toContain('inset');
+        expect(await frames.nth(0).evaluate(el => getComputedStyle(el).boxShadow)).toBe('none');
         expect(await frames.nth(0).evaluate(el => getComputedStyle(el).borderTopStyle)).toBe('solid');
         // The entry's label in words inside the frame's top right corner.
         await expect(frames.nth(1).locator('.read-frame-n')).toHaveText('entry 2');

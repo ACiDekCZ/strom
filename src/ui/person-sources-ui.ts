@@ -338,7 +338,7 @@ export const personSourcesMethods = uiModule({
         }).join('');
 
         const chipsHtml = many ? `<nav class="story-chips" aria-label="${esc(P.chipsLabel)}">${chips.map((ch, i) =>
-            `<button type="button" class="story-chip" data-chapter="${ch.id}"${i === 0 ? ' aria-current="true"' : ''}>${esc(ch.label)}</button>`).join('')}</nav>` : '';
+            `<button type="button" class="story-chip sel-opt" data-chapter="${ch.id}"${i === 0 ? ' aria-current="true"' : ''}>${esc(ch.label)}</button>`).join('')}</nav>` : '';
 
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay active';

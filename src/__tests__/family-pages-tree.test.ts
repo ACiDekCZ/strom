@@ -232,7 +232,7 @@ describe('the choice of a line (§2.3)', () => {
         const rod = String(files.find(f => f.path === rodFile)!.data);
         // From a page in a folder the choice leads one folder up and back (1102 §7.5).
         expect(rod).toContain(`href="../rody/${set.otherSlug}.html"`);
-        expect(rod).toMatch(/<li class="sp-rodpick-rod is-cur" data-rod="[^"]+" data-q="[^"]+" aria-current="true">/);
+        expect(rod).toMatch(/<li class="sp-rodpick-rod sel-opt is-cur" data-sel-form="row" data-rod="[^"]+" data-q="[^"]+" aria-current="true">/);
         // A lineages' set keeps its bar for the script only.
         const lines = buildPageSet(treePagesFixture().data, { kind: 'rods', rods: set.rodIds.slice(0, 2) }, { lang: 'cs', now: TP_NOW });
         const linesIndex = String((await buildPageSetFilesAsync(lines)).find(f => f.path === 'index.html')!.data);

@@ -577,11 +577,12 @@ export const researchDirectionsMethods = uiModule({
         const o = strings.otherResearch;
         const li = el('li', 'live-line-item');
         const name = g.direction?.name ?? strings.live.dirOutside;
-        const row = g.id ? el('button', 'live-line') : el('div', 'live-line live-line--outside');
+        const row = g.id ? el('button', 'live-line sel-opt') : el('div', 'live-line live-line--outside');
         if (g.id) {
             const id = g.id;
             const btn = row as HTMLButtonElement;
             btn.type = 'button';
+            btn.dataset.selForm = 'row';
             btn.dataset.direction = id;
             btn.setAttribute('aria-pressed', String(selected));
             btn.onclick = () => this.selectWorkingLine(id);

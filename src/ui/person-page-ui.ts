@@ -386,7 +386,7 @@ export const personPageMethods = uiModule({
         const tocItems = personPageTocItems(body, lang);
         const toc = tocItems.length
             ? `<nav class="pp-toc" aria-label="${esc(P.toc)}"><div class="pp-toc-h">${esc(P.toc)}</div><ol>`
-                + tocItems.map(s => `<li><a class="pp-toc-link" href="#${esc(s.id)}" data-pp-toc="${esc(s.id)}">${esc(s.label)}</a></li>`).join('')
+                + tocItems.map(s => `<li><a class="pp-toc-link sel-tab" data-sel-dir="side" href="#${esc(s.id)}" data-pp-toc="${esc(s.id)}"><span class="sel-l" data-label="${esc(s.label)}">${esc(s.label)}</span></a></li>`).join('')
                 + '</ol></nav>'
             : '';
 

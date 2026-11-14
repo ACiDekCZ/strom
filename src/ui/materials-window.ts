@@ -527,14 +527,14 @@ export const materialsWindowMethods = uiModule({
         const m = strings.materials;
         const f = w.filters;
         const chip = (act: string, label: string, active: string | null, popup = true) => active
-            ? `<span class="mw-chip is-active"><button type="button" class="mw-chip-main" data-mw="${act}"${popup ? ' aria-haspopup="dialog"' : ''}>${esc(active)}</button><button type="button" class="mw-chip-x" data-mw="clear-${act}" aria-label="${esc(`${m.removeFilter}: ${active}`)}">×</button></span>`
-            : `<button type="button" class="mw-chip" data-mw="${act}" aria-haspopup="dialog">${esc(label)} <span aria-hidden="true">▾</span></button>`;
+            ? `<span class="mw-chip sel-opt is-active"><button type="button" class="mw-chip-main" data-mw="${act}"${popup ? ' aria-haspopup="dialog"' : ''}>${esc(active)}</button><button type="button" class="mw-chip-x" data-mw="clear-${act}" aria-label="${esc(`${m.removeFilter}: ${active}`)}">×</button></span>`
+            : `<button type="button" class="mw-chip sel-opt" data-mw="${act}" aria-haspopup="dialog">${esc(label)} <span aria-hidden="true">▾</span></button>`;
         const personName = f.person ? nameWithoutYears(w.names.get(f.person) ?? f.person) : '';
         const kindLabel = (k: KindFilter) => (k === 'none' ? m.kindNone : m.kind[k] ?? k);
         const batchName = f.batch ? (w.list?.batches.find(b => b.id === f.batch)?.name ?? f.batch) : '';
         const count = activeFilterCount(f);
         const toggle = (act: string, label: string, on: boolean) =>
-            `<button type="button" class="mw-chip mw-toggle${on ? ' is-active' : ''}" data-mw="${act}" aria-pressed="${on}">${esc(label)}</button>`;
+            `<button type="button" class="mw-chip sel-opt mw-toggle${on ? ' is-active' : ''}" data-mw="${act}" aria-pressed="${on}">${esc(label)}</button>`;
         const seg = (cls: string, aria: string, opts: { act: string; label: string; icon?: string; on: boolean }[]) =>
             `<div class="mw-seg ${cls} sel-seg" role="group" aria-label="${esc(aria)}">${opts.map(o =>
                 `<button type="button" class="sel-opt" data-sel-form="seg" data-mw="${o.act}" aria-pressed="${o.on}"${o.icon ? ` aria-label="${esc(o.label)}" title="${esc(o.label)}"` : ''}>${o.icon ? `<span class="mw-seg-icon" aria-hidden="true">${o.icon}</span>` : ''}<span class="mw-seg-text">${esc(o.label)}</span></button>`).join('')}</div>`;
@@ -547,7 +547,7 @@ export const materialsWindowMethods = uiModule({
                 ${ctx.caps.assign ? toggle('hidden', m.showHidden, f.showHidden) : ''}
                 ${count ? `<button type="button" class="link-button mw-clear" data-mw="clear">${esc(m.clearFilters)}</button>` : ''}
             </div>
-            <button type="button" class="mw-chip mw-filters-btn${count ? ' is-active' : ''}" data-mw="sheet" aria-haspopup="dialog">${esc(count ? m.filters(count) : m.filtersTitle)}</button>
+            <button type="button" class="mw-chip sel-opt mw-filters-btn${count ? ' is-active' : ''}" data-mw="sheet" aria-haspopup="dialog">${esc(count ? m.filters(count) : m.filtersTitle)}</button>
             <span class="mw-gap"></span>
             ${seg('mw-seg-group', m.groupBy, [
                 { act: 'group-batch', label: m.groupBatch, on: w.group === 'batch' },
@@ -557,7 +557,7 @@ export const materialsWindowMethods = uiModule({
                 { act: 'view-grid', label: m.grid, icon: '▦', on: w.view === 'grid' },
                 { act: 'view-list', label: m.list, icon: '☰', on: w.view === 'list' },
             ])}
-            ${ctx.caps.assign ? `<button type="button" class="mw-chip mw-select${w.selecting ? ' is-active' : ''}" data-mw="select" aria-pressed="${w.selecting}">${esc(w.selecting ? m.done : m.select)}</button>` : ''}`);
+            ${ctx.caps.assign ? `<button type="button" class="mw-chip sel-opt mw-select${w.selecting ? ' is-active' : ''}" data-mw="select" aria-pressed="${w.selecting}">${esc(w.selecting ? m.done : m.select)}</button>` : ''}`);
     },
 
     /** The strip above the content: not running (with the time), or the list's error. */
@@ -1208,7 +1208,7 @@ export const materialsWindowMethods = uiModule({
             const current = f.person ? nameWithoutYears(w.names.get(f.person) ?? f.person) : '';
             parts.push(`<div class="mw-pop-section">
                 ${sheet ? `<div class="mw-pop-title">${esc(m.fPerson)}</div>` : ''}
-                ${current ? `<span class="mw-chip is-active"><span class="mw-chip-main">${esc(current)}</span><button type="button" class="mw-chip-x" data-pop="clear-person" aria-label="${esc(`${m.removeFilter}: ${current}`)}">×</button></span>` : ''}
+                ${current ? `<span class="mw-chip sel-opt is-active"><span class="mw-chip-main">${esc(current)}</span><button type="button" class="mw-chip-x" data-pop="clear-person" aria-label="${esc(`${m.removeFilter}: ${current}`)}">×</button></span>` : ''}
                 <div id="mw-person-picker" class="mw-person-picker"></div>
             </div>`);
         }
@@ -1228,7 +1228,7 @@ export const materialsWindowMethods = uiModule({
         }
         if (sheet) {
             const toggle = (act: string, label: string, on: boolean) =>
-                `<button type="button" class="mw-chip mw-toggle${on ? ' is-active' : ''}" data-pop="${act}" aria-pressed="${on}">${esc(label)}</button>`;
+                `<button type="button" class="mw-chip sel-opt mw-toggle${on ? ' is-active' : ''}" data-pop="${act}" aria-pressed="${on}">${esc(label)}</button>`;
             parts.push(`<div class="mw-pop-section mw-pop-toggles">
                 ${toggle('noperson', `${m.noPerson} · ${w.summary.noPerson.toLocaleString(getCurrentLanguage())}`, f.noPerson)}
                 ${ctx.caps.assign ? toggle('hidden', m.showHidden, f.showHidden) : ''}

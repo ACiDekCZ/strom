@@ -1095,7 +1095,7 @@ export const researchOverviewMethods = uiModule({
                 ...chips.map(c => ({ f: c.section as WaitingFilter, label: L.waitingChips[c.section], count: c.count })),
             ];
             for (const c of all) {
-                const chip = el('button', 'research-overview__filter');
+                const chip = el('button', 'research-overview__filter sel-opt');
                 // Searching: what was found of its kind; nothing found: dashed, in its place, still choosable.
                 const empty = paintSearchChip(chip, c.label, chipCount(res, c.f, c.count), searching);
                 chip.type = 'button';
@@ -1868,7 +1868,11 @@ export const researchOverviewMethods = uiModule({
         const s = drawnSession();
         const li = el('li', 'research-overview__now-row research-overview__now-row--line');
         if (g.id) li.dataset.direction = g.id;
-        if (selected) li.classList.add('is-selected');
+        if (selected) {
+            // Not a control here (the panel selects): only the chosen row is a row of the one indicator.
+            li.classList.add('is-selected', 'sel-opt');
+            li.dataset.selForm = 'row';
+        }
         const glyph = el('span', 'live-line__glyph', g.id ? directionGlyph(g.direction) : '·');
         glyph.setAttribute('aria-hidden', 'true');
         li.appendChild(glyph);
@@ -1941,7 +1945,7 @@ export const researchOverviewMethods = uiModule({
         const count = (f: Filter): number => (f === 'all' ? changes.length : changes.filter(c => c.kind === f).length);
         const labels: Record<Filter, string> = { all: L.filterAll, persons: L.filterPersons, sources: L.filterSources, stories: L.filterStories };
         for (const f of ['all', 'persons', 'sources', 'stories'] as Filter[]) {
-            const chip = el('button', 'research-overview__filter', `${labels[f]} ${count(f)}`);
+            const chip = el('button', 'research-overview__filter sel-opt', `${labels[f]} ${count(f)}`);
             chip.type = 'button';
             chip.setAttribute('role', 'radio');
             chip.setAttribute('aria-checked', String(filter === f));
@@ -2228,7 +2232,7 @@ export const researchOverviewMethods = uiModule({
         pills.setAttribute('aria-label', L.knowsKindAria);
         const options: [KnowsKind, string][] = [['all', L.knowsKindAll], ['con', L.knowsKindCon], ['hyp', L.knowsKindHyp]];
         for (const [id, label] of options) {
-            const chip = el('button', 'research-overview__filter');
+            const chip = el('button', 'research-overview__filter sel-opt');
             paintSearchChip(chip, label, counts[id], searching);
             chip.type = 'button';
             chip.setAttribute('role', 'radio');

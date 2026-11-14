@@ -92,7 +92,7 @@ function participantChipHtml(model: TableModel, type: RowType, filter: TableFilt
     const item = type === 'events' ? chipItem(filter, 'participant') : null;
     if (!item) return '';
     const label = chipLabel(model, item, 'participant');
-    return `<span class="tv-chip tv-chip--col tv-chip--part is-active" data-partchip>`
+    return `<span class="tv-chip sel-opt tv-chip--col tv-chip--part is-active" data-partchip>`
         + `<span class="tv-chip-text">${esc(label)}</span>`
         + `<button type="button" class="tv-chip-x" data-xchip="participant" aria-label="${esc(strings.table.removeFilter(label))}">×</button></span>`;
 }
@@ -135,7 +135,7 @@ export class FilterBar {
         // The phone's Filters button: on its own line with the search (CSS).
         this.sheetBtn = document.createElement('button');
         this.sheetBtn.type = 'button';
-        this.sheetBtn.className = 'tv-filters-btn';
+        this.sheetBtn.className = 'tv-filters-btn sel-opt';
         this.sheetBtn.setAttribute('aria-haspopup', 'dialog');
         this.sheetBtn.addEventListener('click', () => handlers.onSheet());
         slot.after(this.sheetBtn);
@@ -183,7 +183,7 @@ export class FilterBar {
             const item = chipItem(filter, chip);
             const waits = state.checking && CHECK_CHIPS.includes(chip);
             const choice = CHOICE_CHIPS.includes(chip);
-            html += `<button type="button" class="tv-chip${item ? ' is-active' : ''}" data-chip="${chip}" aria-pressed="${!!item}"`
+            html += `<button type="button" class="tv-chip sel-opt${item ? ' is-active' : ''}" data-chip="${chip}" aria-pressed="${!!item}"`
                 + (waits ? ` aria-disabled="true" title="${esc(strings.table.checksWait)}"` : '')
                 + (choice ? ' aria-haspopup="dialog"' : '')
                 + `>${item ? '✓ ' : ''}${esc(chipLabel(model, item, chip))}${choice ? ' ▾' : ''}</button>`;
@@ -191,11 +191,11 @@ export class FilterBar {
         html += participantChipHtml(model, type, filter);
         for (const c of cols) {
             const label = columnItemLabel(type, c);
-            html += `<span class="tv-chip tv-chip--col is-active" data-colchip="${esc(c.col)}">`
+            html += `<span class="tv-chip sel-opt tv-chip--col is-active" data-colchip="${esc(c.col)}">`
                 + `<button type="button" class="tv-chip-edit" data-col="${esc(c.col)}" aria-haspopup="dialog" aria-label="${esc(strings.table.filterOf(label))}">${esc(label)}</button>`
                 + `<button type="button" class="tv-chip-x" data-x="${esc(c.col)}" aria-label="${esc(strings.table.removeFilter(label))}">×</button></span>`;
         }
-        html += '<button type="button" class="tv-chip tv-chip-more" aria-haspopup="menu" hidden></button>';
+        html += '<button type="button" class="tv-chip sel-opt tv-chip-more" aria-haspopup="menu" hidden></button>';
         html += this.researchHtml(state);
         if (n) html += `<button type="button" class="tv-chips-clear">${esc(strings.table.clearFilters)}</button>`;
         this.row.innerHTML = html;
@@ -216,7 +216,7 @@ export class FilterBar {
         const act = activeResearch(rs, state.filter);
         const label = act.length ? `${R.block} (${act.length})` : R.block;
         let html = '<span class="tv-rsep" aria-hidden="true"></span>';
-        html += `<button type="button" class="tv-chip tv-rtoggle${act.length ? ' is-active' : ''}" aria-haspopup="menu" data-rtoggle>${esc(label)} ▾</button>`;
+        html += `<button type="button" class="tv-chip sel-opt tv-rtoggle${act.length ? ' is-active' : ''}" aria-haspopup="menu" data-rtoggle>${esc(label)} ▾</button>`;
         if (!rs.engaged || rs.narrow) return html;
         const counts = rs.counts();
         const block = rs.offer.filter(o => o.place === 'block' || !!chipItem(state.filter, o.id));
@@ -227,11 +227,11 @@ export class FilterBar {
             const off = o.live && !rs.live;
             let text = chipLabel(state.model, item, o.id);
             if (o.line || o.id === 'offLine') text += ` · ${counts.get(o.id) ?? 0}`;
-            html += `<button type="button" class="tv-chip tv-rchip${item ? ' is-active' : ''}" data-rchip="${esc(o.id)}" aria-pressed="${!!item}"`
+            html += `<button type="button" class="tv-chip sel-opt tv-rchip${item ? ' is-active' : ''}" data-rchip="${esc(o.id)}" aria-pressed="${!!item}"`
                 + (off ? ` aria-disabled="true" title="${esc(R.liveOnly)}"` : '')
                 + `>${item ? '✓ ' : ''}${esc(text)}</button>`;
         }
-        html += `<button type="button" class="tv-chip tv-rmore" aria-haspopup="menu" data-rmore>${esc(R.more)} ▾</button>`;
+        html += `<button type="button" class="tv-chip sel-opt tv-rmore" aria-haspopup="menu" data-rmore>${esc(R.more)} ▾</button>`;
         return html;
     }
 
@@ -779,7 +779,7 @@ export class FilterSheet {
         for (const chip of shown) {
             const item = chipItem(st.filter, chip);
             if (CHOICE_CHIPS.includes(chip)) {
-                html += `<button type="button" class="tv-fs-row tv-fs-page${item ? ' is-active' : ''}" data-page="${chip}">`
+                html += `<button type="button" class="tv-fs-row tv-fs-page sel-opt${item ? ' is-active' : ''}" data-sel-form="row" data-page="${chip}">`
                     + `<span class="tv-fs-label">${esc(chipLabel(st.model, item, chip))}</span><span class="tv-fs-chev" aria-hidden="true">›</span></button>`;
                 continue;
             }

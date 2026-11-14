@@ -90,8 +90,8 @@ describe('the map of places in the file (§3.7)', () => {
         // The protected living: no name, no year of theirs.
         expect(map).not.toMatch(/\bEva\b|Petr\b/);
         // The bar, the menu and the lineage's teaser lead to the map; the map's script is in the file.
-        expect(html).toContain(`<a data-sp-nav="map" class="sp-fbar-a" href="#${set.mapSlug}">`);
-        expect(html).toContain(`<a class="sp-menu-a" href="#${set.mapSlug}">`);
+        expect(html).toContain(`<a data-sp-nav="map" class="sp-fbar-a sel-tab" data-sel-dir="down" href="#${set.mapSlug}">`);
+        expect(html).toContain(`<a class="sp-menu-a sel-tab" data-sel-dir="side" href="#${set.mapSlug}">`);
         expect(html).toContain(`<a class="sp-btn" href="#${set.mapSlug}">`);
         expect(html).toMatch(/<script>\(function\(\)\{var d=document;\nfunction sel\(/);
     });

@@ -272,7 +272,7 @@ export const cardFieldsUiMethods = uiModule({
         const current = SettingsManager.getCardDensity();
         const tiles = CARD_DENSITIES.map(density => {
             const on = density === current;
-            return `<button type="button" class="card-type-tile${on ? ' is-selected' : ''}" role="radio" aria-checked="${on}" tabindex="${on ? 0 : -1}" data-density="${density}">
+            return `<button type="button" class="card-type-tile sel-opt${on ? ' is-selected' : ''}" data-sel-form="tile" role="radio" aria-checked="${on}" tabindex="${on ? 0 : -1}" data-density="${density}">
                 <span class="card-type-thumb" aria-hidden="true">${thumbHtml(density)}</span>
                 <span class="card-type-name">${esc(typeName(density))}</span>
             </button>`;
@@ -373,7 +373,7 @@ export const cardFieldsUiMethods = uiModule({
         const d = strings.cardDensity;
         const s = SettingsManager.getCardFields();
         const chip = (key: CardFieldKey, opt: string, label: string, pressed: boolean) =>
-            `<button type="button" class="card-field-chip" data-key="${key}" data-opt="${opt}" aria-pressed="${pressed}">${esc(label)}</button>`;
+            `<button type="button" class="card-field-chip sel-opt" data-key="${key}" data-opt="${opt}" aria-pressed="${pressed}">${esc(label)}</button>`;
         const rows = s.order.map((key, i) => {
             const on = s.on.includes(key);
             const chips = !on ? [] : [

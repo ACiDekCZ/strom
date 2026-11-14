@@ -596,9 +596,9 @@ export const phoneMethods = uiModule({
                         <div class="phone-fw" aria-hidden="true">
                             <div class="phone-fw-title">Windows Defender Firewall</div>
                             <div class="phone-fw-line">${esc(p.fwTitle)} · node.exe</div>
-                            <div class="phone-fw-opt is-on"><span class="phone-fw-box">✓</span>${esc(p.fwPrivate)}</div>
-                            <div class="phone-fw-opt"><span class="phone-fw-box"></span>${esc(p.fwPublic)}</div>
-                            <div class="phone-fw-buttons"><span class="phone-fw-btn is-on">${esc(p.fwAllow)}</span><span class="phone-fw-btn">${esc(p.fwCancel)}</span></div>
+                            <div class="phone-fw-opt sel-opt is-on"><span class="phone-fw-box">✓</span>${esc(p.fwPrivate)}</div>
+                            <div class="phone-fw-opt sel-opt"><span class="phone-fw-box"></span>${esc(p.fwPublic)}</div>
+                            <div class="phone-fw-buttons"><span class="phone-fw-btn sel-opt is-on">${esc(p.fwAllow)}</span><span class="phone-fw-btn sel-opt">${esc(p.fwCancel)}</span></div>
                         </div>` : '';
         const pub = os === 'win' && s?.network?.category === 'public' ? `<div class="phone-public">${esc(p.sysPublic)}</div>` : '';
         return `

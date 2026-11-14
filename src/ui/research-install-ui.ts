@@ -247,7 +247,7 @@ export const researchInstallMethods = uiModule({
                 ${(['what', 'install', 'wait'] as InstallStep[]).map((k, i, all) => {
                     const done = all.indexOf(step) > i;
                     const label = k === 'what' ? s.stepWhat : k === 'install' ? s.stepInstall : s.stepWait;
-                    return `<li class="install-step${k === step ? ' active' : ''}${done ? ' done' : ''}"${k === step ? ' aria-current="step"' : ''}>${done ? '✓ ' : ''}${esc(label)}</li>`;
+                    return `<li class="install-step sel-tab${k === step ? ' active' : ''}${done ? ' done' : ''}" data-sel-dir="down"${k === step ? ' aria-current="step"' : ''}>${done ? '✓ ' : ''}<span class="sel-l" data-label="${esc(label)}">${esc(label)}</span></li>`;
                 }).join('')}
             </ol>`;
         const body = touch ? this.researchInstallMobileHtml()

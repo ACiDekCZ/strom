@@ -141,6 +141,11 @@ function pageLink(r: Render, slug: string, html: string, cls = 'pp-link', attrs 
         : `<button type="button" class="${cls}"${attrs} data-sp-open="${esc(pageSetAppTarget(page))}">${html}</button>`;
 }
 
+/** A tab's label holding the width of its bold cut (the one selection indicator, src/ui/sel-css.ts). */
+function selLabel(text: string): string {
+    return `<span class="sel-l" data-label="${esc(text)}">${esc(text)}</span>`;
+}
+
 function localDay(d: Date): string {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
@@ -1132,7 +1137,7 @@ function barHtml(r: Render, page: SetPage | null): string {
     const cur = barCurrent(page);
     const mark = (html: string, on: boolean): string => on ? html.replace(/^<(a|button) /, '<$1 aria-current="page" ') : html;
     const navLink = (slug: string, label: string, kind: 'index' | 'map'): string =>
-        slug ? mark(pageLink(r, slug, esc(label), 'sp-fbar-a').replace(/^<(a|button) /, `<$1 data-sp-nav="${kind}" `), cur === kind) : '';
+        slug ? mark(pageLink(r, slug, selLabel(label), 'sp-fbar-a sel-tab', ' data-sel-dir="down"').replace(/^<(a|button) /, `<$1 data-sp-nav="${kind}" `), cur === kind) : '';
     const idx = drawnSlug(r, set.indexSlug.persons);
     const map = drawnSlug(r, set.mapSlug);
     const home = intro ? pageLink(r, intro.slug, esc(intro.title), 'sp-fbar-home') : '';
@@ -1142,7 +1147,7 @@ function barHtml(r: Render, page: SetPage | null): string {
         [map, F.map],
     ];
     const menu = menuItems.filter(([slug]) => !!slug)
-        .map(([slug, label]) => mark(pageLink(r, slug, esc(label), 'sp-menu-a'), page?.slug === slug)).join('');
+        .map(([slug, label]) => mark(pageLink(r, slug, selLabel(label), 'sp-menu-a sel-tab', ' data-sel-dir="side"'), page?.slug === slug)).join('');
     const whole = set.spec.kind === 'tree';
     const pick = whole ? rodPickHtml(r, page) : '';
     // On a phone the choice replaces the name on the pages of a line (§2.3); the file's script marks it per page.
@@ -1268,8 +1273,8 @@ function personsIndexHtml(r: Render, page: SetPage): string {
         const val = n === null ? '' : String(n);
         const t = title ? ` title="${esc(title)}" aria-label="${esc(title)}"` : '';
         return r.mode === 'file'
-            ? `<a class="sp-letter" href="#${esc(n === null ? slug : `${slug}--pis-${n}`)}" data-sp-letter="${val}"${cur}${t}>${esc(text)}</a>`
-            : `<button type="button" class="sp-letter" data-sp-letter="${val}"${cur}${t}>${esc(text)}</button>`;
+            ? `<a class="sp-letter sel-tab" data-sel-dir="down" href="#${esc(n === null ? slug : `${slug}--pis-${n}`)}" data-sp-letter="${val}"${cur}${t}>${selLabel(text)}</a>`
+            : `<button type="button" class="sp-letter sel-tab" data-sel-dir="down" data-sp-letter="${val}"${cur}${t}>${selLabel(text)}</button>`;
     };
     // The uncertain readings' button is "?", named in full (1102).
     const letters = `<nav class="sp-letters" aria-label="${esc(F.idxLetters)}">${letter(slug, null, F.idxAll)}`
@@ -1404,11 +1409,12 @@ function letterPageHtml(r: Render, page: SetPage, body: string, meta: string | n
         // The uncertain readings' cell is "?", named in full (1102).
         const text = k === INDEX_UNCERTAIN ? k : label(k);
         if (k === INDEX_UNCERTAIN && slug && k !== page.letter) {
-            return pageLink(r, slug, esc(text), 'sp-abc-l').replace(/^<(a|button)\b/, `<$1 title="${esc(label(k))}" aria-label="${esc(label(k))}"`);
+            return pageLink(r, slug, selLabel(text), 'sp-abc-l sel-tab', ' data-sel-dir="down"').replace(/^<(a|button)\b/, `<$1 title="${esc(label(k))}" aria-label="${esc(label(k))}"`);
         }
         const named = k === INDEX_UNCERTAIN ? ` title="${esc(label(k))}" aria-label="${esc(label(k))}"` : '';
-        if (k === page.letter) return `<span class="sp-abc-l" aria-current="page"${named}>${esc(text)}</span>`;
-        return slug ? pageLink(r, slug, esc(text), 'sp-abc-l') : `<span class="sp-abc-l sp-abc-off" aria-disabled="true">${esc(text)}</span>`;
+        if (k === page.letter) return `<span class="sp-abc-l sel-tab" data-sel-dir="down" aria-current="page"${named}>${selLabel(text)}</span>`;
+        return slug ? pageLink(r, slug, selLabel(text), 'sp-abc-l sel-tab', ' data-sel-dir="down"')
+            : `<span class="sp-abc-l sp-abc-off sel-tab" data-sel-dir="down" aria-disabled="true">${selLabel(text)}</span>`;
     }).join('');
     const at = letters.findIndex(l => l.key === page.letter);
     const prev = at > 0 ? letters[at - 1] : null;

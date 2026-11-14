@@ -556,10 +556,10 @@ body { margin: 0; background: var(--surface); color: var(--text); font-family: v
 }
 .pp-toc-h { font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent-text); margin: 4px 0 10px 10px; }
 .pp-toc ol, .pp-toc-m ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-.pp-toc-link { display: block; padding: 5px 10px; border-radius: 6px; font-size: 13.5px; color: var(--text-light); text-decoration: none; overflow-wrap: anywhere; }
-.pp-toc-link:focus-visible, .pp-toc-m-link:focus-visible, .pp-toc-m summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.pp-toc-link { display: block; padding: 5px 10px; font-size: 13.5px; text-decoration: none; overflow-wrap: anywhere; }
+.pp-toc-m-link:focus-visible, .pp-toc-m summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
 .pp-file .pp-sec:target > h2, .pp-file .pp-sec:target > .pp-sec-head h2 { color: var(--accent-text); }
-@media (hover: hover) { .pp-toc-link:hover, .pp-toc-m-link:hover { color: var(--text); background: var(--surface-2); } }
+@media (hover: hover) { .pp-toc-m-link:hover { color: var(--text); background: var(--surface-2); } }
 @media (max-width: 899px) {
   .pp-file-layout { display: block; padding: 0; }
   .pp-file-layout > .pp-toc { display: none; }

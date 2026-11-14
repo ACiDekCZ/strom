@@ -939,9 +939,8 @@ export const treeManagementMethods = uiModule({
                 (tree.isHidden ? `<span class="tree-badge">${s.hiddenBadge}</span>` : '');
 
             html += `
-                <div class="tree-manager-item ${isActive ? 'active' : ''} ${tree.isHidden ? 'hidden-tree' : ''}">
+                <div class="tree-manager-item sel-opt ${isActive ? 'active' : ''} ${tree.isHidden ? 'hidden-tree' : ''}" data-sel-form="row">
                     <div class="tree-manager-item-header">
-                        <span class="tree-manager-item-indicator"></span>
                         <span class="tree-manager-item-name clickable" onclick="window.Strom.UI.openTreeFromManager('${tree.id}')">${this.escapeHtml(tree.name)}</span>
                         ${badges}
                         ${treeSizeFormatted ? `<span class="tree-manager-item-size">${treeSizeFormatted}</span>` : ''}

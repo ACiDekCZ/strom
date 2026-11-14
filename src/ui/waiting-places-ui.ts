@@ -255,12 +255,12 @@ export const waitingPlacesMethods = uiModule({
             <div class="waiting-places-title"><span class="waiting-places-name">${esc(W.group)}</span>
                 <span class="waiting-places-count">${esc(W.questions(items.length))}</span></div>
             ${access.canAnswer && (accept.length > 0 || keep.length > 0) ? `<div class="waiting-places-bulk">
-                ${accept.length > 0 ? `<button type="button" class="secondary waiting-places-accept${p?.kind === 'accept' && !p.area ? ' is-on' : ''}" data-wait-act="accept-all">${esc(W.acceptAll(accept.length))}</button>` : ''}
-                ${keep.length > 0 ? `<button type="button" class="secondary waiting-places-keep${p?.kind === 'keep' ? ' is-on' : ''}" data-wait-act="keep-all">${esc(W.keepAll(keep.length))}</button>` : ''}
+                ${accept.length > 0 ? `<button type="button" class="secondary waiting-places-accept sel-opt${p?.kind === 'accept' && !p.area ? ' is-on' : ''}" data-wait-act="accept-all">${esc(W.acceptAll(accept.length))}</button>` : ''}
+                ${keep.length > 0 ? `<button type="button" class="secondary waiting-places-keep sel-opt${p?.kind === 'keep' ? ' is-on' : ''}" data-wait-act="keep-all">${esc(W.keepAll(keep.length))}</button>` : ''}
             </div>` : ''}
             ${access.canAnswer && areas.length > 0 ? `<div class="waiting-places-areas" role="group" aria-label="${esc(W.byArea)}">
                 <span class="waiting-places-areas-label">${esc(W.byArea)}</span>
-                ${areas.map((a, i) => `<button type="button" class="waiting-places-area${p?.area === a.name ? ' is-on' : ''}" data-area="${i}" data-wait-act="area-${i}" aria-pressed="${p?.area === a.name}">${esc(W.area(a.name, a.places.length))}</button>`).join('')}
+                ${areas.map((a, i) => `<button type="button" class="waiting-places-area sel-opt${p?.area === a.name ? ' is-on' : ''}" data-area="${i}" data-wait-act="area-${i}" aria-pressed="${p?.area === a.name}">${esc(W.area(a.name, a.places.length))}</button>`).join('')}
             </div>` : ''}
             ${p ? this.waitingPlacesPreviewHtml(p, items, access) : ''}`;
         head.querySelector<HTMLButtonElement>('.waiting-places-accept')?.addEventListener('click', () =>
