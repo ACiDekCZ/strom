@@ -1380,9 +1380,11 @@
         /* The filter toggle is a .sel-opt chip (src/ui/sel-css.ts): a ghost at rest,
            the doubled edge when the filters are open. ".toolbar button" would paint
            it primary with a white funnel, so its ground, edge and colour come again
-           here (the chosen state's edge and colour still win, src/ui/sel-css.ts). */
+           here (the chosen state's edge and colour still win, src/ui/sel-css.ts).
+           Its 1px edge comes out of the side padding (13 px, the toolbar's 14 less
+           one), so the funnel takes no room from the search input. */
         .toolbar .search-filter-toggle,
-        [data-theme="dark"] .toolbar .search-filter-toggle { background: transparent; border: 1px solid transparent; color: var(--text-light); }
+        [data-theme="dark"] .toolbar .search-filter-toggle { background: transparent; border: 1px solid transparent; color: var(--text-light); padding-left: 13px; padding-right: 13px; }
         .search-no-results {
             padding: 12px;
             text-align: center;
@@ -13788,7 +13790,10 @@
         }
         .view-mode-segment button {
             border: none; background: transparent; color: var(--text-light);
-            padding: 0 14px; font-size: 13px; cursor: pointer;
+            /* 13.4 px, not 14: every label holds the width of its bold cut (.sel-l),
+               about 7 px over the six tabs in de and pl, so the tabs give that room
+               back and the search field keeps its width (de at 1440 and 1300 px). */
+            padding: 0 13.4px; font-size: 13px; cursor: pointer;
         }
         /* The underline tabs must stay flat on hover. The generic
            ".toolbar button:hover { background: var(--primary-dark) }" rule
@@ -13938,11 +13943,12 @@
             .rod-picker-host .sp-rodpick-btn { min-height: 44px; }
             :is(.toolbar .rod-picker-host, .rod-pick-sheet) .sp-rodpick-small button.sp-rodpick-a { min-height: 44px; }
         }
-        /* Narrow desktop: no "Line" before the name, the name to 150px, tighter tabs. */
+        /* Narrow desktop: no "Line" before the name, the name to 150px, tighter tabs
+           (8.4 px, not 9: each tab holds the width of its bold cut, .sel-l). */
         @media (min-width: 1025px) and (max-width: 1279px) {
             .rod-picker-host .sp-rodpick-pfx { display: none; }
             .rod-picker-host .sp-rodpick-v b { max-width: 150px; }
-            .toolbar:has(.rod-picker-host:not([hidden])) .view-mode-segment button { padding: 0 9px; }
+            .toolbar:has(.rod-picker-host:not([hidden])) .view-mode-segment button { padding: 0 8.4px; }
         }
         /* Tablet: at the right end of the bar after the focus, the list opening leftwards. */
         @media (min-width: 641px) and (max-width: 1024px) {

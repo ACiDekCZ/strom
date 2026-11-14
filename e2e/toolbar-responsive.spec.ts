@@ -461,6 +461,64 @@ test.describe('the tree switcher\'s name in a tight toolbar (de-DE)', () => {
     });
 });
 
+/**
+ * The search field of a tree without a research (de: the widest view tabs).
+ * Every view tab holds the width of its bold cut (.sel-l) and the search funnel
+ * keeps a 1px chip edge; the tabs' side padding and the funnel's give that room
+ * back, so the search input is no narrower than with the earlier tabs (no bold
+ * reserve, 14 px sides) and the edgeless funnel. The earlier look is put back
+ * with an injected style and measured in the same page: the fonts of the
+ * machine do not matter.
+ */
+test.describe('the search field beside the view tabs (de-DE, no research)', () => {
+    test.use({ locale: 'de-DE' });
+    const EARLIER_LOOK = `
+        .view-mode-segment .sel-tab { padding-left: 14px !important; padding-right: 14px !important; }
+        .view-mode-segment .sel-tab:not(.active) { font-weight: 400 !important; }
+        .view-mode-segment .sel-l::after { content: none !important; }
+        .toolbar .search-filter-toggle { border: 0 !important; padding-left: 14px !important; padding-right: 14px !important; }`;
+
+    async function searchRoom(page: Page) {
+        await settleLayout(page, '#toolbar-search-picker', '#view-mode-segment');
+        return page.evaluate(() => {
+            const input = document.querySelector('#toolbar-search-picker .person-picker-input') as HTMLElement;
+            const tabs = Array.from(document.querySelectorAll<HTMLElement>('#view-mode-segment button'));
+            return {
+                search: input.getBoundingClientRect().width,
+                steps: (document.querySelector('.toolbar') as HTMLElement).className,
+                tabsWhole: tabs.every(t => t.scrollWidth <= t.clientWidth + 0.5),
+            };
+        });
+    }
+
+    test('1440 and 1300 px, the sample and a long tree name: the search input keeps the earlier width', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await openApp(page);
+        await page.evaluate(() => window.Strom.UI.loadDemoTree());
+        await expect(page.locator('.person-card').first()).toBeVisible();
+        for (const name of [null, 'Familie Großmann aus Oberbayern']) {
+            if (name) {
+                await page.evaluate(() => window.Strom.UI.showRenameTreeDialog(window.Strom.TreeManager.getActiveTreeId()!));
+                await page.locator('#rename-tree-name').fill(name);
+                await page.locator('#rename-tree-modal .buttons .primary').click();
+                await expect(page.locator('#current-tree-name')).toHaveText(name);
+            }
+            for (const width of [1440, 1300]) {
+                await page.setViewportSize({ width, height: 900 });
+                const now = await searchRoom(page);
+                const earlier = await page.addStyleTag({ content: EARLIER_LOOK });
+                const before = await searchRoom(page);
+                await earlier.evaluate(el => el.remove());
+                const at = `${name ?? 'sample'} @${width}px`;
+                expect(now.tabsWhole, `${at}: no view tab cuts its label`).toBe(true);
+                expect(now.steps, `${at}: the same fit steps as with the earlier tabs`).toBe(before.steps);
+                expect(now.search, `${at}: the search input (${now.search}) keeps the earlier width (${before.search})`)
+                    .toBeGreaterThanOrEqual(before.search - 0.5);
+            }
+        }
+    });
+});
+
 test.describe('the 1280 fold boundary', () => {
     test('no toolbar ⚙ at any width: Settings is the last ⋯ Actions row on both sides of 1280; the Actions label folds at 1280', async ({ page }) => {
         await openApp(page);
