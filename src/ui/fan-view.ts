@@ -1190,12 +1190,12 @@ export class FanViewController {
         const sel = this.host.settings().colorMode === 'rod' ? this.host.selectedRod?.() ?? null : null;
         const selKey = sel === null ? null : legend.some(r => r.item.key === sel) ? sel : 'rodOther';
         const rows = legend.map(r =>
-            `<div class="fan-legend-row${r.item.key === selKey ? ' is-selected' : ''}" data-fan-legend="${esc(r.item.key)}">${this.swatch(r)}`
+            `<div class="fan-legend-row sel-opt${r.item.key === selKey ? ' is-selected' : ''}" data-sel-form="row" data-fan-legend="${esc(r.item.key)}">${this.swatch(r)}`
             + `<span class="fan-legend-label">${esc(r.item.label)}</span>`
             + (r.item.who ? `<span class="fan-legend-who">${esc(r.item.who)}</span>` : '')
             + '</div>');
         if (this.model && fanHasRepeats(this.model)) {
-            rows.push(`<div class="fan-legend-row fan-legend-repeats" data-fan-legend="repeats"><span class="fan-sw fan-sw-hatch" aria-hidden="true"></span>`
+            rows.push(`<div class="fan-legend-row fan-legend-repeats sel-opt" data-sel-form="row" data-fan-legend="repeats"><span class="fan-sw fan-sw-hatch" aria-hidden="true"></span>`
                 + `<span class="fan-legend-label">${esc(strings.fan.legendRepeats)}</span></div>`);
         }
         return rows.join('');

@@ -476,8 +476,9 @@ function drawSide(w: HelpWindow): void {
         group.appendChild(el('span', 'help-side-part-title', `${part.id} · ${part.title}`));
         for (const c of w.data.chapters.filter(x => x.part === part.id)) {
             const open = c.id === w.ch;
-            const row = el('button', 'help-side-ch');
+            const row = el('button', 'help-side-ch sel-tab');
             row.type = 'button';
+            row.dataset.selDir = 'side';
             if (open) row.setAttribute('aria-current', 'page');
             row.appendChild(el('span', 'help-num', c.id));
             row.appendChild(el('span', 'help-side-ch-title', c.title));

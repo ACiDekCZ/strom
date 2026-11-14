@@ -212,7 +212,7 @@ export const treeManagementMethods = uiModule({
                 if (embeddedTrees.length > 1) {
                     for (const tree of embeddedTrees) {
                         html += `
-                            <div class="tree-switcher-item ${tree.isActive ? 'active' : ''}" role="menuitem" tabindex="0"
+                            <div class="tree-switcher-item sel-opt ${tree.isActive ? 'active' : ''}" data-sel-form="row" role="menuitem" tabindex="0"
                                  data-embedded-tree-id="${this.escapeHtml(tree.id)}">
                                 <span class="tree-item-check">${tree.isActive ? iconSvg('check') : ''}</span>
                                 <span class="tree-item-name">${this.escapeHtml(tree.name)}</span>
@@ -222,7 +222,7 @@ export const treeManagementMethods = uiModule({
                 } else if (embeddedTrees.length === 1) {
                     // Single tree - just show it as active (no click handler needed)
                     html += `
-                        <div class="tree-switcher-item active" role="menuitem" tabindex="0" aria-current="true">
+                        <div class="tree-switcher-item sel-opt active" data-sel-form="row" role="menuitem" tabindex="0" aria-current="true">
                             <span class="tree-item-check">${iconSvg('check')}</span>
                             <span class="tree-item-name">${this.escapeHtml(embeddedTrees[0].name)}</span>
                         </div>
@@ -266,7 +266,7 @@ export const treeManagementMethods = uiModule({
             const isActive = tree.id === activeId;
             const title = this.treeSwitcherTitle(tree);
             html += `
-                <div class="tree-switcher-item ${isActive ? 'active' : ''}" role="menuitem" tabindex="0" data-tree-id="${tree.id}"
+                <div class="tree-switcher-item sel-opt ${isActive ? 'active' : ''}" data-sel-form="row" role="menuitem" tabindex="0" data-tree-id="${tree.id}"
                      ${title ? `title="${this.escapeHtml(title)}"` : ''} onclick="window.Strom.UI.switchToTree('${tree.id}')">
                     <span class="tree-item-check">${isActive ? iconSvg('check') : ''}</span>
                     <span class="tree-item-name">${this.escapeHtml(tree.name)}</span>

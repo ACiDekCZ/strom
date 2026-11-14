@@ -352,7 +352,8 @@ export const liveFollowMethods = uiModule({
         const s = liveSession();
         if (!s || s.ended || DataManager.isViewMode()) return null;
         const L = strings.live;
-        const btn = el('button', `live-follow-btn live-follow-btn--${size}`, '◎');
+        const btn = el('button', `live-follow-btn live-follow-btn--${size} sel-opt`, '◎');
+        btn.dataset.selForm = 'chip';
         btn.type = 'button';
         if (size === 'panel') btn.id = 'live-follow';
         btn.setAttribute('aria-pressed', String(followOn));

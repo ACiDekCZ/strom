@@ -1339,8 +1339,8 @@ export const treeOverviewMethods = uiModule({
         const label = (id: RodId): string => d.labels.get(id) ?? '';
         const sort = readRodsSort();
         const sortSeg = d.big.length < 2 ? '' : `
-            <div class="tov-rod-sort" role="group" aria-label="${esc(r.sortLabel)}">${ROD_SORTS.map(k =>
-                `<button type="button" class="tov-rod-sort-btn" data-tov="rod-sort" data-kind="${k}" aria-pressed="${k === sort}">${esc(r.sorts[k])}</button>`).join('')}
+            <div class="tov-rod-sort sel-seg" role="group" aria-label="${esc(r.sortLabel)}">${ROD_SORTS.map(k =>
+                `<button type="button" class="tov-rod-sort-btn sel-opt" data-sel-form="seg" data-tov="rod-sort" data-kind="${k}" aria-pressed="${k === sort}">${esc(r.sorts[k])}</button>`).join('')}
             </div>`;
         const top = `<div class="tov-rod-top"><p class="tov-rod-intro">${esc(r.intro)}</p>${sortSeg}</div>`;
 

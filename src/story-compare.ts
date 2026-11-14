@@ -135,7 +135,7 @@ export function storyCompareHtml(input: StoryCompareInput, L: StoryStrings, opts
 
     // ---- The switch: the legend in Changes, or how much changed in a long text
     const tab = (view: StoryCompareView, label: string): string =>
-        `<button type="button" role="tab" class="sc-tab" id="${id}-tab-${view}" data-view="${view}" aria-controls="${id}-${view}" aria-selected="${view === 'changes'}" tabindex="${view === 'changes' ? 0 : -1}">${esc(label)}</button>`;
+        `<button type="button" role="tab" class="sc-tab sel-tab" data-sel-dir="down" id="${id}-tab-${view}" data-view="${view}" aria-controls="${id}-${view}" aria-selected="${view === 'changes'}" tabindex="${view === 'changes' ? 0 : -1}"><span class="sel-l" data-label="${esc(label)}">${esc(label)}</span></button>`;
     const legend = diff.collapse && diff.total >= 3
         ? `<span class="sc-count">${esc(L.changedParas(diff.changed, diff.total))}</span>`
         : `<span class="sc-legend"><span class="sc-key sc-key--add">${esc(L.legendAdded)}</span><span class="sc-key sc-key--del">${esc(L.legendRemoved)}</span></span>`;
@@ -197,11 +197,9 @@ export const STORY_COMPARE_CSS = `
 .sc del { background: var(--sc-del-bg); color: var(--sc-del-text); text-decoration: line-through; }
 .sc ins::before, .sc del::before { content: attr(data-sr) " "; position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .sc-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 0 0 14px; margin-bottom: 18px; border-bottom: 1px solid var(--sc-rule); }
-.sc-tabs { display: flex; gap: 2px; padding: 3px; background: var(--sc-surface-2); border: 1px solid var(--sc-border); border-radius: 9px; }
-/* .sc .sc-tab: over a host's own button rules (the app's .modal button). */
-.sc .sc-tab { padding: 6px 12px; border: 0; border-radius: 7px; background: transparent; font: inherit; font-size: 13px; line-height: 1.4; color: inherit; cursor: pointer; }
-.sc .sc-tab[aria-selected="true"] { font-weight: 600; background: var(--sc-surface); box-shadow: 0 1px 2px rgba(20,16,8,0.12); }
-.sc-tab:focus-visible { outline: 2px solid var(--primary, #3f6b4f); outline-offset: 1px; }
+.sc-tabs { display: flex; gap: 2px; }
+/* .sc .sc-tab: over a host's own button rules (the app's .modal button); the tab is a .sel-tab, its look the host's. */
+.sc .sc-tab { padding: 6px 12px; border: 0; background: transparent; font-family: inherit; font-size: 13px; line-height: 1.4; cursor: pointer; }
 .sc-bar-note { font-size: 12px; color: var(--sc-muted); }
 .sc:not([data-view="changes"]) .sc-bar-note { display: none; }
 .sc-legend { display: inline-flex; gap: 14px; }

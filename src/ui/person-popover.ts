@@ -67,7 +67,7 @@ export function openPersonPopover(o: PersonPopoverOptions): () => void {
     const row = (p: Person, meta: string): string => {
         const born = p.birthDate ? `* ${displayYear(p.birthDate)}` : '';
         const sub = [born, meta].filter(Boolean).join(' · ');
-        return `<button type="button" class="tov-pop-row" role="option" data-id="${esc(p.id)}" aria-selected="${p.id === o.selectedId}">
+        return `<button type="button" class="tov-pop-row sel-opt" data-sel-form="row" role="option" data-id="${esc(p.id)}" aria-selected="${p.id === o.selectedId}">
             <span class="tov-pop-name">${esc(shownName(p))}</span>${sub ? `<span class="tov-pop-meta">${esc(sub)}</span>` : ''}</button>`;
     };
     const render = (): void => {

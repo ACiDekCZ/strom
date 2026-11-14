@@ -206,7 +206,7 @@ function submenuItemHtml(item: SubmenuItem, desc = ''): string {
             : `<span class="research-item-label">${esc(item.label)}</span>`)
         + (item.count ? `<span class="tree-switcher-badge research-count-badge" aria-hidden="true">${item.count}</span>` : '')
         + (item.val ? `<span class="research-item-val" aria-hidden="true">${esc(item.val)}</span>` : '')
-        + (item.pill ? `<span class="research-item-pill is-${item.pill.tone}" aria-hidden="true"><span class="research-item-pill-dot"></span>${esc(item.pill.text)}</span>` : '')
+        + (item.pill ? `<span class="research-item-pill sel-opt is-${item.pill.tone}" data-sel-form="chip" aria-hidden="true"><span class="research-item-pill-dot"></span>${esc(item.pill.text)}</span>` : '')
         + (item.ai && !item.ext ? `<span class="research-ai-badge" title="${esc(r.aiCostHint)}" aria-hidden="true">${esc(r.aiBadge)}</span>` : '')
         + (item.attn ? '<span class="research-item-attn" aria-hidden="true"></span>' : '')
         + (item.ext ? researchOpenMark({ ai: item.ai, sr: false }) : '')

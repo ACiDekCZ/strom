@@ -700,7 +700,7 @@ export const researchOffLineMethods = uiModule({
         const box = el('div', 'research-offline__choices');
         const taken = el('div', 'research-offline__taken');
         taken.appendChild(el('span', 'research-offline__taken-label', L.branchTaken));
-        const seg = el('div', 'research-offline__segment');
+        const seg = el('div', 'research-offline__segment sel-seg');
         seg.setAttribute('role', 'radiogroup');
         seg.setAttribute('aria-label', L.branchTakenAria);
         const busy = branchBusy.has(b.id);
@@ -708,8 +708,9 @@ export const researchOffLineMethods = uiModule({
         for (const m of OWN_MODES) {
             const on = b.mode === m;
             const label = `${L.offModeCap[m]}${m === treeMode ? ` ${L.branchDefaultTag}` : ''}`;
-            const r = el('button', `research-offline__seg${on ? ' is-on' : ''}`, label);
+            const r = el('button', `research-offline__seg sel-opt${on ? ' is-on' : ''}`, label);
             r.type = 'button';
+            r.dataset.selForm = 'seg';
             r.setAttribute('role', 'radio');
             r.setAttribute('aria-checked', String(on));
             r.tabIndex = on || (!OWN_MODES.includes(b.mode as typeof m) && m === OWN_MODES[0]) ? 0 : -1;

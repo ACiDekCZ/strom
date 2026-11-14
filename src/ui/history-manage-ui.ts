@@ -324,9 +324,9 @@ export const historyManageMethods = uiModule({
         if (rows && view.tab === 'deleted' && !rows.deleted.length) view.tab = 'hidden';
         tabs.innerHTML = list.map(([tab, label, n]) => {
             const on = tab === view.tab;
-            return `<button type="button" role="tab" class="hm-tab${on ? ' is-active' : ''}" id="hm-tab-${tab}" data-tab="${tab}"`
+            return `<button type="button" role="tab" class="hm-tab sel-tab${on ? ' is-active' : ''}" data-sel-dir="down" id="hm-tab-${tab}" data-tab="${tab}"`
                 + ` aria-selected="${on}" aria-controls="history-manage-body" tabindex="${on ? 0 : -1}">`
-                + `${esc(label)} <span class="hm-tab-count">${n}</span></button>`;
+                + `<span class="sel-l" data-label="${esc(label)}">${esc(label)}</span> <span class="hm-tab-count">${n}</span></button>`;
         }).join('');
         const count = document.getElementById('history-manage-count');
         const clear = document.getElementById('history-manage-clear');

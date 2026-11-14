@@ -277,8 +277,8 @@ function optionsHtml(s: DialogState): string {
     const parts = BOOK_PART_KEYS.map(k => `<label class="book-part" data-part="${k}"><input type="checkbox" value="${k}">`
         + `<span class="book-part-text"><span class="book-part-t">${esc(T.parts[k])}</span><span class="book-part-r"></span></span></label>`).join('');
     const seg = (name: string, items: ReadonlyArray<[string, string]>, label: string): string =>
-        `<div class="book-seg" role="radiogroup" aria-label="${esc(label)}">`
-        + items.map(([v, l]) => `<button type="button" role="radio" data-${name}="${v}">${esc(l)}</button>`).join('') + `</div>`;
+        `<div class="book-seg sel-seg" role="radiogroup" aria-label="${esc(label)}">`
+        + items.map(([v, l]) => `<button type="button" role="radio" class="sel-opt" data-sel-form="seg" data-${name}="${v}">${esc(l)}</button>`).join('') + `</div>`;
     const sw = (key: 'notes' | 'research', title: string, hintText: string): string =>
         `<div class="book-switch-row"><button type="button" class="book-switch" role="switch" data-switch="${key}" aria-labelledby="book-sw-${key}">`
         + `<span class="book-switch-track" aria-hidden="true"></span></button>`
@@ -309,8 +309,8 @@ function optionsHtml(s: DialogState): string {
         + `<button type="button" class="book-step" data-gen="1" aria-label="${esc(D.more)}">+</button></span></div>`
         + `<p class="book-hint book-gens-t"></p>`
         + (pages ? `<div class="book-anc-line"><span class="book-anc-l" id="book-anc-l">${esc(F.gensOf)}</span>`
-            + `<div class="book-seg book-anc-seg" role="radiogroup" aria-labelledby="book-anc-l">`
-            + ANC_GENS.map(g => `<button type="button" role="radio" data-anc-gen="${g}">${esc(g === 'all' ? F.gensAll : String(g))}</button>`).join('')
+            + `<div class="book-seg book-anc-seg sel-seg" role="radiogroup" aria-labelledby="book-anc-l">`
+            + ANC_GENS.map(g => `<button type="button" role="radio" class="sel-opt" data-sel-form="seg" data-anc-gen="${g}">${esc(g === 'all' ? F.gensAll : String(g))}</button>`).join('')
             + `</div><span class="book-anc-n" aria-live="polite"></span></div>` : '')
         + `</div>`
         + (pages ? `<div class="book-sel book-sel-persons"><div class="book-sel-picker"></div>`
@@ -351,8 +351,8 @@ function pagesOptionsHtml(sum: (sub: Sub, label: string) => string, privacyRadio
     const F = strings.familyPages;
     const imgRow = (key: 'clips' | 'photos', label: string): string =>
         `<div class="fp-img-row"><span class="fp-img-l" id="fp-img-${key}">${esc(label)}</span>`
-        + `<div class="book-seg" role="radiogroup" aria-labelledby="fp-img-${key}">`
-        + IMAGE_CHOICES.map(c => `<button type="button" role="radio" data-${key}="${c}">${esc(F.imgChoice[c])}</button>`).join('')
+        + `<div class="book-seg sel-seg" role="radiogroup" aria-labelledby="fp-img-${key}">`
+        + IMAGE_CHOICES.map(c => `<button type="button" role="radio" class="sel-opt" data-sel-form="seg" data-${key}="${c}">${esc(F.imgChoice[c])}</button>`).join('')
         + `</div><span class="fp-img-n" data-n="${key}"></span></div>`;
     return `<div class="book-sum">${sum('privacy', D.privacy)}${sum('families', F.families)}${sum('groups', F.groupsRow)}${sum('images', F.images)}${sum('include', F.include)}</div>`
         + `<section class="book-sec" data-sec="privacy"><h3 class="book-sec-h" id="book-privacy-h">${esc(D.privacy)}</h3>`
@@ -696,9 +696,9 @@ function syncFoot(s: DialogState, modal: HTMLElement): void {
 function estimateHtml(): string {
     return `<div class="fp-est" aria-live="polite"><span class="fp-est-t"></span><span class="fp-est-d"></span><span class="fp-est-s"></span></div>`
         + `<div class="fp-big" hidden><p class="fp-big-t"></p><p class="fp-big-d"></p><div class="fp-offers">`
-        + `<button type="button" class="fp-offer" data-offer="small"></button>`
-        + `<button type="button" class="fp-offer" data-offer="noclips"></button>`
-        + `<button type="button" class="fp-offer" data-offer="zip" aria-pressed="false"></button></div></div>`
+        + `<button type="button" class="fp-offer sel-opt" data-sel-form="tile" data-offer="small"></button>`
+        + `<button type="button" class="fp-offer sel-opt" data-sel-form="tile" data-offer="noclips"></button>`
+        + `<button type="button" class="fp-offer sel-opt" data-sel-form="tile" data-offer="zip" aria-pressed="false"></button></div></div>`
         + `<p class="fp-est-time"></p>`
         + `<label class="fp-min" hidden><input type="checkbox" name="fp-min"><span><span class="fp-min-t">${esc(strings.familyPages.minimalPages)}</span> <span class="fp-min-n"></span></span></label>`
         + `<p class="fp-file"></p>`;
@@ -1024,13 +1024,13 @@ export const bookUiMethods = uiModule({
         if (presets) {
             presets.setAttribute('aria-label', strings.book.dlg.presetsLabel);
             presets.innerHTML = (['family', 'research', 'custom'] as const)
-                .map(p => `<button type="button" role="radio" data-preset="${p}">${esc(strings.book.preset[p])}</button>`).join('');
+                .map(p => `<button type="button" role="radio" class="sel-opt" data-sel-form="seg" data-preset="${p}">${esc(strings.book.preset[p])}</button>`).join('');
         }
         const out = modal.querySelector<HTMLElement>('.book-out');
         if (out) {
             const F = strings.familyPages;
-            out.innerHTML = `<div class="book-seg book-out-seg" role="radiogroup" aria-label="${esc(F.output)}">`
-                + (['book', 'pages'] as const).map(o => `<button type="button" role="radio" data-output="${o}">${esc(o === 'book' ? F.outBook : F.outPages)}</button>`).join('')
+            out.innerHTML = `<div class="book-seg book-out-seg sel-seg" role="radiogroup" aria-label="${esc(F.output)}">`
+                + (['book', 'pages'] as const).map(o => `<button type="button" role="radio" class="sel-opt" data-sel-form="seg" data-output="${o}">${esc(o === 'book' ? F.outBook : F.outPages)}</button>`).join('')
                 + `</div><p class="book-hint book-out-hint"></p>`;
         }
         const foot = modal.querySelector<HTMLElement>('.fp-foot');

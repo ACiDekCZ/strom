@@ -518,7 +518,7 @@ export const phoneMethods = uiModule({
                 break;
             case 'offList':
                 content = `
-                    <div class="phone-bar is-off">
+                    <div class="phone-bar sel-opt is-off" data-sel-form="chip">
                         <span class="phone-dot is-ring" aria-hidden="true"></span>
                         <div class="phone-bar-text"><strong>${esc(p.offTitle)}</strong><span>${esc(p.offBody)}
                             <button type="button" class="phone-link" data-act="explain" aria-expanded="${d.explain}">${esc(p.statusWhat)}</button></span></div>
@@ -623,7 +623,7 @@ export const phoneMethods = uiModule({
         const ip = phoneIp(s.addresses[0]?.url ?? '');
         const since = Date.parse(s.since);
         return `
-                    <div class="phone-bar is-on">
+                    <div class="phone-bar sel-opt is-on" data-sel-form="chip">
                         <span class="phone-dot is-on" aria-hidden="true"></span>
                         <div class="phone-bar-text"><strong>${esc(p.statusOn(ip))}</strong>${Number.isFinite(since)
                             ? `<span>${esc(p.statusSince(formatLiveClock(since, Date.now(), getCurrentLanguage())))}</span>` : ''}</div>
@@ -639,7 +639,7 @@ export const phoneMethods = uiModule({
         const s = d.state!;
         if (!phoneAddressChanged(s) || d.how) return '';
         return `
-                    <div class="phone-bar is-address">
+                    <div class="phone-bar sel-opt is-address" data-sel-form="chip">
                         <div class="phone-bar-text"><strong>${esc(p.addrTitle(phoneIp(s.addresses[0]?.url ?? '')))}</strong>
                         <span>${esc(p.addrBody)}</span><span class="phone-hint">${esc(p.addrHint)}</span></div>
                         ${this.phoneViewNow() === 'qr' ? '' : `<button type="button" class="primary btn-sm" data-act="qr"${d.lost ? ' disabled' : ''}>${esc(p.addrNewQr)}</button>`}
@@ -654,7 +654,7 @@ export const phoneMethods = uiModule({
         const [title, sub] = code === 'port-busy' ? [p.errPort(phonePort(s.addresses[0]?.url)), p.errRetry]
             : code === 'no-lan' ? [p.errNet, p.errNetRetry] : [p.errBind, p.errBindBody];
         return `
-                    <div class="phone-bar is-error" role="status">
+                    <div class="phone-bar sel-opt is-error" data-sel-form="chip" role="status">
                         <span class="phone-dot is-error" aria-hidden="true"></span>
                         <div class="phone-bar-text"><strong>${esc(title)}</strong><span>${esc(sub)}</span></div>
                         <button type="button" class="secondary btn-sm" data-act="disable"${d.lost ? ' disabled' : ''}>${esc(p.disable)}</button>

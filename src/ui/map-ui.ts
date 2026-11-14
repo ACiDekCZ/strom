@@ -351,7 +351,7 @@ export const mapMethods = uiModule({
     mapKindsHtml(): string {
         const m = strings.map;
         const chips = MAP_KINDS.map(k => `
-            <button type="button" class="map-kind" data-kind="${k}" aria-pressed="true">
+            <button type="button" class="map-kind sel-opt" data-sel-form="chip" data-kind="${k}" aria-pressed="true">
                 <span class="map-kind-check" aria-hidden="true">✓</span>
                 <span class="map-kind-mark" aria-hidden="true">${KIND_MARK[k]}</span>
                 <span class="map-kind-label">${this.escapeHtml(m.kinds[k])}</span>

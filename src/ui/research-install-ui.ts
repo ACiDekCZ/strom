@@ -340,8 +340,8 @@ export const researchInstallMethods = uiModule({
         return `
             <div class="modal-content install-body">
                 <div class="install-os-row">
-                    <div class="install-os" role="radiogroup" aria-label="${esc(s.detected(names[os]))}">
-                        ${INSTALL_OSES.map(o => `<button type="button" role="radio" aria-checked="${o === os}" class="install-os-btn${o === os ? ' active' : ''}" data-os="${o}">${esc(names[o])}</button>`).join('')}
+                    <div class="install-os sel-seg" role="radiogroup" aria-label="${esc(s.detected(names[os]))}">
+                        ${INSTALL_OSES.map(o => `<button type="button" role="radio" aria-checked="${o === os}" class="install-os-btn sel-opt${o === os ? ' active' : ''}" data-sel-form="seg" data-os="${o}">${esc(names[o])}</button>`).join('')}
                     </div>
                     <span class="install-detected">${esc(s.detected(names[detectedOs()]))}</span>
                 </div>
@@ -904,8 +904,8 @@ export const researchInstallMethods = uiModule({
             const line = installLine(st.os, record.token, installAppUrl(window.location.href), treeName, { browser: 'mobile', file }, installChannel(isBetaBuildHere()));
             lineBlock = `
                 <p class="install-mobile-line-label">${esc(s.mobileLine)}</p>
-                <div class="install-os" role="radiogroup" aria-label="${esc(s.mobileLine)}">
-                    ${INSTALL_OSES.map(o => `<button type="button" role="radio" aria-checked="${o === st.os}" class="install-os-btn${o === st.os ? ' active' : ''}" data-os="${o}">${esc(names[o])}</button>`).join('')}
+                <div class="install-os sel-seg" role="radiogroup" aria-label="${esc(s.mobileLine)}">
+                    ${INSTALL_OSES.map(o => `<button type="button" role="radio" aria-checked="${o === st.os}" class="install-os-btn sel-opt${o === st.os ? ' active' : ''}" data-sel-form="seg" data-os="${o}">${esc(names[o])}</button>`).join('')}
                 </div>
                 <div class="install-line-row">
                     <code class="install-line" tabindex="0" data-line="${esc(line)}">${lineHtml(line, record.token)}</code>

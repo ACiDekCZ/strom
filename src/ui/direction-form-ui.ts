@@ -335,13 +335,14 @@ export const directionFormMethods = uiModule({
         const kindField = el('div', 'direction-form__field');
         const kindLabelEl = el('div', 'direction-form__label', L.dirKindLabel);
         kindLabelEl.id = 'direction-form-kind-label';
-        const seg = el('div', 'direction-form__kinds');
+        const seg = el('div', 'direction-form__kinds sel-seg');
         seg.setAttribute('role', 'radiogroup');
         seg.setAttribute('aria-labelledby', 'direction-form-kind-label');
         const shownKinds = edit ? FORM_KINDS.filter(k => k === f.kind || kinds.includes(k)) : kinds;
         for (const k of shownKinds) {
-            const b = el('button', 'direction-form__kind');
+            const b = el('button', 'direction-form__kind sel-opt');
             b.type = 'button';
+            b.dataset.selForm = 'seg';
             b.dataset.kind = k;
             b.setAttribute('role', 'radio');
             const g = el('span', 'direction-form__kind-glyph', KIND_GLYPH[k]);

@@ -536,8 +536,8 @@ export const materialsWindowMethods = uiModule({
         const toggle = (act: string, label: string, on: boolean) =>
             `<button type="button" class="mw-chip mw-toggle${on ? ' is-active' : ''}" data-mw="${act}" aria-pressed="${on}">${esc(label)}</button>`;
         const seg = (cls: string, aria: string, opts: { act: string; label: string; icon?: string; on: boolean }[]) =>
-            `<div class="mw-seg ${cls}" role="group" aria-label="${esc(aria)}">${opts.map(o =>
-                `<button type="button" data-mw="${o.act}" aria-pressed="${o.on}"${o.icon ? ` aria-label="${esc(o.label)}" title="${esc(o.label)}"` : ''}>${o.icon ? `<span class="mw-seg-icon" aria-hidden="true">${o.icon}</span>` : ''}<span class="mw-seg-text">${esc(o.label)}</span></button>`).join('')}</div>`;
+            `<div class="mw-seg ${cls} sel-seg" role="group" aria-label="${esc(aria)}">${opts.map(o =>
+                `<button type="button" class="sel-opt" data-sel-form="seg" data-mw="${o.act}" aria-pressed="${o.on}"${o.icon ? ` aria-label="${esc(o.label)}" title="${esc(o.label)}"` : ''}>${o.icon ? `<span class="mw-seg-icon" aria-hidden="true">${o.icon}</span>` : ''}<span class="mw-seg-text">${esc(o.label)}</span></button>`).join('')}</div>`;
         redraw(tools, `
             <div class="mw-chips">
                 ${chip('person', m.fPerson, f.person ? m.filterChip(m.fPerson, personName) : null)}
@@ -819,7 +819,7 @@ export const materialsWindowMethods = uiModule({
         const persons = this.mwPersons(item);
         const selected = w.selected.has(item.key);
         const kind = item.hidden ? `${materialKindLabel(item)} · ${m.hiddenLabel[item.hidden.reason ?? 'none'] ?? m.hiddenLabel.none}` : materialKindLabel(item);
-        return `<div class="mw-li${selected ? ' is-selected' : ''}${item.hidden ? ' is-hidden' : ''}" role="gridcell" tabindex="-1" data-key="${esc(item.key)}" aria-label="${esc(this.mwAriaLabel(item))}"${w.selecting ? ` aria-selected="${selected}"` : ''}>
+        return `<div class="mw-li sel-opt${selected ? ' is-selected' : ''}${item.hidden ? ' is-hidden' : ''}" role="gridcell" data-sel-form="row" tabindex="-1" data-key="${esc(item.key)}" aria-label="${esc(this.mwAriaLabel(item))}"${w.selecting ? ` aria-selected="${selected}"` : ''}>
             <span class="mw-li-check"><span class="mw-check" aria-hidden="true"></span></span>
             ${this.mwThumbHtml(item, group, true)}
             <span class="mw-li-title" title="${esc(item.title)}">${esc(item.title)}</span>
@@ -1235,9 +1235,9 @@ export const materialsWindowMethods = uiModule({
             </div>`);
             parts.push(`<div class="mw-pop-section">
                 <div class="mw-pop-title">${esc(m.groupBy)}</div>
-                <div class="mw-seg" role="group" aria-label="${esc(m.groupBy)}">
-                    <button type="button" data-pop="group-batch" aria-pressed="${w.group === 'batch'}">${esc(m.groupBatch)}</button>
-                    <button type="button" data-pop="group-date" aria-pressed="${w.group === 'date'}">${esc(m.groupDate)}</button>
+                <div class="mw-seg sel-seg" role="group" aria-label="${esc(m.groupBy)}">
+                    <button type="button" class="sel-opt" data-sel-form="seg" data-pop="group-batch" aria-pressed="${w.group === 'batch'}">${esc(m.groupBatch)}</button>
+                    <button type="button" class="sel-opt" data-sel-form="seg" data-pop="group-date" aria-pressed="${w.group === 'date'}">${esc(m.groupDate)}</button>
                 </div>
             </div>`);
             parts.push(`<div class="mw-pop-foot">

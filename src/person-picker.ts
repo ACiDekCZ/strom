@@ -537,7 +537,7 @@ export class PersonPicker {
             : '';
 
         return `
-            <div class="person-picker-item${selected ? ' selected' : ''}${dist ? ' has-dist' : ''}" role="option" aria-selected="${selected}"${labelAttrs}
+            <div class="person-picker-item sel-opt${selected ? ' selected' : ''}${dist ? ' has-dist' : ''}" data-sel-form="row" role="option" aria-selected="${selected}"${labelAttrs}
                  data-id="${this.escapeHtml(person.id)}">
                 <span class="person-picker-name">${nameHtml(person)} ${birthYear}</span>${below}
             </div>

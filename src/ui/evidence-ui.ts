@@ -284,12 +284,16 @@ export const evidenceUiMethods = uiModule({
             label.append(what);
             pill.append(label);
             const counts = evidenceLevels(DataManager.getData());
+            const levels = document.createElement('span');
+            levels.className = 'evidence-pill-levels sel-seg';
+            pill.append(levels);
             for (const level of LEVELS) {
                 let n = 0;
                 for (const l of counts.values()) if (l === level) n++;
                 const btn = document.createElement('button');
                 btn.type = 'button';
-                btn.className = `evidence-pill-level evidence-pill-level-${level}`;
+                btn.className = `evidence-pill-level evidence-pill-level-${level} sel-opt`;
+                btn.dataset.selForm = 'seg';
                 btn.setAttribute('aria-pressed', String(evidence?.kind === level));
                 btn.setAttribute('aria-label', `${levelLabel(level)}: ${n}`);
                 btn.title = levelLabel(level);
@@ -301,7 +305,7 @@ export const evidenceUiMethods = uiModule({
                 btn.append(swatch, document.createTextNode(String(n)));
                 btn.disabled = n === 0;
                 btn.onclick = () => this.toggleEvidenceLevelGroup(level);
-                pill.append(btn);
+                levels.append(btn);
             }
         } else if (evidence) {
             // While going through them: where you are ("3 / 16").

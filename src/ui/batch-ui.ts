@@ -247,7 +247,7 @@ export const batchMethods = uiModule({
         const steps: [Step, string][] = [['pick', b.stepPick], ['check', b.stepCheck], ['send', b.stepSend]];
         const at = step ? steps.findIndex(s => s[0] === step) : -1;
         const pills = step ? `<ol class="batch-steps">${steps.map(([k, label], i) =>
-            `<li class="batch-step${i === at ? ' is-active' : i < at ? ' is-done' : ''}"${i === at ? ' aria-current="step"' : ''}>${i < at ? '✓ ' : ''}${esc(label)}</li>`).join('')}</ol>` : '';
+            `<li class="batch-step sel-tab${i === at ? ' is-active' : i < at ? ' is-done' : ''}" data-sel-dir="down"${i === at ? ' aria-current="step"' : ''}>${i < at ? '✓ ' : ''}<span class="sel-l" data-label="${esc(label)}">${esc(label)}</span></li>`).join('')}</ol>` : '';
         return `
             <div class="modal batch-dialog" role="dialog" aria-modal="true" aria-labelledby="batch-title">
                 <div class="modal-header batch-header">

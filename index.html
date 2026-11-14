@@ -854,17 +854,12 @@
             border-bottom: 1px solid var(--divider);
             transition: background 0.15s;
         }
-        .tree-switcher-item:first-child {
+        /* An item is a .sel-opt row (src/ui/sel-css.ts); the menu's corners and its last rule kept. */
+        .tree-switcher-item.sel-opt:first-child {
             border-radius: 10px 10px 0 0;
         }
-        .tree-switcher-item:last-child {
+        .tree-switcher-item.sel-opt:last-child {
             border-bottom: none;
-        }
-        @media (hover: hover) { .tree-switcher-item:hover {
-            background: var(--hover-bg);
-        } }
-        .tree-switcher-item.active {
-            background: color-mix(in srgb, var(--primary) 10%, transparent);
         }
         .tree-switcher-item .tree-item-name {
             font-size: 14px;
@@ -2867,12 +2862,12 @@
         }
         #history-modal .hm-state-link { white-space: nowrap; }
         .hm-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 20px; border-bottom: 1px solid var(--divider); }
-        .hm-tabs { flex: none; display: flex; gap: 2px; padding: 2px; background: var(--surface-2); border: 1px solid var(--divider); border-radius: 9px; max-width: 100%; }
+        /* The tabs are .sel-tab (src/ui/sel-css.ts), the line down; the bar's rule is their baseline. */
+        .hm-tabs { flex: none; display: flex; gap: 2px; max-width: 100%; }
         #history-modal button.hm-tab {
-            flex: 1 1 auto; padding: 5px 12px; border: 0; border-radius: 7px; background: transparent; color: var(--text);
-            font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer;
+            flex: 1 1 auto; padding: 5px 12px; border: 0; background: transparent;
+            font-family: inherit; font-size: 13px; white-space: nowrap; cursor: pointer;
         }
-        #history-modal button.hm-tab.is-active { background: var(--surface); font-weight: 600; box-shadow: 0 1px 3px rgba(20,16,8,0.15); }
         .hm-tab-count { color: var(--text-faint); font-variant-numeric: tabular-nums; font-weight: 400; }
         .hm-search {
             flex: 1 1 200px; min-width: 0; height: 34px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 4px 0 10px;
@@ -2979,7 +2974,6 @@
         @media (hover: hover) {
             .hm-region.is-open:hover { background: var(--hover-bg); }
             #history-modal button.hm-dots:not(:disabled):hover, #history-modal button.hm-search-clear:hover { background: var(--hover-bg); color: var(--text); }
-            #history-modal button.hm-tab:not(.is-active):hover { background: var(--hover-bg); }
             #history-modal button.hm-assign:hover { background: var(--hover-bg); }
             #history-modal button.hm-h-act:not(:disabled):hover, #history-modal button.hm-back:hover { text-decoration: underline; }
         }
@@ -6359,12 +6353,12 @@
             display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; padding: 0 16px 12px; align-items: start;
         }
         .waiting-place-cands { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+        /* A candidate is a .sel-opt row (src/ui/sel-css.ts). */
         .waiting-place-cand {
             display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; gap: 10px; align-items: start;
-            padding: 8px 10px; border-radius: 8px; cursor: pointer; min-width: 0;
+            padding: 8px 10px; cursor: pointer; min-width: 0;
         }
         .waiting-place-cand.is-current { cursor: default; }
-        .waiting-place-cand.is-selected { background: var(--primary-soft); }
         .waiting-place-letter {
             display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; box-sizing: border-box;
             border-radius: 50%; background: var(--primary); color: var(--on-primary); font-size: 12px; font-weight: 700;
@@ -6453,7 +6447,7 @@
             .waiting-place-cand > button.waiting-place-pick { grid-column: auto; }
         }
         @media (hover: hover) {
-            .waiting-place-cand:not(.is-current):not(.is-selected):hover { background: var(--surface-2); }
+            .waiting-place-cands > .waiting-place-cand.sel-opt.is-current:hover { background: transparent; }
         }
         /* A town group: the head, the strip (shown closed too), its houses indented. */
         .place-group { border-bottom: 1px solid var(--divider); }
@@ -8355,12 +8349,13 @@
         }
         .research-menu-phone[hidden] { display: none; }
         /* The phone item's state pill ("on · 2", "connection problem"): never wraps. */
+        /* A .sel-opt chip (src/ui/sel-css.ts): "on" drawn as a chosen one; a state, so no hover of its own. */
         .research-item-pill {
-            display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 8px; margin-left: auto; border-radius: 999px;
+            display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 8px; margin-left: auto;
             flex-shrink: 0; white-space: nowrap; font-size: 12px; font-weight: 600; line-height: 1;
         }
-        .research-item-pill.is-on { background: var(--primary-soft); color: var(--primary-dark); }
         .research-item-pill.is-error { background: var(--warning-soft); color: var(--warning-text); }
+        @media (hover: hover) { .research-item-pill.sel-opt.is-error:not(.is-on):hover { background: var(--warning-soft); border-color: var(--border); } }
         .research-item-pill-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--primary); }
         .research-item-pill.is-error .research-item-pill-dot { display: none; }
         /* The menu: the state block, at most six rows (34 px), "Other actions ⌄" opening in place, the footer. */
@@ -8585,13 +8580,12 @@
         .install-tag-agent { background: var(--warning-soft); color: var(--warning-text); }
         .install-body .install-later { font-size: 13px; color: var(--text-light); }
         .install-os-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 12px; }
-        .install-os { display: inline-flex; border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; }
+        /* The system switch is a .sel-seg of .sel-opt cells (src/ui/sel-css.ts). */
+        .install-os { display: inline-flex; overflow: hidden; }
         .install-os-btn {
-            border: none; background: var(--surface); color: var(--text); font: inherit; font-size: 13px;
+            font-family: inherit; font-size: 13px;
             padding: 6px 12px; cursor: pointer; min-height: 32px;
         }
-        .install-os-btn + .install-os-btn { border-left: 1px solid var(--border); }
-        .install-os-btn.active { background: var(--primary-soft); color: var(--primary-dark); font-weight: 600; }
         .install-detected { font-size: 12px; color: var(--text-light); }
         .install-what { margin: 0 0 10px; font-size: 13px; line-height: 1.45; color: var(--text); }
         /* Safari: the tree moves to another browser — said first, then downloaded (research-transfer.ts). */
@@ -11378,7 +11372,7 @@
             position: relative;
             display: flex;
             flex-wrap: wrap;
-            gap: 2px;
+            gap: 4px;
             padding: 3px;
             border-radius: 8px;
             background: var(--surface);
@@ -11389,12 +11383,7 @@
             align-items: center;
             gap: 7px;
             padding: 5px 10px 5px 8px;
-            border: none;
-            border-radius: 6px;
-            background: none;
-            color: var(--text-faint);
             font-size: 13px;
-            font-weight: 400;
             white-space: nowrap;
             cursor: pointer;
         }
@@ -11412,11 +11401,9 @@
             line-height: 1;
         }
         .map-kind-mark { flex: none; min-width: 9px; text-align: center; font-weight: 700; opacity: 0.6; }
-        .map-kind[aria-pressed="true"] { background: var(--primary-soft); color: var(--primary-dark); font-weight: 600; }
         .map-kind[aria-pressed="true"] .map-kind-check { border-color: var(--primary); background: var(--primary); color: var(--on-primary); }
         .map-kind[aria-pressed="true"] .map-kind-mark { opacity: 1; }
         .map-kind[aria-disabled="true"] { cursor: not-allowed; }
-        @media (hover: hover) { .map-kind[aria-pressed="false"]:hover { background: var(--surface-2); } }
         .map-kind-tip {
             position: absolute;
             top: calc(100% + 9px);
@@ -12599,27 +12586,16 @@
             position: relative; z-index: 2;
         }
         .fan-toolbar-spacer { flex: 1 1 0; min-width: 0; }
-        .fan-shapes, .fan-color-seg {
-            display: inline-flex; align-items: center; gap: 2px;
-            padding: 3px; border-radius: 9px;
-            background: var(--surface-2); border: 1px solid var(--border);
-        }
+        /* The shapes and colours are a .sel-seg of .sel-opt cells (src/ui/sel-css.ts). */
+        .fan-shapes.sel-seg, .fan-color-seg.sel-seg { display: inline-flex; overflow: hidden; }
         .fan-shape-btn, .fan-color-btn {
             display: inline-flex; align-items: center; justify-content: center; gap: 7px;
             height: 30px; padding: 0 11px 0 9px; margin: 0; min-width: 0;
-            border: 0; border-radius: 7px; background: none; box-shadow: none;
-            color: var(--text-light); font: inherit; font-size: 13px; white-space: nowrap;
+            font-family: inherit; font-size: 13px; white-space: nowrap;
             cursor: pointer; -webkit-tap-highlight-color: transparent;
         }
         .fan-color-btn { height: 28px; padding: 0 10px; }
         .fan-shape-icon { width: 18px; height: 18px; flex: none; }
-        .fan-shape-btn[aria-checked="true"], .fan-color-btn[aria-checked="true"] {
-            background: var(--surface); color: var(--primary); font-weight: 600; box-shadow: var(--shadow-sm);
-        }
-        @media (hover: hover) {
-            .fan-shape-btn:not([aria-checked="true"]):hover, .fan-color-btn:not([aria-checked="true"]):hover { color: var(--text); background: var(--hover-bg); }
-        }
-        .fan-shape-btn:focus-visible, .fan-color-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         .fan-stepper { display: inline-flex; align-items: center; gap: 8px; }
         .fan-stepper .depth-stepper-label { font-size: 12.5px; color: var(--text-light); white-space: nowrap; }
         .fan-toolbar .fan-stepper .depth-stepper-btn { width: 28px; height: 28px; }
@@ -12683,7 +12659,9 @@
         .fan-legend.is-open .fan-legend-items { display: block; }
         .fan-legend-row { display: flex; align-items: center; gap: 8px; min-height: 22px; }
         /* The family line chosen in the tree view (spec 039 §4.2). */
-        .fan-legend-row.is-selected { background: var(--primary-soft); font-weight: 600; border-radius: 6px; margin: 0 -4px; padding: 0 4px; }
+        .fan-legend-row.sel-opt { margin: 0 -4px; padding: 0 4px; color: inherit; cursor: default; }
+        @media (hover: hover) { .fan-legend-items > .fan-legend-row.sel-opt:not(.is-selected):hover { background: transparent; } }
+        @media (pointer: coarse) { .fan-legend-items > .fan-legend-row.sel-opt { min-height: 22px; } .fan-sheet-items > .fan-legend-row.sel-opt { min-height: 34px; } }
         .fan-legend-label { min-width: 0; }
         .fan-legend-who { color: var(--text-light); margin-left: auto; padding-left: 8px; white-space: nowrap; }
         /* A swatch carries its colours for the light, dark and print themes. */
@@ -12723,10 +12701,7 @@
             width: 44px; height: 44px; padding: 0; margin: 0 -10px 0 0; min-width: 0; border: 0; background: none; box-shadow: none;
             color: var(--text-light); font-size: 24px; cursor: pointer;
         }
-        .fan-sheet-seg {
-            display: flex; gap: 2px; padding: 3px; margin-bottom: 12px;
-            border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border);
-        }
+        .fan-sheet-seg.sel-seg { display: flex; margin-bottom: 12px; overflow: hidden; }
         .fan-sheet-seg .fan-color-btn { flex: 1 1 0; height: 40px; padding: 0 6px; font-size: 14px; }
         .fan-sheet-items .fan-legend-row { min-height: 34px; font-size: 14px; }
         .fan-sheet-items .fan-sw { width: 28px; height: 14px; }
@@ -12744,7 +12719,7 @@
         body.focus-nav-shown .fan-legend { bottom: 76px; max-height: calc(100% - 90px); }
         /* Tablet: colours as a dropdown. */
         @media (max-width: 1024px) {
-            .fan-color-seg, .fan-colors-label { display: none; }
+            .fan-color-seg.sel-seg, .fan-colors-label { display: none; }
             .fan-color-drop { display: inline-flex; }
             body.focus-nav-shown .fan-legend { bottom: 68px; }
         }
@@ -18804,9 +18779,11 @@
         .batch-header { display: flex; align-items: flex-start; gap: 14px; padding: 18px 20px 12px; border-bottom: 1px solid var(--border); flex: none; }
         .batch-header .audit-log-heading { flex: 1; min-width: 0; }
         .batch-steps { display: flex; gap: 6px; list-style: none; margin: 4px 0 0; padding: 0; flex: none; }
-        .batch-step { padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--surface-2); color: var(--text-light); white-space: nowrap; }
-        .batch-step.is-active { background: var(--surface); color: var(--text); box-shadow: inset 0 0 0 1px var(--border); }
-        .batch-step.is-done { background: var(--primary-soft); color: var(--primary-dark); }
+        /* The steps are .sel-tab (src/ui/sel-css.ts), the line down under the current one; not
+           clickable, so no hover and no thumb-high step; a done step keeps its check. */
+        .batch-step { padding: 3px 10px; font-size: 12px; white-space: nowrap; cursor: default; }
+        @media (hover: hover) { .batch-steps > .batch-step.sel-tab:not(.is-active):hover { box-shadow: none; color: var(--text-light); } }
+        @media (pointer: coarse) { .batch-steps > .batch-step.sel-tab { min-height: 0; } }
         .batch-content { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 20px; }
         .batch-footer { flex: none; display: flex; align-items: center; gap: 10px; padding: 12px 20px; border-top: 1px solid var(--border); background: var(--surface-2); margin: 0; }
         .batch-foot-note { flex: 1; min-width: 0; font-size: 12px; color: var(--text-light); line-height: 1.4; }
@@ -20048,7 +20025,8 @@
         .phone-bar { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 10px; }
         .phone-bar-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; font-size: 12.5px; }
         .phone-bar-text strong { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
-        .phone-bar.is-on { background: var(--primary-soft); color: var(--primary-dark); }
+        /* The state bar is a .sel-opt chip (src/ui/sel-css.ts): "on" drawn as a chosen one. */
+        .phone-bar.sel-opt { color: inherit; cursor: default; }
         .phone-bar.is-off { background: var(--bg); border: 1px solid var(--divider); }
         .phone-bar.is-off .phone-bar-text > span { color: var(--text-light); }
         .phone-bar.is-error { background: var(--danger-soft); }
@@ -20056,6 +20034,12 @@
         .phone-bar.is-address { align-items: flex-start; background: var(--warning-soft); color: var(--warning-text); border: 1px solid var(--warning); }
         .phone-bar.is-address .phone-bar-text { font-size: 13.5px; gap: 4px; }
         .phone-bar.is-address .phone-hint { color: var(--text-light); font-size: 12.5px; }
+        /* A state, not a choice: no hover tint over its own colours. */
+        @media (hover: hover) {
+            .phone-bar.sel-opt.is-off:not(.is-on):hover { background: var(--bg); border-color: var(--divider); }
+            .phone-bar.sel-opt.is-error:not(.is-on):hover { background: var(--danger-soft); border-color: var(--border); }
+            .phone-bar.sel-opt.is-address:not(.is-on):hover { background: var(--warning-soft); border-color: var(--warning); }
+        }
         .phone-keep { margin: -8px 0 0; font-size: 12.5px; color: var(--text-light); }
         .phone-list .phone-rows { list-style: none; margin: 0; padding: 0; }
         .phone-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--divider); }
@@ -20609,16 +20593,13 @@
         @media (hover: hover) { .live-panel-expand:hover { color: var(--text); background: var(--hover-bg); } }
         .live-panel-expand:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         /* "Follow the agent in the tree" (◎): off plain, on filled green, paused an outline. */
+        /* A .sel-opt chip (src/ui/sel-css.ts); paused, the chosen edge turns dashed. */
         .live-follow-btn {
             flex: none; width: 28px; height: 28px; padding: 0; margin: 0; min-width: 0; min-height: 0;
-            border: 1px solid transparent; border-radius: 6px; box-shadow: none;
-            background: none; color: var(--text-light); font-size: 15px; line-height: 1; cursor: pointer;
+            font-size: 15px; line-height: 1; cursor: pointer;
             display: inline-flex; align-items: center; justify-content: center;
         }
-        @media (hover: hover) { .live-follow-btn:hover { color: var(--text); background: var(--hover-bg); } }
-        .live-follow-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
-        .live-follow-btn.is-on { background: var(--primary-soft); color: var(--primary); }
-        .live-follow-btn.is-on.is-paused { background: none; border: 1px dashed var(--primary); }
+        .live-follow-btn.sel-opt.is-on.is-paused { border-style: dashed; box-shadow: none; }
         .live-follow-btn--overview { width: 30px; height: 30px; }
         .live-follow-btn--phone { width: 44px; height: 44px; margin-left: auto; font-size: 18px; }
         .live-panel.phone-strip .live-panel-summary { align-items: center; }
@@ -20976,7 +20957,7 @@
             .live-panel-icons > button { position: relative; }
             .live-panel-icons > button::before { content: ""; position: absolute; inset: -8px -1px; }
             /* ◎ has a 1px border: the margin reaches from its padding box. */
-            .live-panel-icons > .live-follow-btn::before { inset: -9px -2px; }
+            .live-panel-icons > .live-follow-btn::before, .live-panel-icons > .live-follow-btn.sel-opt::before { inset: -9px -2px; }
         }
         /* A heading with a menu: no callout or text selection on a long press; lit while its menu is open. */
         .live-section__head { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
@@ -22319,21 +22300,16 @@
             .direction-form .direction-form__pick:not([aria-disabled="true"]):hover { background: var(--surface-2); }
         }
         /* Kind: a segment (34 px; touch 44; a phone the full width). */
-        .direction-form__kinds {
-            display: inline-flex; align-self: flex-start; border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
-        }
+        /* A .sel-seg of .sel-opt cells (src/ui/sel-css.ts). */
+        .direction-form__kinds.sel-seg { display: inline-flex; align-self: flex-start; overflow: hidden; }
         .direction-form .direction-form__kind {
             display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 34px; min-height: 0; padding: 0 14px;
-            margin: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: var(--text);
-            font: inherit; font-size: 13.5px; font-weight: 400; cursor: pointer;
+            margin: 0; font-family: inherit; font-size: 13.5px; cursor: pointer;
         }
-        .direction-form .direction-form__kind + .direction-form__kind { border-left: 1px solid var(--border); }
-        .direction-form .direction-form__kind.is-on { background: var(--primary-soft); font-weight: 600; }
-        .direction-form .direction-form__kind[aria-disabled="true"] { color: var(--text-faint); cursor: default; }
+        .direction-form .direction-form__kind[aria-disabled="true"] { cursor: default; }
         .direction-form .direction-form__kind:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         .direction-form__kind-glyph { font-weight: 600; }
         @media (hover: hover) {
-            .direction-form .direction-form__kind:not(.is-on):not([aria-disabled="true"]):hover { background: var(--surface-2); }
         }
         /* A direction there already. */
         .direction-form__dup {
@@ -22389,7 +22365,7 @@
             .direction-form textarea.direction-form__input { height: auto; }
             .direction-form .direction-form__select, .direction-form .direction-form__year { width: 100%; }
             .direction-form__limit { flex: 1 1 140px; }
-            .direction-form__kinds { display: flex; align-self: stretch; }
+            .direction-form__kinds.sel-seg { display: flex; align-self: stretch; }
             .direction-form .direction-form__kind { flex: 1; height: 44px; padding: 0 8px; }
             .direction-form .close-btn { width: 44px; height: 44px; }
             .direction-form .buttons button { min-height: 48px; }
@@ -22683,13 +22659,12 @@
         .research-offline__choices { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
         .research-offline__taken { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; }
         .research-offline__taken-label { font-size: 12px; color: var(--text-light); }
-        .research-offline__segment { display: flex; max-width: 100%; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+        /* A .sel-seg of .sel-opt cells (src/ui/sel-css.ts). */
+        .research-offline__segment.sel-seg { display: flex; max-width: 100%; overflow: hidden; }
         .research-offline__seg {
-            height: 28px; min-height: 0; margin: 0; padding: 0 10px; border: 0; border-left: 1px solid var(--border); border-radius: 0;
-            background: var(--surface); box-shadow: none; color: var(--text); font: inherit; font-size: 12.5px; white-space: nowrap; cursor: pointer;
+            height: 28px; min-height: 0; margin: 0; padding: 0 10px;
+            font-family: inherit; font-size: 12.5px; white-space: nowrap; cursor: pointer;
         }
-        .research-offline__seg:first-child { border-left: 0; }
-        .research-offline__seg.is-on { background: var(--primary-soft); font-weight: 600; }
         .research-offline__seg[aria-disabled="true"], .research-offline__add[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
         .research-offline__seg:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; position: relative; }
         .research-offline__acts { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; }
@@ -22724,7 +22699,6 @@
         .research-offline__wait-actions .live-waiting-answer { max-width: 100%; }
         .research-offline__held { margin: 6px 0 0; font-size: 12.5px; }
         @media (hover: hover) {
-            .research-offline__seg:not(.is-on):not([aria-disabled="true"]):hover,
             .research-offline__add:not([aria-disabled="true"]):hover { background: var(--hover-bg); }
             .research-offline__expand:hover { color: var(--text); }
         }
@@ -23218,10 +23192,13 @@
         .person-card.evl-partial { outline: 1.5px dashed var(--primary); outline-offset: 1px; }
         .person-card.evl-none { outline: 1.5px dotted var(--text-faint); outline-offset: 1px; background: var(--surface-2); }
         .person-card.evl-none .name-text { color: var(--text-light); }
+        /* The levels are a .sel-seg of .sel-opt cells (src/ui/sel-css.ts), the pill's height kept on touch. */
+        .evidence-pill-levels.sel-seg { display: inline-flex; flex: none; overflow: hidden; }
         .evidence-pill-level {
-            height: 30px; padding: 0 10px; border-radius: 15px; border: 0; background: transparent;
-            color: var(--text); font-variant-numeric: tabular-nums; cursor: pointer; white-space: nowrap;
+            height: 28px; padding: 0 10px;
+            font-variant-numeric: tabular-nums; cursor: pointer; white-space: nowrap;
         }
+        @media (pointer: coarse) { .evidence-pill-levels > .evidence-pill-level.sel-opt { min-height: 0; } }
         .evidence-pill-level { display: inline-flex; align-items: center; gap: 6px; }
         .evidence-pill-level-full, .evidence-pill-level-partial { color: var(--primary); }
         /* The level as the cards' frame in the Evidence mode (.person-card.evl-*), not a glyph. */
@@ -23230,10 +23207,7 @@
         .evl-swatch-partial { border: 1.5px dashed var(--primary); }
         .evl-swatch-none { border: 1.5px dotted var(--text-faint); background: var(--surface-2); }
         .evidence-pill-level-none { color: var(--text-faint); }
-        .evidence-pill-level[aria-pressed="true"] { background: var(--primary-soft); font-weight: 600; }
-        @media (hover: hover) { .evidence-pill-level:hover:not(:disabled) { background: var(--hover-bg); } }
-        .evidence-pill-level:disabled { opacity: 0.5; cursor: default; }
-        .evidence-pill-level:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .evidence-pill-level:disabled { cursor: default; }
         .fan-svg .fan-sector.evidence-hit .fan-fill { stroke: var(--accent) !important; stroke-width: 1.5; stroke-dasharray: 4 3; }
         .evidence-pill {
             position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 95;
@@ -23582,13 +23556,11 @@
         }
         .tov-pop-search:focus-visible { outline: 2px solid var(--primary); outline-offset: 0; }
         .tov-pop-list { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; min-height: 0; }
+        /* A .sel-opt row (src/ui/sel-css.ts). */
         .tov-pop-row {
-            display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 7px 10px; border: 0; border-radius: 7px;
-            background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer;
+            display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 7px 10px;
+            color: var(--text); font-family: inherit; text-align: left; cursor: pointer;
         }
-        .tov-pop-row[aria-selected="true"] { background: var(--primary-soft); }
-        @media (hover: hover) { .tov-pop-row:hover { background: var(--hover-bg); } }
-        .tov-pop-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         .tov-pop-name { font-size: 14px; font-weight: 500; }
         .tov-pop-meta { font-size: 12px; color: var(--text-faint); }
         .tov-pop-none { padding: 8px 10px; font-size: 13px; color: var(--text-light); }
@@ -23608,17 +23580,13 @@
         #book-modal .book-dlg-opts { grid-column: 1; grid-row: 3 / 5; min-height: 0; overflow-y: auto; padding: 8px 24px 28px; }
         #book-modal .book-dlg-side { grid-column: 2; grid-row: 3; min-height: 0; overflow-y: auto; background: var(--book-side-bg); padding: 20px 22px 8px; }
         #book-modal .book-dlg-foot { grid-column: 2; grid-row: 4; background: var(--book-side-bg); padding: 10px 22px 18px; }
+        /* The presets and the segments are a .sel-seg of .sel-opt cells (src/ui/sel-css.ts). */
         #book-modal .book-presets { display: flex; margin-right: auto; }
-        #book-modal .book-presets, #book-modal .book-seg { gap: 2px; padding: 3px; border-radius: 9px; background: var(--card-bg-2); width: max-content; max-width: 100%; }
+        #book-modal .book-presets, #book-modal .book-seg { overflow: hidden; width: max-content; max-width: 100%; }
         #book-modal .book-seg { display: inline-flex; flex: none; }
         #book-modal .book-presets button, #book-modal .book-seg button {
-            padding: 6px 12px; border: 0; border-radius: 7px; background: none; color: var(--text-light);
-            font: inherit; font-size: 13.5px; cursor: pointer; white-space: nowrap; min-height: 0;
+            padding: 6px 12px; font-family: inherit; font-size: 13.5px; cursor: pointer; white-space: nowrap; min-height: 0;
         }
-        #book-modal .book-presets button[aria-checked="true"], #book-modal .book-seg button[aria-checked="true"] {
-            background: var(--surface); color: var(--primary); font-weight: 600; box-shadow: 0 1px 2px rgba(60, 50, 30, 0.15);
-        }
-        #book-modal .book-presets button:focus-visible, #book-modal .book-seg button:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         /* The line under the presets while Custom is chosen (§4.9): a band across the dialog under the header; on a phone a block under the segment */
         #book-modal .book-preset-hint {
             order: 3; flex: 1 1 100%; min-width: 0; margin: 0 -20px -14px -24px; padding: 8px 20px 8px 24px;
@@ -23740,7 +23708,6 @@
         @media (hover: hover) {
             #book-modal .book-kind:not(.book-kind--house):hover { border-color: var(--primary); }
             #book-modal .book-rod-row:hover, #book-modal .book-step:not(:disabled):hover { background: var(--hover-bg); }
-            #book-modal .book-presets button:not([aria-checked="true"]):hover, #book-modal .book-seg button:not([aria-checked="true"]):hover { color: var(--text); }
         }
         /* Narrower than 900 px: one column, the outline under the options (no title page), the estimate and button stuck below */
         @media (max-width: 899px) {
@@ -23920,13 +23887,13 @@
         #book-modal .fp-big-t { font-weight: 600; color: var(--warning-text); }
         #book-modal .fp-big-d { color: var(--text-light); }
         #book-modal .fp-offers { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
+        /* The offers are .sel-opt tiles (src/ui/sel-css.ts); "zip" stays chosen. */
         #book-modal .fp-offer {
-            min-height: 36px; padding: 6px 12px; border: 1px solid var(--primary); border-radius: 8px; background: var(--surface);
-            color: var(--primary); font: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer; text-align: left;
+            min-height: 36px; padding: 6px 12px; font-family: inherit; font-size: 13.5px; cursor: pointer; text-align: left;
         }
-        #book-modal .fp-offer:disabled { border-color: var(--border); color: var(--text-faint); cursor: default; }
-        #book-modal .fp-offer[aria-pressed="true"] { background: var(--primary-soft); font-weight: 600; }
-        #book-modal .fp-offer:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        #book-modal .fp-offer:disabled { color: var(--text-faint); cursor: default; }
+        /* Its edge again over the dialog's button rule (.modal button). */
+        .modal .fp-offer.sel-opt { border: 1px solid var(--border); }
         #book-modal .fp-prog, #book-modal .fp-res { display: flex; flex-direction: column; gap: 10px; font-size: 14px; min-width: 0; }
         #book-modal .fp-prog-h { display: flex; justify-content: space-between; gap: 12px; }
         #book-modal .fp-prog-t, #book-modal .fp-res-t { font-weight: 600; color: var(--text); }
@@ -23945,7 +23912,6 @@
         #book-modal .fp-res-b { display: flex; flex-wrap: wrap; gap: 8px; }
         #book-modal .fp-res-b [hidden] { display: none; }
         @media (hover: hover) {
-            #book-modal .fp-offer:not(:disabled):hover { background: var(--primary-soft); }
         }
         @media (pointer: coarse) {
             #book-modal .fp-offer { min-height: 44px; }
@@ -24264,15 +24230,11 @@
         .tov-rods { display: flex; flex-direction: column; gap: 10px; }
         .tov-rod-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
         .tov-rod-intro { flex: 1; min-width: 220px; margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-light); }
-        .tov-rod-sort { display: flex; gap: 2px; padding: 3px; border-radius: 9px; background: var(--card-bg-2); }
+        /* The sort is a .sel-seg of .sel-opt cells (src/ui/sel-css.ts). */
+        .tov-rod-sort.sel-seg { display: flex; overflow: hidden; }
         .modal.tov .tov-rod-sort-btn {
-            padding: 5px 10px; border: 0; border-radius: 7px; background: none; color: var(--text-light);
-            font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap; min-height: 0;
+            padding: 5px 10px; font-family: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap; min-height: 0;
         }
-        .modal.tov .tov-rod-sort-btn[aria-pressed="true"] {
-            background: var(--surface); color: var(--primary); font-weight: 600; box-shadow: 0 1px 2px rgba(60, 50, 30, 0.15);
-        }
-        .tov-rod-sort-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         .tov-rod-search {
             height: 36px; padding: 0 12px; border: 1px solid var(--border); border-radius: 8px;
             background: var(--surface); color: var(--text); font: inherit; font-size: 14px; box-sizing: border-box; width: 100%;
@@ -24687,7 +24649,7 @@
         /* A row whose name repeats in the result: what tells it apart (years,
            ⚭ partner, parents, place), the end cut with "…" — the whole line is
            in the row's title and accessible name. */
-        .person-picker-item.has-dist {
+        .person-picker-item.has-dist.sel-opt {
             min-height: 46px; padding-top: 6px; padding-bottom: 6px; gap: 1px;
             /* The list is as wide as its names (max-content); a row with such a
                line takes at least this much, the line itself never widens it. */
@@ -24707,21 +24669,17 @@
         /* Found by a detail as well: one row, "* 1820 · † 1866 Horní Smyšlenice · cholera". */
         .person-picker-dist .person-picker-match { display: inline; margin: 0; font-size: inherit; color: inherit; }
         @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
-            .person-picker-item { min-height: 48px; }
+            /* .sel-opt: over the row's touch height (src/ui/sel-css.ts). */
+            .person-picker-item.sel-opt { min-height: 48px; }
             /* Same names on a phone: the list takes the screen's width, so the line says as much as it can. */
-            .person-picker-item.has-dist { min-height: 56px; min-width: calc(100vw - 18px); }
+            .person-picker-item.has-dist.sel-opt { min-height: 56px; min-width: calc(100vw - 18px); }
         }
         /* A name with its birth-surname note may take a second line. */
         .person-picker-item:has(.pn-note) { white-space: normal; }
-        .person-picker-item:last-child {
+        /* An item is a .sel-opt row (src/ui/sel-css.ts): the active one of the listbox. */
+        .person-picker-item.sel-opt:last-child {
             border-bottom: none;
         }
-        .person-picker-item.selected {
-            background: var(--info-soft);
-        }
-        @media (hover: hover) { .person-picker-item:hover {
-            background: var(--info-soft);
-        } }
         .person-picker-item .birth-year {
             color: var(--text-light);
             font-size: 12px;
@@ -27703,13 +27661,12 @@
         .materials-window .mw-chip-x, .mw-pop .mw-chip-x { padding: 0 8px; font-size: 16px; line-height: 1; flex-shrink: 0; }
         .materials-window .mw-filters-btn { display: none; }
         .materials-window .mw-clear { font-size: 13px; padding: 4px 2px; }
-        .mw-seg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--r-pill); overflow: hidden; flex-shrink: 0; }
+        /* A .sel-seg of .sel-opt cells (src/ui/sel-css.ts). */
+        .mw-seg { display: inline-flex; overflow: hidden; flex-shrink: 0; }
         .materials-window .mw-seg button, .mw-pop .mw-seg button {
-            border: none; border-radius: 0; background: var(--surface); color: var(--text-light); font: inherit; font-size: 13px;
+            font-family: inherit; font-size: 13px;
             height: 28px; padding: 0 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
         }
-        .materials-window .mw-seg button + button, .mw-pop .mw-seg button + button { border-left: 1px solid var(--border); }
-        .materials-window .mw-seg button[aria-pressed="true"], .mw-pop .mw-seg button[aria-pressed="true"] { background: var(--primary-soft); color: var(--primary-dark); font-weight: 600; }
         .mw-seg-view .mw-seg-text { display: none; }
         .mw-seg-icon { font-size: 15px; line-height: 1; }
         .materials-window .mw-select { font-weight: 600; }
@@ -27786,7 +27743,6 @@
             border-bottom: 1px solid var(--divider); cursor: pointer; outline: none; font-size: 13px;
         }
         .mw-li:focus-visible { box-shadow: var(--shadow-focus); border-radius: var(--r-sm); }
-        .mw-li.is-selected { background: var(--primary-soft); }
         .mw-li-check { grid-column: 1; display: none; width: 22px; }
         #materials-modal.is-selecting .mw-li-check { display: flex; }
         .mw-li-check .mw-check { position: static; }
@@ -27846,13 +27802,10 @@
         @media (hover: hover) {
             .mw-tile:hover .mw-thumb { border-color: var(--text-ghost); }
             #materials-modal.can-select .mw-tile:hover .mw-check { display: flex; }
-            .mw-li:hover { background: var(--hover-bg); }
-            .mw-li.is-selected:hover { background: var(--primary-soft); }
             .materials-window .mw-chip:hover { border-color: var(--text-ghost); }
             .materials-window .mw-chip.is-active:hover { border-color: var(--primary-dark); }
             .materials-window .mw-group-toggle:hover .mw-group-name, .materials-window .mw-folder-toggle:hover .mw-folder-name { color: var(--primary-dark); }
             .materials-window .mw-more:hover { background: var(--surface-2); color: var(--text); }
-            .materials-window .mw-seg button:hover { color: var(--text); }
             .mw-check-row:hover { background: var(--hover-bg); }
         }
         @media (pointer: coarse) {
@@ -27865,7 +27818,7 @@
         @media (max-width: 1024px) {
             .materials-window .mw-filters-btn { display: inline-flex; }
             .mw-chips > :not(.is-active) { display: none; }
-            .mw-seg-group { display: none; }
+            .mw-seg-group.sel-seg { display: none; }
             #materials-modal .mw-search { flex: 1; width: auto; min-width: 120px; }
             .mw-tools { flex: 0 1 auto; flex-wrap: nowrap; }
             .mw-tools .mw-gap { display: none; }
@@ -28851,13 +28804,13 @@
             padding: 0 8px 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
             text-transform: uppercase; color: var(--accent-text); overflow-wrap: anywhere;
         }
+        /* A chapter is a .sel-tab (src/ui/sel-css.ts), the line on its left side. */
         .help-side-ch {
-            display: flex; gap: 8px; width: 100%; padding: 5px 8px; border: 0; border-radius: 6px;
+            display: flex; gap: 8px; width: 100%; padding: 5px 8px; border: 0;
             background: transparent; font-size: 13px; line-height: 1.35; text-align: left; cursor: pointer;
         }
         .help-side-ch .help-num { flex: none; width: 22px; }
         .help-side-ch-title { min-width: 0; overflow-wrap: anywhere; }
-        .help-side-ch[aria-current="page"] { background: var(--primary-soft); color: var(--primary-dark); font-weight: 600; }
         .help-side-rules { display: flex; flex-direction: column; padding: 3px 0 6px 30px; }
         .help-side-rule {
             padding: 3px 8px; border: 0; border-radius: 5px; background: transparent; font-size: 12.5px;
@@ -29071,9 +29024,8 @@
 
         @media (hover: hover) {
             .help-back:hover, .help-search-open:hover, .help-close:hover, .help-copy:hover, .help-side-home:hover,
-            .help-side-ch:hover, .help-ch:hover, .help-rule-hit:hover, .help-pager-card:hover, .help-toc-row:hover,
+            .help-ch:hover, .help-rule-hit:hover, .help-pager-card:hover, .help-toc-row:hover,
             .help-home-search:hover { background: var(--hover-bg); }
-            .help-side-ch[aria-current="page"]:hover { background: var(--primary-soft); }
             .help-copy:hover, .help-search-clear:hover { color: var(--primary); }
             .help-side-rule:hover { color: var(--text); }
             .help-chip:hover, .help-num-hit:hover { background: var(--primary-soft); }
@@ -29658,10 +29610,10 @@
         <div id="fan-container" class="fan-container">
             <!-- The Fan view's own toolbar (spec 029 §9.5): shape, generations, descendants (two-way), colours. -->
             <div class="fan-toolbar" id="fan-toolbar" role="toolbar" data-i18n-aria-label="viewModeSwitch.fan">
-                <div class="fan-shapes" role="radiogroup" data-i18n-aria-label="fan.shape">
-                    <button type="button" role="radio" class="fan-shape-btn" data-fan-shape="half" aria-checked="false" data-i18n-title="fan.shapeHalf" data-i18n-aria-label="fan.shapeHalf"><svg class="fan-shape-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M2 15 A8 8 0 0 1 18 15 Z" fill="currentColor"/></svg><span class="fan-shape-label" data-i18n="fan.shapeHalf"></span></button>
-                    <button type="button" role="radio" class="fan-shape-btn" data-fan-shape="full" aria-checked="false" data-i18n-title="fan.shapeFull" data-i18n-aria-label="fan.shapeFull"><svg class="fan-shape-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2 A8 8 0 1 1 9.99 2 Z" fill="currentColor"/></svg><span class="fan-shape-label" data-i18n="fan.shapeFull"></span></button>
-                    <button type="button" role="radio" class="fan-shape-btn" data-fan-shape="two" aria-checked="false" data-i18n-title="fan.shapeTwo" data-i18n-aria-label="fan.shapeTwo"><svg class="fan-shape-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M2 10 A8 8 0 0 1 18 10 Z" fill="currentColor"/><path d="M2 10 A8 8 0 0 0 18 10 Z" fill="currentColor" fill-opacity="0.35"/></svg><span class="fan-shape-label" data-i18n="fan.shapeTwo"></span></button>
+                <div class="fan-shapes sel-seg" role="radiogroup" data-i18n-aria-label="fan.shape">
+                    <button type="button" role="radio" class="fan-shape-btn sel-opt" data-sel-form="seg" data-fan-shape="half" aria-checked="false" data-i18n-title="fan.shapeHalf" data-i18n-aria-label="fan.shapeHalf"><svg class="fan-shape-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M2 15 A8 8 0 0 1 18 15 Z" fill="currentColor"/></svg><span class="fan-shape-label" data-i18n="fan.shapeHalf"></span></button>
+                    <button type="button" role="radio" class="fan-shape-btn sel-opt" data-sel-form="seg" data-fan-shape="full" aria-checked="false" data-i18n-title="fan.shapeFull" data-i18n-aria-label="fan.shapeFull"><svg class="fan-shape-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2 A8 8 0 1 1 9.99 2 Z" fill="currentColor"/></svg><span class="fan-shape-label" data-i18n="fan.shapeFull"></span></button>
+                    <button type="button" role="radio" class="fan-shape-btn sel-opt" data-sel-form="seg" data-fan-shape="two" aria-checked="false" data-i18n-title="fan.shapeTwo" data-i18n-aria-label="fan.shapeTwo"><svg class="fan-shape-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M2 10 A8 8 0 0 1 18 10 Z" fill="currentColor"/><path d="M2 10 A8 8 0 0 0 18 10 Z" fill="currentColor" fill-opacity="0.35"/></svg><span class="fan-shape-label" data-i18n="fan.shapeTwo"></span></button>
                 </div>
                 <div class="depth-stepper fan-stepper" id="fan-gen-stepper">
                     <span class="depth-stepper-label" data-i18n="fan.generations"></span>
@@ -29684,7 +29636,7 @@
                 <span class="fan-toolbar-spacer" aria-hidden="true"></span>
                 <div class="fan-colors">
                     <span class="fan-colors-label" id="fan-colors-label" data-i18n="fan.colors"></span>
-                    <div class="fan-color-seg" role="radiogroup" aria-labelledby="fan-colors-label"><button type="button" role="radio" class="fan-color-btn" data-fan-color="gender" aria-checked="false" data-i18n="fan.colorGender"></button><button type="button" role="radio" class="fan-color-btn" data-fan-color="line" aria-checked="false" data-i18n="fan.colorLine"></button><button type="button" role="radio" class="fan-color-btn" data-fan-color="rod" aria-checked="false" data-i18n="fan.colorRod"></button></div>
+                    <div class="fan-color-seg sel-seg" role="radiogroup" aria-labelledby="fan-colors-label"><button type="button" role="radio" class="fan-color-btn sel-opt" data-sel-form="seg" data-fan-color="gender" aria-checked="false" data-i18n="fan.colorGender"></button><button type="button" role="radio" class="fan-color-btn sel-opt" data-sel-form="seg" data-fan-color="line" aria-checked="false" data-i18n="fan.colorLine"></button><button type="button" role="radio" class="fan-color-btn sel-opt" data-sel-form="seg" data-fan-color="rod" aria-checked="false" data-i18n="fan.colorRod"></button></div>
                     <label class="fan-color-drop"><span class="fan-color-drop-label" data-i18n="fan.colorsColon"></span><select id="fan-color-select"><option value="gender" data-i18n="fan.colorGender"></option><option value="line" data-i18n="fan.colorLine"></option><option value="rod" data-i18n="fan.colorRod"></option></select></label>
                 </div>
             </div>
@@ -29706,7 +29658,7 @@
                     <div class="fan-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="fan-sheet-title">
                         <span class="fan-sheet-grab" aria-hidden="true"></span>
                         <div class="fan-sheet-head"><span class="fan-sheet-title" id="fan-sheet-title" data-i18n="fan.colors"></span><button type="button" class="fan-sheet-close" data-fan-sheet-close data-i18n-aria-label="buttons.close">&times;</button></div>
-                        <div class="fan-sheet-seg fan-color-seg-sheet" role="radiogroup" aria-labelledby="fan-sheet-title"><button type="button" role="radio" class="fan-color-btn" data-fan-color="gender" aria-checked="false" data-i18n="fan.colorGender"></button><button type="button" role="radio" class="fan-color-btn" data-fan-color="line" aria-checked="false" data-i18n="fan.colorLine"></button><button type="button" role="radio" class="fan-color-btn" data-fan-color="rod" aria-checked="false" data-i18n="fan.colorRod"></button></div>
+                        <div class="fan-sheet-seg fan-color-seg-sheet sel-seg" role="radiogroup" aria-labelledby="fan-sheet-title"><button type="button" role="radio" class="fan-color-btn sel-opt" data-sel-form="seg" data-fan-color="gender" aria-checked="false" data-i18n="fan.colorGender"></button><button type="button" role="radio" class="fan-color-btn sel-opt" data-sel-form="seg" data-fan-color="line" aria-checked="false" data-i18n="fan.colorLine"></button><button type="button" role="radio" class="fan-color-btn sel-opt" data-sel-form="seg" data-fan-color="rod" aria-checked="false" data-i18n="fan.colorRod"></button></div>
                         <div class="fan-sheet-items" id="fan-sheet-items"></div>
                     </div>
                 </div>
@@ -31299,7 +31251,7 @@
         <div class="modal modal--lg book-dlg" role="dialog" data-dialog-kind="form" data-skeleton="skip" aria-modal="true" aria-labelledby="book-dlg-title">
             <div class="modal-header book-dlg-head">
                 <h2 id="book-dlg-title" data-i18n="book.dialogTitle"></h2>
-                <div class="book-presets" role="radiogroup"></div>
+                <div class="book-presets sel-seg" role="radiogroup"></div>
                 <p class="book-preset-hint" id="book-preset-hint" aria-live="polite"></p>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeBookDialog()">&times;</button>
                 <div class="book-out"></div>

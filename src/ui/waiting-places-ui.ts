@@ -423,7 +423,7 @@ export const waitingPlacesMethods = uiModule({
         const letter = candidateLetter(c.id);
         const warn = this.waitingCandidateWarning(w, c);
         const where = [c.district, c.country].filter(Boolean).join(' · ');
-        return `<div class="waiting-place-cand${selected ? ' is-selected' : ''}" data-cand="${c.id}" data-tone="${warn ? 'warn' : 'plain'}">
+        return `<div class="waiting-place-cand sel-opt${selected ? ' is-selected' : ''}" data-sel-form="row" data-cand="${c.id}" data-tone="${warn ? 'warn' : 'plain'}">
             <span class="waiting-place-letter" aria-hidden="true">${letter}</span>
             <div class="waiting-place-cand-text">
                 <span class="waiting-place-cand-name">${esc(c.name)}</span>

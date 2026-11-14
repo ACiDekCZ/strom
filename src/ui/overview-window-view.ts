@@ -197,7 +197,8 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
             if (read()?.source !== 'live') return null;
             const on = extras().follow.on;
             const L = strings.live;
-            const btn = el('button', `live-follow-btn live-follow-btn--${size}`, '◎');
+            const btn = el('button', `live-follow-btn live-follow-btn--${size} sel-opt`, '◎');
+            btn.dataset.selForm = 'chip';
             btn.type = 'button';
             btn.setAttribute('aria-pressed', String(on));
             btn.classList.toggle('is-on', on);
