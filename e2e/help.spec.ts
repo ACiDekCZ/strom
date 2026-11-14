@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 import { openApp } from './helpers.js';
 
 /**
@@ -10,6 +11,24 @@ import { openApp } from './helpers.js';
 
 const help = (page: Page) => page.locator('.help-modal');
 const main = (page: Page) => page.locator('.help-main');
+
+/**
+ * A part's chapters in the help pinned for this app (vendor/strom-doc, `npm run help:pin`), in the
+ * order of its English contents (README: "## A …" and "- [A1 Title](A1-….md): …"): what the app's
+ * contents must list, whatever chapters a new pin adds.
+ */
+function pinnedChapters(part: 'A' | 'R' | 'S'): { id: string; title: string }[] {
+    const out: { id: string; title: string }[] = [];
+    let inPart = false;
+    for (const line of readFileSync('vendor/strom-doc/en/README.md', 'utf-8').split('\n')) {
+        const h = line.match(/^##\s+([ARS])\s/);
+        if (h) { inPart = h[1] === part; continue; }
+        if (/^#{1,2}\s/.test(line)) { inPart = false; continue; }
+        const item = line.match(/^[-*]\s+\[([ARS]\d+)\s+([^\]]+)\]\(/);
+        if (inPart && item && item[1][0] === part) out.push({ id: item[1], title: item[2] });
+    }
+    return out;
+}
 
 async function openFromMenu(page: Page): Promise<void> {
     await page.locator('.actions-menu-btn').click();
@@ -92,8 +111,14 @@ test.describe('How Strom works on a computer', () => {
         await openFromMenu(page);
         const chapter = page.locator('.help-ch[data-chapter="A9"]');
         await expect(chapter.locator('.help-ch-title')).toHaveText('Using the app');
-        // A chapter of part A (the app), not the last one any more: A10 (one event of several people) follows it.
-        await expect(page.locator('.help-part').first().locator('.help-ch[data-chapter="A9"]')).toHaveCount(1);
+        // Part A (the app) lists the pinned help's chapters of the app in their order, A9 among them
+        // (read from the pin: a new chapter after it, like A10, changes nothing here).
+        const pinned = pinnedChapters('A');
+        expect(pinned.map(c => c.id)).toContain('A9');
+        expect(pinned.find(c => c.id === 'A9')?.title).toBe('Using the app');
+        const partA = page.locator('.help-part').first();
+        await expect(partA.locator('.help-ch')).toHaveCount(pinned.length);
+        expect(await partA.locator('.help-ch').evaluateAll(els => els.map(e => (e as HTMLElement).dataset.chapter))).toEqual(pinned.map(c => c.id));
         await chapter.click();
         await expect(page.locator('.help-h1')).toContainText('A9');
         for (const id of ['A9.1', 'A9.2', 'A9.3', 'A9.4']) await expect(page.locator(`.help-rule[data-rule="${id}"]`)).toHaveCount(1);

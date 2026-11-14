@@ -14,6 +14,17 @@ import {
  */
 
 const QUIET = 120_000;
+/** A clock start for the cases that read a time of day (never near midnight, where the time gets a date). */
+const MIDDAY = new Date('2026-11-13T10:30:00Z');
+/**
+ * "Changes will be sent at …" for an edit made in the first minute after MIDDAY: the quiet time
+ * after it, as the page's clock shows a time of the same day (its own time zone and language).
+ */
+async function sentAt(page: Page): Promise<RegExp> {
+    const times = await page.evaluate(([start, quiet]) => [0, 60_000].map(d =>
+        new Intl.DateTimeFormat('en', { hour: '2-digit', minute: '2-digit' }).format(new Date(start + quiet + d))), [MIDDAY.getTime(), QUIET]);
+    return new RegExp(`^Changes will be sent at (${times.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})$`);
+}
 const WRITE = { status: 200, body: { ok: true, inbox: false, changes: 6, applied: 6, input: 'I0042' } };
 
 /** The research writes at once and makes a new version (with `extra` lines on Jan, e.g. a conflict). */
@@ -27,9 +38,13 @@ function writesAtOnce(bridge: FakeBridge, extra: string[] = []): void {
     };
 }
 
-/** A research tree that sends by itself (the default), its bridge running. */
-async function autoTree(page: Page, init: Partial<FakeBridge> = {}): Promise<FakeBridge> {
-    await page.clock.install();
+/**
+ * A research tree that sends by itself (the default), its bridge running.
+ * `at`: the clock starts there (a case that reads a time of day: never "now", which may be just
+ * before midnight); otherwise at the real time.
+ */
+async function autoTree(page: Page, init: Partial<FakeBridge> = {}, at?: Date): Promise<FakeBridge> {
+    await page.clock.install(at ? { time: at } : undefined);
     await openResearch(page, { auto: true });
     const bridge = await fakeBridge(page, { accepts: { mode: 'research', sync: { auto: 'write' }, sources: true, verified: true, media: null }, ...init });
     // The first start's note is not what these tests are about.
@@ -281,9 +296,9 @@ test('a window narrower than the toolbar\'s mark (1100 px): a new conflict is to
 });
 
 test('waiting for the quiet time: the mark and the block say when the changes go', async ({ page }) => {
-    await autoTree(page);
+    await autoTree(page, {}, MIDDAY);
     await editJan(page);
-    await expect(mark(page)).toHaveAttribute('title', /^Changes will be sent at \d{1,2}:\d{2}/);
+    await expect(mark(page)).toHaveAttribute('title', await sentAt(page));
     await openResearchMenu(page);
     await expect(block(page)).toHaveAttribute('data-state', 'autoWaiting');
     await expect(block(page)).toContainText(/sent at \d{1,2}:\d{2}/);
@@ -2497,9 +2512,9 @@ test.describe('the research not running, at rest (audit 017 a-D6)', () => {
     });
 
     test('sent by itself, the browser started again with the research not running: never "will be sent at" — the changes wait, said with their number', async ({ page }) => {
-        const bridge = await autoTree(page);
+        const bridge = await autoTree(page, {}, MIDDAY);
         await editJan(page);
-        await expect(mark(page)).toHaveAttribute('title', /^Changes will be sent at \d{1,2}:\d{2}/);
+        await expect(mark(page)).toHaveAttribute('title', await sentAt(page));
         await page.evaluate(() => window.Strom.TreeManager.flush());
         bridge.down = true;
         await page.reload();
