@@ -494,7 +494,7 @@ export const personResearchMethods = uiModule({
                 metaHtml = esc([chosen ? r.hypoChosen : '', what, state].filter(Boolean).join(' · '));
             }
             const sw = canSwitch ? this.researchVariantSwitchHtml(variant, !!o!.shown) : '';
-            return `<div class="person-research-variant${o?.shown ? ' is-shown' : ''}${chosen ? ' is-chosen' : ''}" role="listitem" data-variant="${esc(variant.id)}">
+            return `<div class="person-research-variant sel-opt${o?.shown ? ' is-shown' : ''}${chosen ? ' is-chosen' : ''}" data-sel-form="row" role="listitem" data-variant="${esc(variant.id)}">
                     <span class="prv-id" aria-hidden="true">${esc(variant.id)}</span>
                     <span class="prv-text">${this.researchVariantTitleHtml(variant)}<span class="prv-meta">${metaHtml}</span></span>${sw}
                 </div>`;
@@ -588,7 +588,7 @@ export const personResearchMethods = uiModule({
             const waitHtml = vp.waiting && pending ? this.researchHypothesisWaitHtml(h, pending) : '';
             const sw = canSwitch ? this.researchVariantSwitchHtml(variant, !!o!.shown) : '';
             const cls = [o?.shown ? 'is-shown' : '', vp.tag ? 'is-chosen' : '', vp.dim ? 'is-dim' : ''].filter(Boolean).join(' ');
-            return `<div class="person-research-variant${cls ? ` ${cls}` : ''}" role="listitem" data-variant="${esc(variant.id)}">
+            return `<div class="person-research-variant sel-opt${cls ? ` ${cls}` : ''}" data-sel-form="row" role="listitem" data-variant="${esc(variant.id)}">
                     <span class="prv-id" aria-hidden="true">${esc(variant.id)}</span>
                     <span class="prv-text">${this.researchVariantTitleHtml(variant)}<span class="prv-meta">${metaHtml}</span>${proposalHtml}${sources ? `
                         <button type="button" class="link-button prv-sources-toggle" aria-expanded="false">${esc(r.hypoSources(sources.count))}</button>${sources.html}` : ''}${noteText ? `

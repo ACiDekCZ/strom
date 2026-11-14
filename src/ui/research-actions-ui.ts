@@ -1124,7 +1124,7 @@ export const researchActionsMethods = uiModule({
                 <p class="research-review-intro">${esc(r.reviewIntro)}</p>
                 <div class="research-review-scopes" role="radiogroup" aria-labelledby="research-review-title">
                     ${scopes.map(sc => `
-                        <label class="research-review-scope">
+                        <label class="research-review-scope sel-opt" data-sel-form="tile">
                             <input type="radio" name="research-review-scope" value="${sc.value}"${sc.value === current ? ' checked' : ''}>
                             <span class="research-review-scope-text">
                                 <span class="research-review-scope-label">${esc(sc.label)}</span>

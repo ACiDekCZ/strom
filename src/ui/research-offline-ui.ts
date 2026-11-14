@@ -1461,7 +1461,8 @@ export const researchOffLineMethods = uiModule({
             occasional: L.setOutOcc(off.share), last: L.setOutLast, normal: L.setOutNorm, never: L.setOutNever,
         };
         for (const m of OFF_LINE_MODES) {
-            const card = el('label', 'research-transcripts-card research-offline-settings__card');
+            const card = el('label', 'research-transcripts-card research-offline-settings__card sel-opt');
+            card.dataset.selForm = 'tile';
             const input = el('input');
             input.type = 'radio';
             input.name = 'research-offline-mode';

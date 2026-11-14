@@ -400,7 +400,7 @@ export const lineageEditUiMethods = uiModule({
                 if (q && !fold(name).includes(q)) continue;
                 const years = this.treeOverviewRodYears(p);
                 const chosen = pickedId === id;
-                items.push(`<button type="button" class="le-item${chosen ? ' is-chosen' : ''}" data-le="pick" data-id="${esc(id)}"
+                items.push(`<button type="button" class="le-item sel-opt${chosen ? ' is-chosen' : ''}" data-sel-form="row" data-le="pick" data-id="${esc(id)}"
                     ${isFounder ? 'disabled' : ''} aria-pressed="${chosen}">
                     <span class="le-gen">${romanNumeral(g + 1)}</span>
                     <span class="le-item-name">${esc(name)}${years ? ` <span class="le-faint">(${esc(years)})</span>` : ''}${isFounder ? ` <span class="le-faint">· ${esc(t.now)}</span>` : ''}</span>
@@ -434,12 +434,12 @@ export const lineageEditUiMethods = uiModule({
             const rid = rodByForm.get(surnameKey(s.surname));
             const rodText = rid && rid !== rod.id ? ` · ${esc(t.addFormRod(labels.get(rid) ?? s.surname))}` : '';
             const chosen = pick !== null && surnameKey(pick) === surnameKey(s.surname);
-            return `<button type="button" class="le-item${chosen ? ' is-chosen' : ''}" data-le="form-pick" data-form="${esc(s.surname)}" aria-pressed="${chosen}">
+            return `<button type="button" class="le-item sel-opt${chosen ? ' is-chosen' : ''}" data-sel-form="row" data-le="form-pick" data-form="${esc(s.surname)}" aria-pressed="${chosen}">
                 <span class="le-item-name">${esc(s.surname)} <span class="le-faint">· ${esc(strings.surnames.inTree(s.count))}${rodText}</span></span></button>`;
         });
         if (typed && !own.has(surnameKey(typed)) && !list.some(s => surnameKey(s.surname) === surnameKey(typed))) {
             const chosen = pick !== null && surnameKey(pick) === surnameKey(typed);
-            items.push(`<button type="button" class="le-item${chosen ? ' is-chosen' : ''}" data-le="form-pick" data-form="${esc(typed)}" aria-pressed="${chosen}">
+            items.push(`<button type="button" class="le-item sel-opt${chosen ? ' is-chosen' : ''}" data-sel-form="row" data-le="form-pick" data-form="${esc(typed)}" aria-pressed="${chosen}">
                 <span class="le-item-name">${esc(t.addFormUse(typed))}</span></button>`);
         }
         return items.length ? items.join('') : `<p class="le-empty">${esc(t.noMatch)}</p>`;

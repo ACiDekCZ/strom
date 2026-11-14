@@ -931,7 +931,7 @@ export class PathPersonPicker {
             const off = count === 0;
             const sub = [year ? `* ${year}` : '', off ? m.pathPickNone : m.pathPickOnMap(count)].filter(Boolean).join(' · ');
             const chosen = person.id === this.options.selectedId;
-            return `<div class="path-picker-row${off ? ' is-off' : ''}${chosen ? ' is-chosen' : ''}" role="option" tabindex="${off ? -1 : 0}"
+            return `<div class="path-picker-row sel-opt${off ? ' is-off' : ''}${chosen ? ' is-chosen' : ''}" data-sel-form="row" role="option" tabindex="${off ? -1 : 0}"
                         data-id="${this.esc(person.id)}" aria-selected="${chosen}" aria-disabled="${off}">
                     <span class="path-picker-name">${nameHtml(person)}</span>
                     <span class="path-picker-sub">${this.esc(sub)}</span>

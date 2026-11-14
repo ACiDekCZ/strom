@@ -83,7 +83,7 @@ export function researchSendModeCardsHtml(current: ResearchSendMode, compact = c
     recommended: ResearchSendMode = 'manual'): string {
     const t = strings.treeSettings;
     const card = (value: ResearchSendMode, title: string, desc: string, recommended: boolean): string => `
-            <label class="research-transcripts-card research-send-card">
+            <label class="research-transcripts-card research-send-card sel-opt" data-sel-form="tile">
                 <input type="radio" name="${name}" value="${value}"${value === current ? ' checked' : ''}>
                 <span class="research-transcripts-text">
                     <span class="research-transcripts-title">${esc(title)}${recommended ? ` <span class="research-send-recommended">${esc(t.recommended)}</span>` : ''}${value === was ? ` <span class="research-send-was">${esc(t.askWas)}</span>` : ''}</span>
@@ -203,7 +203,7 @@ export const researchTreeSettingsMethods = uiModule({
         const t = strings.treeSettings;
         const current: ResearchTranscripts = link.transcripts === 'evidence' ? 'evidence' : 'lead';
         const option = (value: ResearchTranscripts, title: string, desc: string, isDefault: boolean): string => `
-            <label class="research-transcripts-card">
+            <label class="research-transcripts-card sel-opt" data-sel-form="tile">
                 <input type="radio" name="research-transcripts" value="${value}"${value === current ? ' checked' : ''}>
                 <span class="research-transcripts-text">
                     <span class="research-transcripts-title">${esc(title)}${isDefault ? ` <span class="research-transcripts-default">${esc(t.default)}</span>` : ''}</span>

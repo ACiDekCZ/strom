@@ -305,12 +305,12 @@ export const mergeUiMethods = uiModule({
                         ${strings.labels[conflict.field as keyof typeof strings.labels] || conflict.field}
                     </div>
                     <div class="person-merge-conflict-options">
-                        <label class="person-merge-conflict-option selected" data-value="keep">
+                        <label class="person-merge-conflict-option sel-opt selected" data-sel-form="tile" data-value="keep">
                             <input type="radio" name="conflict-${conflict.field}" value="keep" checked>
                             <span class="person-merge-conflict-value">${this.escapeHtml(conflict.keepValue || '—')}</span>
                             <span class="person-merge-conflict-badge">${strings.personMerge.keepValue}</span>
                         </label>
-                        <label class="person-merge-conflict-option" data-value="other">
+                        <label class="person-merge-conflict-option sel-opt" data-sel-form="tile" data-value="other">
                             <input type="radio" name="conflict-${conflict.field}" value="other">
                             <span class="person-merge-conflict-value">${this.escapeHtml(conflict.otherValue || '—')}</span>
                             <span class="person-merge-conflict-badge">${strings.personMerge.useOther}</span>
@@ -355,11 +355,11 @@ export const mergeUiMethods = uiModule({
                             ${strings.labels.partner}: ${this.escapeHtml(partnerName)}
                         </div>
                         <div class="person-merge-conflict-options">
-                            <label class="person-merge-conflict-option selected" data-value="merge">
+                            <label class="person-merge-conflict-option sel-opt selected" data-sel-form="tile" data-value="merge">
                                 <input type="radio" name="partnership-${this.escapeHtml(conflict.keepPartnership.id)}" value="merge" checked>
                                 <span class="person-merge-conflict-value">${strings.personMerge.mergePartnership}</span>
                             </label>
-                            <label class="person-merge-conflict-option" data-value="keep_both">
+                            <label class="person-merge-conflict-option sel-opt" data-sel-form="tile" data-value="keep_both">
                                 <input type="radio" name="partnership-${this.escapeHtml(conflict.keepPartnership.id)}" value="keep_both">
                                 <span class="person-merge-conflict-value">${strings.personMerge.keepBoth}</span>
                             </label>
@@ -432,9 +432,9 @@ export const mergeUiMethods = uiModule({
             const otherAge = (row.other.age ?? '').trim();
             const ages = !row.ageDiffers ? '' : `<div class="person-merge-conflict-options" data-share-age="${esc(row.shareId)}">`
                 + `<div class="person-merge-conflict-label">${esc(strings.fields.age)}</div>`
-                + `<label class="person-merge-conflict-option selected" data-value="keep"><input type="radio" name="share-age-${esc(row.shareId)}" value="keep" checked>`
+                + `<label class="person-merge-conflict-option sel-opt selected" data-sel-form="tile" data-value="keep"><input type="radio" name="share-age-${esc(row.shareId)}" value="keep" checked>`
                 + `<span class="person-merge-conflict-value">${esc(keepAge)}</span><span class="person-merge-conflict-badge">${esc(strings.personMerge.keepValue)}</span></label>`
-                + `<label class="person-merge-conflict-option" data-value="other"><input type="radio" name="share-age-${esc(row.shareId)}" value="other">`
+                + `<label class="person-merge-conflict-option sel-opt" data-sel-form="tile" data-value="other"><input type="radio" name="share-age-${esc(row.shareId)}" value="other">`
                 + `<span class="person-merge-conflict-value">${esc(otherAge)}</span><span class="person-merge-conflict-badge">${esc(strings.personMerge.useOther)}</span></label>`
                 + `</div>`;
             return `<div class="person-merge-shared-row" data-share="${esc(row.shareId)}">${head}`
@@ -724,7 +724,7 @@ export const mergeUiMethods = uiModule({
         let html = '';
         for (const tree of targets) {
             html += `
-                <div class="merge-trees-option" onclick="window.Strom.UI.selectMergeTarget('${tree.id}')">
+                <div class="merge-trees-option sel-opt" data-sel-form="tile" onclick="window.Strom.UI.selectMergeTarget('${tree.id}')">
                     <input type="radio" name="merge-target" value="${tree.id}">
                     <div class="merge-trees-option-info">
                         <div class="merge-trees-option-name">${this.escapeHtml(tree.name)}</div>
@@ -768,7 +768,7 @@ export const mergeUiMethods = uiModule({
         let html = '';
         for (const tree of trees) {
             html += `
-                <div class="merge-trees-option" onclick="window.Strom.UI.selectMergeTarget('${tree.id}')">
+                <div class="merge-trees-option sel-opt" data-sel-form="tile" onclick="window.Strom.UI.selectMergeTarget('${tree.id}')">
                     <input type="radio" name="merge-target" value="${tree.id}">
                     <div class="merge-trees-option-info">
                         <div class="merge-trees-option-name">${this.escapeHtml(tree.name)}</div>

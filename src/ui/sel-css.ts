@@ -26,7 +26,7 @@
 
 /** Every way the app marks a selected tab or option today. */
 export const SEL = ':is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], '
-    + '.active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked))';
+    + '.active, .is-on, .is-selected, .is-active, .selected, .is-chosen, :has(> input:checked))';
 
 const DISABLED = ':is(:disabled, [aria-disabled="true"])';
 const LANDSCAPE_PHONE = '(max-width: 1024px) and (max-height: 500px) and (orientation: landscape)';

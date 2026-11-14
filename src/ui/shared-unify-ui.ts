@@ -92,7 +92,7 @@ export const sharedUnifyMethods = uiModule({
                 + `<span class="su-label" id="su-label-${esc(f.field)}">${esc(f.label)}</span><div class="su-opts">`;
             for (const o of f.options) {
                 const on = o.index === chosen;
-                html += `<label class="su-opt${on ? ' is-on' : ''}"><input type="radio" name="su-${esc(f.field)}" value="${o.index}"${on ? ' checked' : ''}>`
+                html += `<label class="su-opt sel-opt${on ? ' is-on' : ''}" data-sel-form="tile"><input type="radio" name="su-${esc(f.field)}" value="${o.index}"${on ? ' checked' : ''}>`
                     + `<span class="su-opt-text"><span class="su-val">${esc(o.text)}</span><span class="su-who">${esc(o.names)}</span></span></label>`;
             }
             html += '</div></div>';

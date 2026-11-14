@@ -4425,11 +4425,8 @@
         .su-field { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; }
         .su-label { font-size: 13px; font-weight: 600; color: var(--text-light); padding-top: 10px; overflow-wrap: anywhere; }
         .su-opts { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-        .su-opt {
-            display: flex; align-items: flex-start; gap: 10px; padding: 9px 12px; margin: 0;
-            border: 1px solid var(--border); border-radius: 8px; background: var(--card-bg); cursor: pointer;
-        }
-        .su-opt.is-on { border-color: var(--primary); background: var(--primary-soft); }
+        /* A choice is a .sel-opt tile (src/ui/sel-css.ts): the chosen one framed 2 px. */
+        .su-opt { display: flex; align-items: flex-start; gap: 10px; padding: 9px 12px; margin: 0; cursor: pointer; }
         .su-opt input { width: 18px; height: 18px; flex: none; margin: 1px 0 0; accent-color: var(--primary); }
         .su-opt:focus-within { outline: 2px solid var(--primary); outline-offset: 1px; }
         .su-opt input:focus-visible { outline: none; }
@@ -4451,9 +4448,6 @@
         .shared-diff-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--warning); flex: none; transform: translateY(-1px); }
         .shared-diff-link { font-weight: 500; text-decoration: none; }
         #event-editor-modal .is-shared-diff { border-color: var(--warning); box-shadow: 0 0 0 1px var(--warning); }
-        @media (hover: hover) {
-            .su-opt:not(.is-on):hover { background: var(--surface-2); }
-        }
         @media (pointer: coarse) {
             .su-opt { min-height: 44px; }
             .su-take-all select { min-height: 44px; }
@@ -4464,7 +4458,7 @@
             #shared-unify-modal .shared-unify { height: 100%; max-height: 100dvh; border-radius: 0; }
             .su-field { display: flex; flex-direction: column; gap: 4px; }
             .su-label { padding-top: 0; }
-            .su-opt { min-height: 52px; }
+            .su-opt.sel-opt { min-height: 52px; }
             .su-take-all select { min-height: 44px; font-size: 16px; flex: 1 1 200px; }
             .su-footer { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; }
             .su-footer .su-separate { grid-column: 1 / -1; margin: 0; min-height: 44px; }
@@ -5545,9 +5539,9 @@
         .lineage-edit-modal input.le-search, .lineage-edit-modal input.le-addform-input { width: 100%; box-sizing: border-box; height: 36px;
             padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font-size: 14px; }
         .le-list { display: flex; flex-direction: column; max-height: 240px; overflow-y: auto; overscroll-behavior: contain; }
+        /* A choice is a .sel-opt row (src/ui/sel-css.ts): the chosen one filled with a line under it. */
         .lineage-edit-modal button.le-item { display: flex; align-items: baseline; gap: 6px; width: 100%; text-align: left;
-            padding: 7px 10px; border-radius: 7px; background: none; color: var(--text); font-size: 13.5px; }
-        .lineage-edit-modal button.le-item.is-chosen { background: var(--primary-soft); font-weight: 500; }
+            padding: 7px 10px; color: var(--text); font-size: 13.5px; }
         .lineage-edit-modal button.le-item:disabled { color: var(--text-light); cursor: default; }
         .le-gen { flex: 0 0 30px; color: var(--text-light); font-weight: 400; }
         .le-item-name { min-width: 0; overflow-wrap: anywhere; }
@@ -5569,7 +5563,6 @@
         .le-gone { color: var(--text-light); }
         @media (hover: hover) {
             .lineage-edit-modal button.le-x:not(.is-disabled):hover { background: var(--hover-bg); color: var(--text); }
-            .lineage-edit-modal button.le-item:not(:disabled):not(.is-chosen):hover { background: var(--hover-bg); }
             .lineage-edit-modal button.le-pill--add:not(.is-disabled):hover { background: var(--primary-soft); }
             .lineage-edit-modal button.le-btn.is-disabled:hover { background: transparent; }
         }
@@ -11856,13 +11849,11 @@
             min-height: 38px;
             padding: 6px 8px;
             box-sizing: border-box;
-            border-radius: 8px;
             cursor: pointer;
         }
-        .path-picker-row.is-chosen { background: var(--primary-soft); }
-        .path-picker-row.is-off { cursor: not-allowed; }
-        .path-picker-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
-        @media (hover: hover) { .path-picker-row:not(.is-off):not(.is-chosen):hover { background: var(--surface-2); } }
+        /* A choice is a .sel-opt row (src/ui/sel-css.ts): the chosen one filled with a line under it. */
+        .path-picker-row.sel-opt.is-off { cursor: not-allowed; }
+        .path-picker-row.sel-opt:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         .path-picker-name { font-size: 13.5px; font-weight: 600; overflow-wrap: anywhere; }
         .path-picker-row.is-off .path-picker-name { color: var(--text-faint); }
         .path-picker-sub { font-size: 12px; color: var(--text-muted); }
@@ -11873,7 +11864,7 @@
             .map-path-chip { height: 44px; }
             .map-path-chip-clear { width: 44px; }
             .path-picker-field { height: 46px; }
-            .path-picker-row { min-height: 48px; }
+            .path-picker-row.sel-opt { min-height: 48px; }
             .path-picker-close { width: 44px; height: 44px; }
         }
         @media (max-width: 640px) {
@@ -16598,25 +16589,16 @@
             flex-direction: column;
             gap: 6px;
         }
+        /* A choice is a .sel-opt tile (src/ui/sel-css.ts): the chosen one framed 2 px. */
         .person-merge-conflict-option {
             display: flex;
             align-items: center;
             gap: 8px;
             padding: 8px 10px;
-            border: 1px solid var(--border);
-            border-radius: 6px;
             cursor: pointer;
-            transition: all 0.15s;
         }
-        @media (hover: hover) { .person-merge-conflict-option:hover {
-            background: var(--surface-2);
-        } }
         .person-merge-conflict-option input[type="radio"] {
             margin: 0;
-        }
-        .person-merge-conflict-option.selected {
-            border-color: var(--primary);
-            background: var(--primary-soft);
         }
         .person-merge-conflict-value {
             flex: 1;
@@ -16678,25 +16660,14 @@
             flex-direction: column;
             gap: 8px;
         }
+        /* The chosen side reads as a selected card, not just a radio dot: a .sel-opt tile (src/ui/sel-css.ts). */
         .conflict-option {
             display: flex;
             align-items: center;
             flex-wrap: wrap;
             gap: 10px;
             padding: 8px 12px;
-            border: 1px solid var(--border);
-            border-radius: 8px;
             cursor: pointer;
-            transition: all 0.15s;
-        }
-        @media (hover: hover) { .conflict-option:hover {
-            border-color: var(--primary);
-        } }
-        /* The chosen side reads as a selected card, not just a radio dot. */
-        .conflict-option:has(input:checked) {
-            border-color: var(--primary, #4a7c59);
-            background: color-mix(in srgb, var(--primary) 10%, transparent);
-            box-shadow: inset 0 0 0 1px var(--primary, #4a7c59);
         }
         .conflict-option input[type="radio"] {
             width: auto;
@@ -17611,23 +17582,14 @@
         .merge-trees-options {
             margin-bottom: 16px;
         }
+        /* A choice is a .sel-opt tile (src/ui/sel-css.ts): the chosen one framed 2 px; its 1 px edge, the padding keeps the size. */
         .merge-trees-option {
             display: flex;
             align-items: center;
             gap: 10px;
-            padding: 12px;
-            border: 2px solid var(--border);
-            border-radius: 8px;
+            padding: 13px;
             cursor: pointer;
             margin-bottom: 8px;
-            transition: all 0.15s;
-        }
-        @media (hover: hover) { .merge-trees-option:hover {
-            border-color: var(--primary);
-        } }
-        .merge-trees-option.selected {
-            border-color: var(--primary);
-            background: var(--primary-soft);
         }
         .merge-trees-option input[type="radio"] {
             width: auto;
@@ -20236,7 +20198,6 @@
         .research-send-later { margin: 6px 0 0; font-size: 12px; color: var(--text-light); }
         /* The send cards: Recommended always on by hand, "(so far)" on how it went (the one-time question). */
         .modal label.research-send-card { padding: 13px 15px; }
-        .modal label.research-send-card:has(input:checked) { padding: 12px 14px; }
         .research-send-recommended {
             display: inline-block; margin-left: 4px; padding: 1px 7px; border-radius: 999px; vertical-align: 1px;
             background: var(--primary-soft); color: var(--primary-dark); font-size: 11px; font-weight: 600; line-height: 1.4;
@@ -20349,17 +20310,13 @@
         /* Research for this tree (research-tree-settings-ui.ts). */
         .research-transcripts { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
         .research-transcripts legend { font-size: 14px; font-weight: 600; margin-bottom: 8px; padding: 0; }
+        /* A choice is a .sel-opt tile (src/ui/sel-css.ts): the chosen one framed 2 px; the focus an outline around it. */
         .modal label.research-transcripts-card {
             display: flex; gap: 10px; align-items: flex-start; min-height: 44px; padding: 10px 12px; margin: 0;
-            border: 1px solid var(--border); border-radius: 10px; cursor: pointer;
-            font-size: 14px; font-weight: 400; color: var(--text);
-        }
-        .research-transcripts-card:has(input:checked) {
-            border: 2px solid var(--primary); padding: 9px 11px;
-            background: color-mix(in srgb, var(--primary) 8%, var(--surface));
+            cursor: pointer; font-size: 14px; font-weight: 400; color: var(--text);
         }
         .modal .research-transcripts-card input { width: auto; margin: 3px 0 0; flex: none; accent-color: var(--primary); }
-        .research-transcripts-card:has(input:focus-visible) { box-shadow: var(--shadow-focus); }
+        .research-transcripts-card:has(input:focus-visible) { outline: 2px solid var(--primary); outline-offset: 2px; }
         .research-transcripts-text { display: flex; flex-direction: column; gap: 2px; }
         .research-transcripts-title { font-size: 14px; font-weight: 600; }
         .research-transcripts-default { font-weight: 400; color: var(--text-light); }
@@ -22915,9 +22872,17 @@
         .person-research-hypo-meta { font-size: 13px; line-height: 1.4; color: var(--text-light); }
         .person-research-hypo-note { margin: 4px 0 0; font-size: 13px; line-height: 1.45; color: var(--text-light); white-space: pre-line; }
         .person-research-variants { margin-top: 10px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+        /* The decided version is a .sel-opt row (src/ui/sel-css.ts): filled with a line under it. A list row, not a
+           control: its text keeps its own colour and weight, no hover tint; "shown" keeps its tint under the choice. */
         .person-research-variant { display: flex; align-items: center; gap: 12px; padding: 10px 14px; }
-        .person-research-variant + .person-research-variant { border-top: 1px solid var(--divider); }
-        .person-research-variant.is-shown { background: color-mix(in srgb, var(--ghost-bg) 70%, var(--surface)); }
+        .person-research-variant.sel-opt { color: var(--text); }
+        .person-research-variant.sel-opt > .prv-text { font-weight: 400; }
+        .person-research-variants > .person-research-variant.sel-opt:last-child { border-bottom: 0; }
+        .person-research-variant.sel-opt.is-shown { background: color-mix(in srgb, var(--ghost-bg) 70%, var(--surface)); }
+        @media (hover: hover) {
+            .person-research-variants > .person-research-variant.sel-opt:not(.is-chosen):hover { background: transparent; border-color: var(--divider); }
+            .person-research-variants > .person-research-variant.sel-opt.is-shown:not(.is-chosen):hover { background: color-mix(in srgb, var(--ghost-bg) 70%, var(--surface)); }
+        }
         .prv-id { flex: none; width: 14px; font-weight: 600; color: var(--text-light); }
         .prv-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
         .prv-title {
@@ -22970,7 +22935,6 @@
         /* Spec 074: the card of a hypothesis decided in the app (data-pick: pick, remote, readonly, merge). */
         .person-research-hypo[data-pick] .person-research-variant { align-items: flex-start; }
         .person-research-hypo[data-pick] .view-link-switch { margin-top: 2px; }
-        .person-research-hypo[data-pick] .person-research-variant.is-chosen { background: color-mix(in srgb, var(--primary-soft) 55%, var(--surface)); }
         .person-research-hypo[data-pick] .person-research-variant.is-dim .prv-title { color: var(--text-light); }
         .person-research-hypo[data-pick] .prv-text { gap: 4px; }
         .prv-tag {
@@ -26244,12 +26208,12 @@
         #research-review-modal { z-index: 190; }
         .research-review-intro { margin: 0 0 12px; font-size: 14px; line-height: 1.5; color: var(--text); }
         .research-review-scopes { display: flex; flex-direction: column; gap: 6px; }
+        /* A choice is a .sel-opt tile (src/ui/sel-css.ts): the chosen one framed 2 px; the focus an outline around it. */
         .modal label.research-review-scope {
             display: flex; margin: 0; font-weight: 400; align-items: center; gap: 12px; min-height: 48px; padding: 6px 12px;
-            border: 1px solid var(--border); border-radius: var(--r-md); cursor: pointer;
+            cursor: pointer;
         }
-        .research-review-scope:has(input:checked) { border-color: var(--primary); background: var(--primary-soft); }
-        .research-review-scope:has(input:focus-visible) { box-shadow: var(--shadow-focus); }
+        .research-review-scope:has(input:focus-visible) { outline: 2px solid var(--primary); outline-offset: 2px; }
         .modal .research-review-scope input { width: auto; margin: 0; flex: none; accent-color: var(--primary); }
         .research-review-scope-text { display: flex; flex-direction: column; gap: 1px; }
         .research-review-scope-label { font-size: 14px; color: var(--text); }
@@ -27011,7 +26975,6 @@
         .research-offline-settings { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--divider, var(--border)); min-width: 0; }
         .research-offline-settings legend { float: left; width: 100%; font-size: 15px; font-weight: 600; }
         .research-offline-settings__intro { clear: both; margin: 0 0 2px; font-size: 13px; line-height: 1.45; color: var(--text-light); }
-        .research-offline-settings .research-transcripts-card:has(input:checked) { background: var(--primary-soft); }
         .research-offline-settings .research-direction__problem { margin-top: -2px; }
         .research-offline-settings .research-direction__problem.is-warn { color: var(--warning-text); }
         .research-offline-settings__affects { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-light); }
@@ -27380,15 +27343,11 @@
         .export-gedcom-purpose { display: flex; flex-direction: column; gap: 8px; }
         .export-purpose-label { font-size: 13px; font-weight: 500; color: var(--text); }
         .export-purpose-options { display: flex; flex-direction: column; gap: 8px; }
+        /* A choice is a .sel-opt tile (src/ui/sel-css.ts): the chosen one framed 2 px. */
         .modal label.export-purpose-option {
             display: flex; flex-direction: row; align-items: flex-start; gap: 10px; margin: 0;
-            padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px;
-            background: var(--surface); cursor: pointer; font-weight: 400; box-sizing: border-box;
+            padding: 10px 12px; cursor: pointer; font-weight: 400; box-sizing: border-box;
         }
-        .modal label.export-purpose-option:has(input:checked) {
-            border-color: var(--primary); background: color-mix(in srgb, var(--primary-soft) 60%, var(--surface));
-        }
-        @media (hover: hover) { .modal label.export-purpose-option:hover { border-color: var(--primary); } }
         .export-purpose-option input[type="radio"] { width: 16px; height: 16px; margin: 2px 0 0; flex: none; accent-color: var(--primary); }
         .export-purpose-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
         .export-purpose-title { font-size: 14px; font-weight: 500; color: var(--text); overflow-wrap: anywhere; }
@@ -29161,38 +29120,38 @@
 [data-theme="dark"] { --sel-fill: #3a362c; --sel-mute: var(--line-color, #5a5546); }
 .sel-tab { font-weight: 500; color: var(--text-light); }
 .sel-tab.sel-tab { border-radius: 0; }
-.sel-tab:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)), .sel-opt:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)) { color: var(--sel-fg); font-weight: 600; }
+.sel-tab:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, .is-chosen, :has(> input:checked)), .sel-opt:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, .is-chosen, :has(> input:checked)) { color: var(--sel-fg); font-weight: 600; }
 .sel-tab > .sel-l { display: inline-grid; }
 .sel-tab > .sel-l::after { content: attr(data-label); content: attr(data-label) / ""; font-weight: 600; height: 0; overflow: hidden; visibility: hidden; white-space: inherit; }
 .sel-tab:focus-visible, .sel-opt:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; box-shadow: revert-layer; }
 .sel-tab:is(:disabled, [aria-disabled="true"]), .sel-opt:is(:disabled, [aria-disabled="true"]) { opacity: .55; cursor: default; }
-.sel-tab:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)):is(:disabled, [aria-disabled="true"]), .sel-opt:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)):is(:disabled, [aria-disabled="true"]) { --sel-line: var(--sel-mute); --sel-border: var(--sel-mute); }
-.sel-tab:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)) { box-shadow: inset 0 calc(-1 * var(--sel-line-w)) 0 var(--sel-line); }
-.sel-tab[data-sel-dir="up"]:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)) { box-shadow: inset 0 var(--sel-line-w) 0 var(--sel-line); }
-.sel-tab[data-sel-dir="side"]:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)) { box-shadow: inset var(--sel-line-w) 0 0 var(--sel-line); }
+.sel-tab:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, .is-chosen, :has(> input:checked)):is(:disabled, [aria-disabled="true"]), .sel-opt:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, .is-chosen, :has(> input:checked)):is(:disabled, [aria-disabled="true"]) { --sel-line: var(--sel-mute); --sel-border: var(--sel-mute); }
+.sel-tab:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, .is-chosen, :has(> input:checked)) { box-shadow: inset 0 calc(-1 * var(--sel-line-w)) 0 var(--sel-line); }
+.sel-tab[data-sel-dir="up"]:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, .is-chosen, :has(> input:checked)) { box-shadow: inset 0 var(--sel-line-w) 0 var(--sel-line); }
+.sel-tab[data-sel-dir="side"]:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, .is-chosen, :has(> input:checked)) { box-shadow: inset var(--sel-line-w) 0 0 var(--sel-line); }
 .sel-opt { border: 1px solid var(--border, #ddd4c2); border-radius: var(--sel-r); background: var(--surface, #fffdf8); color: var(--text-light); }
-.sel-opt:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)) { border-color: var(--sel-border); box-shadow: inset 0 0 0 1px var(--sel-border); }
+.sel-opt:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, .is-chosen, :has(> input:checked)) { border-color: var(--sel-border); box-shadow: inset 0 0 0 1px var(--sel-border); }
 .sel-seg { display: inline-flex; border: 1px solid var(--border, #ddd4c2); border-radius: var(--sel-r); }
 .sel-seg > .sel-opt { border: 0; border-radius: 0; }
 .sel-seg > .sel-opt:first-child { border-radius: calc(var(--sel-r) - 1px) 0 0 calc(var(--sel-r) - 1px); }
 .sel-seg > .sel-opt:last-child { border-radius: 0 calc(var(--sel-r) - 1px) calc(var(--sel-r) - 1px) 0; }
 .sel-seg > .sel-opt:first-child:last-child { border-radius: calc(var(--sel-r) - 1px); }
 .sel-seg > .sel-opt + .sel-opt { border-left: 1px solid var(--border, #ddd4c2); }
-.sel-seg > .sel-opt:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)) { box-shadow: inset 0 0 0 2px var(--sel-border); }
+.sel-seg > .sel-opt:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, .is-chosen, :has(> input:checked)) { box-shadow: inset 0 0 0 2px var(--sel-border); }
 .sel-opt[data-sel-form="row"] { border: 0; border-bottom: 1px solid var(--divider, #ece5d6); border-radius: 0; background: transparent; }
-.sel-opt[data-sel-form="row"]:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)) { background: var(--sel-fill); box-shadow: inset 0 -2px 0 var(--sel-line); }
+.sel-opt[data-sel-form="row"]:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, .is-chosen, :has(> input:checked)) { background: var(--sel-fill); box-shadow: inset 0 -2px 0 var(--sel-line); }
 .sel-opt[data-sel-form="tile"] { border-radius: var(--r-md, 8px); }
 @media (hover: hover) {
-  .sel-tab:not(:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)), :is(:disabled, [aria-disabled="true"])):hover { color: var(--text); box-shadow: inset 0 -1px 0 var(--sel-mute); }
-  .sel-tab[data-sel-dir="up"]:not(:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)), :is(:disabled, [aria-disabled="true"])):hover { box-shadow: inset 0 1px 0 var(--sel-mute); }
-  .sel-tab[data-sel-dir="side"]:not(:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)), :is(:disabled, [aria-disabled="true"])):hover { box-shadow: inset 1px 0 0 var(--sel-mute); }
-  .sel-opt:not(:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)), :is(:disabled, [aria-disabled="true"])):hover { background: var(--surface-2, #f6f2ea); border-color: var(--sel-mute); }
+  .sel-tab:not(:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, .is-chosen, :has(> input:checked)), :is(:disabled, [aria-disabled="true"])):hover { color: var(--text); box-shadow: inset 0 -1px 0 var(--sel-mute); }
+  .sel-tab[data-sel-dir="up"]:not(:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, .is-chosen, :has(> input:checked)), :is(:disabled, [aria-disabled="true"])):hover { box-shadow: inset 0 1px 0 var(--sel-mute); }
+  .sel-tab[data-sel-dir="side"]:not(:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, .is-chosen, :has(> input:checked)), :is(:disabled, [aria-disabled="true"])):hover { box-shadow: inset 1px 0 0 var(--sel-mute); }
+  .sel-opt:not(:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, .is-chosen, :has(> input:checked)), :is(:disabled, [aria-disabled="true"])):hover { background: var(--surface-2, #f6f2ea); border-color: var(--sel-mute); }
 }
 @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
-  .sel-tab[data-sel-dir="up"][data-sel-land="side"]:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)) { box-shadow: inset var(--sel-line-w) 0 0 var(--sel-line); }
+  .sel-tab[data-sel-dir="up"][data-sel-land="side"]:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, .is-chosen, :has(> input:checked)) { box-shadow: inset var(--sel-line-w) 0 0 var(--sel-line); }
 }
 @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) and (hover: hover) {
-  .sel-tab[data-sel-dir="up"][data-sel-land="side"]:not(:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)), :is(:disabled, [aria-disabled="true"])):hover { box-shadow: inset 1px 0 0 var(--sel-mute); }
+  .sel-tab[data-sel-dir="up"][data-sel-land="side"]:not(:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, .is-chosen, :has(> input:checked)), :is(:disabled, [aria-disabled="true"])):hover { box-shadow: inset 1px 0 0 var(--sel-mute); }
 }
 @media (pointer: coarse) {
   .sel-tab, .sel-opt:is([data-sel-form="seg"], [data-sel-form="row"], [data-sel-form="tile"]) { min-height: 44px; }
@@ -29200,11 +29159,11 @@
   .sel-opt:is(:not([data-sel-form]), [data-sel-form="chip"])::before { content: ""; position: absolute; inset: -7px 0; }
 }
 @media print {
-  .sel-tab:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)) { box-shadow: none; border-bottom: var(--sel-line-w) solid var(--sel-line); }
-  .sel-tab[data-sel-dir="up"]:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)) { box-shadow: none; border-bottom: 0; border-top: var(--sel-line-w) solid var(--sel-line); }
-  .sel-tab[data-sel-dir="side"]:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)) { box-shadow: none; border-bottom: 0; border-left: var(--sel-line-w) solid var(--sel-line); }
-  .sel-opt:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)), .sel-seg > .sel-opt:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)) { box-shadow: none; outline: 2px solid var(--sel-border); outline-offset: -2px; }
-  .sel-opt[data-sel-form="row"]:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, :has(> input:checked)) { box-shadow: none; outline: 0; border-bottom: 2px solid var(--sel-line); }
+  .sel-tab:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, .is-chosen, :has(> input:checked)) { box-shadow: none; border-bottom: var(--sel-line-w) solid var(--sel-line); }
+  .sel-tab[data-sel-dir="up"]:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, .is-chosen, :has(> input:checked)) { box-shadow: none; border-bottom: 0; border-top: var(--sel-line-w) solid var(--sel-line); }
+  .sel-tab[data-sel-dir="side"]:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, .is-chosen, :has(> input:checked)) { box-shadow: none; border-bottom: 0; border-left: var(--sel-line-w) solid var(--sel-line); }
+  .sel-opt:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, .is-chosen, :has(> input:checked)), .sel-seg > .sel-opt:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, .is-chosen, :has(> input:checked)) { box-shadow: none; outline: 2px solid var(--sel-border); outline-offset: -2px; }
+  .sel-opt[data-sel-form="row"]:is([aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], .active, .is-on, .is-selected, .is-active, .selected, .is-chosen, :has(> input:checked)) { box-shadow: none; outline: 0; border-bottom: 2px solid var(--sel-line); }
 }
         /* sel:end */
     </style>
@@ -32108,14 +32067,14 @@
             <div id="export-gedcom-purpose" class="form-group export-gedcom-purpose" hidden>
                 <span class="export-purpose-label" id="export-purpose-label" data-i18n="exportGed.purpose">What the file is for</span>
                 <div class="export-purpose-options" role="radiogroup" aria-labelledby="export-purpose-label">
-                    <label class="export-purpose-option">
+                    <label class="export-purpose-option sel-opt" data-sel-form="tile">
                         <input type="radio" name="export-gedcom-purpose" id="export-purpose-back" value="back" onchange="window.Strom.UI.selectExportGedcomPurpose('back')">
                         <span class="export-purpose-text">
                             <span class="export-purpose-title" id="export-purpose-back-title"></span>
                             <span class="export-purpose-sub" data-i18n="exportGed.backSub"></span>
                         </span>
                     </label>
-                    <label class="export-purpose-option">
+                    <label class="export-purpose-option sel-opt" data-sel-form="tile">
                         <input type="radio" name="export-gedcom-purpose" id="export-purpose-share" value="share" onchange="window.Strom.UI.selectExportGedcomPurpose('share')">
                         <span class="export-purpose-text">
                             <span class="export-purpose-title" data-i18n="exportGed.share"></span>
