@@ -11,7 +11,7 @@ import { test, expect, Locator, Page } from '@playwright/test';
 import { openApp, createFirstPerson, card } from './helpers.js';
 import { followManaged } from './live-directions-bridge.js';
 
-const LONG = 'Familienforschung Fíšek-Smrkov';
+const LONG = 'Familienforschung Pelíšek-Dubov';
 const PHONE = { width: 390, height: 844 };
 
 /** The label is whole: not cut ("…", hidden overflow), each word on one line, within its box. */
