@@ -13775,7 +13775,7 @@
         }
 
         /* Family / Descendants view tabs — full-height .sel-tab (the selection
-           indicator: the line at the foot of the chosen tab, its bold cut held by
+           indicator: the line at the foot of the chosen tab, its bold cut drawn over
            .sel-l). margin-left:auto pushes the tabs (+ ⋯/settings/add) right. */
         .view-mode-segment {
             display: inline-flex; align-self: stretch; align-items: stretch;
@@ -13790,10 +13790,26 @@
         }
         .view-mode-segment button {
             border: none; background: transparent; color: var(--text-light);
-            /* 13.4 px, not 14: every label holds the width of its bold cut (.sel-l),
-               about 7 px over the six tabs in de and pl, so the tabs give that room
+            /* 13.4 px, not 14: the labels take the 500 cut (the earlier tabs 400),
+               a few px over the six tabs in de and pl, so the tabs give that room
                back and the search field keeps its width (de at 1440 and 1300 px). */
             padding: 0 13.4px; font-size: 13px; cursor: pointer;
+        }
+        /* The chosen view tab's bold cut is drawn over its label, centred (it may
+           run a pixel or two into the padding); the label keeps the width of the
+           regular cut, so no tab reserves the bold one. A Mac draws the bold about
+           1 px wider per label, a Linux rasteriser 2-4 px: a reserve sized for one
+           machine took the search field's room on the other. */
+        .view-mode-segment .sel-tab > .sel-l { display: inline-block; position: relative; }
+        .view-mode-segment .sel-tab > .sel-l::after {
+            position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+            height: auto; overflow: visible; white-space: nowrap; pointer-events: none;
+        }
+        .view-mode-segment .sel-tab:is(.active, [aria-current]:not([aria-current="false"]), [aria-pressed="true"], [aria-selected="true"]) > .sel-l {
+            font-weight: 500; -webkit-text-fill-color: transparent;
+        }
+        .view-mode-segment .sel-tab:is(.active, [aria-current]:not([aria-current="false"]), [aria-pressed="true"], [aria-selected="true"]) > .sel-l::after {
+            visibility: visible; -webkit-text-fill-color: currentColor;
         }
         /* The underline tabs must stay flat on hover. The generic
            ".toolbar button:hover { background: var(--primary-dark) }" rule
@@ -13801,8 +13817,7 @@
            (dark-on-dark) — reassert a transparent background here. */
         @media (hover: hover) { .view-mode-segment button:hover { background: transparent; } }
         /* Fit step 2 (measured, src/ui/toolbar-fit.ts): the toolbar is too tight with
-           ＋ alone — tighter tabs and no "/" hint, the field keeps its text. Every
-           tab holds the width of its bold cut (.sel-l), so the tabs tighten to 8 px. */
+           ＋ alone — tighter tabs and no "/" hint, the field keeps its text. */
         .toolbar.toolbar-squeeze .view-mode-segment button { padding: 0 8px; }
         .toolbar.toolbar-squeeze .search-shortcut { display: none; }
         /* Fit step 4: the tree's name capped shorter ("…"; the whole name in its tooltip). */
@@ -13944,7 +13959,7 @@
             :is(.toolbar .rod-picker-host, .rod-pick-sheet) .sp-rodpick-small button.sp-rodpick-a { min-height: 44px; }
         }
         /* Narrow desktop: no "Line" before the name, the name to 150px, tighter tabs
-           (8.4 px, not 9: each tab holds the width of its bold cut, .sel-l). */
+           (8.4 px, not 9: the labels take the 500 cut, the earlier tabs 400). */
         @media (min-width: 1025px) and (max-width: 1279px) {
             .rod-picker-host .sp-rodpick-pfx { display: none; }
             .rod-picker-host .sp-rodpick-v b { max-width: 150px; }

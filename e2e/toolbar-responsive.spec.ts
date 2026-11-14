@@ -463,12 +463,13 @@ test.describe('the tree switcher\'s name in a tight toolbar (de-DE)', () => {
 
 /**
  * The search field of a tree without a research (de: the widest view tabs).
- * Every view tab holds the width of its bold cut (.sel-l) and the search funnel
- * keeps a 1px chip edge; the tabs' side padding and the funnel's give that room
- * back, so the search input is no narrower than with the earlier tabs (no bold
- * reserve, 14 px sides) and the edgeless funnel. The earlier look is put back
- * with an injected style and measured in the same page: the fonts of the
- * machine do not matter.
+ * The view tabs' labels take the 500 cut (the chosen one's bold cut is drawn
+ * over its label and takes no room) and the search funnel keeps a 1px chip
+ * edge; the tabs' side padding and the funnel's give that room back, so the
+ * search input is no narrower than with the earlier tabs (400 cut, 14 px sides)
+ * and the edgeless funnel. The earlier look is put back with an injected style
+ * and measured in the same page. A machine that draws the bold cut wider (CI's
+ * Linux, 2-4 px a label) changes no tab's width.
  */
 test.describe('the search field beside the view tabs (de-DE, no research)', () => {
     test.use({ locale: 'de-DE' });
@@ -476,6 +477,7 @@ test.describe('the search field beside the view tabs (de-DE, no research)', () =
         .view-mode-segment .sel-tab { padding-left: 14px !important; padding-right: 14px !important; }
         .view-mode-segment .sel-tab:not(.active) { font-weight: 400 !important; }
         .view-mode-segment .sel-l::after { content: none !important; }
+        .view-mode-segment .sel-tab.active > .sel-l { font-weight: 600 !important; -webkit-text-fill-color: currentColor !important; }
         .toolbar .search-filter-toggle { border: 0 !important; padding-left: 14px !important; padding-right: 14px !important; }`;
 
     async function searchRoom(page: Page) {
@@ -516,6 +518,29 @@ test.describe('the search field beside the view tabs (de-DE, no research)', () =
                     .toBeGreaterThanOrEqual(before.search - 0.5);
             }
         }
+    });
+
+    test('a wider bold cut (as a Linux rasteriser draws it) changes no view tab\'s width', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await openApp(page);
+        await page.evaluate(() => window.Strom.UI.loadDemoTree());
+        await expect(page.locator('.person-card').first()).toBeVisible();
+        const tabs = () => page.locator('#view-mode-segment button').evaluateAll(els => els.map(e => e.getBoundingClientRect().width));
+        await settleLayout(page, '#view-mode-segment');
+        const regular = await tabs();
+        // Every 600 cut 3 px wider a label: the reserve of the bold cut grew with it (CI 1440 px: search 53 -> 30).
+        const wide = await page.addStyleTag({ content: `
+            .view-mode-segment .sel-l::after { letter-spacing: .45px !important; }` });
+        await settleLayout(page, '#view-mode-segment');
+        const widened = await tabs();
+        for (let i = 0; i < regular.length; i++) expect(widened[i], `tab ${i}`).toBeCloseTo(regular[i], 1);
+        // The chosen label is drawn whole in the bold cut, inside its tab.
+        const drawn = await page.locator('#view-mode-family').evaluate(btn => {
+            const after = getComputedStyle(btn.querySelector('.sel-l')!, '::after');
+            return { visibility: after.visibility, weight: after.fontWeight, tabWhole: btn.scrollWidth <= btn.clientWidth + 0.5 };
+        });
+        expect(drawn).toEqual({ visibility: 'visible', weight: '600', tabWhole: true });
+        await wide.evaluate(el => el.remove());
     });
 });
 
