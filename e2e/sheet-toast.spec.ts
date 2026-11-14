@@ -83,12 +83,21 @@ test.describe('a toast and a bottom sheet: the newer one wins', () => {
         await showMessage(page, OPENED);
         const opened = message(page, OPENED);
         await expect(opened).toBeVisible();
-        expect((await opened.boundingBox())!.height).toBeGreaterThan(40);
+        const toastBox = (await opened.boundingBox())!;
+        expect(toastBox.height).toBeGreaterThan(40);
 
         const more = row(page, 'T0103').locator('.live-queue-more');
         await more.click();
         await expect(backdrop(page)).toHaveClass(/\bactive\b/);
         const top = await settledTop(menu(page), 844);
+        // Where the toast stood, the backdrop or the sheet is on top (its middle and its second line), never the toast.
+        for (const y of [toastBox.y + toastBox.height / 2, toastBox.y + toastBox.height - 6]) {
+            const hit = await page.evaluate(([x, yy]) => {
+                const n = document.elementFromPoint(x, yy);
+                return n?.closest('.toast') ? 'toast' : n?.closest('#live-task-menu') ? 'sheet' : n?.closest('.bottom-sheet-overlay') ? 'backdrop' : n?.className ?? null;
+            }, [toastBox.x + toastBox.width / 2, y]);
+            expect(['sheet', 'backdrop']).toContain(hit);
+        }
         // Hidden under the sheet: nothing of it between the backdrop and the sheet, the sheet's title whole.
         await expect(opened).toBeHidden();
         await expect(opened).toHaveClass(/toast-under-sheet/);
