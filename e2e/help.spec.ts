@@ -92,8 +92,8 @@ test.describe('How Strom works on a computer', () => {
         await openFromMenu(page);
         const chapter = page.locator('.help-ch[data-chapter="A9"]');
         await expect(chapter.locator('.help-ch-title')).toHaveText('Using the app');
-        // The last chapter of part A.
-        await expect(page.locator('.help-part').first().locator('.help-ch').last()).toHaveAttribute('data-chapter', 'A9');
+        // A chapter of part A (the app), not the last one any more: A10 (one event of several people) follows it.
+        await expect(page.locator('.help-part').first().locator('.help-ch[data-chapter="A9"]')).toHaveCount(1);
         await chapter.click();
         await expect(page.locator('.help-h1')).toContainText('A9');
         for (const id of ['A9.1', 'A9.2', 'A9.3', 'A9.4']) await expect(page.locator(`.help-rule[data-rule="${id}"]`)).toHaveCount(1);
