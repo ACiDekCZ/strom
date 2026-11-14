@@ -631,7 +631,7 @@ describe('Family together (spec 085 §2h)', () => {
         const html = buildFamilyBook(census(cizi), { lang: 'cs', privacy: 'full', detail: 'all' }, ENV);
         const ch = chapterOf(html, 1);
         expect(ch).not.toContain('book-together');
-        expect(ch.replace(/<span class="shared-line-item">([^<]*)<\/span>/g, '$1')).toContain('spolu s Ludmila Sejková, Vojtěch Ostružník <span class="shared-line-more">a další 2</span>');
+        expect(ch.replace(/<span class="shared-line-item">([^<]*)<\/span>/g, '$1')).toContain('spolu: Ludmila Sejková, Vojtěch Ostružník <span class="shared-line-more">a další 2</span>');
         expect(ch).not.toContain('shared-line-mark');
     });
 });

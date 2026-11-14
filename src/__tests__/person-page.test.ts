@@ -1949,10 +1949,22 @@ describe('a shared event on the person page (spec 085 §2b–2c)', () => {
         const line = html.match(/<span class="shared-line shared-line--open"[^>]*>[\s\S]*?<\/span><\/span>/)?.[0] ?? '';
         expect(line).toContain('data-pp-action="shared-event"');
         expect(line).toContain('data-pp-event="c_jan"');
-        expect(line).toContain('spolu s');
+        expect(line).toContain('spolu: ');
         expect(line).toMatch(/data-pp-person="marie"[^>]*title="Marie Dvořáková"[^>]*>Marie</);
         expect(line).toMatch(/data-pp-person="rosa"[^>]*>Rosa</);
         expect(line).toContain('shared-line-mark');
+    });
+
+    it('the lead takes no case: the names stay in the nominative after it (cs, pl), "with" in en and de', () => {
+        const lineText = (lang?: 'pl' | 'de' | 'en') => {
+            const html = body(census(), lang ? { lang } : {});
+            const line = html.match(/<span class="shared-line shared-line--open"[^>]*>[\s\S]*?<\/span><\/span>/)?.[0] ?? '';
+            return line.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+        };
+        expect(lineText()).toMatch(/^spolu: Marie, Rosa/);
+        expect(lineText('pl')).toMatch(/^razem: Marie, Rosa/);
+        expect(lineText('de')).toMatch(/^mit Marie, Rosa/);
+        expect(lineText('en')).toMatch(/^with Marie, Rosa/);
     });
 
     it('a read-only page names the persons without opening the editor', () => {

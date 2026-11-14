@@ -10056,7 +10056,7 @@ const stringsCZ: StringsType = {
         sharedDeletedAll: (ev: string, n: number) => `${ev}: smazáno u ${n} ${plural('cs', n, 'osoby', 'osob', 'osob')}.`,
         sharedSeparated: (name: string) => `Kopie u osoby ${name} je teď samostatná.`,
         sharedOnlyOne: (ev: string, name: string) => `${ev}: teď jen u osoby ${name}.`,
-        sharedLine: 'spolu s',
+        sharedLine: 'spolu:',
         sharedLineMore: (n: number) => `a další ${n}`,
         sharedLineOpen: 'Otevřít společnou událost',
         derivedGodparent: 'Kmotr · křest:',

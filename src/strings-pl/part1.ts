@@ -697,7 +697,7 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         sharedDeletedAll: (ev: string, n: number) => `${ev}: usunięto u ${nPl(n, 'osoby', 'osób', 'osób')}.`,
         sharedSeparated: (name: string) => `Kopia u osoby ${name} jest teraz osobna.`,
         sharedOnlyOne: (ev: string, name: string) => `${ev}: teraz tylko u osoby ${name}.`,
-        sharedLine: 'razem z',
+        sharedLine: 'razem:',
         sharedLineMore: (n: number) => `i ${n} ${plPl(n, 'inna', 'inne', 'innych')}`,
         sharedLineOpen: 'Otwórz wspólne wydarzenie',
         derivedGodparent: 'Chrzestny · chrzest:',
