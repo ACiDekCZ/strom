@@ -221,6 +221,36 @@ test('About: a cancelled share sheet shows nothing; without a sheet the address 
     expect(errors).toEqual([]);
 });
 
+test('About: a share sheet that never opens (an app window on a Mac) still copies the address, the notice over the dialog', async ({ page }) => {
+    await page.addInitScript(() => {
+        const w = window as unknown as { __copied: string[] };
+        w.__copied = [];
+        Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: { writeText: async (t: string) => { w.__copied.push(t); } },
+        });
+        // Chrome's share() in an app window on a Mac: no sheet, never settles.
+        Object.defineProperty(navigator, 'share', { configurable: true, value: () => new Promise(() => {}) });
+    });
+    await openApp(page);
+    await page.evaluate(() => window.Strom.UI.showAboutDialog());
+    const about = page.locator('#about-modal');
+    await about.getByRole('button', { name: 'Share Strom' }).click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __copied: string[] }).__copied), { timeout: 4000 })
+        .toEqual(['https://stromapp.info/']);
+    const toast = page.locator('.toast');
+    await expect(toast).toHaveText('Link copied');
+    await expect(about).toBeVisible();
+    // Seen, not under the dialog's shade: the toast is what is on top at its centre, above the Close button.
+    await expect.poll(() => toast.evaluate(el => {
+        const r = el.getBoundingClientRect();
+        return el.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2));
+    })).toBe(true);
+    const close = await about.locator('.about-footer button').boundingBox();
+    const box = await toast.boundingBox();
+    expect(box!.y + box!.height).toBeLessThanOrEqual(close!.y);
+});
+
 test('About: the author on X is a link beside the others, in a new tab', async ({ page }) => {
     await openApp(page);
     await page.evaluate(() => window.Strom.UI.showAboutDialog());

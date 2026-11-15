@@ -122,21 +122,37 @@ export interface ShareNavigator {
 }
 
 /**
+ * How long a share sheet may take to answer before the address is copied too:
+ * Chrome in an app window on a Mac (an installed web app) opens no sheet and
+ * its share() never settles, so the click would do nothing.
+ */
+export const SHARE_SHEET_WAIT_MS = 1500;
+
+/**
  * Share the website: the system share sheet where the browser has one (a
  * phone, a tablet, a Mac), otherwise a copy of the address to the clipboard.
  * A sheet closed without sharing is 'cancelled' (nothing to show); a sheet
  * that cannot open (no user gesture, a blocked context) falls back to the
- * copy. Nothing is measured or sent anywhere else.
+ * copy, and so does one that has not answered within `waitMs` (it may open
+ * nowhere; a sheet that is open meanwhile stays). Nothing is measured or sent
+ * anywhere else.
  */
-export async function shareStrom(lang: Language, nav: ShareNavigator, title: string): Promise<ShareStromOutcome> {
+export async function shareStrom(lang: Language, nav: ShareNavigator, title: string,
+    waitMs: number = SHARE_SHEET_WAIT_MS): Promise<ShareStromOutcome> {
     const data = { title, url: shareStromUrl(lang) };
     if (typeof nav.share === 'function' && (typeof nav.canShare !== 'function' || nav.canShare(data))) {
-        try {
-            await nav.share(data);
-            return 'shared';
-        } catch (e) {
-            if ((e as { name?: unknown } | null)?.name === 'AbortError') return 'cancelled';
-        }
+        const share = nav.share;
+        const sheet = await new Promise<'shared' | 'cancelled' | 'copy'>((resolve) => {
+            const timer = setTimeout(() => resolve('copy'), waitMs);
+            const settle = (outcome: 'shared' | 'cancelled' | 'copy') => { clearTimeout(timer); resolve(outcome); };
+            const isAbort = (e: unknown) => (e as { name?: unknown } | null)?.name === 'AbortError';
+            try {
+                share(data).then(() => settle('shared'), (e: unknown) => settle(isAbort(e) ? 'cancelled' : 'copy'));
+            } catch (e) {
+                settle(isAbort(e) ? 'cancelled' : 'copy');
+            }
+        });
+        if (sheet !== 'copy') return sheet;
     }
     try {
         if (!nav.clipboard) return 'failed';

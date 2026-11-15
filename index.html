@@ -1843,6 +1843,8 @@
             border: 1px solid var(--border); border-radius: var(--r-md);
         }
         @media (hover: hover) { #about-modal .about-share:hover { background: var(--hover-bg); } }
+        /* What Share Strom did (the address copied, or the address itself): over the About dialog. */
+        .toast[data-kind="about-share"] { z-index: 250; }
         .about-share .ui-icon { color: var(--primary); }
         /* Touch: both support buttons a finger high. */
         @media (pointer: coarse) {

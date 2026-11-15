@@ -5,7 +5,7 @@
  * exist in every UI language, without addressing the reader.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { shareStrom, shareStromUrl, aboutAuthorXLink, type ShareNavigator } from '../about-links.js';
+import { shareStrom, shareStromUrl, SHARE_SHEET_WAIT_MS, aboutAuthorXLink, type ShareNavigator } from '../about-links.js';
 import { getStringsForLang, type Language } from '../strings.js';
 
 const LANGS: Language[] = ['en', 'cs', 'de', 'pl'];
@@ -62,6 +62,48 @@ describe('About: Share Strom', () => {
         const nav: ShareNavigator = { share: async () => { throw notAllowed; }, clipboard: { writeText } };
         expect(await shareStrom('cs', nav, 'Strom')).toBe('copied');
         expect(writeText).toHaveBeenCalledWith('https://stromapp.info/cs/');
+    });
+
+    it('copies the address when the share sheet never answers (an app window on a Mac opens none)', async () => {
+        vi.useFakeTimers();
+        try {
+            vi.setSystemTime(new Date('2026-11-15T10:30:00Z'));
+            const writeText = vi.fn(async () => undefined);
+            const nav: ShareNavigator = { share: () => new Promise<void>(() => {}), clipboard: { writeText } };
+            const outcome = shareStrom('cs', nav, 'Strom');
+            await vi.advanceTimersByTimeAsync(SHARE_SHEET_WAIT_MS - 1);
+            expect(writeText).not.toHaveBeenCalled();
+            await vi.advanceTimersByTimeAsync(1);
+            expect(await outcome).toBe('copied');
+            expect(writeText).toHaveBeenCalledWith('https://stromapp.info/cs/');
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('a sheet answering within the wait is the outcome: shared or cancelled, no copy', async () => {
+        vi.useFakeTimers();
+        try {
+            vi.setSystemTime(new Date('2026-11-15T10:30:00Z'));
+            const writeText = vi.fn(async () => undefined);
+            const later = (fail: boolean) => () => new Promise<void>((resolve, reject) =>
+                setTimeout(() => (fail ? reject(abortError()) : resolve()), SHARE_SHEET_WAIT_MS - 100));
+            const shared = shareStrom('en', { share: later(false), clipboard: { writeText } }, 'Strom');
+            const cancelled = shareStrom('en', { share: later(true), clipboard: { writeText } }, 'Strom');
+            await vi.advanceTimersByTimeAsync(SHARE_SHEET_WAIT_MS * 2);
+            expect(await shared).toBe('shared');
+            expect(await cancelled).toBe('cancelled');
+            expect(writeText).not.toHaveBeenCalled();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('copies the address when share throws at once', async () => {
+        const writeText = vi.fn(async () => undefined);
+        const nav: ShareNavigator = { share: () => { throw new TypeError('not allowed'); }, clipboard: { writeText } };
+        expect(await shareStrom('de', nav, 'Strom')).toBe('copied');
+        expect(writeText).toHaveBeenCalledWith('https://stromapp.info/de/');
     });
 
     it('reports failure when neither sharing nor the clipboard works', async () => {

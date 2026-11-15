@@ -304,13 +304,15 @@ export const miscMethods = uiModule({
     /**
      * "Share Strom" in About: the system share sheet with the website in the UI
      * language, or a copy of its address with a short notice. A cancelled sheet
-     * shows nothing; where neither works, the notice carries the address.
+     * shows nothing; where neither works, the notice carries the address. The
+     * notice stands over the open dialog, clear of its Close button.
      */
     async shareStromFromAbout(): Promise<void> {
         const lang = getCurrentLanguage();
         const outcome = await shareStrom(lang, navigator, 'Strom');
-        if (outcome === 'copied') this.showToast(strings.about.shareCopied);
-        else if (outcome === 'failed') this.showToast(shareStromUrl(lang), 10000);
+        const opts = { kind: 'about-share', clearOf: '#about-modal.active .about-footer' };
+        if (outcome === 'copied') this.showToast(strings.about.shareCopied, 3000, opts);
+        else if (outcome === 'failed') this.showToast(shareStromUrl(lang), 10000, opts);
     },
 
     // ---- SETTINGS DIALOG ----
