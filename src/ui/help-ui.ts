@@ -36,8 +36,11 @@ const INSTALL_URL = 'https://stromapp.info/research/help/';
 const LICENSE_URL = 'https://creativecommons.org/licenses/by/4.0/';
 const SOURCE_URL = 'https://github.com/ACiDekCZ/strom-doc';
 const SHORT_LINK = (id: string): string => `https://stromapp.info/doc/${id}`;
-const WEB_LINK = (lang: HelpLang, chapter: string, rule: string | null): string =>
-    `https://stromapp.info/doc/${lang}/${chapter}/${rule ? `#${rule}` : ''}`;
+/** A chapter on the web: English has no language prefix, the others lead with theirs (/cs/doc/R4/). */
+export function helpWebLink(lang: HelpLang, chapter: string, rule: string | null): string {
+    const prefix = lang === 'en' ? '' : `${lang}/`;
+    return `https://stromapp.info/${prefix}doc/${chapter}/${rule ? `#${rule}` : ''}`;
+}
 
 const HISTORY_MAX = 30;
 const HIGHLIGHT_MS = 2600;
@@ -458,7 +461,7 @@ function trackCurrent(w: HelpWindow): void {
     }
     const web = w.col.querySelector<HTMLAnchorElement>('.help-web');
     if (web) {
-        const url = WEB_LINK(w.lang, w.ch, cur);
+        const url = helpWebLink(w.lang, w.ch, cur);
         web.href = url;
         web.title = url;
     }
@@ -814,8 +817,8 @@ function drawArticle(w: HelpWindow, col: HTMLElement): void {
     trail.appendChild(sep);
     trail.appendChild(el('span', undefined, `${c.part} · ${partTitle(w, c.part)}`));
     crumbs.appendChild(trail);
-    const web = outLink(WEB_LINK(w.lang, c.id, w.cur), s.web, 'help-out help-web');
-    web.title = WEB_LINK(w.lang, c.id, w.cur);
+    const web = outLink(helpWebLink(w.lang, c.id, w.cur), s.web, 'help-out help-web');
+    web.title = helpWebLink(w.lang, c.id, w.cur);
     crumbs.appendChild(web);
     art.appendChild(crumbs);
 

@@ -86,7 +86,7 @@ test.describe('How Strom works on a computer', () => {
         await expect(page.locator('.help-side')).toBeVisible();
         await expect(page.locator('.help-side-ch[aria-current="page"]')).toContainText('R2');
         await expect(page.locator('.help-toc')).toBeHidden();
-        await expect(page.locator('.help-web')).toHaveAttribute('href', /^https:\/\/stromapp\.info\/doc\/en\/R2\//);
+        await expect(page.locator('.help-web')).toHaveAttribute('href', /^https:\/\/stromapp\.info\/doc\/R2\//);
         // Down to a link to another number, remember where the reader was.
         const link = page.locator('.help-article a.help-ref').filter({ hasNot: page.locator('[href="#index"]') }).last();
         await link.scrollIntoViewIfNeeded();
