@@ -305,10 +305,10 @@ export function convertLegacyCensusEvents(data: StromData): number {
 
 /**
  * A census's `2 TYPE` while its note still begins with it
- * (LifeEvent.gedcomType): the text, and the rest of the note; null when the
- * event has none or its note no longer starts with it.
+ * (LifeEvent.gedcomType, CoupleEvent.gedcomType): the text, and the rest of
+ * the note; null when the event has none or its note no longer starts with it.
  */
-export function censusTypeText(ev: Pick<LifeEvent, 'type' | 'note' | 'gedcomType'>): { text: string; note?: string } | null {
+export function censusTypeText(ev: { type: string; note?: string; gedcomType?: string }): { text: string; note?: string } | null {
     const text = ev.gedcomType;
     if (ev.type !== 'census' || typeof text !== 'string' || !text.trim() || typeof ev.note !== 'string') return null;
     if (ev.note !== text && !ev.note.startsWith(`${text}\n`)) return null;

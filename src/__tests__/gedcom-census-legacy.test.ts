@@ -107,6 +107,30 @@ describe('GEDCOM 1 CENS / 2 TYPE: the kind of census is kept (B-N2)', () => {
         expect(edited).not.toContain('2 TYPE Sčítání obyvatel Čech');
         expect(edited).toContain('2 NOTE Čp. 14');
     });
+
+    it('the couple\'s census (1 CENS under FAM) keeps its TYPE the same way, read again the same', () => {
+        const famGed = GED.replace('1 MARR\n2 DATE 1878',
+            '1 MARR\n2 DATE 1878\n1 CENS\n2 TYPE Soupis obyvatel panství Hřebenov\n2 DATE 1885\n2 NOTE Čp. 12\n1 CENS\n2 DATE 1895');
+        const d = load(famGed);
+        const couple = (data: StromData) => Object.values(data.partnerships)[0].events!
+            .filter(e => e.type === 'census').map(e => [e.date, e.note, e.gedcomType]);
+        expect(couple(d)).toEqual([
+            ['1885', 'Soupis obyvatel panství Hřebenov\nČp. 12', 'Soupis obyvatel panství Hřebenov'],
+            ['1895', undefined, undefined],
+        ]);
+        const out = exportToGedcom(d, 'Křemenáček', {}).content.split(/\r?\n/);
+        const at = out.indexOf('2 TYPE Soupis obyvatel panství Hřebenov');
+        expect(at).toBeGreaterThan(0);
+        expect(out[at - 1]).toBe('1 CENS');
+        expect(out.slice(at, at + 4)).toContain('2 NOTE Čp. 12');
+        expect(out.filter(l => l.includes('NOTE Soupis'))).toHaveLength(0);
+        expect(couple(load(out.join('\n')))).toEqual(couple(d));
+        // A note no longer starting with the TYPE writes no TYPE.
+        Object.values(d.partnerships)[0].events!.find(e => e.gedcomType)!.note = 'Čp. 14';
+        const edited = exportToGedcom(d, 'Křemenáček', {}).content.split(/\r?\n/);
+        expect(edited).not.toContain('2 TYPE Soupis obyvatel panství Hřebenov');
+        expect(edited).toContain('2 NOTE Čp. 14');
+    });
 });
 
 describe('a tree of 3.27: its custom "Census" becomes a census once (B-N1)', () => {

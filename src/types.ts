@@ -1538,6 +1538,12 @@ export interface CoupleEvent {
     participants?: EventParticipant[];
     /** The research's status of the event (see FactStatus). */
     status?: FactStatus;
+    /**
+     * What kind of census another program's file wrote under the couple's
+     * `1 CENS` (`2 TYPE`), as written: the first line of the note, written
+     * back as `2 TYPE` while the note still begins with it (as LifeEvent.gedcomType).
+     */
+    gedcomType?: string;
 }
 
 /** The partnership fields the relationships panel edits (DataManager.updatePartnership). */

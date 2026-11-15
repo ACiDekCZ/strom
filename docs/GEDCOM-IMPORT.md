@@ -297,6 +297,10 @@ Emit each fact under its own standard tag. All of these are read, with their
 Aliases fold in without a type of their own: `CHR` and `CHRA` are a christening,
 `GRAD` is where schooling ended.
 
+A `2 TYPE` under `CENS` (`2 TYPE Census of Bohemia`) names the kind of census.
+It becomes the first line of the event's note and goes back as `2 TYPE` while
+the note still begins with it — for a person's census and a couple's alike.
+
 Military service has no GEDCOM 5.5.1 tag. Strom writes it as
 `1 EVEN` / `2 TYPE Military service` (the label in the app's language) and
 reads back that label in English, Czech or German, as well as the `_MILT`,
@@ -445,7 +449,7 @@ event of the couple, with the same parts as a person's event:
 | `MARC` | marriage contract |
 | `MARS` | marriage settlement |
 | `RESI` | the couple's residence |
-| `CENS` | a census of the household |
+| `CENS` | a census of the household (its `TYPE` kept as for a person's census) |
 | `DIVF` | divorce filed |
 | `ANUL` | annulment (the couple's status is not changed by it) |
 | `EVEN` + `TYPE` | anything else, `TYPE` as its name |

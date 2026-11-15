@@ -1299,6 +1299,8 @@ interface RawCoupleEvent {
     participants?: RawParticipant[];
     /** `1 EVEN value`: the value on the tag line, kept when a TYPE takes the label. */
     tagValue?: string;
+    /** `2 TYPE` under a census: what kind of census it was (CoupleEvent.gedcomType). */
+    typeText?: string;
     /** 2 _STROM_STATUS: the research's status of the event. */
     status?: FactStatus;
     /** 2 _STROM_IMPORT (app files only). */
@@ -4774,6 +4776,10 @@ export function parseGedcom(content: string): ParsedGedcom {
                                 ev.note = ev.note ? `${ev.tagValue}\n${ev.note}` : ev.tagValue;
                                 delete ev.tagValue;
                             }
+                        } else if (tag === 'TYPE' && ev.type === 'census' && value.trim()) {
+                            // 1 CENS / 2 TYPE Census of Bohemia under FAM: the kind
+                            // of census, as for a person's census (convertToStrom).
+                            ev.typeText = ev.typeText ? `${ev.typeText} ${value.trim()}` : value.trim();
                         } else if (tag === 'SOUR' && value) {
                             cite(ev.sourceRefs ??= [], value);
                         } else if (tag === 'NOTE') {
@@ -5852,6 +5858,11 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
                 if (ev.address) out.address = ev.address;
                 if (ev.note) out.note = ev.note;
                 if (ev.status) out.status = ev.status;
+                // The census's TYPE heads its note and goes back as TYPE.
+                if (ev.typeText && out.type === 'census') {
+                    out.note = out.note ? `${ev.typeText}\n${out.note}` : ev.typeText;
+                    out.gedcomType = ev.typeText;
+                }
                 const refs = mapRefs(ev.sourceRefs);
                 if (refs.length > 0) out.sourceIds = refs;
                 const evQuay = quayOf(ev.sourceRefs);

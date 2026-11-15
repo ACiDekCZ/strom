@@ -2024,10 +2024,16 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         // The couple's own events, each under its own tag (1 MARB, 1 CENS,
         // 1 EVEN + 2 TYPE …) — never as lines of the note, so another program
         // and the research read them as facts.
-        const pushEvent = (event: CoupleEvent): void => {
+        const pushEvent = (fileEvent: CoupleEvent): void => {
+            // A census's kind another file wrote as its TYPE goes back as TYPE, out of
+            // the note while the note still begins with it (as for a person's census).
+            const typed = censusTypeText(fileEvent);
+            const event: CoupleEvent = typed ? { ...fileEvent, note: typed.note } : fileEvent;
             lines.push(`1 ${COUPLE_EVENT_TAG[event.type]}`);
             if (event.type === 'custom') {
                 pushLongValue(lines, 2, 'TYPE', event.customLabel || strings.gedcomNotes.genericEvent);
+            } else if (typed) {
+                pushLongValue(lines, 2, 'TYPE', typed.text);
             }
             if (event.date) {
                 const date = formatGedcomDate(event.date, partnership.gedcomDates);
