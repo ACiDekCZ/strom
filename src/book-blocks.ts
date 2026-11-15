@@ -15,6 +15,7 @@ import { getStringsForLang } from './strings.js';
 import { sourceEntryText, sourcePlaceParts } from './source-location.js';
 import { formatFlexDate, parseFlexDate, yearOf } from './dates.js';
 import { sortCoupleEvents } from './events.js';
+import { CitationRef, shownCitationsOn } from './citation-order.js';
 import { shownNameOrEmpty } from './person-name.js';
 import { feminineFormIn, isGapOnlyName } from './surnames.js';
 import { INDEX_UNCERTAIN, TRANSCRIPTION_GAP, indexLetter, orderIndexKeys } from './family-pages.js';
@@ -68,6 +69,12 @@ export class BookSourceNumbers {
 
     citeAll(ids: readonly string[] | undefined): string {
         return [...new Set(ids ?? [])].map(id => this.cite(id)).join('');
+    }
+
+    /** The markers of a fact's citations in the order shown (spec 095 K1.1: the main citation, the event's record first). */
+    citeAt(holder: Person | Partnership, ref: CitationRef, ids: readonly string[] | undefined): string {
+        if (!ids?.length) return '';
+        return this.citeAll(shownCitationsOn({ sources: this.catalog }, holder, ref, ids));
     }
 
     /** The sources a chapter cited, in the order of their numbers. */
@@ -503,32 +510,32 @@ function factsHtml(ctx: BookCtx, p: Person): string {
         [personPageDate(date, ctx.lang), place?.trim() ?? ''].filter(Boolean).map(esc).join(', ');
     if (p.birthDate || p.birthPlace) {
         const shown = where(p.birthDate, p.birthPlace);
-        rows.push([P.born[g], shown + ctx.sources.citeAll(p.birthSourceIds) + evidenceMark(ctx, p, 'birth', p.birthStatus, p.birthSourceIds, shown)]);
+        rows.push([P.born[g], shown + ctx.sources.citeAt(p, { personId: p.id, fact: 'birth' }, p.birthSourceIds) + evidenceMark(ctx, p, 'birth', p.birthStatus, p.birthSourceIds, shown)]);
     }
     const events = p.events ?? [];
     const bapt = events.find(e => e.type === 'baptism' && (e.date || e.place));
     if (bapt && bapt.date !== p.birthDate) {
         const shown = where(bapt.date, bapt.place);
-        rows.push([P.baptised[g], shown + ctx.sources.citeAll(bapt.sourceIds) + evidenceMark(ctx, p, 'baptism', bapt.status, bapt.sourceIds, shown)]);
+        rows.push([P.baptised[g], shown + ctx.sources.citeAt(p, { personId: p.id, eventId: bapt.id }, bapt.sourceIds) + evidenceMark(ctx, p, 'baptism', bapt.status, bapt.sourceIds, shown)]);
     }
     if (p.deathDate || p.deathPlace) {
         const shown = where(p.deathDate, p.deathPlace);
-        rows.push([P.died[g], shown + ctx.sources.citeAll(p.deathSourceIds) + evidenceMark(ctx, p, 'death', p.deathStatus, p.deathSourceIds, shown)]);
+        rows.push([P.died[g], shown + ctx.sources.citeAt(p, { personId: p.id, fact: 'death' }, p.deathSourceIds) + evidenceMark(ctx, p, 'death', p.deathStatus, p.deathSourceIds, shown)]);
     }
     const burial = events.find(e => e.type === 'burial' && (e.date || e.place));
     if (burial) {
         const shown = where(burial.date, burial.place);
-        rows.push([S.events.types.burial, shown + ctx.sources.citeAll(burial.sourceIds) + evidenceMark(ctx, p, 'burial', burial.status, burial.sourceIds, shown)]);
+        rows.push([S.events.types.burial, shown + ctx.sources.citeAt(p, { personId: p.id, eventId: burial.id }, burial.sourceIds) + evidenceMark(ctx, p, 'burial', burial.status, burial.sourceIds, shown)]);
     }
     const jobs = events.filter(e => e.type === 'occupation').map(e => {
         const what = stripResearchIds(e.note?.trim() ?? '').text.trim();
         const y = yearOf(e.date);
-        return what ? `${esc(what)}${y !== null ? ` (${y})` : ''}${ctx.sources.citeAll(e.sourceIds)}` : '';
+        return what ? `${esc(what)}${y !== null ? ` (${y})` : ''}${ctx.sources.citeAt(p, { personId: p.id, eventId: e.id }, e.sourceIds)}` : '';
     }).filter(Boolean);
     if (jobs.length) rows.push([P.occupation, jobs.join(', ')]);
     const homes = events.filter(e => e.type === 'residence' && e.place?.trim()).map(e => {
         const y = yearOf(e.date);
-        return `${esc(e.place!.trim())}${y !== null ? ` (${y})` : ''}${ctx.sources.citeAll(e.sourceIds)}`;
+        return `${esc(e.place!.trim())}${y !== null ? ` (${y})` : ''}${ctx.sources.citeAt(p, { personId: p.id, eventId: e.id }, e.sourceIds)}`;
     });
     if (homes.length) rows.push([S.events.types.residence, homes.join(', ')]);
     return rows.length ? `<dl class="book-grid">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('')}</dl>` : '';
@@ -560,7 +567,7 @@ export function personBookHtml(
     ctx.described.set(id, opts.chapter);
     const from = opts.fromRod && rodShown(ctx, id)
         ? ` <span class="book-from">· ${esc(B.fromRod(opts.fromRod.label))}${opts.fromRod.chapter ? `, ${chapterRef(ctx, opts.fromRod.chapter)}` : ''}</span>` : '';
-    const h3 = `<h3>${head}${shielded(ctx, id) ? '' : ctx.sources.citeAll(p.sourceIds)}${from}</h3>`;
+    const h3 = `<h3>${head}${shielded(ctx, id) ? '' : ctx.sources.citeAt(p, { personId: p.id }, p.sourceIds)}${from}</h3>`;
     if (shielded(ctx, id)) return `<section class="book-person">${h3}</section>`;
     const parts: string[] = [h3];
     if (ctx.parts.media && p.photo && /^data:image\//.test(p.photo)) parts.unshift(`<img class="book-photo" src="${esc(p.photo)}" alt="">`);
@@ -635,7 +642,7 @@ function coupleEventsHtml(ctx: BookCtx, u: Partnership): string {
         const note = ev.note?.trim() ? stripResearchIds(ev.note.trim()).text : '';
         const text = [`${[label, whereText].filter(Boolean).join(', ')}.`, list ? B.eventWitnesses(list) : '', note ? (/[.!?…]$/.test(note) ? note : `${note}.`) : ''].filter(Boolean).join(' ');
         const date = ev.date ? formatFlexDate(ev.date, ctx.lang) : S.partnerEvents.noDate;
-        return `<div class="book-ce"><span>${esc(date)}</span><span>${esc(text)}${ctx.sources.citeAll(ev.sourceIds)}</span></div>`;
+        return `<div class="book-ce"><span>${esc(date)}</span><span>${esc(text)}${ctx.sources.citeAt(u, { partnershipId: u.id, eventId: ev.id }, ev.sourceIds)}</span></div>`;
     }).join('');
     return `<div class="book-section book-couple-events"><h3 class="book-sub">${esc(S.partnerEvents.bookTitle)}</h3>${rows}</div>`;
 }
@@ -731,7 +738,7 @@ export function familyChapterHtml(ch: BookChapter, ctx: BookCtx): string {
     ctx.sources.chapter = ch.no;
     const ids = couple(ctx, u);
     const marriage = marriageText(ctx, u);
-    const line = marriage ? `<div class="book-family-line">${marriage}${ctx.sources.citeAll(u.sourceIds)}</div>` : '';
+    const line = marriage ? `<div class="book-family-line">${marriage}${ctx.sources.citeAt(u, { partnershipId: u.id }, u.sourceIds)}</div>` : '';
     const origins = ids.map(id => {
         const n = ctx.model.birthChapter.get(id);
         if (n === undefined || n === ch.no) return '';

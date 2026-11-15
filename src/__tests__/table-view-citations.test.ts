@@ -61,7 +61,8 @@ function tree(): StromData {
         n: person('n', 'Vratislav', 'Pecháček', 'male', { birthDate: '1990-06-01', parentIds: ['c'] }),
     };
     const partnerships = {
-        u1: { id: 'u1', person1Id: 'a', person2Id: 'b', childIds: ['c'], status: 'married', startDate: '1865-01-20', sourceIds: ['s3', 's2'] },
+        // The marriage register an original: first in the order shown (spec 095 K1.1), as in the list.
+        u1: { id: 'u1', person1Id: 'a', person2Id: 'b', childIds: ['c'], status: 'married', startDate: '1865-01-20', sourceIds: ['s3', 's2'], citationQuay: { sourceIds: { s3: 3 } } },
         u2: { id: 'u2', person1Id: 'a', person2Id: 'w', childIds: [], status: 'married', startDate: '1872-02-03', sourceIds: ['s4'] },
         u3: { id: 'u3', person1Id: 'e', person2Id: 'f', childIds: ['d'], status: 'married' },
     };
@@ -159,7 +160,8 @@ describe('citation columns (§14.3)', () => {
         expect(url.link).toBeUndefined();
         expect(url.text).toBe('javascript:alert(1)');
         const data = tree();
-        data.partnerships['u1' as never] = { ...data.partnerships['u1' as never], sourceIds: ['s2', 's3'] };
+        // Neither an original: by the sources' numbers (K1.1 step 5), s2 first.
+        data.partnerships['u1' as never] = { ...data.partnerships['u1' as never], sourceIds: ['s3', 's2'], citationQuay: undefined };
         const m2 = build(data);
         const arch = cell(m2, 'a', 'wArch', 0);
         expect(arch.empty).toBe(true);

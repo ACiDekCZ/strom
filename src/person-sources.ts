@@ -11,7 +11,7 @@ import { yearOf } from './dates.js';
 import { sortCoupleEvents, sortLifeEvents } from './events.js';
 import { shownName } from './person-name.js';
 import { strings as appStrings } from './strings.js';
-import { CitationHolder, citationQuality } from './citation-quality.js';
+import { CitationHolder, citationMainOf, citationQuality } from './citation-quality.js';
 
 type Strings = typeof appStrings;
 
@@ -31,6 +31,8 @@ export interface PersonSourceCite {
     story?: true;
     /** The citation's QUAY (spec 077: its own, else its source's); none for a story's. */
     quality?: number;
+    /** The fact's main citation (spec 095 `citationMain`): ★ after the label where one may be marked (R6, R12). */
+    main?: true;
 }
 
 /** One source and everything it supports for the person. */
@@ -69,19 +71,23 @@ export function personSourceRows(data: StromData, personId: PersonId, S: Strings
         return p ? shownName(p) : '?';
     };
     const rows = new Map<string, PersonSourceRow>();
-    const addIds = (ids: string[] | undefined, cite: PersonSourceCite, quality?: (id: string) => number | undefined) => {
+    const addIds = (ids: string[] | undefined, cite: PersonSourceCite, quality?: (id: string) => number | undefined, main?: string) => {
         for (const id of new Set(ids ?? [])) {
             const source = catalog[id];
             if (!source) continue;
             const row = rows.get(id) ?? { source, cites: [] };
             const q = quality?.(id);
-            if (!row.cites.some(c => c.label === cite.label)) row.cites.push(q !== undefined ? { ...cite, quality: q } : cite);
+            const at: PersonSourceCite = { ...cite, ...(q !== undefined ? { quality: q } : {}), ...(id === main ? { main: true as const } : {}) };
+            const same = row.cites.find(c => c.label === cite.label);
+            if (!same) row.cites.push(at);
+            else if (at.main) same.main = true;
             rows.set(id, row);
         }
     };
-    /** A list of citations (`holder[field]`), each with its QUAY. */
+    /** A list of citations (`holder[field]`), each with its QUAY; a fact's main citation marked (not the person's own). */
     const add = <F extends string>(holder: CitationHolder<F> & Partial<Record<F, string[]>>, field: F, cite: PersonSourceCite) =>
-        addIds(holder[field], cite, id => citationQuality(holder, field, id, catalog));
+        addIds(holder[field], cite, id => citationQuality(holder, field, id, catalog),
+            holder === (person as unknown) && field === 'sourceIds' ? undefined : citationMainOf(holder, field));
     const withYear = (label: string, year: number | null) => (year !== null ? `${label} ${year}` : label);
     add(person, 'sourceIds', { label: S.personSources.citePerson, ctx: { personId }, year: null });
     // The birth and death entries (GEDCOM BIRT.SOUR / DEAT.SOUR).

@@ -19,6 +19,7 @@ import {
     computePersonHistory, HistoryPayload, PersonHistoryEnv, LifelineHistoryItem, historySourceLabel, interleaveHistory, residencePoints, HISTORY_KINDS,
 } from './history.js';
 import { placeKey, type MapKind } from './places.js';
+import { shownCitationsOn } from './citation-order.js';
 import { researchOpenSvg, historyKindSvg, HISTORY_KIND_OPTICAL_DY } from './history-symbols.js';
 import { researchLinkMark, type ResearchActionMark } from './research-link.js';
 import { lifelineGlyphOrDot } from './lifeline-glyphs.js';
@@ -2187,21 +2188,29 @@ function markOf(pt: LifelinePoint): string {
     return lifelineGlyphOrDot(pt, 13);
 }
 
-/** The first excerpt of the first source cited at a birth / marriage / death row. */
+/**
+ * The first excerpt of the first source cited at a birth / marriage / death
+ * row: each list in the order shown (spec 095 K1.1 — the main citation, the
+ * event's own record), the fact's own before the merged event's.
+ */
 function mainExcerpt(c: Ctx, pt: LifelinePoint, merged?: LifelinePoint): { source: Source; excerpt: SourceExcerpt; event: PersonPageCaptionEvent } | null {
     if (!c.page.groups.excerpts) return null;
     const ids: string[] = [];
     let event: PersonPageCaptionEvent;
+    const personId = c.person.id;
+    const mergedIds = (): string[] => {
+        const ev = merged ? eventOf(c, merged) : undefined;
+        return ev ? shownCitationsOn(c.tree, c.person, { personId, eventId: ev.id }, ev.sourceIds) : [];
+    };
     if (pt.kind === 'birth') {
-        ids.push(...(c.person.birthSourceIds ?? []));
-        if (merged) ids.push(...(eventOf(c, merged)?.sourceIds ?? []));
+        ids.push(...shownCitationsOn(c.tree, c.person, { personId, fact: 'birth' }, c.person.birthSourceIds), ...mergedIds());
         event = merged ? 'birthBaptism' : 'birth';
     } else if (pt.kind === 'death') {
-        ids.push(...(c.person.deathSourceIds ?? []));
-        if (merged) ids.push(...(eventOf(c, merged)?.sourceIds ?? []));
+        ids.push(...shownCitationsOn(c.tree, c.person, { personId, fact: 'death' }, c.person.deathSourceIds), ...mergedIds());
         event = merged ? 'deathBurial' : 'death';
     } else if (pt.kind === 'marriage' && pt.partnershipId) {
-        ids.push(...(c.tree.partnerships[pt.partnershipId]?.sourceIds ?? []));
+        const u = c.tree.partnerships[pt.partnershipId];
+        if (u) ids.push(...shownCitationsOn(c.tree, u, { partnershipId: u.id }, u.sourceIds));
         event = 'marriage';
     } else return null;
     for (const sid of ids) {

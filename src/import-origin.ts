@@ -27,7 +27,8 @@ import {
     CoupleEvent, FactOriginKind, FactPart, GedcomExtra, ImportRecord, ImportedValue, LifeEvent, OriginalIdLine, OriginalIds,
     Partnership, Person, PersonId, ResearchFactOrigin, ResearchFactWas, Source, StromData,
 } from './types.js';
-import { CitationHolder, citationQuality } from './citation-quality.js';
+import { CitationHolder, citationMainOf, citationQuality } from './citation-quality.js';
+import { citationFactOn, orderedCitations, shownCitationOrder } from './citation-order.js';
 
 /** A person or a couple: what carries facts. */
 export type FactHolder = Person | Partnership;
@@ -160,6 +161,8 @@ export interface FactCitation {
     source: Source;
     ctx: FactCitationContext;
     quality?: number;
+    /** The fact's main citation (spec 095, `citationMain`): whether to show it is the caller's (citation-gates R6). */
+    main?: true;
 }
 
 const BIRTH_CITE_EVENTS: ReadonlySet<string> = new Set(['birth', 'baptism']);
@@ -171,6 +174,8 @@ const DEATH_CITE_EVENTS: ReadonlySet<string> = new Set(['death', 'burial', 'crem
  * death / burial / cremation events; an event by its own; a couple's marriage by the couple's
  * citations, its divorce by the divorce's own. A cited id the tree no longer has is skipped; a source cited twice comes once.
  * Each with its citation's QUAY (spec 077: its own, else its source's; the first citation's when cited twice).
+ * Each list in the order shown (spec 095 K1.1, or the research's own; the main citation first), the lists
+ * in the order above: the first is the fact's document.
  */
 export function factCitations(
     data: Pick<StromData, 'sources'>, holder: FactHolder, fact: string,
@@ -178,12 +183,15 @@ export function factCitations(
     const out: FactCitation[] = [];
     const seen = new Set<string>();
     const add = <F extends string>(at: CitationHolder<F> & Partial<Record<F, string[]>>, field: F, ctx: FactCitationContext): void => {
-        for (const id of at[field] ?? []) {
+        const info = citationFactOn(holder, ctx);
+        const ids = info ? orderedCitations(data, info.holder, info.field, info.fact, shownCitationOrder()) : at[field] ?? [];
+        const main = info?.isFact ? citationMainOf(at, field) : undefined;
+        for (const id of ids) {
             const source = data.sources?.[id];
             if (!source || seen.has(id)) continue;
             seen.add(id);
             const quality = citationQuality(at, field, id, data.sources);
-            out.push({ source, ctx, ...(quality !== undefined ? { quality } : {}) });
+            out.push({ source, ctx, ...(quality !== undefined ? { quality } : {}), ...(id === main ? { main: true as const } : {}) });
         }
     };
     if (isPartnership(holder)) {

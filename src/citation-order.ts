@@ -381,3 +381,45 @@ export function orderedCitationsAt(
     const info = citationFact(data, ref);
     return info ? orderedCitationSteps(data, info.holder, info.field, info.fact, opts) : [];
 }
+
+/**
+ * citationFact of a list on one person or couple, without the tree around it
+ * (the holder itself is looked in): the pure pages (the person page, the
+ * book, the family pages) and a fact's citations read it.
+ */
+export function citationFactOn(holder: Person | Partnership, ref: CitationRef): CitationFactInfo | null {
+    const one = 'person1Id' in holder
+        ? { persons: {}, partnerships: { [holder.id]: holder } }
+        : { persons: { [holder.id]: holder }, partnerships: {} };
+    return citationFact(one as unknown as Pick<StromData, 'persons' | 'partnerships'>, ref);
+}
+
+// ==================== THE ORDER SHOWN ====================
+
+/** Whether the tree shown keeps the file's order (its research orders citations itself, `citations.order`). */
+let fileOrderNow: () => boolean = () => false;
+
+/** Set once by citation-gates.ts (the active tree and its research's features). */
+export function setCitationFileOrderLookup(lookup: () => boolean): void {
+    fileOrderNow = lookup;
+}
+
+/** The order options of the tree shown: the file's order for a research that orders its citations, else K1.1. */
+export function shownCitationOrder(): CitationOrderOptions {
+    let fileOrder = false;
+    try { fileOrder = fileOrderNow(); } catch { /* no tree yet: K1.1 */ }
+    return fileOrder ? { fileOrder: true } : {};
+}
+
+/**
+ * The citations of a list on a person or couple in the order shown (K1.1,
+ * or the research's own), each once; a reference the holder does not have
+ * keeps the list as it is.
+ */
+export function shownCitationsOn(
+    data: Pick<StromData, 'sources'>, holder: Person | Partnership, ref: CitationRef, list?: readonly string[],
+): string[] {
+    const info = citationFactOn(holder, ref);
+    if (!info) return [...new Set(list ?? [])];
+    return orderedCitations(data, info.holder, info.field, info.fact, shownCitationOrder());
+}

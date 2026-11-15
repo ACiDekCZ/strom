@@ -50,7 +50,7 @@ import { onAllDialogsClosed } from './dialog-focus.js';
 
 import { iconSvg, chainLinkSvg } from '../icons.js';
 import { extraParticipantRole } from '../godparents.js';
-import { sourceChipOpenHtml } from './sources.js';
+import { chipCitations, sourceChipOpenHtml } from './sources.js';
 import { offeredDetails, refreshDetailGroup, resetDetailGroup, renderAgeCheck, ageBirthDate } from './event-details-ui.js';
 import { shownName, shownNameOrEmpty, nameHtml } from '../person-name.js';
 export const relationshipsPanelMethods = uiModule({
@@ -351,6 +351,19 @@ export const relationshipsPanelMethods = uiModule({
         modal.classList.add('active');
     },
 
+    /** The wedding's citation chips: in the order shown (spec 095 K1.1), the main citation with its ★. */
+    partnershipCitationChipsHtml(partnership: Partnership): string {
+        const data = DataManager.getData();
+        const { ids, main } = chipCitations(data, partnership.sourceIds, { partnershipId: partnership.id });
+        const esc = (t: string) => this.escapeHtml(t);
+        return ids.map(sid => {
+            const src = data.sources?.[sid];
+            if (!src) return '';
+            const isMain = sid === main;
+            return `<span class="source-chip ${src.excerpts?.length ? 'has-thumb' : 'has-icon'}${isMain ? ' is-main' : ''}">${sourceChipOpenHtml(src, isMain)}<button type="button" class="source-chip-remove partnership-uncite" title="${esc(strings.sources.remove)}" aria-label="${esc(strings.sources.remove)}" data-partnership-id="${esc(partnership.id)}" data-source-id="${esc(sid)}">&times;</button></span>`;
+        }).join('');
+    },
+
     /**
      * The couple's dates as a labelled grid: the wedding (date, place), the
      * divorce (date, place — shown with a divorced or separated status, or a
@@ -556,10 +569,7 @@ export const relationshipsPanelMethods = uiModule({
                             // something is actually cited.
                             SettingsManager.isAdvancedFields() || partnership.sourceIds?.length
                                 ? '' : ' style="display:none"'}>
-                            ${(partnership.sourceIds ?? []).map(sid => {
-                                const src = DataManager.getData().sources?.[sid];
-                                return src ? `<span class="source-chip ${src.excerpts?.length ? 'has-thumb' : 'has-icon'}">${sourceChipOpenHtml(src)}<button type="button" class="source-chip-remove partnership-uncite" title="${this.escapeHtml(strings.sources.remove)}" aria-label="${this.escapeHtml(strings.sources.remove)}" data-partnership-id="${this.escapeHtml(partnership.id)}" data-source-id="${this.escapeHtml(sid)}">&times;</button></span>` : '';
-                            }).join('')}
+                            ${this.partnershipCitationChipsHtml(partnership)}
                             <button type="button" class="partnership-cite-btn" data-partnership-id="${this.escapeHtml(partnership.id)}">${iconSvg('book', { size: 13 })} ${strings.sources.citePartnership}</button>
                         </div>
                         <div class="partnership-witnesses sources-chips">

@@ -804,6 +804,24 @@ describe('timeline', () => {
         expect(noEx).not.toContain('<img');
     });
 
+    it('the birth\'s excerpt is that of its first citation in the K1.1 order: the birth record before a death record cited first (spec 095 M8)', () => {
+        const d = fiskTree();
+        const jan = d.persons['jan' as PersonId];
+        // The death record (numbered, so first by number alone) cited before the birth record.
+        jan.birthSourceIds = ['s3', 's1'];
+        Object.assign(d.sources!.s3, { excerpts: [{ id: 'x3', dataUrl: IMG, width: 1, height: 1, sizeBytes: 100 }], events: ['DEAT'], quality: 3 });
+        const at = (html: string) => /id="pp-ex-birth"[\s\S]*?<\/figure>/.exec(html)?.[0] ?? '';
+        expect(at(body(d))).toContain('zemřelých');
+        d.sources!.s1.events = ['BIRT', 'CHR'];
+        d.sources!.s1.quality = 3;
+        const birth = at(body(d));
+        expect(birth).toContain('narozených');
+        expect(birth).not.toContain('zemřelých');
+        // A main citation chosen: its excerpt.
+        jan.citationMain = { birthSourceIds: 's3' };
+        expect(at(body(d))).toContain('zemřelých');
+    });
+
     it('register kinds come from the source title', () => {
         expect(registerKindOf('Matrika narozených')).toBe('birth');
         expect(registerKindOf('Kirchenbuch Trauungen')).toBe('marriage');

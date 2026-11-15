@@ -453,7 +453,7 @@ describe('round 2 of the design (§9.2, §9.3, §9.9)', () => {
         expect(set.protectedTree.living.has(ids.eva)).toBe(true);
     });
 
-    it('the marriage excerpt: a marriage register cited by the union first, then the union\'s other sources; none, no block', () => {
+    it('the marriage excerpt: the union\'s first citation in the K1.1 order, then the union\'s other sources; none, no block', () => {
         const { data, unions } = familyPagesFixture();
         const other = PHOTO_IMG.replace('KCIsIy', 'KCIsIz');
         data.sources!['s-census'] = {
@@ -461,13 +461,17 @@ describe('round 2 of the design (§9.2, §9.3, §9.9)', () => {
             excerpts: [{ id: 'x2', dataUrl: other, width: 1, height: 1, sizeBytes: 300 }],
         } as never;
         const u = data.partnerships[unions.f9];
-        // The census before the register in the union's citations: the register's excerpt still wins.
+        // The census before the register in the union's citations: a title alone no longer decides (spec 095 M9).
         u.sourceIds = ['s-census', 's-marr1846'];
         const pageOf = () => {
             const set = rodsSet(data, fixtureRods(data), { privacy: 'full' });
             return section(buildPageSetHtml(set), set.familySlug.get(unions.f9)!);
         };
         let page = pageOf();
+        expect(page).toContain('<span class="sp-clip-cap">Soupis poddaných Čapkov 1846</span>');
+        // The register a record of the marriage, an original: the primary record leads (K1.1 step 2).
+        Object.assign(data.sources!['s-marr1846'], { events: ['MARR'], quality: 3 });
+        page = pageOf();
         expect(page).toContain('Oddací matrika Čapkov 1840–1860, fol. 12');
         expect(page).toContain('<span class="sp-clip-cap">Oddací matrika Čapkov 1840–1860, fol. 12</span>');
         // No excerpt in the union's citations: the first one of its events' sources.

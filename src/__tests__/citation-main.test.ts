@@ -12,6 +12,7 @@ import { TreeManager } from '../tree-manager.js';
 import { AuditLogManager } from '../audit-log.js';
 import { UndoManager } from '../undo.js';
 import { remapCitations, unionCitations } from '../citation-quality.js';
+import { sourceUsage } from '../ui/table-view/table-sources.js';
 import { getStringsForLang } from '../strings.js';
 import { Person, Source, StromData, TreeId, toPartnershipId, toPersonId } from '../types.js';
 
@@ -223,5 +224,20 @@ describe('the undo texts in every language', () => {
         expect(de.undo.citeMain(de.events.typesOf.birth, 'C')).toBe('Hauptzitat (Geburt) – C');
         const pl = getStringsForLang('pl');
         expect(pl.undo.citeMainClear(pl.events.typesOf.death, 'C')).toBe('usunięcie cytatu głównego zgonu – C');
+    });
+});
+
+describe('the Sources table after a removal (spec 095 M10)', () => {
+    it('counts a removed citation\'s facts and people again; undo counts them back', () => {
+        expect(sourceUsage(data()).get('deaths')).toEqual({ persons: 2, facts: 2 });
+        DataManager.setCitationMain({ personId: P, fact: 'birth' }, 'deaths');
+        expect(DataManager.uncitePerson(P, 'deaths', 'birth')).toBe(true);
+        expect(sourceUsage(data()).get('deaths')).toEqual({ persons: 2, facts: 1 });
+        expect(DataManager.uncitePartnership(U, 'deaths', 'divorce')).toBe(true);
+        expect(sourceUsage(data()).get('deaths')).toBeUndefined();
+        DataManager.undo();
+        DataManager.undo();
+        expect(sourceUsage(data()).get('deaths')).toEqual({ persons: 2, facts: 2 });
+        expect(DataManager.citationMainAt({ personId: P, fact: 'birth' })).toBe('deaths');
     });
 });

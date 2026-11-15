@@ -24,7 +24,8 @@
 import { strings } from '../strings.js';
 import { formatFlexDate } from '../dates.js';
 import { sourceEntryText } from '../source-location.js';
-import { FactHolder, factCitations, isPartnership } from '../import-origin.js';
+import { FactCitation, FactHolder, factCitations, isPartnership } from '../import-origin.js';
+import { citationMainShown } from '../citation-gates.js';
 import {
     CARD_STATUS_FACTS, CardStatus, FactReliability, ReliabilityOptions, ReliabilityStep, ReliabilityStepName, factReliability,
 } from '../reliability.js';
@@ -131,6 +132,10 @@ export interface SourceRowModel {
     source: Source;
     ctx: CitationContextLike;
     sub: string;
+    /** The fact's main citation, shown as "★ main · " before the sub (spec 095 R1; only where one may be marked). */
+    main?: true;
+    /** The card's bubble: the facts' words with a ★ after the fact whose main citation this is (before `sub`). */
+    facts?: { label: string; main: boolean }[];
 }
 
 export interface SourcesModel {
@@ -202,13 +207,6 @@ function sourceSub(source: Source, quality: number | undefined): string {
     return [sourceEntryText(source), date, qualityLabel(quality)].filter(Boolean).join(' · ');
 }
 
-/** Sources in the tip's order: the one the value is from first, then by the record's date. */
-function orderSources<T extends { source: Source }>(rows: T[], first: string | undefined): T[] {
-    const key = (r: T): string => r.source.recordDate ?? '9999';
-    const rest = rows.filter(r => r.source.id !== first).sort((a, b) => key(a).localeCompare(key(b)));
-    const lead = rows.find(r => r.source.id === first);
-    return lead ? [lead, ...rest] : rows.length > 0 ? [rows[0], ...rest.filter(r => r !== rows[0])] : rest;
-}
 
 function holderCtx(holder: FactHolder): CitationContextLike {
     return isPartnership(holder) ? { partnershipId: holder.id } : { personId: holder.id };
@@ -222,13 +220,14 @@ export function factSourcesModel(data: StromData, holder: FactHolder, fact: stri
     // The record the research read the value from leads, even when it is not cited at the fact.
     const valueId = r?.sourceIds?.find(id => data.sources?.[id]);
     const valueSource = valueId ? data.sources![valueId] : undefined;
-    const all: { source: Source; ctx: CitationContextLike; quality?: number }[] = valueSource && !cited.some(c => c.source.id === valueId)
+    // The citations in the order shown (spec 095 K1.1: factCitations), the main one marked where one may be (R6).
+    const ordered: FactCitation[] = valueSource && !cited.some(c => c.source.id === valueId)
         ? [{ source: valueSource, ctx: holderCtx(holder), quality: valueSource.quality }, ...cited] : cited;
-    const ordered = orderSources(all, valueId);
+    const mainShown = citationMainShown();
     const rows: SourceRowModel[] = ordered.map((c, i) => {
         let sub = sourceSub(c.source, c.quality);
         if (i === 0 && r?.step === 'proven' && r.dots === 2) sub = [sub, s.readersAgree].filter(Boolean).join(' · ');
-        return { source: c.source, ctx: c.ctx, sub };
+        return { source: c.source, ctx: c.ctx, sub, ...(c.main && mainShown ? { main: true as const } : {}) };
     });
     const step = r?.step;
     if (rows.length === 0) return { head: s.srcHead, rows: [], empty: step === 'import' ? s.importNoCite : s.noSourceRow };
@@ -239,21 +238,23 @@ export function factSourcesModel(data: StromData, holder: FactHolder, fact: stri
 }
 
 /** The sources block of a tree card's mark: the sources at its name, birth and death, then all of the person's. */
-function cardSourcesModel(data: StromData, person: Person, status: CardStatus): SourcesModel {
+export function cardSourcesModel(data: StromData, person: Person, status: CardStatus): SourcesModel {
     const s = strings.reliability;
-    const bySource = new Map<string, { source: Source; ctx: CitationContextLike; facts: string[] }>();
+    // By first appearance at the name, the birth, the death, each fact's citations in the order shown (spec 095 K1.1).
+    const bySource = new Map<string, { source: Source; ctx: CitationContextLike; facts: { label: string; main: boolean }[] }>();
+    const mainShown = citationMainShown();
     for (const fact of CARD_STATUS_FACTS) {
         for (const c of factCitations(data, person, fact)) {
             const row = bySource.get(c.source.id) ?? { source: c.source, ctx: c.ctx, facts: [] };
-            row.facts.push(s.cardFact[fact]);
+            const label = s.cardFact[fact];
+            const at = row.facts.find(f => f.label === label);
+            if (at) at.main ||= !!c.main && mainShown;
+            else row.facts.push({ label, main: !!c.main && mainShown });
             bySource.set(c.source.id, row);
         }
     }
-    const valueId = status.step?.sourceIds?.find(id => bySource.has(id));
-    const ordered = orderSources([...bySource.values()], valueId);
-    const rows: SourceRowModel[] = ordered.map(r => ({
-        source: r.source, ctx: r.ctx,
-        sub: [r.facts.join(', '), sourceEntryText(r.source)].filter(Boolean).join(' · '),
+    const rows: SourceRowModel[] = [...bySource.values()].map(r => ({
+        source: r.source, ctx: r.ctx, sub: sourceEntryText(r.source), facts: r.facts,
     }));
     const total = host?.personSourceCount(person.id) ?? rows.length;
     const more = total > 0 ? { label: s.srcPerson(total), personId: person.id, sourceIds: rows.map(x => x.source.id) } : undefined;
@@ -349,13 +350,25 @@ function modelOf(ctx: StatusTipContext, touch: boolean): TipModel | null {
 
 // ==================== Drawing ====================
 
+/** A row's line under the title: the card's facts (★ after the main one's), "★ main · " at a fact's main citation, the sub. */
+export function sourceSubHtml(r: SourceRowModel): string {
+    const facts = (r.facts ?? []).map(f => f.main
+        ? `${esc(f.label)}&nbsp;<span class="st-src-main" role="img" aria-label="${esc(strings.sources.mainMark)}">\u2605\uFE0E</span>`
+        : esc(f.label)).join(', ');
+    // The shape and the short word for the eye, "main citation" for a reader.
+    const main = r.main
+        ? `<span class="st-src-main" role="img" aria-label="${esc(strings.sources.mainMark)}">\u2605\uFE0E ${esc(strings.sources.mainShort)}</span>` : '';
+    const parts = [main, facts, r.sub ? esc(r.sub) : ''].filter(Boolean);
+    return parts.length ? `<span class="st-src-sub">${parts.join(' · ')}</span>` : '';
+}
+
 function tipHtml(m: TipModel): string {
     const s = strings.reliability;
     const src = m.sources;
     const rows = src ? src.rows.map((r, i) => `
         <button type="button" class="st-src" data-row="${i}" data-source-id="${esc(r.source.id)}" data-ctx="${esc(JSON.stringify(r.ctx))}">
             <span class="st-src-icon" aria-hidden="true">${iconSvg('file', { size: 14 })}</span>
-            <span class="st-src-text"><span class="st-src-title">${esc(r.source.title)}</span>${r.sub ? `<span class="st-src-sub">${esc(r.sub)}</span>` : ''}</span>
+            <span class="st-src-text"><span class="st-src-title">${esc(r.source.title)}</span>${sourceSubHtml(r)}</span>
         </button>`).join('') : '';
     const story = m.story
         ? `<button type="button" class="st-story st-link">${esc(strings.card.tipStoryRow(m.story.title))}</button>` : '';

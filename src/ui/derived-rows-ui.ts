@@ -16,6 +16,7 @@
  */
 
 import { DataManager } from '../data.js';
+import type { DraftCitations } from './sources.js';
 import { PersonId, PartnershipId, Gender, EventRoleAt, LifeEvent, ParticipantRole } from '../types.js';
 import { strings, getCurrentLanguage, joinAnd } from '../strings.js';
 import { formatFlexDate, formatDateForInput } from '../dates.js';
@@ -237,7 +238,10 @@ export const derivedRowsMethods = uiModule({
 
     /** The prefilled sources of a new own record, each removable before Save. */
     renderRecordOwnSources(): void {
-        this.renderSourceChips('event-sources-chips', this.recordOwnDraft?.sourceIds, 'uncitePrefilledSource');
+        const draft = this.recordOwnDraft;
+        // In the order shown (spec 095 K1.1): a part's own record has no record of its kind, so by reliability and number.
+        this.renderSourceChips('event-sources-chips', draft?.sourceIds, 'uncitePrefilledSource', undefined,
+            draft ? { holder: draft as unknown as DraftCitations['holder'], field: 'sourceIds', fact: { date: draft.date } } : undefined);
     },
 
     uncitePrefilledSource(sourceId: string): void {

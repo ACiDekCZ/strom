@@ -14,6 +14,8 @@
 import { PARTNERSHIP_CITATION_FIELDS, PERSON_CITATION_FIELDS, type Partnership, type Person, type Source, type StromData } from '../../types.js';
 import type { SourceRow } from './table-model.js';
 import { safeWebUrl } from '../../validation.js';
+import { orderedCitations, shownCitationOrder, shownCitationsOn } from '../../citation-order.js';
+import type { CitationHolder } from '../../citation-quality.js';
 
 /** How much of the tree one source documents. */
 export interface SourceUse {
@@ -110,13 +112,23 @@ export function factCitations(data: Pick<StromData, 'sources'>, fact: 'birth' | 
 export function factCitations(data: Pick<StromData, 'sources'>, fact: 'marriage', union: Pick<Partnership, 'sourceIds'>): CitedSource[];
 export function factCitations(data: Pick<StromData, 'sources'>, fact: 'birth' | 'death' | 'marriage',
     holder: Person | Pick<Partnership, 'sourceIds'>): CitedSource[] {
+    // Each list in the order shown (spec 095 K1.1): the first is the fact's document.
     const ids: string[] = [];
-    if (fact === 'marriage') ids.push(...(holder.sourceIds ?? []));
-    else {
+    const order = shownCitationOrder();
+    if (fact === 'marriage') {
+        const u = holder as Partial<Partnership>;
+        ids.push(...orderedCitations(data, u as unknown as CitationHolder & Record<string, unknown>, 'sourceIds',
+            { tag: 'MARR', date: u.startDate }, order));
+    } else {
         const p = holder as Person;
         const types = fact === 'birth' ? BIRTH_EVENTS : DEATH_EVENTS;
-        ids.push(...((fact === 'birth' ? p.birthSourceIds : p.deathSourceIds) ?? []));
-        for (const e of p.events ?? []) if (types.has(e.type)) ids.push(...(e.sourceIds ?? []));
+        const field = fact === 'birth' ? 'birthSourceIds' : 'deathSourceIds';
+        ids.push(...orderedCitations(data, p as unknown as CitationHolder & Record<string, unknown>, field,
+            { tag: fact === 'birth' ? 'BIRT' : 'DEAT', date: fact === 'birth' ? p.birthDate : p.deathDate }, order));
+        for (const e of p.events ?? []) {
+            if (!types.has(e.type)) continue;
+            ids.push(...(p.id ? shownCitationsOn(data, p, { personId: p.id, eventId: e.id }, e.sourceIds) : e.sourceIds ?? []));
+        }
     }
     const out: CitedSource[] = [];
     const seen = new Set<string>();

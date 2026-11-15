@@ -8,6 +8,7 @@
 import { researchActionLabel } from './research-open-mark.js';
 import { researchLinkMark } from '../research-link.js';
 import { DataManager } from '../data.js';
+import { citationMainShown } from '../citation-gates.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { PartnershipId, PersonId, Source, Story } from '../types.js';
 import { yearOf } from '../dates.js';
@@ -202,6 +203,7 @@ export const personSourcesMethods = uiModule({
         }
         // An archive has no reading results to give: no link to one.
         const readings = !this.activeResearchAgentless();
+        const mainShown = citationMainShown();
         list.innerHTML = rows.map((r, i) => {
             // One reliability for the row, or each citation its own where they differ (spec 077).
             const whole = rowQuality(r);
@@ -211,7 +213,10 @@ export const personSourcesMethods = uiModule({
                 return label ? ` <span class="source-quality-tag">${esc(label)}</span>` : '';
             };
             const labels = r.cites.map(c => {
-                const label = c.title ? `<span title="${esc(c.title)}">${esc(c.label)}</span>` : esc(c.label);
+                // A fact whose main citation this is: ★ after its label (spec 095 R12), where one may be marked (R6).
+                const star = c.main && mainShown
+                    ? `&nbsp;<span class="person-source-main" role="img" aria-label="${esc(strings.sources.mainMark)}">\u2605\uFE0E</span>` : '';
+                const label = (c.title ? `<span title="${esc(c.title)}">${esc(c.label)}</span>` : esc(c.label)) + star;
                 const own = whole === null && !c.story ? tag(c.quality) : '';
                 // A fact and its own reliability wrap as one, never apart on a narrow screen.
                 return own ? `<span class="person-source-cite">${label}${own}</span>` : label;

@@ -1079,6 +1079,9 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         unsavedMessage: 'W tym źródle są niezapisane zmiany.',
         // Records: excerpt, transcription, viewer, picker
         chipOpen: (title: string) => `Pokaż źródło: ${title}`,
+        mainMark: 'cytat główny',
+        mainShort: 'główny',
+        chipOpenMain: (title: string) => `${title} – cytat główny, otwórz`,
         titleHint: 'Jeden konkretny zapis – chrzest, ślub, zgon.',
         excerptLabel: 'Wycinek zapisu',
         excerptEmpty: 'Wystarczy wkleić zrzut ekranu z przeglądarki archiwum albo wgrać skan.',

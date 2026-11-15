@@ -18,6 +18,7 @@ import { sourceEntryText } from './source-location.js';
 import { formatFlexDate, yearOf } from './dates.js';
 import { Rod, RodId, rods as allRods, ancestorSlots, marriedInto, rodGenerations, rodNameForms, sortByBirth } from './lineage.js';
 import { sortCoupleEvents } from './events.js';
+import { shownCitationsOn } from './citation-order.js';
 import { shownNameOrEmpty, shownNameParts, shownSurnameIsBirth } from './person-name.js';
 import { buildBookModel, BookModel } from './book-model.js';
 import { BOOK_PART_KEYS, BookParts } from './book-options.js';
@@ -941,17 +942,16 @@ function otherMarriagesHtml(r: Render, ctx: BookCtx, u: Partnership, ps: readonl
 
 /**
  * The marriage's record excerpt (§2.2, §9.9): first a source cited at the
- * wedding itself (the union's own citations, which GEDCOM writes under MARR;
- * a marriage register among them before the rest), then the first excerpt
- * of the union's other sources (its events'); none: no block.
+ * wedding itself (the union's own citations, which GEDCOM writes under MARR,
+ * in the order shown — spec 095 K1.1: the main citation, the marriage
+ * record), then the first excerpt of the union's other sources (its
+ * events', each in that order); none: no block.
  */
 function marriageClip(r: Render, u: Partnership): { src: string; caption: string; scan: string } | null {
-    const sources = r.set.protectedTree.tree.sources ?? {};
-    const own = u.sourceIds ?? [];
-    // A marriage register by its title, at a word's start ("Soupis poddaných" is not one).
-    const isRegister = (id: string) => /(?:^|[^\p{L}])(?:odda[cnč]|sňat|marriage|trau|heirat|ehe)/iu.test(sources[id]?.title ?? '');
-    const wedding = [...own.filter(isRegister), ...own];
-    const rest = sortCoupleEvents(u.events ?? []).flatMap(e => e.sourceIds ?? []);
+    const tree = r.set.protectedTree.tree;
+    const sources = tree.sources ?? {};
+    const wedding = shownCitationsOn(tree, u, { partnershipId: u.id }, u.sourceIds);
+    const rest = sortCoupleEvents(u.events ?? []).flatMap(e => shownCitationsOn(tree, u, { partnershipId: u.id, eventId: e.id }, e.sourceIds));
     for (const sid of new Set([...wedding, ...rest])) {
         const s = sources[sid];
         for (const e of s?.excerpts ?? []) {

@@ -18,6 +18,7 @@ import type {
     StromData, FactConfirmation, FactVerifyPending, FactVerifyChecked, ResearchFactVerify, Person, Partnership,
 } from './types.js';
 import { FactHolder, factValueSignature, factsOf, isPartnership } from './import-origin.js';
+import { CitationRef, citationFactOn, orderedCitations, shownCitationOrder } from './citation-order.js';
 
 export { factValueSignature };
 
@@ -232,17 +233,24 @@ export function pendingFacts(holder: FactHolder): string[] {
     return Object.entries(holder.researchVerify ?? {}).filter(([, v]) => !!v?.pending).map(([fact]) => fact);
 }
 
-/** The sources cited for one fact (its own citation list; a person's name and sex: the person's). */
-export function factSourceIds(holder: FactHolder, fact: string): string[] {
+/**
+ * The sources cited for one fact (its own citation list; a person's name and
+ * sex: the person's), then the research's readings. With the tree's sources
+ * the own list is in the order shown (spec 095 K1.1): the first is the
+ * fact's document.
+ */
+export function factSourceIds(holder: FactHolder, fact: string, data?: Pick<StromData, 'sources'>): string[] {
+    const ref = (): CitationRef | null => {
+        const ev = fact.startsWith('event:') ? fact.slice(6) : undefined;
+        if (isPartnership(holder)) return ev ? { partnershipId: holder.id, eventId: ev } : fact === 'marriage' ? { partnershipId: holder.id } : null;
+        if (ev) return { personId: holder.id, eventId: ev };
+        return fact === 'birth' || fact === 'death' ? { personId: holder.id, fact } : { personId: holder.id };
+    };
     const own = (): string[] => {
-        if (fact.startsWith('event:')) {
-            const id = fact.slice(6);
-            return (holder.events ?? []).find(e => e?.id === id)?.sourceIds ?? [];
-        }
-        if (isPartnership(holder)) return fact === 'marriage' ? holder.sourceIds ?? [] : [];
-        if (fact === 'birth') return holder.birthSourceIds ?? [];
-        if (fact === 'death') return holder.deathSourceIds ?? [];
-        return holder.sourceIds ?? [];
+        const at = ref();
+        const info = at ? citationFactOn(holder, at) : null;
+        if (!info) return [];
+        return data ? orderedCitations(data, info.holder, info.field, info.fact, shownCitationOrder()) : [...info.sourceIds];
     };
     return [...new Set([...own(), ...(holder.researchOrigins?.[fact]?.sourceIds ?? [])])];
 }

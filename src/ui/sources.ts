@@ -12,7 +12,7 @@
 
 import { researchActionLabel } from './research-open-mark.js';
 import { researchLinkMark } from '../research-link.js';
-import { DataManager, CitedFact, personCitationField } from '../data.js';
+import { DataManager, CitedFact, personCitationField, SourceCitationRef } from '../data.js';
 import { bookReference, entryDateLine, sameBookReference } from '../source-page.js';
 import { sourcePlaceSearchText, recognizeLocation, imageWord, hasPlaceFields, sourcePlaceParts, sourcePlaceLine } from '../source-location.js';
 import { MQ_MOBILE } from '../breakpoints.js';
@@ -20,7 +20,7 @@ import { sourceTranslation } from '../source-translation.js';
 import { TreeRenderer } from '../renderer.js';
 import { TreeManager } from '../tree-manager.js';
 import { SettingsManager } from '../settings.js';
-import { PersonId, PartnershipId, Source, SourceExcerpt, MediaOriginal, MAX_EXCERPTS_UI } from '../types.js';
+import { PersonId, PartnershipId, Source, SourceExcerpt, MediaOriginal, MAX_EXCERPTS_UI, StromData } from '../types.js';
 import { strings } from '../strings.js';
 import { personEvidence } from '../evidence-level.js';
 import { uiModule } from './module.js';
@@ -38,6 +38,9 @@ import { coupleEventLabel } from '../events.js';
 import { eventTypeLabel } from './person-events.js';
 import { verifiedOffer, isOlderSource, researchReadSource, unverifiedOlderSources } from '../research-sync.js';
 import { shownName } from '../person-name.js';
+import { CitationFact, citationFact, orderedCitations, shownCitationOrder } from '../citation-order.js';
+import { CitationHolder, citationMainOf } from '../citation-quality.js';
+import { citationMainShown } from '../citation-gates.js';
 
 /** What a citation applies to: a person, one of their events, or a partnership. */
 /** What a citation is made on: a person (as a whole, or their birth / death), one of their events, a union. */
@@ -157,10 +160,41 @@ export function hydrateThumbs(container: HTMLElement): void {
  * The clickable part of a citation chip (thumbnail + title). Shared with the
  * relationships panel, which renders its own chips for partnerships.
  */
-export function sourceChipOpenHtml(src: Source): string {
+export function sourceChipOpenHtml(src: Source, main = false): string {
+    const label = main ? strings.sources.chipOpenMain(src.title) : strings.sources.chipOpen(src.title);
+    const star = main ? '<span class="source-chip-main" aria-hidden="true">\u2605\uFE0E</span>' : '';
     return `<button type="button" class="source-chip-open" data-source-open="${esc(src.id)}"
-        aria-label="${esc(strings.sources.chipOpen(src.title))}" title="${esc(sourceChipTitle(src))}">
-        ${sourceThumbHtml(src, 'chip')}<span class="source-chip-label">${esc(src.title)}</span></button>`;
+        aria-label="${esc(label)}" title="${esc(sourceChipTitle(src))}">
+        ${sourceThumbHtml(src, 'chip')}${star}<span class="source-chip-label">${esc(src.title)}</span></button>`;
+}
+
+/** A list of citations not yet in the tree (a new record's prefilled sources): its holder, list and fact. */
+export interface DraftCitations {
+    holder: CitationHolder & Record<string, unknown>;
+    field: string;
+    fact: CitationFact;
+}
+
+/**
+ * A fact's citations as the chips show them (spec 095 §1): each once, in the
+ * order shown (K1.1, or the research's own), with the main citation marked
+ * only where one may be marked (R6) — a citation first by the order alone
+ * has no mark (R2). Ids the catalog does not know are left out.
+ */
+export function chipCitations(
+    data: Pick<StromData, 'persons' | 'partnerships' | 'sources'>,
+    sourceIds: readonly string[] | undefined, ctx?: CitationContext | null, draft?: DraftCitations,
+): { ids: string[]; main?: string } {
+    const sources = data.sources ?? {};
+    const listed = [...new Set(sourceIds ?? [])].filter(id => sources[id]);
+    const info = ctx ? citationFact(data, ctx) : null;
+    const at = info ?? draft;
+    if (!at || listed.length === 0) return { ids: listed };
+    const ordered = orderedCitations(data, at.holder, at.field, at.fact, shownCitationOrder()).filter(id => listed.includes(id));
+    const ids = [...ordered, ...listed.filter(id => !ordered.includes(id))];
+    const main = info?.isFact && citationMainShown()
+        ? citationMainOf(info.holder as CitationHolder & Partial<Record<string, string[]>>, info.field) : undefined;
+    return main && ids.includes(main) ? { ids, main } : { ids };
 }
 
 /** Full name of a person for labels ("Jan Novák"). */
@@ -488,7 +522,14 @@ export const sourcesMethods = uiModule({
         } else if (translation || reading) {
             chunks.push(translation ? `<section>${translation}${reading}</section>` : reading);
         }
-        const cites = DataManager.listSourceCitations(src.id).map(ref => {
+        // A fact whose main citation this source is: ★ after it (spec 095 R1), where a main citation may be marked (R6).
+        const mainShown = citationMainShown();
+        const isMainAt = (ref: SourceCitationRef): boolean => {
+            if (!mainShown) return false;
+            const { kind: _kind, ...at } = ref;
+            return DataManager.citationMainAt(at as CitationContext) === src.id;
+        };
+        const citeText = (ref: SourceCitationRef): string => {
             if (ref.kind === 'partnership') {
                 const u = DataManager.getData().partnerships[ref.partnershipId];
                 if (!u) return '';
@@ -519,10 +560,13 @@ export const sourcesMethods = uiModule({
                 return strings.sources.citedFact(personName(ref.personId), `${strings.events.types[ref.fact]}${year !== null ? ` (${year})` : ''}`);
             }
             return personName(ref.personId);
-        }).filter(Boolean);
+        };
+        const cites = DataManager.listSourceCitations(src.id)
+            .map(ref => ({ text: citeText(ref), main: isMainAt(ref) })).filter(c => c.text);
         if (cites.length > 0) {
+            const star = `<span class="viewer-cite-main" role="img" aria-label="${esc(s.mainMark)}">\u2605\uFE0E</span>`;
             chunks.push(`<section><h3 class="viewer-section-title">${esc(s.viewerCites)}</h3>
-                <ul class="viewer-cites">${cites.map(c => `<li>${esc(c)}</li>`).join('')}</ul></section>`);
+                <ul class="viewer-cites">${cites.map(c => `<li>${esc(c.text)}${c.main ? `&nbsp;${star}` : ''}</li>`).join('')}</ul></section>`);
         }
         body.innerHTML = chunks.join('');
 
@@ -1519,19 +1563,21 @@ export const sourcesMethods = uiModule({
     // ==================== CITATION CHIPS ====================
 
     /** Chips for the sourceIds: open the viewer, remove (uncite) per chip. */
-    renderSourceChips(containerId: string, sourceIds: string[] | undefined, removeHandler: string, ctx?: CitationContext): void {
+    renderSourceChips(containerId: string, sourceIds: string[] | undefined, removeHandler: string, ctx?: CitationContext,
+        draft?: DraftCitations): void {
         const container = document.getElementById(containerId);
         if (!container) return;
-        const sources = DataManager.getData().sources ?? {};
-        // Set: trees imported before the parser deduped may repeat an id.
-        const ids = [...new Set(sourceIds ?? [])].filter(id => sources[id]);
+        const data = DataManager.getData();
+        const sources = data.sources ?? {};
+        // Each once (trees imported before the parser deduped may repeat an id), in the order shown (spec 095 K1.1).
+        const { ids, main } = chipCitations(data, sourceIds, ctx, draft);
         if (ids.length === 0) {
             container.innerHTML = `<span class="sources-empty">${esc(strings.sources.empty)}</span>`;
             return;
         }
         container.innerHTML = ids.map(id => `
-            <span class="source-chip ${sources[id].excerpts?.length ? 'has-thumb' : 'has-icon'}">
-                ${sourceChipOpenHtml(sources[id])}
+            <span class="source-chip ${sources[id].excerpts?.length ? 'has-thumb' : 'has-icon'}${id === main ? ' is-main' : ''}">
+                ${sourceChipOpenHtml(sources[id], id === main)}
                 <button type="button" class="source-chip-remove" title="${esc(strings.sources.remove)}" aria-label="${esc(strings.sources.remove)}"
                     data-source-id="${esc(id)}">&times;</button>
             </span>`).join('');

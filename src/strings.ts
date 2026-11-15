@@ -1327,6 +1327,9 @@ const stringsEN = {
         unsavedMessage: 'This source has unsaved changes.',
         // Register entries: excerpt, transcript, viewer, picker (plan "citace a výřezy")
         chipOpen: (title: string) => `Show source: ${title}`,
+        mainMark: 'main citation',
+        mainShort: 'main',
+        chipOpenMain: (title: string) => `${title} – main citation, open`,
         titleHint: 'One specific entry — a baptism, marriage or burial.',
         excerptLabel: 'Excerpt of the entry',
         excerptEmpty: "A screenshot from the archive's image viewer can be pasted here, or a scan uploaded.",
@@ -10479,6 +10482,9 @@ const stringsCZ: StringsType = {
         unsavedMessage: 'V tomto prameni jsou neuložené změny.',
         // Zápisy: výřez, přepis, prohlížeč, výběr (plán „citace a výřezy“)
         chipOpen: (title: string) => `Zobrazit pramen: ${title}`,
+        mainMark: 'hlavní citace',
+        mainShort: 'hlavní',
+        chipOpenMain: (title: string) => `${title} – hlavní citace, otevřít`,
         titleHint: 'Jeden konkrétní zápis — křest, sňatek, úmrtí.',
         excerptLabel: 'Výřez zápisu',
         excerptEmpty: 'Stačí vložit výstřižek obrazovky z prohlížeče archivu, nebo nahrát sken.',
@@ -19497,6 +19503,9 @@ const stringsDE: StringsType = {
         unsavedMessage: 'Diese Quelle hat ungespeicherte Änderungen.',
         // Einträge: Ausschnitt, Transkription, Ansicht, Auswahl
         chipOpen: (title: string) => `Quelle anzeigen: ${title}`,
+        mainMark: 'Hauptzitat',
+        mainShort: 'Haupt',
+        chipOpenMain: (title: string) => `${title} – Hauptzitat, öffnen`,
         titleHint: 'Ein bestimmter Eintrag — Taufe, Trauung oder Sterbefall.',
         excerptLabel: 'Ausschnitt des Eintrags',
         excerptEmpty: 'Einen Bildschirmausschnitt aus dem Archiv-Viewer einfügen oder einen Scan hochladen.',

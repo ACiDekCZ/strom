@@ -390,7 +390,7 @@ export const verifyUiMethods = uiModule({
         if (offer.row === 'reason' && checked?.why && v.step) {
             const label = lowerFirst(reliabilityLabel(v.step));
             const data = DataManager.getData();
-            const srcId = factSourceIds(v.holder, v.fact).find(id => data.sources?.[id]);
+            const srcId = factSourceIds(v.holder, v.fact, data).find(id => data.sources?.[id]);
             const src = srcId ? data.sources![srcId] : null;
             const ctxJson = JSON.stringify(isPartnership(v.holder) ? { partnershipId: v.holder.id } : { personId: v.holder.id });
             slots.reason.insertAdjacentHTML('beforeend', `<div class="st-v-box st-v-reason">

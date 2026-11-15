@@ -9,6 +9,7 @@
 
 import { TreeId, ResearchLink } from './types.js';
 import { TreeManager } from './tree-manager.js';
+import { setCitationFileOrderLookup } from './citation-order.js';
 
 /** The research keeps a fact's main citation (`_STROM_MAIN`) and takes it from the app. */
 export const CITATIONS_MAIN_FEATURE = 'citations.main';
@@ -52,6 +53,14 @@ export function citationRemoveTaken(treeId: TreeId | null | undefined): boolean 
 export function citationFileOrder(treeId: TreeId | null | undefined): boolean {
     return researchTakes(linkOf(treeId), CITATIONS_ORDER_FEATURE);
 }
+
+/** The tree shown: a main citation may be marked there, so a marked one is shown with its ★ (spec 095 R6). */
+export function citationMainShown(): boolean {
+    return citationMainOffered(TreeManager.getActiveTreeId());
+}
+
+// The pages and the bubbles order a fact's citations by the tree shown.
+setCitationFileOrderLookup(() => citationFileOrder(TreeManager.getActiveTreeId()));
 
 /** How a fact's citations go to a research (GedcomExportOptions citationMain / citationFileOrder). */
 export interface ResearchCitationsOut {
