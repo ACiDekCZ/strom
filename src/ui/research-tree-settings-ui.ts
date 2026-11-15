@@ -194,6 +194,17 @@ export const researchTreeSettingsMethods = uiModule({
         if (id) void this.showResearchTreeSettings(id);
     },
 
+    /**
+     * Research for this tree has its group "Work outside the directions":
+     * a tree tied to a research that is not an archive and does not wait for
+     * its agent. The overview offers its link to that group only then.
+     */
+    offLineSettingsOffered(treeId: string | null): boolean {
+        const link = treeId ? TreeManager.getTreeMetadata(treeId as TreeId)?.research : undefined;
+        if (!link) return false;
+        return this.researchModeOf(link.id, link) !== 'archive' && !this.researchAgentAway(link.id, link);
+    },
+
     /** The dialog for a tree tied to a research that knows how a transcript weighs. */
     async showResearchTreeSettings(treeId: TreeId): Promise<void> {
         const meta = TreeManager.getTreeMetadata(treeId);
@@ -298,7 +309,7 @@ export const researchTreeSettingsMethods = uiModule({
                 <div class="research-stories-host" id="research-stories-host"></div>
                 ${archive || agentAway ? '' : `<div class="research-hypos-host" id="research-hypos-host"></div>`}
                 ${archive || agentAway ? '' : `<div class="research-readtask-host" id="research-readtask-host"></div>`}
-                ${archive || agentAway ? '' : `<div class="research-offline-host" id="research-offline-host" data-research="${esc(link.id)}"></div>`}
+                ${this.offLineSettingsOffered(treeId) ? `<div class="research-offline-host" id="research-offline-host" data-research="${esc(link.id)}"></div>` : ''}
                 <button type="button" class="link-button research-read-history" id="research-read-history" hidden></button>
                 ${modeWhereHtml}
                 ${terminalWhereHtml}

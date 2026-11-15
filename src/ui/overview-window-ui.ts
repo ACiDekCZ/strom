@@ -97,6 +97,7 @@ export const overviewWindowMethods = uiModule({
             };
             // The tree's "Verifying" as the docked overview draws it (its Stop and bulk verification are run here).
             extras.verify = this.treeVerifyNow();
+            extras.offLineSettings = this.offLineSettingsOffered(treeId);
         }
         // What the evidence pill lights up in the tree here (the window's rows say it).
         extras.highlight = this.evidenceHighlightNow();

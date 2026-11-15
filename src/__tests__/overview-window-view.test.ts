@@ -252,6 +252,12 @@ describe('the overview\'s controls ask the main window', () => {
         expect(port.focusMain).toHaveBeenCalledTimes(1);
     });
 
+    it('the tree\'s choice is offered as a link only where the main window says Research for this tree has its group', () => {
+        expect(overrides(stateOf()).o.offLineSettingsOffered(null)).toBe(false);
+        expect(overrides(stateOf({ extras: { ...emptyOverviewExtras(), offLineSettings: true } })).o.offLineSettingsOffered(null)).toBe(true);
+        expect(overrides(stateOf({ extras: { ...emptyOverviewExtras(), offLineSettings: false } })).o.offLineSettingsOffered(null)).toBe(false);
+    });
+
     it('D: the main window\'s light is the snapshot\'s; its end asked there by kind; a light after a filter leaves the main window behind', () => {
         const highlight = { kind: 'changed', label: 'Changed · Persons' };
         const { o, sent, port } = overrides(stateOf({ extras: { ...emptyOverviewExtras(), highlight } }));

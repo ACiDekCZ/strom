@@ -88,6 +88,8 @@ export interface OverviewExtras {
     verify?: OverviewVerifyState | null;
     /** The group the evidence pill lights up in the main window's tree now: its kind and the pill's name (null: none). */
     highlight?: OverviewHighlight | null;
+    /** Research for this tree has its group "Work outside the directions" (offLineSettingsOffered); absent: not. */
+    offLineSettings?: boolean;
 }
 
 /** The tree's verification as the overview's "Verifying" block draws it. */

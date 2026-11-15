@@ -234,6 +234,57 @@ test.describe('the tree\'s choice in the Overview opens the settings at it', () 
         await expect(radio(page, 'last')).toBeFocused();
     });
 
+    // A research that is an archive, or waits for its agent, has no such group in Research for this tree:
+    // the choice is said, not offered (a narrow window, the overview as a sheet).
+    for (const [what, accepts, offered] of [
+        ['a research', { mode: 'research', sync: { auto: 'write' }, sources: true, verified: true, media: null }, true],
+        ['an archive', { mode: 'archive', sync: { auto: 'mirror' }, sources: true, verified: true, media: null }, false],
+        ['a research waiting for its agent', { mode: 'research', agentHere: false, sync: { auto: 'mirror' }, sources: true, verified: true, media: null }, false],
+    ] as const) {
+        test(`390, ${what} viewed without following: the choice ${offered ? 'opens the group' : 'is plain text, no dialog without the group'}`, async ({ page }) => {
+            await page.clock.setFixedTime(new Date('2026-11-13T10:30:00Z'));
+            await page.setViewportSize({ width: 390, height: 844 });
+            await openResearch(page);
+            const off = { mode: 'last', own: false, share: 12, suggest: true, tasks: 5, queued: 5, ownTasks: 0, branches: [
+                { id: 'B-P0003', person: 'P0003', via: { person: 'P0002', rel: 'sibling' }, nearest: 'G0001', tasks: 5, persons: 2,
+                    samples: [{ id: 'T0301', text: 'Křest Jana Fíška' }], mode: 'last', own: false },
+            ] };
+            await fakeBridge(page, {
+                accepts, links: ['send', 'open', 'live', 'app', 'setup', 'chat'], features: FEATURES,
+                statusExtra: {
+                    working: [], caps: OFF_CAPS, offLine: off,
+                    researches: [
+                        { id: 'G0001', name: 'Předci Josefa Fíška', state: 'active', direction: 'ancestors', focus: 'P0001', order: 1, tasks: 4, since: '2026-11-01T08:00:00Z' },
+                        { id: 'G0002', name: 'Předci Anny Svobodové', state: 'active', direction: 'ancestors', focus: 'P0002', order: 2, tasks: 1, since: '2026-11-02T08:00:00Z' },
+                    ],
+                    queue: [{ id: 'T0301', text: 'Křest Jana Fíška', state: 'next', branch: 'B-P0003' }],
+                },
+            });
+            await poll(page);
+            await page.evaluate(() => window.Strom.UI.researchActionOverview());
+            await expect(overview(page)).toBeVisible();
+            const mode = overview(page).locator('.research-offline__mode');
+            await expect(mode).toHaveText('at the end');
+            if (offered) {
+                await expect(overview(page).locator('button.research-offline__mode')).toHaveCount(1);
+                await mode.click();
+                await expect(dialog(page)).toBeVisible();
+                await expect(group(page)).toBeVisible();
+                await expect(radio(page, 'last')).toBeFocused();
+                return;
+            }
+            await expect(overview(page).locator('button.research-offline__mode')).toHaveCount(0);
+            await mode.click();
+            await expect(dialog(page)).toHaveCount(0);
+            await expect(overview(page)).toBeVisible();
+            // Research for this tree itself has no group there either: nothing was promised.
+            const treeId = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeId());
+            await page.evaluate((id) => window.Strom.UI.showResearchTreeSettings(id!), treeId);
+            await expect(dialog(page)).toBeVisible();
+            await expect(dialog(page).locator('#research-offline-host')).toHaveCount(0);
+        });
+    }
+
     test('in the Overview\'s own window: the main window opens the dialog at the chosen card', async ({ page }) => {
         await follow(page);
         await page.locator('#view-window-btn').click();

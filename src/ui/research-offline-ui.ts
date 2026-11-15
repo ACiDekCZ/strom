@@ -514,7 +514,8 @@ export const researchOffLineMethods = uiModule({
      * link to the research's settings of this tree), unfolded each branch
      * (person, years, how it is taken, growing), its relation and nearest
      * direction, a few of its tasks; branches not researched folded last.
-     * A phone reads it only.
+     * A phone reads it only. The tree's choice is plain text where Research
+     * for this tree has no group for it (an archive, an agent away).
      */
     appendOffLineSection(list: HTMLElement, s: LiveSession, mode: Mode, canWrite: boolean, working: readonly LiveWorker[] = []): boolean {
         if (!offLineShown(s)) return false;
@@ -546,12 +547,17 @@ export const researchOffLineMethods = uiModule({
             this.renderResearchOverview();
         };
         head.appendChild(toggle);
-        const modeLink = el('button', 'link-button research-offline__mode', L.offMode[off.mode]);
-        modeLink.type = 'button';
-        modeLink.dataset.do = 'offline-settings';
-        modeLink.title = L.offModeLink;
-        modeLink.onclick = () => this.openOffLineSettings();
-        head.appendChild(modeLink);
+        if (this.offLineSettingsOffered(s.treeId)) {
+            const modeLink = el('button', 'link-button research-offline__mode', L.offMode[off.mode]);
+            modeLink.type = 'button';
+            modeLink.dataset.do = 'offline-settings';
+            modeLink.title = L.offModeLink;
+            modeLink.onclick = () => this.openOffLineSettings();
+            head.appendChild(modeLink);
+        } else {
+            // Research for this tree has no such group (an archive, a research waiting for its agent): said, not offered.
+            head.appendChild(el('span', 'research-offline__mode research-offline__mode--said', L.offMode[off.mode]));
+        }
         list.appendChild(head);
         // What runs outside the directions now: each task and its person, folded or not.
         for (const w of working) {
