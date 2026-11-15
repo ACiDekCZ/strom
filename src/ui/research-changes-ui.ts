@@ -244,8 +244,6 @@ export function nwReason(item: NotWrittenItem, removedHere = false): string {
     return item.skipped ? s.nw['write.failed'] : s.nwUnknown;
 }
 
-const capFirst = (t: string): string => t ? t.charAt(0).toLocaleUpperCase() + t.slice(1) : t;
-
 /**
  * A fact as a not-written row names it: its label, with the year where the
  * tree has the fact ("Birth 1851"; a person's event when the person has one
@@ -253,7 +251,8 @@ const capFirst = (t: string): string => t ? t.charAt(0).toLocaleUpperCase() + t.
  */
 export function nwFactText(fact: string, data: StromData, personId: PersonId | null, coupleId: string | null): string {
     const tag = fact.toUpperCase();
-    const label = tag === 'MARR' ? capFirst(strings.events.typesOf.marriage) : tag === 'DIV' ? capFirst(strings.events.typesOf.divorce) : researchFactLabel(tag);
+    // The event's name as a label ("Marriage", cs "Sňatek", pl "Ślub"), not the in-a-sentence form of typesOf (cs "sňatku").
+    const label = tag === 'MARR' ? strings.table.evKind.marriage : tag === 'DIV' ? strings.table.evKind.divorce : researchFactLabel(tag);
     const p = personId ? data.persons[personId] : undefined;
     const ps = coupleId ? data.partnerships?.[coupleId as keyof typeof data.partnerships] : undefined;
     let date: string | undefined;

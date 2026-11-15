@@ -221,6 +221,18 @@ describe('the reason and the row of an item with a code', () => {
         expect(ui.nwRowParts(gone, data).who).toEqual({ name: 'Hostivít Brambůrek starší', personId: null });
     });
 
+    it('a marriage and a divorce are named as the other facts are, by the event\'s name, not its in-a-sentence form', () => {
+        const [marr, div] = coded([
+            item('fact.noMatch', { person: '', family: 'F0001', fact: 'MARR' }),
+            item('fact.noMatch', { person: '', family: 'F0001', fact: 'DIV' }),
+        ]);
+        const want = { en: ['Marriage 1849', 'Divorce'], cs: ['Sňatek 1849', 'Rozvod'], de: ['Heirat 1849', 'Scheidung'], pl: ['Ślub 1849', 'Rozwód'] } as const;
+        for (const lang of ['en', 'cs', 'de', 'pl'] as const) {
+            setLanguage(lang);
+            expect([ui.nwRowParts(marr, data).fact, ui.nwRowParts(div, data).fact], lang).toEqual(want[lang]);
+        }
+    });
+
     it('never counted as not named: each item a row of its own', () => {
         const paired = pairNotWritten([item('fact.noMatch', { family: 'F0404' }), item('x.y')], data);
         expect(paired.unnamed).toBe(0);
