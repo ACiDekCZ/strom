@@ -373,6 +373,7 @@ export const plPart2: Pick<StringsType, 'crop' | 'importImages' | 'imageViewer' 
             'cite.notCarried': 'cytaty osoby, imienia lub rodziny nie są usuwane z aplikacji',
             'main.notCarried': 'cytat główny nie ustawiony: badanie nie przyjęło tego cytatu',
             'fact.noMatch': 'badanie nie znalazło tego faktu (zmieniła się data lub rodzaj)',
+            'event.retracted': 'badanie w międzyczasie wycofało ten fakt; nie wróci już do aplikacji',
             gone: 'brak w pliku; badanie nic nie usuwa, tylko odnotowuje',
             'conflict.open': 'w tej sprawie czeka już otwarta sprzeczność',
             sentSince: 'późniejsze wysłanie z innego okna zmieniło fakt; ta kopia jest starsza',

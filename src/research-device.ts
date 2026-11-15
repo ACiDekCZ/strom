@@ -445,6 +445,17 @@ function storedParams(value: unknown): Record<string, string> | null {
     return Object.keys(out).length ? out : null;
 }
 
+/** A kept item's cited sources (`cites`, the research's or the file's refs) and their ids here (`citeIds`), at most 20. */
+function storedCites(cites: unknown, ids: unknown): { cites?: string[]; citeIds?: string[] } {
+    if (!Array.isArray(cites)) return {};
+    const refs = cites.slice(0, 20).filter((c): c is string => typeof c === 'string' && /^(S\d{1,9}|@[A-Za-z0-9_-]{1,20}@)$/.test(c));
+    if (!refs.length) return {};
+    // The ids go by the order of the refs: kept only while each ref was kept.
+    const own = refs.length === Math.min(cites.length, 20) && Array.isArray(ids) && ids.length === refs.length && ids.every(x => typeof x === 'string')
+        ? (ids as string[]).map(x => x.slice(0, 80)) : [];
+    return { cites: refs, ...(own.some(Boolean) ? { citeIds: own } : {}) };
+}
+
 /** The tie as it stood before the research's version was loaded: what a restore of that backup builds on again (V-B). */
 export interface ResearchLinkBefore {
     head: string;
@@ -633,6 +644,7 @@ export function researchAutoState(treeId: string): ResearchAutoState {
                         ...(typeof i.removedBy === 'string' && /^I\d{1,9}$/.test(i.removedBy) ? { removedBy: i.removedBy } : {}),
                         ...(typeof i.code === 'string' && /^[A-Za-z][A-Za-z0-9.-]{0,47}$/.test(i.code) ? { code: i.code } : {}),
                         ...(storedParams(i.params) ? { params: storedParams(i.params)! } : {}),
+                        ...storedCites(i.cites, i.citeIds),
                         ...(i.skipped === true ? { skipped: true as const } : {}) })),
                 unexplained: typeof nw.unexplained === 'number' && nw.unexplained > 0 ? Math.floor(nw.unexplained) : 0,
                 ...(nw.seen === true ? { seen: true as const } : {}),

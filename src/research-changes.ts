@@ -649,6 +649,10 @@ export interface NotWrittenItem {
     code?: string;
     /** What it is about by the code (the research's ids, a fact's tag). */
     params?: Record<string, string>;
+    /** The sources its fact cited that went unwritten with it (a new citation): the research's "S0012" or the file's "@S12@". */
+    cites?: string[];
+    /** Those sources in the app, in the order of `cites`, when the send's file told them ('' = by the research's number). */
+    citeIds?: string[];
     /** A change the research wanted to write and could not (`skipped[]` of the answer), listed with the rest. */
     skipped?: true;
 }
@@ -665,7 +669,9 @@ export type PairedNotWritten =
      * `sourceId` with its title); never counted as not named.
      */
     | { type: 'coded'; item: NotWrittenItem; personId: PersonId | null; deleted?: { name: string };
-        couple: PartnershipId | null; sourceId: string | null; title: string };
+        couple: PartnershipId | null; sourceId: string | null; title: string;
+        /** More sources it cited (`cites`) the tree has, after the first (`sourceId`); absent = none. */
+        alsoCited?: { id: string; title: string }[] };
 
 /**
  * Put what the research did not write to its rows: a person (as before, also
@@ -695,11 +701,19 @@ export function pairNotWritten(items: readonly NotWrittenItem[], data: StromData
             const ps = !item.person && item.family
                 ? Object.values(data.partnerships ?? {}).find(f => f?.researchId === item.family) : undefined;
             const sid = item.source ? (item.sourceId && sources[item.sourceId] ? item.sourceId : sourceByRef(item.source)) : null;
-            const sourceId = sid && sources[sid] ? sid : null;
+            // The sources a new citation cited (`cites`), each the tree has, once: the first where the item names none.
+            const cited: { id: string; title: string }[] = [];
+            (item.cites ?? []).forEach((ref, i) => {
+                const own = item.citeIds?.[i];
+                const id = own && sources[own] ? own : sourceByRef(ref);
+                if (id && sources[id] && id !== sid && !cited.some(c => c.id === id)) cited.push({ id, title: sources[id].title?.trim() || ref });
+            });
+            const first = sid && sources[sid] ? { id: sid, title: sources[sid].title?.trim() || item.source! } : cited.shift() ?? null;
             rows.push({ type: 'coded', item, personId: removed ? removed.personId : hit ? hit.id : null,
                 ...(removed ? { deleted: { name: removed.name } } : {}),
                 couple: ps ? ps.id : null,
-                sourceId, title: sourceId ? sources[sourceId].title?.trim() || item.source! : '' });
+                sourceId: first ? first.id : null, title: first ? first.title : '',
+                ...(cited.length ? { alsoCited: cited } : {}) });
             continue;
         }
         if (item.person) {

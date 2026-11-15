@@ -343,12 +343,16 @@ export interface ReplyNotWritten {
     skippedApart: number;
 }
 
-const keptItem = (n: SyncNotWritten, why: string, sourceId: string): NotWrittenItem => ({
-    person: n.person, fact: n.fact, why, ...(why === 'removed' && n.removedBy ? { removedBy: n.removedBy } : {}),
-    ...(n.name ? { name: n.name } : {}), ...(n.family ? { family: n.family } : {}),
-    ...(n.source ? { source: n.source } : {}), ...(sourceId ? { sourceId } : {}), ...(n.place ? { place: n.place } : {}),
-    ...(n.code ? { code: n.code } : {}), ...(Object.keys(n.params).length ? { params: n.params } : {}),
-});
+const keptItem = (n: SyncNotWritten, why: string, sourceId: string, sourceIdOf?: (xref: string) => string): NotWrittenItem => {
+    const citeIds = sourceIdOf && n.cites?.some(c => c.startsWith('@')) ? n.cites.map(c => c.startsWith('@') ? sourceIdOf(c) : '') : [];
+    return {
+        person: n.person, fact: n.fact, why, ...(why === 'removed' && n.removedBy ? { removedBy: n.removedBy } : {}),
+        ...(n.name ? { name: n.name } : {}), ...(n.family ? { family: n.family } : {}),
+        ...(n.source ? { source: n.source } : {}), ...(sourceId ? { sourceId } : {}), ...(n.place ? { place: n.place } : {}),
+        ...(n.code ? { code: n.code } : {}), ...(Object.keys(n.params).length ? { params: n.params } : {}),
+        ...(n.cites?.length ? { cites: n.cites } : {}), ...(citeIds.some(Boolean) ? { citeIds } : {}),
+    };
+};
 
 /** A skipped change with a code, kept as a not-written item (what it is about from its params). */
 const skippedItem = (x: SyncReply['skipped'][number]): NotWrittenItem => {
@@ -379,7 +383,7 @@ export function replyNotWritten(reply: SyncReply, o: { written: boolean; codes: 
     const items = [
         ...listed.map(n => {
             const sourceId = n.source.startsWith('@') && o.sourceIdOf ? o.sourceIdOf(n.source) : '';
-            return keptItem(n, n.why === 'removed' && !o.removedOn ? '' : n.why, sourceId);
+            return keptItem(n, n.why === 'removed' && !o.removedOn ? '' : n.why, sourceId, o.sourceIdOf);
         }),
         ...skippedCoded.map(skippedItem),
     ].slice(0, 50);

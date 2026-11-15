@@ -163,7 +163,8 @@ describe('the reason and the row of an item with a code', () => {
 
     it('every code of the table has its words in four languages, never "nothing new"', () => {
         const codes = ['cite.olderApp', 'cite.sourceRemoved', 'cite.notCarried', 'main.notCarried', 'fact.noMatch', 'gone', 'conflict.open',
-            'sentSince', 'confirm.changed', 'relation.unknown', 'surname.kept', 'surname.warning', 'sync.origin', 'person.no-match', 'write.failed'];
+            'sentSince', 'confirm.changed', 'relation.unknown', 'surname.kept', 'surname.warning', 'sync.origin', 'person.no-match', 'write.failed',
+            'event.retracted'];
         for (const lang of ['en', 'cs', 'de', 'pl'] as const) {
             setLanguage(lang);
             const s = getStringsForLang(lang).sync;
@@ -187,7 +188,7 @@ describe('the reason and the row of an item with a code', () => {
         expect(ui.nwReason(item('report'))).toBe(s.notWrittenReport);
         expect(ui.nwReason(item('person.removed'))).toBe(s.notWrittenRemoved);
         expect(ui.nwReason(item('some.futureCode'))).toBe('not taken');
-        expect(ui.nwReason(item('event.retracted', { skipped: true }))).toBe('writing in the research failed');
+        expect(ui.nwReason(item('record.none', { skipped: true }))).toBe('writing in the research failed');
         expect(ui.nwReason(item('constructor'))).toBe('not taken');
         // No code: by the research's word, as before.
         expect(ui.nwReason({ person: 'P0003', fact: 'BIRT', why: 'pick' })).toBe(s.notWrittenPick);
@@ -296,5 +297,121 @@ describe('a send settled later from /status keeps what it did not take (R15)', (
         await ui().settleResearchSend(TREE, status([]));
         expect(researchAutoState(TREE).notWritten).toBeUndefined();
         patchResearchAutoState(TREE, {});
+    });
+});
+
+describe('a fact the research has since withdrawn (event.retracted)', () => {
+    let ui: typeof import('../ui/research-changes-ui.js');
+    beforeAll(async () => { ui = await import('../ui/research-changes-ui.js'); }, 60000);
+    afterEach(() => setLanguage('en'));
+
+    const withdrawn = {
+        ok: true, inbox: false, changes: 0, applied: 0, intake: 'R20261115131500123-c3d4',
+        notWritten: [
+            { kind: 'fact.uncite', why: 'report', code: 'event.retracted', person: 'P0003', fact: 'BIRT', source: 'S0001',
+                params: { person: 'P0003', fact: 'BIRT', event: 'E0012', source: 'S0001' } },
+            { kind: 'fact.main', why: 'report', code: 'event.retracted', family: 'F0001', fact: 'MARR', source: 'S0001',
+                params: { family: 'F0001', fact: 'MARR', event: 'E0020', source: 'S0001' } },
+            { kind: 'fact.cite', why: 'report', code: 'event.retracted', person: 'P0003', fact: 'BIRT',
+                params: { person: 'P0003', fact: 'BIRT', event: 'E0012' }, cites: ['S0003', '@S12@', 'S0003', 'bad ref'] },
+            { kind: 'fact.note', why: 'report', code: 'event.retracted', family: 'F0001', fact: 'MARR',
+                params: { family: 'F0001', fact: 'MARR', event: 'E0020' } },
+        ],
+        skipped: [
+            { n: 1, kind: 'fact.detail', why: 'E0012 is retracted', code: 'event.retracted', params: { person: 'P0003', fact: 'BIRT', event: 'E0012' } },
+            { n: 1, kind: 'fact.main', why: 'E0020 is retracted', code: 'event.retracted', params: { family: 'F0001', fact: 'MARR', event: 'E0020', source: 'S0001' } },
+        ],
+    };
+    const words = {
+        en: 'the research has since withdrawn this fact; it will not come back to the app',
+        cs: 'výzkum tento fakt mezitím stáhl; do aplikace se už nevrátí',
+        de: 'die Forschung hat diese Angabe inzwischen zurückgezogen; sie kommt nicht mehr in die App zurück',
+        pl: 'badanie w międzyczasie wycofało ten fakt; nie wróci już do aplikacji',
+    } as const;
+    const tree = {
+        ...data,
+        sources: { ...data.sources,
+            s3: { id: 's3', title: 'Matrika Z 1870–1890', refn: 'S0003' },
+            s12: { id: 's12', title: 'Pozůstalost Brambůrkových' } },
+    } as unknown as StromData;
+    const fromReply = () => replyNotWritten(sanitizeSyncReply(withdrawn, CODES),
+        { written: true, codes: true, removedOn: true, sourceIdOf: x => (x === '@S12@' ? 's12' : '') });
+
+    it('read from notWritten[] and skipped[]: the code, its params and the sources cited', () => {
+        const r = sanitizeSyncReply(withdrawn, CODES);
+        expect(r.notWritten.map(n => n.code)).toEqual(Array(4).fill('event.retracted'));
+        expect(r.notWritten[0]).toMatchObject({ person: 'P0003', fact: 'BIRT', source: 'S0001', params: { event: 'E0012' } });
+        expect(r.notWritten[1]).toMatchObject({ person: '', family: 'F0001', fact: 'MARR', source: 'S0001' });
+        // Each cited source once, a ref of the wrong shape left out.
+        expect(r.notWritten[2].cites).toEqual(['S0003', '@S12@']);
+        expect(r.notWritten[3].cites).toBeUndefined();
+        expect(r.skipped.map(x => [x.code, x.params.event])).toEqual([['event.retracted', 'E0012'], ['event.retracted', 'E0020']]);
+        // Without the feature: no code, nothing cited, as before.
+        expect(sanitizeSyncReply(withdrawn, []).notWritten.every(n => n.code === '' && n.cites === undefined)).toBe(true);
+    });
+
+    it('not taken: every item in one list, the skipped ones too', () => {
+        const r = fromReply();
+        expect(r).toMatchObject({ notTaken: true, count: 6, skippedApart: 0 });
+        expect(r.items.map(i => [i.code, !!i.skipped])).toEqual([
+            ['event.retracted', false], ['event.retracted', false], ['event.retracted', false], ['event.retracted', false],
+            ['event.retracted', true], ['event.retracted', true]]);
+        expect(r.items[2]).toMatchObject({ cites: ['S0003', '@S12@'], citeIds: ['', 's12'] });
+    });
+
+    it('its reason in four languages, in notWritten[] and in skipped[] alike', () => {
+        for (const lang of ['en', 'cs', 'de', 'pl'] as const) {
+            setLanguage(lang);
+            expect(getStringsForLang(lang).sync.nw['event.retracted']).toBe(words[lang]);
+            for (const it of fromReply().items) expect(ui.nwReason(it), `${lang} ${it.skipped ? 'skipped' : 'notWritten'}`).toBe(words[lang]);
+        }
+    });
+
+    it('the row: person or couple · fact · source, each when known; a new citation names the sources it cited', () => {
+        const items = fromReply().items;
+        const rows = (pairNotWritten(items, tree).rows as Extract<PairedNotWritten, { type: 'coded' }>[]).map(r => ui.nwRowParts(r, tree));
+        const hostivit = { name: 'Hostivít Brambůrek', personId: 'p3' };
+        const couple = { name: 'Zbyhněv Brambůrek and Radoslava Brambůrková', personId: 'p2' };
+        const matrikaN = { id: 's1', title: 'Matrika N 1850–1860' };
+        expect(rows[0]).toEqual({ who: hostivit, fact: 'Birth 1851', source: matrikaN });
+        expect(rows[1]).toEqual({ who: couple, fact: 'Marriage 1849', source: matrikaN });
+        expect(rows[2]).toEqual({ who: hostivit, fact: 'Birth 1851', source: { id: 's3', title: 'Matrika Z 1870–1890' },
+            more: [{ id: 's12', title: 'Pozůstalost Brambůrkových' }] });
+        expect(rows[3]).toEqual({ who: couple, fact: 'Marriage 1849', source: null });
+        expect(rows[4]).toEqual({ who: hostivit, fact: 'Birth 1851', source: null });
+        expect(rows[5]).toEqual({ who: couple, fact: 'Marriage 1849', source: matrikaN });
+        // In Czech the same parts in its words.
+        setLanguage('cs');
+        const cs = ui.nwRowParts(pairNotWritten(items.slice(1, 2), tree).rows[0] as Extract<PairedNotWritten, { type: 'coded' }>, tree);
+        expect(cs.who?.name).toBe(getStringsForLang('cs').changes.coupleName('Zbyhněv Brambůrek', 'Radoslava Brambůrková'));
+    });
+
+    it('/status.sends: the same items, the cited sources by the research\'s number', () => {
+        const rec = sanitizeLiveStatus({ features: CODES, sends: [{ intake: 'R5', at: '2026-11-15T13:15:00Z', state: 'nothing', changes: 0,
+            notWritten: withdrawn.notWritten, notWrittenCount: 4, skipped: withdrawn.skipped }] })!.sends![0];
+        const nw = sendRecordNotWritten(rec, true)!;
+        expect(nw.items.map(i => i.code)).toEqual(Array(6).fill('event.retracted'));
+        expect(nw.items[2]).toMatchObject({ cites: ['S0003', '@S12@'] });
+        expect(nw.items[2].citeIds).toBeUndefined();
+        const row = pairNotWritten(nw.items.slice(2, 3), tree).rows[0] as Extract<PairedNotWritten, { type: 'coded' }>;
+        // A source new in the app ("@S12@") is not known without the send's file: left out.
+        expect(ui.nwRowParts(row, tree)).toEqual({ who: { name: 'Hostivít Brambůrek', personId: 'p3' }, fact: 'Birth 1851',
+            source: { id: 's3', title: 'Matrika Z 1870–1890' } });
+    });
+
+    it('kept in the state with the sources cited', () => {
+        const store = new Map<string, string>();
+        vi.stubGlobal('localStorage', {
+            getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => { store.set(k, v); },
+            removeItem: (k: string) => { store.delete(k); }, key: () => null, get length() { return store.size; },
+        });
+        try {
+            const items = fromReply().items;
+            patchResearchAutoState('tree_1700000000000_nw02', { notWritten: { at: '2026-11-15T13:15:00Z', fingerprint: 'f5', written: 0, items, unexplained: 0, codes: true } });
+            const kept = researchAutoState('tree_1700000000000_nw02').notWritten!.items;
+            expect(kept).toEqual(items);
+        } finally {
+            vi.unstubAllGlobals();
+        }
     });
 });

@@ -236,7 +236,7 @@ export function nwReason(item: NotWrittenItem, removedHere = false): string {
     if (!code) return strings.changes.noReason;
     const own = Object.prototype.hasOwnProperty.call(s.nw, code) ? s.nw[code] : '';
     if (own) return own;
-    // What the research wanted to write and could not (`event.retracted`, `record.none` …): its write failed.
+    // What the research wanted to write and could not (`record.none` …): its write failed.
     return item.skipped ? s.nw['write.failed'] : s.nwUnknown;
 }
 
@@ -277,6 +277,8 @@ export function nwFactText(fact: string, data: StromData, personId: PersonId | n
  */
 export function nwRowParts(row: Extract<PairedNotWritten, { type: 'coded' }>, data: StromData): {
     who: { name: string; personId: PersonId | null; deleted?: true } | null; fact: string; source: { id: string; title: string } | null;
+    /** More sources the change cited (a new citation of several), after `source`; absent = none. */
+    more?: { id: string; title: string }[];
 } {
     const n = row.item;
     let who: { name: string; personId: PersonId | null; deleted?: true } | null = null;
@@ -298,12 +300,12 @@ export function nwRowParts(row: Extract<PairedNotWritten, { type: 'coded' }>, da
     }
     const fact = n.fact ? nwFactText(n.fact, data, p ? row.personId : null, p ? null : row.couple) : '';
     const source = row.sourceId ? { id: row.sourceId, title: row.title } : null;
-    return { who, fact, source };
+    return { who, fact, source, ...(row.alsoCited?.length ? { more: row.alsoCited.map(c => ({ ...c })) } : {}) };
 }
 
 /** A not-written row with a code: "person · fact · source" and its reason below. */
 function nwCodedRow(row: Extract<PairedNotWritten, { type: 'coded' }>, data: StromData): string {
-    const { who, fact, source } = nwRowParts(row, data);
+    const { who, fact, source, more } = nwRowParts(row, data);
     const parts: string[] = [];
     if (who) {
         parts.push(who.personId
@@ -313,7 +315,9 @@ function nwCodedRow(row: Extract<PairedNotWritten, { type: 'coded' }>, data: Str
         parts.push(`<span class="research-changes-name">${esc(strings.changes.unnamedOne)}</span>`);
     }
     if (fact) parts.push(`<span class="research-changes-fact">${esc(fact)}</span>`);
-    if (source) parts.push(`<button type="button" class="research-changes-name" data-source="${esc(source.id)}">${esc(source.title)}</button>`);
+    for (const src of source ? [source, ...(more ?? [])] : []) {
+        parts.push(`<button type="button" class="research-changes-name" data-source="${esc(src.id)}">${esc(src.title)}</button>`);
+    }
     return `<li class="research-changes-row is-not-written" data-kind="coded" data-code="${esc(row.item.code ?? '')}">`
         + `<span class="research-changes-icon is-warn" aria-hidden="true">!</span>`
         + `<span class="research-changes-text"><span class="research-changes-line is-parts">${parts.join('<span class="research-changes-sep">·</span>')}</span>`

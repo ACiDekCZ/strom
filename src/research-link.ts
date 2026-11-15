@@ -4278,6 +4278,11 @@ export interface SyncNotWritten {
     code: string;
     /** What it is about by the code (`person`, `family`, `fact`, `event`, `source`, `child`, `send`, `sync`, `place`…); {} = none. */
     params: Record<string, string>;
+    /**
+     * The sources the change cited that went unwritten with it (`cites`, a new citation of a fact): the research's
+     * "S0012" or the sent file's "@S12@", at most 20; only with `sync.notWritten.codes`, absent = none.
+     */
+    cites?: string[];
 }
 
 /** `/status.features`: every not-written and skipped change of a send's answer (and of `/status.sends`) carries `code` + `params`. */
@@ -4308,6 +4313,17 @@ function nwParams(value: unknown): Record<string, string> {
     return out;
 }
 
+/** The `cites` of a not-written change: the sources by the shape of `params.source`, each once, at most 20. */
+function nwCites(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    const out = new Set<string>();
+    for (const v of value.slice(0, 20)) {
+        const t = typeof v === 'string' ? v.trim() : '';
+        if (NW_PARAM.source.test(t)) out.add(t);
+    }
+    return [...out];
+}
+
 /** The reasons an older research says in `why`, also told by a code of the same meaning (`person.removed`: `removed`). */
 const NW_WHY_OF_CODE: Record<string, SyncNotWritten['why']> = {
     takenBack: 'takenBack', kept: 'kept', report: 'report', pick: 'pick', 'person.removed': 'removed',
@@ -4324,6 +4340,7 @@ export function sanitizeNotWritten(value: unknown, codes: boolean, max = 200): S
         .map(x => {
             const code = codes ? nwCode(x.code) : '';
             const params = codes ? nwParams(x.params) : {};
+            const cites = codes ? nwCites(x.cites) : [];
             const of = (key: string): unknown => x[key] ?? params[key];
             const said = x.why === 'takenBack' || x.why === 'kept' || x.why === 'report' || x.why === 'pick' || x.why === 'removed' ? x.why : '';
             const why = said || NW_WHY_OF_CODE[code] || '';
@@ -4338,6 +4355,7 @@ export function sanitizeNotWritten(value: unknown, codes: boolean, max = 200): S
                 source: typeof of('source') === 'string' && /^(S\d{1,9}|@[A-Za-z0-9_-]{1,20}@)$/.test(of('source') as string) ? of('source') as string : '',
                 place: cleanText(of('place'), 200),
                 code, params,
+                ...(cites.length ? { cites } : {}),
             };
         });
 }
