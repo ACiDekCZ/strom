@@ -277,7 +277,7 @@ test.describe('view switcher — monotonic, in-viewport, ghost ⋯ (cs-CZ, stres
  * button folds to ＋ by measurement, so it is never cut at the window edge and
  * the tree switcher never slides under the search field.
  */
-const RESEARCH_LABEL: Record<string, string> = { 'cs-CZ': 'Výzkum', 'de-DE': 'Forschung', 'en-US': 'Research' };
+const RESEARCH_LABEL: Record<string, string> = { 'cs-CZ': 'Výzkum', 'de-DE': 'Forschung', 'en-US': 'Research', 'pl-PL': 'Badanie' };
 
 async function openConnectedResearch(page: Page, locale: string): Promise<void> {
     await openResearch(page, { edit: true });
@@ -467,8 +467,10 @@ test.describe('the tree switcher\'s name in a tight toolbar (de-DE)', () => {
  * over its label and takes no room) and the search funnel keeps a 1px chip
  * edge; the tabs' side padding and the funnel's give that room back, so the
  * search input is no narrower than with the earlier tabs (400 cut, 14 px sides)
- * and the edgeless funnel. The earlier look is put back with an injected style
- * and measured in the same page. A machine that draws the bold cut wider (CI's
+ * and the edgeless funnel (or, as the fit folds other controls until the field
+ * has 80 px, needs no fit step the earlier look did not). The earlier look is
+ * put back with an injected style and measured in the same page. A machine
+ * that draws the bold cut wider (CI's
  * Linux, 2-4 px a label) changes no tab's width.
  */
 test.describe('the search field beside the view tabs (de-DE, no research)', () => {
@@ -513,9 +515,16 @@ test.describe('the search field beside the view tabs (de-DE, no research)', () =
                 await earlier.evaluate(el => el.remove());
                 const at = `${name ?? 'sample'} @${width}px`;
                 expect(now.tabsWhole, `${at}: no view tab cuts its label`).toBe(true);
-                expect(now.steps, `${at}: the same fit steps as with the earlier tabs`).toBe(before.steps);
-                expect(now.search, `${at}: the search input (${now.search}) keeps the earlier width (${before.search})`)
-                    .toBeGreaterThanOrEqual(before.search - 0.5);
+                // The fit folds other controls until the field has 80 px (SEARCH_MIN_PX): the earlier,
+                // wider tabs may need a step more; the current ones never need more steps than they did.
+                const nowSteps = now.steps.split(' ').filter(c => c !== 'toolbar');
+                const beforeSteps = before.steps.split(' ').filter(c => c !== 'toolbar');
+                expect(beforeSteps, `${at}: no fit step beyond the earlier tabs' (${before.steps})`).toEqual(expect.arrayContaining(nowSteps));
+                if (nowSteps.length === beforeSteps.length) {
+                    expect(now.search, `${at}: the search input (${now.search}) keeps the earlier width (${before.search})`)
+                        .toBeGreaterThanOrEqual(before.search - 0.5);
+                }
+                expect(now.search, `${at}: the search input keeps 80 px`).toBeGreaterThanOrEqual(80);
             }
         }
     });
@@ -543,6 +552,101 @@ test.describe('the search field beside the view tabs (de-DE, no research)', () =
         await wide.evaluate(el => el.remove());
     });
 });
+
+/**
+ * The search field of every tree keeps at least 80 px (SEARCH_MIN_PX in
+ * src/ui/toolbar-fit.ts): the other controls fold first (＋ alone, narrower
+ * tabs, ⋯, a shorter tree name; on a tablet the steppers' words, the count,
+ * the switch) and a field that still cannot have it becomes the magnifier,
+ * which opens the field over the bar. Before, only a research tree was
+ * measured: without one, de and pl at 1300 px kept a stub of 8-36 px. On a
+ * phone the magnifier opens the field over the bar as well. Nothing runs
+ * over the bar and its controls do not overlap.
+ */
+for (const locale of ['de-DE', 'pl-PL']) {
+    test.describe(`the search field keeps its minimum (${locale})`, () => {
+        test.use({ locale });
+
+        async function searchFit(page: Page) {
+            await settleLayout(page);
+            return page.evaluate(() => {
+                const tb = document.querySelector('.toolbar') as HTMLElement;
+                const shown = (el: Element | null): el is HTMLElement => {
+                    if (!el) return false;
+                    const cs = getComputedStyle(el);
+                    if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+                    const r = el.getBoundingClientRect();
+                    return r.width > 0 && r.height > 0;
+                };
+                const input = document.querySelector('#toolbar-search-picker .person-picker-input');
+                const magnifier = document.querySelector('#search-open-btn');
+                const parts = ['.tree-switcher-btn', '.toolbar .search-container', '#search-open-btn', '#view-mode-segment',
+                    '.toolbar-focus', '#research-menu-btn', '.actions-menu-btn', '.toolbar .btn-add-person']
+                    .map(sel => [sel, document.querySelector(sel)] as const)
+                    .filter(([sel, el]) => shown(el) && !(sel === '.toolbar .search-container' && shown(magnifier)))
+                    .map(([sel, el]) => [sel, el!.getBoundingClientRect()] as const);
+                const overlaps: string[] = [];
+                for (let i = 0; i < parts.length; i++) for (let j = i + 1; j < parts.length; j++) {
+                    const a = parts[i][1], b = parts[j][1];
+                    if (a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1) {
+                        overlaps.push(`${parts[i][0]} × ${parts[j][0]}`);
+                    }
+                }
+                return {
+                    field: shown(input) ? Math.round(input.getBoundingClientRect().width) : 0,
+                    magnifier: shown(magnifier),
+                    overflow: tb.scrollWidth - tb.clientWidth,
+                    page: document.documentElement.scrollWidth - window.innerWidth,
+                    overlaps,
+                };
+            });
+        }
+
+        async function checkWidths(page: Page, what: string) {
+            for (const width of [1440, 1300, 1024, 768, 390]) {
+                await page.setViewportSize({ width, height: width > 500 ? 900 : 844 });
+                const s = await searchFit(page);
+                const at = `${what} @${width}px`;
+                expect(s.overflow, `${at}: the toolbar does not overflow`).toBeLessThanOrEqual(0);
+                expect(s.page, `${at}: the page does not scroll sideways`).toBeLessThanOrEqual(0);
+                expect(s.overlaps, `${at}: no toolbar controls overlap`).toEqual([]);
+                if (s.magnifier) {
+                    // Folded: the magnifier opens a field of full use over the bar.
+                    await page.locator('#search-open-btn').click();
+                    await expect(page.locator('body')).toHaveClass(/search-open/);
+                    const open = await page.locator('#toolbar-search-picker .person-picker-input').evaluate(el => el.getBoundingClientRect().width);
+                    expect(open, `${at}: the opened field (${open})`).toBeGreaterThanOrEqual(80);
+                    // Leaving the field folds it back to the magnifier.
+                    await page.locator('#toolbar-search-picker .person-picker-input').blur();
+                    await expect(page.locator('body')).not.toHaveClass(/search-open/);
+                } else {
+                    expect(s.field, `${at}: the search field (${s.field}px) keeps 80 px`).toBeGreaterThanOrEqual(80);
+                }
+            }
+        }
+
+        test('a tree without a research: the field keeps 80 px or folds into the magnifier', async ({ page }) => {
+            await page.setViewportSize({ width: 1440, height: 900 });
+            await openApp(page);
+            await page.evaluate(() => window.Strom.UI.loadDemoTree());
+            await expect(page.locator('.person-card').first()).toBeVisible();
+            await checkWidths(page, 'sample');
+            // At 1300 px the field itself stays (the other controls folded first).
+            await page.setViewportSize({ width: 1300, height: 900 });
+            const s = await searchFit(page);
+            expect(s.magnifier, '1300px: the field, not the magnifier').toBe(false);
+            // A wider font (as CI's Linux fonts draw the labels): the fit is measured, so it still holds.
+            await page.addStyleTag({ content: '.toolbar, .toolbar * { font-family: Verdana, "DejaVu Sans", sans-serif !important; }' });
+            await checkWidths(page, 'sample, wider font');
+        });
+
+        test('a research tree: the field keeps 80 px or folds into the magnifier', async ({ page }) => {
+            await page.setViewportSize({ width: 1440, height: 900 });
+            await openConnectedResearch(page, locale);
+            await checkWidths(page, 'research');
+        });
+    });
+}
 
 test.describe('the 1280 fold boundary', () => {
     test('no toolbar ⚙ at any width: Settings is the last ⋯ Actions row on both sides of 1280; the Actions label folds at 1280', async ({ page }) => {

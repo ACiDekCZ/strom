@@ -9,8 +9,10 @@
  * window edge), the tree switcher is squeezed below its own pill (which then
  * slides under the search field), the pill keeps its place but its tree name
  * is cut shorter than the name's own cap (de at 1440 with a research: "F."),
- * or a research tree's search field cannot hold its placeholder (up to
- * SEARCH_ROOM_CAP_PX). The steps (spec 073 §1.2), each taken only when the
+ * the search field of any tree is narrower than SEARCH_MIN_PX (de and pl
+ * without a research at 1300 px: a stub of 8-36 px), or a research tree's
+ * search field cannot hold its placeholder (up to SEARCH_ROOM_CAP_PX). The
+ * steps (spec 073 §1.2), each taken only when the
  * ones before it are not enough:
  *
  *   1. `.toolbar-add-compact`: "＋ Add person" → ＋ alone (its tooltip and
@@ -47,11 +49,13 @@
  *      title and the buttons' accessible names stay; 641–900 px always);
  *   2. `.toolbar-focus-nocount`: no "28 of 29 people" (641–768 px always);
  *   3. `.toolbar-focus-nobulk`: no "Children & siblings" switch (the person
- *      menu still offers the step); taken too while the switch leaves the
- *      search input narrower than TABLET_SEARCH_MIN_PX (as are steps 1 and 2,
- *      which free room for it), so finding a person keeps its room before the
- *      switch does;
+ *      menu still offers the step);
  *   4. `.toolbar-squeeze-3`: the search field → the magnifier, as step 5 above.
+ *
+ * Every step is taken too while the search input is narrower than
+ * TABLET_SEARCH_MIN_PX, so finding a person keeps its room before the other
+ * controls do, and a field that still cannot have it becomes the magnifier
+ * (de and pl at 641-768 px with the sample tree: a stub of 8-63 px before).
  */
 
 import { isDesktop, isPhoneBar, isTablet } from '../breakpoints.js';
@@ -63,8 +67,10 @@ export const TOOLBAR_TABLET_FIT_STEPS = ['toolbar-focus-short', 'toolbar-focus-n
 const HYSTERESIS_PX = 16;
 /** The person's name on the tablet toolbar keeps at least this much (or its whole width when shorter). */
 export const TABLET_NAME_MIN_PX = 64;
+/** The desktop search input of every tree keeps at least this width (else the steps above are taken). */
+export const SEARCH_MIN_PX = 80;
 /** The tablet's search input keeps at least this width beside the "Children & siblings" switch. */
-export const TABLET_SEARCH_MIN_PX = 80;
+export const TABLET_SEARCH_MIN_PX = SEARCH_MIN_PX;
 /** The search input never asks for more room than this (a long placeholder may be cut). */
 export const SEARCH_ROOM_CAP_PX = 120;
 
@@ -86,17 +92,19 @@ function placeholderWidth(input: HTMLInputElement, cs: CSSStyleDeclaration): num
 }
 
 /**
- * The room the search input lacks for its placeholder (0 when it fits), with
- * `reserve` px held back. Only a research tree is measured this way.
+ * The room the search input lacks (0 when it has enough), with `reserve` px
+ * held back: every tree's input asks for SEARCH_MIN_PX, a research tree's
+ * also for its placeholder (up to SEARCH_ROOM_CAP_PX).
  */
 export function searchShortfall(toolbar: HTMLElement, reserve = 0): number {
-    if (!document.body.classList.contains('research-actions')) return 0;
     const input = toolbar.querySelector<HTMLInputElement>('#toolbar-search-picker .person-picker-input');
-    if (!input || !input.placeholder || input.getClientRects().length === 0) return 0;
+    if (!input || input.getClientRects().length === 0) return 0;
+    const belowMin = Math.max(0, Math.ceil(SEARCH_MIN_PX - (input.getBoundingClientRect().width - reserve)));
+    if (!document.body.classList.contains('research-actions') || !input.placeholder) return belowMin;
     const cs = getComputedStyle(input);
     const room = input.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0) - reserve;
     const need = Math.min(placeholderWidth(input, cs), SEARCH_ROOM_CAP_PX);
-    return Math.max(0, Math.ceil(need - room));
+    return Math.max(belowMin, Math.ceil(need - room));
 }
 
 /**
@@ -162,12 +170,10 @@ function tabletTooTight(toolbar: HTMLElement, reserve: number): boolean {
 }
 
 /**
- * True when the tablet's "Children & siblings" switch is shown and the search
- * input beside it is narrower than TABLET_SEARCH_MIN_PX (`reserve` px held back).
+ * True when the tablet's search input is shown and narrower than
+ * TABLET_SEARCH_MIN_PX (`reserve` px held back).
  */
-function bulkSqueezesSearch(toolbar: HTMLElement, reserve: number): boolean {
-    const bulk = toolbar.querySelector<HTMLElement>('.toolbar-focus .bulk-family');
-    if (!bulk || bulk.getClientRects().length === 0) return false;
+function tabletSearchTooNarrow(toolbar: HTMLElement, reserve: number): boolean {
     const input = toolbar.querySelector<HTMLElement>('#toolbar-search-picker .person-picker-input');
     if (!input || input.getClientRects().length === 0) return false;
     return input.getBoundingClientRect().width - reserve < TABLET_SEARCH_MIN_PX;
@@ -194,8 +200,8 @@ export function updateToolbarFit(): void {
         fitSteps(toolbar, TOOLBAR_FIT_STEPS, reserve => tooTight(toolbar, reserve));
     } else if (isTablet() && !isPhoneBar()) {
         toolbar.classList.remove(...desktopOnly);
-        fitSteps(toolbar, TOOLBAR_TABLET_FIT_STEPS, (reserve, step) => tabletTooTight(toolbar, reserve)
-            || (step !== 'toolbar-squeeze-3' && bulkSqueezesSearch(toolbar, reserve)));
+        fitSteps(toolbar, TOOLBAR_TABLET_FIT_STEPS, reserve => tabletTooTight(toolbar, reserve)
+            || tabletSearchTooNarrow(toolbar, reserve));
     } else {
         toolbar.classList.remove(...TOOLBAR_FIT_STEPS, ...TOOLBAR_TABLET_FIT_STEPS);
     }
