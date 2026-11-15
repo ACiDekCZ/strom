@@ -295,6 +295,8 @@ export type OverviewAction =
     | { action: 'line-new'; args?: Record<string, never> }
     /** "Verify facts in the tree…" of the tree's "Verifying": the main window's bulk dialog (spec 065 10l). */
     | { action: 'verify-bulk'; args?: Record<string, never> }
+    /** The tree's choice beside "Outside the directions": Research for this tree at it. */
+    | { action: 'offline-settings'; args?: Record<string, never> }
     // ---- in the main window, it stays where it is ----
     /** A row hovered: its card lit up in the main window's tree (null: none). */
     | { action: 'hover-person'; args: { personId: string | null } }
@@ -354,7 +356,7 @@ export type OverviewActionArgs<T extends OverviewActionId> = Extract<OverviewAct
 
 export const OVERVIEW_ACTION_IDS = [
     'show-person', 'show-people', 'show-direction', 'direction-found', 'person-research', 'tree-overview', 'waiting-places', 'waiting-group-note',
-    'waiting-images', 'line-edit', 'line-new', 'verify-bulk',
+    'waiting-images', 'line-edit', 'line-new', 'verify-bulk', 'offline-settings',
     'hover-person', 'verify-stop', 'highlight-end', 'follow-live', 'stop-follow', 'follow-tree', 'follow-view', 'turn-on',
     'line-select', 'line-state', 'line-move', 'line-retry',
     'waiting-answer', 'waiting-sent', 'waiting-unsent', 'waiting-group-sent', 'waiting-file',
@@ -365,7 +367,7 @@ export const OVERVIEW_ACTION_IDS = [
 /** Actions whose result shows in the main window: the overview window asks it to the front after them. */
 export const OVERVIEW_ACTIONS_TO_MAIN: ReadonlySet<OverviewActionId> = new Set<OverviewActionId>([
     'show-person', 'show-people', 'show-direction', 'direction-found', 'person-research', 'tree-overview', 'waiting-places', 'waiting-group-note',
-    'waiting-images', 'line-edit', 'line-new', 'verify-bulk',
+    'waiting-images', 'line-edit', 'line-new', 'verify-bulk', 'offline-settings',
 ]);
 
 const str = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
@@ -431,6 +433,7 @@ export function readOverviewAction(action: unknown, args: unknown): OverviewActi
         case 'tree-overview':
         case 'line-new':
         case 'verify-bulk':
+        case 'offline-settings':
         case 'verify-stop':
         case 'follow-live':
         case 'stop-follow':

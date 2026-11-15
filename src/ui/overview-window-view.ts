@@ -188,6 +188,8 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
         treeVerifyNow() { return extras().verify ?? null; },
         async verifyStop(): Promise<void> { run('verify-stop'); },
         showVerifyBulkDialog(): void { run('verify-bulk'); },
+        // Research for this tree at the work outside the directions: a dialog of the main window.
+        openOffLineSettings(): void { run('offline-settings'); },
         // Its own overview (no small panel here); none opened or closed here.
         renderLivePanel(this: UIClass): void { this.renderResearchOverview(); },
         openOverviewViewing(): boolean { return !!read()?.source; },

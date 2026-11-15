@@ -19,7 +19,7 @@ import {
     QUEUE_OWN_FEATURE, sanitizeQueue,
 } from '../research-link.js';
 import { uiModule } from './module.js';
-import { LiveSession, el, liveQueueItem, liveSession, queueKindTag, queuePaged, queueNoteText, researchSession } from './research-ui.js';
+import { LiveSession, el, liveQueueItem, liveSession, overviewViewing, queueKindTag, queuePaged, queueNoteText, researchSession } from './research-ui.js';
 import { shownName, fitNameHtml } from '../person-name.js';
 import { bookYears } from '../book-blocks.js';
 import { withBusyRetry } from '../research-directions.js';
@@ -1126,13 +1126,16 @@ export const researchOffLineMethods = uiModule({
         }
     },
 
-    /** Open the research's settings of the followed tree at "Work outside the directions". */
+    /**
+     * Open the research's settings of the overview's tree at "Work outside the directions":
+     * the followed research's, else the one viewed without following (spec 057 §7).
+     */
     openOffLineSettings(): void {
-        const s = liveSession();
-        if (!s) return;
+        const treeId = liveSession()?.treeId ?? overviewViewing()?.treeId;
+        if (!treeId) return;
         // The overview as a full-screen sheet stays above every dialog: it goes first.
         if (document.querySelector('#research-overview.research-overview--sheet')) this.closeResearchOverview();
-        void this.showResearchTreeSettings(s.treeId).then(() => {
+        void this.showResearchTreeSettings(treeId).then(() => {
             const group = document.getElementById('research-offline-host');
             group?.scrollIntoView({ block: 'start' });
             group?.querySelector<HTMLInputElement>('input[name="research-offline-mode"]:checked')?.focus({ preventScroll: true });

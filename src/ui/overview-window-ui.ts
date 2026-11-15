@@ -187,6 +187,9 @@ export const overviewWindowMethods = uiModule({
                 if (!this.verifyBulkAvailable()) return false;
                 this.showVerifyBulkDialog();
                 return true;
+            case 'offline-settings':
+                this.openOffLineSettings();
+                return true;
             case 'verify-stop':
                 if (!this.treeVerifyNow()?.stop) return false;
                 void this.verifyStop(null);

@@ -2,6 +2,7 @@ import { test, expect, Page } from '@playwright/test';
 import {
     ago, CAPS, followManaged, GED, launchedLinks, ManagedBridge, MANAGED_DIRECTIONS, openOverview, overview, UUID,
 } from './live-directions-bridge.js';
+import { fakeBridge, openResearch, poll } from './research-bridge.js';
 
 /**
  * Work outside the directions in Research for this tree (spec 038 §9.5,
@@ -182,6 +183,72 @@ test.describe('work outside the directions in Research for this tree', () => {
         await page.evaluate(() => window.Strom.UI.showResearchTreeSettings(window.Strom.TreeManager.getActiveTreeId()!));
         await expect(dialog(page)).toBeVisible();
         await expect(dialog(page).locator('.research-offline-settings')).toHaveCount(0);
+    });
+});
+
+/**
+ * The tree's choice beside Outside the directions (the Overview's Queue) opens
+ * Research for this tree at it wherever the Overview is drawn: without
+ * following (the open tree's research viewed through its bridge, spec 057 §7)
+ * and in the Overview's own window (spec 079: the main window opens it). Each
+ * case did nothing before (1115-app-096-fotka).
+ */
+test.describe('the tree\'s choice in the Overview opens the settings at it', () => {
+    test('without following: the dialog opens at the chosen card', async ({ page }) => {
+        await page.clock.setFixedTime(new Date('2026-11-13T10:30:00Z'));
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await openResearch(page);
+        const off = { mode: 'last', own: false, share: 12, suggest: true, tasks: 5, queued: 5, ownTasks: 0, branches: [
+            { id: 'B-P0003', person: 'P0003', via: { person: 'P0002', rel: 'sibling' }, nearest: 'G0001', tasks: 5, persons: 2,
+                samples: [{ id: 'T0301', text: 'Křest Jana Fíška' }], mode: 'last', own: false },
+        ] };
+        await fakeBridge(page, {
+            accepts: { mode: 'research', sync: { auto: 'write' }, sources: true, verified: true, media: null },
+            links: ['send', 'open', 'live', 'app', 'setup', 'chat'], features: FEATURES,
+            statusExtra: {
+                working: [], caps: OFF_CAPS, offLine: off,
+                researches: [
+                    { id: 'G0001', name: 'Předci Josefa Fíška', state: 'active', direction: 'ancestors', focus: 'P0001', order: 1, tasks: 4, since: '2026-11-01T08:00:00Z' },
+                    { id: 'G0002', name: 'Předci Anny Svobodové', state: 'active', direction: 'ancestors', focus: 'P0002', order: 2, tasks: 1, since: '2026-11-02T08:00:00Z' },
+                ],
+                queue: [{ id: 'T0301', text: 'Křest Jana Fíška', state: 'next', branch: 'B-P0003' }],
+            },
+        });
+        await poll(page);
+        await page.locator('#research-menu-btn').click();
+        await page.locator('#research-item-overview').click();
+        await expect(overview(page)).toBeVisible();
+        expect(await page.evaluate(() => window.Strom.UI.isFollowingActiveResearch())).toBe(false);
+        // A branch's own tag is no link: it unfolds the branch (its choices there), as its whole head does.
+        await overview(page).locator('.research-offline__toggle').click();
+        const branch = overview(page).locator('.research-offline__branch[data-branch="B-P0003"]');
+        await branch.locator('.research-offline__tag').click();
+        await expect(branch).toHaveClass(/is-open/);
+        await expect(dialog(page)).toHaveCount(0);
+        const mode = overview(page).locator('.research-offline__mode');
+        await expect(mode).toHaveText('at the end');
+        await mode.click();
+        await expect(dialog(page)).toBeVisible();
+        await expect(group(page)).toBeVisible();
+        await expect(radio(page, 'last')).toBeChecked();
+        await expect(radio(page, 'last')).toBeFocused();
+    });
+
+    test('in the Overview\'s own window: the main window opens the dialog at the chosen card', async ({ page }) => {
+        await follow(page);
+        await page.locator('#view-window-btn').click();
+        const [popup] = await Promise.all([page.waitForEvent('popup'), page.locator('#view-window-menu [data-view="overview"]').click()]);
+        await popup.waitForLoadState('domcontentloaded');
+        const ov = popup.locator('#research-overview.research-overview--window');
+        await expect(ov).toBeVisible();
+        await ov.locator('.research-offline__mode').click();
+        await expect(dialog(page)).toBeVisible();
+        await expect(group(page)).toBeVisible();
+        await expect(radio(page, 'occasional')).toBeChecked();
+        await expect(radio(page, 'occasional')).toBeFocused();
+        // Not in the window: it draws the overview only.
+        await expect(popup.locator('#research-tree-settings-modal')).toHaveCount(0);
+        await popup.close();
     });
 });
 

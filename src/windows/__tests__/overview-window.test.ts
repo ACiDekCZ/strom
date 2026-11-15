@@ -108,6 +108,9 @@ describe('the actions an overview window may ask for', () => {
         expect(readOverviewAction('verify-stop', undefined)).toEqual({ action: 'verify-stop' });
         expect(OVERVIEW_ACTIONS_TO_MAIN.has('verify-bulk')).toBe(true);
         expect(OVERVIEW_ACTIONS_TO_MAIN.has('verify-stop')).toBe(false);
+        // The tree's choice beside "Outside the directions": Research for this tree opens in the main window (brought forward).
+        expect(readOverviewAction('offline-settings', { extra: 1 })).toEqual({ action: 'offline-settings' });
+        expect(OVERVIEW_ACTIONS_TO_MAIN.has('offline-settings')).toBe(true);
         // The pill's light ended (a filter with nobody left): the kind it lit.
         expect(readOverviewAction('highlight-end', { kind: 'changed', label: 'x' })).toEqual({ action: 'highlight-end', args: { kind: 'changed' } });
         expect(OVERVIEW_ACTIONS_TO_MAIN.has('highlight-end')).toBe(false);
