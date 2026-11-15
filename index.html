@@ -1866,7 +1866,7 @@
             flex: 0 0 auto;
             width: 34px;
             height: 34px;
-            border-radius: 50%;
+            border-radius: var(--av-r, 50%);
             overflow: hidden;
             background: var(--avatar-bg);
             border: 2px solid var(--border);
@@ -15295,7 +15295,8 @@
         .card-story--inline:is(.couple, .draft) {
             background: linear-gradient(135deg, transparent 50%, var(--story-fold) 50%, var(--story-fold) 70%, transparent 70%);
         }
-        .card-avatar-wrap { position: relative; flex: 0 0 auto; display: flex; }
+        /* --av-r: the avatar's radius (the rounded square sets it, §5); the agent's arc follows it. */
+        .card-avatar-wrap { position: relative; flex: 0 0 auto; display: flex; --av-r: 50%; }
         .card-signal {
             position: absolute; top: -6px; right: -6px; z-index: 2;
             width: 18px; height: 18px; min-width: 0; padding: 0; margin: 0;
@@ -15353,7 +15354,7 @@
         }
         .card-agent { inset: -4px; z-index: 1; }
         /* The agent's mark (its bubble, a click follows the research): the arc's box around the avatar. */
-        .card-agent-mark { position: absolute; inset: -4px; z-index: 1; border-radius: 50%; cursor: pointer; }
+        .card-agent-mark { position: absolute; inset: -4px; z-index: 1; border-radius: calc(var(--av-r, 50%) + 4px); cursor: pointer; }
         .card-agent-mark > .card-agent { inset: 0; }
         .card-agent-dot {
             display: none; top: -5px; right: -5px; z-index: 2; width: 12px; height: 12px;
@@ -15362,9 +15363,10 @@
         body[data-card-density="compact"] .card-agent-dot { display: block; }
         @keyframes agSpin { to { transform: rotate(360deg); } }
         #tree-container.tree-offscreen .card-agent,
+        #tree-container.tree-offscreen .card-agent::before,
         #tree-container.tree-offscreen .card-agent-dot { animation-play-state: paused; }
         @media (prefers-reduced-motion: reduce) {
-            .card-agent, .card-agent-dot { animation: none; }
+            .card-agent, .card-agent::before, .card-agent-dot { animation: none !important; }
         }
         /* Done with the person: a check for 4 s, then it fades (the renderer
            sets a negative delay, so a redraw keeps the countdown). */
@@ -15505,19 +15507,20 @@
         }
         /* The rounded square (§5): the radius of each avatar's size (30 → 4, 34 → 5, 44 → 6,
            48 → 7, 72 → 10, 80 → 12px); the initials of a card without a photo take the shape
-           at their own size (D8); the ring follows the corners. */
-        body[data-card-photo-shape="rounded"] #tree-canvas .card-avatar,
-        .card-signals-preview .person-card[data-shape="rounded"] .card-avatar { border-radius: 5px; }
-        body[data-card-photo-shape="rounded"][data-card-fields] #tree-canvas .card-avatar,
-        .card-signals-preview .person-card[data-fields][data-shape="rounded"] .card-avatar { border-radius: 4px; }
-        body[data-card-photo-shape="rounded"][data-card-photo="medium"]:not([data-card-fields]) #tree-canvas .has-photo .card-avatar,
-        .card-signals-preview .person-card[data-density="normal"][data-photo="medium"][data-shape="rounded"] .card-avatar { border-radius: 7px; }
-        body[data-card-photo-shape="rounded"][data-card-photo="large"]:not([data-card-fields]) #tree-canvas .has-photo .card-avatar,
-        .card-signals-preview .person-card[data-density="normal"][data-photo="large"][data-shape="rounded"] .card-avatar { border-radius: 12px; }
-        body[data-card-photo-shape="rounded"][data-card-photo="medium"][data-card-fields] #tree-canvas .has-photo .card-avatar,
-        .card-signals-preview .person-card[data-fields][data-photo="medium"][data-shape="rounded"] .card-avatar { border-radius: 6px; }
-        body[data-card-photo-shape="rounded"][data-card-photo="large"][data-card-fields] #tree-canvas .has-photo .card-avatar,
-        .card-signals-preview .person-card[data-fields][data-photo="large"][data-shape="rounded"] .card-avatar { border-radius: 10px; }
+           at their own size (D8); the ring follows the corners. The radius is the wrap's --av-r
+           (.card-avatar takes it), so the agent's arc around it has the same corners. */
+        body[data-card-photo-shape="rounded"] #tree-canvas .card-avatar-wrap,
+        .card-signals-preview .person-card[data-shape="rounded"] .card-avatar-wrap { --av-r: 5px; }
+        body[data-card-photo-shape="rounded"][data-card-fields] #tree-canvas .card-avatar-wrap,
+        .card-signals-preview .person-card[data-fields][data-shape="rounded"] .card-avatar-wrap { --av-r: 4px; }
+        body[data-card-photo-shape="rounded"][data-card-photo="medium"]:not([data-card-fields]) #tree-canvas .has-photo .card-avatar-wrap,
+        .card-signals-preview .person-card[data-density="normal"][data-photo="medium"][data-shape="rounded"] .card-avatar-wrap { --av-r: 7px; }
+        body[data-card-photo-shape="rounded"][data-card-photo="large"]:not([data-card-fields]) #tree-canvas .has-photo .card-avatar-wrap,
+        .card-signals-preview .person-card[data-density="normal"][data-photo="large"][data-shape="rounded"] .card-avatar-wrap { --av-r: 12px; }
+        body[data-card-photo-shape="rounded"][data-card-photo="medium"][data-card-fields] #tree-canvas .has-photo .card-avatar-wrap,
+        .card-signals-preview .person-card[data-fields][data-photo="medium"][data-shape="rounded"] .card-avatar-wrap { --av-r: 6px; }
+        body[data-card-photo-shape="rounded"][data-card-photo="large"][data-card-fields] #tree-canvas .has-photo .card-avatar-wrap,
+        .card-signals-preview .person-card[data-fields][data-photo="large"][data-shape="rounded"] .card-avatar-wrap { --av-r: 10px; }
         /* Shown "in the view only" (D11): a medium or large photo at 55 %, so the face does not
            outweigh the ghost's hatching; the small one as it always was. */
         body:is([data-card-photo="medium"], [data-card-photo="large"]) #tree-canvas .person-card.view-ghost.has-photo .card-avatar img { opacity: 0.55; }
@@ -15543,12 +15546,23 @@
         body:is([data-card-photo="medium"], [data-card-photo="large"]) #tree-canvas .has-photo .card-avatar-wrap .card-signal-stack.n3 {
             left: auto; right: var(--mk); top: calc(var(--mk) - 2px);
         }
-        /* The agent at work (D10): around a circle its arc, at every size; at a square a 14px ring
-           where the badge sits (an arc around a square would cut its corners). */
-        body[data-card-photo-shape="rounded"] #tree-canvas .card-avatar-wrap .card-agent-mark {
-            inset: auto; top: calc(var(--mk, -6px) + 2px); right: calc(var(--mk, -6px) + 2px); width: 14px; height: 14px;
+        /* The agent at work around a rounded square: the arc follows the avatar's outline, 4px out
+           (radius --av-r + 4px), at every size, a photo or the initials. A 2px ring cut out by a mask
+           holds the faint track; inside it a conic half (as the circle's top and right border)
+           turns, so only transform animates, with the arc's phase from the renderer. */
+        :is(body[data-card-photo-shape="rounded"] #tree-canvas, .card-signals-preview .person-card[data-shape="rounded"]) .card-avatar-wrap .card-agent-mark > .card-agent {
+            border: 0; border-radius: inherit; padding: 2px; overflow: hidden; animation: none;
+            background: color-mix(in srgb, var(--primary) 18%, transparent);
+            -webkit-mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+            mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
         }
-        body[data-card-photo-shape="rounded"] #tree-canvas .card-avatar-wrap .card-agent-mark > .card-agent { background: var(--surface); }
+        :is(body[data-card-photo-shape="rounded"] #tree-canvas, .card-signals-preview .person-card[data-shape="rounded"]) .card-avatar-wrap .card-agent-mark > .card-agent::before {
+            content: ''; position: absolute; inset: -50%;
+            background: conic-gradient(from -45deg, var(--primary) 0 50%, transparent 0);
+            /* Longhands: the play state stays the offscreen tree's (paused). */
+            animation-name: agSpin; animation-duration: 1.4s; animation-timing-function: linear;
+            animation-iteration-count: infinite; animation-delay: inherit;
+        }
         /* The agent's mark in the tooltip and the menu: its arc, still. */
         .agent-mark {
             flex: 0 0 auto; display: inline-block; width: 10px; height: 10px; box-sizing: border-box;
@@ -15720,7 +15734,8 @@
         }
         .card-signals-preview .person-card { position: relative; left: auto; top: auto; cursor: default; }
         .card-signals-preview .person-card[data-density="compact"] { width: 150px; height: 44px; justify-content: center; }
-        .card-signals-preview .person-card[data-density="compact"] .card-signal-dot { display: block; }
+        .card-signals-preview .person-card[data-density="compact"] :is(.card-signal-dot, .card-agent-dot) { display: block; }
+        .card-signals-preview .card-agent-mark { cursor: default; }
         @media (max-width: 640px) {
             .card-signals-settings { flex-direction: column; gap: 12px; }
             /* The full-screen dialog on a phone: rows a finger can hit, a larger switch. */

@@ -1435,6 +1435,95 @@ test.describe('the agent at work', () => {
         expect(await arc.evaluate(el => (el as HTMLElement).style.animationDelay)).toMatch(/^-\d+ms$/);
     });
 
+    test('the arc follows the avatar in each shape and size, a photo or the initials, and turns after a change', async ({ page }) => {
+        await page.emulateMedia({ reducedMotion: 'no-preference' });
+        await follow(page, { width: 1440, height: 900 }, (b) => { b.waiting = []; b.workPerson = 'P0002'; });
+        const anna = card(page, 'Anna');
+        await expect(anna.locator('.card-avatar-wrap .card-agent')).toHaveCount(1);
+        // A 1 × 1 PNG, in memory only (the research's tree is locked).
+        const PHOTO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+        // The arc's box: the avatar's 4px out on every side, its corners the avatar's own + 4px, and turning.
+        // Found again in each read: the follow may draw the tree anew between two reads.
+        const arc = () => page.evaluate(() => {
+            const c = [...document.querySelectorAll('#tree-canvas .person-card')]
+                .find(el => el.querySelector('.name-text')?.textContent?.includes('Anna'))!;
+            const av = c.querySelector<HTMLElement>('.card-avatar-wrap > .card-avatar')!;
+            const mark = c.querySelector<HTMLElement>('.card-agent-mark')!;
+            const ring = c.querySelector<HTMLElement>('.card-agent')!;
+            const k = av.offsetWidth / av.getBoundingClientRect().width;
+            // The mark's box (the circle's ring itself turns, its rect with it).
+            const a = av.getBoundingClientRect(), r = mark.getBoundingClientRect();
+            const own = getComputedStyle(ring).animationName;
+            return {
+                avatar: av.offsetWidth, ring: ring.offsetWidth, ringHeight: ring.offsetHeight,
+                left: Math.round((a.left - r.left) * k), top: Math.round((a.top - r.top) * k),
+                avatarRadius: getComputedStyle(av).borderTopLeftRadius,
+                markRadius: getComputedStyle(mark).borderTopLeftRadius,
+                ringRadius: getComputedStyle(ring).borderTopLeftRadius,
+                spin: own !== 'none' ? own : getComputedStyle(ring, '::before').animationName,
+                running: ring.getAnimations({ subtree: true }).filter(x => x.playState === 'running').length,
+            };
+        });
+        for (const photo of [true, false]) {
+            for (const shape of ['circle', 'rounded'] as const) {
+                for (const size of ['small', 'large'] as const) {
+                    await page.evaluate(async ({ photo, shape, size, src }) => {
+                        const p = window.Strom.DataManager.getAllPersons().find(x => x.firstName === 'Anna')!;
+                        if (photo) p.photo = src; else delete p.photo;
+                        window.Strom.SettingsManager.setCardPhoto({ size, shape });
+                        await window.Strom.TreeRenderer.renderAsync();
+                    }, { photo, shape, size, src: PHOTO });
+                    const at = `${photo ? 'photo' : 'initials'} ${shape} ${size}`;
+                    await expect(anna.locator('.card-avatar-wrap img'), at).toHaveCount(photo ? 1 : 0);
+                    await expect.poll(async () => (await arc()).avatar, { message: at }).toBe(photo && size === 'large' ? 80 : 34);
+                    const m = await arc();
+                    expect([m.ring, m.ringHeight, m.left, m.top], at).toEqual([m.avatar + 8, m.avatar + 8, 4, 4]);
+                    expect(m.spin, at).toBe('agSpin');
+                    expect(m.running, at).toBeGreaterThanOrEqual(1);
+                    if (shape === 'rounded') {
+                        expect(m.avatarRadius, at).toBe(photo && size === 'large' ? '12px' : '5px');
+                        expect(m.markRadius, at).toBe(`${parseFloat(m.avatarRadius) + 4}px`);
+                        expect(m.ringRadius, at).toBe(m.markRadius);
+                    } else {
+                        expect(m.avatarRadius, at).toBe('50%');
+                    }
+                }
+            }
+        }
+        // Changed in the Settings while it works: the arc takes the new shape and goes on turning.
+        await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+        const shapeRow = page.locator('#card-photo-settings .card-look-photo-shape');
+        for (const [name, shape, radius] of [['Rounded square', 'rounded', '9px'], ['Circle', 'circle', '50%']]) {
+            await shapeRow.getByRole('button', { name, exact: true }).click();
+            await expect(page.locator('body')).toHaveAttribute('data-card-photo-shape', shape);
+            await expect.poll(async () => { const m = await arc(); return [m.ring, m.ringRadius === radius || m.avatarRadius === radius, m.spin, m.running > 0]; }, { message: name })
+                .toEqual([42, true, 'agSpin', true]);
+        }
+    });
+
+    test('the preview of the card shows the arc in the chosen shape', async ({ page }) => {
+        await page.emulateMedia({ reducedMotion: 'no-preference' });
+        await follow(page, { width: 1440, height: 900 }, (b) => { b.waiting = []; });
+        // Only the agent: no badge, which would come first.
+        await page.evaluate(() => {
+            const m = window.Strom.SettingsManager;
+            for (const k of ['waiting', 'conflict', 'question'] as const) m.setCardSignal(k, false);
+            m.setCardPhoto({ size: 'large', shape: 'rounded' });
+            window.Strom.UI.showSettingsDialog();
+        });
+        const preview = page.locator('#card-preview-settings .card-signals-preview');
+        const ring = preview.locator('.card-avatar-wrap .card-agent');
+        await expect(ring).toHaveCount(1);
+        await expect(preview.locator('.card-signal')).toHaveCount(0);
+        await expect(ring).toHaveCSS('border-top-left-radius', '16px');
+        const m = await ring.evaluate(el => ({
+            size: (el as HTMLElement).offsetWidth,
+            spin: getComputedStyle(el, '::before').animationName,
+            running: el.getAnimations({ subtree: true }).filter(x => x.playState === 'running').length,
+        }));
+        expect(m).toEqual({ size: 88, spin: 'agSpin', running: 1 });
+    });
+
     test('the amber badge comes first: no arc, the agent in the tooltip', async ({ page }) => {
         // Jan has an open conflict.
         await follow(page, { width: 1440, height: 900 }, (b) => { b.waiting = []; });
