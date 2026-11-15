@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'fs';
-import { openApp } from './helpers.js';
+import { openApp, seedSetting } from './helpers.js';
 
 const APP_VERSION = JSON.parse(readFileSync('package.json', 'utf-8')).version;
 
@@ -15,7 +15,7 @@ test('About shows the version and offers "Buy me a coffee" as a plain link in a 
     const about = page.locator('#about-modal');
     await expect(about).toBeVisible();
     await expect(about.locator('#about-version')).toHaveText(APP_VERSION);
-    await expect(about.locator('.about-support p')).toContainText('free and open source');
+    await expect(about.locator('.about-support > p').first()).toContainText('free and open source');
     const link = about.getByRole('link', { name: 'Buy me a coffee' });
     await expect(link).toBeVisible();
     await expect(link).toHaveAttribute('href', 'https://www.buymeacoffee.com/acidekcz');
@@ -152,6 +152,144 @@ for (const vp of [
         expect(wn!.x + wn!.width).toBeLessThanOrEqual(dialog!.x + dialog!.width);
         expect(wn!.x + wn!.width).toBeLessThanOrEqual(vp.width);
     });
+}
+
+/**
+ * Sharing helps too: under the coffee, "Share Strom" opens the system share
+ * sheet with the website in the UI language; without one it copies the
+ * address and says so briefly; a sheet closed without sharing ends quietly.
+ * The author on X is a link beside the others, in a new tab.
+ */
+test('About: Share Strom opens the share sheet with the website in the UI language', async ({ page }) => {
+    await seedSetting(page, 'language', 'de');
+    await page.addInitScript(() => {
+        const w = window as unknown as { __shared: unknown[] };
+        w.__shared = [];
+        Object.defineProperty(navigator, 'share', {
+            configurable: true,
+            value: async (data: unknown) => { w.__shared.push(data); },
+        });
+    });
+    await openApp(page);
+    await page.evaluate(() => window.Strom.UI.showAboutDialog());
+    const about = page.locator('#about-modal');
+    await expect(about.locator('.about-share-note')).toHaveText('Auch Teilen hilft: Je mehr Menschen Strom kennen, desto mehr kann es wachsen.');
+    const share = about.getByRole('button', { name: 'Strom teilen' });
+    await share.click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __shared: unknown[] }).__shared))
+        .toEqual([{ title: 'Strom', url: 'https://stromapp.info/de/' }]);
+    await expect(page.locator('.toast')).toHaveCount(0);
+    await expect(about).toBeVisible();
+});
+
+test('About: a cancelled share sheet shows nothing; without a sheet the address is copied with a short notice', async ({ page }) => {
+    await seedSetting(page, 'language', 'cs');
+    await page.addInitScript(() => {
+        const w = window as unknown as { __copied: string[] };
+        w.__copied = [];
+        Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: { writeText: async (t: string) => { w.__copied.push(t); } },
+        });
+        Object.defineProperty(navigator, 'share', {
+            configurable: true,
+            value: async () => { throw new DOMException('Share canceled', 'AbortError'); },
+        });
+    });
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await openApp(page);
+    await page.evaluate(() => window.Strom.UI.showAboutDialog());
+    const about = page.locator('#about-modal');
+    await expect(about.locator('.about-share-note')).toHaveText('Pomůže i sdílení: čím víc lidí o Stromu ví, tím víc se může rozvíjet.');
+    const share = about.getByRole('button', { name: 'Sdílet Strom' });
+
+    // A share sheet closed without sharing: no copy, no notice, no error.
+    await share.click();
+    await page.waitForTimeout(300);
+    await expect(page.locator('.toast')).toHaveCount(0);
+    expect(await page.evaluate(() => (window as unknown as { __copied: string[] }).__copied)).toEqual([]);
+
+    // No share sheet: the address is copied and the notice says so.
+    await page.evaluate(() => {
+        Object.defineProperty(navigator, 'share', { configurable: true, value: undefined });
+    });
+    await share.click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __copied: string[] }).__copied))
+        .toEqual(['https://stromapp.info/cs/']);
+    await expect(page.locator('.toast')).toHaveText('Odkaz zkopírován');
+    expect(errors).toEqual([]);
+});
+
+test('About: the author on X is a link beside the others, in a new tab', async ({ page }) => {
+    await openApp(page);
+    await page.evaluate(() => window.Strom.UI.showAboutDialog());
+    const x = page.locator('#about-modal .about-meta').getByRole('link', { name: 'Author on X ↗' });
+    await expect(x).toBeVisible();
+    await expect(x).toHaveAttribute('href', 'https://x.com/visekm');
+    await expect(x).toHaveAttribute('target', '_blank');
+    await expect(x).toHaveAttribute('rel', /\bnoopener\b/);
+    // The share button is a web action without a mark (no ↗, no ◆).
+    await expect(page.locator('#about-share')).toHaveText('Share Strom');
+});
+
+/**
+ * About with the sharing line and the X link fits every screen: nothing
+ * spills past the dialog or the viewport, nothing overlaps, and on touch the
+ * support buttons are a finger high. German has the longest texts; a wider
+ * fallback font stands in for CI's fonts.
+ */
+for (const vp of [
+    { name: 'desktop', width: 1440, height: 900 },
+    { name: 'tablet', width: 1024, height: 768 },
+    { name: 'phone', width: 390, height: 844, touch: true },
+    { name: 'phone sideways', width: 844, height: 390, touch: true },
+]) {
+    for (const lang of ['de', 'pl']) {
+        test(`About with sharing and the X link fits (${lang}, ${vp.name})`, async ({ browser }) => {
+            const context = await browser.newContext({
+                viewport: { width: vp.width, height: vp.height },
+                hasTouch: !!vp.touch, isMobile: !!vp.touch,
+            });
+            const page = await context.newPage();
+            await seedSetting(page, 'language', lang);
+            await openApp(page);
+            await page.addStyleTag({ content: '#about-modal, #about-modal * { font-family: Verdana, "DejaVu Sans", sans-serif !important; }' });
+            await page.evaluate(() => window.Strom.UI.showAboutDialog());
+            const about = page.locator('#about-modal .about-modal');
+            await expect(about).toBeVisible();
+            const share = page.locator('#about-share');
+            await share.scrollIntoViewIfNeeded();
+            const res = await page.evaluate(() => {
+                const dlg = document.querySelector<HTMLElement>('#about-modal .about-modal')!;
+                const d = dlg.getBoundingClientRect();
+                const els = [...dlg.querySelectorAll<HTMLElement>('.about-meta a, .about-support p, .about-coffee')];
+                const rects = els.map(el => ({ t: el.textContent!.trim().slice(0, 20), r: el.getBoundingClientRect() }));
+                const outside = rects.filter(({ r }) => r.left < d.left - 0.5 || r.right > d.right + 0.5 || r.right > window.innerWidth)
+                    .map(x => x.t);
+                const overlaps: string[] = [];
+                for (let i = 0; i < rects.length; i++) for (let j = i + 1; j < rects.length; j++) {
+                    const a = rects[i].r, b = rects[j].r;
+                    if (a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5) overlaps.push(`${rects[i].t} / ${rects[j].t}`);
+                }
+                const buttons = [...dlg.querySelectorAll<HTMLElement>('.about-coffee')].map(b => b.getBoundingClientRect().height);
+                const shareBtn = dlg.querySelector<HTMLElement>('#about-share')!;
+                return {
+                    outside, overlaps, buttons,
+                    dialogScroll: dlg.scrollWidth - dlg.clientWidth,
+                    pageScroll: document.documentElement.scrollWidth - window.innerWidth,
+                    shareOneLine: shareBtn.getBoundingClientRect().height < 50,
+                };
+            });
+            expect(res.outside).toEqual([]);
+            expect(res.overlaps).toEqual([]);
+            expect(res.dialogScroll).toBeLessThanOrEqual(0);
+            expect(res.pageScroll).toBeLessThanOrEqual(0);
+            expect(res.shareOneLine).toBe(true);
+            if (vp.touch) for (const h of res.buttons) expect(h).toBeGreaterThanOrEqual(44);
+            await context.close();
+        });
+    }
 }
 
 /**

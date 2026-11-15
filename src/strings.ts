@@ -5006,6 +5006,10 @@ const stringsEN = {
         version: 'Version',
         support: 'Strom is free and open source. Support for its further development is welcome.',
         coffee: 'Buy me a coffee',
+        // Under the coffee: sharing helps as well (see shareStrom in about-links.ts).
+        shareNote: 'Sharing helps too: the more people know about Strom, the more it can grow.',
+        share: 'Share Strom',
+        shareCopied: 'Link copied',
         betaBadge: 'Beta',
         betaValue: (version: string) => `BETA · ${version}`,
         betaTitle: 'Test version before release. It keeps its own data, separate from the regular app. Trees move between them by export and import; a backup before moving is a good habit.',
@@ -5018,6 +5022,8 @@ const stringsEN = {
         usersGroup: 'Users\' group on Facebook ↗',
         // The changelog on GitHub in the UI language (see about-links.ts).
         whatsNew: 'What\'s new ↗',
+        // The author's profile on X (a web page in a new tab, hence ↗).
+        authorX: 'Author on X ↗',
         close: 'Close',
         currentData: 'Current data',
         stats: {
@@ -14130,6 +14136,9 @@ const stringsCZ: StringsType = {
         version: 'Verze',
         support: 'Strom je zdarma a open source. Jeho další vývoj je možné podpořit.',
         coffee: 'Koupit kávu',
+        shareNote: 'Pomůže i sdílení: čím víc lidí o Stromu ví, tím víc se může rozvíjet.',
+        share: 'Sdílet Strom',
+        shareCopied: 'Odkaz zkopírován',
         betaBadge: 'Beta',
         betaValue: (version: string) => `BETA · ${version}`,
         betaTitle: 'Testovací verze před vydáním. Má vlastní data, oddělená od běžné aplikace. Rodokmeny se mezi nimi přenášejí exportem a importem; záloha před přenosem je dobrý zvyk.',
@@ -14140,6 +14149,7 @@ const stringsCZ: StringsType = {
         sourceCode: 'Zdrojový kód',
         usersGroup: 'Skupina uživatelů na Facebooku ↗',
         whatsNew: 'Co je nového ↗',
+        authorX: 'Autor na X ↗',
         close: 'Zavřít',
         currentData: 'Aktuální data',
         stats: {
@@ -23177,6 +23187,9 @@ const stringsDE: StringsType = {
         version: 'Version',
         support: 'Strom ist kostenlos und Open Source. Wem es hilft, der kann die weitere Entwicklung unterstützen.',
         coffee: 'Einen Kaffee spendieren',
+        shareNote: 'Auch Teilen hilft: Je mehr Menschen Strom kennen, desto mehr kann es wachsen.',
+        share: 'Strom teilen',
+        shareCopied: 'Link kopiert',
         betaBadge: 'Beta',
         betaValue: (version: string) => `BETA · ${version}`,
         betaTitle: 'Testversion vor der Veröffentlichung. Die Beta hat eigene Daten, getrennt von der regulären App. Stammbäume wechseln per Export und Import; eine Sicherung vor dem Wechsel ist eine gute Gewohnheit.',
@@ -23187,6 +23200,7 @@ const stringsDE: StringsType = {
         sourceCode: 'Quellcode',
         usersGroup: 'Nutzergruppe auf Facebook ↗',
         whatsNew: 'Was ist neu ↗',
+        authorX: 'Autor auf X ↗',
         close: 'Schließen',
         currentData: 'Aktuelle Daten',
         stats: {

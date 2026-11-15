@@ -1834,6 +1834,20 @@
         .about-coffee-cup { overflow: visible; }
         @media (hover: hover) { .about-coffee:hover { background: var(--hover-bg); } }
         .about-coffee:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .about-support .about-share-note { margin: 12px 0 8px; }
+        /* The share button looks like the coffee link beside it (over the dialogs' button styles). */
+        #about-modal .about-share {
+            font-family: inherit; line-height: inherit; cursor: pointer; margin: 0;
+            padding: 7px 14px; font-size: 13px; font-weight: 600;
+            color: var(--text); background: var(--surface);
+            border: 1px solid var(--border); border-radius: var(--r-md);
+        }
+        @media (hover: hover) { #about-modal .about-share:hover { background: var(--hover-bg); } }
+        .about-share .ui-icon { color: var(--primary); }
+        /* Touch: both support buttons a finger high. */
+        @media (pointer: coarse) {
+            .about-coffee { min-height: 44px; box-sizing: border-box; }
+        }
         .person-card:active {
             transform: scale(0.98);
             box-shadow: var(--shadow-sm);
@@ -30766,6 +30780,8 @@
                 <div class="about-meta-row">
                     <a href="https://stromapp.info" target="_blank" rel="noopener">stromapp.info</a>
                     <span aria-hidden="true">•</span>
+                    <a id="about-author-x" href="https://x.com/visekm" target="_blank" rel="noopener noreferrer" data-i18n="about.authorX"></a>
+                    <span aria-hidden="true">•</span>
                     <a id="about-license" href="https://www.gnu.org/licenses/agpl-3.0.html" target="_blank" rel="noopener noreferrer">AGPL-3.0-or-later</a>
                 </div>
                 <div class="about-meta-row">
@@ -30780,6 +30796,12 @@
                     <svg class="ui-icon about-coffee-cup" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path class="about-coffee-steam" d="M6 5.5c-.8-.9.8-1.6 0-3"/><path class="about-coffee-steam" d="M10 5.5c-.8-.9.8-1.6 0-3"/><path class="about-coffee-steam" d="M14 5.5c-.8-.9.8-1.6 0-3"/><path d="M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1"/></svg>
                     <span data-i18n="about.coffee"></span>
                 </a>
+                <!-- Sharing helps too: the system share sheet or a copy of the website's address. -->
+                <p class="about-share-note" data-i18n="about.shareNote"></p>
+                <button type="button" class="about-coffee about-share" id="about-share" onclick="window.Strom.UI.shareStromFromAbout()">
+                    <svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="M16 6l-4-4-4 4"/><path d="M12 2v13"/></svg>
+                    <span data-i18n="about.share"></span>
+                </button>
             </div>
             <div class="about-stats" id="about-stats">
                 <div class="about-tree-name" id="stat-tree-name">-</div>

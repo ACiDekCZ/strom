@@ -734,6 +734,9 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
         version: 'Wersja',
         support: 'Strom jest bezpłatny i open source. Jego dalszy rozwój można wesprzeć.',
         coffee: 'Postaw kawę',
+        shareNote: 'Udostępnianie też pomaga: im więcej osób wie o Stromie, tym bardziej może się rozwijać.',
+        share: 'Udostępnij Strom',
+        shareCopied: 'Link skopiowany',
         betaBadge: 'Beta',
         betaValue: (version: string) => `BETA · ${version}`,
         betaTitle: 'Wersja testowa przed wydaniem. Ma własne dane, oddzielone od zwykłej aplikacji. Drzewa przenosi się między nimi eksportem i importem; kopia zapasowa przed przeniesieniem to dobry zwyczaj.',
@@ -744,6 +747,7 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
         sourceCode: 'Kod źródłowy',
         usersGroup: 'Grupa użytkowników na Facebooku ↗',
         whatsNew: 'Co nowego ↗',
+        authorX: 'Autor na X ↗',
         close: 'Zamknij',
         currentData: 'Bieżące dane',
         stats: {

@@ -32,7 +32,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { CARD_STATUS_CLASSES } from '../reliability.js';
 import { cardStatusLegendLabel, statusMarkHtml } from './fact-status.js';
 import { storyFoldHtml } from '../card-signals.js';
-import { aboutUsersGroupLink, aboutChangelogLink, changelogIsBeta } from '../about-links.js';
+import { aboutUsersGroupLink, aboutChangelogLink, changelogIsBeta, aboutAuthorXLink, shareStrom, shareStromUrl } from '../about-links.js';
 import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
 import {
     validateJsonImport,
@@ -118,6 +118,16 @@ export const miscMethods = uiModule({
                 e.preventDefault();
                 this.showAboutWhatsNew();
             } : null;
+        }
+
+        // The author on X: a web page in a new tab, in every language.
+        const authorXEl = modal.querySelector<HTMLAnchorElement>('#about-author-x');
+        if (authorXEl) {
+            const x = aboutAuthorXLink(getCurrentLanguage());
+            authorXEl.href = x.href;
+            authorXEl.target = x.target;
+            authorXEl.rel = x.rel;
+            authorXEl.textContent = x.label;
         }
 
         // The users' group: a row of its own under the source link, only in the
@@ -289,6 +299,18 @@ export const miscMethods = uiModule({
 
     closeAboutDialog(): void {
         document.getElementById('about-modal')?.classList.remove('active');
+    },
+
+    /**
+     * "Share Strom" in About: the system share sheet with the website in the UI
+     * language, or a copy of its address with a short notice. A cancelled sheet
+     * shows nothing; where neither works, the notice carries the address.
+     */
+    async shareStromFromAbout(): Promise<void> {
+        const lang = getCurrentLanguage();
+        const outcome = await shareStrom(lang, navigator, 'Strom');
+        if (outcome === 'copied') this.showToast(strings.about.shareCopied);
+        else if (outcome === 'failed') this.showToast(shareStromUrl(lang), 10000);
     },
 
     // ---- SETTINGS DIALOG ----

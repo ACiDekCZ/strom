@@ -88,3 +88,61 @@ export const WEBSITE_URL = 'https://stromapp.info/';
 export function websiteUrl(lang: Language): string {
     return lang === 'cs' || lang === 'de' ? `${WEBSITE_URL}${lang}/` : WEBSITE_URL;
 }
+
+/** The author's profile on X, offered in About in every language. */
+export const AUTHOR_X_URL = 'https://x.com/visekm';
+
+/** The author-on-X link of the About dialog (a web page in a new tab). */
+export function aboutAuthorXLink(lang: Language): AboutExternalLink {
+    return {
+        href: AUTHOR_X_URL,
+        label: getStringsForLang(lang).about.authorX,
+        target: '_blank',
+        rel: 'noopener noreferrer',
+    };
+}
+
+/**
+ * The address "Share Strom" passes on: the production website in the UI
+ * language (/cs/, /de/, /pl/; English and any other language at the root).
+ * Always the public site, from a beta build or a saved file too.
+ */
+export function shareStromUrl(lang: Language): string {
+    return lang === 'cs' || lang === 'de' || lang === 'pl' ? `${WEBSITE_URL}${lang}/` : WEBSITE_URL;
+}
+
+/** What "Share Strom" ended with: the system sheet, a copy, nothing (cancelled) or neither worked. */
+export type ShareStromOutcome = 'shared' | 'copied' | 'cancelled' | 'failed';
+
+/** The parts of `navigator` that sharing uses (injectable for tests). */
+export interface ShareNavigator {
+    share?: (data: { title?: string; text?: string; url?: string }) => Promise<void>;
+    canShare?: (data: { title?: string; text?: string; url?: string }) => boolean;
+    clipboard?: { writeText(text: string): Promise<void> };
+}
+
+/**
+ * Share the website: the system share sheet where the browser has one (a
+ * phone, a tablet, a Mac), otherwise a copy of the address to the clipboard.
+ * A sheet closed without sharing is 'cancelled' (nothing to show); a sheet
+ * that cannot open (no user gesture, a blocked context) falls back to the
+ * copy. Nothing is measured or sent anywhere else.
+ */
+export async function shareStrom(lang: Language, nav: ShareNavigator, title: string): Promise<ShareStromOutcome> {
+    const data = { title, url: shareStromUrl(lang) };
+    if (typeof nav.share === 'function' && (typeof nav.canShare !== 'function' || nav.canShare(data))) {
+        try {
+            await nav.share(data);
+            return 'shared';
+        } catch (e) {
+            if ((e as { name?: unknown } | null)?.name === 'AbortError') return 'cancelled';
+        }
+    }
+    try {
+        if (!nav.clipboard) return 'failed';
+        await nav.clipboard.writeText(data.url);
+        return 'copied';
+    } catch {
+        return 'failed';
+    }
+}
