@@ -15458,9 +15458,10 @@
         .card-signals-preview .person-card[data-density="normal"][data-photo="large"].has-photo .card-avatar { width: 80px; height: 80px; }
         /* The large card's name and dates centred on y = 32, as on the 64px card beside it (D13):
            the top 64px of the card, at least 15px from its top; a name on rows grows down beside
-           the photo (the card is taller from its fifth row). */
+           the photo (the card is taller from its fifth row). The 14px on top and 48px high: a short
+           text centred on y = 32; nothing below, so the body ends inside the card on any row count. */
         body[data-card-photo="large"]:not([data-card-fields]) #tree-canvas .person-card.has-photo > .card-body,
-        .card-signals-preview .person-card[data-density="normal"][data-photo="large"].has-photo > .card-body { align-self: flex-start; box-sizing: border-box; min-height: 62px; padding: 14px 0; }
+        .card-signals-preview .person-card[data-density="normal"][data-photo="large"].has-photo > .card-body { align-self: flex-start; box-sizing: border-box; min-height: 48px; padding: 14px 0 0; }
         /* The cards of details (§3): the photo in the header at the left, 44px (medium) or 72px
            (large) with a 2px ring; the lines under the header across the card's whole width. The
            header is at least the photo's height; its text keeps the place it has beside the 30px

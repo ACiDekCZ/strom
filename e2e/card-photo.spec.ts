@@ -101,6 +101,40 @@ test('a large photo: the card with a photo 236 × 96, the others 236 × 64; stor
     await expect.poll(() => box(page, 'Florimund')).toEqual([236, 96]);
 });
 
+test('a large photo and a name on four or five rows: the text from 15px, its box inside the card', async ({ page }) => {
+    await openApp(page);
+    await seedTree(page, {
+        p1: { firstName: 'Ivo', lastName: 'Lind', partners: ['p2'], photo: PHOTO, birthDate: '1850' },
+        p2: { firstName: 'Bartolomějka Kryštofa', lastName: 'Wolfensteinerová', gender: 'female', photo: PHOTO, birthDate: '1852', deathDate: '1920' },
+        p3: { firstName: 'Bartoloměj Kryštof Maximilián', lastName: 'Wolfensteiner-Hohenbrandt', parents: ['p1', 'p2'], photo: PHOTO, birthDate: '1880', deathDate: '1950' },
+        p4: { firstName: 'Bartoloměj Kryštof Maximilián Florimund', lastName: 'Wolfensteiner-Hohenbrandt', parents: ['p1', 'p2'], photo: PHOTO, birthDate: '1882' },
+        p5: { firstName: 'Kasimir', lastName: 'Lind', parents: ['p1', 'p2'] },
+    }, 'Lind', 'p5');
+    await page.evaluate(async () => {
+        window.Strom.SettingsManager.setCardPhoto({ size: 'large', shape: 'circle' });
+        await window.Strom.TreeRenderer.renderAsync();
+    });
+    await page.evaluate(() => document.fonts.ready);
+    const rows = (id: string) => page.locator(`#tree-canvas .person-card[data-id="${id}"] .name-row`).count();
+    await expect.poll(() => rows('p3')).toBe(4);
+    await expect.poll(() => rows('p4')).toBe(5);
+    // In the card's own px: the first row 15px from the top (D13), the body's bottom not past the
+    // card's inner bottom (the border), however many rows; the card 96px for four rows, 110 for five.
+    const geometry = (id: string) => page.locator(`#tree-canvas .person-card[data-id="${id}"]`).evaluate(c => {
+        const r = c.getBoundingClientRect();
+        const k = (c as HTMLElement).offsetHeight / r.height;
+        const body = c.querySelector(':scope > .card-body')!.getBoundingClientRect();
+        const first = c.querySelector('.name-row')!.getBoundingClientRect();
+        return { h: (c as HTMLElement).offsetHeight, first: Math.round((first.top - r.top) * k), spill: (body.bottom - r.bottom) * k + 1 };
+    });
+    for (const [id, h] of [['p3', 96], ['p4', 110]] as const) {
+        const g = await geometry(id);
+        expect(g.h, id).toBe(h);
+        expect(g.first, id).toBe(15);
+        expect(g.spill, id).toBeLessThanOrEqual(0.5);
+    }
+});
+
 test('a medium photo: every card 200 wide, none taller', async ({ page }) => {
     await tree(page);
     await openSettings(page);
