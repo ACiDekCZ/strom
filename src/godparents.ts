@@ -312,8 +312,9 @@ export function godparentLeads(data: StromData): RecurringParticipant[] {
 /** Roles a file names that the app has no own role for: kept as 'other' with the word in front of the note. */
 export type ExtraParticipantRole = 'midwife' | 'informant';
 const EXTRA_ROLE_WORDS: Record<ExtraParticipantRole, RegExp> = {
-    midwife: /^(midwife|hebamme|porodn[ií] b[aá]ba)$/i,
-    informant: /^(informant|oznamovatel|anzeigender?)$/i,
+    midwife: /^(midwife|hebamme|porodn[ií] b[aá]ba|akuszerka)$/i,
+    // Both the masculine and the feminine form, as the app itself names a woman informant.
+    informant: /^(informant|oznamovatel(ka)?|anzeigender?|zg[łl]aszaj[aą]c[ya])$/i,
 };
 
 /**

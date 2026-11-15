@@ -234,4 +234,20 @@ describe('roles the app has no name for (from Strom Research or another program)
         expect(extraParticipantRole({ role: 'witness', note: 'Midwife' })).toBeNull();
         expect(extraParticipantRole({ role: 'other' })).toBeNull();
     });
+
+    it('knows the role words in every language, the feminine forms too', async () => {
+        const { extraParticipantRole } = await import('../godparents.js');
+        for (const word of ['Informant', 'Oznamovatel', 'Oznamovatelka', 'Anzeigender', 'Anzeigende', 'Zgłaszający', 'Zgłaszająca', 'zgłaszająca']) {
+            expect(extraParticipantRole({ role: 'other', note: word })).toEqual({ role: 'informant', word, rest: '' });
+        }
+        expect(extraParticipantRole({ role: 'other', note: 'Oznamovatelka — dcera' })).toEqual({ role: 'informant', word: 'Oznamovatelka', rest: 'dcera' });
+        expect(extraParticipantRole({ role: 'other', note: 'Zgłaszająca — córka zmarłego' })).toEqual({ role: 'informant', word: 'Zgłaszająca', rest: 'córka zmarłego' });
+        for (const word of ['Midwife', 'Hebamme', 'Porodní bába', 'Akuszerka']) {
+            expect(extraParticipantRole({ role: 'other', note: word })).toMatchObject({ role: 'midwife', word });
+        }
+        // Near words stay a plain note.
+        for (const note of ['Oznamovatelé', 'Zgłaszający się', 'Oznamovatelkou']) {
+            expect(extraParticipantRole({ role: 'other', note })).toBeNull();
+        }
+    });
 });
