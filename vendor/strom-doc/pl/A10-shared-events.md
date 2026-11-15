@@ -123,7 +123,7 @@ z innego programu) znajduje Jakość danych i proponuje je połączyć. Nic nie 
 danych.
 
 - **Gdzie:** **Jakość danych**, sekcja **Wskazówki**:
-  - jedna grupa: „{wydarzenie} {data}, {miejsce} – zapisano osobno u N osób.” z **Połącz w jedno wydarzenie**;
+  - jedna grupa: „{wydarzenie} {data}, {miejsce}, {dom} – zapisano osobno u N osób.” (dom tylko, gdy jest zapisany) z **Połącz w jedno wydarzenie**;
   - kilka grup: „N wydarzeń zapisano osobno u kilku osób.” z **Przejrzyj po kolei**. Okno **Wydarzenia zapisane
     osobno u kilku osób · N** proponuje grupy po kolei: **Połącz w jedno wydarzenie**, **Później** (grupa do
     zamknięcia okna się nie pokazuje), **Wstecz** (z powrotem do kontroli).
@@ -134,7 +134,7 @@ danych.
     proponuje się **Ujednolić kopie** ([A10.3](#A10.3));
   - grupa, w której jest już wspólne wydarzenie, do niego dołącza („Dołączy do wspólnego wydarzenia N osób.”);
   - połączenie to jeden krok **Cofnij** („{wydarzenie}: połączono w jedno wydarzenie u N osób.”).
-- **Obsługa:** **Przegląd drzewa → Jakość danych → Szczegóły walidacji**, sekcja **Wskazówki**.
+- **Obsługa:** **Przegląd drzewa → Jakość danych → Szybkie działania → Szczegóły walidacji**, sekcja **Wskazówki**.
 - **Obowiązuje od:** aplikacja 3.28.0
 
 <!-- zdroj: app:80c2ffb9 src/ui/same-event-join-ui.ts · src/shared-events.ts sameEventKey (domy dělí skupiny) · src/validation.ts (stopa info) · strings.ts validation.sameJoinLead, sameJoinSummary, sameJoinReview, sameJoin, sameJoinTitle, sameJoinHint, sameJoinToShare, sameJoinDone, later, nameLinkBack · spec 085 K1.6 b · dirigent:prace/1113-app-085-nalezy Výsledek -->
@@ -147,9 +147,11 @@ chrzcie, ślubie, zgonie. Gdy uczestnik jest połączony z osobą w drzewie, to 
 
 - **Role:** **Chrzestny / chrzestna**, **Świadek**, **Celebrans**, **Obecny**; z plików także **Akuszerka**
   i **Zgłaszający**. Uczestnik jest zapisany z imienia i nazwiska, jak w źródle, oraz z bliższym określeniem
-  (rzemiosło, „sąsiad”…).
+  (rzemiosło, „sąsiad”…). Słowo roli na początku notatki uczestnika z pliku jest rozpoznawane także w formie
+  żeńskiej („Zgłaszająca”, „Akuszerka”, cs „Oznamovatelka”).
 - **W życiu połączonej osoby:** wiersz pochodny, na przykład „Chrzestny · chrzest: …”, „Chrzestna · chrzest: …”,
-  „Świadek · ślub: …”, „Udzielający ślubu · ślub: …”, „Akuszerka · chrzest: …”, „Zgłaszający · zgon: …”. Jest na
+  „Świadek · ślub: …”, „Udzielający ślubu · ślub: …”, „Akuszerka · chrzest: …”, „Zgłaszający · zgon: …”. U kobiety „Zgłaszająca · zgon: …” (przy każdym wydarzeniu i w podsumowaniu)
+  i przy ślubie „Udzielająca ślubu · ślub: …” („Celebrantka” przy innych wydarzeniach); „Świadek” ma jedną formę. Jest na
   liście wydarzeń osoby i na stronie osoby w sekcji **Oś czasu życia**; podsumowanie strony osoby ma „Chrzestny
   i świadek u” (u kobiety „Chrzestna i świadek u”).
 - **Granice:**
@@ -161,9 +163,9 @@ chrzcie, ślubie, zgonie. Gdy uczestnik jest połączony z osobą w drzewie, to 
 - **Obsługa:** edycja wydarzenia, sekcja **Chrzestni i świadkowie**: **+ Dodaj**, **Połącz z osobą w drzewie**;
   połączony uczestnik ma znacznik **w drzewie**. Menu wiersza pochodnego: **Otwórz osobę**, **Zapisz też jako własne
   wydarzenie**, **Usuń powiązanie**.
-- **Obowiązuje od:** aplikacja 3.28.0
+- **Obowiązuje od:** aplikacja 3.28.0; formy żeńskie od 3.29.0
 
-<!-- zdroj: app:80c2ffb9 strings.ts events.roles, extraRoles, participants, addParticipant, participantName, participantNote, participantLink, participantInTree, derived*, derivedMenu, recordOwn, unlink · personPage godparentWitness · src/ui/shared-event-ui.ts (odvozené řádky jen v seznamu událostí a Život) · spec 085 K2.1 · dirigent:prace/1113-app-sdilena-udalost Výsledek -->
+<!-- zdroj: app:80c2ffb9 strings.ts events.roles, extraRoles, participants, addParticipant, participantName, participantNote, participantLink, participantInTree, derived*, derivedMenu, recordOwn, unlink · personPage godparentWitness · src/ui/shared-event-ui.ts (odvozené řádky jen v seznamu událostí a Život) · spec 085 K2.1 · dirigent:prace/1113-app-sdilena-udalost Výsledek · 3.29.0: app:844985bc ženské tvary (cs Oznamovatelka, de Anzeigende, pl Zgłaszająca; pl Udzielająca ślubu / Celebrantka; de Amtsperson všude; en jeden tvar, pl świadek, cs oddávající beze změny) · 8bbc2ec6 src/godparents.ts EXTRA_ROLE_WORDS (oznamovatel(ka), zgłaszający/a, akuszerka) -->
 
 <a id="A10.5.1"></a>
 ### A10.5.1 Zapisz też jako własne wydarzenie

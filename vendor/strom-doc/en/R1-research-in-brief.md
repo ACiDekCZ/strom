@@ -147,7 +147,8 @@ command only reads: it verifies nothing and writes nothing.
     only with `--status disproven`;
   - the relation to the main person (the setting `main.person`, else `--of P…`) is in words in the language of the
     research, with the side and the generation, for example **grandfather, father's side (G3)**. G1 is the main
-    person, G2 their parents;
+    person, G2 their parents. Without a main person, or with a retracted one, `strom query` refuses and says how to
+    go on (`strom config set main.person P…`, or `--of P…`);
   - whose facts (`--kin`): `ancestors` the main person and the direct line; `blood` (the default) the ancestors and
     all their descendants, the side branches too; `family` the blood relatives and their partners; `all` the whole
     tree;
@@ -157,7 +158,8 @@ command only reads: it verifies nothing and writes nothing.
     Horáková), `--source` (S… or words of the title), `--status`;
   - a word is looked for at the start of a word in the fact's value, label or cause, not in the note, ignoring
     diacritics. An occupation is also looked for in its Czech, German, Latin and Polish forms (mlynar also finds
-    Müller and molitor); the head of the listing names the forms. `--exact` looks for the word itself only;
+    Müller and molitor) and in the research's own forms ([R1.9.2](#R1.9.2)); the head of the listing names the
+    forms. An occupation no list knows is looked for only as written, and the listing says so. `--exact` looks for the word itself only;
   - `--count` prints only the numbers of persons and facts; `--by generation|kin|place|decade|surname` splits them
     into groups (by generation the side branches have a group of their own), without `--count` the rows by group. The
     rows come in pages (`--limit`, at most 100, `--page`); `--json` also gives each person the link that opens them in
@@ -176,7 +178,7 @@ command only reads: it verifies nothing and writes nothing.
   it says **"strom facts" is now "strom query" (the same options)** and the whole call with `strom query`.
 - **Since:** research 1.32.0
 
-<!-- zdroj: research:src/commands/query.ts (popis, volby, KIN_SETS, FACT_GROUPS, LIST_PAGE_MAX=100, elsewhereOf, tries) · src/core/query.ts (hlavička, kinSet, SHOWN_STATUSES, ASKED_STATUSES) · src/core/occupations.ts · src/commands/analysis.ts help find („the facts recorded of people … strom query“) · src/cli/execute.ts RENAMED, renamedCommand · src/agents/files.ts AGENTS.md „Questions over the data“ · src/commands/start.ts app --person · cs.json ui.query.*, ui.error.command.renamed · test/cli/query.test.ts · CHANGELOG.cs.md 1.32.0 · spec 081 K1–K7 -->
+<!-- zdroj: research:src/commands/query.ts (popis, volby, KIN_SETS, FACT_GROUPS, LIST_PAGE_MAX=100, elsewhereOf, tries) · src/core/query.ts (hlavička, kinSet, SHOWN_STATUSES, ASKED_STATUSES) · src/core/occupations.ts · src/commands/analysis.ts help find („the facts recorded of people … strom query“) · src/cli/execute.ts RENAMED, renamedCommand · src/agents/files.ts AGENTS.md „Questions over the data“ · src/commands/start.ts app --person · cs.json ui.query.*, ui.error.command.renamed · test/cli/query.test.ts · CHANGELOG.cs.md 1.32.0 · spec 081 K1–K7 · query bez hlavní osoby / odvolaná: src/commands/query.ts ofPerson (query.no-main, query.retracted), cs.json ui.error.query.*, commit 6cdab11b -->
 
 <a id="R1.9.1"></a>
 ### R1.9.1 Stories: `strom query --story`
@@ -197,3 +199,36 @@ command only reads: it verifies nothing and writes nothing.
 - **Since:** research 1.32.0
 
 <!-- zdroj: research:src/commands/query.ts (--story, --by place|decade odmítnuto, storyText, storyData) · src/core/query.ts findStories (hlavička: sourcesNamed, storySources, basis sentence|story) · cs.json ui.query.story.* · src/agents/files.ts „A story retells the facts“ · CHANGELOG.cs.md 1.32.0 -->
+
+<a id="R1.9.2"></a>
+### R1.9.2 The research's own forms of occupations: `strom occupation`
+
+The built-in list of occupations (83 occupations, each in Czech, German, Latin and Polish forms) can be extended by
+the research's own forms: another language, an old spelling or an occupation the list does not know.
+`strom query --occupation` ([R1.9](#R1.9)) then finds all the forms as one occupation, also with `--exact`, `--count`
+and `--story` ([R1.9.1](#R1.9.1)).
+
+- **Limits:**
+  - `strom occupation add` takes at least two forms of one occupation. A form the list knows joins the others to it
+    (another form of a miller); forms the list does not know make a new occupation. A form is in the research's
+    language, another language is written with its code before the form: `de:Ölschläger`. When the forms are one
+    occupation already, nothing is written;
+  - each group keeps who added it (the person by hand, or the agent during the research), the day and, with
+    `--source`, the source the form was met in;
+  - the person adds and takes out forms in their own terminal, without an agent, and may take out any of the
+    research's own forms. The agent takes out only a form an agent added; what the person added it never changes or
+    takes out. The built-in list stays as it is;
+  - `strom query` says when the occupation asked for is in no list (only the form as written is looked for) and gives
+    the command that adds its forms: “{word}: not in the list of occupations, found only as written; its other forms:
+    strom occupation add {word} <form> [la:<form> …]”;
+  - the research's own list is the research's file `quality/occupations.json` under the seal
+    ([R14](R14-seal-and-integrity.md)). When it cannot be read, `strom query` and `strom occupation list` look only in
+    the built-in list and say so in one line with `strom repair`; `add` and `remove` write nothing over it.
+- **Method only:** an occupation `strom query` finds in no list, or a form from a source the list lacks, the agent
+  adds with `strom occupation add … --source S…` together with its other forms and tells the user.
+- **Controls:** terminal: `strom occupation add olejník de:Ölschläger`; `strom occupation list` (the research's
+  groups: who, when, sources), `strom occupation list mlynar` (the forms of one occupation, the research's own marked
+  `*`), `strom occupation list --all` (every occupation); `strom occupation remove de:Ölschläger`.
+- **Since:** research 1.32.0
+
+<!-- zdroj: research:src/commands/occupation.ts (add: aspoň dva tvary, --source ověřený pramen, by human | agent podle tree.personWrites; list: bez slova skupiny s by/at/sources, se slovem tvary s * u vlastních, --all; remove: agent jen své, persons, builtin, unknown) · src/core/occupations.ts (OCCUPATIONS_FILE quality/occupations.json, parseForm kód jazyka, addOccupation: nic se nezapíše, když už jedno povolání; mergeOccupations, ownOrRefuse: nečitelný soubor → UsageError strom repair; writeOwn putFile zapečetěná operace) · src/commands/query.ts:254–265 (ui.query.occupation.unknown, ui.occupation.unreadable) · assets/terms/occupations.json (83 skupin) · src/agents/files.ts AGENTS.md „An occupation strom query says is in no list“ · cs.json ui.occupation.*, ui.query.occupation.unknown · commity 84e7fc0e, 0abe8793 · CHANGELOG.cs.md 1.32.0 -->

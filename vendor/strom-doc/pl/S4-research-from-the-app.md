@@ -225,8 +225,13 @@ badania odpowiada.
   gałąź; w **Linie** założenie, edycja, przeniesienie, wstrzymanie, zakończenie i wznowienie linii; rozstrzygnięcie
   sprzeczności, cofnięcie wartości oraz weryfikacja lub potwierdzenie danej przez most. Okno Przeglądu
   ([S4.1.6](#S4.1.6)) dostaje nowy stan od okna głównego, które robi zapis.
+- **Od aplikacji 3.28.0:** Przegląd badania bez śledzenia da się zamknąć przyciskiem ⤡ i ×; panel badania, który był widoczny obok niego,
+  po zamknięciu Przeglądu pokaże się znowu. **Zakończ śledzenie** w otwartym Przeglądzie tylko kończy śledzenie,
+  a Przegląd zostaje otwarty bez śledzenia; zakończenie, które aplikacja robi sama (na przykład przełączenie do
+  archiwum), go zamyka. Przełączenie na inny widok zamyka Przegląd bez śledzenia jak ⤡; Przegląd śledzonego badania
+  zostaje.
 
-<!-- zdroj: app:f05fff8e, 48573de6 src/ui/research-overview-ui.ts renderResearchOverview (source live | bridge | tree; fromTree vynechá working, changes, queue), appendOverviewStateOff (notRunning, turnOn / researchLiveStartHow; telefon phoneTreeOnly, phoneWhy), overviewFollowStrip (activeResearchAgentless → bez pruhu; agentStarted, followNote), appendOverviewWaitingAsOf (asOf), appendOverviewSkeletonLines, appendOverviewFoot (missingLink) · src/research-overview-source.ts BRIDGE_ONLY_SECTIONS, afterTurnOnKeys, skeletonLines (_STROM_DIRECTION, místa osob) · src/research-device.ts WAITING_MAX_AGE_MS = 7 dní · src/ui/research-ui.ts OverviewViewing (refreshedAt, agentStarted, waitingAt) · src/ui/tree-actions.ts researchOverview · 8d564b35 src/ui/tree-overview.ts treeOverviewResearchLinkHtml (sekce focus, bez osob v záhlaví) · strings.ts live.followNote, agentStarted, notRunning, turnOn, afterTurnOn, refreshedAgo, asOf, phoneTreeOnly, phoneWhy, researchLink, missingLink, treeOverview focus · CHANGELOG.cs.md 3.27.0 · spec 057 K1.8–K1.12 · 3.28.0: app:bb6c0d07 src/ui/research-ui.ts researchSession (sledovaný, jinak prohlížený přes most), openLiveTaskMenu, researchStatusAfterWrite / statusAfterWriteWay (bez sledování hned askResearchBridge, jen počítač), src/ui/research-offline-ui.ts taskMenuOrders (queue.next; queue.own last, default), changeTaskOrder, writeTaskOrder · CHANGELOG.cs.md 3.28.0 (c04a7199) · spec 052 K5.1, K5.6; spec 057 §7 · prace/1113-app-jako-dalsi-bez-sledovani · app:3c751bea src/ui/research-ui.ts researchStatusAfterWrite (Čeká: sent, unsent, odpověď, soubor; linie; větev), researchViewedStatusAfterWrite, viewedWriteSession (jen prohlížený přes most, ne sledovaný, ne ze stromu) · research-waiting-write-ui.ts, research-directions-ui.ts, direction-form-ui.ts, research-offline-ui.ts, research-sync-ui.ts, verify-ui.ts, waiting-places-ui.ts · e2e/overview-write-unfollowed.spec.ts (do 3 s, okno bez dotazu na most) · strings.ts live.waitingWrite.sent, unsent, file · spec 083 · prace/1113-app-hledani-v-prehledu bod 2 -->
+<!-- zdroj: app:f05fff8e, 48573de6 src/ui/research-overview-ui.ts renderResearchOverview (source live | bridge | tree; fromTree vynechá working, changes, queue), appendOverviewStateOff (notRunning, turnOn / researchLiveStartHow; telefon phoneTreeOnly, phoneWhy), overviewFollowStrip (activeResearchAgentless → bez pruhu; agentStarted, followNote), appendOverviewWaitingAsOf (asOf), appendOverviewSkeletonLines, appendOverviewFoot (missingLink) · src/research-overview-source.ts BRIDGE_ONLY_SECTIONS, afterTurnOnKeys, skeletonLines (_STROM_DIRECTION, místa osob) · src/research-device.ts WAITING_MAX_AGE_MS = 7 dní · src/ui/research-ui.ts OverviewViewing (refreshedAt, agentStarted, waitingAt) · src/ui/tree-actions.ts researchOverview · 8d564b35 src/ui/tree-overview.ts treeOverviewResearchLinkHtml (sekce focus, bez osob v záhlaví) · strings.ts live.followNote, agentStarted, notRunning, turnOn, afterTurnOn, refreshedAgo, asOf, phoneTreeOnly, phoneWhy, researchLink, missingLink, treeOverview focus · CHANGELOG.cs.md 3.27.0 · spec 057 K1.8–K1.12 · 3.28.0: app:bb6c0d07 src/ui/research-ui.ts researchSession (sledovaný, jinak prohlížený přes most), openLiveTaskMenu, researchStatusAfterWrite / statusAfterWriteWay (bez sledování hned askResearchBridge, jen počítač), src/ui/research-offline-ui.ts taskMenuOrders (queue.next; queue.own last, default), changeTaskOrder, writeTaskOrder · CHANGELOG.cs.md 3.28.0 (c04a7199) · spec 052 K5.1, K5.6; spec 057 §7 · prace/1113-app-jako-dalsi-bez-sledovani · app:3c751bea src/ui/research-ui.ts researchStatusAfterWrite (Čeká: sent, unsent, odpověď, soubor; linie; větev), researchViewedStatusAfterWrite, viewedWriteSession (jen prohlížený přes most, ne sledovaný, ne ze stromu) · research-waiting-write-ui.ts, research-directions-ui.ts, direction-form-ui.ts, research-offline-ui.ts, research-sync-ui.ts, verify-ui.ts, waiting-places-ui.ts · e2e/overview-write-unfollowed.spec.ts (do 3 s, okno bez dotazu na most) · strings.ts live.waitingWrite.sent, unsent, file · spec 083 · prace/1113-app-hledani-v-prehledu bod 2 · od 3.28.0 zavření a Ukončit sledování: app commit 3f2e19f8 (panel výzkumu skrytý pod Přehledem bez sledování, Ukončit sledování nechá Přehled otevřený, jiný pohled ho zavře) -->
 
 <a id="S4.1.6"></a>
 ### S4.1.6 Przegląd badania w osobnym oknie
@@ -406,6 +411,10 @@ Praca agenta zużywa subskrypcję AI.
   w Archiwum Strom ani w badaniu, które czeka na agenta), tylko tam, gdzie aplikacja otwiera linki badania
   ([S4.5](#S4.5)); nie na telefonie. Gdy agent pracuje albo trwa przebieg, działania nie ma; w nagłówku **Kolejki**
   jest zamiast niego **● Trwa praca ›**, które rozwija **Teraz** i przechodzi do **Dokończ i zakończ**.
+- **W sekcji Teraz:** gdy agent nie pracuje i nie trwa żaden przebieg, **Praca nad kolejką…** z tym samym
+  oznaczeniem, oknem i warunkami oferuje też sekcja **Teraz** w **Przeglądzie badania**, także w jego osobnym
+  oknie. Gdy agent pracuje, w **Teraz** zostaje tylko **Dokończ i zakończ**. Zamknięcie okna przywraca fokus na
+  przycisk w **Teraz**.
 - **Okno Praca nad kolejką:**
   - **Automatycznie** (domyślnie): „Agent bierze zadanie za zadaniem, dopóki pozwala limit subskrypcji.” Gdy badanie
     zgłasza, że bramka subskrypcji (warunek, [R7.4](R7-when-the-agent-works.md#R7.4)) nie jest ustawiona, stoi pod tym
@@ -415,15 +424,23 @@ Praca agenta zużywa subskrypcję AI.
     razie jest tylko **Automatycznie**;
   - **Jako pierwsze**: zadanie oznaczone jako następne ([S4.2.2](#S4.2.2)), w przeciwnym razie pierwsze zadanie
     kolejki;
+  - **Kolejne (n)** pod zadaniem **Jako pierwsze** rozwija kolejne zadania kolejki w kolejności badania: najpierw
+    zadanie oznaczone jako następne, potem według miejsca w kolejce; zadań odłożonych i zadań poza liniami, które
+    nie są podejmowane, w nim nie ma. Nad nimi stoi **W kolejności w kolejce** i „Agent nie musi brać ich dokładnie
+    w tej kolejności.” Wiersz to numer i tekst zadania z etykietą **jako następne** i rodzajem zadania; z miejscami
+    w kolejce wiersze są numerowane „2.”, „3.”. Pod nimi „i jeszcze N zadań w kolejce” z **Przegląd badania ›**
+    (rozwija **Kolejkę**) albo „Kolejka może mieć więcej zadań.” Rozwiniętą listę zwija **Ukryj kolejne**. Liczba
+    w **Tylko 5 zadań** nie zmienia listy; każde otwarcie okna zaczyna się zwinięte, a bez kolejnych zadań przycisku
+    nie ma;
   - gdy badanie to zgłasza, długość sesji i bramka („Sesja najwyżej 3 godz. · bramka subskrypcji: …”);
   - **Anuluj** i **Otwórz terminal** (oznaczenie AI i terminal) ze zdaniem **Uruchomienie potwierdza terminal badania.
     Pracę zatrzymuje Ctrl-C w jego oknie lub „Dokończ i zakończ” w sekcji Teraz.**
 - **Obsługa:** aplikacja: **Praca nad kolejką…** po prawej w nagłówku rozwiniętej **Kolejki** w **Przeglądzie
   badania**; menu **Badanie → Praca nad kolejką…** ([S4.5.2](#S4.5.2)). Terminal: `strom run --tasks N`,
   `strom run --loop` ([R7.1](R7-when-the-agent-works.md#R7.1)).
-- **Obowiązuje od:** aplikacja 3.28.0 (badanie 1.32.0)
+- **Obowiązuje od:** aplikacja 3.28.0 (badanie 1.32.0); w sekcji **Teraz** i **Kolejne (n)** od aplikacji 3.29.0
 
-<!-- zdroj: app:9cf43b22, 34accb13 (8a10387e) src/ui/queue-work-dialog.ts queueWorkOffer (live, ne phone/sheet, ne noAgent, linkAvailable work, work.link; busy sessions|runs → 'busy'), queueWorkHead (queue-work-busy → showOverviewNowFinish), queueWorkCounted (run.tasks), queueWorkFirst (own next, pos 1), queueWorkSessionLine, WORK_TASKS_DEFAULT 5, noGate (work.gate === null) · src/research-link.ts WORK_TASKS_MIN/MAX, WORK_LINK_FEATURE, RUN_TASKS_FEATURE · src/ui/research-ui.ts queueHeadAction (jen rozbalená Fronta) · src/ui/research-overview-ui.ts showOverviewNowFinish · strings.ts live.queueWork*, queueWorkingLink · spec 052 K6.1, K6.2, K6.4, K6.6 · ZADANI_DEV_fronta-hledani §5; D6 (řádek sezení i bez brány) -->
+<!-- zdroj: app:9cf43b22, 34accb13 (8a10387e) src/ui/queue-work-dialog.ts queueWorkOffer (live, ne phone/sheet, ne noAgent, linkAvailable work, work.link; busy sessions|runs → 'busy'), queueWorkHead (queue-work-busy → showOverviewNowFinish), queueWorkCounted (run.tasks), queueWorkFirst (own next, pos 1), queueWorkSessionLine, WORK_TASKS_DEFAULT 5, noGate (work.gate === null) · src/research-link.ts WORK_TASKS_MIN/MAX, WORK_LINK_FEATURE, RUN_TASKS_FEATURE · src/ui/research-ui.ts queueHeadAction (jen rozbalená Fronta) · src/ui/research-overview-ui.ts showOverviewNowFinish · strings.ts live.queueWork*, queueWorkingLink · spec 052 K6.1, K6.2, K6.4, K6.6 · ZADANI_DEV_fronta-hledani §5; D6 (řádek sezení i bez brány) · 3.29.0: app:a0a66d45 Teď nabízí Pracovat na frontě… (bez práce agenta a běhu; okno přehledu; fokus zpět) · 3c8f4128 src/ui/queue-work-dialog.ts Další (n) (pořadí: ruční další, místo ve frontě; bez odložených a mimo linie, které se neberou; queue.page; zbytek, Přehled výzkumu ›; sbalené při otevření) · strings.ts live.queueWorkMore, queueWorkLess, queueWorkByQueue, queueWorkByQueueHint, queueWorkRest, queueWorkRestUnknown, queueWorkOverview, queueTagNext -->
 
 <a id="S4.3"></a>
 ## S4.3 Linie w aplikacji
@@ -511,11 +528,16 @@ z [R2.3](R2-lines-and-queue.md#R2.3) i [R2.3.1](R2-lines-and-queue.md#R2.3.1) mo
     z własnym wyborem** i zadania z ręczną kolejnością. Od aplikacji 3.27.0 wstęp grupy mówi, co pomaga linii
     i zawsze idzie z nią: „pytanie linii, dołączenie osób do kogoś z linii lub do jego partnera, powód podany przez
     agenta” ([R2.3](R2-lines-and-queue.md#R2.3)).
+  - Wybór badania obok nagłówka **Poza liniami** (np. „na końcu”) otwiera **Badanie dla tego drzewa…** na grupie
+    **Praca poza liniami** z wybraną kartą, także bez śledzenia i z osobnego okna przeglądu (okno dialogowe otwiera się
+    w oknie głównym). Przy Archiwum Strom i przy badaniu, które czeka na agenta, tej grupy nie ma i wybór jest tylko
+    tekstem. Etykieta gałęzi nie jest odnośnikiem: rozwija gałąź jak cały jej nagłówek.
 - **Obsługa:** aplikacja: **Przegląd badania**, sekcja pracy poza liniami, przy gałęzi **⋯** (**Opcje gałęzi**);
   **Badanie dla tego drzewa…**.
-- **Obowiązuje od:** aplikacja 3.22.0 (badanie 1.26.0)
+- **Obowiązuje od:** aplikacja 3.22.0 (badanie 1.26.0); wybór przy **Poza liniami** bez śledzenia i z okna przeglądu
+  od aplikacji 3.29.0
 
-<!-- zdroj: app:HEAD src/ui/research-offline-ui.ts:3, :104 (caps.offLineBranches, ≥2 linie) · src/research-directions-write.ts setBranchMode, setOffLineTree, answerBranchWaiting · strings.ts live.offModeLink, live.offModeCap, live.branchAddPick, live.branchCreate, live.branchNever, live.branchReset · research-offline-ui.ts:202-228 growingBranchLine, :542 branch choices, :680 branchQueueBeyond, :740 pick · strings.ts live.dirNear, branchGrows, branchOwnChoice, branchQueueHead, branchQueuePos, branchAllTasks, branchTaken, branchDefaultTag, branchAdd(Paused), branchNeverGroup, waitBranchLeave, waitBranchHint, setOutTitle, setOutOcc, setSuggest, setOwnChoice, setManualTasks, menu treeSettings · spec 038 K7 · 3.27.0: strings.ts live.setOutIntro (app 4e4f6d8c, spec 036 K1.8) -->
+<!-- zdroj: app:HEAD src/ui/research-offline-ui.ts:3, :104 (caps.offLineBranches, ≥2 linie) · src/research-directions-write.ts setBranchMode, setOffLineTree, answerBranchWaiting · strings.ts live.offModeLink, live.offModeCap, live.branchAddPick, live.branchCreate, live.branchNever, live.branchReset · research-offline-ui.ts:202-228 growingBranchLine, :542 branch choices, :680 branchQueueBeyond, :740 pick · strings.ts live.dirNear, branchGrows, branchOwnChoice, branchQueueHead, branchQueuePos, branchAllTasks, branchTaken, branchDefaultTag, branchAdd(Paused), branchNeverGroup, waitBranchLeave, waitBranchHint, setOutTitle, setOutOcc, setSuggest, setOwnChoice, setManualTasks, menu treeSettings · spec 038 K7 · 3.27.0: strings.ts live.setOutIntro (app 4e4f6d8c, spec 036 K1.8) · 3.29.0: app:70d50162 research-offline-ui.ts openOffLineSettings bez sledování (prohlížený strom), overview-window offline-settings → hlavní okno · 0a00fb2b research-tree-settings-ui.ts offLineSettingsOffered (archiv, čeká na agenta: text, ne odkaz) -->
 
 <a id="S4.4"></a>
 ## S4.4 Czeka na załatwienie w aplikacji

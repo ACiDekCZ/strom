@@ -249,14 +249,28 @@ of the week have passed since it reset (a day ≈ 14.3 %) with the week's usage.
 ## R7.6 The subscription limit stops the run
 
 When the agent runs into the limit of its subscription during a session, the session closes and the run ends:
-**subscription limit (resets …)**. The run does not wait, not even with `--loop`. This does not depend on the
-condition.
+**subscription limit (resets …)**. Up to research 1.33.0 the run does not wait, not even with `--loop`, and this does
+not depend on the condition; from 1.34.0 see below.
 
 - **Limits:** the task returns to the queue; the reset time shows only when the agent said it. Only a condition can
   wait.
 - **Since:** research 1.0.0
+- **From research 1.34.0:** a run that goes on by itself (`--loop`, `--until`) and has a condition ([R7.4](#R7.4))
+  does not end after the limit. The task returns to the queue (another one may come next), the run waits until the
+  limit resets and a minute more, then asks the condition again and goes on. Terminal: “⏸ the agent's plan limit is
+  used up (five-hour window): waiting until it resets (…), then the condition is asked again and the work goes on
+  (Ctrl-C ends the run)”; the Strom app shows the run as paused with the reason.
+  - the reset time: from the agent's report of the used-up window of the plan (five-hour window, week; both used up:
+    the later of them), otherwise from the time the agent said (a date and time, “in 2 hours”, “7pm” only in the
+    computer's time zone). A time more than 8 days ahead or in the past is not taken. An unknown time: the run waits
+    15 minutes (“…, when it resets not said: waiting until …, then the condition is asked again”);
+  - the reset only after the `--until` time: the run ends with **time limit**;
+  - a session interrupted by the limit does not count for the task as a failure of the agent;
+  - unchanged: a manual run (one task, `--tasks n`, `--max` without `--loop`) and a run without a condition end with
+    **subscription limit** as before. The Claude Code message “You've hit your limit · resets …” and a refusal of
+    the agent because of the limit are taken as the limit.
 
-<!-- zdroj: research:src/commands/session.ts:1196-1206 closeSession (session.limit), :1255-1259 · src/core/session.ts:248-262 · runners/runner.ts:226 looksLikeLimit · cs.json ui.run.stop.limit, ui.run.stop.resets -->
+<!-- zdroj: research:src/commands/session.ts:1196-1206 closeSession (session.limit), :1255-1259 · src/core/session.ts:248-262 · runners/runner.ts:226 looksLikeLimit · cs.json ui.run.stop.limit, ui.run.stop.resets · 1.34.0: research:8f24e9f7 src/commands/session.ts:1453-1483 (gateHolds && gate, limitResume, limitReserve, DEFAULT_WAIT_MS 15 min, until → time, markPaused), :1363 metrics.limit, src/core/planlimit.ts limitResume, timeOf, LIMIT_RESERVE_MS 60 s, FURTHEST_MS · 03146702 (B8: „You've hit your limit“, odmítnutý rate_limit_event) · cs.json ui.run.limit.wait, ui.run.limit.unknown, ui.run.limit.why, ui.run.limit.five_hour, ui.run.limit.seven_day · dirigent:prace/1115-vyzkum-k036-limit-obnova -->
 
 <a id="R7.7"></a>
 ## R7.7 An agent not logged in

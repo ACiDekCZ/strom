@@ -129,6 +129,40 @@ ancestors. The focus, the depth and the zoom stay, and the person's card stays a
 
 <!-- zdroj: app:f5d56ed3 src/bulk-family.ts collectBulkFamily (childrenOf osoba; siblingsOf osoba a předci v pohledu s rodiči v pohledu; maxGeneration), bulkParents, bulkNewIds (drawnPersonIds, kroky 1–5 pipeline), BULK_CONFIRM_ABOVE 150, BULK_TWO_GENERATIONS 2 · src/renderer.ts bulkFamilyPlan (jen family), bulkFamilyState (offer/on/none), bulkFamilyScreens (ceil šířka × zoom / plátno), showBulkFamily → showChildrenOf (jeden krok historie, zoom beze změny, kotva), undoBulkFamily, bulkStepOf (jen při stejné hloubce), forgetBulkSteps při změně hloubky, resetChildrenShown při změně fokusu, pohledu, stromu, hiddenShownCount (+1 za krok) · src/ui/bulk-family-ui.ts confirmBulkFamily (Esc, klik vedle, resize = zrušit; two jen m > 0 a m ≠ n), runBulkFamily, updateBulkFamilySwitches (title treeTip/menuOff/treeNone, aria-disabled) · src/ui/context-menu.ts bulkFamilyRows (offer: menu, +n, menuSub; on: menuOff) · src/ui/toolbar-fit.ts (tablet: přepínač ustoupí před hledáním, f5d56ed3) · index.html button.bulk-family (telefon skrytý) · strings.ts bulk.*, menu.showChildrenHere, showSiblingsHere, focusBar hideAllShown, history back · app 2eb013ba, cecea43f, 8dc34565, f5d56ed3 · dirigent:prace/1113-app-drobnosti-1112 · ZADANI_DEV_drobnosti-1112 §3 -->
 
+<a id="A6.1.4"></a>
+### A6.1.4 Photo on the card
+
+The option **Photo on the card** sets the size and the shape of the person's photo on the card in the tree. The
+defaults **Small** and **Circle** leave the card as before.
+
+| | **Small** | **Medium** | **Large** |
+|---|---|---|---|
+| card **Normal** | 188 × 64 px | 200 × 64 px | 236 × 96 px |
+| photo on the card **Normal** | 34 px | 48 px | 80 px |
+| photo in the card's header **Detailed**, **Register**, **Custom** | 30 px | 44 px | 72 px |
+
+- A larger card is only in a view where at least one shown person has a photo. The cards without a photo in that
+  view are as wide, with small initials, and the names in a row stand at the same height. A view without photos has
+  cards of 188 × 64 px.
+- The card **Normal** has the photo beside the name. **Detailed**, **Register** and **Custom** have it in the header
+  beside the name and the years, with the rows of details below it in full width; the card is taller by the photo
+  (**Custom** 70 or 98 px and 17 px per row instead of 56 px).
+- **Shape:** **Circle** or **Rounded square** (rounding of 12 px for a large photo, 5 px for a small one; the same for
+  the initials). The card's marks stand on the edge of the photo in both shapes.
+- **Export:** the image export, the poster and its tiled PDF ([A7](A7-book-pages-and-export.md)) draw the cards with
+  the chosen photo size and shape as the screen does: a **Normal** card has its size on the screen, **Detailed** and
+  **Register** have the photo on the left of their header. A photo hidden for a living person leaves the initials on
+  the card. An output where nobody has a photo, and the default **Small** with **Circle**, look as before. The
+  sentence under the option: "Applies to the tree, its image export and poster on this device."
+- **Limits:** the card **Compact** has no photo: the row stays, the options are off and below them is "The Compact
+  card has no photo."; the chosen size is kept. The option belongs to the device and is not saved with the tree. The
+  preview in the settings shows the card's size ("card 236 × 96 px").
+- **Controls:** **Settings** → **Person card** → **Photo on the card** (between **Card detail** and the preview):
+  **Size** **Small** · **Medium** · **Large**; **Shape** **Circle** · **Rounded square**.
+- **Since:** app 3.29.0
+
+<!-- zdroj: app:28480ea1 src/types.ts NORMAL_PHOTO_BOX (188×64/34, 200×64/48, 236×96/80), src/settings.ts (zařízení, výchozí small + circle), src/ui/card-fields-ui.ts, src/renderer.ts · b71d561a src/card-width.ts cardAvatarSize (30/44/72), výška Vlastní 70/98 + 17 na řádek · strings.ts cardDensity.photoTitle, photoSize, photoSmall, photoMedium, photoLarge, photoShape, photoCircle, photoRounded, photoCompact, size · CHANGELOG.cs.md 3.29.0 „Fotka na kartě“ · dirigent:test/vysledek-1115-app-096-fotka.md · spec 096 P1 · export: app:64ae50ca src/export-image.ts, src/renderer.ts (poster, PDF po listech; výchozí small + circle bajt po bajtu jako dřív), strings.ts cardDensity.photoScope · spec 096 P2 -->
+
 <a id="A6.2"></a>
 ## A6.2 The Descendants view
 
@@ -754,10 +788,16 @@ cancels it.
   A change from the research is announced by “Research changed 3 facts: …”.
 - One fact can also be edited right in the cell ([A6.7.15](#A6.7.15)).
 - **Limits:** in a read-only tree there is no **Edit…**.
-- **Controls:** buttons at the selected row, the row menu (right button; expanding unions too). On a phone a tap on a
-  row opens a panel with the actions and the unions (“Union 1: … · Edit ›”).
+- **Controls:** the buttons ⌖ ▤ ✎ at the row's end, over no cell's text: with a mouse they show once the pointer has
+  been on the row away from them, on the selected row also with the pointer elsewhere; the row menu (right button;
+  expanding unions too). A finger's tap on a row (a phone, a narrow window, a device worked mainly by touch) opens a
+  panel with the actions and the unions (“Union 1: … · Edit ›”).
+- **From app 3.28.0:** a click with a mouse or a pen only selects the row and the cell on every device, also on a
+  laptop with a touch screen, a tablet with a mouse and in a narrow window; the click's pointer decides, not the
+  device. Up to 3.27.0 every click opened the row panel on a touch device and in a narrow window. The row's actions
+  stand at its end, so the persons' column keeps its whole width on the selected row.
 
-<!-- zdroj: app:src/ui/table-view/table-ui.ts tableMethods (tableRowAction: tree → Rodina, focus, highlight; open; edit → dialog osoby / panel vztahů na svazku), personOfRow (Partner 1), keepWork · table-refresh.ts keepOrder, watchEdit, changedKeys, bridgeChanges, namesList · table-grid.ts FLASH_MS · strings.ts table.act.*, dblClickHint, actionsOf, unionWith, editMore, staleRow, savedToast, bridgeToast · commity da6b9786, de46ae30, e4a35406 -->
+<!-- zdroj: app:src/ui/table-view/table-ui.ts tableMethods (tableRowAction: tree → Rodina, focus, highlight; open; edit → dialog osoby / panel vztahů na svazku), personOfRow (Partner 1), keepWork · table-refresh.ts keepOrder, watchEdit, changedKeys, bridgeChanges, namesList · table-grid.ts FLASH_MS · strings.ts table.act.*, dblClickHint, actionsOf, unionWith, editMore, staleRow, savedToast, bridgeToast · commity da6b9786, de46ae30, e4a35406 · od 3.28.0: table-grid.ts clickPointerType, isMouseLikePointer, table-ui.ts onRowClick (panel jen klepnutí a isPhoneBar | isCoarsePointer), commit ee38c7a6; rowActions ⌖ ▤ ✎ v .tv-acts-dock, armRowActions (myš a pero), commit 80c2ffb9 -->
 
 <a id="A6.7.9"></a>
 ### A6.7.9 CSV and XLSX export
@@ -1089,7 +1129,7 @@ cell can be copied, the table filtered by its value and the fact in it edited ri
 
 - **Copy:** Ctrl/Cmd+C without selected text copies the text the active cell shows, without marks, icons and pills.
   Text selected by hand is copied as usual.
-- **Cell menu:** the row menu (right button, Shift+F10) and on a phone the row panel (a tap on the cell) begin with
+- **Cell menu:** the row menu (right button, Shift+F10) and the row panel (a finger's tap on the cell) begin with
   the cell's choices **Copy**, **Only “{value}”** and **Without “{value}”** (the value shortened to about 24 characters
   with “…”); under them are the row actions ([A6.7.8](#A6.7.8)). The menu opens at the cell, also when another row was
   selected.
@@ -1115,7 +1155,9 @@ cell can be copied, the table filtered by its value and the fact in it edited ri
 
   **Full name** is not edited in the cell (it is made of several parts), nor are computed cells, checks, research,
   citations, counts and relationships; a double click on them opens **Edit…**.
-- **The field** covers the cell. **Enter** saves, **Esc** cancels, **Tab** and **Shift+Tab** save and go to the next
+- **The field** stands in the cell. Only in a column narrower than the field's least width (text and date 100 px,
+  place 140 px, a choice 90 px) is the field wider, lying over the row with a shadow (from app 3.28.0; before, it
+  lay over the next cell). **Enter** saves, **Esc** cancels, **Tab** and **Shift+Tab** save and go to the next
   or previous editable cell of the row, a click elsewhere saves. In a choice a click with the mouse saves the value at
   once; after choosing with the arrows, Enter, Tab or a click elsewhere saves it. The date is read as in the person form; an unreadable
   one stays in the field with the error “The date cannot be read (e.g. 1880-05-15, 1880, about 1880)”. The place
@@ -1131,7 +1173,7 @@ cell can be copied, the table filtered by its value and the fact in it edited ri
   finding's bubble), in the row menu **Edit cell** (F2). An editable cell has a text cursor on hovering with the mouse.
 - **Since:** app 3.27.0
 
-<!-- zdroj: app:src/ui/table-view/table-grid.ts copyKey (Ctrl/Cmd+C, copyPlainText), F2, Enter (has-issue → onIssue, has-finds → onFindings, jinak startEditAt, jinak open), Escape, Tab · table-ui.ts showTableRowMenu (cellPart, cell-edit „Upravit buňku“ s F2), tableCellChoices, tableCellSheetBlocks, :1663 úprava na místě ne v jen ke čtení, archivu, na telefonu (isPhoneBar) · table-edit.ts editTargetOf, PERSON_FIELDS (surname: marriedSurname || lastName, birthSurname, marriedSurname, bDate…burPlace, occ), UNION_FIELDS (wDate, wPlace), editChangeOf (normalizeDateInput, první křest a pohřeb, prázdné pole smaže jen údaj, beze jména neuloží) · strings.ts table.cell.copy, only, without, edit, badDate, nameNeeded, editLabel, onlyEmpty, onlyFilled, matchEquals, matchNotEquals, savedToast · commity 05d9a9ab, be9ca8cd, 28aabdc8 · spec 073 U9 (T54 F4, F8, F9) · T54 2. kolo: table-edit.ts PERSON_FIELDS (firstName, gender, refn, dCause, dAgeRec), UNION_FIELDS (wAgeRec, pAgeRec, rec1, rec2, divDate, divPlace, uStatus), WEDDING_FIELDS (ne u unionWithoutWedding), editOptionsOf (GENDERS, UNION_STATUSES v pořadí formuláře svazku), table-grid.ts select (klik myší uloží hned), commity 8fdf52ca, 79764eba (T54 G3, G10) · nabídka u buňky jiného řádku: commit 400ccda8 (T54 G7) -->
+<!-- zdroj: app:src/ui/table-view/table-grid.ts copyKey (Ctrl/Cmd+C, copyPlainText), F2, Enter (has-issue → onIssue, has-finds → onFindings, jinak startEditAt, jinak open), Escape, Tab · table-ui.ts showTableRowMenu (cellPart, cell-edit „Upravit buňku“ s F2), tableCellChoices, tableCellSheetBlocks, :1663 úprava na místě ne v jen ke čtení, archivu, na telefonu (isPhoneBar) · table-edit.ts editTargetOf, PERSON_FIELDS (surname: marriedSurname || lastName, birthSurname, marriedSurname, bDate…burPlace, occ), UNION_FIELDS (wDate, wPlace), editChangeOf (normalizeDateInput, první křest a pohřeb, prázdné pole smaže jen údaj, beze jména neuloží) · strings.ts table.cell.copy, only, without, edit, badDate, nameNeeded, editLabel, onlyEmpty, onlyFilled, matchEquals, matchNotEquals, savedToast · commity 05d9a9ab, be9ca8cd, 28aabdc8 · spec 073 U9 (T54 F4, F8, F9) · T54 2. kolo: table-edit.ts PERSON_FIELDS (firstName, gender, refn, dCause, dAgeRec), UNION_FIELDS (wAgeRec, pAgeRec, rec1, rec2, divDate, divPlace, uStatus), WEDDING_FIELDS (ne u unionWithoutWedding), editOptionsOf (GENDERS, UNION_STATUSES v pořadí formuláře svazku), table-grid.ts select (klik myší uloží hned), commity 8fdf52ca, 79764eba (T54 G3, G10) · nabídka u buňky jiného řádku: commit 400ccda8 (T54 G7) · pole v buňce: table-grid.ts EDITOR_MIN_WIDTH (text 100, date 100, place 140, select 90), placeEditor, commit 80c2ffb9 · panel klepnutím: commit ee38c7a6 -->
 
 <a id="A6.8"></a>
 ## A6.8 A view in a separate window

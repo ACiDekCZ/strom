@@ -126,10 +126,10 @@ całego komputera. Bez warunku przebieg trwa, dopóki jest praca.
   - kiedy zapytać ponownie, mówi warunek; w przeciwnym razie za 15 minut, nigdy wcześniej niż za 1 minutę. Ctrl-C
     kończy czekanie; z `--until` kończy je podana godzina (**limit czasu**);
   - `--loop` i `--until`: pytanie przed każdą sesją; zadania uruchomione ręcznie: jedno pytanie ([R7.4.1](#R7.4.1));
-  - strom dostarcza warunek `claude-usage` ([R7.5](#R7.5)); własny warunek to folder `plugins/gates/<název>/`;
+  - strom dostarcza warunek `claude-usage` ([R7.5](#R7.5)); własny warunek to folder `plugins/gates/<nazwa>/`;
   - przebieg bez ustawionego warunku (`--no-gate`) lub z innym (`--gate`) wymaga zgody człowieka.
 - **Obsługa:** terminal: **Ustawienia → Samodzielna praca agenta → Praca bez przerwy pod warunkiem: …**
-  (warunek albo **brak**); `strom config set run.gate "<název> [co jí předat]"`, `strom config unset run.gate`; oba
+  (warunek albo **brak**); `strom config set run.gate "<nazwa> [co jej przekazać]"`, `strom config unset run.gate`; oba
   potwierdza człowiek. Aplikacja: **Przegląd badania** przy czekającym przebiegu pokazuje **Wstrzymano** i **wznowi
   o …**.
 - **Obowiązuje od:** badanie 1.2.0, aplikacja 3.5.0 (stan Wstrzymano)
@@ -252,13 +252,28 @@ upłynęło od jego odnowienia (dzień ≈ 14,3 %), z wykorzystaniem tygodnia. S
 ## R7.6 Limit subskrypcji zatrzymuje przebieg
 
 Gdy agent w trakcie sesji natrafi na limit swojej subskrypcji, sesja się zamyka, a przebieg się kończy: **limit
-subskrypcji (odnowi się …)**. Przebieg nie czeka nawet z `--loop`. Nie zależy to od warunku.
+subskrypcji (odnowi się …)**. Do badania 1.33.0 przebieg nie czeka nawet z `--loop` i nie zależy to od warunku; od
+1.34.0 zob. niżej.
 
 - **Granice:** zadanie wraca do kolejki; czas odnowienia pokazuje się tylko wtedy, gdy podał go agent. Czekać potrafi
   tylko warunek.
 - **Obowiązuje od:** badanie 1.0.0
+- **Od badania 1.34.0:** przebieg, który trwa sam (`--loop`, `--until`) i ma warunek ([R7.4](#R7.4)), po limicie się
+  nie kończy. Zadanie wraca do kolejki (jako następne może przyjść inne), przebieg czeka do odnowienia limitu i minutę
+  dłużej, potem ponownie pyta warunek i pracuje dalej. Terminal: „⏸ limit planu agenta wyczerpał się (okno
+  pięciogodzinne) – oczekiwanie do jego odnowienia (…), potem ponowne pytanie warunku i praca idzie dalej (Ctrl-C
+  kończy przebieg)”; aplikacja Strom pokazuje przebieg jako wstrzymany z powodem.
+  - czas odnowienia: z informacji agenta o wyczerpanym oknie planu (okno pięciogodzinne, tydzień; wyczerpane oba:
+    późniejsze z nich), w przeciwnym razie z czasu, który podał agent (data i godzina, „in 2 hours”, „7pm” tylko
+    w strefie czasowej komputera). Czasu za więcej niż 8 dni ani w przeszłości się nie bierze. Nieznany czas:
+    przebieg czeka 15 minut („…, czas odnowienia nieznany – oczekiwanie do …, potem ponowne pytanie warunku”);
+  - odnowienie dopiero po czasie `--until`: przebieg kończy się **limit czasu**;
+  - sesja przerwana limitem nie liczy się zadaniu jako niepowodzenie agenta;
+  - bez zmian: przebieg ręczny (jedno zadanie, `--tasks n`, `--max` bez `--loop`) i przebieg bez warunku kończą się
+    **limit subskrypcji** jak dotąd. Komunikat Claude Code „You've hit your limit · resets …” i odmowa agenta z powodu
+    limitu są traktowane jako limit.
 
-<!-- zdroj: research:src/commands/session.ts:1196-1206 closeSession (session.limit), :1255-1259 · src/core/session.ts:248-262 · runners/runner.ts:226 looksLikeLimit · cs.json ui.run.stop.limit, ui.run.stop.resets -->
+<!-- zdroj: research:src/commands/session.ts:1196-1206 closeSession (session.limit), :1255-1259 · src/core/session.ts:248-262 · runners/runner.ts:226 looksLikeLimit · cs.json ui.run.stop.limit, ui.run.stop.resets · 1.34.0: research:8f24e9f7 src/commands/session.ts:1453-1483 (gateHolds && gate, limitResume, limitReserve, DEFAULT_WAIT_MS 15 min, until → time, markPaused), :1363 metrics.limit, src/core/planlimit.ts limitResume, timeOf, LIMIT_RESERVE_MS 60 s, FURTHEST_MS · 03146702 (B8: „You've hit your limit“, odmítnutý rate_limit_event) · cs.json ui.run.limit.wait, ui.run.limit.unknown, ui.run.limit.why, ui.run.limit.five_hour, ui.run.limit.seven_day · dirigent:prace/1115-vyzkum-k036-limit-obnova -->
 
 <a id="R7.7"></a>
 ## R7.7 Niezalogowany agent

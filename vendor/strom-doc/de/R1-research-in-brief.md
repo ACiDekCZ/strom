@@ -155,7 +155,8 @@ wie sicher sie ist und auf welcher Quelle sie beruht. Der Befehl liest nur: er p
     widerlegte Angaben nur mit `--status disproven`;
   - die Beziehung zur Ausgangsperson (Einstellung `main.person`, sonst `--of P…`) steht in Worten in der Sprache der
     Forschung, mit der Seite und der Generation, zum Beispiel **Großvater, väterlicherseits (G3)**. G1 ist die
-    Ausgangsperson, G2 ihre Eltern;
+    Ausgangsperson, G2 ihre Eltern. Ohne Ausgangsperson, oder wenn sie zurückgezogen ist, lehnt `strom query` ab und
+    sagt, wie es weitergeht (`strom config set main.person P…` oder `--of P…`);
   - wessen Angaben (`--kin`): `ancestors` die Ausgangsperson und die direkte Linie; `blood` (Standard) die Vorfahren
     und alle ihre Nachkommen, auch die Seitenzweige; `family` die Blutsverwandten und ihre Partner; `all` der ganze
     Baum;
@@ -165,7 +166,9 @@ wie sicher sie ist und auf welcher Quelle sie beruht. Der Befehl liest nur: er p
     des Nachnamens: Horáková), `--source` (S… oder Wörter des Titels), `--status`;
   - ein Wort wird am Anfang eines Wortes im Wert, in der Bezeichnung oder in der Ursache der Angabe gesucht, nicht in
     der Notiz, ohne Rücksicht auf diakritische Zeichen. Ein Beruf wird auch in tschechischen, deutschen, lateinischen
-    und polnischen Formen gesucht (mlynar findet auch Müller und molitor); der Kopf der Ausgabe nennt die Formen.
+    und polnischen Formen gesucht (mlynar findet auch Müller und molitor) und in den eigenen Formen der Forschung ([R1.9.2](#R1.9.2)); der Kopf
+    der Ausgabe nennt die Formen. Ein Beruf, den keine Liste kennt, wird nur in der geschriebenen Form gesucht, und
+    die Ausgabe sagt es.
     `--exact` sucht nur das Wort selbst;
   - `--count` gibt nur die Zahlen der Personen und Angaben aus; `--by generation|kin|place|decade|surname` teilt sie
     in Gruppen (nach Generation haben die Seitenzweige eine eigene Gruppe), ohne `--count` die Zeilen nach Gruppen. Die
@@ -188,7 +191,7 @@ wie sicher sie ist und auf welcher Quelle sie beruht. Der Befehl liest nur: er p
   `strom query`.
 - **Gilt seit:** Forschung 1.32.0
 
-<!-- zdroj: research:src/commands/query.ts (popis, volby, KIN_SETS, FACT_GROUPS, LIST_PAGE_MAX=100, elsewhereOf, tries) · src/core/query.ts (hlavička, kinSet, SHOWN_STATUSES, ASKED_STATUSES) · src/core/occupations.ts · src/commands/analysis.ts help find („the facts recorded of people … strom query“) · src/cli/execute.ts RENAMED, renamedCommand · src/agents/files.ts AGENTS.md „Questions over the data“ · src/commands/start.ts app --person · cs.json ui.query.*, ui.error.command.renamed · test/cli/query.test.ts · CHANGELOG.cs.md 1.32.0 · spec 081 K1–K7 -->
+<!-- zdroj: research:src/commands/query.ts (popis, volby, KIN_SETS, FACT_GROUPS, LIST_PAGE_MAX=100, elsewhereOf, tries) · src/core/query.ts (hlavička, kinSet, SHOWN_STATUSES, ASKED_STATUSES) · src/core/occupations.ts · src/commands/analysis.ts help find („the facts recorded of people … strom query“) · src/cli/execute.ts RENAMED, renamedCommand · src/agents/files.ts AGENTS.md „Questions over the data“ · src/commands/start.ts app --person · cs.json ui.query.*, ui.error.command.renamed · test/cli/query.test.ts · CHANGELOG.cs.md 1.32.0 · spec 081 K1–K7 · query bez hlavní osoby / odvolaná: src/commands/query.ts ofPerson (query.no-main, query.retracted), cs.json ui.error.query.*, commit 6cdab11b -->
 
 <a id="R1.9.1"></a>
 ### R1.9.1 Erzählungen: `strom query --story`
@@ -209,3 +212,38 @@ wie sicher sie ist und auf welcher Quelle sie beruht. Der Befehl liest nur: er p
 - **Gilt seit:** Forschung 1.32.0
 
 <!-- zdroj: research:src/commands/query.ts (--story, --by place|decade odmítnuto, storyText, storyData) · src/core/query.ts findStories (hlavička: sourcesNamed, storySources, basis sentence|story) · cs.json ui.query.story.* · src/agents/files.ts „A story retells the facts“ · CHANGELOG.cs.md 1.32.0 -->
+
+<a id="R1.9.2"></a>
+### R1.9.2 Eigene Formen von Berufen: `strom occupation`
+
+Die eingebaute Liste der Berufe (83 Berufe, jeder in tschechischen, deutschen, lateinischen und polnischen Formen)
+lässt sich um eigene Formen der Forschung ergänzen: eine andere Sprache, eine alte Schreibweise oder ein Beruf, den
+die Liste nicht kennt. `strom query --occupation` ([R1.9](#R1.9)) findet dann alle Formen als einen Beruf, auch mit
+`--exact`, `--count` und `--story` ([R1.9.1](#R1.9.1)).
+
+- **Grenzen:**
+  - `strom occupation add` nimmt mindestens zwei Formen eines Berufs. Eine Form, die die Liste kennt, nimmt die
+    anderen zu sich (eine weitere Form des Müllers); Formen, die die Liste nicht kennt, sind ein neuer Beruf. Eine
+    Form ist in der Sprache der Forschung, eine andere Sprache wird mit ihrem Code vor der Form geschrieben:
+    `de:Ölschläger`. Sind die Formen schon ein Beruf, wird nichts geschrieben;
+  - jede Gruppe hält fest, wer sie hinzugefügt hat (der Mensch von Hand oder der Agent bei der Forschung), den Tag
+    und mit `--source` die Quelle, in der die Form vorkam;
+  - der Mensch fügt Formen in seinem eigenen Terminal hinzu und nimmt sie heraus, ohne Agent, und darf jede eigene
+    Form der Forschung herausnehmen. Der Agent nimmt nur eine Form heraus, die ein Agent hinzugefügt hat; was der
+    Mensch hinzugefügt hat, ändert er nie und nimmt es nie heraus. Die eingebaute Liste bleibt, wie sie ist;
+  - `strom query` sagt, wenn der gesuchte Beruf in keiner Liste steht (gesucht wird nur die geschriebene Form), und
+    nennt den Befehl, der seine Formen hinzufügt: „{Wort}: nicht in der Liste der Berufe, nur diese Form gesucht;
+    weitere Formen fügt hinzu: strom occupation add {Wort} <Form> [la:<Form> …]“;
+  - die eigene Liste ist die Datei der Forschung `quality/occupations.json` unter dem Siegel
+    ([R14](R14-seal-and-integrity.md)). Lässt sie sich nicht lesen, suchen `strom query` und `strom occupation list`
+    nur in der eingebauten Liste und sagen es in einer Zeile mit `strom repair`; `add` und `remove` schreiben nichts
+    darüber.
+- **Nur Methodik:** einen Beruf, den `strom query` in keiner Liste findet, oder eine Form aus einer Quelle, die die
+  Liste nicht hat, fügt der Agent mit `strom occupation add … --source S…` samt den anderen Formen hinzu und sagt es
+  dem Nutzer.
+- **Bedienung:** Terminal: `strom occupation add olejník de:Ölschläger`; `strom occupation list` (die Gruppen der
+  Forschung: wer, wann, Quellen), `strom occupation list mlynar` (die Formen eines Berufs, eigene mit `*`),
+  `strom occupation list --all` (alle Berufe); `strom occupation remove de:Ölschläger`.
+- **Gilt seit:** Forschung 1.32.0
+
+<!-- zdroj: research:src/commands/occupation.ts (add: aspoň dva tvary, --source ověřený pramen, by human | agent podle tree.personWrites; list: bez slova skupiny s by/at/sources, se slovem tvary s * u vlastních, --all; remove: agent jen své, persons, builtin, unknown) · src/core/occupations.ts (OCCUPATIONS_FILE quality/occupations.json, parseForm kód jazyka, addOccupation: nic se nezapíše, když už jedno povolání; mergeOccupations, ownOrRefuse: nečitelný soubor → UsageError strom repair; writeOwn putFile zapečetěná operace) · src/commands/query.ts:254–265 (ui.query.occupation.unknown, ui.occupation.unreadable) · assets/terms/occupations.json (83 skupin) · src/agents/files.ts AGENTS.md „An occupation strom query says is in no list“ · cs.json ui.occupation.*, ui.query.occupation.unknown · commity 84e7fc0e, 0abe8793 · CHANGELOG.cs.md 1.32.0 -->

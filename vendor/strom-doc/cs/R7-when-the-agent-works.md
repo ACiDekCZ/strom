@@ -232,12 +232,26 @@ jeho obnovení (den ≈ 14,3 %), s využitím týdne. Sezení začne, jen když 
 ## R7.6 Limit předplatného zastaví běh
 
 Když agent během sezení narazí na limit svého předplatného, sezení se zavře a běh skončí: **limit předplatného
-(obnoví se …)**. Běh nečeká ani s `--loop`. Nezávisí to na podmínce.
+(obnoví se …)**. Do výzkumu 1.33.0 běh nečeká ani s `--loop` a nezávisí to na podmínce; od 1.34.0 viz níže.
 
 - **Hranice:** úkol se vrátí do fronty; čas obnovení se ukáže, jen když ho agent řekl. Čekat umí jen podmínka.
 - **Platí od:** výzkum 1.0.0
+- **Od výzkumu 1.34.0:** běh, který pokračuje sám (`--loop`, `--until`) a má podmínku ([R7.4](#R7.4)), po limitu
+  neskončí. Úkol se vrátí do fronty (jako další může přijít jiný), běh počká do obnovy limitu a minutu navíc, pak se
+  znovu zeptá podmínky a pokračuje. Terminál: „⏸ limit plánu agenta se vyčerpal (pětihodinové okno) – čekání do jeho
+  obnovy (…), pak nový dotaz na podmínku a práce pokračuje (Ctrl-C běh ukončí)“; aplikace Strom ukazuje běh jako
+  pozastavený s důvodem.
+  - čas obnovy: z údaje agenta o vyčerpaném okně plánu (pětihodinové okno, týden; vyčerpaná obě: pozdější z nich),
+    jinak z času, který agent řekl (datum a čas, „in 2 hours“, „7pm“ jen v časovém pásmu počítače). Čas za víc než
+    8 dní nebo v minulosti se nebere. Neznámý čas: běh čeká 15 minut („…, čas obnovy neznámý – čekání do …, pak nový
+    dotaz na podmínku“);
+  - obnova až po čase `--until`: běh skončí **časový limit**;
+  - sezení přerušené limitem se úkolu nepočítá jako neúspěch agenta;
+  - beze změny: ruční běh (jeden úkol, `--tasks n`, `--max` bez `--loop`) a běh bez podmínky skončí **limit
+    předplatného** jako dřív. Claude Code hláška „You've hit your limit · resets …“ i odmítnutí agenta kvůli limitu
+    se berou jako limit.
 
-<!-- zdroj: research:src/commands/session.ts:1196-1206 closeSession (session.limit), :1255-1259 · src/core/session.ts:248-262 · runners/runner.ts:226 looksLikeLimit · cs.json ui.run.stop.limit, ui.run.stop.resets -->
+<!-- zdroj: research:src/commands/session.ts:1196-1206 closeSession (session.limit), :1255-1259 · src/core/session.ts:248-262 · runners/runner.ts:226 looksLikeLimit · cs.json ui.run.stop.limit, ui.run.stop.resets · 1.34.0: research:8f24e9f7 src/commands/session.ts:1453-1483 (gateHolds && gate, limitResume, limitReserve, DEFAULT_WAIT_MS 15 min, until → time, markPaused), :1363 metrics.limit, src/core/planlimit.ts limitResume, timeOf, LIMIT_RESERVE_MS 60 s, FURTHEST_MS · 03146702 (B8: „You've hit your limit“, odmítnutý rate_limit_event) · cs.json ui.run.limit.wait, ui.run.limit.unknown, ui.run.limit.why, ui.run.limit.five_hour, ui.run.limit.seven_day · dirigent:prace/1115-vyzkum-k036-limit-obnova -->
 
 <a id="R7.7"></a>
 ## R7.7 Nepřihlášený agent

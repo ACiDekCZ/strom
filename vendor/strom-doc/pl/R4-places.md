@@ -67,7 +67,7 @@ miejsce należało: parafia, gmina, powiat i inne, zawsze z latami od–do.
   badanie usuwa tylko z podaniem powodu.
 - **Obsługa:** aplikacja: w szczegółach miejsca **Dziś**, **Wcześniej**, **Inna nazwa**, **Inny zapis**; etykiety
   **forma główna**, **inny zapis**, **dawna nazwa**, **inna nazwa** · terminal: `strom place identify|verify --name --alt
-  <název@jazyk:od-do> --form --jurisdiction <druh:název:od-do>`, `strom place names <L…> --drop <název> --why`
+  <název@jazyk:od-do> --form --jurisdiction <druh:název:od-do>`, `strom place names <L…> --drop <nazwa> --why`
 - **Obowiązuje od:** badanie 1.25.0; dzisiejsza nazwa jako pierwsza i `strom place names` od badania 1.25.2
 
 <!-- zdroj: research:src/core/placeid.ts todayName, parseJurisdiction, dropPlaceNames · research:src/core/places.ts JURISDICTIONS = parish, civil, diocese, manor, district, county, state, other · research:src/commands/placeid.ts:167 verify, :258 names · research:src/brief/places.ts (today's name rule) · app:src/strings.ts cs places tags/detail -->
@@ -217,7 +217,9 @@ człowiek ją włączy. Badanie przypisuje w tym celu miejsca do regionów histo
 - **Obsługa:** aplikacja: **Historia miejsc**, **Znajdź historię miejsca i okolic…**, **Przypisz region**, stany
   **Historia miejsca: czeka**, **Historia miejsca: trwa wyszukiwanie**, **Badanie nie odnalazło miejsca** · terminal:
   **Ustawienia → Samodzielna praca agenta → Historia**; `strom config set experiments.history on`,
-  `strom history place <L…>`, `strom history map --unlocated`
-- **Obowiązuje od:** badanie 1.22.0
+  `strom history place <L…>`, `strom history map "<miejsce>" --region <id>[:<od>-<do>]` (raz dla każdego regionu,
+  do którego miejsce należało) albo `--unlocated --why "…"`, `strom history list --event <id>` (jedno wydarzenie
+  historii)
+- **Obowiązuje od:** badanie 1.22.0; `history list --event` 1.33.0
 
-<!-- zdroj: research:src/core/pastevents.ts PACE_EVERY (:2621), experiments.historyPace · research:src/core/placehistory.ts · research:src/commands/history.ts place, map --unlocated, adopt · research:assets/lang/cs.json ui.alone.title, ui.alone.history · app:src/strings.ts history.* (v3.21.2 :13121–13235) · CHANGELOG.cs.md 1.22.0 (l.229) -->
+<!-- zdroj: research:src/core/pastevents.ts PACE_EVERY (:2621), experiments.historyPace · research:src/core/placehistory.ts · research:src/commands/history.ts place, map --unlocated, adopt · research:assets/lang/cs.json ui.alone.title, ui.alone.history · app:src/strings.ts history.* (v3.21.2 :13121–13235) · CHANGELOG.cs.md 1.22.0 (l.229) · 1.33.0: research:926375ea history list --event · c50f80f5 history map bez --region (nápověda celého řádku) · strom help history map, history list -->

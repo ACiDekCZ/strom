@@ -118,7 +118,7 @@ Stejné sčítání nebo bydliště zapsané zvlášť u několika osob (napří
 najde Kvalita dat a nabídne ho spojit. Nic se nespojí samo, ani při aktualizaci dat.
 
 - **Kde:** **Kvalita dat**, oddíl **Stopy**:
-  - jedna skupina: „{událost} {datum}, {místo} – zapsáno zvlášť u N osob.“ s **Spojit do jedné události**;
+  - jedna skupina: „{událost} {datum}, {místo}, {dům} – zapsáno zvlášť u N osob.“ (dům, jen je-li zapsaný) s **Spojit do jedné události**;
   - víc skupin: „N událostí je zapsaných zvlášť u více osob.“ s **Projít po jedné**. Dialog **Události zapsané
     zvlášť u více osob · N** nabídne skupiny po jedné: **Spojit do jedné události**, **Později** (skupina se do zavření dialogu
     neukáže), **Zpět** (zpět na kontrolu).
@@ -129,7 +129,7 @@ najde Kvalita dat a nabídne ho spojit. Nic se nespojí samo, ani při aktualiza
     nabídne se **Sjednotit kopie** ([A10.3](#A10.3));
   - skupina, ve které už společná událost je, se k ní připojí („Připojí se ke společné události N osob.“);
   - spojení je jeden krok **Zpět** („{událost}: spojeno do jedné události u N osob.“).
-- **Ovládání:** **Přehled stromu → Kvalita dat → Detaily validace**, oddíl **Stopy**.
+- **Ovládání:** **Přehled stromu → Kvalita dat → Rychlé akce → Detaily validace**, oddíl **Stopy**.
 - **Platí od:** aplikace 3.28.0
 
 <!-- zdroj: app:80c2ffb9 src/ui/same-event-join-ui.ts · src/shared-events.ts sameEventKey (domy dělí skupiny) · src/validation.ts (stopa info) · strings.ts validation.sameJoinLead, sameJoinSummary, sameJoinReview, sameJoin, sameJoinTitle, sameJoinHint, sameJoinToShare, sameJoinDone, later, nameLinkBack · spec 085 K1.6 b · dirigent:prace/1113-app-085-nalezy Výsledek -->
@@ -141,9 +141,10 @@ Kmotr, svědek, oddávající a další účastník se zapisují u události, kt
 účastník propojený s osobou stromu, ukáže se ta událost i v jejím životě.
 
 - **Role:** **Kmotr / kmotra**, **Svědek**, **Oddávající / křtící**, **Přítomen**; ze souborů i **Porodní bába**
-  a **Oznamovatel**. Účastník je zapsaný jménem, jak je v prameni, a s bližším určením (řemeslo, „soused“…).
+  a **Oznamovatel**. Účastník je zapsaný jménem, jak je v prameni, a s bližším určením (řemeslo, „soused“…). Slovo
+  role na začátku poznámky účastníka ze souboru se pozná i v ženském tvaru („Oznamovatelka“).
 - **V životě propojené osoby:** odvozený řádek, například „Kmotr · křest: …“, „Kmotra · křest: …“, „Svědek · sňatek:
-  …“, „Svědkyně · sňatek: …“, „Oddávající · sňatek: …“, „Porodní bába · křest: …“, „Oznamovatel · úmrtí: …“. Je
+  …“, „Svědkyně · sňatek: …“, „Oddávající · sňatek: …“, „Porodní bába · křest: …“, „Oznamovatel · úmrtí: …“, u ženy „Oznamovatelka · úmrtí: …“ (u kterékoli události i ve shrnutí). Je
   v seznamu událostí osoby a na stránce osoby v oddílu **Časová osa života**; shrnutí stránky osoby má „Kmotr a svědek u“ (u ženy
   „Kmotra a svědkyně u“).
 - **Hranice:**
@@ -154,9 +155,9 @@ Kmotr, svědek, oddávající a další účastník se zapisují u události, kt
 - **Ovládání:** úprava události, oddíl **Kmotři a svědci**: **+ Přidat**, **Propojit s osobou ve stromu**; propojený
   účastník má značku **ve stromu**. Nabídka odvozeného řádku: **Otevřít osobu**, **Zapsat i jako vlastní událost**,
   **Zrušit propojení**.
-- **Platí od:** aplikace 3.28.0
+- **Platí od:** aplikace 3.28.0; ženský tvar oznamovatelky od 3.29.0
 
-<!-- zdroj: app:80c2ffb9 strings.ts events.roles, extraRoles, participants, addParticipant, participantName, participantNote, participantLink, participantInTree, derived*, derivedMenu, recordOwn, unlink · personPage godparentWitness · src/ui/shared-event-ui.ts (odvozené řádky jen v seznamu událostí a v Časové ose života) · spec 085 K2.1 · dirigent:prace/1113-app-sdilena-udalost Výsledek -->
+<!-- zdroj: app:80c2ffb9 strings.ts events.roles, extraRoles, participants, addParticipant, participantName, participantNote, participantLink, participantInTree, derived*, derivedMenu, recordOwn, unlink · personPage godparentWitness · src/ui/shared-event-ui.ts (odvozené řádky jen v seznamu událostí a v Časové ose života) · spec 085 K2.1 · dirigent:prace/1113-app-sdilena-udalost Výsledek · 3.29.0: app:844985bc ženské tvary (cs Oznamovatelka, de Anzeigende, pl Zgłaszająca; pl Udzielająca ślubu / Celebrantka; de Amtsperson všude; en jeden tvar, pl świadek, cs oddávající beze změny) · 8bbc2ec6 src/godparents.ts EXTRA_ROLE_WORDS (oznamovatel(ka), zgłaszający/a, akuszerka) -->
 
 <a id="A10.5.1"></a>
 ### A10.5.1 Zapsat i jako vlastní událost

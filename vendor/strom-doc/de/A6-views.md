@@ -134,6 +134,42 @@ Bildschirms.
 
 <!-- zdroj: app:f5d56ed3 src/bulk-family.ts collectBulkFamily (childrenOf osoba; siblingsOf osoba a předci v pohledu s rodiči v pohledu; maxGeneration), bulkParents, bulkNewIds (drawnPersonIds, kroky 1–5 pipeline), BULK_CONFIRM_ABOVE 150, BULK_TWO_GENERATIONS 2 · src/renderer.ts bulkFamilyPlan (jen family), bulkFamilyState (offer/on/none), bulkFamilyScreens (ceil šířka × zoom / plátno), showBulkFamily → showChildrenOf (jeden krok historie, zoom beze změny, kotva), undoBulkFamily, bulkStepOf (jen při stejné hloubce), forgetBulkSteps při změně hloubky, resetChildrenShown při změně fokusu, pohledu, stromu, hiddenShownCount (+1 za krok) · src/ui/bulk-family-ui.ts confirmBulkFamily (Esc, klik vedle, resize = zrušit; two jen m > 0 a m ≠ n), runBulkFamily, updateBulkFamilySwitches (title treeTip/menuOff/treeNone, aria-disabled) · src/ui/context-menu.ts bulkFamilyRows (offer: menu, +n, menuSub; on: menuOff) · src/ui/toolbar-fit.ts (tablet: přepínač ustoupí před hledáním, f5d56ed3) · index.html button.bulk-family (telefon skrytý) · strings.ts bulk.*, menu.showChildrenHere, showSiblingsHere, focusBar hideAllShown, history back · app 2eb013ba, cecea43f, 8dc34565, f5d56ed3 · dirigent:prace/1113-app-drobnosti-1112 · ZADANI_DEV_drobnosti-1112 §3 -->
 
+<a id="A6.1.4"></a>
+### A6.1.4 Foto auf der Karte
+
+Die Einstellung **Foto auf der Karte** bestimmt Größe und Form des Fotos der Person auf der Karte im Stammbaum. Die
+Standardwerte **Klein** und **Kreis** lassen die Karte wie bisher.
+
+| | **Klein** | **Mittel** | **Groß** |
+|---|---|---|---|
+| Karte **Normal** | 188 × 64 px | 200 × 64 px | 236 × 96 px |
+| Foto auf der Karte **Normal** | 34 px | 48 px | 80 px |
+| Foto im Kopf der Karte **Detailliert**, **Matrikel**, **Eigene** | 30 px | 44 px | 72 px |
+
+- Eine größere Karte gibt es nur in einer Ansicht, in der mindestens eine gezeigte Person ein Foto hat. Karten ohne
+  Foto sind in dieser Ansicht gleich breit, mit kleinen Initialen, und die Namen einer Reihe stehen auf derselben
+  Höhe. Eine Ansicht ohne Fotos hat Karten von 188 × 64 px.
+- Die Karte **Normal** hat das Foto neben dem Namen. **Detailliert**, **Matrikel** und **Eigene** haben es im Kopf
+  neben Namen und Jahren, die Zeilen der Angaben darunter in voller Breite; die Karte ist um das Foto höher
+  (**Eigene** 70 oder 98 px und 17 px pro Zeile statt 56 px).
+- **Form:** **Kreis** oder **Abgerundetes Quadrat** (Rundung 12 px beim großen Foto, 5 px beim kleinen; ebenso die
+  Initialen). Die Marken der Karte stehen in beiden Formen am Rand des Fotos.
+- **Export:** Bildexport, Plakat und sein PDF auf mehreren Blättern ([A7](A7-book-pages-and-export.md)) zeichnen die
+  Karten mit der gewählten Größe und Form des Fotos wie der Bildschirm: die Karte **Normal** hat ihre Größe vom
+  Bildschirm, **Detailliert** und **Matrikel** haben das Foto links im Kopf. Ein für eine lebende Person
+  verborgenes Foto lässt die Initialen auf der Karte. Eine Ausgabe, in der niemand ein Foto hat, und die Vorgabe
+  **Klein** mit **Kreis** sehen aus wie bisher. Der Satz unter der Einstellung: „Gilt für den Baum, Bildexport und
+  Plakat auf diesem Gerät.“
+- **Grenzen:** die Karte **Kompakt** hat kein Foto: die Zeile bleibt, die Optionen sind ausgeschaltet, und darunter
+  steht „Die kompakte Karte hat kein Foto.“; die gewählte Größe bleibt erhalten. Die Einstellung gehört zum Gerät und
+  wird nicht mit dem Stammbaum gespeichert. Die Vorschau in den Einstellungen zeigt die Größe der Karte („Karte
+  236 × 96 px“).
+- **Bedienung:** **Einstellungen** → **Personenkarte** → **Foto auf der Karte** (zwischen **Kartendetail** und der
+  Vorschau): **Größe** **Klein** · **Mittel** · **Groß**; **Form** **Kreis** · **Abgerundetes Quadrat**.
+- **Gilt seit:** App 3.29.0
+
+<!-- zdroj: app:28480ea1 src/types.ts NORMAL_PHOTO_BOX (188×64/34, 200×64/48, 236×96/80), src/settings.ts (zařízení, výchozí small + circle), src/ui/card-fields-ui.ts, src/renderer.ts · b71d561a src/card-width.ts cardAvatarSize (30/44/72), výška Vlastní 70/98 + 17 na řádek · strings.ts cardDensity.photoTitle, photoSize, photoSmall, photoMedium, photoLarge, photoShape, photoCircle, photoRounded, photoCompact, size · CHANGELOG.cs.md 3.29.0 „Fotka na kartě“ · dirigent:test/vysledek-1115-app-096-fotka.md · spec 096 P1 · export: app:64ae50ca src/export-image.ts, src/renderer.ts (poster, PDF po listech; výchozí small + circle bajt po bajtu jako dřív), strings.ts cardDensity.photoScope · spec 096 P2 -->
+
 <a id="A6.2"></a>
 ## A6.2 Ansicht Nachkommen
 
@@ -803,11 +839,18 @@ Strg+Pos1/Ende verschieben die Auswahl, Esc hebt sie auf.
   Forschung hat 3 Angaben geändert: …“.
 - Eine Angabe lässt sich auch direkt in der Zelle bearbeiten ([A6.7.15](#A6.7.15)).
 - **Grenzen:** in einem schreibgeschützten Stammbaum gibt es kein **Bearbeiten…**.
-- **Bedienung:** Schaltflächen an der ausgewählten Zeile, Zeilenmenü (rechte Maustaste; auch Aufklappen der
-  Verbindungen). Auf dem Telefon öffnet ein Tippen auf die Zeile ein Panel mit den Aktionen und den Verbindungen
-  („Verbindung 1: … · Bearbeiten ›“).
+- **Bedienung:** die Schaltflächen ⌖ ▤ ✎ am Ende der Zeile, über keinem Text einer Zelle: mit der Maus erscheinen
+  sie, sobald der Zeiger auf der Zeile außerhalb von ihnen war, an der ausgewählten Zeile auch mit dem Zeiger
+  anderswo; Zeilenmenü (rechte Maustaste; auch Aufklappen der Verbindungen). Ein Tippen mit dem Finger auf die Zeile
+  (Telefon, schmales Fenster, ein vor allem per Touch bedientes Gerät) öffnet ein Panel mit den Aktionen und den
+  Verbindungen („Verbindung 1: … · Bearbeiten ›“).
+- **Ab App 3.28.0:** ein Klick mit Maus oder Stift wählt auf jedem Gerät nur Zeile und Zelle aus, auch auf einem
+  Notebook mit Touchscreen, einem Tablet mit Maus und in einem schmalen Fenster; es entscheidet der Zeiger des
+  Klicks, nicht das Gerät. Bis 3.27.0 öffnete auf einem Touch-Gerät und in einem schmalen Fenster jeder Klick das
+  Panel der Zeile. Die Aktionen der Zeile stehen an ihrem Ende, sodass die Spalte der Personen auf der ausgewählten
+  Zeile ihre ganze Breite behält.
 
-<!-- zdroj: app:src/ui/table-view/table-ui.ts tableMethods (tableRowAction: tree → Rodina, focus, highlight; open; edit → dialog osoby / panel vztahů na svazku), personOfRow (Partner 1), keepWork · table-refresh.ts keepOrder, watchEdit, changedKeys, bridgeChanges, namesList · table-grid.ts FLASH_MS · strings.ts table.act.*, dblClickHint, actionsOf, unionWith, editMore, staleRow, savedToast, bridgeToast · commity da6b9786, de46ae30, e4a35406 -->
+<!-- zdroj: app:src/ui/table-view/table-ui.ts tableMethods (tableRowAction: tree → Rodina, focus, highlight; open; edit → dialog osoby / panel vztahů na svazku), personOfRow (Partner 1), keepWork · table-refresh.ts keepOrder, watchEdit, changedKeys, bridgeChanges, namesList · table-grid.ts FLASH_MS · strings.ts table.act.*, dblClickHint, actionsOf, unionWith, editMore, staleRow, savedToast, bridgeToast · commity da6b9786, de46ae30, e4a35406 · od 3.28.0: table-grid.ts clickPointerType, isMouseLikePointer, table-ui.ts onRowClick (panel jen klepnutí a isPhoneBar | isCoarsePointer), commit ee38c7a6; rowActions ⌖ ▤ ✎ v .tv-acts-dock, armRowActions (myš a pero), commit 80c2ffb9 -->
 
 <a id="A6.7.9"></a>
 ### A6.7.9 CSV- und XLSX-Export
@@ -1162,7 +1205,7 @@ Tabelle bearbeiten.
 
 - **Kopieren:** Strg/Cmd+C ohne ausgewählten Text kopiert den Text, den die aktive Zelle zeigt, ohne Zeichen, Symbole
   und Marken. Von Hand ausgewählter Text wird wie gewohnt kopiert.
-- **Zellenmenü:** das Zeilenmenü (rechte Maustaste, Umschalt+F10) und auf dem Telefon das Panel der Zeile (Tippen auf
+- **Zellenmenü:** das Zeilenmenü (rechte Maustaste, Umschalt+F10) und das Panel der Zeile (Tippen mit dem Finger auf
   die Zelle) beginnen mit den Möglichkeiten der Zelle **Kopieren**, **Nur „{Wert}“** und **Ohne „{Wert}“** (der Wert
   auf etwa 24 Zeichen gekürzt, mit „…“); darunter stehen die Zeilenaktionen ([A6.7.8](#A6.7.8)). Das Menü öffnet sich
   an der Zelle, auch wenn eine andere Zeile ausgewählt war.
@@ -1190,7 +1233,9 @@ Tabelle bearbeiten.
 
   **Vollständiger Name** wird in der Zelle nicht bearbeitet (er besteht aus mehreren Teilen), ebenso wenig berechnete Zellen,
   Prüfungen, Forschung, Quellenangaben, Anzahlen und Beziehungen; ein Doppelklick darauf öffnet **Bearbeiten…**.
-- **Das Feld** überdeckt die Zelle. **Enter** speichert, **Esc** bricht ab, **Tab** und **Umschalt+Tab** speichern und
+- **Das Feld** steht in der Zelle. Nur in einer Spalte, die schmaler ist als die kleinste Breite des Felds (Text und
+  Datum 100 px, Ort 140 px, Auswahl 90 px), ist das Feld breiter und liegt mit einem Schatten über der Zeile (ab App
+  3.28.0; vorher lag es über der nächsten Zelle). **Enter** speichert, **Esc** bricht ab, **Tab** und **Umschalt+Tab** speichern und
   gehen zur nächsten oder vorigen bearbeitbaren Zelle der Zeile, ein Klick anderswohin speichert. In einer Auswahl speichert ein
   Mausklick den Wert sofort; nach der Wahl mit den Pfeilen speichern ihn Enter, Tab oder ein Klick anderswohin. Das
   Datum wird wie im
@@ -1210,7 +1255,7 @@ Tabelle bearbeiten.
   Maus einen Textcursor.
 - **Gilt seit:** App 3.27.0
 
-<!-- zdroj: app:src/ui/table-view/table-grid.ts copyKey (Ctrl/Cmd+C, copyPlainText), F2, Enter (has-issue → onIssue, has-finds → onFindings, jinak startEditAt, jinak open), Escape, Tab · table-ui.ts showTableRowMenu (cellPart, cell-edit „Upravit buňku“ s F2), tableCellChoices, tableCellSheetBlocks, :1663 úprava na místě ne v jen ke čtení, archivu, na telefonu (isPhoneBar) · table-edit.ts editTargetOf, PERSON_FIELDS (surname: marriedSurname || lastName, birthSurname, marriedSurname, bDate…burPlace, occ), UNION_FIELDS (wDate, wPlace), editChangeOf (normalizeDateInput, první křest a pohřeb, prázdné pole smaže jen údaj, beze jména neuloží) · strings.ts table.cell.copy, only, without, edit, badDate, nameNeeded, editLabel, onlyEmpty, onlyFilled, matchEquals, matchNotEquals, savedToast · commity 05d9a9ab, be9ca8cd, 28aabdc8 · spec 073 U9 (T54 F4, F8, F9) · T54 2. kolo: table-edit.ts PERSON_FIELDS (firstName, gender, refn, dCause, dAgeRec), UNION_FIELDS (wAgeRec, pAgeRec, rec1, rec2, divDate, divPlace, uStatus), WEDDING_FIELDS (ne u unionWithoutWedding), editOptionsOf (GENDERS, UNION_STATUSES v pořadí formuláře svazku), table-grid.ts select (klik myší uloží hned), commity 8fdf52ca, 79764eba (T54 G3, G10) · nabídka u buňky jiného řádku: commit 400ccda8 (T54 G7) -->
+<!-- zdroj: app:src/ui/table-view/table-grid.ts copyKey (Ctrl/Cmd+C, copyPlainText), F2, Enter (has-issue → onIssue, has-finds → onFindings, jinak startEditAt, jinak open), Escape, Tab · table-ui.ts showTableRowMenu (cellPart, cell-edit „Upravit buňku“ s F2), tableCellChoices, tableCellSheetBlocks, :1663 úprava na místě ne v jen ke čtení, archivu, na telefonu (isPhoneBar) · table-edit.ts editTargetOf, PERSON_FIELDS (surname: marriedSurname || lastName, birthSurname, marriedSurname, bDate…burPlace, occ), UNION_FIELDS (wDate, wPlace), editChangeOf (normalizeDateInput, první křest a pohřeb, prázdné pole smaže jen údaj, beze jména neuloží) · strings.ts table.cell.copy, only, without, edit, badDate, nameNeeded, editLabel, onlyEmpty, onlyFilled, matchEquals, matchNotEquals, savedToast · commity 05d9a9ab, be9ca8cd, 28aabdc8 · spec 073 U9 (T54 F4, F8, F9) · T54 2. kolo: table-edit.ts PERSON_FIELDS (firstName, gender, refn, dCause, dAgeRec), UNION_FIELDS (wAgeRec, pAgeRec, rec1, rec2, divDate, divPlace, uStatus), WEDDING_FIELDS (ne u unionWithoutWedding), editOptionsOf (GENDERS, UNION_STATUSES v pořadí formuláře svazku), table-grid.ts select (klik myší uloží hned), commity 8fdf52ca, 79764eba (T54 G3, G10) · nabídka u buňky jiného řádku: commit 400ccda8 (T54 G7) · pole v buňce: table-grid.ts EDITOR_MIN_WIDTH (text 100, date 100, place 140, select 90), placeEditor, commit 80c2ffb9 · panel klepnutím: commit ee38c7a6 -->
 
 <a id="A6.8"></a>
 ## A6.8 Ansicht in einem eigenen Fenster

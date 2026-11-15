@@ -2,8 +2,8 @@
 # A10 Ein Ereignis mehrerer Personen
 
 Eine Volkszählung, ein Wohnort oder eine Auswanderung eines ganzen Haushalts wird einmal eingetragen und gilt für
-alle, die dabei waren. Ein Pate, Zeuge oder Trauender, der beim Ereignis einer anderen Person eingetragen ist,
-erscheint auch im Leben des Paten, wenn er mit einer Person im Stammbaum verknüpft ist. Das Kapitel beschreibt die
+alle, die dabei waren. Ein Pate, Zeuge oder eine Amtsperson, eingetragen beim Ereignis einer anderen Person,
+erscheint auch im Leben dieses Beteiligten, wenn er mit einer Person im Stammbaum verknüpft ist. Das Kapitel beschreibt die
 Strom-App 3.28.0 und die Forschung 1.32.0. Wie ein gemeinsames Ereignis in GEDCOM gelesen und geschrieben wird, sagen
 [A2.1](A2-loading-a-family-tree.md#A2.1) und [A2.7](A2-loading-a-family-tree.md#A2.7).
 
@@ -133,7 +133,7 @@ Dieselbe Volkszählung oder denselben Wohnort, bei mehreren Personen getrennt ei
 wird von selbst verbunden, auch nicht bei einer Aktualisierung der Daten.
 
 - **Wo:** **Datenqualität**, Abschnitt **Hinweise**:
-  - eine Gruppe: „{Ereignis} {Datum}, {Ort} – bei N Personen getrennt eingetragen.“ mit **Zu einem Ereignis
+  - eine Gruppe: „{Ereignis} {Datum}, {Ort}, {Haus} – bei N Personen getrennt eingetragen.“ (das Haus nur, wenn eingetragen) mit **Zu einem Ereignis
     verbinden**;
   - mehrere Gruppen: „N Ereignisse sind bei mehreren Personen getrennt eingetragen.“ mit **Einzeln durchgehen**. Der
     Dialog **Bei mehreren Personen getrennt eingetragene Ereignisse · N** bietet die Gruppen einzeln an: **Zu einem
@@ -147,7 +147,7 @@ wird von selbst verbunden, auch nicht bei einer Aktualisierung der Daten.
   - eine Gruppe, in der schon ein gemeinsames Ereignis ist, wird ihm angeschlossen („Wird dem gemeinsamen Ereignis
     von N Personen angeschlossen.“);
   - das Verbinden ist ein Schritt **Rückgängig** („{Ereignis}: bei N Personen zu einem Ereignis verbunden.“).
-- **Bedienung:** **Stammbaum-Überblick → Datenqualität → Validierungsdetails**, Abschnitt **Hinweise**.
+- **Bedienung:** **Stammbaum-Überblick → Datenqualität → Schnellaktionen → Validierungsdetails**, Abschnitt **Hinweise**.
 - **Gilt seit:** App 3.28.0
 
 <!-- zdroj: app:80c2ffb9 src/ui/same-event-join-ui.ts · src/shared-events.ts sameEventKey (domy dělí skupiny) · src/validation.ts (stopa info) · strings.ts validation.sameJoinLead, sameJoinSummary, sameJoinReview, sameJoin, sameJoinTitle, sameJoinHint, sameJoinToShare, sameJoinDone, later, nameLinkBack · spec 085 K1.6 b · dirigent:prace/1113-app-085-nalezy Výsledek -->
@@ -155,16 +155,18 @@ wird von selbst verbunden, auch nicht bei einer Aktualisierung der Daten.
 <a id="A10.5"></a>
 ## A10.5 Paten, Zeugen und weitere Beteiligte im Leben einer Person
 
-Pate, Zeuge, Trauender und weitere Beteiligte werden bei dem Ereignis eingetragen, an dem sie beteiligt waren: bei
+Pate, Zeuge, Amtsperson und weitere Beteiligte werden bei dem Ereignis eingetragen, an dem sie beteiligt waren: bei
 Taufe, Heirat, Tod. Ist ein Beteiligter mit einer Person des Stammbaums verknüpft, erscheint dieses Ereignis auch in
 ihrem Leben.
 
 - **Rollen:** **Pate/Patin**, **Zeuge**, **Amtsperson**, **Anwesend**; aus Dateien auch **Hebamme** und
   **Anzeigender**. Ein Beteiligter ist mit dem Namen eingetragen, wie er in der Quelle steht, und mit einem Detail
-  (Gewerbe, „Nachbar“…).
+  (Gewerbe, „Nachbar“…). Das Rollenwort am Anfang der Notiz eines Beteiligten aus einer Datei wird auch in der
+  weiblichen Form erkannt („Anzeigende“, cs „Oznamovatelka“, pl „Zgłaszająca“).
 - **Im Leben der verknüpften Person:** eine abgeleitete Zeile, zum Beispiel „Pate · Taufe: …“, „Patin · Taufe: …“,
-  „Trauzeuge · Heirat: …“, „Trauzeugin · Heirat: …“, „Trauender · Heirat: …“, „Hebamme · Taufe: …“, „Anzeigender ·
-  Tod: …“. Sie steht in der Liste der Ereignisse der Person und auf der Personenseite im Abschnitt **Lebenslauf**;
+  „Trauzeuge · Heirat: …“, „Trauzeugin · Heirat: …“, „Amtsperson · Heirat: …“, „Hebamme · Taufe: …“, „Anzeigender ·
+  Tod: …“, bei einer Frau „Anzeigende · Tod: …“ (bei jedem Ereignis und in der Zusammenfassung). Die Amtsperson heißt
+  bei der Heirat wie bei der Taufe und in der Tabelle **Amtsperson**. Sie steht in der Liste der Ereignisse der Person und auf der Personenseite im Abschnitt **Lebenslauf**;
   die Zusammenfassung der Personenseite hat „Pate und Zeuge bei“ (bei einer Frau „Patin und Zeugin bei“).
 - **Grenzen:**
   - eine abgeleitete Zeile ist kein eigenes Ereignis der Person: sie geht nicht in GEDCOM, die Tabelle, die Karte, das
@@ -176,9 +178,9 @@ ihrem Leben.
 - **Bedienung:** Bearbeiten des Ereignisses, Abschnitt **Paten & Zeugen**: **+ Hinzufügen**, **Mit jemandem im
   Stammbaum verknüpfen**; ein verknüpfter Beteiligter hat die Marke **im Stammbaum**. Das Menü einer abgeleiteten
   Zeile: **Person öffnen**, **Auch als eigenes Ereignis eintragen**, **Verknüpfung lösen**.
-- **Gilt seit:** App 3.28.0
+- **Gilt seit:** App 3.28.0; „Anzeigende“ und „Amtsperson · Heirat“ seit 3.29.0
 
-<!-- zdroj: app:80c2ffb9 strings.ts events.roles, extraRoles, participants, addParticipant, participantName, participantNote, participantLink, participantInTree, derived*, derivedMenu, recordOwn, unlink · personPage godparentWitness · src/ui/shared-event-ui.ts (odvozené řádky jen v seznamu událostí a v Časové ose života) · spec 085 K2.1 · dirigent:prace/1113-app-sdilena-udalost Výsledek -->
+<!-- zdroj: app:80c2ffb9 strings.ts events.roles, extraRoles, participants, addParticipant, participantName, participantNote, participantLink, participantInTree, derived*, derivedMenu, recordOwn, unlink · personPage godparentWitness · src/ui/shared-event-ui.ts (odvozené řádky jen v seznamu událostí a v Časové ose života) · spec 085 K2.1 · dirigent:prace/1113-app-sdilena-udalost Výsledek · 3.29.0: app:844985bc ženské tvary (cs Oznamovatelka, de Anzeigende, pl Zgłaszająca; pl Udzielająca ślubu / Celebrantka; de Amtsperson všude; en jeden tvar, pl świadek, cs oddávající beze změny) · 8bbc2ec6 src/godparents.ts EXTRA_ROLE_WORDS (oznamovatel(ka), zgłaszający/a, akuszerka) -->
 
 <a id="A10.5.1"></a>
 ### A10.5.1 Auch als eigenes Ereignis eintragen

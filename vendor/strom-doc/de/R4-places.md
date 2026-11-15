@@ -72,7 +72,7 @@ von–bis.
   Zugehörigkeit entfernt die Forschung nur mit Begründung.
 - **Bedienung:** App: im Detail des Ortes **Heute**, **Früher**, **Anderer Name**, **Andere Schreibung**; Etiketten
   **Hauptform**, **andere Schreibung**, **alter Name**, **anderer Name** · Terminal: `strom place identify|verify
-  --name --alt <název@jazyk:od-do> --form --jurisdiction <druh:název:od-do>`, `strom place names <L…> --drop <název>
+  --name --alt <název@jazyk:od-do> --form --jurisdiction <druh:název:od-do>`, `strom place names <L…> --drop <Name>
   --why`
 - **Gilt seit:** Forschung 1.25.0; der heutige Name als erster und `strom place names` seit Forschung 1.25.2
 
@@ -192,7 +192,7 @@ Warteschlange und auch eine einmalige Korrektur der Einträge von Orten. Die Rü
 
 - **Grenzen:** die letzten 20 Schritte, jeder einzeln nach seiner Kennung. Ein Schritt lässt sich nicht zurücknehmen,
   wenn sich der Ort seitdem geändert hat.
-- **Bedienung:** App: **Rückgängig** · Terminal: `strom place undo <krok>`
+- **Bedienung:** App: **Rückgängig** · Terminal: `strom place undo <Schritt>`
 - **Gilt seit:** Forschung 1.25.2 (in der Forschung 1.25.0 nur der letzte Schritt)
 
 <!-- zdroj: research:src/core/placeid.ts UNDO_KEPT=20 (:102), undoPlaces · research:src/commands/placeid.ts:399 undo (person only) · CHANGELOG.cs.md 1.25.0 / 1.25.2 -->
@@ -229,7 +229,9 @@ der Mensch sie einschaltet. Die Forschung ordnet dazu die Orte Regionen der Gesc
 - **Bedienung:** App: **Geschichte der Orte**, **Ortsgeschichte suchen…**, **Region zuordnen**, Zustände
   **Ortsgeschichte: wartet**, **Ortsgeschichte: wird gesucht**, **Die Forschung konnte den Ort nicht bestimmen** ·
   Terminal: **Einstellungen → Der Agent allein → Geschichte**; `strom config set experiments.history on`,
-  `strom history place <L…>`, `strom history map --unlocated`
-- **Gilt seit:** Forschung 1.22.0
+  `strom history place <L…>`, `strom history map "<Ort>" --region <id>[:<von>-<bis>]` (einmal für jede Region,
+  zu der der Ort gehörte) oder `--unlocated --why "…"`, `strom history list --event <id>` (ein Ereignis der
+  Geschichte)
+- **Gilt seit:** Forschung 1.22.0; `history list --event` 1.33.0
 
-<!-- zdroj: research:src/core/pastevents.ts PACE_EVERY (:2621), experiments.historyPace · research:src/core/placehistory.ts · research:src/commands/history.ts place, map --unlocated, adopt · research:assets/lang/cs.json ui.alone.title, ui.alone.history · app:src/strings.ts history.* (v3.21.2 :13121–13235) · CHANGELOG.cs.md 1.22.0 (l.229) -->
+<!-- zdroj: research:src/core/pastevents.ts PACE_EVERY (:2621), experiments.historyPace · research:src/core/placehistory.ts · research:src/commands/history.ts place, map --unlocated, adopt · research:assets/lang/cs.json ui.alone.title, ui.alone.history · app:src/strings.ts history.* (v3.21.2 :13121–13235) · CHANGELOG.cs.md 1.22.0 (l.229) · 1.33.0: research:926375ea history list --event · c50f80f5 history map bez --region (nápověda celého řádku) · strom help history map, history list -->

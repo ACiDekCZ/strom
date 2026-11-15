@@ -134,11 +134,11 @@ Menschen gesetzt, für den ganzen Computer. Ohne Bedingung läuft der Lauf weite
   - `--loop` und `--until`: eine Frage vor jeder Sitzung; von Hand gestartete Aufgaben: eine Frage
     ([R7.4.1](#R7.4.1));
   - strom liefert die Bedingung `claude-usage` mit ([R7.5](#R7.5)); eine eigene Bedingung ist ein Ordner
-    `plugins/gates/<název>/`;
+    `plugins/gates/<Name>/`;
   - ein Lauf ohne gesetzte Bedingung (`--no-gate`) oder mit einer anderen (`--gate`) braucht die Zustimmung des
     Menschen.
 - **Bedienung:** Terminal: **Einstellungen → Der Agent allein → Immer weiter unter einer Bedingung: …** (eine
-  Bedingung oder **keine**); `strom config set run.gate "<název> [co jí předat]"`, `strom config unset run.gate`;
+  Bedingung oder **keine**); `strom config set run.gate "<Name> [was ihr mitgeben]"`, `strom config unset run.gate`;
   beides bestätigt der Mensch. App: die **Forschungsübersicht** zeigt bei einem wartenden Lauf **Pausiert** und
   **weiter um …**.
 - **Gilt seit:** Forschung 1.2.0, App 3.5.0 (Zustand Pausiert)
@@ -264,14 +264,30 @@ Sitzung beginnt nur, wenn der Vorsprung (vergangen − genutzt) mindestens die a
 ## R7.6 Das Limit des Abonnements hält den Lauf an
 
 Wenn der Agent während einer Sitzung auf das Limit seines Abonnements stößt, wird die Sitzung geschlossen, und der
-Lauf endet: **Limit des Abonnements (erneuert sich …)**. Der Lauf wartet nicht, auch nicht mit `--loop`. Das hängt
-nicht von der Bedingung ab.
+Lauf endet: **Limit des Abonnements (erneuert sich …)**. Bis Forschung 1.33.0 wartet der Lauf nicht, auch nicht mit
+`--loop`, und das hängt nicht von der Bedingung ab; ab 1.34.0 siehe unten.
 
 - **Grenzen:** die Aufgabe kehrt in die Warteschlange zurück; die Zeit der Erneuerung erscheint nur, wenn der Agent
   sie genannt hat. Warten kann nur die Bedingung.
 - **Gilt seit:** Forschung 1.0.0
+- **Ab Forschung 1.34.0:** ein Lauf, der von selbst weitergeht (`--loop`, `--until`) und eine Bedingung hat
+  ([R7.4](#R7.4)), endet nach dem Limit nicht. Die Aufgabe kehrt in die Warteschlange zurück (als nächste kann eine
+  andere kommen), der Lauf wartet bis zur Erneuerung des Limits und eine Minute mehr, fragt dann die Bedingung neu
+  und macht weiter. Terminal: „⏸ das Limit des Agenten-Plans ist erschöpft (Fünf-Stunden-Fenster) — Warten bis zur
+  Erneuerung (…), dann wird die Bedingung neu gefragt und die Arbeit geht weiter (Strg-C beendet den Lauf)“; die
+  Strom-App zeigt den Lauf als pausiert mit dem Grund.
+  - Zeit der Erneuerung: aus der Angabe des Agenten über das erschöpfte Fenster des Plans (Fünf-Stunden-Fenster,
+    Woche; beide erschöpft: das spätere), sonst aus der Zeit, die der Agent genannt hat (Datum und Uhrzeit,
+    „in 2 hours“, „7pm“ nur in der Zeitzone des Computers). Eine Zeit mehr als 8 Tage voraus oder in der
+    Vergangenheit wird nicht genommen. Unbekannte Zeit: der Lauf wartet 15 Minuten („…, der Zeitpunkt der Erneuerung
+    unbekannt — Warten bis …, dann wird die Bedingung neu gefragt“);
+  - Erneuerung erst nach der Zeit von `--until`: der Lauf endet mit **Zeitlimit**;
+  - eine durch das Limit unterbrochene Sitzung zählt für die Aufgabe nicht als Misserfolg des Agenten;
+  - unverändert: ein Lauf von Hand (eine Aufgabe, `--tasks n`, `--max` ohne `--loop`) und ein Lauf ohne Bedingung
+    enden mit **Limit des Abonnements** wie bisher. Die Meldung von Claude Code „You've hit your limit · resets …“
+    und eine Ablehnung des Agenten wegen des Limits gelten als Limit.
 
-<!-- zdroj: research:src/commands/session.ts:1196-1206 closeSession (session.limit), :1255-1259 · src/core/session.ts:248-262 · runners/runner.ts:226 looksLikeLimit · cs.json ui.run.stop.limit, ui.run.stop.resets -->
+<!-- zdroj: research:src/commands/session.ts:1196-1206 closeSession (session.limit), :1255-1259 · src/core/session.ts:248-262 · runners/runner.ts:226 looksLikeLimit · cs.json ui.run.stop.limit, ui.run.stop.resets · 1.34.0: research:8f24e9f7 src/commands/session.ts:1453-1483 (gateHolds && gate, limitResume, limitReserve, DEFAULT_WAIT_MS 15 min, until → time, markPaused), :1363 metrics.limit, src/core/planlimit.ts limitResume, timeOf, LIMIT_RESERVE_MS 60 s, FURTHEST_MS · 03146702 (B8: „You've hit your limit“, odmítnutý rate_limit_event) · cs.json ui.run.limit.wait, ui.run.limit.unknown, ui.run.limit.why, ui.run.limit.five_hour, ui.run.limit.seven_day · dirigent:prace/1115-vyzkum-k036-limit-obnova -->
 
 <a id="R7.7"></a>
 ## R7.7 Ein nicht angemeldeter Agent
