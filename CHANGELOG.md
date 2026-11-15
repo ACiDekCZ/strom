@@ -12,6 +12,9 @@ English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md) · [Polski
 - **Simple icons instead of emoji**: the offline mark, the conflict mark when merging and the slideshow's pause; the number of conflicts when merging is in the language of the app.
 - **Phone**: long labels wrap instead of ending in “…” in the middle of a word: the tiles of the person sheet, the title of the tree overview and the title of the *Research overview* in its own window.
 - **Minimap and dialogs**: the minimap shows its whole picture, no longer cut off at its right and bottom edge; a dialog's body scrolled down fades out at its top instead of being cut by a hard edge.
+- **Photo on the card**: *Settings → Person card → Photo on the card* sets the photo's size (*Small*, *Medium*, *Large*) and shape (*Circle*, *Rounded square*); *Small* and *Circle* keep the card as it was. A medium or large photo makes the card wider (a large one also taller) only in a view where someone has a photo; people without a photo keep small initials, and names in a row stand at the same height. The *Normal* card shows the photo beside the name; the *Detailed*, *Register* and *Custom* cards show it in their head, with the rows of details below at full width. The *Compact* card has no photo; image export and the poster keep the small photo for now.
+- **Work on the queue**: *More (n)* under *First up* unfolds the queue's next tasks in the research's order, with *Research overview ›* leading to the whole queue.
+- **Research overview**: the choice beside *Outside the directions* in the *Queue* (*at the end* and the like) opens *Research for this tree* at *Work outside the directions* also when the research is only viewed and in the overview's own window.
 
 ## 3.28.0
 

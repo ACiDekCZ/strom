@@ -12,6 +12,9 @@
 - **Einfache Symbole statt Emoji**: die Offline-Markierung, die Konfliktmarkierung beim Zusammenführen und die Pause der Diashow; die Zahl der Konflikte beim Zusammenführen steht in der Sprache der App.
 - **Telefon**: Lange Beschriftungen brechen um, statt mitten im Wort mit „…“ zu enden: die Kacheln des Personenmenüs, der Titel der Stammbaum-Übersicht und der Titel der *Forschungsübersicht* im eigenen Fenster.
 - **Minikarte und Dialoge**: Die Minikarte zeigt ihr ganzes Bild und wird rechts und unten nicht mehr abgeschnitten; der nach unten gescrollte Inhalt eines Dialogs blendet oben weich aus, statt hart abgeschnitten zu werden.
+- **Foto auf der Karte**: *Einstellungen → Personenkarte → Foto auf der Karte* legt Größe (*Klein*, *Mittel*, *Groß*) und Form (*Kreis*, *Abgerundetes Quadrat*) des Fotos fest; *Klein* und *Kreis* lassen die Karte wie bisher. Ein mittleres oder großes Foto macht die Karte breiter (ein großes auch höher), nur in einer Ansicht, in der jemand ein Foto hat; Personen ohne Foto behalten kleine Initialen, und die Namen einer Reihe stehen auf gleicher Höhe. Die Karte *Normal* zeigt das Foto neben dem Namen, *Detailliert*, *Matrikel* und *Eigene* im Kopf, die Zeilen darunter in voller Breite. Die Karte *Kompakt* hat kein Foto; Bildexport und Plakat zeigen vorerst das kleine Foto.
+- **An der Warteschlange arbeiten**: *Weitere (n)* unter *Als Erstes kommt* klappt die nächsten Aufgaben der Warteschlange in der Reihenfolge der Forschung auf, mit *Forschungsübersicht ›* zur ganzen Warteschlange.
+- **Forschungsübersicht**: Die Wahl neben *Außerhalb der Richtungen* in der *Warteschlange* (*am Ende* und ähnlich) öffnet *Forschung für diesen Stammbaum* bei *Arbeit außerhalb der Richtungen* auch dann, wenn die Forschung nur angesehen wird, und im eigenen Fenster der Übersicht.
 
 ## 3.28.0
 

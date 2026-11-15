@@ -14,6 +14,9 @@ Lista zmian po polsku zaczyna się od wersji 3.21.0; starsze wersje są opisane 
 - **Proste ikony zamiast emoji**: znacznik offline, znacznik konfliktu przy scalaniu i pauza pokazu slajdów; liczba konfliktów przy scalaniu jest w języku aplikacji.
 - **Telefon**: długie etykiety zawijają się zamiast kończyć się „…” w środku słowa: kafelki menu osoby, tytuł przeglądu drzewa i tytuł *Przeglądu badania* w osobnym oknie.
 - **Minimapa i okna dialogowe**: minimapa pokazuje cały obraz i nie jest już przycięta z prawej i u dołu; przewinięta treść okna dialogowego u góry łagodnie zanika zamiast ostrego cięcia.
+- **Zdjęcie na karcie**: *Ustawienia → Karta osoby → Zdjęcie na karcie* wybiera rozmiar (*Małe*, *Średnie*, *Duże*) i kształt (*Koło*, *Zaokrąglony kwadrat*) zdjęcia; *Małe* i *Koło* zostawiają kartę jak dotąd. Średnie lub duże zdjęcie poszerza kartę (duże także ją podwyższa) tylko w widoku, w którym ktoś ma zdjęcie; osoby bez zdjęcia mają małe inicjały, a imiona w rzędzie stoją na tej samej wysokości. Karta *Normalne* ma zdjęcie obok imienia, *Szczegółowe*, *Metrykalne* i *Własne* w nagłówku, a wiersze danych pod nim na pełną szerokość. Karta *Kompaktowe* nie ma zdjęcia; eksport obrazu i plakat mają na razie małe zdjęcie.
+- **Praca nad kolejką**: *Kolejne (n)* pod *Jako pierwsze* rozwija następne zadania kolejki w kolejności badania, z odnośnikiem *Przegląd badania ›* do całej kolejki.
+- **Przegląd badania**: wybór obok *Poza liniami* w *Kolejce* (*na końcu* itp.) otwiera *Badanie dla drzewa* przy *Praca poza liniami* także wtedy, gdy badanie jest tylko przeglądane, i w osobnym oknie przeglądu.
 
 ## 3.28.0
 

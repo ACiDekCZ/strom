@@ -12,6 +12,9 @@
 - **Jednoduché ikony místo emoji**: značka offline, značka konfliktu při slučování a pauza prezentace; počet konfliktů při slučování je v jazyce aplikace.
 - **Telefon**: dlouhé popisky se zalamují místo „…“ uprostřed slova: dlaždice nabídky osoby, titulek přehledu stromu a titulek *Přehledu výzkumu* v samostatném okně.
 - **Minimapa a dialogy**: minimapa ukazuje celý obraz, vpravo a dole už není oříznutá; posunuté tělo dialogu nahoře plynule zeslábne místo ostrého řezu.
+- **Fotka na kartě**: *Nastavení → Karta osoby → Fotka na kartě* volí velikost fotky (*Malá*, *Střední*, *Velká*) a tvar (*Kruh*, *Zaoblený čtverec*); *Malá* a *Kruh* nechávají kartu jako dosud. Střední nebo velká fotka kartu rozšíří (velká ji i zvýší) jen v pohledu, kde někdo fotku má; osoby bez fotky mají malé iniciály a jména v řadě stojí ve stejné výšce. *Normální* karta má fotku vedle jména, *Podrobná*, *Matriční* a *Vlastní* v hlavičce a řádky údajů pod ní v plné šířce. *Kompaktní* karta fotku nemá; export obrázku a plakát mají zatím malou fotku.
+- **Pracovat na frontě**: *Další (n)* pod *Jako první přijde* rozbalí další úkoly fronty v pořadí výzkumu, s odkazem *Přehled výzkumu ›* na celou frontu.
+- **Přehled výzkumu**: volba u skupiny *Mimo linie* ve *Frontě* (*na konci* apod.) otevře nastavení výzkumu u *Práce mimo linie* i tehdy, když se výzkum jen prohlíží, a také ze samostatného okna přehledu.
 
 ## 3.28.0
 
