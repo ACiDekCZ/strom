@@ -106,8 +106,8 @@ test.describe('desktop (1440)', () => {
         // One citation: no pill; none: empty.
         await expect((await cell(page, 'p:b', 'bRef')).locator('.tv-cites-more')).toHaveCount(0);
 
-        // A marriage's citations on each union's sub-row.
-        await expect((await cell(page, 'p:a#u1', 'wRef')).locator('.tv-cell-text')).toHaveText('fol. 30');
+        // A marriage's citations on each union's sub-row, first by the citation order (S2 before S3 by number).
+        await expect((await cell(page, 'p:a#u1', 'wRef')).locator('.tv-cell-text')).toHaveText('č. 41');
         await expect((await cell(page, 'p:a#u1', 'wRef')).locator('.tv-cites-more')).toHaveText('+1');
         await expect((await cell(page, 'p:a#u2', 'wRef')).locator('.tv-cell-text')).toHaveText('fol. 99');
         await expect((await cell(page, 'p:a#u2', 'wRef')).locator('.tv-cites-more')).toHaveCount(0);
