@@ -1872,6 +1872,8 @@ export const researchSyncMethods = uiModule({
         if (again && this.researchUndoneForeign(treeId, link)) {
             console.warn('Not writing again a send taken back that was not this tree\'s own', treeId, again.intake);
             this.refreshResearchSyncUi();
+            // Asked by hand (an older toast): said why nothing went.
+            this.showToast(s.undoneForeignNotSent, 10000, { closable: true });
             return;
         }
         if (!again) {
@@ -1881,6 +1883,8 @@ export const researchSyncMethods = uiModule({
             if (check?.foreign) {
                 console.warn('Not sending a copy that hardly names the research\'s people (another tree\'s data?)', treeId, check);
                 this.refreshResearchSyncUi();
+                // Asked by hand: said why nothing went (by itself only the mark shows the changes waiting).
+                if (!opts.auto) this.showToast(s.foreignNotSent, 10000, { closable: true });
                 return;
             }
         }

@@ -6,7 +6,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
     | 'viewLinks' | 'researchEdge'> = {
     merge: {
         title: 'Scalanie danych',
-        analyzing: 'Analizowanie osób...',
+        analyzing: 'Analizowanie osób…',
         matches: 'Dopasowania',
         conflicts: 'Konflikty',
         newPersons: 'Nowe osoby',
@@ -156,7 +156,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         sharedTitle: 'Wspólne wydarzenia po scaleniu',
         keepPerson: 'Zachowaj',
         mergeWith: 'Scal z',
-        selectPerson: 'Wybierz osobę do scalenia...',
+        selectPerson: 'Wybierz osobę do scalenia…',
         fieldConflicts: 'Konflikty w danych',
         partnershipConflicts: 'Konflikty w związkach',
         keepValue: 'Zachowaj',

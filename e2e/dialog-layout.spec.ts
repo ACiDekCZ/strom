@@ -417,7 +417,7 @@ for (const vp of [
                     pageScroll: document.documentElement.scrollWidth > window.innerWidth,
                 };
             });
-            expect(m.texts).toEqual(['Person löschen…', 'Zusammenführen mit...', 'Abbrechen', 'Speichern']);
+            expect(m.texts).toEqual(['Person löschen…', 'Zusammenführen mit…', 'Abbrechen', 'Speichern']);
             expect(m).toMatchObject({ lines: [1, 1, 1, 1], inFooter: true, pageScroll: false });
             // The app's own font keeps one row; a much wider one may put Delete person on its own.
             if (font === 'default') expect(m.oneRow).toBe(true);

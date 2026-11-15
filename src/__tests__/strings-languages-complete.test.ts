@@ -96,3 +96,15 @@ describe('texts in every UI language', () => {
         expect(left).toEqual([]);
     });
 });
+
+describe('an ellipsis is one character', () => {
+    it('no text of any UI language ends with three dots (… instead), nor the merge button of the person card', async () => {
+        for (const lang of LANGS) {
+            const dots = [...byPath(lang)].filter(([, v]) => typeof v === 'string' && /\.\.\.\s*$/.test(v)).map(([p]) => `${lang}:${p}`);
+            expect(dots).toEqual([]);
+        }
+        const { readFileSync } = await import('node:fs');
+        const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
+        expect(html).toMatch(/data-i18n="personMerge\.mergeWith"><\/span>…<\/button>/);
+    });
+});

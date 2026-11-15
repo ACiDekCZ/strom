@@ -62,6 +62,7 @@ import { RESEARCH_COPY_FP_KEY, RESEARCH_PREV_COPY_FP_KEY } from '../storage-keys
 import { contentFingerprint } from '../research-link.js';
 import { foreignSendCheck, researchRefsOf, FOREIGN_SEND_MIN_BASE } from '../research-foreign-send.js';
 import { StromData, TreeId, TreeMetadata, ResearchLink, ResearchSend, PersonId } from '../types.js';
+import { strings } from '../strings.js';
 
 const LINKED = 'linked-tree' as TreeId;
 const RESEARCH = '4d7c1a92-5e3b-4f06-a8d2-9b1e6c3f7a05';
@@ -245,11 +246,20 @@ describe('a send that is not the tree\'s own never goes (1115-app-prepnuti-strom
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
         await start(otherTree(30), tree(40));
         const ui = page();
+        const toast = vi.fn();
+        (ui as unknown as { showToast: typeof toast }).showToast = toast;
         await ui.postResearchSendNow(LINKED, { auto: true });
+        // By itself: nothing said (the mark shows the changes waiting).
+        expect(toast).not.toHaveBeenCalled();
         await ui.postResearchSendNow(LINKED, { auto: false });
+        // By hand: one toast says why nothing went.
+        expect(toast).toHaveBeenCalledTimes(1);
+        expect(toast.mock.calls[0][0]).toBe(strings.sync.foreignNotSent);
+        expect(String(toast.mock.calls[0][0])).toContain('Not sent');
         // Leaving the page: what the sends before read of the copy holds it back too.
         await ui.postResearchSendNow(LINKED, { auto: true, keepalive: true });
         await settle();
+        expect(toast).toHaveBeenCalledTimes(1);
         expect(posts).toEqual([]);
         expect(warn.mock.calls.some(c => String(c[0]).includes('hardly names the research'))).toBe(true);
         // Nothing marked as sent: the state stays "to send", a send can be asked again.
@@ -294,9 +304,13 @@ describe('a send taken back that was not the tree\'s own (1115-app-prepnuti-stro
 
         // Send again asked anyway (an older toast): nothing written there again.
         vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        const toast = vi.fn();
+        (ui as unknown as { showToast: typeof toast }).showToast = toast;
         await ui.postResearchSendNow(LINKED, { auto: false, undoAgain: true });
         await settle();
         expect(posts).toEqual([]);
+        // Said why nothing went.
+        expect(toast.mock.calls.map(c => c[0])).toEqual([strings.sync.undoneForeignNotSent]);
     });
 
     it('the tree\'s own send taken back: Send again as before, loading its version beside it', async () => {

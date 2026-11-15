@@ -342,6 +342,8 @@ export const plPart2: Pick<StringsType, 'crop' | 'importImages' | 'imageViewer' 
         stateStale: 'Zapisano w innym oknie',
         staleSub: 'To okno ma starszą kopię drzewa. Dopóki nie zostanie ponownie wczytane, nic z niego nie trafi do badania.',
         pillStale: 'Zapisano w innym oknie',
+        foreignNotSent: 'Nie wysłano: otwarte drzewo prawie nie zawiera osób tego badania i zostałoby tam odczytane jako inne drzewo. Zmiany zostają tutaj.',
+        undoneForeignNotSent: 'Nie wysłano ponownie: ta wysyłka nie zawierała osób tego drzewa. Zmiany zostają tutaj.',
         staleTab: 'To drzewo zostało w międzyczasie zapisane w innym oknie. Po ponownym wczytaniu strony zmiany zostaną wysłane do badania.',
         rejectedSub: (t: string) => `O ${t}. Nic nie zapisano, zmiany wciąż są tutaj.`,
         stateSafari: 'Safari nie ma dostępu do badania',
