@@ -15432,6 +15432,86 @@
         }
         /* A stack becomes the one dot too. */
         #tree-canvas.zoom-far .card-signal-stack, #tree-canvas.zoom-far .card-signal-dot--back { display: none; }
+
+        /* ---- Photo on the card (spec 096 §2, §5; Settings → Person card → Photo on the card).
+           body[data-card-photo] is the drawn view's photo size (the chosen one where someone
+           drawn has a photo, else small: renderer.ts viewPhotoSize), body[data-card-photo-shape]
+           its shape; the settings' preview card carries its own (data-photo, data-shape). With
+           small + circle (the default) no rule here applies. Box sizes MUST match
+           NORMAL_PHOTO_BOX in types.ts: medium 200 × 64 (photo 48, padding 8), large 236 × 96
+           (photo 80, padding 10; its height inline, LayoutConfig.personHeights). The text
+           column beside a photo stays 126px; a card without one keeps its 34px initials and
+           padding 9 (a wider column: src/card-width.ts normalCardTextWidth). ---- */
+        body[data-card-photo="medium"]:not([data-card-fields]) #tree-canvas .person-card,
+        .card-signals-preview .person-card[data-density="normal"][data-photo="medium"] { width: 200px; }
+        body[data-card-photo="medium"]:not([data-card-fields]) #tree-canvas .person-card.has-photo,
+        .card-signals-preview .person-card[data-density="normal"][data-photo="medium"].has-photo { padding: 0 8px; }
+        body[data-card-photo="medium"]:not([data-card-fields]) #tree-canvas .person-card.has-photo.focused { padding: 0 7px; }
+        body[data-card-photo="medium"]:not([data-card-fields]) #tree-canvas .person-card.has-photo .card-avatar,
+        .card-signals-preview .person-card[data-density="normal"][data-photo="medium"].has-photo .card-avatar { width: 48px; height: 48px; }
+        body[data-card-photo="large"]:not([data-card-fields]) #tree-canvas .person-card,
+        .card-signals-preview .person-card[data-density="normal"][data-photo="large"] { width: 236px; }
+        body[data-card-photo="large"]:not([data-card-fields]) #tree-canvas .person-card.has-photo,
+        .card-signals-preview .person-card[data-density="normal"][data-photo="large"].has-photo { height: 96px; padding: 0 10px; align-items: center; }
+        body[data-card-photo="large"]:not([data-card-fields]) #tree-canvas .person-card.has-photo.focused { padding: 0 9px; }
+        body[data-card-photo="large"]:not([data-card-fields]) #tree-canvas .person-card.has-photo .card-avatar,
+        .card-signals-preview .person-card[data-density="normal"][data-photo="large"].has-photo .card-avatar { width: 80px; height: 80px; }
+        /* The large card's name and dates centred on y = 32, as on the 64px card beside it (D13):
+           the top 64px of the card, at least 15px from its top; a name on rows grows down beside
+           the photo (the card is taller from its fifth row). */
+        body[data-card-photo="large"]:not([data-card-fields]) #tree-canvas .person-card.has-photo > .card-body,
+        .card-signals-preview .person-card[data-density="normal"][data-photo="large"].has-photo > .card-body { align-self: flex-start; box-sizing: border-box; min-height: 62px; padding: 14px 0; }
+        /* Printed, the 2px border takes 1px of padding a side (as the focus does). */
+        @media print {
+            body[data-card-photo="medium"]:not([data-card-fields]) #tree-canvas .person-card.has-photo { padding: 0 7px; }
+            body[data-card-photo="large"]:not([data-card-fields]) #tree-canvas .person-card.has-photo { padding: 0 9px; }
+        }
+        /* The rounded square (§5): the radius of each avatar's size (30 → 4, 34 → 5, 44 → 6,
+           48 → 7, 72 → 10, 80 → 12px); the initials of a card without a photo take the shape
+           at their own size (D8); the ring follows the corners. */
+        body[data-card-photo-shape="rounded"] #tree-canvas .card-avatar,
+        .card-signals-preview .person-card[data-shape="rounded"] .card-avatar { border-radius: 5px; }
+        body[data-card-photo-shape="rounded"][data-card-fields] #tree-canvas .card-avatar,
+        .card-signals-preview .person-card[data-fields][data-shape="rounded"] .card-avatar { border-radius: 4px; }
+        body[data-card-photo-shape="rounded"][data-card-photo="medium"]:not([data-card-fields]) #tree-canvas .has-photo .card-avatar,
+        .card-signals-preview .person-card[data-density="normal"][data-photo="medium"][data-shape="rounded"] .card-avatar { border-radius: 7px; }
+        body[data-card-photo-shape="rounded"][data-card-photo="large"]:not([data-card-fields]) #tree-canvas .has-photo .card-avatar,
+        .card-signals-preview .person-card[data-density="normal"][data-photo="large"][data-shape="rounded"] .card-avatar { border-radius: 12px; }
+        body[data-card-photo-shape="rounded"][data-card-photo="medium"][data-card-fields] #tree-canvas .has-photo .card-avatar,
+        .card-signals-preview .person-card[data-fields][data-photo="medium"][data-shape="rounded"] .card-avatar { border-radius: 6px; }
+        body[data-card-photo-shape="rounded"][data-card-photo="large"][data-card-fields] #tree-canvas .has-photo .card-avatar,
+        .card-signals-preview .person-card[data-fields][data-photo="large"][data-shape="rounded"] .card-avatar { border-radius: 10px; }
+        /* Shown "in the view only" (D11): a medium or large photo at 55 %, so the face does not
+           outweigh the ghost's hatching; the small one as it always was. */
+        body:is([data-card-photo="medium"], [data-card-photo="large"]) #tree-canvas .person-card.view-ghost.has-photo .card-avatar img { opacity: 0.55; }
+        /* The badges' centre on the outline (§5): at 45° of a circle, at the corner of a square.
+           --mk is their top / right against the avatar (circle r(1 − 1/√2) − 9; the small 30 and
+           34px avatars keep today's −6px and their stack's left anchoring). A medium or large
+           photo anchors the stack of two or three badges on the right, as the single badge. */
+        body[data-card-photo="medium"]:not([data-card-fields]) #tree-canvas .has-photo .card-avatar-wrap { --mk: -2px; }
+        body[data-card-photo="large"]:not([data-card-fields]) #tree-canvas .has-photo .card-avatar-wrap { --mk: 3px; }
+        body[data-card-photo="medium"][data-card-fields] #tree-canvas .has-photo .card-avatar-wrap { --mk: -3px; }
+        body[data-card-photo="large"][data-card-fields] #tree-canvas .has-photo .card-avatar-wrap { --mk: 1px; }
+        body[data-card-photo-shape="rounded"][data-card-photo="medium"] #tree-canvas .has-photo .card-avatar-wrap { --mk: -6px; }
+        body[data-card-photo-shape="rounded"][data-card-photo="large"] #tree-canvas .has-photo .card-avatar-wrap { --mk: -5px; }
+        .card-signals-preview .person-card[data-density="normal"][data-photo="medium"] .card-avatar-wrap { --mk: -2px; }
+        .card-signals-preview .person-card[data-density="normal"][data-photo="large"] .card-avatar-wrap { --mk: 3px; }
+        .card-signals-preview .person-card[data-density="normal"][data-photo="medium"][data-shape="rounded"] .card-avatar-wrap { --mk: -6px; }
+        .card-signals-preview .person-card[data-density="normal"][data-photo="large"][data-shape="rounded"] .card-avatar-wrap { --mk: -5px; }
+        .card-signals-preview .person-card:is([data-photo="medium"], [data-photo="large"]) .card-avatar-wrap .card-signal { top: var(--mk, -6px); right: var(--mk, -6px); }
+        body:is([data-card-photo="medium"], [data-card-photo="large"]) #tree-canvas .has-photo .card-avatar-wrap .card-signal { top: var(--mk); right: var(--mk); }
+        body:is([data-card-photo="medium"], [data-card-photo="large"]) #tree-canvas .has-photo .card-avatar-wrap .card-signal-stack.n2 {
+            left: auto; right: var(--mk); top: calc(var(--mk) - 1px);
+        }
+        body:is([data-card-photo="medium"], [data-card-photo="large"]) #tree-canvas .has-photo .card-avatar-wrap .card-signal-stack.n3 {
+            left: auto; right: var(--mk); top: calc(var(--mk) - 2px);
+        }
+        /* The agent at work (D10): around a circle its arc, at every size; at a square a 14px ring
+           where the badge sits (an arc around a square would cut its corners). */
+        body[data-card-photo-shape="rounded"] #tree-canvas .card-avatar-wrap .card-agent-mark {
+            inset: auto; top: calc(var(--mk, -6px) + 2px); right: calc(var(--mk, -6px) + 2px); width: 14px; height: 14px;
+        }
+        body[data-card-photo-shape="rounded"] #tree-canvas .card-avatar-wrap .card-agent-mark > .card-agent { background: var(--surface); }
         /* The agent's mark in the tooltip and the menu: its arc, still. */
         .agent-mark {
             flex: 0 0 auto; display: inline-block; width: 10px; height: 10px; box-sizing: border-box;
@@ -15763,6 +15843,25 @@
             .card-fields-head { flex-direction: column; align-items: stretch; gap: 6px; }
             .segment.card-fields-date { display: flex; width: 100%; }
             .card-fields-date .segment-btn { flex: 1; min-width: 0; min-height: 44px; padding: 6px 8px; font-size: 14px; }
+        }
+        /* "Photo on the card" (spec 096 §1, src/ui/card-fields-ui.ts renderCardPhotoSettings): the
+           size and shape as "Card appearance" draws its rows (.card-look-grid: the label above the
+           segment on a phone, segments across, a thumb high on touch); a 12px glyph before each
+           shape; on the Compact card the choices faded and off, the sentence why in full colour. */
+        .card-photo-settings { display: flex; flex-direction: column; gap: 8px; }
+        .card-photo-grid .segment-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+        .card-photo-glyph { flex: none; display: inline-block; width: 12px; height: 12px; box-sizing: border-box; border: 1.5px solid currentColor; }
+        .card-photo-glyph.is-circle { border-radius: 50%; }
+        .card-photo-glyph.is-rounded { border-radius: 3px; }
+        .card-photo-note { font-size: 12px; line-height: 1.45; color: var(--text-faint); text-wrap: pretty; }
+        .card-photo-settings.is-off .card-photo-grid { opacity: 0.55; }
+        .card-photo-settings.is-off .card-photo-note { color: var(--text-light); }
+        .card-photo-settings.is-off .segment-btn { cursor: default; }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .card-photo-grid { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+            .card-photo-grid .card-look-label:not(:first-child) { margin-top: 6px; }
+            .card-photo-grid .segment.card-look-segment { display: flex; width: 100%; }
+            .card-photo-grid .segment-btn { flex: 1; min-width: 0; min-height: 44px; padding: 6px 8px; font-size: 14px; }
         }
         @media (pointer: coarse) {
             .card-look-segment .segment-btn, .card-fields-date .segment-btn { min-height: 44px; }
@@ -30740,6 +30839,8 @@
                 <h3 class="settings-group-title" id="settings-group-card" data-i18n="settings.groupCard"></h3>
                 <div class="settings-group-body">
                     <div class="settings-row card-type-settings" id="card-type-settings"></div>
+                    <!-- Photo on the card: its size and shape (spec 096 §1; src/ui/card-fields-ui.ts renderCardPhotoSettings). -->
+                    <div class="settings-row card-photo-settings" id="card-photo-settings"></div>
                     <div class="settings-row card-preview-settings" id="card-preview-settings"></div>
                     <div class="settings-row card-fields-settings" id="card-fields-settings" hidden></div>
                     <!-- Spacing of the tree view: Normal / Dense (spec 069 §1); the hint about the Compact card only on a small screen (§5). -->

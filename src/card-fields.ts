@@ -12,7 +12,7 @@
  * aria-label all read the same lines.
  */
 
-import { Person, StromData, LifeEvent, Partnership, CardDensity } from './types.js';
+import { Person, StromData, LifeEvent, Partnership, CardDensity, CardPhotoSize, CardPhotoShape } from './types.js';
 import { parseFlexDate, formatFlexDate, toCanonical, ageReached, AgeReached } from './dates.js';
 import { newestLifeEvent, sortLifeEvents } from './events.js';
 import { strings } from './strings.js';
@@ -161,6 +161,19 @@ export const CARD_DENSITIES: readonly CardDensity[] = ['compact', 'normal', 'det
 /** A stored card type, repaired: anything unknown is the Normal card. */
 export function normalizeCardDensity(value: unknown): CardDensity {
     return CARD_DENSITIES.includes(value as CardDensity) ? value as CardDensity : 'normal';
+}
+
+/** The photo sizes and shapes of Settings → Person card → Photo on the card (spec 096). */
+export const CARD_PHOTO_SIZES: readonly CardPhotoSize[] = ['small', 'medium', 'large'];
+export const CARD_PHOTO_SHAPES: readonly CardPhotoShape[] = ['circle', 'rounded'];
+
+/** The photo on the card as stored, repaired: anything unknown is small and a circle (the card as it always was). */
+export function normalizeCardPhoto(raw: unknown): { size: CardPhotoSize; shape: CardPhotoShape } {
+    const r = raw && typeof raw === 'object' ? raw as { size?: unknown; shape?: unknown } : {};
+    return {
+        size: CARD_PHOTO_SIZES.includes(r.size as CardPhotoSize) ? r.size as CardPhotoSize : 'small',
+        shape: CARD_PHOTO_SHAPES.includes(r.shape as CardPhotoShape) ? r.shape as CardPhotoShape : 'circle',
+    };
 }
 
 /** Whether a card type draws lines of details (the Custom card's way): Detailed, Register and Custom. */

@@ -3,8 +3,8 @@
  * Settings are NOT exported with tree data - they are local preferences
  */
 
-import { AppSettings, ThemeMode, SurnameDisplay, SURNAME_DISPLAYS, LanguageSetting, CardDensity, TreeSpacing, SETTINGS_KEY, StromData, personSourceIds, CARD_SIZE } from './types.js';
-import { CardFieldSettings, normalizeCardFields, customCardSize, normalizeCardDensity, effectiveCardFields } from './card-fields.js';
+import { AppSettings, ThemeMode, SurnameDisplay, SURNAME_DISPLAYS, LanguageSetting, CardDensity, TreeSpacing, SETTINGS_KEY, StromData, personSourceIds, CARD_SIZE, CardPhotoSize, CardPhotoShape, NORMAL_PHOTO_BOX } from './types.js';
+import { CardFieldSettings, normalizeCardFields, customCardSize, normalizeCardDensity, effectiveCardFields, normalizeCardPhoto } from './card-fields.js';
 import { initLanguage, Language } from './strings.js';
 import { MapKind, MAP_KINDS, isMapKind, readPlacesSort, type PlacesSort } from './places.js';
 
@@ -603,6 +603,16 @@ class SettingsManagerClass {
         this.save();
     }
 
+    /** Settings → Person card → Photo on the card (spec 096): its size and shape; absent or unknown = small + circle. */
+    getCardPhoto(): { size: CardPhotoSize; shape: CardPhotoShape } {
+        return normalizeCardPhoto(this.settings.cardPhoto);
+    }
+
+    setCardPhoto(photo: { size?: CardPhotoSize; shape?: CardPhotoShape }): void {
+        this.settings.cardPhoto = normalizeCardPhoto(photo);
+        this.save();
+    }
+
     /** The export dialog's scope: the whole tree or only the current view. */
     getExportScope(): 'tree' | 'view' {
         return this.settings.exportScope === 'view' ? 'view' : 'tree';
@@ -657,10 +667,19 @@ class SettingsManagerClass {
         this.save();
     }
 
-    /** The card box for the current density (the layout spaces cards by it). */
-    getCardSize(): { cardWidth: number; cardHeight: number } {
+    /**
+     * The card box for the current density (the layout spaces cards by it).
+     * The Normal card with a medium or large photo (spec 096 §2) is wider,
+     * only in a view where someone drawn has a photo (`viewHasPhoto`, D3);
+     * its base height stays 64 (a large card's own height: personHeights).
+     */
+    getCardSize(viewHasPhoto = false): { cardWidth: number; cardHeight: number } {
         const density = this.getCardDensity();
         const fields = this.getEffectiveCardFields(density);
+        if (density === 'normal') {
+            const box = NORMAL_PHOTO_BOX[viewHasPhoto ? this.getCardPhoto().size : 'small'];
+            return { cardWidth: box.cardWidth, cardHeight: CARD_SIZE.normal.cardHeight };
+        }
         if (!fields) return CARD_SIZE[density as 'compact' | 'normal'];
         return customCardSize(fields.on.length, fields.years);
     }

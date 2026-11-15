@@ -36,7 +36,8 @@
  */
 
 import type { CardHeightMode, CardLine, CardLineStyle, CardValueLines } from './card-fields.js';
-import type { CardDensity } from './types.js';
+import type { CardDensity, CardPhotoSize } from './types.js';
+import { NORMAL_PHOTO_BOX } from './types.js';
 
 export const CUSTOM_CARD_MIN_WIDTH = 200;
 /** The medium width's cap: the card before the width choice, and the default. */
@@ -812,11 +813,34 @@ export const NORMAL_CARD_NAME_WIDTH_BARE = 168;
 /** A row of the Normal card's name on rows: 12.5px × 1.15 (index.html .name-fit-2lines). */
 export const NORMAL_CARD_NAME_ROW_HEIGHT = 14.375;
 
-/** One Normal card's name, as the card splits it: the given names, the surname, and whether the avatar stands beside it. */
+/**
+ * One Normal card's name, as the card splits it: the given names, the
+ * surname, and whether the avatar stands beside it. `textWidth`: the card's
+ * text column when the view's cards are not the small ones (spec 096 §2,
+ * normalCardTextWidth); absent = by `avatar`, 126 or 168px. `photo`: the
+ * size of the photo the card shows (absent: none, or the small one).
+ */
 export interface NormalCardName {
     given: string;
     surname: string;
     avatar: boolean;
+    textWidth?: number;
+    photo?: CardPhotoSize;
+}
+
+/**
+ * The Normal card's text column in a view of a photo size (spec 096 §2,
+ * types.ts NORMAL_PHOTO_BOX): beside a photo 126px in every size (the box
+ * grows with the photo); beside the initials (34px, padding 9) of a wider
+ * card 138 / 174px; a card without an avatar (a placeholder) the card's
+ * width less its border and padding of 9.
+ */
+export function normalCardTextWidth(view: CardPhotoSize, avatar: boolean, photo: boolean): number {
+    const box = NORMAL_PHOTO_BOX[view];
+    const small = NORMAL_PHOTO_BOX.small;
+    if (!avatar) return box.cardWidth - 2 - 2 * small.padX;
+    if (photo) return box.cardWidth - 2 - 2 * box.padX - box.avatar - 8;
+    return box.cardWidth - 2 - 2 * small.padX - small.avatar - 8;
 }
 
 /** The rows of a Normal card's name: the given names' rows, then the surname's. */
@@ -836,7 +860,7 @@ export interface NormalCardNameRows {
 export function normalCardNameRows(names: readonly NormalCardName[], measure: MeasureTexts): NormalCardNameRows[] {
     const requests: WrapRequest[] = [];
     for (const n of names) {
-        const width = n.avatar ? NORMAL_CARD_NAME_WIDTH : NORMAL_CARD_NAME_WIDTH_BARE;
+        const width = n.textWidth ?? (n.avatar ? NORMAL_CARD_NAME_WIDTH : NORMAL_CARD_NAME_WIDTH_BARE);
         requests.push({ text: n.given, width, maxLines: 0, kind: 'nameSmall' });
         requests.push({ text: n.surname, width, maxLines: 0, kind: 'nameSmall' });
     }
@@ -847,20 +871,34 @@ export function normalCardNameRows(names: readonly NormalCardName[], measure: Me
     }));
 }
 
+/** The large Normal card with a photo (spec 096 §2): its height, and where its text block starts and ends below the rows. */
+export const NORMAL_LARGE_PHOTO_HEIGHT = 96;
+const LARGE_TEXT_TOP = 15;      // the first row of the name, as on the 64px card (D13)
+const LARGE_META_ROW = 14;      // the row of the dates
+const LARGE_BOTTOM = 9;         // the bottom margin and the border
+
 /**
  * The Normal card's height for its name's rows: the card as it always was
  * (64px) for two rows or fewer, 14.375px more for each row after the second,
  * rounded up to whole pixels (the layout's card height, LayoutConfig.personHeights).
+ * With a large photo (spec 096 §2) 96px, the name's rows beside the photo
+ * from y = 15 and the dates under them; taller from the fifth row on.
+ * A medium photo fits the 64px card: as without one.
  */
-export function normalCardHeight(nameRows: number): number {
+export function normalCardHeight(nameRows: number, photo?: CardPhotoSize): number {
+    if (photo === 'large') {
+        return Math.max(NORMAL_LARGE_PHOTO_HEIGHT,
+            LARGE_TEXT_TOP + Math.ceil(nameRows * NORMAL_CARD_NAME_ROW_HEIGHT) + LARGE_META_ROW + LARGE_BOTTOM);
+    }
     if (nameRows <= 2) return NORMAL_CARD_HEIGHT;
     return NORMAL_CARD_HEIGHT + Math.ceil((nameRows - 2) * NORMAL_CARD_NAME_ROW_HEIGHT);
 }
 
 /**
- * The cards of a view whose name takes more than two rows and their height
- * (normalCardHeight); null when every name fits its two rows (the layout
- * then spaces every card by the one 64px height, as before).
+ * The cards of a view whose name takes more than two rows, or that show a
+ * large photo, and their height (normalCardHeight); null when every name fits
+ * its two rows and no card has a large photo (the layout then spaces every
+ * card by the one 64px height, as before).
  */
 export function normalCardHeights<K>(names: ReadonlyMap<K, NormalCardName>, measure: MeasureTexts): Map<K, number> | null {
     const keys = [...names.keys()];
@@ -868,8 +906,9 @@ export function normalCardHeights<K>(names: ReadonlyMap<K, NormalCardName>, meas
     let out: Map<K, number> | null = null;
     rows.forEach((r, i) => {
         const n = r.given.length + r.surname.length;
-        if (n <= 2) return;
-        (out ??= new Map()).set(keys[i], normalCardHeight(n));
+        const photo = names.get(keys[i])!.photo;
+        if (n <= 2 && photo !== 'large') return;
+        (out ??= new Map()).set(keys[i], normalCardHeight(n, photo));
     });
     return out;
 }

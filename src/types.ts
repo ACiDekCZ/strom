@@ -2108,6 +2108,27 @@ export const CARD_SIZE: Record<'compact' | 'normal', Pick<LayoutConfig, 'cardWid
     normal: { cardWidth: 188, cardHeight: 64 },
 };
 
+/** Settings → Person card → Photo on the card (spec 096): its size; small = the card as it always was. */
+export type CardPhotoSize = 'small' | 'medium' | 'large';
+/** The photo's (and the initials') shape on the card. */
+export type CardPhotoShape = 'circle' | 'rounded';
+
+/**
+ * The Normal card's box per photo size of the view (spec 096 §2): the card's
+ * width and base height, the photo's size and the card's side padding on a
+ * card with a photo. A view takes the medium or large box only when someone
+ * drawn in it has a photo (renderer.ts viewHasPhoto), else the small one,
+ * which is CARD_SIZE.normal. The text column beside the photo is 126px in
+ * every size (src/card-width.ts normalCardTextWidth). A large card with a
+ * photo is 96px tall through LayoutConfig.personHeights (the view's
+ * cardHeight stays 64). MUST match index.html body[data-card-photo].
+ */
+export const NORMAL_PHOTO_BOX: Record<CardPhotoSize, { cardWidth: number; cardHeight: number; avatar: number; padX: number }> = {
+    small: { cardWidth: 188, cardHeight: 64, avatar: 34, padX: 9 },
+    medium: { cardWidth: 200, cardHeight: 64, avatar: 48, padX: 8 },
+    large: { cardWidth: 236, cardHeight: 96, avatar: 80, padX: 10 },
+};
+
 export const DEFAULT_LAYOUT_CONFIG: LayoutConfig = {
     cardWidth: 188,
     cardHeight: 64,
@@ -2350,6 +2371,8 @@ export interface AppSettings {
     historyPlacesSort?: 'persons' | 'alpha';  // default: 'persons' - History of places → Places: all places by people or alphabetically
     placesSort?: 'state' | 'name' | 'people';  // default: 'state' - Places dialog order (a stored 'unplaced' reads as 'state')
     cardDensity?: CardDensity;  // default: 'normal' - how much detail a card shows
+    /** Settings → Person card → Photo on the card (spec 096); absent = small + circle (the card as before). This device only. */
+    cardPhoto?: { size?: CardPhotoSize; shape?: CardPhotoShape };
     exportScope?: 'tree' | 'view';  // default: 'tree' - the export dialog's whole tree / current view switch
     treeSpacing?: TreeSpacing;  // default: 'normal' - gaps between cards and generations in the tree view
     posterSpacing?: TreeSpacing;  // default: 'normal' - the same for an exported image, poster or PDF

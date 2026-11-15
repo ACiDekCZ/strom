@@ -508,6 +508,7 @@ export const cardSignalsUiMethods = uiModule({
         // The row of card types, one preview for the type and the signals
         // under it, the custom type's details below it.
         this.renderCardTypeSettings();
+        this.renderCardPhotoSettings();
         this.renderCardPreview();
         this.renderCardFieldsSettings();
         host.querySelectorAll<HTMLInputElement>('input[data-signal]').forEach(input => {
