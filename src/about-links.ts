@@ -123,28 +123,76 @@ export interface ShareNavigator {
 
 /**
  * How long a share sheet may take to answer before the address is copied too:
- * Chrome in an app window on a Mac (an installed web app) opens no sheet and
- * its share() never settles, so the click would do nothing.
+ * Chrome in an app window on a Mac (an installed web app) may open no sheet
+ * and its share() never settles, so the click would do nothing.
  */
 export const SHARE_SHEET_WAIT_MS = 1500;
+
+/**
+ * A sheet that answers sooner than this was never seen: nobody picks a target
+ * or closes a sheet that fast. Chrome in an installed web app on a Mac
+ * resolves share() at once (0 ms) with no sheet; a success or a cancel that
+ * quick is taken as "no sheet" and the address is copied.
+ */
+export const SHARE_SHEET_MIN_MS = 300;
+
+/** How `shareStrom` waits for the sheet (injectable for tests). */
+export interface ShareStromOptions {
+    /** A desktop app window (an installed web app): no sheet, the copy at once. */
+    appWindow?: boolean;
+    waitMs?: number;
+    minMs?: number;
+    now?: () => number;
+}
+
+/** The parts of `window` that tell a desktop app window (injectable for tests). */
+export interface AppWindowEnv {
+    matchMedia?: (query: string) => { matches: boolean };
+    /** `navigator.userAgentData.mobile` (Chromium only) is read from it. */
+    navigator?: object;
+}
+
+/**
+ * A Chromium browser on a computer running Strom as an installed web app (its
+ * own window, standalone or with the window controls overlay): there the
+ * share sheet opens nowhere, so "Share Strom" copies at once. Phones, tablets
+ * (touch), Safari and a browser tab keep the sheet.
+ */
+export function isDesktopAppWindow(env: AppWindowEnv): boolean {
+    const mq = env.matchMedia;
+    if (typeof mq !== 'function') return false;
+    const own = mq('(display-mode: standalone)').matches || mq('(display-mode: window-controls-overlay)').matches;
+    if (!own) return false;
+    // userAgentData exists in Chromium only; `mobile` is false on a computer.
+    const uad = (env.navigator as { userAgentData?: { mobile?: unknown } } | undefined)?.userAgentData;
+    if (uad?.mobile !== false) return false;
+    return mq('(pointer: fine)').matches && mq('(hover: hover)').matches;
+}
 
 /**
  * Share the website: the system share sheet where the browser has one (a
  * phone, a tablet, a Mac), otherwise a copy of the address to the clipboard.
  * A sheet closed without sharing is 'cancelled' (nothing to show); a sheet
  * that cannot open (no user gesture, a blocked context) falls back to the
- * copy, and so does one that has not answered within `waitMs` (it may open
- * nowhere; a sheet that is open meanwhile stays). Nothing is measured or sent
+ * copy, and so does one that answers sooner than `minMs` (it never showed)
+ * or not within `waitMs` (it may open nowhere; a sheet that is open meanwhile
+ * stays). A desktop app window skips the sheet. Nothing is measured or sent
  * anywhere else.
  */
 export async function shareStrom(lang: Language, nav: ShareNavigator, title: string,
-    waitMs: number = SHARE_SHEET_WAIT_MS): Promise<ShareStromOutcome> {
+    opts: ShareStromOptions = {}): Promise<ShareStromOutcome> {
+    const { appWindow = false, waitMs = SHARE_SHEET_WAIT_MS, minMs = SHARE_SHEET_MIN_MS, now = Date.now } = opts;
     const data = { title, url: shareStromUrl(lang) };
-    if (typeof nav.share === 'function' && (typeof nav.canShare !== 'function' || nav.canShare(data))) {
+    if (!appWindow && typeof nav.share === 'function' && (typeof nav.canShare !== 'function' || nav.canShare(data))) {
         const share = nav.share;
+        const started = now();
         const sheet = await new Promise<'shared' | 'cancelled' | 'copy'>((resolve) => {
             const timer = setTimeout(() => resolve('copy'), waitMs);
-            const settle = (outcome: 'shared' | 'cancelled' | 'copy') => { clearTimeout(timer); resolve(outcome); };
+            // An answer too quick for a person means no sheet was shown.
+            const settle = (outcome: 'shared' | 'cancelled' | 'copy') => {
+                clearTimeout(timer);
+                resolve(outcome !== 'copy' && now() - started < minMs ? 'copy' : outcome);
+            };
             const isAbort = (e: unknown) => (e as { name?: unknown } | null)?.name === 'AbortError';
             try {
                 share(data).then(() => settle('shared'), (e: unknown) => settle(isAbort(e) ? 'cancelled' : 'copy'));

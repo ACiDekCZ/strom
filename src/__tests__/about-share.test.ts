@@ -5,10 +5,26 @@
  * exist in every UI language, without addressing the reader.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { shareStrom, shareStromUrl, SHARE_SHEET_WAIT_MS, aboutAuthorXLink, type ShareNavigator } from '../about-links.js';
+import { shareStrom, shareStromUrl, SHARE_SHEET_WAIT_MS, SHARE_SHEET_MIN_MS, isDesktopAppWindow, aboutAuthorXLink, type ShareNavigator } from '../about-links.js';
 import { getStringsForLang, type Language } from '../strings.js';
 
 const LANGS: Language[] = ['en', 'cs', 'de', 'pl'];
+
+/** A sheet a person answers: after a while, as a real choice takes. */
+function after(ms: number, fail = false): () => Promise<void> {
+    return () => new Promise<void>((resolve, reject) => setTimeout(() => (fail ? reject(abortError()) : resolve()), ms));
+}
+
+/** Run `body` on fixed clocks (fake timers, outside midnight UTC). */
+async function onFixedClock(body: () => Promise<void>): Promise<void> {
+    vi.useFakeTimers();
+    try {
+        vi.setSystemTime(new Date('2026-11-15T10:30:00Z'));
+        await body();
+    } finally {
+        vi.useRealTimers();
+    }
+}
 
 function abortError(): Error {
     const e = new Error('Share canceled');
@@ -24,14 +40,16 @@ describe('About: Share Strom', () => {
         expect(shareStromUrl('pl')).toBe('https://stromapp.info/pl/');
     });
 
-    it('opens the system share sheet with the title and the address where there is one', async () => {
-        const share = vi.fn(async () => undefined);
+    it('opens the system share sheet with the title and the address where there is one', () => onFixedClock(async () => {
+        const share = vi.fn(after(2 * SHARE_SHEET_MIN_MS));
         const writeText = vi.fn(async () => undefined);
         const nav: ShareNavigator = { share, clipboard: { writeText } };
-        expect(await shareStrom('de', nav, 'Strom')).toBe('shared');
+        const outcome = shareStrom('de', nav, 'Strom');
+        await vi.advanceTimersByTimeAsync(SHARE_SHEET_WAIT_MS);
+        expect(await outcome).toBe('shared');
         expect(share).toHaveBeenCalledWith({ title: 'Strom', url: 'https://stromapp.info/de/' });
         expect(writeText).not.toHaveBeenCalled();
-    });
+    }));
 
     it('copies the address where the browser cannot share', async () => {
         const writeText = vi.fn(async () => undefined);
@@ -48,11 +66,47 @@ describe('About: Share Strom', () => {
         expect(writeText).toHaveBeenCalledWith('https://stromapp.info/');
     });
 
-    it('ends quietly when the share sheet is closed without sharing', async () => {
+    it('ends quietly when the share sheet is closed without sharing', () => onFixedClock(async () => {
+        const writeText = vi.fn(async () => undefined);
+        const nav: ShareNavigator = { share: after(2 * SHARE_SHEET_MIN_MS, true), clipboard: { writeText } };
+        const outcome = shareStrom('cs', nav, 'Strom');
+        await vi.advanceTimersByTimeAsync(SHARE_SHEET_WAIT_MS);
+        expect(await outcome).toBe('cancelled');
+        expect(writeText).not.toHaveBeenCalled();
+    }));
+
+    it('copies the address when share() succeeds at once (an installed web app on a Mac shows no sheet)', () => onFixedClock(async () => {
+        // Measured in an installed Chrome web app on a Mac: share() resolved in 0 ms, no sheet.
+        const writeText = vi.fn(async () => undefined);
+        const share = vi.fn(async () => undefined);
+        expect(await shareStrom('cs', { share, clipboard: { writeText } }, 'Strom')).toBe('copied');
+        expect(share).toHaveBeenCalled();
+        expect(writeText).toHaveBeenCalledWith('https://stromapp.info/cs/');
+        // Just under the shortest human answer: still no sheet seen.
+        writeText.mockClear();
+        const quick = shareStrom('en', { share: after(SHARE_SHEET_MIN_MS - 1), clipboard: { writeText } }, 'Strom');
+        await vi.advanceTimersByTimeAsync(SHARE_SHEET_MIN_MS);
+        expect(await quick).toBe('copied');
+        expect(writeText).toHaveBeenCalledWith('https://stromapp.info/');
+    }));
+
+    it('copies the address when the sheet is "cancelled" at once (it never showed)', () => onFixedClock(async () => {
         const writeText = vi.fn(async () => undefined);
         const nav: ShareNavigator = { share: async () => { throw abortError(); }, clipboard: { writeText } };
-        expect(await shareStrom('cs', nav, 'Strom')).toBe('cancelled');
-        expect(writeText).not.toHaveBeenCalled();
+        expect(await shareStrom('de', nav, 'Strom')).toBe('copied');
+        expect(writeText).toHaveBeenCalledWith('https://stromapp.info/de/');
+        writeText.mockClear();
+        const thrown: ShareNavigator = { share: () => { throw abortError(); }, clipboard: { writeText } };
+        expect(await shareStrom('de', thrown, 'Strom')).toBe('copied');
+        expect(writeText).toHaveBeenCalledTimes(1);
+    }));
+
+    it('a desktop app window copies at once without calling share()', async () => {
+        const share = vi.fn(async () => undefined);
+        const writeText = vi.fn(async () => undefined);
+        expect(await shareStrom('pl', { share, clipboard: { writeText } }, 'Strom', { appWindow: true })).toBe('copied');
+        expect(share).not.toHaveBeenCalled();
+        expect(writeText).toHaveBeenCalledWith('https://stromapp.info/pl/');
     });
 
     it('falls back to the copy when the share sheet cannot open', async () => {
@@ -81,23 +135,17 @@ describe('About: Share Strom', () => {
         }
     });
 
-    it('a sheet answering within the wait is the outcome: shared or cancelled, no copy', async () => {
-        vi.useFakeTimers();
-        try {
-            vi.setSystemTime(new Date('2026-11-15T10:30:00Z'));
-            const writeText = vi.fn(async () => undefined);
-            const later = (fail: boolean) => () => new Promise<void>((resolve, reject) =>
-                setTimeout(() => (fail ? reject(abortError()) : resolve()), SHARE_SHEET_WAIT_MS - 100));
-            const shared = shareStrom('en', { share: later(false), clipboard: { writeText } }, 'Strom');
-            const cancelled = shareStrom('en', { share: later(true), clipboard: { writeText } }, 'Strom');
+    it('a sheet answering within the wait is the outcome: shared or cancelled, no copy', () => onFixedClock(async () => {
+        const writeText = vi.fn(async () => undefined);
+        for (const ms of [SHARE_SHEET_MIN_MS, SHARE_SHEET_WAIT_MS - 100]) {
+            const shared = shareStrom('en', { share: after(ms), clipboard: { writeText } }, 'Strom');
+            const cancelled = shareStrom('en', { share: after(ms, true), clipboard: { writeText } }, 'Strom');
             await vi.advanceTimersByTimeAsync(SHARE_SHEET_WAIT_MS * 2);
             expect(await shared).toBe('shared');
             expect(await cancelled).toBe('cancelled');
-            expect(writeText).not.toHaveBeenCalled();
-        } finally {
-            vi.useRealTimers();
         }
-    });
+        expect(writeText).not.toHaveBeenCalled();
+    }));
 
     it('copies the address when share throws at once', async () => {
         const writeText = vi.fn(async () => undefined);
@@ -110,6 +158,30 @@ describe('About: Share Strom', () => {
         expect(await shareStrom('en', {}, 'Strom')).toBe('failed');
         const nav: ShareNavigator = { clipboard: { writeText: async () => { throw new Error('denied'); } } };
         expect(await shareStrom('en', nav, 'Strom')).toBe('failed');
+    });
+});
+
+describe('About: Share Strom in a desktop app window', () => {
+    type Media = Record<string, boolean>;
+    const env = (media: Media, mobile: boolean | null = false) => ({
+        matchMedia: (q: string) => ({ matches: media[q] === true }),
+        navigator: mobile === null ? {} : { userAgentData: { mobile } },
+    });
+    const computer: Media = { '(pointer: fine)': true, '(hover: hover)': true };
+
+    it('is an installed web app of Chromium on a computer (standalone or window controls overlay)', () => {
+        expect(isDesktopAppWindow(env({ ...computer, '(display-mode: standalone)': true }))).toBe(true);
+        expect(isDesktopAppWindow(env({ ...computer, '(display-mode: window-controls-overlay)': true }))).toBe(true);
+    });
+
+    it('is not a browser tab, a phone or tablet, or Safari (no userAgentData)', () => {
+        expect(isDesktopAppWindow(env({ ...computer, '(display-mode: browser)': true }))).toBe(false);
+        // A phone or a tablet: touch, no hover; Chromium says mobile.
+        expect(isDesktopAppWindow(env({ '(display-mode: standalone)': true, '(pointer: coarse)': true }))).toBe(false);
+        expect(isDesktopAppWindow(env({ ...computer, '(display-mode: standalone)': true }, true))).toBe(false);
+        // Safari's web app in the Dock keeps its share sheet.
+        expect(isDesktopAppWindow(env({ ...computer, '(display-mode: standalone)': true }, null))).toBe(false);
+        expect(isDesktopAppWindow({})).toBe(false);
     });
 });
 

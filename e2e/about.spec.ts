@@ -167,7 +167,8 @@ test('About: Share Strom opens the share sheet with the website in the UI langua
         w.__shared = [];
         Object.defineProperty(navigator, 'share', {
             configurable: true,
-            value: async (data: unknown) => { w.__shared.push(data); },
+            // A person picks a target: the sheet answers after a while.
+            value: async (data: unknown) => { w.__shared.push(data); await new Promise(r => setTimeout(r, 500)); },
         });
     });
     await openApp(page);
@@ -178,6 +179,7 @@ test('About: Share Strom opens the share sheet with the website in the UI langua
     await share.click();
     await expect.poll(() => page.evaluate(() => (window as unknown as { __shared: unknown[] }).__shared))
         .toEqual([{ title: 'Strom', url: 'https://stromapp.info/de/' }]);
+    await page.waitForTimeout(800);
     await expect(page.locator('.toast')).toHaveCount(0);
     await expect(about).toBeVisible();
 });
@@ -193,7 +195,11 @@ test('About: a cancelled share sheet shows nothing; without a sheet the address 
         });
         Object.defineProperty(navigator, 'share', {
             configurable: true,
-            value: async () => { throw new DOMException('Share canceled', 'AbortError'); },
+            // Closed by a person: after a while, not at once.
+            value: async () => {
+                await new Promise(r => setTimeout(r, 500));
+                throw new DOMException('Share canceled', 'AbortError');
+            },
         });
     });
     const errors: string[] = [];
@@ -206,7 +212,7 @@ test('About: a cancelled share sheet shows nothing; without a sheet the address 
 
     // A share sheet closed without sharing: no copy, no notice, no error.
     await share.click();
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(900);
     await expect(page.locator('.toast')).toHaveCount(0);
     expect(await page.evaluate(() => (window as unknown as { __copied: string[] }).__copied)).toEqual([]);
 
@@ -250,6 +256,45 @@ test('About: a share sheet that never opens (an app window on a Mac) still copie
     const box = await toast.boundingBox();
     expect(box!.y + box!.height).toBeLessThanOrEqual(close!.y);
 });
+
+/**
+ * An installed web app of Chrome on a Mac (measured 15 Nov 2026): share()
+ * resolves at once (0 ms) and no sheet shows. An answer that quick is no
+ * sheet: the address is copied with the notice. In a desktop app window
+ * (standalone) the sheet is skipped and the copy comes at once.
+ */
+for (const variant of ['share() succeeds at once', 'a desktop app window'] as const) {
+    test(`About: Share Strom copies the address with the notice when ${variant}`, async ({ page }) => {
+        await page.addInitScript((appWindow) => {
+            const w = window as unknown as { __copied: string[]; __shareCalls: number };
+            w.__copied = [];
+            w.__shareCalls = 0;
+            Object.defineProperty(navigator, 'clipboard', {
+                configurable: true,
+                value: { writeText: async (t: string) => { w.__copied.push(t); } },
+            });
+            Object.defineProperty(navigator, 'share', { configurable: true, value: async () => { w.__shareCalls++; } });
+            if (appWindow) {
+                const real = window.matchMedia.bind(window);
+                window.matchMedia = (q: string) => /display-mode:\s*standalone/.test(q)
+                    ? { ...real(q), matches: true, media: q } as MediaQueryList
+                    : real(q);
+            }
+        }, variant === 'a desktop app window');
+        await openApp(page);
+        await page.evaluate(() => window.Strom.UI.showAboutDialog());
+        const about = page.locator('#about-modal');
+        const t0 = Date.now();
+        await about.getByRole('button', { name: 'Share Strom' }).click();
+        await expect.poll(() => page.evaluate(() => (window as unknown as { __copied: string[] }).__copied))
+            .toEqual(['https://stromapp.info/']);
+        await expect(page.locator('.toast')).toHaveText('Link copied');
+        // At once, not after the long wait for a sheet that never answers.
+        expect(Date.now() - t0).toBeLessThan(1200);
+        const calls = await page.evaluate(() => (window as unknown as { __shareCalls: number }).__shareCalls);
+        expect(calls).toBe(variant === 'a desktop app window' ? 0 : 1);
+    });
+}
 
 test('About: the author on X is a link beside the others, in a new tab', async ({ page }) => {
     await openApp(page);

@@ -32,7 +32,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { CARD_STATUS_CLASSES } from '../reliability.js';
 import { cardStatusLegendLabel, statusMarkHtml } from './fact-status.js';
 import { storyFoldHtml } from '../card-signals.js';
-import { aboutUsersGroupLink, aboutChangelogLink, changelogIsBeta, aboutAuthorXLink, shareStrom, shareStromUrl } from '../about-links.js';
+import { aboutUsersGroupLink, aboutChangelogLink, changelogIsBeta, aboutAuthorXLink, shareStrom, shareStromUrl, isDesktopAppWindow } from '../about-links.js';
 import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
 import {
     validateJsonImport,
@@ -309,7 +309,7 @@ export const miscMethods = uiModule({
      */
     async shareStromFromAbout(): Promise<void> {
         const lang = getCurrentLanguage();
-        const outcome = await shareStrom(lang, navigator, 'Strom');
+        const outcome = await shareStrom(lang, navigator, 'Strom', { appWindow: isDesktopAppWindow(window) });
         const opts = { kind: 'about-share', clearOf: '#about-modal.active .about-footer' };
         if (outcome === 'copied') this.showToast(strings.about.shareCopied, 3000, opts);
         else if (outcome === 'failed') this.showToast(shareStromUrl(lang), 10000, opts);
