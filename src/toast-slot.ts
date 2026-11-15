@@ -237,7 +237,9 @@ export function reconcile(): void {
     for (const t of messages) watch?.observe(t, { attributes: true, attributeFilter: ['class'] });
     // The newest message (the undo pill not while a dialog hides it); else the focus confirmation
     const dialog = document.querySelector('.modal-overlay.active') !== null;
-    const candidates = dialog ? messages.filter(t => !t.classList.contains('undo-toast')) : messages;
+    // (a pill made in a dialog stands over it: .undo-toast-over-dialog, spec 095)
+    const candidates = dialog
+        ? messages.filter(t => !t.classList.contains('undo-toast') || t.classList.contains('undo-toast-over-dialog')) : messages;
     const focus = lenders.find(l => l.kind === 'focus') ?? null;
     const next = candidates[candidates.length - 1] ?? messages[messages.length - 1] ?? focus?.el ?? null;
 

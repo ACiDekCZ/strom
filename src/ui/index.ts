@@ -380,6 +380,8 @@ export class UIClass {
     sourceViewerContext: CitationContext | null = null;
     /** The viewer opened from the research's history: only to read (no Edit, no entry from the same book). */
     sourceViewerReadOnly = false;
+    /** The viewer's citation was just removed from its citation bar (spec 095 R9: "Unlinked from …"). */
+    sourceViewerUncited = false;
     /** "Edit" in the viewer: reopen the viewer once the editor closes. */
     reopenViewerAfterEditor: string | null = null;
     /** The catalog was opened from the picker: go back to it on close. */

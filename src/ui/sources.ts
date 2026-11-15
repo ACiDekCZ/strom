@@ -40,7 +40,8 @@ import { verifiedOffer, isOlderSource, researchReadSource, unverifiedOlderSource
 import { shownName } from '../person-name.js';
 import { CitationFact, citationFact, orderedCitations, shownCitationOrder } from '../citation-order.js';
 import { CitationHolder, citationMainOf } from '../citation-quality.js';
-import { citationMainShown } from '../citation-gates.js';
+import { citationMainShown, citationMainOffered, citationRemoveTaken } from '../citation-gates.js';
+import { CiteBarGates, citationFactWords, citeBar, citeBarHtml, citeMainToast, unciteToast } from '../citation-bar.js';
 
 /** What a citation applies to: a person, one of their events, or a partnership. */
 /** What a citation is made on: a person (as a whole, or their birth / death), one of their events, a union. */
@@ -425,6 +426,7 @@ export const sourcesMethods = uiModule({
         this.sourceViewerId = sourceId;
         this.sourceViewerContext = ctx;
         this.sourceViewerReadOnly = !!opts.readOnly;
+        this.sourceViewerUncited = false;
         this.researchImagesViewerOpened(sourceId);
         this.renderSourceViewer();
         const modal = document.getElementById('source-viewer-modal');
@@ -439,11 +441,102 @@ export const sourcesMethods = uiModule({
         this.researchImagesViewerClosed();
         this.sourceViewerId = null;
         this.sourceViewerContext = null;
+        this.sourceViewerUncited = false;
     },
 
     /** Can the current user change sources (not a read-only view, not locked)? */
     canEditSources(): boolean {
         return !DataManager.isReadOnly() && !DataManager.isTreeLocked();
+    },
+
+    /** What the citation bar may offer at a fact (spec 095 R6, R10): the tree's gates and the person's lock. */
+    citationBarGates(ctx: CitationContext, editable: boolean): CiteBarGates {
+        const treeId = DataManager.getCurrentTreeId();
+        const hasResearch = !!(treeId && TreeManager.getTreeMetadata(treeId)?.research);
+        const locked = 'personId' in ctx && DataManager.isPersonLocked(ctx.personId);
+        return {
+            mainOffered: citationMainOffered(treeId),
+            removeNotTaken: hasResearch && !citationRemoveTaken(treeId),
+            editable: editable && !locked,
+            order: shownCitationOrder(),
+        };
+    },
+
+    /** "Mark as main" / "Unmark main" in the viewer's citation bar: one undo step, its own toast (R11). */
+    setViewerCitationMain(on: boolean): void {
+        const ctx = this.sourceViewerContext;
+        const id = this.sourceViewerId;
+        const data = DataManager.getData();
+        const info = ctx ? citationFact(data, ctx) : null;
+        const src = id ? data.sources?.[id] : undefined;
+        if (!ctx || !info?.isFact || !src) return;
+        const { of } = citationFactWords(data, info);
+        if (!DataManager.setCitationMain(ctx, on ? src.id : null, citeMainToast(of, on ? src.title : null))) return;
+        this.citationsChangedAt(ctx);
+        // The focus on the button standing in its place now ("Unmark main" ⇄ "Mark as main").
+        document.querySelector<HTMLElement>(`#source-viewer-body .viewer-cite [data-cite-act="${on ? 'clear' : 'set'}"]`)?.focus();
+    },
+
+    /** "Remove citation" in the viewer's citation bar: the viewer stays, the bar says the citation is gone (R9). */
+    unciteFromSourceViewer(): void {
+        const ctx = this.sourceViewerContext;
+        const id = this.sourceViewerId;
+        if (!ctx || !id || !this.unciteAt(ctx, id)) return;
+        this.sourceViewerUncited = true;
+        this.citationsChangedAt(ctx);
+        document.querySelector<HTMLElement>('#source-viewer-body .viewer-cite-text')?.focus();
+    },
+
+    /**
+     * Remove the citation of `sourceId` from what `ctx` names (one undo step,
+     * no confirmation, the main one too: R8), with its toast (spec 095 §3).
+     * A person's own citations keep the history's words as their toast.
+     */
+    unciteAt(ctx: CitationContext, sourceId: string): boolean {
+        const data = DataManager.getData();
+        const info = citationFact(data, ctx);
+        const src = data.sources?.[sourceId];
+        let toast: ReturnType<typeof unciteToast> | undefined;
+        if (info?.isFact && src && info.sourceIds.includes(sourceId)) {
+            const treeId = DataManager.getCurrentTreeId();
+            const hasResearch = !!(treeId && TreeManager.getTreeMetadata(treeId)?.research);
+            toast = unciteToast({
+                fact: citationFactWords(data, info).of,
+                title: src.title,
+                wasMain: citationMainOffered(treeId) && DataManager.citationMainAt(ctx) === sourceId,
+                persons: 'personId' in ctx && ctx.eventId ? DataManager.unciteEventReach(ctx.personId, ctx.eventId, sourceId) : 1,
+                notTaken: hasResearch && !citationRemoveTaken(treeId),
+                treeId,
+            });
+        }
+        if ('partnershipId' in ctx) {
+            return ctx.eventId
+                ? DataManager.unciteCoupleEvent(ctx.partnershipId, ctx.eventId, sourceId, toast)
+                : DataManager.uncitePartnership(ctx.partnershipId, sourceId, ctx.fact, toast);
+        }
+        return ctx.eventId
+            ? DataManager.unciteEvent(ctx.personId, ctx.eventId, sourceId, toast)
+            : DataManager.uncitePerson(ctx.personId, sourceId, ctx.fact, toast);
+    },
+
+    /** A fact's citations changed from the viewer: the viewer, the chips behind it, the relationships panel. */
+    citationsChangedAt(ctx: CitationContext | null): void {
+        this.renderSourceViewer();
+        this.refreshCitationChips();
+        if (ctx && 'partnershipId' in ctx) this.refreshRelationshipsPanel();
+    },
+
+    /**
+     * After an undo or a redo (the tree is drawn by the caller): the chips of
+     * an open editor and an open viewer's citation bar follow the tree.
+     */
+    citationsTreeChanged(): void {
+        if (document.querySelector('.modal-overlay.active')) this.renderOpenCitationChips();
+        if (!document.getElementById('source-viewer-modal')?.classList.contains('active')) return;
+        if (!this.sourceViewerId || !DataManager.getData().sources?.[this.sourceViewerId]) return;
+        this.renderSourceViewer();
+        const ctx = this.sourceViewerContext;
+        if (ctx && 'partnershipId' in ctx) this.refreshRelationshipsPanel();
     },
 
     renderSourceViewer(): void {
@@ -467,6 +560,10 @@ export const sourcesMethods = uiModule({
         }
 
         const chunks: string[] = [];
+        // Opened from a fact's citation: where it stands in the fact's order, Mark as main, Remove (spec 095 §2).
+        const ctx = this.sourceViewerContext;
+        const bar = ctx ? citeBar(DataManager.getData(), ctx, src.id, this.citationBarGates(ctx, editable), this.sourceViewerUncited) : null;
+        if (bar) chunks.push(citeBarHtml(bar));
         // The file's excerpts, then those loaded from the research (kept with the tree).
         const { excerpts, fromResearch } = this.viewerExcerpts(src);
         // The research on this computer keeps the original scan: offer it.
@@ -564,7 +661,7 @@ export const sourcesMethods = uiModule({
         const cites = DataManager.listSourceCitations(src.id)
             .map(ref => ({ text: citeText(ref), main: isMainAt(ref) })).filter(c => c.text);
         if (cites.length > 0) {
-            const star = `<span class="viewer-cite-main" role="img" aria-label="${esc(s.mainMark)}">\u2605\uFE0E</span>`;
+            const star = `<span class="viewer-cites-main" role="img" aria-label="${esc(s.mainMark)}">\u2605\uFE0E</span>`;
             chunks.push(`<section><h3 class="viewer-section-title">${esc(s.viewerCites)}</h3>
                 <ul class="viewer-cites">${cites.map(c => `<li>${esc(c.text)}${c.main ? `&nbsp;${star}` : ''}</li>`).join('')}</ul></section>`);
         }
@@ -583,6 +680,13 @@ export const sourcesMethods = uiModule({
             });
         });
         body.querySelector('.viewer-add-excerpt')?.addEventListener('click', () => this.editFromSourceViewer(true));
+        body.querySelectorAll<HTMLElement>('.viewer-cite [data-cite-act]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const act = btn.dataset.citeAct;
+                if (act === 'remove') this.unciteFromSourceViewer();
+                else this.setViewerCitationMain(act === 'set');
+            });
+        });
         body.querySelector('#source-viewer-reading')?.addEventListener('click', () => this.showReadingOfSource(src.id));
         this.wireResearchImagesViewer(body, src);
         this.wireSourceConfirm(body, src);
@@ -1596,6 +1700,11 @@ export const sourcesMethods = uiModule({
     /** Refresh whichever citation chip lists are currently on screen (and the cards: their evidence stripes). */
     refreshCitationChips(): void {
         TreeRenderer.render();
+        this.renderOpenCitationChips();
+    },
+
+    /** The citation chip lists on screen (the person editor's, an event's, the person's sources), without the tree. */
+    renderOpenCitationChips(): void {
         if (this.currentId) {
             this.renderPersonSourcesChips();
             this.renderFactSourcesChips('birth');
@@ -1635,13 +1744,13 @@ export const sourcesMethods = uiModule({
 
     unciteBirthSource(sourceId: string): void {
         if (!this.currentId) return;
-        DataManager.uncitePerson(this.currentId, sourceId, 'birth');
+        this.unciteAt({ personId: this.currentId, fact: 'birth' }, sourceId);
         this.refreshCitationChips();
     },
 
     unciteDeathSource(sourceId: string): void {
         if (!this.currentId) return;
-        DataManager.uncitePerson(this.currentId, sourceId, 'death');
+        this.unciteAt({ personId: this.currentId, fact: 'death' }, sourceId);
         this.refreshCitationChips();
     },
 
@@ -1653,14 +1762,14 @@ export const sourcesMethods = uiModule({
 
     unciteEventSource(sourceId: string): void {
         if (this.coupleEventPartnershipId && this.editingEventId) {
-            DataManager.unciteCoupleEvent(this.coupleEventPartnershipId, this.editingEventId, sourceId);
+            this.unciteAt({ partnershipId: this.coupleEventPartnershipId, eventId: this.editingEventId }, sourceId);
             this.refreshCitationChips();
             // The event's row in the panel counts its sources.
             this.refreshRelationshipsPanel();
             return;
         }
         if (!this.currentId || !this.editingEventId) return;
-        DataManager.unciteEvent(this.currentId, this.editingEventId, sourceId);
+        this.unciteAt({ personId: this.currentId, eventId: this.editingEventId }, sourceId);
         this.refreshCitationChips();
     },
 

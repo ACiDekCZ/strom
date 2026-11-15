@@ -762,8 +762,9 @@ export const miscMethods = uiModule({
         initKeyboardAccess();
         // Every single user mutation raises the Undo toast (bulk import/merge
         // pass silent — they have their own UI). Registered once, at startup.
-        DataManager.onMutationCommitted = (description: string) => {
-            this.showUndoToast(description);
+        DataManager.onMutationCommitted = (description, toast) => {
+            // A toast of its own (spec 095): its sentence instead of the history's entry, a note under it.
+            this.showUndoToast(toast?.text ?? description, toast?.note, !!toast);
             this.refreshUndoRedoToolbar();  // R3: keep the visible toolbar pair in sync
         };
         // R3: fires for EVERY commit, silent bulk flows included — a silent
@@ -1859,23 +1860,39 @@ export const miscMethods = uiModule({
      * the message runs its own time. A message gone sooner gives the pill
      * back for the time left.
      */
-    showUndoToast(description: string): void {
+    showUndoToast(description: string, note?: string, ownToast = false): void {
         // A newer pill replaces the one standing at once (its "Undo" would undo the newer change);
         // over another toast to be read it waits for that toast's 3 s (round 7 §53)
         this.dismissUndoToast();
-        whenFree('undo', () => this.putUndoToast(description));
+        // A toast of its own made in a dialog (a citation's chip, the source viewer's citation bar):
+        // it stands over the dialog (any other pill waits for the dialogs to close, as before).
+        const overDialog = ownToast && document.querySelector('.modal-overlay.active') !== null;
+        whenFree('undo', () => this.putUndoToast(description, note, overDialog));
     },
 
-    /** Put the undo pill on the screen now (showUndoToast, its turn come). */
-    putUndoToast(description: string): void {
+    /**
+     * Put the undo pill on the screen now (showUndoToast, its turn come).
+     * `note`: a second sentence under it (the pill wraps, stands 10 s);
+     * `overDialog`: the change was made in a dialog, the pill stands over it
+     * so its "Undo" can be clicked there (spec 095 §2, §3).
+     */
+    putUndoToast(description: string, note?: string, overDialog = false): void {
         const el = document.createElement('div');
         el.className = 'undo-toast';
+        if (note) el.classList.add('undo-toast-roomy');
+        if (overDialog) el.classList.add('undo-toast-over-dialog');
         el.setAttribute('role', 'status');
         el.setAttribute('aria-live', 'polite');
 
         const msg = document.createElement('span');
         msg.className = 'undo-toast-msg';
         msg.textContent = description;
+        if (note) {
+            const small = document.createElement('small');
+            small.className = 'undo-toast-note';
+            small.textContent = note;
+            msg.appendChild(small);
+        }
 
         const btn = document.createElement('button');
         btn.type = 'button';
@@ -1898,7 +1915,7 @@ export const miscMethods = uiModule({
         this.undoToastEl = el;
 
         // Countdown with hover-to-pause: track the time left, re-arm on leave.
-        let remaining = 6000;
+        let remaining = note ? 10000 : 6000;
         let startedAt = Date.now();
         const clear = () => {
             if (this.undoToastTimer) { clearTimeout(this.undoToastTimer); this.undoToastTimer = null; }
@@ -1964,6 +1981,7 @@ export const miscMethods = uiModule({
         this.materialsTreeChanged();    // attachments brought back or gone again
         this.placesManagerTreeChanged();
         this.sourceSplitTreeChanged();  // the Sources manager's lines, an open split dialog
+        this.citationsTreeChanged();    // an open source viewer's citation bar (spec 095 R9)
         this.showToast(strings.undo.undone(result.description), 3000, { kind: 'undo-result' });
     },
 
@@ -1982,6 +2000,7 @@ export const miscMethods = uiModule({
         this.materialsTreeChanged();
         this.placesManagerTreeChanged();
         this.sourceSplitTreeChanged();  // the Sources manager's lines, an open split dialog
+        this.citationsTreeChanged();
         this.showToast(strings.undo.redone(result.description), 3000, { kind: 'undo-result' });
     },
 

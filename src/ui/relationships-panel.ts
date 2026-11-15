@@ -192,7 +192,7 @@ export const relationshipsPanelMethods = uiModule({
                 const el = e.currentTarget as HTMLElement;
                 const partnershipId = el.dataset.partnershipId as PartnershipId;
                 const sourceId = el.dataset.sourceId!;
-                DataManager.uncitePartnership(partnershipId, sourceId);
+                this.unciteAt({ partnershipId }, sourceId);
                 this.refreshRelationshipsPanel();
             });
         });

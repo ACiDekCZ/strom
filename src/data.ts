@@ -182,6 +182,16 @@ export function personCitationField(fact?: CitedFact | null): PersonCitationFiel
     return fact === 'birth' ? 'birthSourceIds' : fact === 'death' ? 'deathSourceIds' : 'sourceIds';
 }
 
+/**
+ * The undo toast of one mutation when it says more than the history's entry
+ * (spec 095: "Main citation for the birth: …", "Citation removed from …"):
+ * `note` is a second sentence under it (the toast then wraps and stands 10 s).
+ */
+export interface MutationToast {
+    text: string;
+    note?: string;
+}
+
 /** One place that cites a source (see DataManager.listSourceCitations). */
 export type SourceCitationRef =
     | { kind: 'person'; personId: PersonId; fact?: CitedFact }
@@ -446,7 +456,7 @@ class DataManagerClass {
      * flows (import / merge / batch), which pass `silent` — those have their own
      * UI. Set by the UI layer at startup; a no-op until then.
      */
-    onMutationCommitted: ((description: string) => void) | null = null;
+    onMutationCommitted: ((description: string, toast?: MutationToast) => void) | null = null;
 
     /**
      * Notified after EVERY commit (single or silent bulk flow) and every
@@ -1444,7 +1454,7 @@ class DataManagerClass {
      * stack with a description, then persist. Replaces this.save() at the end of
      * mutation methods. During a batch this defers to commitBatch (no push/save).
      */
-    private commitMutation(description: string, silent = false, mark?: UndoMark): void {
+    private commitMutation(description: string, silent = false, mark?: UndoMark, toast?: MutationToast): void {
         if (this.batchActive) {
             this.batchDirty = true;
             if (this.batchFirstDescription === null) this.batchFirstDescription = description;
@@ -1457,7 +1467,7 @@ class DataManagerClass {
             this.noteUserChange();
             this.windowSink.edit(description, this.windowEditContext ?? undefined);
             this.onUndoRedoChanged?.();
-            if (!silent) this.onMutationCommitted?.(description);
+            if (!silent) this.onMutationCommitted?.(description, toast);
             return;
         }
         UndoManager.setActiveTree(this.currentTreeId);
@@ -1476,7 +1486,7 @@ class DataManagerClass {
         this.onUndoRedoChanged?.();
         // Single user actions raise the Undo toast; bulk flows (import / merge /
         // batch) pass silent — they surface their own result UI instead.
-        if (!silent && !this.viewMode) this.onMutationCommitted?.(description);
+        if (!silent && !this.viewMode) this.onMutationCommitted?.(description, toast);
     }
 
     /** Description a single undo would reverse (for the ⋯ menu label), or null. */
@@ -3213,7 +3223,7 @@ class DataManagerClass {
     }
 
     /** Remove a citation of `sourceId` from a person (or from their birth / death). */
-    uncitePerson(personId: PersonId, sourceId: string, fact?: CitedFact): boolean {
+    uncitePerson(personId: PersonId, sourceId: string, fact?: CitedFact, toast?: MutationToast): boolean {
         const person = this.data.persons[personId];
         const field = personCitationField(fact);
         if (!person?.[field]?.includes(sourceId)) return false;
@@ -3225,7 +3235,7 @@ class DataManagerClass {
         else delete person[field];
         // The citation's own QUAY and its being the main one go with it.
         cleanCitationQuay(person, PERSON_CITATION_FIELDS);
-        this.commitMutation(strings.undo.uncite(auditPersonName(person)));
+        this.commitMutation(strings.undo.uncite(auditPersonName(person)), false, undefined, toast);
         AuditLogManager.log(this.currentTreeId, 'source.uncite', strings.auditLog.uncitedSource(auditPersonName(person)));
         return true;
     }
@@ -3247,7 +3257,7 @@ class DataManagerClass {
     }
 
     /** Remove a citation of `sourceId` from a partnership (or from its divorce). */
-    uncitePartnership(partnershipId: PartnershipId, sourceId: string, fact?: 'divorce'): boolean {
+    uncitePartnership(partnershipId: PartnershipId, sourceId: string, fact?: 'divorce', toast?: MutationToast): boolean {
         const partnership = this.data.partnerships[partnershipId];
         const field = fact === 'divorce' ? 'divorceSourceIds' : 'sourceIds';
         if (!partnership?.[field]?.includes(sourceId)) return false;
@@ -3259,7 +3269,7 @@ class DataManagerClass {
         else delete partnership[field];
         cleanCitationQuay(partnership, PARTNERSHIP_CITATION_FIELDS);
         const names = this.partnershipNames(partnership);
-        this.commitMutation(strings.undo.uncite(names));
+        this.commitMutation(strings.undo.uncite(names), false, undefined, toast);
         AuditLogManager.log(this.currentTreeId, 'source.uncite', strings.auditLog.uncitedSource(names));
         return true;
     }
@@ -3283,7 +3293,7 @@ class DataManagerClass {
      * nothing changed or it is refused (a locked person or tree, a source not
      * cited there, a person's own citations).
      */
-    setCitationMain(ref: CitationRef, sourceId: string | null): boolean {
+    setCitationMain(ref: CitationRef, sourceId: string | null, toast?: MutationToast): boolean {
         const info = citationFact(this.data, ref);
         if (!info?.isFact) return false;
         if (sourceId !== null && !info.sourceIds.includes(sourceId)) return false;
@@ -3303,7 +3313,7 @@ class DataManagerClass {
         for (const h of holders) putCitationMain(h, info.field, sourceId);
         const name = info.person ? auditPersonName(info.person) : this.partnershipNames(info.partnership!);
         const fact = info.label ?? (info.word ? strings.events.typesOf[info.word] : '');
-        this.commitMutation(sourceId !== null ? strings.undo.citeMain(fact, name) : strings.undo.citeMainClear(fact, name));
+        this.commitMutation(sourceId !== null ? strings.undo.citeMain(fact, name) : strings.undo.citeMainClear(fact, name), false, undefined, toast);
         return true;
     }
 
@@ -3492,7 +3502,7 @@ class DataManagerClass {
     }
 
     /** Remove a citation of `sourceId` from a person's life event (from every copy of a shared one, as citeEvent). */
-    unciteEvent(personId: PersonId, eventId: string, sourceId: string): boolean {
+    unciteEvent(personId: PersonId, eventId: string, sourceId: string, toast?: MutationToast): boolean {
         const person = this.data.persons[personId];
         const ev = person?.events?.find(e => e.id === eventId);
         if (!person || !ev?.sourceIds?.includes(sourceId)) return false;
@@ -3506,9 +3516,25 @@ class DataManagerClass {
             if (c.event.sourceIds.length === 0) delete c.event.sourceIds;
             cleanCitationQuay(c.event, ['sourceIds']);
         }
-        this.commitMutation(strings.undo.uncite(auditPersonName(person)));
+        this.commitMutation(strings.undo.uncite(auditPersonName(person)), false, undefined, toast);
         AuditLogManager.log(this.currentTreeId, 'source.uncite', strings.auditLog.uncitedSource(auditPersonName(person)));
         return true;
+    }
+
+    /**
+     * The persons whose copy of a person's event loses the citation of
+     * `sourceId` when unciteEvent removes it (a shared event: every copy
+     * citing it that is not locked; 0 when nothing would be removed).
+     */
+    unciteEventReach(personId: PersonId, eventId: string, sourceId: string): number {
+        const ev = this.data.persons[personId]?.events?.find(e => e.id === eventId);
+        if (!ev?.sourceIds?.includes(sourceId)) return 0;
+        const persons = new Set<PersonId>();
+        for (const c of this.eventCopies(personId, eventId) ?? [{ personId, event: ev }]) {
+            if (c.event !== ev && this.isPersonLocked(c.personId)) continue;
+            if (c.event.sourceIds?.includes(sourceId)) persons.add(c.personId);
+        }
+        return persons.size;
     }
 
     /**
@@ -3607,7 +3633,7 @@ class DataManagerClass {
         return true;
     }
 
-    unciteCoupleEvent(partnershipId: PartnershipId, eventId: string, sourceId: string): boolean {
+    unciteCoupleEvent(partnershipId: PartnershipId, eventId: string, sourceId: string, toast?: MutationToast): boolean {
         const partnership = this.data.partnerships[partnershipId];
         const ev = partnership?.events?.find(e => e.id === eventId);
         if (!partnership || !ev?.sourceIds?.includes(sourceId) || this.isTreeLocked()) return false;
@@ -3617,7 +3643,7 @@ class DataManagerClass {
         if (ev.sourceIds.length === 0) delete ev.sourceIds;
         cleanCitationQuay(ev, ['sourceIds']);
         const names = this.partnershipNames(partnership);
-        this.commitMutation(strings.undo.uncite(names));
+        this.commitMutation(strings.undo.uncite(names), false, undefined, toast);
         AuditLogManager.log(this.currentTreeId, 'source.uncite', strings.auditLog.uncitedSource(names));
         return true;
     }
