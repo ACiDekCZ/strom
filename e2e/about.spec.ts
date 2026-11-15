@@ -273,7 +273,19 @@ for (const variant of ['share() succeeds at once', 'a desktop app window'] as co
                 configurable: true,
                 value: { writeText: async (t: string) => { w.__copied.push(t); } },
             });
-            Object.defineProperty(navigator, 'share', { configurable: true, value: async () => { w.__shareCalls++; } });
+            // Like Chrome: share() called off the navigator throws "Illegal invocation".
+            Object.defineProperty(navigator, 'share', {
+                configurable: true,
+                value: async function (this: unknown) {
+                    if (this !== navigator) throw new TypeError('Illegal invocation');
+                    w.__shareCalls++;
+                },
+            });
+            // Chromium on a Mac (headless CI runs on Linux).
+            Object.defineProperty(navigator, 'userAgentData', {
+                configurable: true,
+                value: { mobile: false, platform: 'macOS', brands: [] },
+            });
             if (appWindow) {
                 const real = window.matchMedia.bind(window);
                 window.matchMedia = (q: string) => /display-mode:\s*standalone/.test(q)

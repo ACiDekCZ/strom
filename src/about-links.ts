@@ -148,15 +148,15 @@ export interface ShareStromOptions {
 /** The parts of `window` that tell a desktop app window (injectable for tests). */
 export interface AppWindowEnv {
     matchMedia?: (query: string) => { matches: boolean };
-    /** `navigator.userAgentData.mobile` (Chromium only) is read from it. */
+    /** `navigator.userAgentData` (Chromium only: `mobile`, `platform`) is read from it. */
     navigator?: object;
 }
 
 /**
- * A Chromium browser on a computer running Strom as an installed web app (its
- * own window, standalone or with the window controls overlay): there the
- * share sheet opens nowhere, so "Share Strom" copies at once. Phones, tablets
- * (touch), Safari and a browser tab keep the sheet.
+ * Chromium on a Mac running Strom as an installed web app (its own window,
+ * standalone or with the window controls overlay): there the share sheet
+ * opens nowhere, so "Share Strom" copies at once. Windows and ChromeOS app
+ * windows, phones, tablets (touch), Safari and a browser tab keep the sheet.
  */
 export function isDesktopAppWindow(env: AppWindowEnv): boolean {
     const mq = env.matchMedia;
@@ -164,8 +164,10 @@ export function isDesktopAppWindow(env: AppWindowEnv): boolean {
     const own = mq('(display-mode: standalone)').matches || mq('(display-mode: window-controls-overlay)').matches;
     if (!own) return false;
     // userAgentData exists in Chromium only; `mobile` is false on a computer.
-    const uad = (env.navigator as { userAgentData?: { mobile?: unknown } } | undefined)?.userAgentData;
+    const uad = (env.navigator as { userAgentData?: { mobile?: unknown; platform?: unknown } } | undefined)?.userAgentData;
     if (uad?.mobile !== false) return false;
+    // Only Chrome on macOS opens no sheet; Windows and ChromeOS show theirs.
+    if (uad.platform !== 'macOS') return false;
     return mq('(pointer: fine)').matches && mq('(hover: hover)').matches;
 }
 
@@ -195,7 +197,8 @@ export async function shareStrom(lang: Language, nav: ShareNavigator, title: str
             };
             const isAbort = (e: unknown) => (e as { name?: unknown } | null)?.name === 'AbortError';
             try {
-                share(data).then(() => settle('shared'), (e: unknown) => settle(isAbort(e) ? 'cancelled' : 'copy'));
+                // Called on `nav`: a detached navigator.share throws "Illegal invocation".
+                share.call(nav, data).then(() => settle('shared'), (e: unknown) => settle(isAbort(e) ? 'cancelled' : 'copy'));
             } catch (e) {
                 settle(isAbort(e) ? 'cancelled' : 'copy');
             }

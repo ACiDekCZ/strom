@@ -51,6 +51,33 @@ describe('About: Share Strom', () => {
         expect(writeText).not.toHaveBeenCalled();
     }));
 
+    it('calls share() and canShare() on the navigator (a detached navigator.share throws "Illegal invocation")', () => onFixedClock(async () => {
+        const writeText = vi.fn(async (_t: string) => undefined);
+        const nav: ShareNavigator = {
+            share(this: unknown) {
+                if (this !== nav) throw new TypeError('Illegal invocation');
+                return after(2 * SHARE_SHEET_MIN_MS)();
+            },
+            canShare(this: unknown) {
+                if (this !== nav) throw new TypeError('Illegal invocation');
+                return true;
+            },
+            clipboard: {
+                writeText(this: unknown, t: string) {
+                    if (this !== nav.clipboard) throw new TypeError('Illegal invocation');
+                    return writeText(t);
+                },
+            },
+        };
+        const outcome = shareStrom('cs', nav, 'Strom');
+        await vi.advanceTimersByTimeAsync(SHARE_SHEET_WAIT_MS);
+        expect(await outcome).toBe('shared');
+        expect(writeText).not.toHaveBeenCalled();
+        // The copy, too, keeps clipboard as `this`.
+        expect(await shareStrom('cs', { clipboard: nav.clipboard }, 'Strom')).toBe('copied');
+        expect(writeText).toHaveBeenCalledWith('https://stromapp.info/cs/');
+    }));
+
     it('copies the address where the browser cannot share', async () => {
         const writeText = vi.fn(async () => undefined);
         expect(await shareStrom('pl', { clipboard: { writeText } }, 'Strom')).toBe('copied');
@@ -163,13 +190,22 @@ describe('About: Share Strom', () => {
 
 describe('About: Share Strom in a desktop app window', () => {
     type Media = Record<string, boolean>;
-    const env = (media: Media, mobile: boolean | null = false) => ({
+    const env = (media: Media, mobile: boolean | null = false, platform = 'macOS') => ({
         matchMedia: (q: string) => ({ matches: media[q] === true }),
-        navigator: mobile === null ? {} : { userAgentData: { mobile } },
+        navigator: mobile === null ? {} : { userAgentData: { mobile, platform } },
     });
     const computer: Media = { '(pointer: fine)': true, '(hover: hover)': true };
 
-    it('is an installed web app of Chromium on a computer (standalone or window controls overlay)', () => {
+    it('is only a Mac: Windows, ChromeOS and Linux app windows keep the share sheet', () => {
+        const app: Media = { ...computer, '(display-mode: standalone)': true };
+        expect(isDesktopAppWindow(env(app, false, 'macOS'))).toBe(true);
+        for (const platform of ['Windows', 'Chrome OS', 'Linux', '']) {
+            expect(isDesktopAppWindow(env(app, false, platform))).toBe(false);
+            expect(isDesktopAppWindow(env({ ...computer, '(display-mode: window-controls-overlay)': true }, false, platform))).toBe(false);
+        }
+    });
+
+    it('is an installed web app of Chromium on a Mac (standalone or window controls overlay)', () => {
         expect(isDesktopAppWindow(env({ ...computer, '(display-mode: standalone)': true }))).toBe(true);
         expect(isDesktopAppWindow(env({ ...computer, '(display-mode: window-controls-overlay)': true }))).toBe(true);
     });
