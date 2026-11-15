@@ -189,6 +189,32 @@ test.describe('a toast and a bottom sheet: the newer one wins', () => {
         await expect.poll(() => orderWrites(b).map(w => (w[1] as { do: string }).do)).toEqual(['next', 'restore']);
     });
 
+    test('390: the research\'s own "opened" toast at the start waits under the overview and under a task\'s sheet over it', async ({ page }) => {
+        // The order of the verification's finding (1113-app-dorovnani-052-okna N1): the research opens
+        // with its message on the screen, the overview opens over it, then a task's ⋯ sheet.
+        await followManaged(page, { features: NEXT, queue: QUEUE, size: { width: 390, height: 844 } });
+        const opened = page.locator('body > .toast', { hasText: /^Opened the research Fíškovi/ });
+        await expect(opened).toBeVisible();
+        await page.locator('#live-panel .live-panel-toggle').click();
+        await expect(overview(page)).toHaveClass(/research-overview--sheet/);
+        await expect(opened).toHaveClass(/toast-under-sheet/);
+        await expect(opened).toBeHidden();
+        await unfoldQueue(page);
+
+        await row(page, 'T0103').locator('.live-queue-more').click();
+        await expect(backdrop(page)).toHaveClass(/\bactive\b/);
+        const top = await settledTop(menu(page), 844);
+        await expect(opened).toBeHidden();
+        // The sheet's top edge and title whole: no toast between the backdrop and the sheet.
+        expect(await onTop(menu(page).locator('.live-task-menu__title'))).toBe(true);
+        const hit = await page.evaluate(([x, y]) => {
+            const n = document.elementFromPoint(x, y);
+            return n?.closest('.toast') ? 'toast' : n?.closest('#live-task-menu') ? 'sheet' : n?.closest('.bottom-sheet-overlay') ? 'backdrop' : null;
+        }, [195, top + 4]);
+        expect(hit).toBe('sheet');
+        expect(await overflow(page)).toBeLessThanOrEqual(0);
+    });
+
     for (const size of [{ name: 'a phone held sideways', width: 844, height: 390 }, { name: 'a touch tablet', width: 1024, height: 768 }]) {
         test(`${size.name}: the app's sheet hides a toast standing and a toast coming stands clear of it, on top`, async ({ page }) => {
             await followManaged(page, { features: NEXT, queue: QUEUE, size: { width: size.width, height: size.height } });
