@@ -350,6 +350,33 @@ test('the switch after the families of its step closed by their tabs: "+n" again
     await expect(sw.locator('.bulk-family-count')).toHaveText(`+${n}`);
 });
 
+test('the switch after one couple of its step closed by its tabs and folded away: not ✓ while nothing can be added', async ({ page }) => {
+    // An ancestor couple at the top of the depth whose children came with the step: closed by its tabs,
+    // the layout folds the couple away (the other families shown still stand), so nothing is left to add.
+    // The switch said ✓ ("all shown") with those siblings gone; now it is off, the menu row gone too.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await setupData(page, bigTree(1), 'q', 3, 1);
+    const sw = shownSwitch(page);
+    await expect(sw).toHaveAttribute('data-state', 'offer');
+    await sw.click();
+    await expect(sw).toHaveAttribute('data-state', 'on');
+    await expect(cardOf(page, 'pffk0')).toBeVisible();
+    for (const id of ['pfff', 'pffm']) await page.evaluate(q => window.Strom.TreeRenderer.toggleChildrenShown(q as never), id);
+    await expect(cardOf(page, 'pffk0')).toHaveCount(0);
+    expect(await page.evaluate(() => window.Strom.TreeRenderer.bulkFamilyCount('q' as never))).toBe(0);
+    // The rest of the step still stands (another couple's child), counted as before
+    await expect(cardOf(page, 'pfmk0')).toBeVisible();
+    await expect(sw).toHaveAttribute('data-state', 'none');
+    await expect(sw).toHaveAttribute('aria-pressed', 'false');
+    await expect(sw).toHaveAttribute('aria-disabled', 'true');
+    await cardOf(page, 'q').click();
+    await expect(page.locator('.context-menu')).toBeVisible();
+    await expect(page.locator('.context-menu [data-action="bulk-family-off"], .context-menu [data-action="bulk-family"]')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    // "Hide shown" still closes the rest
+    expect(await shownCount(page)).toBeGreaterThan(0);
+});
+
 test('the switch with nothing to add and no step is muted and does nothing', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     const lone = {

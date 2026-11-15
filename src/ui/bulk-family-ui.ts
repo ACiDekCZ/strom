@@ -161,7 +161,8 @@ let switchBusy = false;
  * Draw the focus bar's switch "Children & siblings" for the focus after a
  * render: "+n" while the step adds n people (offer); ✓ while the focus's
  * step stands with nothing more to add (on, aria-pressed, a click takes the
- * step back); muted with nothing to add and no step (none, aria-disabled).
+ * step back); muted with nothing to add and no step standing whole (none,
+ * aria-disabled: also a step left partial by a family closed with its tab).
  * Hidden outside the family view and without a focus. A phone has no switch
  * (CSS): the person sheet's row does the same.
  */

@@ -89,7 +89,7 @@ import {
     siblingsTabState, SiblingsTabState, newlyShownSiblingIds, siblingGroups, ShownChildrenContext, HiddenRelativesTab, unionChildIdSet, branchTabsInOrder,
     offeredPartners, OfferedPartner, childrenByUnion, childrenComeWithPartners, otherFamilyChildrenElsewhere, marriagesInOrder,
 } from './marriage-order.js';
-import { BulkFamily, bulkAddedKeys, bulkBroughtInByParent, bulkNewIds, bulkParents, collectBulkFamily } from './bulk-family.js';
+import { BulkFamily, bulkAddedKeys, bulkBroughtInByParent, bulkKeysShown, bulkNewIds, bulkParents, bulkStepWhole, collectBulkFamily } from './bulk-family.js';
 import { partnerIdsShownInPlace, selectSubgraph } from './layout/pipeline/1-select-subgraph.js';
 import { measureUnionOrderPills, applyUnionOrderGlyphLift, measureTabRows, rowKey, unionOrderPillKey, unionOrderPillPartsHtml, pillFontsPending, branchTabRestHtml, tabsForm, tabsFormClass, bubblePlacement, bubbleBox, touchBubbleBox, touchBubbleBounds, touchBubbleSide, bubbleOpensBelow, BUBBLE_WINDOW_MARGIN, BUBBLE_LOW_WINDOW_NAMES, BUBBLE_LOW_WINDOW_HEIGHT, bubbleNameCounts, bubbleNamesToFit } from './union-order-measure.js';
 import { prepareBubble, showBubble, hideBubble, closeOpenBubble, openBubble, openBubbleOwner } from './bubble-layer.js';
@@ -2460,6 +2460,11 @@ class TreeRendererClass {
             }
             if (siblingsOf && shown.length > 0) this.siblingsShownFor.set(siblingsOf, shown);
             else if (siblingsOf) this.siblingsShownFor.delete(siblingsOf);
+            // The step stands whole with what the rest of it shows (bulkStepOf)
+            if (bulk && shown.length > 0) {
+                const rest: BulkStep = { ...bulk, added: bulkKeysShown(data, bulk.added, new Set(shown)) };
+                for (const q of shown) this.bulkShownFor.set(q, rest);
+            }
             if (shown.length === 0) this.shownStepBefore = null;
             await this.renderInternal();
             if (shown.length === 0) {
@@ -2549,9 +2554,8 @@ class TreeRendererClass {
 
     /**
      * The person's step of children and siblings at once that still stands
-     * (the latest, made at this depth; a family of it closed alone leaves
-     * the rest of it standing), or null. (a) and (b) share it: the focus's
-     * menu row and the switch read the same step.
+     * (the latest, made at this depth), or null. (a) and (b) share it: the
+     * focus's menu row and the switch read the same step.
      */
     bulkStepOf(personId: PersonId): BulkStep | null {
         let out: BulkStep | null = null;
@@ -2563,16 +2567,29 @@ class TreeRendererClass {
     }
 
     /**
+     * Whether the person's standing step still shows everything it showed
+     * (bulkStepWhole): a family of it closed by its tab leaves the rest
+     * standing, but not whole.
+     */
+    private bulkStepIsWhole(step: BulkStep): boolean {
+        const shown = new Set([...this.bulkShownFor].filter(([, b]) => b.seq === step.seq).map(([id]) => id));
+        return bulkStepWhole(DataManager.getData(), step.added, shown);
+    }
+
+    /**
      * The state of children and siblings at once for `personId` (the focus
      * bar's switch with the focus, the person menu's row): 'offer' with n
-     * people to add; 'on' with nothing to add while its step stands (a click
-     * takes the step back, undoBulkFamily); 'none' otherwise (nothing to add,
-     * no step; outside the family view too).
+     * people to add; 'on' with nothing to add while its step stands whole (a
+     * click takes the step back, undoBulkFamily); 'none' otherwise (nothing
+     * to add, no step or one left partial; outside the family view too).
      */
     bulkFamilyState(personId: PersonId): { state: 'offer' | 'on' | 'none'; n: number; step: BulkStep | null } {
         const n = this.bulkFamilyCount(personId);
         const step = this.bulkStepOf(personId);
-        return { state: n > 0 ? 'offer' : step ? 'on' : 'none', n, step };
+        // A step left partial (a family of it closed by its tab) with nothing to add is not "on":
+        // its parents folded away, the ✓ would claim families no longer shown (the rest stays shown;
+        // "Hide shown" and the tabs close it)
+        return { state: n > 0 ? 'offer' : step && this.bulkStepIsWhole(step) ? 'on' : 'none', n, step };
     }
 
     /**

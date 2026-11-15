@@ -15,6 +15,7 @@
 import type { PersonId, StromData } from './types.js';
 import { hiddenChildIds } from './marriage-order.js';
 import { drawnPersonIds, type PipelineInput } from './layout/pipeline/index.js';
+import type { BulkStep } from './view-history.js';
 
 /** Who one step shows: the persons whose children come, the persons whose siblings come. */
 export interface BulkFamily {
@@ -140,4 +141,31 @@ export function bulkBroughtInByParent(data: StromData, parents: readonly PersonI
         for (const q of owners) out.get(q)!.add(id);
     }
     return out;
+}
+
+/**
+ * The keys of a step (`added`) still shown by `shown` (the persons whose
+ * children the step shows): a person whose children come while it is among
+ * them, a person whose siblings come while one of its parents is. After a
+ * parent whose click drew none of its children left the step, the step's
+ * keys are what the rest of it shows.
+ */
+export function bulkKeysShown(data: StromData, added: BulkStep['added'], shown: ReadonlySet<PersonId>):
+    { childrenOf: PersonId[]; siblingsOf: PersonId[] } {
+    return {
+        childrenOf: added.childrenOf.filter(id => shown.has(id)),
+        siblingsOf: added.siblingsOf.filter(id => (data.persons[id]?.parentIds ?? []).some(q => shown.has(q))),
+    };
+}
+
+/**
+ * Whether a step still stands whole: each of its keys still shown by the
+ * persons whose children it shows (`shown`). A family of it closed by its
+ * tab (both parents of a couple whose siblings came) leaves it partial:
+ * the switch then reads "+n" for what is missing, or, when nothing can be
+ * added (the layout folded those parents away), no longer reads ✓.
+ */
+export function bulkStepWhole(data: StromData, added: BulkStep['added'], shown: ReadonlySet<PersonId>): boolean {
+    const now = bulkKeysShown(data, added, shown);
+    return now.childrenOf.length === added.childrenOf.length && now.siblingsOf.length === added.siblingsOf.length;
 }

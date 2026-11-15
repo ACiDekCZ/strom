@@ -16,7 +16,7 @@ import { planShownChildrenFolding, type PipelineInput } from '../layout/pipeline
 import { assertNoNodeOverlap, assertValidPositions } from '../layout/__tests__/helpers/assertions.js';
 import { auditGeometry } from '../layout/__tests__/helpers/geometryAudit.js';
 import { DEFAULT_LAYOUT_CONFIG, type PersonId, type StromData } from '../types.js';
-import { bulkAddedKeys, bulkBroughtInByParent, bulkNewIds, bulkParents, collectBulkFamily, BULK_TWO_GENERATIONS } from '../bulk-family.js';
+import { bulkAddedKeys, bulkBroughtInByParent, bulkKeysShown, bulkNewIds, bulkParents, bulkStepWhole, collectBulkFamily, BULK_TWO_GENERATIONS } from '../bulk-family.js';
 import { syntheticBigFamily } from './helpers/synthetic-big-family.js';
 import { budgetReport, measureAgainstBudget } from './helpers/perf-budget.js';
 
@@ -123,6 +123,24 @@ describe('collectBulkFamily', () => {
         const added = bulkAddedKeys(data, f, parents, inView);
         expect(added.childrenOf).toEqual([]);
         expect(added.siblingsOf.sort()).toEqual(['dad', 'me']);
+    });
+
+    it('a step stands whole while each of its keys is shown: one parent of a couple closed keeps it, both make it partial', () => {
+        const f = collectBulkFamily(data, P('me'), inView);
+        const parents = bulkParents(data, f, inView);
+        const added = bulkAddedKeys(data, f, parents, inView);
+        const all = new Set(parents);
+        expect(bulkStepWhole(data, added, all)).toBe(true);
+        // gp1 closed alone: gp2 still shows dad's siblings
+        expect(bulkStepWhole(data, added, new Set(parents.filter(q => q !== P('gp1'))))).toBe(true);
+        // The couple closed: dad's siblings no longer come
+        const rest = new Set(parents.filter(q => q !== P('gp1') && q !== P('gp2')));
+        expect(bulkStepWhole(data, added, rest)).toBe(false);
+        expect(bulkKeysShown(data, added, rest).siblingsOf).not.toContain('dad');
+        // Me closed: my children no longer come
+        expect(bulkStepWhole(data, added, new Set(parents.filter(q => q !== P('me'))))).toBe(false);
+        // The keys of what the rest shows stand whole with it (a parent that drew nothing left the step)
+        expect(bulkStepWhole(data, bulkKeysShown(data, added, rest), rest)).toBe(true);
     });
 
     it('files each brought card under its parents, a partner under the parent it married', () => {
