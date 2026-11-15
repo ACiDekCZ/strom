@@ -1154,6 +1154,7 @@ class DataManagerClass {
                 await TreeManager.adoptStoredData(startupTreeId);
                 this.currentTreeId = startupTreeId;
                 this.data = migrateData(treeData);
+                TreeManager.markDemoTree(startupTreeId, this.data);
                 return;
             }
             this.currentTreeId = startupTreeId;
@@ -1203,6 +1204,8 @@ class DataManagerClass {
             this.rollbackEditSession();   // a dialog staged on the previous tree meanwhile
             this.currentTreeId = treeId;
             this.data = treeData ? migrateData(treeData) : this.createEmptyData();
+            // An older sample tree is known by its content (never sent to a research).
+            if (treeData) TreeManager.markDemoTree(treeId, this.data);
         } finally {
             if (seq === this.switchSeq) this.switchingTo = null;
         }
@@ -4571,6 +4574,8 @@ class DataManagerClass {
         this.rollbackEditSession();   // whole-data replacement ends a staged dialog
         const migratedData = migrateData(data);
         const treeId = TreeManager.createTreeFromImport(migratedData, treeName);
+        // A copy of the sample tree (its JSON) is the sample tree too.
+        TreeManager.markDemoTree(treeId, migratedData);
         this.currentTreeId = treeId;
         this.data = migratedData;
         // Remove empty default tree(s) after import

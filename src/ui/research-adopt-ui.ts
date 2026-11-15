@@ -123,10 +123,10 @@ export const researchAdoptMethods = uiModule({
      * tree yet. An empty one too: the research announced here hides every
      * other way in, and the hand-over itself settles a tree with nobody in it
      * (a research that takes it is ready empty, an older one is told and the
-     * app says how it starts — C1).
+     * app says how it starts — C1). Never the sample tree.
      */
     researchAdoptAvailable(tree: TreeMetadata | null | undefined): boolean {
-        return !!tree && !tree.research && !DataManager.isViewMode() && onComputer() && this.researchLinkAvailable('new');
+        return !!tree && !tree.research && !tree.demo && !DataManager.isViewMode() && onComputer() && this.researchLinkAvailable('new');
     },
 
     /** The active tree can be handed over (the explanation dialog's variant). */

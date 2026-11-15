@@ -1521,7 +1521,13 @@ export const importExportMethods = uiModule({
         // place) — unless the user already chose a card type; the Custom fields stay as they are.
         if (!SettingsManager.hasCardDensity()) SettingsManager.setCardDensity('register');
 
+        // Leaving the open tree as a switch does: its changes sent (when they go by themselves) first,
+        // the following of its research ended once the sample is open.
+        const from = await this.researchFollowBeforeSwitch(null);
         const newTreeId = await DataManager.importAsNewTree(data, strings.demo.treeName);
+        // The sample is never sent to a research nor tied to one.
+        TreeManager.markDemoTree(newTreeId);
+        this.researchFollowLeft(from.open);
 
         this.updateTreeSwitcher();
         this.updateTreeManagerList();

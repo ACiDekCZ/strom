@@ -21,6 +21,7 @@ import {
     NotWrittenItem, PairedNotWritten,
 } from '../research-changes.js';
 import { gedcomTagEventType } from '../ged-parser.js';
+import { foreignSendCheck, researchRefsOf } from '../research-foreign-send.js';
 import { yearOf } from '../dates.js';
 import { saveResearchCopy, loadResearchCopy, saveResearchPrevCopy, loadResearchPrevCopy } from '../research-copy.js';
 import { RESEARCH_COPY_FP_KEY, RESEARCH_PREV_COPY_FP_KEY } from '../storage-keys.js';
@@ -58,6 +59,8 @@ let prevCopy: { treeId: string; base: StromData | null; fp: string } | null = nu
 let loading: string | null = null;
 let loadingDone: Promise<void> | null = null;
 let memo: { treeId: string; key: string; list: PersonChange[] } | null = null;
+/** The research's numbers researchBaseRefs last found, for a tree (read again at its next call). */
+let baseRefsRead: { treeId: string; refs: Set<string> } | null = null;
 /** Counts the panel's closes: an open waiting for the copy goes on only while nothing closed or opened it meanwhile. */
 let panelSeq = 0;
 /** The changes beyond the people, against the base they were told from. */
@@ -123,6 +126,7 @@ export function forgetResearchChanges(treeId: string): void {
     } catch { /* nothing kept */ }
     if (copy?.treeId === treeId) copy = null;
     if (prevCopy?.treeId === treeId) prevCopy = null;
+    if (baseRefsRead?.treeId === treeId) baseRefsRead = null;
     pendingSent.delete(treeId);
 }
 
@@ -574,6 +578,56 @@ export const researchChangesMethods = uiModule({
         try { localStorage.setItem(FP_KEY + treeId, fp); } catch { /* not trusted next time */ }
         void saveResearchCopy(treeId, base, fp);
         if (p.list) storeWritten(treeId, at, p.list, p.other);
+    },
+
+    /**
+     * The research's numbers of the people in its version the tree builds on:
+     * those of the kept copy and of the one before the last written send (a
+     * send that replaced the copy may itself not have been this tree's own).
+     * null when no copy is kept. `now`: only what is read already (the page
+     * is being left — no time to read storage).
+     */
+    async researchBaseRefs(treeId: TreeId, now = false): Promise<Set<string> | null> {
+        let kept: (StromData | null)[];
+        if (copy?.treeId === treeId) {
+            kept = [copy.base, prevCopy?.treeId === treeId ? prevCopy.base : null];
+        } else if (now) {
+            // What an earlier read found; the open tree's copy read for the next time.
+            if (DataManager.getCurrentTreeId() === treeId) this.researchChangesBase();
+            return baseRefsRead?.treeId === treeId ? baseRefsRead.refs : null;
+        } else {
+            let prevFp = '';
+            try { prevFp = localStorage.getItem(FP_PREV_KEY + treeId) ?? ''; } catch { /* not trusted */ }
+            kept = await Promise.all([loadResearchCopy(treeId), prevFp ? loadResearchPrevCopy(treeId, prevFp) : Promise.resolve(null)]);
+        }
+        if (!kept.some(Boolean)) return null;
+        const refs = new Set<string>();
+        for (const data of kept) for (const ref of researchRefsOf(data)) refs.add(ref);
+        baseRefsRead = { treeId, refs };
+        return refs;
+    },
+
+    /**
+     * Whether the send with one of these fingerprints, kept here as the
+     * research's version once it was written, was not the tree's own: checked
+     * against the other kept copy (foreignSendCheck). null when not known —
+     * neither copy is that send, there is no other, or they are not read yet
+     * (read now; the sync UI is refreshed once they are).
+     */
+    researchKeptSendForeign(treeId: TreeId, fingerprints: readonly string[]): boolean | null {
+        const fps = fingerprints.filter(Boolean);
+        if (!fps.length) return null;
+        if (copy?.treeId !== treeId) {
+            if (DataManager.getCurrentTreeId() === treeId) this.researchChangesBase();
+            return null;
+        }
+        const prev = prevCopy?.treeId === treeId ? prevCopy : null;
+        const pair: [typeof prev, typeof prev][] = [[copy, prev], [prev, copy]];
+        for (const [sent, other] of pair) {
+            if (!sent?.base || !other?.base || !fps.includes(sent.fp)) continue;
+            return foreignSendCheck(researchRefsOf(other.base), sent.base).foreign;
+        }
+        return null;
     },
 
     // ==================== THE PANEL ====================

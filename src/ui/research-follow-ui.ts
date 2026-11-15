@@ -43,10 +43,11 @@ export interface FollowSwitchFrom {
 
 export const researchFollowMethods = uiModule({
     /**
-     * Before the open tree is left for `target`: what the page shows now, and
-     * the tree's changes sent (when they go by themselves) — the switch waits.
+     * Before the open tree is left for `target` (null: a tree made now, e.g.
+     * the sample tree): what the page shows now, and the tree's changes sent
+     * (when they go by themselves) — the switch waits.
      */
-    async researchFollowBeforeSwitch(target: TreeId): Promise<FollowSwitchFrom> {
+    async researchFollowBeforeSwitch(target: TreeId | null): Promise<FollowSwitchFrom> {
         const s = liveSession();
         const open = DataManager.getCurrentTreeId();
         const panel = document.getElementById('live-panel');

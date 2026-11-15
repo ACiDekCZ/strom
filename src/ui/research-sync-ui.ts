@@ -46,6 +46,7 @@ import {
     SYNC_NW_CODES_FEATURE, researchLinkMark, researchUrlMark, type ResearchActionMark,
 } from '../research-link.js';
 import { loadResearchCopy } from '../research-copy.js';
+import { foreignSendCheck } from '../research-foreign-send.js';
 import { ResearchWriteHeld, joinSaid, writeHeldOfRefusal, writeHeldOfStatus, writeHeldSettled } from '../research-write-held.js';
 import { forgetOriginalsHeld } from './originals-ui.js';
 import {
@@ -1378,9 +1379,14 @@ export const researchSyncMethods = uiModule({
         patchResearchAutoState(treeId, { lastWritten: undefined });
         fpCache = null;
         const s = strings.sync;
+        // Not this tree's own: never offered again, its version loads instead (1115).
+        const after = TreeManager.getTreeMetadata(treeId)?.research;
+        const foreign = !!after && this.researchUndoneForeign(treeId, after);
         this.showToast(s.undoneToast(when(lw.at)), Infinity, {
             closable: true,
-            action: { label: s.sendAgain, run: () => { void this.researchSendTree(treeId, { undoAgain: true }); } },
+            action: foreign
+                ? { label: s.loadVersion, run: () => { void this.researchAcceptUndo(); } }
+                : { label: s.sendAgain, run: () => { void this.researchSendTree(treeId, { undoAgain: true }); } },
         });
     },
 
@@ -1761,6 +1767,11 @@ export const researchSyncMethods = uiModule({
         const meta = TreeManager.getTreeMetadata(treeId);
         const link = meta?.research;
         if (!link || sendingTree) return;
+        // The sample tree never goes to a research (a tie it got before 3.29 included).
+        if (meta?.demo) {
+            console.warn('Not sending the sample tree to a research', treeId);
+            return;
+        }
         const s = strings.sync;
         // "Only load from the research": nothing goes, ever — said when the user asked to send.
         if (researchSendMode(link) === 'off') {
@@ -1797,7 +1808,7 @@ export const researchSyncMethods = uiModule({
     async postResearchSendNow(treeId: TreeId, opts: { auto: boolean; thenLoad?: boolean; keepalive?: boolean; again?: boolean; undoAgain?: boolean; noIdsRetried?: boolean }): Promise<void> {
         const meta = TreeManager.getTreeMetadata(treeId);
         const link = meta?.research;
-        if (!link || sendingTree) return;
+        if (!link || sendingTree || meta?.demo) return;
         const s = strings.sync;
         // Never while a switch reads another tree: what goes is the tree's own data, with its own id
         // and link. Sent by itself, it waits for the next answer of the bridge.
@@ -1850,6 +1861,24 @@ export const researchSyncMethods = uiModule({
         // writes it again from what it kept, on the state it was sent from (POST /sync/<R…>/again,
         // 1.12). A copy sent instead reads there as "removed by the research": nothing written (finding 35).
         const again = opts.undoAgain && !opts.auto && link.sent?.state === 'undone' && link.sent.intake ? link.sent : null;
+        // Not this tree's own: its people hardly name anyone of the research's version (another tree's data
+        // under this tie, the sample tree). Never sent — the changes wait here, the send can be asked again.
+        // A send taken back that was so is not written there again either (1115).
+        if (again && this.researchUndoneForeign(treeId, link)) {
+            console.warn('Not writing again a send taken back that was not this tree\'s own', treeId, again.intake);
+            this.refreshResearchSyncUi();
+            return;
+        }
+        if (!again) {
+            const baseRefs = await this.researchBaseRefs(treeId, !!opts.keepalive);
+            if (sendingTree) return;
+            const check = baseRefs ? foreignSendCheck(baseRefs, data) : null;
+            if (check?.foreign) {
+                console.warn('Not sending a copy that hardly names the research\'s people (another tree\'s data?)', treeId, check);
+                this.refreshResearchSyncUi();
+                return;
+            }
+        }
         // What goes over is then the state that send had, not this one (edits since go after it).
         const sentFp = again ? again.fingerprint : fps.current;
         // The research took in an earlier copy of this tree and its version was not loaded here since: this copy
@@ -3073,10 +3102,14 @@ export const researchSyncMethods = uiModule({
     } {
         const s = strings.sync;
         const conflicts = treeId ? this.researchUndoneConflicts(treeId) : 0;
-        const actions: { action: string; label: string; asLink?: boolean }[] = [{ action: 'sendAgain', label: s.sendAgain }];
         const link = treeId ? TreeManager.getTreeMetadata(treeId)?.research : undefined;
+        // Not this tree's own (another tree's data went under its tie): never offered again — loading the
+        // research's version is the way on (1115).
+        const foreign = !!treeId && !!link && this.researchUndoneForeign(treeId, link);
+        const actions: { action: string; label: string; asLink?: boolean }[] = foreign ? [] : [{ action: 'sendAgain', label: s.sendAgain }];
         const kept = !!link && !this.researchHoldsForUndo(link);
-        const sub = [kept ? s.undoneKeptSub(when(sent?.closedAt)) : auto ? s.undoneAutoSub(when(sent?.closedAt)) : s.undoneSub(when(sent?.closedAt))];
+        const sub = [foreign ? s.undoneForeignSub(when(sent?.closedAt))
+            : kept ? s.undoneKeptSub(when(sent?.closedAt)) : auto ? s.undoneAutoSub(when(sent?.closedAt)) : s.undoneSub(when(sent?.closedAt))];
         if (sent?.takenBack) sub.push(s.takenBackSub(sent.takenBack));
         const conn = link ? this.researchConnectionNote(link.id) : null;
         if (conn) sub.unshift(`${conn.title}.`, ...(conn.warn ? [conn.sub] : []));
@@ -3090,8 +3123,25 @@ export const researchSyncMethods = uiModule({
             actions.push({ action: 'showConflicts', label: name ? `${name} ›` : `${s.showConflicts} ›`, asLink: true });
             if (this.researchDecideUrl(treeId)) actions.push({ action: 'decideInResearch', label: s.decideInResearch, asLink: true });
         }
-        actions.push({ action: 'acceptUndo', label: s.loadVersion, asLink: true });
+        // The main action when Send again is not offered; a link beside it otherwise.
+        if (foreign) actions.unshift({ action: 'acceptUndo', label: s.loadVersion });
+        else actions.push({ action: 'acceptUndo', label: s.loadVersion, asLink: true });
         return { tone: 'warn', title: s.stateUndone(when(sent?.at)), sub: sub.join(' '), actions };
+    },
+
+    /**
+     * The send taken back was not this tree's own, so it is never written
+     * there again: the research's record of it names another app tree, or
+     * its content (kept here as the research's version once it was written)
+     * hardly names anyone of the research's other kept version
+     * (foreignSendCheck). Not known: as any send taken back.
+     */
+    researchUndoneForeign(treeId: TreeId, link: ResearchLink): boolean {
+        const sent = link.sent;
+        if (sent?.state !== 'undone') return false;
+        const rec = sent.intake ? this.researchStatusOf(link.id)?.sends?.find(r => r.intake === sent.intake) : undefined;
+        if (rec?.tree && rec.tree !== treeId && rec.tree !== link.id) return true;
+        return this.researchKeptSendForeign(treeId, [rec?.sent ?? '', sent.fingerprint]) === true;
     },
 
     /**
@@ -3379,7 +3429,10 @@ export const researchSyncMethods = uiModule({
             // A send taken back or discarded: in sight however changes go (sent by hand too, B1).
             rejected: { text: state.sent?.state === 'undone'
                 ? [s.pillUndone, this.researchUndoneConflicts(ctx.treeId) > 0 ? s.conflictsN(this.researchUndoneConflicts(ctx.treeId)) : ''].filter(Boolean).join(' · ')
-                : state.sent?.failed ? s.pillFailed : s.pillRejected, button: s.sendAgain, action: 'sendAgain' },
+                : state.sent?.failed ? s.pillFailed : s.pillRejected,
+                // A send taken back that was not this tree's own: its version loads, nothing is sent again (1115).
+                ...(state.sent?.state === 'undone' && this.researchUndoneForeign(ctx.treeId, ctx.link)
+                    ? { button: s.loadVersion, action: 'acceptUndo' } : { button: s.sendAgain, action: 'sendAgain' }) },
             writtenConflicts: { text: [this.researchHeldConflictCount(ctx.treeId, state.sent) > 0
                 ? s.flyConflict(this.researchHeldConflictCount(ctx.treeId, state.sent)) : s.writtenAt(when(researchAutoState(ctx.treeId).lastWritten?.at ?? state.sent?.closedAt)),
                 this.researchConnectionNote(ctx.link.id)?.title ?? ''].filter(Boolean).join(' · '), button: s.showConflicts, action: 'conflicts' },

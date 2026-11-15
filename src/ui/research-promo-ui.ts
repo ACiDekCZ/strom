@@ -279,6 +279,13 @@ export const researchPromoMethods = uiModule({
             void this.showAlert(strings.research.phoneHasResearch(researchDisplayName(link.id)), 'info');
             return;
         }
+        // The sample tree: never tied to a research — said why, nothing set up for it.
+        if (TreeManager.getActiveTreeMetadata()?.demo) {
+            this.closeActionsMenu();
+            this.hideBottomSheet();
+            void this.showAlert(strings.demo.noResearch, 'info');
+            return;
+        }
         // Not here yet: the way to install it (the research, once here, takes the tree over).
         if (!this.researchAdoptActiveAvailable()) {
             document.getElementById(INFO_MODAL_ID)?.remove();

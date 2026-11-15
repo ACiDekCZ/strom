@@ -150,6 +150,7 @@ function page(): typeof researchSyncMethods {
         researchStatusOf: () => null,
         researchHeld: () => null,
         researchNoteSending: () => undefined,
+        researchBaseRefs: async () => null,
         currentResearchSyncState: () => ({ core: 'unsentAndNewer' }),
         maybeAskResearchSendMode: () => undefined,
         scheduleResearchAutoSend: () => undefined,

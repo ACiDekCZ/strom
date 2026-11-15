@@ -18767,7 +18767,9 @@
         .research-sync-block > .research-sync-status { grid-column: 2; grid-row: 1; }
         .research-sync-block > .research-sync-main { grid-column: 3; grid-row: 1; justify-self: end; white-space: nowrap; }
         /* Held back by the research (seal, cloud, disk): its long sentence keeps the width, the way out goes under it. */
-        .research-sync-block[data-state="writeHeld"] > .research-sync-main { grid-column: 2 / -1; grid-row: auto; justify-self: start; white-space: normal; margin-top: 4px; }
+        /* So is a send taken back that was not this tree's own (1115): its long reason, then "Load the research's version". */
+        .research-sync-block[data-state="writeHeld"] > .research-sync-main,
+        .research-sync-block[data-state="rejected"] > .research-sync-main[data-action="acceptUndo"] { grid-column: 2 / -1; grid-row: auto; justify-self: start; white-space: normal; margin-top: 4px; }
         .research-sync-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-faint); }
         .research-sync-block--warn { background: var(--warning-soft); }
         .research-sync-block--warn .research-sync-dot { background: var(--signal-warn); }

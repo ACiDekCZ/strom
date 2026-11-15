@@ -441,6 +441,7 @@ export const plPart2: Pick<StringsType, 'crop' | 'importImages' | 'imageViewer' 
         undoneSub: (t: string) => `O ${t}. Zmiany wciąż są tutaj. Nic więcej nie trafi do badania, dopóki nie zostanie dokonany wybór: wysłać ponownie albo zachować cofnięcie przez wczytanie wersji badania.`,
         undoneAutoSub: (t: string) => `O ${t}. Zmiany wciąż są tutaj. Nic więcej nie zostanie wysłane automatycznie, dopóki nie zostanie dokonany wybór: wysłać ponownie albo zachować cofnięcie przez wczytanie wersji badania.`,
         undoneKeptSub: (t: string) => `O ${t}. Zmiany wciąż są tutaj. Nowe zmiany trafiają do badania jak zwykle, cofnięte zostaje poza nim, dopóki nie zostanie wysłane ponownie.`,
+        undoneForeignSub: (t: string) => `O ${t}. Ta wysyłka nie zawierała osób tego drzewa, dlatego nie zostanie wysłana ponownie. Wczytanie wersji badania zachowa cofnięcie.`,
         undoneDecideFirst: 'Badanie cofnęło wysyłkę, a ze zmianami stąd zapisałoby ją ponownie. Najpierw wymagany jest wybór: Wyślij ponownie albo zachowanie cofnięcia przez wczytanie wersji badania.',
         takenBackSub: (n: number) => `${nPl(n, 'zmiana', 'zmiany', 'zmian')} z cofniętej wysyłki ${plPl(n, 'nie została zapisana', 'nie zostały zapisane', 'nie zostało zapisanych')} ponownie.`,
         takenBackToast: (n: number) => `${nPl(n, 'zmiana', 'zmiany', 'zmian')} z cofniętej wysyłki ${plPl(n, 'nie została zapisana', 'nie zostały zapisane', 'nie zostało zapisanych')}. Z powrotem do badania ${n === 1 ? 'trafi' : 'trafią'} po ponownej wysyłce.`,

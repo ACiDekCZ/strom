@@ -80,6 +80,7 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         tryDemoDesc: 'Zmyślona rodzina, która pokazuje, wszystko, co może zawierać drzewo',
         treeName: 'Przykład: ród Bergów',
         hint: 'Kliknięcie karty otwiera akcje. To zwykłe drzewo – można je usunąć w zarządzaniu drzewami.',
+        noResearch: 'Drzewo przykładowe służy do wypróbowania aplikacji i nigdy nie zostaje połączone z badaniem. Badanie zaczyna się od prawdziwego drzewa rodzinnego.',
         // The made-up family's words; its names and places read the same in every language.
         data: {
             farmer: 'Gospodarz',

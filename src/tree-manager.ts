@@ -43,6 +43,7 @@ import { fillResearchConfirmedValues, hasUnvaluedResearchConfirmations } from '.
 import { requestPersistentStorage } from './persistence.js';
 import { newTieSendMode } from './research-sync.js';
 import { asciiSlug } from './filenames.js';
+import { looksLikeSampleTree } from './demo-sample.js';
 import { announceTreeSaved, clearTreeStale, isTreeStale } from './tab-sync.js';
 import { cloneTreeDataAsJson, estimateJsonBytes } from './clone.js';
 import {
@@ -1698,6 +1699,11 @@ class TreeManagerClass {
     setResearchLink(treeId: TreeId, link: ResearchLink | undefined, opts: { agentless?: boolean } = {}): void {
         const tree = this.index.trees.find(t => t.id === treeId);
         if (!tree) return;
+        // The sample tree is never tied to a research (it would go there as a family tree).
+        if (link && tree.demo) {
+            console.warn('Not tying the sample tree to a research', treeId);
+            return;
+        }
         const before = this.researchBaseOf(treeId);
         if (link) {
             const id = link.id.toLowerCase();
@@ -1745,8 +1751,28 @@ class TreeManagerClass {
     setResearchAdoptToken(treeId: TreeId, value: { token: string; at: string; install?: true } | null): void {
         const tree = this.index.trees.find(t => t.id === treeId);
         if (!tree) return;
+        // The sample tree is never handed over to a research.
+        if (value && tree.demo) return;
         if (value) tree.researchAdoptToken = value;
         else delete tree.researchAdoptToken;
+        this.saveIndex();
+    }
+
+    /** The tree is the bundled sample tree (TreeMetadata.demo). */
+    isDemoTree(treeId: TreeId | null | undefined): boolean {
+        return !!treeId && this.index.trees.find(t => t.id === treeId)?.demo === true;
+    }
+
+    /**
+     * Mark a tree as the sample tree: `data` given, only when it looks like
+     * one (an older sample without the mark, demo-sample.ts) and has no
+     * research tie (an older sample tied already keeps its tie).
+     */
+    markDemoTree(treeId: TreeId, data?: StromData): void {
+        const tree = this.index.trees.find(t => t.id === treeId);
+        if (!tree || tree.demo || (data && (tree.research || !looksLikeSampleTree(data)))) return;
+        tree.demo = true;
+        delete tree.researchAdoptToken;
         this.saveIndex();
     }
 

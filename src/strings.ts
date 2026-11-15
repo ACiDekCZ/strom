@@ -297,6 +297,7 @@ const stringsEN = {
         tryDemoDesc: 'A made-up family that shows what a tree can hold',
         treeName: 'Sample: the Berg family',
         hint: 'Click a card to see actions. This is an ordinary tree — it can be deleted in the tree manager.',
+        noResearch: 'The sample tree is for trying out the app and is never connected to a research. A research starts with a real family tree.',
         // The made-up family's words; its names and places read the same in every language.
         data: {
             farmer: 'Farmer',
@@ -1914,6 +1915,7 @@ const stringsEN = {
         undoneSub: (t: string) => `At ${t}. The changes are still here. Nothing more goes to the research until a choice is made: send it again, or keep the undo by loading the research's version.`,
         undoneAutoSub: (t: string) => `At ${t}. The changes are still here. Nothing more is sent by itself until a choice is made: send it again, or keep the undo by loading the research's version.`,
         undoneKeptSub: (t: string) => `At ${t}. The changes are still here; new edits go to the research as usual, what was taken back stays out of it until it is sent again.`,
+        undoneForeignSub: (t: string) => `At ${t}. That send did not carry this tree's people, so it is not sent again. Loading the research's version keeps the undo.`,
         undoneDecideFirst: "The research took back a send, and it would write it there again with the changes from here. First choose: Send again, or load the research's version to keep the undo.",
         takenBackSub: (n: number) => `${nEn(n, 'change', 'changes')} from the send taken back ${n === 1 ? 'was' : 'were'} not written again.`,
         takenBackToast: (n: number) => `${nEn(n, 'change', 'changes')} from the send taken back ${n === 1 ? 'was' : 'were'} not written. To have ${n === 1 ? 'it' : 'them'} back in the research, send that send again.`,
@@ -9537,6 +9539,7 @@ const stringsCZ: StringsType = {
         tryDemoDesc: 'Vymyšlená rodina, která ukazuje, co všechno strom pojme',
         treeName: 'Ukázka: rod Bergů',
         hint: 'Kliknutím na kartu se otevřou akce. Je to běžný strom — smazat ho jde ve správci stromů.',
+        noResearch: 'Ukázkový strom slouží k vyzkoušení aplikace a s výzkumem se nikdy nepropojí. Výzkum začíná se skutečným rodokmenem.',
         data: {
             farmer: 'Sedlák',
             fisherman: 'Rybář',
@@ -11100,6 +11103,7 @@ const stringsCZ: StringsType = {
         undoneSub: (t: string) => `V ${t}. Úpravy jsou dál tady. Nic dalšího se do výzkumu nepošle, dokud nebude zvoleno: poslat znovu, nebo vrácení ponechat načtením verze výzkumu.`,
         undoneAutoSub: (t: string) => `V ${t}. Úpravy jsou dál tady. Nic dalšího se samo nepošle, dokud nebude zvoleno: poslat znovu, nebo vrácení ponechat načtením verze výzkumu.`,
         undoneKeptSub: (t: string) => `V ${t}. Úpravy jsou dál tady. Nové úpravy se do výzkumu posílají jako obvykle, vrácené zůstane mimo, dokud se nepošle znovu.`,
+        undoneForeignSub: (t: string) => `V ${t}. To poslání neneslo osoby tohoto stromu, proto se znovu neposílá. Načtením verze výzkumu vrácení zůstane.`,
         undoneDecideFirst: 'Výzkum vrátil poslání a s úpravami odtud by ho zapsal znovu. Nejdřív je potřeba zvolit: Poslat znovu, nebo vrácení ponechat načtením verze výzkumu.',
         takenBackSub: (n: number) => `${nCs(n, 'změna', 'změny', 'změn')} z vráceného poslání se znovu nezapsal${n === 1 ? 'a' : n >= 2 && n <= 4 ? 'y' : 'o'}.`,
         takenBackToast: (n: number) => `${nCs(n, 'změna', 'změny', 'změn')} z vráceného poslání se nezapsal${n === 1 ? 'a' : n >= 2 && n <= 4 ? 'y' : 'o'}. Zpět do výzkumu ${n === 1 ? 'ji' : 'je'} dostane opakované poslání.`,
@@ -18615,6 +18619,7 @@ const stringsDE: StringsType = {
         tryDemoDesc: 'Eine erfundene Familie, die zeigt, was ein Stammbaum alles festhält',
         treeName: 'Beispiel: Familie Berg',
         hint: 'Ein Klick auf eine Karte zeigt Aktionen. Es ist ein ganz normaler Stammbaum — löschen lässt er sich in der Stammbaum-Verwaltung.',
+        noResearch: 'Der Beispiel-Stammbaum dient zum Ausprobieren der App und wird nie mit einer Forschung verbunden. Eine Forschung beginnt mit einem echten Stammbaum.',
         data: {
             farmer: 'Bauer',
             fisherman: 'Fischer',
@@ -20169,6 +20174,7 @@ const stringsDE: StringsType = {
         undoneSub: (t: string) => `Um ${t}. Die Änderungen sind noch hier. Bis zur Wahl geht nichts weiter an die Forschung: erneut senden oder die Version der Forschung laden und so die Rücknahme behalten.`,
         undoneAutoSub: (t: string) => `Um ${t}. Die Änderungen sind noch hier. Bis zur Wahl wird nichts von selbst gesendet: erneut senden oder die Version der Forschung laden und so die Rücknahme behalten.`,
         undoneKeptSub: (t: string) => `Um ${t}. Die Änderungen sind noch hier. Neue Änderungen gehen wie gewohnt an die Forschung, das Zurückgenommene bleibt draußen, bis es erneut gesendet wird.`,
+        undoneForeignSub: (t: string) => `Um ${t}. Diese Sendung enthielt nicht die Personen dieses Stammbaums und wird daher nicht erneut gesendet. Mit dem Laden der Version der Forschung bleibt die Rücknahme.`,
         undoneDecideFirst: 'Die Forschung hat eine Sendung zurückgenommen und würde sie mit den neuen Änderungen erneut schreiben. Zuerst wählen: Erneut senden oder die Version der Forschung laden und so die Rücknahme behalten.',
         takenBackSub: (n: number) => `${nDe(n, 'Änderung', 'Änderungen')} aus der zurückgenommenen Sendung ${n === 1 ? 'wurde' : 'wurden'} nicht erneut geschrieben.`,
         takenBackToast: (n: number) => `${nDe(n, 'Änderung', 'Änderungen')} aus der zurückgenommenen Sendung ${n === 1 ? 'wurde' : 'wurden'} nicht geschrieben. Um sie in der Forschung zurückzuhaben, diese Sendung erneut senden.`,

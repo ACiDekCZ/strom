@@ -2477,6 +2477,12 @@ export interface TreeMetadata {
     /** Whether tree is locked (all persons read-only) */
     isLocked?: boolean;
     /**
+     * The bundled sample tree ("Try a sample tree"): never sent to a research
+     * nor tied to one. An older sample without the mark gets it when it is
+     * opened (demo-sample.ts looksLikeSampleTree).
+     */
+    demo?: true;
+    /**
      * The data version of the stored record (written with every save, put
      * right at every read). Above STROM_DATA_VERSION: a newer app saved the
      * tree, so this one opens it read-only and never writes it — also before
