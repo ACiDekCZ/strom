@@ -490,7 +490,10 @@ export const researchSyncMethods = uiModule({
      * Resolves whether `fn` ran.
      */
     async researchWindowLock(treeId: TreeId, ifAvailable: boolean, fn: () => Promise<void>): Promise<boolean> {
-        const locks = (navigator as Navigator & { locks?: LockManager }).locks;
+        // No navigator at all (a runtime without one, such as Node 20 under the unit tests): no Web Locks.
+        const locks = typeof navigator !== 'undefined' && navigator
+            ? (navigator as Navigator & { locks?: LockManager }).locks
+            : undefined;
         // Held by this window already (the quiet load after its own send): go on.
         if (!locks?.request || heldLocks.has(treeId)) {
             await fn();

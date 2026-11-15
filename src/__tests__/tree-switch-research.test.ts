@@ -310,6 +310,24 @@ describe('switching to a tree tied to a research (1115-app-prepnuti-stromu)', ()
         expect(DataManager.getCurrentTreeId()).toBe(PLAIN);
     });
 
+    it('without a navigator (no Web Locks) the tree left still goes at once with its own people', async () => {
+        // A runtime without navigator (Node 20 runs the unit tests on CI): the send runs without a window lock.
+        vi.stubGlobal('navigator', undefined);
+        await start(PLAIN);
+        const ui = page();
+        const switching = DataManager.switchTree(PLAIN);
+        await settle();
+
+        await ui.researchAutoSend(LINKED, 'switch');
+        await settle();
+        expect(posts).toHaveLength(1);
+        expect(posts[0].body).toContain('_STROM_APP_TREE ' + LINKED);
+        expect(posts[0].body).not.toContain('Vzorov');
+
+        release();
+        expect(await switching).toBe(true);
+    });
+
     it('a later switch wins over one still reading: the tree opened is the last one asked', async () => {
         await start();
         const first = DataManager.switchTree(LINKED);
