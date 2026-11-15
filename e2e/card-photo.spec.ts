@@ -432,4 +432,27 @@ for (const [w, h, name] of [[390, 844, '390 px'], [844, 390, 'held sideways']] a
             await expect(page.locator('#settings-modal')).toBeHidden();
         }
     });
+
+    test(`${name}: each shape on one line, in German and Polish too, with a wider font`, async ({ page }) => {
+        await tree(page);
+        // A wider font than the bundled one (as on CI), so the check holds there too.
+        await page.addStyleTag({ content: '#card-photo-settings .segment-btn { font-family: Verdana, "DejaVu Sans", sans-serif !important; }' });
+        for (const lang of ['en', 'cs', 'de', 'pl'] as const) {
+            await page.evaluate((lang) => window.Strom.UI.setLanguage(lang as never), lang);
+            await openSettings(page);
+            const row = photoRow(page);
+            await row.scrollIntoViewIfNeeded();
+            const lines = await row.locator('.card-look-photo-shape .segment-btn').evaluateAll(bs => bs.map(b => {
+                const text = [...b.childNodes].find(n => n.nodeType === Node.TEXT_NODE && n.textContent!.trim())!;
+                const range = document.createRange();
+                range.selectNodeContents(text);
+                return new Set([...range.getClientRects()].map(r => Math.round(r.top))).size;
+            }));
+            expect(lines, lang).toEqual([1, 1]);
+            expect(await row.evaluate(el => el.scrollWidth <= el.clientWidth), lang).toBe(true);
+            expect(await row.locator('.segment-btn').evaluateAll(bs => bs.filter(b => b.scrollWidth > b.clientWidth + 0.5).length), lang).toBe(0);
+            await page.keyboard.press('Escape');
+            await expect(page.locator('#settings-modal')).toBeHidden();
+        }
+    });
 });

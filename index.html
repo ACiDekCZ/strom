@@ -15885,6 +15885,11 @@
             .card-photo-grid .segment.card-look-segment { display: flex; width: 100%; }
             .card-photo-grid .segment-btn { flex: 1; min-width: 0; min-height: 44px; padding: 6px 8px; font-size: 14px; }
         }
+        /* The shapes across a phone grow from their label's width (not halves), so a long
+           name ("Abgerundetes Quadrat", "Zaokrąglony kwadrat") stays on one line at 390px. */
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .card-photo-grid .card-look-photo-shape .segment-btn { flex: 1 1 auto; }
+        }
         @media (pointer: coarse) {
             .card-look-segment .segment-btn, .card-fields-date .segment-btn { min-height: 44px; }
             .card-look-check { min-height: 44px; }
