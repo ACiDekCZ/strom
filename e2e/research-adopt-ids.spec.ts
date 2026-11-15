@@ -323,7 +323,7 @@ test.describe('the research\'s numbers after a hand-over', () => {
             const dm = window.Strom.DataManager;
             const data = structuredClone(dm.getData());
             for (const p of Object.values(data.persons) as any[]) { delete p.refn; delete p.refnType; }
-            dm.replaceWithSourceData(data);
+            dm.replaceWithSourceData(dm.getCurrentTreeId(), data);
             const tm = window.Strom.TreeManager;
             tm.patchResearchLink(tm.getActiveTreeId()!, { fingerprint: 'x' });
         });

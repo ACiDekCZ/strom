@@ -1577,7 +1577,8 @@ export const researchSyncMethods = uiModule({
     /** Leaving the page (hidden): the open tree's changes go now, the request outliving the page when small. */
     async researchAutoLeave(): Promise<void> {
         const ctx = this.researchSyncLink();
-        if (!ctx || !this.researchAutoOn(ctx.link)) return;
+        // A switch reading another tree: the changes wait (sent with the switch's own send or the next time).
+        if (!ctx || !this.researchAutoOn(ctx.link) || DataManager.isSwitchingTree()) return;
         this.clearResearchAutoTimer();
         await this.researchAutoSend(ctx.treeId, 'leave');
     },
@@ -1600,9 +1601,15 @@ export const researchSyncMethods = uiModule({
             if (sendingTree !== treeId && DataManager.getCurrentTreeId() === treeId) this.scheduleResearchAutoSend(treeId);
             return;
         }
+        // While a switch reads another tree nothing goes: the changes wait for the next answer of the
+        // bridge (or the switch's own send of the tree left).
+        if (DataManager.isSwitchingTree()) {
+            autoDue.add(treeId);
+            return;
+        }
         const active = DataManager.getCurrentTreeId() === treeId;
         if (active && (DataManager.isTreeLocked() || DataManager.isReadOnly())) return;
-        const data = active ? DataManager.getData() : await readTree(treeId);
+        const data = active ? DataManager.getDataFor(treeId) : await readTree(treeId);
         if (!data) return;
         const fps = active ? this.researchSyncFingerprints(treeId, link) : fingerprintsOf(data, link);
         // Nothing the research lacks: its version, the state sent, or the state it discarded (sent again only after an edit).
@@ -1647,7 +1654,8 @@ export const researchSyncMethods = uiModule({
     /** After an answer from the bridge: what waited for it goes now (the research's version loads only when asked). */
     async researchAutoCheck(): Promise<void> {
         const ctx = this.researchSyncLink();
-        if (!ctx) return;
+        // A switch reading another tree: the next answer after it decides.
+        if (!ctx || DataManager.isSwitchingTree()) return;
         const { treeId, link } = ctx;
         // Once per tree: how should changes go (asked while its research runs).
         if (runtime.get(link.id)?.up && this.researchSyncCapable(link.id)) this.maybeAskResearchSendMode(treeId);
@@ -1791,8 +1799,14 @@ export const researchSyncMethods = uiModule({
         const link = meta?.research;
         if (!link || sendingTree) return;
         const s = strings.sync;
+        // Never while a switch reads another tree: what goes is the tree's own data, with its own id
+        // and link. Sent by itself, it waits for the next answer of the bridge.
+        if (DataManager.isSwitchingTree()) {
+            if (opts.auto) autoDue.add(treeId);
+            return;
+        }
         const active = DataManager.getCurrentTreeId() === treeId;
-        const data = active ? DataManager.getData() : await readTree(treeId);
+        const data = active ? DataManager.getDataFor(treeId) : await readTree(treeId);
         const bridge = parseLiveBridge(storedResearchBridge(link.id)?.base);
         if (!data || !bridge) return;
         const fps = active ? this.researchSyncFingerprints(treeId, link) : fingerprintsOf(data, link);
@@ -1863,7 +1877,7 @@ export const researchSyncMethods = uiModule({
         sendingTree = treeId;
         // Before this tree first goes to the research from this browser: a backup, whatever the setting
         // (not while the page is being left — the send must go at once).
-        if (active && !again && !opts.keepalive && !researchAutoState(treeId).firstSendBackup) {
+        if (active && DataManager.getCurrentTreeId() === treeId && !again && !opts.keepalive && !researchAutoState(treeId).firstSendBackup) {
             if (await DataManager.snapshotNow('pre-first-send')) patchResearchAutoState(treeId, { firstSendBackup: true });
         }
         if (autoTimerTree === treeId) this.clearResearchAutoTimer();
@@ -2210,7 +2224,9 @@ export const researchSyncMethods = uiModule({
             return done === treeId && !TreeManager.getTreeMetadata(treeId)?.research?.awaitingIds
                 ? { ok: true } : { ok: false, why: 'unavailable' };
         }
-        const current = DataManager.getData();
+        // The tree may have been left while the research's version was read.
+        const current = DataManager.getDataFor(treeId);
+        if (!current) return { ok: false, why: 'unavailable' };
         const kept = await loadResearchCopy(treeId);
         const base = kept ?? current;
         const next = researchIdsByContent(current, base, research);
@@ -2224,7 +2240,7 @@ export const researchSyncMethods = uiModule({
             });
             return { ok: false, why: 'unmatched', research, header };
         }
-        if (next.persons + next.sources > 0) DataManager.replaceWithSourceData(next.data);
+        if (next.persons + next.sources > 0 && !DataManager.replaceWithSourceData(treeId, next.data)) return { ok: false, why: 'unavailable' };
         // The kept version gets them too: changes per person stay the user's own.
         this.researchKeepCopy(treeId, researchIdsByContent(base, base, research).data, link.fingerprint);
         TreeManager.patchResearchLink(treeId, { awaitingIds: undefined });
@@ -3258,7 +3274,7 @@ export const researchSyncMethods = uiModule({
         if (!changed) return null;
         quietLoading = true;
         try {
-            DataManager.replaceWithSourceData(data);
+            DataManager.replaceWithSourceData(treeId, data);
         } finally {
             quietLoading = false;
         }

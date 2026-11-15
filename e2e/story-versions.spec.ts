@@ -131,7 +131,7 @@ test.describe('a story\'s new version', () => {
         await page.evaluate(() => {
             const data = structuredClone(window.Strom.DataManager.getData());
             for (const p of Object.values(data.persons) as { story?: { draft?: unknown } }[]) delete p.story?.draft;
-            window.Strom.DataManager.replaceWithSourceData(data);
+            window.Strom.DataManager.replaceWithSourceData(window.Strom.DataManager.getCurrentTreeId(), data);
         });
         await page.keyboard.press('Escape');
         await page.evaluate((id) => window.Strom.UI.runPersonMenuAction(id, 'story'), jan);
@@ -261,7 +261,7 @@ test.describe('a story\'s new version', () => {
             for (const u of Object.values(data.partnerships) as { story?: { status?: string; draft?: unknown } }[]) {
                 if (u.story) { u.story.status = 'draft'; delete u.story.draft; }
             }
-            window.Strom.DataManager.replaceWithSourceData(data);
+            window.Strom.DataManager.replaceWithSourceData(window.Strom.DataManager.getCurrentTreeId(), data);
         });
         await expect(card(page, 'Marie').locator(':scope > .card-story')).toHaveClass(/draft/);
         expect(await card(page, 'Marie').getAttribute('aria-label')).toContain('Story of the marriage (draft)');

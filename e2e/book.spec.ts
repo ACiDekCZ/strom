@@ -638,7 +638,7 @@ test.describe('family book: the content', () => {
             data.partnerships['u-rozalie'] = { id: 'u-rozalie', person1Id: h.id, person2Id: 'p-rozalie', status: 'married', childIds: [],
                 startDate: '1730', story: { status: 'final', text: 'The second marriage was short.' } };
             h.partnerships.push('u-rozalie');
-            window.Strom.DataManager.replaceWithSourceData(data);
+            window.Strom.DataManager.replaceWithSourceData(window.Strom.DataManager.getCurrentTreeId(), data);
         });
         const dialog = await openDialog(page);
         await dialog.locator('input[name="book-privacy"][value="full"]').check();

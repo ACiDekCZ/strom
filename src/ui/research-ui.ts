@@ -1344,7 +1344,10 @@ function readFileBuffer(file: Blob): Promise<ArrayBuffer> {
 
 /** A tree's stored data as the app would load it, or null when unreadable. */
 export async function readTree(treeId: TreeId): Promise<StromData | null> {
-    if (DataManager.getCurrentTreeId() === treeId && !DataManager.isLocked()) return DataManager.getData();
+    // The open tree's data only when they are this tree's (never another
+    // tree's beside this id while a switch reads it).
+    const open = DataManager.getDataFor(treeId);
+    if (open && !DataManager.isLocked()) return open;
     try {
         const data = await TreeManager.getTreeData(treeId);
         return data ? migrateData(data) : null;
@@ -3865,7 +3868,7 @@ export const researchUiMethods = uiModule({
             this.endLiveFollow(s, 'ended');
             return null;
         }
-        const active = DataManager.getCurrentTreeId() === s.treeId;
+        let active = DataManager.getCurrentTreeId() === s.treeId;
         const previous = await readTree(s.treeId);
         // Images added in the app before following stay (the research has none of them).
         // Titles a research that does not know them dropped stay (T07), and those it never got (B18-1).
@@ -3878,11 +3881,11 @@ export const researchUiMethods = uiModule({
         if (active) {
             // Following replaces the tree again and again: one backup, before the first time.
             if (!s.backedUp) s.backedUp = !!await DataManager.snapshotNow('pre-research-load');
-            DataManager.replaceWithSourceData(stable);
-            this.refreshSearch();
-        } else {
-            TreeManager.updateTreeFromImport(s.treeId, stable);
+            if (DataManager.replaceWithSourceData(s.treeId, stable)) this.refreshSearch();
+            // Left while the backup was taken: stored for that tree, as for one not open.
+            else if (DataManager.getCurrentTreeId() !== s.treeId) active = false;
         }
+        if (!active) TreeManager.updateTreeFromImport(s.treeId, stable);
         if (fileHead || head) s.head = fileHead || head;
         // The tree of the research's head now (asked without `stale`): nothing newer is being built for it.
         s.preparing = false;

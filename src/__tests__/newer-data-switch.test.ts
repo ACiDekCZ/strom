@@ -156,7 +156,7 @@ describe('a tree saved by a newer app is read-only and never written', () => {
         expect(DataManager.getAllPersons()).toHaveLength(1);
 
         // The research: neither a whole new version nor its marks.
-        DataManager.replaceWithSourceData(tree(STROM_DATA_VERSION));
+        DataManager.replaceWithSourceData(T2, tree(STROM_DATA_VERSION));
         DataManager.replaceQualityDismissed([{ type: 'x', persons: ['p0'] } as never]);
         expect(DataManager.getData().qualityDismissed).toBeUndefined();
 

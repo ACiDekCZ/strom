@@ -436,6 +436,9 @@ class DataManagerClass {
     };
 
     private currentTreeId: TreeId | null = null;
+    /** switchTree: the tree being read (null when no switch is under way), and the latest switch's number. */
+    private switchingTo: TreeId | null = null;
+    private switchSeq = 0;
 
     // Undo/redo: deep copy of the data taken at the start of the current mutation.
     private pendingBefore: StromData | null = null;
@@ -1138,19 +1141,22 @@ class DataManagerClass {
         if (startupTreeId) {
             // Set as active tree
             TreeManager.setActiveTree(startupTreeId);
-            this.currentTreeId = startupTreeId;
 
             // Load audit log cache for startup tree
             await AuditLogManager.loadForTree(startupTreeId);
 
             // Locked / undecryptable data loads as an empty stand-in, but
-            // TreeManager refuses to save over it (review K8).
+            // TreeManager refuses to save over it (review K8). The tree's id
+            // becomes the open one together with its data, never before
+            // (see switchTree).
             const treeData = await TreeManager.getTreeData(startupTreeId);
             if (treeData) {
                 await TreeManager.adoptStoredData(startupTreeId);
+                this.currentTreeId = startupTreeId;
                 this.data = migrateData(treeData);
                 return;
             }
+            this.currentTreeId = startupTreeId;
             this.data = this.createEmptyData();
             return;
         }
@@ -1173,27 +1179,39 @@ class DataManagerClass {
 
     async switchTree(treeId: TreeId): Promise<boolean> {
         this.rollbackEditSession();   // whole-data replacement ends a staged dialog
-        // Flush pending writes (including the per-tree save queues) before
-        // switching (ensure current tree data is persisted)
-        await TreeManager.flush();
-
-        if (!TreeManager.setActiveTree(treeId)) {
-            return false;
+        // The open tree's id and its data change TOGETHER, in one step after
+        // the new tree is read: until then both stay the previous tree's.
+        // Setting the id first left a window (reading, decrypting, migrating
+        // the new tree) where the id was the new tree's and the data still the
+        // previous one's — a send to the research in it carried the previous
+        // tree under the new one's link, and a save wrote it over the new
+        // tree's storage. An edit made meanwhile stays the previous tree's
+        // and is saved there.
+        const seq = ++this.switchSeq;
+        this.switchingTo = treeId;
+        let treeData: StromData | null;
+        try {
+            // Flush pending writes (including the per-tree save queues) before
+            // switching (ensure current tree data is persisted)
+            await TreeManager.flush();
+            if (!TreeManager.getTreeMetadata(treeId)) return false;
+            treeData = await TreeManager.getTreeData(treeId);
+            if (treeData) await TreeManager.adoptStoredData(treeId);
+            // A later switch took over while this one read: it opens its tree.
+            if (seq !== this.switchSeq) return false;
+            if (!TreeManager.setActiveTree(treeId)) return false;
+            this.rollbackEditSession();   // a dialog staged on the previous tree meanwhile
+            this.currentTreeId = treeId;
+            this.data = treeData ? migrateData(treeData) : this.createEmptyData();
+        } finally {
+            if (seq === this.switchSeq) this.switchingTo = null;
         }
-
-        this.currentTreeId = treeId;
-        const treeData = await TreeManager.getTreeData(treeId);
         if (treeData) {
-            await TreeManager.adoptStoredData(treeId);
             this.announceNewerData(treeId, treeData);
-            this.data = migrateData(treeData);
-        } else {
-            this.data = this.createEmptyData();
+        } else if (TreeManager.isTreeUnreadable(treeId) && typeof window !== 'undefined') {
             // Locked / wrong key: an empty stand-in that is never saved (K8);
             // let the UI offer unlocking.
-            if (TreeManager.isTreeUnreadable(treeId) && typeof window !== 'undefined') {
-                window.dispatchEvent(new CustomEvent('strom:tree-unreadable', { detail: { treeId } }));
-            }
+            window.dispatchEvent(new CustomEvent('strom:tree-unreadable', { detail: { treeId } }));
         }
 
         // Load audit log cache for the new tree
@@ -1250,6 +1268,20 @@ class DataManagerClass {
      */
     getCurrentTreeId(): TreeId | null {
         return this.currentTreeId;
+    }
+
+    /**
+     * The open tree's data when they are tree `treeId`'s, else null. What
+     * goes somewhere as "tree X" (the research, a file) takes its data here,
+     * never getData() beside an id read apart.
+     */
+    getDataFor(treeId: TreeId): StromData | null {
+        return this.currentTreeId === treeId ? this.data : null;
+    }
+
+    /** A switch to another tree is reading it (the open tree is still the previous one). */
+    isSwitchingTree(): boolean {
+        return this.switchingTo !== null;
     }
 
     private createEmptyData(): StromData {
@@ -4492,9 +4524,12 @@ class DataManagerClass {
      * research bridge). Not an edit of the user's: no undo step — the history
      * before it described a state that no longer exists, so it is dropped.
      */
-    replaceWithSourceData(newData: StromData): void {
+    replaceWithSourceData(treeId: TreeId, newData: StromData): boolean {
+        // Data of tree `treeId` only ever replace that tree: another one open
+        // by now (a switch while they were fetched) is left as it is.
+        if (this.currentTreeId !== treeId) return false;
         this.rollbackEditSession();   // whole-data replacement ends a staged dialog
-        if (this.isReadOnly() || !this.currentTreeId) return;
+        if (this.isReadOnly() || !this.currentTreeId) return false;
         // The tree shown until now: the drawing goes from it to the new one (spec 055).
         const previous = this.data;
         this.data = migrateData(newData);
@@ -4506,6 +4541,7 @@ class DataManagerClass {
         if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent<DataChangedDetail>('strom:data-changed', { detail: { source: 'live', previous } }));
         }
+        return true;
     }
 
     /**

@@ -126,6 +126,48 @@ test.describe('sending by itself', () => {
         expect(bridge.posts[1]).toContain('2 PLAC Kolín');
     });
 
+    test('switching back to the research tree: nothing goes while it is read, then that tree with its own people (1115)', async ({ page }) => {
+        const bridge = await autoTree(page);
+        writesAtOnce(bridge);
+        const linked = await treeId(page);
+        await editJan(page);
+        const other = await page.evaluate(() => window.Strom.DataManager.importAsNewTree({ version: 11, persons: {
+            d1: { id: 'd1', firstName: 'Ukazek', lastName: 'Vzorovy', gender: 'male', partnerships: [], parentIds: [], childIds: [] },
+        }, partnerships: {} } as never, 'Example'));
+        await page.evaluate((id) => window.Strom.UI.switchToTree(id), other);
+        await expect.poll(() => bridge.posts.length).toBe(1);
+        // Reading the research tree is held until the test lets it go.
+        await page.evaluate((id) => {
+            const w = window as unknown as { __reading?: boolean; __open?: () => void; __switching?: Promise<void> };
+            const tm = window.Strom.TreeManager;
+            const read = tm.getTreeData.bind(tm);
+            const gate = new Promise<void>(resolve => { w.__open = resolve; });
+            tm.getTreeData = async (t: string) => {
+                if (t === id) { w.__reading = true; await gate; }
+                return read(t as never);
+            };
+            w.__switching = window.Strom.UI.switchToTree(id);
+        }, linked);
+        await expect.poll(() => page.evaluate(() => !!(window as unknown as { __reading?: boolean }).__reading)).toBe(true);
+        // An answer of the bridge and the page left while it is read: nothing goes.
+        await poll(page);
+        await page.evaluate(() => window.Strom.UI.researchAutoLeave());
+        expect(bridge.posts).toHaveLength(1);
+        await page.evaluate(() => {
+            const w = window as unknown as { __open: () => void; __switching: Promise<void> };
+            w.__open();
+            return w.__switching;
+        });
+        await expect(card(page, 'Jan')).toBeVisible();
+        // Read: the tree's own edit goes, with its own people.
+        await editJan(page, 'Kolín');
+        await page.evaluate(() => window.Strom.UI.researchAutoLeave());
+        await expect.poll(() => bridge.posts.length).toBe(2);
+        expect(bridge.posts[1]).toContain(`1 _STROM_APP_TREE ${linked}`);
+        expect(bridge.posts[1]).toContain('2 PLAC Kolín');
+        for (const post of bridge.posts) expect(post).not.toContain('Vzorovy');
+    });
+
     test('the bridge not running: nothing fetched or opened; "not running" only after the quiet time; sent when it is back', async ({ page }) => {
         const bridge = await autoTree(page);
         writesAtOnce(bridge);

@@ -336,7 +336,7 @@ export const researchAdoptMethods = uiModule({
         if (reply.ids && DataManager.getCurrentTreeId() === tree.id) {
             const withIds = applyAdoptIds(data, exported.xrefs, reply.ids);
             if (withIds.persons + withIds.sources > 0) {
-                DataManager.replaceWithSourceData(withIds.data);
+                DataManager.replaceWithSourceData(tree.id, withIds.data);
                 taken = DataManager.getData();
                 numbered = withIds.persons > 0;
             }
