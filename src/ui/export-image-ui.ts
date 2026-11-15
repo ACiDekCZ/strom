@@ -175,6 +175,8 @@ export function treeCardDrawing(data: StromData, layout: ReturnType<typeof TreeR
         branchMap,
         deceasedSet,
         ...(dimmedIds ? { dimmedIds } : {}),
+        // The photo on the card as the screen draws it (spec 096 P2): its size, shape and who was laid out with one.
+        ...(density === 'compact' ? {} : { cardPhoto: TreeRenderer.getPosterCardPhoto(spacing) }),
         // Marriage-order pills (T13): whose marriage a pill counts follows the
         // focus, and the pill is measured as the screen draws it.
         focusId,

@@ -116,7 +116,7 @@ export interface CustomCardEntry<L extends CardLineText = CardLine> {
     /**
      * The size of the photo the card shows (spec 096 §3, cardAvatarSize):
      * a medium or large one makes the avatar beside the name 44 / 72px;
-     * absent (initials, the small photo, the outputs: D7) 30px.
+     * absent (initials, the small photo) 30px.
      */
     photo?: CardPhotoSize;
 }

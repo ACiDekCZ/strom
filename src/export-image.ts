@@ -6,7 +6,10 @@
  * It reads a LayoutResult but never touches the layout engine.
  */
 
-import { StromData, LayoutConfig, DEFAULT_LAYOUT_CONFIG, PartnershipStatus, PersonId, personCardHeight } from './types.js';
+import {
+    StromData, LayoutConfig, DEFAULT_LAYOUT_CONFIG, PartnershipStatus, PersonId, personCardHeight,
+    CardPhotoSize, CardPhotoShape, NORMAL_PHOTO_BOX,
+} from './types.js';
 import { LayoutResult } from './layout/pipeline/types.js';
 import { displayYear } from './dates.js';
 import { personInitials } from './initials.js';
@@ -18,7 +21,7 @@ import {
     CARD_MARK_WIDTH, CARD_COLUMN_GAP, CUSTOM_CARD_PAD_X, CARD_ROW_HEIGHT, CARD_DETAIL_GAP, CARD_LABEL_GAP,
     CARD_VALUE_DATE_GAP, CARD_NAME_ROW_HEIGHT, CARD_YEARS_ROW_HEIGHT, CARD_BIRTH_ROW_HEIGHT, CARD_AVATAR_WIDTH, CARD_HEAD_GAP,
     MeasureTexts, CardRow, cardPlaceOffset, cardLinesTop, customCardRows, cardHeadBlock, CARD_STATUS_MARK_ROOM,
-    CARD_NAME_MAX_ROWS, normalCardNameRows, NORMAL_CARD_NAME_ROW_HEIGHT,
+    CARD_NAME_MAX_ROWS, normalCardNameRows, NORMAL_CARD_NAME_ROW_HEIGHT, normalCardTextWidth, cardAvatarSize,
 } from './card-width.js';
 import { shownName, shownNameParts, birthNoteText } from './person-name.js';
 import { strings } from './strings.js';
@@ -397,6 +400,55 @@ export interface PosterOptions extends PosterFooterMeta {
      * card is on. Absent: none (the family book's tree page).
      */
     cardMarks?: Map<string, PosterCardMarks>;
+    /**
+     * The photo on the card (spec 096), as the screen draws it: `size` the
+     * view's photo size (the chosen one when someone laid out has a photo,
+     * else small: the layout's card box was made for it), `shape` the
+     * photo's and the initials' shape. `photoIds`: the people laid out with
+     * a photo; a living-privacy mode takes the photo from the data drawn,
+     * and such a card keeps the box it was laid out with, its initials in
+     * the photo's place. Absent: small and a circle, the card as it always was.
+     */
+    cardPhoto?: PosterCardPhoto;
+}
+
+/** The photo on the card in the image (PosterOptions.cardPhoto). */
+export interface PosterCardPhoto {
+    size: CardPhotoSize;
+    shape: CardPhotoShape;
+    photoIds?: ReadonlySet<string>;
+}
+
+/**
+ * The rounded square's radius by the avatar's size (index.html, spec 096 §5):
+ * the cards of details 30 / 44 / 72px, the Normal card 34 / 48 / 80px.
+ */
+export const ROUNDED_AVATAR_RADIUS: Readonly<Record<number, number>> = { 30: 4, 34: 5, 44: 6, 48: 7, 72: 10, 80: 12 };
+
+/**
+ * An avatar of `size` px centred on (cx, cy): the photo clipped to the shape
+ * with the gender ring over it, or the initials on the avatar's ground inside
+ * the ring. The circle is drawn as it always was (the image unchanged by default).
+ */
+function avatarSvg(a: {
+    cx: number; cy: number; size: number; shape: CardPhotoShape; ring: string; stroke: number;
+    photo?: string; clipId: string; initials: string; initialsSize: number;
+}): string[] {
+    const r = a.size / 2;
+    const outline = (attrs: string): string => a.shape === 'rounded'
+        ? `<rect x="${(a.cx - r).toFixed(1)}" y="${(a.cy - r).toFixed(1)}" width="${a.size}" height="${a.size}" rx="${ROUNDED_AVATAR_RADIUS[a.size] ?? 5}"${attrs}/>`
+        : `<circle cx="${a.cx.toFixed(1)}" cy="${a.cy.toFixed(1)}" r="${r}"${attrs}/>`;
+    if (a.photo) {
+        return [
+            `<clipPath id="${a.clipId}">${outline('')}</clipPath>`,
+            `<image href="${escapeXml(a.photo)}" x="${(a.cx - r).toFixed(1)}" y="${(a.cy - r).toFixed(1)}" width="${a.size}" height="${a.size}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${a.clipId})"/>`,
+            outline(` fill="none" stroke="${a.ring}" stroke-width="${a.stroke}"`),
+        ];
+    }
+    return [
+        outline(` fill="${COLORS.avatarBg}" stroke="${a.ring}" stroke-width="${a.stroke}"`),
+        `<text x="${a.cx.toFixed(1)}" y="${(a.cy + 4).toFixed(1)}" text-anchor="middle" font-size="${a.initialsSize}" font-weight="600" fill="${COLORS.initials}">${escapeXml(a.initials)}</text>`,
+    ];
 }
 
 /** What a card's bottom-right corner carries in the image. */
@@ -459,6 +511,7 @@ interface CustomCardLook {
 function customCardSvg(
     person: StromData['persons'][keyof StromData['persons']], pos: { x: number; y: number }, cw: number,
     lines: PosterCardLine[], ring: string, clipId: string, years: string, look: CustomCardLook,
+    photo?: CardPhotoSize, shape: CardPhotoShape = 'circle',
 ): string {
     const { dateColumn, labelColumn, valueLines, nameMaxRows, style, measure, exact, statusRoom } = look;
     const out: string[] = [];
@@ -468,7 +521,8 @@ function customCardSvg(
     const birth = shownNameParts(person, '?').birthNote;
     const birthRow = birthNoteText(birth);
     const metrics = { cardWidth: cw, dateColumn, ...(style === 'labels' ? { labelColumn } : {}) };
-    const entry = { name, avatar: !person.isPlaceholder, lines, ...(years ? { years } : {}), ...(birthRow ? { birth: birthRow } : {}) };
+    const entry = { name, avatar: !person.isPlaceholder, lines, ...(years ? { years } : {}), ...(birthRow ? { birth: birthRow } : {}),
+        ...(photo ? { photo } : {}) };
     let { rows, heads } = customCardRows([entry], metrics, measure, valueLines, style, nameMaxRows);
     // The last line clear of the status mark, as the screen wraps it, unless that
     // takes a row more than the card was laid out with (then it stays as it was).
@@ -480,24 +534,23 @@ function customCardSvg(
     const head = heads[0];
     let textX = left;
     if (!person.isPlaceholder) {
-        const cx = left + 15;
-        // The avatar where a one-row name puts it (the middle of that header), however many rows the name takes (T39).
-        const cy = pos.y + 10 + Math.min(head.block, cardHeadBlock(1, !!head.years)) / 2;
-        if (person.photo) {
-            out.push(`<clipPath id="${clipId}"><circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="15"/></clipPath>`);
-            out.push(`<image href="${escapeXml(person.photo)}" x="${(cx - 15).toFixed(1)}" y="${(cy - 15).toFixed(1)}" width="30" height="30" preserveAspectRatio="xMidYMid slice" clip-path="url(#${clipId})"/>`);
-            out.push(`<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="15" fill="none" stroke="${ring}" stroke-width="1.5"/>`);
-        } else {
-            const initials = personInitials(person.firstName, shownNameParts(person, '', false).surname) || '?';
-            out.push(`<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="15" fill="${COLORS.avatarBg}" stroke="${ring}" stroke-width="1.5"/>`);
-            out.push(`<text x="${cx.toFixed(1)}" y="${(cy + 4).toFixed(1)}" text-anchor="middle" font-size="11" font-weight="600" fill="${COLORS.initials}">${escapeXml(initials)}</text>`);
-        }
-        textX = left + CARD_AVATAR_WIDTH + CARD_HEAD_GAP;
+        // A medium or large photo (spec 096 §3): 44 / 72px at the header's top left, a 2px ring.
+        const size = photo ? cardAvatarSize(photo) : CARD_AVATAR_WIDTH;
+        const cx = left + size / 2;
+        // The small avatar where a one-row name puts it (the middle of that header), however many rows the name takes (T39).
+        const cy = photo ? pos.y + 10 + size / 2 : pos.y + 10 + Math.min(head.block, cardHeadBlock(1, !!head.years)) / 2;
+        out.push(...avatarSvg({
+            cx, cy, size, shape, ring, stroke: photo ? 2 : 1.5, clipId, photo: person.photo,
+            initials: personInitials(person.firstName, shownNameParts(person, '', false).surname) || '?', initialsSize: 11,
+        }));
+        textX = left + size + CARD_HEAD_GAP;
     }
     const nameRoom = right - textX;
     // The name's rows and the years, as a block in the middle of the header; a 15px text's baseline 14.5px into its 19px row.
+    // Beside a medium or large photo the block keeps the place it has beside the small avatar (D13: the header's top).
     const birthH = head.birth ? CARD_BIRTH_ROW_HEIGHT : 0;
-    const blockTop = pos.y + 10 + (head.block - CARD_NAME_ROW_HEIGHT * head.name.length - birthH - (head.years ? CARD_YEARS_ROW_HEIGHT : 0)) / 2;
+    const textBlock = photo ? cardHeadBlock(head.name.length, !!head.years, !!head.birth) : head.block;
+    const blockTop = pos.y + 10 + (textBlock - CARD_NAME_ROW_HEIGHT * head.name.length - birthH - (head.years ? CARD_YEARS_ROW_HEIGHT : 0)) / 2;
     if (valueLines === 1) {
         const nameAt15 = measure('name', [name]).get(name) ?? 0;
         let fs = 15;
@@ -873,6 +926,12 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
     // --- Cards (id order for deterministic output) ---
     out.push('<g class="cards">');
     let clipCounter = 0;
+    // The photo on the card (spec 096): a card laid out with a medium or large photo is drawn with it.
+    const photoView = options.cardPhoto?.size ?? 'small';
+    const photoShape = options.cardPhoto?.shape ?? 'circle';
+    const photoIds = options.cardPhoto?.photoIds;
+    const laidOutWithPhoto = (id: string, p: StromData['persons'][keyof StromData['persons']] | undefined): boolean =>
+        photoView !== 'small' && !!p && !p.isPlaceholder && (photoIds ? photoIds.has(id) : !!p.photo);
     const entries = [...result.positions.entries()].sort((a, b) => String(a[0]).localeCompare(String(b[0])));
     for (const [personId, pos] of entries) {
         const person = data.persons[personId];
@@ -913,7 +972,7 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
                     style: options.cardStyle ?? 'marks',
                     measure: options.measureCardTexts ?? estimateCardTexts, exact: !!options.measureCardTexts,
                     statusRoom: !!markCls,
-                }));
+                }, laidOutWithPhoto(personId, person) ? photoView : undefined, photoShape));
         } else if (person && !isPlaceholder && options.cardDensity === 'compact') {
             // Compact: the name only (no avatar, no meta), centred in the whole
             // box at 13px — the screen's 10px side padding inside the border.
@@ -927,26 +986,25 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
         } else if (person && !isPlaceholder) {
             // Avatar: gender-ring circle with a photo or initials (like on
             // screen), 34px (r=17) centred on the card's height; 10px left
-            // padding (border + padding) — matches the CSS.
-            const r = 17;
-            const cxAv = pos.x + 10 + r;
+            // padding (border + padding) — matches the CSS. A card laid out
+            // with a medium or large photo (spec 096 §2, NORMAL_PHOTO_BOX):
+            // the photo's size and the card's padding of that box; the initials
+            // of a card without one stay 34px in the wider card.
+            const photoCard = laidOutWithPhoto(personId, person);
+            const box = NORMAL_PHOTO_BOX[photoCard ? photoView : 'small'];
+            const pad = 1 + box.padX;
+            const r = box.avatar / 2;
+            const cxAv = pos.x + pad + r;
             const cyAv = pos.y + ch / 2;
-            const hasPhoto = !!person.photo;
-            if (hasPhoto) {
-                const clipId = `av${clipCounter++}`;
-                out.push(`<clipPath id="${clipId}"><circle cx="${cxAv.toFixed(1)}" cy="${cyAv.toFixed(1)}" r="${r}"/></clipPath>`);
-                out.push(`<image href="${escapeXml(person.photo!)}" x="${(cxAv - r).toFixed(1)}" y="${(cyAv - r).toFixed(1)}" width="${2 * r}" height="${2 * r}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${clipId})"/>`);
-                out.push(`<circle cx="${cxAv.toFixed(1)}" cy="${cyAv.toFixed(1)}" r="${r}" fill="none" stroke="${ring}" stroke-width="2"/>`);
-            } else {
-                const initials = personInitials(person.firstName, shownNameParts(person, '', false).surname) || '?';
-                const initialsSize = 12;
-                out.push(`<circle cx="${cxAv.toFixed(1)}" cy="${cyAv.toFixed(1)}" r="${r}" fill="${COLORS.avatarBg}" stroke="${ring}" stroke-width="2"/>`);
-                out.push(`<text x="${cxAv.toFixed(1)}" y="${(cyAv + initialsSize / 3).toFixed(1)}" text-anchor="middle" font-size="${initialsSize}" font-weight="600" fill="${COLORS.initials}">${escapeXml(initials)}</text>`);
-            }
+            out.push(...avatarSvg({
+                cx: cxAv, cy: cyAv, size: box.avatar, shape: photoShape, ring, stroke: 2,
+                photo: person.photo, clipId: person.photo ? `av${clipCounter++}` : '',
+                initials: personInitials(person.firstName, shownNameParts(person, '', false).surname) || '?', initialsSize: 12,
+            }));
 
-            // Text column right of the avatar (10px padding + avatar + gap).
-            const contentX = pos.x + 10 + 2 * r + 9;
-            const contentW = cw - (contentX - pos.x) - 10;
+            // Text column right of the avatar (padding + avatar + gap): 125px beside a photo of any size.
+            const contentX = pos.x + pad + 2 * r + 9;
+            const contentW = cw - (contentX - pos.x) - pad;
             const cx = contentX + contentW / 2;
 
             const fullName = shownName(person, '?');
@@ -967,7 +1025,9 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
             // never shortened. More than two rows: the card was laid out taller for them
             // (T40, config.personHeights).
             const measure = options.measureCardTexts ?? estimateCardTexts;
-            const split = normalCardNameRows([{ given: parts.given, surname: parts.surname, avatar: true }], measure)[0];
+            // In a view of a medium or large photo the column of its box (src/card-width.ts normalCardTextWidth).
+            const split = normalCardNameRows([{ given: parts.given, surname: parts.surname, avatar: true,
+                ...(photoView === 'small' ? {} : { textWidth: normalCardTextWidth(photoView, true, photoCard) }) }], measure)[0];
             const nameRows = [...split.given, ...split.surname];
             const wrapped = nameRows.length > 2;
             // With the birth surname's row the name stays on one line 15 → 14 → 13px, else goes on rows.
@@ -985,8 +1045,10 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
                 // The rows (12.5px, 14.375px a row), then "roz. …" at 11px, then the
                 // years only, in 13.5px rows: one block in the middle of the card.
                 const smallRow = 13.5;
-                const top = pos.y + (ch - nameRows.length * NORMAL_CARD_NAME_ROW_HEIGHT
-                    - (birthText ? smallRow : 0) - (meta ? smallRow : 0)) / 2;
+                const blockH = nameRows.length * NORMAL_CARD_NAME_ROW_HEIGHT + (birthText ? smallRow : 0) + (meta ? smallRow : 0);
+                // Beside a large photo (D13): centred on y = 32 as on the 64px card, at least 15px from the top, growing down.
+                const top = photoCard && photoView === 'large' ? pos.y + Math.max(15, 32 - blockH / 2)
+                    : pos.y + (ch - nameRows.length * NORMAL_CARD_NAME_ROW_HEIGHT - (birthText ? smallRow : 0) - (meta ? smallRow : 0)) / 2;
                 const widths = measure('nameSmall', nameRows);
                 nameRows.forEach((row, i) => {
                     const w = widths.get(row) ?? 0;

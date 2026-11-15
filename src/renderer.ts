@@ -24,7 +24,7 @@ import {
 import { TreeManager } from './tree-manager.js';
 import { chainLinkSvg, iconSvg } from './icons.js';
 import * as CrossTree from './cross-tree.js';
-import { ViewMode, STANDALONE_VIEWS, ResearchEdgeMode, ResearchEdgeHypo, CardPhotoSize, NORMAL_PHOTO_BOX } from './types.js';
+import { ViewMode, STANDALONE_VIEWS, ResearchEdgeMode, ResearchEdgeHypo, CardPhotoSize, CardPhotoShape, NORMAL_PHOTO_BOX } from './types.js';
 import { cardLines, CardLine, cardLineHtml, cardYears, CardLineStyle, cardDateReferences, cardAge, formatAge, isFieldCardDensity } from './card-fields.js';
 import {
     CustomCardMetrics, CardLineRows, CardHead, customCardMetrics, customCardRows, customCardViewHeight, customCardSpouseLineY,
@@ -186,6 +186,8 @@ interface OutputLayout {
     omittedEdges: OmittedEdge[];
     box: CardBox;
     custom: CustomCardMetrics | null;
+    /** The photo size its cards were laid out with (spec 096): the screen's, small when nobody it draws has a photo. */
+    photo: CardPhotoSize;
 }
 
 /** How a tree line is drawn; `view` marks a line of the view layer (links "linked in the view only"). */
@@ -1390,16 +1392,14 @@ class TreeRendererClass {
      */
     private outputLayout(spacing: TreeSpacing = this.getLayoutSpacing()): OutputLayout {
         const own = spacing === this.getLayoutSpacing();
-        // The outputs keep the small photo for now (spec 096 D7): a view of
-        // cards with a medium or large one is laid out again at the small
-        // card's size (the Normal card's box, the cards of details measured again).
-        const photoView = this.viewPhotoSize() !== 'small';
-        const normalPhotoView = photoView && SettingsManager.getCardDensity() === 'normal';
-        if (!this.focusPersonId || this.positions.size === 0 || (own && !this.viewLayer && !this.config.roomBelow && !photoView)) {
+        // The outputs draw the photo on the card as the screen does (spec 096
+        // P2): the screen's card box, the photo's size and shape.
+        const screenPhoto = this.viewPhotoSize();
+        if (!this.focusPersonId || this.positions.size === 0 || (own && !this.viewLayer && !this.config.roomBelow)) {
             return {
                 positions: this.positions, connections: this.withoutEdgeRoom(this.connections, this.config, this.edgeRoomIds, this.viewEdgeRoom),
                 spouseLines: this.spouseLines, omittedEdges: this.omittedEdges,
-                box: this.posterBox(this.config, this.edgeRoomIds, this.viewEdgeRoom), custom: this.customMetrics,
+                box: this.posterBox(this.config, this.edgeRoomIds, this.viewEdgeRoom), custom: this.customMetrics, photo: screenPhoto,
             };
         }
         const cached = this.outputLayoutCache.get(spacing);
@@ -1408,20 +1408,29 @@ class TreeRendererClass {
         // Another spacing (the image export's own, spec 069 §4): the same
         // people at the same card sizes, laid out with that spacing's gaps.
         // The outputs draw no button of a family outside the tree: no room kept for it.
-        const { roomBelow: _room, ...shown } = this.config;
-        const screen: LayoutConfig = normalPhotoView ? this.smallPhotoConfig(shown) : shown;
+        const { roomBelow: _room, ...screen } = this.config;
         let config: LayoutConfig = own ? screen : withSpacing(screen, spacing);
         let result = this.computeTreeLayout(descendantsOnly, [], false, config);
+        // Without the view links nobody laid out may have a photo (D3): the small card then.
+        let photo = screenPhoto;
+        if (photo !== 'small' && this.viewLayer && !this.photoInView(result.positions)) {
+            photo = 'small';
+            if (SettingsManager.getCardDensity() === 'normal') {
+                const small = this.smallPhotoConfig(screen);
+                config = own ? small : withSpacing(small, spacing);
+                result = this.computeTreeLayout(descendantsOnly, [], false, config);
+            }
+        }
         let custom: CustomCardMetrics | null = null;
         let edgeRoomIds = new Set<PersonId>();
         let viewEdgeRoom = 0;
-        if (!this.viewLayer && !(photoView && this.customMetrics)) {
+        if (!this.viewLayer) {
             // No view link: the screen's people, their cards as the screen measured them.
             custom = this.customMetrics;
             edgeRoomIds = new Set(this.edgeRoomIds);
             viewEdgeRoom = this.viewEdgeRoom;
         } else if (this.customMetrics) {
-            const measured = this.customCardsOf(result.positions, 'small');
+            const measured = this.customCardsOf(result.positions, photo);
             const next: LayoutConfig = {
                 ...config, cardWidth: measured.metrics.cardWidth, cardHeight: measured.metrics.cardHeight,
                 personHeights: measured.metrics.personHeights,
@@ -1436,6 +1445,7 @@ class TreeRendererClass {
         const output: OutputLayout = {
             positions: result.positions, connections: this.withoutEdgeRoom(result.connections, config, edgeRoomIds, viewEdgeRoom),
             spouseLines: result.spouseLines, omittedEdges: result.omittedEdges ?? [], box: this.posterBox(config, edgeRoomIds, viewEdgeRoom), custom,
+            photo,
         };
         this.outputLayoutCache.set(spacing, { seq: this.renderSeq, output });
         return output;
@@ -1451,9 +1461,10 @@ class TreeRendererClass {
     }
 
     /**
-     * A Normal card view's layout config with the small photo (spec 096 D7):
-     * the 188px card and its own heights only for names on more than two rows
-     * (T40), measured for the people the screen laid out.
+     * A Normal card view's layout config with the small photo (an output
+     * whose people have no photo, spec 096 D3): the 188px card and its own
+     * heights only for names on more than two rows (T40), measured for the
+     * people the screen laid out.
      */
     private smallPhotoConfig(config: LayoutConfig): LayoutConfig {
         const heights = this.normalNameHeights(this.positions, 'small');
@@ -1548,7 +1559,7 @@ class TreeRendererClass {
     /**
      * The custom card measured for the people of a layout (the screen's or an
      * output's), nothing kept. `view`: the photo size of the view's cards
-     * (spec 096 §3; the outputs keep the small one, D7): a card with a photo
+     * (spec 096 §3; an output nobody of which has a photo: small): a card with a photo
      * gets the avatar of a medium or large one.
      */
     private customCardsOf(positions: Map<PersonId, Position>, view: CardPhotoSize = this.viewPhotoSize()): CustomCardsMeasure {
@@ -1710,6 +1721,23 @@ class TreeRendererClass {
     /** The custom card's width and columns the image export and the book draw (null in other densities). */
     getPosterCardMetrics(spacing?: TreeSpacing): CustomCardMetrics | null {
         return this.outputLayout(spacing).custom;
+    }
+
+    /**
+     * The photo on the card the image export draws (spec 096 P2): the size
+     * its cards were laid out with (small when nobody it draws has a photo),
+     * the chosen shape, and who was laid out with a photo.
+     */
+    getPosterCardPhoto(spacing?: TreeSpacing): { size: CardPhotoSize; shape: CardPhotoShape; photoIds: Set<PersonId> } {
+        const output = this.outputLayout(spacing);
+        const photoIds = new Set<PersonId>();
+        if (output.photo !== 'small') {
+            for (const id of output.positions.keys()) {
+                const person = DataManager.getPerson(id);
+                if (person?.photo && !person.isPlaceholder) photoIds.add(id);
+            }
+        }
+        return { size: output.photo, shape: SettingsManager.getCardPhoto().shape, photoIds };
     }
 
     /** The spacing the current view is laid out with (Settings → Spacing; the fan, timeline and map: normal). */

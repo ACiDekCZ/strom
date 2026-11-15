@@ -186,12 +186,17 @@ test('the Detailed card with a large photo: 72px in the header, the lines from 8
     expect(Math.abs(photo.name! - initials.name!)).toBeLessThanOrEqual(1);
     expect(await spilled(page)).toEqual([]);
     expect(await overlaps(page)).toBe(0);
-    // The outputs keep the small photo (D7): the image export's card as tall as without a photo.
+    // The outputs draw the photo as the screen does (spec 096 P2): the image export's card box is the screen's.
     const poster = await page.evaluate(() => window.Strom.TreeRenderer.getPosterCardBox());
+    expect(poster).toEqual(await page.evaluate(() => window.Strom.TreeRenderer.getCardBox()));
+    expect(await page.evaluate(() => window.Strom.TreeRenderer.getPosterCardPhoto().size)).toBe('large');
     await page.evaluate(() => window.Strom.SettingsManager.setCardPhoto({ size: 'small', shape: 'circle' }));
     await page.evaluate(() => window.Strom.TreeRenderer.render());
     await expect(page.locator('body')).toHaveAttribute('data-card-photo', 'small');
-    expect(await page.evaluate(() => window.Strom.TreeRenderer.getPosterCardBox())).toEqual(poster);
+    // Back to the small photo: the image export's card shorter again.
+    const small = await page.evaluate(() => window.Strom.TreeRenderer.getPosterCardBox());
+    expect(small.cardHeight).toBeLessThan(poster.cardHeight);
+    expect(await page.evaluate(() => window.Strom.TreeRenderer.getPosterCardPhoto().size)).toBe('small');
     expect((await fieldCard(page, 'Florimund')).avatar).toBe(30);
     expect((await fieldCard(page, 'Florimund')).lines).toBeCloseTo(46, 0);
 });
