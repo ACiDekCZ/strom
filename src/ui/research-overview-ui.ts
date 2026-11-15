@@ -61,6 +61,7 @@ import { knowsSearchIndex, type KnowsIndex, type KnowsSearchRow } from '../knows
 import { PREF_KEYS, PrefKey, SectionPref, prefKeyOfOverview, sectionOrder, sectionPrefs, setSectionPref, topPrefs, topTileShown } from './live-section-prefs.js';
 import { OverviewSourceKind, afterTurnOnKeys, skeletonLines } from '../research-overview-source.js';
 import { sectionTitle } from './live-section-edit.js';
+import { keepSectionControlFocus } from './live-section-edit-ui.js';
 import { joinAnd } from '../strings.js';
 import { canOpenWindows, openInNewWindow } from '../windows/window-open.js';
 import { focusOverviewWindow, overviewChanged, overviewInWindow } from '../windows/overview-window.js';
@@ -547,6 +548,7 @@ export const researchOverviewMethods = uiModule({
         queueMicrotask(keepLineFocus());
         queueMicrotask(keepAnswerFocus());
         queueMicrotask(keepKeyFocus());
+        queueMicrotask(keepSectionControlFocus());
         // A task just moved by "Do next": focused once drawn first.
         queueMicrotask(focusQueueMoved);
         // The followed research's, else the open tree's viewed without following (spec 057 §7.2).

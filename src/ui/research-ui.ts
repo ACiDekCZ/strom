@@ -97,7 +97,7 @@ import { currentAppBrowser, appBrowserName } from '../research-transfer.js';
 import { localNetworkStatus } from '../local-network.js';
 import { pendingAdopt } from './pending-adopt.js';
 import { shownName, shownNameOrEmpty, fitNameHtml } from '../person-name.js';
-import { bindSectionMenu, sectionClickSwallowed, sectionMovedNow } from './live-section-edit-ui.js';
+import { bindSectionMenu, keepSectionControlFocus, sectionClickSwallowed, sectionMovedNow } from './live-section-edit-ui.js';
 import { BRIDGE_ANSWER_MS } from '../bridge-ask.js';
 import { bridgeGivesEtag, bridgeGivesImagesByHash, bridgeGivesStale, staleTreeUrl, storedTreeEtag, treeFamilyPartners, treeFileState, treeReplyEtag, treeReplyHeads, treeReplyImages, TREE_GED_TIMEOUT_MS, type TreeReplyHeads } from '../research-tree-file.js';
 import { findImageRefs, forgetHeldImages, imagesUrlOf, refTreeUrl, resolveImageRefs, sha256Hex, type ImageResolveDeps } from '../research-image-refs.js';
@@ -4301,6 +4301,7 @@ export const researchUiMethods = uiModule({
     renderLivePanel(): void {
         this.readWorkingFamilies();
         queueMicrotask(keepLineFocus());
+        queueMicrotask(keepSectionControlFocus());
         queueMicrotask(focusQueueMoved);
         syncResearchCardInfo();
         // A selected line drops with the tree it was made in or the end of following.

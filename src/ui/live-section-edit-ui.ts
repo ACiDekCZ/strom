@@ -151,6 +151,29 @@ function findMore(surface: Surface): HTMLElement | null {
     return surfaceRoot(surface)?.querySelector<HTMLElement>('.live-sec-more') ?? null;
 }
 
+/**
+ * The ⋯ or a section's heading focused before a redraw of the panel or the
+ * overview is focused again in the one drawn anew: every status of a followed
+ * research redraws them (an event stream reconnecting, a poll), and the focus
+ * given back by Escape went to the page with the old button. Returns the step
+ * to run after the redraw (focus moved elsewhere meanwhile is left alone).
+ */
+export function keepSectionControlFocus(): () => void {
+    const a = document.activeElement as HTMLElement | null;
+    const root = a?.closest<HTMLElement>('#live-panel, #research-overview');
+    if (!a || !root) return () => {};
+    const controls = a.getAttribute('aria-controls');
+    const sel = a.matches('.live-sec-more') ? '.live-sec-more'
+        : controls && /^(live|ov)-sec-/.test(controls) ? `[aria-controls="${CSS.escape(controls)}"]` : null;
+    if (!sel) return () => {};
+    const rootId = root.id;
+    return () => {
+        const now = document.activeElement;
+        if (now && now !== document.body && now.isConnected) return;
+        document.getElementById(rootId)?.querySelector<HTMLElement>(sel)?.focus({ preventScroll: true });
+    };
+}
+
 /** A section's heading on a surface, if it is drawn. */
 function findHead(surface: Surface, key: PrefKey): HTMLElement | null {
     const id = surface === 'panel' ? `live-sec-${key}` : `ov-sec-${overviewKeyOf(key)}`;

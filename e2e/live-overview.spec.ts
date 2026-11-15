@@ -699,6 +699,10 @@ test.describe('Customize panel: ⋯, a section\'s menu, Settings (spec 044)', ()
         await page.keyboard.press('Escape');
         await expect(menu).toHaveCount(0);
         await expect(queue).toBeFocused();
+        // Every status of the research redraws the panel (on a slow runner one came right after Escape): the heading
+        // drawn anew keeps the focus.
+        await page.evaluate(() => window.Strom.UI.renderLivePanel());
+        await expect(queue).toBeFocused();
         await expect(queue).toHaveAttribute('aria-expanded', 'true');
         await queue.press('ContextMenu');
         await expect(menu).toBeVisible();
@@ -725,6 +729,9 @@ test.describe('Customize panel: ⋯, a section\'s menu, Settings (spec 044)', ()
         await page.keyboard.press('Escape');
         await expect(pop).toHaveCount(0);
         await expect(panel.locator('.live-panel-more')).toBeFocused();
+        // A status redraws the panel: the new ⋯ keeps the focus.
+        await page.evaluate(() => window.Strom.UI.renderLivePanel());
+        await expect(panel.locator('.live-panel-more')).toBeFocused();
         // The overview stays open: Escape went to the popover only.
         await panel.locator('.live-panel-expand').click();
         const ov = page.locator('#research-overview');
@@ -734,6 +741,9 @@ test.describe('Customize panel: ⋯, a section\'s menu, Settings (spec 044)', ()
         await page.keyboard.press('Escape');
         await expect(pop).toHaveCount(0);
         await expect(ov).toBeVisible();
+        await expect(ov.locator('.research-overview__more')).toBeFocused();
+        // So does the overview's.
+        await page.evaluate(() => window.Strom.UI.renderLivePanel());
         await expect(ov.locator('.research-overview__more')).toBeFocused();
     });
 
