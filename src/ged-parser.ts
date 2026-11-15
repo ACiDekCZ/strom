@@ -2183,6 +2183,14 @@ const JOINED_VALUE_TAGS = new Set(['PLAC', 'NAME', '_WITN', 'WITN', 'PAGE', 'WWW
     '_STROM_FOLIO', '_STROM_IMAGE', '_STROM_LOCATOR', 'CALN']);
 
 /**
+ * A participant's lines (godparent, witness, another person of the event):
+ * the NOTE under one is read from its own line only, so its CONC / CONT lines
+ * are joined up front too — a long or multi-line note (Strom writes one so)
+ * reads back whole.
+ */
+const PARTICIPANT_TAGS = new Set(['ASSO', '_WITN', 'WITN']);
+
+/**
  * Split the file into lines and do the reading that needs the whole file:
  * - join continuation lines of JOINED_VALUE_TAGS into their value;
  * - collect shared note records (0 @N1@ NOTE text + CONT/CONC; GEDCOM 7
@@ -2218,9 +2226,13 @@ function preprocessGedcomLines(lines: string[]): {
     const inlineByText = new Map<string, string>();
     const records: GedLine[] = [];
     let inHead = false;
+    /** The tag of the line each level is under, for the line being read. */
+    const tagAt: string[] = [];
     for (let i = 0; i < parsed.length; i++) {
         const rec = parsed[i];
         if (rec.level === 0) inHead = rec.tag === 'HEAD';
+        tagAt.length = rec.level;
+        tagAt[rec.level] = rec.tag;
         // 0 @N1@ NOTE text / 1 CONT … / 1 CONC …
         if (rec.level === 0 && GED_POINTER.test(rec.tag)) {
             const m = /^(NOTE|SNOTE)(?:\s+(.*))?$/.exec(rec.value);
@@ -2236,7 +2248,8 @@ function preprocessGedcomLines(lines: string[]): {
                 continue;
             }
         }
-        if (rec.level > 0 && JOINED_VALUE_TAGS.has(rec.tag)) {
+        if (rec.level > 0 && (JOINED_VALUE_TAGS.has(rec.tag)
+            || (rec.tag === 'NOTE' && PARTICIPANT_TAGS.has(tagAt[rec.level - 1])))) {
             let value = rec.value;
             while (i + 1 < parsed.length && parsed[i + 1].level === rec.level + 1
                 && (parsed[i + 1].tag === 'CONC' || parsed[i + 1].tag === 'CONT')) {
@@ -3123,6 +3136,9 @@ export function parseGedcom(content: string): ParsedGedcom {
      */
     let openRole: { level: number; part: RawParticipant } | null = null;
     const participantLine = (part: RawParticipant, level: number, tag: string, value: string): typeof openRole => {
+        // A citation of the participant (`3 SOUR @S1@` under an ASSO): the app keeps
+        // citations of a fact, not of one person at it, so it is counted as left out.
+        if (tag === 'SOUR') { drop(tag); return null; }
         const role = readParticipantLine(part, tag, value);
         return role ? { level, part: role } : null;
     };

@@ -92,7 +92,8 @@ space is a value some readers will trim, silently gluing two words together.
 2 CONT Oba poddaní panství Novohradského.
 ```
 
-Continuations are read under `NOTE`, `TEXT`, `TITL` and the other text
+Continuations are read under `NOTE` (a participant's `NOTE` under `ASSO` /
+`_WITN` too), `TEXT`, `TITL` and the other text
 structures, and also under the values that can run long: `NAME`, `PLAC`,
 `PAGE`, `WWW`, `_WITN`, `REFN`, `TYPE`, `SOUR` (inline) and `_QUESTION`.
 Strom's own export splits exactly those, so no physical line it writes is
@@ -285,6 +286,10 @@ are recognised in English, Czech, German, Polish, French and Spanish ("Kmotr",
 or case. Any other role — `Informant`, `Midwife`, "porodní bába" — is kept as
 the role *other* with the file's own word at the start of the participant's
 note, and exported as `RELA Present` with that note.
+
+The participant's `NOTE` may continue on `CONC` / `CONT` lines. A `SOUR` under
+a participant is not read: the app keeps citations of the fact, not of one
+person at it, so cite the event itself. It is listed among the skipped tags.
 
 ## Events
 
