@@ -6,7 +6,7 @@ Lista zmian po polsku zaczyna się od wersji 3.21.0; starsze wersje są opisane 
 
 ## 3.29.0
 
-*Ta wersja jest w przygotowaniu; ta sekcja rośnie z każdą wersją testową.*
+*Wydano 15 listopada 2026.*
 
 - **Cytat główny**: fakt z kilkoma cytatami może oznaczyć jeden jako główny; ma gwiazdkę (★) i stoi pierwszy. Cytaty faktu stoją wszędzie w jednej kolejności: w edytorze osoby, w podpowiedziach, w źródłach osoby, na stronach osoby i rodziny, w księdze rodzinnej, w tabeli Osoby i w Weryfikacji. Źródło otwarte z cytatu pokazuje u góry przeglądarki, który fakt potwierdza i gdzie cytat stoi w kolejności, z przyciskami *Oznacz jako główny* i *Usuń cytowanie*; komunikat usuniętego cytatu oferuje *Cofnij*. GEDCOM zachowuje cytat główny (`_STROM_MAIN`) i kolejność.
 - **Zmiany, których badanie nie przyjęło**, są nazwane: komunikat i panel badania mówią, ile ich jest, a *Co zostało zapisane* wymienia każdą jako osoba · fakt · źródło z powodem, w tym że badanie w międzyczasie wycofało ten fakt; nowy cytat, którego nie przyjęło, podaje cytowane źródła.

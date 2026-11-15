@@ -4,7 +4,7 @@
 
 ## 3.29.0
 
-*Diese Version ist in Vorbereitung; dieser Abschnitt wächst mit jeder Testversion.*
+*Veröffentlicht am 15. November 2026.*
 
 - **Hauptzitat**: Eine Angabe mit mehreren Zitaten kann eines als Hauptzitat markieren; es trägt einen Stern (★) und steht vorn. Die Zitate einer Angabe stehen überall in einer Reihenfolge: im Personeneditor, in den Tipps, in den Quellen der Person, auf den Seiten der Person und der Familie, im Familienbuch, in der Tabelle Personen und in Prüfen. Eine aus einem Zitat geöffnete Quelle zeigt oben im Betrachter, welche Angabe sie belegt und wo das Zitat in der Reihenfolge steht, mit *Als Hauptzitat markieren* und *Zitat entfernen*; die Meldung eines entfernten Zitats bietet *Rückgängig*. GEDCOM behält das Hauptzitat (`_STROM_MAIN`) und die Reihenfolge.
 - **Änderungen, die die Forschung nicht übernommen hat**, werden benannt: Meldung und Forschungsbereich sagen, wie viele, und *Was geschrieben wurde* listet jede als Person · Angabe · Quelle mit ihrem Grund, darunter, dass die Forschung die Angabe inzwischen zurückgezogen hat; ein neues Zitat, das sie nicht übernommen hat, nennt die zitierten Quellen.

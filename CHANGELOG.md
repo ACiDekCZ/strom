@@ -4,7 +4,7 @@ English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md) · [Polski
 
 ## 3.29.0
 
-*This version is in preparation; this section grows with every test version.*
+*Released 15 November 2026.*
 
 - **Main citation**: a fact with several citations may mark one as its main citation; it carries a star (★) and comes first. A fact's citations stand in one order everywhere: the person editor, the tips, the person's sources, the person and family pages, the family book, the People table and Verify. A source opened from a citation shows at the top of the viewer which fact it supports and where the citation stands, with *Mark as main* and *Remove citation*; a removed citation's toast offers *Undo*. GEDCOM keeps the main citation (`_STROM_MAIN`) and the order.
 - **Changes the research did not take** are named: the toast and the research panel say how many, and *What was written* lists each as person · fact · source with its reason, among them that the research has since withdrawn the fact; a new citation it did not take names the sources it cited.

@@ -4,7 +4,7 @@
 
 ## 3.29.0
 
-*Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
+*Vydáno 15. listopadu 2026.*
 
 - **Hlavní citace**: údaj s více citacemi smí jednu označit jako hlavní; má hvězdu (★) a stojí první. Citace údaje jsou všude v jednom pořadí: v editoru osoby, v tipech, v pramenech osoby, na stránkách osoby a rodiny, v rodinné knize, v tabulce Lidé i v Ověření. Pramen otevřený z citace ukazuje nahoře v prohlížeči, který údaj dokládá a kde citace v pořadí stojí, s tlačítky *Označit jako hlavní* a *Odebrat citaci*; toast odebrané citace nabízí *Zpět*. GEDCOM hlavní citaci (`_STROM_MAIN`) i pořadí zachová.
 - **Změny, které výzkum nepřevzal**, mají jméno: toast i panel výzkumu řeknou kolik a *Co se zapsalo* je vypíše jako osoba · údaj · pramen s důvodem, mezi nimi i to, že výzkum údaj mezitím stáhl; nová citace, kterou nepřevzal, uvádí citované prameny.
