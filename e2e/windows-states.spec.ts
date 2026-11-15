@@ -360,9 +360,12 @@ test.describe('desktop (1440)', () => {
         await expect(empty(sat).getByRole('button', { name: 'Close window' })).toBeVisible();
         await expect(sat.locator('html')).toHaveClass(/\bsat-muted\b/);
         await expect(sat.locator('#tree-container')).toHaveAttribute('aria-hidden', 'true');
-        const closed = sat.waitForEvent('close');
-        await empty(sat).getByRole('button', { name: 'Close window' }).click();
-        await closed;
+        // The button closes the window at once: the click races with the page tearing down.
+        await Promise.all([
+            sat.waitForEvent('close').catch(() => { /* already closed */ }),
+            empty(sat).getByRole('button', { name: 'Close window' }).click({ noWaitAfter: true }).catch(() => { /* page closed mid-click */ }),
+        ]);
+        await expect.poll(() => sat.isClosed()).toBe(true);
     });
 
     test('6 the tree locked in the main window: the state with Go to the main window; after the unlock the tree comes again', async ({ page, context }) => {

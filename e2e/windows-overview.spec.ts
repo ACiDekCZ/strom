@@ -387,9 +387,12 @@ test.describe('the overview window\'s states', () => {
         await expect(popup.locator('#research-overview')).toHaveCount(0);
         await expect(popup.getByText('This tree has no research')).toHaveCount(0);
         await expect(popup.getByText('Confirm the baptism of Jan Fíšek')).toHaveCount(0);
-        const closed = popup.waitForEvent('close');
-        await state.getByRole('button', { name: 'Close window' }).click();
-        await closed;
+        // The button closes the window at once: the click races with the page tearing down.
+        await Promise.all([
+            popup.waitForEvent('close').catch(() => { /* already closed */ }),
+            state.getByRole('button', { name: 'Close window' }).click({ noWaitAfter: true }).catch(() => { /* page closed mid-click */ }),
+        ]);
+        await expect.poll(() => popup.isClosed()).toBe(true);
     });
 
     test('the tree locked in the main window: "The tree is locked" with Go to the main window, nothing of the research kept; unlocked, the overview again', async ({ page }) => {
