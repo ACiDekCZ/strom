@@ -314,6 +314,8 @@ test('tree manager row: split opens the proposals directly; a tree not open offe
     await expect(row.locator('.tree-row-menu-item', { hasText: 'Split into families' })).toHaveCount(0);
 
     await row.locator('.tree-open-btn').click();
+    // The switch finishes after the click: the manager shown before it would still mark the other tree as open.
+    await expect(page.locator('.tree-switcher-btn .tree-name')).toHaveText('Rodina Novákových');
     await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
     const active = page.locator('.tree-manager-item.active');
     await active.locator('.tree-row-menu-btn').click();
