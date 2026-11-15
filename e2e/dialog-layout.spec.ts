@@ -382,6 +382,49 @@ test('desktop: the person card footer keeps Delete person, Merge, Cancel and Sav
     expect(await personFooter(page)).toMatchObject({ cancel: true, save: true, merge: true, delete: true, saveMergeOneRow: true, deleteIn: 'footer' });
 });
 
+// German has the longest footer words ("Person löschen…", "Zusammenführen
+// mit…"): from a tablet up each footer button keeps its text on one line,
+// in one row with the app's font, and nothing spills out of the footer with a
+// much wider font (Verdana stands in for wider fonts on CI).
+for (const vp of [
+    { width: 1440, height: 900 }, { width: 1024, height: 768 }, { width: 844, height: 390 },
+]) {
+    for (const font of ['default', 'wide'] as const) {
+        test(`${vp.width}px (${font} font): the German person card footer buttons do not wrap`, async ({ page }) => {
+            await page.setViewportSize(vp);
+            await openApp(page);
+            await createFirstPerson(page, 'Jan', 'Novak');
+            const id = await card(page, 'Jan').getAttribute('data-id');
+            await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
+            if (font === 'wide') await page.addStyleTag({ content: '#person-modal .pm-footer button { font-family: Verdana, "DejaVu Sans", sans-serif !important; }' });
+            await page.evaluate((pid) => window.Strom.UI.showEditPersonModal(pid as never), id);
+            await expect(page.locator('#person-modal')).toBeVisible();
+            const m = await page.evaluate(() => {
+                const footer = document.querySelector('#person-modal .pm-footer') as HTMLElement;
+                const fr = footer.getBoundingClientRect();
+                const shown = [...footer.querySelectorAll<HTMLElement>(':scope > button')].filter(b => b.offsetParent);
+                const lines = (b: HTMLElement) => {
+                    const range = document.createRange();
+                    range.selectNodeContents(b);
+                    return new Set([...range.getClientRects()].filter(r => r.width > 0).map(r => Math.round(r.top))).size;
+                };
+                return {
+                    texts: shown.map(b => b.textContent!.trim()),
+                    lines: shown.map(lines),
+                    inFooter: shown.every(b => b.getBoundingClientRect().right <= fr.right + 0.5 && b.getBoundingClientRect().left >= fr.left - 0.5),
+                    oneRow: new Set(shown.map(b => Math.round((b.getBoundingClientRect().top + b.getBoundingClientRect().bottom) / 2))).size <= 2
+                        && Math.max(...shown.map(b => b.getBoundingClientRect().bottom)) - Math.min(...shown.map(b => b.getBoundingClientRect().top)) < 60,
+                    pageScroll: document.documentElement.scrollWidth > window.innerWidth,
+                };
+            });
+            expect(m.texts).toEqual(['Person löschen…', 'Zusammenführen mit...', 'Abbrechen', 'Speichern']);
+            expect(m).toMatchObject({ lines: [1, 1, 1, 1], inFooter: true, pageScroll: false });
+            // The app's own font keeps one row; a much wider one may put Delete person on its own.
+            if (font === 'default') expect(m.oneRow).toBe(true);
+        });
+    }
+}
+
 // Settings > Person card > Spacing (spec 069 §1): the row right after the card
 // type's block, before "Show on card"; the two options and their pictures fit
 // in every language at the three widths.

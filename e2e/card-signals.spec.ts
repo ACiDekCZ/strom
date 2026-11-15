@@ -695,7 +695,7 @@ test.describe('card signals', () => {
         // One preview for the density and the signals, under the density select.
         const preview = page.locator('#card-preview-settings .card-signals-preview');
         await expect(preview.locator('.person-card')).toBeVisible();
-        await expect(preview.locator('.name-text')).toHaveText('Jan Vlk');
+        await expect(preview.locator('.name-text')).toHaveText('John Wolfe');
         // A research tree: "Awaiting action" is offered; the agent only with the research connected here.
         await expect(settings.locator('input[data-signal="waiting"]')).toHaveCount(1);
         await expect(settings.locator('input[data-signal="agent"]')).toHaveCount(0);

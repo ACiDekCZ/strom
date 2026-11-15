@@ -40,26 +40,38 @@ function fieldLabel(key: CardFieldKey): string {
     return strings.events.types[key];
 }
 
+/** The sample's name in the UI language. */
+function sampleName(): string {
+    return `${strings.cardDensity.sampleFirstName} ${strings.cardDensity.sampleLastName}`;
+}
+
+/** The sample's initials for its avatar. */
+function sampleInitials(): string {
+    return `${strings.cardDensity.sampleFirstName.charAt(0)}${strings.cardDensity.sampleLastName.charAt(0)}`;
+}
+
 /** A made-up person for the preview: a miller who died of consumption, married once. */
 function samplePerson(): { person: Person; data: StromData } {
     const jan = 'sample_jan' as PersonId;
     const marie = 'sample_marie' as PersonId;
     const union = 'sample_union' as PartnershipId;
+    // Names and places in the UI language (a Czech sample read odd in English).
     const d = strings.cardDensity;
+    const place = d.samplePlace;
     const person: Person = {
-        id: jan, firstName: 'Jan', lastName: 'Vlk', gender: 'male', isPlaceholder: false,
-        birthDate: '1862', birthPlace: 'Horní Lhota',
-        deathDate: '1919-03-12', deathPlace: 'Horní Lhota', deathCause: d.sampleCause,
+        id: jan, firstName: d.sampleFirstName, lastName: d.sampleLastName, gender: 'male', isPlaceholder: false,
+        birthDate: '1862', birthPlace: place,
+        deathDate: '1919-03-12', deathPlace: place, deathCause: d.sampleCause,
         partnerships: [union], parentIds: [], childIds: [],
         events: [
-            { id: 'e1', type: 'baptism', date: '1862-03-02', place: 'Horní Lhota' },
-            { id: 'e2', type: 'burial', date: '1919-03-15', place: 'Horní Lhota' },
+            { id: 'e1', type: 'baptism', date: '1862-03-02', place },
+            { id: 'e2', type: 'burial', date: '1919-03-15', place },
             { id: 'e3', type: 'occupation', note: d.sampleOccupation },
         ],
     };
     const partnership: Partnership = {
         id: union, person1Id: jan, person2Id: marie, childIds: [], status: 'married',
-        startDate: '1888-02-14', startPlace: 'Dolní Lhota',
+        startDate: '1888-02-14', startPlace: d.sampleMarriagePlace,
     };
     return { person, data: { persons: { [jan]: person }, partnerships: { [union]: partnership } } };
 }
@@ -105,7 +117,7 @@ function samplePreview(density: CardPresetKey | 'custom', viewWidth: number | un
     const lines = cardLines(person, data, fields);
     const years = fields.years ? cardYears(person, true) : '';
     // A medium or large photo: the header's avatar of that size (spec 096 §3).
-    const entry = { name: 'Jan Vlk', avatar: true, lines, ...(years ? { years } : {}), ...(photo !== 'small' ? { photo } : {}) };
+    const entry = { name: sampleName(), avatar: true, lines, ...(years ? { years } : {}), ...(photo !== 'small' ? { photo } : {}) };
     // The view's card width; the date (or label) column of the sample's own lines.
     const own = customCardMetrics([entry], measureCardTexts, fields.widthCap, fields.lines, fields.style,
         cardDateReferences(fields.fullDate));
@@ -266,13 +278,13 @@ function sampleCard(density: CardDensity, on: CardSignals, viewWidth: number | u
         const { head } = sample;
         const name = sample.wrapped
             ? `<div class="name name--rows"><span class="name-text">${head.name.map(r => `<span class="name-row">${esc(r)}</span>`).join('')}</span></div>`
-            : '<div class="name"><span class="name-text">Jan Vlk</span></div>';
+            : `<div class="name"><span class="name-text">${esc(sampleName())}</span></div>`;
         const years = head.years ? `<div class="card-years">${esc(head.years)}</div>` : '';
         return {
             width: sample.width, height: sample.height, html: `
             <div class="person-card male preview-card${photoClass}${action ? ' has-signal' : ''}" data-density="${density}" data-fields${photoAttrs} style="${box}">
                 <div class="card-body card-body--custom">
-                    <div class="card-head${head.years ? ' card-head--years' : ''}">${avatar('JV')}<div class="card-head-text">${name}${years}</div></div>
+                    <div class="card-head${head.years ? ' card-head--years' : ''}">${avatar(sampleInitials())}<div class="card-head-text">${name}${years}</div></div>
                     ${sample.html}
                 </div>
                 ${stripes}
@@ -286,10 +298,10 @@ function sampleCard(density: CardDensity, on: CardSignals, viewWidth: number | u
     return {
         width: size.cardWidth, height: size.cardHeight, html: `
         <div class="person-card male preview-card${photoClass}${action ? ' has-signal' : ''}" data-density="${density}"${photoAttrs}>
-            ${compact ? '' : avatar('JV')}
+            ${compact ? '' : avatar(sampleInitials())}
             <div class="card-body">
-                <div class="name"><span class="name-text">Jan Vlk</span></div>
-                ${compact ? '' : '<div class="birth-date"><span class="meta-text">1862 – 1919 · Horní Lhota</span></div>'}
+                <div class="name"><span class="name-text">${esc(sampleName())}</span></div>
+                ${compact ? '' : `<div class="birth-date"><span class="meta-text">1862 – 1919 · ${esc(strings.cardDensity.samplePlace)}</span></div>`}
             </div>
             ${stripes}
             ${dot}

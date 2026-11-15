@@ -78,6 +78,10 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         sameEverywhere: 'Dotyczy tego urządzenia. Eksport obrazu, plakat i druk pokazują udokumentowanie i opowieści, pozostałe znaczniki tylko ekran.',
         sampleCause: 'suchoty',
         sampleOccupation: 'młynarz',
+        sampleFirstName: 'Jan',
+        sampleLastName: 'Wilk',
+        samplePlace: 'Górna Wola',
+        sampleMarriagePlace: 'Dolna Wola',
     },
 
     fanChart: {

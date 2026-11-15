@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, card, seedTree, cardBoxesMatchLayout } from './helpers.js';
+import { openApp, card, seedTree, seedSetting, cardBoxesMatchLayout } from './helpers.js';
 import { syntheticTree } from '../src/__tests__/helpers/synthetic-tree';
 import { calibrationWorkload, machineFactor, normalizedMs } from '../src/__tests__/helpers/perf-budget';
 
@@ -52,7 +52,7 @@ test('the row sits between the card types and the preview; Small + Circle by def
     await expect(photoRow(page).locator('.card-photo-note')).toContainText('People without a photo keep small initials.');
     // The preview as it always was: the initials, 188 × 64.
     await expect(page.locator('#card-preview-settings .card-preview-size')).toHaveText('card 188 × 64 px');
-    await expect(page.locator('#card-preview-settings .avatar-initials')).toHaveText('JV');
+    await expect(page.locator('#card-preview-settings .avatar-initials')).toHaveText('JW');
     await expect(page.locator('body')).toHaveAttribute('data-card-photo', 'small');
     expect(await box(page, 'Florimund')).toEqual([188, 64]);
     expect(await box(page, 'Kasimir')).toEqual([188, 64]);
@@ -490,3 +490,38 @@ for (const [w, h, name] of [[390, 844, '390 px'], [844, 390, 'held sideways']] a
         }
     });
 });
+
+/**
+ * The preview's made-up person speaks the UI language: a Czech miller from
+ * Horní Lhota only in Czech, a sample of its own in English, German and
+ * Polish (the Normal card and a card of details, its occupation line too).
+ */
+for (const [lang, name, initials, place, occupation] of [
+    ['en', 'John Wolfe', 'JW', 'Upper Marsh', 'miller'],
+    ['de', 'Johann Wolf', 'JW', 'Oberhain', 'Müller'],
+    ['pl', 'Jan Wilk', 'JW', 'Górna Wola', 'młynarz'],
+    ['cs', 'Jan Vlk', 'JV', 'Horní Lhota', 'mlynář'],
+] as const) {
+    test(`the preview's sample person is in the UI language (${lang})`, async ({ page }) => {
+        await seedSetting(page, 'language', lang);
+        await tree(page);
+        await openSettings(page);
+        const preview = page.locator('#card-preview-settings');
+        await expect(preview.locator('.name-text')).toHaveText(name);
+        await expect(preview.locator('.avatar-initials')).toHaveText(initials);
+        await expect(preview.locator('.meta-text')).toHaveText(`1862 – 1919 · ${place}`);
+    });
+
+    test(`the preview of a card of details shows the sample in the UI language (${lang})`, async ({ page }) => {
+        await seedSetting(page, 'language', lang);
+        await seedSetting(page, 'cardDensity', 'detailed');
+        await tree(page);
+        await openSettings(page);
+        const preview = page.locator('#card-preview-settings');
+        await expect(preview.locator('.name-text')).toHaveText(name);
+        await expect(preview.locator('.card-lines')).toContainText(place);
+        await expect(preview.locator('.card-lines')).toContainText(occupation);
+        const text = await preview.locator('.card-lines').innerText();
+        if (lang !== 'cs') expect(text).not.toMatch(/Lhota|mlynář/);
+    });
+}

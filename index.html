@@ -7816,6 +7816,17 @@
             font-size: 13px;
         }
         @media (hover: hover) { .modal button.pm-delete-link:hover { text-decoration: underline; background: transparent; } }
+        /* Tablet and up (and a phone held sideways): each footer button keeps its
+           words on one line (German "Person löschen…", "Zusammenführen mit…"
+           wrapped at 1440px). The phone footer below shares the row instead. */
+        .pm-footer > button { white-space: nowrap; flex-shrink: 0; }
+        @media (min-width: 641px) {
+            /* The German row needs ~525px of the card's 512: slimmer sides and
+               gap make it fit; a still wider font moves Delete person onto its
+               own row rather than wrap a button's words or spill out. */
+            #person-modal .modal .pm-footer { gap: 8px; flex-wrap: wrap; }
+            #person-modal .modal .pm-footer > button:not(.pm-delete-link) { padding-left: 14px; padding-right: 14px; }
+        }
 
         /* Shell pattern shared by the other form modals (event, source, relation).
            The bare <h2> acts as the pinned header; its horizontal padding stands
@@ -7846,7 +7857,7 @@
         @media (max-width: 640px) {
             .modal .pm-footer:not(.is-read-only) > #pm-dismiss { display: none; }
             #person-modal .modal .pm-footer { flex-direction: row; flex-wrap: nowrap; }
-            #person-modal .modal .pm-footer > button { flex: 1 1 0; width: auto; min-width: 0; min-height: 44px; }
+            #person-modal .modal .pm-footer > button { flex: 1 1 0; width: auto; min-width: 0; min-height: 44px; white-space: normal; }
             .pm-delete-slot { padding: 0 16px 16px; }
         }
         @media (max-width: 640px) {

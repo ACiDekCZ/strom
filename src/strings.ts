@@ -6695,6 +6695,10 @@ const stringsEN = {
         sameEverywhere: 'Applies to this device. Image export, poster and print show sources and stories; the other marks appear on screen only.',
         sampleCause: 'consumption',
         sampleOccupation: 'miller',
+        sampleFirstName: 'John',
+        sampleLastName: 'Wolfe',
+        samplePlace: 'Upper Marsh',
+        sampleMarriagePlace: 'Lower Marsh',
     },
 
     fanChart: {
@@ -15820,6 +15824,10 @@ const stringsCZ: StringsType = {
         sameEverywhere: 'Platí pro toto zařízení. Export obrázku, plakát a tisk ukážou doložení a vyprávění, ostatní značky jen obrazovka.',
         sampleCause: 'souchotiny',
         sampleOccupation: 'mlynář',
+        sampleFirstName: 'Jan',
+        sampleLastName: 'Vlk',
+        samplePlace: 'Horní Lhota',
+        sampleMarriagePlace: 'Dolní Lhota',
     },
 
     fanChart: {
@@ -24838,6 +24846,10 @@ const stringsDE: StringsType = {
         sameEverywhere: 'Gilt für dieses Gerät. Bildexport, Plakat und Druck zeigen Belege und Erzählungen, die übrigen Marken nur der Bildschirm.',
         sampleCause: 'Schwindsucht',
         sampleOccupation: 'Müller',
+        sampleFirstName: 'Johann',
+        sampleLastName: 'Wolf',
+        samplePlace: 'Oberhain',
+        sampleMarriagePlace: 'Niederhain',
     },
 
     fanChart: {
