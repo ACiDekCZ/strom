@@ -506,14 +506,29 @@ all belong to that entry, and every fact it proves cites it.
 A source given inline, as text instead of a pointer (`1 SOUR Vzpomínky
 babičky`, `2 SOUR Farní kniha`), becomes a source record of its own with that
 text as its title, cited where it stood; the same text twice is one source.
-`ABBR` is the title of a record that has no `TITL`. Any other line directly on
-a source record (`DATA`, …) is reported as unsupported.
+`ABBR` is the title of a record that has no `TITL`. `1 DATA` / `2 EVEN CHR,
+BURI` on a source record (GEDCOM 5.5.1 EVENTS_RECORDED) says which events the
+record records: Strom keeps the tags and writes them back on every export; a
+citation of such a record at a fact of its own event (a baptism entry at a
+birth) comes first among the fact's citations. Another line under that `DATA`
+(the period `3 DATE`, `2 AGNC`) has no field and is reported once as `DATA`.
+Any other line directly on a source record is reported as unsupported.
 
 Cite them from the fact they prove — `2 SOUR @S4@` with `3 PAGE` for the exact
 place in the book, `3 QUAY 0..3` for how good the reading is, and
 `3 DATA` / `4 DATE` for the day the entry was written (a baptism is recorded
 after the birth). A citation on the entry is worth more than a source listed
 once on the person.
+
+A fact's citations are written in one order, the one Strom Research uses: the
+main citation the user chose, the primary record of the event (a record of
+that event, `QUAY 3`, written within 12 months of the fact), the other
+`QUAY 3` citations, the rest by `QUAY`, then by the source's number. A tree of
+a research that orders its citations itself keeps the research's order. The
+main citation carries `3 _STROM_MAIN Y` under its `2 SOUR` (only at a fact with
+two citations or more, never in "Back to {program}"); Strom reads it from any
+file. Under a `1 SOUR` of a person or a family it is not read (that is no
+fact's citation).
 
 The rest of the source record's lines reach the source's note: every `NOTE`
 (separated by a blank line), the publication `PUBL` with its `CONT` / `CONC`
@@ -531,7 +546,10 @@ Two limits of the model to plan around:
   "Back to {program}" writes such a set as the one record again, with its
   xref, `AUTH` and own tags once, and each citation's `PAGE`, `QUAY` and
   `DATA` / `DATE` under the citation; the same holds after a merge and after a
-  round trip through the research. Other exports write a record per source.
+  round trip through the research. The file for Strom Research does the same
+  for the pages of a research's record (a numbered record, `REFN S…`): each is
+  a citation of that record with its own `PAGE`, never a record of its own.
+  Other exports write a record per source.
   So the import's "Sources" tile counts the entries (two records cited at 81
   pages: 81), while the "Back to {program}" summary counts the records that
   file writes ("2 sources, 81 citations").

@@ -164,6 +164,31 @@ export function sourceNumbers(sources: Sources): Map<string, number> {
     return out;
 }
 
+/**
+ * The sources that are pages of another record (spec 095, ZADANI_VYZKUM 1.5):
+ * a source the import made for another place cited in a record with a
+ * number (`refn`) — the same record without a number of its own, and no
+ * transcript or excerpt of its own (else it is an entry of its own) — by
+ * the source of that record. A record whose words two numbered sources share
+ * says nothing (which one it is a page of is not known).
+ */
+export function recordPagesOf(sources: Sources): Map<string, string> {
+    const records = new Map<string, string | null>();
+    for (const src of Object.values(sources ?? {})) {
+        if (!src?.refn?.trim()) continue;
+        const key = recordKey(src);
+        records.set(key, records.has(key) ? null : src.id);
+    }
+    const out = new Map<string, string>();
+    if (!records.size) return out;
+    for (const src of Object.values(sources ?? {})) {
+        if (!src || src.refn?.trim() || src.transcript?.trim() || src.excerpts?.length) continue;
+        const record = records.get(recordKey(src));
+        if (record && record !== src.id) out.set(src.id, record);
+    }
+    return out;
+}
+
 /** The numbers of the cited sources only (one fact); the record's number for a page only when one of them has none. */
 function numbersOf(ids: readonly string[], sources: Sources): ReadonlyMap<string, number> {
     const out = new Map<string, number>();

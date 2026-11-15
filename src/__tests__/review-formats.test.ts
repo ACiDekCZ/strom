@@ -401,7 +401,7 @@ describe('S12: a single-parent family keeps witnesses and story', () => {
 });
 
 describe('S17: nothing dropped silently', () => {
-    it('an inline SOUR becomes a source; EVEN keeps its value; ABBR titles; DATA is reported', () => {
+    it('an inline SOUR becomes a source; EVEN keeps its value; ABBR titles; DATA > EVEN is read (spec 095)', () => {
         const r = conv(GED([
             '0 @I1@ INDI', '1 NAME Jan /E/', '1 SEX M',
             '1 SOUR Vzpomínky babičky, sepsané 1950 v Lho', '2 CONC tě',
@@ -417,7 +417,9 @@ describe('S17: nothing dropped silently', () => {
         expect(custom.customLabel).toBe('Neštěstí');
         expect(custom.note).toBe('Velký požár');
         expect(jan.events!.find(e => e.type === 'baptism')!.sourceIds).toHaveLength(1);
-        expect(r.stats.droppedTagSummary).toContain('DATA ×1');
+        // The record's `1 DATA / 2 EVEN DEAT` is the events it records (Source.events), no longer left out.
+        expect(Object.values(r.data.sources!).find(s => s.title === 'Kniha zemřelých')!.events).toEqual(['DEAT']);
+        expect(r.stats.droppedTagSummary).not.toContain('DATA');
     });
 });
 

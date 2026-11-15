@@ -270,7 +270,11 @@ export const importExportMethods = uiModule({
             const research = metadata?.research && isFaithfulExport(privacy, resolveContentOptions(content))
                 ? { id: metadata.research.id, head: metadata.research.head, appTree: treeId, transcripts: this.researchTranscriptsLink(metadata.research).transcripts } : undefined;
             const backTo = this.exportGedcomBackTo(data);
-            const result = exportToGedcom(filtered, metadata?.name, { content, research, origins: true, confirmations: true, researchNote, backTo });
+            // A research tree's citations in the research's order when it orders them (spec 095); a main citation always marked.
+            const { citationFileOrder } = await import('../citation-gates.js');
+            const result = exportToGedcom(filtered, metadata?.name, {
+                content, research, origins: true, confirmations: true, researchNote, backTo, citationFileOrder: citationFileOrder(treeId),
+            });
 
             // Download file
             const blob = new Blob([result.content], { type: 'text/plain;charset=utf-8' });

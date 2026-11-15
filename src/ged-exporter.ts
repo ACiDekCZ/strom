@@ -43,7 +43,8 @@ import { citeLines, ExtraHolder, FactHolder, factImportTags, gedcomHtmlText, imp
 import { CONFIRMED_TAG, EID_TAG, factResearchEid, factVerifyInfo } from './verify.js';
 import { importProgramName } from './import-next.js';
 import { composePage, hasEntryFields } from './source-location.js';
-import { citationQuality, type CitationHolder } from './citation-quality.js';
+import { citationMainOf, citationQuality, type CitationHolder } from './citation-quality.js';
+import { citationFact, CitationRef, orderedCitations, recordPagesOf, sourceNumbers } from './citation-order.js';
 
 /** What to leave out of a GEDCOM export (the export dialog's Content section). */
 export interface GedcomExportOptions {
@@ -118,6 +119,20 @@ export interface GedcomExportOptions {
      * PAGE alone, as from an older app. "Back to {prog}" never writes them.
      */
     sourceFields?: boolean;
+    /**
+     * Write a fact's main citation (`3 _STROM_MAIN Y` under its `2 SOUR`,
+     * spec 095), at a fact of two citations or more. Default: written. False
+     * for a research that does not keep one (no `citations.main` in its
+     * features). "Back to {prog}" never writes it (the other program does
+     * not read it); the main citation stands first there all the same.
+     */
+    citationMain?: boolean;
+    /**
+     * The tree's citations keep their list's order (a research that orders
+     * them itself, `citations.order`): only the main citation first. Default:
+     * the order of spec 095 K1.1 (src/citation-order.ts).
+     */
+    citationFileOrder?: boolean;
 }
 
 /**
@@ -1193,7 +1208,17 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
     // Map all sources to GEDCOM IDs (@S1@ ...). "Back to {prog}": the sources
     // one record became share its xref (its own where it is safe).
     const sourceIdMap = new Map<string, string>();
+    // A page of a research's record (a source the import made for another
+    // place cited in it, spec 095): to the research, a citation of that record
+    // with the page's own PAGE, never a record of its own — a second record
+    // with the record's REFN reads there as a foreign source, and one without
+    // as a new source the fact did not cite.
+    const recordPages = options.research ? recordPagesOf(data.sources) : new Map<string, string>();
+    for (const [page, record] of recordPages) {
+        if (back.sourceGroups.has(page) || back.sourceGroups.has(record)) recordPages.delete(page);
+    }
     for (const sourceId of Object.keys(data.sources ?? {})) {
+        if (recordPages.has(sourceId)) continue;
         const head = back.sourceGroups.get(sourceId);
         if (head && head !== sourceId) continue;
         const own = back.sources.get(sourceId);
@@ -1201,6 +1226,10 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
     }
     for (const [sourceId, head] of back.sourceGroups) {
         if (head !== sourceId && sourceIdMap.has(head)) sourceIdMap.set(sourceId, sourceIdMap.get(head)!);
+    }
+    for (const [page, record] of recordPages) {
+        const xref = sourceIdMap.get(record);
+        if (xref) sourceIdMap.set(page, xref);
     }
     /** The members of each group, by its first member. */
     const groupMembers = new Map<string, Source[]>();
@@ -1239,7 +1268,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
      * `cited`: the list it is in, whose own QUAY of a citation wins over the
      * source's (spec 077); without one the source's, as before.
      */
-    const pushCitation = (level: number, srcId: string, cited?: { holder: CitationHolder; field: string }): void => {
+    const pushCitation = (level: number, srcId: string, cited?: { holder: CitationHolder; field: string }, main = false): void => {
         const ref = sourceIdMap.get(srcId);
         if (!ref) return;
         lines.push(`${level} SOUR ${ref}`);
@@ -1257,7 +1286,30 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         }
         const quay = cited ? citationQuality(cited.holder, cited.field, srcId, data.sources) : src?.quality;
         if (quay !== undefined) lines.push(`${level + 1} QUAY ${quay}`);
+        if (main) lines.push(`${level + 1} _STROM_MAIN Y`);
         lines.push(...kept.rest.map(at));
+    };
+    const citeNumbers = sourceNumbers(data.sources);
+    const citeFileOrder = options.citationFileOrder === true;
+    const writeMain = options.citationMain !== false && !options.backTo;
+    /**
+     * The citations of one list (spec 095): in the order of K1.1, or the
+     * list's own with the main citation first (citationFileOrder); `only`:
+     * just those of them (the part one record of the couple has). The fact's
+     * main citation carries `_STROM_MAIN Y` under a fact (level 2) with two
+     * citations or more written; `markMain` false: a list written under
+     * another fact's tag (a divorce's citations with the wedding's), whose
+     * mark would read back as that fact's.
+     */
+    const pushCitations = (level: number, ref: CitationRef, only?: readonly string[], markMain = true): void => {
+        const info = citationFact(data, ref);
+        if (!info) return;
+        const keep = only ? new Set(only) : null;
+        const ids = orderedCitations(data, info.holder, info.field, info.fact, { fileOrder: citeFileOrder, numbers: citeNumbers })
+            .filter(id => (!keep || keep.has(id)) && sourceIdMap.has(id));
+        const main = markMain && writeMain && level >= 2 && info.isFact && ids.length >= 2
+            ? citationMainOf(info.holder as CitationHolder & Partial<Record<string, string[]>>, info.field) : undefined;
+        for (const id of ids) pushCitation(level, id, { holder: info.holder, field: info.field }, id === main);
     };
 
     // Get current date for header
@@ -1556,7 +1608,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             }
             pushDetails(lines, { age: person.birthAge, address: person.birthAddress });
             pushStatus(lines, person.birthStatus);
-            for (const srcId of person.birthSourceIds ?? []) pushCitation(2, srcId, { holder: person, field: 'birthSourceIds' });
+            pushCitations(2, { personId, fact: 'birth' });
             pushNoted(birthNoted.rest, true);
             pushFactImport(person, 'birth');
             pushFactOrigin(person, 'birth');
@@ -1580,7 +1632,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             }
             pushDetails(lines, { cause: person.deathCause, age: person.deathAge, address: person.deathAddress });
             pushStatus(lines, person.deathStatus);
-            for (const srcId of person.deathSourceIds ?? []) pushCitation(2, srcId, { holder: person, field: 'deathSourceIds' });
+            pushCitations(2, { personId, fact: 'death' });
             pushNoted(deathNoted.rest, true);
             pushFactImport(person, 'death');
             pushFactOrigin(person, 'death');
@@ -1704,17 +1756,13 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             }
 
             // Source citations on the event (2 SOUR @Sx@ + 3 PAGE).
-            for (const srcId of event.sourceIds ?? []) {
-                pushCitation(2, srcId, { holder: event, field: 'sourceIds' });
-            }
+            pushCitations(2, { personId, eventId: event.id });
             pushFactImport(person, `event:${event.id}`);
             pushFactOrigin(person, `event:${event.id}`);
         }
 
         // Source citations on the person (1 SOUR @Sx@ + 2 PAGE).
-        for (const srcId of person.sourceIds ?? []) {
-            pushCitation(1, srcId, { holder: person, field: 'sourceIds' });
-        }
+        pushCitations(1, { personId });
 
         // Media: portrait first (marked), then attachments. Data URLs are
         // CONC-wrapped to keep physical lines within the spec limit.
@@ -1907,10 +1955,11 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         const hasDivorce = partnership.status === 'divorced' || !!endDate || !!endPlace;
         // Divorce citations with no divorce written (the couple married again,
         // say): with the couple's own, rather than lost or a divorce made up.
-        const familySources = hasDivorce ? ownSources : [...new Set([...ownSources, ...ownDivorceSources])];
-        /** The couple's list a citation of the wedding is in: the union's own, else (the divorce's written with them) the divorce's. */
-        const coupleCited = (srcId: string, wedding: readonly string[] = partnership.sourceIds ?? []): { holder: Partnership; field: string } =>
-            ({ holder: partnership, field: wedding.includes(srcId) ? 'sourceIds' : 'divorceSourceIds' });
+        /** The couple's citations under its wedding (or on the record): the wedding's, then the divorce's when no divorce is written. */
+        const pushFamilyCitations = (level: number): void => {
+            pushCitations(level, { partnershipId }, ownSources);
+            if (!hasDivorce) pushCitations(level, { partnershipId, fact: 'divorce' }, ownDivorceSources.filter(id => !ownSources.includes(id)), false);
+        };
         const joinedNote = joinedNoteBack(partnership.note, joinedHere.map(j => j.record));
         const famNoted = notedOf(partnership, joinedNote.note);
         const notedMarriage = notedFact(famNoted.structures, 'MARR');
@@ -1941,7 +1990,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             for (const part of ownWitnesses) pushWitness(part);
             // The couple's citations are the marriage record's: under MARR, where
             // other programs and Strom Research read a marriage's evidence.
-            for (const srcId of familySources) pushCitation(2, srcId, coupleCited(srcId));
+            pushFamilyCitations(2);
             pushNoted(marriageNoted.rest, true);
             pushFactImport(partnership, 'marriage');
             pushFactOrigin(partnership, 'marriage');
@@ -1963,7 +2012,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             if (endPlace) pushPlace(lines, 2, endPlace, data.places);
             pushStatus(lines, partnership.endStatus);
             // The divorce record's own citations, as the file had them under DIV.
-            for (const srcId of ownDivorceSources) pushCitation(2, srcId, { holder: partnership, field: 'divorceSourceIds' });
+            pushCitations(2, { partnershipId, fact: 'divorce' }, ownDivorceSources);
             pushNoted(divorceNoted.rest, true);
             pushFactImport(partnership, 'divorce');
             pushFactOrigin(partnership, 'divorce');
@@ -1995,7 +2044,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             }
             if (event.note) pushNote(lines, 2, event.note);
             for (const part of event.participants ?? []) pushParticipant(lines, part, personIdMap);
-            for (const srcId of event.sourceIds ?? []) pushCitation(2, srcId, { holder: event, field: 'sourceIds' });
+            pushCitations(2, { partnershipId, eventId: event.id });
             pushFactImport(partnership, `event:${event.id}`);
             pushFactOrigin(partnership, `event:${event.id}`);
         };
@@ -2016,9 +2065,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         pushNoted(famNoted.structures.filter(st => !notedMarriage.includes(st) && !notedDivorce.includes(st)), false);
 
         // Family citations of a couple without a marriage (partners).
-        for (const srcId of hasMarriage ? [] : familySources) {
-            pushCitation(1, srcId, coupleCited(srcId));
-        }
+        if (!hasMarriage) pushFamilyCitations(1);
 
         // One parent alone the file wrote as not a couple (Partnership.noCouple):
         // the mark back while the other parent is still the "?" left out and
@@ -2052,17 +2099,21 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             };
             const marriageEnd = endOf('MARR');
             const divorceEnd = endOf('DIV');
-            const recordSources = divorceEnd < 0 ? [...new Set([...sources, ...divorceSources])] : sources;
+            /** Its wedding's citations (with its divorce's when it wrote no divorce). */
+            const pushRecordCitations = (level: number): void => {
+                pushCitations(level, { partnershipId }, sources);
+                if (divorceEnd < 0) pushCitations(level, { partnershipId, fact: 'divorce' }, divorceSources.filter(id => !sources.includes(id)), false);
+            };
             for (let i = 0; i <= kept.length; i++) {
                 if (i === marriageEnd) {
                     for (const part of witnesses) pushWitness(part);
-                    for (const srcId of recordSources) pushCitation(2, srcId, coupleCited(srcId, sources));
+                    pushRecordCitations(2);
                 }
-                if (i === divorceEnd) for (const srcId of divorceSources) pushCitation(2, srcId, { holder: partnership, field: 'divorceSourceIds' });
+                if (i === divorceEnd) pushCitations(2, { partnershipId, fact: 'divorce' }, divorceSources);
                 if (i < kept.length) lines.push(kept[i]);
             }
             for (const event of sortCoupleEvents(events)) pushEvent(event);
-            if (marriageEnd < 0) for (const srcId of recordSources) pushCitation(1, srcId, coupleCited(srcId, sources));
+            if (marriageEnd < 0) pushRecordCitations(1);
         }
     }
 
@@ -2110,6 +2161,8 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         // "Back to {prog}": one record for the sources it became, written once (by its first member).
         const members = groupMembers.get(sourceId);
         if (!members && back.sourceGroups.has(sourceId)) continue;
+        // A page of a research's record: only its citations (see recordPages).
+        if (recordPages.has(sourceId)) continue;
         let source: Source = recordSource;
         let author: string | undefined;
         if (members) {
@@ -2128,6 +2181,12 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         const backIds = back.sourceEntries.get(sourceId);
         if (backIds) pushOriginalIdLines(lines, 1, backIds, false);
         if (source.title) pushWrapped(lines, 1, 'TITL', source.title);
+        // The events the record records (GEDCOM 5.5.1 EVENTS_RECORDED, spec 095): what the order of a fact's citations goes by.
+        const recorded = (members ?? [source]).find(m => m.events?.length)?.events;
+        if (recorded?.length) {
+            lines.push('1 DATA');
+            pushWrapped(lines, 2, 'EVEN', recorded.join(', '));
+        }
         if (author) pushLongValue(lines, 1, 'AUTH', author);
         // The archive, and the call number it files the book under (`2 CALN`; without an archive under a `1 REPO` of none).
         const repoRef = source.repository ? repoIdMap.get(source.repository) : undefined;
@@ -2215,6 +2274,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             individuals: personIdMap.size,
             families: partnershipIdMap.size + looseFamilies.length
         },
-        xrefs: { persons: personIdMap, sources: sourceIdMap },
+        // (A page of a research's record is answered by its record: not named apart.)
+        xrefs: { persons: personIdMap, sources: recordPages.size ? new Map([...sourceIdMap].filter(([id]) => !recordPages.has(id))) : sourceIdMap },
     };
 }

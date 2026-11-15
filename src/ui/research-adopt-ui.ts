@@ -23,6 +23,7 @@ import { ResearchWriteHeld, writeHeldOfCode } from '../research-write-held.js';
 import { SettingsManager } from '../settings.js';
 import { countImages, stripMedia } from '../attachments.js';
 import { exportToGedcom, countFamilies } from '../ged-exporter.js';
+import { NO_CITATION_FEATURES, researchCitationsOut, type ResearchCitationsOut } from '../citation-gates.js';
 import {
     parseLiveBridge, sanitizeAdoptOffer, sanitizeAdoptReply, newAdoptToken, researchNewUrl, contentFingerprint, researchSchemeUrl,
     readResearchHeader, applyAdoptIds, AdoptOffer, AdoptIds, researchGedcomTitles, researchSendsSourceFields, TitlesInGedcom, sanitizeLiveStatus, statusAgentless, type BrowserInfo,
@@ -79,16 +80,17 @@ async function researchMovesTrees(base: string): Promise<boolean> {
  * any research reads right. And whether it reads the sources' place field by
  * field (sources.fields): not reached, not.
  */
-async function researchTitlesAt(base: string): Promise<{ titles: TitlesInGedcom; sourceFields: boolean }> {
+async function researchTitlesAt(base: string): Promise<{ titles: TitlesInGedcom; sourceFields: boolean; citations: ResearchCitationsOut }> {
     try {
         const res = await fetchWithTimeout(`${base}/status`, 4000);
-        if (!res.ok) return { titles: 'tags', sourceFields: false };
+        if (!res.ok) return { titles: 'tags', sourceFields: false, citations: NO_CITATION_FEATURES };
         const body = await res.json() as { features?: unknown } | null;
         const features = Array.isArray(body?.features) ? body.features.filter((f): f is string => typeof f === 'string') : null;
         // The sources' place field by field only to a research that reads it (sources.fields).
-        return { titles: researchGedcomTitles({ features }), sourceFields: researchSendsSourceFields({ features }) };
+        // The main citations only to a research that keeps them (citations.main).
+        return { titles: researchGedcomTitles({ features }), sourceFields: researchSendsSourceFields({ features }), citations: researchCitationsOut({ features }) };
     } catch {
-        return { titles: 'tags', sourceFields: false };
+        return { titles: 'tags', sourceFields: false, citations: NO_CITATION_FEATURES };
     }
 }
 
@@ -293,8 +295,9 @@ export const researchAdoptMethods = uiModule({
         }
         // The research does not take photos over yet: they stay here only.
         // A research that knows no titles gets the names without them (B-1): they stay here.
-        const { titles, sourceFields } = await researchTitlesAt(bridge.base);
-        const exported = exportToGedcom(choice.images ? data : stripMedia(data), tree.name, { titles, sourceFields });
+        const { titles, sourceFields, citations } = await researchTitlesAt(bridge.base);
+        // (A tree the research has not had yet: its citations in the order of K1.1, never the list's own.)
+        const exported = exportToGedcom(choice.images ? data : stripMedia(data), tree.name, { titles, sourceFields, citationMain: citations.citationMain });
         let reply: { tree: string; head: string | null; ids: AdoptIds | null } | null = null;
         let refusedEmpty = false;
         let held: ResearchWriteHeld | null = null;

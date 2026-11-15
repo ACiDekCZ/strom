@@ -52,3 +52,24 @@ export function citationRemoveTaken(treeId: TreeId | null | undefined): boolean 
 export function citationFileOrder(treeId: TreeId | null | undefined): boolean {
     return researchTakes(linkOf(treeId), CITATIONS_ORDER_FEATURE);
 }
+
+/** How a fact's citations go to a research (GedcomExportOptions citationMain / citationFileOrder). */
+export interface ResearchCitationsOut {
+    citationMain: boolean;
+    citationFileOrder: boolean;
+}
+
+/** A research that has said nothing: neither the main citation nor the list's order. */
+export const NO_CITATION_FEATURES: ResearchCitationsOut = { citationMain: false, citationFileOrder: false };
+
+/**
+ * How a tree's citations go in the file a research's bridge gets (its
+ * `/status.features`, not reached: none): the main citation only to a
+ * research that keeps it (an older one would read the mark as nothing and
+ * the next load would lose it), the list's own order to one that orders
+ * citations itself.
+ */
+export function researchCitationsOut(status: { features: readonly string[] | null } | null | undefined): ResearchCitationsOut {
+    const features = status?.features ?? [];
+    return { citationMain: features.includes(CITATIONS_MAIN_FEATURE), citationFileOrder: features.includes(CITATIONS_ORDER_FEATURE) };
+}
