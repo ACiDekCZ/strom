@@ -8,7 +8,7 @@
  * A fake bridge with invented data (the Fíškovi of Smrkov).
  */
 
-import { test, expect, Page } from '@playwright/test';
+import { test, expect, Locator, Page } from '@playwright/test';
 import { MANAGED_AGENT, followManaged, launchedLinks, openOverview, overview } from './live-directions-bridge';
 
 const WORK = ['work.link', 'run.tasks'];
@@ -20,6 +20,22 @@ const QUEUE = [
 const queueHead = (page: Page) => overview(page).locator('.live-section__head[aria-controls="ov-sec-queue"]');
 const workBtn = (page: Page) => overview(page).locator('.queue-work-btn');
 const dialog = (page: Page) => page.locator('#queue-work-modal [role="dialog"]');
+
+/**
+ * The box of the one element `l` matches, found and measured in one go in the
+ * page. The overview draws its controls anew with every status of the
+ * research (in the overview's own window several times a second): a
+ * boundingBox() takes a handle first and measures it after, and a handle
+ * drawn over in between is gone (null).
+ */
+async function boxOf(l: Locator): Promise<{ x: number; y: number; width: number; height: number }> {
+    const boxes = await l.evaluateAll(els => els.map((e) => {
+        const r = e.getBoundingClientRect();
+        return { x: r.x, y: r.y, width: r.width, height: r.height };
+    }));
+    expect(boxes).toHaveLength(1);
+    return boxes[0];
+}
 
 async function unfoldQueue(page: Page): Promise<void> {
     if (await queueHead(page).getAttribute('aria-expanded') === 'false') await queueHead(page).click();
@@ -56,11 +72,11 @@ test.describe('Work on the queue', () => {
         // The AI badge and the terminal's mark (an agent starts working there).
         await expect(btn.locator('.research-ai-badge')).toHaveCount(1);
         await expect(btn.locator('.research-open-mark')).toHaveCount(1);
-        expect(Math.round((await btn.boundingBox())!.height)).toBe(28);
+        expect(Math.round((await boxOf(btn)).height)).toBe(28);
         // The count in the title while the button is there, the button on the title's row.
         await expect(queueHead(page)).toContainText('Queue · 2');
-        const headBox = (await queueHead(page).boundingBox())!;
-        const btnBox = (await btn.boundingBox())!;
+        const headBox = await boxOf(queueHead(page));
+        const btnBox = await boxOf(btn);
         expect(Math.abs((btnBox.y + btnBox.height / 2) - (headBox.y + headBox.height / 2))).toBeLessThan(10);
         await btn.click();
         const d = dialog(page);
@@ -305,7 +321,7 @@ test.describe('Work on the queue in Now', () => {
         await expect(btn.locator('.research-ai-badge')).toHaveCount(1);
         await expect(btn.locator('.research-open-mark')).toHaveCount(1);
         // Within the window's width.
-        const box = (await btn.boundingBox())!;
+        const box = await boxOf(btn);
         expect(box.x + box.width).toBeLessThanOrEqual(390);
         expect(await ov.evaluate(e => e.scrollWidth <= e.clientWidth)).toBe(true);
         await btn.click();
