@@ -258,9 +258,12 @@ export function cardTypeForKey(current: CardDensity, key: string): CardDensity |
  * detail; when details wrap the renderer measures the view's tallest card
  * instead (customCardViewHeight) and starts from this one.
  */
-export function customCardSize(lines: number, years = false): { cardWidth: number; cardHeight: number } {
+export function customCardSize(lines: number, years = false, photo: CardPhotoSize = 'small'): { cardWidth: number; cardHeight: number } {
     // The years under the name make the header 3px taller (19 + 14 instead of the avatar's 30).
-    return { cardWidth: 200, cardHeight: 56 + (years ? 3 : 0) + 17 * Math.max(0, lines) };
+    // A medium or large photo (spec 096 §3, src/card-width.ts cardAvatarSize) makes the header
+    // 44 / 72px; the years fit beside it.
+    const head = photo === 'large' ? 98 : photo === 'medium' ? 70 : 56 + (years ? 3 : 0);
+    return { cardWidth: 200, cardHeight: head + 17 * Math.max(0, lines) };
 }
 
 export interface CardLine {

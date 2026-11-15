@@ -96,7 +96,7 @@ const LINES_LABEL: Record<CardValueLines, () => string> = {
  * view's one-row height, or the sample's own when its details wrap or the
  * height is "by content".
  */
-function samplePreview(density: CardPresetKey | 'custom', viewWidth: number | undefined): {
+function samplePreview(density: CardPresetKey | 'custom', viewWidth: number | undefined, photo: CardPhotoSize = 'small'): {
     html: string; head: CardHead; wrapped: boolean; width: number; height: number; dateColumn: number; labelColumn: number;
 } {
     // The card type's own lines (Detailed, Register), Custom's stored ones.
@@ -104,7 +104,8 @@ function samplePreview(density: CardPresetKey | 'custom', viewWidth: number | un
     const { person, data } = samplePerson();
     const lines = cardLines(person, data, fields);
     const years = fields.years ? cardYears(person, true) : '';
-    const entry = { name: 'Jan Vlk', avatar: true, lines, ...(years ? { years } : {}) };
+    // A medium or large photo: the header's avatar of that size (spec 096 §3).
+    const entry = { name: 'Jan Vlk', avatar: true, lines, ...(years ? { years } : {}), ...(photo !== 'small' ? { photo } : {}) };
     // The view's card width; the date (or label) column of the sample's own lines.
     const own = customCardMetrics([entry], measureCardTexts, fields.widthCap, fields.lines, fields.style,
         cardDateReferences(fields.fullDate));
@@ -114,7 +115,7 @@ function samplePreview(density: CardPresetKey | 'custom', viewWidth: number | un
     const html = `<div class="card-lines${wrapped ? ' card-lines--rows' : ''}">${lines.map(l =>
         cardLineHtml(l, esc, false, wrapped ? rows.get(l) : undefined, fields.style, !!rows.get(l)?.longDate)).join('')}</div>`;
     // The sample's own height when its details wrap or every card is as tall as its content.
-    const height = wrapped || fields.height === 'content' ? heights[0] : customCardSize(fields.on.length, fields.years).cardHeight;
+    const height = wrapped || fields.height === 'content' ? heights[0] : customCardSize(fields.on.length, fields.years, photo).cardHeight;
     return { html, head: heads[0], wrapped, width: metrics.cardWidth, height, dateColumn: own.dateColumn, labelColumn: own.labelColumn ?? 0 };
 }
 
@@ -254,7 +255,7 @@ function sampleCard(density: CardDensity, on: CardSignals, viewWidth: number | u
         `<div class="card-avatar-wrap"><div class="card-avatar">${touched ? `<img src="${SAMPLE_PHOTO}" alt="">`
             : `<span class="avatar-initials">${initials}</span>`}</div>${badge}</div>`;
     if (isFieldCardDensity(density)) {
-        const sample = samplePreview(density, viewWidth);
+        const sample = samplePreview(density, viewWidth, touched ? photo.size : 'small');
         // The width it was wrapped for (the view's; before any view, the sample's own) and its height.
         const box = `--card-date-col: ${sample.dateColumn}px; --card-label-col: ${sample.labelColumn}px; `
             + `width: ${sample.width}px; height: ${sample.height}px`;

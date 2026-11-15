@@ -15461,6 +15461,28 @@
            the photo (the card is taller from its fifth row). */
         body[data-card-photo="large"]:not([data-card-fields]) #tree-canvas .person-card.has-photo > .card-body,
         .card-signals-preview .person-card[data-density="normal"][data-photo="large"].has-photo > .card-body { align-self: flex-start; box-sizing: border-box; min-height: 62px; padding: 14px 0; }
+        /* The cards of details (§3): the photo in the header at the left, 44px (medium) or 72px
+           (large) with a 2px ring; the lines under the header across the card's whole width. The
+           header is at least the photo's height; its text keeps the place it has beside the 30px
+           avatar (D13: 30px, 33 with the years, the name centred in it), a longer name grows down
+           beside the photo. A card without a photo keeps its 30px initials. MUST match
+           src/card-width.ts cardAvatarSize / cardHeadBlock. */
+        body[data-card-fields][data-card-photo="medium"] #tree-canvas .person-card.has-photo .card-avatar,
+        .card-signals-preview .person-card[data-fields][data-photo="medium"].has-photo .card-avatar { width: 44px; height: 44px; border-width: 2px; }
+        body[data-card-fields][data-card-photo="large"] #tree-canvas .person-card.has-photo .card-avatar,
+        .card-signals-preview .person-card[data-fields][data-photo="large"].has-photo .card-avatar { width: 72px; height: 72px; border-width: 2px; }
+        body[data-card-fields][data-card-photo="medium"] #tree-canvas .person-card.has-photo .card-head,
+        .card-signals-preview .person-card[data-fields][data-photo="medium"].has-photo .card-head { min-height: 44px; }
+        body[data-card-fields][data-card-photo="large"] #tree-canvas .person-card.has-photo .card-head,
+        .card-signals-preview .person-card[data-fields][data-photo="large"].has-photo .card-head { min-height: 72px; }
+        body[data-card-fields]:is([data-card-photo="medium"], [data-card-photo="large"]) #tree-canvas .person-card.has-photo .card-head-text,
+        .card-signals-preview .person-card[data-fields]:is([data-photo="medium"], [data-photo="large"]).has-photo .card-head-text {
+            align-self: flex-start; min-height: 30px; justify-content: center;
+        }
+        body[data-card-fields]:is([data-card-photo="medium"], [data-card-photo="large"]) #tree-canvas .person-card.has-photo .card-head--years .card-head-text,
+        .card-signals-preview .person-card[data-fields]:is([data-photo="medium"], [data-photo="large"]).has-photo .card-head--years .card-head-text { min-height: 33px; }
+        body[data-card-fields]:is([data-card-photo="medium"], [data-card-photo="large"]) #tree-canvas .person-card.has-photo .card-head--years > .card-avatar-wrap,
+        .card-signals-preview .person-card[data-fields]:is([data-photo="medium"], [data-photo="large"]).has-photo .card-head--years > .card-avatar-wrap { margin-top: 0; }
         /* Printed, the 2px border takes 1px of padding a side (as the focus does). */
         @media print {
             body[data-card-photo="medium"]:not([data-card-fields]) #tree-canvas .person-card.has-photo { padding: 0 7px; }

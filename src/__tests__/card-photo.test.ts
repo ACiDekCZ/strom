@@ -1,17 +1,20 @@
 /**
- * The photo on the card (spec 096 §1, §2, §4): the stored choice repaired to
+ * The photo on the card (spec 096 §1–§4): the stored choice repaired to
  * small + circle, the Normal card's box per photo size against the CSS, its
- * text column and height, and the default (or a view without a photo) laid
+ * text column and height, the cards of details' header and height with a
+ * medium or large photo, and the default (or a view without a photo) laid
  * out exactly as before. Widths come from a made-up measure. Invented names.
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { normalizeCardPhoto, CARD_PHOTO_SIZES, CARD_PHOTO_SHAPES } from '../card-fields.js';
+import { normalizeCardPhoto, CARD_PHOTO_SIZES, CARD_PHOTO_SHAPES, customCardSize, CardLine } from '../card-fields.js';
 import {
     MeasureTexts, normalCardHeight, normalCardHeights, normalCardTextWidth, normalCardNameRows,
     NORMAL_CARD_NAME_WIDTH, NORMAL_CARD_NAME_WIDTH_BARE,
+    cardAvatarSize, cardHeadBlock, cardLinesTop, customCardHeight, customCardViewHeight, customCardMetrics, customCardRows,
+    customCardSpouseLineY, CustomCardEntry, CARD_AVATAR_SIZE,
 } from '../card-width.js';
 import { CARD_SIZE, NORMAL_PHOTO_BOX, DEFAULT_LAYOUT_CONFIG, layoutConfigFor, PersonId } from '../types.js';
 import { SettingsManager } from '../settings.js';
@@ -206,6 +209,119 @@ describe('the default photo lays the tree out as before', () => {
             }
             SettingsManager.setCardPhoto({ size: 'small' });
             expect(layout({ ...layoutConfigFor('normal'), ...SettingsManager.getCardSize(true) }, focus)).toEqual(before);
+        }
+    });
+});
+
+describe('the cards of details with a photo (§3)', () => {
+    /** A line of a detail with a date and a place. */
+    const line = (place: string): CardLine => ({
+        key: 'birth', mark: '*', text: `1888 ${place}`, date: '1888', rest: place, more: '', wide: false, place, cause: '',
+        label: 'Born', dateLong: false,
+    } as unknown as CardLine);
+
+    it('the avatar: 30 (none, small), 44 medium, 72 large', () => {
+        expect(cardAvatarSize(null)).toBe(CARD_AVATAR_SIZE);
+        expect(cardAvatarSize(undefined)).toBe(30);
+        expect(cardAvatarSize('small')).toBe(30);
+        expect(cardAvatarSize('medium')).toBe(44);
+        expect(cardAvatarSize('large')).toBe(72);
+    });
+
+    it('the header: at least the avatar; the years and three rows of the name fit beside the large photo', () => {
+        // The default avatar: as before.
+        expect(cardHeadBlock(1, false)).toBe(30);
+        expect(cardHeadBlock(1, true)).toBe(33);
+        expect(cardHeadBlock(2, true)).toBe(52);
+        expect(cardHeadBlock(1, true, true)).toBe(47);
+        expect(cardHeadBlock(1, false, false, 30)).toBe(30);
+        // Medium: the years fit (33 < 44); two rows and the years do not (52).
+        expect(cardHeadBlock(1, false, false, 44)).toBe(44);
+        expect(cardHeadBlock(1, true, false, 44)).toBe(44);
+        expect(cardHeadBlock(2, true, false, 44)).toBe(52);
+        // Large: three rows (57) and the years (71) beside 72; four rows grow it.
+        expect(cardHeadBlock(1, true, true, 72)).toBe(72);
+        expect(cardHeadBlock(3, true, false, 72)).toBe(72);
+        expect(cardHeadBlock(4, false, false, 72)).toBe(76);
+        expect(cardLinesTop(cardHeadBlock(1, false, false, 44))).toBe(60);
+        expect(cardLinesTop(cardHeadBlock(1, false, false, 72))).toBe(88);
+    });
+
+    it('the height "equal", one row a detail: 70 + 17n medium, 98 + 17n large (87 / 155 / 115 / 183)', () => {
+        expect(customCardSize(1, false, 'medium').cardHeight).toBe(87);
+        expect(customCardSize(5, false, 'medium').cardHeight).toBe(155);
+        expect(customCardSize(1, false, 'large').cardHeight).toBe(115);
+        expect(customCardSize(5, false, 'large').cardHeight).toBe(183);
+        // The years fit beside the photo: no taller header.
+        expect(customCardSize(5, true, 'medium').cardHeight).toBe(155);
+        expect(customCardSize(5, true, 'large').cardHeight).toBe(183);
+        // Small, and the default: as before.
+        expect(customCardSize(1).cardHeight).toBe(73);
+        expect(customCardSize(5).cardHeight).toBe(141);
+        expect(customCardSize(5, true).cardHeight).toBe(144);
+        expect(customCardSize(5, true, 'small')).toEqual(customCardSize(5, true));
+        // The view's one height from the header (customCardViewHeight) agrees.
+        for (const [photo, avatar] of [['small', 30], ['medium', 44], ['large', 72]] as const) {
+            for (const n of [0, 1, 5]) {
+                for (const years of [false, true]) {
+                    expect(customCardViewHeight(n, 1, [], years, false, avatar)).toBe(customCardSize(n, years, photo).cardHeight);
+                }
+            }
+        }
+        expect(customCardViewHeight(5, 1, [], false, false)).toBe(141);
+    });
+
+    it('a card with a photo: a narrower name, a taller header; one without keeps its own (Narrow and Wide)', () => {
+        const entry = (photo?: 'medium' | 'large'): CustomCardEntry => ({
+            name: 'Abcdefgh Ijklmnopqrs Tuvwxyz', avatar: true, lines: [line('Lhota'), line('Ves')], years: '1850 – 1920',
+            ...(photo ? { photo } : {}),
+        });
+        for (const cap of [240, 400]) {
+            const list = [entry('large'), entry()];
+            const metrics = customCardMetrics(list, measure, cap, 0);
+            // 28 characters × 6 = 168 + 72 + 8 = 248 + 26: the card at its cap (the cap does not change).
+            expect(metrics.cardWidth).toBe(cap === 240 ? 240 : 276);
+            const { heads, heights, rows } = customCardRows(list, metrics, measure, 0, 'marks', 2);
+            const counts = (i: number) => list[i].lines.map(l => rows.get(l as CardLine)!.rows.length);
+            // The lines across the card's whole width: the same rows on either card.
+            expect(counts(0)).toEqual(counts(1));
+            expect(counts(0)).toEqual([1, 1]);
+            const room = metrics.cardWidth - 26;
+            // The name's column: the room less the avatar and the 8px gap.
+            const rowsAt = (w: number) => Math.ceil(168 / w) > 1;
+            expect(heads[0].name.length > 1).toBe(rowsAt(room - 80));
+            expect(heads[0].block).toBe(Math.max(72, cardHeadBlock(heads[0].name.length, true)));
+            expect(heads[1].block).toBe(cardHeadBlock(heads[1].name.length, true));
+            // Two lines of one row each: 10 + header + 6 + 2 × 17 + 3 + 10.
+            expect(heights[0]).toBe(customCardHeight([1, 1], heads[0].block));
+            expect(heights[0]).toBe(10 + 72 + 6 + 34 + 3 + 10);
+            expect(heights[1]).toBe(customCardHeight([1, 1], heads[1].block));
+        }
+        // Without the photo the entries measure as before.
+        const plain = customCardMetrics([entry()], measure, 400, 0);
+        expect(plain.cardWidth).toBe(Math.ceil((168 + 30 + 8 + 26) / 4) * 4);
+    });
+
+    it('the partner line stays by the name (25 / 26.5px), as on a card without a photo', () => {
+        expect(customCardSpouseLineY(2)).toBe(25);
+        expect(customCardSpouseLineY(2, true)).toBe(26.5);
+        expect(customCardSpouseLineY(1, false, 'content')).toBe(25);
+        expect(customCardSpouseLineY(1)).toBeUndefined();
+    });
+
+    it('matches the CSS (index.html body[data-card-fields][data-card-photo])', () => {
+        const html = readFileSync(join(process.cwd(), 'index.html'), 'utf-8');
+        for (const size of ['medium', 'large'] as const) {
+            const sel = `body[data-card-fields][data-card-photo="${size}"] #tree-canvas .person-card.has-photo .card-avatar,`;
+            const at = html.indexOf(sel);
+            expect(at, sel).toBeGreaterThan(-1);
+            const decls = html.slice(html.indexOf('{', at) + 1, html.indexOf('}', at));
+            expect(decls).toContain(`width: ${cardAvatarSize(size)}px`);
+            expect(decls).toContain(`height: ${cardAvatarSize(size)}px`);
+            const head = `body[data-card-fields][data-card-photo="${size}"] #tree-canvas .person-card.has-photo .card-head,`;
+            const h = html.indexOf(head);
+            expect(h, head).toBeGreaterThan(-1);
+            expect(html.slice(html.indexOf('{', h) + 1, html.indexOf('}', h))).toContain(`min-height: ${cardAvatarSize(size)}px`);
         }
     });
 });

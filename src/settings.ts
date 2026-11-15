@@ -681,7 +681,7 @@ class SettingsManagerClass {
             return { cardWidth: box.cardWidth, cardHeight: CARD_SIZE.normal.cardHeight };
         }
         if (!fields) return CARD_SIZE[density as 'compact' | 'normal'];
-        return customCardSize(fields.on.length, fields.years);
+        return customCardSize(fields.on.length, fields.years, viewHasPhoto ? this.getCardPhoto().size : 'small');
     }
 
     /** The stored card signals as they are (older builds' keys kept), brought to version 2 once (spec 066 P4 §8). */

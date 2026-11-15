@@ -30,7 +30,7 @@ import {
     CustomCardMetrics, CardLineRows, CardHead, customCardMetrics, customCardRows, customCardViewHeight, customCardSpouseLineY,
     measureCardTexts, cardFontsPending, CARD_HEAD_HEIGHT, CARD_EDGE_PILL_ROOM, CARD_STATUS_MARK_ROOM,
     cardNameMaxRows, normalCardHeights, normalCardNameRows, rowSeparators, NormalCardName, CARD_LOCK_NAME_ROOM,
-    normalCardTextWidth,
+    normalCardTextWidth, cardAvatarSize, CARD_AVATAR_SIZE,
 } from './card-width.js';
 import { checkRecordedAge, ageBirthDate } from './recorded-age.js';
 import { treeKnowsOrigin, CardStatusClass } from './reliability.js';
@@ -1391,8 +1391,10 @@ class TreeRendererClass {
     private outputLayout(spacing: TreeSpacing = this.getLayoutSpacing()): OutputLayout {
         const own = spacing === this.getLayoutSpacing();
         // The outputs keep the small photo for now (spec 096 D7): a view of
-        // Normal cards with a medium or large one is laid out again at the small card's size.
-        const photoView = SettingsManager.getCardDensity() === 'normal' && this.viewPhotoSize() !== 'small';
+        // cards with a medium or large one is laid out again at the small
+        // card's size (the Normal card's box, the cards of details measured again).
+        const photoView = this.viewPhotoSize() !== 'small';
+        const normalPhotoView = photoView && SettingsManager.getCardDensity() === 'normal';
         if (!this.focusPersonId || this.positions.size === 0 || (own && !this.viewLayer && !this.config.roomBelow && !photoView)) {
             return {
                 positions: this.positions, connections: this.withoutEdgeRoom(this.connections, this.config, this.edgeRoomIds, this.viewEdgeRoom),
@@ -1407,19 +1409,19 @@ class TreeRendererClass {
         // people at the same card sizes, laid out with that spacing's gaps.
         // The outputs draw no button of a family outside the tree: no room kept for it.
         const { roomBelow: _room, ...shown } = this.config;
-        const screen: LayoutConfig = photoView ? this.smallPhotoConfig(shown) : shown;
+        const screen: LayoutConfig = normalPhotoView ? this.smallPhotoConfig(shown) : shown;
         let config: LayoutConfig = own ? screen : withSpacing(screen, spacing);
         let result = this.computeTreeLayout(descendantsOnly, [], false, config);
         let custom: CustomCardMetrics | null = null;
         let edgeRoomIds = new Set<PersonId>();
         let viewEdgeRoom = 0;
-        if (!this.viewLayer) {
+        if (!this.viewLayer && !(photoView && this.customMetrics)) {
             // No view link: the screen's people, their cards as the screen measured them.
             custom = this.customMetrics;
             edgeRoomIds = new Set(this.edgeRoomIds);
             viewEdgeRoom = this.viewEdgeRoom;
         } else if (this.customMetrics) {
-            const measured = this.customCardsOf(result.positions);
+            const measured = this.customCardsOf(result.positions, 'small');
             const next: LayoutConfig = {
                 ...config, cardWidth: measured.metrics.cardWidth, cardHeight: measured.metrics.cardHeight,
                 personHeights: measured.metrics.personHeights,
@@ -1543,8 +1545,13 @@ class TreeRendererClass {
         return measured.metrics;
     }
 
-    /** The custom card measured for the people of a layout (the screen's or an output's), nothing kept. */
-    private customCardsOf(positions: Map<PersonId, Position>): CustomCardsMeasure {
+    /**
+     * The custom card measured for the people of a layout (the screen's or an
+     * output's), nothing kept. `view`: the photo size of the view's cards
+     * (spec 096 §3; the outputs keep the small one, D7): a card with a photo
+     * gets the avatar of a medium or large one.
+     */
+    private customCardsOf(positions: Map<PersonId, Position>, view: CardPhotoSize = this.viewPhotoSize()): CustomCardsMeasure {
         const data = DataManager.getData();
         const fields = SettingsManager.getEffectiveCardFields() ?? SettingsManager.getCardFields();
         // The Detailed card shows the whole name on as many rows as it needs (T40), Register and Custom two at most.
@@ -1564,6 +1571,8 @@ class TreeRendererClass {
         const signalCtx = this.signalContext();
         const visible = (pid: PersonId) => positions.has(pid);
         let anyBirth = false;
+        // The view's largest avatar (a card with a medium or large photo): every card of one height is as tall.
+        let viewAvatar = CARD_AVATAR_SIZE;
         this.prepareCrossTreePills(positions.keys(), this.lastCrossTrees);
         for (const id of positions.keys()) {
             const person = DataManager.getPerson(id);
@@ -1582,9 +1591,12 @@ class TreeRendererClass {
             // The birth surname under the name (src/person-name.ts): its row never widens the card.
             const birth = birthNoteText(shownNameParts(person, '?').birthNote);
             if (birth) anyBirth = true;
+            const photo = view !== 'small' && !!person.photo && !person.isPlaceholder;
+            if (photo) viewAvatar = Math.max(viewAvatar, cardAvatarSize(view));
             entries.push({
                 name: shownName(person, '?'), avatar: !person.isPlaceholder, lines: personLines,
                 ...(birth ? { birth } : {}),
+                ...(photo ? { photo: view } : {}),
                 // A whole name on rows ends before the lock of a locked card (index.html, 5px).
                 ...(nameRows === 0 && DataManager.isPersonLocked(id) ? { nameReserve: CARD_LOCK_NAME_ROOM } : {}),
                 ...(presumed ? { years: cardYears(person, presumed.has(id)) } : {}),
@@ -1612,10 +1624,10 @@ class TreeRendererClass {
         }
         // One height for the view: as tall as the tallest card with its pills' room
         // (a one-row card is as tall as every detail on: it grows when any card has pills).
-        const plain = customCardViewHeight(fields.on.length, fields.lines, heights, fields.years, anyBirth);
+        const plain = customCardViewHeight(fields.on.length, fields.lines, heights, fields.years, anyBirth, viewAvatar);
         const cardHeight = fields.lines === 1
             ? plain + (edgeRoomIds.size > 0 ? CARD_EDGE_PILL_ROOM : 0)
-            : customCardViewHeight(fields.on.length, fields.lines, heights.map(withRoom), fields.years, anyBirth);
+            : customCardViewHeight(fields.on.length, fields.lines, heights.map(withRoom), fields.years, anyBirth, viewAvatar);
         // The outputs draw no pills: without the room, unless the partner line runs
         // through the card's middle (one row a detail), which then stays there.
         const viewEdgeRoom = fields.lines === 1 ? 0 : cardHeight - plain;
