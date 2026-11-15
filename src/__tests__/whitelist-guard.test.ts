@@ -76,16 +76,16 @@ function fullTree(): Required<StromData> {
                 dataUrl: 'data:image/jpeg;base64,AA==', sizeBytes: 1,
                 original: { sha256: 'b'.repeat(64), name: 'page-57.tif', mimeType: 'image/tiff', bytes: 148_000_000, orientation: 6 },
             }], importId: 'I1', importedValues: { firstName: { from: 'I1', value: 'Alice' } },
-            // One census of both (spec 085, data v20): the share, a role of one's own, a godparent's own
+            // One census of both (spec 085, data v20; its main citation, spec 095, v21): the share, a role of one's own, a godparent's own
             // record of a part at a baptism, a participant once rejected as Bob.
             events: [
-                { id: 'ev_census_a', type: 'census', date: '1921-02-15', place: 'Kolín', age: '38', sourceIds: ['s1'], shareId: 'SH7K2QX' },
+                { id: 'ev_census_a', type: 'census', date: '1921-02-15', place: 'Kolín', age: '38', sourceIds: ['s1'], citationMain: { sourceIds: 's1' }, shareId: 'SH7K2QX' },
                 { id: 'ev_god_a', type: 'godparent', date: '1909-03-14', roleAt: { role: 'godparent', personId: BOB, eventType: 'baptism', eventId: 'ev_bapt_b' } },
                 { id: 'ev_wit_a', type: 'weddingWitness', roleAt: { role: 'witness', partnershipId: UNION, eventType: 'marriage', eventId: 'marriage' } },
                 { id: 'ev_bapt_a', type: 'baptism', participants: [{ id: 'pt1', role: 'godparent', name: 'Bob Novak', linkRejected: [BOB] }] },
             ] },
             [BOB]: { ...person(BOB, 'Bob'), events: [
-                { id: 'ev_census_b', type: 'census', date: '1921-02-15', place: 'Kolín', age: '42', sourceIds: ['s1'], shareId: 'SH7K2QX', shareRole: 'lodger' },
+                { id: 'ev_census_b', type: 'census', date: '1921-02-15', place: 'Kolín', age: '42', sourceIds: ['s1'], citationMain: { sourceIds: 's1' }, shareId: 'SH7K2QX', shareRole: 'lodger' },
                 { id: 'ev_bapt_b', type: 'baptism', date: '1909-03-14' },
             ] },
         },
@@ -93,7 +93,7 @@ function fullTree(): Required<StromData> {
         sources: {
             s1: {
                 id: 's1', title: 'Parish register, Kolín', quality: 3,
-                transcript: 'Jan, syn Josefa', recordDate: '1865-03-12', refn: 'S0042',
+                transcript: 'Jan, syn Josefa', recordDate: '1865-03-12', refn: 'S0042', events: ['BIRT', 'CHR'],
                 excerpts: [{
                     id: 'exc1', dataUrl: 'data:image/jpeg;base64,AA==', width: 10, height: 4,
                     sizeBytes: 1, fromAttachmentId: 'att1', region: { x: 0.1, y: 0.2, w: 0.5, h: 0.1 },
@@ -366,6 +366,7 @@ type OwnedElsewhere =
     | 'alsoChildOf'         // GEDCOM import only (066): a second family that also lists the person as a child
     | 'marriedFirstName'    // GEDCOM import only (066): the married name's own given names; goes with the married surname
     | 'citationQuay'        // GEDCOM import only (spec 077): a citation's own QUAY; follows its list (merge, removal)
+    | 'citationMain'        // setCitationMain (spec 095): the main citation of the birth / death; follows its list (merge, removal)
     | 'researchOrigins'     // written by Strom Research only (GEDCOM import), never edited
     | 'confirmed'           // confirmFact / unconfirmFact (spec 065); a changed value ends it by itself
     | 'researchVerify';     // written by Strom Research only (GEDCOM import, spec 065), never edited

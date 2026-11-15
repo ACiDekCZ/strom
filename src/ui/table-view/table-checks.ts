@@ -161,7 +161,7 @@ export function issueTargets(issue: ValidationIssue, data: StromData,
 /** The Events table's column of a common field of a shared event (4b). */
 const SHARED_FIELD_COLUMN: Readonly<Record<SharedEventCommonField, string>> = {
     type: 'evType', customLabel: 'evType', date: 'evDate', place: 'evPlace', address: 'evPlace',
-    note: 'evValue', sourceIds: 'evSource', citationQuay: 'evSource',
+    note: 'evValue', sourceIds: 'evSource', citationQuay: 'evSource', citationMain: 'evSource',
 };
 
 /**

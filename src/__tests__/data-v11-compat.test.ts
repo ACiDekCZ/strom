@@ -103,8 +103,9 @@ describe('data format 10 -> 11', () => {
         // the saved views of the Table view (spec 073), 18 for the sources'
         // call number, folio and image (spec 075), 19 for the QUAY of a
         // citation (spec 077), 20 for one event of several persons and the
-        // own record of a godparent or witness (spec 085).
-        expect(STROM_DATA_VERSION).toBe(20);
+        // own record of a godparent or witness (spec 085), 21 for the main
+        // citation of a fact and the events a source records (spec 095).
+        expect(STROM_DATA_VERSION).toBe(21);
         // A raise would stop an older build at its start (VersionError) — the
         // whole app, also an older exported HTML file: never raised again.
         const storage = readFileSync(new URL('../storage.ts', import.meta.url), 'utf8');

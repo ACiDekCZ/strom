@@ -937,7 +937,7 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
         unifyEmpty: '(puste)',
         sharedFields: {
             type: 'typ', customLabel: 'nazwa', date: 'data', place: 'miejsce', address: 'dom', note: 'notatka',
-            sourceIds: 'źródła', citationQuay: 'jakość cytatu',
+            sourceIds: 'źródła', citationQuay: 'jakość cytatu', citationMain: 'cytat główny',
         },
         parseError: 'Błąd odczytu pliku',
         invalidStructure: 'Nieprawidłowa struktura pliku',

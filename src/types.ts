@@ -234,6 +234,8 @@ export interface LifeEvent {
     sourceIds?: string[];
     /** A citation's own QUAY where it differs from its source's (see CitationQuay). */
     citationQuay?: CitationQuay<'sourceIds'>;
+    /** The citation the user chose as the fact's main one (see CitationMain, data v21). */
+    citationMain?: CitationMain<'sourceIds'>;
     /** Godparents, witnesses, the officiating priest… (see EventParticipant). */
     participants?: EventParticipant[];
     /** The research's status of the event (see FactStatus). */
@@ -401,6 +403,14 @@ export interface Source {
      * GEDCOM: citation DATA.DATE (entry recording date).
      */
     recordDate?: string;
+    /**
+     * The events the record records, as GEDCOM tags in upper case (GEDCOM
+     * 5.5.1 EVENTS_RECORDED, `1 DATA / 2 EVEN CHR, BURI` on the source
+     * record), e.g. `["CHR"]` for a baptism entry (data v21). A citation of
+     * such a record at a fact of that event is its primary record in the
+     * order of a fact's citations (src/citation-order.ts).
+     */
+    events?: string[];
     /** Crops of the entry from its scan (see SourceExcerpt). */
     excerpts?: SourceExcerpt[];
     /**
@@ -705,6 +715,12 @@ export interface Person {
     deathSourceIds?: string[];
     /** A citation's own QUAY where it differs from its source's, per list (see CitationQuay). */
     citationQuay?: CitationQuay<PersonCitationField>;
+    /**
+     * The main citation the user chose for the birth and the death (see
+     * CitationMain, data v21). Never of `sourceIds`: the person's own
+     * citations are no fact (an entry there is dropped when the tree is read).
+     */
+    citationMain?: CitationMain<PersonCitationField>;
     /** Attached documents (scans, certificates, letters…). */
     attachments?: Attachment[];
     /**
@@ -1427,6 +1443,8 @@ export interface Partnership {
     divorceSourceIds?: string[];
     /** A citation's own QUAY where it differs from its source's, per list (see CitationQuay). */
     citationQuay?: CitationQuay<PartnershipCitationField>;
+    /** The main citation the user chose for the wedding and the divorce (see CitationMain, data v21). */
+    citationMain?: CitationMain<PartnershipCitationField>;
     /**
      * Witnesses at the wedding (see EventParticipant). A marriage entry names
      * them the way a baptism names godparents, and they are the same kind of
@@ -1514,6 +1532,8 @@ export interface CoupleEvent {
     sourceIds?: string[];
     /** A citation's own QUAY where it differs from its source's (see CitationQuay). */
     citationQuay?: CitationQuay<'sourceIds'>;
+    /** The citation the user chose as the fact's main one (see CitationMain, data v21). */
+    citationMain?: CitationMain<'sourceIds'>;
     /** Witnesses and others the record names. */
     participants?: EventParticipant[];
     /** The research's status of the event (see FactStatus). */
@@ -1540,6 +1560,17 @@ export type LastFocusedMarker = typeof LAST_FOCUSED;
  * nothing (dropped when the tree is read).
  */
 export type CitationQuay<F extends string = string> = Partial<Record<F, Record<string, number | null>>>;
+
+/**
+ * The main citation of a fact (spec 095 K2, data v21), by citation list: the
+ * id of the source in that list the user chose to stand first (a source cited
+ * at another place of an entry has a source of its own, so the id names the
+ * citation). Set only by hand: without it the order is automatic
+ * (src/citation-order.ts). An entry of a source no longer in its list says
+ * nothing (dropped when the tree is read and when the citation goes). Only
+ * the facts' lists have one, never a person's own citations (not a fact).
+ */
+export type CitationMain<F extends string = string> = Partial<Record<F, string>>;
 
 /** A person's citation lists: the person as a whole, the birth, the death. */
 export const PERSON_CITATION_FIELDS = ['sourceIds', 'birthSourceIds', 'deathSourceIds'] as const;
@@ -1687,8 +1718,16 @@ export function partnershipParticipants(u: Pick<Partnership, 'participants' | 'e
  *   when the tree is read, a backup is taken first. An older app (v19) would
  *   edit one copy alone and the copies would go apart, so the bump makes it
  *   open the tree read-only.
+ * v21 (2026-11, spec 095): the main citation of a fact
+ *   (Person/Partnership/LifeEvent/CoupleEvent.citationMain), chosen by hand,
+ *   and the events a source records (Source.events, GEDCOM EVENTS_RECORDED
+ *   `1 DATA / 2 EVEN`), by which the citations of a fact are ordered when
+ *   shown and exported (src/citation-order.ts; the stored lists are never
+ *   reordered). Additive: nothing is changed when a tree is read. An older
+ *   app (v20) would show the automatic first citation and drop the choice on
+ *   a re-save, so the bump makes it warn first.
  */
-export const STROM_DATA_VERSION = 20;
+export const STROM_DATA_VERSION = 21;
 
 /** The rows of a saved Table view (spec 073 §2; events and sources come later). */
 export type TableViewRowType = 'persons' | 'unions' | 'events' | 'sources';

@@ -23,6 +23,7 @@
 import { researchActionLabel, researchMarkFlags, researchLinkFlags } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
+import { setCitationFeaturesLookup } from '../citation-gates.js';
 import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
 import { strings, getCurrentLanguage } from '../strings.js';
@@ -377,6 +378,9 @@ function tellBridgeStatus(researchId: string, status: LiveStatus): void {
 export function researchStatusNow(researchId: string): LiveStatus | null {
     return runtime.get(researchId)?.status ?? null;
 }
+
+// The citation gates (main citation, removal, order) read the features from here.
+setCitationFeaturesLookup(id => (researchStatusNow(id) ?? lastBridgeStatus(id))?.features ?? null);
 
 /** A status the bridge gave elsewhere (?live=, ?send=, following): it runs, and this is what it said. */
 export function rememberBridgeStatus(researchId: string, status: LiveStatus): void {

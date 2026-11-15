@@ -29,7 +29,7 @@ import { normalizeSha256 } from './sha256.js';
 import { sourceReadState } from './source-confirm.js';
 import { regionHeader, regionToStored } from './originals.js';
 import { strings } from './strings.js';
-import { COUPLE_EVENT_TAG, censusTypeText, eventIsShareable, eventValueIsOnTag, isCoupleEventType, sortCoupleEvents } from './events.js';
+import { COUPLE_EVENT_TAG, LIFE_EVENT_TAG, censusTypeText, eventIsShareable, eventValueIsOnTag, isCoupleEventType, sortCoupleEvents } from './events.js';
 import { allShareCopies, isValidShareId } from './shared-events.js';
 import { LINK_REJECTED_TAG } from './ged-shares.js';
 import { placeKey } from './places.js';
@@ -220,18 +220,8 @@ export const SURNAME_GROUP_SEP = ' | ';
  */
 export const SURNAME_REJECTIONS_MARKER = 'Strom surname-variant rejections';
 
-/**
- * LifeEvent type -> GEDCOM tag. Types with no GEDCOM equivalent ('military',
- * 'custom') ride on the generic EVEN tag with a TYPE label.
- */
-const EVENT_TYPE_TO_TAG: Partial<Record<LifeEventType, string>> = {
-    baptism: 'BAPM', burial: 'BURI', occupation: 'OCCU', residence: 'RESI',
-    emigration: 'EMIG', immigration: 'IMMI', education: 'EDUC', religion: 'RELI',
-    confirmation: 'CONF', firstCommunion: 'FCOM', barMitzvah: 'BARM',
-    batMitzvah: 'BASM', ordination: 'ORDN', adoption: 'ADOP',
-    naturalization: 'NATU', will: 'WILL', probate: 'PROB', cremation: 'CREM',
-    title: 'TITL', nationality: 'NATI', census: 'CENS',
-};
+/** LifeEvent type -> GEDCOM tag (see LIFE_EVENT_TAG). */
+const EVENT_TYPE_TO_TAG = LIFE_EVENT_TAG;
 
 /**
  * The GEDCOM tag of the event a person's own godparent / witness event

@@ -1230,6 +1230,7 @@ function absorbSourceDetails(kept: Source, incoming: Source): void {
     if (!kept.transcript && incoming.transcript) kept.transcript = incoming.transcript;
     if (!kept.recordDate && incoming.recordDate) kept.recordDate = incoming.recordDate;
     if (!kept.refn && incoming.refn) kept.refn = incoming.refn;
+    if (!kept.events?.length && incoming.events?.length) kept.events = [...incoming.events];
     const sourceNote = mergeNoteText(kept.note, incoming.note);
     if (sourceNote !== kept.note) kept.note = sourceNote;
     if (!kept.reading && incoming.reading) {

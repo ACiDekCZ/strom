@@ -167,7 +167,7 @@ const COUPLE_TO_PERSON_TYPE: Partial<Record<CoupleEventType, LifeEventType>> = {
     census: 'census', residence: 'residence', custom: 'custom',
 };
 
-type Common = Pick<LifeEvent, 'type' | 'customLabel' | 'date' | 'place' | 'address' | 'note' | 'sourceIds' | 'citationQuay'>;
+type Common = Pick<LifeEvent, 'type' | 'customLabel' | 'date' | 'place' | 'address' | 'note' | 'sourceIds' | 'citationQuay' | 'citationMain'>;
 
 const sameEvent = (a: LifeEvent, b: Common): boolean =>
     a.type === b.type && (a.customLabel ?? '') === (b.customLabel ?? '')
@@ -182,6 +182,7 @@ function commonOf(ev: Common): Common {
     if (ev.note) out.note = ev.note;
     if (ev.sourceIds?.length) out.sourceIds = [...ev.sourceIds];
     if (ev.citationQuay) out.citationQuay = structuredClone(ev.citationQuay);
+    if (ev.citationMain) out.citationMain = structuredClone(ev.citationMain);
     return out;
 }
 

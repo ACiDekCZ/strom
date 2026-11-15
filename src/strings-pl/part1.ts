@@ -801,7 +801,19 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
             census: 'Spis ludności',
             godparent: 'Chrzestny', weddingWitness: 'Świadek ślubu',
             custom: 'Własne'
-        }
+        },
+        /** A fact's words where it is named in a sentence (genitive: "cytat główny urodzenia"); a custom event says its own label. */
+        typesOf: {
+            birth: 'urodzenia', death: 'zgonu', baptism: 'chrztu', burial: 'pochówku',
+            occupation: 'zawodu', residence: 'miejsca zamieszkania', military: 'służby wojskowej', emigration: 'emigracji',
+            immigration: 'imigracji', education: 'wykształcenia', religion: 'wyznania', confirmation: 'bierzmowania',
+            firstCommunion: 'Pierwszej Komunii Świętej', barMitzvah: 'bar micwy', batMitzvah: 'bat micwy', ordination: 'święceń',
+            adoption: 'adopcji', naturalization: 'naturalizacji', will: 'testamentu', probate: 'postępowania spadkowego',
+            title: 'tytułu', nationality: 'narodowości', cremation: 'kremacji', census: 'spisu ludności',
+            godparent: 'roli chrzestnego', weddingWitness: 'świadka ślubu', custom: 'własnego wydarzenia', marriage: 'ślubu',
+            divorce: 'rozwodu', engagement: 'zaręczyn', banns: 'zapowiedzi', marriageLicence: 'zezwolenia na ślub',
+            marriageContract: 'kontraktu małżeńskiego', marriageSettlement: 'intercyzy', divorceFiled: 'pozwu o rozwód', annulment: 'unieważnienia małżeństwa',
+        },
     },
 
     factStatus: {

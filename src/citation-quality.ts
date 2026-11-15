@@ -10,15 +10,18 @@
  */
 
 import {
-    CitationQuay, PARTNERSHIP_CITATION_FIELDS, PERSON_CITATION_FIELDS, Source, StromData,
+    CitationMain, CitationQuay, PARTNERSHIP_CITATION_FIELDS, PERSON_CITATION_FIELDS, Source, StromData,
 } from './types.js';
 import { sourcePlaceDiffers, sourcePlaceKey } from './source-location.js';
 import { SUPPORTED_LANGUAGES } from './strings.js';
 import { citeLines, withoutCiteLines } from './import-origin.js';
 import { rewriteStorySources } from './story-sources.js';
 
-/** Something that cites sources in lists (a person, a couple, an event) and may keep its citations' own QUAY. */
-export type CitationHolder<F extends string = string> = { citationQuay?: CitationQuay<F> };
+/**
+ * Something that cites sources in lists (a person, a couple, an event) and may
+ * keep its citations' own QUAY and the main citation of a fact (data v21).
+ */
+export type CitationHolder<F extends string = string> = { citationQuay?: CitationQuay<F>; citationMain?: CitationMain<F> };
 
 type Sources = Readonly<Record<string, Source | undefined>> | undefined;
 
@@ -73,7 +76,8 @@ export function setCitationQuality<F extends string>(
 
 /**
  * Join `from`'s citations in list `field` into `into`'s (each source once,
- * `into`'s first): a citation only `from` has brings its own QUAY along.
+ * `into`'s first): a citation only `from` has brings its own QUAY along, and
+ * `from`'s main citation stays the main one when `into` has none there.
  */
 export function unionCitations<F extends string>(
     into: CitationHolder<F> & Partial<Record<F, string[]>>, from: CitationHolder<F> & Partial<Record<F, string[]>>, field: F,
@@ -82,6 +86,12 @@ export function unionCitations<F extends string>(
     if (!ids?.length) return;
     const had = new Set(into[field] ?? []);
     into[field] = [...new Set([...(into[field] ?? []), ...ids])] as (CitationHolder<F> & Partial<Record<F, string[]>>)[F];
+    // The main citation of only one side stays the main one; both: `into`'s.
+    const main = from.citationMain?.[field];
+    const intoMain = into.citationMain?.[field];
+    if (typeof main === 'string' && ids.includes(main) && !(typeof intoMain === 'string' && had.has(intoMain))) {
+        into.citationMain = { ...into.citationMain, [field]: main } as CitationMain<F>;
+    }
     const own = from.citationQuay?.[field];
     if (!own) return;
     for (const id of ids) {
@@ -97,8 +107,10 @@ export function unionCitations<F extends string>(
 /**
  * Keep only valid own QUAY of citations still in their list: an entry of a
  * source no longer cited there, of an unknown list or with no QUAY value goes.
+ * The main citations are cleaned the same way (cleanCitationMain).
  */
 export function cleanCitationQuay(holder: object, fields: readonly string[]): void {
+    cleanCitationMain(holder, fields);
     const h = holder as CitationHolder & Record<string, unknown>;
     if (!('citationQuay' in h)) return;
     const map = h.citationQuay as unknown;
@@ -117,6 +129,54 @@ export function cleanCitationQuay(holder: object, fields: readonly string[]): vo
     }
     if (Object.keys(clean).length) h.citationQuay = clean;
     else delete h.citationQuay;
+}
+
+/**
+ * The lists that may have a main citation: a fact's, never a person's own
+ * `sourceIds` (the person's lists are those with the birth's; no fact).
+ */
+function mainFields(fields: readonly string[]): readonly string[] {
+    return fields.includes('birthSourceIds') ? fields.filter(f => f !== 'sourceIds') : fields;
+}
+
+/**
+ * Keep only a valid main citation of each list (data v21): the id of a source
+ * still in that list; one of a source no longer cited there, of an unknown
+ * list (a person's own citations are no fact) or not an id goes.
+ */
+export function cleanCitationMain(holder: object, fields: readonly string[]): void {
+    const h = holder as CitationHolder & Record<string, unknown>;
+    if (!('citationMain' in h)) return;
+    const map = h.citationMain as unknown;
+    const clean: Record<string, string> = {};
+    if (map && typeof map === 'object' && !Array.isArray(map)) {
+        for (const field of mainFields(fields)) {
+            const id = (map as Record<string, unknown>)[field];
+            const list = h[field];
+            if (typeof id === 'string' && Array.isArray(list) && list.includes(id)) clean[field] = id;
+        }
+    }
+    if (Object.keys(clean).length) h.citationMain = clean;
+    else delete h.citationMain;
+}
+
+/** The main citation (source id) of list `field`, when it is still in that list. */
+export function citationMainOf<F extends string>(
+    holder: (CitationHolder<F> & Partial<Record<F, readonly string[]>>) | null | undefined, field: F,
+): string | undefined {
+    const id = holder?.citationMain?.[field];
+    return typeof id === 'string' && (holder?.[field] as readonly string[] | undefined)?.includes(id) ? id : undefined;
+}
+
+/** Set (a source id of the list) or clear (null) the main citation of list `field`. */
+export function putCitationMain<F extends string>(holder: CitationHolder<F>, field: F, sourceId: string | null): void {
+    if (sourceId) {
+        holder.citationMain = { ...holder.citationMain, [field]: sourceId } as CitationMain<F>;
+        return;
+    }
+    if (!holder.citationMain) return;
+    delete holder.citationMain[field];
+    if (Object.keys(holder.citationMain).length === 0) delete holder.citationMain;
 }
 
 const EVENT_FIELDS = ['sourceIds'] as const;
@@ -140,7 +200,7 @@ export function forEachCitationHolder(data: Pick<StromData, 'persons' | 'partner
     }
 }
 
-/** cleanCitationQuay over a whole tree. */
+/** cleanCitationQuay (with the main citations) over a whole tree. */
 export function cleanTreeCitationQuay(data: Pick<StromData, 'persons' | 'partnerships'>): void {
     forEachCitationHolder(data, (holder, fields) => cleanCitationQuay(holder, fields));
 }
@@ -149,7 +209,8 @@ export function cleanTreeCitationQuay(data: Pick<StromData, 'persons' | 'partner
  * Point the citations of sources at others (`remap` old id → new id), each
  * keeping its QUAY: its own, else that of the source it cited (`before`, the
  * sources as they were). A list names each source once (its first citation);
- * citations of sources not remapped keep what they had.
+ * citations of sources not remapped keep what they had. A main citation of a
+ * remapped source is the new one's.
  */
 export function remapCitations(data: StromData, remap: ReadonlyMap<string, string>, before: Sources): void {
     if (remap.size === 0) return;
@@ -176,6 +237,9 @@ export function remapCitations(data: StromData, remap: ReadonlyMap<string, strin
             holder[field] = out;
             if (Object.keys(quay).length) (holder.citationQuay ??= {})[field] = quay;
             else if (holder.citationQuay) delete holder.citationQuay[field];
+            // The main citation follows its source to the entry it joined.
+            const main = holder.citationMain?.[field];
+            if (typeof main === 'string' && remap.has(main)) holder.citationMain![field] = remap.get(main)!;
         }
         tidy(holder);
     });

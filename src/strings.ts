@@ -1028,7 +1028,19 @@ const stringsEN = {
             census: 'Census',
             godparent: 'Godparent', weddingWitness: 'Wedding witness',
             custom: 'Custom'
-        }
+        },
+        /** A fact's words where it is named in a sentence ("main citation for birth"); a custom event says its own label. */
+        typesOf: {
+            birth: 'birth', death: 'death', baptism: 'baptism', burial: 'burial',
+            occupation: 'occupation', residence: 'residence', military: 'military service', emigration: 'emigration',
+            immigration: 'immigration', education: 'education', religion: 'religion', confirmation: 'confirmation',
+            firstCommunion: 'first communion', barMitzvah: 'bar mitzvah', batMitzvah: 'bat mitzvah', ordination: 'ordination',
+            adoption: 'adoption', naturalization: 'naturalization', will: 'will', probate: 'probate',
+            title: 'title', nationality: 'nationality', cremation: 'cremation', census: 'census',
+            godparent: 'godparenthood', weddingWitness: 'wedding witness', custom: 'custom event', marriage: 'marriage',
+            divorce: 'divorce', engagement: 'engagement', banns: 'banns', marriageLicence: 'marriage licence',
+            marriageContract: 'marriage contract', marriageSettlement: 'marriage settlement', divorceFiled: 'divorce filing', annulment: 'annulment',
+        },
     },
 
     // The research's status of a fact (GEDCOM _STROM_STATUS), a small label beside it
@@ -5150,7 +5162,7 @@ const stringsEN = {
         unifyEmpty: '(empty)',
         sharedFields: {
             type: 'type', customLabel: 'name', date: 'date', place: 'place', address: 'house', note: 'note',
-            sourceIds: 'sources', citationQuay: 'citation quality',
+            sourceIds: 'sources', citationQuay: 'citation quality', citationMain: 'main citation',
         },
         parseError: 'Error reading file',
         invalidStructure: 'Invalid file structure',
@@ -6812,6 +6824,8 @@ const stringsEN = {
         removeSource: (title: string) => `removing source "${title}"`,
         cite: (name: string) => `citation on ${name}`,
         uncite: (name: string) => `removing citation from ${name}`,
+        citeMain: (fact: string, name: string) => `main citation for ${fact} – ${name}`,
+        citeMainClear: (fact: string, name: string) => `unmarking the main citation for ${fact} – ${name}`,
         addAttachment: (name: string) => `attachment of ${name}`,
         removeAttachment: (name: string) => `removing attachment from ${name}`,
         editAttachment: (name: string) => `editing attachment of ${name}`,
@@ -10187,7 +10201,19 @@ const stringsCZ: StringsType = {
             census: 'Sčítání lidu',
             godparent: 'Kmotrovství', weddingWitness: 'Svědek při sňatku',
             custom: 'Vlastní'
-        }
+        },
+        /** A fact's words where it is named in a sentence (genitive: "hlavní citace u narození"); a custom event says its own label. */
+        typesOf: {
+            birth: 'narození', death: 'úmrtí', baptism: 'křtu', burial: 'pohřbu',
+            occupation: 'povolání', residence: 'bydliště', military: 'vojenské služby', emigration: 'emigrace',
+            immigration: 'imigrace', education: 'vzdělání', religion: 'vyznání', confirmation: 'biřmování',
+            firstCommunion: 'prvního svatého přijímání', barMitzvah: 'bar micvy', batMitzvah: 'bat micvy', ordination: 'svěcení',
+            adoption: 'osvojení', naturalization: 'naturalizace', will: 'závěti', probate: 'pozůstalostního řízení',
+            title: 'titulu', nationality: 'národnosti', cremation: 'kremace', census: 'sčítání lidu',
+            godparent: 'kmotrovství', weddingWitness: 'svědectví při sňatku', custom: 'vlastní události', marriage: 'sňatku',
+            divorce: 'rozvodu', engagement: 'zasnoubení', banns: 'ohlášek', marriageLicence: 'povolení k sňatku',
+            marriageContract: 'svatební smlouvy', marriageSettlement: 'předmanželské dohody', divorceFiled: 'žádosti o rozvod', annulment: 'zrušení manželství',
+        },
     },
 
     factStatus: {
@@ -14217,7 +14243,7 @@ const stringsCZ: StringsType = {
         unifyEmpty: '(prázdné)',
         sharedFields: {
             type: 'typ', customLabel: 'název', date: 'datum', place: 'místo', address: 'dům', note: 'poznámka',
-            sourceIds: 'prameny', citationQuay: 'kvalita citace',
+            sourceIds: 'prameny', citationQuay: 'kvalita citace', citationMain: 'hlavní citace',
         },
         parseError: 'Chyba při čtení souboru',
         invalidStructure: 'Neplatná struktura souboru',
@@ -15870,6 +15896,8 @@ const stringsCZ: StringsType = {
         removeSource: (title: string) => `odebrání pramene „${title}“`,
         cite: (name: string) => `citace u ${name}`,
         uncite: (name: string) => `odebrání citace u ${name}`,
+        citeMain: (fact: string, name: string) => `hlavní citace u ${fact} – ${name}`,
+        citeMainClear: (fact: string, name: string) => `zrušení hlavní citace u ${fact} – ${name}`,
         addAttachment: (name: string) => `příloha u ${name}`,
         removeAttachment: (name: string) => `odebrání přílohy u ${name}`,
         editAttachment: (name: string) => `úprava přílohy u ${name}`,
@@ -19191,7 +19219,19 @@ const stringsDE: StringsType = {
             census: 'Volkszählung',
             godparent: 'Patenschaft', weddingWitness: 'Trauzeuge',
             custom: 'Eigenes'
-        }
+        },
+        /** A fact's words where it is named in a sentence (in parentheses: "Hauptzitat (Geburt)"); a custom event says its own label. */
+        typesOf: {
+            birth: 'Geburt', death: 'Tod', baptism: 'Taufe', burial: 'Beerdigung',
+            occupation: 'Beruf', residence: 'Wohnort', military: 'Militärdienst', emigration: 'Auswanderung',
+            immigration: 'Einwanderung', education: 'Ausbildung', religion: 'Konfession', confirmation: 'Firmung',
+            firstCommunion: 'Erstkommunion', barMitzvah: 'Bar Mitzwa', batMitzvah: 'Bat Mitzwa', ordination: 'Ordination',
+            adoption: 'Adoption', naturalization: 'Einbürgerung', will: 'Testament', probate: 'Nachlassverfahren',
+            title: 'Titel', nationality: 'Staatsangehörigkeit', cremation: 'Einäscherung', census: 'Volkszählung',
+            godparent: 'Patenschaft', weddingWitness: 'Trauzeuge', custom: 'Eigenes Ereignis', marriage: 'Heirat',
+            divorce: 'Scheidung', engagement: 'Verlobung', banns: 'Aufgebot', marriageLicence: 'Heiratserlaubnis',
+            marriageContract: 'Ehevertrag', marriageSettlement: 'Güterrechtsvertrag', divorceFiled: 'Scheidungsantrag', annulment: 'Annullierung',
+        },
     },
 
     factStatus: {
@@ -23194,7 +23234,7 @@ const stringsDE: StringsType = {
         unifyEmpty: '(leer)',
         sharedFields: {
             type: 'Art', customLabel: 'Bezeichnung', date: 'Datum', place: 'Ort', address: 'Haus', note: 'Notiz',
-            sourceIds: 'Quellen', citationQuay: 'Zitatqualität',
+            sourceIds: 'Quellen', citationQuay: 'Zitatqualität', citationMain: 'Hauptzitat',
         },
         parseError: 'Fehler beim Lesen der Datei',
         invalidStructure: 'Ungültige Dateistruktur',
@@ -24815,6 +24855,8 @@ const stringsDE: StringsType = {
         removeSource: (title: string) => `Quelle „${title}“ entfernen`,
         cite: (name: string) => `Zitat bei ${name}`,
         uncite: (name: string) => `Zitat von ${name} entfernen`,
+        citeMain: (fact: string, name: string) => `Hauptzitat (${fact}) – ${name}`,
+        citeMainClear: (fact: string, name: string) => `Hauptzitat (${fact}) aufheben – ${name}`,
         addAttachment: (name: string) => `Anhang von ${name}`,
         removeAttachment: (name: string) => `Anhang von ${name} entfernen`,
         editAttachment: (name: string) => `Anhang von ${name} bearbeiten`,

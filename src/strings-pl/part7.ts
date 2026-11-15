@@ -263,6 +263,8 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         removeSource: (title: string) => `usunięcie źródła „${title}”`,
         cite: (name: string) => `cytat dla osoby ${name}`,
         uncite: (name: string) => `usunięcie cytatu osoby ${name}`,
+        citeMain: (fact: string, name: string) => `cytat główny ${fact} – ${name}`,
+        citeMainClear: (fact: string, name: string) => `usunięcie cytatu głównego ${fact} – ${name}`,
         addAttachment: (name: string) => `załącznik osoby ${name}`,
         removeAttachment: (name: string) => `usunięcie załącznika osoby ${name}`,
         editAttachment: (name: string) => `edycja załącznika osoby ${name}`,

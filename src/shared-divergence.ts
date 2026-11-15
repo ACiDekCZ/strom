@@ -81,8 +81,8 @@ export function unifyValues(d: ShareDivergence, choice: ReadonlyMap<SharedEventC
 /** The common fields in which every copy agrees (the dialog's "Same: …" line). */
 export function sameFields(d: ShareDivergence): SharedEventCommonField[] {
     const differ = new Set(d.fields.map(f => f.field));
-    // A label only matters for a custom event; quality only with sources.
-    return SHARED_EVENT_COMMON_FIELDS.filter(f => !differ.has(f) && f !== 'customLabel' && f !== 'citationQuay');
+    // A label only matters for a custom event; quality and the main citation only with sources.
+    return SHARED_EVENT_COMMON_FIELDS.filter(f => !differ.has(f) && f !== 'customLabel' && f !== 'citationQuay' && f !== 'citationMain');
 }
 
 /** The leading copy's event (the dialog's and the finding's title). */
@@ -123,6 +123,10 @@ export function fieldValueText(data: StromData, field: SharedEventCommonField, v
             const q = (value as { sourceIds?: Record<string, number | null> } | undefined)?.sourceIds ?? {};
             const parts = Object.entries(q).map(([id, n]) => `${data.sources?.[id]?.title?.trim() || id}: ${n === null ? '–' : n}`);
             return parts.length ? parts.join(', ') : empty;
+        }
+        case 'citationMain': {
+            const id = (value as { sourceIds?: string } | undefined)?.sourceIds;
+            return id ? data.sources?.[id]?.title?.trim() || data.sources?.[id]?.reference?.trim() || id : empty;
         }
         default: return typeof value === 'string' && value.trim() ? value.trim() : empty;
     }

@@ -77,10 +77,10 @@ export function newShareIdFor(data: StromData): string {
 /**
  * The fields every copy of a shared event has the same: the type (with a
  * custom event's label), the date, the place, the house or address, the note,
- * the sources and their citations' own QUAY.
+ * the sources, their citations' own QUAY and the main citation (spec 095).
  */
 export const SHARED_EVENT_COMMON_FIELDS = [
-    'type', 'customLabel', 'date', 'place', 'address', 'note', 'sourceIds', 'citationQuay',
+    'type', 'customLabel', 'date', 'place', 'address', 'note', 'sourceIds', 'citationQuay', 'citationMain',
 ] as const satisfies readonly (keyof LifeEvent)[];
 export type SharedEventCommonField = typeof SHARED_EVENT_COMMON_FIELDS[number];
 
@@ -127,6 +127,10 @@ export function commonFieldKey(ev: LifeEvent, field: SharedEventCommonField): st
             const own = ev.citationQuay?.sourceIds ?? {};
             return Object.keys(own).filter(id => cited.has(id)).sort()
                 .map(id => `${id}=${own[id] === null ? '-' : own[id]}`).join('\u0001');
+        }
+        case 'citationMain': {
+            const main = ev.citationMain?.sourceIds;
+            return typeof main === 'string' && (ev.sourceIds ?? []).includes(main) ? main : '';
         }
         case 'type':
             return ev.type;
@@ -874,6 +878,11 @@ export function applyPersonMergeShares(
                     }
                 }
             }
+        }
+        // The own record's main citation becomes the shared event's when its copies have none.
+        const ownMain = own.citationMain?.sourceIds;
+        if (ownMain && (own.sourceIds ?? []).includes(ownMain) && copies.every(c => !c.citationMain?.sourceIds)) {
+            for (const c of copies) c.citationMain = { sourceIds: ownMain };
         }
         for (const f of ['note', 'address'] as const) {
             const text = own[f]?.trim();

@@ -4,7 +4,10 @@
  */
 
 import { rewriteStorySources, storySourceIds } from './story-sources.js';
-import { cleanCitationQuay, cleanTreeCitationQuay, joinQualityOnlySources, setCitationQuality, unionCitations } from './citation-quality.js';
+import { CitationRef, citationFact, cleanTreeSourceEvents } from './citation-order.js';
+import {
+    CitationHolder, citationMainOf, cleanCitationMain, cleanCitationQuay, cleanTreeCitationQuay, joinQualityOnlySources, putCitationMain, setCitationQuality, unionCitations,
+} from './citation-quality.js';
 import { normalizeSingleParents, looseSingleParents, isPurePlaceholder, fillPlaceholder, tidyPlaceholders } from './single-parent.js';
 import {
     Person,
@@ -285,6 +288,8 @@ export function migrateData(data: unknown): StromData {
     // Preserve the source catalog if present.
     if (d.sources && typeof d.sources === 'object') {
         result.sources = d.sources as StromData['sources'];
+        // v21 (spec 095): the events a record records, only as tags.
+        cleanTreeSourceEvents(result.sources);
     }
 
     // v19 (spec 077): the sources an import of 3.26 made only for a citation
@@ -2597,12 +2602,17 @@ class DataManagerClass {
             for (const f of SHARED_EVENT_COMMON_FIELDS) {
                 if (f in updates) (common as Record<string, unknown>)[f] = updates[f];
             }
-            for (const c of others) applyEventFields(c.event, common);
+            for (const c of others) {
+                applyEventFields(c.event, common);
+                cleanCitationMain(c.event, ['sourceIds']);
+            }
         }
         Object.assign(ev, updates);
         // An explicit undefined means "field emptied" — drop the key, or the
         // old value would survive the save (Object.assign never removes keys).
         dropUndefinedKeys(ev);
+        // A main citation of a source no longer cited goes.
+        cleanCitationMain(ev, ['sourceIds']);
         // An empty participants array means "all participants removed" — drop the
         // property so exported JSON stays clean (Object.assign would keep []).
         if (Array.isArray(updates.participants) && updates.participants.length === 0) {
@@ -2898,7 +2908,10 @@ class DataManagerClass {
         if (values.type !== undefined && (values.type === 'birth' || values.type === 'death' || !eventIsShareable(values.type))) return 0;
         const first = this.data.persons[copies[0].personId];
         this.beginMutation();
-        for (const c of copies) applyEventFields(c.event, values);
+        for (const c of copies) {
+            applyEventFields(c.event, values);
+            cleanCitationMain(c.event, ['sourceIds']);
+        }
         this.commitMutation(strings.undo.editEvent(auditPersonName(first)));
         AuditLogManager.log(this.currentTreeId, 'event.update', strings.auditLog.updatedEvent(auditPersonName(first)));
         return copies.length;
@@ -2944,7 +2957,10 @@ class DataManagerClass {
         const nextLabel = field === 'customLabel' ? value as string | undefined : ev.customLabel;
         if (nextType === 'custom' && !nextLabel?.trim()) return 0;
         this.beginMutation();
-        for (const c of copies) applyEventFields(c.event, { [field]: value } as SharedEventCommon);
+        for (const c of copies) {
+            applyEventFields(c.event, { [field]: value } as SharedEventCommon);
+            cleanCitationMain(c.event, ['sourceIds']);
+        }
         this.commitMutation(strings.undo.editEvent(auditPersonName(person)));
         AuditLogManager.log(this.currentTreeId, 'event.update', strings.auditLog.updatedEvent(auditPersonName(person)));
         return copies.length;
@@ -3207,6 +3223,8 @@ class DataManagerClass {
         const kept = person[field]!.filter(id => id !== sourceId);
         if (kept.length > 0) person[field] = kept;
         else delete person[field];
+        // The citation's own QUAY and its being the main one go with it.
+        cleanCitationQuay(person, PERSON_CITATION_FIELDS);
         this.commitMutation(strings.undo.uncite(auditPersonName(person)));
         AuditLogManager.log(this.currentTreeId, 'source.uncite', strings.auditLog.uncitedSource(auditPersonName(person)));
         return true;
@@ -3239,9 +3257,53 @@ class DataManagerClass {
         const kept = partnership[field]!.filter(id => id !== sourceId);
         if (kept.length > 0) partnership[field] = kept;
         else delete partnership[field];
+        cleanCitationQuay(partnership, PARTNERSHIP_CITATION_FIELDS);
         const names = this.partnershipNames(partnership);
         this.commitMutation(strings.undo.uncite(names));
         AuditLogManager.log(this.currentTreeId, 'source.uncite', strings.auditLog.uncitedSource(names));
+        return true;
+    }
+
+    /**
+     * The main citation of a fact (spec 095, data v21): the source id the
+     * fact's list marks as its main citation, if it is still cited there.
+     * Undefined for a person's own citations (no fact) or none marked.
+     */
+    citationMainAt(ref: CitationRef): string | undefined {
+        const info = citationFact(this.data, ref);
+        return info?.isFact ? citationMainOf(info.holder as CitationHolder & Partial<Record<string, string[]>>, info.field) : undefined;
+    }
+
+    /**
+     * Mark a fact's citation of `sourceId` as its main citation, or (null)
+     * take the mark away: one undo step. A fact has at most one main citation
+     * (a new one replaces the old); the stored order of the citations is not
+     * changed. A shared event's main citation is common to its copies (a
+     * locked person's copy is left as it is, as citeEvent). False when
+     * nothing changed or it is refused (a locked person or tree, a source not
+     * cited there, a person's own citations).
+     */
+    setCitationMain(ref: CitationRef, sourceId: string | null): boolean {
+        const info = citationFact(this.data, ref);
+        if (!info?.isFact) return false;
+        if (sourceId !== null && !info.sourceIds.includes(sourceId)) return false;
+        const now = citationMainOf(info.holder as CitationHolder & Partial<Record<string, string[]>>, info.field);
+        if ((now ?? null) === sourceId) return false;
+        if ('personId' in ref ? this.isPersonLocked(ref.personId) : this.isTreeLocked()) return false;
+
+        this.beginMutation();
+        const holders: CitationHolder[] = [info.holder];
+        if ('personId' in ref && ref.eventId) {
+            for (const c of this.eventCopies(ref.personId, ref.eventId) ?? []) {
+                if (c.event === info.event || this.isPersonLocked(c.personId)) continue;
+                if (sourceId !== null && !c.event.sourceIds?.includes(sourceId)) continue;
+                holders.push(c.event);
+            }
+        }
+        for (const h of holders) putCitationMain(h, info.field, sourceId);
+        const name = info.person ? auditPersonName(info.person) : this.partnershipNames(info.partnership!);
+        const fact = info.label ?? (info.word ? strings.events.typesOf[info.word] : '');
+        this.commitMutation(sourceId !== null ? strings.undo.citeMain(fact, name) : strings.undo.citeMainClear(fact, name));
         return true;
     }
 
@@ -3508,6 +3570,7 @@ class DataManagerClass {
         this.beginMutation();
         Object.assign(ev, updates);
         dropUndefinedKeys(ev);
+        cleanCitationMain(ev, ['sourceIds']);
         if (ev.participants?.length === 0) delete ev.participants;
         if (ev.ages && Object.keys(ev.ages).length === 0) delete ev.ages;
         const names = this.partnershipNames(partnership);
