@@ -28666,6 +28666,42 @@
         .queue-work__first-label { font-size: 12px; color: var(--text-light); }
         .queue-work__first-task { font-size: 14px; color: var(--text); line-height: 1.4; overflow-wrap: anywhere; }
         .queue-work__session { margin-top: 4px; font-size: 12px; color: var(--text-light); }
+        /* "More (n)" under First up and the tasks it unfolds (the dialog's body scrolls, no inner scroll area). */
+        /* Over the dialogs' button padding and size (.modal button). */
+        .modal button.queue-work__more-btn {
+            display: inline-flex; align-items: center; gap: 4px; margin: 4px 0 0 -2px; padding: 2px;
+            font-size: 12.5px; font-weight: 600; color: var(--primary); text-decoration: none;
+        }
+        .queue-work__more-btn .queue-work__chev {
+            width: 0; height: 0; border: 4px solid transparent; border-top-color: currentColor; border-bottom: 0;
+            margin-top: 1px; transition: transform .15s;
+        }
+        .queue-work__more-btn[aria-expanded="true"] .queue-work__chev { transform: rotate(180deg); }
+        @media (hover: hover) {
+            .queue-work__more-btn:hover .queue-work__more-label { text-decoration: underline; text-underline-offset: 2px; }
+        }
+        .queue-work__more-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; border-radius: 3px; }
+        @media (prefers-reduced-motion: reduce) { .queue-work__more-btn .queue-work__chev { transition: none; } }
+        .queue-work__more { margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--divider); }
+        .queue-work__more[hidden] { display: none; }
+        .queue-work__more-head { font-size: 12px; color: var(--text-light); }
+        .queue-work__more-hint { font-size: 12px; color: var(--text-faint); margin-top: 1px; }
+        .queue-work__more-list { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+        .queue-work__more-row { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+        .queue-work__pos {
+            flex: none; min-width: 3ch; text-align: right; font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums;
+        }
+        .queue-work__more-text { flex: 1; min-width: 0; font-size: 13px; line-height: 1.4; color: var(--text); overflow-wrap: anywhere; }
+        .queue-work__more-text > strong { font-weight: 600; font-variant-numeric: tabular-nums; }
+        .queue-work__sr {
+            position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+        }
+        .queue-work__more-rest { margin: 8px 0 0; font-size: 12px; color: var(--text-light); }
+        .queue-work__more-rest .link-button { padding: 0; font-size: 12px; }
+        @media (pointer: coarse) {
+            .modal button.queue-work__more-btn { min-height: 44px; padding: 0 2px; }
+            .queue-work__more-rest .link-button { min-height: 44px; }
+        }
         #queue-work-modal .modal .buttons.queue-work__foot { flex-wrap: wrap; align-items: center; }
         /* The sentence over the buttons across the whole width, the buttons in one row under it (5d, 5f). */
         .queue-work__confirm { flex: 1 1 100%; margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-light); }

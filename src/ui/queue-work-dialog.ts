@@ -15,10 +15,10 @@
 import { strings } from '../strings.js';
 import {
     RUN_TASKS_FEATURE, WORK_LINK_FEATURE, WORK_TASKS_MAX, WORK_TASKS_MIN, researchLinkMark, workTasksCount,
-    type LiveBusy, type LiveQueueItem, type LiveWork, type ResearchLinkParams,
+    type LiveBusy, type LiveQueueCounts, type LiveQueueItem, type LiveWork, type ResearchLinkParams,
 } from '../research-link.js';
 import { uiModule } from './module.js';
-import { el, liveSession, type LiveSession } from './research-ui.js';
+import { el, liveSession, queueKindText, type LiveSession } from './research-ui.js';
 import { overviewMode } from './research-overview-ui.js';
 import { normalizeModal } from './modal-skeleton.js';
 import { researchActionLabel, setResearchActionLabel } from './research-open-mark.js';
@@ -33,6 +33,8 @@ export interface QueueWorkState {
     busy?: LiveBusy;
     work?: LiveWork;
     queue: readonly LiveQueueItem[];
+    /** The whole queue's counts (`queue.page`): how many tasks are up next beyond the status's twenty. */
+    queueCounts?: LiveQueueCounts;
 }
 
 /** Where the offer stands: none, the action, or "At work ›" in its place. */
@@ -74,6 +76,63 @@ export function queueWorkCounted(state: QueueWorkState): boolean {
 export function queueWorkFirst(queue: readonly LiveQueueItem[]): LiveQueueItem | null {
     const next = queue.filter(q => q.state === 'next');
     return next.find(q => q.own === 'next') ?? next.find(q => q.pos === 1) ?? next[0] ?? null;
+}
+
+/** The status carries at most this many tasks (`sanitizeQueue`): a full one may leave some out. */
+const STATUS_QUEUE_FULL = 20;
+
+/** The tasks after the first, in the research's order: up next, not "never", without the first. */
+export function queueWorkMore(queue: readonly LiveQueueItem[], first: LiveQueueItem | null): LiveQueueItem[] {
+    const rest = queue.filter(q => q.state === 'next' && q.offLine !== 'never' && q !== first);
+    const own = rest.filter(q => q.own === 'next');
+    const others = rest.filter(q => q.own !== 'next');
+    // With `pos`: by it (a task without one after those with one, in the status's order; the sort is stable);
+    // without: the status's order.
+    const byPos = others.some(q => q.pos !== undefined)
+        ? [...others].sort((a, b) => (a.pos ?? Infinity) - (b.pos ?? Infinity)) : others;
+    return [...own, ...byPos];
+}
+
+/** The count in "More (n)": "12", "19+" (an older research's full status without counts), or null: no button. */
+export function queueWorkMoreCount(state: QueueWorkState, more: readonly LiveQueueItem[]): string | null {
+    if (more.length === 0) return null;
+    const total = state.queueCounts?.next;
+    if (total !== undefined) return String(Math.max(more.length, total - 1));
+    return state.queue.length >= STATUS_QUEUE_FULL ? `${more.length}+` : String(more.length);
+}
+
+/** Tasks up next past those listed (null: not known). */
+export function queueWorkRest(state: QueueWorkState, more: readonly LiveQueueItem[]): number | null {
+    const total = state.queueCounts?.next;
+    return total === undefined ? null : Math.max(0, total - 1 - more.length);
+}
+
+/** The unfolded list under First up: its heading, the rows and what lies beyond them (hidden until More). */
+function queueWorkMoreHtml(state: QueueWorkState, more: readonly LiveQueueItem[]): string {
+    const L = strings.live;
+    const placed = more.some(q => q.pos !== undefined);
+    const rows = more.map(q => {
+        const kind = queueKindText(q);
+        const tags = `${q.own === 'next' ? ` <span class="research-queue__tag-next">${esc(L.queueTagNext)}</span>` : ''}${kind
+            ? ` <span class="live-queue-kind" data-kind="${esc(q.kind ?? '')}">${esc(kind)}</span>` : ''}`;
+        return `
+                        <li class="queue-work__more-row">
+                            <span class="queue-work__pos" aria-hidden="true">${q.pos !== undefined ? `${q.pos}.` : '–'}</span>
+                            <span class="queue-work__more-text"><strong>${esc(q.id)}</strong> ${esc(q.text)}${tags}${q.pos !== undefined
+                                ? `<span class="queue-work__sr">, ${esc(L.branchQueuePos(q.pos))}</span>` : ''}</span>
+                        </li>`;
+    }).join('');
+    const rest = queueWorkRest(state, more);
+    const restText = rest !== null && rest > 0 ? L.queueWorkRest(rest)
+        : rest === null && state.queue.length >= STATUS_QUEUE_FULL ? L.queueWorkRestUnknown : '';
+    return `
+                    <div class="queue-work__more" id="queue-work-more" hidden>
+                        <div class="queue-work__more-head" id="queue-work-more-head">${esc(placed ? L.queueWorkThen : L.queueWorkByQueue)}</div>
+                        ${placed ? '' : `<div class="queue-work__more-hint">${esc(L.queueWorkByQueueHint)}</div>`}
+                        <ol class="queue-work__more-list" aria-labelledby="queue-work-more-head">${rows}
+                        </ol>
+                        ${restText ? `<p class="queue-work__more-rest">${esc(restText)} · <button type="button" class="link-button queue-work__overview" id="queue-work-overview">${esc(L.queueWorkOverview)}</button></p>` : ''}
+                    </div>`;
 }
 
 /** "Session up to 1 h · gate: …": the parts the bridge says (none: no line). */
@@ -175,6 +234,9 @@ export const queueWorkMethods = uiModule({
         const counted = queueWorkCounted(state);
         const noGate = !!state.work && state.work.gate === null;
         const first = queueWorkFirst(state.queue);
+        // The tasks after it (not the count in "Only [n] tasks"): folded at every opening.
+        const more = queueWorkMore(state.queue, first);
+        const moreCount = queueWorkMoreCount(state, more);
         const session = queueWorkSessionLine(state.work);
         const n0 = WORK_TASKS_DEFAULT;
         const overlay = document.createElement('div');
@@ -208,6 +270,7 @@ export const queueWorkMethods = uiModule({
                 <div class="queue-work__first">
                     ${first ? `<div class="queue-work__first-label">${esc(L.queueWorkFirst)}</div>
                     <div class="queue-work__first-task"><strong>${esc(first.id)}</strong> ${esc(first.text)}</div>` : ''}
+                    ${moreCount !== null ? `<button type="button" class="link-button queue-work__more-btn" id="queue-work-more-btn" aria-expanded="false" aria-controls="queue-work-more" aria-label="${esc(L.queueWorkMoreAria(moreCount))}"><span class="queue-work__more-label">${esc(L.queueWorkMore(moreCount))}</span><span class="queue-work__chev" aria-hidden="true"></span></button>${queueWorkMoreHtml(state, more)}` : ''}
                     ${session ? `<div class="queue-work__session">${esc(session)}</div>` : ''}
                 </div>` : ''}
                 <div class="buttons queue-work__foot">
@@ -257,6 +320,26 @@ export const queueWorkMethods = uiModule({
             e.stopPropagation();
             close();
         });
+        // "More (n)" ↔ "Hide more": the list unfolds under it, the focus stays on it.
+        const moreBtn = overlay.querySelector<HTMLButtonElement>('#queue-work-more-btn');
+        const moreBox = overlay.querySelector<HTMLElement>('#queue-work-more');
+        if (moreBtn && moreBox && moreCount !== null) {
+            moreBtn.onclick = () => {
+                const open = moreBox.hidden;
+                moreBox.hidden = !open;
+                moreBtn.setAttribute('aria-expanded', String(open));
+                moreBtn.setAttribute('aria-label', open ? L.queueWorkLess : L.queueWorkMoreAria(moreCount));
+                moreBtn.querySelector('.queue-work__more-label')!.textContent = open ? L.queueWorkLess : L.queueWorkMore(moreCount);
+                if (open) moreBtn.scrollIntoView?.({ block: 'nearest' });
+            };
+        }
+        const toOverview = overlay.querySelector<HTMLButtonElement>('#queue-work-overview');
+        if (toOverview) {
+            toOverview.onclick = () => {
+                this.closeQueueWorkDialog(false);
+                this.showOverviewQueue();
+            };
+        }
         overlay.querySelector<HTMLButtonElement>('#queue-work-close-x')!.onclick = close;
         overlay.querySelector<HTMLButtonElement>('#queue-work-cancel')!.onclick = close;
         open.onclick = () => {

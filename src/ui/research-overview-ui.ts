@@ -434,6 +434,26 @@ export const researchOverviewMethods = uiModule({
         else heading?.focus({ preventScroll: true });
     },
 
+    /**
+     * "Research overview ›" under the queue's tasks in "Work on the queue": the overview (open
+     * already when the dialog came from it) with its Queue unfolded, its heading at the top and focused.
+     */
+    showOverviewQueue(): void {
+        if (overviewInWindow()) {
+            this.openResearchOverview();
+            return;
+        }
+        if (!this.isResearchOverviewOpen()) this.openResearchOverview();
+        if (!drawnSession()) return;
+        this.unfoldOverviewSection('queue');
+        this.renderLivePanel();
+        const body = document.querySelector<HTMLElement>('#research-overview .research-overview__body');
+        const heading = body?.querySelector<HTMLElement>('[aria-controls="ov-sec-queue"]');
+        if (!body || !heading) return;
+        scrollHeadingToTop(body, heading);
+        heading.focus({ preventScroll: true });
+    },
+
     /** "Awaiting action" in the open overview, shown until it closes (the choice stays), in view and focused. */
     showOverviewWaiting(): void {
         const s = drawnSession();

@@ -347,3 +347,134 @@ test.describe('Work on the queue in the overview\'s own window', () => {
         await popup.close();
     });
 });
+
+/**
+ * "More (n)" under First up (the queue's tasks after the first, in the
+ * research's order, not tied to "Only [n] tasks"): folded at every opening,
+ * unfolded in the dialog's body (no scroll area of its own), the focus kept
+ * on the button; with places and counts (`queue.page`) numbered "2.", "3." …
+ * and what lies beyond named with a way to the overview's Queue.
+ */
+test.describe('More under First up', () => {
+    const MORE_QUEUE = [
+        { id: 'T0101', text: 'Matriky Smrkov', state: 'next', research: 'G0001' },
+        { id: 'T0102', text: 'Kdo byl Josef Fíšek', state: 'next', research: 'G0002', kind: 'history' },
+        { id: 'T0103', text: 'Příběh Marie Fíškové', state: 'next', research: 'G0001', own: 'next', kind: 'story' },
+        { id: 'T0104', text: 'Sčítání lidu Smrkov 1880', state: 'next', research: 'G0001', own: 'next' },
+        { id: 'T0105', text: 'Pozemková kniha Smrkov', state: 'next', offLine: 'never' },
+        { id: 'T0106', text: 'Křest Jana Fíška', state: 'parked', research: 'G0001' },
+    ];
+    const moreBtn = (page: Page) => dialog(page).locator('#queue-work-more-btn');
+    const moreBox = (page: Page) => dialog(page).locator('#queue-work-more');
+    const rows = (page: Page) => moreBox(page).locator('.queue-work__more-row');
+
+    test('folded: More (3); unfolded in the research\'s order without places; the count does not change it; Escape closes; folded again', async ({ page }) => {
+        await follow(page, { features: [...WORK, 'queue.next', 'tasks.offLine'], queue: MORE_QUEUE });
+        await workBtn(page).click();
+        await expect(dialog(page).locator('.queue-work__first-task')).toHaveText('T0103 Příběh Marie Fíškové');
+        const btn = moreBtn(page);
+        await expect(btn).toHaveText('More (3)');
+        await expect(btn).toHaveAttribute('aria-expanded', 'false');
+        await expect(btn).toHaveAccessibleName('More tasks in the queue: 3');
+        await expect(btn.locator('.research-open-mark, .research-ai-badge')).toHaveCount(0);
+        await expect(moreBox(page)).toBeHidden();
+        // Under the task, above the session's line.
+        expect(await btn.evaluate(b => b.previousElementSibling?.classList.contains('queue-work__first-task'))).toBe(true);
+        await btn.click();
+        await expect(moreBox(page)).toBeVisible();
+        await expect(btn).toHaveAttribute('aria-expanded', 'true');
+        await expect(btn).toHaveText('Hide more');
+        await expect(btn).toBeFocused();
+        // Without places: "In queue order", the hint, dashes; the other one set next first, the kind; no "never", no parked.
+        await expect(moreBox(page).locator('.queue-work__more-head')).toHaveText('In queue order');
+        await expect(moreBox(page).locator('.queue-work__more-hint')).toHaveText('The agent may take them in another order.');
+        await expect(rows(page).locator('.queue-work__more-text')).toHaveText([
+            'T0104 Sčítání lidu Smrkov 1880 next', 'T0101 Matriky Smrkov', 'T0102 Kdo byl Josef Fíšek history',
+        ]);
+        await expect(rows(page).locator('.queue-work__pos')).toHaveText(['–', '–', '–']);
+        await expect(moreBox(page).locator('.queue-work__more-rest')).toHaveCount(0);
+        // The count chooses Only n tasks, the list stays.
+        await dialog(page).getByRole('spinbutton', { name: 'Number of tasks' }).fill('1');
+        await expect(rows(page)).toHaveCount(3);
+        // Folded again by the same button.
+        await btn.click();
+        await expect(moreBox(page)).toBeHidden();
+        await expect(btn).toHaveText('More (3)');
+        await btn.click();
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#queue-work-modal')).toHaveCount(0);
+        await expect(workBtn(page)).toBeFocused();
+        // A new opening: folded.
+        await workBtn(page).click();
+        await expect(moreBtn(page)).toHaveAttribute('aria-expanded', 'false');
+        await expect(moreBox(page)).toBeHidden();
+    });
+
+    test('no more tasks: no button', async ({ page }) => {
+        await follow(page, { queue: [QUEUE[0]] });
+        await workBtn(page).click();
+        await expect(dialog(page).locator('.queue-work__first-task')).toHaveText('T0101 Matriky Smrkov');
+        await expect(moreBtn(page)).toHaveCount(0);
+        await expect(moreBox(page)).toHaveCount(0);
+    });
+
+    for (const width of [1440, 1024]) {
+        test(`${width} px, a long queue with places: numbered, the rest named, the foot in place, Research overview › to the Queue`, async ({ page }) => {
+            const queue = Array.from({ length: 57 }, (_, i) => ({
+                id: `T${String(201 + i).padStart(4, '0')}`, text: `Matriky Smrkov, svazek ${i + 1}`, state: 'next', research: 'G0001',
+            }));
+            await follow(page, { features: [...WORK, 'queue.page'], queue, paged: true, size: { width, height: 900 } });
+            await workBtn(page).click();
+            const btn = moreBtn(page);
+            // 57 up next, the first not counted.
+            await expect(btn).toHaveText('More (56)');
+            await btn.click();
+            await expect(moreBox(page).locator('.queue-work__more-head')).toHaveText('Then');
+            await expect(moreBox(page).locator('.queue-work__more-hint')).toHaveCount(0);
+            // The status's window: the first and 13 after it.
+            await expect(rows(page)).toHaveCount(13);
+            await expect(rows(page).first().locator('.queue-work__pos')).toHaveText('2.');
+            await expect(rows(page).last().locator('.queue-work__pos')).toHaveText('14.');
+            await expect(rows(page).first().locator('.queue-work__more-text')).toHaveText('T0202 Matriky Smrkov, svazek 2, 2 in the queue');
+            await expect(moreBox(page).locator('.queue-work__more-rest')).toHaveText('and 43 more tasks in the queue · Research overview ›');
+            await expect(btn).toBeFocused();
+            // Nothing wider than the dialog; the dialog within the window, its foot in view.
+            const modal = page.locator('#queue-work-modal .modal');
+            expect(await modal.evaluate(m => m.scrollWidth <= m.clientWidth)).toBe(true);
+            const box = (await modal.boundingBox())!;
+            expect(box.y + box.height).toBeLessThanOrEqual(900);
+            await expect(dialog(page).locator('#queue-work-open')).toBeInViewport();
+            const go = moreBox(page).locator('#queue-work-overview');
+            await expect(go.locator('.research-open-mark, .research-ai-badge')).toHaveCount(0);
+            await go.click();
+            await expect(page.locator('#queue-work-modal')).toHaveCount(0);
+            await expect(queueHead(page)).toBeFocused();
+            await expect(queueHead(page)).toHaveAttribute('aria-expanded', 'true');
+        });
+    }
+
+    test('the overview\'s own window 390 px wide: the unfolded list within it', async ({ page }) => {
+        const queue = Array.from({ length: 30 }, (_, i) => ({
+            id: `T${String(301 + i).padStart(4, '0')}`, text: `Matriky Smrkov, oddací kniha svazek ${i + 1} (1850–1860), farnost Smrkov`, state: 'next', research: 'G0001',
+        }));
+        await followManaged(page, { features: [...WORK, 'queue.page'], links: ['work'], queue, paged: true });
+        await page.locator('#view-window-btn').click();
+        const [popup] = await Promise.all([page.waitForEvent('popup'), page.locator('#view-window-menu [data-view="overview"]').click()]);
+        await popup.waitForLoadState('domcontentloaded');
+        await popup.setViewportSize({ width: 390, height: 844 });
+        const ov = popup.locator('#research-overview.research-overview--window');
+        await expect(ov).toBeVisible();
+        const head = ov.locator('.live-section__head[aria-controls="ov-sec-queue"]');
+        if (await head.getAttribute('aria-expanded') === 'false') await head.click();
+        await ov.locator('.queue-work-btn').click();
+        const d = popup.locator('#queue-work-modal [role="dialog"]');
+        await expect(d).toBeVisible();
+        await d.locator('#queue-work-more-btn').click();
+        await expect(d.locator('.queue-work__more-row')).toHaveCount(13);
+        const modal = popup.locator('#queue-work-modal .modal');
+        expect(Math.round((await modal.boundingBox())!.width)).toBe(366);
+        expect(await modal.evaluate(m => m.scrollWidth <= m.clientWidth)).toBe(true);
+        await expect(d.locator('#queue-work-open')).toBeInViewport();
+        await popup.close();
+    });
+});

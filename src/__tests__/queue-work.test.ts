@@ -10,7 +10,8 @@ import {
     type LiveQueueItem,
 } from '../research-link.js';
 import {
-    queueWorkCounted, queueWorkFirst, queueWorkOffer, queueWorkParams, queueWorkSessionLine, type QueueWorkContext, type QueueWorkState,
+    queueWorkCounted, queueWorkFirst, queueWorkMore, queueWorkMoreCount, queueWorkOffer, queueWorkParams, queueWorkRest, queueWorkSessionLine,
+    type QueueWorkContext, type QueueWorkState,
 } from '../ui/queue-work-dialog.js';
 import { setLanguage, strings } from '../strings.js';
 
@@ -120,6 +121,74 @@ describe('what the dialog shows', () => {
         expect(words()).toEqual(['Aufgabe', 'Aufgaben', 'Aufgaben']);
         setLanguage('pl');
         expect(words()).toEqual(['zadanie', 'zadania', 'zadań']);
+        setLanguage('en');
+    });
+});
+
+describe('More under First up', () => {
+    beforeEach(() => setLanguage('en'));
+    const counts = (next: number) => ({ research: {}, branch: {}, next, parked: 0, rev: '0123456789abcdef' });
+    const ids = (q: readonly LiveQueueItem[]) => q.map(x => x.id);
+
+    it('the tasks after the first: not parked, not "never", the one set next first, then by place', () => {
+        const queue = [
+            task('T1', { pos: 1 }), task('T2', { state: 'parked' }), task('T3', { pos: 4 }), task('T4', { pos: 3, offLine: 'never' }),
+            task('T5', { pos: 2 }), task('T6', { own: 'next' }), task('T7'),
+        ];
+        const first = queueWorkFirst(queue);
+        expect(first!.id).toBe('T6');
+        // T6 is the first: T1 comes after it; a task without a place after those with one.
+        expect(ids(queueWorkMore(queue, first))).toEqual(['T1', 'T5', 'T3', 'T7']);
+        // A second task set next stays before the placed ones.
+        const two = [task('T1', { pos: 1 }), task('T2', { own: 'next', pos: 3 }), task('T3', { own: 'next', pos: 2 })];
+        expect(ids(queueWorkMore(two, queueWorkFirst(two)))).toEqual(['T3', 'T1']);
+    });
+
+    it('without places: the status\'s order, stable', () => {
+        const queue = [task('T9'), task('T2'), task('T5', { state: 'parked' }), task('T4')];
+        expect(ids(queueWorkMore(queue, queueWorkFirst(queue)))).toEqual(['T2', 'T4']);
+        const alone = [task('T1')];
+        expect(queueWorkMore(alone, queueWorkFirst(alone))).toEqual([]);
+        expect(queueWorkMore([], null)).toEqual([]);
+    });
+
+    it('the count: none without more, the counts\' next less the first, "n+" for a full status without counts', () => {
+        const state = (queue: LiveQueueItem[], extra: Partial<QueueWorkState> = {}): QueueWorkState => ({ queue, ...extra });
+        const one = [task('T1')];
+        expect(queueWorkMoreCount(state(one), queueWorkMore(one, one[0]))).toBeNull();
+        const three = [task('T1'), task('T2'), task('T3')];
+        const more3 = queueWorkMore(three, three[0]);
+        expect(queueWorkMoreCount(state(three), more3)).toBe('2');
+        expect(queueWorkMoreCount(state(three, { queueCounts: counts(57) }), more3)).toBe('56');
+        // Counts behind what is listed (a status between two counts): never fewer than the rows.
+        expect(queueWorkMoreCount(state(three, { queueCounts: counts(1) }), more3)).toBe('2');
+        const full = Array.from({ length: 20 }, (_, i) => task(`T${i + 1}`));
+        expect(queueWorkMoreCount(state(full), queueWorkMore(full, full[0]))).toBe('19+');
+        expect(queueWorkMoreCount(state(full, { queueCounts: counts(20) }), queueWorkMore(full, full[0]))).toBe('19');
+    });
+
+    it('the rest past the rows: unknown without counts, never below 0', () => {
+        const three = [task('T1'), task('T2'), task('T3')];
+        const more = queueWorkMore(three, three[0]);
+        expect(queueWorkRest({ queue: three }, more)).toBeNull();
+        expect(queueWorkRest({ queue: three, queueCounts: counts(57) }, more)).toBe(54);
+        expect(queueWorkRest({ queue: three, queueCounts: counts(3) }, more)).toBe(0);
+        expect(queueWorkRest({ queue: three, queueCounts: counts(1) }, more)).toBe(0);
+    });
+
+    it('its words in every language', () => {
+        const L = () => strings.live;
+        expect([L().queueWorkMore('12'), L().queueWorkLess, L().queueWorkRest(1), L().queueWorkRest(37)])
+            .toEqual(['More (12)', 'Hide more', 'and 1 more task in the queue', 'and 37 more tasks in the queue']);
+        setLanguage('cs');
+        expect([L().queueWorkMore('19+'), L().queueWorkLess, L().queueWorkRest(1), L().queueWorkRest(3), L().queueWorkRest(37)])
+            .toEqual(['Další (19+)', 'Skrýt další', 'a ještě 1 úkol ve frontě', 'a ještě 3 úkoly ve frontě', 'a ještě 37 úkolů ve frontě']);
+        setLanguage('de');
+        expect([L().queueWorkMore('12'), L().queueWorkRest(1), L().queueWorkRest(37)])
+            .toEqual(['Weitere (12)', 'und 1 weitere Aufgabe in der Warteschlange', 'und 37 weitere Aufgaben in der Warteschlange']);
+        setLanguage('pl');
+        expect([L().queueWorkMore('12'), L().queueWorkRest(1), L().queueWorkRest(3), L().queueWorkRest(37)])
+            .toEqual(['Kolejne (12)', 'i jeszcze 1 zadanie w kolejce', 'i jeszcze 3 zadania w kolejce', 'i jeszcze 37 zadań w kolejce']);
         setLanguage('en');
     });
 });
