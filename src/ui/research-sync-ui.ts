@@ -1607,9 +1607,11 @@ export const researchSyncMethods = uiModule({
             if (sendingTree !== treeId && DataManager.getCurrentTreeId() === treeId) this.scheduleResearchAutoSend(treeId);
             return;
         }
-        // While a switch reads another tree nothing goes: the changes wait for the next answer of the
-        // bridge (or the switch's own send of the tree left).
-        if (DataManager.isSwitchingTree()) {
+        // While a switch reads this tree to open it, it does not go: its changes wait for the next answer
+        // of the bridge once it is open. Any other tree goes as ever — the open one with its own data
+        // (getDataFor), another read from storage — so the tree left, sent as the switch starts, is not
+        // held back by a switch that follows at once.
+        if (DataManager.isSwitchingTo(treeId)) {
             autoDue.add(treeId);
             return;
         }
@@ -1810,9 +1812,9 @@ export const researchSyncMethods = uiModule({
         const link = meta?.research;
         if (!link || sendingTree || meta?.demo) return;
         const s = strings.sync;
-        // Never while a switch reads another tree: what goes is the tree's own data, with its own id
-        // and link. Sent by itself, it waits for the next answer of the bridge.
-        if (DataManager.isSwitchingTree()) {
+        // Never while a switch reads this tree to open it: what goes is the tree's own data, with its own
+        // id and link. Sent by itself, it waits for the next answer of the bridge once it is open.
+        if (DataManager.isSwitchingTo(treeId)) {
             if (opts.auto) autoDue.add(treeId);
             return;
         }

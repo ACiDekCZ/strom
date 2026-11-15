@@ -76,6 +76,8 @@ import { StromData, TreeId, TreeMetadata, ResearchLink, PersonId } from '../type
 
 const DEMO = 'demo-tree' as TreeId;
 const LINKED = 'linked-tree' as TreeId;
+/** A third tree, no research (a switch to it is what holds). */
+const PLAIN = 'plain-tree' as TreeId;
 const RESEARCH = '6b2e9d14-3c7a-4f80-b1d5-8e0a2c4f6b93';
 
 function person(id: string, firstName: string, lastName: string, refn?: string): StromData['persons'][PersonId] {
@@ -159,8 +161,8 @@ function page(): typeof researchSyncMethods {
     }) as typeof researchSyncMethods;
 }
 
-/** Both trees stored, the example tree open (as after the switch to it). */
-async function start(): Promise<void> {
+/** The trees stored, the example tree open (as after the switch to it); reading `held` waits for `release()`. */
+async function start(held: TreeId = LINKED): Promise<void> {
     const sentBefore = contentFingerprint(linkedData(false));
     const link = { id: RESEARCH, head: 'h-1', fingerprint: sentBefore, syncedAt: '2026-11-15T13:00:00Z', sendMode: 'auto' } as ResearchLink;
     const tm = TreeManager as unknown as {
@@ -168,7 +170,7 @@ async function start(): Promise<void> {
         initialized: boolean; saveQueues: Map<TreeId, Promise<void>>; unreadableTrees: Set<TreeId>;
         unsettledSaves: Map<TreeId, unknown>; storedBases: Map<TreeId, unknown>;
     };
-    tm.index = { version: 1, activeTreeId: DEMO, trees: [meta(DEMO, 'Example'), meta(LINKED, 'Kvetonovsky', link)] };
+    tm.index = { version: 1, activeTreeId: DEMO, trees: [meta(DEMO, 'Example'), meta(LINKED, 'Kvetonovsky', link), meta(PLAIN, 'Plain')] };
     tm.initialized = true;
     tm.saveQueues = new Map();
     tm.unreadableTrees = new Set();
@@ -176,6 +178,7 @@ async function start(): Promise<void> {
     tm.storedBases = new Map();
     st('trees').set(DEMO, demoData());
     st('trees').set(LINKED, linkedData(true));
+    st('trees').set(PLAIN, { version: 19, persons: {}, partnerships: {} });
     localStorage.setItem('strom-research-bridge:' + RESEARCH, JSON.stringify({ base: 'http://127.0.0.1:47321/t0k3n' }));
     vi.spyOn(TreeManager, 'getStartupTreeId').mockReturnValue(DEMO);
     await (DataManager as unknown as { loadStartupTree: () => Promise<void> }).loadStartupTree();
@@ -184,7 +187,7 @@ async function start(): Promise<void> {
     const read = TreeManager.getTreeData.bind(TreeManager);
     const gate = new Promise<void>(resolve => { release = resolve; });
     vi.spyOn(TreeManager, 'getTreeData').mockImplementation(async (id: TreeId) => {
-        if (id === LINKED) await gate;
+        if (id === held) await gate;
         return read(id);
     });
 }
@@ -279,6 +282,32 @@ describe('switching to a tree tied to a research (1115-app-prepnuti-stromu)', ()
         expect((demo.persons['d1' as PersonId] as { notes?: string }).notes).toBe('Edited while switching');
         // The tree open now is the linked one, as stored.
         expect(Object.keys(DataManager.getData().persons).sort()).toEqual(['p1', 'p2', 'p3']);
+    });
+
+    it('a switch to another tree holds back only that tree: the research tree, not the one read, goes at once with its own people', async () => {
+        // The tree left just before is sent while a switch that follows at once reads a third tree
+        // (a tree made and opened, then a switch): it goes then, not only when it is opened again.
+        await start(PLAIN);
+        const ui = page();
+        const switching = DataManager.switchTree(PLAIN);
+        await settle();
+        expect(DataManager.isSwitchingTree()).toBe(true);
+        expect(DataManager.isSwitchingTo(PLAIN)).toBe(true);
+        expect(DataManager.isSwitchingTo(LINKED)).toBe(false);
+
+        await ui.researchAutoSend(LINKED, 'switch');
+        await settle();
+        expect(posts).toHaveLength(1);
+        expect(posts[0].url).toContain('/sync');
+        const ged = posts[0].body;
+        expect(ged).toContain('_STROM_APP_TREE ' + LINKED);
+        expect(ged).toContain('Kvetonovsky');
+        expect(ged).toContain('Miller at Kvetonov');
+        expect(ged).not.toContain('Vzorov');
+
+        release();
+        expect(await switching).toBe(true);
+        expect(DataManager.getCurrentTreeId()).toBe(PLAIN);
     });
 
     it('a later switch wins over one still reading: the tree opened is the last one asked', async () => {

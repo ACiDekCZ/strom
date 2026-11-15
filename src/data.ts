@@ -1287,6 +1287,15 @@ class DataManagerClass {
         return this.switchingTo !== null;
     }
 
+    /**
+     * A switch is reading tree `treeId` to open it. Only that tree waits for
+     * the switch: the open tree's data are its own until the switch ends
+     * (getDataFor), and any other tree is read from storage.
+     */
+    isSwitchingTo(treeId: TreeId): boolean {
+        return this.switchingTo === treeId;
+    }
+
     private createEmptyData(): StromData {
         return createEmptyData();
     }
