@@ -737,3 +737,49 @@ test('the one-time offer of Migration over time stands left of its button; Try i
     await expect(toggle).toBeVisible();
     await expect(tip).toHaveCount(0);
 });
+
+test('a change of the UI language while the map is open: its bar, kinds, time bar and the lines legend in the new language', async ({ page }) => {
+    await stubTiles(page);
+    await seedPathTree(page);
+    await choosePerson(page, 'Quillfen', /Tamsin/);
+    await expect(page.locator('.map-lines-legend')).toBeVisible();
+    // Built in English once; the language changes at run time (Settings), the map stays open
+    await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
+    const map = page.locator('#map-container');
+    await expect(map.locator('.map-zoom-in')).toHaveAttribute('aria-label', 'Vergrößern');
+    await expect(map.locator('.map-zoom-in')).toHaveAttribute('title', 'Vergrößern');
+    await expect(map.locator('.map-zoom-out')).toHaveAttribute('aria-label', 'Verkleinern');
+    await expect(map.locator('.map-fit')).toHaveAttribute('aria-label', 'Alle Orte einpassen');
+    await expect(map.locator('.map-time-toggle')).toHaveAttribute('aria-label', 'Migration im Zeitverlauf');
+    await expect(map.locator('.map-time-toggle-text')).toHaveText('Zeitverlauf');
+    await expect(map.locator('#map-scope-view')).toHaveText('Diese Ansicht');
+    await expect(map.locator('#map-scope-tree')).toHaveText('Ganzer Stammbaum');
+    await expect(map.locator('.map-path-chip-pre')).toHaveText('Weg zu:');
+    await expect(map.locator('.map-path-chip-open')).toHaveAttribute('title', 'Person ändern');
+    await expect(map.locator('.map-path-chip-clear')).toHaveAttribute('aria-label', 'Weg aufheben');
+    await expect(map.locator('.map-kind[data-kind="birth"] .map-kind-label')).toHaveText('Geburten');
+    await expect(map.locator('.map-kinds-row[data-kind="wedding"] .map-kinds-name')).toHaveText('Eheschließungen');
+    await expect(map.locator('.map-kinds')).toHaveAttribute('aria-label', 'Arten von Orten');
+    await expect(map.locator('.map-kinds-last')).toHaveText('Mindestens eine Art bleibt eingeschaltet.');
+    await expect(map.locator('.map-time-range')).toHaveAttribute('aria-label', 'Jahr');
+    await expect(map.locator('.map-time-play')).toHaveAttribute('aria-label', 'Abspielen');
+    await expect(map.locator('.map-path-btn-text')).toHaveText('Weg zu einer Person…');
+    await expect(map.locator('.map-lines-legend')).toHaveAttribute('aria-label', 'Stammlinien');
+    await expect(map.locator('.map-lines-title')).toHaveText('Stammlinien');
+    // No English left in the map's own texts and labels (names and places aside)
+    const english = await map.evaluate(root => {
+        const words = /\b(Zoom|Fit all|Over time|This view|Whole tree|Path to|Births|Deaths|Kinds|Play|Year|Family lines|Clear the path|Change person)\b/;
+        const out: string[] = [];
+        for (const el of root.querySelectorAll<HTMLElement>('*')) {
+            if (el.closest('.map-tiles, .map-markers, .map-attribution')) continue;
+            const own = [...el.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent ?? '').join(' ');
+            for (const t of [own, el.getAttribute('aria-label') ?? '', el.getAttribute('title') ?? '']) if (words.test(t)) out.push(t);
+        }
+        return out;
+    });
+    expect(english).toEqual([]);
+    // The controls still work: the scope's chip clears the path
+    await map.locator('.map-path-chip-clear').click();
+    await expect(map.locator('.map-path-chip')).toBeHidden();
+    await expect(map.locator('.map-path-btn')).toBeVisible();
+});

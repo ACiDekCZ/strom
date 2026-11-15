@@ -283,10 +283,11 @@ export const mapLinesLegendMethods = uiModule({
             if (!panel) {
                 panel = document.createElement('section');
                 panel.className = 'map-lines-legend';
-                panel.setAttribute('aria-label', strings.map.linesTitle);
                 container.appendChild(panel);
                 this.bindMapLinesLegend(panel);
             }
+            // Every rebuild: the language may have changed meanwhile (UI.setLanguage)
+            panel.setAttribute('aria-label', strings.map.linesTitle);
             panel.classList.toggle('map-lines-legend--sheet', phone);
             panel.classList.toggle('map-lines-legend--land', layout === 'land');
             if (phone) panel.setAttribute('role', 'dialog');

@@ -247,6 +247,10 @@ export const mapMethods = uiModule({
             this.bindMapTime(container);
             this.bindMapKinds(container);
             this.watchMapFloor(container);
+            container.dataset.mapLang = getCurrentLanguage();
+        } else if (container.dataset.mapLang !== getCurrentLanguage()) {
+            // The language changed while the map was built (UI.setLanguage): its bar in the new one
+            this.retranslateMapChrome(container);
         }
         this.renderMapKinds();
 
@@ -277,6 +281,49 @@ export const mapMethods = uiModule({
         this.applyMapFollowMarks();
         // The states the research knows (check marks, to confirm) come with its places.
         void this.refreshPlacesLive(LIVE_MAX_AGE_MS);
+    },
+
+    /**
+     * The map's own bar, built once with the canvas (zoom, the time mode,
+     * the scope, the kinds, the time bar, the path's chip and button), in
+     * the language now: a change of the UI language at run time (the rest
+     * of the map is drawn anew by every render). Its controls and their
+     * bindings stay.
+     */
+    retranslateMapChrome(container: HTMLElement): void {
+        const m = strings.map;
+        const label = (sel: string, text: string, title = true): void => {
+            container.querySelectorAll<HTMLElement>(sel).forEach(el => {
+                el.setAttribute('aria-label', text);
+                if (title) el.title = text;
+            });
+        };
+        const text = (sel: string, value: string): void => {
+            container.querySelectorAll<HTMLElement>(sel).forEach(el => { el.textContent = value; });
+        };
+        label('.map-zoom-in', m.zoomIn);
+        label('.map-zoom-out', m.zoomOut);
+        label('.map-fit', m.fit);
+        label('.map-time-toggle', m.timeMode, false);
+        text('.map-time-toggle-text', m.timeModeShort);
+        text('#map-scope-view', m.scopeView);
+        text('#map-scope-tree', m.scopeTree);
+        container.querySelectorAll<HTMLElement>('.map-path-chip-open').forEach(el => { el.title = m.pathChange; });
+        text('.map-path-chip-pre', m.pathChip);
+        label('.map-path-chip-clear', m.pathClear);
+        label('.map-kinds, .map-kinds-menu', m.kindsAria, false);
+        container.querySelectorAll<HTMLElement>('.map-kind, .map-kinds-row').forEach(el => {
+            const kind = el.dataset.kind;
+            if (!isMapKind(kind)) return;
+            el.querySelectorAll<HTMLElement>('.map-kind-label, .map-kinds-name').forEach(n => { n.textContent = m.kinds[kind]; });
+            el.querySelectorAll<HTMLElement>('.map-kinds-hint').forEach(n => { n.textContent = m.kindHint[kind]; });
+        });
+        text('.map-kinds-last', m.kindsLastOn);
+        label('.map-time-range', m.timeYear, false);
+        label('.map-path-btn', m.pathPick);
+        text('.map-path-btn-text', m.pathPick);
+        this.updateMapTimePlayIcon();
+        container.dataset.mapLang = getCurrentLanguage();
     },
 
     /** The research's places changed: the open map redraws its marks, bar and bubble. */
