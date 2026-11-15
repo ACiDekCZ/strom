@@ -20,7 +20,7 @@ async function tree(page: Page, opts: Opts = {}): Promise<void> {
         await window.Strom.DataManager.importAsNewTree({
             persons: {
                 r: {
-                    id: 'r', firstName: 'Radim', lastName: 'Ostružník', gender: 'male', isPlaceholder: false,
+                    id: 'r', firstName: 'Hostivít', lastName: 'Ostružník', gender: 'male', isPlaceholder: false,
                     partnerships: [], parentIds: [], childIds: [],
                     birthDate: '1871-03-04', birthPlace: 'Vrbovec', birthStatus: 'probable',
                     // The list's own order: the census, the death record, the birth record.

@@ -431,6 +431,18 @@ export interface ResearchNotWritten {
     /** Changes it counted but neither wrote nor named. */
     unexplained: number;
     seen?: true;
+    /** Told by a research with `sync.notWritten.codes`: its items carry codes (a send that wrote nothing is "not taken"). */
+    codes?: true;
+}
+
+/** A kept item's params: short words by short keys (at most 12), or null when none. */
+function storedParams(value: unknown): Record<string, string> | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>).slice(0, 12)) {
+        if (/^[a-z][a-zA-Z]{0,19}$/.test(k) && typeof v === 'string' && v.trim()) out[k] = v.slice(0, 200);
+    }
+    return Object.keys(out).length ? out : null;
 }
 
 /** The tie as it stood before the research's version was loaded: what a restore of that backup builds on again (V-B). */
@@ -618,9 +630,13 @@ export function researchAutoState(treeId: string): ResearchAutoState {
                         ...(typeof i.source === 'string' && /^(S\d{1,9}|@[A-Za-z0-9_-]{1,20}@)$/.test(i.source) ? { source: i.source } : {}),
                         ...(typeof i.sourceId === 'string' && i.sourceId ? { sourceId: i.sourceId.slice(0, 80) } : {}),
                         ...(typeof i.place === 'string' && i.place.trim() ? { place: i.place.slice(0, 200) } : {}),
-                        ...(typeof i.removedBy === 'string' && /^I\d{1,9}$/.test(i.removedBy) ? { removedBy: i.removedBy } : {}) })),
+                        ...(typeof i.removedBy === 'string' && /^I\d{1,9}$/.test(i.removedBy) ? { removedBy: i.removedBy } : {}),
+                        ...(typeof i.code === 'string' && /^[A-Za-z][A-Za-z0-9.-]{0,47}$/.test(i.code) ? { code: i.code } : {}),
+                        ...(storedParams(i.params) ? { params: storedParams(i.params)! } : {}),
+                        ...(i.skipped === true ? { skipped: true as const } : {}) })),
                 unexplained: typeof nw.unexplained === 'number' && nw.unexplained > 0 ? Math.floor(nw.unexplained) : 0,
                 ...(nw.seen === true ? { seen: true as const } : {}),
+                ...(nw.codes === true ? { codes: true as const } : {}),
             };
         }
         return out;

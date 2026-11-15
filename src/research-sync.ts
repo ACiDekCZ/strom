@@ -6,7 +6,8 @@
  */
 
 import { ResearchLink, ResearchSend, ResearchSendMode, Source, StromData, Person, PersonId, ResearchConflict, ResearchWriteHeld } from './types.js';
-import { ResearchInbox, LiveIntake, ResearchSendRecord } from './research-link.js';
+import { ResearchInbox, LiveIntake, ResearchSendRecord, SyncReply, SyncNotWritten } from './research-link.js';
+import type { NotWrittenItem } from './research-changes.js';
 import { ResearchHeldConflicts, trimHeldConflicts } from './research-device.js';
 import { hasEntryFields } from './source-location.js';
 
@@ -321,6 +322,91 @@ export function pendingSendFate(
     if (Number.isFinite(intakeAt) && Number.isFinite(sentAt) && intakeAt >= sentAt - INTAKE_SKEW_MS) return fate('written', status.lastIntake!.at);
     if (!status.lastIntake && sent.head && status.head && status.head !== sent.head) return fate('written');
     return fate('discarded');
+}
+
+// ==================== WHAT A SEND DID NOT WRITE ====================
+
+/** What of a send's answer is kept as not written (`ResearchAutoState.notWritten`) and how it is told. */
+export interface ReplyNotWritten {
+    /** The items kept (at most 50): the listed ones (taken back left out), then the skipped ones with a code. */
+    items: NotWrittenItem[];
+    /** How many were not written in all (0: nothing to keep; a send not written at once: 0). */
+    count: number;
+    /** Changes it counted but neither wrote nor named. */
+    unexplained: number;
+    /**
+     * Nothing written and changes named (`sync.notWritten.codes`): "The research did not take N changes"
+     * in place of "nothing new" and of "Written 0, not written N".
+     */
+    notTaken: boolean;
+    /** Skipped changes told apart, as before ("skipped N"): all of them, or with codes those without one. */
+    skippedApart: number;
+}
+
+const keptItem = (n: SyncNotWritten, why: string, sourceId: string): NotWrittenItem => ({
+    person: n.person, fact: n.fact, why, ...(why === 'removed' && n.removedBy ? { removedBy: n.removedBy } : {}),
+    ...(n.name ? { name: n.name } : {}), ...(n.family ? { family: n.family } : {}),
+    ...(n.source ? { source: n.source } : {}), ...(sourceId ? { sourceId } : {}), ...(n.place ? { place: n.place } : {}),
+    ...(n.code ? { code: n.code } : {}), ...(Object.keys(n.params).length ? { params: n.params } : {}),
+});
+
+/** A skipped change with a code, kept as a not-written item (what it is about from its params). */
+const skippedItem = (x: SyncReply['skipped'][number]): NotWrittenItem => {
+    const p = x.params;
+    return {
+        person: p.person ?? '', fact: p.fact ?? '', why: '',
+        ...(p.family ? { family: p.family } : {}), ...(p.source ? { source: p.source } : {}), ...(p.place ? { place: p.place } : {}),
+        code: x.code, ...(Object.keys(p).length ? { params: p } : {}), skipped: true,
+    };
+};
+
+/**
+ * What a send's answer did not write: the items it names (`notWritten`, taken
+ * back left out: it has its own word), with codes also what it skipped
+ * (`skipped` with a `code`, the same list), and what it counted but did not
+ * name. `written`: the send was written (or took nothing); `codes`: a research
+ * with `sync.notWritten.codes`; `removedOn`: one with `sync.removed` (a
+ * `removed` from any other is no reason); `sourceIdOf`: the app's source of a
+ * sent file's xref.
+ */
+export function replyNotWritten(reply: SyncReply, o: { written: boolean; codes: boolean; removedOn: boolean; sourceIdOf?: (xref: string) => string }): ReplyNotWritten {
+    const explained = reply.skipped.length + (reply.conflicts ?? 0)
+        + (reply.notWritten.length ? reply.notWritten.length : reply.takenBack ?? 0);
+    const unexplained = o.written && reply.applied !== null && reply.changes !== null ? reply.changes - reply.applied - explained : 0;
+    const listed = reply.notWritten.filter(n => n.why !== 'takenBack');
+    const skippedCoded = o.codes ? reply.skipped.filter(x => x.code) : [];
+    const count = o.written ? listed.length + skippedCoded.length + Math.max(0, unexplained) : 0;
+    const items = [
+        ...listed.map(n => {
+            const sourceId = n.source.startsWith('@') && o.sourceIdOf ? o.sourceIdOf(n.source) : '';
+            return keptItem(n, n.why === 'removed' && !o.removedOn ? '' : n.why, sourceId);
+        }),
+        ...skippedCoded.map(skippedItem),
+    ].slice(0, 50);
+    const wrote = reply.applied ?? reply.changes;
+    return {
+        items, count, unexplained: Math.max(0, unexplained),
+        notTaken: o.codes && count > 0 && (wrote ?? 0) === 0,
+        skippedApart: o.codes ? reply.skipped.filter(x => !x.code).length : reply.skipped.length,
+    };
+}
+
+/**
+ * What a send's record in `/status.sends` says it did not write (V5, read
+ * only from a research with `sync.notWritten.codes`): its items (at most 50,
+ * taken back left out), its skipped changes with a code, and those it
+ * counted beyond the list (`notWrittenCount`) as not named. Null: it says none.
+ */
+export function sendRecordNotWritten(rec: ResearchSendRecord, removedOn: boolean): { items: NotWrittenItem[]; unexplained: number } | null {
+    const all = rec.notWritten ?? [];
+    const listed = all.filter(n => n.why !== 'takenBack');
+    const skipped = (rec.skipped ?? []).filter(x => x.code);
+    const beyond = Math.max(0, (rec.notWrittenCount ?? all.length) - all.length);
+    if (!listed.length && !skipped.length && !beyond) return null;
+    return {
+        items: [...listed.map(n => keptItem(n, n.why === 'removed' && !removedOn ? '' : n.why, '')), ...skipped.map(skippedItem)].slice(0, 50),
+        unexplained: beyond,
+    };
 }
 
 // ==================== TRANSCRIPTS: LEAD OR EVIDENCE ====================

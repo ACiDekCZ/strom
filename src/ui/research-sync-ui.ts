@@ -43,7 +43,7 @@ import {
     parseLiveBridge, researchSchemeUrl, readResearchHeader, stabilizeIds, researchPersonRef, ResearchAccepts,
     researchIdsByContent, holdsResearchIds, ResearchSendRecord, AdoptIds, ExportXrefs, applySyncIds, sourceIdOfXref, researchGedcomTitles, researchSendsReadings, researchSendsSourceFields, SyncReading,
     researchHasTitles, hasTitles, withoutTitles, TITLES_FEATURE, researchConflictRef, isResearchHead, SYNC_REMOVED_FEATURE, SyncPersonConflict,
-    researchLinkMark, researchUrlMark, type ResearchActionMark,
+    SYNC_NW_CODES_FEATURE, researchLinkMark, researchUrlMark, type ResearchActionMark,
 } from '../research-link.js';
 import { loadResearchCopy } from '../research-copy.js';
 import { ResearchWriteHeld, joinSaid, writeHeldOfRefusal, writeHeldOfStatus, writeHeldSettled } from '../research-write-held.js';
@@ -58,7 +58,7 @@ import {
     ResearchSyncState, ResearchSyncKind, researchSyncState, researchSyncWantsAttention, researchSyncUnsent,
     pendingSendFate, sourceReadings, THEN_LOAD_MAX_AGE_MS, conflictTakeovers, heldConflicts,
     researchKeepsTakenBack, latestUndone, nextUndone, openUndone, undoneLeftBehind, syncRefusalReason, unloadedWrittenSends, writtenConflictCount,
-    ownWriteHeadTarget,
+    ownWriteHeadTarget, replyNotWritten, sendRecordNotWritten,
 } from '../research-sync.js';
 import { MATERIAL_ASSIGN_FEATURE } from '../materials.js';
 import { rememberedMaterialFeatures } from './materials-ui.js';
@@ -1294,6 +1294,15 @@ export const researchSyncMethods = uiModule({
             }
             return;
         }
+        // What it did not write, as its record says (`sync.notWritten.codes`, V5): kept as a send's answer keeps
+        // it — the block of the send and "What was written" show it (R15) —, without a toast.
+        const rec = status.features?.includes(SYNC_NW_CODES_FEATURE) && !fate.inherited
+            ? status.sends?.find(r => r.intake === sent.intake && (r.state === 'written' || r.state === 'nothing')) : undefined;
+        const recNw = rec ? sendRecordNotWritten(rec, !!status.features?.includes(SYNC_REMOVED_FEATURE)) : null;
+        if (recNw) {
+            patchResearchAutoState(treeId, { notWritten: { at: closed.closedAt!, fingerprint: sent.fingerprint,
+                written: fate.nothing ? 0 : Math.max(0, rec!.changes ?? closed.changes ?? 0), items: recNw.items, unexplained: recNw.unexplained, codes: true } });
+        }
         if (!fate.nothing) {
             patchResearchAutoState(treeId, { lastWritten: { at: closed.closedAt!, changes: closed.changes, conflicts: 0,
                 ...(closed.intake ? { intake: closed.intake } : {}), fingerprint: closed.fingerprint } });
@@ -1892,8 +1901,10 @@ export const researchSyncMethods = uiModule({
             }
             return;
         }
+        // What it did not write keeps its codes only from a research that says it sends them.
+        const replyFeatures = this.researchStatusOf(link.id)?.features;
         let reply = sanitizeSyncReply(null);
-        try { reply = sanitizeSyncReply(await res.json()); } catch { /* a refusal without a reason */ }
+        try { reply = sanitizeSyncReply(await res.json(), replyFeatures); } catch { /* a refusal without a reason */ }
         sendingTree = null;
         // The research has this copy now (any answer with its mark; a send written again is the old copy, not this one).
         if (res.ok && reply.ok && reply.intake && !again) {
@@ -1968,33 +1979,32 @@ export const researchSyncMethods = uiModule({
         const changes = reply.applied ?? reply.changes;
         // Changes the research counted but neither wrote nor said why (not skipped, not left out as taken
         // back, not a conflict): never silent — the user's edits would stand here only (A5 of the rc.23 round).
-        // What it lists (`notWritten`, rc.25) is said with its reason (taken back has its own word).
-        const explained = reply.skipped.length + (reply.conflicts ?? 0)
-            + (reply.notWritten.length ? reply.notWritten.length : reply.takenBack ?? 0);
-        const unexplained = written && reply.applied !== null && reply.changes !== null ? reply.changes - reply.applied - explained : 0;
-        const listed = reply.notWritten.filter(n => n.why !== 'takenBack');
+        // What it lists (`notWritten`, rc.25) is said with its reason (taken back has its own word); with codes
+        // (`sync.notWritten.codes`) what it skipped too, in the same list.
         const removedOn = !!this.researchStatusOf(link.id)?.features?.includes(SYNC_REMOVED_FEATURE);
-        const notWrittenCount = written ? listed.length + Math.max(0, unexplained) : 0;
+        const codes = !!replyFeatures?.includes(SYNC_NW_CODES_FEATURE);
+        const nwReply = replyNotWritten(reply, { written, codes, removedOn,
+            // A source by the sent file's xref: the app's own id is known from that file.
+            sourceIdOf: xref => exported ? sourceIdOfXref(exported.xrefs, xref) : '' });
+        const notWrittenCount = nwReply.count;
         if (notWrittenCount > 0) {
-            if (unexplained > 0) console.warn('The research wrote fewer changes than it counted, without saying why', reply);
+            if (nwReply.unexplained > 0) console.warn('The research wrote fewer changes than it counted, without saying why', reply);
             // What it wrote is its `applied`, never what this app sent: the rest is kept as not written (the
             // state, "What was written") until the next send is written (V-J).
             patchResearchAutoState(treeId, { notWritten: { at: now, fingerprint: sentFp, written: Math.max(0, changes ?? 0),
-                items: listed.slice(0, 50).map(n => {
-                    // A source by the sent file's xref: the app's own id is known from that file.
-                    const sourceId = n.source.startsWith('@') && exported ? sourceIdOfXref(exported.xrefs, n.source) : '';
-                    // `removed` only from a research that says it does (`sync.removed`): any other answer as before.
-                    const why = n.why === 'removed' && !removedOn ? '' : n.why;
-                    return { person: n.person, fact: n.fact, why, ...(why === 'removed' && n.removedBy ? { removedBy: n.removedBy } : {}),
-                        ...(n.name ? { name: n.name } : {}), ...(n.family ? { family: n.family } : {}),
-                        ...(n.source ? { source: n.source } : {}), ...(sourceId ? { sourceId } : {}), ...(n.place ? { place: n.place } : {}) };
-                }), unexplained: Math.max(0, unexplained) } });
-            // "Written N, not written M · Show": by hand and by itself alike (the written count is in it).
+                items: nwReply.items, unexplained: nwReply.unexplained, ...(codes ? { codes: true as const } : {}) } });
             toldNotWritten = sentFp;
-            this.showToast(`${s.writtenCount(Math.max(0, changes ?? 0), notWrittenCount)} ${listed.length ? s.notWrittenListed(notWrittenCount) : s.notWrittenToast(notWrittenCount)}`, Infinity, {
-                closable: true,
-                action: { label: s.showConflicts, run: () => this.showResearchChanges('written') },
-            });
+            const show = { label: s.showConflicts, run: () => this.showResearchChanges('written') };
+            if (nwReply.notTaken) {
+                // Nothing taken, the changes named: never "nothing new" (by hand and by itself alike).
+                this.showToast(s.notTakenToast(notWrittenCount), Infinity, { closable: true, action: show });
+            } else {
+                // "Written N, not written M · Show": by hand and by itself alike (the written count is in it).
+                const listed = nwReply.items.length > 0;
+                this.showToast(`${s.writtenCount(Math.max(0, changes ?? 0), notWrittenCount)} ${listed ? s.notWrittenListed(notWrittenCount) : s.notWrittenToast(notWrittenCount)}`, Infinity, {
+                    closable: true, action: show,
+                });
+            }
         } else if (written && reply.changes !== 0) {
             patchResearchAutoState(treeId, { notWritten: undefined });
         }
@@ -2083,7 +2093,8 @@ export const researchSyncMethods = uiModule({
         if (reply.changes === 0) {
             // Edits went, the research took none of them: said so (its tree may be ahead, never "the same").
             // "Send, then load" loads its version all the same — asked first, what it replaces shown (N60-4).
-            if (!opts.auto) this.showToast(s.nothingTakenToast, 6000);
+            // What it named as not taken was told above ("The research did not take N changes"), never "nothing new".
+            if (!opts.auto && !nwReply.notTaken) this.showToast(s.nothingTakenToast, 6000);
             if (!opts.auto && opts.thenLoad && active) await this.researchLoadNewer();
         } else if (written) {
             // A write that left conflicts never loads after itself: told as any write (the note, the
@@ -2107,8 +2118,9 @@ export const researchSyncMethods = uiModule({
         }
         // Written, but some changes it could not write and skipped (1.12): said in this app's words
         // (the research's `why` is its own text — shown once it sends a code to say it here).
-        if (reply.skipped.length) {
-            this.showToast(s.skippedToast(reply.skipped.length, ''), 12000, { closable: true });
+        // With codes, what it skipped with a code is in the list of what was not written (told above).
+        if (nwReply.skippedApart) {
+            this.showToast(s.skippedToast(nwReply.skippedApart, ''), 12000, { closable: true });
         }
         // Edited while it was on its way: the quiet time starts again.
         this.researchAutoArm();
@@ -2833,7 +2845,9 @@ export const researchSyncMethods = uiModule({
                 // The archive still holds what was not written (a removal taken back there, audit 017 a-D2), or another
                 // window removed the person there (`sync.removed`): its version at once.
                 const kept = !!nw?.items.some(i => i.why === 'kept' || i.why === 'removed');
-                return { tone: nw?.seen ? 'neutral' : 'warn', title: s.writtenCount(nw?.written ?? 0, m).replace(/\.$/, ''),
+                // Nothing written, its changes named by codes: "The research did not take N changes" (R15).
+                const title = nw?.codes && nw.written === 0 ? s.notTakenTitle(m) : s.writtenCount(nw?.written ?? 0, m).replace(/\.$/, '');
+                return { tone: nw?.seen ? 'neutral' : 'warn', title,
                     sub: s.notWrittenSub(when(nw?.at)), actions: [{ action: 'showWritten', label: s.showConflicts, asLink: true },
                         ...(kept ? [{ action: 'loadNewer' as const, label: s.loadVersion, asLink: true }] : [])] };
             },

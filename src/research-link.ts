@@ -2506,12 +2506,23 @@ export interface ResearchSendRecord {
     conflictIds?: string[];
     /** Taken back and written again since (`resent: true`, or `again`: the mark of that send); absent = not. */
     again?: string;
+    /**
+     * What a written send (or one that took nothing) did not write, as its answer said it (at most 50), and how
+     * many there were in all (`notWrittenCount`); its skipped changes beside them. Read only from a research
+     * with `sync.notWritten.codes` (V5); absent = not said.
+     */
+    notWritten?: SyncNotWritten[];
+    notWrittenCount?: number;
+    skipped?: SyncReply['skipped'];
 }
 
 const SEND_STATES = new Set(['pending', 'written', 'discarded', 'replaced', 'nothing', 'undone', 'failed']);
 
-/** `/status.sends`, or null when the research does not say. Untrusted. */
-export function sanitizeSends(value: unknown): ResearchSendRecord[] | null {
+/**
+ * `/status.sends`, or null when the research does not say. Untrusted. `codes`: a research with
+ * `sync.notWritten.codes` — a written send's `notWritten` / `notWrittenCount` / `skipped` are read too.
+ */
+export function sanitizeSends(value: unknown, codes = false): ResearchSendRecord[] | null {
     if (!Array.isArray(value)) return null;
     const out: ResearchSendRecord[] = [];
     for (const item of value.slice(0, MAX_ITEMS)) {
@@ -2537,9 +2548,22 @@ export function sanitizeSends(value: unknown): ResearchSendRecord[] | null {
             ...(conflictIds(r.conflicts).length ? { conflictIds: conflictIds(r.conflicts) } : {}),
             // Written again since: `resent: true` (1.12.0-rc.21), or `again` (the mark of that send).
             ...(r.resent === true || r.again === true ? { again: 'yes' } : headerToken(r.again) ? { again: headerToken(r.again)! } : {}),
+            ...(codes && (r.state === 'written' || r.state === 'nothing') ? sendNotWritten(r) : {}),
         });
     }
     return out;
+}
+
+/** A send record's `notWritten` (at most 50), `notWrittenCount` (never fewer than listed) and `skipped`, when it says them. */
+function sendNotWritten(r: Record<string, unknown>): Pick<ResearchSendRecord, 'notWritten' | 'notWrittenCount' | 'skipped'> {
+    const items = sanitizeNotWritten(r.notWritten, true, 50);
+    const skipped = sanitizeSkipped(r.skipped, true);
+    const count = asCount(r.notWrittenCount);
+    return {
+        ...(items.length ? { notWritten: items } : {}),
+        ...(items.length || count ? { notWrittenCount: Math.max(items.length, count ?? 0) } : {}),
+        ...(skipped.length ? { skipped } : {}),
+    };
 }
 
 /** Conflicts as a count, or a list of them (`[{ person: "P12" }, …]`); null when not said. */
@@ -3595,7 +3619,7 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         researches: sanitizeDirections(r.researches),
         accepts: readAcceptsGated(sanitizeAccepts(r.accepts), !!features?.includes(READ_FEATURE), !!features?.includes(READ_CHOOSE_FEATURE), !!features?.includes(READ_CHOICES_NOW_FEATURE)),
         inbox: sanitizeInbox(r.inbox),
-        sends: sanitizeSends(r.sends),
+        sends: sanitizeSends(r.sends, !!features?.includes(SYNC_NW_CODES_FEATURE)),
         version: researchVersion(r.strom),
         features,
         // The bridge's own count of the last 24 hours, read only when it says it sends one.
@@ -4168,8 +4192,11 @@ export interface SyncReply {
     kept: number | null;
     /** The technical reason of a send not written (`reason`, English; '' = not said): shown as details. */
     reason: string;
-    /** Changes the research could not write and skipped, the rest written (`skipped: [{n, kind, why}]`, 1.12). */
-    skipped: { kind: string; why: string }[];
+    /**
+     * Changes the research could not write and skipped, the rest written (`skipped: [{n, kind, why}]`, 1.12);
+     * with `sync.notWritten.codes` each with its stable `code` and `params` (else '' and {}).
+     */
+    skipped: { kind: string; why: string; code: string; params: Record<string, string> }[];
     /** The refusal's stable code (`code`, 1.12: `tree.no-ids` …; '' = not said). */
     code: string;
     /** Sends the research took back after the state this copy was made from (`undoneSince`, their marks; 1.12). */
@@ -4244,9 +4271,92 @@ export interface SyncNotWritten {
     source: string;
     /** A place's coordinates (`place.coords`, 1.18): the place's name as the file has it; '' none. */
     place: string;
+    /**
+     * Its stable code (`sync.notWritten.codes`: `cite.olderApp`, `main.notCarried`, `kept` …; '' = not said,
+     * or a research without the feature): the app words the reason by it, never from `why`.
+     */
+    code: string;
+    /** What it is about by the code (`person`, `family`, `fact`, `event`, `source`, `child`, `send`, `sync`, `place`…); {} = none. */
+    params: Record<string, string>;
 }
 
-export function sanitizeSyncReply(value: unknown): SyncReply {
+/** `/status.features`: every not-written and skipped change of a send's answer (and of `/status.sends`) carries `code` + `params`. */
+export const SYNC_NW_CODES_FEATURE = 'sync.notWritten.codes';
+
+/** A not-written change's code: letters, digits, dots and dashes ("cite.olderApp", "person.no-match"). */
+function nwCode(value: unknown): string {
+    return typeof value === 'string' && /^[A-Za-z][A-Za-z0-9.-]{0,47}$/.test(value) ? value : '';
+}
+
+/** What each param of a not-written change may hold (the research's ids, a tag, a place's name). */
+const NW_PARAM: Record<string, RegExp> = {
+    person: /^P\d{1,9}$/, child: /^P\d{1,9}$/, family: /^F\d{1,9}$/, fact: /^[A-Z_]{2,8}$/, event: /^E\d{1,9}$/,
+    source: /^(S\d{1,9}|@[A-Za-z0-9_-]{1,20}@)$/, send: /^R[0-9A-Za-z-]{1,40}$/, sync: /^I\d{1,9}$/,
+};
+
+/** The `params` of a not-written change, checked: known keys by their shape, any other short word as text (at most 12). */
+function nwParams(value: unknown): Record<string, string> {
+    const r = asRecord(value);
+    if (!r) return {};
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(r).slice(0, 12)) {
+        if (!/^[a-z][a-zA-Z]{0,19}$/.test(k) || typeof v !== 'string') continue;
+        const shape = NW_PARAM[k];
+        const t = shape ? (shape.test(v.trim()) ? v.trim() : '') : cleanText(v, 200);
+        if (t) out[k] = t;
+    }
+    return out;
+}
+
+/** The reasons an older research says in `why`, also told by a code of the same meaning (`person.removed`: `removed`). */
+const NW_WHY_OF_CODE: Record<string, SyncNotWritten['why']> = {
+    takenBack: 'takenBack', kept: 'kept', report: 'report', pick: 'pick', 'person.removed': 'removed',
+};
+
+/**
+ * The `notWritten[]` of a send's answer or of `/status.sends`, checked (at most `max`). With `codes`
+ * (`sync.notWritten.codes`) each keeps its code and params, and what it is about comes from the
+ * params where the item does not say it itself; without, exactly as before (no code, no params).
+ */
+export function sanitizeNotWritten(value: unknown, codes: boolean, max = 200): SyncNotWritten[] {
+    return (Array.isArray(value) ? value.slice(0, max) : [])
+        .map(x => asRecord(x)).filter((x): x is Record<string, unknown> => !!x)
+        .map(x => {
+            const code = codes ? nwCode(x.code) : '';
+            const params = codes ? nwParams(x.params) : {};
+            const of = (key: string): unknown => x[key] ?? params[key];
+            const said = x.why === 'takenBack' || x.why === 'kept' || x.why === 'report' || x.why === 'pick' || x.why === 'removed' ? x.why : '';
+            const why = said || NW_WHY_OF_CODE[code] || '';
+            return {
+                kind: cleanText(x.kind, 40),
+                person: typeof of('person') === 'string' && /^P\d{1,9}$/.test(of('person') as string) ? of('person') as string : '',
+                family: typeof of('family') === 'string' && /^F\d{1,9}$/.test(of('family') as string) ? of('family') as string : '',
+                fact: typeof of('fact') === 'string' && /^[A-Z_]{2,8}$/.test(of('fact') as string) ? of('fact') as string : '',
+                why,
+                removedBy: why === 'removed' ? researchIntakeRef(x.removedBy ?? params.sync) ?? '' : '',
+                name: cleanText(x.name, 120),
+                source: typeof of('source') === 'string' && /^(S\d{1,9}|@[A-Za-z0-9_-]{1,20}@)$/.test(of('source') as string) ? of('source') as string : '',
+                place: cleanText(of('place'), 200),
+                code, params,
+            };
+        });
+}
+
+/** The `skipped[]` of a send's answer or of `/status.sends`, checked (at most 50); `code` + `params` only with `codes`. */
+export function sanitizeSkipped(value: unknown, codes: boolean): SyncReply['skipped'] {
+    return (Array.isArray(value) ? value.slice(0, 50) : [])
+        .map(x => asRecord(x)).filter((x): x is Record<string, unknown> => !!x)
+        .map(x => ({ kind: cleanText(x.kind, 40), why: cleanText(x.why, 300),
+            code: codes ? nwCode(x.code) : '', params: codes ? nwParams(x.params) : {} }));
+}
+
+/**
+ * A send's answer, checked. `features`: the research's `/status.features` — what
+ * it did not write and what it skipped keep their codes only with
+ * `sync.notWritten.codes`.
+ */
+export function sanitizeSyncReply(value: unknown, features?: readonly string[] | null): SyncReply {
+    const codes = !!features?.includes(SYNC_NW_CODES_FEATURE);
     const r = asRecord(value);
     if (!r) return { ok: false, changes: null, error: '', inbox: null, intake: '', head: '', applied: null, pending: false, conflicts: null, conflictPersons: [], conflictIds: [], conflictTakeIds: [], kept: null, reason: '', skipped: [], code: '', undoneSince: [], takenBack: null, notWritten: [], personConflicts: [], ids: null, readings: [] };
     const idsRec = asRecord(r.ids);
@@ -4267,26 +4377,12 @@ export function sanitizeSyncReply(value: unknown): SyncReply {
         conflictTakeIds: conflictTakeIds(r.conflicts),
         kept: asCount(r.kept),
         reason: cleanText(r.reason, 400),
-        skipped: (Array.isArray(r.skipped) ? r.skipped.slice(0, 50) : [])
-            .map(x => asRecord(x)).filter((x): x is Record<string, unknown> => !!x)
-            .map(x => ({ kind: cleanText(x.kind, 40), why: cleanText(x.why, 300) })),
+        skipped: sanitizeSkipped(r.skipped, codes),
         code: typeof r.code === 'string' && /^[a-z0-9.-]{1,40}$/.test(r.code) ? r.code : '',
         undoneSince: Array.isArray(r.undoneSince)
             ? r.undoneSince.slice(0, 30).map(v => headerToken(v)).filter((v): v is string => !!v) : [],
         takenBack: asCount(r.takenBack),
-        notWritten: (Array.isArray(r.notWritten) ? r.notWritten.slice(0, 200) : [])
-            .map(x => asRecord(x)).filter((x): x is Record<string, unknown> => !!x)
-            .map(x => ({
-                kind: cleanText(x.kind, 40),
-                person: typeof x.person === 'string' && /^P\d{1,9}$/.test(x.person) ? x.person : '',
-                family: typeof x.family === 'string' && /^F\d{1,9}$/.test(x.family) ? x.family : '',
-                fact: typeof x.fact === 'string' && /^[A-Z_]{2,8}$/.test(x.fact) ? x.fact : '',
-                why: x.why === 'takenBack' || x.why === 'kept' || x.why === 'report' || x.why === 'pick' || x.why === 'removed' ? x.why : '',
-                removedBy: x.why === 'removed' ? researchIntakeRef(x.removedBy) ?? '' : '',
-                name: cleanText(x.name, 120),
-                source: typeof x.source === 'string' && /^(S\d{1,9}|@[A-Za-z0-9_-]{1,20}@)$/.test(x.source) ? x.source : '',
-                place: cleanText(x.place, 200),
-            })),
+        notWritten: sanitizeNotWritten(r.notWritten, codes),
         personConflicts: personConflictsOf(r.conflicts),
         ids: Object.keys(idPersons).length || Object.keys(idSources).length ? { persons: idPersons, sources: idSources } : null,
         readings: sanitizeSyncReadings(r.readings),

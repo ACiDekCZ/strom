@@ -18,7 +18,10 @@ import {
     ChangeKind, PersonChange, diffByPerson, baseCopy, diffOther, otherRowCount, previewInexact, OtherChanges, SourceChange, CoupleChange,
     SourceChangeKind, CoupleChangeKind, PlaceChange, VariantChange, SentOtherRow, sentOtherRows, sanitizeSentOtherRow,
     sourceAppOnly, coupleAppOnly, placesAppOnly, variantsAppOnly, lineageAppOnly, pairNotWritten, RESEARCH_UNREAD_KINDS,
+    NotWrittenItem, PairedNotWritten,
 } from '../research-changes.js';
+import { gedcomTagEventType } from '../ged-parser.js';
+import { yearOf } from '../dates.js';
 import { saveResearchCopy, loadResearchCopy, saveResearchPrevCopy, loadResearchPrevCopy } from '../research-copy.js';
 import { RESEARCH_COPY_FP_KEY, RESEARCH_PREV_COPY_FP_KEY } from '../storage-keys.js';
 import { researchAutoState, patchResearchAutoState, noteResearchSendPreviewSkipped } from '../research-device.js';
@@ -209,6 +212,112 @@ function summaryRow(key: 'places' | 'variants', labelHtml: string, context: stri
 function coupleFocus(ch: CoupleChange, data: StromData): PersonId | null {
     const ok = (id: PersonId): boolean => !!data.persons[id] && !data.persons[id].isPlaceholder;
     return ok(ch.p1) ? ch.p1 : ok(ch.p2) ? ch.p2 : null;
+}
+
+/** The reasons an older research says in `why`, by the code that says the same (`person.removed`: removed). */
+const NW_TODAY_WHY: Record<string, string> = { kept: 'kept', report: 'report', pick: 'pick', 'person.removed': 'removed', takenBack: 'takenBack' };
+
+/**
+ * Why the research did not write a change, in the app's words: by its code
+ * (`sync.notWritten.codes`; a code with today's reason — kept, pick, report,
+ * a person removed — says today's), a code without a text of its own "not
+ * taken" (a change it wanted to write and could not: its write failed), never
+ * "nothing new"; without a code by the research's `why` as before.
+ * `removedHere`: the person was removed here (kept: the removal undone there).
+ */
+export function nwReason(item: NotWrittenItem, removedHere = false): string {
+    const s = strings.sync;
+    const code = item.code ?? '';
+    const why = code ? NW_TODAY_WHY[code] ?? '' : item.why;
+    if (why === 'kept') return removedHere ? s.notWrittenKeptUndone : s.notWrittenKept;
+    if (why === 'report') return s.notWrittenReport;
+    if (why === 'pick') return s.notWrittenPick;
+    if (why === 'removed') return s.notWrittenRemoved;
+    if (!code) return strings.changes.noReason;
+    const own = Object.prototype.hasOwnProperty.call(s.nw, code) ? s.nw[code] : '';
+    if (own) return own;
+    // What the research wanted to write and could not (`event.retracted`, `record.none` …): its write failed.
+    return item.skipped ? s.nw['write.failed'] : s.nwUnknown;
+}
+
+const capFirst = (t: string): string => t ? t.charAt(0).toLocaleUpperCase() + t.slice(1) : t;
+
+/**
+ * A fact as a not-written row names it: its label, with the year where the
+ * tree has the fact ("Birth 1851"; a person's event when the person has one
+ * of that kind, the couple's marriage and divorce).
+ */
+export function nwFactText(fact: string, data: StromData, personId: PersonId | null, coupleId: string | null): string {
+    const tag = fact.toUpperCase();
+    const label = tag === 'MARR' ? capFirst(strings.events.typesOf.marriage) : tag === 'DIV' ? capFirst(strings.events.typesOf.divorce) : researchFactLabel(tag);
+    const p = personId ? data.persons[personId] : undefined;
+    const ps = coupleId ? data.partnerships?.[coupleId as keyof typeof data.partnerships] : undefined;
+    let date: string | undefined;
+    if (p) {
+        if (tag === 'BIRT') date = p.birthDate;
+        else if (tag === 'DEAT') date = p.deathDate;
+        else {
+            const type = gedcomTagEventType(tag);
+            const of = type ? (p.events ?? []).filter(e => e.type === type && e.date) : [];
+            if (of.length === 1) date = of[0].date;
+        }
+    } else if (ps) {
+        if (tag === 'MARR') date = ps.startDate;
+        else if (tag === 'DIV') date = ps.endDate;
+    }
+    const year = yearOf(date);
+    return year !== null ? `${label} ${year}` : label;
+}
+
+/**
+ * The parts of a not-written row with a code: the person (or the couple
+ * "{man} and {woman}"), the fact, the source — each when known, the missing
+ * ones left out; with neither a person nor a source "Change" leads.
+ * `person`/`source`: what the name opens here (a person removed here: none).
+ */
+export function nwRowParts(row: Extract<PairedNotWritten, { type: 'coded' }>, data: StromData): {
+    who: { name: string; personId: PersonId | null; deleted?: true } | null; fact: string; source: { id: string; title: string } | null;
+} {
+    const n = row.item;
+    let who: { name: string; personId: PersonId | null; deleted?: true } | null = null;
+    const p = row.personId ? data.persons[row.personId] : undefined;
+    if (row.deleted) who = { name: row.deleted.name, personId: null, deleted: true };
+    else if (p) who = { name: shownNameOrEmpty(p) || n.name || '', personId: row.personId };
+    else if (n.name) who = { name: n.name, personId: null };
+    else if (row.couple) {
+        const ps = data.partnerships?.[row.couple as keyof typeof data.partnerships];
+        const a = ps ? data.persons[ps.person1Id] : undefined;
+        const b = ps ? data.persons[ps.person2Id] : undefined;
+        // The man first ("{man} and {woman}"), else as the couple has them.
+        const [first, second] = a && b && a.gender !== 'male' && b.gender === 'male' ? [b, a] : [a, b];
+        const names = [first, second].filter((x): x is Person => !!x && !x.isPlaceholder).map(x => shownNameOrEmpty(x)).filter(Boolean);
+        if (names.length) {
+            const focus = [first, second].find(x => !!x && !x.isPlaceholder);
+            who = { name: names.length === 2 ? strings.changes.coupleName(names[0], names[1]) : names[0], personId: focus ? focus.id : null };
+        }
+    }
+    const fact = n.fact ? nwFactText(n.fact, data, p ? row.personId : null, p ? null : row.couple) : '';
+    const source = row.sourceId ? { id: row.sourceId, title: row.title } : null;
+    return { who, fact, source };
+}
+
+/** A not-written row with a code: "person · fact · source" and its reason below. */
+function nwCodedRow(row: Extract<PairedNotWritten, { type: 'coded' }>, data: StromData): string {
+    const { who, fact, source } = nwRowParts(row, data);
+    const parts: string[] = [];
+    if (who) {
+        parts.push(who.personId
+            ? `<button type="button" class="research-changes-name" data-person="${esc(who.personId)}">${esc(who.name)}</button>`
+            : `<span class="research-changes-name${who.deleted ? ' is-deleted' : ''}">${esc(who.name)}</span>`);
+    } else if (!source) {
+        parts.push(`<span class="research-changes-name">${esc(strings.changes.unnamedOne)}</span>`);
+    }
+    if (fact) parts.push(`<span class="research-changes-fact">${esc(fact)}</span>`);
+    if (source) parts.push(`<button type="button" class="research-changes-name" data-source="${esc(source.id)}">${esc(source.title)}</button>`);
+    return `<li class="research-changes-row is-not-written" data-kind="coded" data-code="${esc(row.item.code ?? '')}">`
+        + `<span class="research-changes-icon is-warn" aria-hidden="true">!</span>`
+        + `<span class="research-changes-text"><span class="research-changes-line is-parts">${parts.join('<span class="research-changes-sep">·</span>')}</span>`
+        + `<span class="research-changes-why">${esc(nwReason(row.item, !!row.deleted))}</span></span></li>`;
 }
 
 /** A row's name line: a grey type before it (rows of mixed kinds), the "app only" tag after it. */
@@ -527,12 +636,15 @@ export const researchChangesMethods = uiModule({
                 const named = new Set<string>();
                 const items = paired.rows.map(row => {
                     const n = row.item;
-                    const removed = row.type === 'person' && !!row.deleted;
-                    const why = n.why === 'kept' ? (removed ? s.notWrittenKeptUndone : s.notWrittenKept)
-                        : n.why === 'report' ? s.notWrittenReport : n.why === 'pick' ? s.notWrittenPick
-                        : n.why === 'removed' ? s.notWrittenRemoved : c.noReason;
                     // Kept there, or removed there by another window: the research's version (without them) at once.
                     if (n.why === 'kept' || n.why === 'removed') keptHere = true;
+                    if (row.type === 'coded') {
+                        // Named by its code (`sync.notWritten.codes`): "person · fact · source", the reason by the code.
+                        if (row.personId) named.add(row.personId);
+                        if (row.sourceId) named.add(`source:${row.sourceId}`);
+                        return nwCodedRow(row, data);
+                    }
+                    const why = nwReason(n, row.type === 'person' && !!row.deleted);
                     let name: string;
                     let what = '';
                     let type = '';

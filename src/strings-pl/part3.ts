@@ -18,6 +18,7 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
         writtenSection: (n: number) => `Zapisano · ${n}`,
         noReason: 'Badanie nie podało powodu.',
         unnamed: (n: number) => `${nPl(n, 'zmiana', 'zmiany', 'zmian')}, ${n === 1 ? 'której' : 'których'} badanie nie wymieniło`,
+        unnamedOne: 'Zmiana',
         more: (n: number) => `+ ${n} więcej`,
         kindAdded: 'nowa osoba',
         kindDeleted: 'usunięta',
