@@ -80,21 +80,20 @@ async function follow(page: Page): Promise<string> {
 }
 
 /** A Family window of the main window's tree; its writes to localStorage are counted. */
-async function openFamilyWindow(context: BrowserContext, treeId: string, size = { width: 1200, height: 800 }): Promise<Page> {
+async function openFamilyWindow(context: BrowserContext, treeId: string, size = { width: 1200, height: 800 }, selection: 'off' | 'switch' = 'off'): Promise<Page> {
     const sat = await context.newPage();
     await sat.setViewportSize(size);
-    await sat.addInitScript((ms) => {
+    await sat.addInitScript(([ms, sel]) => {
         (globalThis as { __LIVE_FOLLOW_MS?: unknown }).__LIVE_FOLLOW_MS = ms;
-        // The window's own selection (follow mode off): the main window's jumps are not taken as a
-        // choice here, so only the window's own following moves it.
-        sessionStorage.setItem('strom.win.follow.af1a2b3c', 'off');
+        // 'off': the window's own selection, only its own following moves it; 'switch': Family's default.
+        if (sel === 'off') sessionStorage.setItem('strom.win.follow.af1a2b3c', 'off');
         const log: string[] = [];
         (window as unknown as { __storage: string[] }).__storage = log;
         const proto = Storage.prototype;
         const { setItem, removeItem } = proto;
         proto.setItem = function (this: Storage, k: string, v: string) { if (this === localStorage) log.push(`set ${k}`); return setItem.call(this, k, v); };
         proto.removeItem = function (this: Storage, k: string) { if (this === localStorage) log.push(`remove ${k}`); return removeItem.call(this, k); };
-    }, TIMINGS);
+    }, [TIMINGS, selection] as const);
     await sat.goto(`/strom.html?okno=family&tree=${encodeURIComponent(treeId)}&w=af1a2b3c`);
     await expect(sat.locator('.person-card').first()).toBeVisible();
     return sat;
@@ -210,6 +209,44 @@ test.describe('desktop', () => {
         await expect(sat.locator('.toast', { hasText: 'Following the research ended · the tree can be edited' })).toBeVisible();
         await expect(strip(sat)).toBeHidden();
         expect(await detachedKey(sat)).toBeNull();
+    });
+
+    test('"Follow selection" on: the agent\'s jumps are not sent as a choice; attached, another window\'s choice is only marked; paused, it switches as today', async ({ page, context }) => {
+        const bridge = await routeBridge(context);
+        const treeId = await follow(page);
+        const sat = await openFamilyWindow(context, treeId, undefined, 'switch');
+        const idOf = (p: Page, refn: string) => p.evaluate((r) => Object.values(window.Strom.DataManager.getData().persons).find(x => x.refn === r)!.id, refn);
+        const ring = (p: Page) => p.evaluate(() => window.Strom.TreeRenderer.getWindowSelected());
+        await expect.poll(() => focusRefn(sat)).toBe('P0012');
+        await expect(stripText(sat)).toHaveText('Following the agent · read-only');
+        // The window's own jump after the agent did not reach the main window as a choice.
+        expect(await ring(page)).toBeNull();
+
+        // Attached: a person chosen in the main window is ringed here, the window stays on the agent.
+        const ludmila = await idOf(page, 'P0002');
+        await page.evaluate((id) => window.Strom.TreeRenderer.setFocus(id as never), ludmila);
+        await expect(sat.locator(`.person-card.window-selected[data-id="${ludmila}"]`)).toHaveCount(1);
+        expect(await focusRefn(sat)).toBe('P0012');
+        await expect(stripText(sat)).toHaveText('Following the agent · read-only');
+
+        // Detached: the main window's jump after the agent does not move the window (no choice is sent).
+        await page.evaluate(() => window.Strom.UI.resumeLiveFollow());
+        await strip(sat).getByRole('button', { name: 'Detach this window' }).click();
+        await expect(stripText(sat)).toHaveText('This window is not following the agent · read-only');
+        bridge.person = 'P0003';
+        await nextStatus(bridge);
+        await expect.poll(() => focusRefn(page)).toBe('P0003');
+        await nextStatus(bridge);
+        expect(await focusRefn(sat)).toBe('P0012');
+        expect(await ring(sat)).not.toBe(await idOf(sat, 'P0003'));
+
+        // Following again, then paused by hand: a choice in the main window switches the window as today.
+        await strip(sat).getByRole('button', { name: 'Follow the agent' }).click();
+        await expect.poll(() => focusRefn(sat)).toBe('P0003');
+        await dragTree(sat);
+        await expect(stripText(sat)).toHaveText('Following paused · read-only');
+        await page.evaluate((id) => window.Strom.TreeRenderer.setFocus(id as never), await idOf(page, 'P0013'));
+        await expect.poll(() => focusRefn(sat)).toBe('P0013');
     });
 
     test('the bridge lost: the amber strip with the window\'s own button', async ({ page, context }) => {

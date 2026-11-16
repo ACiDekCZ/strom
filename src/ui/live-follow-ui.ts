@@ -708,7 +708,7 @@ export const liveFollowMethods = uiModule({
         const glide = (id: PersonId): void => { ZoomPan.glideToPerson(id, scale); };
         if (TreeRenderer.getViewMode() !== 'family') TreeRenderer.presetViewMode('family');
         seenMode = 'family';
-        TreeRenderer.setFocus(target, false, glide);
+        TreeRenderer.setFocus(target, false, glide, { agent: true });
     },
 
     /**
@@ -727,7 +727,7 @@ export const liveFollowMethods = uiModule({
         const scale = ZoomPan.getScale() < ZOOM_FAR ? ZOOM_READABLE : ZoomPan.getScale();
         TreeRenderer.presetViewMode('family');
         seenMode = 'family';
-        TreeRenderer.setFocus(id, false, (pid: PersonId) => { ZoomPan.glideToPerson(pid, scale); });
+        TreeRenderer.setFocus(id, false, (pid: PersonId) => { ZoomPan.glideToPerson(pid, scale); }, { agent: true });
         this.renderLiveFollowPill();
         this.renderLivePanel();
     },

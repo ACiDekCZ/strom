@@ -28,7 +28,7 @@ function deps(mode = 'family'): SelectionDeps & { share: TableSelectionShare | n
         calls: [] as string[],
         viewMode: () => mode,
         setTableSelectionShare: (s: TableSelectionShare | null) => { d.share = s; },
-        tableSharedSelect: (id: string | null) => { d.calls.push(`table:${id}`); },
+        tableSharedSelect: (id: string | null, scroll?: boolean) => { d.calls.push(scroll === false ? `table-here:${id}` : `table:${id}`); },
         setWindowSelected: (id: string | null) => { d.calls.push(`ring:${id}`); },
         glideTo: (id: string) => { d.calls.push(`glide:${id}`); },
         reveal: (id: string) => { d.calls.push(`reveal:${id}`); },
@@ -217,5 +217,62 @@ describe('a satellite', () => {
         expect(d.calls).toHaveLength(3);
         stop();
         expect(listeners.has('follow')).toBe(false);
+    });
+});
+
+describe('following the research agent (spec 097 §4)', () => {
+    it('a jump after the agent is not sent as the selection, in the main window nor a satellite; the ring stays', () => {
+        const announced: string[] = [];
+        const registry = {
+            list: () => [1],
+            announceSelection: (id: string) => { announced.push(`main:${id}`); },
+            onSelect: () => () => {},
+        } as unknown as WindowRegistry;
+        const client = {
+            followSelection: true,
+            followMode: 'switch',
+            announceSelection: (id: string) => { announced.push(`sat:${id}`); },
+            on: () => () => {},
+        } as unknown as SatelliteClient;
+        const main = deps('family');
+        const sat = deps('family');
+        const stopMain = wireMainSelection(registry, main);
+        const stopSat = wireSatelliteSelection(client, sat);
+        window.dispatchEvent(new CustomEvent('strom:focus-changed', { detail: { personId: 'p2', agent: true } }));
+        expect(announced).toEqual([]);
+        expect(main.calls).toEqual([]);
+        expect(sat.calls).toEqual([]);
+        // A person chosen by hand still goes out.
+        window.dispatchEvent(new CustomEvent('strom:focus-changed', { detail: { personId: 'p3' } }));
+        expect(announced).toEqual(['main:p3', 'sat:p3']);
+        stopMain();
+        stopSat();
+    });
+
+    it('a satellite following the agent only marks another window\'s choice; paused or detached it takes it as Follow selection says', () => {
+        let attached = true;
+        let onSelect: ((p: { personId: string | null; origin: string }) => void) | null = null;
+        const client = {
+            followSelection: true,
+            followMode: 'switch',
+            announceSelection: () => {},
+            on: (e: string, cb: (p: { personId: string | null; origin: string }) => void) => { if (e === 'select') onSelect = cb; return () => {}; },
+        } as unknown as SatelliteClient;
+        const d = { ...deps('family'), agentAttached: () => attached };
+        wireSatelliteSelection(client, d);
+        onSelect!({ personId: 'p1', origin: 'main-1' });
+        expect(d.calls).toEqual(['ring:p1']);
+        attached = false;
+        onSelect!({ personId: 'p2', origin: 'main-1' });
+        expect(d.calls).toEqual(['ring:p1', 'ring:null', 'recenter:p2']);
+    });
+
+    it('the Table following the agent: the row selected where it is, not scrolled to', () => {
+        const d = { ...deps('table'), agentAttached: () => true };
+        applySharedSelection('p1', d, doc(null), 'mark');
+        expect(d.calls).toEqual(['ring:p1', 'table-here:p1']);
+        const far = { ...deps('family'), agentAttached: () => true };
+        applySharedSelection('p1', far, doc({ left: 760, right: 920, top: 100, bottom: 180 }), 'mark');
+        expect(far.calls).toEqual(['ring:p1']);
     });
 });

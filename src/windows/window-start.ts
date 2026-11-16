@@ -33,6 +33,7 @@ import { onBridgeStatus } from '../ui/research-sync-ui.js';
 import { onDirectionPlaces } from '../research-directions-write.js';
 import type { PersonId } from '../types.js';
 import { wireMainSelection, wireSatelliteSelection, type SelectionDeps } from './window-selection.js';
+import { windowAgentFollow } from './agent-follow-state.js';
 import { SettingsManager } from '../settings.js';
 import type { MapKind } from '../places.js';
 import type { SatelliteKind } from './window-role.js';
@@ -155,7 +156,7 @@ function selectionDeps(): SelectionDeps {
     return {
         viewMode: () => TreeRenderer.getViewMode(),
         setTableSelectionShare: (share) => UI.setTableSelectionShare(share),
-        tableSharedSelect: (id) => UI.tableSharedSelect(id),
+        tableSharedSelect: (id, scroll) => UI.tableSharedSelect(id, scroll),
         setWindowSelected: (id) => TreeRenderer.setWindowSelected(id),
         glideTo: (id) => { ZoomPan.glideToPerson(id); },
         reveal: (id) => TreeRenderer.revealWindowSelected(id),
@@ -180,9 +181,9 @@ function recenterOn(id: PersonId): boolean {
     return true;
 }
 
-/** A satellite's side of the shared selection (spec 079 §2). */
+/** A satellite's side of the shared selection (spec 079 §2); following the agent, another window's choice is only marked (spec 097 §4). */
 export function startSatelliteSelection(client: SatelliteClient): void {
-    wireSatelliteSelection(client, selectionDeps());
+    wireSatelliteSelection(client, { ...selectionDeps(), agentAttached: () => windowAgentFollow() === 'attached' });
     // The person menu's research rows come from the main window and run there (§2, 2g).
     setSatelliteResearchMenu(new SatelliteResearchMenu(client));
 }

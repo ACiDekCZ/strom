@@ -1926,8 +1926,10 @@ class TreeRendererClass {
     /**
      * `reveal`: instead of centring the focused card after the render, call
      * this (it moves the view itself). Resolves once drawn and placed.
+     * `agent`: a jump that follows the research agent (spec 097 §4) — not a
+     * choice of a person, so the other windows do not take it as a selection.
      */
-    setFocus(personId: PersonId | null, saveToData = true, reveal?: (id: PersonId) => void): Promise<void> {
+    setFocus(personId: PersonId | null, saveToData = true, reveal?: (id: PersonId) => void, opts: { agent?: boolean } = {}): Promise<void> {
         // Always have a focus person
         // If null is passed, find a default person
         if (!personId) {
@@ -1957,9 +1959,9 @@ class TreeRendererClass {
         this.pendingShown = null;
         if (pendingShown && this.viewMode === 'family') this.applyShownSnapshot(pendingShown);
         this.focusPersonId = personId;
-        // Other windows follow the person chosen here (spec 079 §2).
+        // Other windows follow the person chosen here (spec 079 §2); a jump after the agent says so (spec 097 §4).
         if (focusChanged && personId && typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('strom:focus-changed', { detail: { personId } }));
+            window.dispatchEvent(new CustomEvent('strom:focus-changed', { detail: opts.agent ? { personId, agent: true } : { personId } }));
         }
 
         // Set default depth to max available when focusing on a new person
@@ -4085,7 +4087,8 @@ class TreeRendererClass {
         const centre = mode === 'fan' ? UI.liveFollowFanCenter?.() ?? null : null;
         if (centre && centre !== this.focusPersonId && DataManager.getPerson(centre)) {
             this.fanView?.deactivate();
-            void this.setFocus(centre, false);
+            // Following's own centre, not a choice of a person (spec 097 §4).
+            void this.setFocus(centre, false, undefined, { agent: true });
             return;
         }
         if (fromTable && fromTable !== this.focusPersonId && DataManager.getPerson(fromTable)) {

@@ -226,7 +226,7 @@ export interface TableSelectionShare {
 }
 let selectionShare: TableSelectionShare | null = null;
 /** Another window's selection that came during a cell's edit: taken when the edit ends. */
-let pendingShared: { person: PersonId | null } | null = null;
+let pendingShared: { person: PersonId | null; scroll: boolean } | null = null;
 
 /** The people a row is about, the main one first: a person; a union's partners; an event's people; a source none. */
 function rowPeople(row: TableRow): PersonId[] {
@@ -779,7 +779,7 @@ export const tableMethods = uiModule({
                     // After the editor's own steps (Tab opens the next one: the selection keeps waiting).
                     queueMicrotask(() => {
                         if (!pendingShared || mounted?.grid.isEditing()) return;
-                        this.tableSharedSelect(pendingShared.person);
+                        this.tableSharedSelect(pendingShared.person, pendingShared.scroll);
                     });
                 },
                 // A tap opens the row's sheet; a mouse or a pen only selects, on any device (its menu is the right button's).
@@ -1632,11 +1632,12 @@ export const tableMethods = uiModule({
      * A person selected in another window (spec 079 §2): their row here is
      * the selected one (the row kept if it is theirs), scrolled to only when
      * out of view. During a cell's edit it waits for the edit's end; a person
-     * the view leaves out: no row is selected, nothing said.
+     * the view leaves out: no row is selected, nothing said. `scroll` false:
+     * the row is selected where it is (the window follows the agent, spec 097 §4).
      */
-    tableSharedSelect(personId: string | null): void {
+    tableSharedSelect(personId: string | null, scroll = true): void {
         if (mounted?.grid.isEditing()) {
-            pendingShared = { person: personId as PersonId | null };
+            pendingShared = { person: personId as PersonId | null, scroll };
             return;
         }
         pendingShared = null;
@@ -1659,7 +1660,7 @@ export const tableMethods = uiModule({
         const row = current && rowPeople(current).includes(pid) ? current : rows.find(r => rowPeople(r).includes(pid));
         st.selected = row ? rowKey(row) : null;
         this.renderTableView(el!);
-        if (row) mounted?.grid.revealKeyNearest(rowKey(row));
+        if (row && scroll) mounted?.grid.revealKeyNearest(rowKey(row));
     },
 
     // -----------------------------------------------------------------------

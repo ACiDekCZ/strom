@@ -105,7 +105,7 @@ describe('AgentFollowState', () => {
         // The new main window's first statuses: not live yet.
         st.setLive(false, false);
         expect(st.value).toBeNull();
-        expect(seen.at(-1)).toEqual({ value: null, ended: false });
+        expect(seen[seen.length - 1]).toEqual({ value: null, ended: false });
         now += 2000;
         st.setLive(false, true);
         expect(storage.getItem(agentFollowKey('w1'))).toBe('detached');
@@ -145,13 +145,13 @@ describe('the window\'s state in its messages (spec 097 §7)', () => {
         client.start();
         expect(posted.find(m => m.type === 'hello')).toMatchObject({ windowId: 'w1', agent: 'detached' });
         client.setAgentFollow('paused');
-        expect(posted.at(-1)).toEqual({ type: 'view', windowId: 'w1', kind: 'family', agent: 'paused' });
+        expect(posted[posted.length - 1]).toEqual({ type: 'view', windowId: 'w1', kind: 'family', agent: 'paused' });
         // The same again: nothing.
         const n = posted.length;
         client.setAgentFollow('paused');
         expect(posted).toHaveLength(n);
         client.setKind('fan');
-        expect(posted.at(-1)).toEqual({ type: 'view', windowId: 'w1', kind: 'fan', agent: 'paused' });
+        expect(posted[posted.length - 1]).toEqual({ type: 'view', windowId: 'w1', kind: 'fan', agent: 'paused' });
         client.stop();
     });
 });
