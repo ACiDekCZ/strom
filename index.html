@@ -795,7 +795,9 @@
             display: flex;
             align-items: center;
             gap: 6px;
-            padding: 7px 12px;
+            /* As high as the search field beside it (T54 H4: .search-row, 38px). */
+            height: 38px; box-sizing: border-box;
+            padding: 0 12px;
             border: 1px solid var(--border);
             border-radius: var(--r-md);
             background: transparent;
@@ -7894,7 +7896,7 @@
             position: fixed; top: 0; left: 0; right: 0; z-index: 100;
             height: 48px; box-sizing: border-box;
             display: flex; align-items: center; gap: 10px;
-            padding: 0 10px 0 16px;
+            padding: 0 16px;
             background: var(--toolbar-bg); color: var(--text);
             border-bottom: 1px solid var(--border);
         }
@@ -7934,8 +7936,16 @@
             border: none; border-radius: 8px; background: transparent; color: var(--text); cursor: pointer;
         }
         .sat-icon-btn:disabled { opacity: .4; cursor: default; }
-        /* ⧉ Open another window (K2): 32 px, outlined. */
+        /* ⧉ Open another window (K2): outlined. Undo / Redo and ⧉ take the main window's sizes and
+           spaces (T54 H15): 29 px ghost buttons 2 px apart, ⧉ a 30 px square 8 px from them, the
+           window's edge 16 px away (the toolbar's padding). */
         .sat-another { box-sizing: border-box; border: 1px solid var(--border); color: var(--text-light); font-size: 15px; line-height: 1; }
+        .sat-tools { flex: none; display: flex; align-items: center; gap: 8px; }
+        .sat-undo-group { flex: none; display: flex; align-items: center; gap: 2px; }
+        .sat-undo-group .sat-icon-btn { width: 29px; height: 29px; border-radius: var(--r-md); color: var(--text-light); }
+        .sat-undo-group .sat-icon-btn svg { display: block; }
+        .sat-undo-group .sat-icon-btn:disabled { opacity: 0.32; }
+        .sat-icon-btn.sat-another { width: 30px; height: 30px; border-radius: var(--r-md); }
         /* The view switcher (K2, 2a/2d/2e): the view tabs from 960 px (the toolbar's own
            classes, 26 px high), below that one button "{view} ▾" (30 px) with a menu. */
         .sat-header .sat-view-segment { flex: none; align-self: center; height: 26px; margin-left: 0; }
@@ -7973,7 +7983,7 @@
         }
         @media (pointer: coarse) {
             .sat-follow { min-width: 44px; height: 40px; justify-content: center; }
-            .sat-icon-btn { width: 44px; height: 44px; }
+            .sat-icon-btn, .sat-undo-group .sat-icon-btn, .sat-icon-btn.sat-another { width: 44px; height: 44px; }
             .sat-view-btn { height: 40px; }
         }
         /* A phone held sideways: the header keeps 48 px and the safe areas. */
@@ -9460,7 +9470,7 @@
         /* The minimap's tab (spec 1112 §2): on the block's top edge, in the
            middle, merging with the card (no bottom edge). Open it shows ⌄ and,
            with a mouse, only while the pointer or the focus is on the block;
-           folded it shows the minimap's sign and stays in view. The canvas
+           folded it shows ⌃ (T54 H2: the same caret, turned) and stays in view. The canvas
            folds away (display: none); the block is anchored at its bottom, so
            the zoom buttons stay put. A touch screen shows it always, muted,
            its target reaching 48 × 44 upwards. */
@@ -12770,13 +12780,14 @@
             .fan-empty:hover .fan-empty-edge { fill: var(--hover-bg, #f1f1ee); }
             .fan-unknown-partner:hover .fan-fill { filter: none; }
         }
-        /* Back / forward (bottom-left) show: the legend and the chip stand above them. */
-        body.focus-nav-shown .fan-legend { bottom: 76px; max-height: calc(100% - 90px); }
+        /* Back / forward (bottom-left) show: the legend keeps its place and they stand above it
+           (T54 H1, --nav-lift by the legend's height, measured into --fan-legend-h by src/ui/legend-lift.ts);
+           the legend keeps room for them above it. */
+        body.focus-nav-shown .fan-legend { max-height: calc(100% - 90px); }
         /* Tablet: colours as a dropdown. */
         @media (max-width: 1024px) {
             .fan-color-seg.sel-seg, .fan-colors-label { display: none; }
             .fan-color-drop { display: inline-flex; }
-            body.focus-nav-shown .fan-legend { bottom: 68px; }
         }
         /* Phone: two rows — shapes (icons) and generations, then descendants on the right. */
         @media (max-width: 640px) {
@@ -13886,7 +13897,7 @@
             .toolbar.toolbar-squeeze-3 .search-container { display: none; }
             .toolbar.toolbar-squeeze-3 .search-open-btn {
                 display: flex; align-items: center; justify-content: center; flex: none;
-                width: 36px; height: 36px; padding: 0; margin-right: auto;
+                width: 38px; height: 38px; padding: 0; margin-right: auto; /* as high as the tree switcher (T54 H4) */
                 border: 1px solid var(--border); border-radius: var(--r-md);
                 background: transparent; color: var(--text); cursor: pointer;
             }
@@ -15971,9 +15982,13 @@
         }
         .focus-back-btn { left: 16px; }
         .focus-forward-btn { left: 68px; }
-        /* The legend pill shares this corner: while back / forward show, it
-           stands 8px above them (24 + 44 + 8) instead of covering them. */
-        body.focus-nav-shown:not(.view-mode-print) .tree-legend { bottom: 76px; }
+        /* The legend shares this corner (T54 H1, as on a phone since spec 082 K1.2): it keeps its
+           place and back / forward stand 8px above it while they show, lifted by --nav-lift (the
+           legend's height, measured by src/ui/legend-lift.ts into --tree-legend-h and --fan-legend-h).
+           The tree's legend stands at 24px as they do; the fan's at 14px of its stage. */
+        body.tree-legend-shown:is([data-view-mode="family"], [data-view-mode="descendants"]) { --nav-lift: calc(var(--tree-legend-h, 0px) + 8px); }
+        body.fan-legend-shown[data-view-mode="fan"] { --nav-lift: max(0px, calc(var(--fan-legend-h, 0px) - 2px)); }
+        .focus-nav-btn { margin-bottom: var(--nav-lift, 0px); }
         @media (hover: hover) { .focus-nav-btn:hover { background: rgba(128,128,128,0.12); } }
         body.view-mode-print .focus-nav-btn { display: none !important; }
         @media print { .focus-nav-btn { display: none !important; } }
@@ -24930,8 +24945,10 @@
             .control-block { bottom: var(--bottom-bar-h); padding-bottom: 8px; }
             /* Floating elements clear the bar too. */
             .tree-legend { bottom: calc(var(--bottom-bar-h) + 12px); }
-            /* Above back / forward (bar + 16 + 44 + 8) while they show. */
-            body.focus-nav-shown:not(.view-mode-print) .tree-legend { bottom: calc(var(--bottom-bar-h) + 68px); }
+            /* The legend keeps its place, back / forward stand 8px above it (T54 H1): the tree's
+               legend at bar + 12 (they at bar + 16), the fan's at bar + 14. */
+            body.tree-legend-shown:is([data-view-mode="family"], [data-view-mode="descendants"]) { --nav-lift: calc(var(--tree-legend-h, 0px) + 4px); }
+            body.fan-legend-shown[data-view-mode="fan"] { --nav-lift: calc(var(--fan-legend-h, 0px) + 6px); }
             .family-offer { bottom: calc(var(--bottom-bar-h) + 16px); }
             /* The tour offer and plain toasts never cover the bar's tabs. */
             .tour-offer { bottom: calc(var(--bottom-bar-h) + 16px); }
@@ -24943,18 +24960,14 @@
         }
 
         /* A phone, upright or held sideways (spec 082 K1.2, T44): the legend stays at the bottom edge and
-           back / forward stand above it, lifted by --nav-lift (the legend's height, measured into
-           --tree-legend-h by src/ui/legend-lift.ts, and a gap of 8px; the fan's legend is its 44px chip).
-           Over a pill of the tree they already stand higher: only what the legend needs more. On the
-           research's strip they stand on the strip as before. A tablet keeps the legend above them. */
+           back / forward stand above it, lifted by --nav-lift (as on every width, T54 H1; the fan's
+           legend is its 44px chip). Over a pill of the tree they already stand higher: only what the
+           legend needs more. On the research's strip they stand on the strip as before. */
         @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
-            body.focus-nav-shown:not(.view-mode-print) .tree-legend { bottom: calc(var(--bottom-bar-h) + 12px); }
-            body.tree-legend-shown:is([data-view-mode="family"], [data-view-mode="descendants"]) { --nav-lift: calc(var(--tree-legend-h, 0px) + 4px); }
             body.tree-legend-shown:is([data-view-mode="family"], [data-view-mode="descendants"]):has(> .evidence-pill) { --nav-lift: max(0px, calc(var(--tree-legend-h, 0px) - 52px)); }
             body.tree-legend-shown:is([data-view-mode="family"], [data-view-mode="descendants"]):has(> .evidence-pill ~ .live-follow-pill) { --nav-lift: max(0px, calc(var(--tree-legend-h, 0px) - 112px)); }
             body[data-view-mode="fan"]:not(:has(#evidence-pill)):not(:has(#live-follow-pill)) { --nav-lift: 52px; }
             body:has(> #live-panel.phone-strip:not([hidden])) { --nav-lift: 0px; }
-            .focus-nav-btn { margin-bottom: var(--nav-lift, 0px); }
         }
         /* Upright the toasts span the phone: they rise as far as the buttons do. */
         @media (max-width: 640px) and (orientation: portrait), (max-width: 640px) and (min-height: 501px) {
@@ -29948,7 +29961,7 @@
         <!-- The minimap's tab on the block's top edge: folds the minimap away and back (src/ui/minimap.ts) -->
         <button type="button" class="minimap-toggle" aria-controls="minimap-panel" aria-expanded="true" hidden>
             <svg class="minimap-toggle-fold" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.5l4 4 4-4"/></svg>
-            <svg class="minimap-toggle-open" width="16" height="12" viewBox="0 0 16 12" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><rect x="0.7" y="0.7" width="14.6" height="10.6" rx="2"/><rect x="5" y="3.5" width="5.5" height="4.5" rx="0.8" fill="currentColor" stroke="none"/></svg>
+            <svg class="minimap-toggle-open" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5l4-4 4 4"/></svg>
         </button>
         <!-- Overview minimap (shown only for trees that overflow the viewport) -->
         <div id="minimap-panel" class="minimap-panel" style="display:none;" data-i18n-title="minimap.title">

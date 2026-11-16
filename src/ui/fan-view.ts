@@ -31,6 +31,7 @@ import { fanYears } from '../fan-labels.js';
 import { shownNameFull } from '../person-name.js';
 import { strings } from '../strings.js';
 import { syncDepthStepper } from './depth-stepper.js';
+import { syncFanLegendLift } from './legend-lift.js';
 import { isMobile } from '../breakpoints.js';
 import { FAN_STORAGE_KEYS } from '../storage-keys.js';
 
@@ -1213,6 +1214,8 @@ export class FanViewController {
         const list = c.querySelector<HTMLElement>('#fan-legend-items');
         legend?.classList.toggle('is-open', this.legendOpen);
         legend?.toggleAttribute('hidden', !this.model);
+        // Back / forward stand above the card at its height (T54 H1).
+        if (legend) syncFanLegendLift(legend);
         if (head) {
             head.innerHTML = `<span class="fan-legend-title">${esc(strings.fan.legend)} · ${esc(label)}</span>`
                 + `<span class="fan-legend-arrow" aria-hidden="true">${this.legendOpen ? '▾' : '▸'}</span>`;

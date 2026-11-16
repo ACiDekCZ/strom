@@ -47,8 +47,8 @@ export interface SatHeaderOptions {
     onFollowChange?: () => void;
 }
 
-const UNDO_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>';
-const REDO_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>';
+const UNDO_ICON = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>';
+const REDO_ICON = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>';
 
 /**
  * The header's name. With the view switcher (K2) the tree alone (the switcher
@@ -136,8 +136,15 @@ export function mountSatHeader(doc: Document, client: SatHeaderClient, opts: Sat
 
     header.append(title);
     if (switcher) header.append(switcher.segment, switcher.button);
-    header.append(spacer, follow.button, divider, undo, redo);
-    if (another) header.append(another);
+    // Undo / Redo as one group and ⧉ beside it, spaced as in the main window's toolbar (T54 H15).
+    const tools = doc.createElement('span');
+    tools.className = 'sat-tools';
+    const undoGroup = doc.createElement('span');
+    undoGroup.className = 'sat-undo-group';
+    undoGroup.append(undo, redo);
+    tools.append(undoGroup);
+    if (another) tools.append(another);
+    header.append(spacer, follow.button, divider, tools);
     doc.body.prepend(header);
 
     const syncTitle = (): void => {

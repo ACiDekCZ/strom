@@ -94,9 +94,9 @@ test('the branch stripe follows the card\'s rounded corners, also on the focused
 });
 
 /**
- * The legend pill and back / forward share the bottom-left corner. On a desktop and a tablet the pill stands
- * above the buttons (T32); on a phone the pill stays at the bottom edge and the buttons stand above it
- * (spec 082 K1.2, T44).
+ * The legend pill and back / forward share the bottom-left corner: on every width the pill stays where it
+ * was and the buttons stand above it (on a phone since spec 082 K1.2, T44; on a desktop and a tablet since
+ * T54 H1 — before, the pill was lifted above them, T32).
  */
 for (const vp of [{ name: 'desktop', width: 1280, height: 800 }, { name: 'tablet', width: 820, height: 1180 }, { name: 'phone', width: 390, height: 844 }]) {
     test.describe(`legend and back on ${vp.name}`, () => {
@@ -122,15 +122,15 @@ for (const vp of [{ name: 'desktop', width: 1280, height: 800 }, { name: 'tablet
                 await expect.poll(async () => {
                     const b = (await nav.boundingBox())!;
                     const l = (await legend.boundingBox())!;
-                    return phone ? b.y + b.height <= l.y : l.y + l.height <= b.y;
+                    return b.y + b.height <= l.y;
                 }).toBe(true);
             };
             await apart(back);
             const l = (await legend.boundingBox())!;
-            // Same left edge as before; on a phone the legend stays where it was, elsewhere it is only lifted.
+            // The legend stays where it was.
             expect(Math.round(l.x)).toBe(Math.round(before.x));
+            expect(Math.round(l.y)).toBe(Math.round(before.y));
             if (phone) {
-                expect(Math.round(l.y)).toBe(Math.round(before.y));
                 // At the bottom edge: just above the bottom bar.
                 const bar = (await page.locator('#bottom-bar').boundingBox())!;
                 expect(bar.y - (l.y + l.height)).toBeLessThanOrEqual(16);

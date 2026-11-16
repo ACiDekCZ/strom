@@ -113,3 +113,82 @@ for (const [label, viewport] of [['390 upright', { width: 390, height: 844 }], [
         });
     });
 }
+
+/**
+ * A computer and a tablet (T54 H1): as on a phone, the legend keeps its place
+ * while back / forward come and go, and they stand above it (they used to push
+ * the legend up as they appeared) — the tree's legend folded to its chip and
+ * open, and the fan's legend card open and folded.
+ */
+const box = (page: Page, sel: string) => page.locator(sel).evaluate(el => {
+    const r = el.getBoundingClientRect();
+    return { top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left) };
+});
+
+for (const [label, viewport] of [['computer 1440', { width: 1440, height: 900 }], ['tablet 1024', { width: 1024, height: 768 }], ['tablet 800 upright', { width: 800, height: 1100 }]] as const) {
+    test.describe(`${label}: the legend keeps its place (T54 H1)`, () => {
+        test.use({ viewport });
+
+        test('the family view: back and forward come above the legend, which does not move', async ({ page }) => {
+            await openApp(page);
+            await page.getByRole('button', { name: 'Try a sample tree' }).click();
+            await expect(page.locator('#toolbar-focus-name')).not.toHaveText('');
+            await page.evaluate(() => window.Strom.UI.toggleBranchLegend(true));
+            const legend = page.locator('#tree-legend');
+            await expect(legend).toBeVisible();
+            const back = page.locator('#focus-back-btn');
+            await expect(back).toBeHidden();
+            for (const folded of [true, false]) {
+                if (folded !== await legend.evaluate(el => el.classList.contains('is-collapsed'))) {
+                    await legend.locator('.tree-legend-toggle').click();
+                }
+                await expect(legend).toHaveClass(folded ? /is-collapsed/ : /^(?!.*is-collapsed)/);
+                const before = await box(page, '#tree-legend');
+                await page.evaluate(() => {
+                    const S = window.Strom;
+                    S.TreeRenderer.setFocus(Object.keys(S.DataManager.getData().persons)[5] as never);
+                });
+                await expect(back).toBeVisible();
+                await expect.poll(() => box(page, '#tree-legend'), 'the legend stays').toEqual(before);
+                await standsAbove(page, '#focus-back-btn', '#tree-legend');
+                await expect.poll(async () => before.top - (await box(page, '#focus-back-btn')).bottom).toBe(8);
+                await expect.poll(() => clashes(page)).toEqual([]);
+                // Forward alone (back to the first focus): still above, the legend still in place.
+                await page.evaluate(() => window.Strom.TreeRenderer.goBack());
+                await expect(page.locator('#focus-forward-btn')).toBeVisible();
+                await standsAbove(page, '#focus-forward-btn', '#tree-legend');
+                expect(await box(page, '#tree-legend')).toEqual(before);
+            }
+            // Without the legend they come down to the corner.
+            await page.evaluate(() => window.Strom.UI.toggleBranchLegend(false));
+            await expect(legend).toBeHidden();
+            await expect.poll(() => page.locator('#focus-forward-btn').evaluate(el => getComputedStyle(el).marginBottom)).toBe('0px');
+        });
+
+        test('the fan: back comes above the legend card, which does not move, open or folded', async ({ page }) => {
+            await openApp(page);
+            await page.getByRole('button', { name: 'Try a sample tree' }).click();
+            await expect(page.locator('#toolbar-focus-name')).not.toHaveText('');
+            await page.evaluate(() => window.Strom.UI.setDisplayViewMode('fan'));
+            const legend = page.locator('#fan-legend');
+            await expect(legend).toBeVisible();
+            await expect(legend).toHaveClass(/is-open/);
+            const before = await box(page, '#fan-legend');
+            await page.evaluate(() => {
+                const S = window.Strom;
+                S.TreeRenderer.setFocus(Object.keys(S.DataManager.getData().persons)[5] as never);
+            });
+            await expect(page.locator('#focus-back-btn')).toBeVisible();
+            await expect.poll(() => box(page, '#fan-legend'), 'the legend stays').toEqual(before);
+            await expect.poll(async () => before.top - (await box(page, '#focus-back-btn')).bottom).toBe(8);
+            await expect.poll(() => clashes(page)).toEqual([]);
+            // Folded, the card is lower: back follows it down, the card's bottom edge stays.
+            await page.locator('#fan-legend-head').click();
+            await expect(legend).not.toHaveClass(/is-open/);
+            const folded = await box(page, '#fan-legend');
+            expect(folded.bottom).toBe(before.bottom);
+            await expect.poll(async () => folded.top - (await box(page, '#focus-back-btn')).bottom).toBe(8);
+            await expect.poll(() => clashes(page)).toEqual([]);
+        });
+    });
+}

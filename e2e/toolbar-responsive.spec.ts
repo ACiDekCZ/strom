@@ -761,3 +761,34 @@ test.describe('the sample tree\'s toolbar with the line picker and ⧉', () => {
         });
     });
 });
+
+test.describe('the tree switcher and the search field are equally high (T54 H4)', () => {
+    test.use({ locale: 'de-DE' });
+
+    const heights = (page: Page) => page.evaluate(() => {
+        const box = (sel: string) => {
+            const r = document.querySelector(sel)!.getBoundingClientRect();
+            return { h: Math.round(r.height * 10) / 10, mid: Math.round((r.top + r.height / 2) * 10) / 10 };
+        };
+        return { switcher: box('.toolbar .tree-switcher-btn'), search: box('.toolbar .search-row') };
+    });
+
+    for (const [width, height, touch] of [[1440, 900, false], [1280, 800, false], [1024, 768, false], [1024, 768, true], [800, 1100, true]] as const) {
+        test.describe(`${width} px${touch ? ', touch' : ''}`, () => {
+            test.use({ viewport: { width, height }, hasTouch: touch });
+
+            test('the same height and middle; folded to the magnifier, that is as high too', async ({ page }) => {
+                await openApp(page);
+                await page.getByRole('button', { name: 'Beispiel-Stammbaum ausprobieren' }).click();
+                await expect(page.locator('#toolbar-focus-name')).not.toHaveText('');
+                await settleLayout(page);
+                const h = await heights(page);
+                expect(h.switcher).toEqual(h.search);
+                // The search folded to the magnifier (fit step 5) keeps the height.
+                await page.evaluate(() => document.querySelector('.toolbar')!.classList.add('toolbar-squeeze-3'));
+                const mag = await page.locator('.toolbar .search-open-btn').evaluate(el => Math.round(el.getBoundingClientRect().height * 10) / 10);
+                expect(mag).toBe(h.switcher.h);
+            });
+        });
+    }
+});

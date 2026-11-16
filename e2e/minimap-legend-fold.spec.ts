@@ -54,9 +54,18 @@ test.describe('minimap fold', () => {
         await expect(tab).toHaveAttribute('aria-expanded', 'false');
         await expect(tab).toHaveAttribute('aria-label', 'Expand minimap');
         expect(await zoomTops(page)).toEqual(before);
-        // Folded, it shows the minimap's sign without the pointer, and nothing is drawn.
+        // Folded, it shows a caret up without the pointer (T54 H2: the open tab's ⌄ turned, no other sign), and nothing is drawn.
         await page.mouse.move(10, 400);
         await expect.poll(() => tab.evaluate(el => getComputedStyle(el).opacity)).toBe('1');
+        await expect(tab.locator('.minimap-toggle-fold')).toBeHidden();
+        const caret = tab.locator('.minimap-toggle-open');
+        await expect(caret).toBeVisible();
+        expect(await caret.evaluate(svg => [...svg.children].map(c => `${c.tagName}:${c.getAttribute('d')}`))).toEqual(['path:M4 9.5l4-4 4 4']);
+        // The same size and stroke as the open tab's ⌄.
+        expect(await tab.evaluate(el => {
+            const [fold, open] = ['.minimap-toggle-fold', '.minimap-toggle-open'].map(s => el.querySelector(s)!);
+            return ['width', 'height', 'viewBox', 'stroke-width'].every(a => fold.getAttribute(a) === open.getAttribute(a));
+        })).toBe(true);
         expect(await page.evaluate(() => (window.Strom.UI as unknown as { minimapTransform: unknown }).minimapTransform)).toBeNull();
         expect(await page.evaluate(() => localStorage.getItem('strom-minimap-open'))).toBe('0');
 

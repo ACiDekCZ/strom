@@ -182,7 +182,8 @@ test.describe('⧉ Open another window', () => {
         await expect(another(sat)).toBeVisible();
         await expect(another(sat)).toBeEnabled();
         await expect(another(sat)).toHaveAccessibleName('Open another window');
-        expect((await another(sat).boundingBox())!.width).toBe(32);
+        // As large as the main window's ⧉ (T54 H15).
+        expect((await another(sat).boundingBox())!.width).toBe(30);
 
         // This window's person, not the main window's.
         await sat.evaluate(() => window.Strom.TreeRenderer.setFocus('e' as never));
@@ -280,6 +281,40 @@ test.describe('the header fits (de)', () => {
                 expect(await sat.locator('.sat-header-title').evaluate(el => el.scrollWidth > el.clientWidth && getComputedStyle(el).textOverflow === 'ellipsis'), 'the long name is cut with an ellipsis').toBe(true);
             }
             await expect(sat).toHaveTitle(`Nachkommen – ${LONG_NAME} – Strom`);
+            await sat.close();
+        });
+    }
+});
+
+test.describe('Undo, Redo and ⧉ as in the main window (T54 H15)', () => {
+    for (const kind of ['table', 'descendants']) {
+        test(`${kind}: the same sizes, the same spaces between them and to the window's edge`, async ({ page, context }) => {
+            await page.setViewportSize({ width: 1440, height: 900 });
+            const treeId = await openMain(page, context);
+            await page.evaluate((k) => window.Strom.UI.setDisplayViewMode(k as never), kind);
+            const rect = (p: Page, sel: string) => p.locator(sel).evaluate(el => {
+                const r = el.getBoundingClientRect();
+                return { left: Math.round(r.left), right: Math.round(r.right), w: Math.round(r.width), h: Math.round(r.height), mid: Math.round(r.top + r.height / 2) };
+            });
+            const main = {
+                undo: await rect(page, '#toolbar-undo-btn'), redo: await rect(page, '#toolbar-redo-btn'),
+                win: await rect(page, '#view-window-btn'), bar: await rect(page, '.toolbar'),
+                pad: await page.locator('.toolbar').evaluate(el => getComputedStyle(el).paddingRight),
+            };
+            const sat = await openSatellite(context, treeId, kind, `h15${kind}`, { width: 1440, height: 900 });
+            const s = {
+                undo: await rect(sat, '.sat-header #toolbar-undo-btn'), redo: await rect(sat, '.sat-header #toolbar-redo-btn'),
+                win: await rect(sat, '.sat-header .sat-another'), bar: await rect(sat, '.sat-header'),
+            };
+            // The buttons as large as the main window's (its ⧉ measured before a window is open: no count beside it).
+            for (const k of ['undo', 'redo', 'win'] as const) expect([s[k].w, s[k].h], k).toEqual([main[k].w, main[k].h]);
+            // Undo and Redo as close as in the main window; ⧉ as far from them as the main window's ⧉ is.
+            expect(s.redo.left - s.undo.right).toBe(main.redo.left - main.undo.right);
+            expect(s.win.left - s.redo.right).toBe(main.undo.left - main.win.right);
+            // One middle line, and ⧉ as far from the window's edge as the toolbar's padding.
+            expect(new Set([s.undo.mid, s.redo.mid, s.win.mid]).size).toBe(1);
+            expect(`${s.bar.right - s.win.right}px`).toBe(main.pad);
+            await headerFits(sat);
             await sat.close();
         });
     }
