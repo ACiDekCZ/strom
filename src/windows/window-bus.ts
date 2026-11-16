@@ -35,6 +35,12 @@ export interface WindowStatus {
     canRedo: boolean;
     /** The satellites the main window knows (one missing from it says hello again: a main window after its reload). */
     windows: string[];
+    /**
+     * The revision of the agent's state (`agent-state`, spec 097 K1.3) the
+     * main window sent last (null: none yet): a window whose mirror stands
+     * elsewhere missed one and asks for the whole state.
+     */
+    agentRev?: number | null;
 }
 
 /** Where a satellite stands on screen (K4 layout). */
@@ -89,6 +95,15 @@ export type WindowMessageBody =
     | { type: 'research-menu'; to: string; reqId: string; items: unknown[] }
     /** main → overview window: the research's state (§6, K3). */
     | { type: 'research-state'; state: unknown }
+    /**
+     * main → sat: the agent's state as the main window has it (spec 097 K1.3,
+     * src/windows/agent-state.ts): the sections changed since the last
+     * revision, or all of them (to one window after its hello or its ask).
+     * No bridge address or token crosses.
+     */
+    | { type: 'agent-state'; to?: string; state: unknown }
+    /** sat → main: the whole agent's state for this window (its mirror missed a revision, a new main window). */
+    | { type: 'agent-state-req'; windowId: string }
     /** sat → main: the window switched its view (its kind in the main window's list, its address). */
     | { type: 'view'; windowId: string; kind: SatelliteKind }
     /**
@@ -121,7 +136,7 @@ export interface ChannelLike {
 }
 
 const TYPES = new Set<string>(['hello', 'init', 'tree', 'patch', 'edit', 'edit-result', 'select', 'undo', 'redo', 'status',
-    'focus-req', 'focused', 'research-action', 'research-action-result', 'research-menu-req', 'research-menu', 'research-state', 'view', 'spawn', 'bye', 'main-bye', 'link', 'close']);
+    'focus-req', 'focused', 'research-action', 'research-action-result', 'research-menu-req', 'research-menu', 'research-state', 'agent-state', 'agent-state-req', 'view', 'spawn', 'bye', 'main-bye', 'link', 'close']);
 
 function isWindowMessage(data: unknown): data is WindowMessage {
     if (!data || typeof data !== 'object') return false;

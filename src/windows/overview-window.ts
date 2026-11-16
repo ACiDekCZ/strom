@@ -548,7 +548,16 @@ export function setOverviewChangeListener(fn: (() => void) | null): void {
     changeListener = fn;
 }
 
+/** Others told of the same hint (the agent's state for other windows, spec 097). */
+const hintListeners = new Set<() => void>();
+
+export function onOverviewChanged(fn: () => void): () => void {
+    hintListeners.add(fn);
+    return () => { hintListeners.delete(fn); };
+}
+
 /** What the overview shows may have changed (every redraw of the research panel says so). */
 export function overviewChanged(): void {
     changeListener?.();
+    for (const fn of [...hintListeners]) fn();
 }

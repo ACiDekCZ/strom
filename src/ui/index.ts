@@ -116,6 +116,7 @@ import { researchBrowserMethods } from './research-browser-ui.js';
 import { researchRemovedMethods } from './research-removed-ui.js';
 import { researchDirectionsMethods } from './research-directions-ui.js';
 import { overviewWindowMethods } from './overview-window-ui.js';
+import { agentWindowMethods } from './agent-window-ui.js';
 import { directionFormMethods } from './direction-form-ui.js';
 import { researchOffLineMethods } from './research-offline-ui.js';
 import { queueWorkMethods } from './queue-work-dialog.js';
@@ -903,6 +904,10 @@ Object.assign(UIClass.prototype, researchDirectionsMethods);
 type OverviewWindowMethods = typeof overviewWindowMethods;
 export interface UIClass extends OverviewWindowMethods {}
 Object.assign(UIClass.prototype, overviewWindowMethods);
+
+type AgentWindowMethods = typeof agentWindowMethods;
+export interface UIClass extends AgentWindowMethods {}
+Object.assign(UIClass.prototype, agentWindowMethods);
 
 type DirectionFormMethods = typeof directionFormMethods;
 export interface UIClass extends DirectionFormMethods {}

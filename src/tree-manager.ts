@@ -210,6 +210,13 @@ class TreeManagerClass {
         trees: []
     };
 
+    /**
+     * A satellite window (spec 079, 097 K1.3) has no index of its own: the
+     * main window's metadata of the tree it shows, as the agent's mirror
+     * carries it (src/windows/agent-mirror.ts). Read only, never stored.
+     */
+    private windowMeta: TreeMetadata | null = null;
+
     private initialized = false;
 
     // ==================== INITIALIZATION ====================
@@ -1415,7 +1422,12 @@ class TreeManagerClass {
     }
 
     getTreeMetadata(id: TreeId): TreeMetadata | null {
-        return this.index.trees.find(t => t.id === id) || null;
+        return this.index.trees.find(t => t.id === id) || (this.windowMeta?.id === id ? this.windowMeta : null);
+    }
+
+    /** The main window's metadata of the tree a satellite shows (null: none); never stored, never in the list of trees. */
+    setWindowTreeMetadata(meta: TreeMetadata | null): void {
+        this.windowMeta = meta;
     }
 
     getFirstTree(): TreeMetadata | null {

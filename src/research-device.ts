@@ -24,6 +24,21 @@ const BRIDGE_KEY = 'strom-research-bridge:';
 const WAITING_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
+ * This window never talks to a research's bridge (a satellite window, spec
+ * 097 K1.3): no bridge is known here, so nothing here reaches one; the
+ * research's state comes from the main window (src/windows/agent-mirror.ts).
+ */
+let bridgelessWindow = false;
+
+export function setBridgelessWindow(on: boolean): void {
+    bridgelessWindow = on;
+}
+
+export function isBridgelessWindow(): boolean {
+    return bridgelessWindow;
+}
+
+/**
  * Remember what the research on this computer announced, and the link scheme
  * it named (a second install's own, e.g. strom-research-beta; not named: the
  * main one, strom-research). An empty list is "not now", never "forget": a
@@ -189,6 +204,8 @@ function storedTree(value: unknown): StoredResearchTree | undefined {
 }
 
 export function storedResearchBridge(researchId: string): StoredResearchBridge | null {
+    // Another window of the app (spec 097 K1.3): only the main window talks to a bridge.
+    if (bridgelessWindow) return null;
     try {
         const raw = localStorage.getItem(BRIDGE_KEY + researchId);
         if (!raw) return null;

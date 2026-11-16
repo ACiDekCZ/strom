@@ -61,6 +61,8 @@ export interface SatelliteEvents {
     'tree-gone': { treeId: TreeId | null };
     /** The research's state from the main window (K3, overview-window.ts: read it with readOverviewState). */
     'research-state': unknown;
+    /** The agent's state from the main window (spec 097 K1.3, agent-state.ts: an AgentMirrorStore takes it in). */
+    'agent-state': unknown;
     /** Another window selected a person (only while following the selection). */
     select: { personId: string | null; origin: string };
     /** "Follow selection" was switched on or off in this window (off: the mark of another window's choice goes). */
@@ -262,6 +264,7 @@ export class SatelliteClient {
             b.on('research-menu', m => this.menuWaiters.get(m.reqId)?.(Array.isArray(m.items) ? m.items : [])),
             b.on('research-action-result', m => this.actionWaiters.get(m.reqId)?.(m.result)),
             b.on('research-state', m => { if (!this.mainId || m.from === this.mainId) this.emit('research-state', m.state); }),
+            b.on('agent-state', m => { if (!this.mainId || m.from === this.mainId) this.emit('agent-state', m.state); }),
         );
         if (typeof window !== 'undefined') {
             const bye = () => this.bus.post({ type: 'bye', windowId: this.windowId, bounds: this.bounds() });
@@ -283,6 +286,14 @@ export class SatelliteClient {
     }
 
     // ---- actions ----
+
+    /** Ask the main window for the whole agent's state (spec 097 K1.3: the mirror missed a revision). */
+    requestAgentState(): void {
+        if (this.started && this.mainId) this.bus.post({ type: 'agent-state-req', windowId: this.windowId });
+    }
+
+    /** The main window's id (null: none known now); another one means its state comes anew. */
+    get mainWindowId(): string | null { return this.mainId; }
 
     /**
      * This window switched its view (§2 K2): the main window's list names

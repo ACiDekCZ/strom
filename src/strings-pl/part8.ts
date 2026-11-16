@@ -1526,6 +1526,7 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         saveAs: 'Zapisz jako nowy',
         discard: 'Odrzuć zmiany',
         builtinNote: 'Widok wbudowany pozostaje bez zmian. Zmiany można zapisać jako nowy widok.',
+        researchFilterOff: 'Filtr badania nie jest teraz stosowany',
         saveAsMenu: 'Zapisz jako nowy…',
         renameMenu: 'Zmień nazwę…',
         deleteMenu: 'Usuń',

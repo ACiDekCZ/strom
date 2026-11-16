@@ -25,7 +25,7 @@ import { foreignSendCheck, researchRefsOf } from '../research-foreign-send.js';
 import { yearOf } from '../dates.js';
 import { saveResearchCopy, loadResearchCopy, saveResearchPrevCopy, loadResearchPrevCopy } from '../research-copy.js';
 import { RESEARCH_COPY_FP_KEY, RESEARCH_PREV_COPY_FP_KEY } from '../storage-keys.js';
-import { researchAutoState, patchResearchAutoState, noteResearchSendPreviewSkipped } from '../research-device.js';
+import { researchAutoState, patchResearchAutoState, noteResearchSendPreviewSkipped, isBridgelessWindow } from '../research-device.js';
 import { researchSendMode, personsByResearchRefs } from './research-sync-ui.js';
 import { researchFactLabel } from './person-research-ui.js';
 import { uiModule } from './module.js';
@@ -453,6 +453,8 @@ export const researchChangesMethods = uiModule({
      * is refreshed once it is —, or the copy no longer stands for the tie's base).
      */
     researchChangesBase(): 'same' | { treeId: TreeId; base: StromData; key: string } | null {
+        // Another window of the app keeps no copy of the research's tree (it reads no storage): not known there.
+        if (isBridgelessWindow()) return null;
         const ctx = this.researchSyncLink();
         if (!ctx) return null;
         const { treeId, link } = ctx;

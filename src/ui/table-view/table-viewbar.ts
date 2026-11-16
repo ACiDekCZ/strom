@@ -19,6 +19,8 @@ export interface ViewBarState {
     builtin: boolean;
     changed: boolean;
     readOnly: boolean;
+    /** The view's research filter is not applied now (spec 097 5e): a note after the view's button. */
+    researchIdle?: boolean;
 }
 
 export interface ViewBarHandlers {
@@ -42,6 +44,7 @@ export class ViewBar {
     private readonly save: HTMLButtonElement;
     private readonly saveAs: HTMLButtonElement;
     private readonly discard: HTMLButtonElement;
+    private readonly note: HTMLElement;
     private last = '';
 
     constructor(slot: HTMLElement, private readonly handlers: ViewBarHandlers) {
@@ -50,6 +53,7 @@ export class ViewBar {
         slot.innerHTML = `<span class="tv-view-label" aria-hidden="true">${esc(t.view)}</span>`
             + '<button type="button" class="tv-view-btn" aria-haspopup="menu">'
             + '<span class="tv-view-name"></span><span class="tv-view-dot" aria-hidden="true" hidden>●</span><span class="tv-view-caret" aria-hidden="true">▾</span></button>'
+            + `<span class="tv-view-note" role="status" title="${esc(t.researchFilterOff)}" hidden><span class="tv-view-note-dot" aria-hidden="true"></span><span class="tv-view-note-text">${esc(t.researchFilterOff)}</span></span>`
             + `<button type="button" class="tv-view-changed" hidden>● ${esc(t.changed)}</button>`
             + `<button type="button" class="tv-view-act tv-view-save" hidden>${esc(t.save)}</button>`
             + `<button type="button" class="tv-view-act tv-view-saveas" hidden>${esc(t.saveAs)}</button>`
@@ -59,6 +63,7 @@ export class ViewBar {
         this.save = slot.querySelector('.tv-view-save')!;
         this.saveAs = slot.querySelector('.tv-view-saveas')!;
         this.discard = slot.querySelector('.tv-view-discard')!;
+        this.note = slot.querySelector('.tv-view-note')!;
         this.btn.addEventListener('click', () => this.handlers.onList(this.btn));
         this.changed.addEventListener('click', () => this.handlers.onBuiltinNote(this.changed));
         this.save.addEventListener('click', () => this.handlers.onSave());
@@ -89,6 +94,7 @@ export class ViewBar {
         this.saveAs.hidden = !s.changed || s.readOnly;
         this.discard.hidden = !s.changed;
         this.slot.classList.toggle('is-changed', s.changed);
+        this.note.hidden = !s.researchIdle;
     }
 }
 

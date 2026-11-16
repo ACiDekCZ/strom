@@ -200,6 +200,9 @@ export class WindowRegistry {
     private readonly heldLinks: { link: { search?: string; files?: unknown[] }; from: string }[] = [];
     private readonly heldActions: HeldAction[] = [];
     private readonly helloListeners = new Set<(id: string, kind: SatelliteKind) => void>();
+    private readonly agentReqListeners = new Set<(id: string) => void>();
+    /** The agent's state's revision sent last (spec 097 K1.3; null: none). */
+    private agentRev: number | null = null;
     private readonly focusWaiters = new Map<string, () => void>();
     private readonly unsubscribe: (() => void)[] = [];
 
@@ -248,6 +251,7 @@ export class WindowRegistry {
             b.on('link', m => this.onLink({ search: m.search, files: m.files }, m.from)),
             b.on('research-action', m => this.onResearchAction({ action: m.action, args: m.args, from: m.from, reqId: m.reqId })),
             b.on('research-menu-req', m => this.onResearchMenuRequest(m)),
+            b.on('agent-state-req', m => this.agentStateAsked(m.windowId || m.from)),
             this.host.onSaved(() => this.sync()),
         );
         if (typeof window !== 'undefined') {
@@ -402,6 +406,27 @@ export class WindowRegistry {
         this.bus.post({ type: 'research-state', state });
     }
 
+    /**
+     * The agent's state for the other windows (spec 097 K1.3): to every one,
+     * or to one (`to`: after its hello or its ask).
+     */
+    postAgentState(state: unknown, to?: string): void {
+        this.bus.post(to ? { type: 'agent-state', to, state } : { type: 'agent-state', state });
+    }
+
+    /** The revision of the agent's state sent last: the status carries it (a window that missed one asks). */
+    setAgentRev(rev: number | null): void {
+        if (rev === this.agentRev) return;
+        this.agentRev = rev;
+        this.postStatus(false);
+    }
+
+    /** A window asked for the whole agent's state (its mirror missed a revision). */
+    onAgentStateRequest(cb: (id: string) => void): () => void {
+        this.agentReqListeners.add(cb);
+        return () => this.agentReqListeners.delete(cb);
+    }
+
     /** Something may have changed (a hint from the app): read the revision and the status now. */
     notifyChanged(): void {
         this.sync();
@@ -491,7 +516,14 @@ export class WindowRegistry {
             canUndo: this.host.canUndo(),
             canRedo: this.host.canRedo(),
             windows: [...this.entries.keys()],
+            agentRev: this.agentRev,
         };
+    }
+
+    private agentStateAsked(id: string): void {
+        for (const cb of [...this.agentReqListeners]) {
+            try { cb(id); } catch (err) { console.error('agent state request failed', err); }
+        }
     }
 
     private postStatus(force: boolean): void {

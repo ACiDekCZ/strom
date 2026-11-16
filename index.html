@@ -10820,6 +10820,18 @@
             color: var(--text-light); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; white-space: nowrap;
         }
         .tv-view-changed[hidden], .tv-view-act[hidden], .tv-view-discard[hidden], .tv-view-dot[hidden] { display: none; }
+        /* Spec 097 5e: a view's research filter not applied now (no research to read here): an amber note after the view. */
+        .tv-view-note {
+            display: inline-flex; align-items: center; gap: 6px; flex: 0 1 auto; min-width: 0; max-width: 280px; height: 26px; padding: 0 10px;
+            border-radius: 999px; background: var(--warning-soft); color: var(--warning-text);
+            font-size: 12px; font-weight: 500; white-space: nowrap;
+        }
+        .tv-view-note[hidden] { display: none; }
+        .tv-view-note-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--warning); }
+        .tv-view-note-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+        @media (min-width: 641px) and (max-width: 1024px) {
+            .tv-view-note { max-width: 200px; }
+        }
         .tv-export-btn {
             display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px; white-space: nowrap;
             border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text);
@@ -11273,6 +11285,9 @@
             .tv-slot-view { flex: 1 1 0; min-width: 0; }
             .tv-view-label, .tv-view-changed, .tv-view-act, .tv-view-discard { display: none; }
             .tv-view-btn { height: 40px; max-width: none; font-size: 14px; }
+            /* 5e on a phone: the note's dot beside the view (its words in its title and for a screen reader). */
+            .tv-view-note { flex: none; width: 26px; padding: 0; justify-content: center; }
+            .tv-view-note-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
             .tv-group-toggle, .tv-resize { display: none; }
             .tv-groupcell { cursor: default; }
             .tv-status-checks { font-size: 11.5px; }

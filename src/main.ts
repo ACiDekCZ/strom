@@ -35,6 +35,9 @@ import { shouldRegisterServiceWorker, registerServiceWorker, linkManifest, isBet
 import { decideWindowRole, getWindowRole, setWindowRole, satelliteViewMode, tryBecomeMain, type SatelliteKind, type SatelliteParams } from './windows/window-role.js';
 import { startMainWindow, startSatelliteClient, startSatelliteSelection, forwardSatelliteLaunches, showSecondTab, openLinksFromOtherWindows, makeSatelliteMain, openMainWindow, wireSatelliteViewStart, keptSatelliteState, keepSatelliteState } from './windows/window-start.js';
 import { mountSatStates } from './windows/sat-states.js';
+import { startAgentMirror } from './windows/agent-mirror.js';
+import { setBridgelessWindow } from './research-device.js';
+import { setWindowFollowGate } from './ui/live-follow-ui.js';
 import { wireWindowDrafts } from './windows/window-drafts.js';
 import { peekBecomeMainMark, retryBecomeMain, takeBecomeMainMark } from './windows/become-main.js';
 import { formatLiveClock } from './live-time.js';
@@ -350,6 +353,11 @@ function startSatelliteWindow(params: SatelliteParams, debugOptions: DebugOption
         },
     });
     startSatelliteSelection(client);
+    // The research (spec 097 K1.3): only the main window talks to its bridge; this window draws the agent's
+    // state from its mirror of the main window's, and follows nothing of its own yet (its jumps are D2's).
+    setBridgelessWindow(true);
+    setWindowFollowGate(() => false);
+    startAgentMirror(client).onChange(changed => UI.agentMirrorApplied(changed));
     // A refused edit was not applied: its Undo pill (standing or waiting) goes before the toast says so.
     client.on('conflict', () => UI.dismissUndoToast());
     // Its states under the header or in place of the view (§3).

@@ -34,11 +34,11 @@ import {
 import { onComputer, researchTableLive } from '../research-ui.js';
 import { researchBubble, researchConflictBubble, type ResearchBubble } from './table-research-bubble.js';
 import { AGENT_DONE_MS, materialsCountNow, researchConflictsNow } from '../../card-signals.js';
-import { directionPlacesKept, onDirectionPlaces } from '../../research-directions-write.js';
+import { onDirectionPlaces } from '../../research-directions-write.js';
 import { findCrossTreeMatches, getTreesDataForMatching, type CrossTreeMatch } from '../../cross-tree.js';
 import type { ChangeKind, PersonChange } from '../../research-changes.js';
 import {
-    addOnlyFilter, addWithoutFilter, CHECK_CHIPS, chipItem, chipLabel, clearFilter, columnItem, filterRows, filterSummary, isChipItem, newWindowOf, removeColumnItemAt, searchQuery, setChip, setParticipantFilter,
+    addOnlyFilter, addWithoutFilter, researchFilterIdle, CHECK_CHIPS, chipItem, chipLabel, clearFilter, columnItem, filterRows, filterSummary, isChipItem, newWindowOf, removeColumnItemAt, searchQuery, setChip, setParticipantFilter,
     setColumnFilter, setEmptyFilter, sortRows, columnItemActive, type ChipId, type ColumnFilter, type FilterResult, type TableFilter,
 } from './table-filter.js';
 import {
@@ -598,7 +598,7 @@ export const tableMethods = uiModule({
         const kind = this.activeResearchArchive() ? 'archive' : 'research';
         const readOnly = DataManager.isReadOnly();
         const now = researchTableLive();
-        const places = now.base ? directionPlacesKept(now.base) : null;
+        const places = now.places;
         const b = this.researchChangesBase();
         // §16.6: ✓ stands AGENT_DONE_MS after the agent left a person; the draw that drops it is asked for.
         const at = Date.now();
@@ -630,6 +630,19 @@ export const tableMethods = uiModule({
         const now = researchTableLive();
         const drawn = researchMemo.env.input;
         if (drawn.live === now.live && drawn.working === now.working && drawn.queue === now.queue) return;
+        redrawTable(el => this.renderTableView(el));
+    },
+
+    /**
+     * Another window's mirror of the agent's state changed (spec 097 K1.3):
+     * the research's link or status may make the tree a research tree here
+     * now (the model is built again), and the research's cells and views
+     * read the main window's work.
+     */
+    tableResearchMirrorChanged(): void {
+        if (TreeRenderer.getViewMode() !== 'table') return;
+        const opts = this.reliabilityOptionsNow();
+        if (model && (model.ctx.reliability.researchTree !== opts.researchTree || model.ctx.reliability.originFeature !== opts.originFeature)) model = null;
         redrawTable(el => this.renderTableView(el));
     },
 
@@ -1033,6 +1046,7 @@ export const tableMethods = uiModule({
         const open = openViewOf(state, type, data.tableViews);
         mounted.views.update({
             name: open.name, builtin: isBuiltinId(open.id), changed: viewChanged(open, st), readOnly: DataManager.isReadOnly(),
+            researchIdle: researchFilterIdle(m, type, st.filter),
         });
         keepWork(tree, state);
     },

@@ -26,6 +26,11 @@ import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
 import { PERSON_MENU_ACTION, runSatelliteResearchRow, SatelliteResearchMenu, setSatelliteResearchMenu } from './window-research-menu.js';
 import { startOverviewMain } from './overview-main.js';
+import { onOverviewChanged } from './overview-window.js';
+import { startAgentMain, type AgentMain } from './agent-main.js';
+import { setAgentStateHint } from '../ui/research-ui.js';
+import { onBridgeStatus } from '../ui/research-sync-ui.js';
+import { onDirectionPlaces } from '../research-directions-write.js';
 import type { PersonId } from '../types.js';
 import { wireMainSelection, wireSatelliteSelection, type SelectionDeps } from './window-selection.js';
 import { SettingsManager } from '../settings.js';
@@ -111,6 +116,7 @@ export function startMainWindow(): WindowRegistry {
         run: (a) => UI.runOverviewWindowAction(a),
         openChanged: (open) => UI.overviewWindowOpenChanged(open),
     });
+    wireAgentMain(registry);
     registry.setResearchActionHandler((action, args) => {
         if (action === PERSON_MENU_ACTION) {
             runSatelliteResearchRow(args, { items: researchItems, run: (personId, a) => UI.runPersonMenuAction(personId as PersonId, a) });
@@ -119,6 +125,29 @@ export function startMainWindow(): WindowRegistry {
         return overview.handle(action, args).result;
     });
     return registry;
+}
+
+/** The agent's state for the other windows (spec 097 K1.3; null: not the main window). */
+let agentMain: AgentMain | null = null;
+
+export function mainAgentState(): AgentMain | null {
+    return agentMain;
+}
+
+/**
+ * The agent's state sent to the other windows (spec 097 K1.3): after every
+ * hint of a change (the research panel drawn, the cards' research word, a
+ * bridge's status, the lines' places read, another tree), at most one post
+ * per tick; the whole state to a window that says hello or asks.
+ */
+function wireAgentMain(reg: WindowRegistry): void {
+    agentMain = startAgentMain(reg, { sections: () => UI.agentWindowState() });
+    const hint = () => agentMain?.changed();
+    setAgentStateHint(hint);
+    onOverviewChanged(hint);
+    onBridgeStatus(hint);
+    onDirectionPlaces(hint);
+    window.addEventListener('strom:tree-switched', hint);
 }
 
 /** The app's side of the shared selection (spec 079 §2). */

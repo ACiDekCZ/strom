@@ -66,7 +66,8 @@ import {
     branchName, focusQueueMoved, personByRefn, queueBranchFilter, queueNextFor, queueNextOffered, queueRowFlash, queueWhyText, setQueueBranchFilter, taskMenuOrders, taskOrderOffered,
     waitBranchText, workingWhyText,
 } from './research-offline-ui.js';
-import type { TaskOrderDo } from '../research-directions-write.js';
+import { directionPlacesKept, type TaskOrderDo, type DirectionPlaces } from '../research-directions-write.js';
+import { agentMirror } from '../windows/agent-mirror.js';
 import { OTHER_GROUP, panelWaiting, textWithLinks, todoWaiting, waitingSection, waitingTodoCount } from '../research-waiting.js';
 import { agoShort } from '../research-others.js';
 import {
@@ -839,6 +840,9 @@ function researchCardInfo(): Map<string, ResearchCardInfo> {
     if (DataManager.isViewMode()) return out;
     const treeId = DataManager.getCurrentTreeId();
     if (!treeId) return out;
+    // Another window of the app (spec 097 K1.3): the main window's word, for the tree it has open.
+    const mirror = agentMirror();
+    if (mirror) return mirror.treeId() === treeId ? new Map(mirror.cards() as Map<string, ResearchCardInfo>) : out;
     const following = followedHere();
     const researchId = TreeManager.getTreeMetadata(treeId)?.research?.id;
     const waiting = following?.waiting ?? (researchId ? storedResearchWaiting(researchId)?.items : undefined) ?? [];
@@ -870,10 +874,17 @@ function researchCardInfo(): Map<string, ResearchCardInfo> {
 }
 setResearchCardInfoProvider(researchCardInfo);
 
-/** The live session of the tree on screen (null: not following it). */
+/** The research's word per person REFN for the cards, as this window has it (the agent's mirror sends it, spec 097). */
+export function researchCardInfoNow(): Map<string, ResearchCardInfo> {
+    return researchCardInfo();
+}
+
+/** The live session of the tree on screen (null: not following it); in another window, the main window's (spec 097 K1.3). */
 function followedHere(): LiveSession | null {
     const treeId = DataManager.getCurrentTreeId();
-    return live && !live.ended && live.treeId === treeId ? live : null;
+    const mirror = agentMirror();
+    const s = mirror ? mirror.session() : live;
+    return s && !s.ended && s.treeId === treeId ? s : null;
 }
 
 /** What the Table view's research cells read beyond the tree (spec 073 §16). */
@@ -894,6 +905,8 @@ export interface ResearchTableLive {
     base: string | null;
     /** Followed here (else, when live, the bridge answers without following). */
     followed: boolean;
+    /** The followed research's lines' places, as read (null: none). */
+    places: DirectionPlaces | null;
 }
 
 const NO_DONE: ReadonlyMap<string, number> = new Map();
@@ -929,8 +942,13 @@ function unfollowedAgentNow(researchId: string): Pick<LiveSession, 'working' | '
  * the waiting list kept from the last time.
  */
 export function researchTableLive(): ResearchTableLive {
+    const mirror = agentMirror();
+    if (mirror) return mirroredTableLive(mirror);
     const s = followedHere();
-    if (s) return { live: true, waiting: s.waiting, working: s.working, queue: s.queue, done: agentDone, base: s.bridge.base || null, followed: true };
+    if (s) {
+        const base = s.bridge.base || null;
+        return { live: true, waiting: s.waiting, working: s.working, queue: s.queue, done: agentDone, base, followed: true, places: base ? directionPlacesKept(base) : null };
+    }
     const treeId = DataManager.getCurrentTreeId();
     const researchId = treeId && !DataManager.isViewMode() ? TreeManager.getTreeMetadata(treeId)?.research?.id : undefined;
     const items = (researchId ? storedResearchWaiting(researchId)?.items : undefined) ?? NO_WAITING;
@@ -941,8 +959,29 @@ export function researchTableLive(): ResearchTableLive {
         waiting = storedWaiting.items;
     }
     const agent = researchId ? unfollowedAgentNow(researchId) : null;
-    if (agent) return { live: true, waiting, working: agent.working, queue: agent.queue, done: NO_DONE, base: null, followed: false };
-    return { live: false, waiting, working: NO_WORKING, queue: NO_QUEUE, done: NO_DONE, base: null, followed: false };
+    if (agent) return { live: true, waiting, working: agent.working, queue: agent.queue, done: NO_DONE, base: null, followed: false, places: null };
+    return { live: false, waiting, working: NO_WORKING, queue: NO_QUEUE, done: NO_DONE, base: null, followed: false, places: null };
+}
+
+/** The Table's research input of another window (spec 097 K1.3): the main window's, the same object until it changes. */
+let mirroredLive: { work: unknown; places: unknown; value: ResearchTableLive } | null = null;
+const NOT_LIVE: ResearchTableLive = { live: false, waiting: NO_WAITING, working: NO_WORKING, queue: NO_QUEUE, done: NO_DONE, base: null, followed: false, places: null };
+
+function mirroredTableLive(mirror: NonNullable<ReturnType<typeof agentMirror>>): ResearchTableLive {
+    const work = mirror.work();
+    if (!work || DataManager.isViewMode() || mirror.treeId() !== DataManager.getCurrentTreeId()) return NOT_LIVE;
+    const places = mirror.places();
+    if (mirroredLive?.work !== work || mirroredLive.places !== places) {
+        mirroredLive = {
+            work, places,
+            value: {
+                live: work.live, followed: work.followed,
+                waiting: work.waiting as LiveSession['waiting'], working: work.working as LiveSession['working'], queue: work.queue as LiveSession['queue'],
+                done: new Map(work.done), base: null, places: work.followed ? places : null,
+            },
+        };
+    }
+    return mirroredLive.value;
 }
 
 /**
@@ -955,6 +994,8 @@ let lastWorked: { session: LiveSession; refs: Set<string> } | null = null;
 let agentDoneTimer: ReturnType<typeof setTimeout> | null = null;
 
 function trackAgentDone(): void {
+    // Another window: the main window tracks it (its cards' word and its Table's input carry it).
+    if (agentMirror()) return;
     const s = followedHere();
     if (!s) {
         lastWorked = null;
@@ -984,8 +1025,21 @@ function trackAgentDone(): void {
 let cardInfoKey = '[]';
 let cardInfoPending = false;
 
+/** Told when the research's word about people may have changed (the agent's state for other windows, spec 097). */
+let agentStateHint: (() => void) | null = null;
+
+export function setAgentStateHint(fn: (() => void) | null): void {
+    agentStateHint = fn;
+}
+
+/** Another window's mirror of the agent's state changed: the cards follow (spec 097 K1.3). */
+export function researchMirrorChanged(): void {
+    syncResearchCardInfo();
+}
+
 /** Redraw the cards once the research's word about people changed. */
 function syncResearchCardInfo(): void {
+    agentStateHint?.();
     if (cardInfoPending) return;
     cardInfoPending = true;
     queueMicrotask(() => {
@@ -1576,7 +1630,10 @@ export function setOverviewWindowDrawn(d: { live: LiveSession | null; viewing: O
 
 /** The followed research (null: none), for the overview. */
 export function liveSession(): LiveSession | null {
-    return windowDrawn ? windowDrawn.live : live;
+    if (windowDrawn) return windowDrawn.live;
+    // Another window of the app (spec 097 K1.3): the main window's session, with an empty bridge (nothing here asks it).
+    const mirror = agentMirror();
+    return mirror ? mirror.session() : live;
 }
 
 /**

@@ -383,6 +383,22 @@ export function researchStatusNow(researchId: string): LiveStatus | null {
 // The citation gates (main citation, removal, order) read the features from here.
 setCitationFeaturesLookup(id => (researchStatusNow(id) ?? lastBridgeStatus(id))?.features ?? null);
 
+/**
+ * A satellite window (spec 097 K1.3): the research's status as the main
+ * window has it (the agent's mirror), so what reads the status here (the
+ * features, the mode) reads the main window's; null forgets it. Nothing
+ * listening to a bridge's status hears it: this window asks no bridge.
+ */
+export function setMirroredResearchStatus(researchId: string, status: LiveStatus | null): void {
+    if (!status) {
+        runtime.delete(researchId);
+        lastSaidStatus.delete(researchId.toLowerCase());
+        return;
+    }
+    runtime.set(researchId, { up: true, checkedAt: Date.now(), status, blocked: false, downSince: 0 });
+    lastSaidStatus.set(researchId.toLowerCase(), status);
+}
+
 /** A status the bridge gave elsewhere (?live=, ?send=, following): it runs, and this is what it said. */
 export function rememberBridgeStatus(researchId: string, status: LiveStatus): void {
     runtime.set(researchId, { up: true, checkedAt: Date.now(), status, blocked: false, downSince: 0 });

@@ -147,8 +147,20 @@ function workedNow(): Set<PersonId> {
     return out;
 }
 
+/**
+ * Whether this window may follow at all (null: it may, the main window).
+ * Another window (spec 097) draws the main window's session from its mirror
+ * and does not follow until its own following is set up (D2 sets the gate).
+ */
+let windowFollowGate: (() => boolean) | null = null;
+
+export function setWindowFollowGate(gate: (() => boolean) | null): void {
+    windowFollowGate = gate;
+}
+
 /** Following applies: on, live, on the research's own tree, not read-only. */
 function followActive(): boolean {
+    if (windowFollowGate && !windowFollowGate()) return false;
     const s = liveSession();
     return followOn && !!s && !s.ended && s.treeId === DataManager.getCurrentTreeId() && !DataManager.isViewMode();
 }

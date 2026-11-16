@@ -732,6 +732,16 @@ export function rowMatches(model: TableModel, row: TableRow, columns: readonly C
 }
 
 /**
+ * A view's filter reads the research (a research chip, a filter on a
+ * research column) and there is no research to read here (spec 097 5e):
+ * the filter lets every row through, and the view's bar says so.
+ */
+export function researchFilterIdle(model: TableModel, type: RowType, filter: TableFilter): boolean {
+    if (model.ctx.research) return false;
+    return filter.items.some(i => isChipItem(i) ? isResearchChipId(i.chip) : !!columnById(type, i.col)?.fromResearch);
+}
+
+/**
  * The rows that pass the filter and the search, in their given order. The
  * union columns' filters of the People table give the union predicate
  * (each union apart, §3.3); the others judge the row. Chips on the findings
