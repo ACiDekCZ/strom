@@ -71,7 +71,7 @@ export function canEditPortrait(personId: PersonId): boolean {
 }
 
 /** A file picker of its own (the person page has no dialog's input): opened inside the click that asks for it. */
-function pickImageFile(onFile: (file: File) => void): void {
+export function pickImageFile(onFile: (file: File) => void): void {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';

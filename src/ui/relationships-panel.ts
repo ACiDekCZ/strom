@@ -53,6 +53,7 @@ import { extraParticipantRole } from '../godparents.js';
 import { chipCitations, sourceChipOpenHtml } from './sources.js';
 import { offeredDetails, refreshDetailGroup, resetDetailGroup, renderAgeCheck, ageBirthDate } from './event-details-ui.js';
 import { shownName, shownNameOrEmpty, nameHtml } from '../person-name.js';
+import { canEditUnionPhoto, photoKb } from './union-photo-ui.js';
 export const relationshipsPanelMethods = uiModule({
     showRelationshipsPanel(personId: PersonId, returnToEdit: boolean = false, preservePending: boolean = false): void {
         // Setup dialog stack for standalone mode (when opened directly from card, not from edit dialog)
@@ -213,6 +214,24 @@ export const relationshipsPanelMethods = uiModule({
                     el.dataset.partnershipId as PartnershipId, el.dataset.participantId!);
                 this.refreshRelationshipsPanel();
             });
+        });
+
+        // The couple's photo (spec 107 §6): changes join the panel's session, the panel is drawn anew.
+        const redraw = () => this.refreshRelationshipsPanel();
+        content.querySelectorAll<HTMLElement>('.pg-photo-thumb').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const pid = btn.dataset.partnershipId as PartnershipId;
+                this.openUnionPhotoViewer(pid, { readOnly: !btn.closest('.pg-photo')?.querySelector('.pg-photo-make'), done: redraw });
+            });
+        });
+        content.querySelectorAll<HTMLElement>('.pg-photo-choose').forEach(btn => {
+            btn.addEventListener('click', () => this.chooseUnionPhoto(btn.dataset.partnershipId as PartnershipId, redraw));
+        });
+        content.querySelectorAll<HTMLElement>('.pg-photo-make').forEach(btn => {
+            btn.addEventListener('click', () => { void this.makeUnionPortraits(btn.dataset.partnershipId as PartnershipId, redraw); });
+        });
+        content.querySelectorAll<HTMLElement>('.pg-photo-remove').forEach(btn => {
+            btn.addEventListener('click', () => { void this.removeUnionPhoto(btn.dataset.partnershipId as PartnershipId, redraw); });
         });
 
         // Attach event listeners for partnership notes (pending change)
@@ -427,7 +446,35 @@ export const relationshipsPanelMethods = uiModule({
                     <button type="button" class="detail-more" hidden></button>
                     ${this.coupleEventAddLinkHtml(partnership, this.coupleEventsReadOnly(currentPersonId))}
                 </div>
+                ${this.partnershipPhotoRowHtml(partnership, this.coupleEventsReadOnly(currentPersonId) || !canEditUnionPhoto(partnership.id))}
             </div>`;
+    },
+
+    /**
+     * The couple's photo (spec 107 §6, 6a, 6b): a row of the union's grid.
+     * Without a photo "Choose photo" and a hint; with one its thumbnail (a
+     * click zooms it), Choose photo (another), Make portraits…, Remove and
+     * its size. A locked person or tree shows the thumbnail and size only.
+     */
+    partnershipPhotoRowHtml(partnership: Partnership, locked: boolean): string {
+        const id = this.escapeHtml(partnership.id);
+        const r = strings.relationships;
+        const photo = partnership.photo;
+        if (!photo && locked) return '';
+        const btn = (cls: string, label: string) => `<button type="button" class="secondary ${cls}" data-partnership-id="${id}">${this.escapeHtml(label)}</button>`;
+        const thumb = photo
+            ? `<button type="button" class="pg-photo-thumb" data-partnership-id="${id}" aria-label="${this.escapeHtml(`${r.unionPhoto}: ${strings.imageViewer.label}`)}"><img src="${this.escapeHtml(photo)}" alt=""></button>`
+            : '';
+        const size = photo ? `<span class="pg-photo-size">${this.escapeHtml(photoKb(photo))}</span>` : '';
+        const actions = locked ? size
+            : photo
+                ? btn('pg-photo-choose', strings.labels.photoChoose) + btn('pg-photo-make', r.makePortraits) + btn('pg-photo-remove', strings.labels.photoRemove) + size
+                : btn('pg-photo-choose', strings.labels.photoChoose) + `<span class="pg-photo-hint">${this.escapeHtml(r.unionPhotoHint)}</span>`;
+        return `
+                <div class="pg-row pg-photo${photo ? ' has-photo' : ''}" data-partnership-id="${id}">
+                    <span class="pg-label">${this.escapeHtml(r.unionPhoto)}</span>
+                    <div class="pg-span pg-photo-body">${thumb}<div class="pg-photo-actions">${actions}</div></div>
+                </div>`;
     },
 
     /** A couple's events are edited unless the person or the tree is locked. */

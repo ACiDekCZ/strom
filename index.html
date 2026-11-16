@@ -4151,6 +4151,29 @@
             .partnership-grid .pg-links .pg-add-end,
             .partnership-grid .pg-links .pg-add-event { min-height: 44px; }
         }
+        /* The couple's photo (spec 107 §6): a row of the union's grid; the
+           thumbnail in the photo's own proportions, the buttons wrap. */
+        .partnership-grid .pg-photo { align-items: start; }
+        .partnership-grid .pg-photo .pg-label { padding-top: 7px; }
+        .pg-photo-body { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+        .pg-photo-thumb {
+            flex: none; display: block; height: 56px; max-width: 96px; padding: 0; margin: 0;
+            border: 1px solid var(--border); border-radius: var(--r-sm); overflow: hidden;
+            background: var(--surface-2); cursor: zoom-in;
+        }
+        .pg-photo-thumb img { display: block; height: 100%; width: auto; max-width: 96px; object-fit: cover; }
+        .pg-photo-thumb:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .pg-photo-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+        .pg-photo-actions button.secondary { margin: 0; }
+        .pg-photo-hint { font-size: 12.5px; color: var(--text-faint); }
+        .pg-photo-size { font-size: 12px; color: var(--text-light); }
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .partnership-grid .pg-photo .pg-label { padding-top: 0; }
+            .pg-photo-thumb { height: 48px; }
+        }
+        @media (pointer: coarse) {
+            .pg-photo-actions button.secondary { min-height: 44px; }
+        }
         /* The couple's own events under the wedding (banns, a census…): rows
            like a person's events; on a phone one row that expands in place. */
         .couple-events { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }

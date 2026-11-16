@@ -52,6 +52,7 @@ import { bottomSheetMethods } from './bottom-sheet.js';
 
 import { personModalMethods } from './person-modal.js';
 import { portraitActionsMethods, PendingPortrait } from './portrait-actions-ui.js';
+import { unionPhotoMethods } from './union-photo-ui.js';
 import { personEventsMethods } from './person-events.js';
 import { sharedEventMethods } from './shared-event-ui.js';
 import { sharedLineMethods } from './shared-line-ui.js';
@@ -622,6 +623,10 @@ Object.assign(UIClass.prototype, personModalMethods);
 type PortraitActionsMethods = typeof portraitActionsMethods;
 export interface UIClass extends PortraitActionsMethods {}
 Object.assign(UIClass.prototype, portraitActionsMethods);
+
+type UnionPhotoMethods = typeof unionPhotoMethods;
+export interface UIClass extends UnionPhotoMethods {}
+Object.assign(UIClass.prototype, unionPhotoMethods);
 
 type PersonEventsMethods = typeof personEventsMethods;
 type SharedEventMethods = typeof sharedEventMethods;

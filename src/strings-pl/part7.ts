@@ -225,6 +225,7 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         addPerson: (name: string) => `dodanie osoby ${name}`,
         editPerson: (name: string) => `edycja osoby ${name}`,
         portrait: (name: string) => `portret osoby ${name}`,
+        unionPhoto: (a: string, b: string) => `zdjęcie pary ${a} i ${b}`,
         clearedData: 'usunięcie wszystkich danych',
         geocodePlaces: (count: number) => `wyszukanie ${nPl(count, 'miejsca', 'miejsc', 'miejsc')}`,
         clearPlaceGeo: 'usunięcie miejsca z mapy',

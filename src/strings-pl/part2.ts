@@ -66,6 +66,7 @@ export const plPart2: Pick<StringsType, 'crop' | 'portrait' | 'importImages' | '
         updated: 'Portret zaktualizowany.',
         replaced: (n: string) => `Portret osoby ${n} zastąpiony.`,
         personGone: 'Osoby nie ma już w drzewie, nic nie zapisano.',
+        fromUnion: (saved: number, skipped: number) => `Zapisano ${nPl(saved, 'portret', 'portrety', 'portretów')} ze zdjęcia pary${skipped > 0 ? `, ${skipped} pominięto` : ''}.`,
     },
 
     // Import filter: leave images out
