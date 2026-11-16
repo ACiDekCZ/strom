@@ -84,6 +84,53 @@ test('partnership status and note can be changed and a partnership removed', asy
     expect(partnerships).toBe(0);
 });
 
+test('removing a partnership with a couple photo asks first and says the photo goes, one without a photo goes at once', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    await addRelation(page, 'Jan', 'partner', 'Marie', 'Novak', 'female');
+    const id = await janId(page);
+    const unionCount = (): Promise<number> => page.evaluate(() => Object.keys(window.Strom.DataManager.getData().partnerships).length);
+    // The couple's photo (spec 107): a tiny JPEG is enough for the question.
+    await page.evaluate(() => {
+        const dm = window.Strom.DataManager;
+        const union = Object.values(dm.getData().partnerships)[0] as { id: string };
+        dm.updatePartnership(union.id as never, { photo: 'data:image/jpeg;base64,/9j/2Q==', photoOriginalName: 'svatba.jpg' });
+    });
+
+    await page.evaluate((pid) => window.Strom.UI.showRelationshipsPanel(pid), id);
+    const panel = page.locator('#relationships-modal');
+    await expect(panel).toBeVisible();
+    const confirm = page.locator('#confirmation-modal');
+    await panel.locator('.rel-remove-btn[data-rel-type="partner"]').first().click();
+    await expect(confirm).toBeVisible();
+    await expect(confirm.locator('#confirm-title')).toHaveText('Remove the partnership of Jan Novak and Marie Novak?');
+    await expect(confirm.locator('.confirm-note')).toHaveText('The couple’s photo goes with it. Portraits made from it stay.');
+    // The note has no label of its own.
+    await expect(confirm.locator('.confirm-note .research-sync-tag')).toHaveCount(0);
+    await confirm.locator('#confirm-cancel-btn').click();
+    await expect(confirm).toBeHidden();
+    expect(await unionCount()).toBe(1);
+
+    await panel.locator('.rel-remove-btn[data-rel-type="partner"]').first().click();
+    await expect(confirm).toBeVisible();
+    await confirm.locator('#confirm-ok-btn').click();
+    await expect.poll(unionCount).toBe(0);
+    // Then today's question about the partner left without anyone: kept.
+    await expect(confirm.locator('#confirm-title')).toHaveText('Delete Marie Novak?');
+    await confirm.locator('#confirm-cancel-btn').click();
+    await page.evaluate(() => window.Strom.UI.saveRelationships());
+    await expect(panel).toBeHidden();
+
+    // Without a photo: removed at once, as before (only the question about the partner left alone follows).
+    await addRelation(page, 'Jan', 'partner', 'Eva', 'Novak', 'female');
+    await page.evaluate((pid) => window.Strom.UI.showRelationshipsPanel(pid), id);
+    await expect(panel).toBeVisible();
+    await panel.locator('.rel-remove-btn[data-rel-type="partner"]').first().click();
+    await expect.poll(unionCount).toBe(0);
+    await expect(confirm.locator('#confirm-title')).toHaveText('Delete Eva Novak?');
+    await confirm.locator('#confirm-cancel-btn').click();
+});
+
 test('a partnership date typed in cs keeps the locale form after the panel refreshes and saves as ISO', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');

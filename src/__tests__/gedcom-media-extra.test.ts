@@ -139,6 +139,9 @@ describe('media records (0 @O1@ OBJE)', () => {
         const v = byName(r.data, 'Vřesomil');
         expect(r.externalMedia).toEqual([{
             personId: v.id, fileName: 'vresomil-1910.jpg', filePath: 'photos/vresomil-1910.jpg', title: 'Vřesomil 1910',
+        }, {
+            // The family's picture: offered as the couple's photo (spec 107).
+            partnershipId: Object.keys(r.data.partnerships)[0], fileName: 'svatba.jpg', filePath: 'photos/svatba.jpg',
         }]);
         expect(v.attachments).toHaveLength(1);
         expect(v.attachments![0]).toMatchObject({ name: 'Kupní smlouva', mimeType: 'image/jpeg', dataUrl: JPEG });
@@ -146,7 +149,7 @@ describe('media records (0 @O1@ OBJE)', () => {
         expect(src.excerpts).toHaveLength(1);
         expect(src.excerpts![0]).toMatchObject({ dataUrl: JPEG, caption: 'folio 12' });
         // A link to a record the file lacks, a record nobody takes; the family's
-        // photo is kept for "Back to {prog}" instead.
+        // photo is kept for "Back to {prog}" until a file is connected to it.
         expect(r.stats.skippedMedia).toBe(2);
         expect(r.stats.droppedTagSummary).toContain('OBJE ×2');
         expect(r.stats.keptTagSummary).toBe('OBJE');

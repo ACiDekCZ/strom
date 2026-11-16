@@ -1166,6 +1166,8 @@ function setParentRel(child: Person, parentId: PersonId, rel: ParentChildRelType
 
 /** Embedded portraits: raster images only. */
 const SAFE_PHOTO_DATA_URL = /^data:image\/(jpeg|png|webp|gif);base64,/i;
+/** A family's picture outside the file that can be the couple's photo: a raster image by its name. */
+const FAMILY_PHOTO_FILE = /\.(jpe?g|png|gif|webp|bmp|tiff?|heic|heif)$/i;
 /** Embedded documents: the same images, or a PDF. */
 const SAFE_ATTACHMENT_DATA_URL = /^data:(image\/(jpeg|png|webp|gif)|application\/pdf);base64,/i;
 
@@ -1205,6 +1207,10 @@ interface RawMedia {
     rawLines?: string[];
     /** A link to a media record (`1 OBJE @O1@`): where the link is in the file. */
     linkLine?: number;
+    /** A family's picture (spec 107): its lines kept in the family's extras for "Back to {prog}". */
+    extra?: RawExtra;
+    /** A family's picture whose lines could not be kept: the tag counted, unless it becomes the couple's photo. */
+    droppedTag?: string;
 }
 
 interface RawEvent {
@@ -1619,6 +1625,8 @@ interface GedcomFamily {
     mediaLinks?: { ref: string; line: number }[];
     /** The media records whose lines the family keeps for "Back to {prog}" (see extras). */
     keptMedia?: string[];
+    /** The family's pictures, written in place or linked (`1 OBJE`): the first image is the couple's photo (spec 107). */
+    media?: RawMedia[];
     /** The record's `0 @F1@ FAM` line in the file. */
     recordLine?: number;
     /**
@@ -1805,7 +1813,10 @@ export interface GedcomConvertOptions {
 /** Result of GEDCOM to Strom conversion */
 /** External media file referenced by the GEDCOM (file itself not embedded). */
 export interface ExternalMediaRef {
-    personId: PersonId;
+    /** The person the picture is of (a portrait or an attachment)… */
+    personId?: PersonId;
+    /** …or the couple whose photo it is (a family's picture, spec 107). */
+    partnershipId?: PartnershipId;
     /** Basename of the referenced file (matching key for bulk attach). */
     fileName: string;
     /** Full FILE value as written in the GEDCOM. */
@@ -2850,7 +2861,11 @@ export function parseGedcom(content: string): ParsedGedcom {
      * (spec 066 G8): from its line in the file down; a pointer under it (an
      * xref the reader renumbers) means the block cannot be kept as written.
      */
-    let extraBlock: { target: { extras?: RawExtra[] }; tag: string; start: number; pointer: boolean; quiet?: boolean } | null = null;
+    let extraBlock: {
+        target: { extras?: RawExtra[] }; tag: string; start: number; pointer: boolean; quiet?: boolean;
+        /** A family's picture written in place (spec 107): read from its lines; kept only with `keep`. */
+        media?: RawMedia; keep?: boolean;
+    } | null = null;
     /** Citation DATA > DATE -> the source's record date (first wins, like PAGE). */
     const citationDates = new Map<string, string>();
     let citeLevel: number | null = null;
@@ -3219,6 +3234,32 @@ export function parseGedcom(content: string): ParsedGedcom {
         }
     };
     /**
+     * A picture written in place (`1 OBJE` and its lines as written): its
+     * file (CONC-joined), form, title, date and portrait mark.
+     */
+    const readInPlaceMedia = (m: RawMedia, raw: string[]): void => {
+        let sub = '';
+        let firstFile = false;
+        for (const line of raw.slice(1)) {
+            const parts = /^\s*(\d+)\s+(\S+)(?: (.*))?$/.exec(line);
+            if (!parts) continue;
+            const lv = Number(parts[1]), tag = parts[2], value = parts[3] ?? '';
+            if (lv === 2) {
+                sub = tag;
+                if (tag === 'FILE') { firstFile = !m.file; if (firstFile) m.file = value; }
+                else if (tag === 'FORM') { if (!m.form) m.form = value; }
+                else if (tag === 'TITL') { if (!m.title) m.title = value; }
+                else if (tag === '_STROM_KIND') m.stromKind = value;
+                else if ((tag === '_PRIM' || tag === '_PRIMARY' || tag === '_PERSONALPHOTO') && value.trim() === 'Y') m.primary = true;
+                else if (tag === '_DATE') { if (!m.date) m.date = mediaDateValue(value); }
+            } else if (lv === 3 && sub === 'FILE' && firstFile) {
+                if (tag === 'CONC') m.file += value;
+                else if (tag === 'FORM') { if (!m.form) m.form = value; }
+                else if (tag === 'TITL') { if (!m.title) m.title = value; }
+            }
+        }
+    };
+    /**
      * The kept block ends before line `end` of the file: its lines as written
      * go to the record, or, when they cannot be kept as they are (a pointer,
      * a data URL, a line that is not one), the tag is counted.
@@ -3228,6 +3269,21 @@ export function parseGedcom(content: string): ParsedGedcom {
         extraBlock = null;
         if (!block) return;
         const raw = lines.slice(block.start, end).filter(l => l.trim() !== '');
+        if (block.media) {
+            // A family's picture: read for the couple's photo, its lines kept
+            // or counted as any other kept tag (the count waits: the one that
+            // becomes the couple's photo is not dropped).
+            readInPlaceMedia(block.media, raw);
+            if (!block.keep) { block.media.droppedTag = block.tag; return; }
+            if (!block.pointer && validExtraBlock(raw) && !raw.some(l => DATA_URL_IN_LINE.test(l))) {
+                const extra: RawExtra = { tag: block.tag, lines: raw };
+                (block.target.extras ??= []).push(extra);
+                block.media.extra = extra;
+            } else {
+                block.media.droppedTag = block.tag;
+            }
+            return;
+        }
         if (!block.pointer && validExtraBlock(raw) && !raw.some(l => DATA_URL_IN_LINE.test(l))) {
             (block.target.extras ??= []).push({ tag: block.tag, lines: raw, ...(block.quiet ? { quiet: true } : {}) });
         } else if (!block.quiet) {
@@ -4344,13 +4400,21 @@ export function parseGedcom(content: string): ParsedGedcom {
                             } else if (tag === 'OBJE' && GED_POINTER.test(value.trim())) {
                                 // A family's link to a media record: its lines are kept
                                 // for "Back to {prog}" below; a record nothing takes is
-                                // counted once (convertToStrom).
-                                if (level === 1 && keepsExtra(tag)) (fam.mediaLinks ??= []).push({ ref: value.trim(), line: rec.src });
-                            } else if (tag === 'OBJE' && level === 1 && keepsExtra(tag)) {
-                                // A family's picture written in place: Strom has no
-                                // picture of a couple, so its lines are kept as written
-                                // for "Back to {prog}" (spec 066 G8).
-                                extraBlock = { target: fam, tag, start: rec.src, pointer: false };
+                                // counted once (convertToStrom). The first image may be
+                                // the couple's photo (spec 107).
+                                if (level === 1) {
+                                    const media: RawMedia = { title: '', form: '', file: '', stromKind: '', ref: value.trim(), linkLine: rec.src };
+                                    (fam.media ??= []).push(media);
+                                    currentMedia = media;
+                                    if (keepsExtra(tag)) (fam.mediaLinks ??= []).push({ ref: value.trim(), line: rec.src });
+                                }
+                            } else if (tag === 'OBJE' && level === 1) {
+                                // A family's picture written in place: the first image
+                                // is the couple's photo (spec 107); the others' lines are
+                                // kept as written for "Back to {prog}" (spec 066 G8).
+                                const media: RawMedia = { title: '', form: '', file: '', stromKind: '', rawLine: rec.src };
+                                (fam.media ??= []).push(media);
+                                extraBlock = { target: fam, tag, start: rec.src, pointer: false, media, keep: keepsExtra(tag) };
                             } else if (tag.startsWith('_') && !KNOWN_FAM_TAGS.has(tag)
                                 && (!IGNORED_BOOKKEEPING_TAGS.has(tag) || KEPT_BOOKKEEPING_TAGS.has(tag)) && keepsExtra(tag)) {
                                 extraBlock = { target: fam, tag, start: rec.src, pointer: GED_POINTER.test(value.trim()), quiet: KEPT_BOOKKEEPING_TAGS.has(tag) };
@@ -4721,7 +4785,12 @@ export function parseGedcom(content: string): ParsedGedcom {
                     }
                 } else if (currentType === 'FAM') {
                     const fam = currentRecord as GedcomFamily;
-                    if (currentSubTag === 'SOUR' && tag === 'PAGE' && currentCitationId) {
+                    if (currentSubTag === 'OBJE' && currentMedia) {
+                        // A family's link to a media record: its own title, date and portrait mark.
+                        if (tag === 'TITL') currentMedia.title = value;
+                        else if ((tag === '_PRIM' || tag === '_PRIMARY' || tag === '_PERSONALPHOTO') && value.trim() === 'Y') currentMedia.primary = true;
+                        else if (tag === '_DATE') { if (!currentMedia.date) currentMedia.date = mediaDateValue(value); }
+                    } else if (currentSubTag === 'SOUR' && tag === 'PAGE' && currentCitationId) {
                         citePage(value);
                     } else if (currentSubTag === 'SOUR' && tag === 'QUAY' && currentCitationId) {
                         noteQuay(currentCitationId, value);
@@ -5071,8 +5140,11 @@ export function parseGedcom(content: string): ParsedGedcom {
         for (const link of fam.mediaLinks ?? []) {
             const block = linkedMediaBlock(link.ref, link.line);
             if (!block) continue;
-            (fam.extras ??= []).push({ tag: 'OBJE', lines: block });
+            const extra: RawExtra = { tag: 'OBJE', lines: block };
+            (fam.extras ??= []).push(extra);
             (fam.keptMedia ??= []).push(link.ref);
+            const media = fam.media?.find(m => m.ref === link.ref && m.linkLine === link.line);
+            if (media) media.extra = extra;
         }
     }
 
@@ -5278,6 +5350,12 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
             date: m.date ?? rec.date,
             ...(m.primary || rec.primary ? { primary: true } : {}),
         };
+    };
+    /** A family's link to a media record read the same way, without taking the record (the one that becomes the couple's photo is). */
+    const familyLinkedMedia = (m: RawMedia): RawMedia | null => {
+        const rec = m.ref ? gedcom.mediaRecords?.get(m.ref) : undefined;
+        if (!rec) return null;
+        return { ...rec, title: m.title || rec.title, date: m.date ?? rec.date, ...(m.primary || rec.primary ? { primary: true } : {}) };
     };
     /** A source's link to a media record, the same way. */
     const linkedSourceMedia = (m: RawSourceMedia): RawSourceMedia | null => {
@@ -5749,6 +5827,44 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         }
 
         persons[personId] = person;
+    }
+    // The couple's photo (spec 107): the family's first image (one marked
+    // primary first). Embedded, it comes in as the photo and its lines are no
+    // longer kept for "Back to {prog}" (it is written from the photo); a file
+    // outside the file is offered like a person's (externalMedia), its lines
+    // kept until a file takes its place. The other pictures stay as written.
+    const familyPhotos = new Map<string, { photo: string; title?: string; date?: string } | Omit<ExternalMediaRef, 'partnershipId'>>();
+    for (const [gedFamId, fam] of gedcom.families) {
+        if (!fam.media?.length) continue;
+        const read = fam.media.map(link => ({ link, media: link.ref ? familyLinkedMedia(link) : link }));
+        let taken: RawMedia | undefined;
+        for (const { link, media } of [...read.filter(r => r.media?.primary), ...read.filter(r => !r.media?.primary)]) {
+            if (!media?.file) continue;
+            const file = imageRefSha(media.file) ? resolveImageFile(media.file, options.images) : media.file;
+            if (!file) continue;
+            if (file.startsWith('data:')) {
+                if (!SAFE_PHOTO_DATA_URL.test(file)) continue;
+                familyPhotos.set(gedFamId, { photo: file, ...(media.title ? { title: media.title } : {}), ...(media.date ? { date: media.date } : {}) });
+                if (link.extra) fam.extras = fam.extras?.filter(e => e !== link.extra);
+                if (link.ref) fam.keptMedia = fam.keptMedia?.filter(r => r !== link.ref);
+            } else {
+                const isUrl = /^https?:\/\//i.test(file);
+                const base = (isUrl ? file.split('?')[0] : file).split(/[\\/]/).pop() || file;
+                if (!FAMILY_PHOTO_FILE.test(base)) continue;
+                familyPhotos.set(gedFamId, {
+                    fileName: base, filePath: file,
+                    ...(media.title ? { title: media.title } : {}),
+                    ...(isUrl ? { isUrl: true } : {}),
+                    ...(media.date ? { date: media.date } : {}),
+                });
+            }
+            taken = link;
+            if (link.ref) usedMedia.add(link.ref);
+            break;
+        }
+        for (const m of fam.media) {
+            if (m !== taken && m.droppedTag) droppedTags.set(m.droppedTag, (droppedTags.get(m.droppedTag) ?? 0) + 1);
+        }
     }
     // A family's picture kept as written (or counted with the family's other kept tags).
     for (const fam of gedcom.families.values()) for (const ref of fam.keptMedia ?? []) usedMedia.add(ref);
@@ -6286,6 +6402,20 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
             : {};
         for (const childGedId of ownChildren) {
             linkChild(partnership, childGedId, gedFamId, fam, real);
+        }
+    }
+
+    // The couple's photo onto its union (a couple of two records: the first one's).
+    for (const [gedFamId, pick] of familyPhotos) {
+        const union = famPartnership.get(gedFamId);
+        if (!union) continue;
+        if ('photo' in pick) {
+            if (union.photo) continue;
+            union.photo = pick.photo;
+            if (pick.title) union.photoOriginalName = pick.title;
+            if (pick.date) union.photoDate = pick.date;
+        } else if (!union.photo && !externalMedia.some(r => r.partnershipId === union.id)) {
+            externalMedia.push({ ...pick, partnershipId: union.id });
         }
     }
 

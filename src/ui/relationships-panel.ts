@@ -699,9 +699,25 @@ export const relationshipsPanelMethods = uiModule({
             case 'parent':
                 DataManager.removeParentChild(relatedId, personId);
                 break;
-            case 'partner':
+            case 'partner': {
+                // A couple with a photo asks first: the photo goes with the
+                // union, the portraits cut from it stay (spec 107, 10d). One
+                // without a photo goes at once, as before (undo brings it back).
+                const union = DataManager.getPartnershipBetween(personId, relatedId);
+                if (union?.photo) {
+                    const d = strings.danger;
+                    const name = (id: PersonId): string => {
+                        const p = DataManager.getPerson(id);
+                        return (p && shownNameOrEmpty(p)) || strings.addChild.unknownPerson;
+                    };
+                    const confirmed = await this.showConfirm(d.undoHint, d.deleteUnionTitle(name(personId), name(relatedId)), {
+                        confirmLabel: d.deleteUnion, variant: 'danger', note: { text: d.deleteUnionPhotoNote },
+                    });
+                    if (!confirmed) return;
+                }
                 DataManager.removePartnership(personId, relatedId);
                 break;
+            }
             case 'child':
                 DataManager.removeParentChild(personId, relatedId);
                 break;

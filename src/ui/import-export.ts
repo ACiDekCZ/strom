@@ -29,7 +29,7 @@ import { strings } from '../strings.js';
 import { extractSubtree } from '../subtree.js';
 import { findComponents } from '../components.js';
 import { compressPhoto, dataUrlByteSize } from '../photo.js';
-import { compressImageAttachment, readFileAsDataUrl, MAX_PDF_BYTES, countImages, stripMedia } from '../attachments.js';
+import { compressImageAttachment, readFileAsDataUrl, countImages, stripMedia } from '../attachments.js';
 import { getDemoTree, DEMO_FOCUS } from '../demo-tree.js';
 import { demoImageMaker } from '../demo-images.js';
 import {
@@ -37,7 +37,8 @@ import {
     gedcomSampleNames, GedcomImportOrigin,
 } from '../ged-parser.js';
 import { createSha256 } from '../sha256.js';
-import { dropMediaLink, localIsoDay } from '../import-origin.js';
+import { localIsoDay } from '../import-origin.js';
+import { attachGedcomMediaFile, gedcomMediaAttachedText, GedcomMediaAttached, GedcomMediaTarget } from '../ged-media-attach.js';
 import { importProgramName } from '../import-next.js';
 
 /**
@@ -65,7 +66,7 @@ import {
 import { PersonPicker } from '../person-picker.js';
 import { AppExporter } from '../export.js';
 import { SettingsManager } from '../settings.js';
-import { ThemeMode, LanguageSetting, AppMode, AuditLog, uniqueIdSuffix } from '../types.js';
+import { ThemeMode, LanguageSetting, AppMode, AuditLog } from '../types.js';
 import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData, classifyCryptoError, CryptoFailure } from '../crypto.js';
 import { cryptoErrorText, cryptoFailureText, resetPasswordError } from '../crypto-errors.js';
 import { validateTreeData, ValidationResult as TreeValidationResult, ValidationIssue } from '../validation.js';
@@ -655,7 +656,13 @@ export const importExportMethods = uiModule({
         const mediaText = document.getElementById('gedcom-media-text');
         const pending = this.gedcomResult.externalMedia.length;
         if (mediaRow) mediaRow.style.display = pending > 0 && this.gedcomImportImages !== false ? '' : 'none';
-        if (mediaText && pending > 0) mediaText.textContent = strings.gedcom.externalMedia(pending);
+        // Couples' photos among them (spec 107): the sentence says how many are whose.
+        const onCouples = this.gedcomResult.externalMedia.filter(r => r.partnershipId).length;
+        if (mediaText && pending > 0) {
+            mediaText.textContent = onCouples > 0
+                ? strings.gedcom.externalMediaSplit(pending, pending - onCouples, onCouples)
+                : strings.gedcom.externalMedia(pending);
+        }
         // Platform exports (MyHeritage) reference photos by URL — offer a
         // direct download (their CDN allows cross-origin GET).
         const downloadBtn = document.getElementById('gedcom-media-download');
@@ -706,17 +713,19 @@ export const importExportMethods = uiModule({
 
         const refs = this.gedcomResult.externalMedia;
         const total = refs.length;
-        let matched = 0;
+        const became = new Map<GedcomMediaAttached, number>();
         const remaining: typeof refs = [];
 
         for (const ref of refs) {
             const file = byName.get(ref.fileName.toLowerCase());
-            if (!file || !(await this.attachFileToGedcomRef(ref, file))) {
+            const kind = file ? await this.attachFileToGedcomRef(ref, file) : null;
+            if (!kind) {
                 remaining.push(ref);
                 continue;
             }
-            matched++;
+            became.set(kind, (became.get(kind) ?? 0) + 1);
         }
+        const matched = [...became.values()].reduce((a, b) => a + b, 0);
         // Fix attachment sizes from data URLs (compression changed them).
         for (const person of Object.values(this.gedcomResult.data.persons)) {
             for (const att of person.attachments ?? []) {
@@ -728,50 +737,17 @@ export const importExportMethods = uiModule({
         // Files brought in by hand are images wanted in this import.
         if (matched > 0) this.gedcomImportImages = true;
         this.showToast(matched > 0
-            ? strings.gedcom.mediaAttached(matched, total)
+            ? gedcomMediaAttachedText(became, total)
             : strings.gedcom.mediaNoMatch);
         this.showGedcomResultDialog();   // refresh tiles + media row
     },
 
-    /** Attach one picked/downloaded file to the person of a media ref. */
-    async attachFileToGedcomRef(ref: { personId: PersonId; title?: string; date?: string; filePath?: string }, file: File): Promise<boolean> {
-        const person = this.gedcomResult?.data.persons[ref.personId];
-        if (!person) return false;
-        // The picture's date from the file goes with it (spec 066 G8).
-        const date = ref.date ? { date: ref.date } : {};
-        try {
-            if (file.type.startsWith('image/')) {
-                if (!person.photo) {
-                    person.photo = await compressPhoto(file);
-                    person.photoOriginalName = file.name;
-                    if (ref.date) person.photoDate = ref.date;
-                } else {
-                    (person.attachments ??= []).push({
-                        id: `att_${Date.now()}_${uniqueIdSuffix()}`,
-                        name: ref.title || file.name,
-                        mimeType: 'image/jpeg',
-                        dataUrl: await compressImageAttachment(file),
-                        sizeBytes: 0,
-                        ...date,
-                    });
-                }
-            } else if (file.type === 'application/pdf' && file.size <= MAX_PDF_BYTES) {
-                (person.attachments ??= []).push({
-                    id: `att_${Date.now()}_${uniqueIdSuffix()}`,
-                    name: ref.title || file.name,
-                    mimeType: 'application/pdf',
-                    dataUrl: await readFileAsDataUrl(file),
-                    sizeBytes: file.size,
-                    ...date,
-                });
-            } else {
-                return false;
-            }
-            if (ref.filePath) dropMediaLink(person, ref.filePath);
-            return true;
-        } catch {
-            return false;
-        }
+    /** Attach one picked/downloaded file to the person or couple of a media ref (what it became, or null). */
+    async attachFileToGedcomRef(ref: GedcomMediaTarget, file: File): Promise<GedcomMediaAttached | null> {
+        if (!this.gedcomResult) return null;
+        return attachGedcomMediaFile(this.gedcomResult.data, ref, file, {
+            portrait: compressPhoto, image: compressImageAttachment, raw: readFileAsDataUrl,
+        });
     },
 
     /**
@@ -787,6 +763,7 @@ export const importExportMethods = uiModule({
         const btn = document.getElementById('gedcom-media-download') as HTMLButtonElement | null;
         if (btn) btn.disabled = true;
         let done = 0, ok = 0;
+        const became = new Map<GedcomMediaAttached, number>();
         const succeeded = new Set<(typeof refs)[number]>();
         for (const ref of urlRefs) {
             done++;
@@ -797,8 +774,10 @@ export const importExportMethods = uiModule({
                 const blob = await resp.blob();
                 const type = blob.type || 'image/jpeg';
                 const file = new File([blob], ref.fileName, { type });
-                if (await this.attachFileToGedcomRef(ref, file)) {
+                const kind = await this.attachFileToGedcomRef(ref, file);
+                if (kind) {
                     succeeded.add(ref);
+                    became.set(kind, (became.get(kind) ?? 0) + 1);
                     ok++;
                 }
             } catch { /* expired link, offline, CORS — ref stays offered */ }
@@ -811,7 +790,7 @@ export const importExportMethods = uiModule({
         this.dismissUndoToast();
         if (ok > 0) this.gedcomImportImages = true;
         this.showToast(ok > 0
-            ? strings.gedcom.mediaAttached(ok, urlRefs.length)
+            ? gedcomMediaAttachedText(became, urlRefs.length)
             : strings.gedcom.mediaDownloadFailed(urlRefs.length));
         this.showGedcomResultDialog();
     },

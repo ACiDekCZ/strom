@@ -1526,6 +1526,34 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
     lines.push('0 @SUBM1@ SUBM');
     pushWrapped(lines, 1, 'NAME', treeName || 'Strom User');
 
+    // A multimedia link (1 OBJE): a person's portrait (marked) and
+    // attachments, a couple's photo (spec 107). Data URLs are CONC-wrapped
+    // to keep physical lines within the spec limit.
+    const pushMedia = (file: string, title: string, kind: 'photo' | '', note?: string, srcId?: string, original?: MediaOriginal, fileMime?: string, date?: string): void => {
+        const mime = file.startsWith('data:') ? file.slice(5, file.indexOf(';')) : fileMime ?? '';
+        const form = mime.includes('/') ? mime.split('/')[1] : 'jpeg';
+        lines.push('1 OBJE');
+        lines.push(`2 FORM ${form}`);
+        if (title) pushWrapped(lines, 2, 'TITL', title);
+        if (kind) lines.push(`2 _STROM_KIND ${kind}`);
+        if (note) pushLongValue(lines, 2, 'NOTE', note);
+        // The source this scan belongs to. 5.5.1 has no SOUR under a
+        // multimedia link, hence the underscore tag.
+        const srcRef = srcId ? sourceIdMap.get(srcId) : undefined;
+        if (srcRef) lines.push(`2 _SOUR ${srcRef}`);
+        // The original behind the preview, by its hash: Strom Research holds it.
+        const sha = normalizeSha256(original?.sha256);
+        if (sha) {
+            lines.push(`2 _STROM_SHA ${sha}`);
+            const o = original?.orientation;
+            if (o && o >= 2 && o <= 8) lines.push(`2 _STROM_ORIENT ${o}`);
+        }
+        pushWrapped(lines, 2, 'FILE', file);
+        // The picture's date from the program's file (spec 066 G8): back under its OBJE, "Back to {prog}" only.
+        const day = back.imports.size > 0 && date ? mediaDateValue(date) : undefined;
+        if (day) lines.push(`2 _DATE ${day}`);
+    };
+
     // ==================== INDIVIDUALS ====================
     for (const [personId, person] of Object.entries(data.persons) as [PersonId, Person][]) {
         const gedcomId = personIdMap.get(personId);
@@ -1764,32 +1792,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         // Source citations on the person (1 SOUR @Sx@ + 2 PAGE).
         pushCitations(1, { personId });
 
-        // Media: portrait first (marked), then attachments. Data URLs are
-        // CONC-wrapped to keep physical lines within the spec limit.
-        const pushMedia = (file: string, title: string, kind: 'photo' | '', note?: string, srcId?: string, original?: MediaOriginal, fileMime?: string, date?: string): void => {
-            const mime = file.startsWith('data:') ? file.slice(5, file.indexOf(';')) : fileMime ?? '';
-            const form = mime.includes('/') ? mime.split('/')[1] : 'jpeg';
-            lines.push('1 OBJE');
-            lines.push(`2 FORM ${form}`);
-            if (title) pushWrapped(lines, 2, 'TITL', title);
-            if (kind) lines.push(`2 _STROM_KIND ${kind}`);
-            if (note) pushLongValue(lines, 2, 'NOTE', note);
-            // The source this scan belongs to. 5.5.1 has no SOUR under a
-            // multimedia link, hence the underscore tag.
-            const srcRef = srcId ? sourceIdMap.get(srcId) : undefined;
-            if (srcRef) lines.push(`2 _SOUR ${srcRef}`);
-            // The original behind the preview, by its hash: Strom Research holds it.
-            const sha = normalizeSha256(original?.sha256);
-            if (sha) {
-                lines.push(`2 _STROM_SHA ${sha}`);
-                const o = original?.orientation;
-                if (o && o >= 2 && o <= 8) lines.push(`2 _STROM_ORIENT ${o}`);
-            }
-            pushWrapped(lines, 2, 'FILE', file);
-            // The picture's date from the program's file (spec 066 G8): back under its OBJE, "Back to {prog}" only.
-            const day = back.imports.size > 0 && date ? mediaDateValue(date) : undefined;
-            if (day) lines.push(`2 _DATE ${day}`);
-        };
+        // Media: portrait first (marked), then attachments (pushMedia above).
         if (person.photo) {
             pushMedia(person.photo, person.photoOriginalName ?? '', 'photo', undefined, undefined, undefined, undefined, person.photoDate);
         }
@@ -2079,6 +2082,12 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         const standInLeftOut = !personIdMap.has(partnership.person1Id) || !personIdMap.has(partnership.person2Id);
         if (partnership.noCouple && standInLeftOut && !hasMarriage && !hasDivorce && !stat && !(partnership.events?.length)) {
             lines.push('1 _STROM_NO_COUPLE Y');
+        }
+
+        // The couple's photo (spec 107): a plain OBJE of the family, no
+        // Strom tag — any program shows it as the family's picture.
+        if (partnership.photo) {
+            pushMedia(partnership.photo, partnership.photoOriginalName ?? '', '', undefined, undefined, undefined, undefined, partnership.photoDate);
         }
 
         pushGedcomExtra(partnership);

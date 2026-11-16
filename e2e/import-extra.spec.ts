@@ -384,6 +384,35 @@ test('GEDCOM result: another program\'s own tags are kept for the way back, deep
     await expect(lines.nth(2)).toHaveText(/^Uchováno pro export „Zpět do MyHeritage Family Tree Builder“: 4 značky \(/);
 });
 
+test('GEDCOM result: a family\'s picture outside the file is counted among the couples, connected it says so', async ({ page }, testInfo) => {
+    await openApp(page);
+    const ged = [
+        '0 HEAD', '1 SOUR MYHERITAGE', '2 NAME MyHeritage Family Tree Builder', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8',
+        '0 @I1@ INDI', '1 NAME Hromoslav /Ozubec/', '1 SEX M', '1 OBJE', '2 FORM jpg', '2 FILE photos/hromoslav.jpg', '1 FAMS @F1@',
+        '0 @I2@ INDI', '1 NAME Libuna /Mechová/', '1 SEX F', '1 FAMS @F1@',
+        '0 @F1@ FAM', '1 HUSB @I1@', '1 WIFE @I2@', '1 OBJE', '2 FORM jpg', '2 FILE photos/svatba.jpg', '2 TITL Svatba',
+        '0 TRLR', '',
+    ].join('\n');
+    const p = testInfo.outputPath('family-photo.ged');
+    writeFileSync(p, ged);
+    await page.locator('#gedcom-input').setInputFiles(p);
+    const result = page.locator('#gedcom-result-modal');
+    await expect(result).toBeVisible();
+    await expect(result.locator('#gedcom-media-text')).toHaveText(/^The file references 2 external media files: 1 on people, 1 on couples \(/);
+    // The couple's photo comes from the picked file (a small JPEG drawn in the page).
+    await page.evaluate(async () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 40; canvas.height = 30;
+        canvas.getContext('2d')!.fillRect(0, 0, 40, 30);
+        const blob = await new Promise<Blob>(r => canvas.toBlob(b => r(b!), 'image/jpeg'));
+        const dt = new DataTransfer();
+        dt.items.add(new File([blob], 'svatba.jpg', { type: 'image/jpeg' }));
+        await window.Strom.UI.attachGedcomMedia(dt.files);
+    });
+    await expect(page.locator('.toast').last()).toContainText('Attached 1 of 2 referenced files: 0 portraits, 0 attachments, 1 couple photo.');
+    await expect(result.locator('#gedcom-media-text')).toHaveText(/^The file references 1 external media file \(/);
+});
+
 test('GEDCOM result: a file with nothing unsupported has no sentence about it', async ({ page }, testInfo) => {
     await openApp(page);
     const p = testInfo.outputPath('clean.ged');
