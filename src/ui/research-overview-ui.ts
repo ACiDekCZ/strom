@@ -70,6 +70,7 @@ import { keepSectionControlFocus } from './live-section-edit-ui.js';
 import { joinAnd } from '../strings.js';
 import { canOpenWindows, openInNewWindow } from '../windows/window-open.js';
 import { focusOverviewWindow, overviewChanged, overviewInWindow } from '../windows/overview-window.js';
+import { agentMirror } from '../windows/agent-mirror.js';
 import { greyOverviewActions } from './overview-window-states.js';
 import { arrangeOverviewColumns, beginOverviewColumns, noteOverviewSectionRows, nodesAfter, resetOverviewColumns } from './overview-columns-ui.js';
 
@@ -561,7 +562,9 @@ export const researchOverviewMethods = uiModule({
         const viewed = followed ? null : overviewViewing();
         // The overview in its own window (6g): none is drawn here.
         const inWindow = overviewInWindow();
-        const s = inWindow ? null : drawnSession();
+        // Another window of the app (spec 097 K2.5): it mirrors the main window's session, the
+        // overview's flag with it, but shows the research through its strip only, never the overview.
+        const s = inWindow || agentMirror() ? null : drawnSession();
         const on = !!s;
         const source: OverviewSourceKind = followed ? 'live' : viewed?.kind ?? 'tree';
         // "More actions" belongs to the open detail: gone with it.
