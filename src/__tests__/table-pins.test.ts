@@ -17,6 +17,17 @@ describe('TablePins', () => {
         expect(p.count()).toBe(0);
     });
 
+    it('holds a row only for its own tree and row type (a jump to a pinned person)', () => {
+        const p = new TablePins();
+        expect(p.holds('t1', 'persons', 'p:a')).toBe(false);
+        p.use('t1', 'persons');
+        p.pin(['p:a']);
+        expect(p.holds('t1', 'persons', 'p:a')).toBe(true);
+        expect(p.holds('t1', 'persons', 'p:b')).toBe(false);
+        expect(p.holds('t2', 'persons', 'p:a')).toBe(false);
+        expect(p.holds('t1', 'unions', 'p:a')).toBe(false);
+    });
+
     it('keeps within PIN_MAX: a range that would go over pins nothing', () => {
         const p = new TablePins();
         p.use('t1', 'persons');

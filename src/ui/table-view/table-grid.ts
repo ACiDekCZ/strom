@@ -585,7 +585,7 @@ export class TableGrid {
      * The name a jump came from (spec 103 §1, 5): in the cell of the way
      * back, marked while that cell is the active one.
      */
-    private origin: { key: string; col: number; personId: string } | null = null;
+    private origin: { key: string; col: number; personId: string; pin: boolean } | null = null;
     /** The open cell editor (T54 F8): over the cell, in the scrolled area (outside the body, so a redraw keeps it). */
     private editor: { key: string; colId: string; pin: boolean; box: HTMLElement; input: HTMLInputElement | HTMLSelectElement; error: HTMLElement; spec: CellEditSpec } | null = null;
 
@@ -864,7 +864,7 @@ export class TableGrid {
         for (const c of this.el.querySelectorAll('.tv-body .is-active-cell')) c.classList.remove('is-active-cell');
         for (const o of this.el.querySelectorAll('.tv-body .tv-nm.is-origin')) o.classList.remove('is-origin');
         const origin = this.origin;
-        if (origin && (!this.cellChosen || origin.key !== this.activeKey || origin.col !== this.activeCol || this.activePin)) this.origin = null;
+        if (origin && (!this.cellChosen || origin.key !== this.activeKey || origin.col !== this.activeCol || origin.pin !== this.activePin)) this.origin = null;
         if (!this.cellChosen || !this.activeKey) return;
         const at = this.zoneLines.findIndex(l => lineKey(l) === this.activeKey);
         if (at < 0) return;
@@ -2284,7 +2284,37 @@ export class TableGrid {
         this.activeKey = key;
         this.activeCol = col;
         this.cellChosen = true;
-        this.origin = origin ? { key, col, personId: origin } : null;
+        this.origin = origin ? { key, col, personId: origin, pin: false } : null;
+        this.jumpedAt = performance.now();
+        this.bodyKey = '';
+        this.draw();
+        this.focusActive(true);
+        return true;
+    }
+
+    /**
+     * A jump to a pinned row the filter hides (spec 103, finding 1 of its check): its line in
+     * the pinned rows' part (in the middle of that part's own scroll when it
+     * is not all seen), the column into view, the cell chosen and focused;
+     * the body stays. False when the line is not among the pinned rows.
+     */
+    jumpToPin(key: string, col: number, origin: string | null): boolean {
+        const input = this.input;
+        const at = this.pinLines.findIndex(l => lineKey(l) === key);
+        if (!input || at < 0) return false;
+        col = Math.max(0, Math.min(input.columns.length - 1, col));
+        const z = this.pinZone;
+        const top = this.pinTops[at] ?? 0;
+        const bottom = this.pinTops[at + 1] ?? top;
+        if (top < z.scrollTop || bottom > z.scrollTop + z.clientHeight) {
+            z.scrollTop = Math.max(0, Math.round((top + bottom) / 2 - z.clientHeight / 2));
+        }
+        this.columnIntoView(col);
+        this.activePin = true;
+        this.activeKey = key;
+        this.activeCol = col;
+        this.cellChosen = true;
+        this.origin = origin ? { key, col, personId: origin, pin: true } : null;
         this.jumpedAt = performance.now();
         this.bodyKey = '';
         this.draw();

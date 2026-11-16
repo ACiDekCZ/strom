@@ -139,6 +139,54 @@ test.describe('desktop (1440)', () => {
         await expect(notice).toBeHidden();
     });
 
+    test('a pinned person the filter hides: the jump goes to their pinned row, no strip, no row for now', async ({ page }) => {
+        await openTable(page, false);
+        const pinRow = (key: string) => tv(page, `.tv-pinrows .tv-row[data-key="${key}"]`);
+        const bodyRow = (key: string) => tv(page, `.tv-body:not(.tv-pinbody) .tv-row[data-key="${key}"]`);
+        await bodyRow('p:c').locator('.tv-name').click({ button: 'right' });
+        await page.locator('.tv-menu .tv-menu-item[data-id="pin"]').click();
+        await expect(pinRow('p:c')).toHaveCount(1);
+        await tv(page, '.tv-search-q').fill('Arvid');
+        await expect(tv(page, '.tv-status')).toContainText('1 of 6');
+        await expect(pinRow('p:c')).toHaveClass(/is-outside/);
+
+        await (await cell(page, 'p:f', 'father')).locator('.tv-nm--jump').click();
+        const name = pinRow('p:c').locator('.tv-name');
+        await expect(name).toHaveClass(/is-active-cell/);
+        await expect(name).toBeFocused();
+        await expect(pinRow('p:c')).toHaveAttribute('aria-selected', 'true');
+        await expect(tv(page, '.tv-notice')).toBeHidden();
+        await expect(bodyRow('p:c')).toHaveCount(0);
+        await expect(tv(page, '.tv-row.is-temp')).toHaveCount(0);
+        await expect(tv(page, '.tv-status')).toContainText('1 of 6');
+
+        // ‹ back to the cell it started from, › to the pinned row again.
+        await expect(back(page)).toHaveAttribute('aria-label', 'Back to Arvid Ostrolam');
+        await back(page).click();
+        await expect(await cell(page, 'p:f', 'father')).toHaveClass(/is-active-cell/);
+        await forward(page).click();
+        await expect(name).toHaveClass(/is-active-cell/);
+        await expect(tv(page, '.tv-notice')).toBeHidden();
+        await expect(bodyRow('p:c')).toHaveCount(0);
+    });
+
+    test('through a partner to a pinned person the filter hides: the Partner cell on the pinned union\'s line', async ({ page }) => {
+        await openTable(page, false, 'b:overview');
+        await tv(page, '.tv-body:not(.tv-pinbody) .tv-row[data-key="p:c"] .tv-name').click({ button: 'right' });
+        await page.locator('.tv-menu .tv-menu-item[data-id="pin"]').click();
+        await tv(page, '.tv-search-q').fill('1882');
+        await expect(tv(page, '.tv-status')).toContainText('1 of 6');
+        await (await cell(page, 'p:d', 'partner')).locator('.tv-nm--jump').click();
+        const head = tv(page, '.tv-headrow [data-col]');
+        const ids = await head.evaluateAll(els => els.map(el => (el as HTMLElement).dataset.col ?? ''));
+        const index = await head.nth(ids.indexOf('partner')).getAttribute('aria-colindex');
+        const target = tv(page, `.tv-pinrows .tv-row[data-key="p:c#u1"] [aria-colindex="${index}"]`);
+        await expect(target).toHaveClass(/is-active-cell/);
+        await expect(target).toBeFocused();
+        await expect(target.locator('.tv-nm.is-origin')).toHaveText('Lunara Pestvik');
+        await expect(tv(page, '.tv-notice')).toBeHidden();
+    });
+
     test('Events: a participant\'s menu starts with "Go to …", the jump to the People table and back', async ({ page }) => {
         await openTable(page, false);
         await tv(page, '.tv-rowtype [data-rowtype="events"]').click();

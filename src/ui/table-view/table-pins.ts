@@ -46,6 +46,10 @@ export class TablePins {
 
     count(): number { return this.keys.length; }
     has(key: string): boolean { return this.keys.includes(key); }
+    /** A row pinned in this tree's table of this row type (the pins of another are dropped on the switch). */
+    holds(tree: string, type: RowType, key: string): boolean {
+        return tree === this.tree && type === this.type && this.keys.includes(key);
+    }
     all(): readonly string[] { return this.keys; }
 
     /** The rows not pinned yet among `keys` (each once). */

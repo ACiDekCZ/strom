@@ -1899,12 +1899,25 @@ export const tableMethods = uiModule({
         return viewRows(tree, m, 'persons', pst.filter, pst.search, pst.sort, columns).rows.some(r => r.kind === 'person' && r.id === personId);
     },
 
-    /** A click (or Enter) on a person's name: the jump, or the strip when the filter hides them (spec 103 2a). */
+    /**
+     * Whether a person's row is pinned in the People table now (spec 103 §3):
+     * a jump to them while the filter hides them lands on their pinned row.
+     */
+    tablePersonPinned(personId: PersonId): boolean {
+        const tree = treeKey();
+        return stateOf(tree).rowType === 'persons' && !isPhoneBar() && pins.holds(tree, 'persons', `p:${personId}`);
+    },
+
+    /**
+     * A click (or Enter) on a person's name: the jump, or the strip when the
+     * filter hides them (spec 103 2a); a pinned person the filter hides is
+     * seen in the pinned rows, so the jump goes to that row, no strip.
+     */
     tableJumpBy(line: GridLine, col: ColumnDef, personId: PersonId): void {
         closeHeadMenu();
         const step = this.tableJumpStep(line, col, personId);
         if (!step) return;
-        if (this.tablePersonShown(personId)) { this.tableRunJump(step, false, true); return; }
+        if (this.tablePersonShown(personId) || this.tablePersonPinned(personId)) { this.tableRunJump(step, false, true); return; }
         const tree = treeKey();
         const state = stateOf(tree);
         hiddenJump = { tree, step, ctx: `${state.rowType}|${peopleCtx(state)}` };
@@ -1940,7 +1953,9 @@ export const tableMethods = uiModule({
         const name = Math.max(0, cols.findIndex(c => c.id === 'name'));
         const at = cols.findIndex(c => c.id === step.to.col);
         grid.flash([`p:${step.to.personId}`]);
-        if (!grid.jumpTo(step.to.key, at < 0 ? name : at, step.to.origin)) grid.jumpTo(`p:${step.to.personId}`, name, null);
+        if (grid.jumpTo(step.to.key, at < 0 ? name : at, step.to.origin) || grid.jumpTo(`p:${step.to.personId}`, name, null)) return;
+        // Not in the body (the filter hides them) but pinned: their row in the pinned rows.
+        if (!grid.jumpToPin(step.to.key, at < 0 ? name : at, step.to.origin)) grid.jumpToPin(`p:${step.to.personId}`, name, null);
     },
 
     /**
@@ -1954,7 +1969,8 @@ export const tableMethods = uiModule({
         if (dir > 0) {
             const step = jumps.forward();
             if (!step) return false;
-            this.tableRunJump(step, step.to.temp || !this.tablePersonShown(step.to.personId as PersonId), false);
+            const pid = step.to.personId as PersonId;
+            this.tableRunJump(step, !this.tablePersonPinned(pid) && (step.to.temp || !this.tablePersonShown(pid)), false);
             return true;
         }
         const step = jumps.back();
