@@ -1475,13 +1475,13 @@ test.describe('the agent at work', () => {
                     }, { photo, shape, size, src: PHOTO });
                     const at = `${photo ? 'photo' : 'initials'} ${shape} ${size}`;
                     await expect(anna.locator('.card-avatar-wrap img'), at).toHaveCount(photo ? 1 : 0);
-                    await expect.poll(async () => (await arc()).avatar, { message: at }).toBe(photo && size === 'large' ? 80 : 34);
+                    await expect.poll(async () => (await arc()).avatar, { message: at }).toBe(size === 'large' ? 80 : 34);
                     const m = await arc();
                     expect([m.ring, m.ringHeight, m.left, m.top], at).toEqual([m.avatar + 8, m.avatar + 8, 4, 4]);
                     expect(m.spin, at).toBe('agSpin');
                     expect(m.running, at).toBeGreaterThanOrEqual(1);
                     if (shape === 'rounded') {
-                        expect(m.avatarRadius, at).toBe(photo && size === 'large' ? '12px' : '5px');
+                        expect(m.avatarRadius, at).toBe(size === 'large' ? '12px' : '5px');
                         expect(m.markRadius, at).toBe(`${parseFloat(m.avatarRadius) + 4}px`);
                         expect(m.ringRadius, at).toBe(m.markRadius);
                     } else {
@@ -1491,13 +1491,14 @@ test.describe('the agent at work', () => {
             }
         }
         // Changed in the Settings while it works: the arc takes the new shape and goes on turning.
+        // The loop ends on the initials at the large size, which the initials take too (80px, the arc 88px).
         await page.evaluate(() => window.Strom.UI.showSettingsDialog());
         const shapeRow = page.locator('#card-photo-settings .card-look-photo-shape');
-        for (const [name, shape, radius] of [['Rounded square', 'rounded', '9px'], ['Circle', 'circle', '50%']]) {
+        for (const [name, shape, radius] of [['Rounded square', 'rounded', '16px'], ['Circle', 'circle', '50%']]) {
             await shapeRow.getByRole('button', { name, exact: true }).click();
             await expect(page.locator('body')).toHaveAttribute('data-card-photo-shape', shape);
             await expect.poll(async () => { const m = await arc(); return [m.ring, m.ringRadius === radius || m.avatarRadius === radius, m.spin, m.running > 0]; }, { message: name })
-                .toEqual([42, true, 'agSpin', true]);
+                .toEqual([88, true, 'agSpin', true]);
         }
     });
 
