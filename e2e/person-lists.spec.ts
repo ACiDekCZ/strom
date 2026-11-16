@@ -3,7 +3,9 @@
  * More, the overview and the chosen list, renaming in place (a taken name is
  * not saved), Duplicate, Delete with Undo, removing a person, the sort
  * choice, the empty states, a list of more than 200 people, a read-only
- * tree, and on a phone the overview and the list taking turns. Invented
+ * tree, and on a phone the overview and the list taking turns; the manual
+ * order (the handle, Alt+↑/↓, Move up / down in a person's ⋯ on a phone),
+ * Freeze, a rule that finds nothing any more and the checklist. Invented
  * names only; the clock is fixed.
  */
 
@@ -108,9 +110,9 @@ test.describe('Lists of people: a computer', () => {
         await d.locator('.pl-person', { hasText: 'Tamsel' }).locator('.pl-x').click();
         await expect(people(page)).toHaveText(['Yselda Fennick', 'Corvin Varnholm']);
 
-        // ⋯ of the list: Open in Table · Rename · Duplicate · Delete.
+        // ⋯ of the list: Open in Table · Rename · Duplicate · Tick off done · Delete.
         await d.locator('.pl-more').click();
-        await expect(d.locator('.pl-menu .pl-menu-item')).toHaveText(['Open in Table', 'Rename', 'Duplicate', 'Delete']);
+        await expect(d.locator('.pl-menu .pl-menu-item')).toHaveText(['Open in Table', 'Rename', 'Duplicate', 'Tick off done', 'Delete']);
         await d.locator('.pl-menu [data-run="dup"]').click();
         await expect(rowNames(page)).toHaveText(['Added in the last 30 days', 'Ancestors – Quillon', 'Letters to the archive', 'Letters to the archive (2)']);
         await expect(d.locator('.pl-row', { hasText: 'Letters to the archive (2)' })).toHaveAttribute('aria-selected', 'true');
@@ -166,6 +168,172 @@ test.describe('Lists of people: a computer', () => {
         await expect(d.locator('.pl-empty-text')).toHaveText('The list has no people yet.');
     });
 
+    test('the manual order: the handle, Escape, Alt+↑/↓, a person\'s ⋯; another order keeps it', async ({ page }) => {
+        await family(page);
+        await page.evaluate(() => window.Strom.UI.showPersonLists());
+        const d = dialog(page);
+        await d.locator('.pl-row', { hasText: 'Letters to write' }).click();
+        // Oldest first: no handle, no row takes the keyboard.
+        await expect(d.locator('.pl-handle')).toHaveCount(0);
+        await d.locator('.pl-sort').click();
+        await d.locator('.pl-menu [data-sort="manual"]').click();
+        await expect(d.locator('.pl-sort')).toContainText('Sort: Manual');
+        await expect(people(page)).toHaveText(['Tamsel Varnholm', 'Corvin Varnholm', 'Yselda Fennick']);
+        await expect(d.locator('.pl-handle')).toHaveCount(3);
+        await expect(d.locator('.pl-handle').first()).toHaveAttribute('aria-label', 'Move – drag or Alt+↑/↓');
+
+        // Drag Yselda above Tamsel: the row lifts, a line shows where it lands.
+        const drag = async (from: string, to: string, finish: 'drop' | 'escape'): Promise<void> => {
+            // A redraw queued by the last change lands first (it replaces the rows).
+            await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+            const h = (await d.locator('.pl-person', { hasText: from }).locator('.pl-handle').boundingBox())!;
+            const target = (await d.locator('.pl-person', { hasText: to }).boundingBox())!;
+            await page.mouse.move(h.x + h.width / 2, h.y + h.height / 2);
+            await page.mouse.down();
+            await page.mouse.move(h.x + h.width / 2, target.y + 6, { steps: 8 });
+            await expect(d.locator('.pl-person.is-lifted')).toHaveCount(1);
+            await expect(d.locator('.pl-drop')).toBeVisible();
+            if (finish === 'escape') await page.keyboard.press('Escape');
+            await page.mouse.up();
+            await expect(d.locator('.pl-drop')).toHaveCount(0);
+        };
+        await drag('Yselda', 'Tamsel', 'drop');
+        await expect(people(page)).toHaveText(['Yselda Fennick', 'Tamsel Varnholm', 'Corvin Varnholm']);
+        await expect(d.locator('.pl-person .pl-num')).toHaveText(['1', '2', '3']);
+        await expect(page.locator('#person-lists-modal .pl-live')).toHaveText('Moved: Yselda Fennick is at position 1 of 3.');
+        // Escape puts the row back and keeps the dialog.
+        await drag('Corvin', 'Yselda', 'escape');
+        await expect(d).toBeVisible();
+        await expect(people(page)).toHaveText(['Yselda Fennick', 'Tamsel Varnholm', 'Corvin Varnholm']);
+
+        // The keyboard: a focused row moves with Alt+↓ and keeps the focus.
+        await d.locator('.pl-person', { hasText: 'Yselda' }).locator('.pl-pname').click();
+        await expect(d.locator('.pl-person', { hasText: 'Yselda' })).toBeFocused();
+        await page.keyboard.press('Alt+ArrowDown');
+        await expect(people(page)).toHaveText(['Tamsel Varnholm', 'Yselda Fennick', 'Corvin Varnholm']);
+        await expect(d.locator('.pl-person', { hasText: 'Yselda' })).toBeFocused();
+        await page.keyboard.press('ArrowDown');
+        await expect(d.locator('.pl-person', { hasText: 'Corvin' })).toBeFocused();
+        await page.keyboard.press('Alt+ArrowUp');
+        await expect(people(page)).toHaveText(['Tamsel Varnholm', 'Corvin Varnholm', 'Yselda Fennick']);
+
+        // A person's ⋯ (shown on hover): Move up / Move down / Remove; the first cannot go up.
+        await d.locator('.pl-person', { hasText: 'Tamsel' }).hover();
+        await d.locator('.pl-person', { hasText: 'Tamsel' }).locator('.pl-person-dots').click();
+        await expect(d.locator('.pl-menu .pl-menu-label')).toHaveText(['Move up', 'Move down', 'Remove from the list']);
+        await expect(d.locator('.pl-menu [data-run="up"]')).toHaveAttribute('aria-disabled', 'true');
+        await d.locator('.pl-menu [data-run="down"]').click();
+        await expect(people(page)).toHaveText(['Corvin Varnholm', 'Tamsel Varnholm', 'Yselda Fennick']);
+
+        // Another order leaves the manual one; back to Manual brings it back.
+        await d.locator('.pl-sort').click();
+        await d.locator('.pl-menu [data-sort="name"]').click();
+        await expect(people(page)).toHaveText(['Yselda Fennick', 'Corvin Varnholm', 'Tamsel Varnholm']);
+        await expect(d.locator('.pl-handle')).toHaveCount(0);
+        await d.locator('.pl-sort').click();
+        await d.locator('.pl-menu [data-sort="manual"]').click();
+        await expect(people(page)).toHaveText(['Corvin Varnholm', 'Tamsel Varnholm', 'Yselda Fennick']);
+
+        // Every change is one undo step: back over the two sorts and the last move.
+        const order = await page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            for (let i = 0; i < 3; i++) dm.undo();
+            return dm.getPersonLists().find(l => l.name === 'Letters to write')!.personIds;
+        });
+        expect(order).toEqual(['t', 'c', 'y']);
+    });
+
+    test('an automatic list: Freeze with Undo; a rule that finds nothing any more', async ({ page }) => {
+        await family(page);
+        await page.evaluate(() => window.Strom.UI.showPersonLists());
+        const d = dialog(page);
+        await d.locator('.pl-row', { hasText: 'Ancestors – Quillon' }).click();
+        await d.locator('.pl-more').click();
+        await expect(d.locator('.pl-menu .pl-menu-item')).toHaveText(['Open in Table', 'Rename', 'Duplicate', 'FreezeBecomes fixed with the people it has now', 'Delete']);
+        await d.locator('.pl-menu [data-run="freeze"]').click();
+        await expect(d.locator('.pl-badge')).toHaveText('Fixed list');
+        await expect(d.locator('.pl-rule')).toContainText('Created from Ancestors of Quillon Varnholm, all generations');
+        await expect(d.locator('.pl-note')).toHaveCount(0);
+        await expect(people(page)).toHaveCount(5);
+        await expect(d.locator('.pl-x')).toHaveCount(5);
+        const toast = page.locator('.undo-toast', { hasText: 'List frozen – it is fixed now.' });
+        await expect(toast).toBeVisible();
+        await toast.locator('.undo-toast-btn').click();
+        await expect(d.locator('.pl-badge')).toHaveText('Automatic list');
+        await expect(d.locator('.pl-x')).toHaveCount(0);
+
+        // The person of the rule deleted: the list stays, empty, with the amber note.
+        await page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            dm.createPersonList({ name: 'Descendants – Wendrel', dynamic: true, rule: { kind: 'descendants', personId: 'w' as never } });
+            dm.deletePerson('w' as never);
+        });
+        await d.locator('.pl-row', { hasText: 'Descendants – Wendrel' }).click();
+        await expect(d.locator('.pl-note--warn')).toContainText('The rule finds nothing any more: Wendrel Varnholm was deleted.');
+        await expect(d.locator('.pl-empty-text')).toHaveText('The list has no people yet.');
+        await d.locator('.pl-note--warn [data-act="delete"]').click();
+        await expect(d.locator('.pl-row', { hasText: 'Descendants – Wendrel' })).toHaveCount(0);
+    });
+
+    test('a checklist: Tick off done, the boxes, All / Left / Done; off keeps what is done', async ({ page }) => {
+        await family(page);
+        await page.evaluate(() => window.Strom.UI.showPersonLists());
+        const d = dialog(page);
+        const row = d.locator('.pl-row', { hasText: 'Letters to write' });
+        await row.click();
+        await expect(d.locator('.pl-check')).toHaveCount(0);
+        await d.locator('.pl-more').click();
+        await expect(d.locator('.pl-menu [data-run="work"]')).toHaveAttribute('aria-checked', 'false');
+        await d.locator('.pl-menu [data-run="work"]').click();
+        await expect(d.locator('.pl-badge')).toHaveText('Checklist');
+        await expect(row.locator('.pl-row-meta')).toHaveText('checklist · 3 of 3 left');
+        await expect(d.locator('.pl-filter-opt')).toHaveText(['All', 'Left 3', 'Done 0']);
+        await expect(d.locator('.pl-check')).toHaveCount(3);
+        await expect(d.locator('.pl-tile').first()).toContainText('3 / 3');
+
+        // Tick Corvin off with a click, Yselda with the space bar.
+        await d.locator('.pl-person', { hasText: 'Corvin' }).locator('.pl-check').click();
+        await expect(d.locator('.pl-person', { hasText: 'Corvin' }).locator('.pl-check')).toHaveAttribute('aria-checked', 'true');
+        await expect(d.locator('.pl-person', { hasText: 'Corvin' })).toHaveClass(/is-done/);
+        await d.locator('.pl-person', { hasText: 'Yselda' }).locator('.pl-check').focus();
+        await page.keyboard.press('Space');
+        await expect(d.locator('.pl-person', { hasText: 'Yselda' }).locator('.pl-check')).toHaveAttribute('aria-checked', 'true');
+        await expect(d.locator('.pl-filter-opt')).toHaveText(['All', 'Left 1', 'Done 2']);
+        await expect(row.locator('.pl-row-meta')).toHaveText('checklist · 1 of 3 left');
+        await expect(d.locator('.pl-tile').first()).toContainText('1 / 3');
+
+        // Left and Done show their people; the position stays the one in the whole list.
+        await d.locator('.pl-filter-opt[data-filter="left"]').click();
+        await expect(people(page)).toHaveText(['Tamsel Varnholm']);
+        await expect(d.locator('.pl-person .pl-num')).toHaveText(['3']);
+        await d.locator('.pl-filter-opt[data-filter="done"]').click();
+        await expect(people(page)).toHaveText(['Corvin Varnholm', 'Yselda Fennick']);
+        // Ticked back under Done: the row goes, the keyboard stays on a box.
+        await d.locator('.pl-person', { hasText: 'Corvin' }).locator('.pl-check').click();
+        await expect(people(page)).toHaveText(['Yselda Fennick']);
+        await expect(d.locator('.pl-person', { hasText: 'Yselda' }).locator('.pl-check')).toBeFocused();
+
+        // Off: no boxes; on again: what was done is back.
+        await d.locator('.pl-more').click();
+        await expect(d.locator('.pl-menu [data-run="work"]')).toHaveAttribute('aria-checked', 'true');
+        await d.locator('.pl-menu [data-run="work"]').click();
+        await expect(d.locator('.pl-check, .pl-filter')).toHaveCount(0);
+        await expect(people(page)).toHaveCount(3);
+        await expect(d.locator('.pl-badge')).toHaveText('Fixed list');
+        await d.locator('.pl-more').click();
+        await d.locator('.pl-menu [data-run="work"]').click();
+        await expect(d.locator('.pl-filter-opt')).toHaveText(['All', 'Left 2', 'Done 1']);
+        await expect(d.locator('.pl-filter-opt[data-filter="all"]')).toHaveAttribute('aria-pressed', 'true');
+
+        // Read only: the done people stay struck through, no boxes, no handle.
+        await page.evaluate(() => { (window.Strom.DataManager as unknown as { viewMode: boolean }).viewMode = true; });
+        await page.evaluate(() => { window.Strom.UI.closePersonLists(); window.Strom.UI.showPersonLists(); });
+        await d.locator('.pl-row', { hasText: 'Letters to write' }).click();
+        await expect(d.locator('.pl-filter-opt')).toHaveText(['All', 'Left 2', 'Done 1']);
+        await expect(d.locator('.pl-check, .pl-handle, .pl-person-dots')).toHaveCount(0);
+        await expect(d.locator('.pl-person.is-done')).toHaveCount(1);
+    });
+
     test('a read-only tree: the badge, and no way to change a list', async ({ page }) => {
         await family(page);
         await page.evaluate(() => { (window.Strom.DataManager as unknown as { viewMode: boolean }).viewMode = true; });
@@ -179,6 +347,41 @@ test.describe('Lists of people: a computer', () => {
         await expect(d.locator('.pl-name-input')).toHaveCount(0);
         await d.locator('.pl-row', { hasText: 'Letters to write' }).press('Delete');
         await expect(rowNames(page)).toHaveCount(3);
+    });
+});
+
+test.describe('Lists of people: a tablet', () => {
+    test.use({ viewport: { width: 1024, height: 768 }, hasTouch: true, isMobile: false });
+
+    test('the manual order with a finger: a 44 px handle, ⋯ always shown', async ({ page }) => {
+        await family(page);
+        await page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            const l = dm.getPersonLists().find(x => x.name === 'Letters to write')!;
+            dm.setPersonListSort(l.id, 'manual');
+            window.Strom.UI.showPersonLists({ listId: l.id });
+        });
+        const d = dialog(page);
+        await expect(people(page)).toHaveText(['Tamsel Varnholm', 'Corvin Varnholm', 'Yselda Fennick']);
+        const h = (await d.locator('.pl-person', { hasText: 'Yselda' }).locator('.pl-handle').boundingBox())!;
+        expect(h.width).toBeGreaterThanOrEqual(44);
+        expect(h.height).toBeGreaterThanOrEqual(44);
+        await expect(d.locator('.pl-person', { hasText: 'Tamsel' }).locator('.pl-person-dots')).toBeVisible();
+
+        // A finger drags Yselda above Tamsel.
+        await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+        const target = (await d.locator('.pl-person', { hasText: 'Tamsel' }).boundingBox())!;
+        const cdp = await page.context().newCDPSession(page);
+        const x = h.x + h.width / 2;
+        let y = h.y + h.height / 2;
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+        for (let i = 0; i < 8; i++) {
+            y += (target.y + 6 - (h.y + h.height / 2)) / 8;
+            await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y }] });
+        }
+        await expect(d.locator('.pl-person.is-lifted')).toHaveCount(1);
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+        await expect(people(page)).toHaveText(['Yselda Fennick', 'Tamsel Varnholm', 'Corvin Varnholm']);
     });
 });
 
@@ -222,7 +425,7 @@ test.describe('Lists of people: a phone', () => {
         // The list's ⋯ is a sheet from below.
         await d.locator('.pl-more').tap();
         const sheet = page.locator('.bottom-sheet-menu');
-        await expect(sheet.locator('.bottom-sheet-item')).toHaveText(['Open in Table', 'Rename', 'Duplicate', 'Delete']);
+        await expect(sheet.locator('.bottom-sheet-item')).toHaveText(['Open in Table', 'Rename', 'Duplicate', 'Tick off done', 'Delete']);
         await page.locator('#pl-sheet-rename').tap();
         const input = d.locator('.pl-name-input');
         await expect(input).toBeFocused();
@@ -242,5 +445,44 @@ test.describe('Lists of people: a phone', () => {
         await expect(d.locator('.pl-title')).toHaveText('Lists of people');
         await d.locator('.pl-close').tap();
         await expect(dialog(page)).toHaveCount(0);
+    });
+
+    test('the manual order on a phone: no handle, Move up / down in a person\'s ⋯; the checklist\'s boxes', async ({ page }) => {
+        await family(page);
+        await page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            const l = dm.getPersonLists().find(x => x.name === 'Letters to write')!;
+            dm.setPersonListSort(l.id, 'manual');
+            window.Strom.UI.showPersonLists({ listId: l.id });
+        });
+        const d = dialog(page);
+        await expect(people(page)).toHaveText(['Tamsel Varnholm', 'Corvin Varnholm', 'Yselda Fennick']);
+        await expect(d.locator('.pl-handle')).toHaveCount(0);
+        const sheet = page.locator('.bottom-sheet-menu');
+
+        // The first one: Move down and Remove (no Move up).
+        await d.locator('.pl-person', { hasText: 'Tamsel' }).locator('.pl-person-dots').tap();
+        await expect(sheet.locator('.bottom-sheet-item')).toHaveText(['↓Move down', '×Remove from the list']);
+        await page.locator('#pl-sheet-down').tap();
+        await expect(people(page)).toHaveText(['Corvin Varnholm', 'Tamsel Varnholm', 'Yselda Fennick']);
+        // The last one: Move up.
+        await d.locator('.pl-person', { hasText: 'Yselda' }).locator('.pl-person-dots').tap();
+        await expect(sheet.locator('.bottom-sheet-item')).toHaveText(['↑Move up', '×Remove from the list']);
+        await page.locator('#pl-sheet-up').tap();
+        await expect(people(page)).toHaveText(['Corvin Varnholm', 'Yselda Fennick', 'Tamsel Varnholm']);
+
+        // A checklist on a phone: the boxes take a finger, the segment fits.
+        await d.locator('.pl-more').tap();
+        await page.locator('#pl-sheet-work').tap();
+        await expect(d.locator('.pl-check')).toHaveCount(3);
+        const chk = (await d.locator('.pl-check').first().boundingBox())!;
+        expect(chk.height).toBeGreaterThanOrEqual(40);
+        await d.locator('.pl-person', { hasText: 'Tamsel' }).locator('.pl-check').tap();
+        await expect(d.locator('.pl-filter-opt')).toHaveText(['All', 'Left 2', 'Done 1']);
+        await d.locator('.pl-filter-opt[data-filter="left"]').tap();
+        await expect(people(page)).toHaveText(['Corvin Varnholm', 'Yselda Fennick']);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+        const seg = (await d.locator('.pl-filter').boundingBox())!;
+        expect(seg.x + seg.width).toBeLessThanOrEqual(390);
     });
 });

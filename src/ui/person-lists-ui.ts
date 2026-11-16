@@ -12,8 +12,10 @@
  *
  * What other parts add (the New list dialog, Edit rule…, Add person…, the
  * Table's scope, more rows of ⋯) comes through ./person-list-hooks.ts.
- * Manual order by dragging, freezing and the checklist (D2b) come into the
- * places marked "D2b" below.
+ * A fixed list in the manual order is arranged by the handle (a mouse or a
+ * finger), by Alt+↑/↓ on a focused row and by Move up / down in a person's
+ * ⋯ (the only way on a phone, which draws no handle). A checklist ticks its
+ * people off and shows All / Left / Done.
  */
 
 import { DataManager } from '../data.js';
@@ -41,6 +43,8 @@ const ADDED_SINCE = '3.30';
 const NARROW_QUERY = '(max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape)';
 
 type Order = 'name' | 'change';
+/** What a checklist shows (§13): everyone, those left, those done. */
+type DoneFilter = 'all' | 'left' | 'done';
 
 interface ListsState {
     selId: string | null;
@@ -50,14 +54,37 @@ interface ListsState {
     view: 'list' | 'detail';
     renaming: boolean;
     draft: string;
-    /** The open popup: a list's ⋯ (by its anchor) or the sort choice. */
-    menu: { kind: 'list'; listId: string; from: 'row' | 'detail' } | { kind: 'sort' } | null;
+    /** The open popup: a list's ⋯ (by its anchor), the sort choice or a person's ⋯. */
+    menu: { kind: 'list'; listId: string; from: 'row' | 'detail' } | { kind: 'sort' } | { kind: 'person'; pid: PersonId } | null;
+    /** A checklist's view of its people (back to All when another list is chosen). */
+    filter: DoneFilter;
+    /** The person row that takes the keyboard in the manual order (one tab stop). */
+    focusPid: PersonId | null;
+}
+
+/** A row being dragged by its handle (§5): where it started and where it would land. */
+interface DragState {
+    listId: string;
+    pid: PersonId;
+    pointerId: number;
+    row: HTMLElement;
+    box: HTMLElement;
+    line: HTMLElement;
+    startY: number;
+    startScroll: number;
+    /** Land before this person, else after `after` (the end of the drawn rows). */
+    before: PersonId | null;
+    after: PersonId | null;
+    cleanup: () => void;
 }
 
 let state: ListsState | null = null;
 let unsubscribe: (() => void) | null = null;
 let renderQueued = false;
 let narrowMql: MediaQueryList | null = null;
+let drag: DragState | null = null;
+/** A redraw asked for while a row is dragged: done when it lands. */
+let renderAfterDrag = false;
 
 function esc(s: string): string {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -119,6 +146,33 @@ function rowMeta(list: PersonList): string {
 
 const DOTS = '<span aria-hidden="true">⋯</span>';
 
+/** The people of a checklist ticked off (only those still in the list). */
+function doneSet(list: PersonList, ids: readonly PersonId[]): Set<PersonId> {
+    if (!list.checklist || list.dynamic || !list.done?.length) return new Set();
+    const inList = new Set(ids);
+    return new Set(list.done.filter(id => inList.has(id)));
+}
+
+/** The people a checklist shows under All / Left / Done (any other list: all). */
+function filteredIds(list: PersonList, ids: PersonId[], filter: DoneFilter): PersonId[] {
+    if (!list.checklist || list.dynamic || filter === 'all') return ids;
+    const done = doneSet(list, ids);
+    return ids.filter(id => done.has(id) === (filter === 'done'));
+}
+
+/**
+ * The manual order with `pid` put before `before` (else after `after`, else
+ * at the end); null when nothing changes.
+ */
+function placedOrder(order: readonly PersonId[], pid: PersonId, before: PersonId | null, after: PersonId | null): PersonId[] | null {
+    if (!order.includes(pid) || before === pid || after === pid) return null;
+    const out = order.filter(id => id !== pid);
+    const at = before && out.includes(before) ? out.indexOf(before)
+        : after && out.includes(after) ? out.indexOf(after) + 1 : out.length;
+    out.splice(at, 0, pid);
+    return out.every((id, i) => id === order[i]) ? null : out;
+}
+
 export const personListsMethods = uiModule({
     /**
      * Open the dialog Lists of people (⋯ › Lists of people…, More on a
@@ -128,10 +182,11 @@ export const personListsMethods = uiModule({
     showPersonLists(opts: { listId?: string; rename?: boolean } = {}): void {
         const reopen = !!state && !!document.getElementById(OVERLAY_ID);
         if (!reopen) {
-            state = { selId: null, order: 'name', search: '', view: 'list', renaming: false, draft: '', menu: null };
+            state = { selId: null, order: 'name', search: '', view: 'list', renaming: false, draft: '', menu: null, filter: 'all', focusPid: null };
         }
         const st = state!;
         if (opts.listId && DataManager.getPersonList(opts.listId)) {
+            if (st.selId !== opts.listId) { st.filter = 'all'; st.focusPid = null; }
             st.selId = opts.listId;
             st.view = 'detail';
             st.search = '';
@@ -153,7 +208,8 @@ export const personListsMethods = uiModule({
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay active pl-overlay';
         overlay.id = OVERLAY_ID;
-        overlay.innerHTML = `<div class="modal modal--lg pl-modal" role="dialog" aria-modal="true" aria-labelledby="pl-title" data-dialog-kind="info" data-skeleton="skip"></div>`;
+        overlay.innerHTML = `<div class="modal modal--lg pl-modal" role="dialog" aria-modal="true" aria-labelledby="pl-title" data-dialog-kind="info" data-skeleton="skip"></div>`
+            + `<div class="pl-live" role="status" aria-live="polite"></div>`;
         document.body.appendChild(overlay);
         overlay.addEventListener('mousedown', (e) => {
             if (e.target === overlay) this.closePersonLists();
@@ -162,6 +218,7 @@ export const personListsMethods = uiModule({
         overlay.addEventListener('keydown', (e) => this.onPersonListsKey(e));
         overlay.addEventListener('input', (e) => this.onPersonListsInput(e));
         overlay.addEventListener('focusout', (e) => this.onPersonListsFocusOut(e));
+        overlay.addEventListener('pointerdown', (e) => this.onPersonListsPointerDown(e));
         this.clearDialogStack();
         this.pushDialog(OVERLAY_ID);
         const refresh = (): void => this.queuePersonListsRender();
@@ -184,6 +241,8 @@ export const personListsMethods = uiModule({
     },
 
     closePersonLists(): void {
+        drag?.cleanup();
+        drag = null;
         document.getElementById(OVERLAY_ID)?.remove();
         this.dialogStack = this.dialogStack.filter(id => id !== OVERLAY_ID);
         unsubscribe?.();
@@ -195,8 +254,14 @@ export const personListsMethods = uiModule({
     personListsEscape(): void {
         const st = state;
         if (!st) return;
+        if (drag) {
+            this.endPersonListDrag(false);
+            return;
+        }
         if (st.menu) {
-            const back = st.menu.kind === 'sort' ? '[data-act="sort"]' : st.menu.from === 'detail' ? '[data-act="menu-detail"]' : null;
+            const back = st.menu.kind === 'sort' ? '[data-act="sort"]'
+                : st.menu.kind === 'person' ? `[data-key="pdots-${CSS.escape(st.menu.pid)}"]`
+                    : st.menu.from === 'detail' ? '[data-act="menu-detail"]' : null;
             st.menu = null;
             this.renderPersonLists();
             this.focusPersonLists(back);
@@ -216,6 +281,7 @@ export const personListsMethods = uiModule({
         renderQueued = true;
         requestAnimationFrame(() => {
             renderQueued = false;
+            if (drag) { renderAfterDrag = true; return; }
             if (state && this.isPersonListsOpen()) this.renderPersonLists();
         });
     },
@@ -244,6 +310,9 @@ export const personListsMethods = uiModule({
         if (narrow && (!st.selId || all.length === 0)) st.view = 'list';
         const sel = st.selId ? all.find(l => l.id === st.selId) ?? null : null;
         if (st.menu?.kind === 'list' && !all.some(l => l.id === (st.menu as { listId: string }).listId)) st.menu = null;
+        if (st.menu?.kind === 'person' && !(sel && !sel.dynamic && sel.personIds?.includes(st.menu.pid))) st.menu = null;
+        // A list that is not a checklist (any more) shows everyone; switched on again it starts at All.
+        if (!sel?.checklist || sel.dynamic) st.filter = 'all';
 
         const view = narrow ? st.view : 'both';
         modal.dataset.view = view;
@@ -393,23 +462,33 @@ export const personListsMethods = uiModule({
         const ids = listPersonIds(index, list);
         const sortOpen = st.menu?.kind === 'sort';
         const sortBtn = `<button type="button" class="pl-sort" data-act="sort" data-key="sort" aria-haspopup="menu" aria-expanded="${sortOpen}">${esc(t.sortBy(t.sort[list.sort]))}<span class="pl-caret" aria-hidden="true">▾</span></button>`;
-        // D2b: the checklist's All / Left / Done segment goes between the title and the sort.
-        const peopleHead = `<div class="pl-people-head"><span class="pl-people-title">${esc(t.people(ids.length))}</span><span class="pl-head-gap"></span>${sortBtn}</div>`;
+        // A checklist: All / Left n / Done n between the title and the sort (§13).
+        const shownIds = filteredIds(list, ids, st.filter);
+        let seg = '';
+        if (list.checklist && !auto) {
+            const done = doneSet(list, ids);
+            const f = st.filter;
+            const opts: Array<[DoneFilter, string]> = [['all', t.filter.all], ['left', t.filter.left(ids.length - done.size)], ['done', t.filter.done(done.size)]];
+            seg = `<div class="sel-seg pl-filter" role="group" aria-label="${esc(t.badge.work)}">${opts.map(([k, label]) => `<button type="button" class="sel-opt pl-filter-opt" data-sel-form="seg" data-act="filter" data-filter="${k}" data-key="filter-${k}" aria-pressed="${f === k}">${esc(label)}</button>`).join('')}</div>`;
+        }
+        const peopleHead = `<div class="pl-people-head"><span class="pl-people-title">${esc(t.people(ids.length))}</span><span class="pl-head-gap"></span>${seg}${sortBtn}</div>`;
         let people: string;
-        if (ids.length === 0) {
+        if (ids.length > 0 && shownIds.length === 0) {
+            people = `<div class="pl-people pl-people--empty"></div>`;
+        } else if (ids.length === 0) {
             const empty = list.rule?.kind === 'added' ? t.addedNone(ADDED_SINCE) : t.emptyList;
             const add = !ro && !auto && personListHooks.addPerson
                 ? `<button type="button" class="secondary" data-act="add-person" data-key="add-person-empty">${esc(t.addPerson)}</button>` : '';
             people = `<div class="pl-people pl-people--empty"><p class="pl-empty-text">${esc(empty)}</p>${add}</div>`;
         } else {
-            people = `<div class="pl-people" role="list" aria-label="${esc(t.people(ids.length))}">${this.personListRowsHtml(list, ids.slice(0, LIST_DETAIL_ROWS), narrow)}</div>`;
+            people = `<div class="pl-people" role="list" aria-label="${esc(t.people(ids.length))}">${this.personListRowsHtml(list, shownIds.slice(0, LIST_DETAIL_ROWS), narrow, ids)}</div>`;
         }
         const footParts: string[] = [];
         if (!ro && !auto && ids.length > 0 && personListHooks.addPerson) {
             footParts.push(`<button type="button" class="pl-link" data-act="add-person" data-key="add-person">+ ${esc(t.addPerson)}</button>`);
         }
-        if (ids.length > LIST_DETAIL_ROWS) {
-            footParts.push(`<span class="pl-foot-note">${esc(t.large(LIST_DETAIL_ROWS, ids.length))}</span>`);
+        if (shownIds.length > LIST_DETAIL_ROWS) {
+            footParts.push(`<span class="pl-foot-note">${esc(t.large(LIST_DETAIL_ROWS, shownIds.length))}</span>`);
             footParts.push(`<button type="button" class="pl-link" data-act="open-table" data-key="open-table-foot">${esc(t.openTable)}</button>`);
         }
         const foot = footParts.length ? `<div class="pl-foot">${footParts.join('')}</div>` : '';
@@ -417,12 +496,23 @@ export const personListsMethods = uiModule({
         return `${nameRow}${ruleRow}${note}${acts}${tilesHtml}${peopleHead}${people}${foot}`;
     },
 
-    /** The people's rows: position, name, years, what the order goes by, × (a fixed list). */
-    personListRowsHtml(list: PersonList, ids: PersonId[], narrow: boolean): string {
+    /**
+     * The people's rows: the handle (the manual order), the position in the
+     * whole list, the checklist's box, name, years, what the order goes by,
+     * ⋯ and × (a fixed list). `all` is the whole list in its order.
+     */
+    personListRowsHtml(list: PersonList, ids: PersonId[], narrow: boolean, all: PersonId[] = ids): string {
         const t = strings.lists;
+        const st = state!;
         const data = DataManager.getData();
         const ro = DataManager.listsReadOnly();
         const removable = !ro && !list.dynamic;
+        const manual = removable && list.sort === 'manual';
+        const check = !list.dynamic && !!list.checklist;
+        const done = check ? doneSet(list, all) : null;
+        const pos = new Map(all.map((id, i) => [id, i + 1]));
+        // The manual order: one row takes the keyboard (Alt+↑/↓ moves it).
+        const tabPid = manual ? (st.focusPid && ids.includes(st.focusPid) ? st.focusPid : ids[0]) : null;
         const rule = list.rule;
         const byRule = rule && (rule.kind === 'ancestors' || rule.kind === 'descendants') && list.sort === 'gen';
         const gens = byRule ? listGenerations(DataManager.getLineageIndex(), list, ids) : null;
@@ -443,18 +533,25 @@ export const personListsMethods = uiModule({
             if (!p) return '';
             const name = shownName(p);
             const meta = metaOf(id);
-            // D2b: the drag handle (manual order) and the checklist's box go before the name.
+            const isDone = !!done?.has(id);
+            // A phone draws no handle: Move up / down are in the person's ⋯ (15g).
+            const handle = manual && !narrow
+                ? `<span class="pl-handle" role="img" aria-label="${esc(t.handle)}" title="${esc(t.handle)}"><span aria-hidden="true">⠿</span></span>` : '';
+            const box = check && !ro
+                ? `<button type="button" class="pl-check" role="checkbox" aria-checked="${isDone}" data-act="done" data-key="chk-${esc(id)}" aria-label="${esc(name)}"><span class="pl-check-box" aria-hidden="true">${isDone ? '✓' : ''}</span></button>` : '';
             const x = removable && !narrow
                 ? `<button type="button" class="pl-x" data-act="remove" data-key="x-${esc(id)}" aria-label="${esc(`${t.remove}: ${name}`)}" title="${esc(t.remove)}"><span aria-hidden="true">×</span></button>` : '';
-            const dots = removable && narrow
-                ? `<button type="button" class="pl-dots pl-person-dots" data-act="person-menu" data-key="pdots-${esc(id)}" aria-label="${esc(`${t.actions}: ${name}`)}" aria-haspopup="menu">${DOTS}</button>` : '';
-            return `<div class="pl-person" role="listitem" data-pid="${esc(id)}"><span class="pl-num">${i + 1}</span>`
+            const open = st.menu?.kind === 'person' && st.menu.pid === id;
+            const dots = removable && (narrow || manual)
+                ? `<button type="button" class="pl-dots pl-person-dots${narrow ? '' : ' pl-person-dots--quiet'}${open ? ' is-open' : ''}" data-act="person-menu" data-key="pdots-${esc(id)}" aria-label="${esc(`${t.actions}: ${name}`)}" aria-haspopup="menu" aria-expanded="${open}"${manual && !narrow ? ' tabindex="-1"' : ''}>${DOTS}</button>` : '';
+            const focus = manual ? ` tabindex="${id === tabPid ? 0 : -1}" data-key="p-${esc(id)}"` : '';
+            return `<div class="pl-person${isDone ? ' is-done' : ''}" role="listitem" data-pid="${esc(id)}"${focus}>${handle}<span class="pl-num">${pos.get(id) ?? i + 1}</span>${box}`
                 + `<span class="pl-pname" title="${esc(name)}">${esc(name)}</span><span class="pl-years">${esc(cardYears(p))}</span>`
-                + `<span class="pl-meta${meta.quiet ? ' is-quiet' : ''}" title="${esc(meta.text)}">${esc(meta.text)}</span>${x}${dots}</div>`;
+                + `<span class="pl-meta${meta.quiet ? ' is-quiet' : ''}" title="${esc(meta.text)}">${esc(meta.text)}</span>${dots}${x}</div>`;
         }).join('');
     },
 
-    /** The rows of a list's ⋯: Open in Table · Rename · Duplicate · (D2b, D5 rows) · Delete. */
+    /** The rows of a list's ⋯: Open in Table · Rename · Duplicate · (Freeze or Tick off done, more from the hooks) · Delete. */
     personListMenuRows(list: PersonList): ListMenuRow[] {
         const t = strings.lists;
         const rows: ListMenuRow[] = [
@@ -486,12 +583,28 @@ export const personListsMethods = uiModule({
             }).join('');
             return `<div class="pl-menu" role="menu" aria-label="${esc(t.sortBy(t.sort[list.sort]))}" data-anchor="sort">${items}</div>`;
         }
+        if (menu.kind === 'person') {
+            const list = st.selId ? DataManager.getPersonList(st.selId) : undefined;
+            const p = DataManager.getData().persons[menu.pid];
+            if (!list || !p) return '';
+            const order = filteredIds(list, listPersonIds(DataManager.getLineageIndex(), list), st.filter);
+            const at = order.indexOf(menu.pid);
+            const item = (run: string, label: string, icon: string, key: string, off: boolean): string =>
+                `<button type="button" class="pl-menu-item" role="menuitem" data-act="person-run" data-run="${run}" data-key="pmenu-${run}"${off ? ' aria-disabled="true"' : ''}>`
+                + `<span class="pl-menu-icon" aria-hidden="true">${icon}</span><span class="pl-menu-label">${esc(label)}</span>`
+                + (key ? `<span class="pl-menu-key" aria-hidden="true">${key}</span>` : '') + '</button>';
+            const manual = list.sort === 'manual';
+            const moves = manual
+                ? item('up', t.up, '↑', 'Alt+↑', at <= 0) + item('down', t.down, '↓', 'Alt+↓', at < 0 || at >= order.length - 1) + '<div class="pl-menu-sep" role="separator"></div>' : '';
+            return `<div class="pl-menu" role="menu" aria-label="${esc(shownName(p))}" data-anchor="${esc(`person:${menu.pid}`)}">${moves}${item('remove', t.remove, '×', '', false)}</div>`;
+        }
         const list = DataManager.getPersonList(menu.listId);
         if (!list) return '';
         const rows = this.personListMenuRows(list);
         const items = rows.map((r, i) => {
             const sep = r.id === 'rename' || r.id === 'delete' ? '<div class="pl-menu-sep" role="separator"></div>' : '';
-            return `${i ? sep : ''}<button type="button" class="pl-menu-item${r.danger ? ' is-danger' : ''}" role="menuitem" data-act="menu-run" data-run="${esc(r.id)}" data-key="menu-${esc(r.id)}">`
+            const role = r.checked === undefined ? 'menuitem' : `menuitemcheckbox" aria-checked="${r.checked}`;
+            return `${i ? sep : ''}<button type="button" class="pl-menu-item${r.danger ? ' is-danger' : ''}" role="${role}" data-act="menu-run" data-run="${esc(r.id)}" data-key="menu-${esc(r.id)}">`
                 + `<span class="pl-menu-label">${esc(r.label)}${r.sub ? `<span class="pl-menu-sub">${esc(r.sub)}</span>` : ''}</span><span class="pl-menu-check" aria-hidden="true">${r.checked ? '✓' : ''}</span></button>`;
         }).join('');
         const anchor = menu.from === 'detail' ? 'menu-detail' : `row:${menu.listId}`;
@@ -506,7 +619,8 @@ export const personListsMethods = uiModule({
         const anchorKey = menu.dataset.anchor ?? '';
         const anchor = anchorKey === 'sort' ? modal.querySelector<HTMLElement>('[data-act="sort"]')
             : anchorKey === 'menu-detail' ? modal.querySelector<HTMLElement>('[data-act="menu-detail"]')
-                : modal.querySelector<HTMLElement>(`.pl-row[data-list="${CSS.escape(anchorKey.slice(4))}"] .pl-dots`);
+                : anchorKey.startsWith('person:') ? modal.querySelector<HTMLElement>(`.pl-person[data-pid="${CSS.escape(anchorKey.slice(7))}"] .pl-person-dots`)
+                    : modal.querySelector<HTMLElement>(`.pl-row[data-list="${CSS.escape(anchorKey.slice(4))}"] .pl-dots`);
         if (!anchor) return;
         const box = modal.getBoundingClientRect();
         const a = anchor.getBoundingClientRect();
@@ -542,15 +656,64 @@ export const personListsMethods = uiModule({
         if (st.menu) this.focusPersonLists('.pl-menu .pl-menu-item');
     },
 
-    /** A person's ⋯ on a phone (no × there): Remove from the list. D2b adds Move up / down. */
+    /**
+     * A person's ⋯: on a phone a sheet (Move up / down in the manual order,
+     * the only way there; Remove from the list), elsewhere a popup by it.
+     */
     openPersonListPersonMenu(listId: string, personId: PersonId): void {
+        const st = state;
         const list = DataManager.getPersonList(listId);
         const p = DataManager.getData().persons[personId];
-        if (!list || !p || DataManager.listsReadOnly() || list.dynamic) return;
+        if (!st || !list || !p || DataManager.listsReadOnly() || list.dynamic) return;
+        if (!isNarrow()) {
+            st.menu = st.menu?.kind === 'person' && st.menu.pid === personId ? null : { kind: 'person', pid: personId };
+            this.renderPersonLists();
+            if (st.menu) this.focusPersonLists('.pl-menu .pl-menu-item:not([aria-disabled="true"])');
+            return;
+        }
+        st.menu = null;
         const t = strings.lists;
-        this.presentMenuSheet(shownName(p), [{ rows: [
-            { label: t.remove, id: 'pl-sheet-remove', icon: '×', run: () => { DataManager.removePersonsFromList(listId, [personId]); } },
-        ] }], { subtitle: cardYears(p) || undefined });
+        const order = filteredIds(list, listPersonIds(DataManager.getLineageIndex(), list), st.filter);
+        const at = order.indexOf(personId);
+        const moves: Array<{ label: string; id: string; icon: string; run: () => void }> = [];
+        if (list.sort === 'manual') {
+            if (at > 0) moves.push({ label: t.up, id: 'pl-sheet-up', icon: '↑', run: () => this.movePersonListPerson(listId, personId, -1) });
+            if (at >= 0 && at < order.length - 1) moves.push({ label: t.down, id: 'pl-sheet-down', icon: '↓', run: () => this.movePersonListPerson(listId, personId, 1) });
+        }
+        const remove = { label: t.remove, id: 'pl-sheet-remove', icon: '×', run: () => { DataManager.removePersonsFromList(listId, [personId]); } };
+        const pos = listPersonIds(DataManager.getLineageIndex(), list).indexOf(personId) + 1;
+        const years = cardYears(p);
+        this.presentMenuSheet(shownName(p), moves.length ? [{ rows: moves }, { rows: [remove], divider: true }] : [{ rows: [remove] }],
+            { subtitle: list.sort === 'manual' && pos > 0 ? [String(pos), years].filter(Boolean).join(' · ') : years || undefined });
+    },
+
+    /**
+     * One step up or down in the manual order (Alt+↑/↓, Move up / down):
+     * past the next person shown (a checklist's Left or Done skips the
+     * others); said aloud for a screen reader.
+     */
+    movePersonListPerson(listId: string, personId: PersonId, dir: -1 | 1): boolean {
+        const st = state;
+        const list = DataManager.getPersonList(listId);
+        if (!st || !list || list.dynamic || list.sort !== 'manual' || DataManager.listsReadOnly()) return false;
+        const order = list.personIds ?? [];
+        const shown = filteredIds(list, listPersonIds(DataManager.getLineageIndex(), list), st.filter);
+        const at = shown.indexOf(personId);
+        const other = shown[at + dir];
+        if (at < 0 || !other) return false;
+        const next = dir < 0 ? placedOrder(order, personId, other, null) : placedOrder(order, personId, null, other);
+        if (!next || !DataManager.setPersonListOrder(listId, next)) return false;
+        this.announcePersonListMove(personId, next);
+        this.renderPersonLists();
+        return true;
+    },
+
+    /** Say where a moved person is now (aria-live). */
+    announcePersonListMove(personId: PersonId, order: readonly PersonId[]): void {
+        const live = document.querySelector<HTMLElement>(`#${OVERLAY_ID} .pl-live`);
+        const p = DataManager.getData().persons[personId];
+        if (!live || !p) return;
+        live.textContent = strings.lists.moved(shownName(p), order.indexOf(personId) + 1, order.length);
     },
 
     selectPersonList(listId: string, focus = true): void {
@@ -559,6 +722,8 @@ export const personListsMethods = uiModule({
         if (st.selId !== listId) {
             st.selId = listId;
             st.renaming = false;
+            st.filter = 'all';
+            st.focusPid = null;
         }
         st.menu = null;
         if (isNarrow()) st.view = 'detail';
@@ -634,7 +799,7 @@ export const personListsMethods = uiModule({
         const el = target.closest<HTMLElement>('[data-act]');
         const act = el?.dataset.act;
         // A click beside an open popup closes it (and does nothing else).
-        if (st.menu && !target.closest('.pl-menu') && act !== 'menu-row' && act !== 'menu-detail' && act !== 'sort') {
+        if (st.menu && !target.closest('.pl-menu') && act !== 'menu-row' && act !== 'menu-detail' && act !== 'sort' && act !== 'person-menu') {
             st.menu = null;
             this.renderPersonLists();
             return;
@@ -642,6 +807,8 @@ export const personListsMethods = uiModule({
         const row = target.closest<HTMLElement>('.pl-row');
         if (!act) {
             if (row?.dataset.list) this.selectPersonList(row.dataset.list);
+            const person = target.closest<HTMLElement>('.pl-person[tabindex]');
+            if (person?.dataset.pid) this.focusPersonListRow(person.dataset.pid as PersonId);
             return;
         }
         const listId = st.selId;
@@ -708,6 +875,37 @@ export const personListsMethods = uiModule({
                 if (listId && pid) this.openPersonListPersonMenu(listId, pid);
                 return;
             }
+            case 'person-run': {
+                const menu = st.menu;
+                if (menu?.kind !== 'person' || !listId || el!.getAttribute('aria-disabled') === 'true') return;
+                st.menu = null;
+                const run = el!.dataset.run;
+                if (run === 'remove') {
+                    DataManager.removePersonsFromList(listId, [menu.pid]);
+                    this.renderPersonLists();
+                    this.focusPersonLists('[data-act="sort"]');
+                    return;
+                }
+                if (!this.movePersonListPerson(listId, menu.pid, run === 'up' ? -1 : 1)) this.renderPersonLists();
+                this.focusPersonListRow(menu.pid);
+                return;
+            }
+            case 'filter':
+                st.filter = (el!.dataset.filter as DoneFilter) ?? 'all';
+                this.renderPersonLists();
+                return;
+            case 'done': {
+                const pid = target.closest<HTMLElement>('.pl-person')?.dataset.pid as PersonId | undefined;
+                if (!listId || !pid) return;
+                // Under Left or Done the row goes away: the keyboard goes to the next box.
+                const rowEl = target.closest('.pl-person');
+                const next = (rowEl?.nextElementSibling ?? rowEl?.previousElementSibling) as HTMLElement | null;
+                const nextKey = st.filter !== 'all' ? next?.querySelector<HTMLElement>('.pl-check')?.dataset.key : el!.dataset.key;
+                DataManager.togglePersonListDone(listId, pid);
+                this.renderPersonLists();
+                this.focusPersonLists(nextKey ? `[data-key="${CSS.escape(nextKey)}"]` : '[data-act="sort"]');
+                return;
+            }
         }
     },
 
@@ -748,6 +946,10 @@ export const personListsMethods = uiModule({
             this.startPersonListRename(st.selId);
             return;
         }
+        if (target.classList.contains('pl-person') && target.dataset.pid) {
+            this.onPersonListRowKey(e, target.dataset.pid as PersonId);
+            return;
+        }
         const row = target.classList.contains('pl-row') ? target : null;
         if (!row) return;
         const rows = [...document.querySelectorAll<HTMLElement>(`#${OVERLAY_ID} .pl-row`)];
@@ -777,6 +979,133 @@ export const personListsMethods = uiModule({
                 if (row.dataset.list && !DataManager.listsReadOnly()) this.deletePersonListUi(row.dataset.list);
                 return;
         }
+    },
+
+    /** The keyboard on a person row of the manual order (one tab stop, roving). */
+    focusPersonListRow(pid: PersonId): void {
+        const st = state;
+        const rows = [...document.querySelectorAll<HTMLElement>(`#${OVERLAY_ID} .pl-person[tabindex]`)];
+        const el = rows.find(r => r.dataset.pid === pid);
+        if (!st || !el) return;
+        st.focusPid = pid;
+        rows.forEach(r => { r.tabIndex = r === el ? 0 : -1; });
+        el.focus({ preventScroll: true });
+        el.scrollIntoView?.({ block: 'nearest' });
+    },
+
+    /** A focused person row: ↑/↓ Home/End go along, Alt+↑/↓ move the person. */
+    onPersonListRowKey(e: KeyboardEvent, pid: PersonId): void {
+        const st = state;
+        const listId = st?.selId;
+        if (!st || !listId) return;
+        const rows = [...document.querySelectorAll<HTMLElement>(`#${OVERLAY_ID} .pl-person[tabindex]`)];
+        const i = rows.findIndex(r => r.dataset.pid === pid);
+        const go = (n: number): void => {
+            const r = rows[Math.max(0, Math.min(rows.length - 1, n))];
+            if (r?.dataset.pid) this.focusPersonListRow(r.dataset.pid as PersonId);
+        };
+        if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+            e.preventDefault();
+            this.movePersonListPerson(listId, pid, e.key === 'ArrowUp' ? -1 : 1);
+            this.focusPersonListRow(pid);
+            return;
+        }
+        if (e.altKey || e.ctrlKey || e.metaKey) return;
+        switch (e.key) {
+            case 'ArrowDown': e.preventDefault(); go(i + 1); return;
+            case 'ArrowUp': e.preventDefault(); go(i - 1); return;
+            case 'Home': e.preventDefault(); go(0); return;
+            case 'End': e.preventDefault(); go(rows.length - 1); return;
+        }
+    },
+
+    /**
+     * The handle pressed (a mouse or a finger, §5): the row lifts and follows
+     * the pointer, a line shows where it lands; letting go there saves the
+     * order (one undo step), Escape or a cancelled pointer puts it back.
+     */
+    onPersonListsPointerDown(e: PointerEvent): void {
+        const st = state;
+        const handle = (e.target as HTMLElement).closest<HTMLElement>('.pl-handle');
+        if (!st?.selId || !handle || drag || (e.pointerType === 'mouse' && e.button !== 0)) return;
+        const row = handle.closest<HTMLElement>('.pl-person');
+        const box = row?.closest<HTMLElement>('.pl-people');
+        const pid = row?.dataset.pid as PersonId | undefined;
+        const list = DataManager.getPersonList(st.selId);
+        if (!row || !box || !pid || !list || list.dynamic || list.sort !== 'manual' || DataManager.listsReadOnly()) return;
+        e.preventDefault();
+        st.menu = null;
+        document.querySelector(`#${OVERLAY_ID} .pl-menu`)?.remove();
+        const line = document.createElement('div');
+        line.className = 'pl-drop';
+        line.setAttribute('aria-hidden', 'true');
+        box.appendChild(line);
+        row.classList.add('is-lifted');
+        box.classList.add('is-dragging');
+        try { handle.setPointerCapture(e.pointerId); } catch { /* the pointer is gone already */ }
+        const move = (ev: PointerEvent): void => { if (ev.pointerId === e.pointerId) this.movePersonListDrag(ev.clientY); };
+        const up = (ev: PointerEvent): void => { if (ev.pointerId === e.pointerId) this.endPersonListDrag(true); };
+        const cancel = (ev: PointerEvent): void => { if (ev.pointerId === e.pointerId) this.endPersonListDrag(false); };
+        window.addEventListener('pointermove', move);
+        window.addEventListener('pointerup', up);
+        window.addEventListener('pointercancel', cancel);
+        drag = {
+            listId: list.id, pid, pointerId: e.pointerId, row, box, line,
+            startY: e.clientY, startScroll: box.scrollTop, before: null, after: null,
+            cleanup: () => {
+                window.removeEventListener('pointermove', move);
+                window.removeEventListener('pointerup', up);
+                window.removeEventListener('pointercancel', cancel);
+                try { handle.releasePointerCapture(e.pointerId); } catch { /* released */ }
+                row.classList.remove('is-lifted');
+                row.style.transform = '';
+                box.classList.remove('is-dragging');
+                line.remove();
+            },
+        };
+        this.movePersonListDrag(e.clientY);
+    },
+
+    /** The lifted row follows the pointer; the line goes into the gap it would land in (the list scrolls at its edges). */
+    movePersonListDrag(y: number): void {
+        const d = drag;
+        if (!d) return;
+        const view = d.box.getBoundingClientRect();
+        const edge = 28;
+        if (y < view.top + edge) d.box.scrollTop -= 10;
+        else if (y > view.bottom - edge) d.box.scrollTop += 10;
+        d.row.style.transform = `translateY(${Math.round(y - d.startY + d.box.scrollTop - d.startScroll)}px)`;
+        const others = [...d.box.querySelectorAll<HTMLElement>('.pl-person')].filter(r => r !== d.row);
+        if (!others.length) return;
+        let k = 0;
+        for (const r of others) {
+            const b = r.getBoundingClientRect();
+            if (y > b.top + b.height / 2) k++;
+            else break;
+        }
+        const target = others[k];
+        d.before = target ? target.dataset.pid as PersonId : null;
+        d.after = target ? null : others[others.length - 1].dataset.pid as PersonId;
+        const ref = target ?? others[others.length - 1];
+        const rb = ref.getBoundingClientRect();
+        const top = (target ? rb.top : rb.bottom) - view.top + d.box.scrollTop;
+        d.line.style.top = `${Math.round(top - 1.5)}px`;
+    },
+
+    /** Let go (`drop`: save where the line is) or put back (Escape, a cancelled pointer). */
+    endPersonListDrag(drop: boolean): void {
+        const d = drag;
+        if (!d) return;
+        drag = null;
+        d.cleanup();
+        const list = DataManager.getPersonList(d.listId);
+        const order = list?.personIds ?? [];
+        const next = drop && list ? placedOrder(order, d.pid, d.before, d.after) : null;
+        if (next && DataManager.setPersonListOrder(d.listId, next)) this.announcePersonListMove(d.pid, next);
+        renderAfterDrag = false;
+        if (state) state.focusPid = d.pid;
+        this.renderPersonLists();
+        this.focusPersonListRow(d.pid);
     },
 
     onPersonListsInput(e: Event): void {

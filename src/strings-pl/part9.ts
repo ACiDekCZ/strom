@@ -43,6 +43,7 @@ export const plPart9: Pick<StringsType, 'lists'> = {
         handle: 'Przesuń – przeciągnij lub Alt+↑/↓',
         up: 'Przesuń wyżej',
         down: 'Przesuń niżej',
+        moved: (n: string, pos: number, total: number) => `Przeniesiono: ${n} jest na pozycji ${pos} z ${total}.`,
         filter: { all: 'Wszystkie', left: (n: number) => `Zostało ${n}`, done: (n: number) => `Gotowe ${n}` },
         addPerson: 'Dodaj osobę…',
         pickTitle: 'Dodaj osobę do listy',

@@ -54,5 +54,21 @@ export const personListHooks: PersonListHooks = {
         ui.closePersonLists();
         ui.setDisplayViewMode('table');
     },
-    listMenu: [],
+    listMenu: [freezeAndChecklistRows],
 };
+
+/**
+ * §7 and §13: an automatic list offers Freeze (fixed with the people it has
+ * now, a toast with Undo); a fixed list switches "Tick off done" on and off
+ * (off keeps what is done for the next time it is on).
+ */
+function freezeAndChecklistRows(_ui: UIClass, list: PersonList): ListMenuRow[] {
+    const t = strings.lists;
+    if (list.dynamic) {
+        return [{ id: 'freeze', label: t.menu.freeze, sub: t.freezeSub, run: () => { DataManager.freezePersonList(list.id); } }];
+    }
+    return [{
+        id: 'work', label: t.menu.work, checked: !!list.checklist,
+        run: () => { DataManager.setPersonListChecklist(list.id, !list.checklist); },
+    }];
+}

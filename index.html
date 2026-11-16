@@ -29752,7 +29752,9 @@
         .pl-side { display: flex; flex-direction: column; flex: none; width: 330px; min-height: 0; border-right: 1px solid var(--divider); background: var(--surface-2); }
         .pl-tools { display: flex; align-items: center; gap: 8px; padding: 12px 14px 8px; }
         .pl-order { flex: none; overflow: hidden; }
-        .pl-order-opt { padding: 4px 12px; font-size: 12.5px; border: 0; border-radius: 0; background: var(--surface); cursor: pointer; }
+        .pl-order-opt, .pl-filter-opt { padding: 4px 12px; font-size: 12.5px; border: 0; border-radius: 0; background: var(--surface); cursor: pointer; }
+        .pl-filter { flex: none; overflow: hidden; }
+        .pl-filter-opt { padding: 3px 9px; font-size: 12px; white-space: nowrap; }
         .pl-search { margin: 0 14px 8px; padding: 6px 10px; font-size: 13px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text); }
         .pl-rows { flex: 1 1 auto; min-height: 0; overflow-y: auto; border-top: 1px solid var(--divider); }
         .pl-row { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 6px 10px 6px 14px; cursor: pointer; color: var(--text); }
@@ -29788,6 +29790,7 @@
         .pl-tiles { display: flex; gap: 8px; margin-top: 14px; flex: none; }
         .pl-tile { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid var(--divider); border-radius: var(--r-md); background: var(--surface); }
         .pl-tile--wide { flex-grow: 1.4; }
+        .pl-tile:has(.pl-tile-link) { flex-grow: 1.6; }
         .pl-tile-v { font-size: 17px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .pl-tiles--6 .pl-tile-v { font-size: 15px; }
         .pl-tile-k { font-size: 11.5px; color: var(--text-light); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -29796,7 +29799,7 @@
         .pl-people-title { font-size: 12.5px; font-weight: 600; color: var(--text-light); }
         .pl-sort { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text); font-size: 12.5px; cursor: pointer; }
         .pl-caret { font-size: 10px; color: var(--text-light); }
-        .pl-people { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+        .pl-people { position: relative; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
         .pl-people--empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 24px 12px; text-align: center; }
         .pl-empty-text { margin: 0; font-size: 13px; color: var(--text-light); max-width: 30em; }
         .pl-person { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 0 4px; border-bottom: 1px solid var(--divider); }
@@ -29807,6 +29810,25 @@
         .pl-meta.is-quiet { color: var(--text-faint); font-style: italic; }
         .pl-x { flex: none; width: 24px; height: 24px; padding: 0; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text-light); font-size: 16px; line-height: 1; cursor: pointer; opacity: 0; }
         .pl-person:focus-within .pl-x { opacity: 1; }
+        /* §5 the manual order: the handle (a mouse or a finger), the lifted row, the line where it lands. */
+        .pl-person[tabindex] { outline: none; }
+        .pl-person[tabindex]:focus-visible { box-shadow: inset 0 0 0 2px var(--primary); }
+        .pl-handle { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 24px; margin-right: -4px; color: var(--text-faint); font-size: 15px; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+        .pl-people.is-dragging, .pl-people.is-dragging .pl-handle { cursor: grabbing; user-select: none; -webkit-user-select: none; }
+        .pl-person.is-lifted { position: relative; z-index: 2; background: var(--surface); box-shadow: var(--shadow-lg); outline: 1px solid var(--primary); }
+        .pl-drop { position: absolute; left: 0; right: 0; z-index: 3; height: 3px; border-radius: var(--r-sm); background: var(--primary); pointer-events: none; }
+        .pl-person-dots--quiet { visibility: hidden; }
+        .pl-person:focus-within .pl-person-dots--quiet, .pl-person-dots--quiet.is-open { visibility: visible; }
+        /* §13 a checklist: the box before the name, done people struck through. */
+        .pl-person .pl-check { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; margin: 0 -2px; padding: 0; border: 0; background: transparent; cursor: pointer; }
+        .pl-check-box { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; width: 18px; height: 18px; border: 1.5px solid var(--border); border-radius: var(--r-sm); background: var(--surface); color: var(--on-primary); font-size: 12px; font-weight: 700; line-height: 1; }
+        .pl-check[aria-checked="true"] .pl-check-box { border-color: var(--primary); background: var(--primary); }
+        .pl-check:focus-visible { outline: none; }
+        .pl-check:focus-visible .pl-check-box { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .pl-person.is-done .pl-pname { color: var(--text-light); text-decoration: line-through; text-decoration-color: var(--text-faint); }
+        .pl-menu-icon { flex: none; width: 1em; text-align: center; color: var(--text-light); }
+        .pl-menu-key { flex: none; font-size: 11.5px; color: var(--text-faint); }
+        .pl-live { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
         .pl-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; padding: 10px 0 14px; font-size: 12.5px; color: var(--text-light); flex: none; }
         .pl-foot .pl-link { margin-left: 0; }
         .pl-detail > :last-child:not(.pl-foot) { margin-bottom: 18px; }
@@ -29828,6 +29850,9 @@
             .pl-row:not([aria-selected="true"]):hover { background: var(--hover-bg); }
             .pl-person:hover { background: var(--hover-bg); }
             .pl-person:hover .pl-x { opacity: 1; }
+            .pl-person:hover .pl-person-dots--quiet { visibility: visible; }
+            .pl-check:hover .pl-check-box { border-color: var(--text-light); }
+            .pl-handle:hover { color: var(--text); }
             .pl-menu-item:not([aria-disabled="true"]):hover { background: var(--hover-bg); }
             .pl-sort:hover { border-color: var(--text-light); }
             .pl-name[data-act]:hover { background: var(--hover-bg); }
@@ -29847,7 +29872,10 @@
             .pl-person { min-height: 48px; }
             .pl-x { width: 40px; height: 40px; opacity: 1; }
             .pl-menu-item { min-height: 44px; }
-            .pl-sort, .pl-order-opt, .pl-search, .pl-acts > button, .pl-note .secondary { min-height: 44px; }
+            .pl-sort, .pl-order-opt, .pl-filter-opt, .pl-search, .pl-acts > button, .pl-note .secondary { min-height: 44px; }
+            .pl-handle { width: 44px; height: 44px; margin: 0 -12px 0 -8px; }
+            .pl-person .pl-check { width: 44px; height: 44px; margin: 0 -10px; }
+            .pl-check-box { width: 24px; height: 24px; font-size: 14px; }
             .pl-link, .pl-tile-link { padding: 10px 0; }
         }
         /* Phone, and a phone held sideways: one column at a time (the overview, then the list with ‹ back). */
@@ -29857,6 +29885,7 @@
         .pl-modal.pl-narrow .pl-tools { flex-wrap: wrap; }
         .pl-modal.pl-narrow .pl-detail { padding: 14px 16px 0; overflow-y: auto; }
         .pl-modal.pl-narrow .pl-people { flex: none; overflow: visible; }
+        .pl-modal.pl-narrow .pl-people-head { flex-wrap: wrap; }
         .pl-modal.pl-narrow .pl-tiles { flex-wrap: wrap; }
         .pl-modal.pl-narrow .pl-tile { flex: 1 1 calc(33.3% - 8px); }
         .pl-modal.pl-narrow .pl-meta { display: none; }
