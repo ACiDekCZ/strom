@@ -297,6 +297,38 @@ export interface LifeEvent {
     roleAt?: EventRoleAt;
 }
 
+/**
+ * The edits of a portrait over its original (spec 107), applied in this
+ * order: mirror, quarter turns, straighten, crop. The math lives in
+ * src/photo.ts (portraitRect, clampPortraitCrop…).
+ */
+export interface PortraitCrop {
+    /**
+     * The frame (a square in pixels) in fractions 0–1 of the image after the
+     * mirror and the quarter turns, from the top left: w × width = h × height.
+     */
+    region: { x: number; y: number; w: number; h: number };
+    /** Clockwise turn in quarter turns (none = upright). */
+    quarterTurns?: 1 | 2 | 3;
+    /** Straightening in degrees, −45…45 in steps of 0.5; positive = clockwise, about the frame's centre. */
+    angle?: number;
+    /** Mirrored horizontally (before the turns). */
+    mirror?: true;
+}
+
+/**
+ * Where a portrait was cut from (Person.photoSource): exactly one of an image
+ * attachment of the same person or a union's photo (Partnership.photo), with
+ * the crop. JSON and backups only, never GEDCOM; patterned on
+ * SourceExcerpt.fromAttachmentId + region.
+ */
+export interface PortraitSource extends PortraitCrop {
+    /** An image attachment of the same person (Person.attachments[].id)… */
+    attachmentId?: string;
+    /** …or the photo of one of the person's unions (Partnership.photo). */
+    partnershipId?: PartnershipId;
+}
+
 /** Whose event a person's own godparent / witness event belongs to (LifeEvent.roleAt). */
 export interface EventRoleAt {
     role: ParticipantRole;
@@ -711,6 +743,14 @@ export interface Person {
     photoOriginalName?: string;
     /** The portrait's date as the file it came from wrote it (see Attachment.date); goes with the photo. */
     photoDate?: string;
+    /**
+     * Where the portrait was cut from (spec 107, data v23): an image attachment
+     * of this person or the couple's photo of one of their unions, with the
+     * crop. Only when the portrait was made in the crop editor from that
+     * original; goes with the photo (a new or removed photo drops it). JSON
+     * and backups only, never GEDCOM.
+     */
+    photoSource?: PortraitSource;
     /** Life events other than birth/death (see LifeEvent). */
     events?: LifeEvent[];
     /** This person's chapter in the family book (GEDCOM _STORY on INDI). */
@@ -1466,6 +1506,17 @@ export interface Partnership {
      * (which stay fields above): banns, a contract, a census of the household…
      */
     events?: CoupleEvent[];
+    /**
+     * The couple's photo (a wedding or joint picture, spec 107, data v23): a
+     * JPEG data URL, longer side ≤ ATTACHMENT_MAX_SIDE, not a square. The
+     * original the partners' portraits can be cut from (Person.photoSource).
+     * GEDCOM: `1 OBJE` under the FAM.
+     */
+    photo?: string;
+    /** Original file name of the couple's photo (UX only). */
+    photoOriginalName?: string;
+    /** The photo's date as the file it came from wrote it (GEDCOM `_DATE`, see Person.photoDate); not shown. */
+    photoDate?: string;
     /** The import (StromData.imports id) the partner link came from. */
     importId?: string;
     /**
@@ -1554,9 +1605,13 @@ export interface CoupleEvent {
     gedcomType?: string;
 }
 
-/** The partnership fields the relationships panel edits (DataManager.updatePartnership). */
+/**
+ * The partnership fields the relationships panel edits (DataManager.updatePartnership).
+ * The couple's photo (spec 107): an empty `photo` removes it.
+ */
 export type PartnershipUpdates = Partial<Pick<Partnership,
-    'status' | 'startDate' | 'startPlace' | 'endDate' | 'endPlace' | 'address' | 'ages' | 'note' | 'isPrimary'>>;
+    'status' | 'startDate' | 'startPlace' | 'endDate' | 'endPlace' | 'address' | 'ages' | 'note' | 'isPrimary'
+    | 'photo' | 'photoOriginalName' | 'photoDate'>>;
 
 // ==================== LAST FOCUSED MARKER ====================
 
@@ -1748,8 +1803,15 @@ export function partnershipParticipants(u: Pick<Partnership, 'participants' | 'e
  *   reordered). Additive: nothing is changed when a tree is read. An older
  *   app (v20) would show the automatic first citation and drop the choice on
  *   a re-save, so the bump makes it warn first.
+ * v23 (2026-11, spec 107): Person.photoSource (the original a portrait was
+ *   cut from — an image attachment of the person or a union's photo — with the
+ *   crop, JSON only) and Partnership.photo / photoOriginalName / photoDate
+ *   (the couple's photo, GEDCOM `FAM > OBJE`). Additive: a tree of v22 reads
+ *   unchanged, nothing is made. An older app (v22) would drop the couple's
+ *   photo and the portraits' originals on a re-save, so the bump makes it
+ *   warn first.
  */
-export const STROM_DATA_VERSION = 22;
+export const STROM_DATA_VERSION = 23;
 
 /** The rows of a saved Table view (spec 073 §2; events and sources come later). */
 export type TableViewRowType = 'persons' | 'unions' | 'events' | 'sources';

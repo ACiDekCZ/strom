@@ -65,7 +65,8 @@ import { buildLineages, cleanLineageOverrides, LineagePatch, type LineageIndex }
 import { sanitizeQualityDismissed, sanitizeSurnameRejections, dismissalKey, surnameRejectionKey } from './quality-dismiss.js';
 import { ChangePacket, applyPacketOntoData } from './share-diff.js';
 import { createSnapshot, getSnapshotPayload, SnapshotReason, hasAutoSnapshotOnDay } from './snapshots.js';
-import { ValidationIssue, stripUnsafeMediaDataUrls, translateValidationType } from './validation.js';
+import { ValidationIssue, stripUnsafeMediaDataUrls, cleanPortraitSources, isSafePhotoDataUrl, translateValidationType } from './validation.js';
+import { isPortraitSourceShape } from './photo.js';
 import { cloneTreeData } from './clone.js';
 import { UndoManager, type UndoMark } from './undo.js';
 import { applyLivingPrivacy, applyContentOptions, resolveContentOptions, ContentOptions, PrivacyMode } from './privacy.js';
@@ -226,6 +227,47 @@ export function unlinkExcerptsFromAttachment(data: StromData, attachmentId: stri
 }
 
 /**
+ * A deleted attachment was the original of a portrait (spec 107 §4d): the
+ * portrait stays, only its link to the original (photoSource) goes — its
+ * crop can then change only within the finished square.
+ */
+export function unlinkPortraitFromAttachment(data: StromData, attachmentId: string): void {
+    for (const person of Object.values(data.persons ?? {})) {
+        if (person?.photoSource?.attachmentId === attachmentId) delete person.photoSource;
+    }
+}
+
+/**
+ * A union's photo is gone (removed, or the union deleted, spec 107 §6e,
+ * 10d): the partners' portraits cut from it stay, their photoSource goes.
+ */
+export function unlinkPortraitsFromUnion(data: StromData, partnershipId: PartnershipId): void {
+    for (const person of Object.values(data.persons ?? {})) {
+        if (person?.photoSource?.partnershipId === partnershipId) delete person.photoSource;
+    }
+}
+
+/**
+ * A union is folded into another one of the same couple (a merge of two
+ * people): its photo fills the kept union's when that has none, and the
+ * portraits cut from it point at the kept union; otherwise they lose the link.
+ */
+export function foldUnionPhoto(data: StromData, from: Partnership, into: Partnership): void {
+    if (from.photo && !into.photo) {
+        into.photo = from.photo;
+        if (from.photoOriginalName) into.photoOriginalName = from.photoOriginalName;
+        else delete into.photoOriginalName;
+        if (from.photoDate) into.photoDate = from.photoDate;
+        else delete into.photoDate;
+        for (const person of Object.values(data.persons ?? {})) {
+            if (person?.photoSource?.partnershipId === from.id) person.photoSource.partnershipId = into.id;
+        }
+        return;
+    }
+    unlinkPortraitsFromUnion(data, from.id);
+}
+
+/**
  * v13: the date forms a record wrote (gedcomDates) go back into a GEDCOM file
  * as they are, so only one-line keyword forms stay; a crafted or broken file
  * may carry anything there.
@@ -332,6 +374,8 @@ export function migrateData(data: unknown): StromData {
     // else (data:text/html…) from a crafted file is dropped before it can be
     // stored or rendered. After the sources are in: excerpts live there.
     stripUnsafeMediaDataUrls(result);
+    // v23 (spec 107): only portrait sources whose original is still there.
+    cleanPortraitSources(result);
 
     // Preserve place coordinates. This object is rebuilt field by field, so
     // anything not named here is dropped on EVERY load — tree switch, app
@@ -2849,9 +2893,23 @@ class DataManagerClass {
         // isDeceased is tri-state (true / false / undefined); apply verbatim when provided.
         if ('isDeceased' in updates) person.isDeceased = updates.isDeceased;
         if ('photo' in updates) {
-            // The date from the file belongs to the picture it came with.
-            if ((updates.photo || undefined) !== person.photo) delete person.photoDate;
-            person.photo = updates.photo || undefined;
+            const photo = updates.photo || undefined;
+            // The date from the file belongs to the picture it came with, and
+            // so does the original it was cut from (spec 107): a new or
+            // removed portrait drops it unless it comes with its own.
+            if (photo !== person.photo) {
+                delete person.photoDate;
+                if (!('photoSource' in updates)) delete person.photoSource;
+            }
+            person.photo = photo;
+            if (!photo) delete person.photoSource;
+        }
+        if ('photoSource' in updates) {
+            // The original of the portrait from the crop editor: only a
+            // well-formed one beside a portrait (a load drops one whose
+            // attachment or union photo is gone, see cleanPortraitSources).
+            if (person.photo && isPortraitSourceShape(updates.photoSource)) person.photoSource = structuredClone(updates.photoSource);
+            else delete person.photoSource;
         }
 
         if (JSON.stringify(person) === personBefore) {
@@ -3985,6 +4043,8 @@ class DataManagerClass {
         // Excerpts cut from this page keep their image; they just can no
         // longer be re-cropped.
         unlinkExcerptsFromAttachment(this.data, attachmentId);
+        // The portrait cut from it stays, without its original (spec 107 §4d).
+        unlinkPortraitFromAttachment(this.data, attachmentId);
         this.commitMutation(strings.undo.removeAttachment(auditPersonName(person)));
         AuditLogManager.log(this.currentTreeId, 'attachment.remove', strings.auditLog.removedAttachment(auditPersonName(person)));
         return true;
@@ -4197,6 +4257,27 @@ class DataManagerClass {
         }
         if (updates.note !== undefined && (updates.note || undefined) !== partnership.note) { partnership.note = updates.note || undefined; changed = true; }
         if (updates.isPrimary !== undefined && (updates.isPrimary || undefined) !== partnership.isPrimary) { partnership.isPrimary = updates.isPrimary || undefined; changed = true; }
+        if (updates.photo !== undefined && (updates.photo || undefined) !== partnership.photo
+            && (!updates.photo || isSafePhotoDataUrl(updates.photo))) {
+            // The couple's photo (spec 107): a new or removed one takes its name
+            // and date along, and the portraits cut from it lose their original.
+            const photo = updates.photo || undefined;
+            if (photo) partnership.photo = photo; else delete partnership.photo;
+            delete partnership.photoOriginalName;
+            delete partnership.photoDate;
+            unlinkPortraitsFromUnion(this.data, partnership.id);
+            changed = true;
+        }
+        if (partnership.photo) {
+            if (updates.photoOriginalName !== undefined && (updates.photoOriginalName || undefined) !== partnership.photoOriginalName) {
+                if (updates.photoOriginalName) partnership.photoOriginalName = updates.photoOriginalName; else delete partnership.photoOriginalName;
+                changed = true;
+            }
+            if (updates.photoDate !== undefined && (updates.photoDate || undefined) !== partnership.photoDate) {
+                if (updates.photoDate) partnership.photoDate = updates.photoDate; else delete partnership.photoDate;
+                changed = true;
+            }
+        }
 
         if (!changed) {
             this.pendingBefore = null;   // nothing changed — no undo step
@@ -4238,6 +4319,7 @@ class DataManagerClass {
             partner.partnerships = partner.partnerships.filter(pid => pid !== partnershipId);
         }
 
+        unlinkPortraitsFromUnion(this.data, partnershipId);
         delete this.data.partnerships[partnershipId];
     }
 
@@ -4491,6 +4573,8 @@ class DataManagerClass {
             p2.partnerships = p2.partnerships.filter(pid => pid !== partnership.id);
         }
 
+        // The couple's photo goes with the union; portraits cut from it stay (spec 107, 10d).
+        unlinkPortraitsFromUnion(this.data, partnership.id);
         delete this.data.partnerships[partnership.id];
         this.commitMutation(strings.undo.removePartnership(p1Name, p2Name));
         // Audit log
@@ -5203,6 +5287,9 @@ class DataManagerClass {
                     if (partner) {
                         partner.partnerships = partner.partnerships.filter(pid => pid !== removePartnershipId);
                     }
+                    // The couple's photo: the kept union's, else the removed one's (spec 107).
+                    if (existingPartnership) foldUnionPhoto(this.data, removePartnership, existingPartnership);
+                    else unlinkPortraitsFromUnion(this.data, removePartnershipId);
                     delete this.data.partnerships[removePartnershipId];
                 } else {
                     // keep_both - transfer the partnership to keepPerson (rare case)
@@ -5508,6 +5595,7 @@ class DataManagerClass {
                 const p2 = this.data.persons[partnership.person2Id];
                 if (p1) p1.partnerships = p1.partnerships.filter(id => id !== partnershipId);
                 if (p2) p2.partnerships = p2.partnerships.filter(id => id !== partnershipId);
+                unlinkPortraitsFromUnion(this.data, partnershipId);
                 delete this.data.partnerships[partnershipId];
                 repaired = true;
                 break;
@@ -5629,6 +5717,7 @@ class DataManagerClass {
                 if (person) {
                     person.partnerships = person.partnerships.filter(id => id !== partnershipId);
                 }
+                unlinkPortraitsFromUnion(this.data, partnershipId);
                 delete this.data.partnerships[partnershipId];
                 repaired = true;
                 break;
@@ -5654,6 +5743,7 @@ class DataManagerClass {
                 const dp2 = this.data.persons[duplicate.person2Id];
                 if (dp1) dp1.partnerships = dp1.partnerships.filter(id => id !== duplicateId);
                 if (dp2) dp2.partnerships = dp2.partnerships.filter(id => id !== duplicateId);
+                foldUnionPhoto(this.data, duplicate, kept);
                 delete this.data.partnerships[duplicateId];
                 repaired = true;
                 break;

@@ -76,6 +76,8 @@ function fullTree(): Required<StromData> {
                 dataUrl: 'data:image/jpeg;base64,AA==', sizeBytes: 1,
                 original: { sha256: 'b'.repeat(64), name: 'page-57.tif', mimeType: 'image/tiff', bytes: 148_000_000, orientation: 6 },
             }], importId: 'I1', importedValues: { firstName: { from: 'I1', value: 'Alice' } }, addedAt: '2026-11-01T08:30:00.000Z',
+            // Her portrait cut from that page, turned and straightened (spec 107, data v23).
+            photo: 'data:image/jpeg;base64,AA==', photoSource: { attachmentId: 'att1', region: { x: 0.2, y: 0.1, w: 0.3, h: 0.3 }, quarterTurns: 1, angle: 3.5 },
             // One census of both (spec 085, data v20; its main citation, spec 095, v21): the share, a role of one's own, a godparent's own
             // record of a part at a baptism, a participant once rejected as Bob.
             events: [
@@ -89,7 +91,8 @@ function fullTree(): Required<StromData> {
                 { id: 'ev_bapt_b', type: 'baptism', date: '1909-03-14' },
             ] },
         },
-        partnerships: { [UNION]: { ...partnership(), importId: 'I1' } },
+        // The couple's photo (spec 107, data v23).
+        partnerships: { [UNION]: { ...partnership(), importId: 'I1', photo: 'data:image/png;base64,iVBORw0KGgo=', photoOriginalName: 'wedding.png', photoDate: '1924-06-14' } },
         sources: {
             s1: {
                 id: 's1', title: 'Parish register, Kolín', quality: 3,
@@ -338,7 +341,7 @@ type EditedByUpdatePerson =
     | 'firstName' | 'lastName' | 'titleBefore' | 'titleAfter' | 'marriedSurname' | 'primaryName' | 'dismissedMarriedSuggestion' | 'gender' | 'nameVariants'
     | 'birthDate' | 'birthPlace' | 'birthAddress' | 'deathDate' | 'deathPlace'
     | 'deathCause' | 'deathAge' | 'deathAddress'
-    | 'notes' | 'refn' | 'question' | 'isDeceased' | 'isLocked' | 'photo' | 'story';
+    | 'notes' | 'refn' | 'question' | 'isDeceased' | 'isLocked' | 'photo' | 'photoSource' | 'story';
 
 /**
  * Fields updatePerson deliberately does NOT touch, and who owns them instead.
@@ -440,6 +443,8 @@ describe('updatePerson applies every field it owns', () => {
         isDeceased: true,
         isLocked: true,
         photo: 'data:image/png;base64,iVBORw0KGgo=',
+        // Saved with the portrait from the crop editor (spec 107); its original is the person's attachment (given below).
+        photoSource: { attachmentId: 'att-src', region: { x: 0.1, y: 0, w: 0.5, h: 1 }, angle: -2.5, mirror: true },
         story: {
             kind: 'vypraveni',
             title: 'Včelařka z Kolína',
@@ -452,8 +457,16 @@ describe('updatePerson applies every field it owns', () => {
 
     const { isLocked: _lock, ...editable } = edits;
 
-    it('writes back every one of them', () => {
+    /** A new person holding the image photoSource above names as its original. */
+    function createWithOriginal(): Person {
         const created = DataManager.createPerson({ firstName: 'Jan', lastName: 'Novak', gender: 'male' });
+        DataManager.addAttachment(created.id, { name: 'studio.jpg', mimeType: 'image/png', dataUrl: 'data:image/png;base64,iVBORw0KGgo=', sizeBytes: 8 });
+        DataManager.getPerson(created.id)!.attachments![0].id = 'att-src';
+        return created;
+    }
+
+    it('writes back every one of them', () => {
+        const created = createWithOriginal();
         DataManager.updatePerson(created.id, editable);
 
         const saved = DataManager.getPerson(created.id);
@@ -470,7 +483,7 @@ describe('updatePerson applies every field it owns', () => {
     });
 
     it('survives a load with all of them intact', () => {
-        const created = DataManager.createPerson({ firstName: 'Jan', lastName: 'Novak', gender: 'male' });
+        const created = createWithOriginal();
         DataManager.updatePerson(created.id, editable);
 
         // The two whitelists in one go: edited, then carried through a load.

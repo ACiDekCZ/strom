@@ -3,8 +3,9 @@
  * Smart heuristics to detect genealogical inconsistencies and data errors
  */
 
-import { StromData, Person, Partnership, PersonId, PartnershipId, Source, LifeEventType, personSourceIds, partnershipSourceIds, partnershipParticipants, gendersCompatible } from './types.js';
+import { StromData, Person, Partnership, PersonId, PartnershipId, Source, LifeEventType, PortraitSource, personSourceIds, partnershipSourceIds, partnershipParticipants, gendersCompatible } from './types.js';
 import { parseFlexDate, FlexDate, ageRangeBetween, approxAgeBetween } from './dates.js';
+import { dataUrlImageSize, isPortraitRegionSquare, isPortraitSourceShape } from './photo.js';
 import { collectPlaces } from './places.js';
 import { godparentLeads } from './godparents.js';
 import { strings } from './strings.js';
@@ -901,6 +902,16 @@ export function stripUnsafeMediaDataUrls(data: StromData): number {
             else delete person.attachments;
         }
     }
+    // The couple's photo (spec 107): the same rule as a person's.
+    for (const union of Object.values(data.partnerships ?? {}) as Partnership[]) {
+        if (!union || typeof union !== 'object') continue;
+        if (union.photo !== undefined && (typeof union.photo !== 'string' || !isSafePhotoDataUrl(union.photo))) {
+            delete union.photo;
+            delete union.photoOriginalName;
+            delete union.photoDate;
+            dropped++;
+        }
+    }
     // Source excerpts: raster crops only. A region outside the image is
     // meaningless (and would break re-cropping), so it goes too.
     for (const src of Object.values(data.sources ?? {}) as Source[]) {
@@ -913,6 +924,40 @@ export function stripUnsafeMediaDataUrls(data: StromData): number {
         }
         if (kept.length > 0) src.excerpts = kept;
         else delete src.excerpts;
+    }
+    return dropped;
+}
+
+/**
+ * The original of each portrait (Person.photoSource, spec 107) brought in
+ * line on load; one that breaks a rule goes, the portrait stays:
+ * - exactly one of attachmentId / partnershipId, a valid region, quarter
+ *   turns 1–3, an angle within ±45° and mirror only as true;
+ * - the attachment is the person's own (not one held as an original only),
+ *   the union is one of the person's and has a photo;
+ * - the region is a square in the original's pixels within 1 % (checked
+ *   when the image's size can be read from its header).
+ * Mutates `data`; returns how many went.
+ */
+export function cleanPortraitSources(data: StromData): number {
+    let dropped = 0;
+    for (const person of Object.values(data.persons ?? {}) as Person[]) {
+        if (!person || typeof person !== 'object' || person.photoSource === undefined) continue;
+        const src = person.photoSource as unknown;
+        let image: string | undefined;
+        if (person.photo && isPortraitSourceShape(src) && isValidRegion(src.region)) {
+            if (src.attachmentId) {
+                const att = person.attachments?.find(a => a.id === src.attachmentId);
+                if (att && !isOriginalOnlyAttachment(att) && SAFE_IMAGE_DATA_URL.test(att.dataUrl)) image = att.dataUrl;
+            } else if (src.partnershipId) {
+                const union = data.partnerships?.[src.partnershipId];
+                if (union?.photo && (union.person1Id === person.id || union.person2Id === person.id)) image = union.photo;
+            }
+        }
+        const size = image ? dataUrlImageSize(image) : null;
+        if (image && (!size || isPortraitRegionSquare((src as PortraitSource).region, size.w, size.h, (src as PortraitSource).quarterTurns))) continue;
+        delete person.photoSource;
+        dropped++;
     }
     return dropped;
 }
@@ -933,6 +978,13 @@ function checkPhotoData(data: StromData, addIssue: AddIssue): void {
             addIssue('warning', 'photoUnsafeData',
                 `${getPersonName(person)}: photo is not a JPEG/PNG/WebP/GIF image`,
                 [personId]);
+        }
+    }
+    for (const [unionId, union] of Object.entries(data.partnerships) as [PartnershipId, Partnership][]) {
+        if (union.photo && !isSafePhotoDataUrl(union.photo)) {
+            addIssue('warning', 'photoUnsafeData',
+                `Union ${unionId}: photo is not a JPEG/PNG/WebP/GIF image`,
+                [union.person1Id, union.person2Id], [unionId]);
         }
     }
 }

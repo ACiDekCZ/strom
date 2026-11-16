@@ -106,8 +106,9 @@ describe('data format 10 -> 11', () => {
         // own record of a godparent or witness (spec 085), 21 for the main
         // citation of a fact and the events a source records (spec 095), 22
         // for the named lists of people and the date a person was added
-        // (spec 084).
-        expect(STROM_DATA_VERSION).toBe(22);
+        // (spec 084), 23 for the original a portrait was cut from and the
+        // couple's photo (spec 107).
+        expect(STROM_DATA_VERSION).toBe(23);
         // A raise would stop an older build at its start (VersionError) — the
         // whole app, also an older exported HTML file: never raised again.
         const storage = readFileSync(new URL('../storage.ts', import.meta.url), 'utf8');

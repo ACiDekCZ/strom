@@ -1,10 +1,12 @@
 /**
  * Person photo handling: compress an uploaded image into a small square JPEG
- * data URL that can live inside the single-file export, and helpers for
- * stripping photos out of exported data.
+ * data URL that can live inside the single-file export, the pure math of a
+ * portrait cut from an original (spec 107: crop, quarter turns, straighten,
+ * mirror — testable without a canvas), and helpers for stripping photos out
+ * of exported data.
  */
 
-import { StromData } from './types.js';
+import { StromData, PortraitCrop, PortraitSource, Person } from './types.js';
 
 /** Target avatar size in device-independent pixels. */
 export const PHOTO_SIZE = 256;
@@ -91,25 +93,469 @@ export function dataUrlByteSize(dataUrl: string): number {
     return Math.max(0, Math.floor(b64.length * 3 / 4) - padding);
 }
 
-/** Total bytes of all person photos in a tree. */
+/** Total bytes of all photos in a tree: the persons' portraits and the couples' photos (spec 107). */
 export function totalPhotoBytes(data: StromData): number {
     let total = 0;
     for (const person of Object.values(data.persons)) {
         if (person.photo) total += dataUrlByteSize(person.photo);
     }
+    for (const union of Object.values(data.partnerships)) {
+        if (union.photo) total += dataUrlByteSize(union.photo);
+    }
     return total;
 }
 
 /**
- * Return a deep copy of `data` with every person photo removed (for
- * "export without photos"). Does not mutate the original.
+ * Return a deep copy of `data` with every photo removed (for "export without
+ * photos"): the portraits, the originals they were cut from (the attachment a
+ * portrait's photoSource names is a photo of the person, also when
+ * attachments are kept) and the couples' photos. Does not mutate the original.
  */
 export function stripPhotos(data: StromData): StromData {
     const copy = structuredClone(data);
+    const gone = new Set<string>();
     for (const person of Object.values(copy.persons)) {
+        const fromAttachment = person.photoSource?.attachmentId;
+        if (fromAttachment && person.attachments?.some(a => a.id === fromAttachment)) {
+            gone.add(fromAttachment);
+            person.attachments = person.attachments.filter(a => a.id !== fromAttachment);
+            if (person.attachments.length === 0) delete person.attachments;
+        }
         delete person.photo;
         delete person.photoOriginalName;
         delete person.photoDate;
+        delete person.photoSource;
+    }
+    for (const union of Object.values(copy.partnerships)) {
+        delete union.photo;
+        delete union.photoOriginalName;
+        delete union.photoDate;
+    }
+    // An excerpt cut from such an original keeps its image, not the link.
+    for (const src of Object.values(copy.sources ?? {})) {
+        for (const exc of src.excerpts ?? []) {
+            if (exc.fromAttachmentId && gone.has(exc.fromAttachmentId)) {
+                delete exc.fromAttachmentId;
+                delete exc.region;
+            }
+        }
     }
     return copy;
 }
+
+/**
+ * Drop, in place, every portrait source whose original is no longer in the
+ * tree (the attachment of the person, or the union's photo, went: a filter, a
+ * merge, a removal). The portrait itself stays. Returns how many went.
+ */
+export function dropDanglingPortraitSources(data: StromData): number {
+    let dropped = 0;
+    for (const person of Object.values(data.persons)) {
+        if (person?.photoSource && !portraitSourceExists(data, person)) {
+            delete person.photoSource;
+            dropped++;
+        }
+    }
+    return dropped;
+}
+
+/** Whether the original a person's portrait was cut from is still there (false without a photoSource). */
+export function portraitSourceExists(data: StromData, person: Person): boolean {
+    const src = person.photoSource;
+    if (!src || !person.photo) return false;
+    if (src.attachmentId) return !!person.attachments?.some(a => a.id === src.attachmentId && !a.originalOnly);
+    if (src.partnershipId) {
+        const union = data.partnerships[src.partnershipId];
+        return !!union?.photo && (union.person1Id === person.id || union.person2Id === person.id);
+    }
+    return false;
+}
+
+// ── The portrait cut from an original (spec 107) ──
+//
+// The model: a fixed square frame over a movable photo. The original
+// (`width` × `height`, upright as decoded) is first mirrored, then turned by
+// quarter turns: that is the "page". The frame is a square on the page
+// (PortraitCrop.region, fractions of the page); the page is then turned by
+// `angle` about the frame's centre and the axis-aligned frame is cut and
+// scaled to PHOTO_SIZE. Everything below is pure math on numbers (no canvas):
+// the editor (src/ui/crop-editor.ts, portrait mode) keeps a PortraitView
+// while the photo is moved and turns it into a PortraitCrop on Done.
+
+/** Highest zoom (800 %) of a portrait's frame over its cover scale. */
+export const PORTRAIT_MAX_ZOOM = 8;
+/** The frame never covers fewer original pixels than this (at most 2× the real resolution of PHOTO_SIZE). */
+export const PORTRAIT_MIN_SOURCE_PX = 128;
+/** Straightening limit in degrees, either way. */
+export const PORTRAIT_MAX_ANGLE = 45;
+/** Straightening step in degrees. */
+export const PORTRAIT_ANGLE_STEP = 0.5;
+
+/** A quarter-turn count 0–3. */
+export type QuarterTurns = 0 | 1 | 2 | 3;
+
+/**
+ * The editor's working state of a portrait, in page pixels (the original
+ * after the mirror and the quarter turns):
+ * - `cx`, `cy`: the page point under the frame's centre;
+ * - `zoom`: 1 = the frame covers the page's shorter side, 2 = half of it…;
+ * - `quarterTurns`, `angle` (degrees, clockwise), `mirror` as PortraitCrop.
+ */
+export interface PortraitView {
+    cx: number;
+    cy: number;
+    zoom: number;
+    quarterTurns: QuarterTurns;
+    angle: number;
+    mirror: boolean;
+}
+
+/** The frame on the page in page pixels: its centre, its side, the angle, and the page's size. */
+export interface PortraitRect {
+    pageWidth: number;
+    pageHeight: number;
+    cx: number;
+    cy: number;
+    side: number;
+    angle: number;
+}
+
+/** A 2D affine matrix as canvas `setTransform(a, b, c, d, e, f)` takes it: x' = a·x + c·y + e, y' = b·x + d·y + f. */
+export type AffineMatrix = [number, number, number, number, number, number];
+
+const toQuarterTurns = (n: number | undefined): QuarterTurns => ((((Math.round(n ?? 0)) % 4) + 4) % 4) as QuarterTurns;
+const rad = (deg: number): number => (deg * Math.PI) / 180;
+const round6 = (n: number): number => Math.round(n * 1e6) / 1e6;
+
+/** The page's size: the original's, its sides swapped by an odd number of quarter turns. */
+export function portraitPageSize(width: number, height: number, quarterTurns?: number): { width: number; height: number } {
+    return toQuarterTurns(quarterTurns) % 2 ? { width: height, height: width } : { width, height };
+}
+
+/**
+ * The smallest zoom at which the frame, turned by `angle` degrees, still lies
+ * inside the page (no empty corner): |cos| + |sin| — 1 at 0°, √2 at ±45°.
+ * The same for any aspect ratio: the turned frame's bounding box is a square.
+ */
+export function minZoomForAngle(angle: number): number {
+    const a = rad(angle);
+    return Math.abs(Math.cos(a)) + Math.abs(Math.sin(a));
+}
+
+/**
+ * The highest zoom for an original of `width` × `height` (either order of the
+ * sides): min(800 %, shorter side / 128 px), never below 100 %. A small photo
+ * (shorter side < 256 px) thus stops at 2× its real resolution.
+ */
+export function maxPortraitZoom(width: number, height: number): number {
+    return Math.max(1, Math.min(PORTRAIT_MAX_ZOOM, Math.min(width, height) / PORTRAIT_MIN_SOURCE_PX));
+}
+
+/** The zoom range at `angle` for an original of `width` × `height`: [min, max], min winning over a lower max. */
+export function portraitZoomRange(width: number, height: number, angle: number): { min: number; max: number } {
+    const min = Math.max(1, minZoomForAngle(angle));
+    return { min, max: Math.max(min, maxPortraitZoom(width, height)) };
+}
+
+/**
+ * The opening crop of an original: the largest centred square, upright
+ * (computeCoverCrop in fractions) — what compressPhoto has always cut.
+ */
+export function defaultPortraitCrop(width: number, height: number): PortraitCrop {
+    const c = computeCoverCrop(width, height);
+    return { region: { x: c.sx / width, y: c.sy / height, w: c.size / width, h: c.size / height } };
+}
+
+/** Whether a crop is the opening one (defaultPortraitCrop, no turn, no straightening, no mirror), within a hair. */
+export function isDefaultPortraitCrop(crop: PortraitCrop, width: number, height: number): boolean {
+    if (toQuarterTurns(crop.quarterTurns) || (crop.angle ?? 0) !== 0 || crop.mirror) return false;
+    const d = defaultPortraitCrop(width, height).region;
+    const r = crop.region;
+    const eps = 1e-4;
+    return Math.abs(r.x - d.x) < eps && Math.abs(r.y - d.y) < eps && Math.abs(r.w - d.w) < eps && Math.abs(r.h - d.h) < eps;
+}
+
+/** The frame of a crop on the page, in page pixels. */
+export function portraitRect(crop: PortraitCrop, width: number, height: number): PortraitRect {
+    const page = portraitPageSize(width, height, crop.quarterTurns);
+    const { x, y, w, h } = crop.region;
+    return {
+        pageWidth: page.width, pageHeight: page.height,
+        cx: (x + w / 2) * page.width, cy: (y + h / 2) * page.height,
+        // Square in pixels by definition; the mean evens out rounding.
+        side: (w * page.width + h * page.height) / 2,
+        angle: crop.angle ?? 0,
+    };
+}
+
+/** How many original pixels the frame's side covers (under PHOTO_SIZE the portrait may be blurry). */
+export function portraitSourcePixels(crop: PortraitCrop, width: number, height: number): number {
+    return portraitRect(crop, width, height).side;
+}
+
+/**
+ * Whether a region is a square in pixels of the page (`width` × `height` the
+ * original, turned by `quarterTurns`), within `tolerance` (1 %) of the longer side.
+ */
+export function isPortraitRegionSquare(region: PortraitCrop['region'], width: number, height: number, quarterTurns?: number, tolerance = 0.01): boolean {
+    const page = portraitPageSize(width, height, quarterTurns);
+    const a = region.w * page.width;
+    const b = region.h * page.height;
+    return Math.abs(a - b) <= tolerance * Math.max(a, b);
+}
+
+/** The working view of a crop (the editor opens on it). */
+export function portraitViewFromCrop(crop: PortraitCrop, width: number, height: number): PortraitView {
+    const r = portraitRect(crop, width, height);
+    return {
+        cx: r.cx, cy: r.cy,
+        zoom: r.side > 0 ? Math.min(r.pageWidth, r.pageHeight) / r.side : 1,
+        quarterTurns: toQuarterTurns(crop.quarterTurns),
+        angle: r.angle,
+        mirror: crop.mirror === true,
+    };
+}
+
+/**
+ * A view brought inside its limits: quarter turns 0–3, the angle within ±45°
+ * in steps of 0.5, the zoom within portraitZoomRange (at least
+ * minZoomForAngle, so no corner is empty), and the centre so that the turned
+ * frame stays on the page (the photo is moved only within itself).
+ */
+export function clampPortraitView(view: PortraitView, width: number, height: number): PortraitView {
+    const quarterTurns = toQuarterTurns(view.quarterTurns);
+    const raw = Number.isFinite(view.angle) ? view.angle : 0;
+    const angle = Math.round(Math.max(-PORTRAIT_MAX_ANGLE, Math.min(PORTRAIT_MAX_ANGLE, raw)) / PORTRAIT_ANGLE_STEP) * PORTRAIT_ANGLE_STEP || 0;
+    const page = portraitPageSize(width, height, quarterTurns);
+    const range = portraitZoomRange(width, height, angle);
+    const zoom = Math.max(range.min, Math.min(range.max, Number.isFinite(view.zoom) ? view.zoom : 1));
+    const side = Math.min(page.width, page.height) / zoom;
+    // Half the turned frame's bounding box: the centre keeps that far from each edge.
+    const reach = (side / 2) * minZoomForAngle(angle);
+    const fit = (v: number, size: number): number => size <= 2 * reach ? size / 2 : Math.max(reach, Math.min(size - reach, Number.isFinite(v) ? v : size / 2));
+    return { cx: fit(view.cx, page.width), cy: fit(view.cy, page.height), zoom, quarterTurns, angle, mirror: view.mirror === true };
+}
+
+/** The crop a view stands for (clamped first; fractions rounded to 6 places, defaults left out). */
+export function portraitCropFromView(view: PortraitView, width: number, height: number): PortraitCrop {
+    const v = clampPortraitView(view, width, height);
+    const page = portraitPageSize(width, height, v.quarterTurns);
+    const side = Math.min(page.width, page.height) / v.zoom;
+    const crop: PortraitCrop = {
+        region: {
+            x: round6((v.cx - side / 2) / page.width), y: round6((v.cy - side / 2) / page.height),
+            w: round6(side / page.width), h: round6(side / page.height),
+        },
+    };
+    if (v.quarterTurns) crop.quarterTurns = v.quarterTurns;
+    if (v.angle) crop.angle = v.angle;
+    if (v.mirror) crop.mirror = true;
+    return crop;
+}
+
+/** A crop brought inside its limits (see clampPortraitView). Keeps a PortraitSource's attachmentId / partnershipId. */
+export function clampPortraitCrop<T extends PortraitCrop>(crop: T, width: number, height: number): T {
+    const { region: _r, quarterTurns: _q, angle: _a, mirror: _m, ...rest } = crop;
+    return { ...rest, ...portraitCropFromView(portraitViewFromCrop(crop, width, height), width, height) } as T;
+}
+
+/** The opening view of an original (defaultPortraitCrop). */
+export function defaultPortraitView(width: number, height: number): PortraitView {
+    return portraitViewFromCrop(defaultPortraitCrop(width, height), width, height);
+}
+
+/** Frame (screen) pixels per page pixel for a frame of `framePx` on screen. */
+export function portraitScale(view: PortraitView, width: number, height: number, framePx: number): number {
+    const page = portraitPageSize(width, height, view.quarterTurns);
+    return (framePx * view.zoom) / Math.min(page.width, page.height);
+}
+
+/** A screen offset turned back onto the page (by −angle) and scaled from screen to page pixels. */
+function screenToPage(view: PortraitView, dx: number, dy: number, scale: number): { x: number; y: number } {
+    const a = rad(view.angle);
+    const cos = Math.cos(a), sin = Math.sin(a);
+    return { x: (cos * dx + sin * dy) / scale, y: (-sin * dx + cos * dy) / scale };
+}
+
+/**
+ * The photo dragged by (dx, dy) screen pixels under a frame of `framePx`: it
+ * follows the pointer (the page point under the frame's centre moves the
+ * other way), clamped.
+ */
+export function panPortraitView(view: PortraitView, dx: number, dy: number, framePx: number, width: number, height: number): PortraitView {
+    const d = screenToPage(view, dx, dy, portraitScale(view, width, height, framePx));
+    return clampPortraitView({ ...view, cx: view.cx - d.x, cy: view.cy - d.y }, width, height);
+}
+
+/**
+ * The view at another zoom, clamped. With `anchor` (a screen point as the
+ * offset from the frame's centre, under a frame of `framePx`) the page point
+ * under it stays under it — the wheel and two fingers zoom about the pointer;
+ * without, about the frame's centre.
+ */
+export function zoomPortraitView(view: PortraitView, zoom: number, width: number, height: number,
+    anchor?: { x: number; y: number; framePx: number }): PortraitView {
+    const range = portraitZoomRange(width, height, view.angle);
+    const next = Math.max(range.min, Math.min(range.max, zoom));
+    if (!anchor) return clampPortraitView({ ...view, zoom: next }, width, height);
+    const before = screenToPage(view, anchor.x, anchor.y, portraitScale(view, width, height, anchor.framePx));
+    const after = screenToPage({ ...view, zoom: next }, anchor.x, anchor.y, portraitScale({ ...view, zoom: next }, width, height, anchor.framePx));
+    return clampPortraitView({ ...view, zoom: next, cx: view.cx + before.x - after.x, cy: view.cy + before.y - after.y }, width, height);
+}
+
+/**
+ * The view straightened to `angle` degrees: the zoom rises to
+ * minZoomForAngle when it must (never drops), clamped.
+ */
+export function straightenPortraitView(view: PortraitView, angle: number, width: number, height: number): PortraitView {
+    return clampPortraitView({ ...view, angle, zoom: Math.max(view.zoom, minZoomForAngle(angle)) }, width, height);
+}
+
+/**
+ * The view turned by a quarter turn (`1` clockwise, `-1` back): the page
+ * point under the frame's centre stays under it (as far as the edge lets it),
+ * the zoom goes back to the smallest that covers the frame.
+ */
+export function turnPortraitView(view: PortraitView, delta: 1 | -1, width: number, height: number): PortraitView {
+    const page = portraitPageSize(width, height, view.quarterTurns);
+    // Clockwise: (x, y) on a page of w × h → (h − y, x); back: (y, w − x).
+    const [cx, cy] = delta === 1 ? [page.height - view.cy, view.cx] : [view.cy, page.width - view.cx];
+    return clampPortraitView({
+        ...view, cx, cy, quarterTurns: toQuarterTurns(view.quarterTurns + delta), zoom: minZoomForAngle(view.angle),
+    }, width, height);
+}
+
+/**
+ * The view mirrored: the portrait comes out as the mirror image of what it
+ * was (left and right swapped), the same crop. Mirroring comes before the
+ * turns, so with an odd number of them it takes two more turns to swap left
+ * and right rather than top and bottom; the angle changes sign.
+ */
+export function mirrorPortraitView(view: PortraitView, width: number, height: number): PortraitView {
+    const page = portraitPageSize(width, height, view.quarterTurns);
+    const quarterTurns = toQuarterTurns(view.quarterTurns + (view.quarterTurns % 2 ? 2 : 0));
+    return clampPortraitView({
+        ...view, cx: page.width - view.cx, quarterTurns, angle: -view.angle || 0, mirror: !view.mirror,
+    }, width, height);
+}
+
+/** a ∘ b: first b, then a. */
+function compose(a: AffineMatrix, b: AffineMatrix): AffineMatrix {
+    return [
+        a[0] * b[0] + a[2] * b[1], a[1] * b[0] + a[3] * b[1],
+        a[0] * b[2] + a[2] * b[3], a[1] * b[2] + a[3] * b[3],
+        a[0] * b[4] + a[2] * b[5] + a[4], a[1] * b[4] + a[3] * b[5] + a[5],
+    ];
+}
+
+/** The original's pixels onto the page: the mirror, then the quarter turns. */
+export function portraitPageMatrix(width: number, height: number, quarterTurns: number, mirror: boolean): AffineMatrix {
+    let m: AffineMatrix = mirror ? [-1, 0, 0, 1, width, 0] : [1, 0, 0, 1, 0, 0];
+    let h = height, w = width;
+    for (let i = 0; i < toQuarterTurns(quarterTurns); i++) {
+        // Clockwise on a w × h page: (x, y) → (h − y, x).
+        m = compose([0, 1, -1, 0, h, 0], m);
+        [w, h] = [h, w];
+    }
+    return m;
+}
+
+/**
+ * The original's pixels onto a square of `outSize` × `outSize` holding the
+ * frame of `view` (the portrait itself at PHOTO_SIZE, the editor's frame at
+ * its size on screen): `ctx.setTransform(...m); ctx.drawImage(original, 0, 0)`
+ * draws it. The page is turned by `angle` about the frame's centre.
+ */
+export function portraitViewMatrix(view: PortraitView, width: number, height: number, outSize: number): AffineMatrix {
+    const s = portraitScale(view, width, height, outSize);
+    const a = rad(view.angle);
+    const cos = Math.cos(a) * s, sin = Math.sin(a) * s;
+    // out = s·R(angle)·(p − c) + outSize / 2
+    const toOut: AffineMatrix = [cos, sin, -sin, cos,
+        outSize / 2 - (cos * view.cx - sin * view.cy), outSize / 2 - (sin * view.cx + cos * view.cy)];
+    return compose(toOut, portraitPageMatrix(width, height, view.quarterTurns, view.mirror));
+}
+
+/** portraitViewMatrix of a stored crop (e.g. the portrait at PHOTO_SIZE on Done). */
+export function portraitOutputMatrix(crop: PortraitCrop, width: number, height: number, outSize: number = PHOTO_SIZE): AffineMatrix {
+    return portraitViewMatrix(portraitViewFromCrop(crop, width, height), width, height, outSize);
+}
+
+/** Apply an affine matrix to a point. */
+export function applyMatrix(m: AffineMatrix, x: number, y: number): { x: number; y: number } {
+    return { x: m[0] * x + m[2] * y + m[4], y: m[1] * x + m[3] * y + m[5] };
+}
+
+/** The inverse of an affine matrix (null when it has none). */
+export function invertMatrix(m: AffineMatrix): AffineMatrix | null {
+    const det = m[0] * m[3] - m[1] * m[2];
+    if (!det) return null;
+    const a = m[3] / det, b = -m[1] / det, c = -m[2] / det, d = m[0] / det;
+    return [a, b, c, d, -(a * m[4] + c * m[5]), -(b * m[4] + d * m[5])];
+}
+
+/** Whether a value is a well-formed PortraitSource (exactly one origin, a region inside 0–1, a sane angle); no lookup. */
+export function isPortraitSourceShape(v: unknown): v is PortraitSource {
+    if (!v || typeof v !== 'object') return false;
+    const s = v as Record<string, unknown>;
+    const hasAtt = typeof s.attachmentId === 'string' && s.attachmentId !== '';
+    const hasUnion = typeof s.partnershipId === 'string' && s.partnershipId !== '';
+    if (hasAtt === hasUnion) return false;
+    if ('attachmentId' in s && !hasAtt) return false;
+    if ('partnershipId' in s && !hasUnion) return false;
+    const r = s.region as Record<string, unknown> | undefined;
+    if (!r || typeof r !== 'object') return false;
+    const { x, y, w, h } = r;
+    if (![x, y, w, h].every(n => typeof n === 'number' && Number.isFinite(n))) return false;
+    const [nx, ny, nw, nh] = [x, y, w, h] as number[];
+    if (!(nx >= 0 && ny >= 0 && nw > 0 && nh > 0 && nx + nw <= 1.0001 && ny + nh <= 1.0001)) return false;
+    if (s.quarterTurns !== undefined && s.quarterTurns !== 1 && s.quarterTurns !== 2 && s.quarterTurns !== 3) return false;
+    if (s.angle !== undefined && !(typeof s.angle === 'number' && Number.isFinite(s.angle) && Math.abs(s.angle) <= PORTRAIT_MAX_ANGLE)) return false;
+    if (s.mirror !== undefined && s.mirror !== true) return false;
+    return true;
+}
+
+/** An image's pixel size from its data URL's header (PNG, GIF, JPEG, WebP), else null. */
+export function dataUrlImageSize(url: string): { w: number; h: number } | null {
+    const comma = url.indexOf(',');
+    if (comma < 0) return null;
+    let bytes: Uint8Array;
+    try {
+        const b64 = url.slice(comma + 1, comma + 1 + 90_000).replace(/\s+/g, '');
+        const bin = atob(b64.slice(0, b64.length - (b64.length % 4)));
+        bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    } catch {
+        return null;
+    }
+    const b = bytes;
+    const be16 = (i: number) => (b[i] << 8) | b[i + 1];
+    const le16 = (i: number) => b[i] | (b[i + 1] << 8);
+    const ok = (w: number, h: number) => (w > 0 && h > 0 ? { w, h } : null);
+    if (b.length > 24 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) {
+        return ok(((b[16] << 24) | (b[17] << 16) | be16(18)) >>> 0, ((b[20] << 24) | (b[21] << 16) | be16(22)) >>> 0);
+    }
+    if (b.length > 10 && b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) return ok(le16(6), le16(8));
+    if (b.length > 4 && b[0] === 0xff && b[1] === 0xd8) {
+        let i = 2;
+        while (i + 9 < b.length) {
+            if (b[i] !== 0xff) { i++; continue; }
+            const m = b[i + 1];
+            if (m === 0xd8 || m === 0x01 || (m >= 0xd0 && m <= 0xd7) || m === 0xff) { i += m === 0xff ? 1 : 2; continue; }
+            if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) return ok(be16(i + 7), be16(i + 5));
+            i += 2 + be16(i + 2);
+        }
+        return null;
+    }
+    if (b.length > 30 && b[0] === 0x52 && b[1] === 0x49 && b[8] === 0x57 && b[9] === 0x45) {
+        const tag = String.fromCharCode(b[12], b[13], b[14], b[15]);
+        if (tag === 'VP8 ') return ok(le16(26) & 0x3fff, le16(28) & 0x3fff);
+        if (tag === 'VP8L') {
+            const v = b[21] | (b[22] << 8) | (b[23] << 16) | (b[24] << 24);
+            return ok((v & 0x3fff) + 1, ((v >>> 14) & 0x3fff) + 1);
+        }
+        if (tag === 'VP8X') return ok((b[24] | (b[25] << 8) | (b[26] << 16)) + 1, (b[27] | (b[28] << 8) | (b[29] << 16)) + 1);
+    }
+    return null;
+}
+
