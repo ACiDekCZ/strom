@@ -15,6 +15,7 @@ import { columnById, columnLabel, columnOffered, type SortSpec } from './table-c
 import { ROW_KEY, ROW_TYPES, type RowType } from './table-model.js';
 import { listKindIcon } from '../list-kind-icon.js';
 import type { ListKind } from '../../person-lists.js';
+import { isDesktop } from '../../breakpoints.js';
 
 export interface BarHandlers {
     /** A row type was chosen (segment or sheet). */
@@ -167,6 +168,48 @@ export function updateScope(bar: HTMLElement, shown: ScopeShown): void {
     } else {
         btn.removeAttribute('aria-disabled');
         btn.title = t.scopeAria(name);
+    }
+}
+
+/**
+ * The steps a computer's row 1 takes before it would wrap (⧉ and ⋯ alone on
+ * a second row): 1 the labels Scope and View hidden, the whole tree as a list
+ * glyph; 2 the search, the list's name and the view's name narrower (…);
+ * 3 a list as its kind's icon + ▾ (its name in the title and the label);
+ * 4 the search at 80 px. One class at a time (index.html reads each step as
+ * including the ones before). Measured, not by width thresholds: a changed
+ * view's buttons, a list's name, the language and the font decide what fits.
+ */
+const FIT_STEPS = ['tv-fit-1', 'tv-fit-2', 'tv-fit-3', 'tv-fit-4'] as const;
+
+/** Row 1 on more than one line, or past its edge. */
+function rowWraps(row: HTMLElement): boolean {
+    if (row.scrollWidth > row.clientWidth) return true;
+    let top = Infinity;
+    let bottom = -Infinity;
+    for (const el of row.children) {
+        if ((el as HTMLElement).offsetParent === null) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width === 0) continue;
+        const mid = r.top + r.height / 2;
+        top = Math.min(top, mid);
+        bottom = Math.max(bottom, mid);
+    }
+    return bottom - top >= 8;
+}
+
+/** Keep a computer's row 1 on one line: the fewest steps that fit (the tablet and the phone keep their own rules). */
+export function fitBarRow(bar: HTMLElement): void {
+    const row = bar.querySelector<HTMLElement>('.tv-bar-row1');
+    if (!row) return;
+    row.classList.remove(...FIT_STEPS);
+    if (!isDesktop() || row.offsetParent === null) return;
+    let at: string | null = null;
+    for (const step of FIT_STEPS) {
+        if (!rowWraps(row)) return;
+        if (at) row.classList.remove(at);
+        row.classList.add(step);
+        at = step;
     }
 }
 

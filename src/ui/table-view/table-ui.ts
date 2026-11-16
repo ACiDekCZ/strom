@@ -55,7 +55,7 @@ import { TableGrid, type CellEditSpec, type GridCellRef, type RowAction } from '
 import { editChangeOf, editOptionsOf, editTargetOf, editValueOf, type EditTarget } from './table-edit.js';
 import { cellChoices, copyPlainText } from './table-cell.js';
 import { fanZoomModifier } from '../../fan-zoom.js';
-import { createBar, createStatus, createWindowButton, updateAgentNote, updateBar, updateNav, updateResearchStatus, updateScope, updateStatus } from './table-bar.js';
+import { createBar, createStatus, createWindowButton, fitBarRow, updateAgentNote, updateBar, updateNav, updateResearchStatus, updateScope, updateStatus } from './table-bar.js';
 import { JumpHistory, jumpTargetCell, type JumpStep } from './table-jump.js';
 import { PIN_MAX, TablePins, pinRanks, pinSvg } from './table-pins.js';
 import { createNotice, showNotice } from './table-notice.js';
@@ -1087,13 +1087,21 @@ export const tableMethods = uiModule({
             // (the chips wrap, the research block opens, the window narrows).
             barWatch?.disconnect();
             let barBottom = -1;
+            let containerWidth = -1;
             barWatch = typeof ResizeObserver === 'function' ? new ResizeObserver(() => {
+                // A new width (the window, a side panel): row 1 fitted again before the card is placed.
+                // The container's width is watched (not the bar's), so the bar's new height comes deeper, in the same frame.
+                const width = Math.round(container.getBoundingClientRect().width);
+                if (width !== containerWidth) { containerWidth = width; fitBarRow(bar); }
                 const bottom = Math.round(bar.getBoundingClientRect().bottom);
                 if (bottom === barBottom) return;
                 barBottom = bottom;
                 this.placeLivePanel?.();
             }) : null;
             barWatch?.observe(bar);
+            barWatch?.observe(container);
+            // The fonts' final widths: fitted again once they are in.
+            void document.fonts?.ready.then(() => { if (mounted?.bar === bar) fitBarRow(bar); });
             mounted = {
                 container, lang, bar, bulk, grid, status, colsBtn, drawn: '', display: null, filters, filterState: null, views, exportBtn, windowBtn,
                 empty, emptyKey: '', unionsButton: null, notice, saveRows: [], pinOutside: new Set(), groupKeys: null,
@@ -1268,6 +1276,7 @@ export const tableMethods = uiModule({
             name: open.name, builtin: isBuiltinId(open.id), changed: viewChanged(open, st), readOnly: DataManager.isReadOnly(),
             researchIdle: researchFilterIdle(m, type, st.filter),
         });
+        fitBarRow(mounted.bar);
         keepWork(tree, state);
     },
 
@@ -1819,7 +1828,9 @@ export const tableMethods = uiModule({
 
     /** ⧉ in the Table's bar follows whether windows are offered (a resize). */
     syncTableWindowButton(): void {
-        if (mounted) mounted.windowBtn.hidden = !canOpenWindows();
+        if (!mounted) return;
+        mounted.windowBtn.hidden = !canOpenWindows();
+        fitBarRow(mounted.bar);
     },
 
     /**

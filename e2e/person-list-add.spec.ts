@@ -238,6 +238,70 @@ test.describe('Add to list: German at 1440', () => {
     });
 });
 
+/** Every control of the Table's row 1 on one line, nothing past its edge. */
+async function expectOneRow(page: Page, what: string): Promise<void> {
+    const bar = page.locator('#table-container .tv-bar-row1');
+    await expect(page.locator('#table-container .tv-more-menu-btn')).toBeVisible();
+    expect(await bar.evaluate(el => el.scrollWidth - el.clientWidth), what).toBeLessThanOrEqual(0);
+    const tops = await bar.locator(':scope > *:not([hidden])').evaluateAll(els => els
+        .filter(el => (el as HTMLElement).offsetParent !== null && el.getBoundingClientRect().width > 0)
+        .map(el => { const r = el.getBoundingClientRect(); return Math.round(r.top + r.height / 2); }));
+    expect(Math.max(...tops) - Math.min(...tops), what).toBeLessThan(8);
+}
+
+/** A changed view: Group by changes it (● changed, Save as new, Discard changes in the bar). */
+async function changeView(page: Page): Promise<void> {
+    await page.evaluate(() => (window.Strom.UI as unknown as { setTableGroupBy(k: string): void }).setTableGroupBy('surname'));
+    await expect(page.locator('#table-container .tv-view-discard')).toBeVisible();
+}
+
+/** The Table in a list's scope (Scope ▾ with the list's name). */
+async function scopeToList(page: Page, name: string): Promise<void> {
+    await page.evaluate((n) => {
+        const dm = window.Strom.DataManager;
+        const l = dm.createPersonList({ name: n, dynamic: false, personIds: dm.getAllPersons().slice(0, 6).map(p => p.id), sort: 'manual' });
+        (window.Strom.UI as unknown as { setTableScopeTo(id: string): void }).setTableScopeTo(l.id);
+    }, name);
+    await expect(page.locator('#table-container .tv-scope-btn.is-list')).toBeVisible();
+}
+
+/** The sample tree (counts in three digits, as people see it first) in the Table, in `lang`. */
+async function tableIn(page: Page, lang: 'cs' | 'de'): Promise<void> {
+    await page.clock.setFixedTime(NOW);
+    await openApp(page);
+    await page.evaluate(() => window.Strom.UI.loadDemoTree());
+    await expect(page.locator('.person-card').first()).toBeVisible();
+    await page.evaluate((l) => window.Strom.UI.setLanguage(l as never), lang);
+    await page.locator('#view-mode-table').click();
+    await expect(page.locator('#table-container .tv-body .tv-row').first()).toBeVisible();
+}
+
+// A changed view's buttons or a list's name in Scope ▾ must not push ⧉ and ⋯ onto a second row.
+for (const [lang, width] of [['cs', 1280], ['de', 1600]] as const) {
+    test.describe(`Add to list: ${lang} at ${width}, a changed view`, () => {
+        test.use({ viewport: { width, height: 900 } });
+        test('the Table\'s bar stays one row', async ({ page }) => {
+            await tableIn(page, lang);
+            await expectOneRow(page, 'unchanged');
+            await changeView(page);
+            await expectOneRow(page, 'changed view');
+        });
+    });
+}
+
+for (const [lang, name] of [['cs', 'Potomci Corvina Varnholma z Lesin'], ['de', 'Gräberbesuch']] as const) {
+    test.describe(`Add to list: ${lang} at 1440, a list's scope`, () => {
+        test.use({ viewport: { width: 1440, height: 900 } });
+        test('the Table\'s bar stays one row', async ({ page }) => {
+            await tableIn(page, lang);
+            await scopeToList(page, name);
+            await expectOneRow(page, 'list');
+            await changeView(page);
+            await expectOneRow(page, 'list, changed view');
+        });
+    });
+}
+
 test.describe('Add to list: a phone', () => {
     test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
