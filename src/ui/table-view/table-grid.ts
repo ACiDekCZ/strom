@@ -41,7 +41,7 @@ import { cellPlainText, columnLabel, groupLabel, type ColumnDef, type SortSpec }
 import { rowKey, type CellName, type CellSeverity, type CellValue, type ResearchCellDetail, type ResearchSignal, type RowType, type TableModel, type TableRow } from './table-model.js';
 import { columnRun, groupRuns, lockedColumn, MIN_COLUMN_WIDTH, type CollapsedBand } from './table-state.js';
 import { columnOffsets, columnWindow, lineOffsets, lineWindow, type ColumnWindow } from './table-window.js';
-import { lineCell, lineKey, lineLevel, plainLines, type GridLine } from './table-subrows.js';
+import { lineCell, lineKey, lineLevel, plainLines, type DrawLine, type GridLine, type GroupLine } from './table-subrows.js';
 import type { CoverageCell } from './table-coverage.js';
 import { cellShownText, highlightHtml } from './table-filter.js';
 import { copyPlainText } from './table-cell.js';
@@ -70,7 +70,7 @@ export interface GridInput {
     /** The grid's accessible name. */
     label: string;
     /** The lines drawn (§3: rows with their union sub-rows); default one line per row. */
-    lines?: readonly GridLine[];
+    lines?: readonly DrawLine[];
     /** The People table: the name cell has the sub-rows' ▾/▸ slot (§3.2). */
     subRows?: boolean;
     /** The name head's "Expand unions" / "Collapse unions" (§3.2); null: no one has 2+ unions. */
@@ -93,6 +93,8 @@ export interface GridInput {
     filtered?: ReadonlySet<string>;
     /** Nothing passes the filter (§13c, §13d): said under the head, with "Clear filters". */
     noMatch?: { title: string; text: string; action: string } | null;
+    /** A phone (spec 084 10d): the header of the group scrolled under the head stays at the top. */
+    stickyGroups?: boolean;
     /** Rows kept after a change that no longer pass the filter (§10.3, their row keys). */
     stale?: ReadonlySet<string>;
     /** The action icons in the first column (§10.1; `edit` false: read-only); none on a phone (10b). */
@@ -132,6 +134,8 @@ export interface GridInput {
      * a line at the left edge.
      */
     outsideList?: ReadonlySet<string>;
+    /** The scope's people (spec 084 §11a): a union's partner not among them is written in grey; absent: no scope. */
+    listPeople?: ReadonlyMap<string, number>;
 }
 
 /**
@@ -248,6 +252,8 @@ export interface GridHandlers {
     onRevealUnions?(personId: string): void;
     /** A group's −/+ or a band was used (§4.3). */
     onToggleGroup?(group: string, collapse: boolean): void;
+    /** A group of rows (spec 084 §10) opened (true) or closed (false) by its header (a click, ← → Enter Space). */
+    onToggleRowGroup?(key: string, open: boolean): void;
     /** The header menu of a column was asked for (§4.6). */
     onHeadMenu?(colId: string, anchor: HTMLElement): void;
     /** A column's width is being dragged (`done` at the end) or set by keys or a double click (§4.5). */
@@ -553,6 +559,10 @@ export class TableGrid {
     private readonly body: HTMLElement;
     /** The pinned rows' part under the head (spec 103 §3) and its body (the rows, drawn as the body's). */
     private readonly pinZone: HTMLElement;
+    /** The group header held under the head while its rows scroll by (spec 084 10d); in the head only then. */
+    private readonly stuck: HTMLElement;
+    /** The indexes of the group headers among the lines. */
+    private groupAt: number[] = [];
     private readonly pinBody: HTMLElement;
     private readonly noMatch: HTMLElement;
     private input: GridInput | null = null;
@@ -570,7 +580,7 @@ export class TableGrid {
     private lastPointerDown = '';
     private measureCtx: CanvasRenderingContext2D | null = null;
     /** The lines drawn and their tops (§3). */
-    private lines: readonly GridLine[] = [];
+    private lines: readonly DrawLine[] = [];
     private tops: number[] = [0];
     private topsFor = '';
     /** The body's active cell (roving tabindex, §3.4): the line's key and the column's drawn position. */
@@ -640,6 +650,14 @@ export class TableGrid {
         this.pinBody = el.querySelector('.tv-pinbody')!;
         // In the head only while rows are pinned (sizePins): the body stays the grid's one .tv-body.
         this.pinZone.remove();
+        this.stuck = document.createElement('div');
+        this.stuck.className = 'tv-grp-stuck';
+        this.stuck.setAttribute('aria-hidden', 'true');
+        this.stuck.addEventListener('click', () => {
+            const key = this.stuck.dataset.key;
+            const line = this.lines.find((l): l is GroupLine => l.kind === 'group' && l.key === key);
+            if (line) this.handlers.onToggleRowGroup?.(line.key, line.collapsed);
+        });
         this.noMatch = el.querySelector('.tv-nomatch')!;
         this.noMatch.addEventListener('click', (e) => {
             if ((e.target as Element).closest('.tv-nomatch-clear')) this.handlers.onClearFilters?.();
@@ -674,6 +692,13 @@ export class TableGrid {
                 // The second click of a double click on a name that jumped: the row under it now is another one.
                 if (e.detail >= 2 && performance.now() - this.jumpedAt < JUMP_DOUBLE_MS) return;
                 const t = e.target as Element;
+                const drawnLine = this.drawLineOf(t);
+                if (drawnLine?.kind === 'group') {
+                    this.activePin = false;
+                    this.activeKey = lineKey(drawnLine);
+                    this.handlers.onToggleRowGroup?.(drawnLine.key, drawnLine.collapsed);
+                    return;
+                }
                 const line = this.lineOf(t);
                 const cellEl = t.closest<HTMLElement>('[aria-colindex]');
                 if (line && cellEl) this.chooseCell(line, cellEl);
@@ -778,11 +803,12 @@ export class TableGrid {
             body.addEventListener('keydown', (e) => this.onBodyKey(e));
             body.addEventListener('focusin', (e) => {
                 const cellEl = (e.target as Element).closest<HTMLElement>('[aria-colindex]');
-                const line = cellEl ? this.lineOf(cellEl) : undefined;
+                const line = cellEl ? this.drawLineOf(cellEl) : undefined;
                 if (!cellEl || !line) return;
                 this.activePin = body === this.pinBody;
                 this.activeKey = lineKey(line);
-                this.activeCol = Number(cellEl.getAttribute('aria-colindex')) - 1;
+                // A group's header (spec 084 §10) keeps the column the arrows come back to.
+                if (line.kind !== 'group') this.activeCol = Number(cellEl.getAttribute('aria-colindex')) - 1;
                 this.cellChosen = true;
                 for (const other of this.el.querySelectorAll<HTMLElement>('.tv-body [aria-colindex][tabindex="0"]')) if (other !== cellEl) other.tabIndex = -1;
                 cellEl.tabIndex = 0;
@@ -806,13 +832,19 @@ export class TableGrid {
     /** New rows or columns: drawn now; `scroll` restores a kept position. */
     /** The line a body element belongs to (the body's or a pinned row's, spec 103 §3). */
     private lineOf(t: Element): GridLine | undefined {
+        const line = this.drawLineOf(t);
+        return line && line.kind !== 'group' ? line : undefined;
+    }
+
+    /** The line a body element belongs to, a group's header too (spec 084 §10). */
+    private drawLineOf(t: Element): DrawLine | undefined {
         const rowEl = t.closest<HTMLElement>('.tv-row[data-index]');
         if (!rowEl) return undefined;
         return (this.pinBody.contains(rowEl) ? this.pinLines : this.lines)[Number(rowEl.dataset.index)];
     }
 
     /** The lines of the part the active cell is in: the pinned rows' or the body's. */
-    private get zoneLines(): readonly GridLine[] {
+    private get zoneLines(): readonly DrawLine[] {
         return this.activePin ? this.pinLines : this.lines;
     }
 
@@ -891,7 +923,7 @@ export class TableGrid {
         const at = lines.findIndex(l => lineKey(l) === this.activeKey);
         const line = at >= 0 ? lines[at] : undefined;
         const col = this.input.columns[this.activeCol];
-        if (!line || !col || line.kind === 'more' || this.input.bands?.[this.activeCol]) return null;
+        if (!line || !col || line.kind === 'more' || line.kind === 'group' || this.input.bands?.[this.activeCol]) return null;
         const el = this.zoneBody.querySelector<HTMLElement>(`.tv-row[data-index="${at}"] [aria-colindex="${this.activeCol + 1}"]`);
         return { line, cell: { col, index: this.activeCol, value: lineCell(this.input.model, line, col) }, el };
     }
@@ -973,6 +1005,8 @@ export class TableGrid {
     setInput(input: GridInput, scroll?: { top: number; left: number }): void {
         this.input = input;
         this.lines = input.lines ?? plainLines(input.rows);
+        this.groupAt = [];
+        this.lines.forEach((l, i) => { if (l.kind === 'group') this.groupAt.push(i); });
         this.pinLines = input.pinLines ?? [];
         // The active cell's pinned row unpinned: the body's row is the active one.
         if (this.activePin && !this.pinLines.some(l => lineKey(l) === this.activeKey)) this.activePin = false;
@@ -1014,13 +1048,21 @@ export class TableGrid {
         return Number.isFinite(v) && v > 0 ? v : rowH;
     }
 
+    /** A group header's height (`--tv-grp-h`, spec 084 §10: 34 px, 40 on a phone). */
+    private groupHeight(rowH: number): number {
+        if (!this.lines.length || this.lines[0].kind !== 'group') return rowH;
+        const v = parseFloat(getComputedStyle(this.el).getPropertyValue('--tv-grp-h'));
+        return Number.isFinite(v) && v > 0 ? v : rowH;
+    }
+
     /** Each line's top for this row height (and the body's height last). */
     private lineTops(rowH: number): number[] {
         const hasMore = this.lines.some(l => l.kind === 'more');
         const moreH = hasMore ? this.moreHeight(rowH) : rowH;
-        const key = `${rowH}|${moreH}`;
+        const grpH = this.groupHeight(rowH);
+        const key = `${rowH}|${moreH}|${grpH}`;
         if (this.topsFor === key) return this.tops;
-        this.tops = lineOffsets(this.lines.map(l => (l.kind === 'more' ? moreH : rowH)));
+        this.tops = lineOffsets(this.lines.map(l => (l.kind === 'more' ? moreH : l.kind === 'group' ? grpH : rowH)));
         this.topsFor = key;
         return this.tops;
     }
@@ -1086,12 +1128,51 @@ export class TableGrid {
             this.headKey = colKey;
             this.drawHead(input, cw);
         }
+        this.placeStuckGroup(input, tops);
         const bodyKey = `${colKey}|${rw.start}-${rw.end}|${rowH}|${pinH}`;
         if (bodyKey !== this.bodyKey) {
             this.bodyKey = bodyKey;
             this.drawBody(input, cw, rw.start, rw.end, tops);
         }
         this.placeEditor();
+    }
+
+    /**
+     * The phone's held group header (spec 084 10d): the last group whose
+     * header has scrolled up under the head, drawn just below the head over
+     * the rows; a tap opens or closes it like its own header.
+     */
+    private placeStuckGroup(input: GridInput, tops: readonly number[]): void {
+        let line: GroupLine | null = null;
+        if (input.stickyGroups && this.groupAt.length) {
+            const y = this.el.scrollTop;
+            let lo = 0;
+            let hi = this.groupAt.length - 1;
+            let found = -1;
+            while (lo <= hi) {
+                const mid = (lo + hi) >> 1;
+                if (tops[this.groupAt[mid]] < y) { found = mid; lo = mid + 1; } else hi = mid - 1;
+            }
+            const l = found >= 0 ? this.lines[this.groupAt[found]] : undefined;
+            if (l && l.kind === 'group') line = l;
+        }
+        if (!line) {
+            if (this.stuck.isConnected) this.stuck.remove();
+            delete this.stuck.dataset.key;
+            return;
+        }
+        const count = strings.table.groupRows[input.type](line.count);
+        const html = `<span class="tv-grp-in"><span class="tv-grp-chev">${line.collapsed ? '▸' : '▾'}</span>`
+            + `<span class="tv-grp-label">${esc(line.label)}</span>`
+            + `<span class="tv-grp-n"><span class="tv-grp-nw">${esc(count)}</span><span class="tv-grp-nn">${line.count}</span></span></span>`;
+        if (this.stuck.dataset.key !== line.key || this.stuck.innerHTML !== html) {
+            this.stuck.dataset.key = line.key;
+            this.stuck.innerHTML = html;
+        }
+        this.stuck.classList.toggle('is-special', line.special);
+        this.stuck.style.width = `${this.el.clientWidth}px`;
+        this.stuck.style.left = `${this.el.scrollLeft}px`;
+        if (!this.stuck.isConnected) this.head.appendChild(this.stuck);
     }
 
     /** The cell's sticky offset for a pinned column. */
@@ -1559,6 +1640,7 @@ export class TableGrid {
         const from = this.drawnRange().start;
         let max = 0;
         for (let r = from; r < Math.min(this.lines.length, from + FIT_ROWS); r++) {
+            if (this.lines[r].kind === 'group') continue;
             max = Math.max(max, ctx.measureText(cellPlainText(lineCell(input.model, this.lines[r], col))).width);
         }
         const headText = this.headRow.querySelector<HTMLElement>(`[data-col="${col.id}"] .tv-cell-text`);
@@ -1577,12 +1659,16 @@ export class TableGrid {
         const bodyActive = this.activePin ? -1 : activeLine;
         const drawn: DrawnRow[] = [];
         for (let r = start; r < end; r++) {
-            drawn.push(this.rowHtml(input, cw, this.lines[r], r, tops[r], tops[r + 1] - tops[r], r === bodyActive ? activeCol : -1, false, r));
+            const line = this.lines[r];
+            drawn.push(line.kind === 'group'
+                ? this.groupHtml(input, cw, line, r, tops[r], tops[r + 1] - tops[r], r === bodyActive)
+                : this.rowHtml(input, cw, line, r, tops[r], tops[r + 1] - tops[r], r === bodyActive ? activeCol : -1, false, r));
         }
         // A reveal of the agent's row moves no focus (spec 097 §5): the focused row stays drawn where it is, out of view.
         const kept = this.keptLine(refocus, start, end);
-        if (kept >= 0) {
-            const d = this.rowHtml(input, cw, this.lines[kept], kept, tops[kept], tops[kept + 1] - tops[kept], kept === bodyActive ? activeCol : -1, false, kept);
+        const keptLine = kept >= 0 ? this.lines[kept] : undefined;
+        if (keptLine && keptLine.kind !== 'group') {
+            const d = this.rowHtml(input, cw, keptLine, kept, tops[kept], tops[kept + 1] - tops[kept], kept === bodyActive ? activeCol : -1, false, kept);
             drawn.push({ ...d, open: d.open.replace('class="tv-row', 'class="tv-row is-kept') });
         }
         this.paintBody(drawn, this.body);
@@ -1599,6 +1685,28 @@ export class TableGrid {
         this.syncNameTabs();
         this.syncActiveMark();
         if (refocus) this.focusActive(false);
+    }
+
+    /**
+     * A group's header (spec 084 §10): one cell over the whole width, its
+     * ▾/▸, value and count held at the left edge while the columns scroll.
+     */
+    private groupHtml(input: GridInput, cw: ColumnWindow, line: GroupLine, r: number, top: number, height: number, active: boolean): DrawnRow {
+        const key = lineKey(line);
+        const t = strings.table;
+        const count = t.groupRows[input.type](line.count);
+        const cls = `tv-row tv-grp${line.collapsed ? ' is-collapsed' : ''}${line.special ? ' is-special' : ''}`;
+        const open = `<div class="${cls}" role="row" data-key="${esc(key)}" data-index="${r}" aria-rowindex="${r + 4}" aria-level="1"`
+            + ` aria-expanded="${!line.collapsed}" aria-label="${esc(t.groupRowAria(line.label, count))}"`
+            + ` style="top:${top}px;height:${height}px;width:${cw.total}px">`;
+        const title = line.collapsed ? t.expandGroup(line.label) : t.collapseGroup(line.label);
+        const cell = `<div class="tv-cell tv-grp-cell" role="gridcell" aria-colindex="1" aria-colspan="${input.columns.length}" tabindex="${active ? 0 : -1}"`
+            + ` style="width:${cw.total}px" title="${esc(title)}"><span class="tv-grp-in">`
+            + `<span class="tv-grp-chev" aria-hidden="true">${line.collapsed ? '▸' : '▾'}</span>`
+            + `<span class="tv-grp-label">${esc(line.label)}</span>`
+            + `<span class="tv-grp-n" aria-hidden="true"><span class="tv-grp-nw">${esc(count)}</span><span class="tv-grp-nn">${line.count}</span></span>`
+            + '</span></div>';
+        return { key, open, cells: [cell] };
     }
 
     /**
@@ -1679,10 +1787,14 @@ export class TableGrid {
             const editable = line.kind !== 'more' && !!input.editableAt?.(line, col);
             const links = this.linksIn(input, line, col);
             const tail = i === tailAt;
-            cells.push(`<div class="${cellClasses(value, col, issue?.severity ?? null, !!conflict)}${res ? ' has-res' : ''}${finds ? ' has-finds' : ''}${editable ? ' is-editable' : ''}${this.pinClass(i, input)}" role="gridcell" aria-colindex="${i + 1}" tabindex="${tab}"`
+            // A union's partner outside the list (spec 084 §11a): grey, said in the title.
+            const partner = row.kind === 'union' && input.listPeople && (col.id === 'p1' || col.id === 'p2') ? row[col.id] : null;
+            const offPartner = !!partner && !input.listPeople!.has(partner.id);
+            const cellTitle = offPartner ? [title, strings.table.outsideList].filter(Boolean).join(' · ') : title;
+            cells.push(`<div class="${cellClasses(value, col, issue?.severity ?? null, !!conflict)}${offPartner ? ' is-off-list' : ''}${res ? ' has-res' : ''}${finds ? ' has-finds' : ''}${editable ? ' is-editable' : ''}${this.pinClass(i, input)}" role="gridcell" aria-colindex="${i + 1}" tabindex="${tab}"`
                 + (res || finds ? ' aria-haspopup="dialog"' : '')
                 + (links && personLinks(value).length ? ' aria-describedby="tv-link-hint"' : '')
-                + ` style="${this.pinStyle(i, input)}"${title ? ` title="${esc(title)}"` : ''}>${tail ? pinMark : ''}${cellInner(value, col, issue, line.kind === 'more' ? '' : input.hit ?? '', conflict, links)}`
+                + ` style="${this.pinStyle(i, input)}"${cellTitle ? ` title="${esc(cellTitle)}"` : ''}>${tail ? pinMark : ''}${cellInner(value, col, issue, line.kind === 'more' ? '' : input.hit ?? '', conflict, links)}`
                 + `${tail ? outsideNote + this.rowTail(input, line) : ''}</div>`);
         }
         if (cw.after > 0) cells.push(this.spacer(cw.after));
@@ -1873,8 +1985,13 @@ export class TableGrid {
         if (key) {
             let at = lines.findIndex(l => lineKey(l) === key);
             if (at < 0) {
+                // A union's sub-row or a row's later place in the groups (spec 084 §10) gone: the row's line.
                 const base = key.split('#')[0];
                 at = lines.findIndex(l => lineKey(l) === base);
+                if (at < 0 && base.includes('@')) {
+                    const row = base.split('@')[0];
+                    at = lines.findIndex(l => lineKey(l) === row);
+                }
             }
             if (at >= 0) return at;
         }
@@ -1938,7 +2055,8 @@ export class TableGrid {
     /** Focus the active cell if it is drawn. */
     private focusActive(force: boolean): void {
         const at = this.activeLineIndex();
-        const cell = this.zoneBody.querySelector<HTMLElement>(`.tv-row[data-index="${at}"] [aria-colindex="${this.activeCol + 1}"]`);
+        const cell = this.zoneBody.querySelector<HTMLElement>(`.tv-row[data-index="${at}"] [aria-colindex="${this.activeCol + 1}"]`)
+            ?? this.zoneBody.querySelector<HTMLElement>(`.tv-row.tv-grp[data-index="${at}"] .tv-grp-cell`);
         if (cell && (force || document.activeElement !== cell)) cell.focus({ preventScroll: true });
     }
 
@@ -1959,11 +2077,29 @@ export class TableGrid {
         // A name in a cell (§14.1) is a button: Enter and Space are its own.
         if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.tv-nm, .tv-link, .tv-cites-more, .tv-conf, .tv-ages')) return;
         const at = this.activeLineIndex();
-        const line = lines[at];
+        const drawn = lines[at];
         const col = Math.min(this.activeCol, input.columns.length - 1);
-        const onName = input.columns[col]?.id === 'name' && !input.bands?.[col];
         const page = Math.max(1, Math.floor((this.el.clientHeight - this.head.offsetHeight) / this.rowHeight()) - 1);
         const ctrl = e.ctrlKey || e.metaKey;
+        // A group's header (spec 084 §10): ← closes it, → opens it, Enter and Space switch; ↑ ↓ pass over it.
+        if (drawn.kind === 'group') {
+            const open = e.key === 'ArrowRight' ? true : e.key === 'ArrowLeft' ? false : e.key === 'Enter' || e.key === ' ' ? drawn.collapsed : null;
+            if (open !== null) {
+                e.preventDefault();
+                if (open === drawn.collapsed) this.handlers.onToggleRowGroup?.(drawn.key, open);
+                return;
+            }
+            const move = e.key === 'ArrowDown' ? at + 1 : e.key === 'ArrowUp' ? at - 1 : e.key === 'PageDown' ? at + page : e.key === 'PageUp' ? at - page
+                : e.key === 'Home' && ctrl ? 0 : e.key === 'End' && ctrl ? lines.length - 1 : null;
+            if (move === null) return;
+            e.preventDefault();
+            this.focusCell(move, col);
+            const now = this.zoneLines[this.activeLineIndex()];
+            if (now && now.kind !== 'group') this.select(now);
+            return;
+        }
+        const line: GridLine = drawn;
+        const onName = input.columns[col]?.id === 'name' && !input.bands?.[col];
         let to: [number, number] | null = null;
         // ↑ ↓ (and the page and Ctrl+Home/End jumps) move the selection with the focus (§10.1).
         let selects = false;
@@ -2065,7 +2201,7 @@ export class TableGrid {
         this.focusCell(to[0], to[1]);
         if (selects) {
             const now = this.zoneLines[this.activeLineIndex()];
-            if (now) this.select(now);
+            if (now && now.kind !== 'group') this.select(now);
         }
     }
 
@@ -2160,7 +2296,7 @@ export class TableGrid {
     private startEditAt(at: number, col: number): boolean {
         const line = this.zoneLines[at];
         const input = this.input;
-        if (!line || !input || line.kind === 'more' || input.bands?.[col]) return false;
+        if (!line || !input || line.kind === 'more' || line.kind === 'group' || input.bands?.[col]) return false;
         const def = input.columns[col];
         if (!def) return false;
         return this.startEdit(line, { col: def, index: col, value: lineCell(input.model, line, def) });
@@ -2258,7 +2394,8 @@ export class TableGrid {
             const lines = this.zoneLines;
             const at = lines.findIndex(l => lineKey(l) === ed.key);
             const from = input ? input.columns.findIndex(c => c.id === ed.colId) : -1;
-            const line = at >= 0 ? lines[at] : undefined;
+            const found = at >= 0 ? lines[at] : undefined;
+            const line = found && found.kind !== 'group' ? found : undefined;
             let next = -1;
             if (input && line && from >= 0) {
                 for (let i = from + step; i >= 0 && i < input.columns.length; i += step) {

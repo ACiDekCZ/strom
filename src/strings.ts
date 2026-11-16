@@ -3,7 +3,7 @@
  */
 
 import { stringsPL } from './strings-pl/index.js';
-import type { Gender } from './types.js';
+import type { Gender, TableGroupKey } from './types.js';
 
 export type Language = 'en' | 'cs' | 'de' | 'pl';
 
@@ -9461,6 +9461,29 @@ const stringsEN = {
         notInList: (name: string) => `Not in the list: ${name}.`,
         outsideList: 'outside the list',
         sortList: 'Sort: # (list order)',
+        /** Rows under group headers by one value (spec 084 §10, §11). */
+        groupBy: 'Group by',
+        groupNone: 'No grouping',
+        grouped: (g: string) => `Grouped: ${g}`,
+        groupsCollapse: 'Collapse all groups',
+        groupsExpand: 'Expand all groups',
+        groupKey: {
+            lines: 'Research line', rod: 'Family line', surname: 'Surname', bPlace: 'Birthplace', bCentury: 'Century of birth',
+            bDecade: 'Decade of birth', gen: 'Generation', sex: 'Sex', occ: 'Occupation',
+            addedDay: 'Added – day', addedMonth: 'Added – month', addedYear: 'Added – year', done: 'Done / left',
+            wDecade: 'Decade of marriage', wPlace: 'Place of marriage', uRods: 'Partners’ family lines', kids: 'Number of children',
+            evType: 'Event type', evDecade: 'Decade', evPlace: 'Place',
+        } as Record<TableGroupKey, string>,
+        groupNoValue: 'no value',
+        groupKids: (n: number) => nEn(n, 'child', 'children'),
+        groupRows: {
+            persons: (n: number) => nEn(n, 'person', 'people'), unions: (n: number) => nEn(n, 'union', 'unions'),
+            events: (n: number) => nEn(n, 'event', 'events'), sources: (n: number) => nEn(n, 'source', 'sources'),
+        },
+        groupsN: (n: number) => nEn(n, 'group', 'groups'),
+        distinct: (n: number) => nEn(n, 'different person', 'different people'),
+        groupCol: 'Group',
+        groupRowAria: (label: string, count: string) => `Group ${label}, ${count}`,
         /** Another window following the agent: the agent's row is hidden by the filter (spec 097 §5). */
         agentRowHidden: 'The agent’s row is hidden by the filter',
         link: {
@@ -18751,6 +18774,29 @@ const stringsCZ: StringsType = {
         notInList: (name: string) => `Osoba není v seznamu: ${name}.`,
         outsideList: 'mimo seznam',
         sortList: 'Řazení: # (pořadí seznamu)',
+        /** Rows under group headers by one value (spec 084 §10, §11). */
+        groupBy: 'Seskupit podle',
+        groupNone: 'Bez seskupení',
+        grouped: (g: string) => `Seskupeno: ${g}`,
+        groupsCollapse: 'Sbalit všechny skupiny',
+        groupsExpand: 'Rozbalit všechny skupiny',
+        groupKey: {
+            lines: 'Linie výzkumu', rod: 'Rod', surname: 'Příjmení', bPlace: 'Místo narození', bCentury: 'Století narození',
+            bDecade: 'Desetiletí narození', gen: 'Generace', sex: 'Pohlaví', occ: 'Povolání',
+            addedDay: 'Přidáno – den', addedMonth: 'Přidáno – měsíc', addedYear: 'Přidáno – rok', done: 'Hotovo / zbývá',
+            wDecade: 'Desetiletí sňatku', wPlace: 'Místo sňatku', uRods: 'Rod partnerů', kids: 'Počet dětí',
+            evType: 'Druh události', evDecade: 'Desetiletí', evPlace: 'Místo',
+        } as Record<TableGroupKey, string>,
+        groupNoValue: 'bez hodnoty',
+        groupKids: (n: number) => nCs(n, 'dítě', 'děti', 'dětí'),
+        groupRows: {
+            persons: (n: number) => nCs(n, 'osoba', 'osoby', 'osob'), unions: (n: number) => nCs(n, 'svazek', 'svazky', 'svazků'),
+            events: (n: number) => nCs(n, 'událost', 'události', 'událostí'), sources: (n: number) => nCs(n, 'pramen', 'prameny', 'pramenů'),
+        },
+        groupsN: (n: number) => nCs(n, 'skupina', 'skupiny', 'skupin'),
+        distinct: (n: number) => nCs(n, 'různá osoba', 'různé osoby', 'různých osob'),
+        groupCol: 'Skupina',
+        groupRowAria: (label: string, count: string) => `Skupina ${label}, ${count}`,
         agentRowHidden: 'Řádek agenta skrývá filtr',
         link: {
             goTo: (name: string) => `Přejít na ${name}`, pick: 'Přejít na…', inCell: 'Osoby v buňce', enterHint: 'Enter: přejít na osobu',
@@ -27956,6 +28002,29 @@ const stringsDE: StringsType = {
         notInList: (name: string) => `Nicht in der Liste: ${name}.`,
         outsideList: 'außerhalb der Liste',
         sortList: 'Sortierung: # (Reihenfolge der Liste)',
+        /** Rows under group headers by one value (spec 084 §10, §11). */
+        groupBy: 'Gruppieren nach',
+        groupNone: 'Ohne Gruppierung',
+        grouped: (g: string) => `Gruppiert: ${g}`,
+        groupsCollapse: 'Alle Gruppen einklappen',
+        groupsExpand: 'Alle Gruppen ausklappen',
+        groupKey: {
+            lines: 'Forschungslinie', rod: 'Stamm', surname: 'Nachname', bPlace: 'Geburtsort', bCentury: 'Geburtsjahrhundert',
+            bDecade: 'Geburtsjahrzehnt', gen: 'Generation', sex: 'Geschlecht', occ: 'Beruf',
+            addedDay: 'Hinzugefügt – Tag', addedMonth: 'Hinzugefügt – Monat', addedYear: 'Hinzugefügt – Jahr', done: 'Erledigt / offen',
+            wDecade: 'Heiratsjahrzehnt', wPlace: 'Heiratsort', uRods: 'Stamm der Partner', kids: 'Anzahl Kinder',
+            evType: 'Ereignisart', evDecade: 'Jahrzehnt', evPlace: 'Ort',
+        } as Record<TableGroupKey, string>,
+        groupNoValue: 'ohne Wert',
+        groupKids: (n: number) => nDe(n, 'Kind', 'Kinder'),
+        groupRows: {
+            persons: (n: number) => nDe(n, 'Person', 'Personen'), unions: (n: number) => nDe(n, 'Verbindung', 'Verbindungen'),
+            events: (n: number) => nDe(n, 'Ereignis', 'Ereignisse'), sources: (n: number) => nDe(n, 'Quelle', 'Quellen'),
+        },
+        groupsN: (n: number) => nDe(n, 'Gruppe', 'Gruppen'),
+        distinct: (n: number) => nDe(n, 'verschiedene Person', 'verschiedene Personen'),
+        groupCol: 'Gruppe',
+        groupRowAria: (label: string, count: string) => `Gruppe ${label}, ${count}`,
         agentRowHidden: 'Die Zeile des Agenten ist ausgefiltert',
         link: {
             goTo: (name: string) => `Zu ${name} wechseln`, pick: 'Wechseln zu…', inCell: 'Personen in der Zelle', enterHint: 'Eingabe: zur Person wechseln',

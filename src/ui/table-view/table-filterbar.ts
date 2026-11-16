@@ -51,6 +51,8 @@ export interface FilterBarState {
     research?: ResearchBarState;
     /** Rows pinned under the table's head (spec 103 §3): the row's first chip says how many (none on a phone). */
     pinned?: number;
+    /** The rows' grouping (spec 084 §10): the chip "Grouped: <value> ×" before the pinned rows' (none on a phone). */
+    grouped?: string | null;
 }
 
 /** The research's part of the chips' row (§16.5, 16a0, 16n–16p, 16z, 16zk). */
@@ -90,8 +92,17 @@ export interface FilterBarHandlers {
     onClear(): void;
     /** The pinned rows' chip's × (spec 103 3a): all unpinned. */
     onUnpinAll?(): void;
+    /** The grouping chip's × (spec 084 §10): no grouping. */
+    onUngroup?(): void;
     /** The phone's Filters button. */
     onSheet(): void;
+}
+
+/** The grouping's chip (spec 084 §10): "Grouped: <value>", × ends the grouping; an outline like the pinned rows'. */
+function groupChipHtml(label: string): string {
+    const t = strings.table;
+    return `<span class="tv-pinchip tv-grpchip" data-grpchip><span class="tv-pinchip-text">${esc(t.grouped(label))}</span>`
+        + `<button type="button" class="tv-pinchip-x tv-grpchip-x" aria-label="${esc(t.groupNone)}" title="${esc(t.groupNone)}">×</button></span>`;
 }
 
 /** The pinned rows' chip (spec 103 3a): the pin, "Pinned rows (n)", × unpins all; a separator after it. */
@@ -193,10 +204,12 @@ export class FilterBar {
         const chips = availableChips(model, type);
         const cols = shownColumnItems(type, filter);
         const pinned = state.phone ? 0 : state.pinned ?? 0;
-        this.row.hidden = state.phone || (!chips.length && !cols.length && !pinned);
+        const grouped = state.phone ? null : state.grouped ?? null;
+        this.row.hidden = state.phone || (!chips.length && !cols.length && !pinned && !grouped);
         if (this.row.hidden) { this.row.innerHTML = ''; return; }
-        // The pinned rows (spec 103 3a): first, fixed (it never gives way to "More filters"), not a filter.
-        let html = pinned ? pinChipHtml(pinned) : '';
+        // The pinned rows (spec 103 3a): first, fixed (it never gives way to "More filters"), not a filter;
+        // the grouping's chip (spec 084 §10) before it.
+        let html = (grouped ? groupChipHtml(grouped) : '') + (pinned ? pinChipHtml(pinned) : grouped ? '<span class="tv-bar-sep tv-pinsep" aria-hidden="true"></span>' : '');
         for (const chip of chips) {
             const item = chipItem(filter, chip);
             const waits = state.checking && CHECK_CHIPS.includes(chip);
@@ -328,6 +341,7 @@ export class FilterBar {
         if (!st) return;
         const t = e.target as Element;
         if (t.closest('.tv-chips-clear')) { this.handlers.onClear(); return; }
+        if (t.closest('.tv-grpchip-x')) { this.handlers.onUngroup?.(); return; }
         if (t.closest('.tv-pinchip-x')) { this.handlers.onUnpinAll?.(); return; }
         const xc = t.closest<HTMLElement>('[data-xchip]');
         if (xc) { this.handlers.onChip(xc.dataset.xchip as ChipId, false); return; }

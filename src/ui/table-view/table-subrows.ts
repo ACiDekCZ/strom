@@ -121,6 +121,8 @@ export interface MainLine {
     n: number;
     /** Expanded (true) or collapsed (false) for a person with 2+ unions; null otherwise. */
     expanded: boolean | null;
+    /** A row repeated in a later group (spec 084 §10c): that group's key, keeping the line's key apart. */
+    dup?: string;
 }
 
 /** One union of a person with 2+ unions (§3.1). */
@@ -133,6 +135,7 @@ export interface SubLine {
     n: number;
     /** A union outside the filter, shown on request (§3.3). */
     dimmed: boolean;
+    dup?: string;
 }
 
 /** "n outside the filter · show" under a person's last shown sub-row (§3.3). */
@@ -140,9 +143,26 @@ export interface MoreLine {
     kind: 'more';
     row: PersonRow;
     hidden: number;
+    dup?: string;
 }
 
+/** A group's header over its rows (spec 084 §10): ▾/▸, the value and the count; no cells. */
+export interface GroupLine {
+    kind: 'group';
+    /** The group's key (`TableView.group.collapsed`). */
+    key: string;
+    label: string;
+    /** "no value" / "earlier" (italics). */
+    special: boolean;
+    /** The group's rows (each row once). */
+    count: number;
+    collapsed: boolean;
+}
+
+/** A line of the grid that stands for a row (what the grid's handlers get). */
 export type GridLine = MainLine | SubLine | MoreLine;
+/** Any line the grid draws: a row's or a group's header. */
+export type DrawLine = GridLine | GroupLine;
 
 export interface LineOptions {
     collapse: UnionCollapse;
@@ -181,16 +201,17 @@ export function buildLines(rows: readonly TableRow[], opts: LineOptions): GridLi
 }
 
 /** A line's key (DOM, focus): the row's key, a sub-row's union and the "more" line apart. */
-export function lineKey(line: GridLine): string {
-    const key = rowKey(line.row);
+export function lineKey(line: DrawLine): string {
+    if (line.kind === 'group') return `g:${line.key}`;
+    const key = rowKey(line.row) + (line.dup !== undefined ? `@${line.dup}` : '');
     if (line.kind === 'sub') return `${key}#u${line.k}`;
     if (line.kind === 'more') return `${key}#more`;
     return key;
 }
 
 /** A line's level in the treegrid (§3.4): 1 for a row, 2 under a person. */
-export function lineLevel(line: GridLine): 1 | 2 {
-    return line.kind === 'row' ? 1 : 2;
+export function lineLevel(line: DrawLine): 1 | 2 {
+    return line.kind === 'row' || line.kind === 'group' ? 1 : 2;
 }
 
 /**
@@ -199,8 +220,8 @@ export function lineLevel(line: GridLine): 1 | 2 {
  * Partner cell gives the number of unions and the other union cells stay
  * empty. A sub-row reads only its union; the person's cells stay empty.
  */
-export function lineCell(model: TableModel, line: GridLine, col: ColumnDef): CellValue {
-    if (line.kind === 'more') return emptyCell();
+export function lineCell(model: TableModel, line: DrawLine, col: ColumnDef): CellValue {
+    if (line.kind === 'more' || line.kind === 'group') return emptyCell();
     if (line.kind === 'sub') return col.unionScoped ? cellOf(model, line.row, col, line.union) : emptyCell();
     if (line.union === null && line.row.kind === 'person' && col.unionScoped) {
         if (col.id !== 'partner') return emptyCell(col.computed);

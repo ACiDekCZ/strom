@@ -158,7 +158,8 @@ test.describe('Add to list: a computer', () => {
         const bar = (await page.locator('#table-container .tv-bar-row1').boundingBox())!;
         expect(bar.height).toBeLessThan(60);
         await more.click();
-        await expect(page.locator('.tv-menu .tv-menu-label')).toHaveText(['Save as list of people…']);
+        // Group by › and the groups' Collapse / Expand all (spec 084 §10) come first.
+        await expect(page.locator('.tv-menu .tv-menu-label')).toHaveText(['Group by', 'Collapse all groups', 'Expand all groups', 'Save as list of people…']);
         await tvItem(page, 'Save as list of people…').click();
         const save = page.locator('#person-list-save');
         await expect(save).toBeVisible();
@@ -170,8 +171,12 @@ test.describe('Add to list: a computer', () => {
         await expect(tvItem(page, 'Save as list of people…')).toBeVisible();
         await page.keyboard.press('Escape');
 
-        // Events: nothing to save, no ⋯ beside ⧉.
+        // Events: nothing to save, but ⋯ stays for Group by (spec 084 §10); Sources: nothing to offer, no ⋯.
         await page.locator('#table-container .tv-rowtype [data-rowtype="events"]').click();
+        await more.click();
+        await expect(page.locator('.tv-menu .tv-menu-label')).toHaveText(['Group by', 'Collapse all groups', 'Expand all groups']);
+        await page.keyboard.press('Escape');
+        await page.locator('#table-container .tv-rowtype [data-rowtype="sources"]').click();
         await expect(more).toBeHidden();
     });
 
@@ -229,7 +234,7 @@ test.describe('Add to list: German at 1440', () => {
         // One row: every control's middle on the same line.
         expect(Math.max(...tops) - Math.min(...tops)).toBeLessThan(8);
         await more.click();
-        await expect(page.locator('.tv-menu .tv-menu-label')).toHaveText(['Als Personenliste speichern…']);
+        await expect(page.locator('.tv-menu .tv-menu-label')).toHaveText(['Gruppieren nach', 'Alle Gruppen einklappen', 'Alle Gruppen ausklappen', 'Als Personenliste speichern…']);
     });
 });
 
@@ -256,8 +261,8 @@ test.describe('Add to list: a phone', () => {
         await openTable(page, true);
         await page.locator('#table-container .tv-more-menu-btn').tap();
         const more = page.locator('.bottom-sheet');
-        // After Scope › (spec 084 §9).
-        await expect(more.locator('.bottom-sheet-item').nth(1)).toContainText('Save as list of people…');
+        // After Scope › (spec 084 §9) and Group by › (§10).
+        await expect(more.locator('.bottom-sheet-item').nth(2)).toContainText('Save as list of people…');
         await more.locator('.bottom-sheet-item', { hasText: 'Save as list of people…' }).tap();
         await expect(page.locator('#person-list-save')).toBeVisible();
     });

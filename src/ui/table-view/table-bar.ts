@@ -209,9 +209,14 @@ export function createStatus(): HTMLElement {
  * The count, the sort, (§13i) "Checks are running…" while the tree's
  * findings are computed and (§13j) the read-only sentence.
  */
-export function updateStatus(el: HTMLElement, type: RowType, shown: number, total: number, sort: readonly SortSpec[], checking = false, readOnly = false): void {
+export function updateStatus(
+    el: HTMLElement, type: RowType, shown: number, total: number, sort: readonly SortSpec[], checking = false, readOnly = false,
+    groups: { n: number; distinct: number | null } | null = null,
+): void {
     el.querySelector<HTMLElement>('.tv-status-ro')!.hidden = !readOnly;
-    el.querySelector('.tv-status-count')!.textContent = countText(type, shown, total);
+    // Grouped (spec 084 §10): "40 of 100 people · 12 groups"; "40 different people · 12 groups" when a person is in several.
+    const count = groups?.distinct != null ? strings.table.distinct(groups.distinct) : countText(type, shown, total);
+    el.querySelector('.tv-status-count')!.textContent = groups ? `${count} · ${strings.table.groupsN(groups.n)}` : count;
     el.querySelector('.tv-status-sort')!.textContent = sortText(type, sort);
     el.querySelector<HTMLElement>('.tv-status-checks')!.hidden = !checking;
 }

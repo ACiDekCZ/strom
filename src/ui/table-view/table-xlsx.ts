@@ -107,7 +107,9 @@ export function buildTableXlsx(input: TableXlsxInput): TableXlsx {
         if (c) return c.group;
         return i > 0 ? groupAt(i - 1) : null;
     };
-    const frozen = Math.min(width, Math.max(1, input.pinned) + (t.unionAt >= 0 && t.unionAt <= input.pinned ? 1 : 0));
+    // The group's column (spec 084 §10) is the first one and frozen with the pinned ones.
+    const lead = t.grouped ? 1 : 0;
+    const frozen = Math.min(width, Math.max(1, input.pinned) + lead + (t.unionAt >= 0 && t.unionAt <= input.pinned + lead ? 1 : 0));
 
     // Column widths and outline: a group's columns after its first one (or after the frozen part) on level 1.
     const columns: XlsxColumn[] = t.columns.map((c, i) => {

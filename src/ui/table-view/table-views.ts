@@ -20,6 +20,7 @@ import { columnById, DEFAULT_VIEWS, type SortSpec } from './table-columns.js';
 import { ROW_TYPES, type RowType } from './table-model.js';
 import type { FilterItem } from './table-filter.js';
 import { defaultUnionCollapse } from './table-subrows.js';
+import { groupKeysOf } from './table-group.js';
 import {
     applyColumnSetup, columnSetupOf, defaultTypeState, type ColumnSetup, type RowTypeState, type TableState,
 } from './table-state.js';
@@ -255,6 +256,8 @@ export function applyView(view: TableView, st: RowTypeState): void {
     st.unions = type === 'persons' && view.unions ? { collapsed: view.unions.collapsed, except: [...view.unions.except] } : defaultUnionCollapse();
     st.revealedUnions = [];
     st.scope = type !== 'sources' && view.scope?.listId ? view.scope.listId : null;
+    st.group = type !== 'sources' && view.group && groupKeysOf(type).includes(view.group.by)
+        ? { by: view.group.by, collapsed: [...view.group.collapsed] } : null;
 }
 
 /** The view a row type's state makes: what "Save" and "Save as new" store (§9.3). */
@@ -267,6 +270,7 @@ export function viewFromState(type: RowType, st: RowTypeState, id: string, name:
         sort: st.sort.map(fromSpec),
         ...(type === 'persons' ? { unions: { collapsed: st.unions.collapsed, except: [...st.unions.except].sort() } } : {}),
         ...(type !== 'sources' && st.scope ? { scope: { listId: st.scope } } : {}),
+        ...(type !== 'sources' && st.group ? { group: { by: st.group.by, collapsed: [...st.group.collapsed].sort() } } : {}),
         updated: now,
     };
 }
@@ -274,7 +278,7 @@ export function viewFromState(type: RowType, st: RowTypeState, id: string, name:
 /** What makes two states the same view: everything a view keeps, nothing else. */
 function stateKey(type: RowType, st: RowTypeState): string {
     const v = viewFromState(type, st, '', '', '');
-    return JSON.stringify([v.columns, v.pinned, [...v.collapsedGroups].sort(), v.coverageRow, v.filter.items, v.sort, v.unions ?? null, v.scope?.listId ?? null]);
+    return JSON.stringify([v.columns, v.pinned, [...v.collapsedGroups].sort(), v.coverageRow, v.filter.items, v.sort, v.unions ?? null, v.scope?.listId ?? null, v.group ?? null]);
 }
 
 /** The state a view opens to, compared the same way (unknown columns dropped, as the table drops them). */

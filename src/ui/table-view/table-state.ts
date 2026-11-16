@@ -8,7 +8,7 @@
 import { columnById, columnOffered, columnsOf, DEFAULT_VIEWS, phoneWidth, type ColumnDef, type ColumnGroup, type SortSpec } from './table-columns.js';
 import { RESEARCH_DEFAULT_COLUMNS } from './table-research.js';
 import type { RowType } from './table-model.js';
-import type { TableView } from '../../types.js';
+import type { TableGroupKey, TableView } from '../../types.js';
 import { defaultUnionCollapse, type UnionCollapse } from './table-subrows.js';
 import { emptyFilter, type TableFilter } from './table-filter.js';
 
@@ -47,6 +47,11 @@ export interface RowTypeState {
      * null for the whole tree. Never set for sources.
      */
     scope: string | null;
+    /**
+     * The rows under group headers by one value (spec 084 §10; `TableView.group`),
+     * the closed groups' keys with it; null: no grouping.
+     */
+    group: { by: TableGroupKey; collapsed: string[] } | null;
     /** The setup "Reset to default" returns to (part D: the open view's stored one; else the default view). */
     base?: ColumnSetup;
 }
@@ -65,7 +70,7 @@ export interface TableState {
 /** A row type's state as its default view gives it. */
 export function defaultTypeState(type: RowType): RowTypeState {
     const v = DEFAULT_VIEWS[type];
-    return { columns: [...v.columns], widths: { ...v.widths }, pinned: v.pinned, sort: v.sort.map(s => ({ ...s })), top: 0, left: 0, selected: null, collapsedGroups: [], coverageRow: true, unions: defaultUnionCollapse(), revealedUnions: [], filter: emptyFilter(), search: '', scope: null };
+    return { columns: [...v.columns], widths: { ...v.widths }, pinned: v.pinned, sort: v.sort.map(s => ({ ...s })), top: 0, left: 0, selected: null, collapsedGroups: [], coverageRow: true, unions: defaultUnionCollapse(), revealedUnions: [], filter: emptyFilter(), search: '', scope: null, group: null };
 }
 
 export function defaultTableState(): TableState {

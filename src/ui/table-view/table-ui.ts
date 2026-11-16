@@ -83,7 +83,7 @@ import { listMenuEntries, listSheetPage } from '../person-list-add.js';
 import { issueCategory, translateValidationType, validateTreeData, type ValidationIssue } from '../../validation.js';
 import { dismissalFor, dismissalKey } from '../../quality-dismiss.js';
 import { QUALITY_CHANGED_EVENT } from '../quality-ui.js';
-import type { Partnership, PartnershipId, Person, PersonId, PersonList, StromData, TableView, TreeId } from '../../types.js';
+import type { Partnership, PartnershipId, Person, PersonId, PersonList, StromData, TableGroupKey, TableView, TreeId } from '../../types.js';
 import {
     discardViewChanges, dropMissingViews, isBuiltinId, isResearchViewId, newViewId, openViewOf, readTableWork, restoreTableState, setResearchViews, switchView,
     tableWorkOf, takenViewNames, uniqueViewName, viewChanged, viewFromState, viewList, writeTableWork,
@@ -95,7 +95,8 @@ import {
     applyChecks, bandSeverity, CHECK_COLUMNS, CheckIndex, conflictCells, lineFindings, lineUnion, type CellFinding, type ConflictCell,
 } from './table-checks.js';
 import { conflictScope } from '../person-research-ui.js';
-import { lineCell, lineKey, plainLines, type GridLine } from './table-subrows.js';
+import { lineCell, lineKey, plainLines, type DrawLine, type GridLine } from './table-subrows.js';
+import { groupedExportRows, groupedLines, groupingFits, groupKeysOfRow, groupRows, hasRepeats, multiValued, offeredGroupKeys, treeHasLines, type GroupOffer } from './table-group.js';
 import { cellDraft, type CellDraft } from '../../windows/window-drafts.js';
 import { cellText, isMouseLikePointer, markHtml, personLinks, type CellConflictMark, type CellIssueMark } from './table-grid.js';
 import { bubbleHeading, bubbleHtml, citesHtml, closeTableBubble, legendHtml, openBubblePanel, sheetElement, type BubbleCite } from './table-bubble.js';
@@ -147,6 +148,8 @@ interface Mounted {
     saveRows: readonly TableRow[];
     /** The pinned rows outside the filter as last drawn (said, not saved, 6b). */
     pinOutside: ReadonlySet<string>;
+    /** The groups of rows as last drawn (spec 084 §10): their keys, for Collapse / Expand all; null: not grouped. */
+    groupKeys: readonly string[] | null;
 }
 
 /** Save as list of people is offered (spec 084 §6): the People and Unions tables of a tree that takes changes. */
@@ -267,6 +270,8 @@ let tempShown: { tree: string; person: PersonId; ctx: string } | null = null;
 let hiddenJump: { tree: string; step: JumpStep; ctx: string; outsideList?: boolean } | null = null;
 /** A view opened with a list that is gone (spec 084 §9): said under the bar until closed or the scope changes (the tree's key). */
 let scopeGone: string | null = null;
+/** A row a jump goes to (spec 084 §10): its group is opened when it is closed. */
+let openGroupFor: string | null = null;
 /** A Table filter rule being edited in the Table (spec 084 §7, §9): ⋯ offers Save to the list. */
 let ruleEdit: { tree: string; listId: string } | null = null;
 
@@ -973,6 +978,7 @@ export const tableMethods = uiModule({
                     return true;
                 }),
                 onToggleGroup: (group, collapse) => this.changeTableColumns(st => setGroupCollapsed(st, group, collapse)),
+                onToggleRowGroup: (key, open) => this.toggleTableRowGroup(key, open),
                 onHeadMenu: (colId, anchor) => this.showTableHeadMenu(colId, anchor),
                 onHeadSort: (colId, add) => this.changeTableColumns(st => (add ? sortShiftClick(st, colId) : sortClick(st, colId))),
                 onCoverageCell: (colId, anchor) => this.showTableCoverageMenu(colId, anchor),
@@ -1039,6 +1045,7 @@ export const tableMethods = uiModule({
                 onRemoveColumn: (at) => this.changeTableFilter(f => removeColumnItemAt(f, at)),
                 onClear: () => this.changeTableFilter(f => clearFilter(f), true),
                 onUnpinAll: () => this.changeTablePins(() => pins.clear()),
+                onUngroup: () => this.setTableGroupBy(null),
                 onSheet: () => this.showTableFilters(),
             });
             const views = new ViewBar(bar.querySelector<HTMLElement>('.tv-slot-view')!, {
@@ -1084,7 +1091,7 @@ export const tableMethods = uiModule({
             barWatch?.observe(bar);
             mounted = {
                 container, lang, bar, bulk, grid, status, colsBtn, drawn: '', display: null, filters, filterState: null, views, exportBtn, windowBtn,
-                empty, emptyKey: '', unionsButton: null, notice, saveRows: [], pinOutside: new Set(),
+                empty, emptyKey: '', unionsButton: null, notice, saveRows: [], pinOutside: new Set(), groupKeys: null,
             };
         }
 
@@ -1093,9 +1100,11 @@ export const tableMethods = uiModule({
         const counts = countScope ? scopeCounts(m, countScope) : rowCounts(m);
         const phone = isPhoneBar();
         mounted.windowBtn.hidden = !canOpenWindows();
-        // ⋯ wider than a phone offers Save as list of people only (spec 084 §6): without it,
-        // or with no rows of the type in the tree (nothing to save), no ⋯.
-        mounted.bar.querySelector('.tv-slot-more')?.classList.toggle('is-empty', !this.tableRuleList() && (!canSaveAsList(type) || counts[type] === 0));
+        // ⋯ wider than a phone offers Group by (spec 084 §10) and Save as list of people (§6):
+        // with neither (no rows of the type, or Sources), no ⋯.
+        const groupOffer = this.tableGroupOffer(m, scope);
+        mounted.bar.querySelector('.tv-slot-more')?.classList.toggle('is-empty', !this.tableRuleList()
+            && (counts[type] === 0 || (!canSaveAsList(type) && !offeredGroupKeys(type, groupOffer).length)));
         normalizeColumns(type, st);
         const display = withLeadColumns(displayColumns(type, st, phone), type === 'persons' ? scope : null);
         mounted.display = display;
@@ -1123,7 +1132,23 @@ export const tableMethods = uiModule({
         // A person shown for now outside the filter (spec 103 2b): in the rows, not in their count.
         const shownRows = persons && tempShown ? withTempRow(m, rows, tempShown.person, st.sort, pass) : rows;
         const temp = shownRows !== rows && tempShown ? new Set([`p:${tempShown.person}`]) : undefined;
-        const lines = persons ? buildLines(shownRows, { collapse: st.unions, pass, revealed: new Set(st.revealedUnions) }) : undefined;
+        // The rows under group headers (spec 084 §10): the jump's or the focus's row opens its group.
+        const grouping = groupingFits(type, st.group, groupOffer) ? st.group : null;
+        const groups = grouping ? groupRows(m, type, grouping.by, shownRows, scope?.cells.done ?? null) : null;
+        if (grouping && groups) {
+            for (const want of [openGroupFor, revealFocus]) {
+                const row = want ? shownRows.find(r => rowKey(r) === want) : undefined;
+                if (!row) continue;
+                const keys = groupKeysOfRow(m, type, grouping.by, row, scope?.cells.done ?? null);
+                if (keys.length && keys.every(k => grouping.collapsed.includes(k))) grouping.collapsed = grouping.collapsed.filter(k => k !== keys[0]);
+            }
+        }
+        openGroupFor = null;
+        const lineOpts = { collapse: st.unions, pass, revealed: new Set(st.revealedUnions) };
+        const lines: readonly DrawLine[] | undefined = groups && grouping
+            ? groupedLines(groups, new Set(grouping.collapsed), rows => (persons ? buildLines(rows, lineOpts) : plainLines(rows)))
+            : persons ? buildLines(shownRows, lineOpts) : undefined;
+        mounted.groupKeys = groups ? groups.map(g => g.key) : null;
         const pinned = this.tablePinnedLines(m, type, st, state.open[type], shownRows, pass, phone);
         mounted.saveRows = rows;
         mounted.pinOutside = pinned?.outside ?? new Set();
@@ -1139,6 +1164,7 @@ export const tableMethods = uiModule({
         const filterState: FilterBarState = {
             model: m, type, filter: st.filter, search: st.search, shown: rows.length, checking: !index || !!checks?.running, phone,
             pinned: phone ? 0 : pins.count(),
+            grouped: grouping ? strings.table.groupKey[grouping.by] : null,
             research: persons && research ? researchBarState(research, m, st.filter, display.columns, isResearchViewId(state.open[type])) : undefined,
         };
         mounted.filterState = filterState;
@@ -1156,7 +1182,8 @@ export const tableMethods = uiModule({
             disabled: type === 'sources',
         });
         this.renderTableSplitBar(mounted.bulk, type);
-        updateStatus(mounted.status, type, rows.length, counts[type], st.sort, !!checks?.running, tableReadOnly());
+        updateStatus(mounted.status, type, rows.length, counts[type], st.sort, !!checks?.running, tableReadOnly(),
+            groups && grouping ? { n: groups.length, distinct: persons && multiValued(grouping.by) && hasRepeats(groups, shownRows.length) ? shownRows.length : null } : null);
         const researchShown = !!research && display.columns.some(c => c.group === 'research');
         updateResearchStatus(mounted.status, !research || !researchShown ? null
             : research.input.live ? { live: true, followed: !!research.input.followed } : { live: false, when: this.tableResearchWhen(tree) });
@@ -1181,13 +1208,14 @@ export const tableMethods = uiModule({
             model: m, type, rows: shownRows, columns: display.columns, widths: display.widths, pinned: display.pinned, sort: st.sort, homeId,
             links: type === 'persons' || type === 'unions', temp,
             pinLines: pinned?.lines, pinnedKeys: pinned?.keys, pinOutside: pinned?.outside, outsideList,
+            listPeople: type === 'unions' && scope ? scope.cells.pos : undefined,
             bands: display.bands, coverageRow: st.coverageRow, editableHead: !phone,
             hit: searchQuery(st.search),
             filtered: new Set(st.filter.items.filter((i): i is Exclude<typeof i, { chip: ChipId }> => !isChipItem(i) && columnItemActive(i)).map(i => i.col)),
             noMatch: !shownRows.length && summary
                 ? { title: strings.table.noMatch, text: strings.table.applies(summary), action: strings.table.clearFilters }
                 : null,
-            lines, subRows: persons, unionsButton, stale,
+            lines, subRows: persons, unionsButton, stale, stickyGroups: phone && !!groups,
             actions: phone ? null : { edit: !tableReadOnly(), tree: treeActionOffered() },
             editableAt: !phone && this.tableInlineEdit() ? (line, col) => !!this.tableEditTarget(line, col) : undefined,
             liveOff: research ? new Set(display.columns
@@ -2139,6 +2167,7 @@ export const tableMethods = uiModule({
         if (step.to.expanded) setExpanded(pst.unions, step.to.personId, true);
         state.rowType = 'persons';
         pst.selected = `p:${step.to.personId}`;
+        openGroupFor = pst.selected;
         if (temp) tempShown = { tree, person: step.to.personId as PersonId, ctx: peopleCtx(state) };
         const el = document.getElementById('table-container');
         if (!el || TreeRenderer.getViewMode() !== 'table') return;
@@ -3050,7 +3079,7 @@ export const tableMethods = uiModule({
         const view = openViewOf(state, type, storedViews()).name;
         const now = new Date();
         return {
-            input: { model, type, rows, columns: all.columns, pass: whole ? null : shown.pass },
+            input: { model, type, rows, columns: all.columns, pass: whole ? null : shown.pass, groups: this.tableExportGroups(model, type, st, scope, rows) },
             pinned: all.pinned, widths: all.widths, view,
             checks: checks && checks.tree === tree ? checks.index : null,
             files: { csv: tableCsvFileName(treeName, view, now, 'csv'), xlsx: tableCsvFileName(treeName, view, now, 'xlsx') },
@@ -3166,20 +3195,94 @@ export const tableMethods = uiModule({
      * above it, behind a separator. On a phone (12a) a sheet: Save as list
      * of people, then Columns, Export, Coverage row and Expand or Collapse unions.
      */
+    /** What Group by offers (spec 084 §10): Research line in a tree with research lines, Done in a work list's scope. */
+    tableGroupOffer(m: TableModel, scope: TableScope | null): GroupOffer {
+        return { lines: treeHasLines(m), work: !!scope?.cells.done };
+    },
+
+    /** The export's rows in their groups (spec 084 §10: flat, the group first); null: not grouped. */
+    tableExportGroups(m: TableModel, type: RowType, st: RowTypeState, scope: TableScope | null, rows: readonly TableRow[]): { group: string; row: TableRow }[] | null {
+        if (!groupingFits(type, st.group, this.tableGroupOffer(m, scope))) return null;
+        return groupedExportRows(groupRows(m, type, st.group.by, rows, scope?.cells.done ?? null));
+    },
+
+        /** Group the rows by a value (spec 084 §10), null: no grouping; the groups start open. */
+    setTableGroupBy(by: TableGroupKey | null): void {
+        this.changeTableColumns((st) => {
+            if ((st.group?.by ?? null) === by) return false;
+            st.group = by ? { by, collapsed: [] } : null;
+            return true;
+        });
+    },
+
+    /** One group opened (true) or closed (false) by its header. */
+    toggleTableRowGroup(key: string, open: boolean): void {
+        this.changeTableColumns((st) => {
+            if (!st.group) return false;
+            const shut = st.group.collapsed.includes(key);
+            if (shut !== open) return false;
+            st.group = { by: st.group.by, collapsed: open ? st.group.collapsed.filter(k => k !== key) : [...st.group.collapsed, key] };
+            return true;
+        });
+    },
+
+    /** Collapse all groups (true) or expand them all (false). */
+    setTableGroupsCollapsed(collapse: boolean): void {
+        const keys = mounted?.groupKeys;
+        this.changeTableColumns((st) => {
+            if (!st.group || !keys) return false;
+            st.group = { by: st.group.by, collapsed: collapse ? [...keys] : [] };
+            return true;
+        });
+    },
+
+    /** Group by's choices (spec 084 §10): No grouping, then the keys the row type offers, the chosen one ticked. */
+    tableGroupChoices(): { id: string; label: string; current: boolean; run: () => void }[] {
+        const state = stateOf(treeKey());
+        const type = state.rowType;
+        const st = state.types[type];
+        const scope = scopeOfType(state, type);
+        const offer = model ? this.tableGroupOffer(model, scope) : { lines: false, work: false };
+        const by = groupingFits(type, st.group, offer) ? st.group.by : null;
+        const t = strings.table;
+        return [
+            { id: 'group-none', label: t.groupNone, current: !by, run: () => this.setTableGroupBy(null) },
+            ...offeredGroupKeys(type, offer).map(k => ({ id: `group-${k}`, label: t.groupKey[k], current: by === k, run: () => this.setTableGroupBy(k) })),
+        ];
+    },
+
     showTableMoreMenu(): void {
         const state = stateOf(treeKey());
         const st = state.types[state.rowType];
         const t = strings.table;
         const saveList = canSaveAsList(state.rowType);
+        const groupChoices = this.tableGroupChoices();
+        const groupedBy = groupChoices.find(c => c.current && c.id !== 'group-none')?.label ?? null;
         // Editing a Table filter rule (spec 084 §7, §9): its list takes the filter as it is now.
         const ruleList = this.tableRuleList();
         const saveRule = ruleList ? { label: strings.lists.saveRule(listDisplayName(ruleList)), run: () => this.saveTableRule() } : null;
         if (!isPhoneBar()) {
             const anchor = mounted?.bar.querySelector<HTMLElement>('.tv-more-menu-btn');
-            if (!anchor || (!saveList && !saveRule) || (!saveRule && !rowCounts(model)[state.rowType])) return;
+            const hasRows = !!rowCounts(model)[state.rowType];
+            const canGroup = hasRows && groupChoices.length > 1;
+            if (!anchor || (!saveRule && (!hasRows || (!saveList && !canGroup)))) return;
             const entries: MenuEntry[] = [];
+            // Group by › and Collapse / Expand all groups (spec 084 §10), then the saves.
+            if (canGroup) {
+                entries.push({
+                    id: 'groupBy', label: t.groupBy, icon: '', hint: `${groupedBy ?? ''} ›`,
+                    run: () => {
+                        const sub: MenuEntry[] = groupChoices.map(c => ({ id: c.id, label: c.label, icon: '', checked: c.current, run: c.run }));
+                        sub.splice(1, 0, SEP);
+                        openHeadMenu(anchor, t.groupBy, '', sub);
+                    },
+                });
+                entries.push({ id: 'groupsCollapse', label: t.groupsCollapse, icon: '', disabled: !groupedBy, run: () => this.setTableGroupsCollapsed(true) });
+                entries.push({ id: 'groupsExpand', label: t.groupsExpand, icon: '', disabled: !groupedBy, run: () => this.setTableGroupsCollapsed(false) });
+            }
+            if ((saveRule || (saveList && hasRows)) && entries.length) entries.push(SEP);
             if (saveRule) entries.push({ id: 'saveRule', label: saveRule.label, icon: '', run: saveRule.run });
-            if (saveList) entries.push({ id: 'saveList', label: strings.lists.saveAs, icon: '', run: () => this.saveTableAsList() });
+            if (saveList && hasRows) entries.push({ id: 'saveList', label: strings.lists.saveAs, icon: '', run: () => this.saveTableAsList() });
             openHeadMenu(anchor, '', '', entries);
             return;
         }
@@ -3208,6 +3311,18 @@ export const tableMethods = uiModule({
             first.push({
                 id: 'tv-scope-row', label: t.scope, value: scope ? listDisplayName(scope.list) : t.scopeWhole,
                 run: () => {}, page: { title: t.scope, rows: this.tableScopeSheetRows() },
+            });
+        }
+        // Group by › (spec 084 §10): its page lists the choices, the chosen one ticked.
+        if (groupChoices.length > 1 && rowCounts(model)[state.rowType]) {
+            first.push({
+                id: 'tv-group-row', label: t.groupBy, value: groupedBy ?? t.groupNone, run: () => {},
+                page: {
+                    title: t.groupBy,
+                    rows: groupChoices.map(c => ({
+                        id: c.id, label: c.label, icon: '', value: c.current ? '✓' : '', ...(c.current ? { ariaLabel: `${c.label} ✓` } : {}), run: c.run,
+                    })),
+                },
             });
         }
         if (saveRule) first.push({ label: saveRule.label, run: saveRule.run });
