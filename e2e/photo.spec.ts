@@ -8,6 +8,8 @@ test('photo: uploading shows an avatar on the card; removing it clears the avata
     await cardAction(page, 'Jan', 'edit');
     const modal = personModal(page);
     await modal.locator('#input-photo').setInputFiles('e2e/fixtures/avatar.png');
+    // The portrait editor opens over the dialog; Done puts the portrait in the preview.
+    await page.locator('.pe-overlay').getByRole('button', { name: 'Done' }).click();
     await expect(modal.locator('#photo-preview img')).toHaveCount(1);
     await modal.getByRole('button', { name: 'Save' }).click();
     await expect(modal).toBeHidden();
@@ -30,36 +32,38 @@ test('photo: uploading shows an avatar on the card; removing it clears the avata
     await expect(card(page, 'Jan').locator('.card-avatar .avatar-initials')).toBeVisible();
 });
 
-// The 90-degree pixel transform is exercised on an ASYMMETRIC image (top half
-// black, bottom half white) so a real rotation is observable (avatar.png is
-// symmetric → its bytes wouldn't change).
-test('photo: rotate buttons turn the image for real, and the photo survives rotation + save', async ({ page }) => {
+// The 90-degree turn is exercised on an ASYMMETRIC image (top half black,
+// bottom half white) so a real rotation is observable (avatar.png is
+// symmetric → its bytes wouldn't change). The dialog has no turn buttons of
+// its own any more: the portrait editor turns the photo (spec 107 §1).
+test('photo: the editor turns the image for real, and the turned photo survives save', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
 
     await cardAction(page, 'Jan', 'edit');
     const modal = personModal(page);
-    // The photo editor lives in the collapsible "More info" section.
+    const editor = page.locator('.pe-overlay');
+    await expect(modal.locator('#photo-rotate-right, #photo-rotate-left')).toHaveCount(0);
     await modal.locator('#input-photo').setInputFiles('e2e/fixtures/asymmetric.png');
-    await expect(modal.locator('#photo-preview img')).toHaveCount(1);
-
-    // Rotate buttons appear once a photo is present.
-    await expect(modal.locator('#photo-rotate-right')).toBeVisible();
-    await expect(modal.locator('#photo-rotate-left')).toBeVisible();
-    // A 90-degree turn actually changes the image.
+    await editor.getByRole('button', { name: 'Done' }).click();
     const before = await modal.locator('#photo-preview img').getAttribute('src');
-    await modal.locator('#photo-rotate-right').click();
-    await expect.poll(() => modal.locator('#photo-preview img').getAttribute('src'))
-        .not.toBe(before);
-    await modal.locator('#photo-rotate-left').click();
-    // Still a valid JPEG portrait after rotating.
-    await expect.poll(() => modal.locator('#photo-preview img').getAttribute('src'))
-        .toMatch(/^data:image\/jpeg/);
+
+    // The same file turned by a quarter: another image.
+    await modal.locator('#input-photo').setInputFiles('e2e/fixtures/asymmetric.png');
+    await editor.getByRole('button', { name: 'Rotate right' }).click();
+    await editor.getByRole('button', { name: 'Done' }).click();
+    await expect(editor).toHaveCount(0);
+    const turned = await modal.locator('#photo-preview img').getAttribute('src');
+    expect(turned).toMatch(/^data:image\/jpeg/);
+    expect(turned).not.toBe(before);
 
     await modal.getByRole('button', { name: 'Save' }).click();
     await expect(modal).toBeHidden();
-    // The photo persisted through rotation + save.
-    const stored = await page.evaluate(() =>
-        window.Strom.DataManager.getAllPersons()[0].photo);
-    expect(stored).toMatch(/^data:image\/jpeg/);
+    // The turned photo persisted, its source saying so.
+    const stored = await page.evaluate(() => {
+        const p = window.Strom.DataManager.getAllPersons()[0];
+        return { photo: p.photo, turns: p.photoSource?.quarterTurns };
+    });
+    expect(stored.photo).toBe(turned);
+    expect(stored.turns).toBe(1);
 });

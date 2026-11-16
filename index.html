@@ -1943,7 +1943,6 @@
             font-size: 12px;
             color: var(--text-light);
         }
-        .photo-rotate-btn { font-size: 16px; line-height: 1; padding: 6px 10px; }
         .field-hint { font-size: 12px; color: var(--text-light, #888); margin-top: 4px; }
         .field-hint .field-hint-apply {
             background: none; border: none; padding: 0 0 0 4px; cursor: pointer;
@@ -28088,7 +28087,13 @@
         .pe-tile-title { font-size: 13px; color: var(--text); }
         .pe-tile-sub { font-size: 11.5px; color: var(--text-faint); font-weight: 400; }
         .pe-thumb { flex: 0 0 auto; width: 36px; height: 36px; border-radius: var(--r-sm); object-fit: cover; }
-        .pe-seg, .pe-slot:empty, .pe-actions:empty { display: none; }
+        .pe-panel .pe-seg, .pe-slot:empty, .pe-actions:empty { display: none; }
+        .pe-dialog :is(.pe-cancel, .pe-skip, .pe-primary) {
+            min-height: 36px; padding: 0 18px; border-radius: var(--r-md); font: inherit; font-size: 14px; cursor: pointer;
+        }
+        .pe-dialog .pe-primary { background: var(--primary); color: var(--on-primary); border: 1px solid var(--primary); }
+        .pe-dialog .pe-primary:disabled { opacity: .5; cursor: default; }
+        .pe-dialog :is(.pe-cancel.secondary, .pe-skip) { background: transparent; color: var(--text); border: 1px solid var(--border); }
         .pe-foot { grid-area: foot; background: var(--surface-2); flex-wrap: nowrap; padding: 0 16px; }
         .pe-keys { flex: 1; min-width: 0; font-size: 12px; color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .pe-buttons { display: flex; gap: 8px; margin-left: auto; }
@@ -28100,6 +28105,7 @@
         @media (pointer: coarse) {
             .pe-keys { visibility: hidden; }
             .pe-icon, .pe-close, .pe-step, .pe-buttons button, .pe-actions button, .pe-head button { min-height: 44px; min-width: 44px; }
+            .pe-dialog :is(.pe-cancel, .pe-skip, .pe-primary) { min-height: 44px; }
             .pe-bar { height: 64px; }
         }
         /* Phone and phone held sideways: the whole screen on the dark stage (§9). */
@@ -28109,11 +28115,13 @@
         }
         .pe-full .pe-head { border-color: rgba(255,255,255,.15); padding: 0 8px; }
         .pe-full .pe-head h2 { flex: 1; text-align: center; }
-        .pe-full .pe-close, .pe-full .pe-sep, .pe-full .pe-who:empty { display: none; }
+        .pe-full .pe-close, .pe-full .pe-sep, .pe-full .pe-who { display: none; }
         .pe-full .pe-cancel-text { background: none; border: none; color: #fff; font: inherit; font-size: 15px; min-height: 44px; padding: 0 8px; cursor: pointer; }
         .pe-full .pe-steps-bar .pe-steps { height: 44px; padding: 0 8px; overflow-x: auto; }
-        .pe-full .pe-step { color: rgba(255,255,255,.75); }
-        .pe-full .pe-step[aria-selected="true"] { color: #fff; box-shadow: inset 0 -2px 0 #fff; }
+        .pe-full .pe-steps .pe-step.sel-tab { color: rgba(255,255,255,.75); background: transparent; }
+        .pe-full .pe-steps .pe-step.sel-tab[aria-selected="true"] { color: #fff; box-shadow: inset 0 -2px 0 #fff; }
+        .pe-full .pe-skip { color: #fff; border-color: rgba(255,255,255,.35); }
+        .pe-overlay [data-layout="phone"] .pe-head .pe-fill { display: none; }
         .pe-full .pe-step-skipped { color: rgba(255,255,255,.7); }
         .pe-full .pe-panel { background: #24221d; border: 0; color: #fff; padding: 14px 16px; gap: 12px; }
         .pe-full .pe-rotate, .pe-full .pe-straight, .pe-full .pe-squares, .pe-full .pe-saved, .pe-full .pe-cap,
@@ -28145,12 +28153,22 @@
         .pe-overlay [data-layout="land"] .pe-head { border-left: 1px solid rgba(255,255,255,.15); }
         .pe-overlay [data-layout="land"] .pe-head .primary,
         .pe-overlay [data-layout="land"] .pe-head .secondary { min-height: 40px; padding: 0 12px; }
-        .pe-overlay [data-layout="land"] .pe-preview { flex-direction: row; align-items: center; }
-        .pe-overlay [data-layout="land"] .pe-panel { overflow: auto; }
+        /* Sideways the column holds everything without scrolling (§9): the card beside the switch, short tiles. */
+        .pe-overlay [data-layout="land"] .pe-panel { flex-flow: row wrap; align-content: flex-start; gap: 8px 12px; padding: 8px 16px; }
+        .pe-overlay [data-layout="land"] .pe-panel > * { flex: 1 1 100%; }
+        .pe-overlay [data-layout="land"] .pe-panel > :is(.pe-preview, .pe-seg) { flex: 0 0 auto; align-self: center; }
+        .pe-overlay [data-layout="land"] .pe-card-box { padding: 6px; }
+        .pe-overlay [data-layout="land"] :is(.pe-tile-sub, .pe-choice-title) { display: none; }
+        .pe-overlay [data-layout="land"] .pe-tiles { flex-direction: row; }
+        .pe-overlay [data-layout="land"] .pe-tile { flex: 1; padding: 4px 8px; }
+        .pe-overlay [data-layout="land"] .pe-thumb { width: 28px; height: 28px; }
         @media (hover: hover) {
             .pe-icon:not(:disabled):hover { background: var(--surface-2); }
             .pe-bar .pe-icon:not(:disabled):hover, .pe-full .pe-icon:not(:disabled):hover { background: rgba(255,255,255,.12); }
             .pe-close:hover { color: var(--text); }
+            .pe-dialog .pe-primary:not(:disabled):hover { background: var(--primary-dark); }
+            .pe-dialog :is(.pe-cancel.secondary, .pe-skip):hover { background: var(--hover-bg); }
+            .pe-full .pe-skip:hover { background: rgba(255,255,255,.12); }
         }
 
         /* Source viewer / editor on small screens */
@@ -31209,8 +31227,6 @@
                             <div class="photo-actions">
                                 <input type="file" id="input-photo" accept="image/*" style="display:none" onchange="window.Strom.UI.handlePhotoInput(event)">
                                 <button type="button" class="secondary" onclick="document.getElementById('input-photo').click()" data-i18n="labels.photoChoose"></button>
-                                <button type="button" class="secondary photo-rotate-btn" id="photo-rotate-left" style="display:none" onclick="window.Strom.UI.rotatePersonPhoto(-1)" data-i18n-title="labels.photoRotateLeft" data-i18n-aria-label="labels.photoRotateLeft">↺</button>
-                                <button type="button" class="secondary photo-rotate-btn" id="photo-rotate-right" style="display:none" onclick="window.Strom.UI.rotatePersonPhoto(1)" data-i18n-title="labels.photoRotateRight" data-i18n-aria-label="labels.photoRotateRight">↻</button>
                                 <button type="button" class="secondary" id="photo-remove-btn" onclick="window.Strom.UI.removePersonPhoto()" data-i18n="labels.photoRemove"></button>
                                 <span class="photo-size" id="photo-size"></span>
                             </div>

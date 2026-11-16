@@ -50,8 +50,6 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
         photo: 'Zdjęcie',
         photoChoose: 'Wybierz zdjęcie',
         photoRemove: 'Usuń',
-        photoRotateLeft: 'Obróć w lewo',
-        photoRotateRight: 'Obróć w prawo',
         maidenName: 'Nazwisko rodowe',
         refn: 'Numer referencyjny',
         question: 'Otwarte pytanie',

@@ -637,14 +637,6 @@ export async function openPortraitEditor(input: PortraitEditorInput): Promise<Po
     mirrorBtn.addEventListener('click', () => setView(mirrorPortraitView(view(), W, H)));
     angleRange.addEventListener('input', () => straighten(Number(angleRange.value)));
     angleRange.addEventListener('dblclick', () => straighten(0));
-    angleRange.addEventListener('keydown', (e) => {
-        // Shift: ±5°, the arrows alone ±0.5° and Home / End ±45° are the slider's own.
-        if (!e.shiftKey) return;
-        const d = e.key === 'ArrowLeft' || e.key === 'ArrowDown' ? -5 : e.key === 'ArrowRight' || e.key === 'ArrowUp' ? 5 : 0;
-        if (!d) return;
-        e.preventDefault();
-        straighten(view().angle + d);
-    });
     // The grid while straightening (dragged or focused).
     let gridDrag = false;
     const showGrid = (): void => { grid.hidden = !(gridDrag || document.activeElement === angleRange); };
@@ -657,14 +649,6 @@ export async function openPortraitEditor(input: PortraitEditorInput): Promise<Po
         arrange();
     }));
     stepsEl?.querySelectorAll<HTMLButtonElement>('.pe-step').forEach(b => b.addEventListener('click', () => goTo(Number(b.dataset.step))));
-    stepsEl?.addEventListener('keydown', (e) => {
-        const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
-        if (!d) return;
-        e.preventDefault();
-        const i = Math.max(0, Math.min(states.length - 1, index + d));
-        goTo(i);
-        stepsEl.querySelectorAll<HTMLButtonElement>('.pe-step')[i]?.focus();
-    });
 
     const goTo = (i: number): void => {
         if (i < 0 || i >= states.length || i === index) return;
@@ -678,12 +662,23 @@ export async function openPortraitEditor(input: PortraitEditorInput): Promise<Po
         let settled = false;
         let busy = false;
         const onResize = (): void => arrange();
+        // The panel's content changes the stage's size (a phone: Keep / Replace, notes): the frame follows.
+        let lastSize = '';
+        const stageObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => {
+            const size = `${stage.clientWidth}x${stage.clientHeight}`;
+            if (size === lastSize) return;
+            lastSize = size;
+            measure();
+            draw();
+        });
+        stageObserver?.observe(stage);
         const queries = [window.matchMedia(MQ_MOBILE), window.matchMedia(MQ_PHONE_LANDSCAPE)];
         const finishImpl = (result: PortraitEditorResult | null): void => {
             if (settled) return;
             settled = true;
             unbindKeys();
             window.removeEventListener('resize', onResize);
+            stageObserver?.disconnect();
             queries.forEach(m => m.removeEventListener('change', onResize));
             window.clearTimeout(liveTimer);
             if (frameReq) cancelAnimationFrame(frameReq);
@@ -748,8 +743,24 @@ export async function openPortraitEditor(input: PortraitEditorInput): Promise<Po
             else { goTo(index + 1); frame.focus({ preventScroll: true }); }
         };
 
+        // The keys reach the editor in the capture phase only (bindEditorKeys): the controls' own keys are here.
         const onKey = (e: KeyboardEvent): void => {
             const active = document.activeElement as HTMLElement | null;
+            const arrow = e.key === 'ArrowLeft' || e.key === 'ArrowDown' ? -1 : e.key === 'ArrowRight' || e.key === 'ArrowUp' ? 1 : 0;
+            if (active === angleRange) {
+                // Shift: ±5°; the arrows alone ±0.5° and Home / End ±45° are the slider's own.
+                if (arrow && e.shiftKey && !keepOn()) { e.preventDefault(); straighten(view().angle + arrow * 5); }
+                if (arrow || e.key === 'Home' || e.key === 'End' || e.key === 'PageUp' || e.key === 'PageDown') return;
+            }
+            if (active === zoomRange && (arrow || e.key === 'Home' || e.key === 'End' || e.key === 'PageUp' || e.key === 'PageDown')) return;
+            if (stepsEl && active?.classList.contains('pe-step') && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+                // The steps are a tablist: the arrows go to the next or previous step.
+                e.preventDefault();
+                const i = Math.max(0, Math.min(states.length - 1, index + arrow));
+                goTo(i);
+                stepsEl.querySelectorAll<HTMLButtonElement>('.pe-step')[i]?.focus();
+                return;
+            }
             if (e.key === 'Enter') {
                 // A focused button does its own thing; anywhere else Enter is Next / Done.
                 if (active && (active.tagName === 'BUTTON' || active.getAttribute('role') === 'tab')) return;
