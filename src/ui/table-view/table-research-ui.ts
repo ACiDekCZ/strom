@@ -16,6 +16,9 @@
  * - the web: an archive's website in a new window (a link, ↗).
  *
  * An action whose research link the research did not announce is left out.
+ * In another window of the app (spec 097 §5) the research's actions run in
+ * the main window (window-table-research.ts); the main window checks them
+ * against its own bubble of the person.
  */
 
 import { DataManager } from '../../data.js';
@@ -24,10 +27,13 @@ import { ZoomPan } from '../../zoom.js';
 import { isPhoneBar } from '../../breakpoints.js';
 import type { PersonId } from '../../types.js';
 import { uiModule } from '../module.js';
-import { liveSession } from '../research-ui.js';
+import { liveSession, onComputer } from '../research-ui.js';
 import { closeTableBubble, openBubblePanel, researchBubbleHtml, researchBubbleTitle, sheetElement } from './table-bubble.js';
-import { researchBubbleActions, type ResearchBubble, type ResearchBubbleAction } from './table-research-bubble.js';
+import { researchBubble, researchBubbleActions, type ResearchBubble, type ResearchBubbleAction } from './table-research-bubble.js';
 import { personLineRole, researchBranchName, type ResearchTableEnv } from './table-research.js';
+import {
+    bubbleFocusesMain, bubbleOfferedHere, bubbleRunsHere, findBubbleAction, readTableBubbleArgs, tableBubbleArgs, tableResearchForward,
+} from '../../windows/window-table-research.js';
 
 /** Where a bubble opens on a computer: under the rectangle, the focus back to the cell when it closes by a key. */
 export interface ResearchBubbleAnchor {
@@ -86,6 +92,9 @@ export const tableResearchMethods = uiModule({
 
     /** An action can run here: a research link only when the research announced it. */
     tableResearchActionShown(a: ResearchBubbleAction): boolean {
+        // Another window: the main window runs the research's actions while it is open.
+        const fwd = tableResearchForward();
+        if (fwd && !bubbleOfferedHere(a, fwd.mainOpen())) return false;
         if (a.via !== 'link' || !a.link) return true;
         // Following live while it is followed opens the live panel; no link is needed.
         if (a.id === 'follow' && liveSession() && !liveSession()!.ended) return true;
@@ -94,6 +103,11 @@ export const tableResearchMethods = uiModule({
 
     /** Run a bubble's action (the waiting item's answer and the website run as their own controls). */
     runTableResearchAction(env: ResearchTableEnv, a: ResearchBubbleAction): void {
+        const fwd = tableResearchForward();
+        if (fwd && !bubbleRunsHere(a)) {
+            if (fwd.mainOpen()) fwd.run(tableBubbleArgs(a), bubbleFocusesMain(a));
+            return;
+        }
         switch (a.id) {
             case 'storyCompare':
                 if (!this.openWaitingStoryCompare(a.personId)) this.showStoryCompare({ personId: a.personId });
@@ -136,6 +150,22 @@ export const tableResearchMethods = uiModule({
             default:
                 return;
         }
+    },
+
+    /**
+     * Another window's bubble action (spec 097 §5): run only when this
+     * window's own bubble of the person offers it now. True when run.
+     */
+    runForwardedTableResearchAction(raw: unknown): boolean {
+        const args = readTableBubbleArgs(raw);
+        const person = args ? DataManager.getPerson(args.personId as PersonId) : null;
+        const env = person ? this.tableResearchEnvNow() : null;
+        if (!args || !person || !env) return false;
+        const b = researchBubble(env, person, 'rSum', { onComputer: onComputer(), bridgeLive: this.researchOriginBridge() === 'live' });
+        const a = b ? findBubbleAction(researchBubbleActions(b), args) : null;
+        if (!a || bubbleRunsHere(a) || a.via === 'item' || !this.tableResearchActionShown(a)) return false;
+        this.runTableResearchAction(env, a);
+        return true;
     },
 
     /** A research link of a bubble's action, launched (its button carries the mark of the link's group). */

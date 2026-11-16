@@ -120,6 +120,27 @@ test.describe('desktop (1440)', () => {
         await sat.close();
     });
 
+    test('a research bubble of another window\'s Table: its research action runs in the main window (spec 097 §5)', async ({ page, context }) => {
+        await routeBridge(context);
+        const treeId = await follow(page);
+        const { sat } = await openTableWindow(context, treeId);
+        await openView(sat, 'r:research');
+        await expect.poll(async () => (await headOrder(sat)).slice(0, 2)).toEqual(['name', 'rSum']);
+        const sumCell = async (refn: string) => {
+            const index = await sat.locator('#table-container .tv-headrow .tv-headcell[data-col="rSum"]').getAttribute('aria-colindex');
+            return (await rowAt(sat, refn)).locator(`[aria-colindex="${index}"]`);
+        };
+        const bubble = sat.locator('.tv-bubble--research');
+
+        // Decide on a conflict: the main window opens What the research knows, this window does not.
+        await (await sumCell('P0006')).click();
+        await bubble.locator('[data-rid="decide"]').first().click();
+        await expect(bubble).toBeHidden();
+        await expect(page.locator('#person-research-modal')).toBeVisible();
+        await expect(sat.locator('#person-research-modal')).toBeHidden();
+        await sat.close();
+    });
+
     test('a saved view with a research filter shows the same rows in another window', async ({ page, context }) => {
         await routeBridge(context);
         const treeId = await follow(page);

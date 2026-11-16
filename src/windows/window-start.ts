@@ -34,6 +34,7 @@ import { onDirectionPlaces } from '../research-directions-write.js';
 import type { PersonId } from '../types.js';
 import { wireMainSelection, wireSatelliteSelection, type SelectionDeps } from './window-selection.js';
 import { windowAgentFollow } from './agent-follow-state.js';
+import { setTableResearchForward, TABLE_BUBBLE_ACTION } from './window-table-research.js';
 import { SettingsManager } from '../settings.js';
 import type { MapKind } from '../places.js';
 import type { SatelliteKind } from './window-role.js';
@@ -123,6 +124,11 @@ export function startMainWindow(): WindowRegistry {
             runSatelliteResearchRow(args, { items: researchItems, run: (personId, a) => UI.runPersonMenuAction(personId as PersonId, a) });
             return;
         }
+        // A research bubble's action of a satellite's Table (spec 097 §5): only one this window's bubble offers.
+        if (action === TABLE_BUBBLE_ACTION) {
+            UI.runForwardedTableResearchAction(args);
+            return;
+        }
         return overview.handle(action, args).result;
     });
     return registry;
@@ -186,6 +192,14 @@ export function startSatelliteSelection(client: SatelliteClient): void {
     wireSatelliteSelection(client, { ...selectionDeps(), agentAttached: () => windowAgentFollow() === 'attached' });
     // The person menu's research rows come from the main window and run there (§2, 2g).
     setSatelliteResearchMenu(new SatelliteResearchMenu(client));
+    // So do the research actions of the Table's bubbles (spec 097 §5).
+    setTableResearchForward({
+        mainOpen: () => client.connection === 'connected',
+        run: (args, focusMain) => {
+            client.researchAction(TABLE_BUBBLE_ACTION, args);
+            if (focusMain) void client.requestMainFocus();
+        },
+    });
 }
 
 /** A launch as launchQueue hands it over. */

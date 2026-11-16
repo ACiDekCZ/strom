@@ -621,6 +621,22 @@ export const tableMethods = uiModule({
     },
 
     /**
+     * The research's environment of the open tree now, the Table shown or
+     * not (null: no research tree): another window's bubble action is checked
+     * against it (spec 097 §5).
+     */
+    tableResearchEnvNow(): ResearchTableEnv | null {
+        const data = DataManager.getData();
+        const lang = getCurrentLanguage();
+        const homeId = TreeRenderer.getFocusPersonId();
+        const rev = DataManager.getRevision();
+        if (!modelIsCurrent(model, data, rev, homeId, lang)) {
+            model = buildTableModel(data, { rev, homeId, lang, reliability: this.reliabilityOptionsNow() });
+        }
+        return this.tableResearchEnv(data, rev, model);
+    },
+
+    /**
      * What the research's bridge said changed (spec 057 §7.4): the table on
      * screen is drawn again when the agent's work or queue its cells read is
      * not the one drawn (following or not).
