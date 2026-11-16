@@ -15,6 +15,8 @@ const BRIDGE = 'http://127.0.0.1:5996/0f1e2d3c4b5a69788796a5b4c3d2e1f0';
 const cors = { 'access-control-allow-origin': '*' };
 const LINKS = ['send', 'excerpt', 'app', 'open', 'chat', 'task', 'review', 'research', 'live'];
 const DESKTOP = { width: 1440, height: 900 };
+/** The page's fixed "now" (away from midnight UTC); the fixture's times are taken from it, never from the system clock. */
+const NOW = new Date('2026-11-16T10:54:00.000Z');
 const TABLET = { width: 900, height: 900 };
 
 const GED = [
@@ -27,6 +29,8 @@ const GED = [
 /** The main window follows a research (an agent at work or not) with something waiting and a queue. */
 async function follow(page: Page, o: { working: boolean; prefs?: Record<string, string>; viewport?: { width: number; height: number } }): Promise<void> {
     await page.setViewportSize(o.viewport ?? DESKTOP);
+    // The context's clock: the overview's own window (a popup of this context) has the same "now".
+    await page.clock.setFixedTime(NOW);
     await page.context().addInitScript(({ links, prefs }) => {
         localStorage.setItem('strom-research-links', JSON.stringify({ actions: links, at: new Date().toISOString() }));
         if (prefs && !sessionStorage.getItem('prefs-set')) {
@@ -34,11 +38,11 @@ async function follow(page: Page, o: { working: boolean; prefs?: Record<string, 
             localStorage.setItem('strom-live-section-prefs', JSON.stringify({ v: 2, s: prefs }));
         }
     }, { links: LINKS, prefs: o.prefs ?? null });
-    const at = new Date(Date.now() - 2 * 86_400_000).toISOString();
+    const at = new Date(NOW.getTime() - 2 * 86_400_000).toISOString();
     const status = () => ({
         tree: { id: UUID, name: 'Vlasákovi z Horní Lhoty' }, head: 'h1', persons: 2, links: LINKS,
         queue: [{ id: 'T0201', text: 'Matriky Horní Lhota 1860–1880', state: 'next', person: 'P0001' }, { id: 'T0202', text: 'Pozemková kniha', state: 'next' }],
-        working: o.working ? [{ who: 'agent-matriky', since: new Date(Date.now() - 9 * 60_000).toISOString(), task: 'Sčítání 1900', person: 'P0002' }] : [],
+        working: o.working ? [{ who: 'agent-matriky', since: new Date(NOW.getTime() - 9 * 60_000).toISOString(), task: 'Sčítání 1900', person: 'P0002' }] : [],
         waiting: [{ id: 'T0101', what: 'Ověřit datum křtu v matrice', kind: 'web', at, order: 0, person: 'P0001', actions: ['answer'] }],
         features: ['waiting.answer'],
     });
@@ -95,6 +99,9 @@ test.describe('the research panel beside the overview\'s own window', () => {
         await expect(workingHead(page)).toHaveAttribute('aria-expanded', 'true');
         await expect(panel(page).locator('#live-sec-working')).toBeVisible();
         await expect(panel(page).locator('#live-sec-working')).toContainText('agent-matriky');
+        // At work for 9 min by the fixed clock, in the overview's window the same "now".
+        await expect(panel(page).locator('#live-sec-working')).toContainText('9 min');
+        expect(await popup.evaluate(() => Date.now())).toBe(NOW.getTime());
         await expect(panel(page).locator('.live-panel-nowork, .live-panel-waitchip, .live-panel-allhidden')).toHaveCount(0);
         await expect(panel(page).locator('.live-panel-head .live-panel-title')).toHaveText('Vlasákovi z Horní Lhoty');
         await expect(panel(page).locator('.live-panel-action')).toHaveText('Stop following');
