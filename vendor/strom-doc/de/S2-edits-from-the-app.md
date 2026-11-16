@@ -112,7 +112,11 @@ anderen Stammbaum ändert daran nichts.
   trägt: die Version der Forschung, auf der der Stammbaum beruht, hat mindestens 10 Personen mit einer Nummer der
   Forschung, die Sendung trüge weniger als 10 % davon, und weniger als 10 % der gesendeten Personen trügen eine
   solche Nummer. Sie sendet sie weder von selbst noch mit **Senden** noch beim Verlassen der Seite; die Änderungen
-  bleiben ungesendet in der App.
+  bleiben ungesendet in der App. Ein Senden mit der Schaltfläche sagt das in der Meldung „Nicht gesendet: Der
+  geöffnete Stammbaum enthält kaum Personen dieser Forschung und würde dort als anderer Stammbaum gelten. Die
+  Änderungen bleiben hier.“, **Erneut senden** einer zurückgenommenen Sendung in der Meldung „Nicht erneut
+  gesendet: Diese Sendung enthielt nicht die Personen dieses Stammbaums. Die Änderungen bleiben hier.“ Das Senden
+  von selbst und das Verlassen der Seite melden nichts; wartende Änderungen zeigt die Markierung.
 - **Der Beispiel-Stammbaum** wird nie an eine Forschung gesendet
   ([S1.3.1](S1-connecting-app-and-research.md#S1.3.1)).
 - **Grenzen:** seit Forschung 1.34.0 lehnt auch die Forschung selbst einen kleinen anderen Stammbaum unter ihrer
@@ -120,7 +124,7 @@ anderen Stammbaum ändert daran nichts.
   wieder angeboten ([S2.7](#S2.7)).
 - **Gilt seit:** App 3.29.0
 
-<!-- zdroj: app:7e92c784 src/data.ts switchTree/loadStartupTree (switchSeq, id stromu spolu s daty), getDataFor(treeId), save() páruje id s daty · 92f9e978 DataManager.isSwitchingTo(treeId) (odkládá se jen poslání stromu, na který se přepíná; autoDue při odpovědi mostu) · bbcc2b17 src/research-foreign-send.ts foreignSendCheck (FOREIGN_SEND_MIN_BASE 10, FOREIGN_SEND_SHARE 0.1, čísla REFN P…), src/ui/research-sync-ui.ts (auto, ruční, odchod ze stránky) · 302a2d3d (bez navigator.locks bez zámku) · CHANGELOG.cs.md 3.29.0 „Přepnutí stromu“ · prace/1115-app-prepnuti-stromu, prace/1115-app-odeslani-pred-prepnutim -->
+<!-- zdroj: app:7e92c784 src/data.ts switchTree/loadStartupTree (switchSeq, id stromu spolu s daty), getDataFor(treeId), save() páruje id s daty · 92f9e978 DataManager.isSwitchingTo(treeId) (odkládá se jen poslání stromu, na který se přepíná; autoDue při odpovědi mostu) · bbcc2b17 src/research-foreign-send.ts foreignSendCheck (FOREIGN_SEND_MIN_BASE 10, FOREIGN_SEND_SHARE 0.1, čísla REFN P…), src/ui/research-sync-ui.ts (auto, ruční, odchod ze stránky) · 302a2d3d (bez navigator.locks bez zámku) · CHANGELOG.cs.md 3.29.0 „Přepnutí stromu“ · prace/1115-app-prepnuti-stromu, prace/1115-app-odeslani-pred-prepnutim · hláška ručního poslání: app:65e7cba0 strings.ts sync.foreignNotSent, sync.undoneForeignNotSent (jen ručně a Poslat znovu) -->
 
 <a id="S2.3"></a>
 ## S2.3 Was die Forschung mit gesendeten Änderungen tut
@@ -161,8 +165,8 @@ zum Widerspruch. Die genauen Regeln stehen in [R5.2](R5-conflicts.md#R5.2); Absc
   vorigen Stand des Stammbaums: die Person erkennt sie an der Nummer in der Forschung, das Ereignis an Art, Datum,
   Ort und Wert, nur wenn die Übereinstimmung eindeutig ist. Ein Ereignis, das die Forschung geändert hat, ist ein
   gewöhnliches Ereignis seiner Person; die anderen Kopien bleiben verbunden.
-- **Ab Forschung 1.34.0:** `strom sync` vergleicht auch die Notiz eines Ereignisses und die Notiz eines Beteiligten
-  eines Ereignisses (Pate, Zeuge…), aus der GEDCOM-Datei wie aus dem JSON der App, in drei Richtungen: eine Notiz,
+- **Ab Forschung 1.34.0:** `strom sync` vergleicht auch die Notiz eines Ereignisses, aus der GEDCOM-Datei wie aus
+  dem JSON der App, in drei Richtungen: eine Notiz,
   die die Forschung nicht hat, ergänzt es; eine Notiz, die der Benutzer seit der letzten Übergabe geändert hat,
   korrigiert es (die vorige bleibt im Verlauf der Notiz); eine auf beiden Seiten geänderte Notiz überlässt es der
   Wahl. Eine entfernte Notiz entfernt nichts. Zeilen, die der Export in die Notiz schreibt (Stand, Worte des
@@ -170,8 +174,17 @@ zum Widerspruch. Die genauen Regeln stehen in [R5.2](R5-conflicts.md#R5.2); Absc
   gibt, zählen nicht als Änderung. Die Änderung lässt sich zurücknehmen. Ein vom Agenten gestartetes Sync ändert
   weder die Notiz des Benutzers noch die einer importierten Angabe. Eine neue Angabe aus der App überträgt ihre
   Notiz noch nicht.
+  - **Welches Ereignis:** ein Ereignis der Datei wird dem Ereignis der Forschung zuerst nach seiner Nummer in der
+    Forschung (E…) zugeordnet, die die Datei der App trägt, dann nach den Einzelheiten und dem Namen. Die Notiz eines
+    Ereignisses korrigiert nie ein anderes; bei zwei gleichen Ereignissen einer Person (gleiche Art, gleicher Tag und
+    gleiche Quelle), die nichts davon unterscheidet, wird bei keinem die Notiz übernommen. Ein unbearbeiteter
+    Stammbaum aus der App ändert keine Notiz.
+  - **Notiz eines Beteiligten:** die Notiz eines Beteiligten eines Ereignisses (Pate, Zeuge…) übernimmt die
+    Forschung 1.34.0 aus der App nicht, auch nicht von der App 3.29.0: ein Stammbaum, den die App in einer älteren
+    Version gespeichert hat, kann eine längere Notiz eines Beteiligten gekürzt enthalten, und die Forschung würde sie
+    ebenfalls kürzen.
 
-<!-- zdroj: research:src/core/sync.ts (v1.25.2) :1-19 · src/core/config.ts:285 sync.review · src/core/live.ts accepts() :1455 sync.auto write|off|mirror · app:src/ui/research-sync-ui.ts :1-21 · strings.ts sync.statePendingSub, sync.flyConflict, sync.showConflicts, sync.decideInResearch, sync.writtenConflictsSub, treeSettings.effectReview · 1.32.0: research:ac489205 src/core/sync.ts readStromJson (appPersonEvent, appParticipants; fact.new, fact.part, fact.share), research:f8eb2032 note.correct (zkrácená poznámka → celá), research:01125661 (NFD zkrácená poznámka), dirigent:prace/1113-vyzkum-json-intake-drobnosti bod 5 (vynechané osoby 1.31 → nové), postřeh 2 (sync poznámek událostí a účastníků) · 3.28.0: app:80c2ffb9 src/research-link.ts keepEventShares, EVENT_SHARE_FEATURE event.share, eventMatchKey · 1.34.0: research:4cfc233c src/core/sync.ts fact.note, fact.part.note (noteEdits, pick, smazání nic), dirigent:prace/1115-vyzkum-095-cli-drobnosti B1 -->
+<!-- zdroj: research:src/core/sync.ts (v1.25.2) :1-19 · src/core/config.ts:285 sync.review · src/core/live.ts accepts() :1455 sync.auto write|off|mirror · app:src/ui/research-sync-ui.ts :1-21 · strings.ts sync.statePendingSub, sync.flyConflict, sync.showConflicts, sync.decideInResearch, sync.writtenConflictsSub, treeSettings.effectReview · 1.32.0: research:ac489205 src/core/sync.ts readStromJson (appPersonEvent, appParticipants; fact.new, fact.part, fact.share), research:f8eb2032 note.correct (zkrácená poznámka → celá), research:01125661 (NFD zkrácená poznámka), dirigent:prace/1113-vyzkum-json-intake-drobnosti bod 5 (vynechané osoby 1.31 → nové), postřeh 2 (sync poznámek událostí a účastníků) · 3.28.0: app:80c2ffb9 src/research-link.ts keepEventShares, EVENT_SHARE_FEATURE event.share, eventMatchKey · 1.34.0: research:4cfc233c src/core/sync.ts fact.note, fact.part.note (noteEdits, pick, smazání nic), dirigent:prace/1115-vyzkum-095-cli-drobnosti B1 · párování podle čísla: src/core/sync.ts planSync (byId `2 _STROM_EID`, sure), poznámka účastníka: src/core/stromapp.ts APP_SENDS_PART_NOTES undefined (dirigent:prace/1115-release-vyzkum-1.34.0 Průběh 22:02) -->
 
 <a id="S2.3.1"></a>
 ### S2.3.1 Hauptzitat und entferntes Zitat aus der App

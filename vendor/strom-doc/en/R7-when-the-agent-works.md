@@ -279,14 +279,27 @@ An agent that is not logged in to its subscription does not do a session. The ru
 in — run … once and log in**.
 
 - **Limits:**
-  - before the first session strom checks this only for Claude Code with a separate folder
-    (`agent.claudeConfigDir` or `CLAUDE_CONFIG_DIR`, other than `~/.claude`). The run then ends without a session and
-    without asking the condition;
+  - before the first session strom checks this for Claude Code: up to research 1.33.0 only with a separate folder
+    (`agent.claudeConfigDir` or `CLAUDE_CONFIG_DIR`, other than `~/.claude`), from 1.34.0 with the default one too.
+    The run then ends without a session and without asking the condition;
   - otherwise the `claude-usage` condition finds it (it stops; for a run by hand **Start anyway?** comes up,
     [R7.4.1](#R7.4.1)), or a session that ends with a login error.
 - **Since:** research 1.25.2; stopping after a session with a login error from 1.0.0
+- **From research 1.34.0:** Claude Code in the terminal, which strom starts by itself (working alone, the readers of
+  scans and documents, [R8.3](R8-reading-scans.md#R8.3)), has a login of its own, not the Claude app's. When
+  `claude auth status` says it is not logged in:
+  - `strom read` and the other reading by readers (clips, transcripts, a document from the app) start no reader and
+    end at once: **Claude Code in the terminal is not logged in — … starts it itself (not the Claude app, which has
+    its own login)**, with the hint **logging in once in a terminal: …, then /login**;
+  - a reader that ends with a login error says so with how to log in, as it goes and in the summary, never only
+    “auth”;
+  - `strom doctor` has a line of its own **Claude Code login**: **Claude Code in the terminal logged in**, or the
+    warning **Claude Code in the terminal is not logged in — …** with the fix **… in a terminal, then /login**. In
+    a Strom archive the login is neither checked nor said.
 
-<!-- zdroj: research:src/commands/session.ts:916 loggedOut, :1260-1264 auth · src/core/claudedir.ts claudeConfigSet :33, forClaude, claudeLoggedIn :91 · gate.ts:253-258 loggedIn · CHANGELOG.cs.md 1.25.2 -->
+  An answer that does not tell the login decides nothing. Terminal: `claude`, then `/login`; `strom doctor`.
+
+<!-- zdroj: research:src/commands/session.ts:916 loggedOut, :1260-1264 auth · src/core/claudedir.ts claudeConfigSet :33, forClaude, claudeLoggedIn :91 · gate.ts:253-258 loggedIn · CHANGELOG.cs.md 1.25.2 · 1.34.0 (K040): src/core/agentcli.ts requireClaudeLogin, agentLoggedOut (agent.logged-out) · src/commands/readers.ts refuseReadersLoggedOut, readerAuthSaid · src/commands/read.ts · src/commands/session.ts loggedOut bez claudeConfigSet · src/commands/setup.ts doctor login (ne v archivu) · assets/lang/*.json ui.read.auth, ui.doc.login*, ui.error.agent.logged-out* · CHANGELOG 1.34.0 -->
 
 <a id="R7.8"></a>
 ## R7.8 Strom archive: a research the agent does not work on

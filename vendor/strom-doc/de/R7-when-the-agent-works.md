@@ -296,14 +296,28 @@ Ein Agent, der nicht bei seinem Abonnement angemeldet ist, führt keine Sitzung 
 nicht angemeldet – einmal … starten und anmelden**.
 
 - **Grenzen:**
-  - vor der ersten Sitzung prüft strom das nur bei Claude Code mit einem eigenen Ordner (`agent.claudeConfigDir` oder
-    `CLAUDE_CONFIG_DIR`, ein anderer als `~/.claude`). Der Lauf endet dann ohne Sitzung und ohne Frage an die
-    Bedingung;
+  - vor der ersten Sitzung prüft strom das bei Claude Code: bis Forschung 1.33.0 nur mit einem eigenen Ordner
+    (`agent.claudeConfigDir` oder `CLAUDE_CONFIG_DIR`, ein anderer als `~/.claude`), seit 1.34.0 auch mit dem
+    Standardordner. Der Lauf endet dann ohne Sitzung und ohne Frage an die Bedingung;
   - sonst erkennt es die Bedingung `claude-usage` (sie hält an; bei einem Lauf von Hand kommt **Trotzdem starten?**,
     [R7.4.1](#R7.4.1)), oder eine Sitzung, die mit einem Fehler der Anmeldung endet.
 - **Gilt seit:** Forschung 1.25.2; das Anhalten nach einer Sitzung mit einem Fehler der Anmeldung seit 1.0.0
+- **Ab Forschung 1.34.0:** Claude Code im Terminal, das strom selbst startet (selbstständiges Arbeiten, die Leser von
+  Scans und Dokumenten, [R8.3](R8-reading-scans.md#R8.3)), hat eine eigene Anmeldung, nicht die der Claude-App. Wenn
+  `claude auth status` sagt, dass es nicht angemeldet ist:
+  - `strom read` und das übrige Lesen durch Leser (Ausschnitte, Abschriften, ein Dokument aus der App) starten keinen
+    Leser und enden sofort: **Claude Code im Terminal ist nicht angemeldet – … startet es selbst (nicht die
+    Claude-App, die ihre eigene Anmeldung hat)**, mit dem Hinweis **einmal im Terminal anmelden: …, dann /login**;
+  - ein Leser, der mit einem Fehler der Anmeldung endet, sagt das mit der Anleitung zur Anmeldung, im Verlauf und in
+    der Zusammenfassung, nie nur „auth“;
+  - `strom doctor` hat eine eigene Zeile **Anmeldung Claude Code**: **Claude Code im Terminal angemeldet** oder die
+    Warnung **Claude Code im Terminal ist nicht angemeldet – …** mit der Behebung **… im Terminal, dann /login**. In
+    einem Strom-Archiv wird die Anmeldung weder geprüft noch gesagt.
 
-<!-- zdroj: research:src/commands/session.ts:916 loggedOut, :1260-1264 auth · src/core/claudedir.ts claudeConfigSet :33, forClaude, claudeLoggedIn :91 · gate.ts:253-258 loggedIn · CHANGELOG.cs.md 1.25.2 -->
+  Eine Antwort, aus der die Anmeldung nicht hervorgeht, entscheidet nichts. Terminal: `claude`, dann `/login`;
+  `strom doctor`.
+
+<!-- zdroj: research:src/commands/session.ts:916 loggedOut, :1260-1264 auth · src/core/claudedir.ts claudeConfigSet :33, forClaude, claudeLoggedIn :91 · gate.ts:253-258 loggedIn · CHANGELOG.cs.md 1.25.2 · 1.34.0 (K040): src/core/agentcli.ts requireClaudeLogin, agentLoggedOut (agent.logged-out) · src/commands/readers.ts refuseReadersLoggedOut, readerAuthSaid · src/commands/read.ts · src/commands/session.ts loggedOut bez claudeConfigSet · src/commands/setup.ts doctor login (ne v archivu) · assets/lang/*.json ui.read.auth, ui.doc.login*, ui.error.agent.logged-out* · CHANGELOG 1.34.0 -->
 
 <a id="R7.8"></a>
 ## R7.8 Strom-Archiv: eine Forschung, an der kein Agent arbeitet

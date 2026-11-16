@@ -98,13 +98,16 @@ nemění.
 - **Kopie bez osob výzkumu:** aplikace nepošle kopii, která skoro nenese osoby výzkumu: verze výzkumu, ze které
   strom vychází, má aspoň 10 osob s číslem výzkumu, v poslání by z nich bylo méně než 10 % a méně než 10 % posílaných
   osob by takové číslo neslo. Nepošle ji sama, tlačítkem **Poslat** ani při opuštění stránky; úpravy zůstanou
-  v aplikaci neodeslané.
+  v aplikaci neodeslané. Poslání tlačítkem to řekne hláškou „Neodesláno: otevřený strom skoro nemá osoby tohoto
+  výzkumu, četl by se tam jako jiný rodokmen. Úpravy zůstávají tady.“, **Poslat znovu** vráceného poslání
+  hláškou „Znovu neodesláno: to poslání neneslo osoby tohoto stromu. Úpravy zůstávají tady.“ Samo poslání a odchod
+  ze stránky nic nehlásí; čekající úpravy ukazuje značka.
 - **Ukázkový strom** se do výzkumu nikdy nepošle ([S1.3.1](S1-connecting-app-and-research.md#S1.3.1)).
 - **Hranice:** malý jiný strom pod propojením výzkumu odmítne od výzkumu 1.34.0 i výzkum sám ([S2.5](#S2.5)).
   Vrácené poslání, které neneslo osoby stromu, aplikace znovu nenabízí ([S2.7](#S2.7)).
 - **Platí od:** aplikace 3.29.0
 
-<!-- zdroj: app:7e92c784 src/data.ts switchTree/loadStartupTree (switchSeq, id stromu spolu s daty), getDataFor(treeId), save() páruje id s daty · 92f9e978 DataManager.isSwitchingTo(treeId) (odkládá se jen poslání stromu, na který se přepíná; autoDue při odpovědi mostu) · bbcc2b17 src/research-foreign-send.ts foreignSendCheck (FOREIGN_SEND_MIN_BASE 10, FOREIGN_SEND_SHARE 0.1, čísla REFN P…), src/ui/research-sync-ui.ts (auto, ruční, odchod ze stránky) · 302a2d3d (bez navigator.locks bez zámku) · CHANGELOG.cs.md 3.29.0 „Přepnutí stromu“ · prace/1115-app-prepnuti-stromu, prace/1115-app-odeslani-pred-prepnutim -->
+<!-- zdroj: app:7e92c784 src/data.ts switchTree/loadStartupTree (switchSeq, id stromu spolu s daty), getDataFor(treeId), save() páruje id s daty · 92f9e978 DataManager.isSwitchingTo(treeId) (odkládá se jen poslání stromu, na který se přepíná; autoDue při odpovědi mostu) · bbcc2b17 src/research-foreign-send.ts foreignSendCheck (FOREIGN_SEND_MIN_BASE 10, FOREIGN_SEND_SHARE 0.1, čísla REFN P…), src/ui/research-sync-ui.ts (auto, ruční, odchod ze stránky) · 302a2d3d (bez navigator.locks bez zámku) · CHANGELOG.cs.md 3.29.0 „Přepnutí stromu“ · prace/1115-app-prepnuti-stromu, prace/1115-app-odeslani-pred-prepnutim · hláška ručního poslání: app:65e7cba0 strings.ts sync.foreignNotSent, sync.undoneForeignNotSent (jen ručně a Poslat znovu) -->
 
 <a id="S2.3"></a>
 ## S2.3 Co výzkum s poslanými úpravami udělá
@@ -138,15 +141,21 @@ v [R5.2](R5-conflicts.md#R5.2); přepisy pramenů z aplikace v [R3.5.1](R3-verif
   nevrací. Aplikace je při načtení nové verze takového výzkumu převezme z předchozího stavu stromu: osobu pozná podle
   čísla ve výzkumu, událost podle typu, data, místa a hodnoty, jen když je shoda jediná. Událost, kterou výzkum
   změnil, je obyčejná událost své osoby; ostatní kopie zůstanou spojené.
-- **Od výzkumu 1.34.0:** `strom sync` porovnává i poznámku události a poznámku účastníka události (kmotra, svědka…),
-  ze souboru GEDCOM i JSON aplikace, třícestně: poznámku, kterou výzkum nemá, doplní; poznámku, kterou uživatel od
+- **Od výzkumu 1.34.0:** `strom sync` porovnává i poznámku události, ze souboru GEDCOM i JSON aplikace, třícestně: poznámku, kterou výzkum nemá, doplní; poznámku, kterou uživatel od
   posledního předání změnil, opraví (předchozí zůstane v historii poznámky); poznámku změněnou na obou stranách nechá
   na volbě. Odebraná poznámka nic neodebere. Řádky, které do poznámky píše export (stav, slova záznamu, věky), vlastní
   řádky výzkumu a poznámka, kterou aplikace dává každé kopii společné události, se za úpravu nepočítají. Úpravu jde
   vrátit. Sync spuštěný agentem poznámku uživatele ani importovaného údaje nemění. Nový údaj z aplikace poznámku zatím
   nepřenáší.
+  - **Která událost:** událost ze souboru se páruje s událostí výzkumu nejdřív podle jejího čísla ve výzkumu (E…),
+    které soubor aplikace nese, pak podle podrobností a názvu. Poznámka jedné události nikdy neopraví jinou; u dvou
+    stejných událostí jedné osoby (stejný typ, den a pramen), které nic z toho nerozliší, se poznámka nebere u žádné.
+    Strom z aplikace bez úprav žádnou poznámku nezmění.
+  - **Poznámka účastníka:** poznámku účastníka události (kmotra, svědka…) z aplikace výzkum 1.34.0 nebere, ani od
+    aplikace 3.29.0: strom uložený v aplikaci ze starší verze může mít delší poznámku účastníka zkrácenou a výzkum by
+    ji zkrátil také.
 
-<!-- zdroj: research:src/core/sync.ts (v1.25.2) :1-19 · src/core/config.ts:285 sync.review · src/core/live.ts accepts() :1455 sync.auto write|off|mirror · app:src/ui/research-sync-ui.ts :1-21 · strings.ts sync.statePendingSub, sync.flyConflict, sync.showConflicts, sync.decideInResearch, sync.writtenConflictsSub, treeSettings.effectReview · 1.32.0: research:ac489205 src/core/sync.ts readStromJson (appPersonEvent, appParticipants; fact.new, fact.part, fact.share), research:f8eb2032 note.correct (zkrácená poznámka → celá), research:01125661 (NFD zkrácená poznámka), dirigent:prace/1113-vyzkum-json-intake-drobnosti bod 5 (vynechané osoby 1.31 → nové), postřeh 2 (sync poznámek událostí a účastníků) · 3.28.0: app:80c2ffb9 src/research-link.ts keepEventShares, EVENT_SHARE_FEATURE event.share, eventMatchKey · 1.34.0: research:4cfc233c src/core/sync.ts fact.note, fact.part.note (noteEdits, pick, smazání nic), dirigent:prace/1115-vyzkum-095-cli-drobnosti B1 -->
+<!-- zdroj: research:src/core/sync.ts (v1.25.2) :1-19 · src/core/config.ts:285 sync.review · src/core/live.ts accepts() :1455 sync.auto write|off|mirror · app:src/ui/research-sync-ui.ts :1-21 · strings.ts sync.statePendingSub, sync.flyConflict, sync.showConflicts, sync.decideInResearch, sync.writtenConflictsSub, treeSettings.effectReview · 1.32.0: research:ac489205 src/core/sync.ts readStromJson (appPersonEvent, appParticipants; fact.new, fact.part, fact.share), research:f8eb2032 note.correct (zkrácená poznámka → celá), research:01125661 (NFD zkrácená poznámka), dirigent:prace/1113-vyzkum-json-intake-drobnosti bod 5 (vynechané osoby 1.31 → nové), postřeh 2 (sync poznámek událostí a účastníků) · 3.28.0: app:80c2ffb9 src/research-link.ts keepEventShares, EVENT_SHARE_FEATURE event.share, eventMatchKey · 1.34.0: research:4cfc233c src/core/sync.ts fact.note, fact.part.note (noteEdits, pick, smazání nic), dirigent:prace/1115-vyzkum-095-cli-drobnosti B1 · párování podle čísla: src/core/sync.ts planSync (byId `2 _STROM_EID`, sure), poznámka účastníka: src/core/stromapp.ts APP_SENDS_PART_NOTES undefined (dirigent:prace/1115-release-vyzkum-1.34.0 Průběh 22:02) -->
 
 <a id="S2.3.1"></a>
 ### S2.3.1 Hlavní citace a odebraná citace z aplikace

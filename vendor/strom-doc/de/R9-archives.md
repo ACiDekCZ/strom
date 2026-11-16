@@ -294,7 +294,7 @@ Archivs zeigt.
   - gespeichert wird nur ein Bild, das der Tab unter seiner eigenen Adresse zeigt. Ein auf ein anderes Bild
     weitergeschalteter Betrachter wird abgelehnt, und nichts wird gespeichert. Nie mehr, als der Betrachter des
     Archivs gibt, nie größer als das Original;
-  - das Speichern wartet, bis der Betrachter des Archivs das ganze Bild zeigt, höchstens 30 s. Seit Forschung 1.31.0
+  - das Speichern wartet, bis der Betrachter des Archivs das ganze Bild zeigt, höchstens 30 s (ein Browser, der den Tab langsam zeichnet: [R9.5.2](#R9.5.2)). Seit Forschung 1.31.0
     zählt nur die Zeit, in der der Browser den Tab zeichnet (er zeichnet keinen Tab hinter einem anderen Tab und
     keinen in einem verdeckten oder minimierten Fenster). Ein 30 s nicht gezeichneter Tab wird als solcher gemeldet
     („the browser did not draw the tab with the viewer for 30 s …“: Tab nach vorn, Fenster frei, dann das Skript
@@ -354,6 +354,42 @@ einmal: mit dem Betrachter des Archivs vergrößert oder in voller Auflösung.
 - **Gilt seit:** Forschung 1.33.0
 
 <!-- zdroj: research:6651b60b src/commands/media.ts media save --again, againPending, settleAgain · src/core/media.ts findImage (nejvíc pixelů, ne část) · src/core/browser.ts SaveRecord.again · strom help media save (--again) · dirigent:prace/1114-vyzkum-z-hlidani-2/vysledek-sub1.md (A2, otevřené: výřez ne; citace na M… zůstávají) · CHANGELOG.cs.md 1.33.0 -->
+
+<a id="R9.5.2"></a>
+### R9.5.2 Ein Browser, der den Tab langsam zeichnet
+
+Ein Bildbetrachter eines Archivs, der ein Bild aus Kacheln zusammensetzt (OpenSeadragon, z. B. ACTA PUBLICA), fordert
+etwa eine Kachel pro Zeichnen des Tabs an. Wo der Browser den Tab nur etwa einmal pro Sekunde zeichnet, dauern die
+Kacheln eines Bildes Minuten, und das Speichern endet nach 30 s mit „the viewer's tiles did not all come in 30 s …“.
+
+- **Zuerst der Browser:** langsam zeichnet ein Tab ohne Grafikbeschleunigung, auf einem Remote-Desktop oder in einer
+  virtuellen Maschine. In Chrome: in `chrome://settings/system` die Grafikbeschleunigung einschalten und Chrome neu
+  starten; `chrome://gpu` zeigt, ob Canvas und Compositing „Software only“ sind (dann hilft ein neuerer
+  Grafiktreiber). Die Angabe „last frame … s ago“ in der Meldung sagt, wie lange es her ist, dass der Browser den Tab
+  zuletzt gezeichnet hat.
+- **Prüft der Code:**
+  - die Einstellung `browser.tileWait` ist verborgen: weder `strom config where` noch `strom help config` zeigt sie,
+    bis sie gesetzt ist. Sie nimmt ganze Sekunden von 60 bis 600 (empfohlen 180) und lehnt einen anderen Wert mit
+    einem Hinweis ab. Sie ist in den Einstellungen des Benutzers gespeichert und gilt für alle Forschungen auf dem
+    Computer;
+  - nicht gesetzt: auf die Kacheln wird 30 s gewartet wie bisher; die Meldung „tiles did not all come in 30 s“ sagt
+    dem Agenten zusätzlich, dass `strom config set browser.tileWait 180` hilft, danach derselbe Befehl strom erneut
+    (ein neues Skript);
+  - gesetzt: solange noch Kacheln kommen (eine in den letzten 10 s), wartet das Skript weiter, solange sie kommen. Es
+    endet nach 30 s ohne neue Kachel, spätestens nach der eingestellten Zeit;
+  - ein Aufruf des Skripts antwortet nach 35 s „strom-wait …“: der Agent startet dasselbe Skript erneut im selben Tab,
+    und es wartet weiter, wo es war. Es gilt erst die letzte Antwort „strom-result …“; aus einer Antwort „strom-wait“
+    übernimmt `strom fetch … --take` nichts;
+  - das gilt für `strom media save` ([R9.5](#R9.5)) und für einen Downloader, der über den Browser aus dem
+    Bildbetrachter eines Archivs speichert (`strom fetch`, [R8.2](R8-reading-scans.md#R8.2)).
+- **Grenzen:** ein schnell gezeichneter Tab wird mit der Einstellung und ohne sie gleich gespeichert. Ohne die
+  Einstellung ändert sich nichts.
+- **Warum:** die Kacheln kommen nur so schnell, wie der Browser den Tab zeichnet; 30 s bleiben für alle anderen.
+- **Bedienung:** Terminal: `strom config set browser.tileWait 180`, zurück auf 30 s mit
+  `strom config unset browser.tileWait`.
+- **Gilt seit:** Forschung 1.32.0
+
+<!-- zdroj: research:75245c94 src/core/browser.ts TILE_WAIT_MIN_S 60, TILE_WAIT_MAX_S 600, TILE_WAIT_SUGGESTED_S 180, TILE_RECENT_MS 10_000, TILE_QUIET_MS 30_000, WAIT_CALL_MS 35_000, CAPTURE_JS ("the viewer's tiles did not all come in 30 s" + věta strom config set browser.tileWait 180; "last frame … s ago"), "strom-wait" · src/core/config.ts browser.tileWait (hidden, tree false, rozsah, hint config unset) · src/commands/media.ts:1686 media save · src/commands/connectors.ts:3152 viewerScript, takeOver (strom-wait nic nepřevezme) · test/cli/connector-mza.test.ts:303 (skryté do nastavení: config where, help config) · CHANGELOG.cs.md 1.32.0 · dirigent:prace/1112-vyzkum-dlazdice-pokrok/karta.md (OSD ~1 dlaždice na snímek; závěr 2: grafická akcelerace, chrome://gpu, neověřeno u reportéra) -->
 
 <a id="R9.6"></a>
 ## R9.6 Warten auf Bilder und Rückkehr der Aufgabe

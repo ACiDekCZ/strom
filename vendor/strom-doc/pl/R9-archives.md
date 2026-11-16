@@ -278,7 +278,7 @@ jednym: otwiera skan w Chrome i zapisuje to, co pokazuje przeglądarka skanów a
   - zapisuje się tylko skan, który karta pokazuje pod swoim własnym adresem. Przeglądarka przesunięta na inny skan
     zostaje odrzucona i nic się nie zapisuje. Nigdy więcej, niż daje przeglądarka archiwum, nigdy większy niż
     oryginał;
-  - zapisywanie czeka, aż przeglądarka archiwum pokaże cały skan, najwyżej 30 s. Od badania 1.31.0 liczy się tylko
+  - zapisywanie czeka, aż przeglądarka archiwum pokaże cały skan, najwyżej 30 s (przeglądarka, która rysuje kartę powoli: [R9.5.2](#R9.5.2)). Od badania 1.31.0 liczy się tylko
     czas, gdy przeglądarka rysuje kartę (nie rysuje karty za inną kartą ani w zakrytym lub zminimalizowanym oknie).
     Karta nierysowana przez 30 s zostaje zgłoszona jako taka („the browser did not draw the tab with the viewer for
     30 s …”: karta na wierzch, okno odkryte, potem skrypt jeszcze raz); przeglądarka archiwum, która w tym czasie
@@ -333,6 +333,40 @@ przeglądarką archiwum przybliżoną albo w pełnej rozdzielczości.
 - **Obowiązuje od:** badanie 1.33.0
 
 <!-- zdroj: research:6651b60b src/commands/media.ts media save --again, againPending, settleAgain · src/core/media.ts findImage (nejvíc pixelů, ne část) · src/core/browser.ts SaveRecord.again · strom help media save (--again) · dirigent:prace/1114-vyzkum-z-hlidani-2/vysledek-sub1.md (A2, otevřené: výřez ne; citace na M… zůstávají) · CHANGELOG.cs.md 1.33.0 -->
+
+<a id="R9.5.2"></a>
+### R9.5.2 Przeglądarka, która rysuje kartę powoli
+
+Przeglądarka skanów archiwum, która składa skan z kafelków (OpenSeadragon, np. ACTA PUBLICA), prosi mniej więcej
+o jeden kafelek przy każdym narysowaniu karty. Gdzie przeglądarka rysuje kartę tylko mniej więcej raz na sekundę,
+kafelki jednego skanu trwają minuty, a zapisywanie kończy się po 30 s komunikatem „the viewer's tiles did not all come
+in 30 s …”.
+
+- **Najpierw przeglądarka:** powoli rysuje się karta bez akceleracji graficznej, na pulpicie zdalnym lub w maszynie
+  wirtualnej. W Chrome: w `chrome://settings/system` włączyć akcelerację graficzną i uruchomić Chrome ponownie;
+  `chrome://gpu` pokazuje, czy Canvas i Compositing nie są „Software only” (wtedy pomaga nowszy sterownik grafiki).
+  Pole „last frame … s ago” w komunikacie mówi, jak dawno przeglądarka ostatnio narysowała kartę.
+- **Pilnuje kod:**
+  - ustawienie `browser.tileWait` jest ukryte: ani `strom config where`, ani `strom help config` go nie pokazują,
+    dopóki nie jest ustawione. Przyjmuje całe sekundy od 60 do 600 (zalecane 180), inną wartość odrzuca z podpowiedzią.
+    Jest zapisane w ustawieniach użytkownika i obowiązuje dla wszystkich badań na komputerze;
+  - nieustawione: na kafelki czeka się 30 s jak dotąd; komunikat „tiles did not all come in 30 s” mówi ponadto
+    agentowi, że pomoże `strom config set browser.tileWait 180`, a potem to samo polecenie strom jeszcze raz (nowy
+    skrypt);
+  - ustawione: dopóki kafelki jeszcze przychodzą (któryś w ostatnich 10 s), skrypt czeka dalej, dopóki przychodzą.
+    Kończy po 30 s bez nowego kafelka, najpóźniej po ustawionym czasie;
+  - jedno wywołanie skryptu po 35 s odpowiada „strom-wait …”: agent uruchamia ten sam skrypt jeszcze raz w tej samej
+    karcie, a ten czeka dalej tam, gdzie był. Liczy się dopiero ostatnia odpowiedź „strom-result …”; z odpowiedzi
+    „strom-wait” `strom fetch … --take` niczego nie przejmuje;
+  - dotyczy `strom media save` ([R9.5](#R9.5)) i programu pobierającego, który przez przeglądarkę zapisuje
+    z przeglądarki skanów archiwum (`strom fetch`, [R8.2](R8-reading-scans.md#R8.2)).
+- **Granice:** karta rysowana szybko zapisuje się tak samo z ustawieniem i bez niego. Bez ustawienia nic się nie
+  zmienia.
+- **Dlaczego:** kafelki przychodzą tylko tak szybko, jak przeglądarka rysuje kartę; 30 s zostaje dla wszystkich innych.
+- **Obsługa:** terminal: `strom config set browser.tileWait 180`, powrót do 30 s: `strom config unset browser.tileWait`.
+- **Obowiązuje od:** badanie 1.32.0
+
+<!-- zdroj: research:75245c94 src/core/browser.ts TILE_WAIT_MIN_S 60, TILE_WAIT_MAX_S 600, TILE_WAIT_SUGGESTED_S 180, TILE_RECENT_MS 10_000, TILE_QUIET_MS 30_000, WAIT_CALL_MS 35_000, CAPTURE_JS ("the viewer's tiles did not all come in 30 s" + věta strom config set browser.tileWait 180; "last frame … s ago"), "strom-wait" · src/core/config.ts browser.tileWait (hidden, tree false, rozsah, hint config unset) · src/commands/media.ts:1686 media save · src/commands/connectors.ts:3152 viewerScript, takeOver (strom-wait nic nepřevezme) · test/cli/connector-mza.test.ts:303 (skryté do nastavení: config where, help config) · CHANGELOG.cs.md 1.32.0 · dirigent:prace/1112-vyzkum-dlazdice-pokrok/karta.md (OSD ~1 dlaždice na snímek; závěr 2: grafická akcelerace, chrome://gpu, neověřeno u reportéra) -->
 
 <a id="R9.6"></a>
 ## R9.6 Oczekiwanie na skany i powrót zadania
