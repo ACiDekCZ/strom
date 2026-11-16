@@ -7,7 +7,7 @@ const notWrittenPl = (n: number): string =>
 /** Polish past-tense ending by sex: '' (man), 'a' (woman), '(a)' (not given). */
 const sexEndPl = (sex: string | undefined): string => sex === 'female' ? 'a' : sex === 'male' ? '' : '(a)';
 
-export const plPart2: Pick<StringsType, 'crop' | 'importImages' | 'imageViewer' | 'attachments' | 'duplicates' | 'minimap' | 'legend' | 'bulk'
+export const plPart2: Pick<StringsType, 'crop' | 'portrait' | 'importImages' | 'imageViewer' | 'attachments' | 'duplicates' | 'minimap' | 'legend' | 'bulk'
     | 'name' | 'person' | 'titles' | 'spacing' | 'marriageOrder' | 'genLabels' | 'branchColors' | 'tour' | 'anniversaries' | 'releaseNotes'
     | 'familyWizard' | 'pwa' | 'fileAccess' | 'sync' | 'researchUpdate' | 'researchImages' | 'treeSettings' | 'media'
     | 'mediaQueue' | 'batch'> = {
@@ -23,6 +23,46 @@ export const plPart2: Pick<StringsType, 'crop' | 'importImages' | 'imageViewer' 
         applyShort: 'Użyj',
         size: (w: number, h: number, kb: number) => `${w} × ${h} px · ≈ ${kb} kB`,
         aria: 'Obszar wycinka. Strzałki przesuwają, Alt+strzałki zmieniają rozmiar, Enter zatwierdza.',
+    },
+
+    // Edytor portretu (spec 107)
+    portrait: {
+        title: 'Kadrowanie portretu',
+        twoTitle: 'Portrety ze zdjęcia pary',
+        next: 'Dalej',
+        skip: 'Pomiń',
+        skipped: 'pominięto',
+        done: 'Gotowe',
+        preview: 'Podgląd',
+        onCard: (size: string) => `Karta · ${size}`,
+        personPage: 'Strona osoby',
+        familyPages: 'Strony rodzinne',
+        savedCircle: 'Na karcie koło, zapisuje się cały kwadrat.',
+        savedRounded: 'Na karcie zaokrąglony kwadrat, zapisuje się cały kwadrat.',
+        rotate: 'Obrót',
+        mirror: 'Odbij lustrzanie',
+        straighten: 'Prostowanie',
+        straightenHint: 'Podczas przeciągania pojawia się siatka. Dwuklik przywraca 0°.',
+        zoom: 'Powiększenie',
+        reset: 'Domyślne',
+        keys: 'Strzałki przesuwają · + − powiększenie · [ ] obrót · 0 domyślne · Enter Gotowe',
+        frameAria: 'Kadr portretu, strzałki przesuwają, plus i minus powiększają',
+        liveZoom: (p: number) => `Powiększenie ${p} %`,
+        liveAngle: (a: string) => `Prostowanie ${a}`,
+        noOriginal: 'Całe zdjęcie nie jest zapisane, kadr można tylko zmniejszyć.',
+        chooseAgain: 'Wybierz zdjęcie ponownie…',
+        small: 'Zdjęcie jest małe, portret może być nieostry.',
+        replaceNote: 'Osoba ma już portret. Gotowe go zastąpi, można to cofnąć.',
+        current: 'Obecny',
+        newOne: 'Nowy',
+        hasPortrait: (n: string) => `${n} ma już portret`,
+        keep: 'Zachowaj obecny portret',
+        keepSub: 'Krok zostanie pominięty.',
+        replace: 'Zastąp nowym kadrem',
+        replaceSub: 'Obecny portret można przywrócić.',
+        keepStage: 'Obecny portret zostaje. Kadr można zmienić po wybraniu „Zastąp”.',
+        single: 'Drugi partner jest nieznany, portret powstanie tylko dla jednej osoby.',
+        stepAria: (i: number, n: number, name: string) => `Krok ${i} z ${n}: ${name}`,
     },
 
     // Import filter: leave images out

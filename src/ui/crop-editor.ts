@@ -1,13 +1,21 @@
 /**
- * Crop editor: pick a rectangle out of an image (a register page) and get it
- * back as a compressed JPEG. A self-contained overlay built per open — no
- * markup in index.html beyond its CSS — shared by source excerpts and, later,
- * the person photo (fixed 1:1 aspect).
+ * The image editors built per open over everything else (no markup in
+ * index.html beyond their CSS):
  *
- * Interaction: drag inside the frame moves it, the handles resize it, dragging
- * outside draws a new frame; wheel / pinch zoom, the stage scrolls when zoomed,
- * double-click fits. Keyboard on the frame: arrows move (Shift ×10), Alt+arrows
- * resize, Enter applies, Escape cancels.
+ * - the crop editor (openCropEditor, here): pick a rectangle out of an image
+ *   (a register page) and get it back as a compressed JPEG — a source
+ *   excerpt. Drag inside the frame moves it, the handles resize it, dragging
+ *   outside draws a new frame; wheel / pinch zoom, the stage scrolls when
+ *   zoomed, double-click fits. Keyboard on the frame: arrows move (Shift ×10),
+ *   Alt+arrows resize, Enter applies, Escape cancels.
+ * - the portrait editor (openPortraitEditor, src/ui/portrait-editor.ts,
+ *   spec 107): a fixed frame in the card photo's shape over a photo that
+ *   moves, zooms, turns, straightens and mirrors.
+ *
+ * Both share what is here: decoding (EXIF applied), the working canvas
+ * (WORK_MAX_SIDE, renderRotated), cropToJpeg, the overlay's skeleton
+ * (.crop-overlay / .crop-dialog / .crop-toolbar / .crop-stage /
+ * .crop-footer) and the keys in the capture phase with the focus trap.
  */
 
 import { strings } from '../strings.js';
@@ -46,19 +54,19 @@ export interface CropResult {
 }
 
 /** Largest working canvas side: enough for any register scan, bounded memory. */
-const WORK_MAX_SIDE = 4000;
+export const WORK_MAX_SIDE = 4000;
 /** Smallest usable frame, in on-screen pixels. */
 const MIN_FRAME_W = 40;
 const MIN_FRAME_H = 20;
 
 /** Decode a Blob or data URL into an upright bitmap (EXIF orientation applied). */
-async function decodeImage(source: Blob | string): Promise<ImageBitmap> {
+export async function decodeImage(source: Blob | string): Promise<ImageBitmap> {
     const blob = typeof source === 'string' ? await (await fetch(source)).blob() : source;
     return createImageBitmap(blob, { imageOrientation: 'from-image' });
 }
 
 /** Draw `img` onto a canvas rotated by quarter turns, scaled so its long side ≤ maxSide. */
-function renderRotated(img: CanvasImageSource & { width: number; height: number }, turns: number, maxSide: number): HTMLCanvasElement {
+export function renderRotated(img: CanvasImageSource & { width: number; height: number }, turns: number, maxSide: number): HTMLCanvasElement {
     const t = ((turns % 4) + 4) % 4;
     const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
     const w = Math.round(img.width * scale);
@@ -75,7 +83,7 @@ function renderRotated(img: CanvasImageSource & { width: number; height: number 
 }
 
 /** Cut `region` out of `page` as a JPEG, long side ≤ maxSide. */
-export function cropToJpeg(page: HTMLCanvasElement, region: CropRegion, maxSide = EXCERPT_MAX_SIDE, quality = EXCERPT_QUALITY):
+export function cropToJpeg(page: CanvasImageSource & { width: number; height: number }, region: CropRegion, maxSide = EXCERPT_MAX_SIDE, quality = EXCERPT_QUALITY):
     { dataUrl: string; width: number; height: number } {
     const sx = region.x * page.width, sy = region.y * page.height;
     const sw = Math.max(1, region.w * page.width), sh = Math.max(1, region.h * page.height);
@@ -108,6 +116,52 @@ export async function compressWholeImage(source: Blob | string):
     }
 }
 
+/**
+ * The editors' overlay: a modal dialog over everything (`.crop-overlay`),
+ * labelled by its title's id, holding `html`, appended to the body.
+ */
+export function createEditorOverlay(labelledBy: string, html: string, extraClass = ''): HTMLDivElement {
+    const overlay = document.createElement('div');
+    overlay.className = extraClass ? `crop-overlay ${extraClass}` : 'crop-overlay';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-labelledby', labelledBy);
+    overlay.innerHTML = html;
+    document.body.appendChild(overlay);
+    return overlay;
+}
+
+/**
+ * The editors' keys in the capture phase: Escape cancels the editor and never
+ * reaches the dialog underneath (the source editor or the person dialog would
+ * close with it), Tab keeps the focus inside the overlay, and no other key
+ * reaches the page below — `onKey` gets them (a focused button still gets its
+ * Space / Enter). Returns the function that removes the listener.
+ */
+export function bindEditorKeys(overlay: HTMLElement, onCancel: () => void, onKey: (e: KeyboardEvent) => void): () => void {
+    const handler = (e: KeyboardEvent): void => {
+        if (e.key === 'Escape') {
+            e.preventDefault(); e.stopImmediatePropagation();
+            onCancel();
+            return;
+        }
+        if (e.key === 'Tab') {
+            const focusables = [...overlay.querySelectorAll<HTMLElement>('button, input, [tabindex="0"]')]
+                .filter(el => el.offsetParent !== null && !(el as HTMLButtonElement).disabled);
+            if (focusables.length === 0) return;
+            const i = focusables.indexOf(document.activeElement as HTMLElement);
+            const next = e.shiftKey ? (i <= 0 ? focusables.length - 1 : i - 1) : (i + 1) % focusables.length;
+            e.preventDefault(); e.stopImmediatePropagation();
+            focusables[next].focus();
+            return;
+        }
+        e.stopImmediatePropagation();
+        onKey(e);
+    };
+    document.addEventListener('keydown', handler, true);
+    return () => document.removeEventListener('keydown', handler, true);
+}
+
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
 /** Keep a region inside the image with a positive size. */
@@ -136,14 +190,9 @@ export async function openCropEditor(source: Blob | string, options: CropOptions
     const opener = document.activeElement as HTMLElement | null;
     const s = strings.crop;
 
-    const overlay = document.createElement('div');
-    overlay.className = 'crop-overlay';
-    overlay.setAttribute('role', 'dialog');
-    overlay.setAttribute('aria-modal', 'true');
-    overlay.setAttribute('aria-labelledby', 'crop-title');
     const keepPageHtml = options.allowKeepPage ? `
         <label class="crop-keep"><input type="checkbox" id="crop-keep-page"> <span>${s.keepPage}</span></label>` : '';
-    overlay.innerHTML = `
+    const overlay = createEditorOverlay('crop-title', `
         <div class="crop-dialog">
             <div class="crop-toolbar">
                 <button type="button" class="crop-cancel crop-narrow-only">${strings.buttons.cancel}</button>
@@ -178,8 +227,7 @@ export async function openCropEditor(source: Blob | string, options: CropOptions
                     <button type="button" class="crop-apply primary">${s.apply}</button>
                 </div>
             </div>
-        </div>`;
-    document.body.appendChild(overlay);
+        </div>`);
 
     const q = <T extends HTMLElement>(sel: string) => overlay.querySelector<T>(sel)!;
     const stage = q<HTMLDivElement>('.crop-stage');
@@ -333,7 +381,7 @@ export async function openCropEditor(source: Blob | string, options: CropOptions
         const finish = (result: CropResult | null): void => {
             if (settled) return;
             settled = true;
-            document.removeEventListener('keydown', onKey, true);
+            unbindKeys();
             window.removeEventListener('resize', layout);
             overlay.remove();
             bitmap.close();
@@ -361,28 +409,9 @@ export async function openCropEditor(source: Blob | string, options: CropOptions
         // Capture phase: Escape / Enter belong to the editor, never to the
         // dialogs underneath (the source editor would close with it).
         const onKey = (e: KeyboardEvent): void => {
-            if (e.key === 'Escape') {
-                e.preventDefault(); e.stopImmediatePropagation();
-                finish(null);
-                return;
-            }
-            if (e.key === 'Tab') {
-                const focusables = [...overlay.querySelectorAll<HTMLElement>('button, input, [tabindex="0"]')]
-                    .filter(el => el.offsetParent !== null && !(el as HTMLButtonElement).disabled);
-                if (focusables.length === 0) return;
-                const i = focusables.indexOf(document.activeElement as HTMLElement);
-                const next = e.shiftKey ? (i <= 0 ? focusables.length - 1 : i - 1) : (i + 1) % focusables.length;
-                e.preventDefault(); e.stopImmediatePropagation();
-                focusables[next].focus();
-                return;
-            }
-            if (document.activeElement !== frame) {
-                // Other keys reach the dialog's own buttons (Space/Enter on a
-                // focused button) but never the page below.
-                e.stopImmediatePropagation();
-                return;
-            }
-            e.stopImmediatePropagation();
+            // Other keys reach the dialog's own buttons (Space/Enter on a
+            // focused button) but never the page below.
+            if (document.activeElement !== frame) return;
             if (e.key === 'Enter') { e.preventDefault(); apply(); return; }
             const step = e.shiftKey ? 0.1 : 0.01;
             const d: Record<string, [number, number]> = {
@@ -394,7 +423,7 @@ export async function openCropEditor(source: Blob | string, options: CropOptions
             if (e.altKey) setRegion({ ...region, w: region.w + delta[0], h: region.h + delta[1] });
             else setRegion({ ...region, x: clamp(region.x + delta[0], 0, 1 - region.w), y: clamp(region.y + delta[1], 0, 1 - region.h) });
         };
-        document.addEventListener('keydown', onKey, true);
+        const unbindKeys = bindEditorKeys(overlay, () => finish(null), onKey);
         window.addEventListener('resize', layout);
 
         overlay.querySelectorAll('.crop-cancel, .crop-close').forEach(b => b.addEventListener('click', () => finish(null)));
