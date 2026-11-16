@@ -114,6 +114,8 @@ export async function openPortraitEditor(input: PortraitEditorInput): Promise<Po
     const opener = document.activeElement as HTMLElement | null;
 
     let states: PortraitStepState[] = initialPortraitSteps({ steps: input.steps, couple }, W, H);
+    // "Default" (the button, 0, a double click) goes back to the step's opening crop: a couple's partner keeps their half.
+    const openingViews = states.map(s => s.view);
     let index = 0;
     let layout: PortraitLayout = currentLayout();
     let phoneSlider: 'zoom' | 'straighten' = 'zoom';
@@ -433,7 +435,7 @@ export async function openPortraitEditor(input: PortraitEditorInput): Promise<Po
     };
     const zoomTo = (z: number, anchor?: { x: number; y: number }): void =>
         setView(zoomPortraitView(view(), z, W, H, anchor ? { ...anchor, framePx: geo.side } : undefined), 'zoom');
-    const reset = (): void => setView(defaultPortraitView(W, H), 'zoom');
+    const reset = (): void => setView(openingViews[index] ?? defaultPortraitView(W, H), 'zoom');
     const turn = (d: 1 | -1): void => setView(turnPortraitView(view(), d, W, H));
     const straighten = (a: number): void => setView(straightenPortraitView(view(), a, W, H), 'angle');
 
