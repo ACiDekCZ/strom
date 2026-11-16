@@ -428,7 +428,8 @@ export async function importJsonAsNewTree(page: Page, filePath: string, treeName
 export async function controlCardComesBack(page: Page): Promise<void> {
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Johan')).toBeVisible();
+    // WebKit on a loaded machine (the whole suite in parallel) takes longer than 5 s to draw the sample tree.
+    await expect(card(page, 'Johan')).toBeVisible({ timeout: 15000 });
     const block = page.locator('.control-block');
     const panel = page.locator('#minimap-panel');
     // A fit while a zoom or the opening view still glides is taken over by the
