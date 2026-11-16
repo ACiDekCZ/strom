@@ -108,6 +108,7 @@ import { evidenceUiMethods } from './evidence-ui.js';
 import { rodViewMethods } from './rod-view.js';
 import { treeOverviewMethods } from './tree-overview.js';
 import { personListsMethods } from './person-lists-ui.js';
+import { personListNewMethods } from './person-list-new-ui.js';
 import { cardSignalsUiMethods } from './card-signals-ui.js';
 import { researchOverviewMethods } from './research-overview-ui.js';
 import { liveSectionEditMethods } from './live-section-edit-ui.js';
@@ -872,6 +873,9 @@ Object.assign(UIClass.prototype, treeOverviewMethods);
 type PersonListsMethods = typeof personListsMethods;
 export interface UIClass extends PersonListsMethods {}
 Object.assign(UIClass.prototype, personListsMethods);
+type PersonListNewMethods = typeof personListNewMethods;
+export interface UIClass extends PersonListNewMethods {}
+Object.assign(UIClass.prototype, personListNewMethods);
 
 type CardSignalsUiMethods = typeof cardSignalsUiMethods;
 export interface UIClass extends CardSignalsUiMethods {}

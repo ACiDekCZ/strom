@@ -3,11 +3,12 @@
  * the parts built beside it (spec 084): one object of entry points, each
  * replaced by its own part when it comes.
  *
- *   newList      "+ New list…" in the dialog's head and its empty state. The
- *                New list dialog (§3) takes it over; until then an empty
- *                fixed list is made under a free name and its name opens
- *                for editing at once.
- *   editRule     "Edit rule…" of an automatic list (§3). null: no link.
+ *   newList      "+ New list…" in the dialog's head and its empty state:
+ *                the dialog New list (§3, src/ui/person-list-new-ui.ts).
+ *   editRule     "Edit rule…" of an automatic list (§3, §7): the same dialog
+ *                with the list's rule. A rule of a Table filter opens the
+ *                Table (until the Table offers "Save to the list"). null:
+ *                no link.
  *   addPerson    "+ Add person…" of a fixed list (§4). null: no link.
  *   openInTable  "Open in Table" and the "N without citation ›" tile (§9):
  *                the Table in the list's scope, with the chip of people
@@ -45,10 +46,14 @@ export interface PersonListHooks {
 
 export const personListHooks: PersonListHooks = {
     newList(ui) {
-        const list = DataManager.createPersonList({ name: strings.lists.new.title, dynamic: false });
-        if (list) ui.showPersonLists({ listId: list.id, rename: true });
+        ui.showNewPersonList();
     },
-    editRule: null,
+    editRule(ui, listId) {
+        const list = DataManager.getPersonList(listId);
+        if (!list?.rule) return;
+        if (list.rule.kind === 'tableFilter') personListHooks.openInTable(ui, listId);
+        else ui.showNewPersonList({ listId });
+    },
     addPerson: null,
     openInTable(ui) {
         ui.closePersonLists();

@@ -154,7 +154,7 @@ test.describe('Lists of people: a computer', () => {
         await expect(dialog(page)).toHaveCount(0);
         await expect(page.locator('#table-container .tv-grid[role="treegrid"]')).toBeVisible();
 
-        // Every list deleted: what a list is for, and New list… makes one with its name open.
+        // Every list deleted: what a list is for, and New list… opens the dialog New list; an empty list says so.
         await page.evaluate(() => {
             const dm = window.Strom.DataManager;
             for (const l of dm.getPersonLists()) dm.deletePersonList(l.id);
@@ -163,8 +163,12 @@ test.describe('Lists of people: a computer', () => {
         await expect(d.locator('.pl-none-title')).toHaveText('The tree has no list of people yet.');
         await expect(d.locator('.pl-head .pl-new')).toHaveCount(0);
         await d.locator('.pl-none .pl-new').click();
-        await expect(d.locator('.pl-name-input')).toBeFocused();
-        await expect(d.locator('.pl-name-input')).toHaveValue('New list of people');
+        const form = page.locator('#person-list-new');
+        await expect(form.locator('#pln-name')).toBeFocused();
+        await form.locator('#pln-name').fill('To visit');
+        await form.locator('[data-act="create"]').click();
+        await expect(form).toHaveCount(0);
+        await expect(d.locator('.pl-name')).toHaveText('To visit');
         await expect(d.locator('.pl-empty-text')).toHaveText('The list has no people yet.');
     });
 

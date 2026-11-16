@@ -859,6 +859,11 @@ export const miscMethods = uiModule({
                 }
                 // The Places dialog's menu, preview and selection close one at a time first.
                 if (this.topActiveOverlay()?.id === 'places-modal' && this.placesEscape()) return;
+                // New list / Save as list: its person choice, then the dialog (over Lists of people).
+                if (this.isNewPersonListOpen() && ['person-list-new', 'person-list-save'].includes(this.topActiveOverlay()?.id ?? '')) {
+                    this.newPersonListEscape();
+                    return;
+                }
                 // Lists of people: an open menu, then the name being edited, then the dialog.
                 if (this.topActiveOverlay()?.id === 'person-lists-modal') {
                     this.personListsEscape();
