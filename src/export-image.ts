@@ -21,7 +21,7 @@ import {
     CARD_MARK_WIDTH, CARD_COLUMN_GAP, CUSTOM_CARD_PAD_X, CARD_ROW_HEIGHT, CARD_DETAIL_GAP, CARD_LABEL_GAP,
     CARD_VALUE_DATE_GAP, CARD_NAME_ROW_HEIGHT, CARD_YEARS_ROW_HEIGHT, CARD_BIRTH_ROW_HEIGHT, CARD_AVATAR_WIDTH, CARD_HEAD_GAP,
     MeasureTexts, CardRow, cardPlaceOffset, cardLinesTop, customCardRows, cardHeadBlock, CARD_STATUS_MARK_ROOM,
-    CARD_NAME_MAX_ROWS, normalCardNameRows, NORMAL_CARD_NAME_ROW_HEIGHT, normalCardTextWidth, cardAvatarSize,
+    CARD_NAME_MAX_ROWS, normalCardNameRows, NORMAL_CARD_NAME_ROW_HEIGHT, normalCardTextWidth, cardAvatarSize, avatarInitialsSize,
 } from './card-width.js';
 import { shownName, shownNameParts, birthNoteText } from './person-name.js';
 import { strings } from './strings.js';
@@ -402,12 +402,13 @@ export interface PosterOptions extends PosterFooterMeta {
     cardMarks?: Map<string, PosterCardMarks>;
     /**
      * The photo on the card (spec 096), as the screen draws it: `size` the
-     * view's photo size (the chosen one when someone laid out has a photo,
+     * view's photo size (the chosen one when someone laid out has an avatar,
      * else small: the layout's card box was made for it), `shape` the
      * photo's and the initials' shape. `photoIds`: the people laid out with
-     * a photo; a living-privacy mode takes the photo from the data drawn,
-     * and such a card keeps the box it was laid out with, its initials in
-     * the photo's place. Absent: small and a circle, the card as it always was.
+     * the avatar of that size, a photo or the initials (spec 103 K2.1; absent:
+     * everyone with an avatar); a living-privacy mode takes the photo from the
+     * data drawn, and such a card keeps its box, its initials in the photo's
+     * place. Absent: small and a circle, the card as it always was.
      */
     cardPhoto?: PosterCardPhoto;
 }
@@ -435,6 +436,8 @@ function avatarSvg(a: {
     photo?: string; clipId: string; initials: string; initialsSize: number;
 }): string[] {
     const r = a.size / 2;
+    // The initials' baseline: 4px below the middle at 11–12px, in proportion at a larger size.
+    const baseline = a.initialsSize <= 12 ? 4 : a.initialsSize * 0.35;
     const outline = (attrs: string): string => a.shape === 'rounded'
         ? `<rect x="${(a.cx - r).toFixed(1)}" y="${(a.cy - r).toFixed(1)}" width="${a.size}" height="${a.size}" rx="${ROUNDED_AVATAR_RADIUS[a.size] ?? 5}"${attrs}/>`
         : `<circle cx="${a.cx.toFixed(1)}" cy="${a.cy.toFixed(1)}" r="${r}"${attrs}/>`;
@@ -447,7 +450,7 @@ function avatarSvg(a: {
     }
     return [
         outline(` fill="${COLORS.avatarBg}" stroke="${a.ring}" stroke-width="${a.stroke}"`),
-        `<text x="${a.cx.toFixed(1)}" y="${(a.cy + 4).toFixed(1)}" text-anchor="middle" font-size="${a.initialsSize}" font-weight="600" fill="${COLORS.initials}">${escapeXml(a.initials)}</text>`,
+        `<text x="${a.cx.toFixed(1)}" y="${(a.cy + baseline).toFixed(1)}" text-anchor="middle" font-size="${a.initialsSize}" font-weight="600" fill="${COLORS.initials}">${escapeXml(a.initials)}</text>`,
     ];
 }
 
@@ -534,14 +537,16 @@ function customCardSvg(
     const head = heads[0];
     let textX = left;
     if (!person.isPlaceholder) {
-        // A medium or large photo (spec 096 §3): 44 / 72px at the header's top left, a 2px ring.
+        // A medium or large avatar (spec 096 §3; a photo or the initials, spec 103 K2.1):
+        // 44 / 72px at the header's top left, a 2px ring.
         const size = photo ? cardAvatarSize(photo) : CARD_AVATAR_WIDTH;
         const cx = left + size / 2;
         // The small avatar where a one-row name puts it (the middle of that header), however many rows the name takes (T39).
         const cy = photo ? pos.y + 10 + size / 2 : pos.y + 10 + Math.min(head.block, cardHeadBlock(1, !!head.years)) / 2;
         out.push(...avatarSvg({
             cx, cy, size, shape, ring, stroke: photo ? 2 : 1.5, clipId, photo: person.photo,
-            initials: personInitials(person.firstName, shownNameParts(person, '', false).surname) || '?', initialsSize: 11,
+            initials: personInitials(person.firstName, shownNameParts(person, '', false).surname) || '?',
+            initialsSize: photo ? avatarInitialsSize(size) : 11,
         }));
         textX = left + size + CARD_HEAD_GAP;
     }
@@ -926,12 +931,13 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
     // --- Cards (id order for deterministic output) ---
     out.push('<g class="cards">');
     let clipCounter = 0;
-    // The photo on the card (spec 096): a card laid out with a medium or large photo is drawn with it.
+    // The photo on the card (spec 096): a card laid out with a medium or large avatar is drawn
+    // with it, a photo or the initials (spec 103 K2.1).
     const photoView = options.cardPhoto?.size ?? 'small';
     const photoShape = options.cardPhoto?.shape ?? 'circle';
     const photoIds = options.cardPhoto?.photoIds;
     const laidOutWithPhoto = (id: string, p: StromData['persons'][keyof StromData['persons']] | undefined): boolean =>
-        photoView !== 'small' && !!p && !p.isPlaceholder && (photoIds ? photoIds.has(id) : !!p.photo);
+        photoView !== 'small' && !!p && !p.isPlaceholder && (photoIds ? photoIds.has(id) : true);
     const entries = [...result.positions.entries()].sort((a, b) => String(a[0]).localeCompare(String(b[0])));
     for (const [personId, pos] of entries) {
         const person = data.persons[personId];
@@ -987,9 +993,9 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
             // Avatar: gender-ring circle with a photo or initials (like on
             // screen), 34px (r=17) centred on the card's height; 10px left
             // padding (border + padding) — matches the CSS. A card laid out
-            // with a medium or large photo (spec 096 §2, NORMAL_PHOTO_BOX):
-            // the photo's size and the card's padding of that box; the initials
-            // of a card without one stay 34px in the wider card.
+            // with a medium or large avatar (spec 096 §2, NORMAL_PHOTO_BOX):
+            // the avatar's size and the card's padding of that box, a photo or
+            // the initials alike (spec 103 K2.1).
             const photoCard = laidOutWithPhoto(personId, person);
             const box = NORMAL_PHOTO_BOX[photoCard ? photoView : 'small'];
             const pad = 1 + box.padX;
@@ -999,7 +1005,8 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
             out.push(...avatarSvg({
                 cx: cxAv, cy: cyAv, size: box.avatar, shape: photoShape, ring, stroke: 2,
                 photo: person.photo, clipId: person.photo ? `av${clipCounter++}` : '',
-                initials: personInitials(person.firstName, shownNameParts(person, '', false).surname) || '?', initialsSize: 12,
+                initials: personInitials(person.firstName, shownNameParts(person, '', false).surname) || '?',
+                initialsSize: photoCard ? avatarInitialsSize(box.avatar) : 12,
             }));
 
             // Text column right of the avatar (padding + avatar + gap): 125px beside a photo of any size.
@@ -1027,7 +1034,7 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
             const measure = options.measureCardTexts ?? estimateCardTexts;
             // In a view of a medium or large photo the column of its box (src/card-width.ts normalCardTextWidth).
             const split = normalCardNameRows([{ given: parts.given, surname: parts.surname, avatar: true,
-                ...(photoView === 'small' ? {} : { textWidth: normalCardTextWidth(photoView, true, photoCard) }) }], measure)[0];
+                ...(photoView === 'small' ? {} : { textWidth: normalCardTextWidth(photoView, true) }) }], measure)[0];
             const nameRows = [...split.given, ...split.surname];
             const wrapped = nameRows.length > 2;
             // With the birth surname's row the name stays on one line 15 → 14 → 13px, else goes on rows.

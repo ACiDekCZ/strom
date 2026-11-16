@@ -670,18 +670,19 @@ class SettingsManagerClass {
     /**
      * The card box for the current density (the layout spaces cards by it).
      * The Normal card with a medium or large photo (spec 096 §2) is wider,
-     * only in a view where someone drawn has a photo (`viewHasPhoto`, D3);
-     * its base height stays 64 (a large card's own height: personHeights).
+     * only in a view where someone drawn has an avatar, a photo or the
+     * initials (`viewHasAvatar`, D3, spec 103 K2.1); its base height stays 64
+     * (a large card's own height: personHeights).
      */
-    getCardSize(viewHasPhoto = false): { cardWidth: number; cardHeight: number } {
+    getCardSize(viewHasAvatar = false): { cardWidth: number; cardHeight: number } {
         const density = this.getCardDensity();
         const fields = this.getEffectiveCardFields(density);
         if (density === 'normal') {
-            const box = NORMAL_PHOTO_BOX[viewHasPhoto ? this.getCardPhoto().size : 'small'];
+            const box = NORMAL_PHOTO_BOX[viewHasAvatar ? this.getCardPhoto().size : 'small'];
             return { cardWidth: box.cardWidth, cardHeight: CARD_SIZE.normal.cardHeight };
         }
         if (!fields) return CARD_SIZE[density as 'compact' | 'normal'];
-        return customCardSize(fields.on.length, fields.years, viewHasPhoto ? this.getCardPhoto().size : 'small');
+        return customCardSize(fields.on.length, fields.years, viewHasAvatar ? this.getCardPhoto().size : 'small');
     }
 
     /** The stored card signals as they are (older builds' keys kept), brought to version 2 once (spec 066 P4 §8). */

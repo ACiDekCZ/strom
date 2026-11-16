@@ -8,7 +8,8 @@ import { syntheticTree } from '../src/__tests__/helpers/synthetic-tree';
  * poster and its tiled PDF draw the cards with the chosen photo size and
  * shape, as the screen does, on a dense invented tree: every card at the
  * screen's box, no two cards overlapping, no line through a card, each photo
- * inside its card. The default (small + circle) keeps the 188 × 64 card.
+ * inside its card; the initials of a card without a photo as large as the
+ * photo (spec 103 K2.3). The default (small + circle) keeps the 188 × 64 card.
  */
 
 /** A photo (a 1 × 1 PNG data URI), so no file is needed. */
@@ -80,6 +81,14 @@ const cardRects = (svg: string): Box[] => [...svg.matchAll(/<rect x="(-?[\d.]+)"
     .map(m => ({ x: Number(m[1]), y: Number(m[2]), w: Number(m[3]), h: Number(m[4]) }));
 const images = (svg: string): Box[] => [...svg.matchAll(/<image href="[^"]*" x="(-?[\d.]+)" y="(-?[\d.]+)" width="(\d+)" height="(\d+)"/g)]
     .map(m => ({ x: Number(m[1]), y: Number(m[2]), w: Number(m[3]), h: Number(m[4]) }));
+/** The cards drawn with a solid border (a person, not a placeholder). */
+const personRects = (svg: string): Box[] => [...svg.matchAll(/<rect x="(-?[\d.]+)" y="(-?[\d.]+)" width="(\d+)" height="(\d+)" rx="8"([^>]*)\/>/g)]
+    .filter(m => !m[5].includes('stroke-dasharray')).map(m => ({ x: Number(m[1]), y: Number(m[2]), w: Number(m[3]), h: Number(m[4]) }));
+/** The size of each avatar drawn with the initials (no photo): a circle's diameter or a rounded square's side. */
+const initialsAvatars = (svg: string): number[] => [
+    ...[...svg.matchAll(/<circle cx="[\d.-]+" cy="[\d.-]+" r="([\d.]+)" fill="#f0e9da"/g)].map(m => 2 * Number(m[1])),
+    ...[...svg.matchAll(/<rect x="[\d.-]+" y="[\d.-]+" width="(\d+)" height="\d+" rx="\d+" fill="#f0e9da"/g)].map(m => Number(m[1])),
+];
 const lines = (svg: string) => [...svg.matchAll(/<line x1="(-?[\d.]+)" y1="(-?[\d.]+)" x2="(-?[\d.]+)" y2="(-?[\d.]+)"/g)]
     .map(m => m.slice(1, 5).map(Number) as [number, number, number, number]);
 
@@ -112,6 +121,7 @@ test.describe('the photo on the card in the image export, the poster and the PDF
         expect(rects.length).toBeGreaterThan(60);
         expect(new Set(rects.map(r => r.w))).toEqual(new Set([188]));
         expect(new Set(images(svg).map(i => i.w))).toEqual(new Set([34]));
+        expect(new Set(initialsAvatars(svg))).toEqual(new Set([34]));
         expect(audit(svg)).toEqual({ overlaps: 0, through: 0, outside: 0 });
     });
 
@@ -142,10 +152,13 @@ test.describe('the photo on the card in the image export, the poster and the PDF
             } else {
                 expect(svg).toContain(`r="${avatar / 2}" fill="none"`);
             }
-            // A Normal card with a large photo is 96px or taller; the others 64 (T40: taller for a long name).
+            // The initials of a card without a photo as large as the photo (spec 103 K2.3).
+            const initials = initialsAvatars(svg);
+            expect(initials.length).toBeGreaterThan(10);
+            expect(new Set(initials)).toEqual(new Set([avatar]));
+            // A Normal card with a large avatar, a photo or the initials, is 96px or taller.
             if (density === 'normal' && size === 'large') {
-                expect(Math.max(...rects.map(r => r.h))).toBeGreaterThanOrEqual(96);
-                expect(Math.min(...rects.map(r => r.h))).toBe(64);
+                expect(Math.min(...personRects(svg).map(r => r.h))).toBeGreaterThanOrEqual(96);
             }
             expect(audit(svg)).toEqual({ overlaps: 0, through: 0, outside: 0 });
         });

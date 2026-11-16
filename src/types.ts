@@ -2160,13 +2160,14 @@ export type CardPhotoShape = 'circle' | 'rounded';
 
 /**
  * The Normal card's box per photo size of the view (spec 096 §2): the card's
- * width and base height, the photo's size and the card's side padding on a
- * card with a photo. A view takes the medium or large box only when someone
- * drawn in it has a photo (renderer.ts viewHasPhoto), else the small one,
- * which is CARD_SIZE.normal. The text column beside the photo is 126px in
- * every size (src/card-width.ts normalCardTextWidth). A large card with a
- * photo is 96px tall through LayoutConfig.personHeights (the view's
- * cardHeight stays 64). MUST match index.html body[data-card-photo].
+ * width and base height, the avatar's size and the card's side padding on a
+ * card with an avatar, a photo or the initials alike (spec 103 K2.1). A view
+ * takes the medium or large box only when someone drawn in it has an avatar
+ * (renderer.ts viewHasAvatar), else the small one, which is CARD_SIZE.normal.
+ * The text column beside the avatar is 126px in every size (src/card-width.ts
+ * normalCardTextWidth). A large card with an avatar is 96px tall through
+ * LayoutConfig.personHeights (the view's cardHeight stays 64; a placeholder
+ * 64). MUST match index.html body[data-card-photo].
  */
 export const NORMAL_PHOTO_BOX: Record<CardPhotoSize, { cardWidth: number; cardHeight: number; avatar: number; padX: number }> = {
     small: { cardWidth: 188, cardHeight: 64, avatar: 34, padX: 9 },

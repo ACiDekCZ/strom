@@ -72,7 +72,7 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         photoCircle: 'Koło',
         photoRounded: 'Zaokrąglony kwadrat',
         photoCompact: 'Karta kompaktowa nie ma zdjęcia.',
-        photoScope: 'Osoby bez zdjęcia mają małe inicjały. Dotyczy drzewa, eksportu obrazu i plakatu na tym urządzeniu.',
+        photoScope: 'Osoby bez zdjęcia mają inicjały w tym samym rozmiarze. Dotyczy drzewa, eksportu obrazu i plakatu na tym urządzeniu.',
         moveUp: 'Przesuń wyżej',
         moveDown: 'Przesuń niżej',
         sameEverywhere: 'Dotyczy tego urządzenia. Eksport obrazu, plakat i druk pokazują udokumentowanie i opowieści, pozostałe znaczniki tylko ekran.',

@@ -14,7 +14,7 @@ import {
     MeasureTexts, normalCardHeight, normalCardHeights, normalCardTextWidth, normalCardNameRows,
     NORMAL_CARD_NAME_WIDTH, NORMAL_CARD_NAME_WIDTH_BARE,
     cardAvatarSize, cardHeadBlock, cardLinesTop, customCardHeight, customCardViewHeight, customCardMetrics, customCardRows,
-    customCardSpouseLineY, CustomCardEntry, CARD_AVATAR_SIZE,
+    customCardSpouseLineY, CustomCardEntry, CARD_AVATAR_SIZE, avatarInitialsSize,
 } from '../card-width.js';
 import { CARD_SIZE, NORMAL_PHOTO_BOX, DEFAULT_LAYOUT_CONFIG, layoutConfigFor, PersonId } from '../types.js';
 import { SettingsManager } from '../settings.js';
@@ -100,14 +100,20 @@ describe('the Normal card box per photo size', () => {
         expect(SettingsManager.getCardSize(true)).toEqual(CARD_SIZE.compact);
     });
 
-    it('the text column beside a photo is 126px in every size; beside the initials of a wider card wider', () => {
-        for (const size of CARD_PHOTO_SIZES) expect(normalCardTextWidth(size, true, true)).toBe(NORMAL_CARD_NAME_WIDTH);
-        expect(normalCardTextWidth('small', true, false)).toBe(NORMAL_CARD_NAME_WIDTH);
-        expect(normalCardTextWidth('small', false, false)).toBe(NORMAL_CARD_NAME_WIDTH_BARE);
-        expect(normalCardTextWidth('medium', true, false)).toBe(138);
-        expect(normalCardTextWidth('large', true, false)).toBe(174);
-        expect(normalCardTextWidth('medium', false, false)).toBe(180);
-        expect(normalCardTextWidth('large', false, false)).toBe(216);
+    it('the text column beside the avatar (a photo or the initials) is 126px in every size (spec 103 K2.1)', () => {
+        for (const size of CARD_PHOTO_SIZES) expect(normalCardTextWidth(size, true)).toBe(NORMAL_CARD_NAME_WIDTH);
+        expect(normalCardTextWidth('small', false)).toBe(NORMAL_CARD_NAME_WIDTH_BARE);
+        expect(normalCardTextWidth('medium', false)).toBe(180);
+        expect(normalCardTextWidth('large', false)).toBe(216);
+    });
+
+    it('the initials take a size in proportion to the avatar: 12 / 11px as before in the small one', () => {
+        expect(avatarInitialsSize(NORMAL_PHOTO_BOX.small.avatar)).toBe(12);
+        expect(avatarInitialsSize(cardAvatarSize('small'))).toBe(11);
+        expect(avatarInitialsSize(NORMAL_PHOTO_BOX.medium.avatar)).toBe(17);
+        expect(avatarInitialsSize(NORMAL_PHOTO_BOX.large.avatar)).toBe(29);
+        expect(avatarInitialsSize(cardAvatarSize('medium'))).toBe(16);
+        expect(avatarInitialsSize(cardAvatarSize('large'))).toBe(26);
     });
 
     it('matches the CSS (index.html body[data-card-photo])', () => {
@@ -136,13 +142,18 @@ describe('the Normal card box per photo size', () => {
             const box = NORMAL_PHOTO_BOX[size];
             const view = `body[data-card-photo="${size}"]:not([data-card-fields]) #tree-canvas .person-card`;
             expect(px(rule(`${view},`), 'width')).toBe(box.cardWidth);
-            const withPhoto = rule(`${view}.has-photo,`);
-            expect(pad(withPhoto)).toBe(box.padX);
-            if (size === 'large') expect(px(withPhoto, 'height')).toBe(box.cardHeight);
-            expect(pad(rule(`${view}.has-photo.focused {`))).toBe(box.padX - 1);
-            const avatar = rule(`${view}.has-photo .card-avatar,`);
+            // Every card with an avatar, a photo or the initials (spec 103 K2.1).
+            const withAvatar = rule(`${view}.has-avatar,`);
+            expect(pad(withAvatar)).toBe(box.padX);
+            if (size === 'large') expect(px(withAvatar, 'height')).toBe(box.cardHeight);
+            expect(pad(rule(`${view}.has-avatar.focused {`))).toBe(box.padX - 1);
+            const avatar = rule(`${view}.has-avatar .card-avatar,`);
             expect(px(avatar, 'width')).toBe(box.avatar);
             expect(px(avatar, 'height')).toBe(box.avatar);
+            const initials = rule(`body[data-card-photo="${size}"]:not([data-card-fields]) #tree-canvas .has-avatar .avatar-initials {`);
+            expect(px(initials, 'font-size')).toBe(avatarInitialsSize(box.avatar));
+            const fieldInitials = rule(`body[data-card-fields][data-card-photo="${size}"] #tree-canvas .has-avatar .avatar-initials {`);
+            expect(px(fieldInitials, 'font-size')).toBe(avatarInitialsSize(cardAvatarSize(size)));
             // The column: the box less the border, the padding, the photo and the 8px gap.
             expect(box.cardWidth - 2 - 2 * box.padX - box.avatar - 8).toBe(NORMAL_CARD_NAME_WIDTH);
         }
@@ -312,13 +323,13 @@ describe('the cards of details with a photo (§3)', () => {
     it('matches the CSS (index.html body[data-card-fields][data-card-photo])', () => {
         const html = readFileSync(join(process.cwd(), 'index.html'), 'utf-8');
         for (const size of ['medium', 'large'] as const) {
-            const sel = `body[data-card-fields][data-card-photo="${size}"] #tree-canvas .person-card.has-photo .card-avatar,`;
+            const sel = `body[data-card-fields][data-card-photo="${size}"] #tree-canvas .person-card.has-avatar .card-avatar,`;
             const at = html.indexOf(sel);
             expect(at, sel).toBeGreaterThan(-1);
             const decls = html.slice(html.indexOf('{', at) + 1, html.indexOf('}', at));
             expect(decls).toContain(`width: ${cardAvatarSize(size)}px`);
             expect(decls).toContain(`height: ${cardAvatarSize(size)}px`);
-            const head = `body[data-card-fields][data-card-photo="${size}"] #tree-canvas .person-card.has-photo .card-head,`;
+            const head = `body[data-card-fields][data-card-photo="${size}"] #tree-canvas .person-card.has-avatar .card-head,`;
             const h = html.indexOf(head);
             expect(h, head).toBeGreaterThan(-1);
             expect(html.slice(html.indexOf('{', h) + 1, html.indexOf('}', h))).toContain(`min-height: ${cardAvatarSize(size)}px`);

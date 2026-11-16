@@ -535,12 +535,23 @@ export interface CardHead {
 export const CARD_AVATAR_SIZE = 30;
 
 /**
- * The avatar of a card of details by the size of the photo it shows (spec
- * 096 §3, D5): 30px (initials, the small photo, no photo: null), 44px
- * medium, 72px large. MUST match index.html body[data-card-fields][data-card-photo].
+ * The avatar of a card of details by the view's photo size (spec 096 §3,
+ * D5; a photo or the initials alike, spec 103 K2.1): 30px (small, or none:
+ * null), 44px medium, 72px large. MUST match index.html body[data-card-fields][data-card-photo].
  */
 export function cardAvatarSize(photo?: CardPhotoSize | null): number {
     return photo === 'large' ? 72 : photo === 'medium' ? 44 : CARD_AVATAR_SIZE;
+}
+
+/**
+ * The initials' font size in an avatar of `avatar` px (spec 103 K2.1): in
+ * proportion to it, 12px in the Normal card's 34px avatar and 11px in the
+ * 30px one of a card of details as before; 17 / 29px in the Normal card's
+ * medium and large avatar, 16 / 26px in a card of details'. MUST match
+ * index.html .avatar-initials under body[data-card-photo].
+ */
+export function avatarInitialsSize(avatar: number): number {
+    return Math.round(avatar * 0.36);
 }
 /** A row of the name (15px text). */
 export const CARD_NAME_ROW_HEIGHT = 19;
@@ -839,7 +850,8 @@ export const NORMAL_CARD_NAME_ROW_HEIGHT = 14.375;
  * surname, and whether the avatar stands beside it. `textWidth`: the card's
  * text column when the view's cards are not the small ones (spec 096 §2,
  * normalCardTextWidth); absent = by `avatar`, 126 or 168px. `photo`: the
- * size of the photo the card shows (absent: none, or the small one).
+ * size of the avatar the card shows, a photo or the initials (absent: none,
+ * or the small one).
  */
 export interface NormalCardName {
     given: string;
@@ -851,17 +863,15 @@ export interface NormalCardName {
 
 /**
  * The Normal card's text column in a view of a photo size (spec 096 §2,
- * types.ts NORMAL_PHOTO_BOX): beside a photo 126px in every size (the box
- * grows with the photo); beside the initials (34px, padding 9) of a wider
- * card 138 / 174px; a card without an avatar (a placeholder) the card's
- * width less its border and padding of 9.
+ * types.ts NORMAL_PHOTO_BOX): beside the avatar 126px in every size (the box
+ * grows with the avatar, a photo or the initials alike, spec 103 K2.1); a
+ * card without an avatar (a placeholder) the card's width less its border
+ * and padding of 9.
  */
-export function normalCardTextWidth(view: CardPhotoSize, avatar: boolean, photo: boolean): number {
+export function normalCardTextWidth(view: CardPhotoSize, avatar: boolean): number {
     const box = NORMAL_PHOTO_BOX[view];
-    const small = NORMAL_PHOTO_BOX.small;
-    if (!avatar) return box.cardWidth - 2 - 2 * small.padX;
-    if (photo) return box.cardWidth - 2 - 2 * box.padX - box.avatar - 8;
-    return box.cardWidth - 2 - 2 * small.padX - small.avatar - 8;
+    if (!avatar) return box.cardWidth - 2 - 2 * NORMAL_PHOTO_BOX.small.padX;
+    return box.cardWidth - 2 - 2 * box.padX - box.avatar - 8;
 }
 
 /** The rows of a Normal card's name: the given names' rows, then the surname's. */

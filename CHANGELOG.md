@@ -7,6 +7,7 @@ English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md) · [Polski
 *This version is in preparation; this section grows with every test version.*
 
 - **Table filters**: *Without* in a cell's menu keeps the exclusions made before, in the same column or another; each one is a chip of its own (*Birthplace ≠ …*) whose × drops it alone, and *Clear filters* drops them all. A second *Only* in a column adds its value (*Father = A or B*); *Without* of such a value takes it out again. A saved view keeps the chips, and views saved earlier open unchanged.
+- **Photo on the card**: the *Medium* or *Large* photo size now applies to people without a photo too: their initials take the photo's size and shape on every card with an avatar, in the tree views, the image export, the poster and its PDF, so the tree looks even. *Small* keeps the cards as they were; the *Compact* card has no avatar.
 
 ## 3.29.0
 

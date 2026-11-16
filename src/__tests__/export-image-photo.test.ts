@@ -100,13 +100,16 @@ describe('the default photo (small + circle): the image as before', () => {
     });
 });
 
-/** The Normal cards' heights in a view of a photo size, as the screen lays them out (renderer.ts normalNameColumn). */
+/**
+ * The Normal cards' heights in a view of a photo size, as the screen lays
+ * them out (renderer.ts normalNameColumn): every card with an avatar, a
+ * photo or the initials, at the view's size (spec 103 K2.1).
+ */
 function heightsFor(view: CardPhotoSize): Map<PersonId, number> {
     const names = new Map(normalPeople.map(p => {
         const avatar = !p.isPlaceholder;
-        const photo = avatar && !!p.photo;
         return [p.id, view === 'small' ? { given: p.firstName, surname: p.lastName, avatar }
-            : { given: p.firstName, surname: p.lastName, avatar, textWidth: normalCardTextWidth(view, avatar, photo), ...(photo ? { photo: view } : {}) }];
+            : { given: p.firstName, surname: p.lastName, avatar, textWidth: normalCardTextWidth(view, avatar), ...(avatar ? { photo: view } : {}) }];
     }));
     return normalCardHeights(names, measure) ?? new Map();
 }
@@ -147,8 +150,9 @@ describe('Normal cards with the view\'s photo (spec 096 §2)', () => {
             const box = NORMAL_PHOTO_BOX[size];
             const rects = cardRects(svg);
             expect(rects.every(r => r.w === box.cardWidth)).toBe(true);
-            // The cards with a photo (a, d, e, f) as tall as laid out: a large one at least 96.
-            for (const id of ['a', 'd', 'e', 'f']) {
+            // The cards with an avatar (a, d, e, f with a photo, b with the initials) as tall as
+            // laid out: a large one at least 96 (spec 103 K2.1); the placeholder (c) 64.
+            for (const id of ['a', 'b', 'd', 'e', 'f']) {
                 const pos = normalPositions[id as keyof typeof normalPositions];
                 const rect = rects.find(r => r.x === pos.x && r.y === pos.y)!;
                 expect(rect.h).toBe(config.personHeights?.get(id as PersonId) ?? 64);
@@ -161,33 +165,40 @@ describe('Normal cards with the view\'s photo (spec 096 §2)', () => {
                 // At the card's padding of that box, centred on the card's height.
                 expect(img.x % 260).toBeCloseTo(1 + box.padX, 1);
             }
-            // The ring follows the shape: a circle, or a rounded square of the size's radius (initials 5px).
+            // The ring follows the shape: a circle, or a rounded square of the size's radius.
             if (shape === 'circle') {
                 expect(svg).not.toMatch(/<rect x="[^"]+" y="[^"]+" width="(34|48|80)"/);
                 expect(svg).toContain(`r="${box.avatar / 2}" fill="none"`);
+                // Quirinella's initials (no photo): the photo's size (spec 103 K2.1).
+                expect(svg).toContain(`r="${box.avatar / 2}" fill="#f0e9da"`);
             } else {
                 expect(svg).toContain(`width="${box.avatar}" height="${box.avatar}" rx="${ROUNDED_AVATAR_RADIUS[box.avatar]}" fill="none"`);
-                // Quirinella's initials: 34px, the rounded square's 5px.
-                expect(svg).toContain('width="34" height="34" rx="5" fill="#f0e9da"');
+                // Quirinella's initials: the photo's size and radius.
+                expect(svg).toContain(`width="${box.avatar}" height="${box.avatar}" rx="${ROUNDED_AVATAR_RADIUS[box.avatar]}" fill="#f0e9da"`);
                 expect(svg).not.toMatch(/<circle[^>]* r="(17|24|40)"/);
             }
             expect(allInsideCards(svg)).toBe(true);
         });
     }
 
-    it('the text column beside a photo stays 125px; the initials of a card without one keep 34px in the wider card', () => {
+    it('the text column beside the avatar stays 125px; the initials of a card without a photo take the photo\'s size (spec 103 K2.1)', () => {
         for (const size of SIZES) {
-            const { svg } = normalView(size, 'circle');
+            const { svg, config } = normalView(size, 'circle');
             const box = NORMAL_PHOTO_BOX[size];
-            // Florimund (a photo, at x 0): the name centred in the column right of the photo.
-            const name = texts(svg).find(t => t.text === 'Florimund Pfefferkorn')!;
             const contentX = 1 + box.padX + box.avatar + 9;
-            expect(name.x).toBeCloseTo(contentX + (box.cardWidth - contentX - 1 - box.padX) / 2, 1);
+            const column = (x: number) => x + contentX + (box.cardWidth - contentX - 1 - box.padX) / 2;
             expect(box.cardWidth - contentX - 1 - box.padX).toBe(125);
-            // Quirinella (no photo, at x 260): the 34px initials at 10px, the wider column after them.
-            expect(svg).toMatch(new RegExp(`<circle cx="${(260 + 10 + 17).toFixed(1)}" cy="32.0" r="17" fill="#f0e9da"`));
-            const plain = texts(svg).find(t => t.text === 'Quirinella Pfefferkornová')!;
-            expect(plain.x).toBeCloseTo(260 + 53 + (box.cardWidth - 63) / 2, 1);
+            // Florimund (a photo, at x 0): the name centred in the column right of the photo.
+            expect(texts(svg).find(t => t.text === 'Florimund Pfefferkorn')!.x).toBeCloseTo(column(0), 1);
+            // Quirinella (no photo, at x 260): her initials as large and as placed as a photo, in the
+            // middle of her card's height, the same column after them; their text in proportion.
+            const h = config.personHeights?.get('b' as PersonId) ?? 64;
+            const r = box.avatar / 2;
+            expect(svg).toMatch(new RegExp(`<circle cx="${(260 + 1 + box.padX + r).toFixed(1)}" cy="${(h / 2).toFixed(1)}" r="${r}" fill="#f0e9da"`));
+            const initials = size === 'small' ? 12 : size === 'medium' ? 17 : 29;
+            expect(svg).toMatch(new RegExp(`<text x="${(260 + 1 + box.padX + r).toFixed(1)}" y="[\\d.]+" text-anchor="middle" font-size="${initials}" font-weight="600" fill="[^"]+">QP</text>`));
+            expect(texts(svg).find(t => t.text === 'Quirinella Pfefferkornová')!.x).toBeCloseTo(column(260), 1);
+            if (size === 'large') expect(h).toBe(96);
         }
     });
 
@@ -245,8 +256,10 @@ describe('cards of details with the view\'s photo (spec 096 §3)', () => {
                 expect(name.x).toBeCloseTo(12 + avatar + 8, 1);
                 const lines = texts(svg).filter(t => t.x < 300 && /1850|1910/.test(t.text) && t.text !== '1850 – 1910');
                 expect(Math.min(...lines.map(l => l.y))).toBeGreaterThan(10 + avatar);
-                // Quirinella, without a photo: her 30px initials beside the name.
-                expect(svg).toContain(shape === 'rounded' ? 'width="30" height="30" rx="4" fill="#f0e9da"' : 'r="15" fill="#f0e9da"');
+                // Quirinella, without a photo: her initials as large as the photo beside the name (spec 103 K2.1).
+                expect(svg).toContain(shape === 'rounded' ? `width="${avatar}" height="${avatar}" rx="${ROUNDED_AVATAR_RADIUS[avatar]}" fill="#f0e9da"`
+                    : `r="${avatar / 2}" fill="#f0e9da"`);
+                expect(texts(svg).find(t => t.text.startsWith('Quirinella'))!.x).toBeCloseTo(300 + 12 + avatar + 8, 1);
                 if (shape === 'rounded' && size !== 'small') {
                     expect(svg).toContain(`width="${avatar}" height="${avatar}" rx="${ROUNDED_AVATAR_RADIUS[avatar]}" fill="none" stroke="#5b7f9e" stroke-width="2"`);
                 }

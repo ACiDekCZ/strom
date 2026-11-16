@@ -9,6 +9,7 @@ Lista zmian po polsku zaczyna się od wersji 3.21.0; starsze wersje są opisane 
 *Ta wersja jest w przygotowaniu; ta sekcja rośnie z każdą wersją testową.*
 
 - **Filtry tabeli**: *Bez* w menu komórki zachowuje wcześniejsze wykluczenia w tej samej lub innej kolumnie; każde jest osobnym chipem (*Miejsce urodzenia ≠ …*), którego × usuwa tylko je, a *Wyczyść filtry* usuwa wszystkie. Drugie *Tylko* w kolumnie dodaje swoją wartość (*Ojciec = A lub B*); *Bez* takiej wartości znów ją usuwa. Zapisany widok pamięta chipy, a widoki zapisane wcześniej otwierają się bez zmian.
+- **Zdjęcie na karcie**: *Średnie* i *Duże* zdjęcie obowiązuje teraz także osoby bez zdjęcia: ich inicjały mają rozmiar i kształt zdjęcia na każdej karcie z awatarem, w widokach drzewa, eksporcie obrazu, plakacie i jego PDF, więc drzewo wygląda jednolicie. *Małe* zostawia karty jak dotąd; karta *Kompaktowe* nie ma awatara.
 
 ## 3.29.0
 

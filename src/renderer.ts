@@ -381,11 +381,12 @@ class TreeRendererClass {
      */
     private normalHeights: Map<PersonId, number> | null = null;
     /**
-     * Whether someone drawn in the view (not a placeholder) has a photo: the
-     * medium and large photo sizes apply only then (spec 096 D3). The next
-     * render starts from it (usually the same).
+     * Whether someone drawn in the view has an avatar (not a placeholder):
+     * the medium and large photo sizes apply only then (spec 096 D3; since
+     * spec 103 K2.1 the initials of a card without a photo take the photo's
+     * size too). The next render starts from it (usually the same).
      */
-    private viewHasPhoto = false;
+    private viewHasAvatar = false;
     /** The custom card's lines per drawn person, computed once per render. */
     private customLines = new Map<PersonId, CardLine[]>();
     /** The custom card lines' rows (src/card-width.ts customCardRows): what wraps, what is cut. */
@@ -830,7 +831,7 @@ class TreeRendererClass {
         // The layout engine spaces cards from the config size — keep it in sync
         // with the density (and the CSS box) or cards overlap / drift apart.
         const density = SettingsManager.getCardDensity();
-        const size = SettingsManager.getCardSize(this.viewHasPhoto);
+        const size = SettingsManager.getCardSize(this.viewHasAvatar);
         // Detailed, Register and Custom draw lines of details (their fields: effectiveCardFields).
         const fieldCards = SettingsManager.getEffectiveCardFields(density);
         const custom = !!fieldCards && !STANDALONE_VIEWS.includes(this.viewMode);
@@ -870,15 +871,15 @@ class TreeRendererClass {
         const islandRoom = this.viewLinkIslandRoom(viewLinks);
         if (islandRoom) this.config = { ...this.config, roomBelow: islandRoom };
         let result = this.computeTreeLayout(descendantsOnly, viewLinks);
-        // The photo on the card (spec 096): a medium or large photo only in a
-        // view where someone drawn has one (D3); the Normal card is wider
-        // then: laid out again when that changed (the person set does not
-        // depend on the card size).
-        const hasPhoto = this.photoInView(result.positions);
-        const photoChanged = hasPhoto !== this.viewHasPhoto;
+        // The photo on the card (spec 096): a medium or large avatar (a photo
+        // or the initials, spec 103 K2.1) only in a view where someone drawn
+        // has one (D3); the Normal card is wider then: laid out again when
+        // that changed (the person set does not depend on the card size).
+        const hasAvatar = this.avatarInView(result.positions);
+        const photoChanged = hasAvatar !== this.viewHasAvatar;
         if (photoChanged) {
-            this.viewHasPhoto = hasPhoto;
-            const next = SettingsManager.getCardSize(hasPhoto);
+            this.viewHasAvatar = hasAvatar;
+            const next = SettingsManager.getCardSize(hasAvatar);
             if (density === 'normal' && next.cardWidth !== this.config.cardWidth) {
                 this.config = { ...this.config, cardWidth: next.cardWidth };
                 result = this.computeTreeLayout(descendantsOnly, viewLinks);
@@ -1411,9 +1412,9 @@ class TreeRendererClass {
         const { roomBelow: _room, ...screen } = this.config;
         let config: LayoutConfig = own ? screen : withSpacing(screen, spacing);
         let result = this.computeTreeLayout(descendantsOnly, [], false, config);
-        // Without the view links nobody laid out may have a photo (D3): the small card then.
+        // Without the view links nobody laid out may have an avatar (D3): the small card then.
         let photo = screenPhoto;
-        if (photo !== 'small' && this.viewLayer && !this.photoInView(result.positions)) {
+        if (photo !== 'small' && this.viewLayer && !this.avatarInView(result.positions)) {
             photo = 'small';
             if (SettingsManager.getCardDensity() === 'normal') {
                 const small = this.smallPhotoConfig(screen);
@@ -1559,8 +1560,9 @@ class TreeRendererClass {
     /**
      * The custom card measured for the people of a layout (the screen's or an
      * output's), nothing kept. `view`: the photo size of the view's cards
-     * (spec 096 §3; an output nobody of which has a photo: small): a card with a photo
-     * gets the avatar of a medium or large one.
+     * (spec 096 §3; an output nobody of which has an avatar: small): a card with
+     * an avatar, a photo or the initials (spec 103 K2.1), gets the avatar of a
+     * medium or large one.
      */
     private customCardsOf(positions: Map<PersonId, Position>, view: CardPhotoSize = this.viewPhotoSize()): CustomCardsMeasure {
         const data = DataManager.getData();
@@ -1582,7 +1584,7 @@ class TreeRendererClass {
         const signalCtx = this.signalContext();
         const visible = (pid: PersonId) => positions.has(pid);
         let anyBirth = false;
-        // The view's largest avatar (a card with a medium or large photo): every card of one height is as tall.
+        // The view's largest avatar (a card with a medium or large one): every card of one height is as tall.
         let viewAvatar = CARD_AVATAR_SIZE;
         this.prepareCrossTreePills(positions.keys(), this.lastCrossTrees);
         for (const id of positions.keys()) {
@@ -1602,7 +1604,8 @@ class TreeRendererClass {
             // The birth surname under the name (src/person-name.ts): its row never widens the card.
             const birth = birthNoteText(shownNameParts(person, '?').birthNote);
             if (birth) anyBirth = true;
-            const photo = view !== 'small' && !!person.photo && !person.isPlaceholder;
+            // The avatar of the view's photo size, a photo or the initials (spec 103 K2.1).
+            const photo = view !== 'small' && !person.isPlaceholder;
             if (photo) viewAvatar = Math.max(viewAvatar, cardAvatarSize(view));
             entries.push({
                 name: shownName(person, '?'), avatar: !person.isPlaceholder, lines: personLines,
@@ -1665,32 +1668,32 @@ class TreeRendererClass {
      * A Normal card's avatar, text column and photo in a view of a photo
      * size (spec 096 §2): in the small view the card as it always was (126 /
      * 168px by the avatar); in a medium or large one the column of that box
-     * (src/card-width.ts normalCardTextWidth) and the photo's size.
+     * (src/card-width.ts normalCardTextWidth) and the avatar's size, a photo
+     * or the initials alike (spec 103 K2.1).
      */
     private normalNameColumn(person: Person, view: CardPhotoSize): Pick<NormalCardName, 'avatar' | 'textWidth' | 'photo'> {
         const avatar = !person.isPlaceholder;
         if (view === 'small') return { avatar };
-        const photo = avatar && !!person.photo;
-        return { avatar, textWidth: normalCardTextWidth(view, avatar, photo), ...(photo ? { photo: view } : {}) };
+        return { avatar, textWidth: normalCardTextWidth(view, avatar), ...(avatar ? { photo: view } : {}) };
     }
 
-    /** Whether someone laid out (not a placeholder) has a photo (spec 096 D3). */
-    private photoInView(positions: ReadonlyMap<PersonId, Position>): boolean {
+    /** Whether someone laid out has an avatar, a photo or the initials (not a placeholder; spec 096 D3, 103 K2.1). */
+    private avatarInView(positions: ReadonlyMap<PersonId, Position>): boolean {
         if (SettingsManager.getCardDensity() === 'compact') return false;
         for (const id of positions.keys()) {
             const person = DataManager.getPerson(id);
-            if (person?.photo && !person.isPlaceholder) return true;
+            if (person && !person.isPlaceholder) return true;
         }
         return false;
     }
 
     /**
      * The photo size the drawn view's cards have (index.html
-     * body[data-card-photo]): the chosen one where someone drawn has a photo,
-     * else small (D3); the Compact card never shows one.
+     * body[data-card-photo]): the chosen one where someone drawn has an
+     * avatar, else small (D3); the Compact card never shows one.
      */
     private viewPhotoSize(): CardPhotoSize {
-        if (!this.viewHasPhoto || SettingsManager.getCardDensity() === 'compact') return 'small';
+        if (!this.viewHasAvatar || SettingsManager.getCardDensity() === 'compact') return 'small';
         return SettingsManager.getCardPhoto().size;
     }
 
@@ -1725,8 +1728,9 @@ class TreeRendererClass {
 
     /**
      * The photo on the card the image export draws (spec 096 P2): the size
-     * its cards were laid out with (small when nobody it draws has a photo),
-     * the chosen shape, and who was laid out with a photo.
+     * its cards were laid out with (small when nobody it draws has an
+     * avatar), the chosen shape, and who was laid out with the avatar of
+     * that size: everyone with an avatar, a photo or the initials (spec 103 K2.1).
      */
     getPosterCardPhoto(spacing?: TreeSpacing): { size: CardPhotoSize; shape: CardPhotoShape; photoIds: Set<PersonId> } {
         const output = this.outputLayout(spacing);
@@ -1734,7 +1738,7 @@ class TreeRendererClass {
         if (output.photo !== 'small') {
             for (const id of output.positions.keys()) {
                 const person = DataManager.getPerson(id);
-                if (person?.photo && !person.isPlaceholder) photoIds.add(id);
+                if (person && !person.isPlaceholder) photoIds.add(id);
             }
         }
         return { size: output.photo, shape: SettingsManager.getCardPhoto().shape, photoIds };
@@ -4950,9 +4954,12 @@ class TreeRendererClass {
             }
             // The avatar circle is always present in normal/detailed density
             // (initials by default); a photo just fills it instead. `has-photo`
-            // marks the photo case for styling/tests.
-            if (person.photo && !person.isPlaceholder && SettingsManager.getCardDensity() !== 'compact') {
-                classes += ' has-photo';
+            // marks the photo case for styling/tests; `has-avatar` every card
+            // with the avatar, which takes the view's photo size (index.html
+            // body[data-card-photo], spec 103 K2.1).
+            if (!person.isPlaceholder && SettingsManager.getCardDensity() !== 'compact') {
+                classes += ' has-avatar';
+                if (person.photo) classes += ' has-photo';
             }
             // Add focused class if this is the focus person
             if (this.focusPersonId && id === this.focusPersonId) {
@@ -5885,7 +5892,7 @@ class TreeRendererClass {
             const card = it.nameEl.closest('.person-card');
             const avatar = !!card?.querySelector('.card-avatar');
             return { given: it.given, surname: it.surname, avatar,
-                ...(view === 'small' ? {} : { textWidth: normalCardTextWidth(view, avatar, !!card?.classList.contains('has-photo')) }) };
+                ...(view === 'small' ? {} : { textWidth: normalCardTextWidth(view, avatar) }) };
         }), measureCardTexts);
         const lineOf = (cls: string, text: string, rows: readonly string[]): HTMLElement => {
             const line = document.createElement('span');

@@ -7,6 +7,7 @@
 *Diese Version ist in Vorbereitung; dieser Abschnitt wächst mit jeder Testversion.*
 
 - **Filter der Tabelle**: *Ohne* im Menü einer Zelle behält die vorherigen Ausschlüsse in derselben oder einer anderen Spalte; jeder ist ein eigener Chip (*Geburtsort ≠ …*), dessen × nur ihn aufhebt, und *Filter aufheben* hebt alle auf. Ein zweites *Nur* in einer Spalte fügt seinen Wert hinzu (*Vater = A oder B*); *Ohne* für einen solchen Wert nimmt ihn wieder heraus. Eine gespeicherte Ansicht behält die Chips, früher gespeicherte Ansichten öffnen sich unverändert.
+- **Foto auf der Karte**: Die Größe *Mittel* oder *Groß* gilt jetzt auch für Personen ohne Foto: Ihre Initialen erhalten Größe und Form des Fotos auf jeder Karte mit Avatar, in den Baumansichten, im Bildexport, auf dem Plakat und in seinem PDF, sodass der Baum einheitlich wirkt. *Klein* lässt die Karten wie bisher; die Karte *Kompakt* hat keinen Avatar.
 
 ## 3.29.0
 

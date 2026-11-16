@@ -15468,75 +15468,82 @@
 
         /* ---- Photo on the card (spec 096 §2, §5; Settings → Person card → Photo on the card).
            body[data-card-photo] is the drawn view's photo size (the chosen one where someone
-           drawn has a photo, else small: renderer.ts viewPhotoSize), body[data-card-photo-shape]
+           drawn has an avatar, else small: renderer.ts viewPhotoSize), body[data-card-photo-shape]
            its shape; the settings' preview card carries its own (data-photo, data-shape). With
-           small + circle (the default) no rule here applies. Box sizes MUST match
-           NORMAL_PHOTO_BOX in types.ts: medium 200 × 64 (photo 48, padding 8), large 236 × 96
-           (photo 80, padding 10; its height inline, LayoutConfig.personHeights). The text
-           column beside a photo stays 126px; a card without one keeps its 34px initials and
-           padding 9 (a wider column: src/card-width.ts normalCardTextWidth). ---- */
+           small + circle (the default) no rule here applies. Every card with an avatar
+           (.has-avatar: a photo or the initials, spec 103 K2.1) takes the size; a placeholder has
+           none. Box sizes MUST match NORMAL_PHOTO_BOX in types.ts: medium 200 × 64 (avatar 48,
+           padding 8), large 236 × 96 (avatar 80, padding 10; its height inline,
+           LayoutConfig.personHeights). The text column beside the avatar stays 126px
+           (src/card-width.ts normalCardTextWidth). ---- */
         body[data-card-photo="medium"]:not([data-card-fields]) #tree-canvas .person-card,
         .card-signals-preview .person-card[data-density="normal"][data-photo="medium"] { width: 200px; }
-        body[data-card-photo="medium"]:not([data-card-fields]) #tree-canvas .person-card.has-photo,
+        body[data-card-photo="medium"]:not([data-card-fields]) #tree-canvas .person-card.has-avatar,
         .card-signals-preview .person-card[data-density="normal"][data-photo="medium"].has-photo { padding: 0 8px; }
-        body[data-card-photo="medium"]:not([data-card-fields]) #tree-canvas .person-card.has-photo.focused { padding: 0 7px; }
-        body[data-card-photo="medium"]:not([data-card-fields]) #tree-canvas .person-card.has-photo .card-avatar,
+        body[data-card-photo="medium"]:not([data-card-fields]) #tree-canvas .person-card.has-avatar.focused { padding: 0 7px; }
+        body[data-card-photo="medium"]:not([data-card-fields]) #tree-canvas .person-card.has-avatar .card-avatar,
         .card-signals-preview .person-card[data-density="normal"][data-photo="medium"].has-photo .card-avatar { width: 48px; height: 48px; }
         body[data-card-photo="large"]:not([data-card-fields]) #tree-canvas .person-card,
         .card-signals-preview .person-card[data-density="normal"][data-photo="large"] { width: 236px; }
-        body[data-card-photo="large"]:not([data-card-fields]) #tree-canvas .person-card.has-photo,
+        body[data-card-photo="large"]:not([data-card-fields]) #tree-canvas .person-card.has-avatar,
         .card-signals-preview .person-card[data-density="normal"][data-photo="large"].has-photo { height: 96px; padding: 0 10px; align-items: center; }
-        body[data-card-photo="large"]:not([data-card-fields]) #tree-canvas .person-card.has-photo.focused { padding: 0 9px; }
-        body[data-card-photo="large"]:not([data-card-fields]) #tree-canvas .person-card.has-photo .card-avatar,
+        body[data-card-photo="large"]:not([data-card-fields]) #tree-canvas .person-card.has-avatar.focused { padding: 0 9px; }
+        body[data-card-photo="large"]:not([data-card-fields]) #tree-canvas .person-card.has-avatar .card-avatar,
         .card-signals-preview .person-card[data-density="normal"][data-photo="large"].has-photo .card-avatar { width: 80px; height: 80px; }
         /* The large card's name and dates centred on y = 32, as on the 64px card beside it (D13):
            the top 64px of the card, at least 15px from its top; a name on rows grows down beside
            the photo (the card is taller from its fifth row). The 14px on top and 48px high: a short
            text centred on y = 32; nothing below, so the body ends inside the card on any row count. */
-        body[data-card-photo="large"]:not([data-card-fields]) #tree-canvas .person-card.has-photo > .card-body,
+        body[data-card-photo="large"]:not([data-card-fields]) #tree-canvas .person-card.has-avatar > .card-body,
         .card-signals-preview .person-card[data-density="normal"][data-photo="large"].has-photo > .card-body { align-self: flex-start; box-sizing: border-box; min-height: 48px; padding: 14px 0 0; }
         /* The cards of details (§3): the photo in the header at the left, 44px (medium) or 72px
            (large) with a 2px ring; the lines under the header across the card's whole width. The
            header is at least the photo's height; its text keeps the place it has beside the 30px
            avatar (D13: 30px, 33 with the years, the name centred in it), a longer name grows down
-           beside the photo. A card without a photo keeps its 30px initials. MUST match
-           src/card-width.ts cardAvatarSize / cardHeadBlock. */
-        body[data-card-fields][data-card-photo="medium"] #tree-canvas .person-card.has-photo .card-avatar,
+           beside the photo. The initials of a card without a photo take the same size (spec 103
+           K2.1). MUST match src/card-width.ts cardAvatarSize / cardHeadBlock. */
+        body[data-card-fields][data-card-photo="medium"] #tree-canvas .person-card.has-avatar .card-avatar,
         .card-signals-preview .person-card[data-fields][data-photo="medium"].has-photo .card-avatar { width: 44px; height: 44px; border-width: 2px; }
-        body[data-card-fields][data-card-photo="large"] #tree-canvas .person-card.has-photo .card-avatar,
+        body[data-card-fields][data-card-photo="large"] #tree-canvas .person-card.has-avatar .card-avatar,
         .card-signals-preview .person-card[data-fields][data-photo="large"].has-photo .card-avatar { width: 72px; height: 72px; border-width: 2px; }
-        body[data-card-fields][data-card-photo="medium"] #tree-canvas .person-card.has-photo .card-head,
+        body[data-card-fields][data-card-photo="medium"] #tree-canvas .person-card.has-avatar .card-head,
         .card-signals-preview .person-card[data-fields][data-photo="medium"].has-photo .card-head { min-height: 44px; }
-        body[data-card-fields][data-card-photo="large"] #tree-canvas .person-card.has-photo .card-head,
+        body[data-card-fields][data-card-photo="large"] #tree-canvas .person-card.has-avatar .card-head,
         .card-signals-preview .person-card[data-fields][data-photo="large"].has-photo .card-head { min-height: 72px; }
-        body[data-card-fields]:is([data-card-photo="medium"], [data-card-photo="large"]) #tree-canvas .person-card.has-photo .card-head-text,
+        body[data-card-fields]:is([data-card-photo="medium"], [data-card-photo="large"]) #tree-canvas .person-card.has-avatar .card-head-text,
         .card-signals-preview .person-card[data-fields]:is([data-photo="medium"], [data-photo="large"]).has-photo .card-head-text {
             align-self: flex-start; min-height: 30px; justify-content: center;
         }
-        body[data-card-fields]:is([data-card-photo="medium"], [data-card-photo="large"]) #tree-canvas .person-card.has-photo .card-head--years .card-head-text,
+        body[data-card-fields]:is([data-card-photo="medium"], [data-card-photo="large"]) #tree-canvas .person-card.has-avatar .card-head--years .card-head-text,
         .card-signals-preview .person-card[data-fields]:is([data-photo="medium"], [data-photo="large"]).has-photo .card-head--years .card-head-text { min-height: 33px; }
-        body[data-card-fields]:is([data-card-photo="medium"], [data-card-photo="large"]) #tree-canvas .person-card.has-photo .card-head--years > .card-avatar-wrap,
+        body[data-card-fields]:is([data-card-photo="medium"], [data-card-photo="large"]) #tree-canvas .person-card.has-avatar .card-head--years > .card-avatar-wrap,
         .card-signals-preview .person-card[data-fields]:is([data-photo="medium"], [data-photo="large"]).has-photo .card-head--years > .card-avatar-wrap { margin-top: 0; }
+        /* The initials in a medium or large avatar (spec 103 K2.1): in proportion to it, as 12px are
+           to the 34px avatar. MUST match src/card-width.ts avatarInitialsSize. */
+        body[data-card-photo="medium"]:not([data-card-fields]) #tree-canvas .has-avatar .avatar-initials { font-size: 17px; }
+        body[data-card-photo="large"]:not([data-card-fields]) #tree-canvas .has-avatar .avatar-initials { font-size: 29px; }
+        body[data-card-fields][data-card-photo="medium"] #tree-canvas .has-avatar .avatar-initials { font-size: 16px; }
+        body[data-card-fields][data-card-photo="large"] #tree-canvas .has-avatar .avatar-initials { font-size: 26px; }
         /* Printed, the 2px border takes 1px of padding a side (as the focus does). */
         @media print {
-            body[data-card-photo="medium"]:not([data-card-fields]) #tree-canvas .person-card.has-photo { padding: 0 7px; }
-            body[data-card-photo="large"]:not([data-card-fields]) #tree-canvas .person-card.has-photo { padding: 0 9px; }
+            body[data-card-photo="medium"]:not([data-card-fields]) #tree-canvas .person-card.has-avatar { padding: 0 7px; }
+            body[data-card-photo="large"]:not([data-card-fields]) #tree-canvas .person-card.has-avatar { padding: 0 9px; }
         }
         /* The rounded square (§5): the radius of each avatar's size (30 → 4, 34 → 5, 44 → 6,
            48 → 7, 72 → 10, 80 → 12px); the initials of a card without a photo take the shape
-           at their own size (D8); the ring follows the corners. The radius is the wrap's --av-r
+           at the avatar's size (D8); the ring follows the corners. The radius is the wrap's --av-r
            (.card-avatar takes it), so the agent's arc around it has the same corners. */
         body[data-card-photo-shape="rounded"] #tree-canvas .card-avatar-wrap,
         .card-signals-preview .person-card[data-shape="rounded"] .card-avatar-wrap { --av-r: 5px; }
         body[data-card-photo-shape="rounded"][data-card-fields] #tree-canvas .card-avatar-wrap,
         .card-signals-preview .person-card[data-fields][data-shape="rounded"] .card-avatar-wrap { --av-r: 4px; }
-        body[data-card-photo-shape="rounded"][data-card-photo="medium"]:not([data-card-fields]) #tree-canvas .has-photo .card-avatar-wrap,
+        body[data-card-photo-shape="rounded"][data-card-photo="medium"]:not([data-card-fields]) #tree-canvas .has-avatar .card-avatar-wrap,
         .card-signals-preview .person-card[data-density="normal"][data-photo="medium"][data-shape="rounded"] .card-avatar-wrap { --av-r: 7px; }
-        body[data-card-photo-shape="rounded"][data-card-photo="large"]:not([data-card-fields]) #tree-canvas .has-photo .card-avatar-wrap,
+        body[data-card-photo-shape="rounded"][data-card-photo="large"]:not([data-card-fields]) #tree-canvas .has-avatar .card-avatar-wrap,
         .card-signals-preview .person-card[data-density="normal"][data-photo="large"][data-shape="rounded"] .card-avatar-wrap { --av-r: 12px; }
-        body[data-card-photo-shape="rounded"][data-card-photo="medium"][data-card-fields] #tree-canvas .has-photo .card-avatar-wrap,
+        body[data-card-photo-shape="rounded"][data-card-photo="medium"][data-card-fields] #tree-canvas .has-avatar .card-avatar-wrap,
         .card-signals-preview .person-card[data-fields][data-photo="medium"][data-shape="rounded"] .card-avatar-wrap { --av-r: 6px; }
-        body[data-card-photo-shape="rounded"][data-card-photo="large"][data-card-fields] #tree-canvas .has-photo .card-avatar-wrap,
+        body[data-card-photo-shape="rounded"][data-card-photo="large"][data-card-fields] #tree-canvas .has-avatar .card-avatar-wrap,
         .card-signals-preview .person-card[data-fields][data-photo="large"][data-shape="rounded"] .card-avatar-wrap { --av-r: 10px; }
         /* Shown "in the view only" (D11): a medium or large photo at 55 %, so the face does not
            outweigh the ghost's hatching; the small one as it always was. */
@@ -15545,22 +15552,22 @@
            --mk is their top / right against the avatar (circle r(1 − 1/√2) − 9; the small 30 and
            34px avatars keep today's −6px and their stack's left anchoring). A medium or large
            photo anchors the stack of two or three badges on the right, as the single badge. */
-        body[data-card-photo="medium"]:not([data-card-fields]) #tree-canvas .has-photo .card-avatar-wrap { --mk: -2px; }
-        body[data-card-photo="large"]:not([data-card-fields]) #tree-canvas .has-photo .card-avatar-wrap { --mk: 3px; }
-        body[data-card-photo="medium"][data-card-fields] #tree-canvas .has-photo .card-avatar-wrap { --mk: -3px; }
-        body[data-card-photo="large"][data-card-fields] #tree-canvas .has-photo .card-avatar-wrap { --mk: 1px; }
-        body[data-card-photo-shape="rounded"][data-card-photo="medium"] #tree-canvas .has-photo .card-avatar-wrap { --mk: -6px; }
-        body[data-card-photo-shape="rounded"][data-card-photo="large"] #tree-canvas .has-photo .card-avatar-wrap { --mk: -5px; }
+        body[data-card-photo="medium"]:not([data-card-fields]) #tree-canvas .has-avatar .card-avatar-wrap { --mk: -2px; }
+        body[data-card-photo="large"]:not([data-card-fields]) #tree-canvas .has-avatar .card-avatar-wrap { --mk: 3px; }
+        body[data-card-photo="medium"][data-card-fields] #tree-canvas .has-avatar .card-avatar-wrap { --mk: -3px; }
+        body[data-card-photo="large"][data-card-fields] #tree-canvas .has-avatar .card-avatar-wrap { --mk: 1px; }
+        body[data-card-photo-shape="rounded"][data-card-photo="medium"] #tree-canvas .has-avatar .card-avatar-wrap { --mk: -6px; }
+        body[data-card-photo-shape="rounded"][data-card-photo="large"] #tree-canvas .has-avatar .card-avatar-wrap { --mk: -5px; }
         .card-signals-preview .person-card[data-density="normal"][data-photo="medium"] .card-avatar-wrap { --mk: -2px; }
         .card-signals-preview .person-card[data-density="normal"][data-photo="large"] .card-avatar-wrap { --mk: 3px; }
         .card-signals-preview .person-card[data-density="normal"][data-photo="medium"][data-shape="rounded"] .card-avatar-wrap { --mk: -6px; }
         .card-signals-preview .person-card[data-density="normal"][data-photo="large"][data-shape="rounded"] .card-avatar-wrap { --mk: -5px; }
         .card-signals-preview .person-card:is([data-photo="medium"], [data-photo="large"]) .card-avatar-wrap .card-signal { top: var(--mk, -6px); right: var(--mk, -6px); }
-        body:is([data-card-photo="medium"], [data-card-photo="large"]) #tree-canvas .has-photo .card-avatar-wrap .card-signal { top: var(--mk); right: var(--mk); }
-        body:is([data-card-photo="medium"], [data-card-photo="large"]) #tree-canvas .has-photo .card-avatar-wrap .card-signal-stack.n2 {
+        body:is([data-card-photo="medium"], [data-card-photo="large"]) #tree-canvas .has-avatar .card-avatar-wrap .card-signal { top: var(--mk); right: var(--mk); }
+        body:is([data-card-photo="medium"], [data-card-photo="large"]) #tree-canvas .has-avatar .card-avatar-wrap .card-signal-stack.n2 {
             left: auto; right: var(--mk); top: calc(var(--mk) - 1px);
         }
-        body:is([data-card-photo="medium"], [data-card-photo="large"]) #tree-canvas .has-photo .card-avatar-wrap .card-signal-stack.n3 {
+        body:is([data-card-photo="medium"], [data-card-photo="large"]) #tree-canvas .has-avatar .card-avatar-wrap .card-signal-stack.n3 {
             left: auto; right: var(--mk); top: calc(var(--mk) - 2px);
         }
         /* The agent at work around a rounded square: the arc follows the avatar's outline, 4px out

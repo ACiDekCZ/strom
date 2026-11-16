@@ -7,6 +7,7 @@
 *Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
 
 - **Filtry Tabulky**: *Bez* v nabídce buňky ponechá dřívější vyloučení ve stejném i jiném sloupci; každé je samostatný štítek (*Místo narození ≠ …*), jehož × zruší jen ten, a *Zrušit filtry* zruší všechny. Druhé *Jen* ve sloupci přidá svou hodnotu (*Otec = A nebo B*); *Bez* takové hodnoty ji zase odebere. Uložený pohled si štítky pamatuje a dříve uložené pohledy se otevřou beze změny.
+- **Fotka na kartě**: *Střední* a *Velká* fotka teď platí i pro osoby bez fotky: jejich iniciály mají velikost a tvar fotky na každé kartě s avatarem, v pohledech stromu, exportu obrázku, plakátu i jeho PDF, takže strom vypadá jednotně. *Malá* nechává karty jako dosud; *Kompaktní* karta avatar nemá.
 
 ## 3.29.0
 

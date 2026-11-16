@@ -7,8 +7,9 @@ import { calibrationWorkload, machineFactor, normalizedMs } from '../src/__tests
  * Settings → Person card → Photo on the card (spec 096 §1–§6): the size and
  * shape, Small + Circle by default (the card as it always was), the preview
  * with a stand-in photo, the Normal card with a medium or large photo in the
- * tree (only cards with a photo taller), the cards of details with the photo
- * in their header, a view without a photo kept small, the Compact card
+ * tree, the cards of details with the photo in their header, the initials of
+ * a card without a photo at the photo's size (spec 103 K2.1, also in a view
+ * without any photo; Small as before), the Compact card
  * without the choice, the widths of a phone, a tablet and a desktop, and the
  * drawing of a large tree against a calibrated budget. Invented people.
  */
@@ -49,16 +50,19 @@ test('the row sits between the card types and the preview; Small + Circle by def
     await expect(photoRow(page).locator('.card-look-photo-size')).toHaveAccessibleName('Size');
     await expect(photoRow(page).locator('.card-look-photo-shape')).toHaveAccessibleName('Shape');
     await expect(photoRow(page).locator('[aria-pressed="true"]')).toHaveText(['Small', 'Circle']);
-    await expect(photoRow(page).locator('.card-photo-note')).toContainText('People without a photo keep small initials.');
+    await expect(photoRow(page).locator('.card-photo-note')).toContainText('People without a photo get initials of the same size.');
     // The preview as it always was: the initials, 188 × 64.
     await expect(page.locator('#card-preview-settings .card-preview-size')).toHaveText('card 188 × 64 px');
     await expect(page.locator('#card-preview-settings .avatar-initials')).toHaveText('JW');
     await expect(page.locator('body')).toHaveAttribute('data-card-photo', 'small');
     expect(await box(page, 'Florimund')).toEqual([188, 64]);
     expect(await box(page, 'Kasimir')).toEqual([188, 64]);
+    // Small (spec 103 K2.2): the initials 34px at 12px, as before.
+    expect(await card(page, 'Kasimir').locator('.card-avatar').evaluate(el => (el as HTMLElement).offsetWidth)).toBe(34);
+    await expect(card(page, 'Kasimir').locator('.avatar-initials')).toHaveCSS('font-size', '12px');
 });
 
-test('a large photo: the card with a photo 236 × 96, the others 236 × 64; stored, kept after a reload', async ({ page }) => {
+test('a large photo: every card with an avatar 236 × 96, the initials as large as the photo; stored, kept after a reload', async ({ page }) => {
     await tree(page);
     await openSettings(page);
     await sizeBtn(page, 'Large').click();
@@ -70,11 +74,12 @@ test('a large photo: the card with a photo 236 × 96, the others 236 × 64; stor
     await expect(page.locator('body')).toHaveAttribute('data-card-photo', 'large');
     await expect.poll(() => cardBoxesMatchLayout(page)).toBe(true);
     expect(await box(page, 'Florimund')).toEqual([236, 96]);
-    expect(await box(page, 'Kasimir')).toEqual([236, 64]);
+    expect(await box(page, 'Kasimir')).toEqual([236, 96]);
     const avatar = await card(page, 'Florimund').locator('.card-avatar').evaluate(el => (el as HTMLElement).offsetWidth);
     expect(avatar).toBe(80);
-    // Beside the initials of a card without a photo: 34px, as before.
-    expect(await card(page, 'Kasimir').locator('.card-avatar').evaluate(el => (el as HTMLElement).offsetWidth)).toBe(34);
+    // The initials of a card without a photo: as large as the photo, their text in proportion (spec 103 K2.1).
+    expect(await card(page, 'Kasimir').locator('.card-avatar').evaluate(el => (el as HTMLElement).offsetWidth)).toBe(80);
+    await expect(card(page, 'Kasimir').locator('.avatar-initials')).toHaveCSS('font-size', '29px');
     // The name of the large card at the height of the name beside it (D13): both centred on
     // y = 32 within 2px (the large card's name on two rows, the other's on one). Neither is
     // the focus, whose border is wider; in CSS px whatever the zoom.
@@ -93,7 +98,7 @@ test('a large photo: the card with a photo 236 × 96, the others 236 × 64; stor
     await shapeBtn(page, 'Rounded square').click();
     await expect(page.locator('body')).toHaveAttribute('data-card-photo-shape', 'rounded');
     await expect(card(page, 'Florimund').locator('.card-avatar')).toHaveCSS('border-radius', '12px');
-    await expect(card(page, 'Kasimir').locator('.card-avatar')).toHaveCSS('border-radius', '5px');
+    await expect(card(page, 'Kasimir').locator('.card-avatar')).toHaveCSS('border-radius', '12px');
     expect(await page.evaluate(() => window.Strom.SettingsManager.getCardPhoto())).toEqual({ size: 'large', shape: 'rounded' });
 
     await page.reload();
@@ -144,15 +149,28 @@ test('a medium photo: every card 200 wide, none taller', async ({ page }) => {
     expect(await box(page, 'Florimund')).toEqual([200, 64]);
     expect(await box(page, 'Kasimir')).toEqual([200, 64]);
     expect(await card(page, 'Florimund').locator('.card-avatar').evaluate(el => (el as HTMLElement).offsetWidth)).toBe(48);
+    expect(await card(page, 'Kasimir').locator('.card-avatar').evaluate(el => (el as HTMLElement).offsetWidth)).toBe(48);
+    await expect(card(page, 'Kasimir').locator('.avatar-initials')).toHaveCSS('font-size', '17px');
 });
 
-test('a view without a photo keeps the small card (D3); the Compact card has the choice off', async ({ page }) => {
+test('a view without any photo: the initials at the chosen size (spec 103 K2.1), Small as before; the Compact card has the choice off', async ({ page }) => {
     await tree(page, false);
     await openSettings(page);
     await sizeBtn(page, 'Large').click();
     await expect(page.locator('#card-preview-settings .card-preview-size')).toHaveText('card 236 × 96 px');
+    await expect(page.locator('body')).toHaveAttribute('data-card-photo', 'large');
+    await expect.poll(() => cardBoxesMatchLayout(page)).toBe(true);
+    for (const name of ['Florimund', 'Kasimir']) {
+        expect(await box(page, name)).toEqual([236, 96]);
+        expect(await card(page, name).locator('.card-avatar').evaluate(el => (el as HTMLElement).offsetWidth)).toBe(80);
+    }
+    await expect.poll(() => page.evaluate(() => [...document.querySelectorAll<HTMLElement>('#tree-canvas .name-text, #tree-canvas .meta-text')]
+        .filter(el => el.scrollWidth > el.clientWidth + 0.5).map(el => el.textContent))).toEqual([]);
+    await sizeBtn(page, 'Small').click();
     await expect(page.locator('body')).toHaveAttribute('data-card-photo', 'small');
-    expect(await box(page, 'Florimund')).toEqual([188, 64]);
+    await expect.poll(() => box(page, 'Florimund')).toEqual([188, 64]);
+    expect(await card(page, 'Florimund').locator('.card-avatar').evaluate(el => (el as HTMLElement).offsetWidth)).toBe(34);
+    await sizeBtn(page, 'Large').click();
 
     await page.evaluate(() => window.Strom.UI.setCardDensity('compact'));
     await expect(photoRow(page)).toHaveClass(/is-off/);
@@ -199,7 +217,7 @@ const overlaps = (page: Page) => page.evaluate(() => {
     return n;
 });
 
-test('the Detailed card with a large photo: 72px in the header, the lines from 88px, the name where it stands beside the initials', async ({ page }) => {
+test('the Detailed card with a large photo: 72px in the header, the lines from 88px, the initials as large, the name where it stands beside the small avatar', async ({ page }) => {
     await tree(page);
     await page.evaluate(() => {
         window.Strom.SettingsManager.setCardPhoto({ size: 'large', shape: 'circle' });
@@ -212,10 +230,12 @@ test('the Detailed card with a large photo: 72px in the header, the lines from 8
     expect(photo.avatar).toBe(72);
     expect(photo.head).toBe(72);
     expect(photo.lines).toBeCloseTo(88, 0);
-    // Without a photo: the 30px initials, its own lines from 46px (the height "equal": one view height).
-    expect(initials.avatar).toBe(30);
-    expect(initials.lines).toBeCloseTo(46, 0);
+    // Without a photo: the initials as large as the photo, the lines from 88px too (spec 103 K2.1).
+    expect(initials.avatar).toBe(72);
+    expect(initials.head).toBe(72);
+    expect(initials.lines).toBeCloseTo(88, 0);
     expect(photo.w).toBe(initials.w);
+    await expect(card(page, 'Kasimir').locator('.avatar-initials')).toHaveCSS('font-size', '26px');
     // The name at the same height on either card (D13).
     expect(Math.abs(photo.name! - initials.name!)).toBeLessThanOrEqual(1);
     expect(await spilled(page)).toEqual([]);
@@ -252,7 +272,7 @@ test('Custom, one row a detail, height "equal": every card 98 + 17n with a large
     expect(initials.h).toBe(photo.h);
     expect(photo.avatar).toBe(72);
     await expect(card(page, 'Florimund').locator('.card-avatar')).toHaveCSS('border-radius', '10px');
-    await expect(card(page, 'Kasimir').locator('.card-avatar')).toHaveCSS('border-radius', '4px');
+    await expect(card(page, 'Kasimir').locator('.card-avatar')).toHaveCSS('border-radius', '10px');
     expect(await spilled(page)).toEqual([]);
 
     await page.evaluate(() => window.Strom.SettingsManager.setCardPhoto({ size: 'medium', shape: 'circle' }));
@@ -267,7 +287,7 @@ test('Custom, one row a detail, height "equal": every card 98 + 17n with a large
     expect(await overlaps(page)).toBe(0);
 });
 
-test('the Register card (height by content) with a large photo: only the card with a photo taller', async ({ page }) => {
+test('the Register card (height by content) with a large photo: the cards with the initials as tall as with a photo', async ({ page }) => {
     await tree(page);
     await page.evaluate(() => window.Strom.UI.setCardDensity('register'));
     await expect.poll(() => cardBoxesMatchLayout(page)).toBe(true);
@@ -279,8 +299,11 @@ test('the Register card (height by content) with a large photo: only the card wi
     const photo = await fieldCard(page, 'Florimund');
     expect(photo.head).toBeGreaterThanOrEqual(72);
     expect(photo.lines).toBeGreaterThanOrEqual(88 - 0.5);
-    // The card without a photo keeps its own height (its width may follow the wider view).
-    expect((await fieldCard(page, 'Kasimir')).h).toBe(before.h);
+    // The card without a photo: its initials as large, its header as tall (spec 103 K2.1).
+    const initials = await fieldCard(page, 'Kasimir');
+    expect(initials.avatar).toBe(72);
+    expect(initials.head).toBeGreaterThanOrEqual(72);
+    expect(initials.h).toBeGreaterThan(before.h);
     expect(await spilled(page)).toEqual([]);
     expect(await overlaps(page)).toBe(0);
 });
@@ -431,6 +454,9 @@ for (const width of [390, 1024, 1440]) {
                 expect(await overlaps(page), label).toBe(0);
                 const avatar = await card(page, 'Hyacintha').locator('.card-avatar').evaluate(el => (el as HTMLElement).offsetWidth);
                 expect(avatar, label).toBe(density === 'normal' ? (size === 'large' ? 80 : 48) : (size === 'large' ? 72 : 44));
+                // Kasimir, without a photo: the initials as large (spec 103 K2.1).
+                const initials = await card(page, 'Kasimir').locator('.card-avatar').evaluate(el => (el as HTMLElement).offsetWidth);
+                expect(initials, label).toBe(avatar);
             }
         }
     });
