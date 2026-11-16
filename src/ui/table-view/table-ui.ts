@@ -75,6 +75,7 @@ import {
 import { columnCoverage, coverageCell, coverageLabel, type CoverageCell } from './table-coverage.js';
 import type { ColumnDef } from './table-columns.js';
 import { closeHeadMenu, headMenuItems, openHeadMenu, SEP, type HeadMenuItem, type MenuEntry } from './table-headmenu.js';
+import { listMenuEntries, listSheetPage } from '../person-list-add.js';
 import { issueCategory, translateValidationType, validateTreeData, type ValidationIssue } from '../../validation.js';
 import { dismissalFor, dismissalKey } from '../../quality-dismiss.js';
 import { QUALITY_CHANGED_EVENT } from '../quality-ui.js';
@@ -138,6 +139,15 @@ interface Mounted {
     unionsButton: 'expand' | 'collapse' | null;
     /** The strip for a person the filter hides (spec 103 2a). */
     notice: HTMLElement;
+    /** The rows as last drawn, without a row shown for now: Save as list of people takes them (spec 084 §6). */
+    saveRows: readonly TableRow[];
+    /** The pinned rows outside the filter as last drawn (said, not saved, 6b). */
+    pinOutside: ReadonlySet<string>;
+}
+
+/** Save as list of people is offered (spec 084 §6): the People and Unions tables of a tree that takes changes. */
+function canSaveAsList(type: RowType): boolean {
+    return (type === 'persons' || type === 'unions') && !DataManager.listsReadOnly();
 }
 
 /** "New from research" in a window, or off (16zk): the window is the chip's value. */
@@ -986,13 +996,16 @@ export const tableMethods = uiModule({
             barWatch?.observe(bar);
             mounted = {
                 container, lang, bar, bulk, grid, status, colsBtn, drawn: '', display: null, filters, filterState: null, views, exportBtn, windowBtn,
-                empty, emptyKey: '', unionsButton: null, notice,
+                empty, emptyKey: '', unionsButton: null, notice, saveRows: [], pinOutside: new Set(),
             };
         }
 
         const counts = rowCounts(m);
         const phone = isPhoneBar();
         mounted.windowBtn.hidden = !canOpenWindows();
+        // ⋯ wider than a phone offers Save as list of people only (spec 084 §6): without it,
+        // or with no rows of the type in the tree (nothing to save), no ⋯.
+        mounted.bar.querySelector('.tv-slot-more')?.classList.toggle('is-empty', !canSaveAsList(type) || counts[type] === 0);
         normalizeColumns(type, st);
         const display = displayColumns(type, st, phone);
         mounted.display = display;
@@ -1022,6 +1035,8 @@ export const tableMethods = uiModule({
         const temp = shownRows !== rows && tempShown ? new Set([`p:${tempShown.person}`]) : undefined;
         const lines = persons ? buildLines(shownRows, { collapse: st.unions, pass, revealed: new Set(st.revealedUnions) }) : undefined;
         const pinned = this.tablePinnedLines(m, type, st, state.open[type], shownRows, pass, phone);
+        mounted.saveRows = rows;
+        mounted.pinOutside = pinned?.outside ?? new Set();
         const unionsButton = persons && hasMultiUnions(rows) ? (anyExpanded(st.unions, rows) ? 'collapse' : 'expand') : null;
         const summary = filterSummary(m, type, st.filter, st.search);
         // Another window following the agent (spec 097 §5): the agent's row tinted, scrolled to, or said hidden.
@@ -2222,6 +2237,57 @@ export const tableMethods = uiModule({
         };
     },
 
+    /**
+     * "Add to list ›" of a row's menu (spec 084 §4): its own menu of the
+     * fixed lists. One person: ✓ where they are; a range selected across
+     * rows: "Add n people to a list", each person once, no ✓. A union
+     * brings both partners, an event its people; a source none.
+     */
+    tableRowListEntry(line: GridLine, area: readonly string[], anchor: HTMLElement): HeadMenuItem | null {
+        if (line.kind === 'more' || !model || DataManager.listsReadOnly()) return null;
+        const type = stateOf(treeKey()).rowType;
+        const many = area.length > 1 && area.includes(rowKey(line.row));
+        const byKey = many ? new Map(rowsOf(model, type).map(r => [rowKey(r), r] as const)) : null;
+        const rows = byKey ? area.map(k => byKey.get(k)).filter((r): r is TableRow => !!r) : [line.row];
+        const ids = [...new Set(rows.flatMap(rowPeople))];
+        if (!ids.length) return null;
+        const c = strings.contextMenu;
+        const label = many ? strings.table.act.toListN(ids.length) : c.toList;
+        return {
+            id: 'to-list', label, icon: '', hint: '›',
+            run: () => {
+                const menu = openHeadMenu(anchor, '', '', listMenuEntries(this, ids,
+                    () => this.showNewPersonList({ personIds: ids }), ids.length > 1 ? c.newListWithMany : c.newListWith));
+                menu.setAttribute('aria-label', label);
+            },
+        };
+    },
+
+    /**
+     * Save as list of people (spec 084 §6): the People or Unions table's
+     * people in the order of its rows (filter and sort, no row shown for
+     * now; a union's both partners, each person once), the filter and sort
+     * as a copy for an automatic list, the pinned rows outside the filter said.
+     */
+    saveTableAsList(): void {
+        if (!mounted || !model) return;
+        const state = stateOf(treeKey());
+        const type = state.rowType;
+        if (!canSaveAsList(type) || (type !== 'persons' && type !== 'unions')) return;
+        const st = state.types[type];
+        const ids = [...new Set(mounted.saveRows.flatMap(rowPeople))];
+        const byKey = new Map(rowsOf(model, type).map(r => [rowKey(r), r] as const));
+        const outside = [...mounted.pinOutside].map(k => byKey.get(k)).filter((r): r is TableRow => !!r)
+            .flatMap(rowPeople).map(id => DataManager.getPerson(id)).filter((p): p is Person => !!p).map(p => personName(p));
+        const open = viewList(state, storedViews(), DataManager.isReadOnly());
+        const name = [...open.builtin, ...open.research, ...open.custom].find(v => v.active)?.name;
+        this.showNewPersonList({
+            source: type === 'unions' ? 'unions' : 'table',
+            rule: (() => { const v = viewFromState(type, st, '', '', ''); return { kind: 'tableFilter' as const, rowType: type, filter: v.filter, sort: v.sort }; })(),
+            personIds: ids, pinOut: outside.join(', '), ...(name ? { name } : {}),
+        });
+    },
+
     showTableRowMenu(line: GridLine, anchor: HTMLElement, cell: GridCellRef | null = null): void {
         if (line.kind === 'more') return;
         if (isPhoneBar()) { this.showTableRowSheet(line, cell); return; }
@@ -2248,6 +2314,9 @@ export const tableMethods = uiModule({
         // Pin or unpin the row (spec 103 3b), after Edit, before the unions.
         const pin = this.tableRowPinEntry(line, area);
         if (pin) entries.push(SEP, pin);
+        // Add to list › (spec 084 §4, 4c): the row's people, or those of a range selected across rows.
+        const toList = this.tableRowListEntry(line, area, anchor);
+        if (toList) entries.push(SEP, toList);
         if (line.kind === 'row' && line.expanded !== null) {
             const expand = !line.expanded;
             const id = line.row.id;
@@ -2297,6 +2366,14 @@ export const tableMethods = uiModule({
             cellBlocks.length || linkBlocks.length ? { rows, divider: true } : { rows },
             ...(pinRows.length ? [{ rows: pinRows, divider: true }] : []),
         ];
+        // Add to list › (spec 084 §4, 15e): a second page of the sheet; the row's people (no range by touch).
+        const people = rowPeople(line.row);
+        if (people.length && !DataManager.listsReadOnly()) {
+            const c = strings.contextMenu;
+            const page = listSheetPage(this, people, () => this.showNewPersonList({ personIds: people }),
+                people.length > 1 ? c.newListWithMany : c.newListWith);
+            blocks.push({ rows: [{ label: c.toList, icon: '', run: () => {}, page } as typeof rows[number]], divider: true });
+        }
         if (!ro && line.row.kind === 'person') {
             const row = line.row;
             const n = row.unions.length;
@@ -2533,6 +2610,8 @@ export const tableMethods = uiModule({
                     { id: 'delete', label: t.deleteMenu, icon: '', disabled: !list.canEdit, run: () => { void this.deleteOpenTableView(); } });
                 if (list.builtinOpen) entries.push({ note: t.builtinLocked });
             }
+            // Save as list of people (spec 084 §6): after Delete, behind its own separator.
+            if (canSaveAsList(state.rowType)) entries.push(SEP, { id: 'saveList', label: strings.lists.saveAs, icon: '', run: () => this.saveTableAsList() });
             openHeadMenu(anchor, '', '', entries);
             return;
         }
@@ -2812,11 +2891,25 @@ export const tableMethods = uiModule({
         }
     },
 
-    /** The phone's ⋯ (12a): Columns, Export, Coverage row and Expand or Collapse unions. */
+    /**
+     * ⋯ of the Table. Wider than a phone (spec 084 §6) a menu under it:
+     * Save as list of people (the People and Unions tables of a tree that
+     * takes changes); D4 puts Group by › and Collapse / Expand all groups
+     * above it, behind a separator. On a phone (12a) a sheet: Save as list
+     * of people, then Columns, Export, Coverage row and Expand or Collapse unions.
+     */
     showTableMoreMenu(): void {
         const state = stateOf(treeKey());
         const st = state.types[state.rowType];
         const t = strings.table;
+        const saveList = canSaveAsList(state.rowType);
+        if (!isPhoneBar()) {
+            const anchor = mounted?.bar.querySelector<HTMLElement>('.tv-more-menu-btn');
+            if (!anchor || !saveList || !rowCounts(model)[state.rowType]) return;
+            const entries: MenuEntry[] = [{ id: 'saveList', label: strings.lists.saveAs, icon: '', run: () => this.saveTableAsList() }];
+            openHeadMenu(anchor, '', '', entries);
+            return;
+        }
         const rows: { label: string; run: () => void; value?: string; active?: boolean; ariaLabel?: string }[] = [
             { label: t.columns, value: String(st.columns.length), run: () => this.showTableColumns() },
             { label: t.export, run: () => this.showTableExport() },
@@ -2835,7 +2928,9 @@ export const tableMethods = uiModule({
         }
         this.noteBottomSheetTrigger();
         this.hideBottomSheet();
-        this.presentMenuSheet(t.moreActions, [{ rows }]);
+        this.presentMenuSheet(t.moreActions, saveList
+            ? [{ rows: [{ label: strings.lists.saveAs, run: () => this.saveTableAsList() }] }, { rows, divider: true }]
+            : [{ rows }]);
     },
 
     /** A completeness cell's bubble by touch (§6.2): the share, what is missing, what it counts. */

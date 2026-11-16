@@ -125,9 +125,9 @@ test.describe('desktop (1440)', () => {
         const place = await cell(page, 'p:b1', 'bPlace');
         await place.click({ button: 'right' });
         await expect(place).toHaveClass(/is-active-cell/);
-        await expect(menuLabels(page)).toHaveText(['Copy', 'Only “Lhotka nad Brodem”', 'Without “Lhotka nad Brodem”', 'Edit cell', 'Show in tree', 'Open person', 'Edit…', 'Pin row']);
+        await expect(menuLabels(page)).toHaveText(['Copy', 'Only “Lhotka nad Brodem”', 'Without “Lhotka nad Brodem”', 'Edit cell', 'Show in tree', 'Open person', 'Edit…', 'Pin row', 'Add to list']);
         await expect(page.locator('.tv-menu .tv-menu-item').first().locator('.tv-menu-hint')).toHaveText(/^(Ctrl\+C|⌘C)$/);
-        await expect(page.locator('.tv-menu .tv-menu-sep')).toHaveCount(2);
+        await expect(page.locator('.tv-menu .tv-menu-sep')).toHaveCount(3);
         await menuItem(page, 'Copy').click();
         await expect.poll(() => clipboard(page)).toBe('Lhotka nad Brodem');
 
@@ -157,7 +157,7 @@ test.describe('desktop (1440)', () => {
 
         // An empty cell: only empty / only filled.
         await (await cell(page, 'p:f', 'bPlace')).click({ button: 'right' });
-        await expect(menuLabels(page)).toHaveText(['Only empty', 'Only filled', 'Edit cell', 'Show in tree', 'Open person', 'Edit…', 'Pin row']);
+        await expect(menuLabels(page)).toHaveText(['Only empty', 'Only filled', 'Edit cell', 'Show in tree', 'Open person', 'Edit…', 'Pin row', 'Add to list']);
         await menuItem(page, 'Only empty').click();
         await expect(status(page)).toHaveText('3 of 7 people');
 
@@ -170,7 +170,7 @@ test.describe('desktop (1440)', () => {
         await page.keyboard.press('Escape');
         // The row's own name keeps the row's actions alone.
         await row(page, 'p:b2').locator('.tv-name').click({ button: 'right' });
-        await expect(menuLabels(page)).toHaveText(['Show in tree', 'Open person', 'Edit…', 'Pin row']);
+        await expect(menuLabels(page)).toHaveText(['Show in tree', 'Open person', 'Edit…', 'Pin row', 'Add to list']);
     });
 
     test('Only "{father}" lists the siblings (a namesake\'s son not), kept in a saved view and back after a reload', async ({ page }) => {
@@ -336,14 +336,14 @@ test.describe('phone (390)', () => {
         const sheet = page.locator('.bottom-sheet-menu');
         await expect(sheet).toBeVisible();
         const labels = sheet.locator('.bottom-sheet-item .bottom-sheet-label');
-        await expect(labels).toHaveText(['Copy', 'Only “4 Mar 1880”', 'Without “4 Mar 1880”', 'Show in tree', 'Open person', 'Edit…']);
+        await expect(labels).toHaveText(['Copy', 'Only “4 Mar 1880”', 'Without “4 Mar 1880”', 'Show in tree', 'Open person', 'Edit…', 'Add to list']);
         expect((await sheet.locator('.bottom-sheet-item').first().boundingBox())!.height).toBeGreaterThanOrEqual(44);
         await sheet.locator('.bottom-sheet-item', { hasText: 'Only' }).tap();
         await expect(sheet).toHaveCount(0);
         await expect(status(page)).toHaveText('1 of 7 people');
         // The name keeps the row's sheet as it was.
         await row(page, 'p:b1').locator('.tv-name').tap();
-        await expect(labels).toHaveText(['Show in tree', 'Open person', 'Edit…']);
+        await expect(labels).toHaveText(['Show in tree', 'Open person', 'Edit…', 'Add to list']);
     });
 
     test('the column\'s filter after an Only: tick a second value ("= A or B", spec 103 K1.5)', async ({ page }) => {

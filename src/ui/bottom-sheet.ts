@@ -50,7 +50,7 @@ interface MenuRow {
     /** A shortcut chip (shown only with a mouse): Ctrl+Z, Ctrl+⇧+Z, Ctrl+S. */
     kbd?: 'undo' | 'redo' | 'save';
     /** A second level in the same sheet ("For the family ›"): its title and rows, ‹ Back returns. */
-    page?: { title: string; rows: MenuRow[] };
+    page?: { title: string; rows: MenuRow[]; note?: string };
     /** A stable id for the row (tests, focus). */
     id?: string;
     /** A small sign before the label (the Table view's row actions: ⌖ ▤ ✎); '' keeps its place empty. */
@@ -137,6 +137,7 @@ export const bottomSheetMethods = uiModule({
             const divider = a.divider ? '<div class="bottom-sheet-divider" role="separator"></div>' : '';
             const header = (a.section ? `<div class="bottom-sheet-section win-research-head" role="presentation">${esc(a.section)}</div>` : '')
                 + (a.header ? `<div class="bottom-sheet-section" role="presentation">${esc(a.header)}</div>` : '');
+            if (a.hint) return `${divider}${header}<p class="bottom-sheet-hint" role="note">${esc(a.label)}</p>`;
             if (a.caption) {
                 return `${divider}${header}<div class="bottom-sheet-caption" role="menuitem" aria-disabled="true"><span class="view-link-icon" aria-hidden="true"></span><span>${esc(a.label)}</span></div>`;
             }
@@ -660,6 +661,14 @@ export const bottomSheetMethods = uiModule({
             const items = document.createElement('div');
             items.className = 'bottom-sheet-items';
             for (const row of page.rows) items.appendChild(makeButton(row));
+            // A quiet note under the rows, not an action (Add to list: automatic lists fill themselves).
+            if (page.note) {
+                const note = document.createElement('p');
+                note.className = 'bottom-sheet-hint';
+                note.setAttribute('role', 'note');
+                note.textContent = page.note;
+                items.appendChild(note);
+            }
             subPage.append(head, items);
             sheet.appendChild(subPage);
             title.hidden = true;

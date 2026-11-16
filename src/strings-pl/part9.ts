@@ -75,6 +75,8 @@ export const plPart9: Pick<StringsType, 'lists'> = {
             added: (p: string, l: string, _g?: Gender) => `${p} – dodano do listy „${l}”.`,
             removed: (p: string, _g?: Gender) => `${p} – usunięto z listy.`,
             saved: (n: string) => `Lista „${n}” zapisana.`,
+            addedN: (n: number, l: string) => `Dodano ${n} ${plPl(n, 'osobę', 'osoby', 'osób')} do listy „${l}”.`,
+            allIn: (l: string) => `Wszystkie są już na liście „${l}”.`,
             personDeleted: (n: string, k: number) => `Osoba ${n} usunięta, także z ${k} ${plPl(k, 'listy', 'list', 'list')}.`,
         },
         new: {
@@ -119,6 +121,7 @@ export const plPart9: Pick<StringsType, 'lists'> = {
             rodTitle: 'Zapisz ród jako listę',
             lineTitle: 'Zapisz linię jako listę',
             searchTitle: 'Nowa lista z wyników',
+            searchName: (q: string) => `Wyszukiwanie: ${q}`,
         },
         readOnly: 'Tylko do odczytu',
         manage: 'Zarządzaj listami…',

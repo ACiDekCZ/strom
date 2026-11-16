@@ -516,6 +516,8 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
     },
 
     research: {
+        /** A research line's ⋯ (spec 084 §6, 6e): the line as a list of people. */
+        dirSaveList: 'Zapisz jako listę…',
         browser: {
             rowLabel: 'Przeglądarka',
             ready: 'Claude in Chrome połączony – agent pobiera też z archiwów dostępnych tylko przez przeglądarkę.',

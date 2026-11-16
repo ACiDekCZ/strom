@@ -1094,9 +1094,17 @@ export const researchDirectionsMethods = uiModule({
         return row;
     },
 
+    /** "Save as list…" of a line's ⋯ (spec 084 §6): the dialog with the line's rule, Keep up to date on. */
+    directionSaveListItem(d: LiveDirection): DirectionMenuItem {
+        return {
+            do: 'save-list', label: strings.research.dirSaveList,
+            run: () => this.showNewPersonList({ source: 'line', rule: { kind: 'line', directionId: d.id, lineName: d.name } }),
+        };
+    },
+
     /**
      * The ⋯ menu of a managed direction: Edit · Pause / Restart · End… ·
-     * the moves it can make · Work on it (its agent in the terminal).
+     * the moves it can make · Save as list… · Work on it (its agent in the terminal).
      */
     openManagedDirectionMenu(anchor: HTMLElement, s: LiveSession, d: LiveDirection): void {
         const L = strings.live;
@@ -1115,6 +1123,8 @@ export const researchDirectionsMethods = uiModule({
             if (at > 1) moves.push({ do: 'top', label: L.dirMoveTop, run: () => this.moveDirection(d.id, 'top') });
             if (moves.length > 0) items.push(null, ...moves);
         }
+        // Save as list (spec 084 §6, 6e): stays in the app, so no mark.
+        if (!DataManager.listsReadOnly()) items.push(null, this.directionSaveListItem(d));
         const work = d.state === 'active' && !this.activeResearchNoAgent() ? this.activeResearchLink('chat', { research: d.id }) : null;
         if (work) {
             items.push(null, { do: 'work', label: L.dirWork, mark: researchLinkMark('chat'), run: () => this.launchResearchLink(work, 'agent') });
@@ -1133,6 +1143,10 @@ export const researchDirectionsMethods = uiModule({
         if (d.state !== 'done') items.push({ do: 'done', label: L.dirEndMenu, hint: L.dirEndHint, run: () => this.openDirectionEnd(anchor, d) });
         if (this.directionsView(s).canOrder && shownOrder(s).indexOf(d.id) > 1) {
             items.push({ do: 'top', label: L.dirMoveTop, run: () => this.moveDirection(d.id, 'top') });
+        }
+        if (!DataManager.listsReadOnly()) {
+            if (items.length > 0) items.push(null);
+            items.push(this.directionSaveListItem(d));
         }
         const work = d.state === 'active' && !this.activeResearchNoAgent() ? this.activeResearchLink('chat', { research: d.id }) : null;
         if (work) {

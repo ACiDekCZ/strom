@@ -2887,6 +2887,8 @@ const stringsEN = {
     },
 
     research: {
+        /** A research line's ⋯ (spec 084 §6, 6e): the line as a list of people. */
+        dirSaveList: 'Save as list…',
         /** The agent's browser (spec 048 §11): the row beside the agent, and the note at images waiting for a browser-only archive. */
         browser: {
             rowLabel: 'Browser',
@@ -3523,6 +3525,12 @@ const stringsEN = {
         showStory: 'Story',
         relationship: 'Find relationship…',
         archives: 'Search in archives…',
+        /** Lists of people (spec 084 §4): the row, its second level's last rows and note. */
+        toList: 'Add to list',
+        newListWith: 'New list with this person…',
+        newListWithMany: 'New list with these people…',
+        autoListsNote: 'Automatic lists fill themselves from their rule.',
+        moreLists: 'More lists…',
         addParent: 'Add parent',
         addPartner: 'Add partner',
         addChild: 'Add child',
@@ -4501,6 +4509,7 @@ const stringsEN = {
     },
     rodView: {
         only: (l: string) => `Only the ${l} line`,
+        saveList: (r: string) => `Save the ${r} family line as a list…`,
         onlySub: 'Only one line',
         birth: 'birth',
         wife: 'wife',
@@ -4909,6 +4918,8 @@ const stringsEN = {
         placeholder: 'Search person…',
         noResults: 'No results',
         multipleResults: 'Multiple results found',
+        toList: 'Results to a list',
+        newFromResults: (n: number) => `New list from the results (${n})…`,
         selectPerson: 'Select person',
         shortcutHint: '/',
         shortcutAria: 'Press / to search',
@@ -9074,6 +9085,8 @@ const stringsEN = {
             added: (p: string, l: string, _g?: Gender) => `${p} added to “${l}”.`,
             removed: (p: string, _g?: Gender) => `${p} removed from the list.`,
             saved: (n: string) => `List “${n}” saved.`,
+            addedN: (n: number, l: string) => `${nEn(n, 'person', 'people')} added to “${l}”.`,
+            allIn: (l: string) => `All of them are already in “${l}”.`,
             personDeleted: (n: string, k: number) => `${n} deleted, also removed from ${nEn(k, 'list', 'lists')}.`,
         },
         new: {
@@ -9119,6 +9132,8 @@ const stringsEN = {
             rodTitle: 'Save the family line as a list',
             lineTitle: 'Save the line as a list',
             searchTitle: 'New list from the results',
+            /** The name a list from the search results starts with. */
+            searchName: (q: string) => `Search: ${q}`,
         },
         readOnly: 'Read only',
         manage: 'Manage lists…',
@@ -9513,7 +9528,7 @@ const stringsEN = {
         viewWhat: 'Saved: the row type, the columns (order, widths, pinning, collapsed groups), the filter and the sort.',
         viewCopyName: (name: string) => `${name} 2`,
         deleteConfirm: (name: string) => `Delete the view ${name}?`,
-        act: { tree: 'Show in tree', open: 'Open person', edit: 'Edit…', openSource: 'Open source' },
+        act: { tree: 'Show in tree', open: 'Open person', edit: 'Edit…', openSource: 'Open source', toListN: (n: number) => `Add ${nEn(n, 'person', 'people')} to a list` },
         dblClickHint: 'double click',
         actionsOf: (name: string) => `Actions: ${name}`,
         unionWith: (k: number, name: string) => `Union ${k}: ${name}`,
@@ -12242,6 +12257,8 @@ const stringsCZ: StringsType = {
     },
 
     research: {
+        /** A research line's ⋯ (spec 084 §6, 6e): the line as a list of people. */
+        dirSaveList: 'Uložit jako seznam…',
         browser: {
             rowLabel: 'Prohlížeč',
             ready: 'Claude in Chrome připojen – agent stahuje i z archivů jen přes prohlížeč.',
@@ -12871,6 +12888,11 @@ const stringsCZ: StringsType = {
         showStory: 'Vyprávění',
         relationship: 'Zjistit vztah…',
         archives: 'Hledat v archivech…',
+        toList: 'Přidat do seznamu',
+        newListWith: 'Nový seznam s touto osobou…',
+        newListWithMany: 'Nový seznam s těmito osobami…',
+        autoListsNote: 'Automatické seznamy se plní samy podle pravidla.',
+        moreLists: 'Další seznamy…',
         addParent: 'Přidat rodiče',
         addPartner: 'Přidat partnera',
         addChild: 'Přidat dítě',
@@ -13842,6 +13864,7 @@ const stringsCZ: StringsType = {
     },
     rodView: {
         only: (l: string) => `Jen rod ${l}`,
+        saveList: (r: string) => `Uložit rod ${r} jako seznam…`,
         onlySub: 'Jen rod',
         birth: 'rodný',
         wife: 'manželka',
@@ -14224,6 +14247,8 @@ const stringsCZ: StringsType = {
         placeholder: 'Hledat osobu…',
         noResults: 'Nic nenalezeno',
         multipleResults: 'Nalezeno více výsledků',
+        toList: 'Výsledky do seznamu',
+        newFromResults: (n: number) => `Nový seznam z výsledků (${n})…`,
         selectPerson: 'Vybrat osobu',
         shortcutHint: '/',
         shortcutAria: 'Hledání klávesou /',
@@ -18339,6 +18364,8 @@ const stringsCZ: StringsType = {
             added: (p: string, l: string, g?: Gender) => g === 'male' ? `${p} přidán do seznamu „${l}“.` : g === 'female' ? `${p} přidána do seznamu „${l}“.` : `Osoba ${p} přidána do seznamu „${l}“.`,
             removed: (p: string, g?: Gender) => g === 'male' ? `${p} odebrán ze seznamu.` : g === 'female' ? `${p} odebrána ze seznamu.` : `Osoba ${p} odebrána ze seznamu.`,
             saved: (n: string) => `Seznam „${n}“ uložen.`,
+            addedN: (n: number, l: string) => `Do seznamu „${l}“ ${plural('cs', n, 'přidána', 'přidány', 'přidáno')} ${nCs(n, 'osoba', 'osoby', 'osob')}.`,
+            allIn: (l: string) => `Všechny už v seznamu „${l}“ jsou.`,
             personDeleted: (n: string, k: number) => k === 1 ? `Osoba ${n} smazána, odebrána i z 1 seznamu.` : `Osoba ${n} smazána, odebrána i ${[2, 3, 4, 6, 7].includes(k) ? 'ze' : 'z'} ${k} seznamů.`,
         },
         new: {
@@ -18384,6 +18411,7 @@ const stringsCZ: StringsType = {
             rodTitle: 'Uložit rod jako seznam',
             lineTitle: 'Uložit linii jako seznam',
             searchTitle: 'Nový seznam z výsledků',
+            searchName: (q: string) => `Hledání: ${q}`,
         },
         readOnly: 'Jen ke čtení',
         manage: 'Spravovat seznamy…',
@@ -18774,7 +18802,7 @@ const stringsCZ: StringsType = {
         viewWhat: 'Uloží se typ řádků, sloupce (pořadí, šířky, ukotvení, sbalené skupiny), filtr a řazení.',
         viewCopyName: (name: string) => `${name} 2`,
         deleteConfirm: (name: string) => `Smazat pohled ${name}?`,
-        act: { tree: 'Ukázat ve stromu', open: 'Otevřít osobu', edit: 'Upravit…', openSource: 'Otevřít pramen' },
+        act: { tree: 'Ukázat ve stromu', open: 'Otevřít osobu', edit: 'Upravit…', openSource: 'Otevřít pramen', toListN: (n: number) => `Přidat ${nCs(n, 'osobu', 'osoby', 'osob')} do seznamu` },
         dblClickHint: 'dvojklik',
         actionsOf: (name: string) => `Akce: ${name}`,
         unionWith: (k: number, name: string) => `Svazek ${k}: ${name}`,
@@ -21487,6 +21515,8 @@ const stringsDE: StringsType = {
     },
 
     research: {
+        /** A research line's ⋯ (spec 084 §6, 6e): the line as a list of people. */
+        dirSaveList: 'Als Liste speichern…',
         browser: {
             rowLabel: 'Browser',
             ready: 'Claude in Chrome verbunden – der Agent lädt auch aus Archiven, die nur im Browser zugänglich sind.',
@@ -22110,6 +22140,11 @@ const stringsDE: StringsType = {
         showStory: 'Erzählung',
         relationship: 'Verwandtschaft finden…',
         archives: 'In Archiven suchen…',
+        toList: 'Zur Personenliste hinzufügen',
+        newListWith: 'Neue Liste mit dieser Person…',
+        newListWithMany: 'Neue Liste mit diesen Personen…',
+        autoListsNote: 'Automatische Listen füllen sich selbst nach ihrer Regel.',
+        moreLists: 'Weitere Listen…',
         addParent: 'Elternteil hinzufügen',
         addPartner: 'Partner hinzufügen',
         addChild: 'Kind hinzufügen',
@@ -23072,6 +23107,7 @@ const stringsDE: StringsType = {
     },
     rodView: {
         only: (l: string) => `Nur Stammlinie ${l}`,
+        saveList: (r: string) => `Stamm ${r} als Liste speichern…`,
         onlySub: 'Nur eine Stammlinie',
         birth: 'Geburt',
         wife: 'Ehefrau',
@@ -23452,6 +23488,8 @@ const stringsDE: StringsType = {
         placeholder: 'Person suchen…',
         noResults: 'Keine Ergebnisse',
         multipleResults: 'Mehrere Ergebnisse gefunden',
+        toList: 'Ergebnisse in eine Liste',
+        newFromResults: (n: number) => `Neue Liste aus den Ergebnissen (${n})…`,
         selectPerson: 'Person auswählen',
         shortcutHint: '/',
         shortcutAria: 'Zum Suchen / drücken',
@@ -27519,6 +27557,8 @@ const stringsDE: StringsType = {
             added: (p: string, l: string, _g?: Gender) => `${p} zur Liste „${l}“ hinzugefügt.`,
             removed: (p: string, _g?: Gender) => `${p} aus der Liste entfernt.`,
             saved: (n: string) => `Liste „${n}“ gespeichert.`,
+            addedN: (n: number, l: string) => `${nDe(n, 'Person', 'Personen')} zur Liste „${l}“ hinzugefügt.`,
+            allIn: (l: string) => `Alle sind schon in der Liste „${l}“.`,
             personDeleted: (n: string, k: number) => `${n} gelöscht, auch aus ${nDe(k, 'Liste', 'Listen')} entfernt.`,
         },
         new: {
@@ -27564,6 +27604,7 @@ const stringsDE: StringsType = {
             rodTitle: 'Stamm als Liste speichern',
             lineTitle: 'Linie als Liste speichern',
             searchTitle: 'Neue Liste aus den Ergebnissen',
+            searchName: (q: string) => `Suche: ${q}`,
         },
         readOnly: 'Nur lesen',
         manage: 'Listen verwalten…',
@@ -27954,7 +27995,7 @@ const stringsDE: StringsType = {
         viewWhat: 'Gespeichert werden Zeilenart, Spalten (Reihenfolge, Breiten, Fixierung, eingeklappte Gruppen), Filter und Sortierung.',
         viewCopyName: (name: string) => `${name} 2`,
         deleteConfirm: (name: string) => `Ansicht ${name} löschen?`,
-        act: { tree: 'Im Baum zeigen', open: 'Person öffnen', edit: 'Bearbeiten…', openSource: 'Quelle öffnen' },
+        act: { tree: 'Im Baum zeigen', open: 'Person öffnen', edit: 'Bearbeiten…', openSource: 'Quelle öffnen', toListN: (n: number) => `${nDe(n, 'Person', 'Personen')} zur Liste hinzufügen` },
         dblClickHint: 'Doppelklick',
         actionsOf: (name: string) => `Aktionen: ${name}`,
         unionWith: (k: number, name: string) => `Verbindung ${k}: ${name}`,

@@ -238,6 +238,7 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
     },
     rodView: {
         only: (l: string) => `Tylko ród ${l}`,
+        saveList: (r: string) => `Zapisz ród ${r} jako listę…`,
         onlySub: 'Tylko ród',
         birth: 'z urodzenia',
         wife: 'żona',
@@ -620,6 +621,8 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
         placeholder: 'Szukaj osoby…',
         noResults: 'Nic nie znaleziono',
         multipleResults: 'Znaleziono kilka wyników',
+        toList: 'Wyniki do listy',
+        newFromResults: (n: number) => `Nowa lista z wyników (${n})…`,
         selectPerson: 'Wybierz osobę',
         shortcutHint: '/',
         shortcutAria: 'Wyszukiwanie klawiszem /',

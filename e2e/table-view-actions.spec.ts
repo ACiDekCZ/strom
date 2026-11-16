@@ -75,7 +75,7 @@ test.describe('desktop (1440)', () => {
         await row(page, 'p:a').locator('.tv-name').click({ button: 'right' });
         const menu = page.locator('.tv-menu');
         await expect(menu).toHaveAttribute('aria-label', 'Actions: Bertold Vranoš');
-        await expect(menu.locator('.tv-menu-label')).toHaveText(['Show in tree', 'Open person', 'Edit…', 'Pin row']);
+        await expect(menu.locator('.tv-menu-label')).toHaveText(['Show in tree', 'Open person', 'Edit…', 'Pin row', 'Add to list']);
         await expect(menu.locator('.tv-menu-item[data-id="open"] .tv-menu-hint')).toHaveText('Enter');
         await expect(selected(page)).toHaveAttribute('data-key', 'p:a');
         await page.keyboard.press('Escape');
@@ -183,7 +183,7 @@ test.describe('phone (390)', () => {
         await expect(sheet).toContainText('Bertold Vranoš');
         await expect(sheet).toContainText('1851–1911');
         const items = sheet.locator('.bottom-sheet-item');
-        await expect(items.locator('.bottom-sheet-label')).toHaveText(['Show in tree', 'Open person', 'Edit…', 'Union 1: Zbyňka Kořánková']);
+        await expect(items.locator('.bottom-sheet-label')).toHaveText(['Show in tree', 'Open person', 'Edit…', 'Add to list', 'Union 1: Zbyňka Kořánková']);
         await expect(items.last().locator('.bottom-sheet-value')).toHaveText('Edit ›');
         const box = await items.first().boundingBox();
         expect(box!.height).toBeGreaterThanOrEqual(44);

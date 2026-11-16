@@ -9,7 +9,8 @@
  *                with the list's rule. A rule of a Table filter opens the
  *                Table (until the Table offers "Save to the list"). null:
  *                no link.
- *   addPerson    "+ Add person…" of a fixed list (§4). null: no link.
+ *   addPerson    "+ Add person…" of a fixed list (§4, the dialog in
+ *                src/ui/person-list-add.ts). null: no link.
  *   openInTable  "Open in Table" and the "N without citation ›" tile (§9):
  *                the Table in the list's scope, with the chip of people
  *                without a source when asked. Until the Table knows a
@@ -54,7 +55,9 @@ export const personListHooks: PersonListHooks = {
         if (list.rule.kind === 'tableFilter') personListHooks.openInTable(ui, listId);
         else ui.showNewPersonList({ listId });
     },
-    addPerson: null,
+    addPerson(ui, listId) {
+        ui.showAddPersonsToList(listId);
+    },
     openInTable(ui) {
         ui.closePersonLists();
         ui.setDisplayViewMode('table');

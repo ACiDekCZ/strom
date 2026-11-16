@@ -24,6 +24,7 @@ import { clearRodSelection, getSelectedRod, rodIndex, setRodSelection } from './
 import { getWindowRole } from '../windows/window-role.js';
 import { satelliteResearchMenu, WIN_RESEARCH_PREFIX } from '../windows/window-research-menu.js';
 import { isBulkBubbleOpen, runBulkFamily } from './bulk-family-ui.js';
+import { personListMenuRows } from './person-list-add.js';
 
 /** The menu action of a row that moves the view to a child drawn elsewhere (+ the child's id). */
 const CHILD_ELSEWHERE_ACTION = 'child-elsewhere:';
@@ -65,6 +66,10 @@ export interface PersonMenuAction {
     note?: string;
     /** Opens a second level (desktop flyout, bottom-sheet page). */
     submenu?: PersonMenuAction[];
+    /** A drawn sign before the label (trusted markup: a list's kind icon). */
+    iconHtml?: string;
+    /** A quiet note, not an action (under the lists: automatic lists fill themselves). */
+    hint?: boolean;
     /** A grid of buttons instead of a row (the "Add" group). */
     chips?: PersonMenuAction[];
     /** A state line, not an action (a ghost's "Linked in the view only · H0022 B", with its mark). */
@@ -205,7 +210,8 @@ export function menuItemBody(a: PersonMenuAction): string {
         + (a.submenu ? '<span class="menu-item-chev" aria-hidden="true">›</span>' : '');
     const label = a.note ? `${e(a.label)}<span class="menu-item-note">${e(a.note)}</span>` : e(a.label);
     // The kind column (§2): an empty span, its mark drawn by the style (index.html .menu-item-kind)
-    const kind = a.kind ? `<span class="menu-item-kind" data-kind="${a.kind}" aria-hidden="true"></span>` : '';
+    const kind = (a.kind ? `<span class="menu-item-kind" data-kind="${a.kind}" aria-hidden="true"></span>` : '')
+        + (a.iconHtml ? `<span class="menu-item-icon" aria-hidden="true">${a.iconHtml}</span>` : '');
     if (a.glyph !== undefined) {
         const cls = a.glyph ? 'menu-item-label menu-item-line' : 'menu-item-label menu-item-line-more';
         return `<span class="menu-item-glyph" aria-hidden="true">${e(a.glyph)}</span><span class="${cls}">${label}</span>${tail}`;
@@ -328,6 +334,7 @@ export const contextMenuMethods = uiModule({
                 ] : []),
                 ...readItems(false),
                 ...rodRows,
+                ...group(personListMenuRows(personId)),
                 ...group([
                     ...researchInGroup,
                     ...(isTreeLocked ? [] : [{ action: 'toggle-lock', label: strings.lock.unlockPerson }]),
@@ -355,6 +362,7 @@ export const contextMenuMethods = uiModule({
             ...group([
                 { action: 'relationship', label: c.relationship },
                 { action: 'archives', label: c.archives },
+                ...personListMenuRows(personId),
             ]),
             ...group([
                 ...researchInGroup,
@@ -542,6 +550,7 @@ export const contextMenuMethods = uiModule({
             this.runPersonInLine(action);
             return;
         }
+        if (this.runPersonListAction(personId, action)) return;
         if (action === LINE_JUMP_PARENTS_ACTION || action === LINE_JUMP_CHILDREN_ACTION) {
             TreeRenderer.jumpAlongLine(personId, action === LINE_JUMP_PARENTS_ACTION);
             return;
@@ -713,6 +722,7 @@ export const contextMenuMethods = uiModule({
             const header = (a.section ? `<div class="menu-section-header win-research-head" role="presentation">${this.escapeHtml(a.section)}</div>` : '')
                 + (a.header ? `<div class="menu-section-header" role="presentation">${this.escapeHtml(a.header)}</div>` : '');
             // A state, not an action: read out, never reached by the arrows, nothing to run.
+            if (a.hint) return `${divider}${header}<div class="menu-hint" role="note">${this.escapeHtml(a.label)}</div>`;
             if (a.caption) {
                 return `${divider}${header}<div class="menu-caption" role="menuitem" aria-disabled="true"><span class="view-link-icon" aria-hidden="true"></span><span>${this.escapeHtml(a.label)}</span></div>`;
             }

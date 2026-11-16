@@ -864,6 +864,11 @@ export const miscMethods = uiModule({
                     this.newPersonListEscape();
                     return;
                 }
+                // Add person (to a fixed list, over Lists of people).
+                if (this.topActiveOverlay()?.id === 'person-list-add') {
+                    this.closeAddPersonsToList();
+                    return;
+                }
                 // Lists of people: an open menu, then the name being edited, then the dialog.
                 if (this.topActiveOverlay()?.id === 'person-lists-modal') {
                     this.personListsEscape();

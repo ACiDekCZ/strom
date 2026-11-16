@@ -2209,14 +2209,22 @@ class DataManagerClass {
         return true;
     }
 
-    /** People added to a fixed list by hand (one person: the toast names them). */
+    /**
+     * People added to a fixed list by hand (§4): those already in it are not
+     * added twice; nothing new = no change (false). The toast names one
+     * person, else says how many came.
+     */
     addPersonsToList(id: string, ids: PersonId[]): boolean {
-        const real = ids.filter(pid => !!this.data.persons[pid] && !this.data.persons[pid].isPlaceholder);
+        const list = this.getPersonList(id);
+        // An automatic list takes nobody by hand (its rule fills it).
+        if (!list || list.dynamic) return false;
+        const have = new Set(list.personIds ?? []);
+        const real = [...new Set(ids)].filter(pid => !!this.data.persons[pid] && !this.data.persons[pid].isPlaceholder && !have.has(pid));
         if (!real.length) return false;
         return !!this.changePersonList(id, (l, now) => withPersonsAdded(l, real, now), {
             silent: false,
             toast: next => {
-                if (real.length !== 1) return undefined;
+                if (real.length !== 1) return { text: strings.lists.toast.addedN(real.length, listDisplayName(next)) };
                 const p = personToastName(this.data, real[0]);
                 return { text: strings.lists.toast.added(p.name, listDisplayName(next), p.gender) };
             },

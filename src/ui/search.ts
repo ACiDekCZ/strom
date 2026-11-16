@@ -44,6 +44,8 @@ import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
 import { isPhoneBar } from '../breakpoints.js';
 import { shownName } from '../person-name.js';
+import { openHeadMenu } from './table-view/table-headmenu.js';
+import { listMenuEntries } from './person-list-add.js';
 
 /** The phone top bar (≤640px, or a phone sideways): the search folds to a magnifier there. */
 export function isPhoneToolbar(): boolean {
@@ -345,7 +347,7 @@ export const searchMethods = uiModule({
         }
     },
 
-    showSearchResultsModal(results: import('../types.js').Person[], _query: string): void {
+    showSearchResultsModal(results: import('../types.js').Person[], query: string): void {
         // Use confirmation modal for search results
         // Fresh Cancel / OK pair — not whatever the last confirm left there.
         this.resetConfirmButtons();
@@ -407,6 +409,25 @@ export const searchMethods = uiModule({
         modal.onclick = (e) => {
             if (e.target === modal) close();
         };
+
+        // Results to a list › (spec 084 §4, §6): ALL the results, not only the ten shown; only where lists can change.
+        const buttons = document.getElementById('confirm-buttons');
+        if (buttons && !DataManager.listsReadOnly()) {
+            const ids = results.map(p => p.id);
+            const link = document.createElement('button');
+            link.type = 'button';
+            link.className = 'link-button search-to-list';
+            link.setAttribute('aria-haspopup', 'menu');
+            link.textContent = `${strings.search.toList} ›`;
+            link.onclick = () => {
+                const menu = openHeadMenu(link, '', '', listMenuEntries(this, ids, () => {
+                    close();
+                    this.showNewPersonList({ source: 'search', personIds: ids, name: strings.lists.save.searchName(query.trim()) });
+                }, strings.search.newFromResults(ids.length), true));
+                menu.setAttribute('aria-label', strings.search.toList);
+            };
+            buttons.prepend(link);
+        }
 
         modal.classList.add('active');
     },

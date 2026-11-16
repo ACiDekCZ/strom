@@ -10881,7 +10881,8 @@
         .tv-slot-window:has(> .tv-window-btn[hidden]) { display: none; }
         /* A tablet's width with a mouse (641–1024): the search gives way to 120 px, so ⧉ stays in the row. */
         @media (min-width: 641px) and (max-width: 1024px) {
-            .tv-bar-row1:has(.tv-window-btn:not([hidden])) .tv-slot-search { flex-basis: 120px; }
+            .tv-bar-row1:has(.tv-window-btn:not([hidden])) .tv-slot-search,
+            .tv-bar-row1:has(.tv-slot-more:not(.is-empty)) .tv-slot-search { flex-basis: 120px; }
         }
         .tv-window-btn {
             display: inline-flex; align-items: center; justify-content: center; flex: none;
@@ -11171,13 +11172,16 @@
         .tv-bubble--sheet .tv-bub-link { height: 44px; padding: 0 8px; font-size: 15px; }
         .tv-bubble--sheet .tv-leg-name { font-size: 14px; }
         .tv-bubble--sheet .tv-leg-text { font-size: 13.5px; }
-        /* §12 the phone's ⋯ (Columns, Export, Coverage row, unions); hidden on wider screens. */
-        .tv-slot-more { display: none; }
+        /* §12 ⋯: on a phone Columns, Export, Coverage row, unions; wider (spec 084 §6) an icon square like ⧉,
+           the last of row 1, with Save as list of people (none to offer: not drawn). */
+        .tv-slot-more { display: flex; flex: none; margin-left: -4px; }
+        .tv-slot-more.is-empty { display: none; }
         .tv-more-menu-btn {
-            display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 40px; padding: 0;
+            display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 0; box-sizing: border-box;
             border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text-light);
-            font: inherit; font-size: 20px; line-height: 1; cursor: pointer;
+            font: inherit; font-size: 17px; line-height: 1; cursor: pointer;
         }
+        .tv-more-menu-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
         /* §16.4 the research bubble (16j–16m, 16w, 16zf, 16zl): 400 px, the head, sections under a divider; a sheet on a phone (16y). */
         .tv-bubble--research { width: 400px; max-height: min(70vh, 560px); overflow-y: auto; padding-bottom: 8px; }
         .tv-rbub-head { display: flex; align-items: baseline; gap: 8px; padding: 10px 14px 8px; border-bottom: 1px solid var(--divider); }
@@ -11366,7 +11370,8 @@
             .tv-nomatch { padding: 28px 12px; }
             /* 12a row 1: the row type · the view (grows, "…") · ⋯ with Columns and Export; row 2: search · Filters. */
             .tv-slot-cols, .tv-slot-export, .tv-slot-window, .tv-bar-spacer { display: none; }
-            .tv-slot-more { display: flex; flex: none; }
+            .tv-slot-more, .tv-slot-more.is-empty { display: flex; flex: none; margin-left: 0; }
+            .tv-more-menu-btn { width: 44px; height: 40px; font-size: 20px; }
             .tv-empty { padding: 32px 16px; }
             .tv-empty .empty-block-title { font-size: 21px; }
             .tv-empty .empty-block-text { max-width: 300px; font-size: 14.5px; }
@@ -14215,6 +14220,20 @@
         /* A line's row is a .sel-opt row on its <li> (src/ui/sel-css.ts). */
         :is(.toolbar .rod-picker-host, .rod-pick-sheet) button.sp-rodpick-first { box-shadow: inset 0 0 0 2px var(--primary); }
         :is(.toolbar .rod-picker-host, .rod-pick-sheet) button.sp-rodpick-a:focus-visible, :is(.toolbar .rod-picker-host, .rod-pick-sheet) button.sp-rodpick-x:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        /* The choice's last row (spec 084 §6): the chosen line saved as a list of people, behind a line of its own. */
+        .sp-rodpick-save { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--divider); list-style: none; }
+        .sp-rodpick-save[hidden] { display: none; }
+        :is(.rod-picker-host, .rod-pick-sheet) button.sp-rodpick-savebtn {
+            box-sizing: border-box; display: block; width: 100%; min-height: 40px; padding: 6px 8px; border: 0; border-radius: var(--r-sm);
+            background: transparent; color: var(--text); font: inherit; font-size: 14px; text-align: left; cursor: pointer;
+        }
+        :is(.rod-picker-host, .rod-pick-sheet) button.sp-rodpick-savebtn:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        @media (hover: hover) {
+            :is(.rod-picker-host, .rod-pick-sheet) button.sp-rodpick-savebtn:hover { background: var(--hover-bg); }
+        }
+        @media (pointer: coarse) {
+            :is(.rod-picker-host, .rod-pick-sheet) button.sp-rodpick-savebtn { min-height: 48px; }
+        }
         @media (hover: hover) {
         }
         @media (pointer: coarse) {
@@ -26630,6 +26649,11 @@
         .context-menu-item .menu-item-label, .bottom-sheet-item .menu-item-label { flex: 1; min-width: 0; }
         .menu-item-badge { margin-left: 12px; }
         .menu-item-ext { flex: none; margin-left: 8px; color: var(--text-faint); }
+        /* Add to list › (spec 084 §4): a list's kind icon before its name, the note under the lists. */
+        .menu-item-icon { display: inline-flex; flex: none; margin-right: 8px; }
+        .menu-hint, .bottom-sheet-hint { margin: 0; padding: 6px 16px 8px; font-size: 11.5px; line-height: 1.4; color: var(--text-muted); cursor: default; user-select: none; }
+        .context-menu .menu-hint { max-width: 300px; box-sizing: border-box; }
+        .bottom-sheet-hint { padding: 8px 20px 10px; }
         .context-menu .research-open-mark { margin-left: 8px; }
         .context-menu .menu-section-header { padding: 6px 16px 2px; }
 
@@ -29909,6 +29933,18 @@
         .modal.modal--md.pln-modal.pln-modal--de { width: 560px; max-width: min(560px, 94vw); }
         .modal.modal--md.pln-modal--save { width: 480px; max-width: min(480px, 94vw); }
         .modal.modal--md.pln-modal--save.pln-modal--de { width: 520px; max-width: min(520px, 94vw); }
+        /* Add person to a fixed list (spec 084 §4, 4d): a search and people taken by their boxes. */
+        .modal.modal--md.pla-modal { width: 460px; max-width: min(460px, 94vw); }
+        .pla-body { min-height: 0; overflow: hidden; }
+        .modal.pln-modal input.pla-search { box-sizing: border-box; width: 100%; height: 36px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text); font: inherit; font-size: 14px; }
+        .pla-sub { margin: 0; font-size: 12.5px; color: var(--text-light); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .pla-rows { display: flex; flex-direction: column; gap: 4px; min-height: 120px; max-height: min(360px, calc(100dvh - 260px)); overflow-y: auto; overscroll-behavior: contain; }
+        .pla-row { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 6px 10px; box-sizing: border-box; cursor: pointer; }
+        .pla-row[aria-disabled="true"] { cursor: default; }
+        .pla-check { flex: none; width: 16px; height: 16px; margin: 0; accent-color: var(--text); cursor: inherit; }
+        .pla-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; color: var(--text); }
+        .pla-years, .pla-in { flex: none; font-size: 12.5px; color: var(--text-light); font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .pla-none { margin: 8px 0; font-size: 13px; color: var(--text-light); }
         .pln-head { padding: 16px 16px 12px 24px; gap: 8px; }
         .pln-head h2 { margin: 0; font-family: var(--font-serif); font-size: 17px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .pln-body { display: flex; flex-direction: column; gap: 8px; padding: 16px 24px; }
@@ -29963,6 +29999,9 @@
             .modal.pln-modal input.pln-days { font-size: 16px; }
             .modal .pln-switch { width: 44px; height: 44px; margin: -9px -2px -9px 0; }
             .modal .pln-foot > button { min-height: 48px; }
+            .modal.pln-modal input.pla-search { height: 44px; font-size: 16px; }
+            .pla-row { min-height: 48px; }
+            .pla-check { width: 20px; height: 20px; }
         }
         /* Phone: the whole screen (15d); the buttons side by side, Create on the right. */
         @media (max-width: 640px) {

@@ -211,7 +211,9 @@ export const personListNewMethods = uiModule({
         const source: NewListSource = opts.source ?? 'new';
         const mode: NewListState['mode'] = editList ? 'edit' : source === 'new' ? 'new' : 'save';
         const rule = editList?.rule ?? opts.rule ?? null;
-        const focus = TreeRenderer.getFocusPersonId();
+        // One given person ("New list with this person…") is also the person of ancestors / descendants.
+        const one = opts.personIds?.length === 1 ? opts.personIds[0] : null;
+        const focus = one && personOf(one) ? one : TreeRenderer.getFocusPersonId();
         const firstRod = rodChoices().big[0]?.id ?? rodChoices().small[0]?.id ?? null;
         const lines = researchLines();
         const active = document.activeElement;

@@ -257,7 +257,7 @@ test.describe('phone (390)', () => {
             await expect(sheet).toBeVisible();
         };
         await openMore();
-        await expect(sheet.locator('.bottom-sheet-item')).toHaveText([/^Columns/, 'Export', /^Coverage row/, 'Collapse unions']);
+        await expect(sheet.locator('.bottom-sheet-item')).toHaveText(['Save as list of people…', /^Columns/, 'Export', /^Coverage row/, 'Collapse unions']);
         await sheet.locator('.bottom-sheet-item', { hasText: 'Columns' }).tap();
         await expect(page.locator('.tv-colpanel--sheet')).toBeVisible();
         await page.locator('.tv-colpanel--sheet .tv-cp-done').tap();
@@ -347,7 +347,8 @@ test.describe('desktop (1440)', () => {
 
     test('an empty tree in the table, Unions without unions and nothing matching the search', async ({ page }) => {
         await openTable(page, LONERS, false);
-        await expect(tv(page, '.tv-more-menu-btn')).toBeHidden();
+        // ⋯ on a computer too: Save as list of people (spec 084 §6).
+        await expect(tv(page, '.tv-more-menu-btn')).toBeVisible();
         await expect(tv(page, '.tv-cols-btn')).toBeVisible();
 
         await page.getByRole('radio', { name: /^Unions, / }).click();
@@ -372,6 +373,8 @@ test.describe('desktop (1440)', () => {
         await expect(empty.locator('.empty-block-title')).toHaveText('The table is empty so far');
         await expect(tv(page, '.tv-chips')).toBeHidden();
         await expect(page.locator('#empty-state')).toBeHidden();
+        // No rows, nothing to save: no ⋯ on a computer.
+        await expect(tv(page, '.tv-more-menu-btn')).toBeHidden();
         // The first person added: the grid comes back.
         await page.evaluate(() => window.Strom.DataManager.createPerson({ firstName: 'Imbra', lastName: 'Udrasko', gender: 'female' } as never));
         await page.evaluate(() => window.Strom.TreeRenderer.render());

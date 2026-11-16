@@ -1538,7 +1538,7 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         viewWhat: 'Zapisuje się rodzaj wierszy, kolumny (kolejność, szerokości, zablokowanie, zwinięte grupy), filtr i sortowanie.',
         viewCopyName: (name: string) => `${name} 2`,
         deleteConfirm: (name: string) => `Usunąć widok ${name}?`,
-        act: { tree: 'Pokaż w drzewie', open: 'Otwórz osobę', edit: 'Edytuj…', openSource: 'Otwórz źródło' },
+        act: { tree: 'Pokaż w drzewie', open: 'Otwórz osobę', edit: 'Edytuj…', openSource: 'Otwórz źródło', toListN: (n: number) => `Dodaj ${nPl(n, 'osobę', 'osoby', 'osób')} do listy` },
         dblClickHint: 'dwuklik',
         actionsOf: (name: string) => `Działania: ${name}`,
         unionWith: (k: number, name: string) => `Związek ${k}: ${name}`,

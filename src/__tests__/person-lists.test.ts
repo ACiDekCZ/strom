@@ -488,7 +488,24 @@ describe('DataManager', () => {
         expect(DataManager.getPersonList(b.id)?.name).toBe('Viktor’s line');
     });
 
-    it('the ready-made list is stored when changed; deleting it writes it down for good', () => {
+    it('adding by hand: people already in the list are not added twice, nothing new is no change', () => {
+        const a = DataManager.createPersonList({ name: 'Picked', dynamic: false, personIds: [id('ada')] })!;
+        const steps = toasts.length;
+        expect(DataManager.addPersonsToList(a.id, [id('ada')])).toBe(false);
+        expect(toasts.length).toBe(steps);
+        expect(DataManager.addPersonsToList(a.id, [id('ada'), id('brita'), id('emil'), id('brita')])).toBe(true);
+        expect(DataManager.getPersonListIds(a.id)).toEqual(['ada', 'brita', 'emil']);
+        expect(toasts[toasts.length - 1]?.toast?.text).toBe('2 people added to “Picked”.');
+        expect(DataManager.addPersonsToList(a.id, [id('viktor')])).toBe(true);
+        expect(toasts[toasts.length - 1]?.toast?.text).toBe('Viktor Ostrovid added to “Picked”.');
+        DataManager.undo();
+        expect(DataManager.getPersonListIds(a.id)).toEqual(['ada', 'brita', 'emil']);
+        // An automatic list takes nobody by hand.
+        const auto = DataManager.createPersonList({ name: 'Auto', dynamic: true, rule: { kind: 'descendants', personId: id('viktor') } })!;
+        expect(DataManager.addPersonsToList(auto.id, [id('brita')])).toBe(false);
+    });
+
+        it('the ready-made list is stored when changed; deleting it writes it down for good', () => {
         expect(DataManager.getPersonLists().map(l => l.id)).toEqual([ADDED30_ID]);
         DataManager.setPersonListSort(ADDED30_ID, 'name');
         expect(dm.data.personLists?.[0]).toMatchObject({ id: ADDED30_ID, builtin: 'added30', sort: 'name' });
@@ -561,6 +578,10 @@ describe('the texts', () => {
         expect(strings.lists.toast.filled(5)).toBe('Přidáno 5 osob podle pravidla.');
         expect(strings.lists.toast.personDeleted('Ada', 2)).toBe('Osoba Ada smazána, odebrána i ze 2 seznamů.');
         expect(strings.lists.toast.added('Ada', 'X', 'female')).toBe('Ada přidána do seznamu „X“.');
+        expect(strings.lists.toast.addedN(1, 'X')).toBe('Do seznamu „X“ přidána 1 osoba.');
+        expect(strings.lists.toast.addedN(3, 'X')).toBe('Do seznamu „X“ přidány 3 osoby.');
+        expect(strings.lists.toast.addedN(5, 'X')).toBe('Do seznamu „X“ přidáno 5 osob.');
+        expect(strings.table.act.toListN(2)).toBe('Přidat 2 osoby do seznamu');
         expect(strings.lists.rule.anc('Ada', 4)).toBe('Předci osoby Ada, do 4 generací');
         setLanguage('pl');
         expect(strings.lists.toast.filled(5)).toBe('Dodano 5 osób według reguły.');
