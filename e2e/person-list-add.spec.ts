@@ -256,7 +256,8 @@ test.describe('Add to list: a phone', () => {
         await openTable(page, true);
         await page.locator('#table-container .tv-more-menu-btn').tap();
         const more = page.locator('.bottom-sheet');
-        await expect(more.locator('.bottom-sheet-item').first()).toContainText('Save as list of people…');
+        // After Scope › (spec 084 §9).
+        await expect(more.locator('.bottom-sheet-item').nth(1)).toContainText('Save as list of people…');
         await more.locator('.bottom-sheet-item', { hasText: 'Save as list of people…' }).tap();
         await expect(page.locator('#person-list-save')).toBeVisible();
     });

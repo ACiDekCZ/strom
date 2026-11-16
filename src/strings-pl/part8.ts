@@ -1315,6 +1315,7 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
             },
         },
         col: {
+            num: '#', done: 'Gotowe',
             name: 'Imię i nazwisko', firstName: 'Imię', surname: 'Nazwisko', birthSurname: 'Nazwisko rodowe', marriedSurname: 'Nazwisko po ślubie', titles: 'Tytuły',
             gender: 'Płeć', living: 'Żyjący', researchId: 'ID badania', refn: 'Nr ref.', gen: 'Pokolenie', kin: 'Pokrewieństwo z osobą główną', rod: 'Ród',
             bDate: 'Data urodzenia', bPlace: 'Miejsce urodzenia', bAddr: 'Adres urodzenia', bapDate: 'Data chrztu', bapPlace: 'Miejsce chrztu',
@@ -1438,6 +1439,7 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         },
         // §8 filtr, wyszukiwanie i sortowanie
         chip: {
+            left: 'Zostało', done: 'Gotowe',
             living: 'Żyjący', deceased: 'Zmarli', blood: 'Krewni', rod: 'Ród', gen: 'Pokolenie',
             multiU: 'Kilka związków', noBirth: 'Bez daty urodzenia', uncertain: 'Niepewna data', noSource: 'Bez źródła',
             finding: 'Z ustaleniami', unusual: 'Nietypowe', unconfirmed: 'Niepotwierdzone z badania',
@@ -1463,6 +1465,16 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         filters: 'Filtry',
         clearFilters: 'Wyczyść filtry',
         outsideFilter: 'poza filtrem',
+        /** The list of people the rows are narrowed to (spec 084 §9). */
+        scope: 'Zakres',
+        scopeAria: (name: string) => `Zakres: ${name}`,
+        scopeWhole: 'Całe drzewo',
+        scopeManage: 'Zarządzaj listami…',
+        scopeSources: 'Źródła nie mają zakresu według listy.',
+        scopeGone: 'Listy widoku już nie ma, pokazano całe drzewo.',
+        notInList: (name: string) => `Nie ma na liście: ${name}.`,
+        outsideList: 'poza listą',
+        sortList: 'Sortowanie: # (kolejność listy)',
         agentRowHidden: 'Wiersz agenta ukrywa filtr',
         link: {
             goTo: (name: string) => `Przejdź do ${name}`, pick: 'Przejdź do…', inCell: 'Osoby w komórce', enterHint: 'Enter: przejdź do osoby',

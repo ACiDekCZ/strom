@@ -10858,6 +10858,46 @@
             color: var(--text-light); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; white-space: nowrap;
         }
         .tv-view-changed[hidden], .tv-view-act[hidden], .tv-view-discard[hidden], .tv-view-dot[hidden] { display: none; }
+        /* Spec 084 §9 Scope ▾ between the row type and the view: the whole tree plain, a list dark-framed and bold with its kind. */
+        .tv-slot-scope { display: flex; align-items: center; min-width: 0; flex: 0 1 auto; }
+        .tv-scope-btn {
+            display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 270px; height: 34px; padding: 0 10px;
+            border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text);
+            font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap;
+        }
+        .tv-scope-btn.is-list { border-color: var(--sel-border); font-weight: 600; }
+        .tv-scope-btn[aria-disabled="true"] { opacity: 0.5; cursor: default; }
+        .tv-scope-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .tv-scope-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+        .tv-scope-caret { flex: none; font-weight: 400; color: var(--text-light); }
+        .tv-scope-menu { min-width: 320px; max-width: 380px; }
+        .tv-scope-label { margin-right: 6px; font-size: 12px; color: var(--text-faint); white-space: nowrap; }
+        .tv-scope-glyph { display: none; flex: none; color: var(--text-light); }
+        @media (max-width: 1199px) { .tv-slot-scope .tv-scope-label { display: none; } }
+        /* A tight bar (a tablet's width; a changed view's buttons below 1600 px): the whole tree as a list glyph
+           (its name in the title and the label), its label hidden; a list keeps its name. */
+        @media (max-width: 1599px) {
+            .tv-bar-row1:has(.tv-view-discard:not([hidden])) .tv-scope-label,
+            .tv-bar-row1:has(.tv-view-discard:not([hidden])) .tv-slot-view .tv-view-label { display: none; }
+            .tv-bar-row1:has(.tv-view-discard:not([hidden])) .tv-scope-btn:not(.is-list) .tv-scope-name { display: none; }
+            .tv-bar-row1:has(.tv-view-discard:not([hidden])) .tv-scope-btn:not(.is-list) .tv-scope-glyph { display: block; }
+        }
+        @media (min-width: 641px) and (max-width: 1024px) {
+            .tv-scope-btn { max-width: 190px; }
+            .tv-scope-btn:not(.is-list) .tv-scope-name { display: none; }
+            .tv-scope-btn:not(.is-list) .tv-scope-glyph { display: block; }
+        }
+        /* A row outside the list (pinned or shown for now): dimmed, a line at the left edge, # says "–". */
+        .tv-body .tv-row.is-outside-list > .tv-cell:first-child { box-shadow: inset 3px 0 0 var(--warning-text); }
+        .tv-body .tv-row.is-temp.is-outside-list > .tv-cell:not(:first-child) { opacity: 0.55; }
+        .tv-notice--list .tv-notice-whole { font-weight: 600; }
+        /* §13d a work list's Done: a box ticked off or not. */
+        .tv-check {
+            display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; box-sizing: border-box;
+            border: 1.5px solid var(--border-strong, var(--border)); border-radius: var(--r-sm); background: var(--surface);
+            color: var(--on-primary); font-size: 12px; font-weight: 700; line-height: 1; cursor: pointer;
+        }
+        .tv-check.is-on { background: var(--primary); border-color: var(--primary); }
         /* Spec 097 5e: a view's research filter not applied now (no research to read here): an amber note after the view. */
         .tv-view-note {
             display: inline-flex; align-items: center; gap: 6px; flex: 0 1 auto; min-width: 0; max-width: 280px; height: 26px; padding: 0 10px;
@@ -11289,6 +11329,8 @@
             .tv-fpanel-apply:hover, .tv-nomatch-clear:hover { background: var(--primary-dark); border-color: var(--primary-dark); color: var(--on-primary); }
             .tv-headcell[data-col]:not(.tv-bandhead) { cursor: pointer; }
             .tv-covcell.is-clickable:hover { color: var(--primary); text-decoration: underline; }
+            .tv-scope-btn:not([aria-disabled="true"]):hover { border-color: var(--primary); }
+            .tv-check:hover { border-color: var(--primary); }
         }
         /* Tablet: no top tabs; the table keeps the desktop rows. Touch: taller rows. */
         @media (pointer: coarse) {
@@ -11302,6 +11344,8 @@
             .tv-rowtype .segment-btn { height: 44px; }
             .tv-legend-btn { height: 44px; }
             .tv-cols-btn, .tv-export-btn, .tv-view-btn, .tv-view-act { height: 44px; }
+            .tv-scope-btn { height: 44px; }
+            .tv-check { width: 24px; height: 24px; font-size: 15px; }
             .tv-view-discard, .tv-view-changed.is-note { min-height: 44px; }
             .export-table-link { min-height: 44px; }
             .tv-head-menu { display: none; }
@@ -11370,6 +11414,9 @@
             .tv-nomatch { padding: 28px 12px; }
             /* 12a row 1: the row type · the view (grows, "…") · ⋯ with Columns and Export; row 2: search · Filters. */
             .tv-slot-cols, .tv-slot-export, .tv-slot-window, .tv-bar-spacer { display: none; }
+            /* Spec 084 §9: the scope is Scope › in the phone's ⋯. */
+            .tv-slot-scope { display: none; }
+            .tv-scope-menu { min-width: 0; max-width: calc(100vw - 32px); }
             .tv-slot-more, .tv-slot-more.is-empty { display: flex; flex: none; margin-left: 0; }
             .tv-more-menu-btn { width: 44px; height: 40px; font-size: 20px; }
             .tv-empty { padding: 32px 16px; }

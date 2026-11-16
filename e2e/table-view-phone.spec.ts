@@ -257,7 +257,7 @@ test.describe('phone (390)', () => {
             await expect(sheet).toBeVisible();
         };
         await openMore();
-        await expect(sheet.locator('.bottom-sheet-item')).toHaveText(['Save as list of people…', /^Columns/, 'Export', /^Coverage row/, 'Collapse unions']);
+        await expect(sheet.locator('.bottom-sheet-item')).toHaveText([/^ScopeWhole tree/, 'Save as list of people…', /^Columns/, 'Export', /^Coverage row/, 'Collapse unions']);
         await sheet.locator('.bottom-sheet-item', { hasText: 'Columns' }).tap();
         await expect(page.locator('.tv-colpanel--sheet')).toBeVisible();
         await page.locator('.tv-colpanel--sheet .tv-cp-done').tap();

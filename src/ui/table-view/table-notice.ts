@@ -2,7 +2,9 @@
  * The strip under the Table's bar for a person the filter hides (spec 103
  * §2, 2a): "Hidden by the filter: {name}." with Show for now, Clear filters
  * and ×. It closes on ×, Escape in it, one of its actions, the next jump
- * and a change of the filter.
+ * and a change of the filter. A person outside the Table's list (spec 084
+ * §9): "Not in the list: {name}." with Show for now, Whole tree and ×; a
+ * view whose list is gone says the whole tree is shown, with ×.
  */
 
 import { strings } from '../../strings.js';
@@ -12,9 +14,14 @@ export interface NoticeHandlers {
     onShow(): void;
     /** Clear filters: the filter and the search off, then the jump. */
     onClear(): void;
+    /** Whole tree (spec 084 §9): the scope off, then the jump. */
+    onWhole(): void;
     /** × or Escape. */
     onClose(): void;
 }
+
+/** What the strip is about: a person the filter hides, one outside the list, a view's list gone. */
+export type NoticeKind = 'filter' | 'list' | 'gone';
 
 function esc(text: string): string {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -31,6 +38,7 @@ export function createNotice(handlers: NoticeHandlers): HTMLElement {
         const act = (e.target as Element).closest<HTMLElement>('[data-notice]')?.dataset.notice;
         if (act === 'show') handlers.onShow();
         else if (act === 'clear') handlers.onClear();
+        else if (act === 'whole') handlers.onWhole();
         else if (act === 'close') handlers.onClose();
     });
     el.addEventListener('keydown', (e) => {
@@ -42,20 +50,23 @@ export function createNotice(handlers: NoticeHandlers): HTMLElement {
     return el;
 }
 
-/** The strip for `name`, or hidden (null). */
-export function showNotice(el: HTMLElement, name: string | null): void {
+/** The strip for `name` (for `gone` the name is not said), or hidden (null). */
+export function showNotice(el: HTMLElement, name: string | null, kind: NoticeKind = 'filter'): void {
     if (name === null) {
         if (!el.hidden) { el.hidden = true; el.innerHTML = ''; }
         return;
     }
     const t = strings.table;
+    const text = kind === 'gone' ? t.scopeGone : kind === 'list' ? t.notInList(name) : t.link.hidden(name);
     const html = '<span class="tv-notice-dot" aria-hidden="true"></span>'
-        + `<span class="tv-notice-text">${esc(t.link.hidden(name))}</span>`
+        + `<span class="tv-notice-text">${esc(text)}</span>`
         + '<span class="tv-notice-acts">'
-        + `<button type="button" class="tv-notice-btn tv-notice-temp" data-notice="show">${esc(t.link.showTemp)}</button>`
-        + `<button type="button" class="tv-notice-btn tv-notice-clear" data-notice="clear">${esc(t.clearFilters)}</button>`
+        + (kind === 'gone' ? '' : `<button type="button" class="tv-notice-btn tv-notice-temp" data-notice="show">${esc(t.link.showTemp)}</button>`)
+        + (kind === 'list' ? `<button type="button" class="tv-notice-btn tv-notice-whole" data-notice="whole">${esc(t.scopeWhole)}</button>`
+            : kind === 'filter' ? `<button type="button" class="tv-notice-btn tv-notice-clear" data-notice="clear">${esc(t.clearFilters)}</button>` : '')
         + `<button type="button" class="tv-notice-close" data-notice="close" aria-label="${esc(strings.buttons.close)}" title="${esc(strings.buttons.close)}">×</button>`
         + '</span>';
+    el.classList.toggle('tv-notice--list', kind !== 'filter');
     if (el.hidden || el.innerHTML !== html) el.innerHTML = html;
     el.hidden = false;
 }

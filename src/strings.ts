@@ -9301,6 +9301,7 @@ const stringsEN = {
             },
         },
         col: {
+            num: '#', done: 'Done',
             name: 'Full name', firstName: 'First name', surname: 'Surname', birthSurname: 'Birth surname', marriedSurname: 'Married surname', titles: 'Titles',
             gender: 'Sex', living: 'Living', researchId: 'Research ID', refn: 'Ref. number', gen: 'Generation', kin: 'Relationship to home person', rod: 'Family line',
             bDate: 'Birth date', bPlace: 'Birthplace', bAddr: 'Birth address', bapDate: 'Baptism date', bapPlace: 'Baptism place',
@@ -9424,6 +9425,7 @@ const stringsEN = {
         },
         // §8 filter, search and sort
         chip: {
+            left: 'Left', done: 'Done',
             living: 'Living', deceased: 'Deceased', blood: 'Blood relatives', rod: 'Family line', gen: 'Generation',
             multiU: 'Several unions', noBirth: 'No birth date', uncertain: 'Uncertain date', noSource: 'No source',
             finding: 'With findings', unusual: 'Unusual', unconfirmed: 'Unconfirmed research',
@@ -9449,6 +9451,16 @@ const stringsEN = {
         filters: 'Filters',
         clearFilters: 'Clear filters',
         outsideFilter: 'outside the filter',
+        /** The list of people the rows are narrowed to (spec 084 §9). */
+        scope: 'Scope',
+        scopeAria: (name: string) => `Scope: ${name}`,
+        scopeWhole: 'Whole tree',
+        scopeManage: 'Manage lists…',
+        scopeSources: 'Sources have no scope by list.',
+        scopeGone: 'The view’s list is gone; the whole tree is shown.',
+        notInList: (name: string) => `Not in the list: ${name}.`,
+        outsideList: 'outside the list',
+        sortList: 'Sort: # (list order)',
         /** Another window following the agent: the agent's row is hidden by the filter (spec 097 §5). */
         agentRowHidden: 'The agent’s row is hidden by the filter',
         link: {
@@ -18579,6 +18591,7 @@ const stringsCZ: StringsType = {
             },
         },
         col: {
+            num: '#', done: 'Hotovo',
             name: 'Celé jméno', firstName: 'Křestní jméno', surname: 'Příjmení', birthSurname: 'Rodné příjmení', marriedSurname: 'Příjmení po sňatku', titles: 'Tituly',
             gender: 'Pohlaví', living: 'Žijící', researchId: 'ID výzkumu', refn: 'Ref. číslo', gen: 'Generace', kin: 'Vztah k hlavní osobě', rod: 'Rod',
             bDate: 'Datum narození', bPlace: 'Místo narození', bAddr: 'Adresa narození', bapDate: 'Datum křtu', bapPlace: 'Místo křtu',
@@ -18702,6 +18715,7 @@ const stringsCZ: StringsType = {
         },
         // §8 filtr, hledání a řazení
         chip: {
+            left: 'Zbývá', done: 'Hotovo',
             living: 'Žijící', deceased: 'Zemřelí', blood: 'Pokrevní příbuzní', rod: 'Rod', gen: 'Generace',
             multiU: 'Víc svazků', noBirth: 'Bez data narození', uncertain: 'Nejisté datum', noSource: 'Bez pramene',
             finding: 'S nálezem', unusual: 'Neobvyklé', unconfirmed: 'Nepotvrzené z výzkumu',
@@ -18727,6 +18741,16 @@ const stringsCZ: StringsType = {
         filters: 'Filtry',
         clearFilters: 'Zrušit filtry',
         outsideFilter: 'mimo filtr',
+        /** The list of people the rows are narrowed to (spec 084 §9). */
+        scope: 'Rozsah',
+        scopeAria: (name: string) => `Rozsah: ${name}`,
+        scopeWhole: 'Celý strom',
+        scopeManage: 'Spravovat seznamy…',
+        scopeSources: 'Prameny nemají rozsah podle seznamu.',
+        scopeGone: 'Seznam pohledu už není, ukazuje se celý strom.',
+        notInList: (name: string) => `Osoba není v seznamu: ${name}.`,
+        outsideList: 'mimo seznam',
+        sortList: 'Řazení: # (pořadí seznamu)',
         agentRowHidden: 'Řádek agenta skrývá filtr',
         link: {
             goTo: (name: string) => `Přejít na ${name}`, pick: 'Přejít na…', inCell: 'Osoby v buňce', enterHint: 'Enter: přejít na osobu',
@@ -27772,6 +27796,7 @@ const stringsDE: StringsType = {
             },
         },
         col: {
+            num: '#', done: 'Erledigt',
             name: 'Vollständiger Name', firstName: 'Vorname', surname: 'Nachname', birthSurname: 'Geburtsname', marriedSurname: 'Ehename', titles: 'Titel',
             gender: 'Geschlecht', living: 'Lebend', researchId: 'Forschungs-ID', refn: 'Ref.-Nummer', gen: 'Generation', kin: 'Beziehung zur Hauptperson', rod: 'Stamm',
             bDate: 'Geburtsdatum', bPlace: 'Geburtsort', bAddr: 'Geburtsadresse', bapDate: 'Taufdatum', bapPlace: 'Taufort',
@@ -27895,6 +27920,7 @@ const stringsDE: StringsType = {
         },
         // §8 Filter, Suche und Sortierung
         chip: {
+            left: 'Offen', done: 'Erledigt',
             living: 'Lebend', deceased: 'Verstorben', blood: 'Blutsverwandte', rod: 'Stamm', gen: 'Generation',
             multiU: 'Mehrere Verbindungen', noBirth: 'Ohne Geburtsdatum', uncertain: 'Unsicheres Datum', noSource: 'Ohne Quelle',
             finding: 'Mit Befund', unusual: 'Ungewöhnlich', unconfirmed: 'Unbestätigt (Forschung)',
@@ -27920,6 +27946,16 @@ const stringsDE: StringsType = {
         filters: 'Filter',
         clearFilters: 'Filter aufheben',
         outsideFilter: 'außerhalb des Filters',
+        /** The list of people the rows are narrowed to (spec 084 §9). */
+        scope: 'Umfang',
+        scopeAria: (name: string) => `Umfang: ${name}`,
+        scopeWhole: 'Ganzer Stammbaum',
+        scopeManage: 'Listen verwalten…',
+        scopeSources: 'Quellen haben keinen Umfang nach Liste.',
+        scopeGone: 'Die Liste der Ansicht gibt es nicht mehr; der ganze Stammbaum wird gezeigt.',
+        notInList: (name: string) => `Nicht in der Liste: ${name}.`,
+        outsideList: 'außerhalb der Liste',
+        sortList: 'Sortierung: # (Reihenfolge der Liste)',
         agentRowHidden: 'Die Zeile des Agenten ist ausgefiltert',
         link: {
             goTo: (name: string) => `Zu ${name} wechseln`, pick: 'Wechseln zu…', inCell: 'Personen in der Zelle', enterHint: 'Eingabe: zur Person wechseln',

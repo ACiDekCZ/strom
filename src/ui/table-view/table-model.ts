@@ -40,9 +40,19 @@ export interface CellIssue {
 }
 
 /** One cell's value: what is shown, what sorts and filters, and how it reads. */
+/** What the Table's scope gives its cells (spec 084 §9, §13d). */
+export interface ScopeCells {
+    /** 1-based place of each person of the list. */
+    pos: ReadonlyMap<string, number>;
+    /** The ticked-off people of a work list; null: the list is not a work list. */
+    done: ReadonlySet<string> | null;
+}
+
 export interface CellValue {
     /** The text shown (plain; the grid escapes it). */
     text: string;
+    /** A box ticked off or not (spec 084 §13d: a work list's Done); undefined: no box. */
+    check?: boolean;
     /** Sort key; null sorts last in both directions. */
     sortKey: number | string | null;
     /** Nothing recorded. */
@@ -267,6 +277,13 @@ export interface TableContext {
     research: ResearchTableEnv | null;
     /** The other trees a person is in (§16 crossTree); null: not read. Set by the view, like `research`. */
     crossTree: ((p: Person) => readonly CrossTreeMatch[]) | null;
+    /**
+     * The list of people the Table is narrowed to (spec 084 §9): each
+     * person's place in the list's order and, for a work list (§13d), the
+     * people ticked off. Set by the view; its cells (# and Done) are never
+     * cached.
+     */
+    scope: ScopeCells | null;
     /** Whether the tree has any source (the person's status mark, §16 personStatus). */
     hasSources(): boolean;
     /** Each person's unions (the person's status mark). */
@@ -363,6 +380,7 @@ function makeContext(data: StromData, opts: BuildOptions): TableContext {
         checks: null,
         research: null,
         crossTree: null,
+        scope: null,
         hasSources: () => hasSources ??= treeHasAnySource(data),
         unionsOf: () => unions ??= unionsByPerson(data),
     };

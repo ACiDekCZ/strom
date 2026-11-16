@@ -41,7 +41,10 @@ export const EVENT_CHIP_ORDER = ['evBirth', 'evMarriage', 'evDeath', 'evOther', 
  * (§14.1 "Godparent: {name} ×"), which is set from a participant's name in
  * a cell and is not in the quick row.
  */
-export type ChipId = typeof CHIP_ORDER[number] | typeof EVENT_CHIP_ORDER[number] | typeof SOURCE_CHIP_ORDER[number] | 'participant' | ResearchChipId;
+export type ChipId = typeof CHIP_ORDER[number] | typeof EVENT_CHIP_ORDER[number] | typeof SOURCE_CHIP_ORDER[number] | typeof LIST_CHIPS[number] | 'participant' | ResearchChipId;
+
+/** A work list's chips (spec 084 §13d): first in the row while the scope is a work list; they exclude each other. */
+export const LIST_CHIPS = ['left', 'done'] as const;
 
 /** A chip of the quick row (not the research's block, §16.5): its words are `strings.table.chip`. */
 export type QuickChipId = Exclude<ChipId, `line:${string}`>;
@@ -196,7 +199,7 @@ export function setChip(filter: TableFilter, chip: ChipId, on: boolean, choice: 
         filter.items[at] = item;
     } else {
         // Living and deceased exclude each other: the other goes off; so do the event families.
-        const other = chip === 'living' ? 'deceased' : chip === 'deceased' ? 'living' : null;
+        const other = chip === 'living' ? 'deceased' : chip === 'deceased' ? 'living' : chip === 'left' ? 'done' : chip === 'done' ? 'left' : null;
         if (other) setChip(filter, other, false);
         if (chip in EVENT_KIND_CHIPS) for (const c of Object.keys(EVENT_KIND_CHIPS)) if (c !== chip) setChip(filter, c as ChipId, false);
         filter.items.push(item);
@@ -358,6 +361,7 @@ export function chipAvailable(model: TableModel, type: RowType, chip: ChipId): b
     if (type === 'events') return chip === 'participant' || (EVENT_CHIP_ORDER as readonly string[]).includes(chip);
     if (type === 'sources') return (SOURCE_CHIP_ORDER as readonly string[]).includes(chip);
     if (type === 'persons' && isResearchChipId(chip)) return !!model.ctx.research && researchChipActive(model.ctx.research, chip);
+    if ((LIST_CHIPS as readonly string[]).includes(chip)) return type === 'persons' && !!model.ctx.scope?.done;
     if (type !== 'persons' || !(CHIP_ORDER as readonly string[]).includes(chip)) return false;
     if (chip === 'unconfirmed') return model.ctx.reliability.researchTree;
     return true;
@@ -365,7 +369,7 @@ export function chipAvailable(model: TableModel, type: RowType, chip: ChipId): b
 
 /** The quick chips a row type offers, in their fixed order (the participant filter and the research's block are not in it). */
 export function availableChips(model: TableModel, type: RowType): QuickChipId[] {
-    const order: readonly QuickChipId[] = type === 'events' ? EVENT_CHIP_ORDER : type === 'sources' ? SOURCE_CHIP_ORDER : CHIP_ORDER;
+    const order: readonly QuickChipId[] = type === 'events' ? EVENT_CHIP_ORDER : type === 'sources' ? SOURCE_CHIP_ORDER : [...LIST_CHIPS, ...CHIP_ORDER];
     return order.filter(c => chipAvailable(model, type, c));
 }
 
@@ -457,6 +461,9 @@ export function personPassesChip(model: TableModel, row: PersonRow, item: ChipFi
             return (item.from === undefined || n >= item.from) && (item.to === undefined || n <= item.to);
         }
         case 'multiU': return row.unions.length > 1;
+        // A work list's chips pass everyone without a work list in the scope (a view kept them).
+        case 'left': return !ctx.scope?.done || !ctx.scope.done.has(row.id);
+        case 'done': return !ctx.scope?.done || ctx.scope.done.has(row.id);
         case 'noBirth': return !p.birthDate?.trim();
         case 'uncertain': return cellOf(model, row, col('persons', 'bDate')).uncertain || cellOf(model, row, col('persons', 'dDate')).uncertain;
         case 'noSource': return cellOf(model, row, col('persons', 'srcCount')).sortKey === 0;

@@ -7,14 +7,13 @@
  *                the dialog New list (§3, src/ui/person-list-new-ui.ts).
  *   editRule     "Edit rule…" of an automatic list (§3, §7): the same dialog
  *                with the list's rule. A rule of a Table filter opens the
- *                Table (until the Table offers "Save to the list"). null:
- *                no link.
+ *                Table with the rule's filter; its ⋯ offers "Save to the
+ *                list". null: no link.
  *   addPerson    "+ Add person…" of a fixed list (§4, the dialog in
  *                src/ui/person-list-add.ts). null: no link.
  *   openInTable  "Open in Table" and the "N without citation ›" tile (§9):
  *                the Table in the list's scope, with the chip of people
- *                without a source when asked. Until the Table knows a
- *                list's scope it opens the Table's people.
+ *                without a source when asked.
  *   listMenu     more rows of a list's ⋯, after Duplicate (§7 Freeze, §13
  *                Tick off done, §12 Export ›). Each returns its rows for the
  *                list (none when they do not apply).
@@ -52,15 +51,17 @@ export const personListHooks: PersonListHooks = {
     editRule(ui, listId) {
         const list = DataManager.getPersonList(listId);
         if (!list?.rule) return;
-        if (list.rule.kind === 'tableFilter') personListHooks.openInTable(ui, listId);
-        else ui.showNewPersonList({ listId });
+        if (list.rule.kind === 'tableFilter') {
+            ui.closePersonLists();
+            ui.openTableForRule(listId);
+        } else ui.showNewPersonList({ listId });
     },
     addPerson(ui, listId) {
         ui.showAddPersonsToList(listId);
     },
-    openInTable(ui) {
+    openInTable(ui, listId, opts) {
         ui.closePersonLists();
-        ui.setDisplayViewMode('table');
+        ui.openTableInScope(listId, opts ?? {});
     },
     listMenu: [freezeAndChecklistRows],
 };

@@ -1004,8 +1004,37 @@ export const SOURCE_COLUMNS: readonly ColumnDef[] = cols('sources', [
     { id: 'srcImage', group: 'research', label: 'srcImage', width: 250, get: (c, r) => c.research ? sourceImageCell(asSource(r).source) : emptyCell() },
 ]);
 
+/**
+ * The columns a list's scope puts first in the People table (spec 084 §9,
+ * §13d): # (the place in the list's order, "–" outside the list) and, for a
+ * work list, Done with its box. Not in the catalog: shown only with the
+ * scope, never moved, hidden or stored in a view's columns; their cells are
+ * not cached (they follow the scope, not the model).
+ */
+export const LEAD_COLUMNS: readonly ColumnDef[] = cols('persons', [
+    {
+        id: 'num', group: 'person', label: 'num', kind: 'number', width: 46, computed: true, get: (c, r) => {
+            const n = c.scope?.pos.get(r.id);
+            return n ? numberCell(n, true) : { ...emptyCell(true), text: '–' };
+        },
+    },
+    {
+        id: 'done', group: 'person', label: 'done', width: 72, align: 'left', get: (c, r) => {
+            const done = c.scope?.done;
+            if (!done || !c.scope?.pos.has(r.id)) return naCell();
+            const on = done.has(r.id);
+            return { ...emptyCell(), empty: false, text: '', sortKey: on ? 1 : 0, check: on };
+        },
+    },
+]);
+
+/** Whether a column is one of the scope's lead columns (# and Done). */
+export function isLeadColumn(col: ColumnDef): boolean {
+    return LEAD_COLUMNS.includes(col);
+}
+
 const BY_TYPE: Record<RowType, ReadonlyMap<string, ColumnDef>> = {
-    persons: new Map(PERSON_COLUMNS.map(c => [c.id, c])),
+    persons: new Map([...PERSON_COLUMNS, ...LEAD_COLUMNS].map(c => [c.id, c])),
     unions: new Map(UNION_COLUMNS.map(c => [c.id, c])),
     events: new Map(EVENT_COLUMNS.map(c => [c.id, c])),
     sources: new Map(SOURCE_COLUMNS.map(c => [c.id, c])),
@@ -1157,6 +1186,7 @@ export function cellOf(model: TableModel, row: TableRow, col: ColumnDef, unionIn
     const scoped = row.kind === 'person' && col.unionScoped;
     const idx = scoped ? (unionIndex ?? 0) : 0;
     const key = scoped && idx > 0 ? `${col.id}#${idx}` : col.id;
+    if (LEAD_COLUMNS.includes(col)) return col.get(model.ctx, row, null);
     const hit = row.cache.get(key);
     if (hit) return hit;
     let value: CellValue;

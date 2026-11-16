@@ -13,6 +13,8 @@
 import { strings } from '../../strings.js';
 import { columnById, columnLabel, columnOffered, type SortSpec } from './table-columns.js';
 import { ROW_KEY, ROW_TYPES, type RowType } from './table-model.js';
+import { listKindIcon } from '../list-kind-icon.js';
+import type { ListKind } from '../../person-lists.js';
 
 export interface BarHandlers {
     /** A row type was chosen (segment or sheet). */
@@ -23,6 +25,8 @@ export interface BarHandlers {
     onMoreMenu(): void;
     /** ‹ / › (spec 103 §1): a jump by a name back or forward. */
     onHistory(dir: -1 | 1): void;
+    /** Scope ▾ (spec 084 §9): the menu of the lists. */
+    onScopeMenu(anchor: HTMLElement): void;
 }
 
 function esc(text: string): string {
@@ -37,6 +41,8 @@ export function countText(type: RowType, shown: number, total: number): string {
 
 /** "Sort: Birth date ↑, Name ↓" (empty without a sort). */
 export function sortText(type: RowType, sort: readonly SortSpec[]): string {
+    // A list's own order (spec 084 §9): "Sort: # (list order)".
+    if (type === 'persons' && sort.length === 1 && sort[0].col === 'num' && sort[0].dir !== 'desc') return strings.table.sortList;
     const cols = sort
         .map(s => { const col = columnById(type, s.col); return col && columnOffered(col) ? `${columnLabel(col)} ${s.dir === 'desc' ? '↓' : '↑'}` : ''; })
         .filter(Boolean);
@@ -75,6 +81,8 @@ export function createBar(handlers: BarHandlers): HTMLElement {
         + '</div>'
         + `<div class="tv-rowtype sel-seg" role="radiogroup" aria-label="${esc(strings.table.rowType)}"></div>`
         + '<button type="button" class="tv-rowtype-btn" aria-haspopup="dialog"></button>'
+        + `<div class="tv-slot tv-slot-scope"><span class="tv-scope-label" aria-hidden="true">${esc(strings.table.scope)}</span>`
+        + '<button type="button" class="tv-scope-btn" aria-haspopup="menu"></button></div>'
         + '<div class="tv-slot tv-slot-view"></div>'
         + '<div class="tv-bar-spacer"></div>'
         + '<div class="tv-slot tv-slot-search"></div>'
@@ -104,6 +112,8 @@ export function createBar(handlers: BarHandlers): HTMLElement {
     });
     bar.querySelector('.tv-rowtype-btn')!.addEventListener('click', () => handlers.onRowTypeSheet());
     bar.querySelector('.tv-more-menu-btn')!.addEventListener('click', () => handlers.onMoreMenu());
+    const scopeBtn = bar.querySelector<HTMLElement>('.tv-scope-btn')!;
+    scopeBtn.addEventListener('click', () => { if (scopeBtn.getAttribute('aria-disabled') !== 'true') handlers.onScopeMenu(scopeBtn); });
     bar.querySelector('.tv-slot-nav')!.addEventListener('click', (e) => {
         const btn = (e.target as Element).closest<HTMLElement>('[data-nav]');
         if (btn && btn.getAttribute('aria-disabled') !== 'true') handlers.onHistory(Number(btn.dataset.nav) as -1 | 1);
@@ -125,6 +135,39 @@ export function updateBar(bar: HTMLElement, type: RowType, counts: Record<RowTyp
     const label = strings.table.rows[type];
     btn.textContent = `${label} · ${counts[type]} ▾`;
     btn.setAttribute('aria-label', `${strings.table.rowType}: ${strings.table.rowTypeAria(label, counts[type])}`);
+}
+
+/** What Scope ▾ shows (spec 084 §9): the list's name and kind; null: the whole tree. */
+export interface ScopeShown {
+    list: { name: string; kind: ListKind } | null;
+    /** Sources: no scope by list (dimmed, says why). */
+    disabled: boolean;
+}
+
+/** The whole tree's glyph in a tight bar: lines of a list. */
+const SCOPE_GLYPH = '<svg class="tv-scope-glyph" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor"'
+    + ' stroke-width="1.6" stroke-linecap="round"><path d="M6 4h8M6 8h8M6 12h8"/><circle cx="2.5" cy="4" r=".6"/><circle cx="2.5" cy="8" r=".6"/><circle cx="2.5" cy="12" r=".6"/></svg>';
+
+/** Scope ▾ for the current row type (spec 084 §9; the phone has it in ⋯). */
+export function updateScope(bar: HTMLElement, shown: ScopeShown): void {
+    const btn = bar.querySelector<HTMLElement>('.tv-scope-btn')!;
+    const t = strings.table;
+    const name = shown.list?.name ?? t.scopeWhole;
+    const key = JSON.stringify(shown);
+    if (btn.dataset.key === key) return;
+    btn.dataset.key = key;
+    btn.classList.toggle('is-list', !!shown.list);
+    // The whole tree: its name, or where the bar is tight (a tablet, a changed view) only a list glyph.
+    btn.innerHTML = (shown.list ? listKindIcon(shown.list.kind, 14) : SCOPE_GLYPH)
+        + `<span class="tv-scope-name">${esc(name)}</span><span class="tv-scope-caret" aria-hidden="true">▾</span>`;
+    btn.setAttribute('aria-label', t.scopeAria(name));
+    if (shown.disabled) {
+        btn.setAttribute('aria-disabled', 'true');
+        btn.title = t.scopeSources;
+    } else {
+        btn.removeAttribute('aria-disabled');
+        btn.title = t.scopeAria(name);
+    }
 }
 
 /**

@@ -126,6 +126,12 @@ export interface GridInput {
     pinnedKeys?: ReadonlySet<string>;
     /** Pinned rows the filter hides (row keys): drawn dimmed with "outside the filter". */
     pinOutside?: ReadonlySet<string>;
+    /**
+     * Rows outside the Table's list of people (spec 084 §9: pinned or shown
+     * for now; row keys): "outside the list" instead of "outside the filter",
+     * a line at the left edge.
+     */
+    outsideList?: ReadonlySet<string>;
 }
 
 /**
@@ -260,6 +266,8 @@ export interface GridHandlers {
     onFindings?(line: GridLine, col: number, cell: HTMLElement): void;
     /** A tap on a completeness cell (§6.2): true when its bubble opened (touch; a mouse or a pen has the title). */
     onComp?(line: GridLine, col: number, cell: HTMLElement, pointer: string): boolean;
+    /** A work list's Done box was clicked, or Space pressed on its cell (spec 084 §13d). */
+    onCheck?(line: GridLine): void;
     /** A click on a column's head (§8.4); `add`: with Shift, a further sort key. */
     onHeadSort?(colId: string, add: boolean): void;
     /** A click on a coverage cell (§6.1: only empty / only filled). */
@@ -432,6 +440,11 @@ export function researchHtml(d: ResearchCellDetail, hit = ''): string {
 }
 
 function cellValueCore(value: CellValue, col: ColumnDef, hit = '', links = false): string {
+    // A work list's Done (spec 084 §13d): a box ticked off or not.
+    if (value.check !== undefined) {
+        return `<span class="tv-check${value.check ? ' is-on' : ''}" role="checkbox" aria-checked="${value.check}" aria-label="${esc(strings.table.col.done)}">`
+            + `${value.check ? '✓' : ''}</span>`;
+    }
     const r = value.research;
     if (r && !value.na && (r.parts.length > 0 || r.count !== undefined || r.signal)) return researchHtml(r, hit);
     if (col.kind === 'percent' && value.percent !== undefined && !value.na) {
@@ -702,6 +715,11 @@ export class TableGrid {
                 if (conf && cellEl && this.handlers.onConflict) {
                     this.select(line);
                     this.handlers.onConflict(line, Number(cellEl.getAttribute('aria-colindex')) - 1, conf);
+                    return;
+                }
+                if (t.closest('.tv-check') && line.kind === 'row' && this.handlers.onCheck) {
+                    this.select(line);
+                    this.handlers.onCheck(line);
                     return;
                 }
                 const act = t.closest<HTMLElement>('.tv-act[data-act]');
@@ -1597,6 +1615,8 @@ export class TableGrid {
         const rowSelected = rk === input.selected;
         const tailAt = this.tailColumn(input);
         const outside = pin && !!input.pinOutside?.has(rk);
+        const offList = !!input.outsideList?.has(rk) && (outside || !!input.temp?.has(rk));
+        const outsideWord = offList ? strings.table.outsideList : strings.table.outsideFilter;
         let attrs = ` aria-level="${lineLevel(line)}"`;
         let cls = 'tv-row' + home;
         if (line.kind !== 'more' && this.flashKeys.has(rk)) cls += ' is-flash';
@@ -1605,6 +1625,7 @@ export class TableGrid {
         if (line.kind === 'row' && input.agentKey === rk) cls += ' is-agent';
         if (pin) cls += ' is-pinned';
         if (outside) cls += ' is-outside';
+        if (offList) cls += ' is-outside-list';
         if (line.kind === 'row') {
             cls += ' sel-opt';
             attrs += ` data-sel-form="row" aria-selected="${rowSelected ? 'true' : 'false'}"`;
@@ -1629,7 +1650,7 @@ export class TableGrid {
             + ` style="top:${top}px;height:${height}px;width:${cw.total}px">`;
         // The pin before the name (spec 103 3c): filled in a pinned row, an outline on its row in the body.
         const pinMark = line.kind !== 'row' ? '' : pin ? PIN_MARK : input.pinnedKeys?.has(rk) ? PIN_MARK_OUTLINE : '';
-        const outsideNote = outside ? `<span class="tv-outside">${esc(strings.table.outsideFilter)}</span>` : '';
+        const outsideNote = outside ? `<span class="tv-outside">${esc(outsideWord)}</span>` : '';
         const cells: string[] = [];
         let prev = -1;
         for (const i of cw.indices) {
@@ -1644,7 +1665,7 @@ export class TableGrid {
                 continue;
             }
             if (input.subRows && col.id === 'name') {
-                cells.push(this.nameCell(input, line, col, i, tab, i === tailAt ? this.rowTail(input, line) : '', pinMark, outside));
+                cells.push(this.nameCell(input, line, col, i, tab, i === tailAt ? this.rowTail(input, line) : '', pinMark, outside, offList));
                 continue;
             }
             const value = lineCell(input.model, line, col);
@@ -1806,7 +1827,7 @@ export class TableGrid {
     }
 
     /** The name cell of the People table (§3.1, §3.2): ▾/▸ and the count pill, a sub-row's "Union k of n", the "more" button. */
-    private nameCell(input: GridInput, line: GridLine, col: ColumnDef, i: number, tab: number, tail = '', pinMark = '', pinOutside = false): string {
+    private nameCell(input: GridInput, line: GridLine, col: ColumnDef, i: number, tab: number, tail = '', pinMark = '', pinOutside = false, offList = false): string {
         const t = strings.table;
         const open = `<div class="tv-cell tv-name${this.pinClass(i, input)}" role="gridcell" aria-colindex="${i + 1}" tabindex="${tab}" style="${this.pinStyle(i, input)}"`;
         if (line.kind === 'more') {
@@ -1835,7 +1856,8 @@ export class TableGrid {
         const start = bar ? head.replace('class="tv-cell tv-name', 'class="tv-cell tv-name has-agent') : head;
         // A row shown for now although the filter hides it (spec 103 2b): "outside the filter" after the name.
         // A pinned row the filter hides (spec 103 3d) says the same.
-        const outside = pinOutside || input.temp?.has(rowKey(line.row)) ? `<span class="tv-outside">${esc(t.outsideFilter)}</span>` : '';
+        // Outside the Table's list of people (spec 084 §9): "outside the list".
+        const outside = pinOutside || input.temp?.has(rowKey(line.row)) ? `<span class="tv-outside">${esc(offList ? t.outsideList : t.outsideFilter)}</span>` : '';
         return `${start}${name.length > 24 ? ` title="${esc(name)}"` : ''}>${bar}${toggle}${pinMark}${conflict ? conflictMarkHtml(conflict) : ''}<span class="tv-cell-text">${nameHtml}</span>${outside}${done}${pill}`
             + `${issue ? markHtml(issue.severity, issue.label) : ''}${tail}</div>`;
     }
@@ -2000,6 +2022,10 @@ export class TableGrid {
             case ' ': {
                 e.preventDefault();
                 const cellEl = (e.target as Element).closest<HTMLElement>('[aria-colindex]');
+                if (e.key === ' ' && line.kind === 'row' && cellEl?.querySelector('.tv-check') && this.handlers.onCheck) {
+                    this.handlers.onCheck(line);
+                    return;
+                }
                 if (e.key === 'Enter' && line.kind !== 'more' && cellEl?.classList.contains('has-issue') && this.handlers.onIssue) {
                     this.handlers.onIssue(line, col, cellEl);
                     return;

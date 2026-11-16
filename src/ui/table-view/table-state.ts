@@ -42,6 +42,11 @@ export interface RowTypeState {
     filter: TableFilter;
     /** The search text (§8.3; not part of a view). */
     search: string;
+    /**
+     * The list of people the rows are narrowed to (spec 084 §9; `TableView.scope`),
+     * null for the whole tree. Never set for sources.
+     */
+    scope: string | null;
     /** The setup "Reset to default" returns to (part D: the open view's stored one; else the default view). */
     base?: ColumnSetup;
 }
@@ -60,7 +65,7 @@ export interface TableState {
 /** A row type's state as its default view gives it. */
 export function defaultTypeState(type: RowType): RowTypeState {
     const v = DEFAULT_VIEWS[type];
-    return { columns: [...v.columns], widths: { ...v.widths }, pinned: v.pinned, sort: v.sort.map(s => ({ ...s })), top: 0, left: 0, selected: null, collapsedGroups: [], coverageRow: true, unions: defaultUnionCollapse(), revealedUnions: [], filter: emptyFilter(), search: '' };
+    return { columns: [...v.columns], widths: { ...v.widths }, pinned: v.pinned, sort: v.sort.map(s => ({ ...s })), top: 0, left: 0, selected: null, collapsedGroups: [], coverageRow: true, unions: defaultUnionCollapse(), revealedUnions: [], filter: emptyFilter(), search: '', scope: null };
 }
 
 export function defaultTableState(): TableState {
