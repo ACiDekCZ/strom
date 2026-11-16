@@ -371,6 +371,7 @@ export const plPart2: Pick<StringsType, 'crop' | 'importImages' | 'imageViewer' 
         notTakenTitle: (n: number) => `Badanie nie przyjęło ${nPl(n, 'zmiany', 'zmian', 'zmian')}`,
         nw: {
             'cite.olderApp': 'cytat zostaje w badaniu: ta wersja aplikacji nie wysyła jeszcze usunięć',
+            'note.shorter': 'krótsze bliższe określenie chrzestnego lub świadka nieprzyjęte: badanie pyta w „Czeka na załatwienie”, czy je przyjąć',
             'cite.sourceRemoved': 'źródło zostaje w badaniu z cytatami; źródło usuwa się w badaniu',
             'cite.notCarried': 'cytaty osoby, imienia lub rodziny nie są usuwane z aplikacji',
             'main.notCarried': 'cytat główny nie ustawiony: badanie nie przyjęło tego cytatu',

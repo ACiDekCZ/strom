@@ -164,7 +164,7 @@ describe('the reason and the row of an item with a code', () => {
     it('every code of the table has its words in four languages, never "nothing new"', () => {
         const codes = ['cite.olderApp', 'cite.sourceRemoved', 'cite.notCarried', 'main.notCarried', 'fact.noMatch', 'gone', 'conflict.open',
             'sentSince', 'confirm.changed', 'relation.unknown', 'surname.kept', 'surname.warning', 'sync.origin', 'person.no-match', 'write.failed',
-            'event.retracted'];
+            'event.retracted', 'note.shorter'];
         for (const lang of ['en', 'cs', 'de', 'pl'] as const) {
             setLanguage(lang);
             const s = getStringsForLang(lang).sync;
@@ -178,6 +178,24 @@ describe('the reason and the row of an item with a code', () => {
         setLanguage('cs');
         expect(ui.nwReason(item('cite.olderApp'))).toBe('citace ve výzkumu zůstává: tato verze aplikace odebrání ještě neposílá');
         expect(ui.nwReason(item('main.notCarried'))).toBe('hlavní citace nenastavena: výzkum tuto citaci nepřevzal');
+    });
+
+    it('note.shorter (a shorter note of a godparent or witness, research 1.35): its own reason in four languages, never "not taken"', () => {
+        const want = {
+            en: 'shorter detail of a godparent or witness not taken: the research asks in Awaiting action whether to take it',
+            cs: 'kratší bližší určení kmotra či svědka nepřevzato: výzkum se v Čeká na vyřízení ptá, zda ho vzít',
+            de: 'kürzeres Detail eines Paten oder Zeugen nicht übernommen: die Forschung fragt unter „Wartet auf Bearbeitung“, ob es übernommen wird',
+            pl: 'krótsze bliższe określenie chrzestnego lub świadka nieprzyjęte: badanie pyta w „Czeka na załatwienie”, czy je przyjąć',
+        } as const;
+        for (const lang of ['en', 'cs', 'de', 'pl'] as const) {
+            setLanguage(lang);
+            const s = getStringsForLang(lang).sync;
+            // As the research sends it (a fact.part.note change reported): why report, the code.
+            const said = ui.nwReason(item('note.shorter', { why: 'report', person: 'P0003', fact: 'BAPM' }));
+            expect(said, lang).toBe(want[lang]);
+            expect(said).not.toBe(s.nwUnknown);
+            expect(said).not.toBe(s.notWrittenReport);
+        }
     });
 
     it('codes with today\'s reason say today\'s; an unknown code "not taken"; a skipped one with an unknown code a failed write', () => {

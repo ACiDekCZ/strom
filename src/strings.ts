@@ -1857,6 +1857,7 @@ const stringsEN = {
         /** A not-written change's reason by its code (research-changes-ui nwReason); a code not here: nwUnknown. */
         nw: {
             'cite.olderApp': 'citation kept in the research: this version of the app does not send removals yet',
+            'note.shorter': 'shorter detail of a godparent or witness not taken: the research asks in Awaiting action whether to take it',
             'cite.sourceRemoved': 'the source stays in the research with its citations; a source is deleted in the research',
             'cite.notCarried': 'citations of a person, a name or a family are not removed from the app',
             'main.notCarried': 'main citation not set: the research did not take this citation',
@@ -11077,6 +11078,7 @@ const stringsCZ: StringsType = {
         notTakenTitle: (n: number) => `Výzkum nepřevzal ${nCs(n, 'změnu', 'změny', 'změn')}`,
         nw: {
             'cite.olderApp': 'citace ve výzkumu zůstává: tato verze aplikace odebrání ještě neposílá',
+            'note.shorter': 'kratší bližší určení kmotra či svědka nepřevzato: výzkum se v Čeká na vyřízení ptá, zda ho vzít',
             'cite.sourceRemoved': 'pramen zůstává ve výzkumu i s citacemi; pramen se maže ve výzkumu',
             'cite.notCarried': 'citace osoby, jména nebo rodiny se z aplikace neodebírají',
             'main.notCarried': 'hlavní citace nenastavena: výzkum tuto citaci nepřevzal',
@@ -20177,6 +20179,7 @@ const stringsDE: StringsType = {
         notTakenTitle: (n: number) => `${nDe(n, 'Änderung', 'Änderungen')} nicht übernommen`,
         nw: {
             'cite.olderApp': 'Zitat bleibt in der Forschung: diese App-Version sendet Entfernungen noch nicht',
+            'note.shorter': 'kürzeres Detail eines Paten oder Zeugen nicht übernommen: die Forschung fragt unter „Wartet auf Bearbeitung“, ob es übernommen wird',
             'cite.sourceRemoved': 'die Quelle bleibt mit ihren Zitaten in der Forschung; gelöscht wird eine Quelle in der Forschung',
             'cite.notCarried': 'Zitate einer Person, eines Namens oder einer Familie werden aus der App nicht entfernt',
             'main.notCarried': 'Hauptzitat nicht gesetzt: die Forschung hat dieses Zitat nicht übernommen',
