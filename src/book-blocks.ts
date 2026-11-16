@@ -625,6 +625,21 @@ function storyBlock(ctx: BookCtx, story: Story, who: string, owner: { person: Pe
     return `<div class="book-story">${banner}<h4>${who}${title}</h4>${body}${approve}</div>`;
 }
 
+/**
+ * The couple's photo (spec 107 §8) above the couple's events, the width of
+ * the column, captioned by the union's kind and the wedding's date
+ * ("Marriage, 18 Jun 1924"); only with the book's images (a book without
+ * them, or a couple with a living partner under privacy, has none).
+ */
+function couplePhotoHtml(ctx: BookCtx, u: Partnership): string {
+    if (!ctx.parts.media || !u.photo || !/^data:image\//.test(u.photo)) return '';
+    const S = T(ctx);
+    const kind = u.status === 'partners' ? S.book.partners : S.fields.marriageRow;
+    const caption = [kind, u.startDate ? formatFlexDate(u.startDate, ctx.lang) : ''].filter(Boolean).join(', ');
+    return `<figure class="book-photo book-photo--couple"><img src="${esc(u.photo)}" alt="${esc(caption)}">`
+        + `<figcaption>${esc(caption)}</figcaption></figure>`;
+}
+
 function coupleEventsHtml(ctx: BookCtx, u: Partnership): string {
     const S = T(ctx);
     const B = S.book;
@@ -777,7 +792,7 @@ export function familyChapterHtml(ch: BookChapter, ctx: BookCtx): string {
     const children = childrenHtml(ctx, u, ch);
     const sources = chapterSourcesHtml(ctx, ch.no);
     ctx.sources.chapter = 0;
-    return `<article class="book-family${ch.sub ? ' is-sub' : ''}" id="${esc(bookId(ctx, `kap-${ch.no}`))}">${head}${events}${together.html}`
+    return `<article class="book-family${ch.sub ? ' is-sub' : ''}" id="${esc(bookId(ctx, `kap-${ch.no}`))}">${head}${couplePhotoHtml(ctx, u)}${events}${together.html}`
         + `<div class="book-section book-partners">${partners}</div>${storyHtml}${children}${sources}</article>`;
 }
 

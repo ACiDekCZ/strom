@@ -127,6 +127,10 @@ a { color: inherit; }
 .book-clip img { display: block; max-width: 100%; max-height: 60mm; object-fit: contain; }
 .book-clip figcaption { font-size: 9.5pt; color: #4a4438; margin-top: 3px; }
 .book-photo { width: 34mm; float: right; margin: 0 0 6px 12px; border-radius: 4px; }
+/* The couple's photo (spec 107 §8): the column's width above the couple's events. */
+.book-photo--couple { width: auto; float: none; margin: 4mm 0; break-inside: avoid; page-break-inside: avoid; }
+.book-photo--couple img { display: block; width: 100%; max-height: 110mm; object-fit: contain; border-radius: 4px; }
+.book-photo--couple figcaption { margin-top: 1.5mm; font-size: 10pt; color: #5c5546; }
 /* "Family together" (spec 085 §2h): the family's shared events once, between two rules */
 .book-together { border-top: 1px solid #e3dccd; border-bottom: 1px solid #e3dccd; padding: 2px 0 8px; break-inside: avoid; }
 .book-together .book-sub { margin-top: 8px; }

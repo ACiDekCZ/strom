@@ -6,7 +6,7 @@
  */
 
 import type { Partnership, Person, StromData } from './types.js';
-import { strings } from './strings.js';
+import { strings, type StringsType } from './strings.js';
 import { givenNameOf } from './shared-with-line.js';
 import { shownNameOrEmpty } from './person-name.js';
 
@@ -19,15 +19,15 @@ export function unionPartnersInOrder(data: Pick<StromData, 'persons'>, union: Pi
 }
 
 /** A partner's name in the caption: the given name, else the whole shown name. */
-function captionName(person: Person): string {
-    return givenNameOf(person) || shownNameOrEmpty(person) || strings.addChild.unknownPerson;
+function captionName(person: Person, S: StringsType): string {
+    return givenNameOf(person) || shownNameOrEmpty(person) || S.addChild.unknownPerson;
 }
 
-/** "Ilsa and Oskar · couple's photo" (the partners in the card's order). */
-export function unionPhotoCaption(data: Pick<StromData, 'persons'>, union: Pick<Partnership, 'person1Id' | 'person2Id'>): string {
+/** "Oskar and Ilsa · couple's photo" (the partners in the card's order); `S`: a page's own language. */
+export function unionPhotoCaption(data: Pick<StromData, 'persons'>, union: Pick<Partnership, 'person1Id' | 'person2Id'>, S: StringsType = strings): string {
     const [a, b] = unionPartnersInOrder(data, union);
-    const names = [a, b].filter((p): p is Person => !!p).map(captionName);
-    const r = strings.relationships;
+    const names = [a, b].filter((p): p is Person => !!p).map(p => captionName(p, S));
+    const r = S.relationships;
     if (names.length === 2) return r.unionPhotoCaption(names[0], names[1]);
-    return r.unionPhotoCaptionOne(names[0] ?? strings.addChild.unknownPerson);
+    return r.unionPhotoCaptionOne(names[0] ?? S.addChild.unknownPerson);
 }

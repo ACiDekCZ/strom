@@ -96,6 +96,7 @@ export function bookPartAvailability(data: StromData, options: BookOptions, env:
     const hasSources = persons.some(p => personSourceIds(p).some(id => !!catalog[id]))
         || unions.some(u => partnershipSourceIds(u).some(id => !!catalog[id]));
     const hasMedia = Object.values(data.persons).some(p => !!p.photo)
+        || unions.some(u => !!u.photo)
         || Object.values(catalog).some(s => (s.excerpts ?? []).length > 0);
     const state = (available: boolean, key: BookPartReasonKey): BookPartState =>
         ({ available, reason: available ? '' : B.unavailable[key] });

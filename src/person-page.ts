@@ -12,6 +12,7 @@
  * the output.
  */
 
+import { unionPhotoCaption } from './union-photo.js';
 import { StromData, Person, PersonId, Partnership, PartnershipId, Source, SourceExcerpt, LifeEvent, EventParticipant, Story, Attachment, PlaceGeo, FactStatus } from './types.js';
 import { applyLivingPrivacy, stripResearchWork, isLivingPerson, inferBirthUpperBounds, PrivacyMode } from './privacy.js';
 import { computePersonLifeline, LifelinePoint } from './timeline.js';
@@ -689,7 +690,9 @@ function countGroups(page: PersonPageData): PersonPageGroupCounts {
                 .reduce((n, s) => n + s.rows.filter(r => r.kind === 'kid').length, 0)
             : 0,
         excerpts: sources.reduce((n, s) => n + (s.excerpts?.length ?? 0), 0),
-        materials: (person?.attachments ?? []).filter(a => !isPdfAttachment(a) && !!safeImage(a.dataUrl) && !isOriginalOnlyAttachment(a)).length,
+        materials: (person?.attachments ?? []).filter(a => !isPdfAttachment(a) && !!safeImage(a.dataUrl) && !isOriginalOnlyAttachment(a)).length
+            // The couples' photos (spec 107 §8).
+            + (page.groups.materials ? (person?.partnerships ?? []).filter(id => !!safeImage(page.tree.partnerships[id]?.photo)).length : 0),
         pdf: (person?.attachments ?? []).filter(a => !!safePdf(a)).length,
         sources: page.groups.sources ? sources.length : 0,
         research: researchItems(page, page.lang).count + researchIdCount(page),
@@ -2642,7 +2645,24 @@ function excerptEvent(c: Ctx, sid: string): { event: PersonPageCaptionEvent | nu
     return null;
 }
 
-/** Every image of the person: the excerpts of the person's sources and the image attachments, by year (none last). */
+/**
+ * The photos of the person's couples (spec 107 §8), first in the gallery in
+ * the order of the unions: a couple with a living partner has none in a
+ * protected page (the privacy took it).
+ */
+function couplePhotoItems(c: Ctx): GalleryItem[] {
+    if (!c.page.groups.materials) return [];
+    const unions = partnershipsInOrder(c.tree, c.person.partnerships.map(id => c.tree.partnerships[id]).filter((u): u is Partnership => !!u));
+    const out: GalleryItem[] = [];
+    for (const u of unions) {
+        const src = safeImage(u.photo);
+        if (!src) continue;
+        out.push({ src, kind: 'photo', caption: unionPhotoCaption(c.tree, u, c.S), sub: '', year: yearOf(u.startDate), wide: false });
+    }
+    return out;
+}
+
+/** Every image of the person: the couples' photos, then the excerpts of the person's sources and the image attachments by year (none last). */
 function galleryItems(c: Ctx, rows: PersonSourceRow[]): GalleryItem[] {
     const { P } = c;
     const out: GalleryItem[] = [];
@@ -2680,10 +2700,11 @@ function galleryItems(c: Ctx, rows: PersonSourceRow[]): GalleryItem[] {
         const size = dataUrlImageSize(src);
         out.push({ src, kind, caption, sub, year, wide: !!size && isWide(kind, size.w, size.h) });
     }
-    return out
+    const sorted = out
         .map((it, i) => ({ it, i }))
         .sort((x, y) => (x.it.year ?? Infinity) - (y.it.year ?? Infinity) || x.i - y.i)
         .map(x => x.it);
+    return [...couplePhotoItems(c), ...sorted];
 }
 
 /** Pages of a PDF data URL (its page objects), null when it cannot be read. */
