@@ -381,7 +381,7 @@ test.describe('live panel: up next, update, spend', () => {
         await expect(panel.locator('.live-queue-toggle')).toHaveCount(0);
         await expect(panel.locator('.live-panel-update')).toHaveCount(0);
         await expect(panel.locator('.live-panel-spend')).toHaveCount(0);
-        await panel.getByRole('button', { name: 'Stop' }).click();
+        await panel.getByRole('button', { name: 'End following' }).click();
         await page.evaluate(() => window.Strom.UI.showResearchWaiting());
         await expect(page.locator('#live-panel.idle')).toBeVisible();
         await expect(page.locator('#live-panel .live-queue-toggle')).toHaveCount(0);
