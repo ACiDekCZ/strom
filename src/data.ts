@@ -1639,7 +1639,7 @@ class DataManagerClass {
      * for flows with their own result UI such as the family wizard) skips the
      * Undo toast. `description === null` uses the first inner mutation's.
      */
-    commitBatch(description: string | null, silent = true): void {
+    commitBatch(description: string | null, silent = true, toast?: MutationToast): void {
         if (!this.batchActive) return;
         if (--this.batchDepth > 0) return;
         this.batchActive = false;
@@ -1651,7 +1651,7 @@ class DataManagerClass {
             this.pendingBefore = null;   // nothing changed — no undo step
             return;
         }
-        this.commitMutation(desc, silent);
+        this.commitMutation(desc, silent, undefined, toast);
     }
 
     /**
@@ -1659,13 +1659,15 @@ class DataManagerClass {
      * Undo toast (review V12). The batch is closed on every path, including a
      * throw. `description === null` names the step after the first inner
      * mutation (e.g. "adding Jan Novák" for a create-then-edit save).
+     * `toast`: the Undo toast's own sentence when it says more than the
+     * history's entry ("Portrait updated.").
      */
-    runBatch<T>(description: string | null, fn: () => T): T {
+    runBatch<T>(description: string | null, fn: () => T, toast?: MutationToast): T {
         this.beginBatch();
         try {
             return fn();
         } finally {
-            this.commitBatch(description, false);
+            this.commitBatch(description, false, toast);
         }
     }
 

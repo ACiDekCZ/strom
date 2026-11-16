@@ -63,6 +63,9 @@ export const plPart2: Pick<StringsType, 'crop' | 'portrait' | 'importImages' | '
         keepStage: 'Obecny portret zostaje. Kadr można zmienić po wybraniu „Zastąp”.',
         single: 'Drugi partner jest nieznany, portret powstanie tylko dla jednej osoby.',
         stepAria: (i: number, n: number, name: string) => `Krok ${i} z ${n}: ${name}`,
+        updated: 'Portret zaktualizowany.',
+        replaced: (n: string) => `Portret osoby ${n} zastąpiony.`,
+        personGone: 'Osoby nie ma już w drzewie, nic nie zapisano.',
     },
 
     // Import filter: leave images out
@@ -88,6 +91,9 @@ export const plPart2: Pick<StringsType, 'crop' | 'portrait' | 'importImages' | '
         add: 'Dodaj załącznik',
         empty: 'Brak załączników',
         delete: 'Usuń',
+        asPortrait: 'Jako portret…',
+        portraitTag: 'Portret',
+        portraitTagTitle: 'Z tego zdjęcia pochodzi portret osoby.',
         deleteConfirm: (what: string) => `Usunąć ten załącznik?\n\n${what}`,
         notePlaceholder: 'Notatka (opcjonalnie)',
         personTotal: (parts: string) => `Przy tej osobie: ${parts}`,

@@ -35,6 +35,7 @@ import { storyFactText } from '../story-sources.js';
 import { isLivingPerson, inferBirthUpperBounds } from '../privacy.js';
 import { dataUrlByteSize } from '../photo.js';
 import { openPortraitEditor } from './portrait-editor.js';
+import { PendingPortrait, PortraitOrigin, portraitCropOf, portraitOriginOf, portraitOriginImage, canEditPortrait } from './portrait-actions-ui.js';
 import { personInitials } from '../initials.js';
 import { shownName, nameHtml } from '../person-name.js';
 import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
@@ -1343,6 +1344,9 @@ export const personModalMethods = uiModule({
             preview.innerHTML = dataUrl ? `<img src="${this.escapeHtml(dataUrl)}" alt="">` : '';
         }
         if (removeBtn) removeBtn.style.display = dataUrl ? '' : 'none';
+        // "Edit crop" only beside a portrait (spec 107 §2).
+        const recropBtn = document.getElementById('photo-recrop-btn');
+        if (recropBtn) recropBtn.style.display = dataUrl ? '' : 'none';
         if (sizeEl) sizeEl.textContent = dataUrl ? `${Math.round(dataUrlByteSize(dataUrl) / 1024)} kB` : '';
         // Mirror the photo into the header avatar (falls back to initials).
         this.updateHeaderAvatar();
@@ -1359,21 +1363,7 @@ export const personModalMethods = uiModule({
         const file = input.files?.[0];
         input.value = '';  // allow re-selecting the same file
         if (!file) return;
-        const current = (document.querySelector('#photo-preview img') as HTMLImageElement | null)?.getAttribute('src') || undefined;
-        let result: Awaited<ReturnType<typeof openPortraitEditor>>;
-        try {
-            result = await openPortraitEditor({ source: file, steps: [{ person: this.personFromForm(), current }] });
-        } catch (e) {
-            console.error('Photo processing failed:', e);
-            this.showAlert(strings.personModal.photoError, 'error');
-            return;
-        }
-        const step = result?.steps[0];
-        if (!result || !step) return;
-        this.setPhotoPreview(step.photo);
-        this.pendingPortrait = result.original
-            ? { photo: step.photo, crop: step.crop, original: result.original, fileName: file.name }
-            : null;
+        await this.portraitIntoPersonModal({ source: file, fileName: file.name, replace: true });
     },
 
     /** The person as the open form has them now (name, gender, dates): the portrait editor's card preview. */
@@ -1393,25 +1383,106 @@ export const personModalMethods = uiModule({
 
     /**
      * The portrait from the editor still in the preview, ready for Save: the
-     * whole photo as an attachment, the portrait's source naming it (spec 107
-     * §1). Null once the preview shows something else (removed, another
+     * whole photo as an attachment, or the attachment / couple's photo it was
+     * cut from, the portrait's source naming it with its crop (spec 107 §1,
+     * §2, §4). Null once the preview shows something else (removed, another
      * person's form).
      */
-    pendingPortraitFor(photo: string | undefined): { crop: PortraitCrop; original: string; fileName: string } | null {
+    pendingPortraitFor(photo: string | undefined): PendingPortrait | null {
         const p = this.pendingPortrait;
         return p && photo && p.photo === photo ? p : null;
     },
 
-    /** Save the pending portrait's original as the person's attachment; the source for updatePerson. */
-    attachPendingPortrait(personId: PersonId, pending: { crop: PortraitCrop; original: string; fileName: string } | null): { photoSource?: PortraitSource } {
+    /** Save the pending portrait's original as the person's attachment (a new file); the source for updatePerson. */
+    attachPendingPortrait(personId: PersonId, pending: PendingPortrait | null): { photoSource?: PortraitSource } {
         if (!pending) return {};
+        if (pending.origin) {
+            // Cut from what the tree has: only while it is still there.
+            const person = DataManager.getPerson(personId);
+            return person && portraitOriginImage(person, pending.origin) ? { photoSource: { ...pending.origin, ...pending.crop } } : {};
+        }
+        if (!pending.original) return {};
         const att = DataManager.addAttachment(personId, {
-            name: pending.fileName,
+            name: pending.fileName || 'photo.jpg',
             mimeType: 'image/jpeg',
             dataUrl: pending.original,
             sizeBytes: dataUrlByteSize(pending.original),
         });
         return att ? { photoSource: { attachmentId: att.id, ...pending.crop } } : {};
+    },
+
+    /**
+     * "Edit crop" in the dialog (spec 107 §2): the portrait in the preview
+     * over its original — a new file still waiting for Save, or the
+     * attachment / couple's photo the person's portrait names — else within
+     * the finished square, "Choose the photo again…" opening the file picker.
+     */
+    async recropPersonPhoto(): Promise<void> {
+        const photo = (document.querySelector('#photo-preview img') as HTMLImageElement | null)?.getAttribute('src') || undefined;
+        if (!photo) return;
+        if (this.currentId && !canEditPortrait(this.currentId)) return;
+        const pending = this.pendingPortraitFor(photo);
+        if (pending?.original) {
+            await this.portraitIntoPersonModal({ source: pending.original, initial: pending.crop, original: pending.original, fileName: pending.fileName });
+            return;
+        }
+        const stored = this.currentId ? DataManager.getPerson(this.currentId) : null;
+        const origin = pending ? pending.origin ?? null
+            : stored?.photo === photo && stored.photoSource ? portraitOriginOf(stored.photoSource) : null;
+        const crop = pending ? pending.crop : stored?.photoSource ? portraitCropOf(stored.photoSource) : undefined;
+        const image = stored && origin ? portraitOriginImage(stored, origin) : null;
+        if (image && origin) {
+            await this.portraitIntoPersonModal({ source: image, initial: crop, origin });
+            return;
+        }
+        await this.portraitIntoPersonModal({
+            source: photo,
+            squareOnly: true,
+            onChooseAgain: () => document.getElementById('input-photo')?.click(),
+        });
+    },
+
+    /**
+     * Open the portrait editor over the person dialog and put its portrait
+     * into the preview (saved with the dialog). `origin`: cut from the
+     * person's attachment or the couple's photo; `original`: a new file's
+     * whole photo; neither (squareOnly): no source.
+     */
+    async portraitIntoPersonModal(opts: {
+        source: string | Blob;
+        initial?: PortraitCrop;
+        origin?: PortraitOrigin;
+        original?: string;
+        fileName?: string;
+        squareOnly?: boolean;
+        onChooseAgain?: () => void;
+        /** Another photo for a person with a portrait: Current → New. */
+        replace?: boolean;
+    }): Promise<void> {
+        const current = (document.querySelector('#photo-preview img') as HTMLImageElement | null)?.getAttribute('src') || undefined;
+        let result: Awaited<ReturnType<typeof openPortraitEditor>>;
+        try {
+            result = await openPortraitEditor({
+                source: opts.source,
+                squareOnly: opts.squareOnly,
+                onChooseAgain: opts.onChooseAgain,
+                steps: [{ person: this.personFromForm(), ...(opts.initial ? { initial: opts.initial } : {}), ...(opts.replace && current ? { current } : {}) }],
+            });
+        } catch (e) {
+            console.error('Photo processing failed:', e);
+            this.showAlert(strings.personModal.photoError, 'error');
+            return;
+        }
+        const step = result?.steps[0];
+        if (!result || !step) return;
+        this.setPhotoPreview(step.photo);
+        const original = result.original ?? opts.original;
+        this.pendingPortrait = opts.squareOnly ? null
+            : opts.origin ? { photo: step.photo, crop: step.crop, origin: opts.origin }
+            : original ? { photo: step.photo, crop: step.crop, original, fileName: opts.fileName ?? '' }
+            : null;
+        // The attachment named as the portrait's source shows its tag at once.
+        this.renderAttachmentsList();
     },
 
     removePersonPhoto(): void {

@@ -221,6 +221,7 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
         openPdf: 'Otwórz PDF ↗',
         showInBatch: 'Pokaż w partii',
         download: 'Pobierz',
+        useAsPortrait: 'Użyj jako portretu…',
         deleteFromTree: 'Usuń z drzewa…',
         notHere: 'Pliku nie ma na tym komputerze. Wpis w archiwum pozostaje.',
         notHereResearch: 'Pliku nie ma na tym komputerze. Wpis w badaniu pozostaje.',

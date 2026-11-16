@@ -40,6 +40,7 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
         deleteEvent: 'Usuń zdarzenie',
         deleteAttachmentTitle: (name: string) => `Usunąć załącznik ${name}?`,
         deleteAttachment: 'Usuń załącznik',
+        portraitSourceNote: 'To źródło portretu. Portret zostaje, jego kadr da się potem zmieniać tylko wewnątrz gotowego kwadratu.',
         deleteUnionTitle: (a: string, b: string) => `Usunąć związek ${a} i ${b}?`,
         deleteUnion: 'Usuń związek',
         deleteUnionPhotoNote: 'Razem z nim zniknie zdjęcie pary. Portrety z niego zostaną.',

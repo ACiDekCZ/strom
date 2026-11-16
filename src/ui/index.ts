@@ -39,7 +39,7 @@ import {
 import { PersonPicker } from '../person-picker.js';
 import { AppExporter } from '../export.js';
 import { SettingsManager } from '../settings.js';
-import { ThemeMode, LanguageSetting, AppMode, AuditLog, ViewMode, PrimaryName, PortraitCrop } from '../types.js';
+import { ThemeMode, LanguageSetting, AppMode, AuditLog, ViewMode, PrimaryName } from '../types.js';
 import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData } from '../crypto.js';
 import { validateTreeData, ValidationResult as TreeValidationResult, ValidationIssue } from '../validation.js';
 import * as CrossTree from '../cross-tree.js';
@@ -51,6 +51,7 @@ import { contextMenuMethods } from './context-menu.js';
 import { bottomSheetMethods } from './bottom-sheet.js';
 
 import { personModalMethods } from './person-modal.js';
+import { portraitActionsMethods, PendingPortrait } from './portrait-actions-ui.js';
 import { personEventsMethods } from './person-events.js';
 import { sharedEventMethods } from './shared-event-ui.js';
 import { sharedLineMethods } from './shared-line-ui.js';
@@ -320,10 +321,10 @@ export class UIClass {
     primaryNameInitial: PrimaryName | undefined = undefined;
     /**
      * Person modal: the portrait from the editor in the preview, with the
-     * whole photo and the crop it was cut by — an attachment and the
-     * portrait's source on Save (spec 107 §1); dropped on the next open.
+     * whole photo or the attachment it was cut from and its crop — the
+     * portrait's source on Save (spec 107 §1, §2, §4); dropped on the next open.
      */
-    pendingPortrait: { photo: string; crop: PortraitCrop; original: string; fileName: string } | null = null;
+    pendingPortrait: PendingPortrait | null = null;
 
     // Debounce timer for the live search filter/highlight.
     searchFilterTimer: ReturnType<typeof setTimeout> | null = null;
@@ -617,6 +618,10 @@ Object.assign(UIClass.prototype, bottomSheetMethods);
 type PersonModalMethods = typeof personModalMethods;
 export interface UIClass extends PersonModalMethods {}
 Object.assign(UIClass.prototype, personModalMethods);
+
+type PortraitActionsMethods = typeof portraitActionsMethods;
+export interface UIClass extends PortraitActionsMethods {}
+Object.assign(UIClass.prototype, portraitActionsMethods);
 
 type PersonEventsMethods = typeof personEventsMethods;
 type SharedEventMethods = typeof sharedEventMethods;

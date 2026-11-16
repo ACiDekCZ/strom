@@ -490,6 +490,9 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         saveShort: 'Zapisz',
         moreActions: 'Więcej działań',
         edit: 'Edytuj osobę',
+        editCrop: 'Edytuj kadr portretu',
+        portrait: 'Portret',
+        wholePhoto: 'Całe zdjęcie',
         focus: 'Ustaw w centrum drzewa',
         toc: 'Na tej stronie',
         map: {

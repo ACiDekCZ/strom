@@ -983,7 +983,10 @@ export const personPageMethods = uiModule({
             `<button type="button" class="pp-menu-item${narrow ? ' pp-menu-item--narrow' : ''}" role="menuitem" data-pp-menu="${key}">${esc(label)}</button>`;
         // Phones (and a phone held sideways) have Save and Print here; wider windows have them in the header.
         menu.innerHTML = item('save', P.save, true) + item('print', P.print, true)
-            + (canEdit ? item('edit', P.edit) : '') + item('focus', P.focus);
+            + (canEdit ? item('edit', P.edit) : '')
+            // Edit portrait crop (spec 107 §2): only an editable person with a portrait.
+            + (canEdit && DataManager.getPerson(personId)?.photo ? item('crop', P.editCrop) : '')
+            + item('focus', P.focus);
         menu.hidden = false;
         overlayEl()?.querySelector('.pp-more')?.setAttribute('aria-expanded', 'true');
         [...menu.querySelectorAll<HTMLElement>('.pp-menu-item')].find(el => el.getClientRects().length > 0)?.focus();
@@ -1019,6 +1022,9 @@ export const personPageMethods = uiModule({
             this.snapshotPersonPage();
             this.pushDialog('person-modal');
             this.showEditPersonModal(personId);
+        } else if (key === 'crop') {
+            // The editor opens over the page; Done writes at once and the page redraws (strom:user-change).
+            this.editPersonPortrait(personId);
         } else if (key === 'focus') {
             this.closePersonPage({ focus: false });
             this.runPersonMenuAction(personId, 'focus');
