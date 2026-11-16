@@ -38,7 +38,8 @@ import { StromData, TreeId, PersonId, SourceExcerpt, TreeImagesVariant } from '.
 import { parseGedcom, convertToStrom, decodeGedcomFile, parseGedcomDate } from '../ged-parser.js';
 import { formatFlexDate, instantLocalDay } from '../dates.js';
 import { formatLiveTime, formatLiveClock } from '../live-time.js';
-import { isMobile } from '../breakpoints.js';
+import { isDesktop, isMobile } from '../breakpoints.js';
+import { livePanelDrawnSections, livePanelNothingAtWork, livePanelWorkingOnly } from './live-panel-working-only.js';
 import {
     readResearchHeader, parseLoopbackUrl, parseLiveBridge, contentFingerprint, fingerprintLike,
     decideResearchOpen, stabilizeIds, keepEventShares, keepTitles, keepMarriedSurname, keepSurnameVariants, keepLineageOverrides, researchHasTitles, withResearchTitles, TITLES_FEATURE, carryOverMedia, carryOverUnknownPartners, sanitizeLiveStatus, sanitizeLiveChange,
@@ -4333,12 +4334,15 @@ export const researchUiMethods = uiModule({
         // Phones: the panel is a strip (head and a summary); a tap opens the overview sheet.
         const phone = window.matchMedia?.('(max-width: 640px)').matches === true;
         const collapsed = s.collapsed || phone;
+        // The overview in its own window, on a computer (spec 079 U9): the head and "Working" only, the rest is there.
+        const workingOnly = livePanelWorkingOnly({ overviewInWindow: overviewInWindow(), desktop: isDesktop(), ended: s.ended });
         panel.setAttribute('aria-label', r.panelLabel);
         panel.classList.remove('idle');
         panel.classList.toggle('ended', s.ended);
         panel.classList.toggle('lost', !s.ended && s.lostSince !== null);
         panel.classList.toggle('collapsed', collapsed);
         panel.classList.toggle('phone-strip', phone && !s.ended);
+        panel.classList.toggle('working-only', workingOnly);
         // The overview shows the same (a drawn overview hides the panel).
         panel.hidden = livePanelHidden(s);
         // A redraw replaces the ⋯ buttons: an open task menu moves to the new one.
@@ -4372,7 +4376,7 @@ export const researchUiMethods = uiModule({
         // "Awaiting action" hidden: its count stays in the head, first (a click shows it in the overview).
         // Folded, the summary has it; a phone's strip has its own.
         const waitHidden = panelSectionHidden('waiting');
-        const headWaitChip = waitHidden && !collapsed && !phone ? waitingChip(s, () => this.openResearchOverview({ showWaiting: true })) : null;
+        const headWaitChip = waitHidden && !collapsed && !phone && !workingOnly ? waitingChip(s, () => this.openResearchOverview({ showWaiting: true })) : null;
         if (headWaitChip) actions.appendChild(headWaitChip);
         // Folded: the other trees as one chip (unfolds the panel with them shown; spec 011).
         const otherChip = collapsed && !phone && !s.ended ? this.researchElsewhereChip('collapsed') : null;
@@ -4425,12 +4429,12 @@ export const researchUiMethods = uiModule({
                 if (chip) summary.appendChild(chip);
             }
             // "Awaiting action" collapsed or hidden: its count first (a click opens the overview; hidden, shown there).
-            if (!phone && (waitHidden || panelSectionCollapsed(s, 'waiting'))) {
+            if (!phone && !workingOnly && (waitHidden || panelSectionCollapsed(s, 'waiting'))) {
                 const chip = waitingChip(s, () => this.openResearchOverview({ showWaiting: waitHidden }));
                 if (chip) summary.appendChild(chip);
             }
             const fresh = s.changes.length - s.seenChanges;
-            if (fresh > 0) summary.appendChild(el('span', 'live-panel-chip live-panel-new', r.newChanges(fresh)));
+            if (fresh > 0 && !workingOnly) summary.appendChild(el('span', 'live-panel-chip live-panel-new', r.newChanges(fresh)));
             // An older tree shown at once: the newer one comes by itself.
             if (s.preparing && !s.ended) summary.appendChild(livePreparing('span', 'live-panel-chip live-panel-preparing'));
             if (!s.ended && !phone) summary.appendChild(el('span', 'live-panel-chip', r.readOnly));
@@ -4462,7 +4466,7 @@ export const researchUiMethods = uiModule({
             menu: (h, at) => this.openLiveSectionMenu(h, key, 'panel', at),
         });
         // Every section hidden: a word and the way back instead (the head keeps the count of what waits).
-        if (PANEL_PREF_KEYS.every(k => panelSectionHidden(k))) {
+        if (!workingOnly && PANEL_PREF_KEYS.every(k => panelSectionHidden(k))) {
             appendAllHidden(body, (anchor) => this.openLiveSectionEditor(anchor, 'panel'));
         }
 
@@ -4470,9 +4474,15 @@ export const researchUiMethods = uiModule({
         // show it only while live.
         const multi = linesMulti(s);
         const sel = selectedLine(s);
+        // Beside the overview's window "Working" stays expanded (folded it would leave the panel a head).
+        const workingFoldNow = (): LiveFold & { locked?: boolean } => (workingOnly
+            ? { ...fold('working'), collapsed: false, locked: true } : fold('working'));
         const drawWorking = (): void => {
-            if (panelSectionHidden('working')) {
-                // Hidden by the user: not drawn.
+            if (workingOnly && livePanelNothingAtWork(s.working)) {
+                // Beside the overview's window, nobody at work: a line in place of the section.
+                body.appendChild(el('p', 'live-panel-nowork', L.nothingAtWork));
+            } else if (panelSectionHidden('working') && !workingOnly) {
+                // Hidden by the user: not drawn (beside the overview's window it is all the panel has).
             } else if (!s.ended && multi) {
                 // Two or more lines at work: a row each, one can be selected (spec 011).
                 const o = strings.otherResearch;
@@ -4483,7 +4493,7 @@ export const researchUiMethods = uiModule({
                     : [glyphs, o.linesWorking(n)].filter(Boolean).join(' · ');
                 // Folded, the summary says the lines or the selection; unfolded, the title says the count
                 // and "All directions" drops a selection.
-                const workingFold = fold('working');
+                const workingFold = workingFoldNow();
                 const title = n >= 2 && !workingFold.collapsed ? o.linesTitle(n) : r.atWork;
                 let aside: HTMLButtonElement | undefined;
                 if (sel && !workingFold.collapsed) {
@@ -4499,7 +4509,7 @@ export const researchUiMethods = uiModule({
                 const w = s.working[0];
                 const since = w ? Date.parse(w.since) : NaN;
                 const summary = w ? [w.who, w.paused ? L.statePaused : Number.isFinite(since) ? liveDuration(since) : ''].filter(Boolean).join(' · ') : L.nobody;
-                const host = liveSection(body, { ...fold('working'), title: r.atWork, summary, help: nowHelpTopic(s) });
+                const host = liveSection(body, { ...workingFoldNow(), title: r.atWork, summary, help: nowHelpTopic(s) });
                 this.appendWorkingList(host, s);
             }
         };
@@ -4551,7 +4561,7 @@ export const researchUiMethods = uiModule({
         };
         // In the sections' order (one for the panel and the overview; the panel has four of them).
         const draw: Record<LiveSectionKey, () => void> = { working: drawWorking, waiting: drawWaiting, changes: drawChanges, queue: drawQueue };
-        for (const key of panelSectionOrder()) draw[key]();
+        for (const key of livePanelDrawnSections(panelSectionOrder(), workingOnly)) draw[key]();
         panel.appendChild(body);
         if (!s.ended && s.spend && !phone) this.appendSpendFoot(panel, s.spend);
         placeLivePanel(panel);
@@ -4559,7 +4569,8 @@ export const researchUiMethods = uiModule({
         if (again && menuTask) this.openLiveTaskMenu(again, menuTask, true);
         // Too tall for the window: fold from the bottom up (by default Up next, then Changes, then Working;
         // never Waiting, never a section with a choice: one kept expanded makes the panel scroll). Not remembered.
-        if (!collapsed && !panel.hidden && body.scrollHeight > body.clientHeight + 1) {
+        // Beside the overview's window "Working" alone stays expanded and scrolls.
+        if (!collapsed && !workingOnly && !panel.hidden && body.scrollHeight > body.clientHeight + 1) {
             const prefs = sectionPrefs();
             const next = autoFoldOrder().find(k => prefs[k] === undefined && !s.autoCollapsed.has(k)
                 && body.querySelector(`#live-sec-${k}`));
@@ -5271,7 +5282,7 @@ export const researchUiMethods = uiModule({
         const researchId = idlePanel;
         const state = researchId ? storedResearchWaiting(researchId) : null;
         panel.setAttribute('aria-label', r.panelIdle);
-        panel.classList.remove('ended', 'collapsed');
+        panel.classList.remove('ended', 'collapsed', 'working-only');
         panel.classList.add('idle');
         // The overview open without following shows the same (and the panel lay over its ⤡).
         panel.hidden = this.activeResearchId() !== researchId || viewingShown();
@@ -5381,6 +5392,12 @@ export const researchUiMethods = uiModule({
         }
         const panel = document.getElementById('live-panel');
         if (panel && live && panel.classList.contains('phone-strip') !== (phone && !live.ended)) {
+            this.renderLivePanel();
+            return;
+        }
+        // Across 1024 px beside the overview's window: the head and "Working" only on a computer, all below.
+        if (panel && live && panel.classList.contains('working-only')
+            !== livePanelWorkingOnly({ overviewInWindow: overviewInWindow(), desktop: isDesktop(), ended: live.ended })) {
             this.renderLivePanel();
             return;
         }

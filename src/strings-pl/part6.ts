@@ -632,6 +632,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         closeOverview: 'Zmniejsz do panelu',
         overviewTitle: 'Przegląd badania',
         nobody: 'Nikt nie pracuje',
+        nothingAtWork: 'Teraz nie trwa żadna praca',
         sinceFor: (t: string, d: string) => `od ${t} · ${d}`,
         newChanges: (n: number) => nPl(n, 'nowa', 'nowe', 'nowych'),
         queueCount: (n: number) => nPl(n, 'zadanie', 'zadania', 'zadań'),
