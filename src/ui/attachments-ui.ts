@@ -13,6 +13,8 @@ import { TreeManager } from '../tree-manager.js';
 import { Attachment, PersonId } from '../types.js';
 import { strings } from '../strings.js';
 import { dataUrlByteSize } from '../photo.js';
+import { isPortraitCandidate } from '../materials.js';
+import { canEditPortrait } from './portrait-actions-ui.js';
 import { ORIGINAL_ONLY_DATA_URL } from '../validation.js';
 import {
     compressImageAttachment, readFileAsDataUrl, personMedia,
@@ -82,6 +84,9 @@ export const attachmentsMethods = uiModule({
 
         const attachments = person.attachments ?? [];
         const locked = DataManager.isPersonLocked(this.currentId);
+        // The attachment the portrait is cut from: its tag, and no "As portrait…" (spec 107 §4).
+        const sourceId = this.portraitSourceAttachmentShown(person);
+        const canPortrait = canEditPortrait(this.currentId);
 
         if (attachments.length === 0) {
             // Compact empty state: the "Add attachment" button sits right below.
@@ -102,8 +107,14 @@ export const attachmentsMethods = uiModule({
                     : `<input type="text" class="attachment-note-input" value="${esc(att.note ?? '')}"
                            data-i18n-placeholder="attachments.notePlaceholder"
                            data-attachment-id="${esc(att.id)}">`;
+                const isSource = att.id === sourceId;
+                const tag = isSource
+                    ? `<span class="attachment-tag" title="${esc(strings.attachments.portraitTagTitle)}">${esc(strings.attachments.portraitTag)}</span>` : '';
+                const asPortrait = canPortrait && !locked && !isSource && isPortraitCandidate(att)
+                    ? `<button type="button" class="secondary attachment-portrait-btn" data-attachment-id="${esc(att.id)}">${esc(strings.attachments.asPortrait)}</button>` : '';
                 const del = locked ? '' : `
                     <div class="attachment-actions">
+                        ${asPortrait}
                         <button type="button" class="attachment-delete-btn" title="${esc(strings.attachments.delete)}" aria-label="${esc(strings.attachments.delete)}"
                             data-attachment-id="${esc(att.id)}">${iconSvg('trash')}</button>
                     </div>`;
@@ -115,7 +126,7 @@ export const attachmentsMethods = uiModule({
                     <div class="attachment-row">
                         ${thumb}
                         <div class="attachment-main">
-                            <span class="attachment-name">${esc(att.name)}</span>
+                            <span class="attachment-name-row"><span class="attachment-name">${esc(att.name)}</span>${tag}</span>
                             <span class="attachment-size">${esc(formatBytes(att.sizeBytes))}</span>
                             ${origLine}
                             ${noteField}
@@ -132,6 +143,11 @@ export const attachmentsMethods = uiModule({
             });
             container.querySelectorAll<HTMLInputElement>('.attachment-note-input[data-attachment-id]').forEach(el => {
                 el.addEventListener('change', () => this.updateAttachmentNoteFromInput(el.dataset.attachmentId ?? '', el.value));
+            });
+            container.querySelectorAll<HTMLElement>('.attachment-portrait-btn[data-attachment-id]').forEach(el => {
+                el.addEventListener('click', () => {
+                    if (this.currentId) void this.useAttachmentAsPortrait(this.currentId, el.dataset.attachmentId ?? '');
+                });
             });
             container.querySelectorAll<HTMLElement>('.attachment-delete-btn[data-attachment-id]').forEach(el => {
                 el.addEventListener('click', () => { void this.deleteAttachment(el.dataset.attachmentId ?? ''); });
@@ -462,9 +478,14 @@ export const attachmentsMethods = uiModule({
         const queuedOriginal = state?.kind === 'queued' || state?.kind === 'sending';
         // An archive keeps no attachments: only the original stays there (an attachment without one: no note).
         const archiveNote = this.researchArchiveDeleteNote();
-        const note = state?.kind === 'inResearch'
+        const researchNote = state?.kind === 'inResearch'
             ? archiveNote ? { tag: archiveNote.tag, text: strings.sync.archiveDeleteAttachmentNote } : { tag: strings.research.brand, text: m.deleteDetach }
             : undefined;
+        // The portrait's source (spec 107 §4d): the portrait stays, cut off from it.
+        const isSource = !!person && this.portraitSourceAttachmentShown(person) === attachmentId;
+        const note = isSource
+            ? { ...(researchNote?.tag ? { tag: researchNote.tag } : {}), text: [researchNote?.text, d.portraitSourceNote].filter(Boolean).join(' ') }
+            : researchNote;
         const confirmed = await this.showConfirm(d.undoHint, d.deleteAttachmentTitle(att.name), {
             confirmLabel: d.deleteAttachment, variant: 'danger', note,
             ...(queuedOriginal ? { checkbox: { label: m.deleteDiscard(formatBytes(att.original?.bytes ?? 0)), hint: m.deleteDiscardHint, checked: true } } : {}),

@@ -10,6 +10,7 @@
 
 import { test, expect, Page } from '@playwright/test';
 import { openApp, cardAction, personModal, seedTree } from './helpers.js';
+import { fakeBridge, fakeMaterial, MATERIAL_FEATURES, openResearch, poll, researchGed, UUID, BRIDGE } from './research-bridge.js';
 
 const editor = (page: Page) => page.locator('.pe-overlay');
 const pct = (page: Page) => editor(page).locator('.pe-pct');
@@ -215,5 +216,190 @@ test.describe('Edit crop later (desktop)', () => {
         const s = await stored(page);
         expect(s.attachments.map(a => a.name)).toEqual(['svatba.jpg', 'novy.png']);
         expect(s.source).toMatchObject({ attachmentId: s.attachments[1].id });
+    });
+});
+
+/** A second picture for Zbyhoslav (no portrait comes from it). */
+async function addSecondPicture(page: Page, original: string): Promise<void> {
+    await page.evaluate((dataUrl) => {
+        window.Strom.DataManager.addAttachment('zb' as never, { name: 'louka.jpg', mimeType: 'image/jpeg', dataUrl, sizeBytes: 20000 });
+    }, original);
+}
+
+const attRow = (page: Page, name: string) => personModal(page).locator('#attachments-list .attachment-row', { hasText: name });
+
+test.describe('The portrait\'s source among the attachments (desktop)', () => {
+    test.use({ viewport: { width: 1440, height: 900 } });
+
+    test('the Portrait tag on the source, As portrait… on another picture; a portrait removed in the dialog takes the tag away', async ({ page }) => {
+        const img = await seedZbyhoslav(page, 'source');
+        await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));
+        await addSecondPicture(page, img.original);
+        await openDialog(page);
+        const tag = attRow(page, 'svatba.jpg').locator('.attachment-tag');
+        await expect(tag).toHaveText('Portrait');
+        await expect(tag).toHaveAttribute('title', 'The person’s portrait is cut from this photo.');
+        await expect(attRow(page, 'svatba.jpg').locator('.attachment-portrait-btn')).toHaveCount(0);
+        await expect(attRow(page, 'louka.jpg').locator('.attachment-tag')).toHaveCount(0);
+        const btn = attRow(page, 'louka.jpg').locator('.attachment-portrait-btn');
+        await expect(btn).toHaveText('As portrait…');
+        const box = (await btn.boundingBox())!;
+        expect(Math.round(box.height)).toBe(30);
+        // Before the trash.
+        await expect(attRow(page, 'louka.jpg').locator('.attachment-actions button')).toHaveClass([/attachment-portrait-btn/, /attachment-delete-btn/]);
+        await personModal(page).locator('#photo-remove-btn').click();
+        await expect(personModal(page).locator('#attachments-list .attachment-tag')).toHaveCount(0);
+        await expect(attRow(page, 'svatba.jpg').locator('.attachment-portrait-btn')).toBeVisible();
+    });
+
+    test('As portrait… in the dialog: Current → New over the attachment, the tag moves on Done, Save names it without a new attachment', async ({ page }) => {
+        const img = await seedZbyhoslav(page, 'source');
+        await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));
+        await addSecondPicture(page, img.original);
+        await openDialog(page);
+        await attRow(page, 'louka.jpg').locator('.attachment-portrait-btn').click();
+        await expect(editor(page)).toBeVisible();
+        await expect(editor(page).locator('.pe-note-replace')).toBeVisible();
+        await editor(page).getByRole('button', { name: 'Done' }).click();
+        await expect(editor(page)).toHaveCount(0);
+        await expect(attRow(page, 'louka.jpg').locator('.attachment-tag')).toHaveText('Portrait');
+        await expect(attRow(page, 'svatba.jpg').locator('.attachment-tag')).toHaveCount(0);
+        // Nothing written before Save.
+        expect((await stored(page)).source).toMatchObject({ attachmentId: 'att_svatba' });
+        await personModal(page).getByRole('button', { name: 'Save' }).click();
+        await expect(personModal(page)).toBeHidden();
+        const s = await stored(page);
+        expect(s.attachments).toHaveLength(2);
+        expect(s.source).toMatchObject({ attachmentId: s.attachments[1].id });
+        expect(s.photo).not.toBe(img.portrait);
+    });
+
+    test('deleting the source: the confirmation says the portrait stays; it stays without its source and is then edited within its square', async ({ page }) => {
+        const img = await seedZbyhoslav(page, 'source');
+        await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));
+        await addSecondPicture(page, img.original);
+        await openDialog(page);
+        // Another attachment: no note.
+        await attRow(page, 'louka.jpg').locator('.attachment-delete-btn').click();
+        const confirm = page.locator('#confirmation-modal');
+        await expect(confirm).toHaveClass(/active/);
+        await expect(confirm).not.toContainText('portrait’s source');
+        await confirm.getByRole('button', { name: 'Cancel' }).click();
+        await attRow(page, 'svatba.jpg').locator('.attachment-delete-btn').click();
+        await expect(confirm).toContainText('This is the portrait’s source. The portrait stays; its crop can then only change within the finished square.');
+        await confirm.locator('#confirm-ok-btn').click();
+        await expect(attRow(page, 'svatba.jpg')).toHaveCount(0);
+        const s = await stored(page);
+        expect(s.photo).toBe(img.portrait);
+        expect(s.source).toBeUndefined();
+        await personModal(page).locator('#photo-recrop-btn').click();
+        await expect(editor(page).locator('.pe-note-original')).toBeVisible();
+    });
+
+    test('a locked person: no As portrait…, no Edit crop', async ({ page }) => {
+        const img = await seedZbyhoslav(page, 'source', { isLocked: true });
+        await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));
+        await page.evaluate((dataUrl) => {
+            const p = window.Strom.DataManager.getPerson('zb' as never)!;
+            p.attachments!.push({ id: 'att_louka', name: 'louka.jpg', mimeType: 'image/jpeg', dataUrl, sizeBytes: 20000 });
+        }, img.original);
+        // A locked person's dialog (read-only; the card menu offers no Edit).
+        await page.evaluate(() => {
+            const ui = window.Strom.UI as unknown as { pushDialog(id: string): void; showEditPersonModal(id: string): void };
+            ui.pushDialog('person-modal');
+            ui.showEditPersonModal('zb');
+        });
+        await expect(personModal(page)).toBeVisible();
+        await expect(attRow(page, 'svatba.jpg').locator('.attachment-tag')).toHaveText('Portrait');
+        await expect(personModal(page).locator('.attachment-portrait-btn')).toHaveCount(0);
+        await expect(personModal(page).locator('#photo-recrop-btn')).not.toBeEnabled();
+    });
+});
+
+test.describe('Use as portrait… in the materials (desktop)', () => {
+    test.use({ viewport: { width: 1440, height: 900 } });
+    const ACCEPTS = { sync: { auto: 'off' }, sources: true, verified: true, media: { max: 500 * 1024 * 1024, region: true, tasks: 'open' } };
+
+    /** Jan of the research with a portrait and two pictures of the tree, the first its source. */
+    async function setup(page: Page): Promise<{ original: string; portrait: string; janId: string }> {
+        const material = fakeMaterial({ files: [], batches: [], people: { P0003: 'Jan Fíšek' } });
+        await fakeBridge(page, { accepts: ACCEPTS, features: MATERIAL_FEATURES, material, treeGed: researchGed() });
+        await openResearch(page, { media: true });
+        await page.evaluate(({ uuid, base, accepts }) => {
+            localStorage.setItem(`strom-research-bridge:${uuid}`, JSON.stringify({ base, accepts }));
+        }, { uuid: UUID, base: BRIDGE, accepts: ACCEPTS });
+        const img = await images(page);
+        const janId = await page.evaluate((img) => {
+            const DM = window.Strom.DataManager;
+            const jan = Object.values(DM.getData().persons).find(p => p.firstName === 'Jan')!;
+            const a = DM.addAttachment(jan.id, { name: 'svatba.jpg', mimeType: 'image/jpeg', dataUrl: img.original, sizeBytes: 20000 })!;
+            DM.addAttachment(jan.id, { name: 'louka.jpg', mimeType: 'image/jpeg', dataUrl: img.original, sizeBytes: 20000 });
+            DM.updatePerson(jan.id, { photo: img.portrait, photoSource: { attachmentId: a.id, region: { x: 150 / 900, y: 0, w: 600 / 900, h: 1 } } });
+            return jan.id as string;
+        }, img);
+        await poll(page);
+        return { ...img, janId };
+    }
+
+    const janStored = (page: Page, id: string) => page.evaluate((id) => {
+        const p = window.Strom.DataManager.getPerson(id as never)!;
+        return { photo: p.photo, source: p.photoSource, names: (p.attachments ?? []).map(a => [a.id, a.name]) };
+    }, id);
+
+    test('the person\'s materials: the tag on the source, Use as portrait… in another picture\'s ⋯, waiting for Save', async ({ page }) => {
+        const { janId } = await setup(page);
+        await page.evaluate((id) => {
+            const ui = window.Strom.UI as unknown as { pushDialog(id: string): void; showEditPersonModal(id: string): void };
+            ui.pushDialog('person-modal');
+            ui.showEditPersonModal(id);
+        }, janId);
+        const section = page.locator('#materials-section');
+        const row = (name: string) => section.locator('.material-row:not(.is-skeleton)', { hasText: name });
+        await expect(row('svatba.jpg').locator('.material-portrait-tag')).toHaveText('Portrait');
+        await expect(row('louka.jpg').locator('.material-portrait-tag')).toHaveCount(0);
+        await row('svatba.jpg').locator('.material-more').click();
+        await expect(page.locator('#materials-item-menu [data-action="useAsPortrait"]')).toHaveCount(0);
+        await page.keyboard.press('Escape');
+        await row('louka.jpg').locator('.material-more').click();
+        const items = page.locator('#materials-item-menu [data-action]');
+        await expect(items).toHaveText(['Open', 'Download', 'Use as portrait…', 'Delete from the tree…']);
+        await page.locator('#materials-item-menu [data-action="useAsPortrait"]').click();
+        await expect(editor(page)).toBeVisible();
+        await expect(editor(page).locator('.pe-note-replace')).toBeVisible();
+        await editor(page).getByRole('button', { name: 'Done' }).click();
+        await expect(row('louka.jpg').locator('.material-portrait-tag')).toHaveText('Portrait');
+        await page.locator('#person-modal').getByRole('button', { name: 'Save' }).click();
+        const s = await janStored(page, janId);
+        expect(s.names.map(n => n[1])).toEqual(['svatba.jpg', 'louka.jpg']);
+        expect(s.source).toMatchObject({ attachmentId: s.names[1][0] });
+    });
+
+    test('the viewer: the tag in the panel, Use as portrait… between Download and Delete writes at once with Undo', async ({ page }) => {
+        const img = await setup(page);
+        await page.evaluate(() => (window.Strom.UI as unknown as { openMaterials(o: unknown): void }).openMaterials({}));
+        const win = page.locator('#materials-modal');
+        await expect(win).toBeVisible();
+        const panel = page.locator('#image-viewer-panel');
+        await win.locator('.mw-canvas .mw-tile', { hasText: 'svatba.jpg' }).click();
+        await expect(panel.locator('.mv-portrait-tag')).toHaveText('Portrait');
+        await expect(panel.locator('.mv-act[data-action="useAsPortrait"]')).toHaveCount(0);
+        await page.keyboard.press('ArrowRight');
+        await expect(panel.locator('.mv-title')).toHaveText(/louka/);
+        await expect(panel.locator('.mv-portrait-tag')).toHaveCount(0);
+        await expect(panel.locator('.mv-act')).toHaveText(['Download', 'Use as portrait…', 'Delete from the tree…']);
+        await panel.locator('.mv-act[data-action="useAsPortrait"]').click();
+        await expect(page.locator('#attachment-overlay')).not.toHaveClass(/active/);
+        await expect(editor(page)).toBeVisible();
+        await editor(page).getByRole('button', { name: 'Done' }).click();
+        // (The setup's own edits keep a toast of theirs.)
+        const toast = page.locator('.undo-toast', { hasText: 'Portrait of Jan Fíšek replaced.' });
+        await expect(toast).toBeVisible();
+        let s = await janStored(page, img.janId);
+        expect(s.source).toMatchObject({ attachmentId: s.names[1][0] });
+        expect(s.names).toHaveLength(2);
+        await toast.getByRole('button', { name: 'Undo' }).click();
+        await expect.poll(async () => (await janStored(page, img.janId)).photo).toBe(img.portrait);
+        s = await janStored(page, img.janId);
+        expect(s.source).toMatchObject({ attachmentId: s.names[0][0] });
     });
 });

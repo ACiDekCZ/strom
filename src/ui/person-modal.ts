@@ -1487,6 +1487,8 @@ export const personModalMethods = uiModule({
 
     removePersonPhoto(): void {
         this.setPhotoPreview(undefined);
+        // The Portrait tag leaves the source attachment (spec 107 §4).
+        this.renderAttachmentsList();
     },
 
     /**

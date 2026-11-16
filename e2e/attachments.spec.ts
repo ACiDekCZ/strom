@@ -30,7 +30,7 @@ test('attachments: add an image, it survives a reload, then delete it', { tag: '
     await expect(modal.locator('.attachment-note-input')).toHaveValue('Birth certificate');
 
     // Delete it — the confirmation says which file.
-    await modal.locator('.attachment-actions button').click();
+    await modal.locator('.attachment-actions .attachment-delete-btn').click();
     const confirm = page.locator('#confirmation-modal');
     await expect(confirm).toBeVisible();
     await expect(confirm).toHaveClass(/active/);

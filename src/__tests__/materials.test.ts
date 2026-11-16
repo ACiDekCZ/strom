@@ -267,8 +267,15 @@ describe('materialActions', () => {
         expect(remove).toEqual({ id: 'removeFromPerson', viaBatch: true });
     });
 
-    it('tree item: open, download, delete', () => {
-        expect(ids(materialActions(by['a:t'], caps(), { person: 'P0001' }))).toEqual(['open', 'download', 'deleteFromTree']);
+    it('tree item: open, download, use as portrait, delete', () => {
+        expect(ids(materialActions(by['a:t'], caps(), { person: 'P0001' }))).toEqual(['open', 'download', 'useAsPortrait', 'deleteFromTree']);
+    });
+
+    it('use as portrait only for a picture the tree shows (not a PDF, not only its original)', () => {
+        const pdf = personMaterials({ attachments: [att('p', { mimeType: 'application/pdf', name: 'p.pdf' })] })[0];
+        expect(ids(materialActions(pdf, caps()))).toEqual(['open', 'download', 'deleteFromTree']);
+        const only = personMaterials({ attachments: [att('o', { originalOnly: true, dataUrl: '' })] })[0];
+        expect(ids(materialActions(only, caps()))).not.toContain('useAsPortrait');
     });
 
     it('an older research: no writes; bridge down: writes disabled', () => {

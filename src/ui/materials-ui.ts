@@ -36,6 +36,7 @@ import { formatBytesShort } from './originals-ui.js';
 import { onComputer } from './research-ui.js';
 import { openImageViewer } from './image-viewer.js';
 import { uiModule } from './module.js';
+import { canEditPortrait } from './portrait-actions-ui.js';
 
 const MODAL_ID = 'materials-modal';
 const SECTION_ID = 'materials-section';
@@ -222,6 +223,7 @@ const ACTION_LABEL: Record<MaterialActionId, () => string> = {
     openSystem: () => strings.materials.openSystem,
     showInBatch: () => strings.materials.showInBatch,
     download: () => strings.materials.download,
+    useAsPortrait: () => strings.materials.useAsPortrait,
     deleteFromTree: () => strings.materials.deleteFromTree,
 };
 
@@ -505,7 +507,11 @@ export const materialsMethods = uiModule({
         const thumb = imgPreview
             ? `<span class="material-thumb"><img src="${esc(att.dataUrl)}" alt=""></span>`
             : `<span class="material-thumb"${lazy ? ` data-sha="${esc(sha)}"` : ''}><span class="material-row-tile">${esc(materialTileLetters(item))}</span></span>`;
-        const where = `<span class="material-line3"><span class="material-where">${esc(batchFolderLabel(item))}</span>${refn && item.viaBatch.includes(refn) ? `<span class="material-via">${esc(m.viaBatch)}</span>` : ''}</span>`;
+        // The attachment the person's portrait is cut from (spec 107 §4).
+        const owner = this.currentId ? DataManager.getPerson(this.currentId) : null;
+        const isSource = !!att && !!owner && this.portraitSourceAttachmentShown(owner) === att.id;
+        const portraitTag = isSource ? `<span class="material-via material-portrait-tag" title="${esc(strings.attachments.portraitTagTitle)}">${esc(strings.attachments.portraitTag)}</span>` : '';
+        const where = `<span class="material-line3"><span class="material-where">${esc(batchFolderLabel(item))}</span>${refn && item.viaBatch.includes(refn) ? `<span class="material-via">${esc(m.viaBatch)}</span>` : ''}${portraitTag}</span>`;
         // A tree attachment keeps its own note field (editable as before); the research's note is shown.
         let note = '';
         if (item.origin === 'tree' && att && !locked) {
@@ -694,7 +700,10 @@ export const materialsMethods = uiModule({
         const actions = materialActions(item, ctx.caps, { person: refn, where: 'menu' })
             // Nothing to download from an attachment that is only its original; a locked person keeps its files.
             .filter(a => !(a.id === 'download' && (!item.attachment?.dataUrl || item.attachment.originalOnly)))
-            .filter(a => !(a.id === 'deleteFromTree' && locked));
+            .filter(a => !(a.id === 'deleteFromTree' && locked))
+            // Use as portrait: a person who can change, and not the portrait's source already (spec 107 §4).
+            .filter(a => !(a.id === 'useAsPortrait' && (!this.currentId || !canEditPortrait(this.currentId)
+                || (!!person && this.portraitSourceAttachmentShown(person) === item.attachment?.id))));
         const menu = document.createElement('div');
         menu.id = MENU_ID;
         menu.className = 'materials-item-menu';
@@ -779,6 +788,7 @@ export const materialsMethods = uiModule({
                 a.remove();
                 break;
             }
+            case 'useAsPortrait': if (item.attachment && this.currentId) void this.useAttachmentAsPortrait(this.currentId, item.attachment.id); break;
             case 'deleteFromTree': if (item.attachment) void this.deleteAttachment(item.attachment.id); break;
             default: this.materialAction(action.id, [item], { person: refn, where: 'section' });
         }

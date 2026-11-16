@@ -547,7 +547,7 @@ export function materialCaps(env: MaterialEnv & { links?: boolean }): MaterialCa
 
 export type MaterialActionId =
     | 'open' | 'assign' | 'removeFromPerson' | 'hide' | 'restore'
-    | 'openSystem' | 'showInBatch' | 'download' | 'deleteFromTree';
+    | 'openSystem' | 'showInBatch' | 'download' | 'useAsPortrait' | 'deleteFromTree';
 
 export interface MaterialAction {
     id: MaterialActionId;
@@ -592,8 +592,15 @@ const ACTION_ROWS: ActionRow[] = [
     { id: 'openSystem', when: (i, c) => inArchive(i) && c.links !== false },
     { id: 'showInBatch', when: (i) => inArchive(i) && !!i.batch },
     { id: 'download', when: (i) => i.origin === 'tree' },
+    // A picture of the tree's attachment as the person's portrait (spec 107 §4; the menu leaves it out where the person cannot change).
+    { id: 'useAsPortrait', when: (i) => isPortraitCandidate(i.attachment) },
     { id: 'deleteFromTree', when: (i) => i.origin === 'tree' },
 ];
+
+/** An attachment that can become a portrait: a picture the tree shows (not only its original kept by the research). */
+export function isPortraitCandidate(att: Attachment | undefined): boolean {
+    return !!att && att.mimeType.startsWith('image/') && !att.originalOnly && !!att.dataUrl;
+}
 
 /** The actions of one item (P1). */
 export function materialActions(item: MaterialItem, caps: MaterialCaps, ctx: MaterialActionContext = {}): MaterialAction[] {

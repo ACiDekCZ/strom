@@ -28769,6 +28769,25 @@
             font-size: 15px; line-height: 1; color: var(--text-secondary, #777); flex-shrink: 0;
         }
         @media (hover: hover) { .attachment-actions button:hover { color: var(--danger, #c0392b); } }
+        /* The portrait's source (spec 107 §4): a Portrait tag by the name, "As portrait…" before the trash. */
+        .attachment-name-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+        .attachment-tag, .mv-portrait-tag {
+            flex: none; font-size: 11px; line-height: 17px; padding: 0 6px; border-radius: var(--r-tag);
+            border: 1px solid var(--border); color: var(--text-light); white-space: nowrap; font-weight: 400;
+        }
+        .mv-portrait-tag { align-self: flex-start; }
+        .attachment-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+        .modal .attachment-actions button.attachment-portrait-btn {
+            height: 30px; padding: 0 10px; font-size: 13px; line-height: 1; border: 1px solid var(--border);
+            border-radius: var(--r-md); background: transparent; color: var(--text); white-space: nowrap;
+        }
+        @media (hover: hover) { .modal .attachment-actions button.attachment-portrait-btn:hover { color: var(--text); background: var(--hover-bg); } }
+        .attachment-actions button.attachment-portrait-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        @media (pointer: coarse) { .modal .attachment-actions button.attachment-portrait-btn { height: 44px; } }
+        @media (max-width: 640px) {
+            .attachment-row:has(.attachment-portrait-btn) { flex-wrap: wrap; }
+            .attachment-row:has(.attachment-portrait-btn) .attachment-actions { margin-left: auto; }
+        }
         .attachments-total { color: var(--text-secondary, #777); font-size: 12px; margin-bottom: 8px; }
         .attachments-empty { color: var(--text-light); font-size: 13px; padding: 4px 0; }
         .attachments-empty.empty-block--compact { font-size: inherit; padding: 8px 0 4px; }

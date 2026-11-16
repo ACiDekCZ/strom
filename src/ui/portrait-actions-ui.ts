@@ -90,6 +90,24 @@ function pickImageFile(onFile: (file: File) => void): void {
 
 export const portraitActionsMethods = uiModule({
     /**
+     * The attachment the person's portrait is cut from as it stands now (the
+     * Portrait tag): in the person's open dialog the portrait in its preview
+     * (one from the editor waiting for Save names its own, a removed one
+     * none), elsewhere the stored portrait's source.
+     */
+    portraitSourceAttachmentShown(person: Person): string | null {
+        const dialog = document.getElementById('person-modal');
+        if (this.currentId === person.id && dialog?.classList.contains('active')) {
+            const preview = dialog.querySelector<HTMLImageElement>('#photo-preview img')?.getAttribute('src') || undefined;
+            if (!preview) return null;
+            const pending = this.pendingPortraitFor(preview);
+            if (pending) return pending.origin && 'attachmentId' in pending.origin ? pending.origin.attachmentId : null;
+            if (preview !== person.photo) return null;
+        }
+        return person.photo ? person.photoSource?.attachmentId ?? null : null;
+    },
+
+    /**
      * Open the editor and write its portrait at once (the person page, the
      * materials outside the person dialog): one undo step, "Portrait
      * updated." or "Portrait of {n} replaced." with Undo. `origin`: the

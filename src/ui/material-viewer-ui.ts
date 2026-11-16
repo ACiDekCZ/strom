@@ -22,8 +22,9 @@ import { announcedResearchScheme } from '../research-device.js';
 import {
     MaterialItem, cachedMaterialList, materialFileItem, materialType, materialKindLabel, materialFolder,
     materialFromKey, fileExt, fileUrl, thumbUrl, materialSystemLink, getCachedThumb, researchMakesThumb,
-    batchFolderLabel, materialDate,
+    batchFolderLabel, materialDate, isPortraitCandidate,
 } from '../materials.js';
+import { canEditPortrait } from './portrait-actions-ui.js';
 import { pdfBlobFromDataUrl } from '../attachments.js';
 import { formatBytesShort } from './originals-ui.js';
 import { openViewerList, closeImageViewer, viewerListOpen, redrawViewerList, relayoutViewer, ViewerSlots } from './image-viewer.js';
@@ -372,6 +373,14 @@ export const materialViewerMethods = uiModule({
         if (name && name !== item.title) head.appendChild(h('div', 'mv-name', name));
         const summary = [materialKindLabel(item), item.date ? materialDate(item.date) : '', item.origin === 'tree' ? '' : batchFolderLabel(item)].filter(Boolean).join(' · ');
         head.appendChild(h('div', 'mv-summary', summary));
+        // The attachment the owner's portrait is cut from (spec 107 §4).
+        const portraitOwner = item.origin === 'tree' && item.attachment ? attachmentOwner(item.attachment.id) : null;
+        const isPortraitSource = !!portraitOwner && !!item.attachment && this.portraitSourceAttachmentShown(portraitOwner) === item.attachment.id;
+        if (isPortraitSource) {
+            const tag = h('span', 'attachment-tag mv-portrait-tag', strings.attachments.portraitTag);
+            tag.title = strings.attachments.portraitTagTitle;
+            head.appendChild(tag);
+        }
 
         // People.
         const body = h('div', 'mv-body');
@@ -537,6 +546,14 @@ export const materialViewerMethods = uiModule({
             const att = item.attachment;
             if (att.dataUrl && !att.originalOnly) download(att.dataUrl, att.name);
             const owner = attachmentOwner(att.id);
+            // Use as portrait (spec 107 §4): the tree's own write, so it does not wait for the research's bridge.
+            if (owner && isPortraitCandidate(att) && !isPortraitSource && canEditPortrait(owner.id)) {
+                const ownerId = owner.id;
+                action(m.useAsPortrait, () => {
+                    closeImageViewer();
+                    void this.useAttachmentAsPortrait(ownerId, att.id);
+                }, { id: 'useAsPortrait' });
+            }
             if (owner && !DataManager.isPersonLocked(owner.id)) {
                 action(m.deleteFromTree, () => {
                     closeImageViewer();
