@@ -136,13 +136,12 @@ test.describe('desktop (1440)', () => {
         await page.keyboard.press('Escape');
         await expect(modal).not.toHaveClass(/active/);
 
-        // Godparents: the tree's person a link that opens the person, a written name text.
+        // Godparents: the tree's person a link to their row (spec 103 U3), a written name text.
         const gods = await cell(page, 'p:c', 'godparents');
         await expect(gods).toContainText('Ostromír Plíšťák, Drahobud Vlčírek');
         await expect(gods.locator('.tv-nm--person')).toHaveText('Ostromír Plíšťák');
         await gods.locator('.tv-nm--person').click();
-        await expect(page.locator('#person-page-modal')).toBeVisible();
-        await expect(page.locator('#person-page-modal')).toContainText('Ostromír Plíšťák');
+        await expect(page.locator('#table-container .tv-body .tv-row[data-key="p:g"]')).toHaveAttribute('aria-selected', 'true');
     });
 });
 

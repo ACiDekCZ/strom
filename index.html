@@ -10475,6 +10475,58 @@
         }
         .tv-nm--person { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
         .tv-nm:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; border-radius: 2px; }
+        /* Spec 103 U3: in the People and Unions tables a person's name links to their row. It looks as the cell's
+           text (underlined only under a mouse); several names in a row, the last one shown cut with "…". */
+        .tv-nms { display: flex; align-items: baseline; min-width: 0; }
+        .tv-nms > .tv-nm, .tv-nms > span { flex: none; }
+        .tv-nms > :last-child { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+        .tv-nms > span:last-child { padding-block: 2px; margin-block: -2px; }
+        .tv-nm-sep { white-space: pre; }
+        .tv-nm--jump {
+            color: inherit; text-decoration: none; text-align: left; min-width: 0; max-width: none; cursor: default;
+        }
+        /* The name a jump came from, in the cell of the way back, while that cell is the active one. */
+        .tv-nm--jump.is-origin {
+            background: var(--help-mark-hit); box-shadow: inset 0 0 0 1px var(--warning-text);
+            border-radius: 3px; padding: 2px 4px; margin: -2px -4px;
+        }
+        /* A row shown for now outside the filter (spec 103 2b): dimmed as a stale row, a stripe at its name. */
+        .tv-body .tv-row.is-temp > .tv-cell:not(:first-child) { opacity: 0.55; }
+        .tv-body .tv-row.is-temp > .tv-cell:first-child { box-shadow: inset 3px 0 0 var(--warning-text); }
+        .tv-outside {
+            flex: none; margin-left: 8px; font-family: var(--font-sans); font-size: 11px; font-style: italic; font-weight: 400;
+            color: var(--warning-text); white-space: nowrap; padding-right: 3px;
+        }
+        /* ‹ › of the jumps (spec 103 §1): at the bar's start, shown from the first jump on. */
+        .tv-slot-nav { display: flex; align-items: center; gap: 4px; }
+        .tv-slot-nav[hidden] { display: none; }
+        .tv-nav-btn {
+            width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+            border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text);
+            font: inherit; font-size: 20px; line-height: 1; cursor: pointer;
+        }
+        .tv-nav-btn[aria-disabled="true"] { color: var(--text-faint); opacity: 0.4; cursor: default; }
+        .tv-nav-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .tv-bar-sep { width: 1px; height: 22px; margin-left: 6px; background: var(--divider); }
+        /* The strip for a person the filter hides (spec 103 2a), between the bar and the grid. */
+        .tv-notice {
+            flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-height: 46px; box-sizing: border-box;
+            padding: 6px 8px 6px 16px; background: var(--warning-soft); color: var(--warning-text);
+            border-bottom: 1px solid var(--border); font-size: 13px;
+        }
+        .tv-notice[hidden] { display: none; }
+        .tv-notice-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--warning-text); }
+        .tv-notice-text { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; }
+        .tv-notice-acts { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+        .tv-notice-btn {
+            height: 30px; padding: 0 10px; border: 1px solid var(--warning-text); border-radius: 6px; background: transparent;
+            color: var(--warning-text); font: inherit; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer;
+        }
+        .tv-notice-close {
+            width: 30px; height: 30px; padding: 0; border: none; background: none; color: var(--warning-text);
+            font: inherit; font-size: 18px; line-height: 1; cursor: pointer; border-radius: 6px;
+        }
+        .tv-notice-btn:focus-visible, .tv-notice-close:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         /* §14.2: a source's title, its web address (a link into a new window) and its readers (the pill of 066). */
         .tv-src-title { font-weight: 500; }
         .tv-link { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
@@ -11110,6 +11162,10 @@
             .tv-chip-x:hover, .tv-chip-edit:hover { background: var(--surface-2); }
             .tv-nm:hover { text-decoration: underline; }
             .tv-nm--person:hover { color: var(--primary-dark); }
+            .tv-nm--jump:hover { color: var(--primary); text-decoration: underline 1px; text-underline-offset: 2px; cursor: pointer; }
+            .tv-nav-btn:not([aria-disabled="true"]):hover { border-color: var(--primary); }
+            .tv-notice-btn:hover { background: color-mix(in srgb, var(--warning-text) 10%, transparent); }
+            .tv-notice-close:hover { background: color-mix(in srgb, var(--warning-text) 12%, transparent); }
             .tv-link:hover { color: var(--primary-dark); }
             .tv-cites-more:hover { border-color: var(--primary); color: var(--text); }
             .tv-ages:hover { text-decoration-color: var(--primary); color: var(--text); }
@@ -11126,6 +11182,9 @@
         /* Tablet: no top tabs; the table keeps the desktop rows. Touch: taller rows. */
         @media (pointer: coarse) {
             .table-view { --tv-row-h: 36px; }
+            .tv-nav-btn { width: 36px; height: 36px; }
+            .tv-notice-btn, .tv-notice-close { height: 40px; }
+            .tv-notice-close { width: 40px; }
             /* Touch: a tap opens the row's sheet with 48 px actions (10b), no small icons. */
             /* (:is(…) as specific as the selected row's rule that shows them.) */
             .tv-body .tv-row[aria-selected="true"]:is(:hover, :not(:hover)) .tv-acts { display: none; }
@@ -11175,7 +11234,7 @@
             .tv-status { padding: 0 12px; }
             .tv-cols-btn, .tv-export-btn { height: 40px; }
             /* 12a the view as a button that grows and shortens with "…"; its sheet carries Save, Save as new, Discard. */
-            .tv-slot-view { flex: 1 1 auto; }
+            .tv-slot-view { flex: 1 1 0; min-width: 0; }
             .tv-view-label, .tv-view-changed, .tv-view-act, .tv-view-discard { display: none; }
             .tv-view-btn { height: 40px; max-width: none; font-size: 14px; }
             .tv-group-toggle, .tv-resize { display: none; }
@@ -11209,6 +11268,13 @@
             .tv-status:has(.tv-status-res:not([hidden])) .tv-status-sort { display: none; }
             .tv-ro-long { display: none; }
             .tv-ro-short { display: inline; }
+            .tv-nav-btn { width: 44px; height: 44px; border: none; }
+            .tv-slot-nav { gap: 0; }
+            .tv-bar-sep { margin-left: 2px; }
+            .tv-notice { padding: 6px 8px 8px 12px; }
+            .tv-notice-acts { flex: 1 1 100%; flex-wrap: wrap; }
+            .tv-notice-btn { height: 40px; }
+            .tv-notice-close { margin-left: auto; }
         }
         /* 12c a phone held sideways: the table's bar in one row of 50 px (type · view · search · Filters · ⋯), a 26 px status line. */
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {

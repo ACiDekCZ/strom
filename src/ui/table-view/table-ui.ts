@@ -55,7 +55,9 @@ import { TableGrid, type CellEditSpec, type GridCellRef, type RowAction } from '
 import { editChangeOf, editOptionsOf, editTargetOf, editValueOf, type EditTarget } from './table-edit.js';
 import { cellChoices, copyPlainText } from './table-cell.js';
 import { fanZoomModifier } from '../../fan-zoom.js';
-import { createBar, createStatus, createWindowButton, updateBar, updateResearchStatus, updateStatus } from './table-bar.js';
+import { createBar, createStatus, createWindowButton, updateBar, updateNav, updateResearchStatus, updateStatus } from './table-bar.js';
+import { JumpHistory, jumpTargetCell, type JumpStep } from './table-jump.js';
+import { createNotice, showNotice } from './table-notice.js';
 import { applyTableWindowState, readTableWindowState, tableWindowStateOf, type TableWindowState } from './table-window-state.js';
 import { canOpenWindows, openInNewWindow } from '../../windows/window-open.js';
 import { getWindowRole } from '../../windows/window-role.js';
@@ -66,7 +68,7 @@ import {
 } from './table-state.js';
 import { ColumnPanel } from './table-colpanel.js';
 import {
-    anyExpanded, buildLines, coverageUnionsOf, hasMultiUnions, setAllExpanded, setExpanded, sortUnionOf, type UnionPredicate,
+    anyExpanded, buildLines, coverageUnionsOf, hasMultiUnions, isExpanded, setAllExpanded, setExpanded, sortUnionOf, type UnionPredicate,
 } from './table-subrows.js';
 import { columnCoverage, coverageCell, coverageLabel, type CoverageCell } from './table-coverage.js';
 import type { ColumnDef } from './table-columns.js';
@@ -88,7 +90,7 @@ import {
 import { conflictScope } from '../person-research-ui.js';
 import { lineCell, lineKey, type GridLine } from './table-subrows.js';
 import { cellDraft, type CellDraft } from '../../windows/window-drafts.js';
-import { cellText, isMouseLikePointer, markHtml, type CellConflictMark, type CellIssueMark } from './table-grid.js';
+import { cellText, isMouseLikePointer, markHtml, personLinks, type CellConflictMark, type CellIssueMark } from './table-grid.js';
 import { bubbleHeading, bubbleHtml, citesHtml, closeTableBubble, legendHtml, openBubblePanel, sheetElement, type BubbleCite } from './table-bubble.js';
 import { bridgeChanges, changedKeys, familyKeys, keepOrder, namesList, rowKeysFor, watchEdit } from './table-refresh.js';
 import type { DataChangedDetail } from '../../data.js';
@@ -132,6 +134,8 @@ interface Mounted {
     emptyKey: string;
     /** What the phone's ⋯ offers for unions (§3.2): expand, collapse or nothing. */
     unionsButton: 'expand' | 'collapse' | null;
+    /** The strip for a person the filter hides (spec 103 2a). */
+    notice: HTMLElement;
 }
 
 /** "New from research" in a window, or off (16zk): the window is the chip's value. */
@@ -229,6 +233,39 @@ function rowPeople(row: TableRow): PersonId[] {
     if (row.kind === 'union') return [row.p1?.id, row.p2?.id].filter((id): id is PersonId => !!id);
     if (row.kind === 'event') return row.persons.map(p => p.id);
     return [];
+}
+
+/** Jumps by a person's name (spec 103 U3, decision D1): this window's history, of one tree (dropped when another one is drawn). */
+const jumps = new JumpHistory();
+let jumpsTree: string | null = null;
+/** A person shown for now outside the filter (spec 103 2b), while the People table's filter, search, sort and view stay. */
+let tempShown: { tree: string; person: PersonId; ctx: string } | null = null;
+/** The jump the strip waits on (spec 103 2a); gone with a change of the row type or the People table's filter. */
+let hiddenJump: { tree: string; step: JumpStep; ctx: string } | null = null;
+
+/** What a row shown for now depends on: the People table's filter, search, sort and open view. */
+function peopleCtx(state: TableState): string {
+    const st = state.types.persons;
+    return JSON.stringify([st.filter, searchQuery(st.search), st.sort, state.open.persons]);
+}
+
+/**
+ * The rows with a person shown for now (spec 103 2b) where the sort (else
+ * the table's own order) puts them; the rows unchanged when they show the
+ * person already or there is no such person.
+ */
+function withTempRow(m: TableModel, rows: readonly TableRow[], person: PersonId, sort: readonly SortSpec[], pass: UnionPredicate | null): readonly TableRow[] {
+    const temp = m.personRows.get(person);
+    if (!temp || rows.includes(temp)) return rows;
+    const order = sort.length ? sortRows(m, 'persons', [...rows, temp], sort, pass ? sortUnionOf(pass) : undefined) : rowsOf(m, 'persons');
+    const shown = new Set<TableRow>(rows);
+    let before: TableRow | null = null;
+    for (const r of order) {
+        if (r === temp) break;
+        if (shown.has(r)) before = r;
+    }
+    const at = before ? rows.indexOf(before) + 1 : 0;
+    return [...rows.slice(0, at), temp, ...rows.slice(at)];
 }
 
 /** Records changed (entity keys) whose rows light up at the next draw (§10.3). */
@@ -658,6 +695,16 @@ export const tableMethods = uiModule({
         dropMissingViews(state, data.tableViews);
         const type = state.rowType;
         const st = state.types[type];
+        // Jumps by a name (spec 103 U3): another tree drops the history, the row shown for now and the strip.
+        if (jumpsTree !== tree) {
+            jumps.clear();
+            jumpsTree = tree;
+            tempShown = null;
+            hiddenJump = null;
+        }
+        const pctx = peopleCtx(state);
+        if (tempShown && (tempShown.tree !== tree || type !== 'persons' || tempShown.ctx !== pctx)) tempShown = null;
+        if (hiddenJump && (hiddenJump.tree !== tree || hiddenJump.ctx !== `${type}|${pctx}`)) hiddenJump = null;
 
         if (!mounted || mounted.container !== container || mounted.lang !== lang || !container.contains(mounted.grid.el)) {
             this.closeTableColumns(false);
@@ -671,6 +718,25 @@ export const tableMethods = uiModule({
                 onRowType: (t) => this.setTableRowType(t),
                 onRowTypeSheet: () => this.showTableRowTypeSheet(),
                 onMoreMenu: () => this.showTableMoreMenu(),
+                onHistory: (d) => { this.tableHistory(d, false); },
+            });
+            const notice = createNotice({
+                onShow: () => { if (hiddenJump) this.tableRunJump(hiddenJump.step, true, true); },
+                onClear: () => {
+                    const h = hiddenJump;
+                    if (!h) return;
+                    const pst = stateOf(treeKey()).types.persons;
+                    clearFilter(pst.filter);
+                    pst.search = '';
+                    filterChanged(pst);
+                    pst.top = 0;
+                    this.tableRunJump(h.step, false, true);
+                },
+                onClose: () => {
+                    hiddenJump = null;
+                    showNotice(notice, null);
+                    mounted?.grid.el.focus({ preventScroll: true });
+                },
             });
             const grid = new TableGrid({
                 onScroll: (top, left) => {
@@ -706,7 +772,9 @@ export const tableMethods = uiModule({
                 },
                 onRowAction: (action, line) => this.tableRowAction(action, line),
                 onEditCell: (line, cell) => this.tableEditCell(line, cell.col),
-                onName: (line, _col, name, anchor) => this.tableNameAction(line, name, anchor),
+                onName: (line, col, name, anchor) => this.tableNameAction(line, name, anchor, col),
+                onPickName: (line, col, names, anchor) => this.tableLinkPick(line, col, names, anchor),
+                onHistory: (d) => this.tableHistory(d, true),
                 onMoreCites: (_line, _col, ids, anchor) => this.showTableCites(ids, anchor),
                 onSharedAges: (line, anchor) => { if (line.kind !== 'more' && line.row.kind === 'event') this.showTableSharedAges(line.row, anchor); },
                 onRowMenu: (line, anchor, cell) => this.showTableRowMenu(line, anchor, cell),
@@ -816,7 +884,7 @@ export const tableMethods = uiModule({
             const bulk = document.createElement('div');
             bulk.className = 'table-bulk';
             bulk.hidden = true;
-            container.append(bar, bulk, grid.el, empty, status);
+            container.append(bar, notice, bulk, grid.el, empty, status);
             // A followed research's card stands below the bar: placed again when the bar's bottom moves
             // (the chips wrap, the research block opens, the window narrows).
             barWatch?.disconnect();
@@ -830,7 +898,7 @@ export const tableMethods = uiModule({
             barWatch?.observe(bar);
             mounted = {
                 container, lang, bar, bulk, grid, status, colsBtn, drawn: '', display: null, filters, filterState: null, views, exportBtn, windowBtn,
-                empty, emptyKey: '', unionsButton: null,
+                empty, emptyKey: '', unionsButton: null, notice,
             };
         }
 
@@ -861,7 +929,10 @@ export const tableMethods = uiModule({
             if (!revealFocus && st.selected && rows.some(r => rowKey(r) === st.selected)) revealFocus = st.selected;
         }
         const persons = type === 'persons';
-        const lines = persons ? buildLines(rows, { collapse: st.unions, pass, revealed: new Set(st.revealedUnions) }) : undefined;
+        // A person shown for now outside the filter (spec 103 2b): in the rows, not in their count.
+        const shownRows = persons && tempShown ? withTempRow(m, rows, tempShown.person, st.sort, pass) : rows;
+        const temp = shownRows !== rows && tempShown ? new Set([`p:${tempShown.person}`]) : undefined;
+        const lines = persons ? buildLines(shownRows, { collapse: st.unions, pass, revealed: new Set(st.revealedUnions) }) : undefined;
         const unionsButton = persons && hasMultiUnions(rows) ? (anyExpanded(st.unions, rows) ? 'collapse' : 'expand') : null;
         const summary = filterSummary(m, type, st.filter, st.search);
         const filterState: FilterBarState = {
@@ -886,7 +957,7 @@ export const tableMethods = uiModule({
         const openView = openViewOf(state, type, data.tableViews);
         this.drawTableEmpty(tableEmptyState({
             persons: counts.persons, unions: counts.unions, events: counts.events, sources: counts.sources, type, viewId: openView.id, viewChanged: viewChanged(openView, st),
-            search: st.search, shown: rows.length, checksDone: !!index && !checks?.running,
+            search: st.search, shown: shownRows.length, checksDone: !!index && !checks?.running,
             leads: index ? index.issues.filter(i => i.severity === 'info').length : 0,
             allComplete: () => {
                 const comp = columnById('persons', 'comp');
@@ -899,11 +970,12 @@ export const tableMethods = uiModule({
         const restore = mounted.drawn !== drawn ? { top: st.top, left: st.left } : undefined;
         mounted.drawn = drawn;
         mounted.grid.setInput({
-            model: m, type, rows, columns: display.columns, widths: display.widths, pinned: display.pinned, sort: st.sort, homeId,
+            model: m, type, rows: shownRows, columns: display.columns, widths: display.widths, pinned: display.pinned, sort: st.sort, homeId,
+            links: type === 'persons' || type === 'unions', temp,
             bands: display.bands, coverageRow: st.coverageRow, editableHead: !phone,
             hit: searchQuery(st.search),
             filtered: new Set(st.filter.items.filter((i): i is Exclude<typeof i, { chip: ChipId }> => !isChipItem(i) && columnItemActive(i)).map(i => i.col)),
-            noMatch: !rows.length && summary
+            noMatch: !shownRows.length && summary
                 ? { title: strings.table.noMatch, text: strings.table.applies(summary), action: strings.table.clearFilters }
                 : null,
             lines, subRows: persons, unionsButton, stale,
@@ -937,6 +1009,8 @@ export const tableMethods = uiModule({
             } : undefined,
         }, restore);
         if (revealFocus) mounted.grid.revealKey(revealFocus);
+        showNotice(mounted.notice, hiddenJump ? hiddenJump.step.to.label : null);
+        updateNav(mounted.bar, jumps.any(), jumps.canBack() ? jumps.backLabel() : null, jumps.canForward() ? jumps.forwardLabel() : null);
         if (flashNext) {
             const lit = flashNext.tree === tree ? rowKeysFor(data, type, flashNext.keys, type === 'events' ? m.events : undefined) : null;
             flashNext = null;
@@ -1746,9 +1820,158 @@ export const tableMethods = uiModule({
      * participant's name offers "Filter: godparent {name}" (and, for a tree's
      * person, Open person), as a menu or on a phone and by touch as a sheet.
      */
-    tableNameAction(line: GridLine, name: CellName, anchor: HTMLElement): void {
+    // -----------------------------------------------------------------------
+    // Jumps by a person's name (spec 103 U3)
+
+    /**
+     * The step of a jump from a cell to a person's row in the People table
+     * (spec 103 §1, 3): where it starts, the line and cell it lands on (the
+     * Partner cell on the union's line through a partner, else Name; D2), the
+     * union opened for it (D3).
+     */
+    tableJumpStep(line: GridLine, col: ColumnDef, personId: PersonId): JumpStep | null {
+        const m = model;
+        const target = DataManager.getPerson(personId);
+        const prow = m?.personRows.get(personId);
+        if (!m || !target || !prow || line.kind === 'more') return null;
+        const state = stateOf(treeKey());
+        const people = rowPeople(line.row);
+        const origin = people.find(id => id !== personId) ?? null;
+        const from = [origin, ...people].map(id => (id ? DataManager.getPerson(id) : null)).find(Boolean);
+        let via = col.id;
+        let unionId: string | null = null;
+        if (line.row.kind === 'union' && (col.id === 'p1' || col.id === 'p2')) {
+            via = 'partner';
+            unionId = line.row.id;
+        } else if (line.row.kind === 'person' && col.id === 'partner' && line.union !== null) {
+            unionId = line.row.unions[line.union]?.id ?? null;
+        }
+        const pst = state.types.persons;
+        const shown = displayColumns('persons', pst, isPhoneBar()).columns.map(c => c.id);
+        const unionIndex = unionId ? prow.unions.findIndex(u => u.id === unionId) : -1;
+        const cell = jumpTargetCell(via, shown, unionIndex, prow.unions.length);
+        const grid = mounted?.grid.el;
+        return {
+            from: {
+                rowType: state.rowType, row: rowKey(line.row), key: lineKey(line), col: col.id,
+                scrollTop: grid?.scrollTop ?? 0, scrollLeft: grid?.scrollLeft ?? 0, label: from ? personName(from) : '',
+            },
+            to: {
+                personId, key: cell.sub ? `p:${personId}#u${cell.sub}` : `p:${personId}`, col: cell.col,
+                origin: cell.col === 'name' ? null : origin, label: personName(target),
+                expanded: cell.sub && !isExpanded(pst.unions, personId) ? personId : undefined,
+            },
+        };
+    },
+
+    /** Whether the People table shows a person now (its filter and search pass them). */
+    tablePersonShown(personId: PersonId): boolean {
+        const m = model;
+        if (!m) return false;
+        const tree = treeKey();
+        const pst = stateOf(tree).types.persons;
+        const columns = displayColumns('persons', pst, isPhoneBar()).columns;
+        return viewRows(tree, m, 'persons', pst.filter, pst.search, pst.sort, columns).rows.some(r => r.kind === 'person' && r.id === personId);
+    },
+
+    /** A click (or Enter) on a person's name: the jump, or the strip when the filter hides them (spec 103 2a). */
+    tableJumpBy(line: GridLine, col: ColumnDef, personId: PersonId): void {
+        closeHeadMenu();
+        const step = this.tableJumpStep(line, col, personId);
+        if (!step) return;
+        if (this.tablePersonShown(personId)) { this.tableRunJump(step, false, true); return; }
+        const tree = treeKey();
+        const state = stateOf(tree);
+        hiddenJump = { tree, step, ctx: `${state.rowType}|${peopleCtx(state)}` };
+        const el = document.getElementById('table-container');
+        if (el && TreeRenderer.getViewMode() === 'table') this.renderTableView(el);
+    },
+
+    /**
+     * A jump (spec 103 §1, 4): the People table, the person's row (shown for
+     * now outside the filter with `temp`), their union opened (D3), the cell
+     * in the middle and focused, the row lit; a new step when `record`.
+     */
+    tableRunJump(step: JumpStep, temp: boolean, record: boolean): void {
+        const tree = treeKey();
+        const state = stateOf(tree);
+        const pst = state.types.persons;
+        hiddenJump = null;
+        step.to.temp = temp;
+        if (record) {
+            if (jumpsTree !== tree) { jumps.clear(); jumpsTree = tree; }
+            jumps.push(step);
+        }
+        if (step.to.expanded) setExpanded(pst.unions, step.to.personId, true);
+        state.rowType = 'persons';
+        pst.selected = `p:${step.to.personId}`;
+        if (temp) tempShown = { tree, person: step.to.personId as PersonId, ctx: peopleCtx(state) };
+        const el = document.getElementById('table-container');
+        if (!el || TreeRenderer.getViewMode() !== 'table') return;
+        this.renderTableView(el);
+        const grid = mounted?.grid;
+        const cols = mounted?.display?.columns ?? [];
+        if (!grid) return;
+        const name = Math.max(0, cols.findIndex(c => c.id === 'name'));
+        const at = cols.findIndex(c => c.id === step.to.col);
+        grid.flash([`p:${step.to.personId}`]);
+        if (!grid.jumpTo(step.to.key, at < 0 ? name : at, step.to.origin)) grid.jumpTo(`p:${step.to.personId}`, name, null);
+    },
+
+    /**
+     * ‹ / › and Alt+← / Alt+→ (spec 103 §1, 6): back to where the last jump
+     * started (its row type, scroll and cell; the union it opened closed, the
+     * row it showed for now gone), or the jump again. False: no step.
+     */
+    tableHistory(dir: -1 | 1, focus: boolean): boolean {
+        const tree = treeKey();
+        if (jumpsTree !== tree) return false;
+        if (dir > 0) {
+            const step = jumps.forward();
+            if (!step) return false;
+            this.tableRunJump(step, step.to.temp || !this.tablePersonShown(step.to.personId as PersonId), false);
+            return true;
+        }
+        const step = jumps.back();
+        if (!step) return false;
+        const state = stateOf(tree);
+        hiddenJump = null;
+        if (step.to.expanded) setExpanded(state.types.persons.unions, step.to.personId, false);
+        if (step.to.temp && tempShown?.person === step.to.personId) tempShown = null;
+        const from = step.from;
+        state.rowType = from.rowType;
+        const fst = state.types[from.rowType];
+        fst.selected = from.row;
+        fst.top = from.scrollTop;
+        fst.left = from.scrollLeft;
+        const el = document.getElementById('table-container');
+        if (!el || TreeRenderer.getViewMode() !== 'table') return true;
+        this.renderTableView(el);
+        const grid = mounted?.grid;
+        if (!grid) return true;
+        const at = Math.max(0, (mounted?.display?.columns ?? []).findIndex(c => c.id === from.col));
+        grid.flash([from.row]);
+        grid.restoreCell(from.key, at, from.scrollTop, from.scrollLeft, focus);
+        return true;
+    },
+
+    /** Enter on a cell naming several of the tree's people (spec 103 1i): "Go to…" with each one. */
+    tableLinkPick(line: GridLine, col: ColumnDef, names: readonly CellName[], anchor: HTMLElement): void {
+        const entries: MenuEntry[] = names.filter(n => !!n.personId).map((n, i) => ({
+            id: `link${i}`, label: n.text, icon: '', run: () => this.tableJumpBy(line, col, n.personId as PersonId),
+        }));
+        if (entries.length) openHeadMenu(anchor, strings.table.link.pick, '', entries);
+    },
+
+    tableNameAction(line: GridLine, name: CellName, anchor: HTMLElement, col?: ColumnDef): void {
         closeHeadMenu();
         const role = name.role;
+        // A person's link in the People and Unions tables (spec 103 U3): a jump to their row.
+        const type = stateOf(treeKey()).rowType;
+        if (!role && name.personId && col && (type === 'persons' || type === 'unions')) {
+            this.tableJumpBy(line, col, name.personId as PersonId);
+            return;
+        }
         if (!role) {
             if (name.personId && DataManager.getPerson(name.personId)) this.showPersonPage(name.personId);
             return;
@@ -1761,15 +1984,19 @@ export const tableMethods = uiModule({
         }, true);
         const personId = name.personId && DataManager.getPerson(name.personId) ? name.personId : null;
         const open = (): void => { if (personId) this.showPersonPage(personId); };
+        // Go to {name} (spec 103, decision D6 c): first, the jump to their row in the People table.
+        const goTo = (): void => { if (personId && col) this.tableJumpBy(line, col, personId as PersonId); };
         if (isPhoneBar() || isCoarsePointer()) {
-            const rows = [{ label: t.filterParticipant[role](name.text), icon: '', run: filter }];
+            const rows = personId && col ? [{ label: t.link.goTo(name.text), icon: '→', run: goTo }] : [];
+            rows.push({ label: t.filterParticipant[role](name.text), icon: '', run: filter });
             if (personId) rows.push({ label: t.act.open, icon: '▤', run: open });
             this.noteBottomSheetTrigger();
             this.hideBottomSheet();
             this.presentMenuSheet(name.text, [{ rows }]);
             return;
         }
-        const entries: MenuEntry[] = [{ id: 'participant', label: t.filterParticipant[role](name.text), icon: '', run: filter }];
+        const entries: MenuEntry[] = personId && col ? [{ id: 'goTo', label: t.link.goTo(name.text), icon: '→', run: goTo }] : [];
+        entries.push({ id: 'participant', label: t.filterParticipant[role](name.text), icon: '', run: filter });
         if (personId) entries.push({ id: 'open', label: t.act.open, icon: '▤', run: open });
         const menu = openHeadMenu(anchor, '', '', entries);
         menu.setAttribute('aria-label', name.text);
@@ -1863,7 +2090,17 @@ export const tableMethods = uiModule({
         ];
         if (!ro) rows.push({ label: t.act.edit, icon: '✎', run: run('edit') });
         const cellBlocks = this.tableCellSheetBlocks(line, cell);
-        const blocks: { rows: typeof rows; divider?: boolean }[] = [...cellBlocks, cellBlocks.length ? { rows, divider: true } : { rows }];
+        // People in the cell (spec 103 §4): Go to {name} for each of the tree's people the cell names, first.
+        const type = stateOf(treeKey()).rowType;
+        const links = cell && cell.col.id !== 'name' && (type === 'persons' || type === 'unions') ? personLinks(cell.value) : [];
+        const linkBlocks = links.length ? [{
+            header: t.link.inCell,
+            rows: links.map(n => ({ label: t.link.goTo(n.text), icon: '→', value: '›', run: () => this.tableJumpBy(line, cell!.col, n.personId as PersonId) })),
+        }] : [];
+        const blocks: { rows: typeof rows; divider?: boolean }[] = [
+            ...cellBlocks.map((b, i) => (i === 0 && linkBlocks.length ? { ...b, divider: true } : b)),
+            cellBlocks.length || linkBlocks.length ? { rows, divider: true } : { rows },
+        ];
         if (!ro && line.row.kind === 'person') {
             const row = line.row;
             const n = row.unions.length;
@@ -1883,7 +2120,7 @@ export const tableMethods = uiModule({
         const sub = date ? [date.prefix, date.text].filter(Boolean).join(' ') : fanYears(person);
         this.noteBottomSheetTrigger();
         this.hideBottomSheet();
-        this.presentMenuSheet(title, blocks, sub ? { subtitle: sub } : {});
+        this.presentMenuSheet(title, [...linkBlocks, ...blocks], sub ? { subtitle: sub } : {});
     },
 
     /** A source row's sheet (§14.2): its title and archive on top, Open source and Edit. */

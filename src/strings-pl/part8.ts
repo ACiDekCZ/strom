@@ -1462,6 +1462,12 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         moreFilters: 'Więcej filtrów',
         filters: 'Filtry',
         clearFilters: 'Wyczyść filtry',
+        outsideFilter: 'poza filtrem',
+        link: {
+            goTo: (name: string) => `Przejdź do ${name}`, pick: 'Przejdź do…', inCell: 'Osoby w komórce', enterHint: 'Enter: przejdź do osoby',
+            hidden: (name: string) => `Ukryte przez filtr: ${name}.`, showTemp: 'Pokaż tymczasowo',
+        },
+        nav: { back: 'Wstecz', backTo: (name: string) => `Wróć do ${name}`, forward: 'Dalej', forwardTo: (name: string) => `Ponownie do ${name}` },
         search: 'Szukaj w tabeli',
         matches: (n: number) => nPl(n, 'wynik', 'wyniki', 'wyników'),
         filterMark: 'Kolumna filtrowana',

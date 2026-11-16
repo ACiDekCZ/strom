@@ -255,12 +255,12 @@ function otherPartner(ctx: TableContext, u: Partnership | null, self: PersonId):
     return ctx.person(u.person1Id === self ? u.person2Id : u.person1Id);
 }
 
+/** The wedding's witnesses, the tree's people as links to their rows (spec 103 U3). */
 function witnessNames(ctx: TableContext, u: Partnership): CellValue {
-    const names = (u.participants ?? []).filter(x => x.role === 'witness').map(x => {
-        const p = x.personId ? ctx.data.persons[x.personId] : undefined;
-        return p ? shownNameOrEmpty(p) : (x.name ?? '').trim();
-    }).filter(Boolean);
-    return textCell(names.join(', '));
+    return namesCell((u.participants ?? []).filter(x => x.role === 'witness').map(x => {
+        const n = participantCellName(ctx, x);
+        return n.personId ? { text: n.text, personId: n.personId } : { text: n.text };
+    }));
 }
 
 /** Length of a union (§5.1): from the wedding to the divorce, else to the first death; both alive: nothing. */

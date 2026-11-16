@@ -21,6 +21,8 @@ export interface BarHandlers {
     onRowTypeSheet(): void;
     /** The phone's ⋯ (12a): Columns, Export, Coverage row, Expand or Collapse unions. */
     onMoreMenu(): void;
+    /** ‹ / › (spec 103 §1): a jump by a name back or forward. */
+    onHistory(dir: -1 | 1): void;
 }
 
 function esc(text: string): string {
@@ -41,11 +43,36 @@ export function sortText(type: RowType, sort: readonly SortSpec[]): string {
     return cols.length ? strings.table.sortedBy(cols.join(', ')) : '';
 }
 
+/**
+ * ‹ / › (spec 103 §1): shown from the first jump on, each off without a
+ * step that way; their names say where they lead.
+ */
+export function updateNav(bar: HTMLElement, any: boolean, back: string | null, forward: string | null): void {
+    const slot = bar.querySelector<HTMLElement>('.tv-slot-nav');
+    if (!slot) return;
+    slot.hidden = !any;
+    const set = (dir: string, label: string | null, named: (n: string) => string, plain: string): void => {
+        const btn = slot.querySelector<HTMLElement>(`[data-nav="${dir}"]`)!;
+        const text = label ? named(label) : plain;
+        btn.setAttribute('aria-disabled', label === null ? 'true' : 'false');
+        btn.setAttribute('aria-label', text);
+        btn.title = text;
+    };
+    const nav = strings.table.nav;
+    set('-1', back, nav.backTo, nav.back);
+    set('1', forward, nav.forwardTo, nav.forward);
+}
+
 /** The bar's skeleton; `updateBar` fills the row type. */
 export function createBar(handlers: BarHandlers): HTMLElement {
     const bar = document.createElement('div');
     bar.className = 'tv-bar';
     bar.innerHTML = '<div class="tv-bar-row1">'
+        + '<div class="tv-slot tv-slot-nav" hidden>'
+        + `<button type="button" class="tv-nav-btn" data-nav="-1" aria-disabled="true" aria-label="${esc(strings.table.nav.back)}" title="${esc(strings.table.nav.back)}">‹</button>`
+        + `<button type="button" class="tv-nav-btn" data-nav="1" aria-disabled="true" aria-label="${esc(strings.table.nav.forward)}" title="${esc(strings.table.nav.forward)}">›</button>`
+        + '<span class="tv-bar-sep" aria-hidden="true"></span>'
+        + '</div>'
         + `<div class="tv-rowtype sel-seg" role="radiogroup" aria-label="${esc(strings.table.rowType)}"></div>`
         + '<button type="button" class="tv-rowtype-btn" aria-haspopup="dialog"></button>'
         + '<div class="tv-slot tv-slot-view"></div>'
@@ -77,6 +104,10 @@ export function createBar(handlers: BarHandlers): HTMLElement {
     });
     bar.querySelector('.tv-rowtype-btn')!.addEventListener('click', () => handlers.onRowTypeSheet());
     bar.querySelector('.tv-more-menu-btn')!.addEventListener('click', () => handlers.onMoreMenu());
+    bar.querySelector('.tv-slot-nav')!.addEventListener('click', (e) => {
+        const btn = (e.target as Element).closest<HTMLElement>('[data-nav]');
+        if (btn && btn.getAttribute('aria-disabled') !== 'true') handlers.onHistory(Number(btn.dataset.nav) as -1 | 1);
+    });
     return bar;
 }
 

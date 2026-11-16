@@ -106,6 +106,14 @@ export interface GridInput {
     agentAt?: (line: GridLine) => AgentRowState | null;
     /** A cell edited in place (T54 F8): it carries `is-editable` (the text cursor under a mouse). */
     editableAt?: (line: GridLine, col: ColumnDef) => boolean;
+    /**
+     * A tree's person named in a cell is a link to their row (spec 103 U3,
+     * K3.1: the People and Unions tables): it looks as the cell's text, is
+     * underlined under a mouse, a click (or Enter on its cell) jumps.
+     */
+    links?: boolean;
+    /** Rows shown for now although the filter hides them (spec 103 K3.2, 2b: their row keys). */
+    temp?: ReadonlySet<string>;
 }
 
 /**
@@ -198,6 +206,10 @@ export interface GridHandlers {
      * (a link), a participant's name (its filter).
      */
     onName?(line: GridLine, col: ColumnDef, name: CellName, anchor: HTMLElement): void;
+    /** Enter on a cell naming several of the tree's people (spec 103 1i, `links`): "Go to…" with each one. */
+    onPickName?(line: GridLine, col: ColumnDef, names: readonly CellName[], anchor: HTMLElement): void;
+    /** Alt+← / Alt+→ in the body (spec 103 §1, `links`): a jump back or forward; true when there was one. */
+    onHistory?(dir: -1 | 1): boolean;
     /** The pill "+N" of a citation cell (§14.3): the further citations' bubble. */
     onMoreCites?(line: GridLine, col: ColumnDef, ids: readonly string[], anchor: HTMLElement): void;
     /** A shared event's ages (spec 085 §4, 4a): their bubble. */
@@ -248,6 +260,8 @@ export interface GridHandlers {
 
 /** How far a press moves before it is a drag; how long a touch holds for the header menu. */
 const DRAG_START_PX = 5;
+/** A double click's second click this soon after a jump by a name lands on the row jumped to: it does nothing (spec 103 K3.3). */
+const JUMP_DOUBLE_MS = 700;
 const LONG_PRESS_MS = 500;
 const LONG_PRESS_MOVE_PX = 10;
 /** Alt+Shift+←/→ changes a width by this much (§4.5). */
@@ -323,13 +337,26 @@ const COMP_BAR = 30;
  * A cell's inner HTML (§5, §6.2): a substitute's label before the value in
  * italics, a date qualifier's word, a completeness percentage with its bar.
  */
-export function cellInner(value: CellValue, col: ColumnDef, issue: CellIssueMark | null = null, hit = '', conflict: CellConflictMark | null = null): string {
+export function cellInner(
+    value: CellValue, col: ColumnDef, issue: CellIssueMark | null = null, hit = '', conflict: CellConflictMark | null = null, links = false,
+): string {
     // A research conflict's ≠ stands before the value, a finding's mark stays after it (§16.3).
     const conf = conflict ? conflictMarkHtml(conflict) : '';
-    if (issue) return conf + cellValueHtml(value, col, hit) + markHtml(issue.severity, issue.label);
-    if (!value.mark) return conf + cellValueHtml(value, col, hit);
+    if (issue) return conf + cellValueHtml(value, col, hit, links) + markHtml(issue.severity, issue.label);
+    if (!value.mark) return conf + cellValueHtml(value, col, hit, links);
     // A level beside a value (Findings: after the number; Highest level: before its word).
-    return col.align === 'right' ? cellValueHtml(value, col, hit) + markHtml(value.mark) : markHtml(value.mark) + cellValueHtml(value, col, hit);
+    return col.align === 'right' ? cellValueHtml(value, col, hit, links) + markHtml(value.mark) : markHtml(value.mark) + cellValueHtml(value, col, hit, links);
+}
+
+/**
+ * The tree's people a cell links to (spec 103 U3): its names that are a
+ * person without a participant's role, or the one person it names (a
+ * parent, a partner); none for an aggregate or a cell without a value.
+ */
+export function personLinks(value: CellValue): CellName[] {
+    if (value.na || value.aggregate || value.empty) return [];
+    if (value.names?.length) return value.names.filter(n => !!n.personId && !n.role && !!n.text);
+    return value.personId && value.text ? [{ text: value.text, personId: value.personId }] : [];
 }
 
 /**
@@ -342,8 +369,8 @@ export function conflictMarkHtml(conflict: CellConflictMark): string {
         + ` aria-label="${esc(conflict.label)}" title="${esc(conflict.label)}">${RESEARCH_GLYPH.conf}</button>`;
 }
 
-function cellValueHtml(value: CellValue, col: ColumnDef, hit = ''): string {
-    const html = cellValueCore(value, col, hit);
+function cellValueHtml(value: CellValue, col: ColumnDef, hit = '', links = false): string {
+    const html = cellValueCore(value, col, hit, links);
     return value.moreSources?.length && !value.na ? html + moreCitesHtml(value.moreSources.length) : html;
 }
 
@@ -387,7 +414,7 @@ export function researchHtml(d: ResearchCellDetail, hit = ''): string {
     return `<span class="tv-cell-text tv-rcell">${html}</span>`;
 }
 
-function cellValueCore(value: CellValue, col: ColumnDef, hit = ''): string {
+function cellValueCore(value: CellValue, col: ColumnDef, hit = '', links = false): string {
     const r = value.research;
     if (r && !value.na && (r.parts.length > 0 || r.count !== undefined || r.signal)) return researchHtml(r, hit);
     if (col.kind === 'percent' && value.percent !== undefined && !value.na) {
@@ -403,7 +430,12 @@ function cellValueCore(value: CellValue, col: ColumnDef, hit = ''): string {
     }
     if (value.prefix) html += `<span class="tv-qual">${hit ? highlightHtml(value.prefix, hit) : esc(value.prefix)}</span>`;
     if (value.shared && value.names?.length && !value.na) return html + sharedNamesHtml(value, hit);
-    if (value.names?.length && !value.na) return html + `<span class="tv-cell-text">${namesHtml(value.names, hit)}</span>`;
+    // Linked names (spec 103 U3) in a row of their own: the last one shown is cut with "…", the others stay whole.
+    if (value.names?.length && !value.na) return html + `<span class="tv-cell-text${links ? ' tv-nms' : ''}">${namesHtml(value.names, hit, links)}</span>`;
+    // A parent, a partner (spec 103 U3): the one person as a link to their row.
+    if (links && value.personId && !value.na && !value.aggregate && value.text) {
+        return html + `<span class="tv-cell-text tv-nms">${namesHtml([{ text: value.text, personId: value.personId }], hit, true)}</span>`;
+    }
     if (value.sharedAges && !value.na) {
         // A shared event's own ages (4a): a button that opens each one's age.
         return html + `<button type="button" class="tv-ages" tabindex="-1" aria-haspopup="dialog" title="${esc(strings.table.agePerPerson)}">`
@@ -447,15 +479,21 @@ export function readersHtml(value: CellValue, hit = ''): string {
  * The names of a cell (§14.1): a tree's person as a link, a participant's
  * name as a button that offers its filter, any other name as text. Out of
  * the tab order until their cell is the active one (`syncNameTabs`).
+ * `links` (spec 103 U3): a person without a role links to their row, looks
+ * as the cell's text (`tv-nm--jump`) and is never a tab stop; the whole
+ * name is its title.
  */
-export function namesHtml(names: readonly CellName[], hit = ''): string {
+export function namesHtml(names: readonly CellName[], hit = '', links = false): string {
     return names.map((n, i) => {
         const text = hit ? highlightHtml(n.text, hit) : esc(n.text);
-        const title = n.title ? ` title="${esc(n.title)}"` : '';
-        if (!n.personId && !n.role) return `<span${title}>${text}</span>`;
-        return `<button type="button" class="tv-nm${n.personId ? ' tv-nm--person' : ''}" data-ni="${i}" tabindex="-1"`
+        if (!n.personId && !n.role) return `<span${n.title ? ` title="${esc(n.title)}"` : ''}>${text}</span>`;
+        const jump = links && !!n.personId && !n.role;
+        const whole = n.title ?? (jump ? n.text : '');
+        const title = whole ? ` title="${esc(whole)}"` : '';
+        return `<button type="button" class="tv-nm${n.personId ? ' tv-nm--person' : ''}${jump ? ' tv-nm--jump' : ''}" data-ni="${i}"`
+            + `${jump ? ` data-pid="${esc(n.personId!)}"` : ''} tabindex="-1"`
             + `${n.role ? ' aria-haspopup="menu"' : ''}${title}>${text}</button>`;
-    }).join(', ');
+    }).join(links ? '<span class="tv-nm-sep">, </span>' : ', ');
 }
 
 /** A row as drawn: its opening tag and its cells (spacers included), each one element. */
@@ -520,6 +558,15 @@ export class TableGrid {
     /** The rows lit after a change (row keys, §10.3) and the timer that ends it. */
     private readonly flashKeys = new Set<string>();
     private flashTimer: ReturnType<typeof setTimeout> | null = null;
+    /** Where the body's last press went down: a click on a name jumps only when it did not move (spec 103 K3.3). */
+    private downAt: { x: number; y: number } | null = null;
+    /** When the last jump by a name happened (`JUMP_DOUBLE_MS`). */
+    private jumpedAt = -Infinity;
+    /**
+     * The name a jump came from (spec 103 §1, 5): in the cell of the way
+     * back, marked while that cell is the active one.
+     */
+    private origin: { key: string; col: number; personId: string } | null = null;
     /** The open cell editor (T54 F8): over the cell, in the scrolled area (outside the body, so a redraw keeps it). */
     private editor: { key: string; colId: string; box: HTMLElement; input: HTMLInputElement | HTMLSelectElement; error: HTMLElement; spec: CellEditSpec } | null = null;
 
@@ -533,7 +580,8 @@ export class TableGrid {
             + '<div class="tv-row tv-headrow" role="row"></div>'
             + '<div class="tv-row tv-covrow" role="row"></div>'
             + '</div><div class="tv-body" role="rowgroup"></div>'
-            + '<div class="tv-nomatch" role="status" hidden></div>';
+            + '<div class="tv-nomatch" role="status" hidden></div>'
+            + `<span id="tv-link-hint" hidden>${esc(strings.table.link.enterHint)}</span>`;
         this.el = el;
         this.head = el.querySelector('.tv-head')!;
         this.groupRow = el.querySelector('.tv-grouprow')!;
@@ -550,12 +598,17 @@ export class TableGrid {
             this.schedule();
             this.placeEditor();
         }, { passive: true });
-        this.body.addEventListener('pointerdown', (e) => { this.lastPointerDown = e.pointerType; }, { passive: true });
+        this.body.addEventListener('pointerdown', (e) => {
+            this.lastPointerDown = e.pointerType;
+            this.downAt = { x: e.clientX, y: e.clientY };
+        }, { passive: true });
         this.body.addEventListener('pointermove', (e) => this.armRowActions(e), { passive: true });
         this.body.addEventListener('pointerleave', () => this.disarmRowActions(), { passive: true });
         this.body.addEventListener('click', (e) => {
             const pointer = clickPointerType(e, this.lastPointerDown);
             this.lastPointerDown = '';
+            // The second click of a double click on a name that jumped: the row under it now is another one.
+            if (e.detail >= 2 && performance.now() - this.jumpedAt < JUMP_DOUBLE_MS) return;
             const t = e.target as Element;
             const rowEl = t.closest<HTMLElement>('.tv-row[data-key]');
             const line = rowEl ? this.lines[Number(rowEl.dataset.index)] : undefined;
@@ -573,7 +626,16 @@ export class TableGrid {
                 return;
             }
             const nm = t.closest<HTMLElement>('.tv-nm[data-ni]');
-            if (nm && cellEl && this.nameAt(line, cellEl, nm)) return;
+            if (nm && cellEl) {
+                // A person's link (spec 103 K3.3): a plain click of a mouse or a pen (or Enter on it) jumps; a drag,
+                // Shift / Ctrl / Cmd, a double click's second click or a tap is a click of the cell as any other.
+                if (!nm.classList.contains('tv-nm--jump')) {
+                    if (this.nameAt(line, cellEl, nm)) return;
+                } else if (this.linkClick(e, pointer) && this.nameAt(line, cellEl, nm)) {
+                    this.jumpedAt = performance.now();
+                    return;
+                }
+            }
             const more = t.closest<HTMLElement>('.tv-cites-more');
             if (more && cellEl && this.moreCitesAt(line, cellEl, more)) return;
             const ages = t.closest<HTMLElement>('.tv-ages');
@@ -623,7 +685,9 @@ export class TableGrid {
         // A double click edits (§10.1); the ▾/▸, the count pill and the icons are their own.
         this.body.addEventListener('dblclick', (e) => {
             const t = e.target as Element;
-            if (t.closest('.tv-toggle, .tv-unions-pill, .tv-act, .tv-more-btn, .tv-nm, .tv-link, .tv-cites-more, .tv-conf, .tv-ages')) return;
+            if (performance.now() - this.jumpedAt < JUMP_DOUBLE_MS) return;
+            // A person's link (spec 103 K3.3) is a part of its cell: a double click edits as on the rest of it.
+            if (t.closest('.tv-toggle, .tv-unions-pill, .tv-act, .tv-more-btn, .tv-nm:not(.tv-nm--jump), .tv-link, .tv-cites-more, .tv-conf, .tv-ages')) return;
             const line = this.lineOf(t);
             if (!line || line.kind === 'more') return;
             // A cell edited in place (T54 F8) opens its editor; any other cell edits the row.
@@ -680,10 +744,24 @@ export class TableGrid {
         const input = this.input;
         if (!input || line.kind === 'more' || !this.handlers.onName) return false;
         const col = input.columns[Number(cellEl.getAttribute('aria-colindex')) - 1];
-        const name = col ? lineCell(input.model, line, col).names?.[Number(nm.dataset.ni)] : undefined;
+        const value = col ? lineCell(input.model, line, col) : null;
+        // A parent's or a partner's cell (spec 103 U3) names its one person without a list of names.
+        const name = value ? value.names?.[Number(nm.dataset.ni)] ?? (!value.names?.length ? personLinks(value)[0] : undefined) : undefined;
         if (!col || !name) return false;
         this.handlers.onName(line, col, name, nm);
         return true;
+    }
+
+    /**
+     * A click on a person's link that jumps (spec 103 K3.3): Enter or Space on
+     * it, or the left button of a mouse or a pen without Shift, Ctrl, Cmd or
+     * Alt, not the second click of a double click, moved less than a drag.
+     */
+    private linkClick(e: MouseEvent, pointer: string): boolean {
+        if (e.detail === 0) return true;
+        if (!isMouseLikePointer(pointer) || e.button !== 0 || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey || e.detail !== 1) return false;
+        const d = this.downAt;
+        return !d || (Math.abs(e.clientX - d.x) < DRAG_START_PX && Math.abs(e.clientY - d.y) < DRAG_START_PX);
     }
 
     /** The pill "+N" of a citation cell (§14.3) to its handler; false: the cell has no further citations. */
@@ -734,19 +812,36 @@ export class TableGrid {
         return { line, cell: { col, index: this.activeCol, value: lineCell(this.input.model, line, col) }, el };
     }
 
-    /** The quiet outline on the chosen active cell (T54 F9), off everywhere else. */
+    /**
+     * The quiet outline on the chosen active cell (T54 F9), off everywhere
+     * else; in it the name a jump came from (spec 103 §1, 5), while it stays
+     * the active cell.
+     */
     private syncActiveMark(): void {
         for (const c of this.body.querySelectorAll('.is-active-cell')) c.classList.remove('is-active-cell');
+        for (const o of this.body.querySelectorAll('.tv-nm.is-origin')) o.classList.remove('is-origin');
+        const origin = this.origin;
+        if (origin && (!this.cellChosen || origin.key !== this.activeKey || origin.col !== this.activeCol)) this.origin = null;
         if (!this.cellChosen || !this.activeKey) return;
         const at = this.lines.findIndex(l => lineKey(l) === this.activeKey);
         if (at < 0) return;
-        this.body.querySelector(`.tv-row[data-index="${at}"] [aria-colindex="${this.activeCol + 1}"]`)?.classList.add('is-active-cell');
+        const cell = this.body.querySelector(`.tv-row[data-index="${at}"] [aria-colindex="${this.activeCol + 1}"]`);
+        cell?.classList.add('is-active-cell');
+        if (this.origin && cell) {
+            for (const b of cell.querySelectorAll<HTMLElement>('.tv-nm--jump[data-pid]')) {
+                if (b.dataset.pid === this.origin.personId) b.classList.add('is-origin');
+            }
+        }
     }
 
-    /** The names of the active cell (the one with the body's tab stop) in the tab order, the others out (§14.1). */
+    /**
+     * The names of the active cell (the one with the body's tab stop) in the
+     * tab order, the others out (§14.1). A person's link (spec 103 §4) never:
+     * Enter on its cell jumps.
+     */
     private syncNameTabs(): void {
         for (const b of this.body.querySelectorAll<HTMLElement>('.tv-nm[data-ni], .tv-link, .tv-cites-more, .tv-conf, .tv-ages')) {
-            b.tabIndex = b.closest('[aria-colindex]')?.getAttribute('tabindex') === '0' ? 0 : -1;
+            b.tabIndex = !b.classList.contains('tv-nm--jump') && b.closest('[aria-colindex]')?.getAttribute('tabindex') === '0' ? 0 : -1;
         }
     }
 
@@ -1370,6 +1465,7 @@ export class TableGrid {
             let cls = 'tv-row' + home;
             if (line.kind !== 'more' && this.flashKeys.has(rk)) cls += ' is-flash';
             if (input.stale?.has(rk)) cls += ' is-stale';
+            if (input.temp?.has(rk)) cls += ' is-temp';
             if (line.kind === 'row') {
                 cls += ' sel-opt';
                 attrs += ` data-sel-form="row" aria-selected="${rowSelected ? 'true' : 'false'}"`;
@@ -1415,9 +1511,11 @@ export class TableGrid {
                 // §7.4: Findings and Highest level with a mark open the person's findings.
                 const finds = line.kind === 'row' && line.row.kind === 'person' && !issue && !!value.mark && PERSON_FINDINGS_COLUMNS.has(col.id);
                 const editable = line.kind !== 'more' && !!input.editableAt?.(line, col);
+                const links = this.linksIn(input, line, col);
                 cells.push(`<div class="${cellClasses(value, col, issue?.severity ?? null, !!conflict)}${res ? ' has-res' : ''}${finds ? ' has-finds' : ''}${editable ? ' is-editable' : ''}${this.pinClass(i, input)}" role="gridcell" aria-colindex="${i + 1}" tabindex="${tab}"`
                     + (res || finds ? ' aria-haspopup="dialog"' : '')
-                    + ` style="${this.pinStyle(i, input)}"${title ? ` title="${esc(title)}"` : ''}>${cellInner(value, col, issue, line.kind === 'more' ? '' : input.hit ?? '', conflict)}`
+                    + (links && personLinks(value).length ? ' aria-describedby="tv-link-hint"' : '')
+                    + ` style="${this.pinStyle(i, input)}"${title ? ` title="${esc(title)}"` : ''}>${cellInner(value, col, issue, line.kind === 'more' ? '' : input.hit ?? '', conflict, links)}`
                     + `${i === tailAt ? this.rowTail(input, line) : ''}</div>`);
             }
             if (cw.after > 0) cells.push(this.spacer(cw.after));
@@ -1594,7 +1692,9 @@ export class TableGrid {
         const bar = agent?.kind === 'working' ? agentRowHtml(agent) : '';
         const done = agent?.kind === 'done' ? agentRowHtml(agent) : '';
         const start = bar ? head.replace('class="tv-cell tv-name', 'class="tv-cell tv-name has-agent') : head;
-        return `${start}${name.length > 24 ? ` title="${esc(name)}"` : ''}>${bar}${toggle}${conflict ? conflictMarkHtml(conflict) : ''}<span class="tv-cell-text">${nameHtml}</span>${done}${pill}`
+        // A row shown for now although the filter hides it (spec 103 2b): "outside the filter" after the name.
+        const outside = input.temp?.has(rowKey(line.row)) ? `<span class="tv-outside">${esc(t.outsideFilter)}</span>` : '';
+        return `${start}${name.length > 24 ? ` title="${esc(name)}"` : ''}>${bar}${toggle}${conflict ? conflictMarkHtml(conflict) : ''}<span class="tv-cell-text">${nameHtml}</span>${outside}${done}${pill}`
             + `${issue ? markHtml(issue.severity, issue.label) : ''}${tail}</div>`;
     }
 
@@ -1632,16 +1732,28 @@ export class TableGrid {
         const bottom = tops[line + 1];
         if (top < el.scrollTop) el.scrollTop = top;
         else if (bottom + headH > el.scrollTop + el.clientHeight) el.scrollTop = bottom + headH - el.clientHeight;
-        if (col >= input.pinned) {
-            const pinnedW = this.offsets[Math.min(input.pinned, input.columns.length)];
-            const x = this.offsets[col];
-            const w = input.widths[col];
-            if (x - pinnedW < el.scrollLeft) el.scrollLeft = Math.max(0, x - pinnedW);
-            else if (x + w > el.scrollLeft + el.clientWidth) el.scrollLeft = x + w - el.clientWidth;
-        }
+        this.columnIntoView(col);
         this.bodyKey = '';
         this.draw();
         this.focusActive(true);
+    }
+
+    /** A column scrolled into view beside the pinned ones (none for a pinned column). */
+    private columnIntoView(col: number): void {
+        const input = this.input;
+        if (!input || col < input.pinned) return;
+        const el = this.el;
+        const pinnedW = this.offsets[Math.min(input.pinned, input.columns.length)];
+        const x = this.offsets[col];
+        const w = input.widths[col];
+        if (x - pinnedW < el.scrollLeft) el.scrollLeft = Math.max(0, x - pinnedW);
+        else if (x + w > el.scrollLeft + el.clientWidth) el.scrollLeft = x + w - el.clientWidth;
+        el.classList.toggle('is-scrolled-x', el.scrollLeft > 0);
+    }
+
+    /** A cell's names are links to the people's rows (spec 103 U3): `links` on, not the row's own name. */
+    private linksIn(input: GridInput, line: GridLine, col: ColumnDef): boolean {
+        return !!input.links && line.kind !== 'more' && col.id !== 'name';
     }
 
     /** Focus the active cell if it is drawn. */
@@ -1655,6 +1767,11 @@ export class TableGrid {
         const input = this.input;
         if (!input || !this.lines.length) return;
         if (this.copyKey(e)) return;
+        // Alt+← / Alt+→ (spec 103 §1): the table's jumps back and forward (the head's move a column).
+        if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && this.handlers.onHistory) {
+            if (this.handlers.onHistory(e.key === 'ArrowLeft' ? -1 : 1)) e.preventDefault();
+            return;
+        }
         if (e.altKey) return;
         // A name in a cell (§14.1) is a button: Enter and Space are its own.
         if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.tv-nm, .tv-link, .tv-cites-more, .tv-conf, .tv-ages')) return;
@@ -1737,6 +1854,11 @@ export class TableGrid {
                     return;
                 }
                 if (line.kind === 'more') { this.handlers.onRevealUnions?.(line.row.id); return; }
+                // Enter on a cell naming the tree's people (spec 103 1i): one jumps, several offer "Go to…".
+                const c = input.columns[col];
+                const names = e.key === 'Enter' && cellEl && c && this.linksIn(input, line, c) ? personLinks(lineCell(input.model, line, c)) : [];
+                if (cellEl && c && names.length === 1 && this.handlers.onName) { this.handlers.onName(line, c, names[0], cellEl); return; }
+                if (cellEl && c && names.length > 1 && this.handlers.onPickName) { this.handlers.onPickName(line, c, names, cellEl); return; }
                 this.select(line);
                 // Enter edits a cell edited in place (T54 F8), else opens the person (§10.1); Space only selects.
                 if (e.key === 'Enter' && !this.startEditAt(at, col)) this.handlers.onRowAction?.('open', line);
@@ -2003,6 +2125,52 @@ export class TableGrid {
         const top = r.top - g.top - this.el.clientTop + this.el.scrollTop;
         ed.box.style.cssText = `left:${Math.round(left)}px;top:${Math.round(top)}px;width:${Math.round(width)}px;height:${Math.round(r.height)}px`;
         ed.box.classList.toggle('is-floating', width > r.width + 0.5 || Math.abs(left - cellLeft) > 0.5);
+    }
+
+    /**
+     * A jump to a person's row (spec 103 §1, 4): the line in the middle of
+     * the body, the column into view beside the pinned ones, the cell chosen
+     * and focused; `origin` the person whose name in it leads back. False
+     * when the line is not drawn.
+     */
+    jumpTo(key: string, col: number, origin: string | null): boolean {
+        const input = this.input;
+        const at = this.lines.findIndex(l => lineKey(l) === key);
+        if (!input || at < 0) return false;
+        col = Math.max(0, Math.min(input.columns.length - 1, col));
+        const tops = this.lineTops(this.rowHeight());
+        const view = Math.max(0, this.el.clientHeight - this.head.offsetHeight);
+        this.el.scrollTop = Math.max(0, Math.round((tops[at] + tops[at + 1]) / 2 - view / 2));
+        this.columnIntoView(col);
+        this.activeKey = key;
+        this.activeCol = col;
+        this.cellChosen = true;
+        this.origin = origin ? { key, col, personId: origin } : null;
+        this.jumpedAt = performance.now();
+        this.bodyKey = '';
+        this.draw();
+        this.focusActive(true);
+        return true;
+    }
+
+    /**
+     * Back to where a jump started (spec 103 §1, 6): its scroll and its
+     * active cell (its person's row when the line is gone); focused when
+     * asked (Alt+←, not the bar's ‹).
+     */
+    restoreCell(key: string, col: number, top: number, left: number, focus: boolean): void {
+        const input = this.input;
+        if (!input) return;
+        this.el.scrollTop = top;
+        this.el.scrollLeft = left;
+        this.el.classList.toggle('is-scrolled-x', this.el.scrollLeft > 0);
+        this.activeKey = key;
+        this.activeCol = Math.max(0, Math.min(input.columns.length - 1, col));
+        this.cellChosen = true;
+        this.origin = null;
+        this.bodyKey = '';
+        this.draw();
+        if (focus) this.focusActive(true);
     }
 
     /** Scroll a row into view (§8.3: the app's person search in the table) and draw. */
