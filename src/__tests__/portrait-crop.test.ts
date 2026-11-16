@@ -12,8 +12,15 @@ import {
     panPortraitView, zoomPortraitView, straightenPortraitView, turnPortraitView, mirrorPortraitView,
     portraitViewMatrix, portraitOutputMatrix, invertMatrix, applyMatrix, isPortraitRegionSquare,
     isPortraitSourceShape, isDefaultPortraitCrop, portraitSourcePixels, dropDanglingPortraitSources,
-    computeCoverCrop, PortraitView,
+    computeCoverCrop, PortraitView, stripPhotos, totalPhotoBytes, dataUrlByteSize,
 } from '../photo.js';
+import { countImages } from '../attachments.js';
+import { applyContentOptions, applyLivingPrivacy } from '../privacy.js';
+import { parseGedcom, convertToStrom } from '../ged-parser.js';
+import { createMergeState, updateConflictResolution } from '../merge/matching.js';
+import { executeMerge } from '../merge/executor.js';
+import { StorageManager } from '../storage.js';
+import { carryOverMedia } from '../research-link.js';
 import { cleanPortraitSources, stripUnsafeMediaDataUrls } from '../validation.js';
 import { DataManager, migrateData } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
@@ -223,7 +230,7 @@ const A = 'p_a' as PersonId, B = 'p_b' as PersonId, C = 'p_c' as PersonId;
 const U = 'u_ab' as PartnershipId;
 
 function person(id: PersonId, over: Partial<Person> = {}): Person {
-    return { id, firstName: 'Ivo', lastName: 'Brabec', gender: 'male', isPlaceholder: false, partnerships: [], parentIds: [], childIds: [], ...over };
+    return { id, firstName: 'Zorbin', lastName: 'Quellmar', gender: 'male', isPlaceholder: false, partnerships: [], parentIds: [], childIds: [], ...over };
 }
 
 /** A and B a couple with a 400 × 300 photo; A has a 400 × 300 attachment; C is no partner. */
@@ -412,5 +419,225 @@ describe('DataManager and the portrait\'s original', () => {
         expect(union.photoOriginalName).toBe('wedding.png');
         expect(DataManager.getData().partnerships[U2]).toBeUndefined();
         expect(DataManager.getPerson(B)?.photoSource?.partnershipId).toBe(U);
+    });
+});
+
+// ── Without photos, privacy ──
+
+describe('photos left out of an export', () => {
+    const square = { x: 0.125, y: 0, w: 0.75, h: 1 };
+
+    it('stripPhotos takes the portraits, their originals and the couples\' photos', () => {
+        const d = tree({ attachmentId: 'att1', region: square });
+        d.persons[A].attachments!.push({ id: 'att2', name: 'letter.png', mimeType: 'image/png', dataUrl: png(10, 10), sizeBytes: 33 });
+        const out = stripPhotos(d);
+        expect(out.persons[A].photo).toBeUndefined();
+        expect(out.persons[A].photoSource).toBeUndefined();
+        // The original is a photo of the person; another attachment stays.
+        expect(out.persons[A].attachments?.map(a => a.id)).toEqual(['att2']);
+        expect(out.partnerships[U]).not.toHaveProperty('photo');
+        expect(out.partnerships[U]).not.toHaveProperty('photoOriginalName');
+        expect(out.partnerships[U]).not.toHaveProperty('photoDate');
+        // The input is untouched.
+        expect(d.partnerships[U].photo).toBeDefined();
+    });
+
+    it('countImages and totalPhotoBytes count the couple\'s photo with the photos', () => {
+        const d = tree();
+        expect(countImages(d).photos).toBe(3);
+        expect(countImages(d).attachments).toBe(1);
+        expect(totalPhotoBytes(d)).toBe(2 * dataUrlByteSize(PORTRAIT) + dataUrlByteSize(png(400, 300)));
+    });
+
+    it('without attachments, the portrait keeps no link to its original', () => {
+        const out = applyContentOptions(tree({ attachmentId: 'att1', region: square }),
+            { photos: true, attachments: false, notes: true, sources: true });
+        expect(out.persons[A].photo).toBe(PORTRAIT);
+        expect(out.persons[A].photoSource).toBeUndefined();
+        expect(out.partnerships[U].photo).toBeDefined();
+    });
+});
+
+describe('living people under a privacy mode', () => {
+    const square = { x: 0.125, y: 0, w: 0.75, h: 1 };
+    const DEAD = { birthDate: '1890', deathDate: '1960' };
+
+    it('a living person loses the portrait\'s source and its original', () => {
+        const d = tree({ attachmentId: 'att1', region: square });
+        Object.assign(d.persons[B], DEAD);
+        const out = applyLivingPrivacy(d, 'anonymous', 2026, { keepDeceasedSources: true });
+        expect(out.persons[A].photoSource).toBeUndefined();
+        expect(out.persons[A].attachments).toBeUndefined();
+    });
+
+    it('the couple\'s photo goes when either partner is living, with the deceased one\'s link to it', () => {
+        const d = tree();
+        Object.assign(d.persons[A], DEAD, { photoSource: { partnershipId: U, region: square } });
+        const out = applyLivingPrivacy(d, 'initials', 2026, { keepDeceasedSources: true });
+        expect(out.partnerships[U]).not.toHaveProperty('photo');
+        expect(out.partnerships[U]).not.toHaveProperty('photoOriginalName');
+        expect(out.persons[A].photo).toBe(PORTRAIT);
+        expect(out.persons[A].photoSource).toBeUndefined();
+    });
+
+    it('a couple both deceased keeps its photo and the portraits their source', () => {
+        const d = tree();
+        Object.assign(d.persons[A], DEAD, { photoSource: { partnershipId: U, region: square } });
+        Object.assign(d.persons[B], DEAD);
+        const out = applyLivingPrivacy(d, 'anonymous', 2026, { keepDeceasedSources: true });
+        expect(out.partnerships[U].photo).toBe(png(400, 300));
+        expect(out.persons[A].photoSource).toEqual({ partnershipId: U, region: square });
+    });
+
+    it('without the deceased\'s sources every attachment goes, and the links to them', () => {
+        const d = tree({ attachmentId: 'att1', region: square });
+        Object.assign(d.persons[A], DEAD);
+        Object.assign(d.persons[B], DEAD);
+        const out = applyLivingPrivacy(d, 'anonymous', 2026);
+        expect(out.persons[A].photo).toBe(PORTRAIT);
+        expect(out.persons[A].photoSource).toBeUndefined();
+    });
+});
+
+// ── Merging a file into the tree ──
+
+const COUPLE_GED = [
+    '0 HEAD', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8',
+    '0 @I1@ INDI', '1 NAME Zorbin /Quellmar/', '1 SEX M', '1 BIRT', '2 DATE 3 MAR 1881', '1 DEAT', '2 DATE 1950', '1 FAMS @F1@',
+    '0 @I2@ INDI', '1 NAME Ottavine /Fenwray/', '1 SEX F', '1 BIRT', '2 DATE 12 JUN 1884', '1 DEAT', '2 DATE 1961', '1 FAMS @F1@',
+    '0 @F1@ FAM', '1 HUSB @I1@', '1 WIFE @I2@', '1 MARR', '2 DATE 1905',
+    '0 TRLR',
+].join('\n');
+
+describe('merging a tree with portraits and a couple photo', () => {
+    const square = { x: 0.125, y: 0, w: 0.75, h: 1 };
+    const OTHER = 'data:image/jpeg;base64,/9j/BBBB';
+    const importGed = (): StromData => convertToStrom(parseGedcom(COUPLE_GED)).data;
+    const named = (d: StromData, first: string): Person => Object.values(d.persons).find(p => p.firstName === first)!;
+    const union = (d: StromData) => Object.values(d.partnerships)[0];
+
+    /** The incoming tree: his portrait cut from his attachment, hers from the couple's photo. */
+    function incomingTree(): StromData {
+        const d = importGed();
+        const he = named(d, 'Zorbin'), she = named(d, 'Ottavine'), u = union(d);
+        he.attachments = [{ id: 'att-in', name: 'studio.png', mimeType: 'image/png', dataUrl: png(400, 300), sizeBytes: 33 }];
+        he.photo = PORTRAIT;
+        he.photoSource = { attachmentId: 'att-in', region: square, angle: 5 };
+        u.photo = png(400, 300);
+        u.photoOriginalName = 'wedding.png';
+        she.photo = OTHER;
+        she.photoSource = { partnershipId: u.id, region: square };
+        return d;
+    }
+
+    beforeEach(() => {
+        vi.spyOn(StorageManager, 'set').mockResolvedValue(undefined as never);
+    });
+
+    it('into a tree without them: the portraits bring their originals, the union its photo', async () => {
+        const existing = importGed();
+        // The same studio photo is in the tree already, under its own id.
+        named(existing, 'Zorbin').attachments = [{ id: 'att-own', name: 'studio.png', mimeType: 'image/png', dataUrl: png(400, 300), sizeBytes: 33 }];
+        const result = await executeMerge(createMergeState(existing, incomingTree()));
+        expect(result.success).toBe(true);
+        const merged = result.mergedData;
+        const he = named(merged, 'Zorbin'), she = named(merged, 'Ottavine'), u = union(merged);
+        expect(u.id).toBe(union(existing).id);
+        expect(u.photo).toBe(png(400, 300));
+        expect(u.photoOriginalName).toBe('wedding.png');
+        expect(he.photoSource).toEqual({ attachmentId: 'att-own', region: square, angle: 5 });
+        expect(she.photo).toBe(OTHER);
+        expect(she.photoSource).toEqual({ partnershipId: u.id, region: square });
+    });
+
+    it('the tree\'s own couple photo stays; a portrait cut from the other one keeps no link', async () => {
+        const existing = importGed();
+        union(existing).photo = png(640, 480);
+        const merged = (await executeMerge(createMergeState(existing, incomingTree()))).mergedData;
+        expect(union(merged).photo).toBe(png(640, 480));
+        expect(named(merged, 'Ottavine').photo).toBe(OTHER);
+        expect(named(merged, 'Ottavine').photoSource).toBeUndefined();
+    });
+
+    it('the winning portrait brings its source: the tree\'s own by default, the file\'s when chosen', async () => {
+        const existing = importGed();
+        const own = named(existing, 'Zorbin');
+        own.attachments = [{ id: 'att-old', name: 'old.png', mimeType: 'image/png', dataUrl: png(300, 300), sizeBytes: 33 }];
+        own.photo = 'data:image/jpeg;base64,/9j/CCCC';
+        own.photoSource = { attachmentId: 'att-old', region: { x: 0, y: 0, w: 1, h: 1 } };
+
+        const kept = await executeMerge(createMergeState(existing, incomingTree()));
+        expect(named(kept.mergedData, 'Zorbin').photoSource).toEqual(own.photoSource);
+
+        const chosen = createMergeState(existing, incomingTree());
+        const match = chosen.matches.find(m => m.incomingPerson.firstName === 'Zorbin')!;
+        updateConflictResolution(chosen, match.incomingId, 'photo', 'use_incoming');
+        const he = named((await executeMerge(chosen)).mergedData, 'Zorbin');
+        expect(he.photo).toBe(PORTRAIT);
+        expect(he.photoSource).toEqual({ attachmentId: 'att-in', region: square, angle: 5 });
+    });
+});
+
+// ── An update from the research ──
+
+describe('an update from the research keeps the app\'s portrait sources and couple photos', () => {
+    const square = { x: 0.125, y: 0, w: 0.75, h: 1 };
+
+    /** What the research sends back: the same people, no images (it keeps none of the app's). */
+    function fromResearch(previous: StromData): StromData {
+        const next = structuredClone(previous);
+        for (const p of Object.values(next.persons)) {
+            delete p.photo; delete p.photoSource; delete p.attachments;
+        }
+        for (const u of Object.values(next.partnerships)) {
+            delete u.photo; delete u.photoOriginalName; delete u.photoDate;
+        }
+        return next;
+    }
+
+    it('the couple\'s photo, the portraits and their sources come along', () => {
+        const previous = tree({ attachmentId: 'att1', region: square, angle: -2 });
+        previous.persons[B].photo = PORTRAIT;
+        previous.persons[B].photoSource = { partnershipId: U, region: square };
+        const { data, lost } = carryOverMedia(fromResearch(previous), previous);
+        expect(lost).toBe(0);
+        expect(data.partnerships[U]).toMatchObject({ photo: png(400, 300), photoOriginalName: 'wedding.png', photoDate: '1924' });
+        expect(data.persons[A].photoSource).toEqual({ attachmentId: 'att1', region: square, angle: -2 });
+        expect(data.persons[B].photoSource).toEqual({ partnershipId: U, region: square });
+    });
+
+    it('the couple under a new id (the same two people) keeps its photo, the portrait follows', () => {
+        const previous = tree();
+        previous.persons[B].photo = PORTRAIT;
+        previous.persons[B].photoSource = { partnershipId: U, region: square };
+        const next = fromResearch(previous);
+        const U2 = 'u_new' as PartnershipId;
+        next.partnerships = { [U2]: { ...next.partnerships[U], id: U2 } };
+        next.persons[A].partnerships = [U2];
+        next.persons[B].partnerships = [U2];
+        const { data } = carryOverMedia(next, previous);
+        expect(data.partnerships[U2].photo).toBe(png(400, 300));
+        expect(data.persons[B].photoSource).toEqual({ partnershipId: U2, region: square });
+    });
+
+    it('the research\'s own photos win: a portrait or couple photo it changed is not overwritten, the old source not put on it', () => {
+        const previous = tree({ partnershipId: U, region: square });
+        const next = fromResearch(previous);
+        next.persons[A].photo = 'data:image/jpeg;base64,/9j/DDDD';
+        next.partnerships[U].photo = png(640, 480);
+        const { data } = carryOverMedia(next, previous);
+        expect(data.persons[A].photo).toBe('data:image/jpeg;base64,/9j/DDDD');
+        expect(data.persons[A].photoSource).toBeUndefined();
+        expect(data.partnerships[U].photo).toBe(png(640, 480));
+    });
+
+    it('a couple the research no longer has counts as lost', () => {
+        const previous = tree();
+        const next = fromResearch(previous);
+        next.partnerships = {};
+        next.persons[A].partnerships = [];
+        next.persons[B].partnerships = [];
+        // The attachment of A comes along; the couple's photo has no couple to go to.
+        expect(carryOverMedia(next, previous).lost).toBe(1);
     });
 });

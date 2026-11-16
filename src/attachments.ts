@@ -188,6 +188,14 @@ export function countImages(data: StromData): ImageCount {
             out.bytes += att.sizeBytes || dataUrlByteSize(att.dataUrl);
         }
     }
+    // The couples' photos count with the photos (spec 107); a portrait's
+    // original is an attachment already.
+    for (const union of Object.values(data.partnerships ?? {})) {
+        if (union.photo) {
+            out.photos++;
+            out.bytes += dataUrlByteSize(union.photo);
+        }
+    }
     for (const src of Object.values(data.sources ?? {})) {
         for (const exc of src.excerpts ?? []) {
             out.excerpts++;

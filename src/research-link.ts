@@ -9,7 +9,7 @@
  */
 
 import { keepPersonListData } from './person-lists-data.js';
-import { StromData, Person, PersonId, PartnershipId, Partnership, ResearchLink, Source, APP_VERSION, isPrimaryName, PlaceRecordBy, LifeEvent, EventRoleAt } from './types.js';
+import { StromData, Person, PersonId, PartnershipId, Partnership, ResearchLink, Source, APP_VERSION, isPrimaryName, PlaceRecordBy, LifeEvent, EventRoleAt, PortraitSource } from './types.js';
 import { eventIsShareable, eventValueIsOnTag } from './events.js';
 import { SUPPORTED_LANGUAGES, getStringsForLang } from './strings.js';
 import { withoutConvertedStandIns, isPurePlaceholder } from './single-parent.js';
@@ -1754,7 +1754,10 @@ export interface MediaCarryOver {
  * cut in the app), so an update would drop them. Carry them over from the
  * previous state onto `next` (already through stabilizeIds, so ids match;
  * people without a REFN yet are paired by matchUnlinkedPersons):
- * - a person's photo when the research has none for them;
+ * - a person's photo when the research has none for them, and the original
+ *   it was cut from (photoSource, spec 107) while that original is still there;
+ * - a couple's photo when the research has none for that couple (same id,
+ *   else the same two people);
  * - attachments the research does not have (by id or content); a link to a
  *   source the update no longer has is dropped;
  * - excerpts without a `clip` (clipped ones belong to the research) to the
@@ -1773,12 +1776,41 @@ export function carryOverMedia(next: StromData, previous: StromData): MediaCarry
     const unlinked = matchUnlinkedPersons(next, previous);
     const sources = next.sources ? { ...next.sources } : undefined;
     const sourceExists = (id: string | undefined): boolean => !!id && !!sources?.[id];
+    const currentId = (id: PersonId): PersonId | undefined => (persons[id] ? id : unlinked.get(id)) as PersonId | undefined;
+
+    // The couples' photos (spec 107), before the people: a portrait cut from
+    // one needs it in place. The research's own photo of the couple wins.
+    const partnerships = { ...(next.partnerships ?? {}) };
+    let unionsChanged = false;
+    /** Where each previous union with a photo is now (same id, else the same couple). */
+    const unionNow = new Map<PartnershipId, PartnershipId>();
+    for (const [uid, old] of Object.entries(previous.partnerships ?? {}) as [PartnershipId, Partnership][]) {
+        if (!old?.photo) continue;
+        let cur: Partnership | undefined = partnerships[uid];
+        if (!cur) {
+            const a = currentId(old.person1Id), b = currentId(old.person2Id);
+            cur = a && b ? Object.values(partnerships).find(u =>
+                (u.person1Id === a && u.person2Id === b) || (u.person1Id === b && u.person2Id === a)) : undefined;
+        }
+        if (!cur) {
+            lost++;
+            continue;
+        }
+        unionNow.set(uid, cur.id);
+        if (cur.photo) continue;
+        partnerships[cur.id] = {
+            ...cur, photo: old.photo,
+            ...(old.photoOriginalName ? { photoOriginalName: old.photoOriginalName } : {}),
+            ...(old.photoDate ? { photoDate: old.photoDate } : {}),
+        };
+        unionsChanged = true;
+    }
 
     for (const [id, old] of Object.entries(previous.persons ?? {})) {
         if (!old) continue;
         const media = (old.photo ? 1 : 0) + (old.attachments?.length ?? 0);
         if (!media) continue;
-        const curId = (persons[id as PersonId] ? id : unlinked.get(id)) as PersonId | undefined;
+        const curId = currentId(id as PersonId);
         const cur = curId ? persons[curId] : undefined;
         if (!curId || !cur) {
             lost += media;
@@ -1807,6 +1839,27 @@ export function carryOverMedia(next: StromData, previous: StromData): MediaCarry
         if (extra.length) {
             out.attachments = [...have, ...extra];
             changed = true;
+        }
+        // The original the portrait was cut from (spec 107): the research
+        // keeps no such link, so it comes along with the portrait it belongs
+        // to while its original is still there.
+        const src = old.photoSource;
+        if (src && old.photo && out.photo === old.photo && !cur.photoSource) {
+            let carried: PortraitSource | undefined;
+            if (src.attachmentId) {
+                const att = old.attachments?.find(a => a.id === src.attachmentId);
+                const now = att && (out.attachments ?? []).find(a => a.id === att.id || (!a.originalOnly && a.dataUrl === att.dataUrl));
+                if (now) carried = { ...src, attachmentId: now.id };
+            } else if (src.partnershipId) {
+                const uid = unionNow.get(src.partnershipId);
+                const union = uid ? partnerships[uid] : undefined;
+                if (union && union.photo === previous.partnerships[src.partnershipId]?.photo
+                    && (union.person1Id === curId || union.person2Id === curId)) carried = { ...src, partnershipId: union.id };
+            }
+            if (carried) {
+                out.photoSource = carried;
+                changed = true;
+            }
         }
         if (changed) persons[curId] = out;
     }
@@ -1848,7 +1901,7 @@ export function carryOverMedia(next: StromData, previous: StromData): MediaCarry
     // The lists of people and the date each person came into the tree are the
     // tree's own (spec 084 §8): a person new here gets the research's date or now.
     const data = keepPersonListData(
-        keepPlaceOrigins(carryOverTreeDecisions({ ...next, persons, ...(sources ? { sources } : {}) }, previous), previous),
+        keepPlaceOrigins(carryOverTreeDecisions({ ...next, persons, ...(unionsChanged ? { partnerships } : {}), ...(sources ? { sources } : {}) }, previous), previous),
         previous, new Date().toISOString());
     return { data, lost };
 }

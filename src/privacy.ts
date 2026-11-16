@@ -14,7 +14,7 @@ import { strings } from './strings.js';
 import { yearOf } from './dates.js';
 import { forgetHiddenImports } from './import-origin.js';
 import { tidyShares } from './shared-events.js';
-import { stripPhotos } from './photo.js';
+import { stripPhotos, dropDanglingPortraitSources } from './photo.js';
 import { stripAttachments, stripExcerpts } from './attachments.js';
 
 export type PrivacyMode = 'full' | 'initials' | 'anonymous' | 'minimal';
@@ -232,6 +232,8 @@ export function applyContentOptions(data: StromData, content: boolean | ContentO
     // A fact left out takes its stored import value with it.
     for (const person of Object.values(out.persons)) forgetHiddenImports(person, false);
     for (const ps of Object.values(out.partnerships)) forgetHiddenImports(ps, false);
+    // A portrait whose original was left out keeps no link to it (spec 107).
+    dropDanglingPortraitSources(out);
     return out;
 }
 
@@ -337,6 +339,8 @@ function stripDetails(person: Person): void {
     delete person.photo;
     delete person.photoOriginalName;
     delete person.photoDate;
+    // The original the portrait was cut from (spec 107; the attachment goes below).
+    delete person.photoSource;
     // Life events carry places and dates — drop them for living people.
     delete person.events;
     // Source citations may point at sensitive references — drop them too.
@@ -391,6 +395,10 @@ function stripPartnershipDetails(partnership: Partnership, mode: PrivacyMode): v
     delete partnership.divorceSourceIds;
     // The banns, the household at a census: dates, places, witnesses.
     delete partnership.events;
+    // The couple's photo shows a living person (spec 107).
+    delete partnership.photo;
+    delete partnership.photoOriginalName;
+    delete partnership.photoDate;
     if (startYear !== null) partnership.startDate = String(startYear);
 }
 
@@ -542,6 +550,9 @@ export function applyLivingPrivacy(
         for (const id of Object.keys(copy.sources)) if (!cited.has(id)) delete copy.sources[id];
     }
 
+    // A deceased partner's portrait cut from the photo of a couple with a
+    // living person, or from an attachment that went: the link goes too.
+    dropDanglingPortraitSources(copy);
     return copy;
 }
 

@@ -25,7 +25,9 @@ import {
     generatePartnershipId,
     PERSON_CITATION_FIELDS, PARTNERSHIP_CITATION_FIELDS, isGender, gendersCompatible, mergedPrimaryName,
     ImportRecord,
+    PortraitSource,
 } from '../types.js';
+import { dropDanglingPortraitSources } from '../photo.js';
 import { importProgramName } from '../import-next.js';
 import { addSurnameGroup, surnameKey } from '../surnames.js';
 import { cleanLineageOverrides } from '../lineage.js';
@@ -719,6 +721,8 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
             }
         }
 
+        // The original of each portrait that came from the incoming tree (spec 107).
+        carryPortraitSources(mergedData, state, mapping.persons, unionTarget);
         carryAlsoChildOf(mergedData, state, mapping, unionTarget);
         // Own godparent / witness events of the incoming tree point at the merged couples and events.
         resolveIncomingRoleAt(mergedData, state.incomingData, unionTarget);
@@ -1255,6 +1259,51 @@ function absorbSourceDetails(kept: Source, incoming: Source): void {
 }
 
 /**
+ * The original a portrait was cut from follows the portrait that won (spec
+ * 107): a person whose portrait is the incoming one takes the incoming
+ * photoSource, its attachment found among the merged person's by its bytes
+ * (an attachment kept under another id) and its union by where the incoming
+ * union went — when that union shows the same photo. A person who kept the
+ * tree's own portrait keeps its own source. One that no longer leads to its
+ * original goes (dropDanglingPortraitSources).
+ */
+function carryPortraitSources(
+    data: StromData,
+    state: MergeState,
+    personMap: ReadonlyMap<PersonId, PersonId>,
+    unionTarget: ReadonlyMap<PartnershipId, PartnershipId>,
+): void {
+    for (const [incomingId, incoming] of Object.entries(state.incomingData.persons) as [PersonId, Person][]) {
+        const targetId = personMap.get(incomingId);
+        const target = targetId ? data.persons[targetId] : undefined;
+        if (!target) continue;
+        const own = state.existingData.persons[target.id];
+        delete target.photoSource;
+        // The tree's own portrait stayed: its own source, if it has one.
+        if (own?.photoSource && target.photo && own.photo === target.photo) {
+            target.photoSource = structuredClone(own.photoSource);
+            continue;
+        }
+        const src = incoming.photoSource;
+        if (!src || !incoming.photo || incoming.photo !== target.photo) continue;
+        const next: PortraitSource = structuredClone(src);
+        if (src.attachmentId) {
+            const att = incoming.attachments?.find(a => a.id === src.attachmentId);
+            const kept = att && target.attachments?.find(a => a.dataUrl === att.dataUrl && !a.originalOnly);
+            if (!kept) continue;
+            next.attachmentId = kept.id;
+        } else if (src.partnershipId) {
+            const union = unionTarget.get(src.partnershipId);
+            const photo = state.incomingData.partnerships[src.partnershipId]?.photo;
+            if (!union || !photo || data.partnerships[union]?.photo !== photo) continue;
+            next.partnershipId = union;
+        }
+        target.photoSource = next;
+    }
+    dropDanglingPortraitSources(data);
+}
+
+/**
  * Excerpts whose full-page attachment did not survive the merge (dropped as a
  * duplicate of the same bytes under another id) lose only their re-crop link.
  */
@@ -1490,6 +1539,9 @@ export function mergePersonData(
                     else delete existing.photoOriginalName;
                     if (incoming.photoDate) existing.photoDate = incoming.photoDate;
                     else delete existing.photoDate;
+                    // The original of the losing portrait goes with it; the
+                    // winner's comes in carryPortraitSources (spec 107).
+                    delete existing.photoSource;
                 }
                 break;
             default:
@@ -1657,6 +1709,15 @@ export function mergePartnershipData(
     }
     if (!existing.endPlace && incoming.endPlace) existing.endPlace = incoming.endPlace;
     if (!existing.address && incoming.address) existing.address = incoming.address;
+    // The couple's photo (spec 107): the tree's own stays, the incoming one
+    // fills a gap, its name and date riding along.
+    if (!existing.photo && incoming.photo) {
+        existing.photo = incoming.photo;
+        if (incoming.photoOriginalName) existing.photoOriginalName = incoming.photoOriginalName;
+        else delete existing.photoOriginalName;
+        if (incoming.photoDate) existing.photoDate = incoming.photoDate;
+        else delete existing.photoDate;
+    }
     // Ages are keyed by person: incoming ids become the merged tree's ids.
     for (const [pid, age] of Object.entries(incoming.ages ?? {})) {
         const key = personIdMap?.get(pid as PersonId) ?? pid;

@@ -1893,6 +1893,8 @@ export const treeOverviewMethods = uiModule({
                 events += p.events?.length ?? 0;
                 attachments += p.attachments?.length ?? 0;
             }
+            // A couple's photo is a photo too (spec 107).
+            for (const u of Object.values(data.partnerships)) if (u.photo) photos++;
             const parts = findComponents(data).filter(c => c.count > 0).map(c => ({
                 name: componentName(c, strings.split.familyName, strings.split.noSurname), count: c.count,
             }));
