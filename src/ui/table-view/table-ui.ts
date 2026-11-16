@@ -687,6 +687,30 @@ function tableReadOnly(): boolean {
     return DataManager.isReadOnly() || DataManager.isTreeLocked();
 }
 
+/**
+ * Once the source opened from the table (its viewer, its editor, the editor
+ * from the viewer and back) is closed, the table's active cell has the focus
+ * again, unless something else took it meanwhile.
+ */
+function focusTableAfterSource(): void {
+    const viewer = document.getElementById('source-viewer-modal');
+    const editor = document.getElementById('source-editor-modal');
+    const open = (): boolean => !!viewer?.classList.contains('active') || !!editor?.classList.contains('active');
+    if (!open()) return;
+    const watch = new MutationObserver(() => {
+        if (open()) return;
+        watch.disconnect();
+        // After the table's redraw of a saved change (one frame).
+        requestAnimationFrame(() => {
+            const focused = document.activeElement;
+            if (focused && focused !== document.body) return;
+            if (TreeRenderer.getViewMode() !== 'table') return;
+            mounted?.grid.activeCell()?.el?.focus({ preventScroll: true });
+        });
+    });
+    for (const el of [viewer, editor]) if (el) watch.observe(el, { attributes: true, attributeFilter: ['class'] });
+}
+
 export const tableMethods = uiModule({
     /**
      * The research's environment for the cells (§16; null: no research tree):
@@ -1904,7 +1928,7 @@ export const tableMethods = uiModule({
     tableRowAction(action: RowAction, line: GridLine): void {
         if (line.row.kind === 'source') {
             closeHeadMenu();
-            if (action !== 'tree') this.openTableSource(line.row);
+            if (action !== 'tree') this.openTableSource(line.row, action === 'edit');
             return;
         }
         const personId = personOfRow(line.row);
@@ -1939,27 +1963,40 @@ export const tableMethods = uiModule({
         grid?.scrollIntoView({ block: 'nearest' });
     },
 
-    /**
-     * A source row's Open source and Edit (§14.2): the sources manager on that
-     * source; a locked tree, which has no manager, shows the source itself.
-     */
-    openTableSource(row: SourceRow): void {
-        this.openTableSourceId(row.id);
+    /** A source row's Open source (the source itself) and Edit (its editor) (§14.2). */
+    openTableSource(row: SourceRow, edit = false): void {
+        this.openTableSourceId(row.id, edit);
     },
 
-    /** A source by its id in the sources manager (§14.2, §14.3); a locked tree shows the source itself. */
-    openTableSourceId(id: string): void {
+    /**
+     * A source by its id (§14.2, §14.3): the source itself (its excerpts, Edit
+     * in it when the tree can be changed), or with `edit` straight its editor;
+     * a locked or read-only tree shows the source only. Closed, the table is
+     * where it was, its active cell focused again.
+     */
+    openTableSourceId(id: string, edit = false): void {
         const data = DataManager.getData();
         if (!data.sources?.[id]) return;
-        if (DataManager.isTreeLocked()) { this.showSourceViewer(id, null, { readOnly: true }); return; }
-        watching = { tree: treeKey(), name: () => DataManager.getData().sources?.[id]?.title ?? '', keys: watchEdit(data, [`s:${id}`]) };
+        // Nothing of the manager's stack stands between the table and the source.
         this.clearDialogStack();
-        this.showSourcesDialog(id);
+        if (tableReadOnly()) {
+            this.showSourceViewer(id, null, { readOnly: DataManager.isTreeLocked() });
+        } else {
+            watching = { tree: treeKey(), name: () => DataManager.getData().sources?.[id]?.title ?? '', keys: watchEdit(data, [`s:${id}`]) };
+            if (edit) {
+                this.sourceEditorContext = null;
+                this.reopenViewerAfterEditor = null;
+                this.showEditSourceModal(id);
+            } else {
+                this.showSourceViewer(id, null);
+            }
+        }
+        focusTableAfterSource();
     },
 
     /**
      * The pill "+N" of a citation cell (§14.3): the further cited sources, a
-     * click (a tap on a phone's sheet) opens one in the sources manager.
+     * click (a tap on a phone's sheet) opens that source.
      */
     showTableCites(ids: readonly string[], anchor: HTMLElement): void {
         closeHeadMenu();

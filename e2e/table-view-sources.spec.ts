@@ -4,9 +4,10 @@ import { card, openApp } from './helpers.js';
 /**
  * The Table view's Sources rows (spec 073 §14.2): the Rows switch gets
  * Sources with its count; the Unread chip; the web address is a link ↗ into
- * a new window; Open source and Edit open the sources manager on that
- * source. A tree without sources shows its empty state. On a phone the type
- * sheet and the row's sheet.
+ * a new window; Open source opens the source itself (its viewer), Edit its
+ * editor, and closed the table is where it was; a locked tree shows the
+ * source only. A tree without sources shows its empty state. On a phone the
+ * type sheet and the row's sheet.
  */
 
 const person = (id: string, firstName: string, lastName: string, extra: Record<string, unknown> = {}) =>
@@ -62,7 +63,7 @@ async function openTable(page: Page, phone = false, sources: Record<string, unkn
 test.describe('desktop (1440)', () => {
     test.use({ viewport: { width: 1440, height: 900 } });
 
-    test('the Sources segment, the Unread chip, the link into a new window, Open source on that source', async ({ page }) => {
+    test('the Sources segment, the Unread chip, the link into a new window, Open source shows the source, Edit its editor', async ({ page }) => {
         await openTable(page);
         const seg = page.locator('#table-container .tv-rowtype [data-rowtype="sources"]');
         await expect(seg).toHaveAttribute('aria-label', 'Sources, 3');
@@ -103,36 +104,103 @@ test.describe('desktop (1440)', () => {
         await page.locator('#table-container .tv-chips .tv-chip[data-chip="srcUnread"]').click();
         await expect(status(page)).toHaveText('3 of 3 sources');
 
-        // Open source: the manager on that source; no "Show in tree" on a source.
+        // Open source: the source itself (its viewer, Edit in it); no "Show in tree" on a source.
         await col(page, 's:s2', 2).click();
         await expect(row(page, 's:s2').locator('.tv-act')).toHaveCount(2);
         await expect(row(page, 's:s2').locator('.tv-act[data-act="tree"]')).toHaveCount(0);
         await row(page, 's:s2').locator('.tv-act[data-act="open"]').click();
-        const modal = page.locator('#sources-modal');
-        await expect(modal).toHaveClass(/active/);
-        const target = modal.locator('.source-row.is-target');
-        await expect(target).toHaveCount(1);
-        await expect(target.locator('.source-title')).toHaveText('Soupis obyvatel Horní Lhotka');
-        await expect(target.locator('.source-row-open')).toBeFocused();
+        const viewer = page.locator('#source-viewer-modal');
+        await expect(viewer).toHaveClass(/active/);
+        await expect(viewer.locator('#source-viewer-title')).toHaveText('Soupis obyvatel Horní Lhotka');
+        await expect(viewer.locator('#source-viewer-edit')).toBeVisible();
+        await expect(page.locator('#sources-modal')).not.toHaveClass(/active/);
+        // Closed: back in the table, the same row selected and its cell focused.
         await page.keyboard.press('Escape');
-        await expect(modal).not.toHaveClass(/active/);
+        await expect(viewer).not.toHaveClass(/active/);
+        await expect(row(page, 's:s2')).toHaveAttribute('aria-selected', 'true');
+        await expect(col(page, 's:s2', 2)).toBeFocused();
 
-        // Edit (double click) opens the same manager on that source.
+        // Edit (double click): straight the source's editor, the form of the manager's Edit.
         await col(page, 's:s3', 3).dblclick();
-        await expect(modal).toHaveClass(/active/);
-        await expect(modal.locator('.source-row.is-target .source-title')).toHaveText('Oddací kniha Horní Lhotka');
-
-        // A change in the manager: the row shows it, lit, with "Saved: {title}".
         const editor = page.locator('#source-editor-modal');
-        await modal.locator('.source-row.is-target .source-edit-btn').click();
+        await expect(editor).toHaveClass(/active/);
+        await expect(editor.locator('#source-editor-title')).toHaveText('Edit source');
+        await expect(editor.locator('#input-source-title')).toHaveValue('Oddací kniha Horní Lhotka');
+        await expect(page.locator('#sources-modal')).not.toHaveClass(/active/);
+        await expect(viewer).not.toHaveClass(/active/);
+
+        // Saved: back in the table, the row shows it, lit, with "Saved: {title}".
         await editor.locator('#input-source-title').fill('Oddací kniha Dolní Lhotka');
         await editor.getByRole('button', { name: 'Save' }).click();
         await expect(editor).toBeHidden();
-        await page.keyboard.press('Escape');
-        await expect(modal).not.toHaveClass(/active/);
+        await expect(page.locator('.modal-overlay.active')).toHaveCount(0);
         await expect(col(page, 's:s3', 1)).toContainText('Oddací kniha Dolní Lhotka');
-        // Its toast (it may wait under the manager's own message: one toast shows at a time).
         await expect(page.locator('.toast').filter({ hasText: 'Saved: Oddací kniha Dolní Lhotka' })).toHaveCount(1);
+        await expect(row(page, 's:s3')).toHaveAttribute('aria-selected', 'true');
+        await expect(col(page, 's:s3', 3)).toBeFocused();
+    });
+
+    test('Open source, then Edit in the source: saved, back to the source, then to the table at its place', async ({ page }) => {
+        const many: Record<string, unknown> = { ...SOURCES };
+        for (let i = 10; i < 70; i++) many[`s${i}`] = { id: `s${i}`, title: `Matrika ${i}` };
+        await openTable(page, false, many);
+        await page.locator('#table-container .tv-rowtype [data-rowtype="sources"]').click();
+        await expect(status(page)).toHaveText('63 of 63 sources');
+        // A row far down: scrolled to, selected.
+        const body = page.locator('#table-container .tv-grid');
+        await body.evaluate(el => { el.scrollTop = el.scrollHeight; });
+        // The last rows by title: … Matrika 69, Oddací kniha, Soupis obyvatel.
+        await expect(row(page, 's:s2')).toBeVisible();
+        const key = 's:s60';
+        await row(page, key).locator('[aria-colindex="2"]').click();
+        await expect(row(page, key)).toHaveAttribute('aria-selected', 'true');
+        const top = await body.evaluate(el => el.scrollTop);
+        expect(top).toBeGreaterThan(0);
+
+        await row(page, key).locator('.tv-act[data-act="open"]').click();
+        const viewer = page.locator('#source-viewer-modal');
+        await expect(viewer).toHaveClass(/active/);
+        await viewer.locator('#source-viewer-edit').click();
+        const editor = page.locator('#source-editor-modal');
+        await expect(editor).toHaveClass(/active/);
+        await editor.locator('#input-source-repository').fill('Archiv Fiktivní');
+        await editor.getByRole('button', { name: 'Save' }).click();
+        // Back to the source (refreshed), then Escape: the table where it was.
+        await expect(viewer).toHaveClass(/active/);
+        await expect(viewer).toContainText('Archiv Fiktivní');
+        await page.keyboard.press('Escape');
+        await expect(page.locator('.modal-overlay.active')).toHaveCount(0);
+        await expect(row(page, key)).toHaveAttribute('aria-selected', 'true');
+        await expect(row(page, key).locator('[aria-colindex="2"]')).toBeFocused();
+        expect(Math.abs(await body.evaluate(el => el.scrollTop) - top)).toBeLessThanOrEqual(2);
+        await expect(await cellIn(page, key, 'srcRepo')).toHaveText('Archiv Fiktivní');
+    });
+
+    test('a locked tree: Open source and Edit show the source only, no editor', async ({ page }) => {
+        await openTable(page);
+        await page.evaluate(() => window.Strom.UI.toggleTreeLock(window.Strom.DataManager.getCurrentTreeId()!));
+        await expect(page.locator('body')).toHaveClass(/tree-locked/);
+        await page.locator('#table-container .tv-rowtype [data-rowtype="sources"]').click();
+        await expect(status(page)).toHaveText('3 of 3 sources');
+        const viewer = page.locator('#source-viewer-modal');
+        const editor = page.locator('#source-editor-modal');
+
+        await col(page, 's:s1', 2).click();
+        await row(page, 's:s1').locator('.tv-act[data-act="open"]').click();
+        await expect(viewer).toHaveClass(/active/);
+        await expect(viewer.locator('#source-viewer-title')).toHaveText('Kniha narozených Horní Lhotka');
+        await expect(viewer.locator('#source-viewer-edit')).toBeHidden();
+        await page.keyboard.press('Escape');
+        await expect(viewer).not.toHaveClass(/active/);
+
+        await col(page, 's:s3', 3).dblclick();
+        await expect(viewer).toHaveClass(/active/);
+        await expect(viewer.locator('#source-viewer-title')).toHaveText('Oddací kniha Horní Lhotka');
+        await expect(viewer.locator('#source-viewer-edit')).toBeHidden();
+        await expect(editor).not.toHaveClass(/active/);
+        await page.keyboard.press('Escape');
+        await expect(viewer).not.toHaveClass(/active/);
+        await expect(col(page, 's:s3', 3)).toBeFocused();
     });
 
     test('Online: web addresses written without "https://" pass the chip, as the Online column links them (T54)', async ({ page }) => {
@@ -227,10 +295,33 @@ test.describe('phone (390)', () => {
         await expect(items.locator('.bottom-sheet-label')).toHaveText(['Open source', 'Edit…']);
         expect((await items.first().boundingBox())!.height).toBeGreaterThanOrEqual(44);
         await items.first().tap();
-        const modal = page.locator('#sources-modal');
-        await expect(modal).toHaveClass(/active/);
-        await expect(modal.locator('.source-row.is-target .source-title')).toHaveText('Soupis obyvatel Horní Lhotka');
+        // The source itself, on top: the row's sheet gone, nothing of it hidden under the table.
+        const viewer = page.locator('#source-viewer-modal');
+        await expect(viewer).toHaveClass(/active/);
+        await expect(sheet).toBeHidden();
+        await expect(viewer.locator('#source-viewer-title')).toHaveText('Soupis obyvatel Horní Lhotka');
+        const onTop = (sel: string) => page.evaluate((sel) => {
+            const box = document.querySelector(`${sel} .modal`)?.getBoundingClientRect()
+                ?? document.querySelector(sel)!.getBoundingClientRect();
+            const hit = document.elementFromPoint(box.left + box.width / 2, box.top + Math.min(box.height / 2, 40));
+            return !!hit && !!hit.closest(sel);
+        }, sel);
+        expect(await onTop('#source-viewer-modal')).toBe(true);
         await page.keyboard.press('Escape');
+        await expect(viewer).not.toHaveClass(/active/);
+
+        // Edit…: straight the source's editor, on top.
+        await col(page, 's:s2', 1).tap();
+        await expect(sheet).toBeVisible();
+        await items.nth(1).tap();
+        const editor = page.locator('#source-editor-modal');
+        await expect(editor).toHaveClass(/active/);
+        await expect(sheet).toBeHidden();
+        await expect(editor.locator('#input-source-title')).toHaveValue('Soupis obyvatel Horní Lhotka');
+        expect(await onTop('#source-editor-modal')).toBe(true);
+        await page.keyboard.press('Escape');
+        await expect(editor).not.toHaveClass(/active/);
+        await expect(page.locator('#sources-modal')).not.toHaveClass(/active/);
 
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
         expect(overflow).toBeLessThanOrEqual(0);

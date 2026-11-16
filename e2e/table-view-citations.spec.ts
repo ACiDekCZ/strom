@@ -5,7 +5,7 @@ import { card, openApp } from './helpers.js';
  * The People table's citation columns and Godparents (spec 073 §14.3,
  * §14.5): switched on in the Columns panel; the first cited source's
  * reference with a pill "+2" whose bubble lists the other sources, a click
- * opens one in the sources manager; a marriage's citations on each union's
+ * opens that source itself; a marriage's citations on each union's
  * sub-row; the godparents with the tree's person as a link that opens the
  * person. On a phone the pill opens a sheet with 44 px rows.
  */
@@ -127,14 +127,16 @@ test.describe('desktop (1440)', () => {
         await expect(bubble).toHaveCount(0);
         await expect(pill).toBeFocused();
 
-        // A click on a source opens it in the sources manager.
+        // A click on a source opens the source itself (its viewer), not the sources manager.
         await pill.click();
         await bubble.locator('.tv-bub-cite').nth(1).click();
-        const modal = page.locator('#sources-modal');
-        await expect(modal).toHaveClass(/active/);
-        await expect(modal.locator('.source-row.is-target .source-title')).toHaveText('Oddací kniha Lhota pod Skalkou');
+        const viewer = page.locator('#source-viewer-modal');
+        await expect(viewer).toHaveClass(/active/);
+        await expect(viewer.locator('#source-viewer-title')).toHaveText('Oddací kniha Lhota pod Skalkou');
+        await expect(page.locator('#sources-modal')).not.toHaveClass(/active/);
         await page.keyboard.press('Escape');
-        await expect(modal).not.toHaveClass(/active/);
+        await expect(viewer).not.toHaveClass(/active/);
+        await expect(page.locator('.modal-overlay.active')).toHaveCount(0);
 
         // Godparents: the tree's person a link to their row (spec 103 U3), a written name text.
         const gods = await cell(page, 'p:c', 'godparents');
@@ -206,10 +208,13 @@ test.describe('phone (390)', () => {
         await expect(items.nth(1)).toContainText('Farní úřad Lhota · fol. 30');
         expect((await items.first().boundingBox())!.height).toBeGreaterThanOrEqual(44);
         await items.first().tap();
-        const modal = page.locator('#sources-modal');
-        await expect(modal).toHaveClass(/active/);
-        await expect(modal.locator('.source-row.is-target .source-title')).toHaveText('Výpis ze soupisu');
+        const viewer = page.locator('#source-viewer-modal');
+        await expect(viewer).toHaveClass(/active/);
+        await expect(sheet).toBeHidden();
+        await expect(viewer.locator('#source-viewer-title')).toHaveText('Výpis ze soupisu');
+        await expect(page.locator('#sources-modal')).not.toHaveClass(/active/);
         await page.keyboard.press('Escape');
+        await expect(viewer).not.toHaveClass(/active/);
 
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
         expect(overflow).toBeLessThanOrEqual(0);

@@ -380,14 +380,17 @@ test.describe('research bubbles (§16.4)', () => {
         await expect(b.locator('[data-rid="changeInResearch"]')).toHaveCount(0);
         await (await cellOf(page, 'P0005', 'rOrig')).click();
         await expect(b.locator('.tv-rbub-sec[data-sec="orig"]')).toBeVisible();
-        // The bridge does not answer: no restoring; the source opens in the Sources.
+        // The bridge does not answer: no restoring; the source opens itself (its viewer), not the Sources.
         await expect(b.locator('[data-rid="revert"]')).toHaveCount(0);
         await b.locator('[data-rid="source"]').click();
         await expect(b).toBeHidden();
-        const sources = page.getByRole('heading', { name: 'Sources', level: 2 });
-        await expect(sources).toBeVisible();
+        const viewer = page.locator('#source-viewer-modal');
+        await expect(viewer).toHaveClass(/active/);
+        await expect(viewer.locator('#source-viewer-title')).not.toBeEmpty();
+        await expect(page.getByRole('heading', { name: 'Sources', level: 2 })).toBeHidden();
         await page.keyboard.press('Escape');
-        await expect(sources).toBeHidden();
+        await expect(viewer).not.toHaveClass(/active/);
+        await expect(page.locator('#table-container')).toBeVisible();
 
         await (await cellOf(page, 'P0001', 'rLine')).click();
         await b.locator('[data-rid="showLine"]').click();
