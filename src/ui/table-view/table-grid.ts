@@ -127,6 +127,9 @@ export interface CellEditSpec {
 
 /** The width of the row's actions (§10.1): three 26 px icons, their gaps and padding. */
 const ROW_ACTIONS_ROOM = 100;
+/** A filtered column's head mark (§8.2): the search's funnel (index.html), filled. */
+const FILTER_FUNNEL_SVG = '<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2.4"'
+    + ' stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18l-7 8.5V19l-4 2.5v-8L3 5z"/></svg>';
 
 /**
  * The least width of a field edited in place (T54 F8), by its kind. A field
@@ -237,6 +240,8 @@ export interface GridHandlers {
     onHeadSort?(colId: string, add: boolean): void;
     /** A click on a coverage cell (§6.1: only empty / only filled). */
     onCoverageCell?(colId: string, anchor: HTMLElement): void;
+    /** A click on the coverage row's label "filled" (T54 H12): what the row counts. */
+    onCoverageHelp?(anchor: HTMLElement): void;
     /** "Clear filters" under the head when nothing passes (§13c). */
     onClearFilters?(): void;
 }
@@ -573,8 +578,10 @@ export class TableGrid {
             if (more && cellEl && this.moreCitesAt(line, cellEl, more)) return;
             const ages = t.closest<HTMLElement>('.tv-ages');
             if (ages && line.kind === 'row' && this.handlers.onSharedAges) {
+                const at = cellEl ?? ages;
                 this.select(line);
-                this.handlers.onSharedAges(line, ages);
+                const live = this.liveAnchor(line, at);
+                this.handlers.onSharedAges(line, live.querySelector<HTMLElement>('.tv-ages') ?? live);
                 return;
             }
             // A web address opens its own window (§14.2); the row stays as it is.
@@ -600,13 +607,17 @@ export class TableGrid {
                 this.handlers.onResearch(line, Number(cellEl.getAttribute('aria-colindex')) - 1, cellEl);
                 return;
             }
+            // A bubble opens at the cell as drawn after the select: selecting
+            // another row draws the rows anew, and the clicked cell, gone from
+            // the page, put the bubble in the window's corner (T54 H8, as G7).
             if (cellEl?.classList.contains('has-finds') && this.handlers.onFindings) {
                 this.select(line);
-                this.handlers.onFindings(line, Number(cellEl.getAttribute('aria-colindex')) - 1, cellEl);
+                this.handlers.onFindings(line, Number(cellEl.getAttribute('aria-colindex')) - 1, this.liveAnchor(line, cellEl));
                 return;
             }
             this.select(line);
-            if (cellEl?.querySelector('.tv-comp') && this.handlers.onComp?.(line, Number(cellEl.getAttribute('aria-colindex')) - 1, cellEl, pointer)) return;
+            if (cellEl?.querySelector('.tv-comp')
+                && this.handlers.onComp?.(line, Number(cellEl.getAttribute('aria-colindex')) - 1, this.liveAnchor(line, cellEl), pointer)) return;
             this.handlers.onRowClick?.(line, this.cellRefOf(line, cellEl), pointer);
         });
         // A double click edits (§10.1); the ▾/▸, the count pill and the icons are their own.
@@ -943,7 +954,11 @@ export class TableGrid {
             const arrow = sort >= 0
                 ? ` <span class="tv-sort-mark" aria-hidden="true">${input.sort[sort].dir === 'desc' ? '↓' : '↑'}${input.sort.length > 1 ? sort + 1 : ''}</span>`
                 : '';
-            const filtered = input.filtered?.has(col.id) ? `<span class="tv-filter-mark">${esc(strings.table.filterMark)}</span>` : '';
+            // §8.2 a filtered column: the app's funnel, filled (T54 H10: a word took a narrow column's room).
+            const isFiltered = !!input.filtered?.has(col.id);
+            const filtered = isFiltered
+                ? `<span class="tv-filter-mark" role="img" aria-label="${esc(strings.table.filterMark)}" title="${esc(strings.table.filterMark)}">${FILTER_FUNNEL_SVG}</span>`
+                : '';
             const liveOff = !!input.liveOff?.has(col.id);
             const liveTag = liveOff ? `<span class="tv-live-tag" title="${esc(strings.table.res.liveOnly)}">${esc(strings.table.res.liveTag)}</span>` : '';
             const headName = liveOff ? `${label} (${strings.table.res.liveOnly})` : label;
@@ -951,7 +966,7 @@ export class TableGrid {
             const computed = col.computed ? ' is-computed' : '';
             names += `<div class="tv-cell tv-headcell${right}${computed}${this.pinClass(i, input)}" role="columnheader"`
                 + ` aria-colindex="${i + 1}" data-col="${esc(col.id)}" data-index="${i}" tabindex="${col.id === focusCol ? 0 : -1}"`
-                + ` title="${esc(headName)}" aria-label="${esc(headName)}"${ariaSort} style="${this.pinStyle(i, input)}">`
+                + ` title="${esc(headName)}" aria-label="${esc(isFiltered ? `${headName} · ${strings.table.filterMark}` : headName)}"${ariaSort} style="${this.pinStyle(i, input)}">`
                 + `<span class="tv-cell-text">${esc(label)}</span>${liveTag}${arrow}${filtered}`
                 + (col.id === 'name' && input.unionsButton
                     ? `<button type="button" class="tv-head-all" tabindex="-1" data-expand="${input.unionsButton === 'expand' ? 1 : 0}">`
@@ -961,9 +976,10 @@ export class TableGrid {
                 + (editable ? '<span class="tv-resize" aria-hidden="true"></span>' : '')
                 + '</div>';
             const cc = input.coverage?.(col) ?? null;
-            const ccls = cc?.label ? ' tv-cov-label' : cc?.low ? ' tv-cov-low' : '';
+            const ccls = cc?.label ? ` tv-cov-label${this.handlers.onCoverageHelp ? ' is-note' : ''}` : cc?.low ? ' tv-cov-low' : '';
+            const ctext = cc?.label ? `<span class="tv-cov-word">${esc(cc.text)}</span>` : esc(cc?.text ?? '');
             cov += `<div class="tv-cell tv-covcell${right}${ccls}${this.pinClass(i, input)}${cc && !cc.label && this.handlers.onCoverageCell ? ' is-clickable' : ''}" role="gridcell" aria-colindex="${i + 1}"`
-                + ` data-col="${esc(col.id)}" style="${this.pinStyle(i, input)}"${cc?.title ? ` title="${esc(cc.title)}"` : ''}>${esc(cc?.text ?? '')}</div>`;
+                + ` data-col="${esc(col.id)}" style="${this.pinStyle(i, input)}"${cc?.title ? ` title="${esc(cc.title)}"` : ''}>${ctext}</div>`;
             prev = i;
         }
         flush();
@@ -1016,6 +1032,8 @@ export class TableGrid {
             }
             const cov = t.closest<HTMLElement>('.tv-covcell.is-clickable[data-col]');
             if (cov) { this.handlers.onCoverageCell?.(cov.dataset.col!, cov); return; }
+            const covNote = t.closest<HTMLElement>('.tv-covcell.is-note');
+            if (covNote) { this.handlers.onCoverageHelp?.(covNote); return; }
             const collapsed = t.closest<HTMLElement>('.tv-groupcell.is-collapsed');
             const bandAt = collapsed ? this.input?.bands?.[Number(collapsed.dataset.start)] : null;
             if (bandAt) this.handlers.onToggleGroup?.(bandAt.group, false);
@@ -1710,7 +1728,7 @@ export class TableGrid {
                 }
                 if (e.key === 'Enter' && line.kind !== 'more' && cellEl?.classList.contains('has-finds') && this.handlers.onFindings) {
                     this.select(line);
-                    this.handlers.onFindings(line, col, cellEl);
+                    this.handlers.onFindings(line, col, this.liveAnchor(line, cellEl));
                     return;
                 }
                 if (line.kind !== 'more' && cellEl?.classList.contains('has-res') && this.handlers.onResearch) {

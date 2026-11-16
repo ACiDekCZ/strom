@@ -725,6 +725,7 @@ export const tableMethods = uiModule({
                 onHeadMenu: (colId, anchor) => this.showTableHeadMenu(colId, anchor),
                 onHeadSort: (colId, add) => this.changeTableColumns(st => (add ? sortShiftClick(st, colId) : sortClick(st, colId))),
                 onCoverageCell: (colId, anchor) => this.showTableCoverageMenu(colId, anchor),
+                onCoverageHelp: (anchor) => this.showTableCoverageHelp(anchor),
                 // §13c: the search counts among what applies, so it goes too.
                 onClearFilters: () => this.changeTableFilter((f, st) => {
                     const searched = st.search !== '';
@@ -1076,7 +1077,6 @@ export const tableMethods = uiModule({
     /** The bubble (a phone: the sheet) of these findings at a cell; `about`: each says whom or what it is about. */
     openTableFindings(line: GridLine, colPos: number, cell: HTMLElement, list: readonly CellFinding[], about: boolean): void {
         if (!list.length || !mounted) return;
-        const rect = cell.getBoundingClientRect();
         const treeId = treeKey();
         const readOnly = this.treeValidationReadOnly(treeId);
         const container = mounted.container;
@@ -1090,6 +1090,8 @@ export const tableMethods = uiModule({
         const cellKey = lineKey(line);
         const findCell = (): HTMLElement | null => [...grid.el.querySelectorAll<HTMLElement>('.tv-row[data-key]')]
             .find(r => r.dataset.key === cellKey)?.querySelector<HTMLElement>(`[aria-colindex="${colPos + 1}"]`) ?? null;
+        // The cell as drawn now: a select draws the rows anew (T54 H8).
+        const rect = (findCell() ?? cell).getBoundingClientRect();
         const data = DataManager.getData();
         const shown = list.map(f => {
             const shared = sharedFinding(f.issue, data);
@@ -2222,6 +2224,17 @@ export const tableMethods = uiModule({
         discardViewChanges(stateOf(treeKey()), storedViews());
         view = null;
         this.redrawTableNow();
+    },
+
+    /** The coverage row's label "filled" (T54 H9, H12): what the row counts and why a share is bold; a phone: the sheet. */
+    showTableCoverageHelp(anchor: HTMLElement): void {
+        const t = strings.table;
+        const body = `<div class="tv-bub-note">${escHtml(t.coverageHelp)}</div>`;
+        if (isPhoneBar()) {
+            this.showTableSheet(sheetElement(t.coverageRow, body, 'legend', () => this.hideBottomSheet()));
+            return;
+        }
+        openBubblePanel({ rect: anchor.getBoundingClientRect(), label: t.coverageRow, kind: 'legend', focusBack: () => anchor, html: body });
     },
 
     /** "● changed" of a built-in view: why there is no Save (9c). */

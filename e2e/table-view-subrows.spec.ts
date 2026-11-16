@@ -106,6 +106,21 @@ test.describe('desktop (1440)', () => {
         expect(Number(await cov('bPlace').evaluate(el => getComputedStyle(el).fontWeight))).toBeGreaterThanOrEqual(600);
         // Wedding date: the unit is the union (Halvor's 2, one each for Ysolde and Brenna).
         await expect(cov('wDate')).toHaveAttribute('title', '0 of 4');
+        // "filled" says what the row counts and why a share is bold (T54 H9, H12): its title and, on a click, a bubble.
+        await expect(cov('name')).toHaveAttribute('title', /^The share of the rows shown that have a value in the column;.*Under 50 % in bold\.$/);
+        await expect(cov('name')).toHaveCSS('cursor', 'help');
+        await cov('name').click();
+        const note = page.getByRole('dialog', { name: 'Coverage row' });
+        await expect(note).toBeVisible();
+        await expect(note).toContainText('A completeness column gives the average of its rows.');
+        // Under the label, not in a corner.
+        const c = (await cov('name').boundingBox())!;
+        const b = (await note.boundingBox())!;
+        expect(Math.abs(b.y - (c.y + c.height + 4))).toBeLessThan(2);
+        await page.keyboard.press('Escape');
+        await expect(note).toHaveCount(0);
+        // The sort and the column's menu do not open from it.
+        await expect(page.locator('.tv-menu')).toHaveCount(0);
     });
 });
 

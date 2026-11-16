@@ -11,7 +11,7 @@ import { getStringsForLang, type Language } from '../strings.js';
 import { buildTableModel, type PersonRow, type TableModel, type TableRow } from '../ui/table-view/table-model.js';
 import { ageCell, cellOf, cellPlainText, columnById, columnNote, PERSON_COLUMNS, UNION_COLUMNS } from '../ui/table-view/table-columns.js';
 import { sortRows } from '../ui/table-view/table-filter.js';
-import { columnCoverage, coverageCell } from '../ui/table-view/table-coverage.js';
+import { columnCoverage, coverageCell, coverageLabel } from '../ui/table-view/table-coverage.js';
 import {
     anyExpanded, buildLines, coverageUnionsOf, defaultUnionCollapse, hasMultiUnions, isExpanded, lineCell, lineKey, lineLevel,
     passingUnions, personPassesUnions, setAllExpanded, setExpanded, sortUnionOf, toggleExpanded, type UnionPredicate,
@@ -221,6 +221,19 @@ describe('coverage row (§6.1)', () => {
         expect(columnCoverage(m, m.unions, columnById('unions', 'uComp')!).percent).toBe(u.avg);
         // Other columns keep the share of filled cells.
         expect(columnCoverage(m, m.persons, columnById('persons', 'bDate')!).average).toBeUndefined();
+    });
+
+    it('"filled" says what the row counts, the average and the bold under 50 %, in every language (T54 H9, H12)', () => {
+        const label = coverageLabel();
+        expect(label).toMatchObject({ text: 'filled', label: true, low: false });
+        expect(label.title).toMatch(/^The share of the rows shown that have a value in the column;.*average.*Under 50 % in bold\.$/);
+        const words: Record<string, RegExp> = { en: /average.*50 %/, cs: /průměr.*50 %/, de: /Durchschnitt.*50 %/, pl: /średnią.*50 %/ };
+        for (const lang of ['en', 'cs', 'de', 'pl'] as Language[]) {
+            const help = getStringsForLang(lang).table.coverageHelp;
+            expect(help, lang).toMatch(words[lang]);
+            // Impersonal: it does not address the reader.
+            expect(help, lang).not.toMatch(/\b(you|your|vy|váš|vaše|Sie|Ihr|du|ty)\b/i);
+        }
     });
 });
 

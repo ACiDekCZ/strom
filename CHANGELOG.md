@@ -8,6 +8,7 @@ English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md) · [Polski
 
 - **Table filters**: *Without* in a cell's menu keeps the exclusions made before, in the same column or another; each one is a chip of its own (*Birthplace ≠ …*) whose × drops it alone, and *Clear filters* drops them all. A second *Only* in a column adds its value (*Father = A or B*); *Without* of such a value takes it out again. A saved view keeps the chips, and views saved earlier open unchanged.
 - **Photo on the card**: the *Medium* or *Large* photo size now applies to people without a photo too: their initials take the photo's size and shape on every card with an avatar, in the tree views, the image export, the poster and its PDF, so the tree looks even. *Small* keeps the cards as they were; the *Compact* card has no avatar.
+- **Table**: a click on a cell of *Findings* or *Highest level* on another row than the selected one opens its bubble under the cell, no longer in the window's corner (the same for a completeness cell by touch and for the ages of a shared event). A slanted text at a cell's end (*living*, *2 unions*) keeps its last letter. A filtered column shows a filled funnel in its head instead of the word *filter*, so a narrow column keeps room for its name. The row *filled* explains itself on hover or a click: the share of the rows shown that have a value in the column, rows it does not apply to left out, the average for a completeness column; a share under 50 % stays bold so a mostly empty column stands out.
 
 ## 3.29.0
 

@@ -60,7 +60,7 @@ export function columnCoverage(
     return { filled, total, percent: total ? Math.round((filled / total) * 100) : null };
 }
 
-/** What the coverage row's cell shows (§6.1): "{p} %", bold under 50 %, "–" without a denominator; its title "{a} of {b}" or "average of {n}". */
+/** What the coverage row's cell shows (§6.1): "{p} %", bold under 50 % (a column mostly empty stands out), "–" without a denominator; its title "{a} of {b}" or "average of {n}". */
 export interface CoverageCell {
     text: string;
     /** Under 50 %: drawn bold in the text colour. */
@@ -77,7 +77,11 @@ export function coverageCell(c: Coverage): CoverageCell {
     return { text: `${c.percent} %`, low: c.percent < 50, title };
 }
 
-/** The coverage row's label cell (§6.1: "filled" in the first column, spec 082 K2.1). */
+/**
+ * The coverage row's label cell (§6.1: "filled" in the first column, spec 082
+ * K2.1); its title says what the row counts and why some shares are bold
+ * (T54 H9, H12: the bold under 50 % is §6.1's, the sentence names it).
+ */
 export function coverageLabel(): CoverageCell {
-    return { text: strings.table.coverage, low: false, title: '', label: true };
+    return { text: strings.table.coverage, low: false, title: strings.table.coverageHelp, label: true };
 }

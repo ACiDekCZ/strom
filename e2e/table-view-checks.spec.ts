@@ -157,6 +157,40 @@ test.describe('desktop (1440)', () => {
         await expect(young.locator('[data-act="dismiss"]')).toHaveText('Not an error');
     });
 
+    test('a bubble opens at its cell on the first click of another row (T54 H8)', async ({ page }) => {
+        await openTable(page);
+        await page.locator('#table-container .tv-cols-btn').click();
+        const panel = page.getByRole('dialog', { name: 'Columns' });
+        await panel.locator('.tv-cp-q').fill('Highest');
+        await panel.getByRole('checkbox', { name: 'Highest level' }).check();
+        await panel.getByRole('button', { name: 'Done' }).click();
+        const bubble = page.locator('.tv-bubble--finding');
+        // Each cell on a row not selected: the click selects the row (drawn
+        // anew) and the bubble stands right under (or above) that cell.
+        for (const [key, colId] of [['p:g', 'nFind'], ['p:f', 'topSev'], ['p:g', 'dDate']] as const) {
+            const other = key === 'p:g' ? 'p:o' : 'p:g';
+            await (await cell(page, other, 'nFind')).click({ position: { x: 4, y: 4 } });
+            await page.keyboard.press('Escape');
+            await expect(bubble).toHaveCount(0);
+            await expect(row(page, key)).not.toHaveAttribute('aria-selected', 'true');
+            const target = await cell(page, key, colId);
+            await expect(target).not.toHaveText('…');
+            await target.click();
+            await expect(bubble).toBeVisible();
+            await expect(row(page, key)).toHaveAttribute('aria-selected', 'true');
+            const c = (await (await cell(page, key, colId)).boundingBox())!;
+            const b = (await bubble.boundingBox())!;
+            // Under the cell from its left edge (moved left only to stay in the window).
+            expect(b.x, `${colId} left`).toBeLessThanOrEqual(c.x + 1);
+            expect(b.x + b.width, `${colId} over the cell`).toBeGreaterThan(c.x + c.width / 2);
+            const gap = b.y >= c.y ? b.y - (c.y + c.height) : c.y - (b.y + b.height);
+            expect(gap, `${colId} at its cell`).toBeLessThan(8);
+            expect(gap, `${colId} at its cell`).toBeGreaterThanOrEqual(0);
+            await page.keyboard.press('Escape');
+            await expect(bubble).toHaveCount(0);
+        }
+    });
+
     test('a union\'s sub-rows carry no finding of the person (T54)', async ({ page }) => {
         await openTable(page, false, TWICE);
         await page.locator('#table-container .tv-cols-btn').click();

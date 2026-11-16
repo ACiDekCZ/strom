@@ -10407,10 +10407,8 @@
         .tv-covcell.is-clickable { cursor: pointer; }
         .tv-body { position: relative; }
         /* §8.2 a column with a filter; §8.3 the search's matches. */
-        .tv-filter-mark {
-            flex: none; margin-left: 6px; padding: 1px 5px; border-radius: var(--r-sm); font-size: 10.5px; font-weight: 600; line-height: 1.3;
-            color: var(--primary); background: var(--primary-soft);
-        }
+        .tv-filter-mark { flex: none; display: inline-flex; margin-left: 5px; color: var(--primary); }
+        .tv-filter-mark svg { display: block; }
         mark.tv-hit { background: var(--help-mark-hit); color: inherit; border-radius: 2px; padding: 0; }
         /* §13c/§13d nothing passes the filter: under the head, across the visible width. */
         .tv-nomatch {
@@ -10503,6 +10501,10 @@
         .tv-cell--subst .tv-cell-text { font-style: italic; }
         /* §5: a substitute's label, a date's qualifier word, a count in place of a union value. */
         .tv-cell--aggregate { color: var(--text-faint); font-style: italic; }
+        /* A slanted text's last letter leans past its box, clipped where the box clips its "…" (T54 H14: "living",
+           "2 unions" cut): 3 px more room on the right for its ink, the text and its ellipsis where they were. */
+        .tv-body .tv-cell--na .tv-cell-text, .tv-body .tv-cell--aggregate .tv-cell-text, .tv-body .tv-cell--subst .tv-cell-text,
+        .tv-body .tv-rpart--i { padding-inline-end: 3px; margin-inline-end: -3px; }
         .tv-subst {
             flex: none; display: inline-flex; align-items: center; height: 17px; padding: 0 4px; margin-right: 5px;
             border: 1px solid var(--border); border-radius: 4px; box-sizing: border-box;
@@ -10517,6 +10519,9 @@
         /* §6.1 coverage row: under 50 % bold; "filled" in the name column. */
         .tv-covcell.tv-cov-low { font-weight: 600; color: var(--text); }
         .tv-covcell.tv-cov-label { font-style: italic; }
+        /* "filled" says what the row counts (T54 H12): the table's note pattern (.tv-view-changed.is-note). */
+        .tv-covcell.is-note { cursor: help; }
+        .tv-covcell.is-note .tv-cov-word { text-decoration: underline dotted; text-underline-offset: 3px; }
         /* §3 union sub-rows: ▾/▸ and the count pill by the name, "Union k of n", the quiet "more" line. */
         .table-view { --tv-more-h: 26px; }
         .tv-body .tv-row--sub, .tv-body .tv-row--more { background: var(--sub); }
@@ -10941,6 +10946,8 @@
         /* §7.4 the person's findings: whom or what each is about, under its text. */
         .tv-bub-about { padding: 0 14px 4px; font-size: 12.5px; color: var(--text); line-height: 1.45; overflow-wrap: anywhere; }
         .tv-bub-note { padding: 0 14px 8px; font-size: 12px; color: var(--text-faint); line-height: 1.45; }
+        /* A sheet across a phone's width: its note runs the sheet's width ("filled" explained, T54 H12). */
+        .tv-bubble--sheet .tv-bub-note { max-width: none; }
         .tv-bub-actions { display: flex; align-items: center; gap: 14px; padding: 8px 14px; border-top: 1px solid var(--divider); }
         .tv-bub-btn {
             height: 30px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface);

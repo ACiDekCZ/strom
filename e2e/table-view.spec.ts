@@ -152,6 +152,38 @@ test.describe('desktop (1440)', () => {
         expect(await clippedTexts(page)).toEqual([]);
     });
 
+    test('a slanted text keeps its last letter: room on the right of its clipping box (T54 H14)', async ({ page }) => {
+        await page.clock.setFixedTime(new Date('2026-06-15T10:00:00Z'));
+        await openApp(page);
+        // One living person: "living" in Death completeness and "–" in the death cells.
+        await seedTree(page, { ...INKY, e: { firstName: 'Fylip', lastName: 'Pýchrož', birthDate: '1990-03-03', parents: ['a', 'b'] } }, 'Pýchrož', 'a');
+        await openTable(page);
+        await page.locator('#table-container .tv-cols-btn').click();
+        const panel = page.getByRole('dialog', { name: 'Columns' });
+        await panel.locator('.tv-cp-q').fill('Death completeness');
+        await panel.getByRole('checkbox', { name: 'Death completeness' }).check();
+        await panel.getByRole('button', { name: 'Done' }).click();
+        await expect(page.locator('#table-container .tv-body .tv-row[data-key="p:a#u2"]')).toBeVisible();
+        const room = await page.locator('#table-container .tv-body').evaluate((body) => {
+            const out: { text: string; room: number }[] = [];
+            for (const el of body.querySelectorAll<HTMLElement>('.tv-cell-text')) {
+                if (getComputedStyle(el).fontStyle !== 'italic' || !el.textContent?.trim()) continue;
+                const range = document.createRange();
+                range.selectNodeContents(el);
+                const t = range.getBoundingClientRect();
+                // The clipping edge is the padding box's right; the text ends at its own right.
+                const r = el.getBoundingClientRect();
+                const clipRight = r.right - parseFloat(getComputedStyle(el).borderRightWidth);
+                out.push({ text: el.textContent.trim(), room: clipRight - t.right });
+            }
+            return out;
+        });
+        const texts = room.map(r => r.text);
+        expect(texts).toContain('living');
+        expect(texts).toContain('2 unions');
+        for (const r of room) expect(r.room, r.text).toBeGreaterThanOrEqual(2);
+    });
+
     test('the person in focus goes along between the table and the other views (U9)', async ({ page }) => {
         await openApp(page);
         await seedTree(page, longTree(120), 'Kvelden', 'p0');

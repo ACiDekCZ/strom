@@ -10,6 +10,7 @@ Lista zmian po polsku zaczyna się od wersji 3.21.0; starsze wersje są opisane 
 
 - **Filtry tabeli**: *Bez* w menu komórki zachowuje wcześniejsze wykluczenia w tej samej lub innej kolumnie; każde jest osobnym chipem (*Miejsce urodzenia ≠ …*), którego × usuwa tylko je, a *Wyczyść filtry* usuwa wszystkie. Drugie *Tylko* w kolumnie dodaje swoją wartość (*Ojciec = A lub B*); *Bez* takiej wartości znów ją usuwa. Zapisany widok pamięta chipy, a widoki zapisane wcześniej otwierają się bez zmian.
 - **Zdjęcie na karcie**: *Średnie* i *Duże* zdjęcie obowiązuje teraz także osoby bez zdjęcia: ich inicjały mają rozmiar i kształt zdjęcia na każdej karcie z awatarem, w widokach drzewa, eksporcie obrazu, plakacie i jego PDF, więc drzewo wygląda jednolicie. *Małe* zostawia karty jak dotąd; karta *Kompaktowe* nie ma awatara.
+- **Tabela**: kliknięcie komórki *Ustalenia* lub *Najwyższy poziom* w innym niż wybrany wierszu otwiera dymek pod komórką, już nie w rogu okna (tak samo komórka kompletności dotykiem i wieki wspólnego wydarzenia). Kursywa na końcu komórki (*żyjący*, *2 związki*) nie ma już uciętej ostatniej litery. Filtrowana kolumna ma w nagłówku zamiast słowa *filtr* wypełniony lejek, więc wąskiej kolumnie zostaje miejsce na nazwę. Wiersz *wypełniono* wyjaśnia się po najechaniu lub kliknięciu: udział wyświetlanych wierszy z wartością w kolumnie, bez wierszy, których kolumna nie dotyczy, przy kolumnie kompletności średnia; udział poniżej 50 % pozostaje pogrubiony, aby prawie pusta kolumna była widoczna.
 
 ## 3.29.0
 
