@@ -31,7 +31,21 @@ export interface BecomeMainMark {
     tree: string | null;
     /** The Table's state of a satellite (row type, view, filters, sort, search, row). */
     table?: unknown;
+    /**
+     * Taking over after the main window closed while it followed a research
+     * (spec 097 §7): the tree and the research followed and whether ◎ was on;
+     * the new main window follows that research again through the bridge
+     * address stored in this browser (no address or token in the mark).
+     */
+    live?: { treeId: string; researchId: string; follow: boolean };
     at: number;
+}
+
+function parseMarkLive(raw: unknown): BecomeMainMark['live'] {
+    if (!raw || typeof raw !== 'object') return undefined;
+    const v = raw as { treeId?: unknown; researchId?: unknown; follow?: unknown };
+    if (typeof v.treeId !== 'string' || !v.treeId || typeof v.researchId !== 'string' || !v.researchId) return undefined;
+    return { treeId: v.treeId, researchId: v.researchId, follow: v.follow === true };
 }
 
 type SessionLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
@@ -52,7 +66,8 @@ export function peekBecomeMainMark(now = Date.now(), storage: SessionLike | null
     try {
         const d = JSON.parse(raw) as Partial<BecomeMainMark>;
         if (typeof d.at !== 'number' || now - d.at > BECOME_MAIN_MARK_MS || now < d.at - 1000) return null;
-        return { tree: typeof d.tree === 'string' && d.tree ? d.tree : null, table: d.table, at: d.at };
+        const live = parseMarkLive(d.live);
+        return { tree: typeof d.tree === 'string' && d.tree ? d.tree : null, table: d.table, ...(live ? { live } : {}), at: d.at };
     } catch {
         return null;
     }

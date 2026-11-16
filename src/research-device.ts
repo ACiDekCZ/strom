@@ -203,6 +203,22 @@ function storedTree(value: unknown): StoredResearchTree | undefined {
     return kind || state ? { ...(kind ? { kind } : {}), ...(state ? { state } : {}) } : undefined;
 }
 
+/**
+ * Whether this browser keeps an address of the research's bridge (read from
+ * storage only, the bridge is not asked). Another window of the app may ask
+ * before it takes over as the main window (spec 097 §7): only the main
+ * window it becomes then talks to the bridge.
+ */
+export function hasStoredResearchBridge(researchId: string): boolean {
+    try {
+        const raw = localStorage.getItem(BRIDGE_KEY + researchId);
+        if (!raw) return false;
+        return !!parseLiveBridge((JSON.parse(raw) as { base?: unknown }).base);
+    } catch {
+        return false;
+    }
+}
+
 export function storedResearchBridge(researchId: string): StoredResearchBridge | null {
     // Another window of the app (spec 097 K1.3): only the main window talks to a bridge.
     if (bridgelessWindow) return null;

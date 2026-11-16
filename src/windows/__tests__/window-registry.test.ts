@@ -328,6 +328,11 @@ describe('the list of windows', () => {
 });
 
 describe('the windows\' own following of the agent (spec 097 §7)', () => {
+    it('a status without any window following says no agents', async () => {
+        const a = await connect();
+        expect(last(a.of('status'))?.agents).toBeUndefined();
+    });
+
     it('a window\'s state from its hello and its view messages, in the list (not as a change of it)', async () => {
         const a = await connect();
         expect(registry.list()[0].agent).toBeUndefined();
@@ -337,9 +342,13 @@ describe('the windows\' own following of the agent (spec 097 §7)', () => {
         await settle();
         expect(registry.list()[0]).toMatchObject({ id: a.id, kind: 'table', agent: 'detached' });
         expect(changes).not.toHaveBeenCalled();
+        // The status says it at once, not only with the next heartbeat (a main window closing meanwhile).
+        expect(last(a.of('status'))?.agents).toEqual({ [a.id]: 'detached' });
         a.bus.post({ type: 'hello', windowId: a.id, kind: 'table', treeId: TREE, agent: 'paused' });
         await settle();
         expect(registry.list()[0].agent).toBe('paused');
+        // The status names it for every window (the order of taking over).
+        expect(last(a.of('status'))?.agents).toEqual({ [a.id]: 'paused' });
         a.bus.post({ type: 'view', windowId: a.id, kind: 'family', agent: null });
         await settle();
         expect(registry.list()[0]).toMatchObject({ kind: 'family' });

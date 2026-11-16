@@ -520,7 +520,15 @@ export class WindowRegistry {
             canRedo: this.host.canRedo(),
             windows: [...this.entries.keys()],
             agentRev: this.agentRev,
+            ...this.agentsField(),
         };
+    }
+
+    /** The windows' own following of the agent (spec 097 §7: the order of taking over); none without any. */
+    private agentsField(): { agents?: Record<string, AgentFollow> } {
+        const agents: Record<string, AgentFollow> = {};
+        for (const [id, e] of this.entries) if (e.agent) agents[id] = e.agent;
+        return Object.keys(agents).length > 0 ? { agents } : {};
     }
 
     private agentStateAsked(id: string): void {
@@ -604,7 +612,14 @@ export class WindowRegistry {
         const entry = this.entries.get(m.windowId || m.from);
         if (!entry) return;
         // Its following of the agent (spec 097): kept for the order of taking over, not shown here (§8).
-        if (m.agent !== undefined) entry.agent = parseAgentFollow(m.agent);
+        if (m.agent !== undefined) {
+            const agent = parseAgentFollow(m.agent);
+            if (agent !== (entry.agent ?? null)) {
+                entry.agent = agent;
+                // The status says it at once: a main window closed before its next heartbeat leaves the right order.
+                this.postStatus(false);
+            }
+        }
         if (entry.kind === m.kind) return;
         entry.kind = m.kind;
         this.emitChange();

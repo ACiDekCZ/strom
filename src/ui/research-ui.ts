@@ -670,7 +670,7 @@ export function appendChangeText(host: HTMLElement, c: LiveChangeItem, show: (id
  */
 const LIVE_RESUME_KEY = 'strom.live';
 
-function rememberLiveBridge(base: string, treeId: string): void {
+export function rememberLiveBridge(base: string, treeId: string): void {
     try {
         sessionStorage.setItem(LIVE_RESUME_KEY, JSON.stringify({ bridge: base, treeId }));
     } catch { /* no storage: a reload just ends following */ }

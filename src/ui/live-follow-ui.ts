@@ -176,6 +176,16 @@ export function setLiveFollowScope(s: LiveFollowScope | null): void {
     scope = s;
 }
 
+/**
+ * The main window started by taking over (spec 097 §7): ◎ as it was in the
+ * closed main window, before following starts again.
+ */
+export function adoptLiveFollowOn(on: boolean): void {
+    if (scope) return;
+    followOn = on;
+    storeOn(on);
+}
+
 /** Keys that move in the Table's rows or scroll it. */
 const TABLE_MOVE_KEY = /^(Arrow(Up|Down|Left|Right)|PageUp|PageDown|Home|End| )$/;
 

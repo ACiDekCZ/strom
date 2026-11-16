@@ -42,6 +42,11 @@ export interface WindowStatus {
      * elsewhere missed one and asks for the whole state.
      */
     agentRev?: number | null;
+    /**
+     * Each window's own following of the agent as it last said (spec 097 §7:
+     * the order of taking over); only the windows that have one.
+     */
+    agents?: Record<string, AgentFollow>;
 }
 
 /** Where a satellite stands on screen (K4 layout). */
@@ -120,6 +125,8 @@ export type WindowMessageBody =
     | { type: 'bye'; windowId: string; bounds?: WindowBounds }
     /** main → all: the main window is going away. */
     | { type: 'main-bye' }
+    /** sat → all: this window takes over after the main window closed (spec 097 §7); the others wait for it. */
+    | { type: 'taking-over'; windowId: string }
     /** second tab / sat → main: an address or a launch to open there (?person= ?live= ?send= ?import-url=, files). */
     | { type: 'link'; search?: string; files?: unknown[] }
     /** main → sat: close yourself (a window the main window holds no reference to). */
@@ -141,7 +148,7 @@ export interface ChannelLike {
 }
 
 const TYPES = new Set<string>(['hello', 'init', 'tree', 'patch', 'edit', 'edit-result', 'select', 'undo', 'redo', 'status',
-    'focus-req', 'focused', 'research-action', 'research-action-result', 'research-menu-req', 'research-menu', 'research-state', 'agent-state', 'agent-state-req', 'view', 'spawn', 'bye', 'main-bye', 'link', 'close']);
+    'focus-req', 'focused', 'research-action', 'research-action-result', 'research-menu-req', 'research-menu', 'research-state', 'agent-state', 'agent-state-req', 'view', 'spawn', 'bye', 'main-bye', 'taking-over', 'link', 'close']);
 
 function isWindowMessage(data: unknown): data is WindowMessage {
     if (!data || typeof data !== 'object') return false;

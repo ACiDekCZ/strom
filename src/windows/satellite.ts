@@ -70,6 +70,8 @@ export interface SatelliteEvents {
     follow: boolean;
     /** The window's "Follow selection" mode changed (a choice in the header, K2.1). */
     'follow-mode': FollowMode;
+    /** Another window takes over after the main window closed (spec 097 §7). */
+    'taking-over': { windowId: string };
     /** The main window asks this window to close (§4 ×). */
     close: Record<string, never>;
     /**
@@ -267,6 +269,7 @@ export class SatelliteClient {
             b.on('research-action-result', m => this.actionWaiters.get(m.reqId)?.(m.result)),
             b.on('research-state', m => { if (!this.mainId || m.from === this.mainId) this.emit('research-state', m.state); }),
             b.on('agent-state', m => { if (!this.mainId || m.from === this.mainId) this.emit('agent-state', m.state); }),
+            b.on('taking-over', m => this.emit('taking-over', { windowId: m.windowId || m.from })),
         );
         if (typeof window !== 'undefined') {
             const bye = () => this.bus.post({ type: 'bye', windowId: this.windowId, bounds: this.bounds() });
@@ -292,6 +295,11 @@ export class SatelliteClient {
     /** Ask the main window for the whole agent's state (spec 097 K1.3: the mirror missed a revision). */
     requestAgentState(): void {
         if (this.started && this.mainId) this.bus.post({ type: 'agent-state-req', windowId: this.windowId });
+    }
+
+    /** This window takes over after the main window closed (spec 097 §7): the others stop waiting for their turn. */
+    announceTakeover(): void {
+        if (this.started) this.bus.post({ type: 'taking-over', windowId: this.windowId });
     }
 
     /** The main window's id (null: none known now); another one means its state comes anew. */

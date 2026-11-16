@@ -33,12 +33,14 @@ import { keepLifelineChipsFor } from './lifeline-view.js';
 import { parseDeepLink, deepLinkTreeMatches, stripDeepLinkParams } from './deep-link.js';
 import { shouldRegisterServiceWorker, registerServiceWorker, linkManifest, isBetaBuild, appModeFor, captureInstallPrompt, INSTALL_AVAILABILITY_EVENT, isSafariOnComputer, safariAppName } from './pwa.js';
 import { decideWindowRole, getWindowRole, setWindowRole, satelliteViewMode, tryBecomeMain, type SatelliteKind, type SatelliteParams } from './windows/window-role.js';
-import { startMainWindow, startSatelliteClient, startSatelliteSelection, forwardSatelliteLaunches, showSecondTab, openLinksFromOtherWindows, makeSatelliteMain, openMainWindow, wireSatelliteViewStart, keptSatelliteState, keepSatelliteState } from './windows/window-start.js';
+import { startMainWindow, startSatelliteClient, startSatelliteSelection, forwardSatelliteLaunches, showSecondTab, openLinksFromOtherWindows, makeSatelliteMain, takeOverAsMain, openMainWindow, wireSatelliteViewStart, keptSatelliteState, keepSatelliteState } from './windows/window-start.js';
 import { mountSatStates, SWITCHED_TOAST_MS } from './windows/sat-states.js';
 import { startAgentMirror } from './windows/agent-mirror.js';
 import { startAgentFollowState, type AgentFollow } from './windows/agent-follow-state.js';
-import { setBridgelessWindow } from './research-device.js';
-import { setLiveFollowScope } from './ui/live-follow-ui.js';
+import { hasStoredResearchBridge, setBridgelessWindow, storedResearchBridge } from './research-device.js';
+import { adoptLiveFollowOn, setLiveFollowScope } from './ui/live-follow-ui.js';
+import { rememberLiveBridge } from './ui/research-ui.js';
+import { Takeover } from './windows/takeover.js';
 import { wireWindowDrafts } from './windows/window-drafts.js';
 import { peekBecomeMainMark, retryBecomeMain, takeBecomeMainMark } from './windows/become-main.js';
 import { formatLiveClock } from './live-time.js';
@@ -397,6 +399,15 @@ function startSatelliteWindow(params: SatelliteParams, debugOptions: DebugOption
     wireAgentFollow(client, agentFollow, () => states.update());
     // A refused edit was not applied: its Undo pill (standing or waiting) goes before the toast says so.
     client.on('conflict', () => UI.dismissUndoToast());
+    // The main window closed while it followed a research (§7): one window takes over, the others say so once it is there.
+    const takeover = new Takeover(client, {
+        researchId: () => mirror.live()?.researchId ?? mirror.status()?.researchId ?? null,
+        followOn: () => mirror.follow().on,
+        hasBridge: (researchId) => hasStoredResearchBridge(researchId),
+        become: (live, locked) => takeOverAsMain(client, client.kind, live, locked),
+        changed: () => states.update(),
+        takenOver: () => UI.showToast(strings.win.takenOver, SWITCHED_TOAST_MS),
+    }).start();
     // Its states under the header or in place of the view (§3).
     const states = mountSatStates(document, client, {
         goToMain: () => { void client.requestMainFocus(); },
@@ -415,7 +426,7 @@ function startSatelliteWindow(params: SatelliteParams, debugOptions: DebugOption
                 idle: follow === 'attached' && !UI.liveFollowHasTarget(),
                 noJump: mode === 'descendants' || mode === 'timeline',
                 lost: !!mirror.live()?.lostSince,
-                takeover: null,
+                takeover: takeover.stripPhase,
             };
         },
         detach: () => UI.setLiveFollow(false),
@@ -681,7 +692,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         const params = new URLSearchParams(window.location.search);
         let resumingLive = false;
         try {
-            resumingLive = !!sessionStorage.getItem('strom.live');
+            // Taking over after the main window closed (spec 097 §7): following comes back as after a reload.
+            resumingLive = !!sessionStorage.getItem('strom.live') || !!becomeMark?.live;
         } catch { /* no storage */ }
         if (params.has('import-url') || params.has('live') || resumingLive) {
             document.documentElement.classList.add('external-opening');
@@ -743,6 +755,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     const becameMain = takeBecomeMainMark();
     if (role.role === 'main' && becameMain?.tree && becameMain.table !== undefined && DataManager.getCurrentTreeId() === becameMain.tree) {
         UI.setTableWindowStart(becameMain.tree, becameMain.table);
+    }
+    // It took over while the closed main window followed a research (spec 097 §7): that research is followed
+    // again as after a reload (its bridge address as stored in this browser), ◎ as it was.
+    const tookOver = role.role === 'main' ? becameMain?.live : undefined;
+    if (tookOver && DataManager.getCurrentTreeId() === tookOver.treeId) {
+        const base = storedResearchBridge(tookOver.researchId)?.base;
+        if (base) {
+            rememberLiveBridge(base, tookOver.treeId);
+            adoptLiveFollowOn(tookOver.follow);
+        }
     }
     // The main window: the satellites get their tree from here (spec 079 §0).
     // ⧉ after the view tabs, the indicator of open windows, the Table tab's shortcuts (§1, §4).

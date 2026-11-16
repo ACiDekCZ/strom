@@ -16,7 +16,7 @@ import { WindowBus } from './window-bus.js';
 import { WindowRegistry, dataManagerHost } from './window-registry.js';
 import { SatelliteClient } from './satellite.js';
 import { MAIN_WINDOW_NAME, newWindowId, satelliteViewMode, satelliteWindowName, tryBecomeMain, type SatelliteParams } from './window-role.js';
-import { becomeMain, writeBecomeMainMark } from './become-main.js';
+import { becomeMain, writeBecomeMainMark, type BecomeMainMark } from './become-main.js';
 import { recordReloadPoint } from '../resume-view.js';
 import { openForwardedLink, type ForwardedLink, type LinkOpenerDeps } from './window-link.js';
 import { SecondTab, renderSecondTab, removeSecondTabScreen } from './second-tab.js';
@@ -291,8 +291,8 @@ export function showSecondTab(startSatellite: (params: SatelliteParams) => void)
  * the mark (the new page tries again for the lock a moment), the reload point
  * and the Table's state of a satellite, its address without `okno=`.
  */
-function prepareMainStart(opts: { tree: string | null; search?: string | null; table?: unknown }): void {
-    writeBecomeMainMark({ tree: opts.tree, ...(opts.table !== undefined ? { table: opts.table } : {}), at: Date.now() });
+function prepareMainStart(opts: { tree: string | null; search?: string | null; table?: unknown; live?: BecomeMainMark['live'] }): void {
+    writeBecomeMainMark({ tree: opts.tree, ...(opts.table !== undefined ? { table: opts.table } : {}), ...(opts.live ? { live: opts.live } : {}), at: Date.now() });
     try {
         const url = new URL(window.location.href);
         if (opts.search) url.search = opts.search;
@@ -300,6 +300,16 @@ function prepareMainStart(opts: { tree: string | null; search?: string | null; t
         url.hash = '';
         history.replaceState(null, '', url.toString());
     } catch { /* the address stays */ }
+}
+
+/** What a satellite writes before it starts again as the main window: its view (the reload point), its Table, the mark. */
+function prepareSatelliteMain(client: SatelliteClient, kind: SatelliteParams['kind'], live?: BecomeMainMark['live']): void {
+    const tree = client.treeId;
+    const view = satelliteViewMode(kind);
+    // The reload point needs a person: the focus, else the first one of the tree (the Table keeps its own row).
+    const person = TreeRenderer.getFocusPersonId() ?? DataManager.getAllPersons().find(p => !p.isPlaceholder)?.id ?? null;
+    if (tree && person) recordReloadPoint({ tree, person, view });
+    prepareMainStart({ tree, table: view === 'table' ? UI.tableWindowState() : undefined, live });
 }
 
 /**
@@ -313,13 +323,27 @@ export function makeSatelliteMain(client: SatelliteClient, kind: SatelliteParams
     return becomeMain({
         tryLock: () => tryBecomeMain(),
         prepare: () => {
-            const tree = client.treeId;
-            const view = satelliteViewMode(kind);
-            // The reload point needs a person: the focus, else the first one of the tree (the Table keeps its own row).
-            const person = TreeRenderer.getFocusPersonId() ?? DataManager.getAllPersons().find(p => !p.isPlaceholder)?.id ?? null;
-            if (tree && person) recordReloadPoint({ tree, person, view });
             try { sessionStorage.removeItem('strom.live'); } catch { /* no storage */ }
-            prepareMainStart({ tree, table: view === 'table' ? UI.tableWindowState() : undefined });
+            prepareSatelliteMain(client, kind);
+        },
+        restart: () => window.location.reload(),
+    });
+}
+
+/**
+ * Taking over after the main window closed while it followed a research
+ * (spec 097 §7): as "Make this the main window", with the research followed
+ * in the mark (the new main window follows it again, ◎ as it was); the
+ * session's copy (`strom.live`) is not removed here, the new main window
+ * writes it anew from the bridge address stored in this browser.
+ * `locked`: the lock is held, before the reload.
+ */
+export function takeOverAsMain(client: SatelliteClient, kind: SatelliteParams['kind'], live: NonNullable<BecomeMainMark['live']>, locked: () => void): Promise<boolean> {
+    return becomeMain({
+        tryLock: () => tryBecomeMain(),
+        prepare: () => {
+            locked();
+            prepareSatelliteMain(client, kind, live);
         },
         restart: () => window.location.reload(),
     });
