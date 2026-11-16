@@ -198,7 +198,7 @@ test('the "More" sheet (menu 1020 §7): Undo|Redo tiles, content, For the family
     await expect(sheet.locator('.bottom-sheet-section')).toHaveCount(0);
     const rows = (await sheet.locator('.bottom-sheet-items > .bottom-sheet-item:not(.bottom-sheet-storage-row)').allInnerTexts()).map(t => t.replace(/\s+/g, ' ').trim());
     // "Ancestor research · New" only while it is new (menu 1020 §1.1); seen here: in the tree's sheet.
-    expect(rows).toEqual(['Anniversaries', 'Export…', 'For the family ›', 'Full screen', 'Tree: My Family Tree ›', 'Add family…']);
+    expect(rows).toEqual(['Anniversaries', 'Lists of people', 'Export…', 'For the family ›', 'Full screen', 'Tree: My Family Tree ›', 'Add family…']);
     await expect(pairs.nth(1)).toHaveAttribute('aria-label', 'View');
     await expect(pairs.nth(1).locator('.bottom-sheet-item')).toHaveText(['Fan', 'Map', 'Timeline']);
     await expect(pairs.nth(2).locator('.bottom-sheet-item')).toHaveText(['Settings', 'How Strom works', 'About Strom']);

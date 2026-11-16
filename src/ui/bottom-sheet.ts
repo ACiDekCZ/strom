@@ -417,6 +417,8 @@ export const bottomSheetMethods = uiModule({
         const lastExport = viewMode ? undefined : this.exportReminderLast();
         const reminder = lastExport === undefined ? undefined
             : { id: 'sheet-export-reminder', text: this.exportReminderText(lastExport), link: s.snapshots.exportAll, run: () => this.researchActionExportAll() };
+        // Lists of people (spec 084 §2, 15a): after Sources, an exported page reads them too.
+        const listsRow: MenuRow = { label: s.lists.title, id: 'sheet-lists', run: () => this.showPersonLists() };
         // "For the family ›": the book and the family pages (an exported page has them too), the poster, the fly-through.
         const familyRow: MenuRow = { label: s.menu.forFamily, id: 'sheet-family', run: () => {}, page: { title: s.menu.forFamily, rows: [
             ...(active || viewMode ? [bookRow, pagesRow, treePagesRow] : []),
@@ -426,13 +428,14 @@ export const bottomSheetMethods = uiModule({
         if (viewMode) {
             // An exported page (menu 1020 §10, D1): the overview takes the place of Tree ›.
             blocks.push({ divider: blocks.length > 0, rows: [
-                annRow, familyRow,
+                annRow, listsRow, familyRow,
                 { label: s.treeOverview.menu, id: 'sheet-overview', run: () => this.showActiveTreeOverview() },
             ] });
         } else {
             blocks.push({ divider: blocks.length > 0, rows: [
                 ...(active ? [annRow] : []),
                 ...(active && this.isSourcesMenuOffered() ? [{ label: s.sources.menu, run: () => this.showSourcesDialog() }] : []),
+                ...(active ? [listsRow] : []),
                 // One Export…: the whole tree or the current view, chosen in its dialog
                 // (locked data exports what it shows).
                 active

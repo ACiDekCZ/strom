@@ -684,6 +684,11 @@ export const treeManagementMethods = uiModule({
         this.closeActionsMenu();
         this.showSourcesDialog();
     },
+    /** ⋯ › Lists of people… (spec 084 §2). */
+    treeActionLists(): void {
+        this.closeActionsMenu();
+        this.showPersonLists();
+    },
     treeActionBook(): void {
         this.closeActionsMenu();
         this.showBookDialog();

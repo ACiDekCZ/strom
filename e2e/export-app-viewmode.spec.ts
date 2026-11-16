@@ -146,10 +146,16 @@ test.describe('view mode: Actions and More carry what an exported page can do', 
         // The same "For the family ›" as in editing; About is reached through Settings (menu 1020 D1, D18).
         const rows = (await dropdown.locator(':scope > .tree-switcher-action:visible, :scope > .actions-submenu-wrap:visible > .actions-submenu-row')
             .allInnerTexts()).map(t => t.replace(/\s+/g, ' ').trim());
-        expect(rows.map(r => r.replace(/\s*\d+$/, ''))).toEqual(['Anniversaries', 'For the family ›', 'Tree overview', 'How Strom works', 'Settings']);
+        expect(rows.map(r => r.replace(/\s*\d+$/, ''))).toEqual(['Anniversaries', 'Lists of people…', 'For the family ›', 'Tree overview', 'How Strom works', 'Settings']);
         await expect(page.locator('#actions-view-about-row')).toHaveCount(0);
+        // Lists of people read only (spec 084 §2): the badge, no way to change a list.
+        await page.locator('#actions-lists-row').click();
+        const lists = page.locator('#person-lists-modal');
+        await expect(lists.locator('.pl-ro')).toHaveText('Read only');
+        await expect(lists.locator('.pl-new, .pl-dots, .pl-more, .pl-pencil')).toHaveCount(0);
+        await page.keyboard.press('Escape');
+        await expect(lists).toHaveCount(0);
 
-        await page.evaluate(() => window.Strom.UI.closeActionsMenu());
         const viaFamily = async (row: string) => {
             await open();
             await page.locator('#actions-family-row').click();
@@ -187,7 +193,7 @@ test.describe('view mode: Actions and More carry what an exported page can do', 
         await expect(page.locator('#sheet-undo')).toHaveCount(0);
         const rows = (await sheet.locator('.bottom-sheet-items > .bottom-sheet-item').allInnerTexts()).map(t => t.replace(/\s+/g, ' ').trim());
         // "For the family ›" as in editing (menu 1020 D18); Full screen where the browser offers it (spec 082 K1.3).
-        expect(rows.map(r => r.replace(/\s*\d+$/, ''))).toEqual(['Anniversaries', 'For the family ›', 'Tree overview', 'Full screen']);
+        expect(rows.map(r => r.replace(/\s*\d+$/, ''))).toEqual(['Anniversaries', 'Lists of people', 'For the family ›', 'Tree overview', 'Full screen']);
         await expect(sheet.locator('.bottom-sheet-pair').last().locator('.bottom-sheet-item')).toHaveText(['Settings', 'How Strom works', 'About Strom']);
         await page.locator('#sheet-family').click();
         await page.locator('#sheet-book').click();

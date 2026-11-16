@@ -859,6 +859,11 @@ export const miscMethods = uiModule({
                 }
                 // The Places dialog's menu, preview and selection close one at a time first.
                 if (this.topActiveOverlay()?.id === 'places-modal' && this.placesEscape()) return;
+                // Lists of people: an open menu, then the name being edited, then the dialog.
+                if (this.topActiveOverlay()?.id === 'person-lists-modal') {
+                    this.personListsEscape();
+                    return;
+                }
                 // The questions about places: a bulk preview closes first, then the window.
                 if (this.topActiveOverlay()?.id === 'waiting-places-modal') {
                     this.waitingPlacesEscape();

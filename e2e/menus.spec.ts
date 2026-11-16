@@ -87,13 +87,14 @@ test.describe('actions menu "Tree:" submenu', () => {
         const rows = await firstLevel(page);
         expect(rows[0]).toMatch(/^Anniversaries/);
         expect(rows[1]).toBe('Sources');
-        expect(rows[2]).toBe('Export…');
-        expect(rows[3]).toBe('For the family ›');
+        expect(rows[2]).toBe('Lists of people…');
+        expect(rows[3]).toBe('Export…');
+        expect(rows[4]).toBe('For the family ›');
         // "Ancestor research · New" only while it is new (menu 1020 §1.1): seen here, so the tree's list has it.
-        expect(rows[4]).toMatch(/^Tree:/);
-        expect(rows[5]).toBe('How Strom works');
-        expect(rows[6]).toBe('Settings');
-        expect(rows).toHaveLength(7);
+        expect(rows[5]).toMatch(/^Tree:/);
+        expect(rows[6]).toBe('How Strom works');
+        expect(rows[7]).toBe('Settings');
+        expect(rows).toHaveLength(8);
         // Undo / Redo are in the toolbar, not here; no ⚙ in the toolbar.
         await expect(dropdown.locator('#actions-undo-row, #actions-redo-row')).toHaveCount(0);
         await expect(page.locator('.actions-toolbar-settings')).toHaveCount(0);

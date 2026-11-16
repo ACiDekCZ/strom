@@ -22,6 +22,7 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
     },
     menu: {
         export: 'Eksport',
+        lists: 'Listy osób…',
         import: 'Import',
         exportJson: 'Eksport JSON',
         exportJsonDesc: 'Pobierz dane jako plik JSON',
