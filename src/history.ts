@@ -931,19 +931,22 @@ const RESIDENCE_KINDS: ReadonlySet<LifelinePoint['kind']> = new Set(['birth', 'd
  * The person's dated points with a place (birth, death, marriages, own and
  * couple events), sorted. An own event that names the place of a rite or an
  * act rather than a home (a baptism, a burial, a will…: NOT_RESIDENCE_EVENT_TYPES)
- * is no point (K043); only a baptism stands in for a birth without a place,
- * up to the first real point.
+ * is no point (K043). Without a birth point, the first baptism stands in for
+ * the birth up to the first real point: with the person's birthplace when it
+ * is known (only the birth date is missing; the baptism gives the time, not the
+ * place), else with the place of the baptism.
  */
-export function residencePoints(points: readonly LifelinePoint[]): ResidencePoint[] {
+export function residencePoints(points: readonly LifelinePoint[], birthPlace: string | undefined): ResidencePoint[] {
     const placed = (pt: LifelinePoint): boolean => RESIDENCE_KINDS.has(pt.kind) && typeof pt.place === 'string' && !!pt.place.trim();
     const kept = points.filter(pt => placed(pt) && (pt.kind !== 'event' || isResidenceEventType(pt.eventType)));
     const out = kept.map(pt => ({ year: pt.year, sortKey: pt.sortKey, place: pt.place!.trim() }))
         .sort((a, b) => a.sortKey - b.sortKey);
     if (!kept.some(pt => pt.kind === 'birth')) {
-        const baptism = points.filter(pt => placed(pt) && pt.kind === 'event' && pt.eventType === 'baptism')
+        const born = birthPlace?.trim();
+        const baptism = points.filter(pt => pt.kind === 'event' && pt.eventType === 'baptism' && (!!born || placed(pt)))
             .sort((a, b) => a.sortKey - b.sortKey)[0];
         if (baptism && (!out.length || baptism.sortKey < out[0].sortKey)) {
-            out.unshift({ year: baptism.year, sortKey: baptism.sortKey, place: baptism.place!.trim() });
+            out.unshift({ year: baptism.year, sortKey: baptism.sortKey, place: born || baptism.place!.trim() });
         }
     }
     return out;
@@ -1225,7 +1228,7 @@ export function computePersonHistory(
         ({ items: [], hidden: [], placesPending: false, placesMissing: false, hasPlaces: false, state });
     if (!person) return empty({ kind: 'noPlace' });
     const points = computePersonLifeline(data, personId);
-    const residence = residencePoints(points);
+    const residence = residencePoints(points, person.birthPlace);
     if (!residence.length) return empty({ kind: 'noPlace' });
 
     const { birth, death, lo, hi } = lifeBounds(person, points);
@@ -1410,8 +1413,9 @@ export function historyFindRegions(data: StromData, personId: string, p: History
     const regions = p.regions;
     if (!regions) return [];
     if (historyWaiting(p, env.treeState)) return [];
-    if (!data.persons[personId as keyof typeof data.persons]) return [];
-    const residence = residencePoints(computePersonLifeline(data, personId));
+    const person = data.persons[personId as keyof typeof data.persons] as Person | undefined;
+    if (!person) return [];
+    const residence = residencePoints(computePersonLifeline(data, personId), person.birthPlace);
     const facts = new Map<string, number>();
     const matched = new Map<string, string | null>();
     for (const r of residence) {
@@ -1461,7 +1465,7 @@ export function historyMainPlace(data: StromData, personId: string, p: HistoryPa
     const person = data.persons[personId as keyof typeof data.persons] as Person | undefined;
     if (!person) return null;
     const points = computePersonLifeline(data, personId);
-    const residence = residencePoints(points);
+    const residence = residencePoints(points, person.birthPlace);
     if (!residence.length) return null;
     const matched = new Map<string, string | null>();
     const out = new Map<string, HistoryMainPlace & { first: number }>();

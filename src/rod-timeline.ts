@@ -217,12 +217,14 @@ export function buildRodTimeline(input: RodTimelineInput): RodTimeline | null {
             }
         }
         out.sort((a, b) => a.sort - b.sort);
-        // A birth without a place: the place of the first baptism stands in for it, up to the first real point
-        // (as on the person's chart, residencePoints).
-        if (!p.birthPlace?.trim()) {
+        // No birth point: the first baptism stands in for it, up to the first real point, with the birthplace
+        // when it is known (only the birth date is missing), else with the baptism's place (as on the person's
+        // chart, residencePoints).
+        const born = p.birthPlace?.trim();
+        if (!born || yearOf(p.birthDate) === null) {
             const before = out.length;
             const first = out[0];
-            for (const ev of p.events ?? []) if (ev.type === 'baptism') add(ev.date, ev.place);
+            for (const ev of p.events ?? []) if (ev.type === 'baptism') add(ev.date, born || ev.place);
             const baptisms = out.splice(before).sort((a, b) => a.sort - b.sort);
             if (baptisms[0] && (!first || baptisms[0].sort < first.sort)) out.unshift(baptisms[0]);
         }

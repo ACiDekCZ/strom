@@ -2926,7 +2926,7 @@ function summaryHtml(c: Ctx): string {
     if (job) {
         cells.push([P.summary.years(job.years), job.label]);
     } else {
-        const points = residencePoints(computePersonLifeline(tree, person.id, { childEvents: false }));
+        const points = residencePoints(computePersonLifeline(tree, person.id, { childEvents: false }), person.birthPlace);
         const places = new Set(points.map(p => placeKey(p.place)).filter(Boolean));
         if (places.size >= 3) cells.push([P.summary.places(places.size), P.summary.lifelong]);
     }

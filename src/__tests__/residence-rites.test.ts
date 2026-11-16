@@ -4,7 +4,8 @@
  * the band of places lived on the person's chart, the history of the places
  * lived in, the count of places on the person page and the moves of a line's
  * timeline leave them out. A baptism with a place stands in for a birth
- * without one, up to the first real point. A birth with a full date sorts by
+ * without one, up to the first real point; a birthplace known without a birth
+ * date runs from the baptism's date (the baptism gives the time, not the place). A birth with a full date sorts by
  * that date. Fictional data.
  */
 
@@ -75,7 +76,7 @@ describe('rites and acts are not places lived (K043)', () => {
     });
 
     it('residencePoints: the birthplace from the birth on, no baptism, no burial place last', () => {
-        const pts = residencePoints(computePersonLifeline(tree(), ONDREJ));
+        const pts = residencePoints(computePersonLifeline(tree(), ONDREJ), 'Rodnice');
         expect(pts.map(p => p.place)).not.toContain('Farnov');
         expect(pts.map(p => p.place)).not.toContain('Hřbitovice');
         expect(new Set(pts.map(p => p.place))).toEqual(new Set(['Rodnice']));
@@ -120,13 +121,13 @@ describe('rites and acts are not places lived (K043)', () => {
     });
 
     it('the places of the person page\'s summary count the birthplace once and neither rite', () => {
-        const pts = residencePoints(computePersonLifeline(tree(), ONDREJ, { childEvents: false }));
+        const pts = residencePoints(computePersonLifeline(tree(), ONDREJ, { childEvents: false }), 'Rodnice');
         expect(new Set(pts.map(p => placeKey(p.place))).size).toBe(1);
     });
 
     it('a baptism with a place stands in for a birth without one, up to the first real point', () => {
         const d = tree({ birthPlace: undefined });
-        const pts = residencePoints(computePersonLifeline(d, ONDREJ));
+        const pts = residencePoints(computePersonLifeline(d, ONDREJ), d.persons[ONDREJ].birthPlace);
         expect(pts.map(p => [p.year, p.place])).toEqual([
             [1879, 'Farnov'], [1905, 'Rodnice'], [1906, 'Rodnice'], [1940, 'Rodnice'],
         ]);
@@ -134,7 +135,26 @@ describe('rites and acts are not places lived (K043)', () => {
         expect(input.residence.map(r => r.place)).toEqual(['Farnov', 'Rodnice']);
         expect(Math.floor(input.residence[0].to)).toBe(1905);
         // The birthplace known: the baptism is no point at all.
-        expect(residencePoints(computePersonLifeline(tree(), ONDREJ)).some(p => p.place === 'Farnov')).toBe(false);
+        expect(residencePoints(computePersonLifeline(tree(), ONDREJ), 'Rodnice').some(p => p.place === 'Farnov')).toBe(false);
+    });
+
+    it('a birthplace known without a birth date: the birthplace from the baptism\'s date, not the place of the baptism', () => {
+        const d = tree({ birthDate: undefined });
+        const pts = residencePoints(computePersonLifeline(d, ONDREJ), d.persons[ONDREJ].birthPlace);
+        expect(pts.map(p => [p.year, p.place])).toEqual([
+            [1879, 'Rodnice'], [1905, 'Rodnice'], [1906, 'Rodnice'], [1940, 'Rodnice'],
+        ]);
+        expect(pts[0].sortKey).toBeCloseTo(1879 + yearFraction('1879-03-05'), 6);
+        const input = lifeChartInput(d, ONDREJ, { now: 2026.8 })!;
+        expect(input.residence.map(r => r.place)).toEqual(['Rodnice']);
+        expect(Math.floor(input.residence[0].from)).toBe(1879);
+        // The history of the places lived and the place lived longest go by the same points.
+        const farnov = payload({
+            events: [{ id: 'far-1879', from: 1879, kind: 'other', scope: 'place', place: { key: 'Farnov' }, text: { cs: 'Farnov 1879' }, source: { title: 'Kronika', url: 'https://example.org/k' } }],
+            places: { Farnov: { events: ['far-1879'] } },
+        });
+        expect(computePersonHistory(d, ONDREJ, farnov, 'cs').items).toEqual([]);
+        expect(historyMainPlace(d, ONDREJ, payload({ places: { Farnov: { events: [] } } }))).toBeNull();
     });
 
     it('a baptism after the first real point stands in for nothing', () => {
@@ -142,7 +162,7 @@ describe('rites and acts are not places lived (K043)', () => {
             birthPlace: undefined,
             events: [ev('e2', 'residence', '1879-01-10', 'Rodnice'), ev('e1', 'baptism', '1879-03-05', 'Farnov')],
         });
-        expect(residencePoints(computePersonLifeline(d, ONDREJ)).some(p => p.place === 'Farnov')).toBe(false);
+        expect(residencePoints(computePersonLifeline(d, ONDREJ), d.persons[ONDREJ].birthPlace).some(p => p.place === 'Farnov')).toBe(false);
     });
 });
 
@@ -195,6 +215,15 @@ describe('a line\'s timeline (K043)', () => {
         expect(moves.map(e => e.place)).not.toContain('Farnov');
         expect(moves.map(e => e.from)).not.toContain('Farnov');
         expect(moves.map(e => e.place)).not.toContain('Hřbitovice');
+    });
+
+    it('a birthplace known without a birth date: a move from the birthplace, none from the place of the baptism', () => {
+        const tl = timeline(withVaclav({
+            birthDate: undefined,
+            events: [ev('k1', 'baptism', '1845-03-05', 'Farnov')],
+        }));
+        const moves = tl.events.filter(e => e.kind === 'move' && e.personId === F.ids.vaclav);
+        expect(moves.map(e => [e.year, e.from, e.place])).toEqual([[1879, 'Lopuchov', 'Smrkov čp. 7']]);
     });
 
     it('a baptism with a place stands in for a birth without one', () => {

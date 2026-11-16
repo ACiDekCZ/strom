@@ -175,7 +175,7 @@ describe('where a person lived', () => {
         events: [residence('1870', 'Horní Lhota'), residence('1880', 'Lhotka')],
         deathDate: '1900', deathPlace: 'Lhotka',
     })]);
-    const pts = residencePoints(computePersonLifeline(d, 'a'));
+    const pts = residencePoints(computePersonLifeline(d, 'a'), 'Lhota');
     it('takes the nearest dated point; a tie takes the earlier one', () => {
         expect(placesInYear(pts, 1850)).toEqual(['Lhota']);
         expect(placesInYear(pts, 1854)).toEqual(['Lhota']);     // 16 vs 16 → earlier

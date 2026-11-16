@@ -276,7 +276,7 @@ export function lifeChartInput(tree: StromData, personId: PersonId, opts: LifeCh
     });
 
     // Places lived: runs of the same place, each up to the next place (the last one to the end of the bar).
-    const res = residencePoints(lifeline);
+    const res = residencePoints(lifeline, person.birthPlace);
     const residence: ChartResidence[] = [];
     for (let i = 0; i < res.length; i++) {
         const key = placeKey(res[i].place);
