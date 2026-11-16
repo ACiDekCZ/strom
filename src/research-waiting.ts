@@ -74,16 +74,18 @@ export interface WaitingGroupRows<T extends LiveWaiting = LiveWaiting> {
     items: T[];
 }
 
-/**
- * Items by their place, each group where its first item stands (in the
- * research's order); items without a place and the "other" group at the bottom.
- */
-export function groupWaiting<T extends LiveWaiting>(items: readonly T[]): WaitingGroupRows<T>[] {
+/** The key of the group an item goes under: "Places" for a question about places, its place, else "other". */
+export function waitingGroupKey(w: LiveWaiting): string {
+    return w.kind === 'place' ? PLACES_GROUP : w.group?.key ?? OTHER_GROUP;
+}
+
+/** Items by their place in the order given, each group where its first item stands. */
+function groupInOrder<T extends LiveWaiting>(items: readonly T[]): WaitingGroupRows<T>[] {
     const groups = new Map<string, WaitingGroupRows<T>>();
-    for (const w of orderWaiting(items)) {
+    for (const w of items) {
         // The research's questions about places go under one group "Places", whatever group they name.
         const place = w.kind === 'place';
-        const key = place ? PLACES_GROUP : w.group?.key ?? OTHER_GROUP;
+        const key = waitingGroupKey(w);
         let g = groups.get(key);
         if (!g) {
             g = { key, group: place ? null : w.group ?? null, items: [] };
@@ -93,16 +95,69 @@ export function groupWaiting<T extends LiveWaiting>(items: readonly T[]): Waitin
         if (!g.group && w.group && !place) g.group = w.group;
         g.items.push(w);
     }
-    const list = [...groups.values()];
+    return [...groups.values()];
+}
+
+/**
+ * Items by their place, each group where its first item stands (in the
+ * research's order); items without a place and the "other" group at the bottom.
+ */
+export function groupWaiting<T extends LiveWaiting>(items: readonly T[]): WaitingGroupRows<T>[] {
+    const list = groupInOrder(orderWaiting(items));
     return [...list.filter(g => g.key !== OTHER_GROUP), ...list.filter(g => g.key === OTHER_GROUP)];
 }
 
-/** Both phases (after the filter), each in groups. */
-export function waitingPhases<T extends LiveWaiting>(items: readonly T[], filter: WaitingFilter): Record<WaitingPhase, WaitingGroupRows<T>[]> {
+/**
+ * The order of Awaiting action (spec 083 K5.1): the research's (phases,
+ * places, lines), or by when an item has waited since (`at`).
+ */
+export type WaitingOrder = 'recommended' | 'newest' | 'oldest';
+export const WAITING_ORDERS: readonly WaitingOrder[] = ['recommended', 'newest', 'oldest'];
+/** The key of a phase's one list without groups (it has no heading). */
+export const FLAT_GROUP = '*';
+
+/** When an item has waited since (`at`); null when the research did not say (or said nothing readable). */
+export function waitingSince(w: LiveWaiting): number | null {
+    if (!w.at) return null;
+    const ts = Date.parse(w.at);
+    return Number.isFinite(ts) ? ts : null;
+}
+
+/**
+ * Items by when they have waited since, newest or oldest first; equal times
+ * keep the research's order, items without a time come last either way, in
+ * the research's order (spec 083 H2 a).
+ */
+export function sortWaitingByTime<T extends LiveWaiting>(items: readonly T[], order: 'newest' | 'oldest'): T[] {
+    const sign = order === 'newest' ? -1 : 1;
+    return orderWaiting(items).map((w, i) => ({ w, i, t: waitingSince(w) }))
+        .sort((a, b) => {
+            if (a.t === null || b.t === null) return a.t === b.t ? a.i - b.i : a.t === null ? 1 : -1;
+            return sign * (a.t - b.t) || a.i - b.i;
+        })
+        .map(x => x.w);
+}
+
+/** One phase's rows in an order: in groups, or (a time order only) one list without them. */
+function phaseRows<T extends LiveWaiting>(items: readonly T[], order: WaitingOrder, groups: boolean): WaitingGroupRows<T>[] {
+    if (order === 'recommended') return groupWaiting(items);
+    const sorted = sortWaitingByTime(items, order);
+    if (!groups) return sorted.length > 0 ? [{ key: FLAT_GROUP, group: null, items: sorted }] : [];
+    // Each group where its newest (oldest) item stands; "Other" and "Places" too, not kept at the bottom.
+    return groupInOrder(sorted);
+}
+
+/**
+ * Both phases (after the filter), each in groups: in the research's order
+ * (recommended), or by time (spec 083 K5.1, K5.2) — within each group and
+ * the groups by their first item, or (`groups` off) one list per phase.
+ */
+export function waitingPhases<T extends LiveWaiting>(items: readonly T[], filter: WaitingFilter,
+    order: WaitingOrder = 'recommended', groups = true): Record<WaitingPhase, WaitingGroupRows<T>[]> {
     const shown = filterWaiting(items, filter);
     return {
-        todo: groupWaiting(shown.filter(w => waitingPhase(w) === 'todo')),
-        sent: groupWaiting(shown.filter(w => waitingPhase(w) === 'sent')),
+        todo: phaseRows(shown.filter(w => waitingPhase(w) === 'todo'), order, groups),
+        sent: phaseRows(shown.filter(w => waitingPhase(w) === 'sent'), order, groups),
     };
 }
 

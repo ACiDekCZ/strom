@@ -73,6 +73,7 @@ import {
     PrefKey, SECTION_PREFS_EVENT, SectionPref, autoFoldOrder, hasSectionPrefs, isImportantWaiting, resetSectionPrefs, restoreSectionPrefs, newWaiting, noteWaitingSeen, panelSectionOrder, sectionPrefs, sectionPrefsSnapshot, setSectionPref, topPrefs,
     waitingSeen, watchSectionPrefsStorage, PANEL_PREF_KEYS,
 } from './live-section-prefs.js';
+import { waitingSinceText } from './waiting-order-ui.js';
 import {
     QUEUE_ROWS_CAP, QueueFilter, QueueList, loadMoreQueueList, noteQueueRev, onQueueListsChange, queueList, queueListItem, queueRemote, requestQueueList,
     resetQueueLists, retryQueueList,
@@ -149,10 +150,15 @@ export interface WaitingView {
     detail: string | null;
     /** Items to do that came while following, new to the user until the overview closes. */
     fresh: Set<string>;
+    /**
+     * Items to do the record of Awaiting action had not seen when the overview
+     * drew them: tagged "new" until the overview closes (spec 083 K5.3, H1 a).
+     */
+    tagged: Set<string>;
 }
 
 export function newWaitingView(): WaitingView {
-    return { open: new Map(), detail: null, fresh: new Set() };
+    return { open: new Map(), detail: null, fresh: new Set(), tagged: new Set() };
 }
 
 export interface LiveSession {
@@ -1405,10 +1411,12 @@ export function timeEl(value: string, kind: LiveTimeKind): HTMLElement | null {
 }
 
 /** How a time is said: ago, since, since and for how long, the last change, the bridge's last answer. */
-type LiveTimeKind = 'ago' | 'since' | 'sincefor' | 'lastchange' | 'refreshed';
+type LiveTimeKind = 'ago' | 'since' | 'sincefor' | 'lastchange' | 'refreshed' | 'waitsince';
 
 function liveTimeText(ts: number, kind: LiveTimeKind): string {
     const lang = getCurrentLanguage();
+    // An item's "waits since" in a time order of Awaiting action (spec 083 §5).
+    if (kind === 'waitsince') return waitingSinceText(ts);
     if (kind === 'refreshed') return strings.live.refreshedAgo(formatLiveTime(ts, Date.now(), lang, strings.research.justNow));
     if (kind === 'lastchange') return strings.live.lastChange(formatLiveTime(ts, Date.now(), lang, strings.research.justNow));
     if (kind === 'sincefor') return strings.live.sinceFor(formatLiveClock(ts, Date.now(), lang), liveDuration(ts));
@@ -1475,7 +1483,7 @@ function tickLiveTimes(): void {
     for (const host of hosts) {
         host.querySelectorAll<HTMLElement>('.live-time[data-ts]').forEach((node) => {
             const k = node.dataset.kind;
-            const kind = k === 'since' || k === 'sincefor' || k === 'lastchange' || k === 'refreshed' ? k : 'ago';
+            const kind = k === 'since' || k === 'sincefor' || k === 'lastchange' || k === 'refreshed' || k === 'waitsince' ? k : 'ago';
             node.textContent = liveTimeText(Number(node.dataset.ts), kind);
         });
     }

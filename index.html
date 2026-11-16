@@ -21690,6 +21690,73 @@
         .live-kind--decide { color: var(--warning-text); border-color: color-mix(in srgb, var(--warning) 45%, var(--border)); }
         .live-text-link { color: var(--primary); overflow-wrap: anywhere; }
         .live-waiting-more { display: block; margin: 4px 0 0; padding: 0; font-size: 13px; color: var(--text-light); }
+        /* Awaiting action's order (spec 083 §5): "⇅ Recommended ▾", in a time order the Groups switch beside it. */
+        .research-overview__order { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: 6px 0 2px; }
+        .research-overview__order-btn {
+            display: inline-flex; align-items: center; gap: 6px; max-width: 100%; height: 26px; padding: 0 8px;
+            border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text);
+            font: 500 12.5px/1 inherit; cursor: pointer; white-space: nowrap;
+        }
+        .research-overview__order-btn.is-time { background: var(--primary-soft); border-color: var(--primary); }
+        .research-overview__order-icon { flex: none; color: var(--text-light); }
+        .research-overview__order-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+        .research-overview__order-caret { flex: none; font-size: 9px; color: var(--text-light); }
+        @media (hover: hover) { .research-overview__order-btn:hover { background: var(--hover-bg); } }
+        .research-overview__order-btn:focus-visible, .research-overview__groups:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .research-overview__groups {
+            display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none;
+            font: inherit; font-size: 12.5px; color: var(--text-light); cursor: pointer;
+        }
+        .research-overview__groups-track {
+            position: relative; flex: none; width: 28px; height: 16px; border-radius: 999px; background: var(--border); transition: background .15s;
+        }
+        .research-overview__groups-knob {
+            position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--surface);
+            box-shadow: 0 1px 2px rgba(0, 0, 0, .25); transition: transform .15s;
+        }
+        .research-overview__groups[aria-checked="true"] .research-overview__groups-track { background: var(--primary); }
+        .research-overview__groups[aria-checked="true"] .research-overview__groups-knob { transform: translateX(12px); }
+        @media (prefers-reduced-motion: reduce) { .research-overview__groups-track, .research-overview__groups-knob { transition: none; } }
+        /* Beside a row: the "new" tag over the time it has waited since. */
+        .research-overview__waiting-row.has-side { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 10px; row-gap: 2px; }
+        .research-overview__waiting-row.has-side > :not(.research-overview__waiting-side) { grid-column: 1; }
+        .research-overview__waiting-side {
+            grid-column: 2; grid-row: 1 / span 2; align-self: start;
+            display: flex; flex-direction: column; align-items: flex-end; gap: 3px;
+        }
+        .hwr-item > .research-overview__waiting-side { flex: none; }
+        .research-overview__since, .research-overview__waiting-meta .research-overview__since {
+            font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; white-space: nowrap;
+        }
+        /* The time of a group's first item right after its name; the name gives way first. */
+        .research-overview__group-title:has(+ .research-overview__group-since) { flex: 0 1 auto; }
+        .research-overview__group-since {
+            flex: none; margin-right: auto; font-size: 11.5px; font-weight: 400; color: var(--text-faint);
+            font-variant-numeric: tabular-nums; white-space: nowrap;
+        }
+        .research-overview__group-since::before { content: '·\00a0'; }
+        .research-overview__new {
+            flex: none; padding: 1px 7px; border-radius: 999px; background: var(--warning-soft); color: var(--warning-text);
+            font-size: 10.5px; font-weight: 600; line-height: 1.4; white-space: nowrap;
+        }
+        .research-overview__group-tag {
+            display: inline-block; max-width: 16rem; padding: 0 6px; border: 1px solid var(--divider); border-radius: 4px;
+            background: var(--surface-2); color: var(--text-light); font-size: 11.5px; line-height: 1.5;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom;
+        }
+        .hwr-place { gap: 0; }
+        /* Touch: the order a 32 px chip, it and the switch 44 px targets. */
+        @media (pointer: coarse) {
+            .research-overview__order { row-gap: 12px; }
+            .research-overview__order-btn, .research-overview__groups { position: relative; height: 32px; }
+            .research-overview__order-btn::before, .research-overview__groups::before { content: ''; position: absolute; left: 0; right: 0; top: -6px; bottom: -6px; }
+        }
+        @media (max-width: 640px) {
+            .research-overview__group-tag { max-width: 11rem; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .research-overview__order { margin: 2px 0; }
+        }
         /* Touch: rows, headings and actions at least 44px. */
         @media (pointer: coarse) {
             .research-overview__waiting-row, .research-overview__phase-head, .research-overview__waiting-group { min-height: 44px; }

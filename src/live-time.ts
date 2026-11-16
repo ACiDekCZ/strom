@@ -27,6 +27,24 @@ export function formatLiveClock(ts: number, now: number, lang: string): string {
     return `${day} ${time}`;
 }
 
+/**
+ * Since when an item has waited (spec 083 §5): `justNow` / "25 min ago"
+ * within the hour, "12:07" today, `yesterday`, the day ("12. 11.") this
+ * year, the day with its year before. Only the day for older ones: their
+ * hour would be noise.
+ */
+export function formatWaitingSince(ts: number, now: number, lang: string, words: { justNow: string; yesterday: string }): string {
+    if (now - ts < 3_600_000) return formatLiveTime(ts, now, lang, words.justNow);
+    const d = new Date(ts);
+    const today = new Date(now);
+    if (sameDay(d, today)) return new Intl.DateTimeFormat(lang, { hour: '2-digit', minute: '2-digit' }).format(d);
+    const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+    if (sameDay(d, yesterday)) return words.yesterday;
+    return new Intl.DateTimeFormat(lang, d.getFullYear() === today.getFullYear()
+        ? { day: 'numeric', month: 'numeric' }
+        : { day: 'numeric', month: 'numeric', year: 'numeric' }).format(d);
+}
+
 function sameDay(a: Date, b: Date): boolean {
     return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }

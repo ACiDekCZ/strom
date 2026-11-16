@@ -63,7 +63,7 @@ let observer: ResizeObserver | null = null;
 let observed: HTMLElement | null = null;
 
 /** The parts of a section's body that belong to its sticky head, while they lead it. */
-const HEAD_PARTS = '[role="search"], .research-overview__filters, .research-overview__timeline-bar, '
+const HEAD_PARTS = '[role="search"], .research-overview__filters, .research-overview__order, .research-overview__timeline-bar, '
     + '.research-overview__search-status, .research-overview__search-empty, .research-overview__queue-result';
 
 /**

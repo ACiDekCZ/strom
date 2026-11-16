@@ -24,7 +24,7 @@ import { computeEvidenceGaps } from '../stats.js';
 import { LiveChangeKind, LiveWaiting, LiveWorker, ResearchActionMark, WAITING_SECTIONS, researchConflictRef, researchPersonRef, researchTaskRef, recentAddsCount, researchLinkMark } from '../research-link.js';
 import { waitingGroupSendable, waitingGroupHasNote, waitingSendable, waitingUnsendable, waitingFileWritable } from '../research-waiting-write.js';
 import {
-    PLACES_GROUP, WaitingFilter, WaitingGroupRows, WaitingPhase, effectiveWaitingFilter, waitingActionDo, waitingChatLeads, waitingChips, waitingDaysAgo, waitingGroupChatTask,
+    FLAT_GROUP, PLACES_GROUP, WAITING_ORDERS, WaitingFilter, WaitingGroupRows, WaitingOrder, WaitingPhase, sortWaitingByTime, effectiveWaitingFilter, waitingActionDo, waitingChatLeads, waitingChips, waitingDaysAgo, waitingGroupChatTask,
     waitingGroupOpenByDefault, waitingPhase, waitingPhases, waitingSection, waitingTaskActions, waitingTodoCount,
     WaitActionView, imagesState, splitWaitingActions, waitingActions, waitingForImages, waitingGroupMissing,
 } from '../research-waiting.js';
@@ -32,7 +32,12 @@ import { WaitingAnswerForm, waitingAnswerChangedNote } from './waiting-answer-fo
 import { appendImagesDetail, bindImagesDrop, clearImagesSeen, forgetImagesArrived, imagesShortEl, itemKey, noteImagesArrived } from './waiting-images-ui.js';
 import { clearOverviewImages, foldOverviewImages, overviewImagesResult } from './waiting-task-ui.js';
 import { formatLiveClock } from '../live-time.js';
-import { MQ_PHONE_BAR } from '../breakpoints.js';
+import { MQ_PHONE_BAR, isPhoneBar } from '../breakpoints.js';
+import { openHeadMenu } from './table-view/table-headmenu.js';
+import {
+    ORDER_ICON, noteWaitingNew, setWaitingDrawn, storeWaitingGroups, storeWaitingOrder, storedWaitingGroups, storedWaitingOrder, waitingDrawn,
+    waitingGroupTagEl, waitingOrderLabel, waitingSideEl, waitingSinceEl, watchWaitingOrderStorage,
+} from './waiting-order-ui.js';
 import { browserGroupNote, browserNote } from '../research-browser.js';
 import { uiModule } from './module.js';
 import {
@@ -750,6 +755,8 @@ export const researchOverviewMethods = uiModule({
                     return;
                 }
                 const f = fold('waiting');
+                // What was not seen yet keeps its "new" tag while the overview is open (spec 083 K5.3).
+                noteWaitingNew(s.treeId, s.waiting, s.waitingView.tagged);
                 // Collapsed: "N new" beside the title; expanded: what is to do now is seen.
                 if (f.collapsed) {
                     const chip = waitingNewChip(s);
@@ -1057,6 +1064,12 @@ export const researchOverviewMethods = uiModule({
         noteImagesArrived(s);
         if (showField) mountSectionSearch(host, search, total);
         const grouped = s.waiting.some(w => w.section);
+        // The order chosen (spec 083 K5.1, K5.2): kept on this device; the Groups switch only in a time order.
+        watchWaitingOrderStorage(() => this.renderResearchOverview());
+        const order = storedWaitingOrder();
+        const flat = order !== 'recommended' && grouped && !storedWaitingGroups();
+        setWaitingDrawn(order, flat);
+        const orderRow = total >= 2 ? this.overviewWaitingOrderEl(order, grouped, mode) : null;
         const chips = grouped ? waitingChips(s.waiting) : [];
         const chosen = storedWaitingFilter();
         const filter = grouped ? effectiveWaitingFilter(s.waiting, chosen) : 'all';
@@ -1068,8 +1081,10 @@ export const researchOverviewMethods = uiModule({
         const searching = res.searching;
         // Its guessed height in the own window's columns: phases and places without the search (rows when ungrouped).
         if (grouped) {
-            const all = waitingPhases(s.waiting, filter);
-            noteOverviewSectionRows('waiting', (['todo', 'sent'] as WaitingPhase[]).reduce((n, p) => n + (all[p].length > 0 ? 1 + all[p].length : 0), 0));
+            const all = waitingPhases(s.waiting, filter, order, !flat);
+            // Without groups a phase's rows count, else its places' headings.
+            const lines = (p: WaitingPhase): number => all[p].reduce((n, g) => n + (g.key === FLAT_GROUP ? g.items.length : 1), 0);
+            noteOverviewSectionRows('waiting', (['todo', 'sent'] as WaitingPhase[]).reduce((n, p) => n + (all[p].length > 0 ? 1 + lines(p) : 0), 0));
         } else noteOverviewSectionRows('waiting', s.waiting.length);
         // The hypotheses the search shows (the picked ones outside it stay picked) and what matched each by its number.
         const hypoSearch: HypothesisListSearch | null = searching ? {
@@ -1102,8 +1117,10 @@ export const researchOverviewMethods = uiModule({
         };
         // An older research: no kinds, places or phases.
         if (!grouped) {
+            if (orderRow) host.appendChild(orderRow);
             appendSearchOutcome(host, search, { searching, found: res.shown.length, total: res.total, kindLabel: null, onAllKinds: () => {} });
-            if (res.shown.length > 0) host.appendChild(rows(res.shown));
+            const shown = order === 'recommended' ? res.shown : sortWaitingByTime(res.shown, order);
+            if (shown.length > 0) host.appendChild(rows(shown));
             outsideFoot();
             return;
         }
@@ -1140,6 +1157,7 @@ export const researchOverviewMethods = uiModule({
             }
             host.appendChild(bar);
         }
+        if (orderRow) host.appendChild(orderRow);
         appendSearchOutcome(host, search, {
             searching, found: res.shown.length, total: res.total,
             kindLabel: filter === 'all' ? null : L.waitingChips[filter],
@@ -1150,7 +1168,7 @@ export const researchOverviewMethods = uiModule({
         });
 
         // Searching: only what was found, each phase and place with a match open unless folded during the search.
-        const phases = waitingPhases(res.matched, filter);
+        const phases = waitingPhases(res.matched, filter, order, !flat);
         const searchOpen = search?.searchOpen;
         browserNotedInHead.clear();
         for (const phase of ['todo', 'sent'] as WaitingPhase[]) {
@@ -1175,6 +1193,11 @@ export const researchOverviewMethods = uiModule({
             const wrap = el('div', 'research-overview__phase');
             wrap.dataset.phase = phase;
             for (const g of groups) {
+                // Without groups (a time order): one list, its hypotheses' head over its first row (decision H4 a).
+                if (g.key === FLAT_GROUP) {
+                    wrap.appendChild(rows(g.items));
+                    continue;
+                }
                 // Every place has its heading, a lone item's too: a bare row would read as an item of the place above.
                 const key = `group:${phase}:${g.key}`;
                 const gOpen = sectionPartOpen(key, waitingGroupOpenByDefault(g.items, filter, view.fresh), searching, view.open, searchOpen);
@@ -1187,6 +1210,79 @@ export const researchOverviewMethods = uiModule({
             host.appendChild(wrap);
         }
         outsideFoot();
+    },
+
+    /**
+     * The order of Awaiting action (spec 083 §5, 5r1–5r5): "⇅ Recommended ▾"
+     * opens the three orders (a sheet on a phone); in a time order the
+     * Groups switch beside it (a research with places only). Both stay in
+     * the app (no mark) and are kept on this device for every tree.
+     */
+    overviewWaitingOrderEl(order: WaitingOrder, grouped: boolean, mode: Mode): HTMLElement {
+        const L = strings.live;
+        const bar = el('div', 'research-overview__order');
+        const btn = el('button', `research-overview__order-btn${order !== 'recommended' ? ' is-time' : ''}`);
+        btn.type = 'button';
+        btn.dataset.focusKey = 'waiting-order';
+        btn.setAttribute('aria-haspopup', 'menu');
+        btn.setAttribute('aria-expanded', 'false');
+        btn.setAttribute('aria-label', L.waitingOrderAria(waitingOrderLabel(order)));
+        btn.insertAdjacentHTML('beforeend', ORDER_ICON);
+        btn.append(el('span', 'research-overview__order-name', waitingOrderLabel(order)));
+        const caret = el('span', 'research-overview__order-caret', '▾');
+        caret.setAttribute('aria-hidden', 'true');
+        btn.appendChild(caret);
+        const choose = (o: WaitingOrder): void => {
+            if (o === storedWaitingOrder()) return;
+            storeWaitingOrder(o);
+            this.renderResearchOverview();
+        };
+        btn.onclick = () => {
+            if (mode === 'sheet' || isPhoneBar()) {
+                this.presentMenuSheet(L.waitingOrder, [{ rows: WAITING_ORDERS.map(o => ({ label: waitingOrderLabel(o), active: o === order, run: () => choose(o) })) }],
+                    { overlayClass: 'research-overview__order-sheet' });
+                // The three orders are a choice of one.
+                const sheet = [...document.querySelectorAll<HTMLElement>('.research-overview__order-sheet .bottom-sheet-menu')].pop();
+                sheet?.querySelectorAll<HTMLElement>('.bottom-sheet-item').forEach((b, i) => {
+                    b.setAttribute('role', 'menuitemradio');
+                    b.setAttribute('aria-checked', String(WAITING_ORDERS[i] === order));
+                });
+                return;
+            }
+            btn.setAttribute('aria-expanded', 'true');
+            const menu = openHeadMenu(btn, '', '', [
+                { heading: L.waitingOrder },
+                ...WAITING_ORDERS.map(o => ({ id: `order-${o}`, label: waitingOrderLabel(o), icon: '', checked: o === order, run: () => choose(o) })),
+            ]);
+            menu.classList.add('research-overview__order-menu');
+            menu.setAttribute('aria-label', L.waitingOrder);
+            // Closed any way: the button says so again.
+            const watch = new MutationObserver(() => {
+                if (menu.isConnected) return;
+                watch.disconnect();
+                btn.setAttribute('aria-expanded', 'false');
+            });
+            watch.observe(document.body, { childList: true });
+        };
+        bar.appendChild(btn);
+        if (order !== 'recommended' && grouped) {
+            const on = storedWaitingGroups();
+            const sw = el('button', 'research-overview__groups');
+            sw.type = 'button';
+            sw.dataset.focusKey = 'waiting-groups';
+            sw.setAttribute('role', 'switch');
+            sw.setAttribute('aria-checked', String(on));
+            const track = el('span', 'research-overview__groups-track');
+            track.setAttribute('aria-hidden', 'true');
+            track.appendChild(el('span', 'research-overview__groups-knob'));
+            sw.append(track, el('span', 'research-overview__groups-label', L.waitingGroups));
+            sw.onclick = () => {
+                storeWaitingGroups(!on);
+                this.renderResearchOverview();
+            };
+            bar.appendChild(sw);
+        }
+        return bar;
     },
 
     /**
@@ -1235,9 +1331,16 @@ export const researchOverviewMethods = uiModule({
         } else {
             gh.append(chevron, title);
         }
+        // A time order (spec 083 §5): the time of its first item after the name.
+        const since = waitingDrawn().order !== 'recommended' && g.items[0] ? waitingSinceEl(g.items[0], 'research-overview__group-since') : null;
+        if (since) title.after(since);
         if (kind !== name) gh.appendChild(el('span', 'research-overview__group-kind', kind));
+        // Folded with new items: how many (K5.3).
+        const fresh = open ? 0 : g.items.filter(w => s.waitingView.tagged.has(w.id)).length;
+        const newText = fresh > 0 ? L.waitingNewCount(fresh) : '';
+        if (fresh > 0) gh.appendChild(el('span', 'research-overview__new', newText));
         gh.appendChild(el('span', 'research-overview__group-span', String(g.items.length)));
-        gh.setAttribute('aria-label', `${name} · ${g.items.length}${kind !== name ? `, ${kind}` : ''}${missingText ? `, ${missingText}` : ''}`);
+        gh.setAttribute('aria-label', `${name} · ${g.items.length}${kind !== name ? `, ${kind}` : ''}${missingText ? `, ${missingText}` : ''}${newText ? `, ${newText}` : ''}`);
         gh.onclick = toggle;
         row.appendChild(gh);
         const action = this.overviewWaitingGroupAction(s, g, phase, mode);
@@ -1338,6 +1441,7 @@ export const researchOverviewMethods = uiModule({
         const L = strings.live;
         const view = s.waitingView;
         const open = view.detail === w.id;
+        const drawnAs = waitingDrawn();
         const li = el('li', 'research-overview__waiting-item');
         li.dataset.id = w.id;
         // A growing branch is a suggestion: lit as new while it waits.
@@ -1378,11 +1482,20 @@ export const researchOverviewMethods = uiModule({
                     L.waitingSentOn(new Date(ts).toLocaleDateString(getCurrentLanguage(), { day: 'numeric', month: 'numeric' }))));
             }
             if (Number.isFinite(ts)) meta.appendChild(el('span', 'research-overview__waiting-age', waitingDaysAgo(ts, Date.now(), getCurrentLanguage())));
-        } else {
+        } else if (drawnAs.order === 'recommended') {
+            // A time order says it beside the row instead.
             const at = timeEl(w.at, 'ago');
             if (at) meta.appendChild(at);
         }
+        // Without groups: the place it belongs to (spec 083 K5.2).
+        if (drawnAs.flat) meta.appendChild(waitingGroupTagEl(w));
         row.appendChild(meta);
+        // The "new" tag (any order) over the time it has waited since (a time order).
+        const side = waitingSideEl(w, { isNew: view.tagged.has(w.id), time: drawnAs.order !== 'recommended' });
+        if (side) {
+            row.classList.add('has-side');
+            row.appendChild(side);
+        }
         row.onclick = () => {
             view.detail = open ? null : w.id;
             // One thing at a time: an answer being written closes (its draft stays); what arrived was seen.
