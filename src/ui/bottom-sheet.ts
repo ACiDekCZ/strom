@@ -540,11 +540,13 @@ export const bottomSheetMethods = uiModule({
         title.className = 'bottom-sheet-menu-title';
         title.textContent = titleText;
         sheet.appendChild(title);
+        // The quiet line under the title goes with it on a second page.
+        let subLine: HTMLElement | null = null;
         if (opts.subtitle) {
-            const sub = document.createElement('div');
-            sub.className = 'bottom-sheet-menu-sub';
-            sub.textContent = opts.subtitle;
-            sheet.appendChild(sub);
+            subLine = document.createElement('div');
+            subLine.className = 'bottom-sheet-menu-sub';
+            subLine.textContent = opts.subtitle;
+            sheet.appendChild(subLine);
         }
 
         const list = document.createElement('div');
@@ -672,6 +674,7 @@ export const bottomSheetMethods = uiModule({
             subPage.append(head, items);
             sheet.appendChild(subPage);
             title.hidden = true;
+            if (subLine) subLine.hidden = true;
             list.hidden = true;
             items.querySelector<HTMLElement>('.bottom-sheet-item')?.focus({ preventScroll: true });
         };
@@ -680,6 +683,7 @@ export const bottomSheetMethods = uiModule({
             subPage.remove();
             subPage = null;
             title.hidden = false;
+            if (subLine) subLine.hidden = false;
             list.hidden = false;
             subOpener?.focus({ preventScroll: true });
         };
@@ -795,6 +799,7 @@ export const bottomSheetMethods = uiModule({
         const showResearchPage = (): void => {
             if (!researchPage) return;
             title.hidden = true;
+            if (subLine) subLine.hidden = true;
             list.hidden = true;
             researchPage.hidden = false;
             // The second level is the whole research menu, "Other actions" open.
@@ -809,6 +814,7 @@ export const bottomSheetMethods = uiModule({
             researchPage.hidden = true;
             this.setResearchMoreOpen(false);
             title.hidden = false;
+            if (subLine) subLine.hidden = false;
             list.hidden = false;
             const body = researchPage.querySelector<HTMLElement>('#research-sheet-menu');
             if (body) {
