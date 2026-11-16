@@ -28015,15 +28015,17 @@
         .pe-sep { width: 1px; height: 20px; background: var(--border); }
         .pe-close { min-width: 44px; min-height: 44px; border: none; background: none; color: inherit; font-size: 22px; cursor: pointer; }
         .pe-steps { display: flex; align-items: stretch; gap: 4px; min-width: 0; height: 100%; }
+        /* A long name shrinks its tab with … and never runs into the next tab or the close button (10g). */
         .pe-step {
-            display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; min-height: 44px;
+            display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; min-height: 44px; min-width: 0; flex: 0 1 auto;
             background: none; border: none; cursor: pointer; font: inherit; white-space: nowrap;
         }
+        .pe-step-num, .pe-step-skipped { flex: 0 0 auto; }
         .pe-step-num {
             display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px;
             border: 1px solid currentColor; border-radius: 50%; font-size: 12px; font-variant-numeric: tabular-nums;
         }
-        .pe-step-name { font-family: var(--font-serif, Georgia, serif); }
+        .pe-step-name { font-family: var(--font-serif, Georgia, serif); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
         .pe-step-skipped { font-size: 12px; color: var(--text-faint); }
         .pe-steps-bar { grid-area: steps; }
         .pe-steps-bar:empty { display: none; }
@@ -28085,8 +28087,14 @@
         }
         .pe-sec { display: flex; flex-direction: column; gap: 8px; margin: 0; }
         .pe-sec-title { margin: 0; font-size: 12.5px; font-weight: 600; color: var(--text-light); }
-        .pe-card-box { display: flex; justify-content: center; padding: 12px; }
+        .pe-card-box { display: flex; justify-content: center; padding: 12px 8px; }
         .pe-card-box .card-avatar canvas, .pe-card-box .card-avatar img { width: 100%; height: 100%; display: block; }
+        /* A long name wraps on the preview card as the tree's Normal card shows it whole (T40, 10h): no "…", the card grows. */
+        .pe-card-box.card-signals-preview .person-card.preview-card[data-density="normal"] { height: auto; min-height: 64px; }
+        .pe-card-box.card-signals-preview .person-card.preview-card[data-density="normal"][data-photo="large"] { min-height: 96px; }
+        .pe-card-box.card-signals-preview .person-card.preview-card[data-density="normal"]:not([data-photo="large"]) { padding-top: 6px; padding-bottom: 6px; }
+        .pe-card-box .person-card .name .name-text { white-space: normal; overflow-wrap: anywhere; hyphens: auto; text-overflow: clip; }
+        .pe-card-box .person-card .name.pe-name-rows .name-text { font-size: 12.5px; line-height: 1.15; }
         .pe-cap { font-size: 11.5px; color: var(--text-faint); text-align: center; }
         .pe-squares { display: flex; justify-content: center; align-items: flex-end; gap: 16px; }
         .pe-squares figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; }
@@ -28120,6 +28128,8 @@
         .pe-tile-text { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
         .pe-tile-title { font-size: 13px; color: var(--text); }
         .pe-tile-sub { font-size: 11.5px; color: var(--text-faint); font-weight: 400; }
+        /* Keep / Replace never take a third line (10f). */
+        .pe-tile-title, .pe-tile-sub { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
         .pe-thumb { flex: 0 0 auto; width: 36px; height: 36px; border-radius: var(--r-sm); object-fit: cover; }
         .pe-panel .pe-seg, .pe-slot:empty, .pe-actions:empty { display: none; }
         .pe-dialog :is(.pe-cancel, .pe-skip, .pe-primary) {
@@ -28134,6 +28144,9 @@
         .pe-live { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
         @media (max-width: 1024px) {
             .pe-overlay .pe-dialog { grid-template-columns: minmax(0, 1fr) 264px; }
+            /* The narrower panel keeps Keep / Replace on two lines in German (10f). */
+            .pe-panel { padding: 16px 12px; }
+            .pe-tile { gap: 8px; padding: 8px; }
             .pe-keys { visibility: hidden; }
         }
         @media (pointer: coarse) {
@@ -28193,9 +28206,16 @@
         .pe-overlay [data-layout="land"] .pe-panel > :is(.pe-preview, .pe-seg) { flex: 0 0 auto; align-self: center; }
         .pe-overlay [data-layout="land"] .pe-card-box { padding: 6px; }
         .pe-overlay [data-layout="land"] :is(.pe-tile-sub, .pe-choice-title) { display: none; }
+        .pe-overlay [data-layout="land"] .pe-preview { order: -2; }
+        .pe-overlay [data-layout="land"] .pe-seg { order: -1; flex-direction: column; }
+        .pe-overlay [data-layout="land"] .pe-seg > .sel-opt { min-height: 36px; }
+        .pe-overlay [data-layout="land"] .pe-seg > .sel-opt:first-child { border-radius: calc(var(--sel-r) - 1px) calc(var(--sel-r) - 1px) 0 0; }
+        .pe-overlay [data-layout="land"] .pe-seg > .sel-opt:last-child { border-radius: 0 0 calc(var(--sel-r) - 1px) calc(var(--sel-r) - 1px); }
+        .pe-overlay [data-layout="land"] .pe-seg > .sel-opt + .sel-opt { border-left: 0; border-top: 1px solid rgba(255,255,255,.35); }
+        .pe-overlay [data-layout="land"] .pe-pair { display: none; }
         .pe-overlay [data-layout="land"] .pe-tiles { flex-direction: row; }
-        .pe-overlay [data-layout="land"] .pe-tile { flex: 1; padding: 4px 8px; }
-        .pe-overlay [data-layout="land"] .pe-thumb { width: 28px; height: 28px; }
+        .pe-overlay [data-layout="land"] .pe-tile { flex: 1 1 0; min-width: 0; padding: 4px 8px; }
+        .pe-overlay [data-layout="land"] .pe-tile .pe-thumb { display: none; }
         @media (hover: hover) {
             .pe-icon:not(:disabled):hover { background: var(--surface-2); }
             .pe-bar .pe-icon:not(:disabled):hover, .pe-full .pe-icon:not(:disabled):hover { background: rgba(255,255,255,.12); }

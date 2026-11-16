@@ -439,6 +439,18 @@ export async function openPortraitEditor(input: PortraitEditorInput): Promise<Po
     const turn = (d: 1 | -1): void => setView(turnPortraitView(view(), d, W, H));
     const straighten = (a: number): void => setView(straightenPortraitView(view(), a, W, H), 'angle');
 
+    /** A name too long for one row goes on rows at the smaller size, as the tree's Normal card shows it whole (T40, 10h). */
+    const fitPreviewName = (): void => {
+        const nameText = q<HTMLSpanElement>('.pe-card-box .name-text');
+        const nameEl = nameText.parentElement!;
+        nameEl.classList.remove('pe-name-rows');
+        nameText.style.whiteSpace = 'nowrap';
+        if (nameText.clientWidth > 0 && nameText.scrollWidth > nameText.clientWidth + 1) nameEl.classList.add('pe-name-rows');
+        nameText.style.whiteSpace = '';
+    };
+    // Measured in the fallback font before the card fonts are in: once more when they are.
+    void document.fonts?.ready.then(() => { if (overlay.isConnected) fitPreviewName(); });
+
     // ---------- the step's panel: who, Keep / Replace, notes ----------
     const renderStep = (): void => {
         const step = input.steps[index];
@@ -448,6 +460,7 @@ export async function openPortraitEditor(input: PortraitEditorInput): Promise<Po
         cardEl.classList.remove('male', 'female', 'unknown');
         cardEl.classList.add(step.person.gender === 'male' || step.person.gender === 'female' ? step.person.gender : 'unknown');
         q<HTMLSpanElement>('.pe-card-box .name-text').textContent = shownName(step.person);
+        fitPreviewName();
         const years = cardYears(step.person);
         const meta = q<HTMLSpanElement>('.pe-card-box .meta-text');
         meta.textContent = years;
