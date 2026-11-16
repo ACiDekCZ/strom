@@ -11082,6 +11082,17 @@
         .tv-status-agent-show:focus-visible { outline: 2px solid var(--follow-c1); outline-offset: 1px; border-radius: 2px; }
         /* The research's state gives way with "…" before the legend leaves the status line (a phone, de). */
         .tv-status-right:has(> .tv-status-res:not([hidden])) { flex: 0 1 auto; min-width: 0; }
+        /* Spec 097 §5: the agent's hidden-row note shows only in another window, whose strip already says following and
+           read-only: the research's state and the read-only sentence give way while it shows, so its sentence is not cut. */
+        .tv-status:has(.tv-status-agent:not([hidden])) .tv-status-res,
+        .tv-status:has(.tv-status-agent:not([hidden])) .tv-status-ro { display: none; }
+        /* Up to 400 px the count and the legend give way too (back with the note gone), and the note goes without its ◎
+           (its colour stays): the German sentence and Show for now fit at 390. */
+        @media (max-width: 400px) {
+            .tv-status:has(.tv-status-agent:not([hidden])) .tv-status-count,
+            .tv-status:has(.tv-status-agent:not([hidden])) .tv-legend-btn,
+            .tv-status-agent-mark { display: none; }
+        }
         /* A phone following a research: the table ends above the research's strip (its status line and legend stay in sight). */
         @media (max-width: 640px) {
             body[data-view-mode="table"]:has(> #live-panel.phone-strip:not([hidden])) .table-container { bottom: var(--live-strip-h, 0px); }

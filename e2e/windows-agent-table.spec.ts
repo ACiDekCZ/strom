@@ -269,12 +269,18 @@ test.describe('desktop', () => {
         expect(await scrollTop(sat)).toBe(at);
         await expect(stripText(sat)).toHaveText('Following the agent · read-only');
         expect(await sat.locator('#table-container .tv-status').evaluate(el => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
-        // A narrow window (390): the note takes the sort's place, Show for now still within the line.
+        // The note's sentence whole: the research's state and the read-only sentence (the strip says both) give way.
+        const noteCut = () => note(sat).locator('.tv-status-agent-text').evaluate(el => el.scrollWidth - el.clientWidth);
+        expect(await noteCut()).toBeLessThanOrEqual(0);
+        await expect(sat.locator('#table-container .tv-status-ro')).toBeHidden();
+        await expect(sat.locator('#table-container .tv-status-res')).toBeHidden();
+        // A narrow window (390): the note takes the sort's place, the count's and the legend's, Show for now still within the line.
         await sat.setViewportSize({ width: 390, height: 700 });
         await expect(sat.locator('#table-container .tv-status-sort')).toBeHidden();
         await expect(note(sat).getByRole('button', { name: 'Show for now' })).toBeVisible();
         const right = await note(sat).getByRole('button', { name: 'Show for now' }).evaluate(el => el.getBoundingClientRect().right);
         expect(right).toBeLessThanOrEqual(390);
+        expect(await noteCut()).toBeLessThanOrEqual(0);
         await sat.setViewportSize({ width: 1000, height: 620 });
 
         // Show for now: the row shown for now outside the filter, scrolled to; the note goes.
@@ -284,6 +290,8 @@ test.describe('desktop', () => {
         await expect(temp).toHaveClass(/\bis-agent\b/);
         await expect.poll(async () => (await rowPlace(sat, 'P0300')).seen).toBe('all');
         await expect(note(sat)).toBeHidden();
+        // The note gone: the read-only sentence is back.
+        await expect(sat.locator('#table-container .tv-status-ro')).toBeVisible();
         await sat.close();
     });
 });
