@@ -24,8 +24,24 @@ describe('satelliteScreen', () => {
         expect(screen({ hasTree: false, live: true })).toMatchObject({ strip: null, loading: true });
     });
 
-    it('2 read-only: the neutral strip while the main window follows a live research', () => {
-        expect(screen({ live: true })).toEqual({ strip: 'live', empty: null, loading: false, muted: false });
+    it('2 read-only: while the main window follows a live research, the window\'s own following (spec 097, states 4–9)', () => {
+        expect(screen({ live: true })).toEqual({ strip: 'attached', empty: null, loading: false, muted: false });
+        expect(screen({ live: true, agent: 'attached' })).toMatchObject({ strip: 'attached' });
+        expect(screen({ live: true, agent: 'attached', noJumpView: true })).toMatchObject({ strip: 'attachedNoJump' });
+        expect(screen({ live: true, agent: 'attached', agentIdle: true, noJumpView: true })).toMatchObject({ strip: 'idle' });
+        expect(screen({ live: true, agent: 'detached', agentIdle: true })).toMatchObject({ strip: 'detached' });
+        expect(screen({ live: true, agent: 'paused', agentIdle: true })).toMatchObject({ strip: 'paused' });
+        // The higher state wins: the bridge lost before the window's own state.
+        expect(screen({ live: true, agent: 'paused', bridgeLost: true })).toMatchObject({ strip: 'lost' });
+        expect(screen({ live: true, agent: 'detached', bridgeLost: true })).toMatchObject({ strip: 'lost' });
+        // Without a live session none of them, whatever the window kept.
+        expect(screen({ agent: 'detached', bridgeLost: true })).toMatchObject({ strip: null });
+    });
+
+    it('taking over (spec 097 §7) before the main window closed; impossible, its own amber strip', () => {
+        expect(screen({ connection: 'main-closed', live: true, takeover: 'running' })).toMatchObject({ strip: 'takeover' });
+        expect(screen({ connection: 'main-closed', live: true, takeover: 'failed' })).toMatchObject({ strip: 'takeoverFailed' });
+        expect(screen({ connection: 'main-closed', live: true, agent: 'paused', bridgeLost: true })).toMatchObject({ strip: 'closed' });
     });
 
     it('3 main closed: the amber strip, before 2', () => {

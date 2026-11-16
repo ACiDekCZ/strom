@@ -4,7 +4,8 @@ import { card, openApp } from './helpers.js';
 /**
  * The satellite window's states (spec 079 §3): the view's skeleton until the
  * tree comes ("Loading the tree…" only after 300 ms, the header muted); the
- * read-only strip while the main window follows a live research; the amber
+ * read-only strip of the window's following while the main window follows a
+ * live research (spec 097 §1); the amber
  * strip once the main window closed (not on its reload), before the live one,
  * with "Make this the main window" (the window starts again as the main one
  * with its tree and the Table; the lock held by another window: nothing) and
@@ -163,7 +164,9 @@ test.describe('desktop (1440)', () => {
         // 2: live research in the main window.
         await page.evaluate(() => window.Strom.DataManager.setLiveTree(window.Strom.DataManager.getCurrentTreeId()));
         await expect(strip(sat)).toBeVisible();
-        await expect(strip(sat)).toHaveText(/Read-only · the main window is following research/);
+        // The window's own following of the agent (spec 097 §1): nobody worked on in this tree here.
+        await expect(strip(sat)).toHaveText(/The agent is not working now · read-only/);
+        await expect(strip(sat).getByRole('button', { name: 'Detach this window' })).toBeVisible();
         await expect(strip(sat).getByRole('button', { name: 'Go to the main window' })).toBeVisible();
         await expect(strip(sat)).not.toHaveClass(/sat-strip--amber/);
         await expect(tv(sat, '.tv-status-ro')).toBeVisible();
@@ -187,7 +190,7 @@ test.describe('desktop (1440)', () => {
 
         // 3 before 2: the main window follows a live research, then closes.
         await page.evaluate(() => window.Strom.DataManager.setLiveTree(window.Strom.DataManager.getCurrentTreeId()));
-        await expect(strip(sat)).toHaveText(/Read-only/);
+        await expect(strip(sat)).toHaveText(/read-only/);
         const closedAt = Date.now();
         await page.close();
         await expect(strip(sat)).toHaveClass(/sat-strip--amber/, { timeout: 4500 });

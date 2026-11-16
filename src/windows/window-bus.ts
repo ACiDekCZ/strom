@@ -11,6 +11,7 @@
 
 import type { TreeId } from '../types.js';
 import type { SatelliteKind } from './window-role.js';
+import type { AgentFollow } from './agent-follow-state.js';
 
 export const WINDOW_CHANNEL = 'strom-windows';
 
@@ -52,8 +53,12 @@ export interface WindowBounds {
 }
 
 export type WindowMessageBody =
-    /** sat → main: after start and after its reload. `state`: the view's own state (K4). */
-    | { type: 'hello'; windowId: string; kind: SatelliteKind; treeId: TreeId | null; state?: unknown }
+    /**
+     * sat → main: after start and after its reload. `state`: the view's own
+     * state (K4). `agent`: the window's own following of the agent (spec 097
+     * §1–§3; none without a live session), for the order of taking over (§7).
+     */
+    | { type: 'hello'; windowId: string; kind: SatelliteKind; treeId: TreeId | null; state?: unknown; agent?: AgentFollow | null }
     /** main → sat: the view's starting state from openSatellite (once, before `tree`). */
     | { type: 'init'; to: string; kind: SatelliteKind; state: unknown }
     /**
@@ -104,8 +109,8 @@ export type WindowMessageBody =
     | { type: 'agent-state'; to?: string; state: unknown }
     /** sat → main: the whole agent's state for this window (its mirror missed a revision, a new main window). */
     | { type: 'agent-state-req'; windowId: string }
-    /** sat → main: the window switched its view (its kind in the main window's list, its address). */
-    | { type: 'view'; windowId: string; kind: SatelliteKind }
+    /** sat → main: the window switched its view (its kind in the main window's list, its address), or its following of the agent changed. */
+    | { type: 'view'; windowId: string; kind: SatelliteKind; agent?: AgentFollow | null }
     /**
      * sat → main: this window opened another one itself (§2 ⧉ "Open another
      * window"); its starting state goes to it as `init` after its hello.

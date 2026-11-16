@@ -22,6 +22,7 @@ import type { TreeId } from '../types.js';
 import { WindowBus, answerWhenFocused, FOCUS_WAIT_MS, type MessageOf, type WindowStatus, type EditRefusal, type WindowBounds } from './window-bus.js';
 import { isMainAlive, MAIN_WINDOW_NAME, newWindowId, type LocksLike, type SatelliteParams, type SatelliteKind } from './window-role.js';
 import { effectiveFollowMode, followChoiceToStore, parseFollowChoice, type FollowMode } from './follow-mode.js';
+import type { AgentFollow } from './agent-follow-state.js';
 
 /** Where the satellite's copy of the tree lives (DataManager; a test may pass its own). */
 export interface SatelliteDataTarget {
@@ -136,6 +137,7 @@ export class SatelliteClient {
     private _connection: SatelliteConnection = 'connecting';
     private _init: { kind: SatelliteKind; state: unknown } | null = null;
     private _mainFocus: unknown = null;
+    private _agent: AgentFollow | null = null;
     private mainId: string | null = null;
     private lastHeard = 0;
     private helloAt = -Infinity;
@@ -305,7 +307,17 @@ export class SatelliteClient {
         this._kind = kind;
         // The view's default (or a switch of a view that cannot move its centre) may change what a choice does here.
         if (this.followMode !== wasMode) this.emit('follow-mode', this.followMode);
-        if (this.started) this.bus.post({ type: 'view', windowId: this.windowId, kind });
+        if (this.started) this.bus.post({ type: 'view', windowId: this.windowId, kind, agent: this._agent });
+    }
+
+    /** This window's own following of the agent (spec 097 §1–§3; null: no live session). */
+    get agentFollow(): AgentFollow | null { return this._agent; }
+
+    /** The window's following of the agent changed: the main window's list says it (the order of taking over, §7). */
+    setAgentFollow(agent: AgentFollow | null): void {
+        if (agent === this._agent) return;
+        this._agent = agent;
+        if (this.started) this.bus.post({ type: 'view', windowId: this.windowId, kind: this._kind, agent });
     }
 
     /**
@@ -402,7 +414,7 @@ export class SatelliteClient {
 
     private hello(): void {
         this.helloAt = Date.now();
-        this.bus.post({ type: 'hello', windowId: this.windowId, kind: this._kind, treeId: this._treeId ?? this.requestedTreeId });
+        this.bus.post({ type: 'hello', windowId: this.windowId, kind: this._kind, treeId: this._treeId ?? this.requestedTreeId, agent: this._agent });
     }
 
     private setConnection(c: SatelliteConnection): void {

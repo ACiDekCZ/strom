@@ -6,8 +6,12 @@
  *
  * 1 loading     — until the tree comes: the view's skeleton, "Loading the
  *                 tree…" only after 300 ms, the header's controls muted;
- * 2 read-only   — the main window follows a live research: a neutral strip,
- *                 "Go to the main window";
+ * 2 read-only   — the main window follows a live research: the window's own
+ *                 following of the agent (spec 097 §1–§3, §6; the table of
+ *                 strip states in ZADANI_DEV): attached, without jumps in
+ *                 this view, the agent idle, paused, detached, the bridge
+ *                 lost; each with its icon, words and buttons, and "Go to
+ *                 the main window" last;
  * 3 main closed — `main-bye` or no status for 3 s (the client decides): an
  *                 amber strip "as of {time}", Make this the main window, Open
  *                 Strom (takes precedence over 2);
@@ -20,13 +24,20 @@
  */
 
 import { strings } from '../strings.js';
+import type { AgentFollow } from './agent-follow-state.js';
 
 /** How long the loading state waits before it says so (a small tree does not flash). */
 export const LOADING_LABEL_DELAY_MS = 300;
 export const CONFLICT_TOAST_MS = 6000;
 export const SWITCHED_TOAST_MS = 4000;
 
-export type SatStrip = 'live' | 'closed' | null;
+/**
+ * The strip under the header (spec 097: the higher one wins). While the main
+ * window follows a live research, one of `lost` … `attached` stands;
+ * `takeover` / `takeoverFailed` belong to taking over after the main window
+ * closed (§7).
+ */
+export type SatStrip = 'takeover' | 'takeoverFailed' | 'closed' | 'lost' | 'paused' | 'detached' | 'idle' | 'attachedNoJump' | 'attached' | null;
 export type SatEmpty = 'gone' | 'locked' | null;
 
 export interface SatScreenInput {
@@ -37,6 +48,25 @@ export interface SatScreenInput {
     locked: boolean;
     /** The tree was locked since the copy came: it shows again when the main window sends it anew (the copy is dropped meanwhile). */
     awaitingTree: boolean;
+    /** The window's own following of the agent (null or missing: attached). */
+    agent?: AgentFollow | null;
+    /** The agent works on nobody of this tree now. */
+    agentIdle?: boolean;
+    /** The view shown has no jumps (the descendants, the timeline). */
+    noJumpView?: boolean;
+    /** The main window's bridge does not answer (it is tried again). */
+    bridgeLost?: boolean;
+    /** Taking over after the main window closed (§7): under way here, or impossible. */
+    takeover?: 'running' | 'failed' | null;
+}
+
+/** The strip while the main window follows a live research (states 4–9). */
+function liveStrip(s: SatScreenInput): SatStrip {
+    if (s.bridgeLost) return 'lost';
+    if (s.agent === 'paused') return 'paused';
+    if (s.agent === 'detached') return 'detached';
+    if (s.agentIdle) return 'idle';
+    return s.noJumpView ? 'attachedNoJump' : 'attached';
 }
 
 export interface SatScreen {
@@ -56,8 +86,10 @@ export function satelliteScreen(s: SatScreenInput): SatScreen {
     else if (s.locked && (!closed || !s.hasTree)) empty = 'locked';
     const loading = !empty && (!s.hasTree || s.awaitingTree);
     let strip: SatStrip = null;
-    if (closed) strip = 'closed';
-    else if (s.live && !empty && !loading) strip = 'live';
+    if (s.takeover === 'running') strip = 'takeover';
+    else if (s.takeover === 'failed') strip = 'takeoverFailed';
+    else if (closed) strip = 'closed';
+    else if (s.live && !empty && !loading) strip = liveStrip(s);
     return { strip, empty, loading, muted: loading || empty !== null };
 }
 
@@ -73,9 +105,26 @@ export interface SatStatesClient {
     on(event: 'conflict', cb: () => void): () => void;
 }
 
+/** The window's following of the agent as the strip reads it (spec 097). */
+export interface SatAgentView {
+    follow: AgentFollow | null;
+    idle: boolean;
+    noJump: boolean;
+    lost: boolean;
+    takeover: 'running' | 'failed' | null;
+}
+
 export interface SatStatesOptions {
     /** "Go to the main window" (states 2 and 6). */
     goToMain: () => void;
+    /** The window's following of the agent now (none: the strip of spec 079 alone). */
+    agent?: () => SatAgentView;
+    /** "Detach this window" (spec 097 §2). */
+    detach?: () => void;
+    /** "Follow the agent" (§2). */
+    attach?: () => void;
+    /** "Back to the agent" (§3). */
+    back?: () => void;
     /** "Open Strom" (state 3): a new main window. */
     openStrom: () => void;
     /** "Make this the main window" (state 3). */
@@ -88,6 +137,25 @@ export interface SatStatesOptions {
     /** The content (the view's container): inert while a state or the skeleton stands in its place. */
     content?: () => HTMLElement | null;
 }
+
+/** The strip's icons (16 × 16, the colour from the strip's class; spec 097 §1). */
+const SVG = (inner: string, attrs = ''): string =>
+    `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"${attrs}>${inner}</svg>`;
+const ICONS = {
+    follow: SVG('<circle cx="12" cy="12" r="8.5"></circle><circle cx="12" cy="12" r="3" fill="currentColor"></circle>'),
+    pause: SVG('<circle cx="12" cy="12" r="8.5"></circle><path d="M10 8.5v7M14 8.5v7" stroke-linecap="round"></path>'),
+    off: SVG('<circle cx="12" cy="12" r="8.5"></circle>', ' stroke-dasharray="3 3"'),
+    warn: SVG('<path d="M12 3.5 21 19.5H3z" stroke-linejoin="round"></path><path d="M12 10v4.5M12 17.2v.1"></path>', ' stroke-linecap="round"'),
+    spin: SVG('<path d="M12 3.5a8.5 8.5 0 1 1-8.5 8.5"></path>', ' stroke-linecap="round"'),
+} as const;
+
+const STRIP_ICON: Record<Exclude<SatStrip, null>, keyof typeof ICONS> = {
+    takeover: 'spin', takeoverFailed: 'warn', closed: 'warn', lost: 'warn',
+    paused: 'pause', detached: 'off', idle: 'follow', attachedNoJump: 'follow', attached: 'follow',
+};
+
+/** The amber strips (the main window closed, the bridge lost, no taking over). */
+const AMBER: readonly SatStrip[] = ['closed', 'lost', 'takeoverFailed'];
 
 /** Widths of the skeleton's rows (% of the area), as in 3a. */
 const SKELETON_ROWS = [92, 74, 86, 64, 90, 58, 80, 70, 88, 62, 84, 72];
@@ -108,24 +176,28 @@ function button(doc: Document, className: string, text: string, run: () => void)
 
 /**
  * Put the states under the header. They follow the client's events; `refresh`
- * writes their texts again (another language). `screen` is the state shown now.
+ * writes their texts again (another language), `update` looks at the window's
+ * following of the agent again (its words change only with the state).
+ * `screen` is the state shown now.
  */
-export function mountSatStates(doc: Document, client: SatStatesClient, opts: SatStatesOptions): { refresh: () => void; screen: () => SatScreen } {
+export function mountSatStates(doc: Document, client: SatStatesClient, opts: SatStatesOptions): { refresh: () => void; update: () => void; screen: () => SatScreen } {
     const html = doc.documentElement;
     let awaitingTree = false;
     let wasLocked = false;
     let shown: SatScreen = { strip: null, empty: null, loading: false, muted: false };
+    /** The strip as written: its state and, while lost, the window's own button (detach or follow). */
+    let stripKey = '';
     let stripText = '';
 
-    // The strip (3b, 3c).
+    // The strip (3b, 3c; spec 097 §1): its words change only with its state (role=status says each change once).
     const strip = el(doc, 'div', 'sat-strip');
     strip.setAttribute('role', 'status');
     strip.hidden = true;
-    const dot = el(doc, 'span', 'sat-strip-dot');
-    dot.setAttribute('aria-hidden', 'true');
+    const icon = el(doc, 'span', 'sat-strip-icon');
+    icon.setAttribute('aria-hidden', 'true');
     const text = el(doc, 'span', 'sat-strip-text');
     const actions = el(doc, 'div', 'sat-strip-actions');
-    strip.append(dot, text, actions);
+    strip.append(icon, text, actions);
 
     // In place of the content (3f, 3g).
     const empty = el(doc, 'div', 'sat-empty');
@@ -165,21 +237,63 @@ export function mountSatStates(doc: Document, client: SatStatesClient, opts: Sat
     };
     if (typeof ResizeObserver !== 'undefined') new ResizeObserver(syncOffset).observe(strip);
 
-    const writeStrip = (kind: SatStrip): void => {
+    const writeStrip = (kind: SatStrip, agent: SatAgentView | null): void => {
         const w = strings.win;
+        // A press on the strip's button keeps the focus in the strip: on the button standing in its place now.
+        const pressed = [...actions.children].indexOf(doc.activeElement as Element);
         actions.replaceChildren();
-        strip.classList.toggle('sat-strip--amber', kind === 'closed');
-        if (kind === 'live') {
-            stripText = w.readOnlyLive;
-            actions.append(button(doc, 'sat-strip-btn sat-strip-btn--link', w.goToMain, () => opts.goToMain()));
-        } else if (kind === 'closed') {
-            stripText = w.mainClosed(opts.formatTime(client.lastHeardAt));
-            actions.append(
-                button(doc, 'sat-strip-btn sat-strip-make-main', w.makeMain, () => opts.makeMain()),
-                button(doc, 'sat-strip-btn sat-strip-btn--primary sat-strip-open', w.openStrom, () => opts.openStrom()),
-            );
+        strip.className = 'sat-strip';
+        if (kind) strip.classList.add(`sat-strip--${kind}`);
+        strip.classList.toggle('sat-strip--amber', AMBER.includes(kind));
+        icon.innerHTML = kind ? ICONS[STRIP_ICON[kind]] : '';
+        const goToMain = (): HTMLButtonElement => button(doc, 'sat-strip-btn sat-strip-btn--link sat-strip-main', w.goToMain, () => opts.goToMain());
+        const detach = (): HTMLButtonElement => button(doc, 'sat-strip-btn sat-strip-detach', w.detach, () => opts.detach?.());
+        const attach = (): HTMLButtonElement => button(doc, 'sat-strip-btn sat-strip-attach', w.attach, () => opts.attach?.());
+        const closedButtons = (): HTMLButtonElement[] => [
+            button(doc, 'sat-strip-btn sat-strip-make-main', w.makeMain, () => opts.makeMain()),
+            button(doc, 'sat-strip-btn sat-strip-btn--primary sat-strip-open', w.openStrom, () => opts.openStrom()),
+        ];
+        switch (kind) {
+            case 'takeover':
+                stripText = w.takingOver;
+                break;
+            case 'takeoverFailed':
+                stripText = w.takeoverFailed;
+                actions.append(...closedButtons());
+                break;
+            case 'closed':
+                stripText = w.mainClosed(opts.formatTime(client.lastHeardAt));
+                actions.append(...closedButtons());
+                break;
+            case 'lost':
+                stripText = w.bridgeLost;
+                actions.append(agent?.follow === 'detached' ? attach() : detach(), goToMain());
+                break;
+            case 'paused':
+                stripText = w.agentPaused;
+                actions.append(button(doc, 'sat-strip-btn sat-strip-btn--primary sat-strip-back', strings.live.followBack, () => opts.back?.()), detach(), goToMain());
+                break;
+            case 'detached':
+                stripText = w.agentDetached;
+                actions.append(attach(), goToMain());
+                break;
+            case 'idle':
+                stripText = w.agentIdle;
+                actions.append(detach(), goToMain());
+                break;
+            case 'attachedNoJump':
+                stripText = w.agentAttachedNoJump;
+                actions.append(detach(), goToMain());
+                break;
+            case 'attached':
+                stripText = w.agentAttached;
+                actions.append(detach(), goToMain());
+                break;
+            default:
+                stripText = '';
         }
         text.textContent = stripText;
+        if (pressed >= 0 && actions.children.length > 0) (actions.children[Math.min(pressed, actions.children.length - 1)] as HTMLElement).focus();
     };
 
     const writeEmpty = (kind: SatEmpty): void => {
@@ -203,6 +317,7 @@ export function mountSatStates(doc: Document, client: SatStatesClient, opts: Sat
         // Locked now: the copy shows again only when the main window sends the tree anew (it does at the unlock).
         if (s?.locked && !wasLocked) awaitingTree = true;
         wasLocked = !!s?.locked;
+        const agent = opts.agent?.() ?? null;
         const next = satelliteScreen({
             connection: client.connection,
             hasTree: client.hasTree,
@@ -210,12 +325,15 @@ export function mountSatStates(doc: Document, client: SatStatesClient, opts: Sat
             live: !!s?.live,
             locked: !!s?.locked,
             awaitingTree,
+            ...(agent ? { agent: agent.follow, agentIdle: agent.idle, noJumpView: agent.noJump, bridgeLost: agent.lost, takeover: agent.takeover } : {}),
         });
         const prev = shown;
         shown = next;
-        if (force || next.strip !== prev.strip) {
+        const key = `${next.strip}${next.strip === 'lost' ? `:${agent?.follow === 'detached'}` : ''}`;
+        if (force || key !== stripKey) {
+            stripKey = key;
             strip.hidden = next.strip === null;
-            writeStrip(next.strip);
+            writeStrip(next.strip, agent);
             syncOffset();
         }
         if (force || next.empty !== prev.empty) {
@@ -251,5 +369,5 @@ export function mountSatStates(doc: Document, client: SatStatesClient, opts: Sat
     });
     client.on('conflict', () => opts.toast(strings.win.editConflict, CONFLICT_TOAST_MS));
     render(true);
-    return { refresh: () => render(true), screen: () => shown };
+    return { refresh: () => render(true), update: () => render(), screen: () => shown };
 }

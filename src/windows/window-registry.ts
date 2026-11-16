@@ -19,6 +19,7 @@ import { TreeManager } from '../tree-manager.js';
 import type { TreeId } from '../types.js';
 import { WindowBus, answerWhenFocused, FOCUS_WAIT_MS, type MessageOf, type WindowBounds, type WindowStatus, type EditRefusal } from './window-bus.js';
 import { newWindowId, satelliteUrl, satelliteWindowName, type SatelliteKind } from './window-role.js';
+import { parseAgentFollow, type AgentFollow } from './agent-follow-state.js';
 
 /** What the registry needs of the main window (DataManager's by default; a test passes its own). */
 export interface MainWindowHost {
@@ -90,6 +91,8 @@ export interface WindowEntry {
     /** Its view's state from its hello (K4), and where it stood when it left. */
     state?: unknown;
     bounds?: WindowBounds;
+    /** Its own following of the agent as it last said (spec 097; null: none, no live session). */
+    agent?: AgentFollow | null;
 }
 
 interface Entry extends WindowEntry {
@@ -290,7 +293,7 @@ export class WindowRegistry {
 
     /** The satellite windows, in the order they appeared. */
     list(): WindowEntry[] {
-        return [...this.entries.values()].map(({ id, kind, treeId, opened, connected, state, bounds }) => ({ id, kind, treeId, opened, connected, state, bounds }));
+        return [...this.entries.values()].map(({ id, kind, treeId, opened, connected, state, bounds, agent }) => ({ id, kind, treeId, opened, connected, state, bounds, ...(agent ? { agent } : {}) }));
     }
 
     get size(): number {
@@ -563,6 +566,7 @@ export class WindowRegistry {
         entry.kind = m.kind;
         entry.treeId = m.treeId;
         entry.connected = true;
+        entry.agent = parseAgentFollow(m.agent);
         if (m.state !== undefined) entry.state = m.state;
         this.entries.set(id, entry);
         if (!entry.initSent) {
@@ -598,7 +602,10 @@ export class WindowRegistry {
     /** A satellite switched its view (§2 K2): the list names the new one. */
     private onView(m: MessageOf<'view'>): void {
         const entry = this.entries.get(m.windowId || m.from);
-        if (!entry || entry.kind === m.kind) return;
+        if (!entry) return;
+        // Its following of the agent (spec 097): kept for the order of taking over, not shown here (§8).
+        if (m.agent !== undefined) entry.agent = parseAgentFollow(m.agent);
+        if (entry.kind === m.kind) return;
         entry.kind = m.kind;
         this.emitChange();
     }

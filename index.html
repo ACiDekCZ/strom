@@ -8017,6 +8017,26 @@
         .sat-strip-actions { flex: none; display: flex; flex-wrap: wrap; gap: 6px; max-width: 100%; }
         .sat-strip--amber { background: var(--warning-soft); color: var(--warning-text); }
         .sat-strip--amber .sat-strip-dot { background: var(--warning); }
+        /* The window's following of the agent (spec 097 §1): its icon and words tell the state, the colour third. */
+        .sat-strip-icon { flex: none; width: 16px; height: 16px; display: inline-flex; color: var(--follow-c1); }
+        .sat-strip-icon svg { display: block; width: 16px; height: 16px; }
+        .sat-strip-icon:empty { display: none; }
+        .sat-strip--attached,
+        .sat-strip--attachedNoJump,
+        .sat-strip--idle { box-shadow: inset 3px 0 0 var(--follow-c1); }
+        .sat-strip--idle .sat-strip-icon { color: var(--text-faint); }
+        .sat-strip--paused { box-shadow: inset 3px 0 0 var(--text-faint); }
+        .sat-strip--paused .sat-strip-icon { color: var(--text-light); }
+        .sat-strip--detached .sat-strip-icon { color: var(--text-faint); }
+        .sat-strip--amber .sat-strip-icon { color: var(--warning-text); }
+        .sat-strip--takeover .sat-strip-icon { color: var(--primary); animation: sat-strip-spin 1s linear infinite; }
+        @keyframes sat-strip-spin { to { transform: rotate(360deg); } }
+        @media (prefers-reduced-motion: reduce) {
+            .sat-strip--takeover .sat-strip-icon { animation: none; }
+        }
+        .sat-strip--attached .sat-strip-text,
+        .sat-strip--paused .sat-strip-text { font-weight: 500; }
+        .sat-strip--lost .sat-strip-btn:not(.sat-strip-btn--link) { background: transparent; border-color: var(--warning-text); color: var(--warning-text); }
         .sat-strip-btn,
         .sat-empty-btn {
             flex: none; display: inline-flex; align-items: center; justify-content: center;
@@ -8075,6 +8095,14 @@
             .sat-strip { padding: 7px 8px 7px 12px; }
             .sat-empty { padding: 16px; }
             .sat-empty-btn { height: 44px; padding: 0 16px; font-size: 14px; }
+            /* A narrow window: the buttons under the words, in line with them (spec 097 §1). */
+            .sat-strip-icon:not(:empty) ~ .sat-strip-text { flex-basis: calc(100% - 30px); }
+            .sat-strip-icon:not(:empty) ~ .sat-strip-actions { flex-basis: 100%; padding-left: 26px; box-sizing: border-box; }
+        }
+        /* Up to 400 px the strip's buttons are 44 px high, with a mouse too. */
+        @media (max-width: 400px) {
+            .sat-strip { padding: 8px 8px 8px 14px; }
+            .sat-strip-btn { min-height: 44px; }
         }
         /* Touch: 44 px targets in the strip too. */
         @media (pointer: coarse) {

@@ -113,6 +113,12 @@ let seenMode: ViewMode | null = null;
 
 const isFollowView = (m: ViewMode): m is FollowView => (FOLLOW_VIEWS as readonly string[]).includes(m);
 
+/** Another window follows in the view it shows (O5); a view without jumps counts as the family view. */
+function shownFollowView(): FollowView {
+    const mode = TreeRenderer.getViewMode();
+    return isFollowView(mode) ? mode : 'family';
+}
+
 function personOfRefn(): (refn: string) => PersonId | null {
     const persons = Object.values(DataManager.getData().persons);
     return (refn: string) => persons.find(x => x.refn === refn)?.id ?? null;
@@ -148,21 +154,42 @@ function workedNow(): Set<PersonId> {
 }
 
 /**
- * Whether this window may follow at all (null: it may, the main window).
- * Another window (spec 097) draws the main window's session from its mirror
- * and does not follow until its own following is set up (D2 sets the gate).
+ * Following in another window of the app (spec 097 §1–§4; null: the main
+ * window, whose ◎ switch and settings are the device's). There the window's
+ * own state decides whether it follows (src/windows/agent-follow-state.ts);
+ * it follows in the view it shows (never the "Follow in" setting), stores
+ * nothing of the main window's (the switch, the focus before following),
+ * and its pause is said by its strip, not by the pill.
  */
-let windowFollowGate: (() => boolean) | null = null;
+export interface LiveFollowScope {
+    /** The window follows the agent (attached or paused). */
+    on(): boolean;
+    /** Follow the agent here, or detach this window. */
+    setOn(on: boolean): void;
+    /** Following here paused (moved by hand) or back. */
+    setPaused(paused: boolean): void;
+}
 
-export function setWindowFollowGate(gate: (() => boolean) | null): void {
-    windowFollowGate = gate;
+let scope: LiveFollowScope | null = null;
+
+export function setLiveFollowScope(s: LiveFollowScope | null): void {
+    scope = s;
+}
+
+/** Following is switched on here: the window's own state, else the ◎ switch. */
+function isOn(): boolean {
+    return scope ? scope.on() : followOn;
+}
+
+/** The window's state hears whether following is paused here (by hand, or the map's panning). */
+function reportPaused(): void {
+    scope?.setPaused(pausedByUser || !!session?.mapPaused);
 }
 
 /** Following applies: on, live, on the research's own tree, not read-only. */
 function followActive(): boolean {
-    if (windowFollowGate && !windowFollowGate()) return false;
     const s = liveSession();
-    return followOn && !!s && !s.ended && s.treeId === DataManager.getCurrentTreeId() && !DataManager.isViewMode();
+    return isOn() && !!s && !s.ended && s.treeId === DataManager.getCurrentTreeId() && !DataManager.isViewMode();
 }
 
 /** The session of following, started when following applies, dropped when it does not. */
@@ -173,13 +200,14 @@ function followSession(): FollowSession | null {
     }
     if (!session) {
         const treeId = DataManager.getCurrentTreeId();
+        // Another window keeps nothing of the main window's: neither its kept focus nor its view (O5: the one it shows).
         const focusBefore = startFocusBefore({
-            focus: TreeRenderer.getFocusPersonId(), worked: workedNow(), kept: treeId ? getFocusBefore(treeId) : null,
+            focus: TreeRenderer.getFocusPersonId(), worked: workedNow(), kept: treeId && !scope ? getFocusBefore(treeId) : null,
             defaultPerson: defaultPerson(), exists: id => !!DataManager.getPerson(id),
         });
-        if (treeId) setFocusBefore(treeId, focusBefore);
+        if (treeId && !scope) setFocusBefore(treeId, focusBefore);
         session = {
-            view: getFollowView(), focusBefore, fanPinned: null,
+            view: scope ? shownFollowView() : getFollowView(), focusBefore, fanPinned: null,
             mapPaused: false, trail: [], cardTrail: [], lastTargets: new Map(), lastPlaces: new Map(), legendOpen: null,
             fanArrive: true, mapArrive: true,
         };
@@ -368,23 +396,28 @@ export const liveFollowMethods = uiModule({
         btn.dataset.selForm = 'chip';
         btn.type = 'button';
         if (size === 'panel') btn.id = 'live-follow';
-        btn.setAttribute('aria-pressed', String(followOn));
-        btn.classList.toggle('is-on', followOn);
-        btn.classList.toggle('is-paused', followOn && (pausedByUser || (followMapPaused() && TreeRenderer.getViewMode() === 'map')));
-        const label = followOn ? L.followOff : L.followOn;
+        const on = isOn();
+        btn.setAttribute('aria-pressed', String(on));
+        btn.classList.toggle('is-on', on);
+        btn.classList.toggle('is-paused', on && (pausedByUser || (followMapPaused() && TreeRenderer.getViewMode() === 'map')));
+        const label = on ? L.followOff : L.followOn;
         btn.setAttribute('aria-label', label);
-        btn.title = followOn && !followTarget() ? `${label} · ${L.followIdle}` : label;
-        btn.onclick = () => this.setLiveFollow(!followOn);
+        btn.title = on && !followTarget() ? `${label} · ${L.followIdle}` : label;
+        btn.onclick = () => this.setLiveFollow(!isOn());
         return btn;
     },
 
     isLiveFollowOn(): boolean {
-        return followOn;
+        return isOn();
     },
 
     setLiveFollow(on: boolean): void {
-        followOn = on;
-        storeOn(on);
+        // Another window: its own state (attach / detach), nothing stored on the device.
+        if (scope) scope.setOn(on);
+        else {
+            followOn = on;
+            storeOn(on);
+        }
         pausedByUser = false;
         lastTarget = null;
         session = null;
@@ -449,7 +482,7 @@ export const liveFollowMethods = uiModule({
      */
     liveFollowViewRow(where: 'panel' | 'overview' | 'phone'): HTMLElement | null {
         const s = liveSession();
-        if (!followOn || !s || s.ended || DataManager.isViewMode()) return null;
+        if (!isOn() || !s || s.ended || DataManager.isViewMode()) return null;
         if (!topPrefs().followIn) return null;
         const fs = followSession();
         if (!fs) return null;
@@ -608,6 +641,12 @@ export const liveFollowMethods = uiModule({
         // Leaving the map ends its own pause (the next visit pans to the work again).
         if (left === 'map' && fs.mapPaused) this.endMapPause();
         if (!isFollowView(mode)) {
+            // Another window follows in the view it shows (§4): the descendants or the timeline have no jumps there, no pause.
+            if (scope) {
+                lastTarget = null;
+                this.refreshFollowMarks(new Set());
+                return true;
+            }
             this.pauseLiveFollow();
             return true;
         }
@@ -633,7 +672,7 @@ export const liveFollowMethods = uiModule({
         if (!workedNow().has(focus)) {
             fs.focusBefore = focus;
             const treeId = DataManager.getCurrentTreeId();
-            if (treeId) setFocusBefore(treeId, focus);
+            if (treeId && !scope) setFocusBefore(treeId, focus);
         }
         if (pausedByUser) return false;
         this.pauseLiveFollow();
@@ -647,6 +686,8 @@ export const liveFollowMethods = uiModule({
         if (!followActive() || pausedByUser) return;
         // The fan and the map do not move with the agent: their marks follow (refreshFollowMarks).
         if ((followSession()?.view ?? 'family') !== 'family') return;
+        // Another window jumps only in the family view it shows (§4: never switched there by following).
+        if (scope && TreeRenderer.getViewMode() !== 'family') return;
         const target = followTarget();
         if (!target) return;
         const there = target === lastTarget && TreeRenderer.getFocusPersonId() === target && TreeRenderer.getViewMode() === 'family';
@@ -701,6 +742,7 @@ export const liveFollowMethods = uiModule({
         if (idleTimer) clearTimeout(idleTimer);
         idleTimer = setTimeout(() => this.resumeLiveFollow(), timing().idle);
         if (first) {
+            reportPaused();
             this.renderLiveFollowPill();
             this.renderLivePanel();
             this.placeMapFollowChrome();
@@ -713,9 +755,12 @@ export const liveFollowMethods = uiModule({
         idleTimer = null;
         pausedByUser = false;
         lastTarget = null;
+        reportPaused();
         this.renderLiveFollowPill();
         this.renderLivePanel();
         const fsNow = followSession();
+        // Another window comes back in the view it shows (O5): Back never switches its view.
+        if (fsNow && scope) fsNow.view = shownFollowView();
         if (fsNow?.view === 'fan' || fsNow?.view === 'map') {
             if (fsNow.view === 'fan') fsNow.fanArrive = true; else fsNow.mapArrive = true;
             if (TreeRenderer.getViewMode() === fsNow.view) this.refreshFollowMarks(new Set());
@@ -743,6 +788,7 @@ export const liveFollowMethods = uiModule({
         if (mapIdleTimer) clearTimeout(mapIdleTimer);
         mapIdleTimer = setTimeout(() => this.resumeMapFollow(), timing().idle);
         if (first) {
+            reportPaused();
             this.renderLiveFollowPill();
             this.renderLivePanel();
         }
@@ -766,6 +812,7 @@ export const liveFollowMethods = uiModule({
         const was = !!session?.mapPaused;
         if (session) session.mapPaused = false;
         if (!was) return;
+        reportPaused();
         this.renderLiveFollowPill();
         this.renderLivePanel();
         this.placeMapFollowChrome();
@@ -776,7 +823,8 @@ export const liveFollowMethods = uiModule({
      * has it; on the map moved by hand "Map panning paused · Back to the agent · ×".
      */
     renderLiveFollowPill(): void {
-        const kind = !followActive() ? null
+        // Another window says its pause in its strip (§3, dotaz 1): no pill there, not even the map's.
+        const kind = scope || !followActive() ? null
             : pausedByUser ? 'follow'
                 : followMapPaused() && TreeRenderer.getViewMode() === 'map' ? 'map' : null;
         let pill = document.getElementById('live-follow-pill');
@@ -802,6 +850,36 @@ export const liveFollowMethods = uiModule({
         close.onclick = () => this.setLiveFollow(false);
         pill.append(back, close);
         document.body.appendChild(pill);
+    },
+
+    /** Following paused here (by hand, or the map's panning while the map is shown). */
+    liveFollowPausedHere(): boolean {
+        return followActive() && (pausedByUser || (followMapPaused() && TreeRenderer.getViewMode() === 'map'));
+    },
+
+    /** The agent works on a person of this tree now (else following has nobody to jump to). */
+    liveFollowHasTarget(): boolean {
+        return followTarget() !== null;
+    },
+
+    /** Back to the agent from another window's strip: the pause by hand, else the map's. */
+    liveFollowBack(): void {
+        if (pausedByUser) this.resumeLiveFollow();
+        else if (session?.mapPaused) this.resumeMapFollow();
+        else this.followJump(true);
+    },
+
+    /**
+     * Another window's live session ended or its main window changed: following
+     * there starts afresh (no pause, no timers, no marks), nothing is stored.
+     */
+    resetLiveFollowHere(): void {
+        pausedByUser = false;
+        lastTarget = null;
+        session = null;
+        this.clearLiveFollowTimers();
+        this.renderLiveFollowPill();
+        this.refreshFollowMarks(new Set());
     },
 
     /** Moving or zooming the tree by hand, and the F key. */
@@ -852,7 +930,7 @@ export const liveFollowMethods = uiModule({
             if (!inPlace || !s || s.ended || s.treeId !== DataManager.getCurrentTreeId() || DataManager.isViewMode()) return;
             if (document.querySelector('.modal-overlay.active')) return;
             e.preventDefault();
-            this.setLiveFollow(!followOn);
+            this.setLiveFollow(!isOn());
         });
     },
 });

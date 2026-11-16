@@ -327,6 +327,26 @@ describe('the list of windows', () => {
     });
 });
 
+describe('the windows\' own following of the agent (spec 097 §7)', () => {
+    it('a window\'s state from its hello and its view messages, in the list (not as a change of it)', async () => {
+        const a = await connect();
+        expect(registry.list()[0].agent).toBeUndefined();
+        const changes = vi.fn();
+        registry.onChange(changes);
+        a.bus.post({ type: 'view', windowId: a.id, kind: 'table', agent: 'detached' });
+        await settle();
+        expect(registry.list()[0]).toMatchObject({ id: a.id, kind: 'table', agent: 'detached' });
+        expect(changes).not.toHaveBeenCalled();
+        a.bus.post({ type: 'hello', windowId: a.id, kind: 'table', treeId: TREE, agent: 'paused' });
+        await settle();
+        expect(registry.list()[0].agent).toBe('paused');
+        a.bus.post({ type: 'view', windowId: a.id, kind: 'family', agent: null });
+        await settle();
+        expect(registry.list()[0]).toMatchObject({ kind: 'family' });
+        expect(registry.list()[0].agent).toBeUndefined();
+    });
+});
+
 describe('selection', () => {
     it('a selection from a satellite reaches the main view and is not sent back', async () => {
         const sat = await connect();
