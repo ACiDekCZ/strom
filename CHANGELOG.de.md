@@ -2,6 +2,12 @@
 
 [English](CHANGELOG.md) · [Čeština](CHANGELOG.cs.md) · Deutsch · [Polski](CHANGELOG.pl.md)
 
+## 3.30.0
+
+*Diese Version ist in Vorbereitung; dieser Abschnitt wächst mit jeder Testversion.*
+
+- **Filter der Tabelle**: *Ohne* im Menü einer Zelle behält die vorherigen Ausschlüsse in derselben oder einer anderen Spalte; jeder ist ein eigener Chip (*Geburtsort ≠ …*), dessen × nur ihn aufhebt, und *Filter aufheben* hebt alle auf. Ein zweites *Nur* in einer Spalte fügt seinen Wert hinzu (*Vater = A oder B*); *Ohne* für einen solchen Wert nimmt ihn wieder heraus. Eine gespeicherte Ansicht behält die Chips, früher gespeicherte Ansichten öffnen sich unverändert.
+
 ## 3.29.0
 
 *Veröffentlicht am 15. November 2026.*

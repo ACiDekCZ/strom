@@ -1,5 +1,5 @@
 import type { StringsType, PersonPageCaptionEvent, PersonPageRegister } from '../strings.js';
-import { nPl, plPl, numPl, capFirstPl, langNamePl, joinAndPl, pluralCategoryPl } from './helpers.js';
+import { nPl, plPl, numPl, capFirstPl, langNamePl, joinAndPl, joinOrPl, pluralCategoryPl } from './helpers.js';
 
 /** Polish month names: genitive (with a day, "2 listopada 1890") and nominative (month and year, "listopad 1890"). */
 const PL_MONTHS_GEN = ['stycznia', 'lutego', 'marca', 'kwietnia', 'maja', 'czerwca', 'lipca', 'sierpnia', 'września', 'października', 'listopada', 'grudnia'];
@@ -1476,6 +1476,7 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         matchStarts: 'zaczyna się od',
         matchEquals: 'jest',
         matchNotEquals: 'nie jest',
+        filterOr: (values: string[]) => joinOrPl(values),
         cell: {
             copy: 'Kopiuj',
             only: (v: string) => `Tylko „${v}”`,

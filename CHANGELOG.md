@@ -2,6 +2,12 @@
 
 English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md) · [Polski](CHANGELOG.pl.md)
 
+## 3.30.0
+
+*This version is in preparation; this section grows with every test version.*
+
+- **Table filters**: *Without* in a cell's menu keeps the exclusions made before, in the same column or another; each one is a chip of its own (*Birthplace ≠ …*) whose × drops it alone, and *Clear filters* drops them all. A second *Only* in a column adds its value (*Father = A or B*); *Without* of such a value takes it out again. A saved view keeps the chips, and views saved earlier open unchanged.
+
 ## 3.29.0
 
 *Released 15 November 2026.*

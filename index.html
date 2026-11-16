@@ -10290,6 +10290,10 @@
         .tv-chip-edit, .tv-chip-x { height: 100%; border: none; background: none; color: inherit; font: inherit; cursor: pointer; }
         .tv-chip-edit { padding: 0 4px 0 11px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .tv-chip-x { width: 24px; padding: 0; font-size: 15px; border-radius: var(--r-sm); }
+        /* Many column filters (spec 103 K1.2): their chips shorten, the words end in "…", the × stays whole. */
+        .tv-chips.is-tight > .tv-chip--col { flex: 0 1 auto; min-width: 96px; }
+        .tv-chips.is-tight .tv-chip-edit { flex: 1 1 auto; min-width: 0; }
+        .tv-chips.is-tight .tv-chip-x { flex: none; }
         .tv-chip-text { padding: 0 4px 0 11px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .tv-chips-clear {
             flex: none; margin-left: auto; padding: 0 2px; border: none; background: none; color: var(--primary);

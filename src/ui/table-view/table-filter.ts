@@ -79,6 +79,13 @@ export interface ChipFilter {
  * person (`personId`), not the text. Without the value counts empty cells
  * as passing. Older versions read such an item as "contains" (a text column)
  * or ignore it, so a stored view needs no new data version.
+ *
+ * Several at once (spec 103 K1.1–K1.3): every "Without" is an item of its
+ * own ("≠ value", an exclusion), so a column can hold several of them beside
+ * its one main filter; a further "Only" of a column adds its value to the
+ * column's "equals" (`or`: one of the values passes). Older versions apply
+ * every item (exclusions included) and read an "equals" by its first value;
+ * a stored view keeps its shape, so no new data version either.
  */
 export interface ColumnFilter {
     col: string;
@@ -89,9 +96,19 @@ export interface ColumnFilter {
     text?: string;
     /** The tree's person an equality compares (a name of a person, parent, partner). */
     personId?: string;
+    /** The further values of an "equals" (spec 103 K1.3): a cell with any of the values passes. */
+    or?: EqualValue[];
     values?: string[];
+    /** The values were picked by a cell's Only (spec 103 K1.3): a further Only adds its value. */
+    picked?: true;
     empty?: true;
     filled?: true;
+}
+
+/** One value of an equality: the text as shown, and the tree's person when the cell names one. */
+export interface EqualValue {
+    text: string;
+    personId?: string;
 }
 
 export type FilterItem = ChipFilter | ColumnFilter;
@@ -113,8 +130,24 @@ export function chipItem(filter: TableFilter, chip: ChipId): ChipFilter | null {
     return filter.items.find((i): i is ChipFilter => isChipItem(i) && i.chip === chip) ?? null;
 }
 
+/**
+ * A column's filter as its head's form edits it: the column's main filter
+ * (the first item that is not an exclusion), else its first item.
+ */
 export function columnItem(filter: TableFilter, col: string): ColumnFilter | null {
-    return filter.items.find((i): i is ColumnFilter => !isChipItem(i) && i.col === col) ?? null;
+    const at = columnItemIndex(filter, col);
+    return at >= 0 ? filter.items[at] as ColumnFilter : null;
+}
+
+/** Where `columnItem` is in the filter's items; -1 without one. */
+export function columnItemIndex(filter: TableFilter, col: string): number {
+    const main = mainItemIndex(filter, col);
+    return main >= 0 ? main : filter.items.findIndex(i => !isChipItem(i) && i.col === col);
+}
+
+/** Where the column's main filter is (its first item that is not an exclusion); -1 without one. */
+function mainItemIndex(filter: TableFilter, col: string): number {
+    return filter.items.findIndex(i => !isChipItem(i) && i.col === col && !isExclusionItem(i));
 }
 
 export function columnItems(filter: TableFilter): ColumnFilter[] {
@@ -170,23 +203,138 @@ export function setChip(filter: TableFilter, chip: ChipId, on: boolean, choice: 
     return true;
 }
 
-/** Set (or with an empty one, drop) a column's filter. */
-export function setColumnFilter(filter: TableFilter, item: ColumnFilter): boolean {
-    const at = filter.items.findIndex(i => !isChipItem(i) && i.col === item.col);
+/**
+ * Set (or with an empty one, drop) a column's filter: the item at `at` (the
+ * one a chip's or a head's form edits), else the column's main filter; the
+ * column's exclusions stay (spec 103 K1.1).
+ */
+export function setColumnFilter(filter: TableFilter, item: ColumnFilter, at?: number): boolean {
+    const old = at !== undefined && at >= 0 ? filter.items[at] : undefined;
+    const idx = old && !isChipItem(old) && old.col === item.col ? at! : mainItemIndex(filter, item.col);
     const active = columnItemActive(item);
-    if (at < 0 && !active) return false;
-    if (at >= 0 && !active) { filter.items.splice(at, 1); return true; }
-    if (at >= 0) {
-        if (JSON.stringify(filter.items[at]) === JSON.stringify(item)) return false;
-        filter.items[at] = item;
+    if (idx < 0 && !active) return false;
+    if (idx >= 0 && !active) { filter.items.splice(idx, 1); return true; }
+    if (idx >= 0) {
+        if (JSON.stringify(filter.items[idx]) === JSON.stringify(item)) return false;
+        filter.items[idx] = item;
     } else filter.items.push(item);
     return true;
 }
 
+/** Drop every filter of a column. */
 export function removeColumnFilter(filter: TableFilter, col: string): boolean {
-    const at = filter.items.findIndex(i => !isChipItem(i) && i.col === col);
-    if (at < 0) return false;
+    const n = filter.items.length;
+    filter.items = filter.items.filter(i => isChipItem(i) || i.col !== col);
+    return filter.items.length !== n;
+}
+
+/** Drop one column filter (a chip's ×, spec 103 K1.2): the item at `at` of the filter's items. */
+export function removeColumnItemAt(filter: TableFilter, at: number): boolean {
+    const item = filter.items[at];
+    if (!item || isChipItem(item)) return false;
     filter.items.splice(at, 1);
+    return true;
+}
+
+/** The values of an equality item: its own and the further ones (`or`). */
+export function equalValues(item: ColumnFilter): EqualValue[] {
+    const first: EqualValue[] = item.personId || item.text?.trim()
+        ? [{ text: item.text ?? '', ...(item.personId ? { personId: item.personId } : {}) }]
+        : [];
+    return [...first, ...(item.match === 'equals' ? (item.or ?? []).filter(v => !!v && (!!v.personId || !!v.text?.trim())) : [])];
+}
+
+/** Whether two values of an equality are the same: the same person, else (neither a person) the same text. */
+function sameValue(a: EqualValue, b: EqualValue): boolean {
+    if (a.personId || b.personId) return a.personId === b.personId;
+    return foldName(a.text) === foldName(b.text);
+}
+
+/** An item with these values of an equality (the first in `text`, the further ones in `or`). */
+function withValues(item: ColumnFilter, values: EqualValue[]): ColumnFilter {
+    const [first, ...more] = values;
+    const out: ColumnFilter = { ...item, text: first.text };
+    delete out.personId;
+    delete out.or;
+    if (first.personId) out.personId = first.personId;
+    if (more.length) out.or = more;
+    return out;
+}
+
+/** An exclusion: "≠ value" alone (a cell's Without; spec 103 K1.2 gives each its own chip). */
+export function isExclusionItem(item: ColumnFilter): boolean {
+    return item.match === 'notEquals' && (!!item.personId || !!item.text?.trim())
+        && !item.empty && !item.filled && item.from === undefined && item.to === undefined && !item.values?.length;
+}
+
+/**
+ * "Only {value}" of a cell's menu (T54 F4, spec 103 K1.3), with the filters
+ * there are: a further Only of a column adds its value (one of them passes),
+ * an exclusion of the same value goes; any other main filter of the column
+ * gives way to it. An enumeration's values (`values`, picked) add up alike.
+ */
+export function addOnlyFilter(filter: TableFilter, item: ColumnFilter): boolean {
+    const at = mainItemIndex(filter, item.col);
+    const main = at >= 0 ? filter.items[at] as ColumnFilter : null;
+    if (item.values?.length) {
+        if (main?.picked && main.values?.length) {
+            const add = item.values.filter(v => !main.values!.includes(v));
+            if (!add.length) return false;
+            filter.items[at] = { ...main, values: [...main.values, ...add] };
+            return true;
+        }
+        return setColumnFilter(filter, { ...item, picked: true });
+    }
+    const value = equalValues(item)[0];
+    if (!value) return false;
+    // The value is no longer excluded.
+    const n = filter.items.length;
+    filter.items = filter.items.filter(i => isChipItem(i) || i.col !== item.col || !isExclusionItem(i) || !sameValue(equalValues(i)[0], value));
+    let changed = filter.items.length !== n;
+    const mainAt = mainItemIndex(filter, item.col);
+    const cur = mainAt >= 0 ? filter.items[mainAt] as ColumnFilter : null;
+    if (cur && cur.match === 'equals' && equalValues(cur).length) {
+        const values = equalValues(cur);
+        if (values.some(v => sameValue(v, value))) return changed;
+        filter.items[mainAt] = withValues(cur, [...values, value]);
+        return true;
+    }
+    changed = setColumnFilter(filter, item) || changed;
+    return changed;
+}
+
+/**
+ * "Without {value}" of a cell's menu (T54 F4, spec 103 K1.1): one more
+ * exclusion of the column beside the ones there are. A value of the
+ * column's "equals" leaves it instead (the others stay; the last one makes
+ * the exclusion). An enumeration keeps its values without this one.
+ */
+export function addWithoutFilter(filter: TableFilter, item: ColumnFilter): boolean {
+    const at = mainItemIndex(filter, item.col);
+    const main = at >= 0 ? filter.items[at] as ColumnFilter : null;
+    if (!isExclusionItem(item)) {
+        // An enumeration: what passes both (its values without the cell's one); none left, the cell's own Without.
+        if (main?.values?.length && item.values?.length) {
+            const keep = main.values.filter(v => item.values!.includes(v));
+            if (keep.length === main.values.length) return false;
+            if (keep.length) { filter.items[at] = { ...main, values: keep }; return true; }
+        }
+        return setColumnFilter(filter, item);
+    }
+    const value = equalValues(item)[0];
+    let changed = false;
+    if (main && main.match === 'equals') {
+        const values = equalValues(main);
+        if (values.some(v => sameValue(v, value))) {
+            const rest = values.filter(v => !sameValue(v, value));
+            if (rest.length) { filter.items[at] = withValues(main, rest); return true; }
+            filter.items.splice(at, 1);
+            changed = true;
+        }
+    }
+    const has = filter.items.some(i => !isChipItem(i) && i.col === item.col && isExclusionItem(i) && sameValue(equalValues(i)[0], value));
+    if (has) return changed;
+    filter.items.push(item);
     return true;
 }
 
@@ -412,12 +560,20 @@ export function cellPersonOf(value: CellValue): string | undefined {
     return value.names?.length === 1 ? value.names[0].personId : undefined;
 }
 
-/** Whether a cell holds the value of an equality filter: the same person, else the same text (case and diacritics aside). */
+/**
+ * Whether a cell holds a value of an equality filter (any of an "equals"'s
+ * values): the same person, else the same text (case and diacritics aside).
+ */
 export function cellEquals(value: CellValue, item: ColumnFilter): boolean {
     if (value.na || value.empty) return false;
-    if (item.personId) return cellPersonOf(value) === item.personId;
-    const want = foldName(item.text ?? '');
-    return want !== '' && foldName(cellShownText(value)) === want;
+    let text: string | null = null;
+    for (const v of equalValues(item)) {
+        if (v.personId) { if (cellPersonOf(value) === v.personId) return true; continue; }
+        const want = foldName(v.text);
+        text ??= foldName(cellShownText(value));
+        if (want !== '' && text === want) return true;
+    }
+    return false;
 }
 
 /** Whether one cell passes a column filter (all its conditions). */
@@ -581,7 +737,10 @@ export function columnItemLabel(type: RowType, item: ColumnFilter): string {
         const to = item.to !== undefined ? num(item.to) : '';
         parts.push(f && to ? (f === to ? `= ${f}` : `${f}–${to}`) : f ? `≥ ${f}` : `≤ ${to}`);
     }
-    if (isEqualityItem(item) && item.text?.trim()) parts.push(`${item.match === 'equals' ? '=' : '≠'} ${item.text.trim()}`);
+    if (isEqualityItem(item) && item.text?.trim()) {
+        const values = item.match === 'equals' ? equalValues(item).map(v => v.text.trim()) : [item.text.trim()];
+        parts.push(`${item.match === 'equals' ? '=' : '≠'} ${values.length > 1 ? t.filterOr(values) : values[0]}`);
+    }
     else if (kind === 'text' && item.text?.trim()) parts.push(item.match === 'starts' ? t.filterStarts(item.text.trim()) : t.filterContains(item.text.trim()));
     if (kind === 'values' && item.values?.length) parts.push(item.values.length > 2 ? `${item.values.length}×` : item.values.map(v => valueWord(c, v)).join(', '));
     if (item.empty) parts.push(t.filterEmpty);

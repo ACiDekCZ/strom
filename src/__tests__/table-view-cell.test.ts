@@ -7,10 +7,15 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
 import type { PersonId, StromData } from '../types.js';
-import { setLanguage } from '../strings.js';
+import { joinOr, setLanguage } from '../strings.js';
+import { joinOrPl } from '../strings-pl/helpers.js';
+import { sanitizeTableView } from '../table-views-data.js';
 import { buildTableModel, type TableModel, type TableRow, type PersonRow } from '../ui/table-view/table-model.js';
 import { cellOf, columnById } from '../ui/table-view/table-columns.js';
-import { cellPasses, cellShownText, columnItemLabel, filterKindOf, filterRows, type ColumnFilter } from '../ui/table-view/table-filter.js';
+import {
+    addOnlyFilter, addWithoutFilter, cellPasses, cellShownText, clearFilter, columnItemLabel, columnItems, emptyFilter, filterKindOf, filterRows,
+    removeColumnItemAt, setColumnFilter, type ColumnFilter, type FilterItem, type TableFilter,
+} from '../ui/table-view/table-filter.js';
 import { cellChoices, shortValue } from '../ui/table-view/table-cell.js';
 import { lineCell, type GridLine } from '../ui/table-view/table-subrows.js';
 
@@ -137,5 +142,150 @@ describe('the text a cell shows (T54 F9)', () => {
         const base = cellOf(build(), rowOf(build(), 'b1'), col('bPlace'));
         expect(cellShownText({ ...base, subst: 'bap', moreSources: ['s1', 's2'] })).toBe('Lhotka nad Brodem');
         expect(cellShownText({ ...base, na: true, text: '' })).toBe('');
+    });
+});
+
+describe('several Only / Without at once (spec 103 K1.1–K1.4)', () => {
+    const rows = (m: TableModel, f: TableFilter) => filterRows(m, 'persons', m.persons, f).rows.map(r => r.id).sort();
+    const labels = (f: TableFilter) => columnItems(f).map(i => columnItemLabel('persons', i));
+    const only = (m: TableModel, f: TableFilter, id: string, colId: string) => addOnlyFilter(f, choicesAt(m, id, colId).only!);
+    const without = (m: TableModel, f: TableFilter, id: string, colId: string) => addWithoutFilter(f, choicesAt(m, id, colId).without!);
+
+    it('K1.1: a second Without of the same column keeps the first, each one its own chip', () => {
+        const m = build();
+        const f = emptyFilter();
+        expect(without(m, f, 'b1', 'bPlace')).toBe(true);
+        expect(without(m, f, 't', 'bPlace')).toBe(true);
+        expect(labels(f)).toEqual(['Birthplace ≠ Lhotka nad Brodem', 'Birthplace ≠ Dolní Vřesová']);
+        // Neither place; the people without one stay.
+        expect(rows(m, f)).toEqual(['f', 'f2', 'w']);
+        // The same value again (in other letters) changes nothing.
+        expect(without(m, f, 'b2', 'bPlace')).toBe(false);
+        expect(columnItems(f)).toHaveLength(2);
+    });
+
+    it('K1.1: Without in two columns: both apply', () => {
+        const m = build();
+        const f = emptyFilter();
+        without(m, f, 'b1', 'father');
+        without(m, f, 't', 'bPlace');
+        expect(labels(f)).toEqual(['Father ≠ Radomír Šlapetný', 'Birthplace ≠ Dolní Vřesová']);
+        expect(rows(m, f)).toEqual(['f', 'f2', 'w']);
+    });
+
+    it('K1.2: the × of a chip drops that one; Clear filters drops them all', () => {
+        const m = build();
+        const f = emptyFilter();
+        without(m, f, 'b1', 'bPlace');
+        without(m, f, 't', 'bPlace');
+        without(m, f, 'b1', 'father');
+        expect(removeColumnItemAt(f, 0)).toBe(true);
+        expect(labels(f)).toEqual(['Birthplace ≠ Dolní Vřesová', 'Father ≠ Radomír Šlapetný']);
+        expect(rows(m, f)).toEqual(['f', 'f2', 'w']);
+        expect(clearFilter(f)).toBe(true);
+        expect(rows(m, f)).toHaveLength(7);
+    });
+
+    it('K1.3: a second Only of a column adds its value (one of them passes); the same value again changes nothing', () => {
+        const m = build();
+        const f = emptyFilter();
+        only(m, f, 'b1', 'bPlace');
+        expect(only(m, f, 't', 'bPlace')).toBe(true);
+        expect(columnItems(f)).toHaveLength(1);
+        expect(labels(f)).toEqual(['Birthplace = Lhotka nad Brodem or Dolní Vřesová']);
+        expect(rows(m, f)).toEqual(['b1', 'b2', 'm', 't']);
+        expect(only(m, f, 'b2', 'bPlace')).toBe(false);
+        // A father by the person: the other Radomír Šlapetný is a value of his own.
+        const g = emptyFilter();
+        only(m, g, 'b1', 'father');
+        only(m, g, 't', 'father');
+        expect(labels(g)).toEqual(['Father = Radomír Šlapetný or Radomír Šlapetný']);
+        expect(rows(m, g)).toEqual(['b1', 'b2', 't']);
+    });
+
+    it('K1.3: Only and Without apply together; a Without of a value of the Only takes it out of the Only', () => {
+        const m = build();
+        const f = emptyFilter();
+        only(m, f, 'b1', 'bPlace');
+        only(m, f, 't', 'bPlace');
+        without(m, f, 'b1', 'father');
+        expect(rows(m, f)).toEqual(['m', 't']);
+        // Without Lhotka: out of the Only, no chip of its own.
+        expect(without(m, f, 'b2', 'bPlace')).toBe(true);
+        expect(labels(f)).toEqual(['Birthplace = Dolní Vřesová', 'Father ≠ Radomír Šlapetný']);
+        expect(rows(m, f)).toEqual(['m', 't']);
+        // Its last value: the Only goes and the value is excluded (never an empty table without a word).
+        expect(without(m, f, 'm', 'bPlace')).toBe(true);
+        expect(labels(f)).toEqual(['Father ≠ Radomír Šlapetný', 'Birthplace ≠ Dolni Vresova']);
+        expect(rows(m, f)).toEqual(['f', 'f2', 'w']);
+        // Only of an excluded value: the exclusion goes.
+        expect(only(m, f, 't', 'bPlace')).toBe(true);
+        expect(labels(f)).toEqual(['Father ≠ Radomír Šlapetný', 'Birthplace = Dolní Vřesová']);
+        expect(rows(m, f)).toEqual(['m', 't']);
+    });
+
+    it('K1.3: an enumeration\'s Only adds its value, its Without takes one out', () => {
+        const m = build();
+        const f = emptyFilter();
+        only(m, f, 'f', 'uStatus');
+        expect(rows(m, f)).toEqual(['f', 'm']);
+        only(m, f, 'f2', 'uStatus');
+        expect(columnItems(f)).toHaveLength(1);
+        expect(rows(m, f)).toEqual(['f', 'f2', 'm', 'w']);
+        without(m, f, 'f', 'uStatus');
+        expect(rows(m, f)).toEqual(['f2', 'w']);
+        // Without first, then Only of another value: just that value.
+        const g = emptyFilter();
+        without(m, g, 'f', 'uStatus');
+        only(m, g, 'f2', 'uStatus');
+        expect(rows(m, g)).toEqual(['f2', 'w']);
+    });
+
+    it('the head\'s form edits the main filter; the column\'s exclusions stay', () => {
+        const m = build();
+        const f = emptyFilter();
+        without(m, f, 'b1', 'bPlace');
+        setColumnFilter(f, { col: 'bPlace', kind: 'text', filled: true });
+        expect(labels(f)).toEqual(['Birthplace ≠ Lhotka nad Brodem', 'Birthplace filled']);
+        expect(rows(m, f)).toEqual(['m', 't']);
+        // A chip's form edits its own item.
+        setColumnFilter(f, { col: 'bPlace', kind: 'text', match: 'notEquals', text: 'Dolní Vřesová' }, 0);
+        expect(rows(m, f)).toEqual(['b1', 'b2']);
+    });
+
+    it('K1.4: a stored view keeps the chips; an older view (one filter a column) reads and filters as before', () => {
+        const m = build();
+        const f = emptyFilter();
+        without(m, f, 'b1', 'bPlace');
+        without(m, f, 't', 'bPlace');
+        only(m, f, 'b1', 'father');
+        only(m, f, 't', 'father');
+        const stored = JSON.parse(JSON.stringify({ id: 'tv-x', name: 'Bez dvou míst', rowType: 'persons', filter: f }));
+        const back = sanitizeTableView(stored)!;
+        const g: TableFilter = { op: 'and', items: back.filter.items as unknown as FilterItem[] };
+        expect(labels(g)).toEqual(labels(f));
+        expect(rows(m, g)).toEqual(rows(m, f));
+        // A view saved by 3.29 (one item a column): the same items and the same rows.
+        const old = sanitizeTableView({
+            id: 'tv-old', name: 'Starý', rowType: 'persons',
+            filter: { op: 'and', items: [
+                { col: 'bPlace', kind: 'text', match: 'notEquals', text: 'Dolni Vresova' },
+                { col: 'father', kind: 'text', match: 'equals', text: 'Radomír Šlapetný', personId: 'f' },
+            ] },
+        })!;
+        const h: TableFilter = { op: 'and', items: old.filter.items as unknown as FilterItem[] };
+        expect(labels(h)).toEqual(['Birthplace ≠ Dolni Vresova', 'Father = Radomír Šlapetný']);
+        expect(rows(m, h)).toEqual(['b1', 'b2']);
+        // A further Without of an old view's column joins its exclusion.
+        without(m, h, 'b1', 'bPlace');
+        expect(labels(h)).toEqual(['Birthplace ≠ Dolni Vresova', 'Father = Radomír Šlapetný', 'Birthplace ≠ Lhotka nad Brodem']);
+    });
+
+    it('"or" in the four languages', () => {
+        expect(joinOr('en', ['A', 'B'])).toBe('A or B');
+        expect(joinOr('cs', ['A', 'B', 'C'])).toBe('A, B nebo C');
+        expect(joinOr('de', ['A', 'B'])).toBe('A oder B');
+        expect(joinOrPl(['A', 'B'])).toBe('A lub B');
+        expect(joinOr('en', ['A', 'B', 'C', 'D'])).toBe('A, B +2');
     });
 });

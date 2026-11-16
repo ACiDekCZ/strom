@@ -38,7 +38,7 @@ import { directionPlacesKept, onDirectionPlaces } from '../../research-direction
 import { findCrossTreeMatches, getTreesDataForMatching, type CrossTreeMatch } from '../../cross-tree.js';
 import type { ChangeKind, PersonChange } from '../../research-changes.js';
 import {
-    CHECK_CHIPS, chipItem, chipLabel, clearFilter, columnItem, filterRows, filterSummary, isChipItem, newWindowOf, removeColumnFilter, searchQuery, setChip, setParticipantFilter,
+    addOnlyFilter, addWithoutFilter, CHECK_CHIPS, chipItem, chipLabel, clearFilter, columnItem, filterRows, filterSummary, isChipItem, newWindowOf, removeColumnItemAt, searchQuery, setChip, setParticipantFilter,
     setColumnFilter, setEmptyFilter, sortRows, columnItemActive, type ChipId, type ColumnFilter, type FilterResult, type TableFilter,
 } from './table-filter.js';
 import {
@@ -781,8 +781,8 @@ export const tableMethods = uiModule({
                 onChip: (chip, on) => this.changeTableFilter(f => setChip(f, chip, on)),
                 onResearchNew: (w) => this.changeTableFilter(f => setResearchNew(f, w)),
                 onChoiceChip: (chip, anchor) => this.showTableChipChoice(chip, anchor),
-                onEditColumn: (col, anchor) => this.showTableColumnFilter(col, anchor),
-                onRemoveColumn: (col) => this.changeTableFilter(f => removeColumnFilter(f, col)),
+                onEditColumn: (col, at, anchor) => this.showTableColumnFilter(col, anchor, at),
+                onRemoveColumn: (at) => this.changeTableFilter(f => removeColumnItemAt(f, at)),
                 onClear: () => this.changeTableFilter(f => clearFilter(f), true),
                 onSheet: () => this.showTableFilters(),
             });
@@ -1320,15 +1320,23 @@ export const tableMethods = uiModule({
         if (el && TreeRenderer.getViewMode() === 'table') this.renderTableView(el);
     },
 
-    /** A column's filter (8d): a panel under the head or its chip; on a phone a sheet. */
-    showTableColumnFilter(colId: string, anchor: HTMLElement): void {
+    /**
+     * A column's filter (8d): a panel under the head or its chip; on a phone a
+     * sheet. A chip edits its own item (`at`, one of the column's exclusions
+     * too, spec 103 K1.2); the head the column's main filter.
+     */
+    showTableColumnFilter(colId: string, anchor: HTMLElement, at = -1): void {
         if (!model) return;
         const state = stateOf(treeKey());
         const type = state.rowType;
         const col = columnById(type, colId);
         if (!col) return;
-        const form = columnFilterForm(model, type, col, columnItem(state.types[type].filter, colId));
-        const apply = (): void => this.changeTableFilter(f => setColumnFilter(f, form.read()));
+        const filter = state.types[type].filter;
+        const own = filter.items[at];
+        const target = own && !isChipItem(own) && own.col === colId ? own : columnItem(filter, colId);
+        const form = columnFilterForm(model, type, col, target);
+        // The item stays the one edited, wherever it is in the items when the form applies.
+        const apply = (): void => this.changeTableFilter(f => setColumnFilter(f, form.read(), target ? f.items.indexOf(target) : -1));
         this.showTableFilterForm(anchor, columnLabel(col), form.el, apply);
     },
 
@@ -1419,7 +1427,7 @@ export const tableMethods = uiModule({
             onChip: (chip, on) => this.changeTableFilter(f => setChip(f, chip, on)),
             onResearchNew: (w) => this.changeTableFilter(f => setResearchNew(f, w)),
             onChoice: (chip, choice) => this.changeTableFilter(f => setChip(f, chip, !!choice, choice ?? {})),
-            onRemoveColumn: (col) => this.changeTableFilter(f => removeColumnFilter(f, col)),
+            onRemoveColumn: (at) => this.changeTableFilter(f => removeColumnItemAt(f, at)),
             onClear: () => this.changeTableFilter(f => clearFilter(f), true),
             onClose: () => this.closeTableFilters(),
         });
@@ -1777,12 +1785,14 @@ export const tableMethods = uiModule({
         if (!choices) return [];
         const t = strings.table;
         const col = cell.col;
-        const set = (item: ColumnFilter) => (): void => this.changeTableFilter(f => setColumnFilter(f, item), true);
+        // Only adds its value to the column's, Without one more exclusion (spec 103 K1.1, K1.3).
+        const only = (item: ColumnFilter) => (): void => this.changeTableFilter(f => addOnlyFilter(f, item), true);
+        const without = (item: ColumnFilter) => (): void => this.changeTableFilter(f => addWithoutFilter(f, item), true);
         const out: HeadMenuItem[] = [];
         const copy = choices.copy;
         if (copy) out.push({ id: 'cellCopy', label: t.cell.copy, icon: '', hint: fanZoomModifier() === '⌘' ? '⌘C' : 'Ctrl+C', run: () => copyPlainText(copy) });
-        if (choices.only) out.push({ id: 'cellOnly', label: t.cell.only(choices.label), icon: '', run: set(choices.only) });
-        if (choices.without) out.push({ id: 'cellWithout', label: t.cell.without(choices.label), icon: '', run: set(choices.without) });
+        if (choices.only) out.push({ id: 'cellOnly', label: t.cell.only(choices.label), icon: '', run: only(choices.only) });
+        if (choices.without) out.push({ id: 'cellWithout', label: t.cell.without(choices.label), icon: '', run: without(choices.without) });
         if (choices.empty) {
             out.push(
                 { id: 'cellEmpty', label: t.onlyEmpty, icon: '', run: () => this.changeTableFilter(f => setEmptyFilter(f, col, 'empty'), true) },

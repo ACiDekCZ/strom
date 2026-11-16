@@ -86,6 +86,18 @@ export function joinAnd(lang: Language, parts: string[]): string {
     return `${items.slice(0, -1).join(', ')} ${and} ${items[items.length - 1]}`;
 }
 
+/**
+ * The values of a filter's "or" (spec 103 K1.3): "A or B", "A, B or C";
+ * from four on the first two and the count of the others ("A, B +2").
+ */
+export function joinOr(lang: Language, parts: string[]): string {
+    const items = parts.filter(Boolean);
+    if (items.length <= 1) return items[0] ?? '';
+    if (items.length > 3) return `${items[0]}, ${items[1]} +${items.length - 2}`;
+    const or = lang === 'cs' ? 'nebo' : lang === 'de' ? 'oder' : lang === 'pl' ? 'lub' : 'or';
+    return `${items.slice(0, -1).join(', ')} ${or} ${items[items.length - 1]}`;
+}
+
 /** Czech count form shorthand: `${n} ${word}`. */
 const nCs = (n: number, one: string, few: string, other: string): string => `${n} ${plural('cs', n, one, few, other)}`;
 /** English count form shorthand: `${n} ${word}`. */
@@ -9290,6 +9302,7 @@ const stringsEN = {
         matchStarts: 'starts with',
         matchEquals: 'is',
         matchNotEquals: 'is not',
+        filterOr: (values: string[]) => joinOr('en', values),
         cell: {
             copy: 'Copy',
             only: (v: string) => `Only “${v}”`,
@@ -18384,6 +18397,7 @@ const stringsCZ: StringsType = {
         matchStarts: 'začíná',
         matchEquals: 'je',
         matchNotEquals: 'není',
+        filterOr: (values: string[]) => joinOr('cs', values),
         cell: {
             copy: 'Kopírovat',
             only: (v: string) => `Jen „${v}“`,
@@ -27396,6 +27410,7 @@ const stringsDE: StringsType = {
         matchStarts: 'beginnt mit',
         matchEquals: 'ist',
         matchNotEquals: 'ist nicht',
+        filterOr: (values: string[]) => joinOr('de', values),
         cell: {
             copy: 'Kopieren',
             only: (v: string) => `Nur „${v}“`,

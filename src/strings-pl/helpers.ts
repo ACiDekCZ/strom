@@ -50,6 +50,14 @@ export function joinAndPl(parts: string[]): string {
     return `${items.slice(0, -1).join(', ')} i ${items[items.length - 1]}`;
 }
 
+/** Polish values of a filter's "or": "a lub b", "a, b lub c"; from four on "a, b +2". */
+export function joinOrPl(parts: string[]): string {
+    const items = parts.filter(Boolean);
+    if (items.length <= 1) return items[0] ?? '';
+    if (items.length > 3) return `${items[0]}, ${items[1]} +${items.length - 2}`;
+    return `${items.slice(0, -1).join(', ')} lub ${items[items.length - 1]}`;
+}
+
 /** The first letter upper case. */
 export const capFirstPl = (s: string): string => { const t = String(s ?? ''); return t ? t.charAt(0).toLocaleUpperCase('pl') + t.slice(1) : t; };
 

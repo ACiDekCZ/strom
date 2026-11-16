@@ -8,7 +8,8 @@ import { openApp, seedTree, waitForPersist, type SeedPerson } from './helpers.js
  * cell's Copy · Only "{value}" · Without "{value}" (an empty cell: only empty
  * / only filled), the filters "= / ≠" as chips, kept with a saved view; a
  * father's Only lists the siblings, not the children of a namesake; on a
- * phone the row's sheet starts with the same choices.
+ * phone the row's sheet starts with the same choices. Several exclusions
+ * apply at once, each its own chip (spec 103 K1.1–K1.4).
  */
 
 const FAMILY: Record<string, SeedPerson> = {
@@ -198,6 +199,46 @@ test.describe('desktop (1440)', () => {
         await expect(status(page)).toHaveText('2 of 7 people');
         await expect(colChips(page)).toHaveText(['Father = Radomír Šlapetný']);
         await expect(row(page, 'p:t')).toHaveCount(0);
+    });
+
+    test('Without one value, then another: both apply, each its own chip whose × drops it alone; kept in a saved view (spec 103 K1.1, K1.2, K1.4)', async ({ page }) => {
+        await openTable(page);
+        await (await cell(page, 'p:b1', 'bPlace')).click({ button: 'right' });
+        await menuItem(page, 'Without').click();
+        await expect(status(page)).toHaveText('5 of 7 people');
+        await (await cell(page, 'p:t', 'bPlace')).click({ button: 'right' });
+        await menuItem(page, 'Without').click();
+        // The first exclusion stays: neither place, the people without one remain.
+        await expect(colChips(page)).toHaveText(['Birthplace ≠ Lhotka nad Brodem', 'Birthplace ≠ Dolni Vresova']);
+        await expect(status(page)).toHaveText('3 of 7 people');
+        // Another column's Without joins them.
+        await (await cell(page, 'p:w', 'bDate')).click({ button: 'right' });
+        await menuItem(page, 'Without').click();
+        await expect(colChips(page)).toHaveCount(3);
+        await expect(status(page)).toHaveText('2 of 7 people');
+
+        // The × of the first chip drops that one alone.
+        await page.locator('#table-container .tv-chip--col').first().locator('.tv-chip-x').click();
+        await expect(colChips(page)).toHaveText(['Birthplace ≠ Dolni Vresova', /^Birth date ≠ /]);
+        await expect(status(page)).toHaveText('4 of 7 people');
+        await expect(row(page, 'p:b1')).toHaveCount(1);
+
+        await page.locator('#table-container .tv-view-saveas').click();
+        const input = page.locator('.tv-fpanel.tv-vpanel .tv-vname-input');
+        await input.fill('Two exclusions');
+        await input.press('Enter');
+        await waitForPersist(page, 'Two exclusions');
+        await page.reload();
+        await expect(page.locator('html')).not.toHaveClass(/app-loading/);
+        if (!await page.locator('#table-container .tv-grid').isVisible()) await page.locator('#view-mode-table').click();
+        await expect(page.locator('#table-container .tv-view-name')).toHaveText('Two exclusions');
+        await expect(colChips(page)).toHaveText(['Birthplace ≠ Dolni Vresova', /^Birth date ≠ /]);
+        await expect(status(page)).toHaveText('4 of 7 people');
+
+        // Clear filters drops them all.
+        await page.locator('#table-container .tv-chips-clear').click();
+        await expect(colChips(page)).toHaveCount(0);
+        await expect(status(page)).toHaveText('7 of 7 people');
     });
 
     test('the menu of a cell on another row than the selected one opens under that cell (T54 G7)', async ({ page }) => {

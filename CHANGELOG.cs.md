@@ -2,6 +2,12 @@
 
 [English](CHANGELOG.md) · Čeština · [Deutsch](CHANGELOG.de.md) · [Polski](CHANGELOG.pl.md)
 
+## 3.30.0
+
+*Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
+
+- **Filtry Tabulky**: *Bez* v nabídce buňky ponechá dřívější vyloučení ve stejném i jiném sloupci; každé je samostatný štítek (*Místo narození ≠ …*), jehož × zruší jen ten, a *Zrušit filtry* zruší všechny. Druhé *Jen* ve sloupci přidá svou hodnotu (*Otec = A nebo B*); *Bez* takové hodnoty ji zase odebere. Uložený pohled si štítky pamatuje a dříve uložené pohledy se otevřou beze změny.
+
 ## 3.29.0
 
 *Vydáno 15. listopadu 2026.*

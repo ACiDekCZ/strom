@@ -4,6 +4,12 @@
 
 Lista zmian po polsku zaczyna się od wersji 3.21.0; starsze wersje są opisane [po angielsku](CHANGELOG.md).
 
+## 3.30.0
+
+*Ta wersja jest w przygotowaniu; ta sekcja rośnie z każdą wersją testową.*
+
+- **Filtry tabeli**: *Bez* w menu komórki zachowuje wcześniejsze wykluczenia w tej samej lub innej kolumnie; każde jest osobnym chipem (*Miejsce urodzenia ≠ …*), którego × usuwa tylko je, a *Wyczyść filtry* usuwa wszystkie. Drugie *Tylko* w kolumnie dodaje swoją wartość (*Ojciec = A lub B*); *Bez* takiej wartości znów ją usuwa. Zapisany widok pamięta chipy, a widoki zapisane wcześniej otwierają się bez zmian.
+
 ## 3.29.0
 
 *Wydano 15 listopada 2026.*
