@@ -275,3 +275,88 @@ test.describe('The couple’s photo row on a phone', () => {
         expect(r!.x + r!.width).toBeLessThanOrEqual(box!.x + box!.width + 1);
     });
 });
+
+/** Table › Unions with the Photo column shown: Ilsa and Oskar's union has a photo, Wolfhart and Adelgunde's none. */
+async function openUnionsTable(page: Page, phone = false): Promise<void> {
+    await page.clock.setFixedTime(new Date('2026-06-15T10:00:00Z'));
+    await openApp(page);
+    await seedTree(page, {
+        ilsa: { firstName: 'Ilsa', lastName: 'Quellmayer', gender: 'female', birthDate: '1901', partners: ['oskar'] },
+        oskar: { firstName: 'Oskar', lastName: 'Quellmayer', gender: 'male', birthDate: '1898' },
+        wolfhart: { firstName: 'Wolfhart', lastName: 'Fronwieser', gender: 'male', birthDate: '1880', partners: ['adelgunde'] },
+        adelgunde: { firstName: 'Adelgunde', lastName: 'Fronwieser', gender: 'female', birthDate: '1884' },
+    });
+    await setPhoto(page);
+    await page.locator(phone ? '#bb-view-table' : '#view-mode-table').click();
+    const tv = page.locator('#table-container');
+    if (phone) {
+        await tv.locator('.tv-rowtype-btn').tap();
+        await page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: /^Unions/ }).tap();
+    } else {
+        await tv.locator('.tv-rowtype [data-rowtype="unions"]').click();
+    }
+    await expect(tv).toHaveAttribute('data-rowtype', 'unions');
+    await expect(tv.locator('.tv-headrow [data-col="uPhoto"]')).toHaveCount(0);
+    if (phone) {
+        await tv.locator('.tv-more-menu-btn').tap();
+        await page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: 'Columns' }).tap();
+    } else {
+        await tv.locator('.tv-cols-btn').click();
+    }
+    const cols = page.locator('.tv-colpanel');
+    await page.locator('.tv-cp-q').fill('Photo');
+    await cols.getByRole('checkbox', { name: 'Photo', exact: true }).check();
+    await cols.locator('.tv-cp-done').click();
+    await expect(tv.locator('.tv-headrow [data-col="uPhoto"]')).toBeVisible();
+}
+
+test.describe('Table › Unions, the Photo column (desktop)', () => {
+    test.use({ viewport: { width: 1440, height: 900 } });
+
+    test('the thumbnail zooms the photo with Make portraits…, written at once with Undo; the filter with / without photo', async ({ page }) => {
+        await openUnionsTable(page);
+        const tv = page.locator('#table-container');
+        const thumbs = tv.locator('.tv-body .tv-thumb');
+        await expect(thumbs).toHaveCount(1);
+        await expect(tv.locator(`.tv-row[data-key="u:${PID}"] .tv-thumb img`)).toHaveAttribute('src', /^blob:/);
+        await thumbs.click();
+        await expect(page.locator('#image-viewer-panel .mv-title')).toHaveText('Oskar and Ilsa · couple’s photo');
+        await page.locator('#image-viewer-panel').getByRole('button', { name: 'Make portraits…' }).click();
+        await expect(editor(page)).toBeVisible();
+        await editor(page).locator('.pe-primary').click();
+        await editor(page).locator('.pe-primary').click();
+        const toast = page.locator('.undo-toast', { hasText: '2 portraits saved from the couple’s photo.' });
+        await expect(toast).toBeVisible();
+        expect((await portraits(page)).oskar.source).toMatchObject({ partnershipId: PID });
+        await toast.getByRole('button', { name: 'Undo' }).click();
+        const p = await portraits(page);
+        expect(p.oskar.photo).toBeNull();
+        expect(p.ilsa.photo).toBeNull();
+
+        // The filter: "without photo" and "with photo" alone.
+        await tv.locator('.tv-headrow [data-col="uPhoto"]').click({ button: 'right' });
+        await page.locator('.tv-menu .tv-menu-item[data-id="filter"]').click();
+        const panel = page.locator('.tv-fpanel');
+        await expect(panel.locator('.tv-ff-check')).toHaveText(['without photo', 'with photo']);
+        await expect(panel.locator('input[type="text"], input[type="number"]')).toHaveCount(0);
+        await panel.getByRole('checkbox', { name: 'with photo' }).check();
+        await panel.locator('.tv-fpanel-apply').click();
+        await expect(tv.locator('.tv-status-count')).toHaveText('1 of 2 unions');
+        await expect(tv.locator('.tv-body .tv-row[data-key]')).toHaveCount(1);
+    });
+});
+
+test.describe('Table › Unions, the Photo column on a phone', () => {
+    test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+    test('the thumbnail fits the row and a tap zooms the photo', async ({ page }) => {
+        await openUnionsTable(page, true);
+        const thumb = page.locator(`#table-container .tv-row[data-key="u:${PID}"] .tv-thumb`);
+        await thumb.scrollIntoViewIfNeeded();
+        const box = (await thumb.boundingBox())!;
+        const row = (await page.locator(`#table-container .tv-row[data-key="u:${PID}"]`).boundingBox())!;
+        expect(box.height).toBeLessThanOrEqual(row.height);
+        await thumb.tap();
+        await expect(page.locator('#image-viewer-panel .mv-title')).toHaveText('Oskar and Ilsa · couple’s photo');
+    });
+});

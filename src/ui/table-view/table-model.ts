@@ -80,6 +80,8 @@ export interface CellValue {
     pill?: string;
     /** A percentage for completeness columns (0–100). */
     percent?: number;
+    /** A picture shown small in the cell (spec 107 §8: the couple's photo, a data URL); its text is "yes" for exports. */
+    thumb?: string;
     /** The cell's tooltip, when it says more than the text. */
     title?: string;
     /** A date's qualifier as a short word shown before the text ("abt.", §5.3). */

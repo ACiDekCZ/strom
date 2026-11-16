@@ -54,6 +54,7 @@ import { chipCitations, sourceChipOpenHtml } from './sources.js';
 import { offeredDetails, refreshDetailGroup, resetDetailGroup, renderAgeCheck, ageBirthDate } from './event-details-ui.js';
 import { shownName, shownNameOrEmpty, nameHtml } from '../person-name.js';
 import { canEditUnionPhoto, photoKb } from './union-photo-ui.js';
+import { unionPhotoCaption } from '../union-photo.js';
 export const relationshipsPanelMethods = uiModule({
     showRelationshipsPanel(personId: PersonId, returnToEdit: boolean = false, preservePending: boolean = false): void {
         // Setup dialog stack for standalone mode (when opened directly from card, not from edit dialog)
@@ -463,7 +464,7 @@ export const relationshipsPanelMethods = uiModule({
         if (!photo && locked) return '';
         const btn = (cls: string, label: string) => `<button type="button" class="secondary ${cls}" data-partnership-id="${id}">${this.escapeHtml(label)}</button>`;
         const thumb = photo
-            ? `<button type="button" class="pg-photo-thumb" data-partnership-id="${id}" aria-label="${this.escapeHtml(`${r.unionPhoto}: ${strings.imageViewer.label}`)}"><img src="${this.escapeHtml(photo)}" alt=""></button>`
+            ? `<button type="button" class="pg-photo-thumb" data-partnership-id="${id}" aria-label="${this.escapeHtml(unionPhotoCaption(DataManager.getData(), partnership))}"><img src="${this.escapeHtml(photo)}" alt=""></button>`
             : '';
         const size = photo ? `<span class="pg-photo-size">${this.escapeHtml(photoKb(photo))}</span>` : '';
         const actions = locked ? size

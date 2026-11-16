@@ -168,12 +168,14 @@ export function shownColumnItems(type: RowType, filter: TableFilter): ColumnFilt
 }
 
 /** How a column is filtered (§8.2): text, a range (dates by years) or chosen values. */
-export type FilterKind = 'text' | 'range' | 'values';
+export type FilterKind = 'text' | 'range' | 'values' | 'presence';
 
 /** Enumerations filtered by their values (§8.2: union status, level), besides the pills. */
 const VALUE_COLUMNS = new Set(['uStatus', 'topSev', 'gender', 'living', 'div', 'evid', 'certainty', 'rod', 'srcRead', 'srcTranscript']);
 
 export function filterKindOf(col: ColumnDef): FilterKind {
+    // A picture (spec 107 §8): with or without one only.
+    if (col.kind === 'thumb') return 'presence';
     if (col.kind === 'pill' || VALUE_COLUMNS.has(col.id)) return 'values';
     if (col.kind === 'date' || col.kind === 'age' || col.kind === 'number' || col.kind === 'percent') return 'range';
     return 'text';
@@ -849,8 +851,8 @@ export function columnItemLabel(type: RowType, item: ColumnFilter, model?: Table
     }
     else if (kind === 'text' && item.text?.trim()) parts.push(item.match === 'starts' ? t.filterStarts(item.text.trim()) : t.filterContains(item.text.trim()));
     if (kind === 'values' && item.values?.length) parts.push(item.values.length > 2 ? `${item.values.length}×` : item.values.map(v => valueWord(c, v)).join(', '));
-    if (item.empty) parts.push(t.filterEmpty);
-    if (item.filled) parts.push(t.filterFilled);
+    if (item.empty) parts.push(kind === 'presence' ? t.withoutPhoto : t.filterEmpty);
+    if (item.filled) parts.push(kind === 'presence' ? t.withPhoto : t.filterFilled);
     return `${label} ${parts.join(' · ')}`.trim();
 }
 

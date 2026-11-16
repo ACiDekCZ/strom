@@ -525,9 +525,11 @@ export function columnFilterForm(model: TableModel, type: RowType, col: ColumnDe
                 + `${item?.values?.includes(v.value) ? ' checked' : ''}><span>${esc(v.label)}</span></label>`).join('')
             + '</div>';
     }
-    html += '<div class="tv-ff-sep" role="separator"></div>'
-        + `<label class="tv-ff-check"><input type="checkbox" class="tv-ff-empty" name="${uid}"${item?.empty ? ' checked' : ''}><span>${esc(t.onlyEmpty)}</span></label>`
-        + `<label class="tv-ff-check"><input type="checkbox" class="tv-ff-filled" name="${uid}"${item?.filled ? ' checked' : ''}><span>${esc(t.onlyFilled)}</span></label>`;
+    // A picture's column (spec 107 §8): "with photo" / "without photo" alone.
+    const presence = kind === 'presence';
+    html += (presence ? '' : '<div class="tv-ff-sep" role="separator"></div>')
+        + `<label class="tv-ff-check"><input type="checkbox" class="tv-ff-empty" name="${uid}"${item?.empty ? ' checked' : ''}><span>${esc(presence ? t.withoutPhoto : t.onlyEmpty)}</span></label>`
+        + `<label class="tv-ff-check"><input type="checkbox" class="tv-ff-filled" name="${uid}"${item?.filled ? ' checked' : ''}><span>${esc(presence ? t.withPhoto : t.onlyFilled)}</span></label>`;
     el.innerHTML = html;
     const empty = el.querySelector<HTMLInputElement>('.tv-ff-empty')!;
     const filled = el.querySelector<HTMLInputElement>('.tv-ff-filled')!;

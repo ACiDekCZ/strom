@@ -63,6 +63,10 @@ export function cellChoices(model: TableModel, type: RowType, line: GridLine, co
     if (!copy) return null;
     const label = shortValue(copy);
     if (cellNotComparable(value)) return { copy, label };
+    // A picture (spec 107 §8): only the rows with one, or without one.
+    if (filterKindOf(col) === 'presence') {
+        return { copy, label, only: { col: col.id, kind: col.kind, filled: true }, without: { col: col.id, kind: col.kind, empty: true } };
+    }
     if (filterKindOf(col) === 'values') {
         const key = enumValueOf(value);
         const others = columnValues(model, type, col).map(v => v.value).filter(v => v !== key);

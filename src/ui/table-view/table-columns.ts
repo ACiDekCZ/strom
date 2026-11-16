@@ -30,7 +30,7 @@ import {
 } from './table-research.js';
 import { dateNumber, type CellName, type CellValue, type EventRow, type PersonRow, type RowType, type SourceRow, type TableContext, type TableModel, type TableRow, type UnionRow } from './table-model.js';
 
-export type ColumnKind = 'text' | 'date' | 'age' | 'number' | 'percent' | 'pill' | 'link';
+export type ColumnKind = 'text' | 'date' | 'age' | 'number' | 'percent' | 'pill' | 'link' | 'thumb';
 
 /** Column groups in their order (People first, then the Unions table's own). */
 export const PERSON_GROUPS = ['person', 'birth', 'parents', 'union', 'divorce', 'death', 'events', 'sources', 'rel', 'research', 'checks'] as const;
@@ -69,6 +69,14 @@ const EMPTY: CellValue = Object.freeze({ text: '', sortKey: null, empty: true, n
 
 export function emptyCell(computed = false): CellValue {
     return { ...EMPTY, computed };
+}
+
+/**
+ * A picture's cell (spec 107 §8): shown small, "yes" in a copy or an export;
+ * with a picture it sorts before the cells without one in both directions.
+ */
+export function thumbCell(dataUrl: string | undefined): CellValue {
+    return dataUrl ? { ...EMPTY, empty: false, text: strings.table.yes, sortKey: 0, thumb: dataUrl } : emptyCell();
 }
 
 /** A cell the column does not apply to (§6.1: left out of coverage). */
@@ -721,6 +729,7 @@ export const UNION_COLUMNS: readonly ColumnDef[] = cols('unions', [
     { id: 'uLen', group: 'uextra', label: 'uLen', width: 96, kind: 'age', computed: true, get: (c, r) => unionLength(c, asUnion(r).union) },
     { id: 'srcCount', group: 'uextra', label: 'srcCount', width: 92, kind: 'number', computed: true, get: (_c, r) => numberCell(partnershipSourceIds(asUnion(r).union).length) },
     { id: 'uComp', group: 'uextra', label: 'uComp', width: 124, kind: 'percent', computed: true, get: (c, r) => unionComp(asUnion(r).union, unionPartners(c, asUnion(r)).p2) },
+    { id: 'uPhoto', group: 'uextra', label: 'uPhoto', width: 64, kind: 'thumb', get: (_c, r) => thumbCell(asUnion(r).union.photo) },
     // Research (16zg): only in a research tree
     ...UNION_RESEARCH_DEFS.map(([id, width]): Def => ({
         id, group: 'research', label: id, width, get: (c, r) => c.research ? unionResearchCell(c.research, asUnion(r).union, id) : emptyCell(),

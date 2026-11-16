@@ -274,6 +274,8 @@ export interface GridHandlers {
     onComp?(line: GridLine, col: number, cell: HTMLElement, pointer: string): boolean;
     /** A work list's Done box was clicked, or Space pressed on its cell (spec 084 §13d). */
     onCheck?(line: GridLine): void;
+    /** A picture in a cell clicked (spec 107 §8: the couple's photo zoomed). */
+    onThumb?(line: GridLine): void;
     /** A click on a column's head (§8.4); `add`: with Shift, a further sort key. */
     onHeadSort?(colId: string, add: boolean): void;
     /** A click on a coverage cell (§6.1: only empty / only filled). */
@@ -445,7 +447,40 @@ export function researchHtml(d: ResearchCellDetail, hit = ''): string {
     return `<span class="tv-cell-text tv-rcell">${html}</span>`;
 }
 
+/**
+ * A picture in a cell by an object URL of its own (spec 107 §8), made once
+ * per picture: the rows drawn anew on every scroll do not carry the whole
+ * photo in their markup.
+ */
+const thumbUrls = new Map<string, string>();
+function thumbUrl(dataUrl: string): string {
+    const known = thumbUrls.get(dataUrl);
+    if (known) return known;
+    let url = dataUrl;
+    try {
+        const comma = dataUrl.indexOf(',');
+        const mime = /^data:([^;,]+)/.exec(dataUrl)?.[1] ?? 'image/jpeg';
+        const bin = atob(dataUrl.slice(comma + 1));
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        url = URL.createObjectURL(new Blob([bytes], { type: mime }));
+    } catch { /* not base64: the data URL itself */ }
+    // A changed photo leaves its old one behind: a bounded set, the oldest let go.
+    if (thumbUrls.size >= 200) {
+        const [oldKey, oldUrl] = thumbUrls.entries().next().value as [string, string];
+        thumbUrls.delete(oldKey);
+        if (oldUrl.startsWith('blob:')) URL.revokeObjectURL(oldUrl);
+    }
+    thumbUrls.set(dataUrl, url);
+    return url;
+}
+
 function cellValueCore(value: CellValue, col: ColumnDef, hit = '', links = false): string {
+    // A picture (spec 107 §8: the couple's photo): small, a click zooms it.
+    if (value.thumb && !value.na) {
+        return `<button type="button" class="tv-thumb" tabindex="-1" aria-label="${esc(columnLabel(col))}">`
+            + `<img src="${esc(thumbUrl(value.thumb))}" loading="lazy" decoding="async" alt=""></button>`;
+    }
     // A work list's Done (spec 084 §13d): a box ticked off or not.
     if (value.check !== undefined) {
         return `<span class="tv-check${value.check ? ' is-on' : ''}" role="checkbox" aria-checked="${value.check}" aria-label="${esc(strings.table.col.done)}">`
@@ -742,6 +777,12 @@ export class TableGrid {
                     this.handlers.onConflict(line, Number(cellEl.getAttribute('aria-colindex')) - 1, conf);
                     return;
                 }
+                const thumb = t.closest<HTMLElement>('.tv-thumb');
+                if (thumb && line.kind === 'row' && this.handlers.onThumb) {
+                    this.select(line);
+                    this.handlers.onThumb(line);
+                    return;
+                }
                 if (t.closest('.tv-check') && line.kind === 'row' && this.handlers.onCheck) {
                     this.select(line);
                     this.handlers.onCheck(line);
@@ -780,7 +821,7 @@ export class TableGrid {
                 const t = e.target as Element;
                 if (performance.now() - this.jumpedAt < JUMP_DOUBLE_MS) return;
                 // A person's link (spec 103 K3.3) is a part of its cell: a double click edits as on the rest of it.
-                if (t.closest('.tv-toggle, .tv-unions-pill, .tv-act, .tv-more-btn, .tv-nm:not(.tv-nm--jump), .tv-link, .tv-cites-more, .tv-conf, .tv-ages')) return;
+                if (t.closest('.tv-toggle, .tv-unions-pill, .tv-act, .tv-more-btn, .tv-nm:not(.tv-nm--jump), .tv-link, .tv-cites-more, .tv-conf, .tv-ages, .tv-thumb')) return;
                 const line = this.lineOf(t);
                 if (!line || line.kind === 'more') return;
                 // A cell edited in place (T54 F8) opens its editor; any other cell edits the row.

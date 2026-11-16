@@ -1025,6 +1025,7 @@ export const tableMethods = uiModule({
                 onResize: (colId, width) => this.changeTableColumns(st => setColumnWidth(st, colId, width)),
                 onMoveColumn: (colId, offset) => this.changeTableColumns((st, t) => moveColumnBy(t, st, colId, offset)),
                 onCheck: (line) => this.toggleTableDone(line),
+                onThumb: (line) => { if (line.kind !== 'more' && line.row.kind === 'union') this.openUnionPhotoViewer(line.row.id); },
                 onMoveGroup: (start, end, before) => this.changeTableColumns((st, t) => {
                     const d = mounted?.display;
                     if (!d) return false;
