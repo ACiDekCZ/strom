@@ -55,6 +55,8 @@ interface MenuRow {
     id?: string;
     /** A small sign before the label (the Table view's row actions: ⌖ ▤ ✎); '' keeps its place empty. */
     icon?: string;
+    /** A drawn sign (an SVG, trusted markup) in place of `icon`'s text (the Table's pin). */
+    iconHtml?: string;
     /** A second line of the row's own (the tree's research marks). */
     extra?: HTMLElement;
 }
@@ -559,7 +561,8 @@ export const bottomSheetMethods = uiModule({
                 const icon = document.createElement('span');
                 icon.className = 'bottom-sheet-icon';
                 icon.setAttribute('aria-hidden', 'true');
-                icon.textContent = row.icon;
+                if (row.iconHtml) icon.innerHTML = row.iconHtml;
+                else icon.textContent = row.icon;
                 btn.appendChild(icon);
             }
             const label = document.createElement('span');

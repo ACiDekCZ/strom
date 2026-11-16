@@ -17,6 +17,10 @@ export interface HeadMenuItem {
     label: string;
     /** A small sign before the label. */
     icon: string;
+    /** A drawn sign (an SVG, trusted markup) in place of `icon` (spec 103 3b: the pin). */
+    iconHtml?: string;
+    /** The item's tooltip (spec 103 3h: why it is disabled). */
+    title?: string;
     /** The shortcut on the right. */
     hint?: string;
     disabled?: boolean;
@@ -112,8 +116,8 @@ export function openHeadMenu(anchor: HTMLElement, title: string, note: string, e
         const checkable = e.checked !== undefined;
         html += `<button type="button" class="tv-menu-item" role="${checkable ? 'menuitemradio' : 'menuitem'}" tabindex="-1" data-i="${i}" data-id="${esc(e.id)}"`
             + (checkable ? ` aria-checked="${e.checked}"` : '')
-            + `${e.disabled ? ' aria-disabled="true"' : ''}>`
-            + `<span class="tv-menu-icon" aria-hidden="true">${esc(e.checked ? '✓' : e.icon)}</span>`
+            + `${e.disabled ? ' aria-disabled="true"' : ''}${e.title ? ` title="${esc(e.title)}"` : ''}>`
+            + `<span class="tv-menu-icon" aria-hidden="true">${e.iconHtml && !e.checked ? e.iconHtml : esc(e.checked ? '✓' : e.icon)}</span>`
             + `<span class="tv-menu-label">${esc(e.label)}</span>`
             + (e.hint ? `<span class="tv-menu-hint" aria-hidden="true">${esc(e.hint)}</span>` : '')
             + '</button>';

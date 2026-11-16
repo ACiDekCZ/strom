@@ -18,6 +18,7 @@ import {
     generationSpan, newWindowOf, rodChoices, shownColumnItems, type ChipFilter, type ChipId, type ColumnFilter, type TableFilter,
 } from './table-filter.js';
 import { closeHeadMenu, openHeadMenu, type HeadMenuEntry, type MenuEntry } from './table-headmenu.js';
+import { pinSvg } from './table-pins.js';
 import {
     type ResearchChipId, type ResearchChipOffer, type ResearchNewWindow,
 } from './table-research.js';
@@ -47,6 +48,8 @@ export interface FilterBarState {
     phone: boolean;
     /** The research's chips (§16.5); absent without research. */
     research?: ResearchBarState;
+    /** Rows pinned under the table's head (spec 103 §3): the row's first chip says how many (none on a phone). */
+    pinned?: number;
 }
 
 /** The research's part of the chips' row (§16.5, 16a0, 16n–16p, 16z, 16zk). */
@@ -84,8 +87,19 @@ export interface FilterBarHandlers {
     /** A column filter's ×: that one item (spec 103 K1.2). */
     onRemoveColumn(at: number): void;
     onClear(): void;
+    /** The pinned rows' chip's × (spec 103 3a): all unpinned. */
+    onUnpinAll?(): void;
     /** The phone's Filters button. */
     onSheet(): void;
+}
+
+/** The pinned rows' chip (spec 103 3a): the pin, "Pinned rows (n)", × unpins all; a separator after it. */
+function pinChipHtml(n: number): string {
+    const t = strings.table.pinRow;
+    return `<span class="tv-pinchip" data-pinchip><span class="tv-pinchip-icon" aria-hidden="true">${pinSvg(13)}</span>`
+        + `<span class="tv-pinchip-text">${esc(t.chip(n))}</span>`
+        + `<button type="button" class="tv-pinchip-x" aria-label="${esc(t.unpinAll)}" title="${esc(t.unpinAll)}">×</button></span>`
+        + '<span class="tv-bar-sep tv-pinsep" aria-hidden="true"></span>';
 }
 
 /** The participant filter's chip (§14.1: "Godparent: {name} ×"), when it is on. */
@@ -177,9 +191,11 @@ export class FilterBar {
 
         const chips = availableChips(model, type);
         const cols = shownColumnItems(type, filter);
-        this.row.hidden = state.phone || (!chips.length && !cols.length);
+        const pinned = state.phone ? 0 : state.pinned ?? 0;
+        this.row.hidden = state.phone || (!chips.length && !cols.length && !pinned);
         if (this.row.hidden) { this.row.innerHTML = ''; return; }
-        let html = '';
+        // The pinned rows (spec 103 3a): first, fixed (it never gives way to "More filters"), not a filter.
+        let html = pinned ? pinChipHtml(pinned) : '';
         for (const chip of chips) {
             const item = chipItem(filter, chip);
             const waits = state.checking && CHECK_CHIPS.includes(chip);
@@ -311,6 +327,7 @@ export class FilterBar {
         if (!st) return;
         const t = e.target as Element;
         if (t.closest('.tv-chips-clear')) { this.handlers.onClear(); return; }
+        if (t.closest('.tv-pinchip-x')) { this.handlers.onUnpinAll?.(); return; }
         const xc = t.closest<HTMLElement>('[data-xchip]');
         if (xc) { this.handlers.onChip(xc.dataset.xchip as ChipId, false); return; }
         const x = t.closest<HTMLElement>('[data-x]');

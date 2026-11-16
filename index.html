@@ -10497,6 +10497,41 @@
             flex: none; margin-left: 8px; font-family: var(--font-sans); font-size: 11px; font-style: italic; font-weight: 400;
             color: var(--warning-text); white-space: nowrap; padding-right: 3px;
         }
+        /* Pinned rows (spec 103 §3): under the head, the body scrolls beneath them; drawn as the body's rows. */
+        .tv-pinrows { position: relative; background: var(--surface); border-bottom: 2px solid var(--border); box-shadow: 0 4px 8px -4px var(--tv-pin-shadow); }
+        .tv-pinrows[hidden] { display: none; }
+        /* More than a third of the body: a scroll of its own, half a row more seen (3e). Being a scroller it would
+           leave with the columns: it is moved back by the grid's scrollLeft, its rows with the columns, the pinned cells kept. */
+        .tv-pinrows.has-scroll {
+            max-height: var(--tv-pin-max); overflow: hidden auto; overscroll-behavior: contain;
+            transform: translateX(var(--tv-sx, 0px));
+        }
+        .tv-pinrows.has-scroll > .tv-pinbody { transform: translateX(calc(-1 * var(--tv-sx, 0px))); }
+        .tv-pinrows.has-scroll .tv-pinned { transform: translateX(var(--tv-sx, 0px)); }
+        /* The pin before the name: filled in a pinned row, an outline on its row in the body. */
+        .tv-pin { flex: none; display: inline-flex; margin-right: 6px; color: var(--primary); }
+        .tv-pin svg { display: block; fill: currentColor; }
+        .tv-pin--outline { color: var(--text-faint); }
+        .tv-pin--outline svg { fill: none; }
+        /* A pinned row the filter hides (3d): dimmed as a row shown for now, without its stripe. */
+        .tv-body .tv-row.is-outside > .tv-cell:not(:first-child) { opacity: 0.55; }
+        /* The editor over a pinned row stands above the head that holds the row. */
+        .tv-editor.is-over-pins { z-index: 4; }
+        /* "Pinned rows (n) ×" (3a): the chips' row's first, an outline, never moved into More filters. */
+        .tv-pinchip {
+            order: -2; flex: none; display: inline-flex; align-items: center; height: 28px; box-sizing: border-box;
+            padding: 0 2px 0 10px; border: 1px solid var(--text); border-radius: var(--sel-r); background: var(--surface);
+            color: var(--text); font-size: 12.5px; font-weight: 600; white-space: nowrap;
+        }
+        .tv-pinchip-icon { display: inline-flex; margin-right: 6px; }
+        .tv-pinchip-icon svg { display: block; fill: currentColor; }
+        .tv-pinchip-x {
+            width: 22px; height: 22px; margin-left: 4px; padding: 0; border: none; border-radius: var(--r-sm);
+            background: none; color: inherit; font: inherit; font-size: 15px; font-weight: 400; line-height: 1; cursor: pointer;
+        }
+        .tv-pinchip-x:focus-visible { outline: 2px solid var(--primary); outline-offset: 0; }
+        .tv-pinsep { order: -1; flex: none; margin-left: 0; }
+        @media (hover: hover) { .tv-pinchip-x:hover { background: var(--surface-2); } }
         /* ‹ › of the jumps (spec 103 §1): at the bar's start, shown from the first jump on. */
         .tv-slot-nav { display: flex; align-items: center; gap: 4px; }
         .tv-slot-nav[hidden] { display: none; }
@@ -10749,6 +10784,7 @@
         .tv-menu-item[aria-disabled="true"] { color: var(--text-ghost); cursor: default; }
         .tv-menu-item:focus-visible { outline: none; background: var(--surface-2); box-shadow: inset 2px 0 0 var(--primary); }
         .tv-menu-icon { flex: none; width: 16px; text-align: center; color: var(--text-light); }
+        .tv-menu-icon > svg, .bottom-sheet-icon > svg { display: block; margin: 0 auto; }
         .tv-menu-label { flex: 1 1 auto; min-width: 0; }
         .tv-menu-hint { flex: none; font-size: 11.5px; color: var(--text-faint); }
         /* §4.4 the Columns button and panel (a sheet from the bottom on a phone). */

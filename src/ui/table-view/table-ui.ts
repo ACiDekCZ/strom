@@ -57,6 +57,7 @@ import { cellChoices, copyPlainText } from './table-cell.js';
 import { fanZoomModifier } from '../../fan-zoom.js';
 import { createBar, createStatus, createWindowButton, updateBar, updateNav, updateResearchStatus, updateStatus } from './table-bar.js';
 import { JumpHistory, jumpTargetCell, type JumpStep } from './table-jump.js';
+import { PIN_MAX, TablePins, pinRanks, pinSvg } from './table-pins.js';
 import { createNotice, showNotice } from './table-notice.js';
 import { applyTableWindowState, readTableWindowState, tableWindowStateOf, type TableWindowState } from './table-window-state.js';
 import { canOpenWindows, openInNewWindow } from '../../windows/window-open.js';
@@ -88,7 +89,7 @@ import {
     applyChecks, bandSeverity, CHECK_COLUMNS, CheckIndex, conflictCells, lineFindings, lineUnion, type CellFinding, type ConflictCell,
 } from './table-checks.js';
 import { conflictScope } from '../person-research-ui.js';
-import { lineCell, lineKey, type GridLine } from './table-subrows.js';
+import { lineCell, lineKey, plainLines, type GridLine } from './table-subrows.js';
 import { cellDraft, type CellDraft } from '../../windows/window-drafts.js';
 import { cellText, isMouseLikePointer, markHtml, personLinks, type CellConflictMark, type CellIssueMark } from './table-grid.js';
 import { bubbleHeading, bubbleHtml, citesHtml, closeTableBubble, legendHtml, openBubblePanel, sheetElement, type BubbleCite } from './table-bubble.js';
@@ -267,6 +268,12 @@ function withTempRow(m: TableModel, rows: readonly TableRow[], person: PersonId,
     const at = before ? rows.indexOf(before) + 1 : 0;
     return [...rows.slice(0, at), temp, ...rows.slice(at)];
 }
+
+/**
+ * Rows pinned under the head (spec 103 §3): this window's, of one tree and
+ * one row type, never in a view (decisions D5, D7).
+ */
+const pins = new TablePins();
 
 /** Records changed (entity keys) whose rows light up at the next draw (§10.3). */
 let flashNext: { tree: string; keys: readonly string[] } | null = null;
@@ -702,6 +709,8 @@ export const tableMethods = uiModule({
             tempShown = null;
             hiddenJump = null;
         }
+        // Pinned rows (spec 103 §3): another tree or row type drops them.
+        pins.use(tree, type);
         const pctx = peopleCtx(state);
         if (tempShown && (tempShown.tree !== tree || type !== 'persons' || tempShown.ctx !== pctx)) tempShown = null;
         if (hiddenJump && (hiddenJump.tree !== tree || hiddenJump.ctx !== `${type}|${pctx}`)) hiddenJump = null;
@@ -853,6 +862,7 @@ export const tableMethods = uiModule({
                 onEditColumn: (col, at, anchor) => this.showTableColumnFilter(col, anchor, at),
                 onRemoveColumn: (at) => this.changeTableFilter(f => removeColumnItemAt(f, at)),
                 onClear: () => this.changeTableFilter(f => clearFilter(f), true),
+                onUnpinAll: () => this.changeTablePins(() => pins.clear()),
                 onSheet: () => this.showTableFilters(),
             });
             const views = new ViewBar(bar.querySelector<HTMLElement>('.tv-slot-view')!, {
@@ -933,10 +943,12 @@ export const tableMethods = uiModule({
         const shownRows = persons && tempShown ? withTempRow(m, rows, tempShown.person, st.sort, pass) : rows;
         const temp = shownRows !== rows && tempShown ? new Set([`p:${tempShown.person}`]) : undefined;
         const lines = persons ? buildLines(shownRows, { collapse: st.unions, pass, revealed: new Set(st.revealedUnions) }) : undefined;
+        const pinned = this.tablePinnedLines(m, type, st, state.open[type], shownRows, pass, phone);
         const unionsButton = persons && hasMultiUnions(rows) ? (anyExpanded(st.unions, rows) ? 'collapse' : 'expand') : null;
         const summary = filterSummary(m, type, st.filter, st.search);
         const filterState: FilterBarState = {
             model: m, type, filter: st.filter, search: st.search, shown: rows.length, checking: !index || !!checks?.running, phone,
+            pinned: phone ? 0 : pins.count(),
             research: persons && research ? researchBarState(research, m, st.filter, display.columns, isResearchViewId(state.open[type])) : undefined,
         };
         mounted.filterState = filterState;
@@ -972,6 +984,7 @@ export const tableMethods = uiModule({
         mounted.grid.setInput({
             model: m, type, rows: shownRows, columns: display.columns, widths: display.widths, pinned: display.pinned, sort: st.sort, homeId,
             links: type === 'persons' || type === 'unions', temp,
+            pinLines: pinned?.lines, pinnedKeys: pinned?.keys, pinOutside: pinned?.outside,
             bands: display.bands, coverageRow: st.coverageRow, editableHead: !phone,
             hit: searchQuery(st.search),
             filtered: new Set(st.filter.items.filter((i): i is Exclude<typeof i, { chip: ChipId }> => !isChipItem(i) && columnItemActive(i)).map(i => i.col)),
@@ -1124,8 +1137,7 @@ export const tableMethods = uiModule({
     tableCellFinder(line: GridLine, colPos: number): () => HTMLElement | null {
         const grid = mounted?.grid;
         const key = lineKey(line);
-        return () => (grid ? [...grid.el.querySelectorAll<HTMLElement>('.tv-row[data-key]')]
-            .find(r => r.dataset.key === key)?.querySelector<HTMLElement>(`[aria-colindex="${colPos + 1}"]`) ?? null : null);
+        return () => grid?.drawnCell(key, colPos) ?? null;
     },
 
     /** A finding's cell was clicked or Enter pressed on it (§7.4): the row selected, the bubble opened. */
@@ -1162,8 +1174,7 @@ export const tableMethods = uiModule({
         }
         const grid = mounted.grid;
         const cellKey = lineKey(line);
-        const findCell = (): HTMLElement | null => [...grid.el.querySelectorAll<HTMLElement>('.tv-row[data-key]')]
-            .find(r => r.dataset.key === cellKey)?.querySelector<HTMLElement>(`[aria-colindex="${colPos + 1}"]`) ?? null;
+        const findCell = (): HTMLElement | null => grid.drawnCell(cellKey, colPos);
         // The cell as drawn now: a select draws the rows anew (T54 H8).
         const rect = (findCell() ?? cell).getBoundingClientRect();
         const data = DataManager.getData();
@@ -2038,15 +2049,91 @@ export const tableMethods = uiModule({
     },
 
     /** The row's menu (§10.1): the cell's part (T54 F4) · Show in tree · Open person (Enter) · Edit… (double click) · Expand / Collapse unions. */
+    /**
+     * The pinned rows' lines for the grid (spec 103 §3): rows gone from the
+     * data drop out; in the table's order, kept until the sort, the filter,
+     * the search or the view change (D7 a); a person with their union
+     * sub-rows as the body draws them (D5 a); those the filter hides marked.
+     * Null with none, and on a phone (no pins there).
+     */
+    tablePinnedLines(
+        m: TableModel, type: RowType, st: RowTypeState, view: unknown, shown: readonly TableRow[], pass: UnionPredicate | null, phone: boolean,
+    ): { lines: readonly GridLine[]; keys: ReadonlySet<string>; outside: ReadonlySet<string> } | null {
+        if (!pins.count()) return null;
+        const byKey = new Map(rowsOf(m, type).map(r => [rowKey(r), r] as const));
+        pins.prune(k => byKey.has(k));
+        if (!pins.count() || phone) return null;
+        const shownKeys = shown.map(rowKey);
+        const shownSet = new Set(shownKeys);
+        const ctx = JSON.stringify([st.filter, searchQuery(st.search), st.sort, view]);
+        const order = pins.ordered(ctx, keys => pinRanks(keys, shownKeys, () => {
+            const hidden = keys.filter(k => !shownSet.has(k)).map(k => byKey.get(k)!);
+            const all = st.sort.length ? sortRows(m, type, [...shown, ...hidden], st.sort, pass ? sortUnionOf(pass) : undefined) : rowsOf(m, type);
+            return all.map(rowKey);
+        }));
+        const rows = order.map(k => byKey.get(k)).filter((r): r is TableRow => !!r);
+        const lines = type === 'persons' ? buildLines(rows, { collapse: st.unions, pass, revealed: new Set(st.revealedUnions) }) : plainLines(rows);
+        return { lines, keys: new Set(order), outside: new Set(order.filter(k => !shownSet.has(k))) };
+    },
+
+    /** Pin or unpin rows (spec 103 §3) and draw; the focus stays in its cell. */
+    changeTablePins(change: () => unknown): void {
+        change();
+        if (mounted) this.renderTableView(mounted.container);
+    },
+
+    /**
+     * The rows of a text selected across several rows of the grid (spec 103
+     * 3g: the grid selects cells one at a time, a range is the selected
+     * text), their row keys, each once; empty without one across rows.
+     */
+    tableAreaRowKeys(): string[] {
+        const grid = mounted?.grid.el;
+        const sel = typeof window.getSelection === 'function' ? window.getSelection() : null;
+        if (!grid || !sel || sel.isCollapsed || !sel.rangeCount) return [];
+        const range = sel.getRangeAt(0);
+        if (!grid.contains(range.commonAncestorContainer)) return [];
+        const keys = [...grid.querySelectorAll<HTMLElement>('.tv-body .tv-row[data-key]')]
+            .filter(r => range.intersectsNode(r)).map(r => r.dataset.key!.split('#')[0]);
+        const out = [...new Set(keys)];
+        return out.length > 1 ? out : [];
+    },
+
+    /**
+     * The row menu's pin item (spec 103 3b, 3g, 3h): Pin row, Pin rows (n)
+     * for a selected range the click is in, Unpin row on a pinned row;
+     * disabled with why when the pins would go over PIN_MAX. None on a phone.
+     */
+    tableRowPinEntry(line: GridLine, area: readonly string[]): HeadMenuItem | null {
+        if (isPhoneBar()) return null;
+        const t = strings.table.pinRow;
+        const key = rowKey(line.row);
+        const icon = pinSvg(14);
+        const many = area.length > 1 && area.includes(key) && pins.fresh(area).length ? area : null;
+        if (!many && pins.has(key)) return { id: 'unpin', label: t.unpin, icon: '', iconHtml: icon, run: () => this.changeTablePins(() => pins.unpin(key)) };
+        const keys = many ?? [key];
+        const can = pins.canPin(keys);
+        return {
+            id: 'pin', label: many ? t.many(many.length) : t.one, icon: '', iconHtml: icon,
+            ...(can ? {} : { disabled: true, title: t.limit }),
+            run: () => { if (pins.count() + pins.fresh(keys).length <= PIN_MAX) this.changeTablePins(() => pins.pin(keys)); },
+        };
+    },
+
     showTableRowMenu(line: GridLine, anchor: HTMLElement, cell: GridCellRef | null = null): void {
         if (line.kind === 'more') return;
         if (isPhoneBar()) { this.showTableRowSheet(line, cell); return; }
         const t = strings.table;
         const run = (a: RowAction) => () => this.tableRowAction(a, line);
         const src = line.row.kind === 'source' ? line.row : null;
-        const cellPart: MenuEntry[] = this.tableCellChoices(line, cell);
+        // A text selected across rows (spec 103 3g): the cell's part is Copy only, its text.
+        const area = isPhoneBar() ? [] : this.tableAreaRowKeys();
+        const areaText = area.length ? window.getSelection()?.toString() ?? '' : '';
+        const cellPart: MenuEntry[] = area.length
+            ? [{ id: 'cellCopy', label: t.cell.copy, icon: '', hint: fanZoomModifier() === '⌘' ? '⌘C' : 'Ctrl+C', run: () => copyPlainText(areaText) }]
+            : this.tableCellChoices(line, cell);
         // T54 F8: the cell edited in place, as F2 does.
-        if (cell && this.tableEditTarget(line, cell.col)) {
+        if (!area.length && cell && this.tableEditTarget(line, cell.col)) {
             cellPart.push({ id: 'cell-edit', label: t.cell.edit, icon: '', hint: 'F2', run: () => { mounted?.grid.editActive(); } });
         }
         const entries: MenuEntry[] = cellPart.length ? [...cellPart, SEP] : [];
@@ -2056,6 +2143,9 @@ export const tableMethods = uiModule({
             entries.push({ id: 'open', label: t.act.open, icon: '▤', hint: 'Enter', run: run('open') });
         }
         if (!tableReadOnly()) entries.push({ id: 'edit', label: t.act.edit, icon: '✎', hint: t.dblClickHint, run: run('edit') });
+        // Pin or unpin the row (spec 103 3b), after Edit, before the unions.
+        const pin = this.tableRowPinEntry(line, area);
+        if (pin) entries.push(SEP, pin);
         if (line.kind === 'row' && line.expanded !== null) {
             const expand = !line.expanded;
             const id = line.row.id;
@@ -2089,6 +2179,9 @@ export const tableMethods = uiModule({
             { label: t.act.open, icon: '▤', run: run('open') },
         ];
         if (!ro) rows.push({ label: t.act.edit, icon: '✎', run: run('edit') });
+        // A tablet's sheet pins the row too (spec 103 §3; a phone has no pins).
+        const pin = this.tableRowPinEntry(line, []);
+        const pinRows = pin ? [{ label: pin.label, icon: '', iconHtml: pin.iconHtml, ...(pin.disabled ? { sub: pin.title } : {}), run: pin.disabled ? () => {} : pin.run }] : [];
         const cellBlocks = this.tableCellSheetBlocks(line, cell);
         // People in the cell (spec 103 §4): Go to {name} for each of the tree's people the cell names, first.
         const type = stateOf(treeKey()).rowType;
@@ -2100,6 +2193,7 @@ export const tableMethods = uiModule({
         const blocks: { rows: typeof rows; divider?: boolean }[] = [
             ...cellBlocks.map((b, i) => (i === 0 && linkBlocks.length ? { ...b, divider: true } : b)),
             cellBlocks.length || linkBlocks.length ? { rows, divider: true } : { rows },
+            ...(pinRows.length ? [{ rows: pinRows, divider: true }] : []),
         ];
         if (!ro && line.row.kind === 'person') {
             const row = line.row;

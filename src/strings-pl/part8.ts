@@ -1468,6 +1468,10 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
             hidden: (name: string) => `Ukryte przez filtr: ${name}.`, showTemp: 'Pokaż tymczasowo',
         },
         nav: { back: 'Wstecz', backTo: (name: string) => `Wróć do ${name}`, forward: 'Dalej', forwardTo: (name: string) => `Ponownie do ${name}` },
+        pinRow: {
+            one: 'Przypnij wiersz', many: (n: number) => `Przypnij wiersze (${n})`, unpin: 'Odepnij wiersz', chip: (n: number) => `Przypięte wiersze (${n})`,
+            unpinAll: 'Odepnij wszystkie wiersze', zone: 'Przypięte wiersze', rowSr: (name: string) => `Przypięty wiersz: ${name}`, limit: 'Można przypiąć najwyżej 10 wierszy.',
+        },
         search: 'Szukaj w tabeli',
         matches: (n: number) => nPl(n, 'wynik', 'wyniki', 'wyników'),
         filterMark: 'Kolumna filtrowana',

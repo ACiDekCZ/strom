@@ -49,6 +49,7 @@ import { shownNameOrEmpty as personName } from '../../person-name.js';
 import { AGENT_SPIN_MS, sharedPhaseDelay } from '../../card-signals.js';
 import { PERSON_FINDINGS_COLUMNS } from './table-checks.js';
 import { sharedEventMarkSvg } from '../../icons.js';
+import { pinSvg } from './table-pins.js';
 
 export interface GridInput {
     model: TableModel;
@@ -114,6 +115,12 @@ export interface GridInput {
     links?: boolean;
     /** Rows shown for now although the filter hides them (spec 103 K3.2, 2b: their row keys). */
     temp?: ReadonlySet<string>;
+    /** Rows pinned under the head (spec 103 U3, §3): their lines (a person with its union sub-rows), in the table's order. */
+    pinLines?: readonly GridLine[];
+    /** The pinned rows' keys (rowKey): their own rows in the body carry the pin's outline. */
+    pinnedKeys?: ReadonlySet<string>;
+    /** Pinned rows the filter hides (row keys): drawn dimmed with "outside the filter". */
+    pinOutside?: ReadonlySet<string>;
 }
 
 /**
@@ -271,6 +278,9 @@ const FIT_ROWS = 200;
 const FIT_MAX = 480;
 
 const ROW_HEIGHT_FALLBACK = 32;
+/** The pin before a pinned row's name (filled) and on its row in the body (an outline), spec 103 3c. */
+const PIN_MARK = `<span class="tv-pin" aria-hidden="true">${pinSvg(12)}</span>`;
+const PIN_MARK_OUTLINE = `<span class="tv-pin tv-pin--outline" aria-hidden="true">${pinSvg(12)}</span>`;
 
 /**
  * The pointer of a click: the click's own `pointerType` where the browser
@@ -521,6 +531,9 @@ export class TableGrid {
     private readonly headRow: HTMLElement;
     private readonly covRow: HTMLElement;
     private readonly body: HTMLElement;
+    /** The pinned rows' part under the head (spec 103 §3) and its body (the rows, drawn as the body's). */
+    private readonly pinZone: HTMLElement;
+    private readonly pinBody: HTMLElement;
     private readonly noMatch: HTMLElement;
     private input: GridInput | null = null;
     private offsets: number[] = [0];
@@ -551,6 +564,12 @@ export class TableGrid {
     private cellChosen = false;
     /** The rows last drawn, so a redraw of the same rows replaces only the cells that changed (§16.6). */
     private drawnRows: DrawnRow[] = [];
+    /** The pinned rows' lines, their tops and as last drawn (spec 103 §3). */
+    private pinLines: readonly GridLine[] = [];
+    private pinTops: number[] = [0];
+    private drawnPins: DrawnRow[] = [];
+    /** The active cell is in the pinned rows' part (its line one of `pinLines`). */
+    private activePin = false;
     /** The agent's bars stop while out of sight (§16.6). */
     private agentBars: IntersectionObserver | null = null;
     /** The line whose action icons the pointer may show (it came onto the row away from where they stand), by its key. */
@@ -568,17 +587,19 @@ export class TableGrid {
      */
     private origin: { key: string; col: number; personId: string } | null = null;
     /** The open cell editor (T54 F8): over the cell, in the scrolled area (outside the body, so a redraw keeps it). */
-    private editor: { key: string; colId: string; box: HTMLElement; input: HTMLInputElement | HTMLSelectElement; error: HTMLElement; spec: CellEditSpec } | null = null;
+    private editor: { key: string; colId: string; pin: boolean; box: HTMLElement; input: HTMLInputElement | HTMLSelectElement; error: HTMLElement; spec: CellEditSpec } | null = null;
 
     constructor(private readonly handlers: GridHandlers = {}) {
         const el = document.createElement('div');
         el.className = 'tv-grid';
         el.setAttribute('role', 'treegrid');
         el.tabIndex = 0;
-        el.innerHTML = '<div class="tv-head" role="rowgroup">'
+        // The head's rows belong to the grid itself: the pinned rows under them are a group of their own.
+        el.innerHTML = '<div class="tv-head" role="none">'
             + '<div class="tv-row tv-grouprow" role="row"></div>'
             + '<div class="tv-row tv-headrow" role="row"></div>'
             + '<div class="tv-row tv-covrow" role="row"></div>'
+            + `<div class="tv-pinrows" role="rowgroup" aria-label="${esc(strings.table.pinRow.zone)}" hidden><div class="tv-body tv-pinbody"></div></div>`
             + '</div><div class="tv-body" role="rowgroup"></div>'
             + '<div class="tv-nomatch" role="status" hidden></div>'
             + `<span id="tv-link-hint" hidden>${esc(strings.table.link.enterHint)}</span>`;
@@ -587,156 +608,176 @@ export class TableGrid {
         this.groupRow = el.querySelector('.tv-grouprow')!;
         this.headRow = el.querySelector('.tv-headrow')!;
         this.covRow = el.querySelector('.tv-covrow')!;
-        this.body = el.querySelector('.tv-body')!;
+        this.body = el.querySelector(':scope > .tv-body')!;
+        this.pinZone = el.querySelector('.tv-pinrows')!;
+        this.pinBody = el.querySelector('.tv-pinbody')!;
+        // In the head only while rows are pinned (sizePins): the body stays the grid's one .tv-body.
+        this.pinZone.remove();
         this.noMatch = el.querySelector('.tv-nomatch')!;
         this.noMatch.addEventListener('click', (e) => {
             if ((e.target as Element).closest('.tv-nomatch-clear')) this.handlers.onClearFilters?.();
         });
         el.addEventListener('scroll', () => {
             el.classList.toggle('is-scrolled-x', el.scrollLeft > 0);
+            el.style.setProperty('--tv-sx', `${el.scrollLeft}px`);
             this.handlers.onScroll?.(el.scrollTop, el.scrollLeft);
             this.schedule();
             this.placeEditor();
         }, { passive: true });
-        this.body.addEventListener('pointerdown', (e) => {
-            this.lastPointerDown = e.pointerType;
-            this.downAt = { x: e.clientX, y: e.clientY };
-        }, { passive: true });
-        this.body.addEventListener('pointermove', (e) => this.armRowActions(e), { passive: true });
-        this.body.addEventListener('pointerleave', () => this.disarmRowActions(), { passive: true });
-        this.body.addEventListener('click', (e) => {
-            const pointer = clickPointerType(e, this.lastPointerDown);
-            this.lastPointerDown = '';
-            // The second click of a double click on a name that jumped: the row under it now is another one.
-            if (e.detail >= 2 && performance.now() - this.jumpedAt < JUMP_DOUBLE_MS) return;
-            const t = e.target as Element;
-            const rowEl = t.closest<HTMLElement>('.tv-row[data-key]');
-            const line = rowEl ? this.lines[Number(rowEl.dataset.index)] : undefined;
-            const cellEl = t.closest<HTMLElement>('[aria-colindex]');
-            if (line && cellEl) this.chooseCell(line, cellEl);
-            const band = t.closest<HTMLElement>('.tv-band[data-band]');
-            if (band) { this.handlers.onToggleGroup?.(band.dataset.band!, false); return; }
-            if (!line || !this.input) return;
-            if (line.kind === 'more') {
-                if (t.closest('.tv-more-btn')) this.handlers.onRevealUnions?.(line.row.id);
-                return;
-            }
-            if (line.kind === 'row' && line.expanded !== null && t.closest('.tv-toggle, .tv-unions-pill')) {
-                this.handlers.onToggleUnions?.(line.row.id, !line.expanded);
-                return;
-            }
-            const nm = t.closest<HTMLElement>('.tv-nm[data-ni]');
-            if (nm && cellEl) {
-                // A person's link (spec 103 K3.3): a plain click of a mouse or a pen (or Enter on it) jumps; a drag,
-                // Shift / Ctrl / Cmd, a double click's second click or a tap is a click of the cell as any other.
-                if (!nm.classList.contains('tv-nm--jump')) {
-                    if (this.nameAt(line, cellEl, nm)) return;
-                } else if (this.linkClick(e, pointer) && this.nameAt(line, cellEl, nm)) {
-                    this.jumpedAt = performance.now();
+        // The body and the pinned rows (spec 103 §3) take the same pointer and keys.
+        for (const body of [this.body, this.pinBody]) {
+            body.addEventListener('pointerdown', (e) => {
+                this.lastPointerDown = e.pointerType;
+                this.downAt = { x: e.clientX, y: e.clientY };
+            }, { passive: true });
+            body.addEventListener('pointermove', (e) => this.armRowActions(e), { passive: true });
+            body.addEventListener('pointerleave', () => this.disarmRowActions(), { passive: true });
+            body.addEventListener('click', (e) => {
+                const pointer = clickPointerType(e, this.lastPointerDown);
+                this.lastPointerDown = '';
+                // The second click of a double click on a name that jumped: the row under it now is another one.
+                if (e.detail >= 2 && performance.now() - this.jumpedAt < JUMP_DOUBLE_MS) return;
+                const t = e.target as Element;
+                const line = this.lineOf(t);
+                const cellEl = t.closest<HTMLElement>('[aria-colindex]');
+                if (line && cellEl) this.chooseCell(line, cellEl);
+                const band = t.closest<HTMLElement>('.tv-band[data-band]');
+                if (band) { this.handlers.onToggleGroup?.(band.dataset.band!, false); return; }
+                if (!line || !this.input) return;
+                if (line.kind === 'more') {
+                    if (t.closest('.tv-more-btn')) this.handlers.onRevealUnions?.(line.row.id);
                     return;
                 }
-            }
-            const more = t.closest<HTMLElement>('.tv-cites-more');
-            if (more && cellEl && this.moreCitesAt(line, cellEl, more)) return;
-            const ages = t.closest<HTMLElement>('.tv-ages');
-            if (ages && line.kind === 'row' && this.handlers.onSharedAges) {
-                const at = cellEl ?? ages;
+                if (line.kind === 'row' && line.expanded !== null && t.closest('.tv-toggle, .tv-unions-pill')) {
+                    this.handlers.onToggleUnions?.(line.row.id, !line.expanded);
+                    return;
+                }
+                const nm = t.closest<HTMLElement>('.tv-nm[data-ni]');
+                if (nm && cellEl) {
+                    // A person's link (spec 103 K3.3): a plain click of a mouse or a pen (or Enter on it) jumps; a drag,
+                    // Shift / Ctrl / Cmd, a double click's second click or a tap is a click of the cell as any other.
+                    if (!nm.classList.contains('tv-nm--jump')) {
+                        if (this.nameAt(line, cellEl, nm)) return;
+                    } else if (this.linkClick(e, pointer) && this.nameAt(line, cellEl, nm)) {
+                        this.jumpedAt = performance.now();
+                        return;
+                    }
+                }
+                const more = t.closest<HTMLElement>('.tv-cites-more');
+                if (more && cellEl && this.moreCitesAt(line, cellEl, more)) return;
+                const ages = t.closest<HTMLElement>('.tv-ages');
+                if (ages && line.kind === 'row' && this.handlers.onSharedAges) {
+                    const at = cellEl ?? ages;
+                    this.select(line);
+                    const live = this.liveAnchor(line, at);
+                    this.handlers.onSharedAges(line, live.querySelector<HTMLElement>('.tv-ages') ?? live);
+                    return;
+                }
+                // A web address opens its own window (§14.2); the row stays as it is.
+                if (t.closest('a.tv-link')) return;
+                const conf = t.closest<HTMLElement>('.tv-conf');
+                if (conf && cellEl && this.handlers.onConflict) {
+                    this.select(line);
+                    this.handlers.onConflict(line, Number(cellEl.getAttribute('aria-colindex')) - 1, conf);
+                    return;
+                }
+                const act = t.closest<HTMLElement>('.tv-act[data-act]');
+                if (act) {
+                    this.select(line);
+                    this.handlers.onRowAction?.(act.dataset.act as RowAction, line);
+                    return;
+                }
+                if (cellEl?.classList.contains('has-issue') && this.handlers.onIssue) {
+                    this.handlers.onIssue(line, Number(cellEl.getAttribute('aria-colindex')) - 1, cellEl);
+                    return;
+                }
+                if (cellEl?.classList.contains('has-res') && this.handlers.onResearch) {
+                    this.select(line);
+                    this.handlers.onResearch(line, Number(cellEl.getAttribute('aria-colindex')) - 1, cellEl);
+                    return;
+                }
+                // A bubble opens at the cell as drawn after the select: selecting
+                // another row draws the rows anew, and the clicked cell, gone from
+                // the page, put the bubble in the window's corner (T54 H8, as G7).
+                if (cellEl?.classList.contains('has-finds') && this.handlers.onFindings) {
+                    this.select(line);
+                    this.handlers.onFindings(line, Number(cellEl.getAttribute('aria-colindex')) - 1, this.liveAnchor(line, cellEl));
+                    return;
+                }
                 this.select(line);
-                const live = this.liveAnchor(line, at);
-                this.handlers.onSharedAges(line, live.querySelector<HTMLElement>('.tv-ages') ?? live);
-                return;
-            }
-            // A web address opens its own window (§14.2); the row stays as it is.
-            if (t.closest('a.tv-link')) return;
-            const conf = t.closest<HTMLElement>('.tv-conf');
-            if (conf && cellEl && this.handlers.onConflict) {
+                if (cellEl?.querySelector('.tv-comp')
+                    && this.handlers.onComp?.(line, Number(cellEl.getAttribute('aria-colindex')) - 1, this.liveAnchor(line, cellEl), pointer)) return;
+                this.handlers.onRowClick?.(line, this.cellRefOf(line, cellEl), pointer);
+            });
+            // A double click edits (§10.1); the ▾/▸, the count pill and the icons are their own.
+            body.addEventListener('dblclick', (e) => {
+                const t = e.target as Element;
+                if (performance.now() - this.jumpedAt < JUMP_DOUBLE_MS) return;
+                // A person's link (spec 103 K3.3) is a part of its cell: a double click edits as on the rest of it.
+                if (t.closest('.tv-toggle, .tv-unions-pill, .tv-act, .tv-more-btn, .tv-nm:not(.tv-nm--jump), .tv-link, .tv-cites-more, .tv-conf, .tv-ages')) return;
+                const line = this.lineOf(t);
+                if (!line || line.kind === 'more') return;
+                // A cell edited in place (T54 F8) opens its editor; any other cell edits the row.
+                const ref = this.cellRefOf(line, t.closest<HTMLElement>('[aria-colindex]'));
+                if (ref && this.startEdit(line, ref)) return;
+                this.handlers.onRowAction?.('edit', line);
+            });
+            body.addEventListener('contextmenu', (e) => {
+                const t = e.target as Element;
+                const line = this.lineOf(t);
+                if (!line || line.kind === 'more' || !this.handlers.onRowMenu) return;
+                e.preventDefault();
+                const cellEl = t.closest<HTMLElement>('[aria-colindex]');
+                if (cellEl) this.chooseCell(line, cellEl);
+                const ref = this.cellRefOf(line, cellEl);
+                const anchor = cellEl ?? t.closest<HTMLElement>('.tv-row')!;
                 this.select(line);
-                this.handlers.onConflict(line, Number(cellEl.getAttribute('aria-colindex')) - 1, conf);
-                return;
-            }
-            const act = t.closest<HTMLElement>('.tv-act[data-act]');
-            if (act) {
-                this.select(line);
-                this.handlers.onRowAction?.(act.dataset.act as RowAction, line);
-                return;
-            }
-            if (cellEl?.classList.contains('has-issue') && this.handlers.onIssue) {
-                this.handlers.onIssue(line, Number(cellEl.getAttribute('aria-colindex')) - 1, cellEl);
-                return;
-            }
-            if (cellEl?.classList.contains('has-res') && this.handlers.onResearch) {
-                this.select(line);
-                this.handlers.onResearch(line, Number(cellEl.getAttribute('aria-colindex')) - 1, cellEl);
-                return;
-            }
-            // A bubble opens at the cell as drawn after the select: selecting
-            // another row draws the rows anew, and the clicked cell, gone from
-            // the page, put the bubble in the window's corner (T54 H8, as G7).
-            if (cellEl?.classList.contains('has-finds') && this.handlers.onFindings) {
-                this.select(line);
-                this.handlers.onFindings(line, Number(cellEl.getAttribute('aria-colindex')) - 1, this.liveAnchor(line, cellEl));
-                return;
-            }
-            this.select(line);
-            if (cellEl?.querySelector('.tv-comp')
-                && this.handlers.onComp?.(line, Number(cellEl.getAttribute('aria-colindex')) - 1, this.liveAnchor(line, cellEl), pointer)) return;
-            this.handlers.onRowClick?.(line, this.cellRefOf(line, cellEl), pointer);
-        });
-        // A double click edits (§10.1); the ▾/▸, the count pill and the icons are their own.
-        this.body.addEventListener('dblclick', (e) => {
-            const t = e.target as Element;
-            if (performance.now() - this.jumpedAt < JUMP_DOUBLE_MS) return;
-            // A person's link (spec 103 K3.3) is a part of its cell: a double click edits as on the rest of it.
-            if (t.closest('.tv-toggle, .tv-unions-pill, .tv-act, .tv-more-btn, .tv-nm:not(.tv-nm--jump), .tv-link, .tv-cites-more, .tv-conf, .tv-ages')) return;
-            const line = this.lineOf(t);
-            if (!line || line.kind === 'more') return;
-            // A cell edited in place (T54 F8) opens its editor; any other cell edits the row.
-            const ref = this.cellRefOf(line, t.closest<HTMLElement>('[aria-colindex]'));
-            if (ref && this.startEdit(line, ref)) return;
-            this.handlers.onRowAction?.('edit', line);
-        });
-        this.body.addEventListener('contextmenu', (e) => {
-            const t = e.target as Element;
-            const line = this.lineOf(t);
-            if (!line || line.kind === 'more' || !this.handlers.onRowMenu) return;
-            e.preventDefault();
-            const cellEl = t.closest<HTMLElement>('[aria-colindex]');
-            if (cellEl) this.chooseCell(line, cellEl);
-            const ref = this.cellRefOf(line, cellEl);
-            const anchor = cellEl ?? t.closest<HTMLElement>('.tv-row')!;
-            this.select(line);
-            this.handlers.onRowMenu(line, this.liveAnchor(line, anchor), ref);
-        });
-        this.body.addEventListener('keydown', (e) => this.onBodyKey(e));
+                this.handlers.onRowMenu(line, this.liveAnchor(line, anchor), ref);
+            });
+            body.addEventListener('keydown', (e) => this.onBodyKey(e));
+            body.addEventListener('focusin', (e) => {
+                const cellEl = (e.target as Element).closest<HTMLElement>('[aria-colindex]');
+                const line = cellEl ? this.lineOf(cellEl) : undefined;
+                if (!cellEl || !line) return;
+                this.activePin = body === this.pinBody;
+                this.activeKey = lineKey(line);
+                this.activeCol = Number(cellEl.getAttribute('aria-colindex')) - 1;
+                this.cellChosen = true;
+                for (const other of this.el.querySelectorAll<HTMLElement>('.tv-body [aria-colindex][tabindex="0"]')) if (other !== cellEl) other.tabIndex = -1;
+                cellEl.tabIndex = 0;
+                this.syncNameTabs();
+                this.syncActiveMark();
+            });
+        }
         // The grid itself focused (its tab stop): an arrow enters the body at the active cell.
         el.addEventListener('keydown', (e) => {
             if (e.target !== el || !/^(Arrow(Up|Down|Left|Right)|Home|End|PageUp|PageDown)$/.test(e.key)) return;
             e.preventDefault();
             this.focusCell(Math.max(0, this.activeLineIndex()), this.activeCol);
         });
-        this.body.addEventListener('focusin', (e) => {
-            const cellEl = (e.target as Element).closest<HTMLElement>('[aria-colindex]');
-            const rowEl = cellEl?.closest<HTMLElement>('.tv-row[data-index]');
-            const line = rowEl ? this.lines[Number(rowEl.dataset.index)] : undefined;
-            if (!cellEl || !line) return;
-            this.activeKey = lineKey(line);
-            this.activeCol = Number(cellEl.getAttribute('aria-colindex')) - 1;
-            this.cellChosen = true;
-            for (const other of this.body.querySelectorAll<HTMLElement>('[aria-colindex][tabindex="0"]')) if (other !== cellEl) other.tabIndex = -1;
-            cellEl.tabIndex = 0;
-            this.syncNameTabs();
-            this.syncActiveMark();
-        });
+        // The pinned rows' own scroll (more than a third of the body): the editor stays over its cell.
+        this.pinZone.addEventListener('scroll', () => this.placeEditor(), { passive: true });
         this.wireHead();
         this.resize = typeof ResizeObserver === 'function' ? new ResizeObserver(() => this.schedule()) : null;
         this.resize?.observe(el);
     }
 
     /** New rows or columns: drawn now; `scroll` restores a kept position. */
-    /** The line a body element belongs to. */
+    /** The line a body element belongs to (the body's or a pinned row's, spec 103 §3). */
     private lineOf(t: Element): GridLine | undefined {
         const rowEl = t.closest<HTMLElement>('.tv-row[data-index]');
-        return rowEl ? this.lines[Number(rowEl.dataset.index)] : undefined;
+        if (!rowEl) return undefined;
+        return (this.pinBody.contains(rowEl) ? this.pinLines : this.lines)[Number(rowEl.dataset.index)];
+    }
+
+    /** The lines of the part the active cell is in: the pinned rows' or the body's. */
+    private get zoneLines(): readonly GridLine[] {
+        return this.activePin ? this.pinLines : this.lines;
+    }
+
+    /** The element of the part the active cell is in. */
+    private get zoneBody(): HTMLElement {
+        return this.activePin ? this.pinBody : this.body;
     }
 
     /** A name of a cell (§14.1) to its handler; false: not a name the cell lists. */
@@ -777,6 +818,7 @@ export class TableGrid {
 
     /** A cell clicked or right-clicked becomes the active one (T54 F9). */
     private chooseCell(line: GridLine, cellEl: HTMLElement): void {
+        this.activePin = this.pinBody.contains(cellEl);
         this.activeKey = lineKey(line);
         this.activeCol = Number(cellEl.getAttribute('aria-colindex')) - 1;
         this.cellChosen = true;
@@ -804,11 +846,12 @@ export class TableGrid {
      */
     activeCell(): { line: GridLine; cell: GridCellRef; el: HTMLElement | null } | null {
         if (!this.cellChosen || !this.activeKey || !this.input) return null;
-        const at = this.lines.findIndex(l => lineKey(l) === this.activeKey);
-        const line = at >= 0 ? this.lines[at] : undefined;
+        const lines = this.zoneLines;
+        const at = lines.findIndex(l => lineKey(l) === this.activeKey);
+        const line = at >= 0 ? lines[at] : undefined;
         const col = this.input.columns[this.activeCol];
         if (!line || !col || line.kind === 'more' || this.input.bands?.[this.activeCol]) return null;
-        const el = this.body.querySelector<HTMLElement>(`.tv-row[data-index="${at}"] [aria-colindex="${this.activeCol + 1}"]`);
+        const el = this.zoneBody.querySelector<HTMLElement>(`.tv-row[data-index="${at}"] [aria-colindex="${this.activeCol + 1}"]`);
         return { line, cell: { col, index: this.activeCol, value: lineCell(this.input.model, line, col) }, el };
     }
 
@@ -818,14 +861,14 @@ export class TableGrid {
      * the active cell.
      */
     private syncActiveMark(): void {
-        for (const c of this.body.querySelectorAll('.is-active-cell')) c.classList.remove('is-active-cell');
-        for (const o of this.body.querySelectorAll('.tv-nm.is-origin')) o.classList.remove('is-origin');
+        for (const c of this.el.querySelectorAll('.tv-body .is-active-cell')) c.classList.remove('is-active-cell');
+        for (const o of this.el.querySelectorAll('.tv-body .tv-nm.is-origin')) o.classList.remove('is-origin');
         const origin = this.origin;
-        if (origin && (!this.cellChosen || origin.key !== this.activeKey || origin.col !== this.activeCol)) this.origin = null;
+        if (origin && (!this.cellChosen || origin.key !== this.activeKey || origin.col !== this.activeCol || this.activePin)) this.origin = null;
         if (!this.cellChosen || !this.activeKey) return;
-        const at = this.lines.findIndex(l => lineKey(l) === this.activeKey);
+        const at = this.zoneLines.findIndex(l => lineKey(l) === this.activeKey);
         if (at < 0) return;
-        const cell = this.body.querySelector(`.tv-row[data-index="${at}"] [aria-colindex="${this.activeCol + 1}"]`);
+        const cell = this.zoneBody.querySelector(`.tv-row[data-index="${at}"] [aria-colindex="${this.activeCol + 1}"]`);
         cell?.classList.add('is-active-cell');
         if (this.origin && cell) {
             for (const b of cell.querySelectorAll<HTMLElement>('.tv-nm--jump[data-pid]')) {
@@ -840,7 +883,7 @@ export class TableGrid {
      * Enter on its cell jumps.
      */
     private syncNameTabs(): void {
-        for (const b of this.body.querySelectorAll<HTMLElement>('.tv-nm[data-ni], .tv-link, .tv-cites-more, .tv-conf, .tv-ages')) {
+        for (const b of this.el.querySelectorAll<HTMLElement>('.tv-body :is(.tv-nm[data-ni], .tv-link, .tv-cites-more, .tv-conf, .tv-ages)')) {
             b.tabIndex = !b.classList.contains('tv-nm--jump') && b.closest('[aria-colindex]')?.getAttribute('tabindex') === '0' ? 0 : -1;
         }
     }
@@ -853,8 +896,8 @@ export class TableGrid {
      */
     private liveAnchor(line: GridLine, el: HTMLElement): HTMLElement {
         if (el.isConnected) return el;
-        const at = this.lines.findIndex(l => lineKey(l) === lineKey(line));
-        const rowEl = at >= 0 ? this.body.querySelector<HTMLElement>(`.tv-row[data-index="${at}"]`) : null;
+        const at = this.zoneLines.findIndex(l => lineKey(l) === lineKey(line));
+        const rowEl = at >= 0 ? this.zoneBody.querySelector<HTMLElement>(`.tv-row[data-index="${at}"]`) : null;
         if (!rowEl) return el;
         const col = el.getAttribute('aria-colindex');
         return (col ? rowEl.querySelector<HTMLElement>(`[aria-colindex="${col}"]`) : null) ?? rowEl;
@@ -879,7 +922,7 @@ export class TableGrid {
         this.flashTimer = setTimeout(() => {
             this.flashTimer = null;
             this.flashKeys.clear();
-            for (const el of this.body.querySelectorAll<HTMLElement>('.tv-row.is-flash')) {
+            for (const el of this.el.querySelectorAll<HTMLElement>('.tv-body .tv-row.is-flash')) {
                 el.classList.add('is-flash-out');
                 el.classList.remove('is-flash');
             }
@@ -889,6 +932,9 @@ export class TableGrid {
     setInput(input: GridInput, scroll?: { top: number; left: number }): void {
         this.input = input;
         this.lines = input.lines ?? plainLines(input.rows);
+        this.pinLines = input.pinLines ?? [];
+        // The active cell's pinned row unpinned: the body's row is the active one.
+        if (this.activePin && !this.pinLines.some(l => lineKey(l) === this.activeKey)) this.activePin = false;
         this.topsFor = '';
         this.offsets = columnOffsets(input.widths);
         this.headKey = '';
@@ -938,6 +984,36 @@ export class TableGrid {
         return this.tops;
     }
 
+    /**
+     * The pinned rows' part (spec 103 §3): their tops, hidden without any;
+     * at most a third of the body, then its own scroll with half a row more
+     * seen (3e). Its height (for the body's redraw).
+     */
+    private sizePins(rowH: number): number {
+        const lines = this.pinLines;
+        const z = this.pinZone;
+        if (!lines.length) {
+            z.hidden = true;
+            z.remove();
+            this.pinTops = [0];
+            return 0;
+        }
+        if (!z.isConnected) this.head.appendChild(z);
+        const moreH = lines.some(l => l.kind === 'more') ? this.moreHeight(rowH) : rowH;
+        this.pinTops = lineOffsets(lines.map(l => (l.kind === 'more' ? moreH : rowH)));
+        const total = this.pinTops[lines.length];
+        z.hidden = false;
+        this.pinBody.style.height = `${total}px`;
+        this.pinBody.style.width = `${this.offsets[this.input?.columns.length ?? 0] ?? 0}px`;
+        const bodyH = this.el.clientHeight - (this.head.offsetHeight - z.offsetHeight);
+        const max = (Math.max(1, Math.floor(bodyH / 3 / rowH - 0.5)) + 0.5) * rowH;
+        const scroll = total > max + 0.5;
+        z.classList.toggle('has-scroll', scroll);
+        z.style.setProperty('--tv-pin-max', `${max}px`);
+        this.el.style.setProperty('--tv-sx', `${this.el.scrollLeft}px`);
+        return scroll ? max : total;
+    }
+
     private schedule(): void {
         if (this.frame) return;
         this.frame = requestAnimationFrame(() => { this.frame = 0; this.draw(); });
@@ -948,6 +1024,7 @@ export class TableGrid {
         const input = this.input;
         if (!input) return;
         const rowH = this.rowHeight();
+        const pinH = this.sizePins(rowH);
         const headH = this.head.offsetHeight;
         const tops = this.lineTops(rowH);
         this.body.style.height = `${tops[this.lines.length]}px`;
@@ -956,15 +1033,19 @@ export class TableGrid {
         // A table narrower than the grid: the row's actions right after its last column, over no cell;
         // with less room there, as far out as the grid's edge lets them.
         const free = this.el.clientWidth - cw.total;
-        this.body.classList.toggle('has-acts-room', free >= ROW_ACTIONS_ROOM);
-        this.body.style.setProperty('--tv-acts-out', `${Math.max(0, Math.min(free, ROW_ACTIONS_ROOM))}px`);
-        const rw = lineWindow(tops, Math.max(0, this.el.scrollTop - headH), Math.max(0, this.el.clientHeight - headH));
+        for (const b of [this.body, this.pinBody]) {
+            b.classList.toggle('has-acts-room', free >= ROW_ACTIONS_ROOM);
+            b.style.setProperty('--tv-acts-out', `${Math.max(0, Math.min(free, ROW_ACTIONS_ROOM))}px`);
+        }
+        // The rows under the head: from a head's height above the view's top to its bottom
+        // (the pinned rows make the head taller, spec 103 §3).
+        const rw = lineWindow(tops, Math.max(0, this.el.scrollTop - headH), Math.max(0, this.el.clientHeight));
         const colKey = cw.indices.join(',');
         if (colKey !== this.headKey) {
             this.headKey = colKey;
             this.drawHead(input, cw);
         }
-        const bodyKey = `${colKey}|${rw.start}-${rw.end}|${rowH}`;
+        const bodyKey = `${colKey}|${rw.start}-${rw.end}|${rowH}|${pinH}`;
         if (bodyKey !== this.bodyKey) {
             this.bodyKey = bodyKey;
             this.drawBody(input, cw, rw.start, rw.end, tops);
@@ -1449,85 +1530,114 @@ export class TableGrid {
     }
 
     private drawBody(input: GridInput, cw: ColumnWindow, start: number, end: number, tops: readonly number[]): void {
-        const refocus = this.body.contains(document.activeElement);
+        const refocus = !!document.activeElement?.closest('.tv-body') && this.el.contains(document.activeElement);
         const activeLine = this.activeLineIndex();
         const activeCol = Math.min(this.activeCol, input.columns.length - 1);
-        const selectedPerson = input.selected;
+        const bodyActive = this.activePin ? -1 : activeLine;
         const drawn: DrawnRow[] = [];
         for (let r = start; r < end; r++) {
-            const line = this.lines[r];
-            const row = line.row;
-            const key = lineKey(line);
-            const home = row.kind === 'person' && row.id === input.homeId ? ' is-home' : '';
-            const rk = rowKey(row);
-            const rowSelected = rk === selectedPerson;
-            let attrs = ` aria-level="${lineLevel(line)}"`;
-            let cls = 'tv-row' + home;
-            if (line.kind !== 'more' && this.flashKeys.has(rk)) cls += ' is-flash';
-            if (input.stale?.has(rk)) cls += ' is-stale';
-            if (input.temp?.has(rk)) cls += ' is-temp';
-            if (line.kind === 'row') {
-                cls += ' sel-opt';
-                attrs += ` data-sel-form="row" aria-selected="${rowSelected ? 'true' : 'false'}"`;
-                if (rowSelected && input.selectedShared) cls += ' is-shared';
-                if (line.expanded !== null) attrs += ` aria-expanded="${line.expanded}"`;
-                if (line.expanded === false && row.kind === 'person') {
-                    attrs += ` aria-label="${esc(strings.table.a11y.collapsed(personName(row.person), line.n))}"`;
-                }
-            } else {
-                cls += line.kind === 'sub' ? ' tv-row--sub' : ' tv-row--more';
-                if (rowSelected) cls += ' is-selected-sub';
-                if (line.kind === 'sub') {
-                    if (line.dimmed) cls += ' is-dimmed';
-                    attrs += ` aria-label="${esc(strings.table.a11y.unionRow(line.k, line.n, personName(line.row.person)))}"`;
-                }
-            }
-            const open = `<div class="${cls}" role="row" data-key="${esc(key)}" data-index="${r}" aria-rowindex="${r + 4}"${attrs}`
-                + ` style="top:${tops[r]}px;height:${tops[r + 1] - tops[r]}px;width:${cw.total}px">`;
-            const cells: string[] = [];
-            let prev = -1;
-            const tailAt = this.tailColumn(input);
-            for (const i of cw.indices) {
-                if (prev >= 0 && i !== prev + 1 && cw.before > 0) cells.push(this.spacer(cw.before));
-                prev = i;
-                const col = input.columns[i];
-                const tab = r === activeLine && i === activeCol ? 0 : -1;
-                const band = input.bands?.[i];
-                if (band) {
-                    cells.push(`<div class="tv-cell tv-band" role="gridcell" aria-colindex="${i + 1}" tabindex="${tab}" data-band="${esc(band.group)}"`
-                        + ` style="width:${input.widths[i]}px">${line.kind === 'more' ? '' : input.bandCell?.(line, band) ?? ''}</div>`);
-                    continue;
-                }
-                if (input.subRows && col.id === 'name') {
-                    cells.push(this.nameCell(input, line, col, i, tab, i === tailAt ? this.rowTail(input, line) : ''));
-                    continue;
-                }
-                const value = lineCell(input.model, line, col);
-                const issue = line.kind === 'more' ? null : input.issueAt?.(line, col, value) ?? null;
-                const conflict = line.kind === 'more' ? null : input.conflictAt?.(line, col, value) ?? null;
-                const substTip = value.subst ? (value.subst === 'bap' ? strings.table.subst.bap : strings.table.subst.bur) : '';
-                const title = value.title ?? (substTip || (value.text.length > 24 ? value.text : ''));
-                const res = line.kind !== 'more' && !issue && !!input.researchAt?.(line, col, value);
-                // §7.4: Findings and Highest level with a mark open the person's findings.
-                const finds = line.kind === 'row' && line.row.kind === 'person' && !issue && !!value.mark && PERSON_FINDINGS_COLUMNS.has(col.id);
-                const editable = line.kind !== 'more' && !!input.editableAt?.(line, col);
-                const links = this.linksIn(input, line, col);
-                cells.push(`<div class="${cellClasses(value, col, issue?.severity ?? null, !!conflict)}${res ? ' has-res' : ''}${finds ? ' has-finds' : ''}${editable ? ' is-editable' : ''}${this.pinClass(i, input)}" role="gridcell" aria-colindex="${i + 1}" tabindex="${tab}"`
-                    + (res || finds ? ' aria-haspopup="dialog"' : '')
-                    + (links && personLinks(value).length ? ' aria-describedby="tv-link-hint"' : '')
-                    + ` style="${this.pinStyle(i, input)}"${title ? ` title="${esc(title)}"` : ''}>${cellInner(value, col, issue, line.kind === 'more' ? '' : input.hit ?? '', conflict, links)}`
-                    + `${i === tailAt ? this.rowTail(input, line) : ''}</div>`);
-            }
-            if (cw.after > 0) cells.push(this.spacer(cw.after));
-            const acts = this.rowActions(input, line);
-            if (acts) cells.push(acts);
-            drawn.push({ key, open, cells });
+            drawn.push(this.rowHtml(input, cw, this.lines[r], r, tops[r], tops[r + 1] - tops[r], r === bodyActive ? activeCol : -1, false, r));
         }
-        this.paintBody(drawn);
+        this.paintBody(drawn, this.body);
+        // The pinned rows (spec 103 §3): all of them, as the body's rows; their place in the body for a screen reader.
+        if (this.pinLines.length || this.drawnPins.length) {
+            const pinActive = this.activePin ? activeLine : -1;
+            const at = new Map<string, number>();
+            if (this.pinLines.length) this.lines.forEach((l, i) => at.set(lineKey(l), i));
+            const pins = this.pinLines.map((line, r) => this.rowHtml(input, cw, line, r, this.pinTops[r], this.pinTops[r + 1] - this.pinTops[r],
+                r === pinActive ? activeCol : -1, true, at.get(lineKey(line)) ?? null));
+            this.paintBody(pins, this.pinBody);
+        }
         this.armedRowEl()?.classList.add('is-acts-armed');
         this.syncNameTabs();
         this.syncActiveMark();
         if (refocus) this.focusActive(false);
+    }
+
+    /**
+     * One line as drawn (the body's or a pinned one, spec 103 §3): `tabCol`
+     * the column of its cell that holds the tab stop (-1: none), `rowIndex`
+     * its place in the body (null: a pinned row the filter hides).
+     */
+    private rowHtml(input: GridInput, cw: ColumnWindow, line: GridLine, r: number, top: number, height: number,
+        tabCol: number, pin: boolean, rowIndex: number | null): DrawnRow {
+        const row = line.row;
+        const key = lineKey(line);
+        const home = row.kind === 'person' && row.id === input.homeId ? ' is-home' : '';
+        const rk = rowKey(row);
+        const rowSelected = rk === input.selected;
+        const tailAt = this.tailColumn(input);
+        const outside = pin && !!input.pinOutside?.has(rk);
+        let attrs = ` aria-level="${lineLevel(line)}"`;
+        let cls = 'tv-row' + home;
+        if (line.kind !== 'more' && this.flashKeys.has(rk)) cls += ' is-flash';
+        if (input.stale?.has(rk)) cls += ' is-stale';
+        if (input.temp?.has(rk)) cls += ' is-temp';
+        if (pin) cls += ' is-pinned';
+        if (outside) cls += ' is-outside';
+        if (line.kind === 'row') {
+            cls += ' sel-opt';
+            attrs += ` data-sel-form="row" aria-selected="${rowSelected ? 'true' : 'false'}"`;
+            if (rowSelected && input.selectedShared) cls += ' is-shared';
+            if (line.expanded !== null) attrs += ` aria-expanded="${line.expanded}"`;
+            if (pin) {
+                const tailCol = input.columns[tailAt];
+                const name = row.kind === 'person' ? personName(row.person) : tailCol ? cellText(lineCell(input.model, line, tailCol)) : '';
+                attrs += ` aria-label="${esc(strings.table.pinRow.rowSr(name))}"`;
+            } else if (line.expanded === false && row.kind === 'person') {
+                attrs += ` aria-label="${esc(strings.table.a11y.collapsed(personName(row.person), line.n))}"`;
+            }
+        } else {
+            cls += line.kind === 'sub' ? ' tv-row--sub' : ' tv-row--more';
+            if (rowSelected) cls += ' is-selected-sub';
+            if (line.kind === 'sub') {
+                if (line.dimmed) cls += ' is-dimmed';
+                attrs += ` aria-label="${esc(strings.table.a11y.unionRow(line.k, line.n, personName(line.row.person)))}"`;
+            }
+        }
+        const open = `<div class="${cls}" role="row" data-key="${esc(key)}" data-index="${r}"${rowIndex !== null ? ` aria-rowindex="${rowIndex + 4}"` : ''}${attrs}`
+            + ` style="top:${top}px;height:${height}px;width:${cw.total}px">`;
+        // The pin before the name (spec 103 3c): filled in a pinned row, an outline on its row in the body.
+        const pinMark = line.kind !== 'row' ? '' : pin ? PIN_MARK : input.pinnedKeys?.has(rk) ? PIN_MARK_OUTLINE : '';
+        const outsideNote = outside ? `<span class="tv-outside">${esc(strings.table.outsideFilter)}</span>` : '';
+        const cells: string[] = [];
+        let prev = -1;
+        for (const i of cw.indices) {
+            if (prev >= 0 && i !== prev + 1 && cw.before > 0) cells.push(this.spacer(cw.before));
+            prev = i;
+            const col = input.columns[i];
+            const tab = i === tabCol ? 0 : -1;
+            const band = input.bands?.[i];
+            if (band) {
+                cells.push(`<div class="tv-cell tv-band" role="gridcell" aria-colindex="${i + 1}" tabindex="${tab}" data-band="${esc(band.group)}"`
+                    + ` style="width:${input.widths[i]}px">${line.kind === 'more' ? '' : input.bandCell?.(line, band) ?? ''}</div>`);
+                continue;
+            }
+            if (input.subRows && col.id === 'name') {
+                cells.push(this.nameCell(input, line, col, i, tab, i === tailAt ? this.rowTail(input, line) : '', pinMark, outside));
+                continue;
+            }
+            const value = lineCell(input.model, line, col);
+            const issue = line.kind === 'more' ? null : input.issueAt?.(line, col, value) ?? null;
+            const conflict = line.kind === 'more' ? null : input.conflictAt?.(line, col, value) ?? null;
+            const substTip = value.subst ? (value.subst === 'bap' ? strings.table.subst.bap : strings.table.subst.bur) : '';
+            const title = value.title ?? (substTip || (value.text.length > 24 ? value.text : ''));
+            const res = line.kind !== 'more' && !issue && !!input.researchAt?.(line, col, value);
+            // §7.4: Findings and Highest level with a mark open the person's findings.
+            const finds = line.kind === 'row' && line.row.kind === 'person' && !issue && !!value.mark && PERSON_FINDINGS_COLUMNS.has(col.id);
+            const editable = line.kind !== 'more' && !!input.editableAt?.(line, col);
+            const links = this.linksIn(input, line, col);
+            const tail = i === tailAt;
+            cells.push(`<div class="${cellClasses(value, col, issue?.severity ?? null, !!conflict)}${res ? ' has-res' : ''}${finds ? ' has-finds' : ''}${editable ? ' is-editable' : ''}${this.pinClass(i, input)}" role="gridcell" aria-colindex="${i + 1}" tabindex="${tab}"`
+                + (res || finds ? ' aria-haspopup="dialog"' : '')
+                + (links && personLinks(value).length ? ' aria-describedby="tv-link-hint"' : '')
+                + ` style="${this.pinStyle(i, input)}"${title ? ` title="${esc(title)}"` : ''}>${tail ? pinMark : ''}${cellInner(value, col, issue, line.kind === 'more' ? '' : input.hit ?? '', conflict, links)}`
+                + `${tail ? outsideNote + this.rowTail(input, line) : ''}</div>`);
+        }
+        if (cw.after > 0) cells.push(this.spacer(cw.after));
+        const acts = this.rowActions(input, line);
+        if (acts) cells.push(acts);
+        return { key, open, cells };
     }
 
     /**
@@ -1538,14 +1648,15 @@ export class TableGrid {
      * stay as they are (no new layout, a running bar runs on). Other rows are
      * drawn anew; with none to keep, the body anew.
      */
-    private paintBody(rows: DrawnRow[]): void {
-        const last = this.drawnRows;
-        this.drawnRows = rows;
-        const els = Array.from(this.body.children);
+    private paintBody(rows: DrawnRow[], target: HTMLElement): void {
+        const pins = target === this.pinBody;
+        const last = pins ? this.drawnPins : this.drawnRows;
+        if (pins) this.drawnPins = rows; else this.drawnRows = rows;
+        const els = Array.from(target.children);
         const byKey = new Map<string, { el: Element; drawn: DrawnRow }>();
         if (els.length === last.length) last.forEach((d, i) => byKey.set(d.key, { el: els[i], drawn: d }));
         const whole = (): void => {
-            this.body.innerHTML = rows.map(r => r.open + r.cells.join('') + '</div>').join('');
+            target.innerHTML = rows.map(r => r.open + r.cells.join('') + '</div>').join('');
             this.watchAgentBars();
         };
         if (byKey.size === 0 || byKey.size !== last.length) { whole(); return; }
@@ -1572,15 +1683,15 @@ export class TableGrid {
         }
         if (kept === 0) { whole(); return; }
         for (const gone of byKey.values()) { gone.el.remove(); changed = true; }
-        const body = this.body.children;
-        next.forEach((el, i) => { if (body[i] !== el) { this.body.insertBefore(el, body[i] ?? null); changed = true; } });
+        const body = target.children;
+        next.forEach((el, i) => { if (body[i] !== el) { target.insertBefore(el, body[i] ?? null); changed = true; } });
         if (changed) this.watchAgentBars();
     }
 
     /** The agent's bars drawn now, paused while out of sight (a row under the head, the table off screen). */
     private watchAgentBars(): void {
         this.agentBars?.disconnect();
-        const bars = this.body.querySelectorAll<HTMLElement>('.tv-agent-bar');
+        const bars = this.el.querySelectorAll<HTMLElement>('.tv-body .tv-agent-bar');
         if (!bars.length || typeof IntersectionObserver !== 'function') return;
         this.agentBars ??= new IntersectionObserver((entries) => {
             for (const e of entries) e.target.classList.toggle('is-paused', !e.isIntersecting);
@@ -1635,7 +1746,7 @@ export class TableGrid {
     /** The armed line's row as drawn now (a row drawn anew, e.g. on a selection, gets the mark back). */
     private armedRowEl(): HTMLElement | null {
         if (this.armedKey === null) return null;
-        for (const el of this.body.children) if ((el as HTMLElement).dataset.key === this.armedKey) return el as HTMLElement;
+        for (const el of [...this.body.children, ...this.pinBody.children]) if ((el as HTMLElement).dataset.key === this.armedKey) return el as HTMLElement;
         return null;
     }
 
@@ -1665,7 +1776,7 @@ export class TableGrid {
     }
 
     /** The name cell of the People table (§3.1, §3.2): ▾/▸ and the count pill, a sub-row's "Union k of n", the "more" button. */
-    private nameCell(input: GridInput, line: GridLine, col: ColumnDef, i: number, tab: number, tail = ''): string {
+    private nameCell(input: GridInput, line: GridLine, col: ColumnDef, i: number, tab: number, tail = '', pinMark = '', pinOutside = false): string {
         const t = strings.table;
         const open = `<div class="tv-cell tv-name${this.pinClass(i, input)}" role="gridcell" aria-colindex="${i + 1}" tabindex="${tab}" style="${this.pinStyle(i, input)}"`;
         if (line.kind === 'more') {
@@ -1693,8 +1804,9 @@ export class TableGrid {
         const done = agent?.kind === 'done' ? agentRowHtml(agent) : '';
         const start = bar ? head.replace('class="tv-cell tv-name', 'class="tv-cell tv-name has-agent') : head;
         // A row shown for now although the filter hides it (spec 103 2b): "outside the filter" after the name.
-        const outside = input.temp?.has(rowKey(line.row)) ? `<span class="tv-outside">${esc(t.outsideFilter)}</span>` : '';
-        return `${start}${name.length > 24 ? ` title="${esc(name)}"` : ''}>${bar}${toggle}${conflict ? conflictMarkHtml(conflict) : ''}<span class="tv-cell-text">${nameHtml}</span>${outside}${done}${pill}`
+        // A pinned row the filter hides (spec 103 3d) says the same.
+        const outside = pinOutside || input.temp?.has(rowKey(line.row)) ? `<span class="tv-outside">${esc(t.outsideFilter)}</span>` : '';
+        return `${start}${name.length > 24 ? ` title="${esc(name)}"` : ''}>${bar}${toggle}${pinMark}${conflict ? conflictMarkHtml(conflict) : ''}<span class="tv-cell-text">${nameHtml}</span>${outside}${done}${pill}`
             + `${issue ? markHtml(issue.severity, issue.label) : ''}${tail}</div>`;
     }
 
@@ -1703,13 +1815,14 @@ export class TableGrid {
 
     /** The active line's index (its key, else its person's row, else the first line). */
     private activeLineIndex(): number {
-        if (!this.lines.length) return -1;
+        const lines = this.zoneLines;
+        if (!lines.length) return -1;
         const key = this.activeKey;
         if (key) {
-            let at = this.lines.findIndex(l => lineKey(l) === key);
+            let at = lines.findIndex(l => lineKey(l) === key);
             if (at < 0) {
                 const base = key.split('#')[0];
-                at = this.lines.findIndex(l => lineKey(l) === base);
+                at = lines.findIndex(l => lineKey(l) === base);
             }
             if (at >= 0) return at;
         }
@@ -1719,12 +1832,26 @@ export class TableGrid {
     /** Scroll a line and a column into view (drawing them), then focus the cell. */
     private focusCell(line: number, col: number): void {
         const input = this.input;
-        if (!input || !this.lines.length) return;
-        line = Math.max(0, Math.min(this.lines.length - 1, line));
+        const lines = this.zoneLines;
+        if (!input || !lines.length) return;
+        line = Math.max(0, Math.min(lines.length - 1, line));
         col = Math.max(0, Math.min(input.columns.length - 1, col));
-        this.activeKey = lineKey(this.lines[line]);
+        this.activeKey = lineKey(lines[line]);
         this.activeCol = col;
         this.cellChosen = true;
+        if (this.activePin) {
+            // A pinned row: into view in the pinned rows' own scroll, the body stays.
+            const z = this.pinZone;
+            const top = this.pinTops[line];
+            const bottom = this.pinTops[line + 1];
+            if (top < z.scrollTop) z.scrollTop = top;
+            else if (bottom > z.scrollTop + z.clientHeight) z.scrollTop = bottom - z.clientHeight;
+            this.columnIntoView(col);
+            this.bodyKey = '';
+            this.draw();
+            this.focusActive(true);
+            return;
+        }
         const tops = this.lineTops(this.rowHeight());
         const headH = this.head.offsetHeight;
         const el = this.el;
@@ -1759,13 +1886,17 @@ export class TableGrid {
     /** Focus the active cell if it is drawn. */
     private focusActive(force: boolean): void {
         const at = this.activeLineIndex();
-        const cell = this.body.querySelector<HTMLElement>(`.tv-row[data-index="${at}"] [aria-colindex="${this.activeCol + 1}"]`);
+        const cell = this.zoneBody.querySelector<HTMLElement>(`.tv-row[data-index="${at}"] [aria-colindex="${this.activeCol + 1}"]`);
         if (cell && (force || document.activeElement !== cell)) cell.focus({ preventScroll: true });
     }
 
     private onBodyKey(e: KeyboardEvent): void {
         const input = this.input;
-        if (!input || !this.lines.length) return;
+        // The keys work in the part the focused cell is in: the pinned rows' or the body's (spec 103 §3).
+        const cellAt = (e.target as Element).closest?.('[aria-colindex]');
+        if (cellAt) this.activePin = this.pinBody.contains(cellAt);
+        const lines = this.zoneLines;
+        if (!input || !lines.length) return;
         if (this.copyKey(e)) return;
         // Alt+← / Alt+→ (spec 103 §1): the table's jumps back and forward (the head's move a column).
         if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && this.handlers.onHistory) {
@@ -1776,7 +1907,7 @@ export class TableGrid {
         // A name in a cell (§14.1) is a button: Enter and Space are its own.
         if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.tv-nm, .tv-link, .tv-cites-more, .tv-conf, .tv-ages')) return;
         const at = this.activeLineIndex();
-        const line = this.lines[at];
+        const line = lines[at];
         const col = Math.min(this.activeCol, input.columns.length - 1);
         const onName = input.columns[col]?.id === 'name' && !input.bands?.[col];
         const page = Math.max(1, Math.floor((this.el.clientHeight - this.head.offsetHeight) / this.rowHeight()) - 1);
@@ -1813,7 +1944,7 @@ export class TableGrid {
             case 'PageDown': to = [at + page, col]; selects = true; break;
             case 'PageUp': to = [at - page, col]; selects = true; break;
             case 'Home': to = ctrl ? [0, 0] : [at, 0]; selects = ctrl; break;
-            case 'End': to = ctrl ? [this.lines.length - 1, input.columns.length - 1] : [at, input.columns.length - 1]; selects = ctrl; break;
+            case 'End': to = ctrl ? [lines.length - 1, input.columns.length - 1] : [at, input.columns.length - 1]; selects = ctrl; break;
             case 'ArrowRight':
                 if (onName && line.kind === 'row' && line.expanded === false) {
                     e.preventDefault();
@@ -1829,7 +1960,7 @@ export class TableGrid {
                     return;
                 }
                 if (onName && line.kind !== 'row') {
-                    const parent = this.lines.findIndex(l => l.kind === 'row' && l.row === line.row);
+                    const parent = lines.findIndex(l => l.kind === 'row' && l.row === line.row);
                     to = [parent >= 0 ? parent : at, col];
                     break;
                 }
@@ -1877,7 +2008,7 @@ export class TableGrid {
         e.preventDefault();
         this.focusCell(to[0], to[1]);
         if (selects) {
-            const now = this.lines[this.activeLineIndex()];
+            const now = this.zoneLines[this.activeLineIndex()];
             if (now) this.select(now);
         }
     }
@@ -1931,7 +2062,11 @@ export class TableGrid {
     reopenDraft(key: string, colId: string, text: string, note: string): boolean {
         if (this.markOpenDraft(note)) return true;
         const input = this.input;
-        const at = this.lines.findIndex(l => lineKey(l) === key);
+        let at = this.zoneLines.findIndex(l => lineKey(l) === key);
+        if (at < 0 && this.activePin) {
+            this.activePin = false;
+            at = this.lines.findIndex(l => lineKey(l) === key);
+        }
         const col = input ? input.columns.findIndex(c => c.id === colId) : -1;
         if (at < 0 || col < 0) return false;
         this.focusCell(at, col);
@@ -1967,7 +2102,7 @@ export class TableGrid {
 
     /** A drawn line's cell edited in place, by the line's index and the column's drawn position. */
     private startEditAt(at: number, col: number): boolean {
-        const line = this.lines[at];
+        const line = this.zoneLines[at];
         const input = this.input;
         if (!line || !input || line.kind === 'more' || input.bands?.[col]) return false;
         const def = input.columns[col];
@@ -1986,7 +2121,8 @@ export class TableGrid {
         this.cellChosen = true;
         this.syncActiveMark();
         const box = document.createElement('div');
-        box.className = 'tv-editor';
+        // Over a pinned row (spec 103 §3) it stands above the head that holds it.
+        box.className = this.activePin ? 'tv-editor is-over-pins' : 'tv-editor';
         box.dataset.input = spec.input;
         let field: HTMLInputElement | HTMLSelectElement;
         // A choice (T54 G3): its values in a select; a value picked with the mouse saves at once.
@@ -2016,7 +2152,7 @@ export class TableGrid {
         error.hidden = true;
         field.setAttribute('aria-describedby', error.id);
         box.append(field, error);
-        const ed = { key: lineKey(line), colId: ref.col.id, box, input: field, error, spec };
+        const ed = { key: lineKey(line), colId: ref.col.id, pin: this.activePin, box, input: field, error, spec };
         this.editor = ed;
         this.el.appendChild(box);
         (field as HTMLElement).addEventListener('keydown', (e) => {
@@ -2062,9 +2198,11 @@ export class TableGrid {
         this.closeEdit(false);
         if (step !== null) {
             const input = this.input;
-            const at = this.lines.findIndex(l => lineKey(l) === ed.key);
+            this.activePin = ed.pin && this.pinLines.some(l => lineKey(l) === ed.key);
+            const lines = this.zoneLines;
+            const at = lines.findIndex(l => lineKey(l) === ed.key);
             const from = input ? input.columns.findIndex(c => c.id === ed.colId) : -1;
-            const line = at >= 0 ? this.lines[at] : undefined;
+            const line = at >= 0 ? lines[at] : undefined;
             let next = -1;
             if (input && line && from >= 0) {
                 for (let i = from + step; i >= 0 && i < input.columns.length; i += step) {
@@ -2094,7 +2232,7 @@ export class TableGrid {
         const ed = this.editor;
         if (!ed) return;
         const input = this.input;
-        if (!input || !this.lines.some(l => lineKey(l) === ed.key) || !input.columns.some(c => c.id === ed.colId)) {
+        if (!input || !(ed.pin ? this.pinLines : this.lines).some(l => lineKey(l) === ed.key) || !input.columns.some(c => c.id === ed.colId)) {
             this.closeEdit(false);
             return;
         }
@@ -2110,9 +2248,9 @@ export class TableGrid {
         const ed = this.editor;
         const input = this.input;
         if (!ed || !input) return;
-        const at = this.lines.findIndex(l => lineKey(l) === ed.key);
+        const at = (ed.pin ? this.pinLines : this.lines).findIndex(l => lineKey(l) === ed.key);
         const col = input.columns.findIndex(c => c.id === ed.colId);
-        const cell = at >= 0 && col >= 0 ? this.body.querySelector<HTMLElement>(`.tv-row[data-index="${at}"] [aria-colindex="${col + 1}"]`) : null;
+        const cell = at >= 0 && col >= 0 ? (ed.pin ? this.pinBody : this.body).querySelector<HTMLElement>(`.tv-row[data-index="${at}"] [aria-colindex="${col + 1}"]`) : null;
         if (!cell) return;
         const g = this.el.getBoundingClientRect();
         const r = cell.getBoundingClientRect();
@@ -2142,6 +2280,7 @@ export class TableGrid {
         const view = Math.max(0, this.el.clientHeight - this.head.offsetHeight);
         this.el.scrollTop = Math.max(0, Math.round((tops[at] + tops[at + 1]) / 2 - view / 2));
         this.columnIntoView(col);
+        this.activePin = false;
         this.activeKey = key;
         this.activeCol = col;
         this.cellChosen = true;
@@ -2164,6 +2303,7 @@ export class TableGrid {
         this.el.scrollTop = top;
         this.el.scrollLeft = left;
         this.el.classList.toggle('is-scrolled-x', this.el.scrollLeft > 0);
+        this.activePin = false;
         this.activeKey = key;
         this.activeCol = Math.max(0, Math.min(input.columns.length - 1, col));
         this.cellChosen = true;
@@ -2183,6 +2323,7 @@ export class TableGrid {
         if (tops[at] < this.el.scrollTop || tops[at + 1] > this.el.scrollTop + view) {
             this.el.scrollTop = Math.max(0, tops[at] - Math.round(view / 3));
         }
+        this.activePin = false;
         this.activeKey = key;
         this.activeCol = 0;
         this.cellChosen = false;
@@ -2203,11 +2344,22 @@ export class TableGrid {
         const el = this.el;
         if (tops[at] < el.scrollTop) el.scrollTop = tops[at];
         else if (tops[at + 1] + headH > el.scrollTop + el.clientHeight) el.scrollTop = Math.max(0, tops[at + 1] + headH - el.clientHeight);
+        this.activePin = false;
         this.activeKey = key;
         this.activeCol = 0;
         this.cellChosen = false;
         this.bodyKey = '';
         this.draw();
+    }
+
+    /** A line's cell as drawn now: in the part the active cell is in (the pinned rows' or the body's), else the other. */
+    drawnCell(key: string, colPos: number): HTMLElement | null {
+        for (const body of this.activePin ? [this.pinBody, this.body] : [this.body, this.pinBody]) {
+            const row = [...body.children].find(r => (r as HTMLElement).dataset.key === key);
+            const cell = row?.querySelector<HTMLElement>(`[aria-colindex="${colPos + 1}"]`);
+            if (cell) return cell;
+        }
+        return null;
     }
 
     /** The rows drawn now (their indexes), for tests and keyboard moves. */

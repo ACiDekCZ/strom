@@ -125,9 +125,9 @@ test.describe('desktop (1440)', () => {
         const place = await cell(page, 'p:b1', 'bPlace');
         await place.click({ button: 'right' });
         await expect(place).toHaveClass(/is-active-cell/);
-        await expect(menuLabels(page)).toHaveText(['Copy', 'Only “Lhotka nad Brodem”', 'Without “Lhotka nad Brodem”', 'Edit cell', 'Show in tree', 'Open person', 'Edit…']);
+        await expect(menuLabels(page)).toHaveText(['Copy', 'Only “Lhotka nad Brodem”', 'Without “Lhotka nad Brodem”', 'Edit cell', 'Show in tree', 'Open person', 'Edit…', 'Pin row']);
         await expect(page.locator('.tv-menu .tv-menu-item').first().locator('.tv-menu-hint')).toHaveText(/^(Ctrl\+C|⌘C)$/);
-        await expect(page.locator('.tv-menu .tv-menu-sep')).toHaveCount(1);
+        await expect(page.locator('.tv-menu .tv-menu-sep')).toHaveCount(2);
         await menuItem(page, 'Copy').click();
         await expect.poll(() => clipboard(page)).toBe('Lhotka nad Brodem');
 
@@ -157,7 +157,7 @@ test.describe('desktop (1440)', () => {
 
         // An empty cell: only empty / only filled.
         await (await cell(page, 'p:f', 'bPlace')).click({ button: 'right' });
-        await expect(menuLabels(page)).toHaveText(['Only empty', 'Only filled', 'Edit cell', 'Show in tree', 'Open person', 'Edit…']);
+        await expect(menuLabels(page)).toHaveText(['Only empty', 'Only filled', 'Edit cell', 'Show in tree', 'Open person', 'Edit…', 'Pin row']);
         await menuItem(page, 'Only empty').click();
         await expect(status(page)).toHaveText('3 of 7 people');
 
@@ -170,7 +170,7 @@ test.describe('desktop (1440)', () => {
         await page.keyboard.press('Escape');
         // The row's own name keeps the row's actions alone.
         await row(page, 'p:b2').locator('.tv-name').click({ button: 'right' });
-        await expect(menuLabels(page)).toHaveText(['Show in tree', 'Open person', 'Edit…']);
+        await expect(menuLabels(page)).toHaveText(['Show in tree', 'Open person', 'Edit…', 'Pin row']);
     });
 
     test('Only "{father}" lists the siblings (a namesake\'s son not), kept in a saved view and back after a reload', async ({ page }) => {

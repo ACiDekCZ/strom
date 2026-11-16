@@ -9296,6 +9296,10 @@ const stringsEN = {
             hidden: (name: string) => `Hidden by the filter: ${name}.`, showTemp: 'Show for now',
         },
         nav: { back: 'Back', backTo: (name: string) => `Back to ${name}`, forward: 'Forward', forwardTo: (name: string) => `Forward to ${name}` },
+        pinRow: {
+            one: 'Pin row', many: (n: number) => `Pin rows (${n})`, unpin: 'Unpin row', chip: (n: number) => `Pinned rows (${n})`,
+            unpinAll: 'Unpin all rows', zone: 'Pinned rows', rowSr: (name: string) => `Pinned row: ${name}`, limit: 'At most 10 rows can be pinned.',
+        },
         search: 'Search the table',
         matches: (n: number) => nEn(n, 'match', 'matches'),
         filterMark: 'Column filtered',
@@ -18399,6 +18403,10 @@ const stringsCZ: StringsType = {
             hidden: (name: string) => `Filtr skrývá: ${name}.`, showTemp: 'Zobrazit dočasně',
         },
         nav: { back: 'Zpět', backTo: (name: string) => `Zpět na ${name}`, forward: 'Vpřed', forwardTo: (name: string) => `Znovu na ${name}` },
+        pinRow: {
+            one: 'Ukotvit řádek', many: (n: number) => `Ukotvit řádky (${n})`, unpin: 'Uvolnit řádek', chip: (n: number) => `Ukotvené řádky (${n})`,
+            unpinAll: 'Uvolnit všechny ukotvené řádky', zone: 'Ukotvené řádky', rowSr: (name: string) => `Ukotvený řádek: ${name}`, limit: 'Ukotvit jde nejvýš 10 řádků.',
+        },
         search: 'Hledat v tabulce',
         matches: (n: number) => nCs(n, 'shoda', 'shody', 'shod'),
         filterMark: 'Sloupec je filtrovaný',
@@ -27420,6 +27428,10 @@ const stringsDE: StringsType = {
             hidden: (name: string) => `Vom Filter ausgeblendet: ${name}.`, showTemp: 'Vorübergehend zeigen',
         },
         nav: { back: 'Zurück', backTo: (name: string) => `Zurück zu ${name}`, forward: 'Weiter', forwardTo: (name: string) => `Weiter zu ${name}` },
+        pinRow: {
+            one: 'Zeile anheften', many: (n: number) => `Zeilen anheften (${n})`, unpin: 'Zeile lösen', chip: (n: number) => `Angeheftete Zeilen (${n})`,
+            unpinAll: 'Alle angehefteten Zeilen lösen', zone: 'Angeheftete Zeilen', rowSr: (name: string) => `Angeheftete Zeile: ${name}`, limit: 'Höchstens 10 Zeilen lassen sich anheften.',
+        },
         search: 'In Tabelle suchen',
         matches: (n: number) => `${n} Treffer`,
         filterMark: 'Spalte gefiltert',

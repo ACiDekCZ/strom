@@ -75,7 +75,7 @@ test.describe('desktop (1440)', () => {
         await row(page, 'p:a').locator('.tv-name').click({ button: 'right' });
         const menu = page.locator('.tv-menu');
         await expect(menu).toHaveAttribute('aria-label', 'Actions: Bertold Vranoš');
-        await expect(menu.locator('.tv-menu-label')).toHaveText(['Show in tree', 'Open person', 'Edit…']);
+        await expect(menu.locator('.tv-menu-label')).toHaveText(['Show in tree', 'Open person', 'Edit…', 'Pin row']);
         await expect(menu.locator('.tv-menu-item[data-id="open"] .tv-menu-hint')).toHaveText('Enter');
         await expect(selected(page)).toHaveAttribute('data-key', 'p:a');
         await page.keyboard.press('Escape');
