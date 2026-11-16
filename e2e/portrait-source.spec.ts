@@ -250,6 +250,12 @@ test.describe('The portrait\'s source among the attachments (desktop)', () => {
         await personModal(page).locator('#photo-remove-btn').click();
         await expect(personModal(page).locator('#attachments-list .attachment-tag')).toHaveCount(0);
         await expect(attRow(page, 'svatba.jpg').locator('.attachment-portrait-btn')).toBeVisible();
+        // Saved: the portrait and its source go, the attachment stays.
+        await personModal(page).getByRole('button', { name: 'Save' }).click();
+        const s = await stored(page);
+        expect(s.photo).toBeUndefined();
+        expect(s.source).toBeUndefined();
+        expect(s.attachments.map(a => a.name)).toEqual(['svatba.jpg', 'louka.jpg']);
     });
 
     test('As portrait… in the dialog: Current → New over the attachment, the tag moves on Done, Save names it without a new attachment', async ({ page }) => {
@@ -453,5 +459,51 @@ test.describe('The zoom: Portrait | Whole photo', () => {
         await attRow(page, 'svatba.jpg').locator('.attachment-thumb').click();
         await expect(page.locator('#attachment-overlay')).toHaveClass(/active/);
         await expect(sw(page)).toBeHidden();
+    });
+});
+
+test.describe('Where the person cannot change (desktop)', () => {
+    test.use({ viewport: { width: 1440, height: 900 } });
+
+    test('a read-only tree: no Edit crop, no As portrait…, no Use as portrait…, no Edit portrait crop on the person page', async ({ page }) => {
+        const img = await seedZbyhoslav(page, 'source');
+        await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));
+        await addSecondPicture(page, img.original);
+        await page.evaluate(() => { (window.Strom.DataManager as unknown as { viewMode: boolean }).viewMode = true; });
+        await page.evaluate(() => window.Strom.UI.showPersonPage('zb' as never));
+        await ppWin(page).locator('.pp-more').click();
+        await expect(ppWin(page).locator('.pp-menu-item:visible')).not.toHaveCount(0);
+        await expect(ppWin(page).locator('[data-pp-menu="crop"]')).toHaveCount(0);
+        await page.keyboard.press('Escape');
+        await page.keyboard.press('Escape');
+        await expect(ppWin(page)).toHaveCount(0);
+        await page.evaluate(() => {
+            const ui = window.Strom.UI as unknown as { pushDialog(id: string): void; showEditPersonModal(id: string): void };
+            ui.pushDialog('person-modal');
+            ui.showEditPersonModal('zb');
+        });
+        await expect(personModal(page)).toBeVisible();
+        await expect(attRow(page, 'svatba.jpg').locator('.attachment-tag')).toHaveText('Portrait');
+        await expect(personModal(page).locator('.attachment-portrait-btn')).toHaveCount(0);
+        // (A read-only tree offers no Edit person; the dialog forced open here opens no editor either.)
+        await personModal(page).locator('#photo-recrop-btn').click();
+        await expect(editor(page)).toHaveCount(0);
+        // Called anyway (a stale button): nothing opens.
+        await page.evaluate(() => window.Strom.UI.useAttachmentAsPortrait('zb' as never, 'att_svatba'));
+        await page.evaluate(() => window.Strom.UI.editPersonPortrait('zb' as never));
+        await expect(editor(page)).toHaveCount(0);
+    });
+
+    test('the person gone while the editor is open (another window, a sync): Done writes nothing and says so', async ({ page }) => {
+        await seedZbyhoslav(page, 'source');
+        await page.evaluate(() => window.Strom.UI.showPersonPage('zb' as never));
+        await ppWin(page).locator('.pp-more').click();
+        await ppWin(page).locator('[data-pp-menu="crop"]').click();
+        await expect(editor(page)).toBeVisible();
+        await page.evaluate(() => window.Strom.DataManager.deletePerson('zb' as never));
+        await editor(page).getByRole('button', { name: 'Done' }).click();
+        await expect(editor(page)).toHaveCount(0);
+        await expect(page.getByText('The person is no longer in the tree; nothing was saved.')).toBeVisible();
+        expect(await page.evaluate(() => window.Strom.DataManager.getAllPersons().length)).toBe(0);
     });
 });
