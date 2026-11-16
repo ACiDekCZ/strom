@@ -184,7 +184,7 @@ test.describe('desktop (1440)', () => {
         await expect(status(page)).toHaveText('2 of 7 people');
         await expect(row(page, 'p:b2')).toHaveCount(1);
         await expect(row(page, 'p:t')).toHaveCount(0);
-        await expect(colChips(page)).toHaveText(['Father = Radomír Šlapetný']);
+        await expect(colChips(page)).toHaveText(['Father = Radomír Šlapetný (b. 1850)']);
 
         await page.locator('#table-container .tv-view-saveas').click();
         const input = page.locator('.tv-fpanel.tv-vpanel .tv-vname-input');
@@ -197,7 +197,7 @@ test.describe('desktop (1440)', () => {
         if (!await page.locator('#table-container .tv-grid').isVisible()) await page.locator('#view-mode-table').click();
         await expect(page.locator('#table-container .tv-view-name')).toHaveText('Siblings');
         await expect(status(page)).toHaveText('2 of 7 people');
-        await expect(colChips(page)).toHaveText(['Father = Radomír Šlapetný']);
+        await expect(colChips(page)).toHaveText(['Father = Radomír Šlapetný (b. 1850)']);
         await expect(row(page, 'p:t')).toHaveCount(0);
     });
 
@@ -239,6 +239,59 @@ test.describe('desktop (1440)', () => {
         await page.locator('#table-container .tv-chips-clear').click();
         await expect(colChips(page)).toHaveCount(0);
         await expect(status(page)).toHaveText('7 of 7 people');
+    });
+
+    test('"= A or B" in the chip: tick B, untick A, untick the last; namesakes with the birth year (spec 103 K1.5)', async ({ page }) => {
+        await openTable(page);
+        await (await cell(page, 'p:b1', 'bPlace')).click({ button: 'right' });
+        await menuItem(page, 'Only').click();
+        await expect(status(page)).toHaveText('2 of 7 people');
+        // The chip's form: "is" ticks the column's values, its own first.
+        await colChips(page).click();
+        const panel = page.locator('.tv-fpanel');
+        const values = panel.locator('.tv-ff-eqvalues .tv-ff-check');
+        await expect(panel.locator('.tv-ff-match')).toHaveValue('equals');
+        await expect(panel.locator('.tv-ff-text')).toBeHidden();
+        await expect(values).toHaveText(['Lhotka nad Brodem', 'Dolní Vřesová']);
+        await expect(values.locator('input')).toHaveCount(2);
+        await expect(values.nth(0).locator('input')).toBeChecked();
+        await expect(values.nth(1).locator('input')).not.toBeChecked();
+        await values.nth(1).locator('input').check();
+        await panel.locator('.tv-fpanel-apply').click();
+        await expect(colChips(page)).toHaveText(['Birthplace = Lhotka nad Brodem or Dolní Vřesová']);
+        await expect(status(page)).toHaveText('4 of 7 people');
+        for (const id of ['b1', 'b2', 'm', 't']) await expect(row(page, `p:${id}`)).toHaveCount(1);
+
+        // Untick A: B alone.
+        await colChips(page).click();
+        await expect(values).toHaveText(['Lhotka nad Brodem', 'Dolní Vřesová']);
+        await values.nth(0).locator('input').uncheck();
+        await panel.locator('.tv-fpanel-apply').click();
+        await expect(colChips(page)).toHaveText(['Birthplace = Dolní Vřesová']);
+        await expect(status(page)).toHaveText('2 of 7 people');
+        await expect(row(page, 'p:b1')).toHaveCount(0);
+        await expect(row(page, 'p:t')).toHaveCount(1);
+
+        // Untick the last: the chip goes.
+        await colChips(page).click();
+        await values.nth(0).locator('input').uncheck();
+        await panel.locator('.tv-fpanel-apply').click();
+        await expect(colChips(page)).toHaveCount(0);
+        await expect(status(page)).toHaveText('7 of 7 people');
+
+        // Namesakes: the birth year tells the fathers apart, in the chip and in its list.
+        await page.locator('#table-container .tv-view-btn').click();
+        await menuItem(page, 'Births and parents').click();
+        await (await cell(page, 'p:b1', 'father')).click({ button: 'right' });
+        await menuItem(page, 'Only').click();
+        await expect(colChips(page)).toHaveText(['Father = Radomír Šlapetný (b. 1850)']);
+        await colChips(page).click();
+        await expect(values).toHaveText(['Radomír Šlapetný (b. 1850)', 'Radomír Šlapetný (b. 1849)']);
+        await values.nth(1).locator('input').check();
+        await panel.locator('.tv-fpanel-apply').click();
+        await expect(colChips(page)).toHaveText(['Father = Radomír Šlapetný (b. 1850) or Radomír Šlapetný (b. 1849)']);
+        await expect(status(page)).toHaveText('3 of 7 people');
+        await expect(row(page, 'p:t')).toHaveCount(1);
     });
 
     test('the menu of a cell on another row than the selected one opens under that cell (T54 G7)', async ({ page }) => {
@@ -291,5 +344,23 @@ test.describe('phone (390)', () => {
         // The name keeps the row's sheet as it was.
         await row(page, 'p:b1').locator('.tv-name').tap();
         await expect(labels).toHaveText(['Show in tree', 'Open person', 'Edit…']);
+    });
+
+    test('the column\'s filter after an Only: tick a second value ("= A or B", spec 103 K1.5)', async ({ page }) => {
+        await openTable(page, true);
+        await (await cell(page, 'p:b1', 'bDate')).tap();
+        await page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: 'Only' }).tap();
+        await expect(status(page)).toHaveText('1 of 7 people');
+        await page.locator('#table-container .tv-headrow [data-col="bDate"] .tv-head-menu').dispatchEvent('click');
+        await page.locator('.bottom-sheet-item, .tv-menu-item', { hasText: 'Filter…' }).first().tap();
+        const sheet = page.locator('.tv-fsheet');
+        const values = sheet.locator('.tv-ff-eqvalues .tv-ff-check');
+        await expect(values.first()).toHaveText('4 Mar 1880');
+        await expect(values.first().locator('input')).toBeChecked();
+        expect((await values.nth(1).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        await sheet.locator('.tv-ff-eqvalues .tv-ff-check', { hasText: '1885' }).tap();
+        await sheet.getByRole('button', { name: 'Apply' }).tap();
+        await expect(status(page)).toHaveText('2 of 7 people');
+        await expect(row(page, 'p:t')).toHaveCount(1);
     });
 });

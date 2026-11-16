@@ -1488,6 +1488,7 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         matchEquals: 'jest',
         matchNotEquals: 'nie jest',
         filterOr: (values: string[]) => joinOrPl(values),
+        nameBorn: (name: string, year: number) => `${name} (ur. ${year})`,
         cell: {
             copy: 'Kopiuj',
             only: (v: string) => `Tylko „${v}”`,

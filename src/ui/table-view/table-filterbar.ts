@@ -14,8 +14,9 @@ import { strings } from '../../strings.js';
 import { columnLabel, type ColumnDef } from './table-columns.js';
 import { ROW_KEY, type RowType, type TableModel } from './table-model.js';
 import {
-    activeFilterCount, availableChips, CHECK_CHIPS, chipItem, chipLabel, columnItemLabel, columnValues, filterKindOf, isEqualityItem,
-    generationSpan, newWindowOf, rodChoices, shownColumnItems, type ChipFilter, type ChipId, type ColumnFilter, type TableFilter,
+    activeFilterCount, availableChips, CHECK_CHIPS, chipItem, chipLabel, columnItemLabel, columnValues, equalChoices, equalsOf,
+    filterKindOf, isEqualityItem, generationSpan, newWindowOf, rodChoices, shownColumnItems,
+    type ChipFilter, type ChipId, type ColumnFilter, type EqualValue, type TableFilter,
 } from './table-filter.js';
 import { closeHeadMenu, openHeadMenu, type HeadMenuEntry, type MenuEntry } from './table-headmenu.js';
 import { pinSvg } from './table-pins.js';
@@ -208,7 +209,7 @@ export class FilterBar {
         html += participantChipHtml(model, type, filter);
         // Every column filter is a chip of its own, each exclusion too (spec 103 K1.2); `data-at` is its place in the items.
         for (const c of cols) {
-            const label = columnItemLabel(type, c);
+            const label = columnItemLabel(type, c, model);
             const at = filter.items.indexOf(c);
             html += `<span class="tv-chip sel-opt tv-chip--col is-active" data-colchip="${esc(c.col)}">`
                 + `<button type="button" class="tv-chip-edit" data-col="${esc(c.col)}" data-at="${at}" aria-haspopup="dialog" aria-label="${esc(strings.table.filterOf(label))}" title="${esc(label)}">${esc(label)}</button>`
@@ -489,6 +490,14 @@ export function columnFilterForm(model: TableModel, type: RowType, col: ColumnDe
     } else if (eq) {
         html += `<div class="tv-ff-line"><select class="tv-ff-match" aria-label="${esc(columnLabel(col))}">${eqOptions}</select>${textInput}</div>`;
     }
+    // "= A or B" (spec 103 K1.5): while "is", the column's values to tick in place of the text, the item's own ticked and first.
+    const choices = eq && kind !== 'values' ? equalChoices(model, type, col, item!) : [];
+    if (choices.length) {
+        html += `<div class="tv-ff-values tv-ff-eqvalues" role="group" aria-label="${esc(columnLabel(col))}">`
+            + choices.map((c, i) => `<label class="tv-ff-check"><input type="checkbox" class="tv-ff-eqvalue" data-i="${i}"${c.on ? ' checked' : ''}>`
+                + `<span title="${esc(c.label)}">${esc(c.label)}</span></label>`).join('')
+            + '</div>';
+    }
     if (kind === 'range') {
         const lead = col.kind === 'date' ? `<span class="tv-ff-lead">${esc(t.rangeYears)}</span>` : '';
         html += `<div class="tv-ff-line">${lead}`
@@ -511,6 +520,22 @@ export function columnFilterForm(model: TableModel, type: RowType, col: ColumnDe
     // Only empty and only filled exclude each other.
     empty.addEventListener('change', () => { if (empty.checked) filled.checked = false; });
     filled.addEventListener('change', () => { if (filled.checked) empty.checked = false; });
+    const list = el.querySelector<HTMLElement>('.tv-ff-eqvalues');
+    const boxes = [...el.querySelectorAll<HTMLInputElement>('.tv-ff-eqvalue')];
+    const ticked = (): EqualValue[] => choices.filter((_c, i) => boxes[i].checked).map(c => c.value);
+    if (list) {
+        const select = el.querySelector<HTMLSelectElement>('.tv-ff-match')!;
+        const textEl = el.querySelector<HTMLInputElement>('.tv-ff-text')!;
+        // "is" ticks the values; another match writes its text, the first value ticked to start with.
+        const sync = (): void => {
+            const on = select.value === 'equals';
+            if (!on && !list.hidden) textEl.value = ticked()[0]?.text ?? textEl.value;
+            list.hidden = !on;
+            textEl.hidden = on;
+        };
+        select.addEventListener('change', sync);
+        sync();
+    }
     return {
         el,
         read(): ColumnFilter {
@@ -520,11 +545,19 @@ export function columnFilterForm(model: TableModel, type: RowType, col: ColumnDe
                 const text = textEl.value.trim();
                 const m = el.querySelector<HTMLSelectElement>('.tv-ff-match')!.value;
                 const match: NonNullable<ColumnFilter['match']> = m === 'starts' || m === 'equals' || m === 'notEquals' ? m : 'contains';
-                if (text) {
+                if (list && match === 'equals') {
+                    // The values ticked (spec 103 K1.5); none, no "is" (with nothing else the chip goes).
+                    const values = ticked();
+                    Object.assign(out, equalsOf(col, values));
+                } else if (text) {
                     out.text = text;
                     out.match = match;
-                    // The person compared stays while the value is the one the cell gave; so do the further values of an "equals".
-                    if (item?.personId && (match === 'equals' || match === 'notEquals') && text === item.text?.trim()) out.personId = item.personId;
+                    // The person compared stays while the value is one the list ticked or the cell gave; so do the further values of an "equals".
+                    const listed = ticked().find(v => v.personId && v.text.trim() === text);
+                    if (match === 'equals' || match === 'notEquals') {
+                        if (listed) out.personId = listed.personId;
+                        else if (item?.personId && text === item.text?.trim()) out.personId = item.personId;
+                    }
                     if (item?.or?.length && match === 'equals' && item.match === 'equals' && text === item.text?.trim()) out.or = item.or;
                 }
             }
@@ -824,7 +857,7 @@ export class FilterSheet {
         if (cols.length) {
             html += `<div class="tv-fs-section">${esc(t.inColumns)}</div>`;
             for (const c of cols) {
-                const label = columnItemLabel(st.type, c);
+                const label = columnItemLabel(st.type, c, st.model);
                 html += `<div class="tv-fs-row"><span class="tv-fs-label">${esc(label)}</span>`
                     + `<button type="button" class="tv-fs-x" data-x="${st.filter.items.indexOf(c)}" aria-label="${esc(t.removeFilter(label))}">×</button></div>`;
             }

@@ -13,8 +13,8 @@ import { sanitizeTableView } from '../table-views-data.js';
 import { buildTableModel, type TableModel, type TableRow, type PersonRow } from '../ui/table-view/table-model.js';
 import { cellOf, columnById } from '../ui/table-view/table-columns.js';
 import {
-    addOnlyFilter, addWithoutFilter, cellPasses, cellShownText, clearFilter, columnItemLabel, columnItems, emptyFilter, filterKindOf, filterRows,
-    removeColumnItemAt, setColumnFilter, type ColumnFilter, type FilterItem, type TableFilter,
+    addOnlyFilter, addWithoutFilter, cellPasses, cellShownText, clearFilter, columnEqualValues, columnItemLabel, columnItems, emptyFilter, equalChoices,
+    equalsOf, equalValueLabel, filterKindOf, filterRows, removeColumnItemAt, setColumnFilter, type ColumnFilter, type FilterItem, type TableFilter,
 } from '../ui/table-view/table-filter.js';
 import { cellChoices, shortValue } from '../ui/table-view/table-cell.js';
 import { lineCell, type GridLine } from '../ui/table-view/table-subrows.js';
@@ -287,5 +287,84 @@ describe('several Only / Without at once (spec 103 K1.1–K1.4)', () => {
         expect(joinOr('de', ['A', 'B'])).toBe('A oder B');
         expect(joinOrPl(['A', 'B'])).toBe('A lub B');
         expect(joinOr('en', ['A', 'B', 'C', 'D'])).toBe('A, B +2');
+    });
+});
+
+describe('"= A or B" by the chip\'s list of values (spec 103 K1.5)', () => {
+    const rows = (m: TableModel, f: TableFilter) => filterRows(m, 'persons', m.persons, f).rows.map(r => r.id).sort();
+    const labels = (m: TableModel | null, f: TableFilter) => columnItems(f).map(i => columnItemLabel('persons', i, m));
+    const only = (m: TableModel, f: TableFilter, id: string, colId: string) => addOnlyFilter(f, choicesAt(m, id, colId).only!);
+    /** The chip's form applied with these values of its list ticked (by their words). */
+    const tick = (m: TableModel, f: TableFilter, at: number, words: string[]) => {
+        const item = f.items[at] as ColumnFilter;
+        const list = equalChoices(m, 'persons', col(item.col), item);
+        return setColumnFilter(f, equalsOf(col(item.col), words.map(w => list.find(c => c.label === w)!.value)), at);
+    };
+
+    it('the list: the chip\'s values ticked and first, then the column\'s others once each (case and diacritics aside), in its order', () => {
+        const m = build();
+        const f = emptyFilter();
+        only(m, f, 'b1', 'bPlace');
+        const list = equalChoices(m, 'persons', col('bPlace'), f.items[0] as ColumnFilter);
+        expect(list.map(c => [c.label, c.on])).toEqual([['Lhotka nad Brodem', true], ['Dolni Vresova', false]]);
+        expect(columnEqualValues(m, 'persons', col('bPlace')).map(c => c.label)).toEqual(['Dolni Vresova', 'Lhotka nad Brodem']);
+    });
+
+    it('ticking B adds it ("= A or B"), unticking A leaves B, unticking the last drops the chip', () => {
+        const m = build();
+        const f = emptyFilter();
+        only(m, f, 'b1', 'bPlace');
+        expect(rows(m, f)).toEqual(['b1', 'b2']);
+        expect(tick(m, f, 0, ['Lhotka nad Brodem', 'Dolni Vresova'])).toBe(true);
+        expect(labels(m, f)).toEqual(['Birthplace = Lhotka nad Brodem or Dolni Vresova']);
+        expect(rows(m, f)).toEqual(['b1', 'b2', 'm', 't']);
+        // The same shape a second Only gives (a stored view keeps it).
+        const g = emptyFilter();
+        only(m, g, 'b1', 'bPlace');
+        only(m, g, 'm', 'bPlace');
+        expect(f.items).toEqual(g.items);
+        expect(tick(m, f, 0, ['Dolni Vresova'])).toBe(true);
+        expect(labels(m, f)).toEqual(['Birthplace = Dolni Vresova']);
+        expect(rows(m, f)).toEqual(['m', 't']);
+        // Nothing changed, nothing to apply.
+        expect(tick(m, f, 0, ['Dolni Vresova'])).toBe(false);
+        expect(tick(m, f, 0, [])).toBe(true);
+        expect(f.items).toHaveLength(0);
+        expect(rows(m, f)).toHaveLength(7);
+    });
+
+    it('namesakes: each person a value of their own, with the birth year in the list and in the chip', () => {
+        const m = build();
+        const f = emptyFilter();
+        only(m, f, 'b1', 'father');
+        expect(labels(m, f)).toEqual(['Father = Radomír Šlapetný (b. 1850)']);
+        const list = equalChoices(m, 'persons', col('father'), f.items[0] as ColumnFilter);
+        expect(list.map(c => [c.label, c.on])).toEqual([['Radomír Šlapetný (b. 1850)', true], ['Radomír Šlapetný (b. 1849)', false]]);
+        tick(m, f, 0, ['Radomír Šlapetný (b. 1850)', 'Radomír Šlapetný (b. 1849)']);
+        expect(labels(m, f)).toEqual(['Father = Radomír Šlapetný (b. 1850) or Radomír Šlapetný (b. 1849)']);
+        expect(rows(m, f)).toEqual(['b1', 'b2', 't']);
+        tick(m, f, 0, ['Radomír Šlapetný (b. 1849)']);
+        expect(rows(m, f)).toEqual(['t']);
+        // A name no one else shows, and a text value: as they are.
+        expect(equalValueLabel(m, { text: 'Žofie Kvapilová', personId: 'm' })).toBe('Žofie Kvapilová');
+        expect(equalValueLabel(m, { text: 'Radomír Šlapetný' })).toBe('Radomír Šlapetný');
+        // Without the model (no tree at hand) the name alone.
+        expect(columnItemLabel('persons', f.items[0] as ColumnFilter)).toBe('Father = Radomír Šlapetný');
+    });
+
+    it('the birth year in the four languages', () => {
+        const m = build();
+        const v = { text: 'Radomír Šlapetný', personId: 'f2' };
+        try {
+            expect(equalValueLabel(m, v)).toBe('Radomír Šlapetný (b. 1849)');
+            setLanguage('cs');
+            expect(equalValueLabel(m, v)).toBe('Radomír Šlapetný (nar. 1849)');
+            setLanguage('de');
+            expect(equalValueLabel(m, v)).toBe('Radomír Šlapetný (* 1849)');
+            setLanguage('pl');
+            expect(equalValueLabel(m, v)).toBe('Radomír Šlapetný (ur. 1849)');
+        } finally {
+            setLanguage('en');
+        }
     });
 });

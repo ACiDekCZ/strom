@@ -25,6 +25,7 @@ import { RELIABILITY_ORDER } from '../../reliability.js';
 import { strings } from '../../strings.js';
 import type { EventParticipant, ParticipantRole, PersonId } from '../../types.js';
 import { shownNameOrEmpty } from '../../person-name.js';
+import { yearOf as dateYearOf } from '../../dates.js';
 
 // ---------------------------------------------------------------------------
 // The filter's shape (§8.2, §9.1). Part D stores it in `TableView.filter`.
@@ -618,6 +619,89 @@ export function columnValues(model: TableModel, type: RowType, column: ColumnDef
     return [...seen].sort((a, b) => compareKeys(a[1].key ?? '', b[1].key ?? '')).map(([value, x]) => ({ value, label: x.label }));
 }
 
+/** A cell without one value to compare: a research mark, several names, a completeness, a count of unions (T54 F4). */
+export function cellNotComparable(value: CellValue): boolean {
+    return !!value.research || value.percent !== undefined || !!value.aggregate || (value.names?.length ?? 0) > 1;
+}
+
+/**
+ * The values a chip's "= A" offers to add (spec 103 K1.5): every value a
+ * cell's Only of the column would compare, once (the same person, else the
+ * same text), in the column's sort order, each in its words (namesakes with
+ * their birth year, equalValueLabel).
+ */
+export function columnEqualValues(model: TableModel, type: RowType, column: ColumnDef): { value: EqualValue; label: string }[] {
+    const seen = new Map<string, { value: EqualValue; key: number | string | null }>();
+    const add = (v: CellValue): void => {
+        if (v.na || v.empty || cellNotComparable(v)) return;
+        const text = cellShownText(v);
+        if (!text) return;
+        const personId = cellPersonOf(v);
+        const k = personId ? `p:${personId}` : `t:${foldName(text)}`;
+        if (!seen.has(k)) seen.set(k, { value: { text, ...(personId ? { personId } : {}) }, key: v.sortKey });
+    };
+    for (const row of rowsOf(model, type)) {
+        if (column.unionScoped && row.kind === 'person') row.unions.forEach((_u, i) => add(cellOf(model, row, column, i)));
+        else add(cellOf(model, row, column));
+    }
+    const out = [...seen.values()].map(x => ({ value: x.value, label: equalValueLabel(model, x.value), key: x.key }));
+    out.sort((a, b) => compareKeys(a.key ?? '', b.key ?? '') || compareKeys(a.label, b.label));
+    return out.map(({ value, label }) => ({ value, label }));
+}
+
+/**
+ * The list of a chip's "= A" (spec 103 K1.5): the item's values ticked and
+ * first, then the column's other values; namesakes with their birth year.
+ */
+export function equalChoices(model: TableModel, type: RowType, column: ColumnDef, item: ColumnFilter): { value: EqualValue; label: string; on: boolean }[] {
+    const own = equalValues(item);
+    return [
+        ...own.map(value => ({ value, label: equalValueLabel(model, value), on: true })),
+        ...columnEqualValues(model, type, column).filter(c => !own.some(v => sameValue(v, c.value))).map(c => ({ ...c, on: false })),
+    ];
+}
+
+/**
+ * A column's "is" with the values ticked in its chip's list (spec 103 K1.5:
+ * "= A or B"); none ticked, no equality (alone the chip goes). The shape a
+ * cell's Only gives, so a stored view keeps it.
+ */
+export function equalsOf(column: ColumnDef, values: readonly EqualValue[]): ColumnFilter {
+    const base: ColumnFilter = { col: column.id, kind: column.kind };
+    return values.length ? withValues({ ...base, match: 'equals' }, [...values]) : base;
+}
+
+/** How many of the tree's people show a name (case and diacritics aside), counted once per model. */
+const nameCounts = new WeakMap<TableModel, Map<string, number>>();
+
+function namesakes(model: TableModel, name: string): number {
+    let counts = nameCounts.get(model);
+    if (!counts) {
+        counts = new Map();
+        for (const row of model.persons) {
+            const k = foldName(shownNameOrEmpty(row.person));
+            if (k) counts.set(k, (counts.get(k) ?? 0) + 1);
+        }
+        nameCounts.set(model, counts);
+    }
+    return counts.get(foldName(name)) ?? 0;
+}
+
+/**
+ * A value of an equality in words (spec 103 K1.5): its text; a person whose
+ * name another of the tree's people shows too with their birth year
+ * ("Radomír Šlapetný (b. 1850)"), so namesakes tell apart in a chip and in
+ * its list of values.
+ */
+export function equalValueLabel(model: TableModel | null | undefined, v: EqualValue): string {
+    const text = v.text.trim();
+    if (!model || !v.personId) return text;
+    const p = model.ctx.person(v.personId as PersonId);
+    if (!p || namesakes(model, shownNameOrEmpty(p)) < 2) return text;
+    const year = dateYearOf(p.birthDate);
+    return year === null ? text : strings.table.nameBorn(text, year);
+}
+
 // ---------------------------------------------------------------------------
 // Applying the filter and the search
 
@@ -725,8 +809,12 @@ export function chipLabel(model: TableModel | null, item: ChipFilter | null, chi
     return t.chip[chip as QuickChipId];
 }
 
-/** A column filter's words (§8.1: the chip "Age at marriage ≤ 15"). */
-export function columnItemLabel(type: RowType, item: ColumnFilter): string {
+/**
+ * A column filter's words (§8.1: the chip "Age at marriage ≤ 15"); with the
+ * model a person of an equality whose name another person shows carries the
+ * birth year (spec 103 K1.5).
+ */
+export function columnItemLabel(type: RowType, item: ColumnFilter, model?: TableModel | null): string {
     const c = columnById(type, item.col);
     const t = strings.table;
     const label = c ? columnLabel(c) : item.col;
@@ -738,7 +826,8 @@ export function columnItemLabel(type: RowType, item: ColumnFilter): string {
         parts.push(f && to ? (f === to ? `= ${f}` : `${f}–${to}`) : f ? `≥ ${f}` : `≤ ${to}`);
     }
     if (isEqualityItem(item) && item.text?.trim()) {
-        const values = item.match === 'equals' ? equalValues(item).map(v => v.text.trim()) : [item.text.trim()];
+        const values = (item.match === 'equals' ? equalValues(item) : [{ text: item.text, ...(item.personId ? { personId: item.personId } : {}) }])
+            .map(v => equalValueLabel(model, v));
         parts.push(`${item.match === 'equals' ? '=' : '≠'} ${values.length > 1 ? t.filterOr(values) : values[0]}`);
     }
     else if (kind === 'text' && item.text?.trim()) parts.push(item.match === 'starts' ? t.filterStarts(item.text.trim()) : t.filterContains(item.text.trim()));
@@ -763,7 +852,7 @@ export function filterSummary(model: TableModel, type: RowType, filter: TableFil
     const out: string[] = [];
     for (const i of filter.items) {
         if (isChipItem(i)) { if (chipAvailable(model, type, i.chip)) out.push(chipLabel(model, i, i.chip)); }
-        else if (columnItemActive(i) && columnById(type, i.col) && columnOffered(columnById(type, i.col)!)) out.push(columnItemLabel(type, i));
+        else if (columnItemActive(i) && columnById(type, i.col) && columnOffered(columnById(type, i.col)!)) out.push(columnItemLabel(type, i, model));
     }
     if (searchQuery(search)) out.push(`“${search.trim()}”`);
     return out.join(' · ');

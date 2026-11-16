@@ -14,7 +14,7 @@
 import type { ColumnDef } from './table-columns.js';
 import type { CellValue, RowType, TableModel } from './table-model.js';
 import type { GridLine } from './table-subrows.js';
-import { cellPersonOf, cellShownText, columnValues, enumValueOf, filterKindOf, type ColumnFilter } from './table-filter.js';
+import { cellNotComparable, cellPersonOf, cellShownText, columnValues, enumValueOf, filterKindOf, type ColumnFilter } from './table-filter.js';
 
 /** How long the value is in the menu's words before it ends with "…". */
 export const CELL_VALUE_CHARS = 24;
@@ -44,11 +44,6 @@ export function shortValue(text: string, max = CELL_VALUE_CHARS): string {
  */
 const ROW_NAME_COLUMN: Partial<Record<RowType, string>> = { persons: 'name', sources: 'srcTitle' };
 
-/** A cell without one value to compare: a research mark, several names, a completeness, a count of unions. */
-function notComparable(value: CellValue): boolean {
-    return !!value.research || value.percent !== undefined || !!value.aggregate || (value.names?.length ?? 0) > 1;
-}
-
 /**
  * What a cell offers (the menu's and the sheet's part of the cell); null:
  * nothing (the "more" line, a collapsed group's band, the row's own name,
@@ -67,7 +62,7 @@ export function cellChoices(model: TableModel, type: RowType, line: GridLine, co
     if (value.empty) return { copy: '', label: '', empty: true };
     if (!copy) return null;
     const label = shortValue(copy);
-    if (notComparable(value)) return { copy, label };
+    if (cellNotComparable(value)) return { copy, label };
     if (filterKindOf(col) === 'values') {
         const key = enumValueOf(value);
         const others = columnValues(model, type, col).map(v => v.value).filter(v => v !== key);

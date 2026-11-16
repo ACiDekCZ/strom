@@ -9316,6 +9316,8 @@ const stringsEN = {
         matchEquals: 'is',
         matchNotEquals: 'is not',
         filterOr: (values: string[]) => joinOr('en', values),
+        /** A person named in a filter whose name another person of the tree shares (spec 103 K1.5): with the birth year. */
+        nameBorn: (name: string, year: number) => `${name} (b. ${year})`,
         cell: {
             copy: 'Copy',
             only: (v: string) => `Only “${v}”`,
@@ -18423,6 +18425,7 @@ const stringsCZ: StringsType = {
         matchEquals: 'je',
         matchNotEquals: 'není',
         filterOr: (values: string[]) => joinOr('cs', values),
+        nameBorn: (name: string, year: number) => `${name} (nar. ${year})`,
         cell: {
             copy: 'Kopírovat',
             only: (v: string) => `Jen „${v}“`,
@@ -27448,6 +27451,7 @@ const stringsDE: StringsType = {
         matchEquals: 'ist',
         matchNotEquals: 'ist nicht',
         filterOr: (values: string[]) => joinOr('de', values),
+        nameBorn: (name: string, year: number) => `${name} (* ${year})`,
         cell: {
             copy: 'Kopieren',
             only: (v: string) => `Nur „${v}“`,
