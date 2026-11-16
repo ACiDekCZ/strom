@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { card } from './helpers.js';
+import { card, reloadApp } from './helpers.js';
 import { fakeBridge, openResearch, openResearchMenu, poll, block, editJan, researchGed, NEW_HEAD } from './research-bridge.js';
 
 /**
@@ -83,7 +83,7 @@ test.describe('changes per person', () => {
             st.lastWritten = { ...st.lastWritten, at: '2026-10-24T08:52:00.000Z' };
             localStorage.setItem(key, JSON.stringify(st));
         });
-        await page.reload();
+        await reloadApp(page);
         await poll(page);
         await openResearchMenu(page);
         await expect(block(page)).toHaveAttribute('data-state', 'inSync');
@@ -123,7 +123,7 @@ test.describe('changes per person', () => {
 
         // No news after every restart: no dot on the Research button, the block quiet until the next send.
         for (let i = 0; i < 2; i++) {
-            await page.reload();
+            await reloadApp(page);
             await poll(page);
             await openResearchMenu(page);
             await expect(block(page)).toHaveAttribute('data-state', 'notWritten');
@@ -148,13 +148,13 @@ test.describe('changes per person', () => {
             delete st.writtenSeen;
             localStorage.setItem(key, JSON.stringify(st));
         });
-        await page.reload();
+        await reloadApp(page);
         await poll(page);
         await openResearchMenu(page);
         await expect(block(page)).toHaveAttribute('data-state', 'written');
         await expect(block(page).getByRole('menuitem', { name: 'What was written ›' })).toBeVisible();
         await page.evaluate(() => window.Strom.UI.closeResearchMenu());
-        await page.reload();
+        await reloadApp(page);
         await poll(page);
         await openResearchMenu(page);
         await expect(block(page)).toHaveAttribute('data-state', 'inSync');
@@ -253,7 +253,7 @@ test.describe('changes per person', () => {
         const before = await shown();
         expect(before.sub).toMatch(/^0 people · changed since /);
         expect(before.inexact).toBe(0);
-        await page.reload();
+        await reloadApp(page);
         await expect(card(page, 'Jan')).toBeVisible();
         expect(await shown()).toEqual(before);
     });
@@ -297,7 +297,7 @@ test.describe('changes per person after a send the research took nothing from', 
         await listed();
 
         // After a reload: the same.
-        await page.reload();
+        await reloadApp(page);
         await expect(card(page, 'Jan')).toBeVisible();
         await poll(page);
         await listed();

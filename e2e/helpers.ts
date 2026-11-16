@@ -122,6 +122,16 @@ export async function openApp(
 }
 
 /**
+ * Reload the page and wait, as openApp does, until the startup tree is read
+ * (html.app-loading gone). The load event comes before it: a research menu
+ * opened or a bridge polled in between finds no tree yet and does nothing.
+ */
+export async function reloadApp(page: Page): Promise<void> {
+    await page.reload();
+    await expect(page.locator('html')).not.toHaveClass(/app-loading/);
+}
+
+/**
  * A page opened beside the app's main window as a whole app of its own: a
  * browser without Web Locks (no window roles, every tab loads and saves the
  * trees; another tab's save is told over tab-sync). Without it, another tab
