@@ -28857,6 +28857,26 @@
             opacity: 0; transition: opacity 300ms ease;
         }
         .image-viewer-hint.show { opacity: 1; }
+        /* A portrait's zoom: Portrait | Whole photo at the bottom (spec 107 §2), white on the dark scene. */
+        .image-viewer-whole {
+            --sel-fg: #fff; --sel-border: #fff; --sel-r: 7px; --border: transparent; --surface: transparent; --text-light: #fff;
+            position: absolute; left: 50%; bottom: calc(28px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+            gap: 10px; padding: 6px; border: 0; border-radius: var(--r-lg); background: rgba(255,255,255,0.12);
+        }
+        .image-viewer-whole[hidden] { display: none; }
+        .image-viewer-whole > .image-viewer-whole-btn.sel-opt {
+            height: 36px; padding: 0 14px; border-radius: var(--r-md); font: inherit; font-size: 13.5px; cursor: pointer; white-space: nowrap;
+        }
+        .image-viewer-whole > .sel-opt + .sel-opt { border-left: 0; }
+        .image-viewer-whole > .image-viewer-whole-btn:focus-visible { outline: 2px solid #9fd3ae; outline-offset: 2px; }
+        @media (hover: hover) { .image-viewer-whole > .image-viewer-whole-btn:hover { background: rgba(255,255,255,0.10); } }
+        .image-viewer-whole:not([hidden]) ~ .image-viewer-hint { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
+        @media (max-width: 640px) { .image-viewer-whole { bottom: calc(24px + env(safe-area-inset-bottom, 0px)); } }
+        @media (pointer: coarse) { .image-viewer-whole > .image-viewer-whole-btn.sel-opt { height: 44px; } }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .image-viewer-whole { bottom: calc(12px + env(safe-area-inset-bottom, 0px)); padding: 4px; }
+            .image-viewer-whole:not([hidden]) ~ .image-viewer-hint { bottom: calc(68px + env(safe-area-inset-bottom, 0px)); }
+        }
         @media (max-width: 640px) {
             .image-viewer-tools { right: 8px; }
             .image-viewer-level { min-width: 56px; }
@@ -31581,6 +31601,7 @@
             <img id="attachment-overlay-img" alt="" draggable="false">
         </div>
         <div id="image-viewer-media" class="image-viewer-media" hidden></div>
+        <div id="image-viewer-whole" class="image-viewer-whole sel-seg" role="group" hidden></div>
         <div class="image-viewer-tools">
             <button type="button" id="image-viewer-out" class="image-viewer-btn" data-i18n-aria-label="imageViewer.zoomOut" data-i18n-title="imageViewer.zoomOut">&minus;</button>
             <button type="button" id="image-viewer-level" class="image-viewer-btn image-viewer-level" data-i18n-title="imageViewer.fit">100 %</button>

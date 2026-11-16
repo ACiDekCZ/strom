@@ -34,6 +34,7 @@ import { lifeChartHtml } from '../person-page-chart.js';
 import { FanZoom, fanZoomModifier } from '../fan-zoom.js';
 import { PERSON_PAGE_CSS } from '../person-page-css.js';
 import { uiModule } from './module.js';
+import { portraitWholePhoto } from './portrait-actions-ui.js';
 import type { SetRef } from './family-pages-ui.js';
 import { openImageViewer } from './image-viewer.js';
 import { personSubtitle } from './person-sources-ui.js';
@@ -749,7 +750,10 @@ export const personPageMethods = uiModule({
         const zoom = target.closest<HTMLElement>('[data-pp-zoom]');
         if (zoom) {
             const src = (zoom.querySelector('img') ?? zoom.closest('.pp-fig')?.querySelector('img'))?.getAttribute('src');
-            if (src) openImageViewer(src, () => zoom.focus({ preventScroll: true }));
+            // A portrait cut from a photo of the tree: Portrait | Whole photo (spec 107 §2).
+            const person = zoom.classList.contains('pp-portrait') && state ? DataManager.getPerson(state.current.personId) : null;
+            const whole = person && src === person.photo ? portraitWholePhoto(person) : null;
+            if (src) openImageViewer(src, () => zoom.focus({ preventScroll: true }), undefined, whole);
             return;
         }
         const differs = target.closest<HTMLElement>('[data-pp-differs]');

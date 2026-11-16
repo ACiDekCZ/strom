@@ -2778,14 +2778,38 @@ function lightboxHtml(c: Ctx): string {
     }).join('');
 }
 
-/** The file's light box of the portrait. */
+/**
+ * The whole photo the person's portrait is cut from, when the file carries it
+ * (an attachment of the person or the couple's photo; a file without
+ * attachments has no portrait source at all).
+ */
+export function portraitWholeImage(tree: Pick<StromData, 'partnerships'>, person: Person): string | null {
+    const src = person.photo ? person.photoSource : undefined;
+    if (!src) return null;
+    if (src.attachmentId) {
+        const att = person.attachments?.find(a => a.id === src.attachmentId);
+        return att && !att.originalOnly && att.mimeType.startsWith('image/') ? safeImage(att.dataUrl) : null;
+    }
+    if (src.partnershipId) return safeImage(tree.partnerships[src.partnershipId]?.photo);
+    return null;
+}
+
+/** The file's light box of the portrait, and of the whole photo it is cut from (Portrait | Whole photo, spec 107 §2). */
 function portraitLightbox(c: Ctx, photo: string | null): string {
     if (!c.imgs || !photo) return '';
     const name = nameOf(c, c.person.id);
-    return `<div class="pp-lb" id="obr-p" role="dialog" aria-label="${esc(name)}">`
+    const wholeSrc = portraitWholeImage(c.tree, c.person);
+    const whole = wholeSrc ? imgHtml(c, wholeSrc, name, 'pp-lb-img') : '';
+    const box = (id: string, img: string, nav: string): string =>
+        `<div class="pp-lb" id="${id}" role="dialog" aria-label="${esc(name)}">`
         + `<div class="pp-lb-top"><span class="pp-lb-count"></span><a class="pp-lb-close" href="#pp-sec-facts" data-pp-lb="close">${esc(c.P.gal.closeZoom)}</a></div>`
-        + imgHtml(c, photo, name, 'pp-lb-img')
-        + `<div class="pp-lb-foot"><span class="pp-lb-cap">${esc(name)}</span></div></div>`;
+        + img
+        + `<div class="pp-lb-foot"><span class="pp-lb-cap">${esc(name)}</span>${nav}</div></div>`;
+    if (!whole) return box('obr-p', imgHtml(c, photo, name, 'pp-lb-img'), '');
+    return box('obr-p', imgHtml(c, photo, name, 'pp-lb-img'),
+        `<span class="pp-lb-navs"><a class="pp-lb-nav" href="#obr-p-full" data-pp-lb="whole">${esc(c.P.wholePhoto)}</a></span>`)
+        + box('obr-p-full', whole,
+            `<span class="pp-lb-navs"><a class="pp-lb-nav" href="#obr-p" data-pp-lb="portrait">${esc(c.P.portrait)}</a></span>`);
 }
 
 // ── In brief (§0.3) ──

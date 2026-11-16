@@ -1519,6 +1519,32 @@ describe('person page 2 (§0, §3, §4)', () => {
         expect(off).not.toContain('application/pdf');
     });
 
+    it('the file: a portrait cut from an attachment opens Portrait | Whole photo (spec 107 §2); without its source only the portrait', () => {
+        const d = withAttachments(2);
+        const jan = d.persons['jan' as PersonId];
+        jan.photo = png(300, 300);
+        jan.photoSource = { attachmentId: 'a1', region: { x: 0, y: 0, w: 1, h: 0.5 } };
+        const html = doc(d);
+        expect(html).toContain('<div class="pp-lb" id="obr-p" role="dialog"');
+        expect(html).toContain('<a class="pp-lb-nav" href="#obr-p-full" data-pp-lb="whole">Celá fotka</a>');
+        expect(html).toContain('<div class="pp-lb" id="obr-p-full" role="dialog"');
+        expect(html).toContain('<a class="pp-lb-nav" href="#obr-p" data-pp-lb="portrait">Portrét</a>');
+        // The whole photo is the attachment's image, embedded once (the gallery shows it too).
+        expect(html.split(png(11, 20)).length - 1).toBe(1);
+        // The file without its materials' images: no whole photo either (the portrait keeps its box).
+        const off = doc(d, { groups: { ...PERSON_PAGE_ALL_GROUPS, materials: false } });
+        expect(off).toContain('id="obr-p"');
+        expect(off).not.toContain('obr-p-full');
+        // A portrait with no source: one box, no link.
+        delete jan.photoSource;
+        const plain = doc(d);
+        expect(plain).toContain('id="obr-p"');
+        expect(plain).not.toContain('obr-p-full');
+        // A source that is not a picture the file shows (a PDF): nothing more either.
+        jan.photoSource = { attachmentId: 'pdf1', region: { x: 0, y: 0, w: 1, h: 1 } };
+        expect(doc(d)).not.toContain('obr-p-full');
+    });
+
     it('the family tree in the file: a living card is "E. F. · * 1952" with a dashed border, no living name anywhere', () => {
         const d: StromData = {
             persons: {

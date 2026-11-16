@@ -403,3 +403,55 @@ test.describe('Use as portrait… in the materials (desktop)', () => {
         expect(s.source).toMatchObject({ attachmentId: s.names[0][0] });
     });
 });
+
+test.describe('The zoom: Portrait | Whole photo', () => {
+    const viewerImg = (page: Page) => page.locator('#attachment-overlay-img');
+    const sw = (page: Page) => page.locator('#image-viewer-whole');
+
+    for (const [label, viewport] of [['desktop', { width: 1440, height: 900 }], ['phone', { width: 390, height: 844 }]] as const) {
+        test(`the person page's portrait opens with the switch; Whole photo shows the photo it is cut from (${label})`, async ({ page }) => {
+            await page.setViewportSize(viewport);
+            const img = await seedZbyhoslav(page, 'source');
+            await page.evaluate(() => window.Strom.UI.showPersonPage('zb' as never));
+            await ppWin(page).locator('.pp-portrait').click();
+            await expect(page.locator('#attachment-overlay')).toHaveClass(/active/);
+            await expect(sw(page)).toBeVisible();
+            const cells = sw(page).getByRole('button');
+            await expect(cells).toHaveText(['Portrait', 'Whole photo']);
+            await expect(cells.first()).toHaveAttribute('aria-pressed', 'true');
+            await expect(viewerImg(page)).toHaveAttribute('src', img.portrait);
+            // Centred at the bottom, inside the screen.
+            const box = (await sw(page).boundingBox())!;
+            expect(Math.abs(box.x + box.width / 2 - viewport.width / 2)).toBeLessThan(2);
+            expect(box.y + box.height).toBeLessThan(viewport.height);
+            await cells.nth(1).click();
+            await expect(cells.nth(1)).toHaveAttribute('aria-pressed', 'true');
+            await expect(cells.first()).toHaveAttribute('aria-pressed', 'false');
+            await expect(viewerImg(page)).toHaveAttribute('src', img.original);
+            // The viewer is still open (the click did not close it).
+            await expect(page.locator('#attachment-overlay')).toHaveClass(/active/);
+            await cells.first().click();
+            await expect(viewerImg(page)).toHaveAttribute('src', img.portrait);
+            await page.keyboard.press('Escape');
+            await expect(page.locator('#attachment-overlay')).not.toHaveClass(/active/);
+            await expect(sw(page)).toBeHidden();
+        });
+    }
+
+    test('a portrait without its original, and an attachment\'s zoom: no switch', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await seedZbyhoslav(page, 'plain');
+        await page.evaluate(() => window.Strom.UI.showPersonPage('zb' as never));
+        await ppWin(page).locator('.pp-portrait').click();
+        await expect(page.locator('#attachment-overlay')).toHaveClass(/active/);
+        await expect(sw(page)).toBeHidden();
+        await page.keyboard.press('Escape');
+        await page.keyboard.press('Escape');
+        await expect(ppWin(page)).toHaveCount(0);
+        await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));
+        await openDialog(page);
+        await attRow(page, 'svatba.jpg').locator('.attachment-thumb').click();
+        await expect(page.locator('#attachment-overlay')).toHaveClass(/active/);
+        await expect(sw(page)).toBeHidden();
+    });
+});

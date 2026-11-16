@@ -387,14 +387,50 @@ async function loadOriginal(original: ViewerOriginal): Promise<void> {
 }
 let loadedBytes = 0;
 
-/** Open the viewer on an image (data URL); `close` runs after it closes. `original`: its full quality from the research. */
-export function openImageViewer(dataUrl: string, close?: () => void, original?: ViewerOriginal): void {
+/**
+ * The zoom's Portrait | Whole photo (spec 107 §2): two cells at the bottom,
+ * the portrait first; the whole photo the portrait is cut from in the other.
+ * Hidden without a whole photo.
+ */
+function renderWholeSwitch(portrait: string, whole: string | undefined): void {
+    const bar = el('image-viewer-whole');
+    if (!bar) return;
+    bar.innerHTML = '';
+    bar.hidden = !whole;
+    if (!whole) return;
+    bar.setAttribute('aria-label', strings.personPage.portrait);
+    const cell = (label: string, src: string, on: boolean): HTMLButtonElement => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'image-viewer-whole-btn sel-opt';
+        b.dataset.selForm = 'seg';
+        b.dataset.whole = src === whole ? '1' : '0';
+        b.textContent = label;
+        b.setAttribute('aria-pressed', String(on));
+        b.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (b.getAttribute('aria-pressed') === 'true') return;
+            bar.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+            showSrc(src);
+        });
+        return b;
+    };
+    bar.append(cell(strings.personPage.portrait, portrait, true), cell(strings.personPage.wholePhoto, whole, false));
+}
+
+/**
+ * Open the viewer on an image (data URL); `close` runs after it closes.
+ * `original`: its full quality from the research. `whole`: the whole photo a
+ * portrait is cut from (the Portrait | Whole photo switch).
+ */
+export function openImageViewer(dataUrl: string, close?: () => void, original?: ViewerOriginal, whole?: string | null): void {
     const image = img();
     const ov = overlay();
     if (!image || !ov || !dataUrl) return;
     if (list && isOpen()) closeImageViewer();
     previewSrc = dataUrl;
     renderMediaBar(original);
+    renderWholeSwitch(dataUrl, whole ?? undefined);
     if (original?.autoLoad) queueMicrotask(() => { void loadOriginal(original); });
     wire();
     onClose = close ?? null;
@@ -429,6 +465,7 @@ export function closeImageViewer(): void {
     if (originalUrl) URL.revokeObjectURL(originalUrl);
     originalUrl = null;
     renderMediaBar(undefined);
+    renderWholeSwitch('', undefined);
     document.removeEventListener('keydown', onKey, true);
     dismissHint();
     pointers.clear();
