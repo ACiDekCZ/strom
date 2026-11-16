@@ -124,6 +124,36 @@ export function isPosthumousEvent(type: LifeEventType | undefined): boolean {
     return type === 'burial' || type === 'cremation' || type === 'probate';
 }
 
+/**
+ * Own events whose place says nothing of where the person lived (K043): the
+ * place of a rite (a baptism or another sacrament is held in the parish
+ * church, often not in the village of birth; an ordination in a cathedral),
+ * of the body and the estate after a death (the cemetery, the crematorium,
+ * the court), of a will, and of the person's part at someone else's rite (a
+ * godparent, a wedding witness — like the derived participations, which are
+ * no places lived either). Every place-of-living view takes it: the band of
+ * places lived on the person's chart, the history of the places lived in, the
+ * count of places on the person page and the moves of a line's timeline.
+ *
+ * Kept as places lived: a residence and a census (the home itself), an
+ * occupation, military service and education (where the person spent that
+ * time), an emigration (the place left) and an immigration (the place
+ * reached), a naturalization (done where the person settled), an adoption,
+ * a title, a nationality and a religion (rarely placed, and then mostly at
+ * home), and a custom event. A couple's events (banns, a licence, a contract…)
+ * are kept too: they are read or signed where the couple lives.
+ */
+export const NOT_RESIDENCE_EVENT_TYPES: ReadonlySet<LifeEventType> = new Set<LifeEventType>([
+    'baptism', 'confirmation', 'firstCommunion', 'barMitzvah', 'batMitzvah', 'ordination',
+    'burial', 'cremation', 'probate', 'will',
+    'godparent', 'weddingWitness',
+]);
+
+/** Whether an own event's place counts as a place the person lived in (see NOT_RESIDENCE_EVENT_TYPES). */
+export function isResidenceEventType(type: LifeEventType | undefined): boolean {
+    return !type || !NOT_RESIDENCE_EVENT_TYPES.has(type);
+}
+
 /** One row of a person's life list: the birth, an own event, or the death. */
 export type LifeListEntry =
     | { kind: 'birth' }
@@ -132,8 +162,8 @@ export type LifeListEntry =
 
 /**
  * A person's birth, own events and death in the order of a life, by the rule
- * of the life timeline (computePersonLifeline): by date, the birth opening its
- * year and a death known only by the year closing it; a baptism never ahead
+ * of the life timeline (computePersonLifeline): by date, a birth known only by
+ * the year opening it and a death known only by the year closing it; a baptism never ahead
  * of the birth, a burial, cremation or probate never ahead of the death, with
  * an equal or missing day as much as with a slip in the record. A birth
  * without a date stays first; undated events come after the dated ones, an
@@ -152,7 +182,8 @@ export function orderLifeList(
     let deathKey: number | undefined;
     if (birth) {
         const y = yearOf(birth.date);
-        birthKey = y === null ? -Infinity : y + 0.001;
+        birthKey = y === null ? -Infinity
+            : parseFlexDate(birth.date)?.month !== undefined ? y + yearFraction(birth.date) : y + 0.001;
         rows.push({ entry: { kind: 'birth' }, key: birthKey, rank: 0, id: '' });
     }
     if (death) {

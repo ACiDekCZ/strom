@@ -387,8 +387,8 @@ function personName(data: StromData, id: string | undefined): string | undefined
  * Build the chronological life timeline for one person from existing data:
  * birth, own life events (with participants), marriages and their ends
  * (partner named), each child's birth, and death; with `childEvents`, also the
- * children's deaths, burials, marriages and divorces. Points are sorted oldest-first by date; birth
- * opens its year, baptism follows birth, burial / cremation / probate follow
+ * children's deaths, burials, marriages and divorces. Points are sorted oldest-first by date; a birth
+ * known by the year alone opens its year, baptism follows birth, burial / cremation / probate follow
  * death (see `lifelineRank`). Pure — no DOM. The caller decides whether to
  * show the section (convention: hide when fewer than 2 points).
  */
@@ -402,7 +402,12 @@ export function computePersonLifeline(
 
     const birthY = yearOf(person.birthDate);
     if (birthY !== null) {
-        points.push({ year: birthY, sortKey: birthY + 0.001, kind: 'birth', place: person.birthPlace || undefined,
+        // A birth with a month sorts by its date like every point (K043: a place
+        // of that year before it is no longer taken as where the life began);
+        // one known only by the year opens that year.
+        const birthKey = parseFlexDate(person.birthDate)?.month !== undefined
+            ? birthY + yearFraction(person.birthDate) : birthY + 0.001;
+        points.push({ year: birthY, sortKey: birthKey, kind: 'birth', place: person.birthPlace || undefined,
             ...detailsOf({ address: person.birthAddress }) });
     }
 

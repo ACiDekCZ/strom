@@ -21,6 +21,7 @@ import { Partnership, PartnershipId, Person, PersonId, StromData } from './types
 import { yearOf, yearFraction } from './dates.js';
 import { placeKey, townOfPlace } from './places.js';
 import { Rod, RodId, RodPlaceSpan, placeSpans, rodGenerations } from './lineage.js';
+import { NOT_RESIDENCE_EVENT_TYPES } from './events.js';
 import { HistoryKind, HistoryPayload, PersonHistoryEnv, effectiveHidden, matchHistoryPlace, pickHistoryText } from './history.js';
 import { ProtectedPersonPageTree } from './person-page.js';
 import { countryIdAt } from './map-context.js';
@@ -121,8 +122,13 @@ export interface RodTimelineInput {
 /** Rows of places on the overview (§5.2). */
 export const ROD_TIMELINE_PLACES = 6;
 
-/** Events of a person's own that say nothing of where the person lived. */
-const NOT_RESIDENCE = new Set(['death', 'burial', 'cremation', 'probate', 'will', 'emigration', 'immigration']);
+/**
+ * Events of a person's own that say nothing of where the person lived: the
+ * shared set (rites, the body and the estate, a will, a part at another's
+ * rite), a death record (the line shows deaths as their own events) and the
+ * emigration records, which `points` takes apart as the place left and reached.
+ */
+const NOT_RESIDENCE: ReadonlySet<string> = new Set<string>([...NOT_RESIDENCE_EVENT_TYPES, 'death', 'emigration', 'immigration']);
 
 function isWedding(u: Partnership): boolean {
     return u.status === 'married' || u.status === 'divorced';
@@ -210,7 +216,17 @@ export function buildRodTimeline(input: RodTimelineInput): RodTimeline | null {
                 if (c) add(c.birthDate, c.birthPlace);
             }
         }
-        return out.sort((a, b) => a.sort - b.sort);
+        out.sort((a, b) => a.sort - b.sort);
+        // A birth without a place: the place of the first baptism stands in for it, up to the first real point
+        // (as on the person's chart, residencePoints).
+        if (!p.birthPlace?.trim()) {
+            const before = out.length;
+            const first = out[0];
+            for (const ev of p.events ?? []) if (ev.type === 'baptism') add(ev.date, ev.place);
+            const baptisms = out.splice(before).sort((a, b) => a.sort - b.sort);
+            if (baptisms[0] && (!first || baptisms[0].sort < first.sort)) out.unshift(baptisms[0]);
+        }
+        return out;
     };
 
     const seenMove = new Set<string>();

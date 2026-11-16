@@ -15,6 +15,7 @@ import type { StromData, Person } from './types.js';
 import { placeKey } from './places.js';
 import { computePersonLifeline, type LifelinePoint } from './timeline.js';
 import { yearOf } from './dates.js';
+import { isResidenceEventType } from './events.js';
 import { getStringsForLang, type Language } from './strings.js';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -926,12 +927,26 @@ export interface ResidencePoint {
 
 const RESIDENCE_KINDS: ReadonlySet<LifelinePoint['kind']> = new Set(['birth', 'death', 'marriage', 'divorce', 'event', 'coupleEvent']);
 
-/** The person's dated points with a place (birth, death, marriages, own and couple events), sorted. */
+/**
+ * The person's dated points with a place (birth, death, marriages, own and
+ * couple events), sorted. An own event that names the place of a rite or an
+ * act rather than a home (a baptism, a burial, a will…: NOT_RESIDENCE_EVENT_TYPES)
+ * is no point (K043); only a baptism stands in for a birth without a place,
+ * up to the first real point.
+ */
 export function residencePoints(points: readonly LifelinePoint[]): ResidencePoint[] {
-    return points
-        .filter(pt => RESIDENCE_KINDS.has(pt.kind) && typeof pt.place === 'string' && pt.place.trim())
-        .map(pt => ({ year: pt.year, sortKey: pt.sortKey, place: pt.place!.trim() }))
+    const placed = (pt: LifelinePoint): boolean => RESIDENCE_KINDS.has(pt.kind) && typeof pt.place === 'string' && !!pt.place.trim();
+    const kept = points.filter(pt => placed(pt) && (pt.kind !== 'event' || isResidenceEventType(pt.eventType)));
+    const out = kept.map(pt => ({ year: pt.year, sortKey: pt.sortKey, place: pt.place!.trim() }))
         .sort((a, b) => a.sortKey - b.sortKey);
+    if (!kept.some(pt => pt.kind === 'birth')) {
+        const baptism = points.filter(pt => placed(pt) && pt.kind === 'event' && pt.eventType === 'baptism')
+            .sort((a, b) => a.sortKey - b.sortKey)[0];
+        if (baptism && (!out.length || baptism.sortKey < out[0].sortKey)) {
+            out.unshift({ year: baptism.year, sortKey: baptism.sortKey, place: baptism.place!.trim() });
+        }
+    }
+    return out;
 }
 
 /**

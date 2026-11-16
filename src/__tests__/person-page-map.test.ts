@@ -16,6 +16,7 @@ import { chartAnchorId } from '../person-page-chart.js';
 import { preparePersonPageData, buildPersonPageBody, PERSON_PAGE_ALL_GROUPS, type PersonPageOptions } from '../person-page.js';
 import { placeKey, MAP_KINDS, type MapKind } from '../places.js';
 import { getStringsForLang } from '../strings.js';
+import { yearFraction } from '../dates.js';
 import { PERSON_PAGE_MAP_CSS } from '../person-page-viz-css.js';
 import type { StromData, PersonId, PartnershipId, Person, Gender, Partnership, PlaceGeo } from '../types.js';
 
@@ -79,7 +80,8 @@ describe('collectPersonPlacePoints', () => {
 
     it('uses the life timeline\'s sort keys (anchors line up with its rows)', () => {
         const birth = collectPersonPlacePoints(tree(), JAN, { now: 2026 }).find(x => x.kind === 'birth')!;
-        expect(birth.sortKey).toBeCloseTo(1860.001, 3);
+        // The birth's full date (K043), as the life timeline sorts it.
+        expect(birth.sortKey).toBeCloseTo(1860 + yearFraction('1860-03-12'), 6);
     });
 
     it('leaves out a relative\'s place that is one of the person\'s own', () => {
