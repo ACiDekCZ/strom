@@ -167,7 +167,7 @@ test.describe('the Research button and menu', () => {
             ui.isFollowingActiveResearch = () => true;
             ui.refreshResearchMenu();
         });
-        await expect(firstLevel(page)).toHaveText(['Research overview', 'Stop following', 'Awaiting action', 'Continue with the agent', 'Open research', 'Send changes', 'Other actions']);
+        await expect(firstLevel(page)).toHaveText(['Research overview', 'End following', 'Awaiting action', 'Continue with the agent', 'Open research', 'Send changes', 'Other actions']);
         await expect(page.locator('#research-item-live')).toHaveCount(0);
         await expect(page.locator('#research-menu-more #research-item-overview')).toHaveCount(0);
     });

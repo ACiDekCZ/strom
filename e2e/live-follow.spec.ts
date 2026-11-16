@@ -75,6 +75,10 @@ interface Bridge {
  * Follow the bridge. `quick`: the app reconnects every 250 ms instead of 2 s
  * (__LIVE_RECONNECT_MS), so its next status comes soon (nextStatus).
  */
+/** The help of Settings › Following research › Follow the agent in (spec 097 §8). */
+const HELP_WINDOWS = 'Applies to the main window when following starts and on Back to the agent. Other windows follow in their own view.';
+const HELP_ONE_WINDOW = 'Used when following starts and on Back to the agent. The view can be switched while following.';
+
 async function follow(page: Page, o: { size?: { width: number; height: number }; gap?: number; idle?: number; on?: boolean; quick?: boolean; ged?: string } = {}): Promise<Bridge> {
     await page.setViewportSize(o.size ?? { width: 1440, height: 900 });
     await page.addInitScript(([links, gap, idle, on, quick]) => {
@@ -264,7 +268,7 @@ test.describe('follow the agent in the tree', () => {
         await expect.poll(() => page.evaluate(() => window.Strom.TreeRenderer.getViewMode())).toBe('family');
         await expect.poll(() => focusRefn(page)).toBe('P0012');
         await expect.poll(() => offCentre(page, 'P0012')).toBeLessThan(3);
-        await expect(btn(page)).toHaveAttribute('aria-label', 'Stop following');
+        await expect(btn(page)).toHaveAttribute('aria-label', 'Stop following here');
     });
 
     test('a new target: one jump after the brake, to the latest one', async ({ page }) => {
@@ -420,7 +424,7 @@ test.describe('follow the agent in the tree', () => {
         await nextStatus(bridge);
         const before = await focusRefn(page);
         await btn(page).click();
-        await expect(btn(page)).toHaveAttribute('title', 'Stop following · waiting for the agent to work on someone');
+        await expect(btn(page)).toHaveAttribute('title', 'Stop following here · waiting for the agent to work on someone');
         bridge.person = 'P0013';
         bridge.paused = true;
         await nextStatus(bridge);
@@ -838,7 +842,7 @@ test.describe('following: the person menu says why it does not edit (063 U3 A5)'
         await expect(page.locator('#person-modal.active, .modal-overlay.active')).toHaveCount(0);
         // The way out, right under it.
         const stop = menu.locator('[data-action="live-stop"]');
-        await expect(stop).toHaveText('Stop following');
+        await expect(stop).toHaveText('End following');
         expect(await menu.locator('[role="menuitem"]').evaluateAll((els) => {
             const i = els.findIndex(e => e.getAttribute('aria-disabled') === 'true');
             return (els[i + 1] as HTMLElement | undefined)?.dataset.action ?? null;
@@ -875,7 +879,7 @@ test.describe('following: the person menu says why it does not edit (063 U3 A5)'
             await expect(edit).toBeVisible();
             await expect(page.locator('#person-modal.active')).toHaveCount(0);
             const stop = sheet.locator('.bottom-sheet-item.is-link[data-action="live-stop"]');
-            await expect(stop).toHaveText('Stop following');
+            await expect(stop).toHaveText('End following');
             const box = (await stop.boundingBox())!;
             expect(box.height).toBeGreaterThanOrEqual(44);
             await stop.tap();
@@ -1248,6 +1252,8 @@ test.describe('follow the agent in the fan (spec 043)', () => {
         await expect(group).toBeVisible();
         const set = (key: string) => group.locator(`.live-sec-set__row[data-key="${key}"]`);
         await expect(set('follow-view').locator('[aria-checked="true"]')).toHaveText('Family');
+        // A computer with a mouse: other windows follow in their own view (spec 097 §8).
+        await expect(set('follow-view').locator('.settings-desc')).toHaveText(HELP_WINDOWS);
         await expect(set('follow-fan-center').locator('[aria-checked="true"]')).toHaveText('Focused person');
         await expect(set('follow-fan-person')).toHaveCount(0);
         await expect(group.locator('[data-key="follow-trail"] input[type="checkbox"]')).toBeChecked();
@@ -1282,6 +1288,23 @@ test.describe('follow the agent in the fan (spec 043)', () => {
         await btn(page).click();
         await expect.poll(() => view(page)).toBe('fan');
         expect(await followView(page)).toBe('fan');
+    });
+
+    test('Settings at a phone\'s width: the help of the follow view without other windows (spec 097 §8)', async ({ page }) => {
+        await follow(page, { idle: 60_000, size: { width: 600, height: 900 } });
+        await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+        const row = page.locator('#settings-group-research-follow .live-sec-set__row[data-key="follow-view"]');
+        await expect(row.locator('.settings-desc')).toHaveText(HELP_ONE_WINDOW);
+    });
+
+    test.describe('a touch tablet (spec 097 §8)', () => {
+        test.use({ hasTouch: true, isMobile: true });
+        test('Settings: the help of the follow view without other windows', async ({ page }) => {
+            await follow(page, { idle: 60_000, size: { width: 820, height: 1180 } });
+            await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+            const row = page.locator('#settings-group-research-follow .live-sec-set__row[data-key="follow-view"]');
+            await expect(row.locator('.settings-desc')).toHaveText(HELP_ONE_WINDOW);
+        });
     });
 
     test('the overview: the line about the switch has the same gap above and below; once it goes the summary closes up to "Follow in" (1105)', async ({ page }) => {

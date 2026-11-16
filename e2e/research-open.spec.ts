@@ -360,7 +360,7 @@ test.describe('live research (?live=)', () => {
         await expect(panel).toBeVisible();
         await expect(panel.locator('.live-working')).toContainText('Nobody is working');
         await expect(page.locator('body')).toHaveClass(/tree-locked/);
-        await panel.getByRole('button', { name: 'Stop following' }).click();
+        await panel.getByRole('button', { name: 'End following' }).click();
         await expect(panel).toHaveCount(0);
         await expect(page.locator('body')).not.toHaveClass(/tree-locked/);
     });
@@ -553,7 +553,7 @@ test.describe('live panel layout', () => {
         const head = await rect(page, '#live-panel .live-panel-head');
         expect(apart(head, await rect(page, '#embedded-mode-banner'))).toBe(true);
         expect(apart(head, await rect(page, '#collab-badge'))).toBe(true);
-        await page.locator('#live-panel').getByRole('button', { name: 'Stop following' }).click();
+        await page.locator('#live-panel').getByRole('button', { name: 'End following' }).click();
         await expect(page.locator('#live-panel')).toHaveCount(0);
     });
 
@@ -621,7 +621,7 @@ test.describe('live research survives a reload', () => {
         await page.goto(`/strom.html?live=${encodeURIComponent(BRIDGE)}`);
         const panel = page.locator('#live-panel');
         await expect(panel).toBeVisible();
-        await panel.getByRole('button', { name: 'Stop following' }).click();
+        await panel.getByRole('button', { name: 'End following' }).click();
         await expect(panel).toHaveCount(0);
 
         requests.length = 0;

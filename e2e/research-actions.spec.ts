@@ -306,7 +306,7 @@ test.describe('live research: Awaiting action', () => {
         // The first level: the overview and Stop following first (spec 057 §7.1), then design 2d — the tree is the
         // research's own, nothing of it to send (menu 1020 §2.7).
         await expect(page.locator('#research-menu > .research-menu-group > .tree-switcher-action .research-item-label'))
-            .toHaveText(['Research overview', 'Stop following', 'Awaiting action', 'Continue with the agent', 'Open research', 'Other actions']);
+            .toHaveText(['Research overview', 'End following', 'Awaiting action', 'Continue with the agent', 'Open research', 'Other actions']);
         await expect(page.locator('#research-item-send')).toHaveCount(0);
         await page.locator('#research-item-waiting').click();
         await expect(panel).not.toHaveClass(/collapsed/);

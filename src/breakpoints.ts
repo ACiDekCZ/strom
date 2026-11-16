@@ -57,3 +57,11 @@ export const MQ_PHONE_BAR = `${MQ_MOBILE}, ${MQ_PHONE_LANDSCAPE}`;
 export function isPhoneBar(): boolean {
     return matches(MQ_PHONE_BAR, (w) => w <= MOBILE_MAX);
 }
+
+/** A mouse wider than a phone (a computer, a tablet with a mouse): where other windows of the app open (spec 097 §8). */
+export const MQ_MOUSE_WIDE = `(hover: hover) and (pointer: fine) and (min-width: ${MOBILE_MAX + 1}px)`;
+
+/** A mouse wider than a phone now (no matchMedia: no). */
+export function isMouseWide(): boolean {
+    return matches(MQ_MOUSE_WIDE, () => false);
+}

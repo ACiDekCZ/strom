@@ -179,7 +179,7 @@ test.describe('the Research overview without following', () => {
         expect((bridge.seen ?? []).some(s => s.endsWith('/tree.ged'))).toBe(true);
         // Followed now: the overview open, Stop in its head, no strip.
         await expect(ov(page)).toBeVisible();
-        await expect(ov(page).locator('.research-overview__head .live-panel-action')).toHaveText('Stop following');
+        await expect(ov(page).locator('.research-overview__head .live-panel-action')).toHaveText('End following');
         await expect(strip(page)).toHaveCount(0);
         // The menu: the overview first, Stop following second.
         await page.locator('#research-menu-btn').click();

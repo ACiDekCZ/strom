@@ -160,7 +160,7 @@ test.describe('the Research overview in a window of its own', () => {
         await expect(head.locator('.live-dot')).toHaveCount(1);
         await expect(head.locator('.research-overview__title')).toHaveText(/ · Research overview$/);
         await expect(head.locator('.research-overview__title')).toHaveAttribute('title', / · Research overview$/);
-        await expect(head.locator('.research-overview__stop')).toHaveText('Stop following');
+        await expect(head.locator('.research-overview__stop')).toHaveText('End following');
         await expect(head.locator('.live-follow-btn')).toBeVisible();
         await expect(head.locator('.research-overview__more')).toBeVisible();
         await expect(ov.locator('.research-overview__close, .research-overview__window')).toHaveCount(0);

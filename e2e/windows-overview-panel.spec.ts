@@ -104,7 +104,7 @@ test.describe('the research panel beside the overview\'s own window', () => {
         expect(await popup.evaluate(() => Date.now())).toBe(NOW.getTime());
         await expect(panel(page).locator('.live-panel-nowork, .live-panel-waitchip, .live-panel-allhidden')).toHaveCount(0);
         await expect(panel(page).locator('.live-panel-head .live-panel-title')).toHaveText('Vlasákovi z Horní Lhoty');
-        await expect(panel(page).locator('.live-panel-action')).toHaveText('Stop following');
+        await expect(panel(page).locator('.live-panel-action')).toHaveText('End following');
 
         // ⤢: the overview's window to the front, no overview here and no other window.
         await page.evaluate(() => {

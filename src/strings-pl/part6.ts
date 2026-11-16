@@ -213,6 +213,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         groupResearchFollow: 'Śledzenie badania',
         followView: 'Śledzenie agenta w',
         followViewHelp: 'Stosowane przy włączeniu śledzenia i przy Powrót do agenta. Widok można przełączać w trakcie śledzenia.',
+        followViewHelpWindows: 'Dotyczy okna głównego przy włączeniu śledzenia i przy Powrót do agenta. Inne okna śledzą we własnym widoku.',
         followFanCenter: 'Środek wachlarza przy śledzeniu',
         followFanCenterFocus: 'Osoba w centrum uwagi',
         followFanCenterRoot: 'Osoba domyślna',

@@ -8,7 +8,7 @@
  */
 
 import { strings } from '../strings.js';
-import { isMobile, isPhoneBar } from '../breakpoints.js';
+import { isMobile, isMouseWide, isPhoneBar } from '../breakpoints.js';
 import { TreeManager } from '../tree-manager.js';
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
@@ -1090,7 +1090,8 @@ export const liveSectionEditMethods = uiModule({
         const V = strings.viewModeSwitch;
         const redraw = (): void => this.renderResearchFollowSettings();
 
-        const view = settingsLine('follow-view', S.followView, S.followViewHelp, null);
+        // A computer with a mouse can open other windows, which follow in their own view (spec 097 §8).
+        const view = settingsLine('follow-view', S.followView, isMouseWide() ? S.followViewHelpWindows : S.followViewHelp, null);
         view.line.appendChild(choiceSegment<FollowView>(view.labelId, FOLLOW_VIEWS.map(v => ({ value: v, label: V[v] })), getFollowView(), (v) => {
             setFollowView(v);
             redraw();
