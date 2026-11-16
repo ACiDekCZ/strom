@@ -36,6 +36,8 @@ export function tableCsvField(raw: string): string {
 export function exportText(value: CellValue): string {
     const r = value.research;
     if (r) return r.liveOff ? '' : r.export;
+    // A ticked box (Done of a work list, spec 084 §13d) as the mark it shows.
+    if (value.check) return '✓';
     return cellPlainText(value);
 }
 

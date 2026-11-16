@@ -371,11 +371,12 @@ test.describe('linked in the view only: the outputs', () => {
         await expect(ghosts(page)).toHaveCount(6);
         const on = await files();
         for (const kind of Object.keys(off)) expect(on[kind], kind).toBe(off[kind]);
-        expect(on.json).not.toMatch(/view-links|addedAt/);
+        // A view link's record has a numeric addedAt; a person's (when added, spec 084 §8) is a date text.
+        expect(on.json).not.toMatch(/view-links|"addedAt": ?\d/);
         // The app file's data: the tree as it is.
         const embedded = (html: string) => html.match(/window\.STROM_EMBEDDED_DATA = (\{.*?\});<\/script>/s)?.[1] ?? '';
         expect(embedded(on.html)).not.toBe('');
-        expect(embedded(on.html)).not.toMatch(/view-links|addedAt/);
+        expect(embedded(on.html)).not.toMatch(/view-links|"addedAt": ?\d/);
 
         // Sharing (the whole tree or the branch in view): the shared file carries no record either.
         for (const scope of ['whole', 'branch']) {
@@ -390,7 +391,7 @@ test.describe('linked in the view only: the outputs', () => {
             ]);
             const file = readFileSync(await download.path(), 'utf-8');
             expect(embedded(file), scope).not.toBe('');
-            expect(embedded(file), scope).not.toMatch(/view-links|addedAt/);
+            expect(embedded(file), scope).not.toMatch(/view-links|"addedAt": ?\d/);
             // Nowhere in the file (the app's own code names the keys, never a record).
             expect(file, scope).not.toMatch(/"hypo":\s*"H00(22|24)",\s*"variant"|"islandIds"/);
         }

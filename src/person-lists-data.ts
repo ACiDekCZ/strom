@@ -283,13 +283,12 @@ export function subsetForSubtree(lists: readonly PersonList[] | undefined, keep:
             const done = l.done.filter(id => keep.has(id));
             if (done.length) next.done = done; else delete next.done;
         }
-        if (!l.dynamic) {
-            const personIds = (l.personIds ?? []).filter(id => keep.has(id));
-            if (!personIds.length) continue;
-            next.personIds = personIds;
-            const removed = (l.removed ?? []).filter(id => keep.has(id));
-            if (removed.length) next.removed = removed; else delete next.removed;
-        }
+        // No one left behind stays in the list's own data (an automatic list's kept order or removed people too).
+        const removed = (l.removed ?? []).filter(id => keep.has(id));
+        if (removed.length) next.removed = removed; else delete next.removed;
+        const personIds = (l.personIds ?? []).filter(id => keep.has(id));
+        if (!l.dynamic && !personIds.length) continue;
+        if (personIds.length) next.personIds = personIds; else delete next.personIds;
         out.push(next);
     }
     return out.length ? out : undefined;

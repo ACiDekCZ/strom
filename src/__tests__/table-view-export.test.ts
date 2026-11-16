@@ -10,7 +10,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import type { PersonId, StromData } from '../types.js';
 import { setLanguage } from '../strings.js';
 import { buildTableModel, type TableModel } from '../ui/table-view/table-model.js';
-import { columnById, type ColumnDef } from '../ui/table-view/table-columns.js';
+import { columnById, LEAD_COLUMNS, type ColumnDef } from '../ui/table-view/table-columns.js';
 import { buildTableCsv, fileNamePart, tableCsvField, tableCsvFileName } from '../ui/table-view/table-export.js';
 import { filterRows, sortRows } from '../ui/table-view/table-filter.js';
 import { neutralizeFormula } from '../csv-export.js';
@@ -124,6 +124,16 @@ describe('buildTableCsv (§11.2)', () => {
         expect(tableCsvField('@SUM(A1)')).toBe("'@SUM(A1)");
         expect(tableCsvField('a\nb')).toBe('"a\nb"');
         expect(tableCsvField('')).toBe('');
+    });
+});
+
+describe('a list\'s scope (spec 084 §12, §13d)', () => {
+    it('# and Done go first: the place in the list and a ticked box as ✓', () => {
+        const m = build();
+        m.ctx.scope = { pos: new Map([['e', 1], ['b', 2]]), done: new Set(['b']) };
+        const rows = [m.personRows.get('e' as PersonId)!, m.personRows.get('b' as PersonId)!];
+        const out = buildTableCsv({ model: m, type: 'persons', rows, columns: [...LEAD_COLUMNS, ...cols('persons', ['name'])] });
+        expect(parseCsv(out.csv.slice(1))).toEqual([['#', 'Done', 'Full name'], ['1', '', 'Prokop Zlatohlávek'], ['2', '✓', 'Apolónie Pěnkavová']]);
     });
 });
 

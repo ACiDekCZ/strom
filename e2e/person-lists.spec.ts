@@ -112,7 +112,7 @@ test.describe('Lists of people: a computer', () => {
 
         // ⋯ of the list: Open in Table · Rename · Duplicate · Tick off done · Delete.
         await d.locator('.pl-more').click();
-        await expect(d.locator('.pl-menu .pl-menu-item')).toHaveText(['Open in Table', 'Rename', 'Duplicate', 'Tick off done', 'Delete']);
+        await expect(d.locator('.pl-menu .pl-menu-item')).toHaveText(['Open in Table', 'Rename', 'Duplicate', 'Tick off done', 'Export›', 'Delete']);
         await d.locator('.pl-menu [data-run="dup"]').click();
         await expect(rowNames(page)).toHaveText(['Added in the last 30 days', 'Ancestors – Quillon', 'Letters to the archive', 'Letters to the archive (2)']);
         await expect(d.locator('.pl-row', { hasText: 'Letters to the archive (2)' })).toHaveAttribute('aria-selected', 'true');
@@ -253,7 +253,7 @@ test.describe('Lists of people: a computer', () => {
         const d = dialog(page);
         await d.locator('.pl-row', { hasText: 'Ancestors – Quillon' }).click();
         await d.locator('.pl-more').click();
-        await expect(d.locator('.pl-menu .pl-menu-item')).toHaveText(['Open in Table', 'Rename', 'Duplicate', 'FreezeBecomes fixed with the people it has now', 'Delete']);
+        await expect(d.locator('.pl-menu .pl-menu-item')).toHaveText(['Open in Table', 'Rename', 'Duplicate', 'FreezeBecomes fixed with the people it has now', 'Export›', 'Delete']);
         await d.locator('.pl-menu [data-run="freeze"]').click();
         await expect(d.locator('.pl-badge')).toHaveText('Fixed list');
         await expect(d.locator('.pl-rule')).toContainText('Created from Ancestors of Quillon Varnholm, all generations');
@@ -429,7 +429,7 @@ test.describe('Lists of people: a phone', () => {
         // The list's ⋯ is a sheet from below.
         await d.locator('.pl-more').tap();
         const sheet = page.locator('.bottom-sheet-menu');
-        await expect(sheet.locator('.bottom-sheet-item')).toHaveText(['Open in Table', 'Rename', 'Duplicate', 'Tick off done', 'Delete']);
+        await expect(sheet.locator('.bottom-sheet-item')).toHaveText(['Open in Table', 'Rename', 'Duplicate', 'Tick off done', 'Export›', 'Delete']);
         await page.locator('#pl-sheet-rename').tap();
         const input = d.locator('.pl-name-input');
         await expect(input).toBeFocused();

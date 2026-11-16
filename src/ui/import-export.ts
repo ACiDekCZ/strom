@@ -75,6 +75,20 @@ import { uiModule } from './module.js';
 import { safeFileName } from '../filenames.js';
 import { isMultiTreeBackup, readEmbeddedHtml, readWindowAssignment, BackupTrees, BackupTreeEntry } from '../backup-formats.js';
 import { viewLinksPayload } from '../view-links.js';
+import type { PersonList } from '../types.js';
+import { listDisplayName, listKind } from '../person-lists.js';
+import { listKindIcon } from './list-kind-icon.js';
+
+/** A list the export dialog's list scope offers (spec 084 §12): one with people. */
+interface ExportableList { list: PersonList; count: number }
+
+/** The active tree's lists with people, by name. */
+function exportableLists(): ExportableList[] {
+    return DataManager.getPersonLists()
+        .map(list => ({ list, count: DataManager.getPersonListIds(list.id).length }))
+        .filter(l => l.count > 0)
+        .sort((a, b) => listDisplayName(a.list).localeCompare(listDisplayName(b.list)));
+}
 
 export const importExportMethods = uiModule({
     // ---- EXPORT/IMPORT DIALOGS ----
@@ -124,30 +138,44 @@ export const importExportMethods = uiModule({
     },
 
     /**
-     * The export dialog's "Whole tree · Current view only (N people)" switch
-     * (remembered). The view exists for the active tree only, and only when
-     * it shows anyone (the fan / timeline views lay out no people); in the
-     * view scope the formats that cannot export a view are disabled.
+     * The export dialog's "Whole tree · Current view only (N people) · List
+     * of people" switch (remembered). The view exists for the active tree
+     * only, and only when it shows anyone (the fan / timeline views lay out
+     * no people); the list scope (spec 084 §12) only when the active tree has
+     * a list with people, its list chosen below the switch. In the view and
+     * list scopes the formats that cannot export them are disabled.
      */
     renderExportScope(): void {
         const modal = document.getElementById('export-modal');
         if (!modal) return;
         const isActive = this.exportTargetTreeId === TreeManager.getActiveTreeId();
         const count = isActive ? TreeRenderer.getVisiblePersonIds().size : 0;
-        const scope = count > 0 ? SettingsManager.getExportScope() : 'tree';
+        const lists = isActive ? exportableLists() : [];
+        let scope = SettingsManager.getExportScope();
+        if (scope === 'view' && count === 0) scope = 'tree';
+        const listId = SettingsManager.getExportListId();
+        const list = lists.find(l => l.list.id === listId) ?? null;
+        // A remembered list that is gone (another tree, deleted, empty): the whole tree.
+        if (scope === 'list' && !list) scope = 'tree';
         modal.classList.toggle('scope-view', scope === 'view');
+        modal.classList.toggle('scope-list', scope === 'list');
         const viewBtn = document.getElementById('export-scope-view') as HTMLButtonElement | null;
         if (viewBtn) {
             viewBtn.textContent = strings.exportMenu.scopeView(count);
             viewBtn.disabled = count === 0;
         }
+        const listBtn = document.getElementById('export-scope-list') as HTMLButtonElement | null;
+        if (listBtn) listBtn.hidden = lists.length === 0;
         modal.querySelectorAll<HTMLButtonElement>('.export-scope .segment-btn').forEach(btn => {
             const on = btn.dataset.scope === scope;
             btn.classList.toggle('active', on);
             btn.setAttribute('aria-checked', String(on));
         });
+        this.renderExportListPick(scope === 'list' ? lists : [], list?.list.id ?? null);
         modal.querySelectorAll<HTMLButtonElement>('.menu-options .menu-option').forEach(option => {
-            if (option.hasAttribute('data-view-ok')) return;
+            const viewOk = option.hasAttribute('data-view-ok');
+            const listOk = option.hasAttribute('data-list-ok');
+            if (viewOk && listOk) return;
             const text = option.querySelector('.option-text');
             let note = text?.querySelector('.option-scope-note');
             if (text && !note) {
@@ -156,24 +184,96 @@ export const importExportMethods = uiModule({
                 text.appendChild(note);
             }
             if (note) note.textContent = strings.exportMenu.scopeWholeOnly;
-            option.disabled = scope === 'view';
+            option.disabled = (scope === 'view' && !viewOk) || (scope === 'list' && !listOk);
         });
         // The view's people without anyone seen only through a link shown in the view.
         this.renderViewLinksNote(document.getElementById('export-scope'), isActive && scope === 'view');
     },
 
-    setExportScope(scope: 'tree' | 'view'): void {
+    /** The list choice under the switch (spec 084 §12): the kind's icon, "name · N people"; hidden outside the list scope. */
+    renderExportListPick(lists: ExportableList[], chosen: string | null): void {
+        const box = document.getElementById('export-list-pick');
+        const select = document.getElementById('export-list-select') as HTMLSelectElement | null;
+        if (!box || !select) return;
+        box.hidden = !lists.length;
+        if (!lists.length) return;
+        select.replaceChildren(...lists.map(l => {
+            const o = document.createElement('option');
+            o.value = l.list.id;
+            o.textContent = `${listDisplayName(l.list)} · ${strings.lists.persons(l.count)}`;
+            return o;
+        }));
+        const on = lists.find(l => l.list.id === chosen) ?? lists[0];
+        select.value = on.list.id;
+        const icon = document.getElementById('export-list-kind');
+        if (icon) icon.innerHTML = listKindIcon(listKind(on.list), 16);
+    },
+
+    setExportScope(scope: 'tree' | 'view' | 'list'): void {
+        // The list scope starts on the remembered list, else the first one.
+        if (scope === 'list') {
+            const lists = exportableLists();
+            if (!lists.length) return;
+            const id = SettingsManager.getExportListId();
+            if (!lists.some(l => l.list.id === id)) SettingsManager.setExportListId(lists[0].list.id);
+        }
         SettingsManager.setExportScope(scope);
         this.renderExportScope();
     },
 
-    /** The export dialog's JSON backup: the whole tree, or only the people the view shows. */
+    /** The list of the list scope (spec 084 §12), remembered. */
+    setExportList(id: string): void {
+        if (!exportableLists().some(l => l.list.id === id)) return;
+        SettingsManager.setExportListId(id);
+        SettingsManager.setExportScope('list');
+        this.renderExportScope();
+    },
+
+    /**
+     * The export dialog opened on a list (⋯ of a list › Export › GEDCOM…,
+     * spec 084 §12): the list scope with the list chosen.
+     */
+    showExportDialogForList(listId: string): void {
+        if (!exportableLists().some(l => l.list.id === listId)) return;
+        SettingsManager.setExportListId(listId);
+        SettingsManager.setExportScope('list');
+        this.showExportDialog();
+    },
+
+    /**
+     * The list the export dialog exports now (its list scope), with its
+     * people in the list's order; null: the whole tree or the view.
+     */
+    exportScopeList(): { list: PersonList; ids: PersonId[] } | null {
+        const modal = document.getElementById('export-modal');
+        if (!modal?.classList.contains('active') || !modal.classList.contains('scope-list')) return null;
+        const id = SettingsManager.getExportListId();
+        const list = id ? DataManager.getPersonList(id) : undefined;
+        if (!list) return null;
+        const ids = DataManager.getPersonListIds(list.id).filter(pid => !!DataManager.getData().persons[pid]);
+        return ids.length ? { list, ids } : null;
+    },
+
+    /** The export dialog's JSON backup: the whole tree, only the people the view shows, or the list's (spec 084 §12). */
     exportBackupFromDialog(): void {
-        if (document.getElementById('export-modal')?.classList.contains('scope-view')) {
+        const scoped = this.exportScopeList();
+        if (scoped) {
+            void this.exportPersonListJSON(scoped.list, scoped.ids);
+        } else if (document.getElementById('export-modal')?.classList.contains('scope-view')) {
             void this.exportFocusedJSON();
         } else {
             void this.exportTargetTreeJSON();
         }
+    },
+
+    /** The JSON backup of a list's people (the tree's data narrowed to them, spec 084 §12). */
+    async exportPersonListJSON(list: PersonList, ids: PersonId[]): Promise<void> {
+        this.closeExportDialog();
+        const treeName = TreeManager.getTreeMetadata(TreeManager.getActiveTreeId() as TreeId)?.name;
+        const file = `${safeFileName(treeName, 'family-tree')}-${safeFileName(listDisplayName(list), 'list')}.json`;
+        this.showExportPasswordDialog(async (password: string | null) => {
+            await DataManager.exportFocusedJSON(new Set(ids), password, this.readExportPrivacyMode(), this.readExportContentOptions(), file);
+        }, false, { format: 'json' });
     },
 
     /**
@@ -246,6 +346,8 @@ export const importExportMethods = uiModule({
             this.closeExportDialog();
             return;
         }
+        // The dialog's list scope (spec 084 §12): the list's people and the families between them.
+        const scoped = this.exportScopeList();
         this.closeExportDialog();
 
         // GEDCOM cannot be encrypted, so show the export dialog in passwordless
@@ -254,9 +356,10 @@ export const importExportMethods = uiModule({
         this.showExportPasswordDialog(async () => {
             const { exportToGedcom } = await import('../ged-exporter.js');
             const { applyLivingPrivacy } = await import('../privacy.js');
-            const data = await storedTreeForExport(treeId);
+            const stored = await storedTreeForExport(treeId);
             const metadata = TreeManager.getTreeMetadata(treeId);
-            if (!data) return;
+            if (!stored) return;
+            const data: StromData = scoped ? { version: stored.version, ...extractSubtree(stored, new Set(scoped.ids)) } : stored;
 
             const { isFaithfulExport } = await import('../research-link.js');
             const { resolveContentOptions } = await import('../privacy.js');
@@ -281,10 +384,12 @@ export const importExportMethods = uiModule({
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `${safeFileName(metadata?.name, 'family-tree')}.ged`;
+            a.download = scoped
+                ? `${safeFileName(metadata?.name, 'family-tree')}-${safeFileName(listDisplayName(scoped.list), 'list')}.ged`
+                : `${safeFileName(metadata?.name, 'family-tree')}.ged`;
             a.click();
             URL.revokeObjectURL(url);
-            if (privacy === 'full') TreeManager.noteFileCopy([treeId]);
+            if (privacy === 'full' && !scoped) TreeManager.noteFileCopy([treeId]);
         }, false, { defaultPrivacy: 'initials', passwordless: true, content: true, format: 'gedcom', treeId, gedcomPurpose: opts.preset === 'back' ? 'back' : 'share' });
     },
 

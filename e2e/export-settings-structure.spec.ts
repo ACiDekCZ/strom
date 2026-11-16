@@ -38,8 +38,9 @@ test('export menu: groups in order with result-named rows (EN, CS, DE)', async (
     expect(descs.length).toBeGreaterThanOrEqual(7);
     for (const d of descs) expect(d.trim().length).toBeGreaterThan(0);
 
-    // The whole tree / current view switch, singular for one person.
-    await expect(page.locator('#export-scope .segment-btn')).toHaveText(['Whole tree', 'Current view only (1 person)']);
+    // The whole tree / current view / list switch, singular for one person (the person just made
+    // is in the ready-made list Added in the last 30 days, spec 084 §12).
+    await expect(page.locator('#export-scope .segment-btn')).toHaveText(['Whole tree', 'Current view only (1 person)', 'List of people']);
 
     // Rows have no fill and no frame.
     const row = page.locator('#export-modal .menu-option').first();
@@ -54,7 +55,7 @@ test('export menu: groups in order with result-named rows (EN, CS, DE)', async (
         'sdílet', 'uložit a zálohovat', 'tisk a obraz', 'pro jiné programy',
     ]);
     expect(cs[2].rows).toEqual(['Plakát', 'Kniha rodu', 'Propojené stránky']);
-    await expect(page.locator('#export-scope .segment-btn')).toHaveText(['Celý strom', 'Jen aktuální pohled (1 osoba)']);
+    await expect(page.locator('#export-scope .segment-btn')).toHaveText(['Celý strom', 'Jen aktuální pohled (1 osoba)', 'Seznam osob']);
     await page.evaluate(() => window.Strom.UI.closeExportDialog());
 
     await page.evaluate(() => window.Strom.UI.setLanguage('de'));

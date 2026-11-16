@@ -365,6 +365,8 @@ function stripDetails(person: Person): void {
     delete person.refnType;
     // What the research knows about them (conflicts, hypotheses, searches).
     delete person.research;
+    // When they came into the tree (spec 084 §8) is a date about them like the rest.
+    delete person.addedAt;
 }
 
 /**

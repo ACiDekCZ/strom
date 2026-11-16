@@ -9757,14 +9757,31 @@
         .export-scope { margin: 0 0 14px; }
         .export-scope .segment { display: flex; width: 100%; }
         .export-scope .segment-btn { flex: 1; padding: 8px 10px; font-size: 13px; }
-        .option-desc-view, .option-scope-note { display: none; }
+        .option-desc-view, .option-desc-list, .option-scope-note { display: none; }
         #export-modal.scope-view .option-desc-view { display: block; }
         #export-modal.scope-view .option-desc-tree { display: none; }
         #export-modal.scope-view .menu-option:not([data-view-ok]) .option-desc { display: none; }
         #export-modal.scope-view .menu-option:not([data-view-ok]) .option-scope-note { display: block; }
         #export-modal.scope-view .menu-option:disabled { opacity: 0.55; cursor: default; }
+        /* A list of people (spec 084 §12): GEDCOM and the JSON backup narrowed to the list, the rest as in the view scope. */
+        #export-modal.scope-list .option-desc-list { display: block; }
+        #export-modal.scope-list .option-desc-tree { display: none; }
+        #export-modal.scope-list .menu-option:not([data-list-ok]) .option-desc { display: none; }
+        #export-modal.scope-list .menu-option:not([data-list-ok]) .option-scope-note { display: block; }
+        #export-modal.scope-list .menu-option:disabled { opacity: 0.55; cursor: default; }
+        .export-scope .segment-btn[hidden] { display: none; }
+        .export-list-pick { margin: 10px 0 0; }
+        .export-list-pick[hidden] { display: none; }
+        .export-list-pick label { display: block; margin: 0 0 4px; font-size: 12.5px; color: var(--text-light); }
+        .export-list-field { display: flex; align-items: center; gap: 8px; }
+        .export-list-kind { flex: none; display: inline-flex; color: var(--text-light); }
+        .export-list-field select { flex: 1 1 auto; min-width: 0; }
         @media (max-width: 640px) {
             .export-scope .segment-btn { min-height: 44px; }
+            .export-list-field select { min-height: 44px; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .export-list-field select { min-height: 44px; }
         }
         .file-link-indicator {
             display: inline-flex;
@@ -29941,6 +29958,9 @@
         .pl-menu-sub { font-size: 11.5px; color: var(--text-light); }
         .pl-menu-check { flex: none; width: 1em; color: var(--text); }
         .pl-menu-sep { height: 1px; margin: 4px 6px; background: var(--divider); }
+        /* A second level of a list's ⋯ (Export ›, spec 084 §12): its row stays marked while it is open. */
+        .pl-menu-item.is-open { background: var(--hover-bg); }
+        .pl-menu-chev { color: var(--text-light); }
         @media (hover: hover) {
             .pl-close:hover, .pl-back:hover, .pl-pencil:hover, .pl-dots:hover, .pl-x:hover { background: var(--hover-bg); color: var(--text); }
             .pl-row:hover .pl-dots { visibility: visible; }
@@ -32038,6 +32058,15 @@
                 <div class="segment sel-seg" role="radiogroup" data-i18n-aria-label="exportMenu.scopeLabel">
                     <button type="button" class="segment-btn sel-opt" data-sel-form="seg" role="radio" data-scope="tree" onclick="window.Strom.UI.setExportScope('tree')" data-i18n="exportMenu.scopeWhole"></button>
                     <button type="button" class="segment-btn sel-opt" data-sel-form="seg" role="radio" data-scope="view" id="export-scope-view" onclick="window.Strom.UI.setExportScope('view')"></button>
+                    <button type="button" class="segment-btn sel-opt" data-sel-form="seg" role="radio" data-scope="list" id="export-scope-list" hidden onclick="window.Strom.UI.setExportScope('list')" data-i18n="exportMenu.scopeList"></button>
+                </div>
+                <!-- spec 084 §12: the list of the list scope (its kind's icon, name · count). -->
+                <div class="export-list-pick" id="export-list-pick" hidden>
+                    <label for="export-list-select" data-i18n="exportMenu.listPick"></label>
+                    <div class="export-list-field">
+                        <span class="export-list-kind" id="export-list-kind" aria-hidden="true"></span>
+                        <select id="export-list-select" onchange="window.Strom.UI.setExportList(this.value)"></select>
+                    </div>
                 </div>
             </div>
             <!-- Grouped by purpose. `.active-tree-only` groups disappear whole
@@ -32071,11 +32100,12 @@
                             <span class="option-desc" data-i18n="exportMenu.appDesc"></span>
                         </span>
                     </button>
-                    <button class="menu-option" id="export-backup-btn" data-view-ok onclick="window.Strom.UI.exportBackupFromDialog()">
+                    <button class="menu-option" id="export-backup-btn" data-view-ok data-list-ok onclick="window.Strom.UI.exportBackupFromDialog()">
                         <span class="option-text">
                             <span class="option-title" data-i18n="exportMenu.backup"></span>
                             <span class="option-desc option-desc-tree" data-i18n="exportMenu.backupDesc"></span>
                             <span class="option-desc option-desc-view" data-i18n="exportMenu.backupViewDesc"></span>
+                            <span class="option-desc option-desc-list" data-i18n="exportMenu.backupListDesc"></span>
                         </span>
                     </button>
                 </div>
@@ -32102,10 +32132,11 @@
                 </div>
                 <div class="menu-group" role="group" aria-labelledby="export-group-other">
                     <div class="menu-group-title" id="export-group-other" data-i18n="exportMenu.groupOther"></div>
-                    <button class="menu-option" onclick="window.Strom.UI.exportTargetTreeGedcom()">
+                    <button class="menu-option" id="export-gedcom-btn" data-list-ok onclick="window.Strom.UI.exportTargetTreeGedcom()">
                         <span class="option-text">
                             <span class="option-title" data-i18n="exportMenu.gedcom"></span>
-                            <span class="option-desc" data-i18n="exportMenu.gedcomDesc"></span>
+                            <span class="option-desc option-desc-tree" data-i18n="exportMenu.gedcomDesc"></span>
+                            <span class="option-desc option-desc-list" data-i18n="exportMenu.gedcomListDesc"></span>
                         </span>
                     </button>
                     <button class="menu-option" onclick="window.Strom.UI.exportTargetTreeCsv()">

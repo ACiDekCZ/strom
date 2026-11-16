@@ -327,6 +327,11 @@ function dropGoneScopes(state: TableState): boolean {
     return gone;
 }
 
+/** The scope's lead columns (spec 084 §9, §13d): # and, for a work list, Done. */
+function leadColumnsOf(scope: TableScope): ColumnDef[] {
+    return LEAD_COLUMNS.filter(c => c.id === 'num' || !!scope.cells.done);
+}
+
 /**
  * The columns drawn with a scope (spec 084 §9, §13d): # first and, for a
  * work list, Done, both pinned before the state's own; the drawn positions
@@ -334,7 +339,7 @@ function dropGoneScopes(state: TableState): boolean {
  */
 function withLeadColumns(d: DisplayColumns, scope: TableScope | null): DisplayColumns {
     if (!scope) return d;
-    const leads = LEAD_COLUMNS.filter(c => c.id === 'num' || !!scope.cells.done);
+    const leads = leadColumnsOf(scope);
     return {
         columns: [...leads, ...d.columns], widths: [...leads.map(c => c.width), ...d.widths], pinned: d.pinned + leads.length,
         bands: [...leads.map(() => null), ...d.bands], starts: [...leads.map(() => 0), ...d.starts], ends: [...leads.map(() => 0), ...d.ends],
@@ -3064,7 +3069,7 @@ export const tableMethods = uiModule({
         const type = state.rowType;
         const st = state.types[type];
         const display = displayColumns(type, st, isPhoneBar());
-        // The scope's rows only (spec 084 §9); its # and Done are the export's own matter (§12).
+        // The scope's rows only (spec 084 §9), People with the scope's # and Done first as drawn (§12).
         const scope = scopeOfType(state, type);
         const shown = viewRows(tree, model, type, st.filter, st.search, st.sort, display.columns, scope);
         const filter = filterSummary(model, type, st.filter, st.search);
@@ -3074,7 +3079,12 @@ export const tableMethods = uiModule({
         const rows = whole
             ? (st.sort.length ? sortRows(model, type, every, st.sort) : [...every])
             : shown.stale.size ? shown.rows.filter(r => !shown.stale.has(rowKey(r))) : shown.rows;
-        const all = shownColumns(type, st, false);
+        const own = shownColumns(type, st, false);
+        const leads = type === 'persons' && scope ? leadColumnsOf(scope) : [];
+        if (leads.length) applyScopeCells(model, scope);
+        const all = leads.length
+            ? { columns: [...leads, ...own.columns], widths: [...leads.map(c => c.width), ...own.widths], pinned: own.pinned + leads.length }
+            : own;
         const treeName = (tree && TreeManager.getTreeMetadata(tree as TreeId)?.name) || '';
         const view = openViewOf(state, type, storedViews()).name;
         const now = new Date();
@@ -3142,6 +3152,48 @@ export const tableMethods = uiModule({
             this.showToast(strings.table.res.exportNotLive, 6000, { title: done });
         } else {
             this.showToast(done, 5000);
+        }
+    },
+
+    /**
+     * ⋯ of a list › Export › CSV (spec 084 §12): downloaded at once — the
+     * People table's columns as the Table has them, # first (and Done of a
+     * work list), the list's people in its order, `{tree}_{list}_{day}.csv`.
+     */
+    exportPersonListCsv(listId: string): void {
+        const list = DataManager.getPersonList(listId);
+        const scope = tableScopeOf(listId);
+        if (!list || !scope) return;
+        const data = DataManager.getData();
+        const lang = getCurrentLanguage();
+        const homeId = TreeRenderer.getFocusPersonId();
+        const rev = DataManager.getRevision();
+        const tree = treeKey();
+        if (!modelIsCurrent(model, data, rev, homeId, lang)) {
+            model = buildTableModel(data, { rev, homeId, lang, reliability: this.reliabilityOptionsNow() });
+        }
+        const m = model!;
+        applyChecks(m, this.tableChecksFor(tree, data, rev));
+        applyResearch(m, this.tableResearchEnv(data, rev, m));
+        const before = m.ctx.scope;
+        applyScopeCells(m, scope);
+        try {
+            const st = stateOf(tree).types.persons;
+            const columns = [...leadColumnsOf(scope), ...shownColumns('persons', st, false).columns];
+            const csv = buildTableCsv({ model: m, type: 'persons', rows: scopeRows(m, 'persons', scope), columns, pass: null });
+            const treeName = (tree && TreeManager.getTreeMetadata(tree as TreeId)?.name) || '';
+            const file = tableCsvFileName(treeName, listDisplayName(list), new Date(), 'csv');
+            const url = URL.createObjectURL(new Blob([csv.csv], { type: 'text/csv;charset=utf-8' }));
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = file;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 0);
+            this.showToast(strings.table.exportedToast.p(file, csv.items, csv.lines, csv.columns), 5000);
+        } finally {
+            m.ctx.scope = before;
         }
     },
 

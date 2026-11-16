@@ -4983,7 +4983,7 @@ class DataManagerClass {
         return a.download;
     }
 
-    async exportFocusedJSON(visiblePersonIds: Set<PersonId>, password?: string | null, privacyMode: PrivacyMode = 'full', content: boolean | ContentOptions = false): Promise<void> {
+    async exportFocusedJSON(visiblePersonIds: Set<PersonId>, password?: string | null, privacyMode: PrivacyMode = 'full', content: boolean | ContentOptions = false, fileName = 'family-tree-focus.json'): Promise<void> {
         // Self-consistent slice (glue + cleaned relations + pruned sources),
         // shared with "make a tree from this view".
         const sliced = extractSubtree(this.data, visiblePersonIds);
@@ -5005,7 +5005,7 @@ class DataManagerClass {
         const blob = new Blob([dataStr], { type: 'application/json' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = 'family-tree-focus.json';
+        a.download = fileName;
         a.click();
         URL.revokeObjectURL(a.href);
     }

@@ -208,3 +208,39 @@ test.describe('view mode: Actions and More carry what an exported page can do', 
         await expect(page.locator('#actions-menu-dropdown')).not.toHaveClass(/active/);
     });
 });
+
+test('lists of people in the exported HTML: shown, opened in the Table and as its scope, never changed (spec 084 §16)', async ({ page }, testInfo) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    await addRelation(page, 'Jan', 'partner', 'Marie', 'Novak', 'female');
+    await page.evaluate(() => {
+        const dm = window.Strom.DataManager;
+        const ids = Object.values(dm.getData().persons).map(p => p.id);
+        const work = dm.createPersonList({ name: 'Letters to write', dynamic: false, personIds: ids })!;
+        dm.setPersonListChecklist(work.id, true);
+        dm.togglePersonListDone(work.id, ids[0], true);
+    });
+
+    await openAppExportDialog(page);
+    await saveAndOpen(page, testInfo, (async () => {
+        const [d] = await Promise.all([
+            page.waitForEvent('download'),
+            page.locator('#export-password-modal').locator('#export-submit-btn').click(),
+        ]);
+        return d;
+    })());
+    await expect(page.locator('body')).toHaveClass(/view-mode/);
+
+    await page.evaluate(() => window.Strom.UI.showPersonLists());
+    const d = page.locator('#person-lists-modal');
+    await expect(d.locator('.pl-ro')).toHaveText('Read only');
+    await d.locator('.pl-row', { hasText: 'Letters to write' }).click();
+    await expect(d.locator('.pl-person .pl-pname')).toHaveCount(2);
+    await expect(d.locator('.pl-person.is-done')).toHaveCount(1);
+    // No way to change a list: no New list, ⋯, ×, boxes, handles or Add person.
+    await expect(d.locator('.pl-new, .pl-dots, .pl-more, .pl-pencil, .pl-x, .pl-check, .pl-handle, [data-act="add-person"]')).toHaveCount(0);
+    await d.locator('[data-act="open-table"]').first().click();
+    await expect(d).toHaveCount(0);
+    await expect(page.locator('#table-container .tv-scope-btn')).toHaveAttribute('aria-label', 'Scope: Letters to write');
+    await expect(page.locator('#table-container .tv-status-count')).toHaveText('2 of 2 people');
+});

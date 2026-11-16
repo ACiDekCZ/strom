@@ -2497,7 +2497,8 @@ export interface AppSettings {
     cardDensity?: CardDensity;  // default: 'normal' - how much detail a card shows
     /** Settings → Person card → Photo on the card (spec 096); absent = small + circle (the card as before). This device only. */
     cardPhoto?: { size?: CardPhotoSize; shape?: CardPhotoShape };
-    exportScope?: 'tree' | 'view';  // default: 'tree' - the export dialog's whole tree / current view switch
+    exportScope?: 'tree' | 'view' | 'list';  // default: 'tree' - the export dialog's whole tree / current view / list of people switch
+    exportListId?: string;  // the list of the export dialog's list scope (spec 084 §12)
     treeSpacing?: TreeSpacing;  // default: 'normal' - gaps between cards and generations in the tree view
     posterSpacing?: TreeSpacing;  // default: 'normal' - the same for an exported image, poster or PDF
     /** The custom density's lines (src/card-fields.ts); set the first time "Custom" is chosen. */

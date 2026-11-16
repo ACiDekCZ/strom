@@ -33,6 +33,8 @@ export interface ListMenuRow {
     /** A ✓ at the row's end (a switch that is on). */
     checked?: boolean;
     danger?: boolean;
+    /** A second level ("Export ›"): its rows open beside the row (a page of the phone's sheet); `run` is not used. */
+    children?: ListMenuRow[];
     run: () => void;
 }
 
@@ -63,7 +65,7 @@ export const personListHooks: PersonListHooks = {
         ui.closePersonLists();
         ui.openTableInScope(listId, opts ?? {});
     },
-    listMenu: [freezeAndChecklistRows],
+    listMenu: [freezeAndChecklistRows, exportRows],
 };
 
 /**
@@ -79,5 +81,22 @@ function freezeAndChecklistRows(_ui: UIClass, list: PersonList): ListMenuRow[] {
     return [{
         id: 'work', label: t.menu.work, checked: !!list.checklist,
         run: () => { DataManager.setPersonListChecklist(list.id, !list.checklist); },
+    }];
+}
+
+/**
+ * §12: Export › GEDCOM… opens the dialog Export on the list (its list scope),
+ * CSV (list order) downloads the People table of the list at once. A list
+ * without anyone has nothing to export.
+ */
+function exportRows(ui: UIClass, list: PersonList): ListMenuRow[] {
+    const t = strings.lists;
+    if (!DataManager.getPersonListIds(list.id).length) return [];
+    return [{
+        id: 'export', label: t.menu.export, run: () => {},
+        children: [
+            { id: 'export-ged', label: t.export.ged, run: () => { ui.closePersonLists(); ui.showExportDialogForList(list.id); } },
+            { id: 'export-csv', label: t.export.csv, run: () => { ui.exportPersonListCsv(list.id); } },
+        ],
     }];
 }

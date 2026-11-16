@@ -113,6 +113,16 @@ describe('applyLivingPrivacy', () => {
         expect(p.birthDate).toBeUndefined();
     });
 
+    it('when a living person came into the tree goes like their other details (spec 084 §8)', () => {
+        const data = tree({ ...living, addedAt: '2026-11-02T09:00:00.000Z' }, { ...deceased, addedAt: '2026-11-02T09:00:00.000Z' });
+        expect(P(applyLivingPrivacy(data, 'full', NOW))['living'].addedAt).toBe('2026-11-02T09:00:00.000Z');
+        for (const mode of ['initials', 'anonymous', 'minimal'] as const) {
+            const out = applyLivingPrivacy(data, mode, NOW);
+            expect(P(out)['living'].addedAt, mode).toBeUndefined();
+            expect(P(out)['dead'].addedAt, mode).toBe('2026-11-02T09:00:00.000Z');
+        }
+    });
+
     it('leaves deceased persons untouched', () => {
         const out = applyLivingPrivacy(tree(deceased), 'anonymous', NOW);
         expect(P(out)['dead']).toEqual(deceased);

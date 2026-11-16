@@ -358,6 +358,19 @@ describe('keeping lists right when people go', () => {
         const sub = extractSubtree({ ...family(), personLists: lists }, new Set([id('ada'), id('emil')]));
         expect(sub.personLists?.map(l => l.id)).toEqual(['a', 'c']);
     });
+
+    it('a part of the tree: no one left behind stays in an automatic list\'s own data either', () => {
+        const auto: PersonList = {
+            id: 'd', name: 'Auto', dynamic: true, sort: 'manual', updated: '', rule: { kind: 'ancestors', personId: id('ada') },
+            personIds: [id('mira'), id('ada')], removed: [id('mira')],
+        };
+        const [out] = subsetForSubtree([auto], new Set(['ada']))!;
+        expect(out.personIds).toEqual(['ada']);
+        expect(out.removed).toBeUndefined();
+        expect(out.rule).toEqual(auto.rule);
+        const [none] = subsetForSubtree([auto], new Set(['emil']))!;
+        expect(none.personIds).toBeUndefined();
+    });
 });
 
 describe('names', () => {

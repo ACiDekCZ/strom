@@ -55,7 +55,7 @@ interface ListsState {
     renaming: boolean;
     draft: string;
     /** The open popup: a list's ⋯ (by its anchor), the sort choice or a person's ⋯. */
-    menu: { kind: 'list'; listId: string; from: 'row' | 'detail' } | { kind: 'sort' } | { kind: 'person'; pid: PersonId } | null;
+    menu: { kind: 'list'; listId: string; from: 'row' | 'detail'; sub?: string } | { kind: 'sort' } | { kind: 'person'; pid: PersonId } | null;
     /** A checklist's view of its people (back to All when another list is chosen). */
     filter: DoneFilter;
     /** The person row that takes the keyboard in the manual order (one tab stop). */
@@ -256,6 +256,13 @@ export const personListsMethods = uiModule({
         if (!st) return;
         if (drag) {
             this.endPersonListDrag(false);
+            return;
+        }
+        if (st.menu?.kind === 'list' && st.menu.sub) {
+            const back = st.menu.sub;
+            st.menu = { ...st.menu, sub: undefined };
+            this.renderPersonLists();
+            this.focusPersonLists(`[data-act="menu-sub"][data-run="${CSS.escape(back)}"]`);
             return;
         }
         if (st.menu) {
@@ -601,20 +608,32 @@ export const personListsMethods = uiModule({
         const list = DataManager.getPersonList(menu.listId);
         if (!list) return '';
         const rows = this.personListMenuRows(list);
+        const item = (r: ListMenuRow): string => {
+            if (r.children) {
+                const open = menu.sub === r.id;
+                return `<button type="button" class="pl-menu-item${open ? ' is-open' : ''}" role="menuitem" aria-haspopup="menu" aria-expanded="${open}" data-act="menu-sub" data-run="${esc(r.id)}" data-key="menu-${esc(r.id)}">`
+                    + `<span class="pl-menu-label">${esc(r.label)}</span><span class="pl-menu-check pl-menu-chev" aria-hidden="true">›</span></button>`;
+            }
+            const role = r.checked === undefined ? 'menuitem' : `menuitemcheckbox" aria-checked="${r.checked}`;
+            return `<button type="button" class="pl-menu-item${r.danger ? ' is-danger' : ''}" role="${role}" data-act="menu-run" data-run="${esc(r.id)}" data-key="menu-${esc(r.id)}">`
+                + `<span class="pl-menu-label">${esc(r.label)}${r.sub ? `<span class="pl-menu-sub">${esc(r.sub)}</span>` : ''}</span><span class="pl-menu-check" aria-hidden="true">${r.checked ? '✓' : ''}</span></button>`;
+        };
         const items = rows.map((r, i) => {
             const sep = r.id === 'rename' || r.id === 'delete' ? '<div class="pl-menu-sep" role="separator"></div>' : '';
-            const role = r.checked === undefined ? 'menuitem' : `menuitemcheckbox" aria-checked="${r.checked}`;
-            return `${i ? sep : ''}<button type="button" class="pl-menu-item${r.danger ? ' is-danger' : ''}" role="${role}" data-act="menu-run" data-run="${esc(r.id)}" data-key="menu-${esc(r.id)}">`
-                + `<span class="pl-menu-label">${esc(r.label)}${r.sub ? `<span class="pl-menu-sub">${esc(r.sub)}</span>` : ''}</span><span class="pl-menu-check" aria-hidden="true">${r.checked ? '✓' : ''}</span></button>`;
+            return `${i ? sep : ''}${item(r)}`;
         }).join('');
         const anchor = menu.from === 'detail' ? 'menu-detail' : `row:${menu.listId}`;
-        return `<div class="pl-menu" role="menu" aria-label="${esc(listDisplayName(list))}" data-anchor="${esc(anchor)}">${items}</div>`;
+        // An open second level ("Export ›") beside its row.
+        const parent = menu.sub ? rows.find(r => r.id === menu.sub && r.children) : undefined;
+        const sub = parent
+            ? `<div class="pl-menu pl-submenu" role="menu" aria-label="${esc(parent.label)}" data-anchor="${esc(`sub:${parent.id}`)}">${parent.children!.map(item).join('')}</div>` : '';
+        return `<div class="pl-menu" role="menu" aria-label="${esc(listDisplayName(list))}" data-anchor="${esc(anchor)}">${items}</div>${sub}`;
     },
 
     /** Put the open popup under (or above) its button, inside the dialog. */
     placePersonListsMenu(): void {
         const modal = document.querySelector<HTMLElement>(`#${OVERLAY_ID} .pl-modal`);
-        const menu = modal?.querySelector<HTMLElement>('.pl-menu');
+        const menu = modal?.querySelector<HTMLElement>('.pl-menu:not(.pl-submenu)');
         if (!modal || !menu) return;
         const anchorKey = menu.dataset.anchor ?? '';
         const anchor = anchorKey === 'sort' ? modal.querySelector<HTMLElement>('[data-act="sort"]')
@@ -633,6 +652,20 @@ export const personListsMethods = uiModule({
         if (top + h > box.height - 8) top = Math.max(8, a.top - box.top - h - 4);
         menu.style.left = `${Math.round(left)}px`;
         menu.style.top = `${Math.round(top)}px`;
+        // The second level: beside its row (to the right, else to the left of the menu), inside the dialog.
+        const sub = modal.querySelector<HTMLElement>('.pl-submenu');
+        const parent = sub ? menu.querySelector<HTMLElement>(`[data-act="menu-sub"][data-run="${CSS.escape((sub.dataset.anchor ?? '').slice(4))}"]`) : null;
+        if (!sub || !parent) return;
+        const m = menu.getBoundingClientRect();
+        const r = parent.getBoundingClientRect();
+        const sw = sub.offsetWidth;
+        const sh = sub.offsetHeight;
+        let sl = m.right - box.left + 2;
+        if (sl + sw > box.width - 8) sl = Math.max(8, m.left - box.left - sw - 2);
+        let st = r.top - box.top - 4;
+        if (st + sh > box.height - 8) st = Math.max(8, box.height - 8 - sh);
+        sub.style.left = `${Math.round(sl)}px`;
+        sub.style.top = `${Math.round(st)}px`;
     },
 
     /** A list's ⋯: a popup by its button; on a phone a sheet from below. */
@@ -647,13 +680,23 @@ export const personListsMethods = uiModule({
                 { rows: rows.filter(r => r.id === 'open'), divider: false },
                 { rows: rows.filter(r => r.id !== 'open' && r.id !== 'delete'), divider: true },
                 { rows: rows.filter(r => r.id === 'delete'), divider: true },
-            ].map(b => ({ ...b, rows: b.rows.map(r => ({ label: r.label, sub: r.sub, danger: r.danger, value: r.checked ? '✓' : undefined, id: `pl-sheet-${r.id}`, run: r.run })) }));
+            ].map(b => ({ ...b, rows: b.rows.map(r => sheetRow(r)) }));
             this.presentMenuSheet(listDisplayName(list), blocks, { subtitle: rowMeta(list) });
             return;
         }
         st.menu = st.menu?.kind === 'list' && st.menu.listId === listId && st.menu.from === from ? null : { kind: 'list', listId, from };
         this.renderPersonLists();
         if (st.menu) this.focusPersonLists('.pl-menu .pl-menu-item');
+    },
+
+    /** Open or close a second level of a list's ⋯ ("Export ›"), its first row focused when it opens. */
+    togglePersonListSubmenu(id: string): void {
+        const st = state;
+        if (st?.menu?.kind !== 'list') return;
+        const open = st.menu.sub === id ? undefined : id;
+        st.menu = { ...st.menu, sub: open };
+        this.renderPersonLists();
+        this.focusPersonLists(open ? '.pl-submenu .pl-menu-item' : `[data-act="menu-sub"][data-run="${CSS.escape(id)}"]`);
     },
 
     /**
@@ -832,12 +875,13 @@ export const personListsMethods = uiModule({
                 const menu = st.menu;
                 if (menu?.kind !== 'list') return;
                 const list = DataManager.getPersonList(menu.listId);
-                const item = list ? this.personListMenuRows(list).find(r => r.id === el!.dataset.run) : undefined;
+                const item = list ? this.personListMenuRows(list).flatMap(r => [r, ...(r.children ?? [])]).find(r => r.id === el!.dataset.run && !r.children) : undefined;
                 st.menu = null;
                 this.renderPersonLists();
                 item?.run();
                 return;
             }
+            case 'menu-sub': this.togglePersonListSubmenu(el!.dataset.run ?? ''); return;
             case 'sort':
                 st.menu = st.menu?.kind === 'sort' ? null : { kind: 'sort' };
                 this.renderPersonLists();
@@ -919,6 +963,21 @@ export const personListsMethods = uiModule({
                 e.preventDefault();
                 this.commitPersonListRename();
             }
+            return;
+        }
+        // A second level: → (or Enter) on its row opens it, ← in it goes back to the row.
+        if (st.menu?.kind === 'list' && e.key === 'ArrowRight' && target.dataset.act === 'menu-sub') {
+            e.preventDefault();
+            if (st.menu.sub !== target.dataset.run) this.togglePersonListSubmenu(target.dataset.run ?? '');
+            else this.focusPersonLists('.pl-submenu .pl-menu-item');
+            return;
+        }
+        if (st.menu?.kind === 'list' && st.menu.sub && e.key === 'ArrowLeft' && target.closest('.pl-submenu')) {
+            e.preventDefault();
+            const back = st.menu.sub;
+            st.menu = { ...st.menu, sub: undefined };
+            this.renderPersonLists();
+            this.focusPersonLists(`[data-act="menu-sub"][data-run="${CSS.escape(back)}"]`);
             return;
         }
         // An open popup: arrows move, Home / End jump (Escape: the global handler).
@@ -1156,3 +1215,11 @@ export const personListsMethods = uiModule({
         }, 0);
     },
 });
+
+/** A row of a list's ⋯ in the phone's sheet; a second level ("Export ›") is a page of the sheet. */
+function sheetRow(r: ListMenuRow): { label: string; sub?: string; danger?: boolean; value?: string; id: string; run: () => void; page?: { title: string; rows: ReturnType<typeof sheetRow>[] } } {
+    return {
+        label: r.label, sub: r.sub, danger: r.danger, value: r.checked ? '✓' : undefined, id: `pl-sheet-${r.id}`, run: r.run,
+        ...(r.children ? { page: { title: r.label, rows: r.children.map(sheetRow) } } : {}),
+    };
+}
