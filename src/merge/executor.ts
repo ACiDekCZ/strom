@@ -3,6 +3,7 @@
  * Executes the merge operation based on user decisions
  */
 
+import { earlierAddedAt } from '../person-lists-data.js';
 import { rewriteStorySources } from '../story-sources.js';
 import { remapCitations, unionCitations } from '../citation-quality.js';
 import {
@@ -468,6 +469,8 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
             if (decision.type === 'skip') skippedCount++;
         }
 
+        // When this merge brings people into the tree (spec 084 §8).
+        const mergedAt = new Date().toISOString();
         // Process confirmed matches - merge person data
         for (const match of state.matches) {
             const decision = state.decisions.get(match.incomingId);
@@ -478,6 +481,7 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
                     // Merge data according to conflict resolutions
                     mergePersonData(existingPerson, shared(match.incomingPerson), match.conflicts, mapping.persons, state.incomingData.persons);
                     carryMergedImports(existingPerson, state.existingData.persons[match.existingId], match.incomingPerson, importMap);
+                    keepEarlierAddedAt(existingPerson, match.incomingPerson);
                     mergedCount++;
                 }
             } else if (decision?.type === 'manual_match') {
@@ -485,6 +489,7 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
                 if (existingPerson) {
                     mergePersonData(existingPerson, shared(match.incomingPerson), match.conflicts, mapping.persons, state.incomingData.persons);
                     carryMergedImports(existingPerson, state.existingData.persons[decision.targetId], match.incomingPerson, importMap);
+                    keepEarlierAddedAt(existingPerson, match.incomingPerson);
                     mergedCount++;
                 }
             }
@@ -562,6 +567,9 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
                 remapEventParticipants(newPerson.events, mapping.persons, state.incomingData.persons);
             }
             adoptIncomingMarks(newPerson, mapping.persons, importMap);
+            // A person new to this tree comes into it now (spec 084 §8).
+            if (!newPerson.isPlaceholder) newPerson.addedAt = mergedAt;
+            else delete newPerson.addedAt;
 
             mergedData.persons[newId] = newPerson;
             addedCount++;
@@ -1883,4 +1891,12 @@ function validateMergedData(data: StromData): string[] {
     }
 
     return errors;
+}
+
+/**
+ * The same person in both trees keeps the earlier date of coming into a tree;
+ * without one here the person is older than the date (it stays without).
+ */
+function keepEarlierAddedAt(kept: Person, incoming: Person): void {
+    if (kept.addedAt && incoming.addedAt) kept.addedAt = earlierAddedAt(kept.addedAt, incoming.addedAt);
 }

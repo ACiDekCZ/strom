@@ -8,6 +8,7 @@
  * in src/ui/research-ui.ts. Nothing here touches the DOM or storage.
  */
 
+import { keepPersonListData } from './person-lists-data.js';
 import { StromData, Person, PersonId, PartnershipId, Partnership, ResearchLink, Source, APP_VERSION, isPrimaryName, PlaceRecordBy, LifeEvent, EventRoleAt } from './types.js';
 import { eventIsShareable, eventValueIsOnTag } from './events.js';
 import { SUPPORTED_LANGUAGES, getStringsForLang } from './strings.js';
@@ -1844,7 +1845,11 @@ export function carryOverMedia(next: StromData, previous: StromData): MediaCarry
     // of them) — the research's GEDCOM does not carry the marks.
     // The app's own fields of a location (who put it there, "Keep") — the
     // research's GEDCOM carries the coordinates only (spec 034).
-    const data = keepPlaceOrigins(carryOverTreeDecisions({ ...next, persons, ...(sources ? { sources } : {}) }, previous), previous);
+    // The lists of people and the date each person came into the tree are the
+    // tree's own (spec 084 §8): a person new here gets the research's date or now.
+    const data = keepPersonListData(
+        keepPlaceOrigins(carryOverTreeDecisions({ ...next, persons, ...(sources ? { sources } : {}) }, previous), previous),
+        previous, new Date().toISOString());
     return { data, lost };
 }
 

@@ -75,7 +75,7 @@ function fullTree(): Required<StromData> {
                 id: 'att1', name: 'page-57.jpg', mimeType: 'image/jpeg',
                 dataUrl: 'data:image/jpeg;base64,AA==', sizeBytes: 1,
                 original: { sha256: 'b'.repeat(64), name: 'page-57.tif', mimeType: 'image/tiff', bytes: 148_000_000, orientation: 6 },
-            }], importId: 'I1', importedValues: { firstName: { from: 'I1', value: 'Alice' } },
+            }], importId: 'I1', importedValues: { firstName: { from: 'I1', value: 'Alice' } }, addedAt: '2026-11-01T08:30:00.000Z',
             // One census of both (spec 085, data v20; its main citation, spec 095, v21): the share, a role of one's own, a godparent's own
             // record of a part at a baptism, a participant once rejected as Bob.
             events: [
@@ -123,8 +123,15 @@ function fullTree(): Required<StromData> {
         tableViews: [{
             id: 'tv-1', name: 'Births 1840–1870', rowType: 'persons', columns: [{ id: 'name', width: 240 }, { id: 'bDate' }], pinned: 1,
             collapsedGroups: ['birth'], coverageRow: false, filter: { op: 'and', items: [{ chip: 'deceased' }] },
-            sort: [{ col: 'bDate', dir: -1 }], unions: { collapsed: true, except: [ALICE] }, updated: '2026-11-10T09:00:00.000Z',
+            sort: [{ col: 'bDate', dir: -1 }], unions: { collapsed: true, except: [ALICE] },
+            scope: { listId: 'pl-1' }, group: { by: 'rod', collapsed: ['r1'] }, updated: '2026-11-10T09:00:00.000Z',
         }],
+        // Lists of people (spec 084, data v22): a fixed checklist with its rule of origin, the ready-made one deleted.
+        personLists: [{
+            id: 'pl-1', name: 'Archive request', dynamic: false, rule: { kind: 'ancestors', personId: ALICE, generations: 3, personName: 'Alice' },
+            personIds: [ALICE], removed: [BOB], sort: 'manual', checklist: true, done: [ALICE], updated: '2026-11-12T10:00:00.000Z',
+        }],
+        personListsDropped: ['added30'],
         researchAsOf: '2026-09-20',
         researchDirections: {
             complete: true,
@@ -369,7 +376,8 @@ type OwnedElsewhere =
     | 'citationMain'        // setCitationMain (spec 095): the main citation of the birth / death; follows its list (merge, removal)
     | 'researchOrigins'     // written by Strom Research only (GEDCOM import), never edited
     | 'confirmed'           // confirmFact / unconfirmFact (spec 065); a changed value ends it by itself
-    | 'researchVerify';     // written by Strom Research only (GEDCOM import, spec 065), never edited
+    | 'researchVerify'      // written by Strom Research only (GEDCOM import, spec 065), never edited
+    | 'addedAt';            // written when the person comes into the tree (spec 084 §8), never edited
 
 /**
  * Compile-time proof that the two lists together cover Person exactly. Add a

@@ -683,6 +683,14 @@ export interface Person {
     nameVariants?: string[];
     isLocked?: boolean;
     /**
+     * When the person came into the tree (ISO; spec 084 §8, data version
+     * 22): written when a person is added, a GEDCOM file imported, another
+     * tree merged in or the research brings a new person. Never edited by
+     * hand, never guessed for older people (absent = "earlier"), never
+     * written to GEDCOM.
+     */
+    addedAt?: string;
+    /**
      * Explicit override of the "is this person alive?" heuristic used by the
      * living-privacy export filter. true = deceased, false = definitely alive,
      * undefined = fall back to the age heuristic.
@@ -1724,6 +1732,14 @@ export function partnershipParticipants(u: Pick<Partnership, 'participants' | 'e
  *   when the tree is read, a backup is taken first. An older app (v19) would
  *   edit one copy alone and the copies would go apart, so the bump makes it
  *   open the tree read-only.
+ * v22 (2026-11, spec 084): StromData.personLists (named lists of people,
+ *   fixed or automatic by a rule) and StromData.personListsDropped (the
+ *   ready-made "Added in the last 30 days" deleted), Person.addedAt (when a
+ *   person came into the tree), TableView.scope and TableView.group.
+ *   Additive: nothing is computed for older trees (people without addedAt
+ *   are "earlier"; the ready-made list exists without being stored, see
+ *   src/person-lists.ts). An older app (v21) would drop the lists on a
+ *   re-save, so the bump makes it warn first.
  * v21 (2026-11, spec 095): the main citation of a fact
  *   (Person/Partnership/LifeEvent/CoupleEvent.citationMain), chosen by hand,
  *   and the events a source records (Source.events, GEDCOM EVENTS_RECORDED
@@ -1733,7 +1749,7 @@ export function partnershipParticipants(u: Pick<Partnership, 'participants' | 'e
  *   app (v20) would show the automatic first citation and drop the choice on
  *   a re-save, so the bump makes it warn first.
  */
-export const STROM_DATA_VERSION = 21;
+export const STROM_DATA_VERSION = 22;
 
 /** The rows of a saved Table view (spec 073 §2; events and sources come later). */
 export type TableViewRowType = 'persons' | 'unions' | 'events' | 'sources';
@@ -1754,7 +1770,58 @@ export interface TableView {
     filter: { op: 'and'; items: Record<string, unknown>[] };
     sort: { col: string; dir: 1 | -1 }[];
     unions?: { collapsed: boolean; except: string[] };
+    /** The rows of one list of people only (spec 084 §9; not for sources). */
+    scope?: { listId: string };
+    /** Group headers by one value (spec 084 §10); `collapsed` holds the closed groups' keys. */
+    group?: { by: TableGroupKey; collapsed: string[] };
     /** ISO time of the last save. */
+    updated: string;
+}
+
+/** What the Table groups its rows by (spec 084 §10, §11). */
+export type TableGroupKey =
+    | 'lines' | 'rod' | 'surname' | 'bPlace' | 'bCentury' | 'bDecade' | 'gen' | 'sex' | 'occ'
+    | 'addedDay' | 'addedMonth' | 'addedYear' | 'done'
+    | 'wDecade' | 'wPlace' | 'uRods' | 'kids'
+    | 'evType' | 'evDecade' | 'evPlace';
+
+/**
+ * The rule of a list of people (spec 084): what an automatic list is worked
+ * out from each time, what a fixed list was made from ("Created from", "Add
+ * from the rule"). `personName` keeps the name of the rule's person for when
+ * that person is gone.
+ */
+export type PersonListRule =
+    | { kind: 'rods'; rodIds: string[] }
+    | { kind: 'ancestors'; personId: PersonId; generations?: number; personName?: string }
+    | { kind: 'descendants'; personId: PersonId; generations?: number; personName?: string }
+    | { kind: 'line'; directionId: string; lineName?: string }
+    | { kind: 'tableFilter'; rowType: 'persons' | 'unions'; filter: TableView['filter']; sort: TableView['sort'] }
+    | { kind: 'added'; days: number };
+
+/** How the people of a list are ordered (spec 084 §5). */
+export type PersonListSort = 'old' | 'gen' | 'name' | 'added' | 'manual';
+
+/** A named list of people (spec 084, data version 22). */
+export interface PersonList {
+    id: string;
+    /** Unique in the tree (compared without diacritics and case). Empty only for the ready-made list: its name follows its period. */
+    name: string;
+    /** true = automatic: the people come from the rule each time. */
+    dynamic: boolean;
+    rule?: PersonListRule;
+    /** A fixed list's people in their manual order (kept under any other sort). */
+    personIds?: PersonId[];
+    /** People taken out of a fixed list by hand: "Add from the rule" does not bring them back. */
+    removed?: PersonId[];
+    sort: PersonListSort;
+    /** A fixed list ticked off person by person (§13). */
+    checklist?: boolean;
+    /** The ticked-off people of this list. */
+    done?: PersonId[];
+    /** The ready-made "Added in the last 30 days" (§8). */
+    builtin?: 'added30';
+    /** ISO time of the last change. */
     updated: string;
 }
 
@@ -1982,6 +2049,15 @@ export interface StromData {
      * empty = none saved.
      */
     tableViews?: TableView[];
+
+    /**
+     * Named lists of people (spec 084, data version 22), fixed or automatic.
+     * The ready-made "Added in the last 30 days" is stored only once changed
+     * (src/person-lists.ts). Absent or empty = none.
+     */
+    personLists?: PersonList[];
+    /** Ready-made lists deleted here: never made again (spec 084 Q3). */
+    personListsDropped?: 'added30'[];
 
     /**
      * When Strom Research wrote what the people's `research` says (GEDCOM
@@ -2260,6 +2336,8 @@ export type AuditAction =
     | 'tableView.save'
     | 'tableView.rename'
     | 'tableView.delete'
+    | 'personList.save'
+    | 'personList.delete'
     | 'undo'
     | 'redo'
     /** An edit made in a satellite window, saved by the main window (spec 079). */

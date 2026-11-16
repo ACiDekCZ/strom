@@ -9,9 +9,17 @@
  * filter's items against its own catalog when it opens a view.
  */
 
-import type { StromData, TableView, TableViewRowType } from './types.js';
+import type { StromData, TableGroupKey, TableView, TableViewRowType } from './types.js';
 
 export const TABLE_VIEW_ROW_TYPES: readonly TableViewRowType[] = ['persons', 'unions', 'events', 'sources'];
+
+/** Every value the Table can group by (spec 084 §10, §11); a stored grouping by anything else is dropped. */
+export const TABLE_GROUP_KEYS: readonly TableGroupKey[] = [
+    'lines', 'rod', 'surname', 'bPlace', 'bCentury', 'bDecade', 'gen', 'sex', 'occ',
+    'addedDay', 'addedMonth', 'addedYear', 'done',
+    'wDecade', 'wPlace', 'uRods', 'kids',
+    'evType', 'evDecade', 'evPlace',
+];
 
 function isObject(v: unknown): v is Record<string, unknown> {
     return !!v && typeof v === 'object' && !Array.isArray(v);
@@ -50,6 +58,13 @@ export function sanitizeTableView(raw: unknown): TableView | null {
         updated: typeof raw.updated === 'string' ? raw.updated : '',
     };
     if (isObject(raw.unions)) view.unions = { collapsed: raw.unions.collapsed === true, except: strings(raw.unions.except) };
+    // v22 (spec 084): one list's rows only (not for sources) and the grouping.
+    if (isObject(raw.scope) && typeof raw.scope.listId === 'string' && raw.scope.listId && view.rowType !== 'sources') {
+        view.scope = { listId: raw.scope.listId };
+    }
+    if (isObject(raw.group) && typeof raw.group.by === 'string' && TABLE_GROUP_KEYS.includes(raw.group.by as TableGroupKey)) {
+        view.group = { by: raw.group.by as TableGroupKey, collapsed: strings(raw.group.collapsed) };
+    }
     return view;
 }
 

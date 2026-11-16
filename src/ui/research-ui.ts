@@ -22,6 +22,7 @@
 
 import { noteOverviewSectionRows } from './overview-columns-ui.js';
 import { keepTableViews } from '../table-views-data.js';
+import { stampResearchTree } from '../person-lists-data.js';
 import { pressOnToast } from '../sheet-toasts.js';
 import { setResearchActionLabel, researchActionMark } from './research-open-mark.js';
 import { DataManager, migrateData } from '../data.js';
@@ -2466,7 +2467,8 @@ export const researchUiMethods = uiModule({
             // keeps its tie as a copy — its changes can still be sent back.
             if (existing?.research) TreeManager.setResearchLink(existing.id, { ...existing.research, copy: true });
             const treeName = existing ? strings.research.copyName(name, formatFlexDate(todayIso())) : name;
-            treeId = await DataManager.importAsNewTree(data, treeName);
+            // Everyone comes into the new tree now, or on the research's own date (spec 084 §8).
+            treeId = await DataManager.importAsNewTree(stampResearchTree(data, new Date().toISOString()), treeName);
             created = true;
         } else {
             treeId = existing.id;

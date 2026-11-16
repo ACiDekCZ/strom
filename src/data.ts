@@ -35,6 +35,9 @@ import {
     LAST_FOCUSED,
     LastFocusedMarker,
     TableView,
+    PersonList,
+    PersonListRule,
+    PersonListSort,
     STROM_DATA_VERSION, PERSON_CITATION_FIELDS, PARTNERSHIP_CITATION_FIELDS, PersonCitationField, isGender, oppositeGender, isPrimaryName, PrimaryName, mergedPrimaryName,
     EmbeddedDataEnvelope,
     isEmbeddedEnvelope,
@@ -58,7 +61,7 @@ import { extractSubtree } from './subtree.js';
 import { collectPlaces, renamePlace, placeKey, orphanedPlaceKeys, splitPlaceHouses, SplitPlaceHousesResult } from './places.js';
 import { StorageManager } from './storage.js';
 import { surnameForms, addSurnameGroup, removeSurnameGroup, surnameKey } from './surnames.js';
-import { cleanLineageOverrides, LineagePatch } from './lineage.js';
+import { buildLineages, cleanLineageOverrides, LineagePatch, type LineageIndex } from './lineage.js';
 import { sanitizeQualityDismissed, sanitizeSurnameRejections, dismissalKey, surnameRejectionKey } from './quality-dismiss.js';
 import { ChangePacket, applyPacketOntoData } from './share-diff.js';
 import { createSnapshot, getSnapshotPayload, SnapshotReason, hasAutoSnapshotOnDay } from './snapshots.js';
@@ -77,6 +80,14 @@ import { maxGenerations, maxGenerationsWithSiblings } from './focus-depth.js';
 import { cleanPlaceGeoMeta, sanitizePlaceRecords, sanitizePlaceRefs } from './place-records.js';
 import { addPlaceAlias, sanitizePlaceAliases } from './place-groups.js';
 import { sanitizeTableViews } from './table-views-data.js';
+import {
+    earlierAddedAt, isListNameTaken, newPersonListId, onPersonDeleted, onPersonsMerged, personListsOf, sanitizeAddedAt,
+    sanitizePersonListRule, sanitizePersonLists, sanitizePersonListsDropped, suggestListName,
+} from './person-lists-data.js';
+import {
+    listDisplayName, listPersonIds, personToastName, rulePersonIds, ruleLabel, sortListIds, withChecklist, withDoneToggled,
+    withFrozen, withManualOrder, withPersonMoved, withPersonsAdded, withPersonsRemoved, withRuleFilled, withSort, type ListEnv,
+} from './person-lists.js';
 import {
     SharedEventCommon, SharedEventCommonField, SharedEventEdit, SharedEventSaveResult, SharedEventIndex, PersonSharedEvent,
     SHARED_EVENT_COMMON_FIELDS, applyEventFields, buildSharedEventIndex, cleanEventShares, commonFieldsOf, newShareIdFor,
@@ -293,6 +304,10 @@ export function migrateData(data: unknown): StromData {
         if (person && typeof person === 'object' && 'dismissedMarriedSuggestion' in person
             && (typeof person.dismissedMarriedSuggestion !== 'string' || !person.dismissedMarriedSuggestion.trim())) {
             delete person.dismissedMarriedSuggestion;
+        }        // v22 (spec 084): when the person came into the tree, an ISO time or nothing.
+        if (person && typeof person === 'object' && 'addedAt' in person) {
+            const at = sanitizeAddedAt(person.addedAt);
+            if (at) person.addedAt = at; else delete person.addedAt;
         }
     }
     // Preserve the source catalog if present.
@@ -373,6 +388,11 @@ export function migrateData(data: unknown): StromData {
     // v17: the saved views of the Table view (src/table-views-data.ts).
     const tableViews = sanitizeTableViews(d.tableViews);
     if (tableViews) result.tableViews = tableViews;
+    // v22: the lists of people and the ready-made lists deleted (src/person-lists-data.ts).
+    const personLists = sanitizePersonLists(d.personLists);
+    if (personLists) result.personLists = personLists;
+    const personListsDropped = sanitizePersonListsDropped(d.personListsDropped);
+    if (personListsDropped) result.personListsDropped = personListsDropped;
 
     // v15: the GEDCOM files loaded into the tree and the origin of facts and
     // links from them (src/import-origin.ts). Only valid records; marks that
@@ -2047,6 +2067,240 @@ class DataManagerClass {
         return true;
     }
 
+    // ==================== LISTS OF PEOPLE (spec 084) ====================
+
+    private lineageIndexCache: { data: StromData; revision: number; index: LineageIndex } | null = null;
+
+    /** The lineage index of the open tree, built once per state of the data (lists, rods, selections). */
+    getLineageIndex(): LineageIndex {
+        const c = this.lineageIndexCache;
+        if (c && c.data === this.data && c.revision === this.revision) return c.index;
+        const index = buildLineages(this.data);
+        this.lineageIndexCache = { data: this.data, revision: this.revision, index };
+        return index;
+    }
+
+    /** Lists cannot be changed (Q1): a read-only or locked tree, a live research's tree, a newer app's data, another window's read-only copy. */
+    listsReadOnly(): boolean {
+        return this.isReadOnly() || this.isTreeLocked();
+    }
+
+    /** The tree's lists, the ready-made "Added in the last 30 days" first while it is not stored. */
+    getPersonLists(): PersonList[] {
+        return personListsOf(this.data);
+    }
+
+    getPersonList(id: string): PersonList | undefined {
+        return personListsOf(this.data).find(l => l.id === id);
+    }
+
+    /** The people of a list in its order (none for an unknown id). */
+    getPersonListIds(id: string, env: ListEnv = {}): PersonId[] {
+        const list = this.getPersonList(id);
+        return list ? listPersonIds(this.getLineageIndex(), list, env) : [];
+    }
+
+    /** Whether another list has this name (without diacritics and case). */
+    isPersonListNameTaken(name: string, exceptId?: string): boolean {
+        return isListNameTaken(personListsOf(this.data), name, exceptId, listDisplayName);
+    }
+
+    /** The name itself when free, else "{name} (2)" with the next free number. */
+    suggestPersonListName(name: string, exceptId?: string): string {
+        return suggestListName(personListsOf(this.data), name, exceptId, listDisplayName);
+    }
+
+    /** Stores a changed list (the ready-made one is stored the first time it changes) in one undo step. */
+    private storePersonList(list: PersonList, description: string, silent: boolean, toast?: MutationToast, audit = false): void {
+        this.beginMutation();
+        const stored = this.data.personLists ?? [];
+        const at = stored.findIndex(l => l.id === list.id);
+        const copy = structuredClone(list);
+        this.data.personLists = at >= 0 ? stored.map((l, i) => (i === at ? copy : l))
+            : list.builtin ? [copy, ...stored] : [...stored, copy];
+        this.commitMutation(description, silent, undefined, toast);
+        if (audit && this.currentTreeId) AuditLogManager.log(this.currentTreeId, 'personList.save', strings.lists.audit.saved(listDisplayName(list)));
+    }
+
+    /** One change of a list: `change` gets the list and returns it changed (the same object = nothing to do). */
+    private changePersonList(id: string, change: (list: PersonList, now: string) => PersonList,
+        opts: { silent?: boolean; toast?: (next: PersonList) => MutationToast | undefined; audit?: boolean } = {}): PersonList | null {
+        if (this.listsReadOnly()) return null;
+        const list = this.getPersonList(id);
+        if (!list) return null;
+        const next = change(list, new Date().toISOString());
+        if (next === list) return list;
+        this.storePersonList(next, strings.lists.undo.edit(listDisplayName(next)), opts.silent ?? true, opts.toast?.(next), opts.audit);
+        return next;
+    }
+
+    /**
+     * A new list (spec 084 §6). A fixed list made from a rule takes the
+     * rule's people now (`personIds` given: those, e.g. the Table's rows in
+     * its order); a name already used gets the next free "(2)". The default
+     * order: by generation for ancestors / descendants, by date added for the
+     * "added" rule, manual for a fixed list of given people, else oldest first.
+     */
+    createPersonList(input: { name: string; dynamic: boolean; rule?: PersonListRule; personIds?: PersonId[]; sort?: PersonListSort; checklist?: boolean }, env: ListEnv = {}): PersonList | null {
+        if (this.listsReadOnly()) return null;
+        const rule = input.rule ? sanitizePersonListRule(input.rule) : null;
+        if (input.dynamic && !rule) return null;
+        const name = this.suggestPersonListName(input.name.trim() || (rule ? ruleLabel(rule, this.getLineageIndex()) : ''));
+        if (!name) return null;
+        const index = this.getLineageIndex();
+        if (rule && (rule.kind === 'ancestors' || rule.kind === 'descendants') && !rule.personName) {
+            const p = this.data.persons[rule.personId];
+            if (p) rule.personName = shownName(p);
+        }
+        const sort: PersonListSort = input.sort
+            ?? (rule?.kind === 'ancestors' || rule?.kind === 'descendants' ? 'gen'
+                : rule?.kind === 'added' ? 'added'
+                : !input.dynamic && input.personIds ? 'manual' : 'old');
+        const list: PersonList = {
+            id: newPersonListId(personListsOf(this.data)), name, dynamic: input.dynamic,
+            sort: input.dynamic && sort === 'manual' ? 'old' : sort,
+            updated: new Date().toISOString(),
+        };
+        if (rule) list.rule = rule;
+        if (!input.dynamic) {
+            const ids = input.personIds ?? (rule ? sortListIds(index, list, rulePersonIds(index, rule, env), sort === 'manual' ? 'old' : sort, env) : []);
+            list.personIds = [...new Set(ids)].filter(id => !!this.data.persons[id] && !this.data.persons[id].isPlaceholder);
+            if (input.checklist) list.checklist = true;
+        }
+        this.storePersonList(list, strings.lists.undo.create(name), false, { text: strings.lists.toast.saved(name) }, true);
+        return list;
+    }
+
+    /** A new name; false when another list has it (or it is empty). */
+    renamePersonList(id: string, name: string): boolean {
+        const clean = name.trim();
+        if (!clean || this.isPersonListNameTaken(clean, id)) return false;
+        return !!this.changePersonList(id, (l, now) => (l.name === clean ? l : { ...l, name: clean, updated: now }), { audit: true });
+    }
+
+    /** A copy under the next free name ("… (2)"), with its people and what is done; never a ready-made one. */
+    duplicatePersonList(id: string): PersonList | null {
+        if (this.listsReadOnly()) return null;
+        const list = this.getPersonList(id);
+        if (!list) return null;
+        const copy: PersonList = structuredClone(list);
+        delete copy.builtin;
+        copy.id = newPersonListId(personListsOf(this.data));
+        copy.name = this.suggestPersonListName(listDisplayName(list));
+        copy.updated = new Date().toISOString();
+        this.storePersonList(copy, strings.lists.undo.create(copy.name), true, undefined, true);
+        return copy;
+    }
+
+    /** Deletes a list with an Undo toast; the ready-made one is never made again (Q3). */
+    deletePersonList(id: string): boolean {
+        if (this.listsReadOnly()) return false;
+        const list = this.getPersonList(id);
+        if (!list) return false;
+        const name = listDisplayName(list);
+        this.beginMutation();
+        const next = (this.data.personLists ?? []).filter(l => l.id !== id);
+        if (next.length) this.data.personLists = next; else delete this.data.personLists;
+        if (list.builtin && !this.data.personListsDropped?.includes(list.builtin)) {
+            this.data.personListsDropped = [...(this.data.personListsDropped ?? []), list.builtin];
+        }
+        this.commitMutation(strings.lists.undo.delete(name), false, undefined, { text: strings.lists.toast.deleted(name) });
+        if (this.currentTreeId) AuditLogManager.log(this.currentTreeId, 'personList.delete', strings.lists.audit.deleted(name));
+        return true;
+    }
+
+    /** People added to a fixed list by hand (one person: the toast names them). */
+    addPersonsToList(id: string, ids: PersonId[]): boolean {
+        const real = ids.filter(pid => !!this.data.persons[pid] && !this.data.persons[pid].isPlaceholder);
+        if (!real.length) return false;
+        return !!this.changePersonList(id, (l, now) => withPersonsAdded(l, real, now), {
+            silent: false,
+            toast: next => {
+                if (real.length !== 1) return undefined;
+                const p = personToastName(this.data, real[0]);
+                return { text: strings.lists.toast.added(p.name, listDisplayName(next), p.gender) };
+            },
+        });
+    }
+
+    /** People taken out of a fixed list (Undo toast; one person: named). */
+    removePersonsFromList(id: string, ids: PersonId[]): boolean {
+        return !!this.changePersonList(id, (l, now) => withPersonsRemoved(l, ids, now), {
+            silent: false,
+            toast: () => {
+                if (ids.length !== 1) return undefined;
+                const p = personToastName(this.data, ids[0]);
+                return { text: strings.lists.toast.removed(p.name, p.gender) };
+            },
+        });
+    }
+
+    /** A person moved in a fixed list's manual order (Alt+↑/↓, Move up / down). */
+    movePersonInList(id: string, personId: PersonId, delta: number): boolean {
+        return !!this.changePersonList(id, (l, now) => withPersonMoved(l, personId, delta, now));
+    }
+
+    /** A new manual order of a fixed list (drag and drop). */
+    setPersonListOrder(id: string, ids: PersonId[]): boolean {
+        return !!this.changePersonList(id, (l, now) => withManualOrder(l, ids, now));
+    }
+
+    setPersonListSort(id: string, sort: PersonListSort): boolean {
+        return !!this.changePersonList(id, (l, now) => withSort(l, sort, now));
+    }
+
+    /** A new rule (Edit rule…); `dynamic` switches between automatic and fixed (a fixed one takes the rule's people now). */
+    setPersonListRule(id: string, rule: PersonListRule, dynamic: boolean, env: ListEnv = {}): boolean {
+        const clean = sanitizePersonListRule(rule);
+        if (!clean) return false;
+        const index = this.getLineageIndex();
+        if ((clean.kind === 'ancestors' || clean.kind === 'descendants') && !clean.personName) {
+            const p = this.data.persons[clean.personId];
+            if (p) clean.personName = shownName(p);
+        }
+        return !!this.changePersonList(id, (l, now) => {
+            const next: PersonList = { ...l, rule: clean, dynamic, updated: now };
+            if (dynamic) {
+                delete next.personIds; delete next.removed; delete next.checklist;
+                if (next.sort === 'manual') next.sort = 'old';
+            } else if (l.dynamic) {
+                next.personIds = sortListIds(index, next, rulePersonIds(index, clean, env), l.sort, env);
+            }
+            return next;
+        }, { audit: true });
+    }
+
+    /** "Freeze" (§7): fixed with the people it has now (toast with Undo). */
+    freezePersonList(id: string, env: ListEnv = {}): boolean {
+        return !!this.changePersonList(id, (l, now) => withFrozen(this.getLineageIndex(), l, now, env), {
+            silent: false, toast: () => ({ text: strings.lists.toast.frozen }), audit: true,
+        });
+    }
+
+    /**
+     * "Add from the rule" (§7): how many people came (toast with Undo); 0 =
+     * the list is complete (nothing changes: the caller shows `lists.toast.full`).
+     */
+    fillPersonList(id: string, env: ListEnv = {}): number {
+        let added = 0;
+        this.changePersonList(id, (l, now) => {
+            const r = withRuleFilled(this.getLineageIndex(), l, now, env);
+            added = r.added;
+            return r.list;
+        }, { silent: false, toast: () => ({ text: strings.lists.toast.filled(added) }) });
+        return added;
+    }
+
+    /** "Tick off done" on or off (a fixed list only; off keeps what is done). */
+    setPersonListChecklist(id: string, on: boolean): boolean {
+        return !!this.changePersonList(id, (l, now) => withChecklist(l, on, now));
+    }
+
+    /** A person of a checklist ticked off or back: one undo step, no toast (§13). */
+    togglePersonListDone(id: string, personId: PersonId, done?: boolean): boolean {
+        return !!this.changePersonList(id, (l, now) => withDoneToggled(l, personId, now, done));
+    }
+
     // ==================== DATA QUALITY ====================
 
     /**
@@ -2324,6 +2578,8 @@ class DataManagerClass {
         }
         // Which surname the person goes by: only with a married surname.
         if (person.marriedSurname && isPrimaryName(personData.primaryName)) person.primaryName = personData.primaryName;
+        // When the person came into the tree (spec 084 §8); a placeholder gets it once it becomes a person.
+        if (!isPlaceholder) person.addedAt = new Date().toISOString();
 
         this.data.persons[person.id] = person;
         this.commitMutation(strings.undo.addPerson(auditPersonName(person)));
@@ -2534,6 +2790,7 @@ class DataManagerClass {
             if ((first && first !== '?') || (last && person.lastName !== lastNameBefore)) {
                 person.isPlaceholder = false;
                 if (first === '?') person.firstName = '';
+                if (!person.addedAt) person.addedAt = new Date().toISOString();
             }
         }
         if (updates.gender !== undefined) person.gender = updates.gender;
@@ -3842,7 +4099,10 @@ class DataManagerClass {
         tidyPlaceholders(this.data, others);
         // …and the own records of a part at another's event lose the link to it.
         tidyShares(this.data, shareIds);
-        this.commitMutation(strings.undo.deletePerson(deletedName));
+        // …and it leaves the lists of people; the toast then says from how many (spec 084 §7).
+        const inLists = onPersonDeleted(this.data, id);
+        this.commitMutation(strings.undo.deletePerson(deletedName), false, undefined,
+            inLists > 0 ? { text: strings.lists.toast.personDeleted(deletedName, inLists) } : undefined);
         // Audit log
         AuditLogManager.log(this.currentTreeId, 'person.delete', strings.auditLog.deletedPerson(deletedName));
         // Invalidate cross-tree cache when person is deleted
@@ -5072,6 +5332,12 @@ class DataManagerClass {
             if (child.parentIds.includes(keepId) && !child.importedParents![keepId]) child.importedParents![keepId] = from;
         }
         pruneImportOrigin(this.data);
+
+        // 6e. Lists of people (spec 084 §7): the removed person's place in a
+        // list passes to the kept one; the earlier date of coming into the tree stays.
+        const addedAt = earlierAddedAt(keepPerson.addedAt, removePerson.addedAt);
+        if (addedAt) keepPerson.addedAt = addedAt;
+        onPersonsMerged(this.data, keepId, removeId);
 
         // 7. Delete the removed person
         delete this.data.persons[removeId];

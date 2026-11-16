@@ -13,6 +13,7 @@ import { plPart5 } from './part5.js';
 import { plPart6 } from './part6.js';
 import { plPart7 } from './part7.js';
 import { plPart8 } from './part8.js';
+import { plPart9 } from './part9.js';
 
 export const stringsPL: StringsType = {
     ...plPart1,
@@ -23,4 +24,5 @@ export const stringsPL: StringsType = {
     ...plPart6,
     ...plPart7,
     ...plPart8,
+    ...plPart9,
 };

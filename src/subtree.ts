@@ -17,6 +17,7 @@ import { cleanLineageOverrides } from './lineage.js';
 import { placeRecordsFor } from './place-records.js';
 import { placeAliasesFor } from './place-groups.js';
 import { pruneImportOrigin } from './import-origin.js';
+import { subsetForSubtree } from './person-lists-data.js';
 
 /**
  * Build a deep-copied StromData containing only `seedIds` (plus glue partners),
@@ -147,6 +148,11 @@ export function extractSubtree(data: StromData, seedIds: Set<PersonId>): StromDa
     if (data.researchDirections) result.researchDirections = data.researchDirections;
     // The saved views of the Table view are about columns, not people: whole.
     if (data.tableViews?.length) result.tableViews = structuredClone(data.tableViews);
+    // Lists of people (spec 084 §7): a fixed list keeps the people who came
+    // along (none = no list); an automatic one works on what the part has.
+    const lists = subsetForSubtree(data.personLists, new Set(Object.keys(persons)));
+    if (lists) result.personLists = lists;
+    if (data.personListsDropped?.length) result.personListsDropped = [...data.personListsDropped];
     // The GEDCOM files the tree was loaded from come along; marks of parent
     // links to people left behind go (pruneImportOrigin).
     if (data.imports?.length) result.imports = structuredClone(data.imports);

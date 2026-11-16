@@ -17,6 +17,7 @@
  * and is dropped on export. docs/GEDCOM-IMPORT.md is the full contract.
  */
 
+import { stampAddedAt } from './person-lists-data.js';
 import { normalizeSingleParents } from './single-parent.js';
 import {
     FactStatus,
@@ -6459,6 +6460,8 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         const marks = applyRecordImportMarks();
         if (origins || ids || marks) cleanImportOrigin(data, gedcom.stromImports);
     }
+    // The people of the file come into the tree on the day of the import (spec 084 §8).
+    if (origin) stampAddedAt(data, origin.at);
     // Confirmations and the research's re-verification of facts (spec 065):
     // only from a file Strom wrote.
     if (readOrigins) applyFactVerify();
