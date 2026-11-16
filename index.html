@@ -7623,6 +7623,10 @@
             display: inline-flex;
             overflow: hidden;
         }
+        /* A segment's corners are those of the text fields and buttons beside it (T54 H11: Gender in the person
+           dialog): a dialog's 8 px, the toolbar's and the table's --r-md elsewhere. */
+        .segment.sel-seg { --sel-r: var(--r-md); }
+        .modal .segment.sel-seg { --sel-r: var(--r-lg); }
         .segment-btn {
             padding: 9px 24px;
             font-size: 14px;
@@ -10261,6 +10265,9 @@
             font-family: var(--font-sans);
         }
         .table-view { --tv-row-h: 32px; --tv-group-h: 26px; --tv-head-h: 44px; --tv-cov-h: 24px; }
+        /* One line weight for what is chosen in the table (T54 H3): the row type, an active chip, the active
+           cell's frame and the selected row's line are all drawn at the hairline, not doubled. */
+        .table-view { --sel-line-w: 1px; }
         .tv-bar { flex: none; background: var(--surface); border-bottom: 1px solid var(--border); }
         .tv-bar-row1 {
             display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px;
@@ -10294,6 +10301,8 @@
             font: inherit; font-size: 12.5px; cursor: pointer;
         }
         .tv-chip[hidden] { display: none; }
+        /* An active chip: its frame dark, one hairline (T54 H3; the indicator's doubled edge left out). */
+        .table-view .tv-chip.sel-opt:is([aria-pressed="true"], .is-active) { box-shadow: none; }
         .tv-chips > .tv-chip--col.sel-opt::before { content: none; }
         .tv-chip[aria-disabled="true"] { color: var(--text-ghost); cursor: default; }
         .tv-chip--col { padding: 0 2px 0 0; cursor: default; }
@@ -10372,6 +10381,15 @@
         /* Row type: a segmented radio group (§2), "People 38". */
         .tv-rowtype { display: inline-flex; overflow: hidden; }
         .tv-rowtype .segment-btn { padding: 0 12px; height: 34px; font-size: 13px; white-space: nowrap; }
+        /* The corners of the bar's fields and buttons (T54 H11); each cell draws its own frame, so the chosen
+           one's dark frame lies where the light one was, one hairline thick (H3), as high as Columns and Export. */
+        .table-view .tv-rowtype.sel-seg { --sel-r: var(--r-md); border: 0; }
+        .table-view .tv-rowtype.sel-seg > .sel-opt { position: relative; border: var(--sel-line-w) solid var(--border); }
+        .table-view .tv-rowtype.sel-seg > .sel-opt + .sel-opt { margin-left: calc(-1 * var(--sel-line-w)); border-left: var(--sel-line-w) solid var(--border); }
+        .table-view .tv-rowtype.sel-seg > .sel-opt:first-child { border-radius: var(--sel-r) 0 0 var(--sel-r); }
+        .table-view .tv-rowtype.sel-seg > .sel-opt:last-child { border-radius: 0 var(--sel-r) var(--sel-r) 0; }
+        .table-view .tv-rowtype.sel-seg > .sel-opt:is(.active, [aria-checked="true"]) { z-index: 1; border-color: var(--sel-border); box-shadow: none; }
+        @media (hover: hover) { .table-view .tv-rowtype.sel-seg > .sel-opt:hover { z-index: 1; } }
         .tv-rowtype-count { margin-left: 6px; font-variant-numeric: tabular-nums; opacity: 0.85; }
         .tv-rowtype-btn {
             display: none; align-items: center; gap: 6px; height: 40px; padding: 0 12px;
@@ -10442,9 +10460,9 @@
         /* A selection shared with other windows (spec 079 §2): the selected row with a 3 px stripe on the left (kept by the pinned cell). */
         .tv-body .tv-row.is-shared > .tv-cell:first-child { box-shadow: inset 3px 0 0 var(--primary); }
         /* The cells paint the row's fill (background: inherit) over its line, so they carry the line too. */
-        .tv-body .tv-row.sel-opt[aria-selected="true"] > .tv-cell { box-shadow: inset 0 -2px 0 var(--sel-line); }
-        .tv-body .tv-row.is-shared.sel-opt[aria-selected="true"] > .tv-cell:first-child { box-shadow: inset 3px 0 0 var(--primary), inset 0 -2px 0 var(--sel-line); }
-        .tv-grid.is-scrolled-x .tv-body .tv-row.sel-opt[aria-selected="true"] > .tv-pinned-last:not(:first-child) { box-shadow: 6px 0 8px -6px var(--tv-pin-shadow), inset 0 -2px 0 var(--sel-line); }
+        .tv-body .tv-row.sel-opt[aria-selected="true"] > .tv-cell { box-shadow: inset 0 calc(-1 * var(--sel-line-w)) 0 var(--sel-line); }
+        .tv-body .tv-row.is-shared.sel-opt[aria-selected="true"] > .tv-cell:first-child { box-shadow: inset 3px 0 0 var(--primary), inset 0 calc(-1 * var(--sel-line-w)) 0 var(--sel-line); }
+        .tv-grid.is-scrolled-x .tv-body .tv-row.sel-opt[aria-selected="true"] > .tv-pinned-last:not(:first-child) { box-shadow: 6px 0 8px -6px var(--tv-pin-shadow), inset 0 calc(-1 * var(--sel-line-w)) 0 var(--sel-line); }
         .tv-name { font-family: var(--font-serif); font-size: 14px; }
         .tv-row.is-home .tv-name { font-weight: 600; }
         /* §14.1: names in a cell. A tree's person is a link (opens the person); a participant's name offers its filter. */
@@ -10596,7 +10614,7 @@
         .tv-headrow .tv-headcell[data-col="name"] .tv-head-all { min-height: 20px; order: 2; }
         .tv-headrow .tv-headcell[data-col="name"] .tv-head-menu { height: 16px; }
         /* The active cell (a click, the arrows): a quiet outline; the keyboard's focus ring stays stronger. */
-        .tv-body .tv-cell.is-active-cell { outline: 2px solid var(--primary); outline-offset: -2px; }
+        .tv-body .tv-cell.is-active-cell { outline: var(--sel-line-w) solid var(--primary); outline-offset: calc(-1 * var(--sel-line-w)); }
         .tv-body .tv-cell:focus-visible, .tv-head-all:focus-visible, .tv-more-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         /* A cell edited in place (T54 F8): the field over its cell, as wide as its column; the error under it. Only in a column
            narrower than its kind's least width does it float over the row's other cells, raised with a shadow. */

@@ -784,10 +784,47 @@ test.describe('the tree switcher and the search field are equally high (T54 H4)'
                 await settleLayout(page);
                 const h = await heights(page);
                 expect(h.switcher).toEqual(h.search);
-                // The search folded to the magnifier (fit step 5) keeps the height.
-                await page.evaluate(() => document.querySelector('.toolbar')!.classList.add('toolbar-squeeze-3'));
-                const mag = await page.locator('.toolbar .search-open-btn').evaluate(el => Math.round(el.getBoundingClientRect().height * 10) / 10);
+                // The search folded to the magnifier (fit step 5) keeps the height. Measured in the same task
+                // as the class is set: the bar's own fit may take a forced step back right after.
+                const mag = await page.evaluate(() => {
+                    document.querySelector('.toolbar')!.classList.add('toolbar-squeeze-3');
+                    return Math.round(document.querySelector('.toolbar .search-open-btn')!.getBoundingClientRect().height * 10) / 10;
+                });
                 expect(mag).toBe(h.switcher.h);
+            });
+        });
+    }
+});
+
+test.describe('Esc folds the search opened from the magnifier back to it', () => {
+    test.use({ locale: 'de-DE' });
+
+    // Widths where the de bar folds the search on its own: a computer at 1100, a tablet at 700.
+    for (const [width, height, touch] of [[1100, 800, false], [700, 1000, true]] as const) {
+        test.describe(`${width} px${touch ? ', touch' : ''}`, () => {
+            test.use({ viewport: { width, height }, hasTouch: touch });
+
+            test('the field closes, the magnifier has the focus, the query stays', async ({ page }) => {
+                await openApp(page);
+                await page.getByRole('button', { name: 'Beispiel-Stammbaum ausprobieren' }).click();
+                await expect(page.locator('#toolbar-focus-name')).not.toHaveText('');
+                await settleLayout(page);
+                // The search folded to the magnifier (fit step toolbar-squeeze-3).
+                await expect(page.locator('.toolbar')).toHaveClass(/\btoolbar-squeeze-3\b/);
+                const mag = page.locator('#search-open-btn');
+                const field = page.locator('#toolbar-search-picker .person-picker-input');
+                await mag.click();
+                await expect(field).toBeVisible();
+                await expect(field).toBeFocused();
+                await field.pressSequentially('an');
+                await page.keyboard.press('Escape');
+                await expect(page.locator('body')).not.toHaveClass(/\bsearch-open\b/);
+                await expect(field).toBeHidden();
+                await expect(mag).toBeFocused();
+                // The query holds: the magnifier shows it, and opens the field with it again.
+                await expect(page.locator('body')).toHaveClass(/\bsearch-active\b/);
+                await mag.click();
+                await expect(field).toHaveValue('an');
             });
         });
     }

@@ -64,12 +64,12 @@ test.describe('desktop (1440)', () => {
         await expect(row(page, 'p:b1')).toHaveAttribute('aria-selected', 'true');
         const bubble = page.locator('.tv-bubble');
         await expect(bubble).toBeVisible();
-        // The cell cursor's outline (2px --primary, inset; not a selection) in the light and the dark scheme.
+        // The cell cursor's outline (a hairline of --primary, inset, T54 H3; not a selection) in the light and the dark scheme.
         for (const scheme of ['light', 'dark'] as const) {
             await page.emulateMedia({ colorScheme: scheme });
             // Read until the outline settled after the click and the scheme switch (a single read can catch it mid-change).
             await expect.poll(() => place.evaluate(e => { const s = getComputedStyle(e); return { style: s.outlineStyle, width: s.outlineWidth }; }))
-                .toEqual({ style: 'solid', width: '2px' });
+                .toEqual({ style: 'solid', width: '1px' });
         }
         await page.emulateMedia({ colorScheme: 'light' });
         // Escape closes the bubble and gives the focus back to the active cell.

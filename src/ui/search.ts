@@ -50,6 +50,11 @@ export function isPhoneToolbar(): boolean {
     return isPhoneBar();
 }
 
+/** A desktop or tablet bar too tight for the field: the search folds to the magnifier (fit step toolbar-squeeze-3). */
+function isSearchFolded(): boolean {
+    return !!document.querySelector('.toolbar.toolbar-squeeze-3');
+}
+
 /** Filters set in the filter panel (the years count as one). */
 function activeFilterCount(c: SearchCriteria): number {
     return [c.lastName, c.place, c.birthFrom ?? c.birthTo, c.gender, c.living].filter(v => v !== undefined && v !== '').length;
@@ -102,10 +107,15 @@ export const searchMethods = uiModule({
                 setTimeout(() => this.settleSearchAfterBlur(), 150);
             });
             input.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape' && isPhoneToolbar() && document.body.classList.contains('search-open')) {
+                if (e.key !== 'Escape' || !document.body.classList.contains('search-open')) return;
+                if (isPhoneToolbar()) {
                     e.preventDefault();
                     e.stopPropagation();
                     this.cancelSearch();
+                } else if (isSearchFolded()) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.foldSearch();
                 }
             });
         }
@@ -116,6 +126,21 @@ export const searchMethods = uiModule({
         document.body.classList.add('search-open');
         const input = document.querySelector<HTMLInputElement>('#toolbar-search-picker .person-picker-input');
         input?.focus();
+    },
+
+    /**
+     * Esc in the field opened from the magnifier (a tight desktop or tablet
+     * bar): the field folds back and the magnifier takes the focus. The
+     * query and the filters stay (the magnifier then shows they hold).
+     */
+    foldSearch(): void {
+        if (document.getElementById('search-filters')?.style.display !== 'none') this.toggleSearchFilters();
+        this.toolbarSearchPicker?.hide();
+        document.body.classList.remove('search-open');
+        const mag = document.getElementById('search-open-btn');
+        if (mag) mag.focus();
+        else document.querySelector<HTMLInputElement>('#toolbar-search-picker .person-picker-input')?.blur();
+        this.syncSearchState();
     },
 
     /** Phone "Cancel" (and Esc / Back): the query AND the filters go, the bar is at rest. */

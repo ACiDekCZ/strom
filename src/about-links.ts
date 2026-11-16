@@ -82,11 +82,11 @@ export function aboutChangelogLink(lang: Language, version: string, beta: boolea
 export const WEBSITE_URL = 'https://stromapp.info/';
 
 /**
- * The website's home page in a page's language: the site has /cs/ and /de/,
- * English (and any other language) at the root.
+ * The website's home page in a page's language: English at the root, the
+ * other languages under their prefix (/cs/, /de/, /pl/).
  */
 export function websiteUrl(lang: Language): string {
-    return lang === 'cs' || lang === 'de' ? `${WEBSITE_URL}${lang}/` : WEBSITE_URL;
+    return lang === 'en' ? WEBSITE_URL : `${WEBSITE_URL}${lang}/`;
 }
 
 /** The author's profile on X, offered in About in every language. */

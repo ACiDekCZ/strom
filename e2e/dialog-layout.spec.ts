@@ -300,9 +300,10 @@ test('segment switches in dialogs: square inner buttons, the outer corners follo
     }));
     const square = '0px 0px 0px 0px';
     // The selection line (sel-css) runs inside the cell, so the end cells round
-    // their outer corners to the container's inner radius (4px - 1px border).
-    const first = '3px 0px 0px 3px';
-    const last = '0px 3px 3px 0px';
+    // their outer corners to the container's inner radius: the dialog's text
+    // fields' 8px (T54 H11) - 1px border.
+    const first = '7px 0px 0px 7px';
+    const last = '0px 7px 7px 0px';
     expect(m).toEqual([
         // Male | Female | Unknown (U01)
         { buttons: [first, square, last], container: true, clips: true },

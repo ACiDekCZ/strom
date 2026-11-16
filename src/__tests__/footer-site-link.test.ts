@@ -29,9 +29,10 @@ function set(data: StromData, lang: Language) {
 const footers = (html: string) => [...html.matchAll(/<footer class="(?:sp|pp)-foot">[\s\S]*?<\/footer>/g)].map(m => m[0]);
 
 describe('the footer\'s link to the website', () => {
-    it('leads to the site in the pages\' language: Czech and German paths, English at the root', () => {
+    it('leads to the site in the pages\' language: Czech, German and Polish paths, English at the root', () => {
         expect(websiteUrl('cs')).toBe('https://stromapp.info/cs/');
         expect(websiteUrl('de')).toBe('https://stromapp.info/de/');
+        expect(websiteUrl('pl')).toBe('https://stromapp.info/pl/');
         expect(websiteUrl('en')).toBe('https://stromapp.info/');
     });
 
