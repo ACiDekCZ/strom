@@ -703,7 +703,11 @@ function focusTableAfterSource(): void {
         // After the table's redraw of a saved change (one frame).
         requestAnimationFrame(() => {
             const focused = document.activeElement;
-            if (focused && focused !== document.body) return;
+            // The dialog gives the focus back to the row's icon that opened it, which hides
+            // right after under the pointer (§10.1) and leaves the focus nowhere: not a taker.
+            const taken = focused instanceof Element && focused !== document.body
+                && !focused.closest('.tv-act') && focused.getClientRects().length > 0;
+            if (taken) return;
             if (TreeRenderer.getViewMode() !== 'table') return;
             mounted?.grid.activeCell()?.el?.focus({ preventScroll: true });
         });

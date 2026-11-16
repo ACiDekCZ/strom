@@ -203,6 +203,31 @@ test.describe('desktop (1440)', () => {
         await expect(col(page, 's:s3', 3)).toBeFocused();
     });
 
+    test('Open source by the row\'s icon, closed with Escape: the active cell has the focus again and the arrows move on from it', async ({ page }) => {
+        await openTable(page);
+        await page.locator('#table-container .tv-rowtype [data-rowtype="sources"]').click();
+        await expect(status(page)).toHaveText('3 of 3 sources');
+        await col(page, 's:s1', 2).click();
+        await expect(col(page, 's:s1', 2)).toBeFocused();
+        const open = row(page, 's:s1').locator('.tv-act[data-act="open"]');
+        await open.click();
+        const viewer = page.locator('#source-viewer-modal');
+        await expect(viewer).toHaveClass(/active/);
+        // A windowed browser hides the icon under the pointer only after the frame that follows the closing, and the
+        // dialog gives the focus back to the icon first; kept shown here, the icon still has the focus in that frame.
+        await page.addStyleTag({ content: '#table-container .tv-row[aria-selected="true"] .tv-acts { display: inline-flex !important; }' });
+        // The table's findings worked out before (their redraw would focus the cell anyway).
+        await expect(page.locator('#table-container .tv-status-checks')).toBeHidden();
+        await page.keyboard.press('Escape');
+        await expect(viewer).not.toHaveClass(/active/);
+        await expect(row(page, 's:s1')).toHaveAttribute('aria-selected', 'true');
+        await expect(col(page, 's:s1', 2)).toBeFocused();
+        // The arrows go on in the table: ↓ the next row (by title: Kniha…, Oddací…, Soupis…).
+        await page.keyboard.press('ArrowDown');
+        await expect(row(page, 's:s3')).toHaveAttribute('aria-selected', 'true');
+        await expect(col(page, 's:s3', 2)).toBeFocused();
+    });
+
     test('Online: web addresses written without "https://" pass the chip, as the Online column links them (T54)', async ({ page }) => {
         await openTable(page, false, {
             s1: { id: 's1', title: 'Matrika Horní Lhotka', repository: 'Archiv Fiktivní', reference: 'Kniha 98', url: 'www.example.org/lhotka' },
