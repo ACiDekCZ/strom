@@ -1482,7 +1482,7 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         groupsCollapse: 'Zwiń wszystkie grupy',
         groupsExpand: 'Rozwiń wszystkie grupy',
         groupKey: {
-            lines: 'Linia badań', rod: 'Ród', surname: 'Nazwisko', bPlace: 'Miejsce urodzenia', bCentury: 'Wiek urodzenia',
+            lines: 'Linia badania', rod: 'Ród', surname: 'Nazwisko', bPlace: 'Miejsce urodzenia', bCentury: 'Wiek urodzenia',
             bDecade: 'Dekada urodzenia', gen: 'Pokolenie', sex: 'Płeć', occ: 'Zawód',
             addedDay: 'Dodano – dzień', addedMonth: 'Dodano – miesiąc', addedYear: 'Dodano – rok', done: 'Gotowe / zostało',
             wDecade: 'Dekada ślubu', wPlace: 'Miejsce ślubu', uRods: 'Ród partnerów', kids: 'Liczba dzieci',

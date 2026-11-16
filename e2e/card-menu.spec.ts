@@ -40,7 +40,7 @@ test('desktop: the first level, the Add grid, More › with Delete apart', async
     const menu = page.locator('.context-menu');
     await expect(menu).toBeVisible();
     expect(await rowsOf(page, '.context-menu')).toEqual(
-        ['focus', 'edit', 'sources', 'descendants', 'grid', 'relationship', 'archives', '>more']);
+        ['focus', 'edit', 'sources', 'descendants', 'grid', 'relationship', 'archives', '>add-to-list', '>more']);
     // Labels without "Show": nouns open their dialog.
     await expect(menu.locator('[data-action="sources"]')).toHaveText('Sources');
     await expect(menu.locator('.menu-section-header')).toHaveText('Add');
@@ -147,7 +147,8 @@ test('a locked person: Unlock on the first level (a submenu of one is no submenu
     const id = await page.evaluate(() => Object.keys(window.Strom.DataManager.getData().persons)[0]);
     await page.evaluate((pid) => window.Strom.UI.runPersonMenuAction(pid as never, 'toggle-lock'), id);
     await card(page, 'Jan').click();
-    expect(await rowsOf(page, '.context-menu')).toEqual(['focus', 'view', 'toggle-lock']);
+    // Add to list › stays: a locked person may go to a list, a locked tree may not (spec 084 §4, Q1).
+    expect(await rowsOf(page, '.context-menu')).toEqual(['focus', 'view', '>add-to-list', 'toggle-lock']);
     await expect(page.locator('.context-menu [data-action="toggle-lock"]')).toHaveText('Unlock');
     await page.keyboard.press('Escape');
 
@@ -178,7 +179,7 @@ for (const width of [600, 1024]) {
         // Tiles first (Edit · Focus · Sources), then Add, the rows, More ›.
         expect(await actionsOf(page, '.bottom-sheet-person .sheet-tiles')).toEqual(['edit', 'focus', 'sources']);
         expect(await rowsOf(page, '.bottom-sheet-person .sheet-page-root')).toEqual(
-            ['edit', 'focus', 'sources', 'grid', 'descendants', 'relationship', 'archives', '>more']);
+            ['edit', 'focus', 'sources', 'grid', 'descendants', 'relationship', 'archives', '>add-to-list', '>more']);
         expect(await actionsOf(page, '.bottom-sheet-person .sheet-page-root').then(a => [...a].sort())).toEqual([...FIRST].sort());
 
         // Actionability (visible, stable, receives the pointer — not covered by
