@@ -105,6 +105,11 @@ export interface GridInput {
     researchAt?: (line: GridLine, col: ColumnDef, value: CellValue) => boolean;
     /** The agent at a row's person while the research is followed (§16.6): the bar on the name's left edge, ✓ once done. */
     agentAt?: (line: GridLine) => AgentRowState | null;
+    /**
+     * The agent's row in a window that follows the agent (spec 097 §5: its row
+     * key): the whole row on the follow tint, a line at its first cell.
+     */
+    agentKey?: string | null;
     /** A cell edited in place (T54 F8): it carries `is-editable` (the text cursor under a mouse). */
     editableAt?: (line: GridLine, col: ColumnDef) => boolean;
     /**
@@ -270,6 +275,8 @@ const DRAG_START_PX = 5;
 /** A double click's second click this soon after a jump by a name lands on the row jumped to: it does nothing (spec 103 K3.3). */
 const JUMP_DOUBLE_MS = 700;
 const LONG_PRESS_MS = 500;
+/** The glide of a reveal of the agent's row (spec 097 §5, O4). */
+const REVEAL_GLIDE_MS = 300;
 const LONG_PRESS_MOVE_PX = 10;
 /** Alt+Shift+←/→ changes a width by this much (§4.5). */
 export const WIDTH_STEP = 16;
@@ -581,6 +588,13 @@ export class TableGrid {
     private downAt: { x: number; y: number } | null = null;
     /** When the last jump by a name happened (`JUMP_DOUBLE_MS`). */
     private jumpedAt = -Infinity;
+    /** The glide of a reveal that keeps the selection (spec 097 §5): its frame, 0 when none runs. */
+    private glide = 0;
+    /**
+     * A row drawn out of view while its cell keeps the focus (spec 097 §5: the
+     * agent's reveal moves no focus); gone with the user's own move.
+     */
+    private keepKey: string | null = null;
     /**
      * The name a jump came from (spec 103 §1, 5): in the cell of the way
      * back, marked while that cell is the active one.
@@ -617,6 +631,15 @@ export class TableGrid {
         this.noMatch.addEventListener('click', (e) => {
             if ((e.target as Element).closest('.tv-nomatch-clear')) this.handlers.onClearFilters?.();
         });
+        // The user's own move (the wheel, the scroll bar, a press, a key) ends a reveal's glide and lets a kept row go.
+        const own = (): void => {
+            this.stopGlide();
+            this.keepKey = null;
+        };
+        el.addEventListener('wheel', own, { passive: true });
+        el.addEventListener('pointerdown', own, { passive: true });
+        el.addEventListener('keydown', own);
+        el.addEventListener('touchstart', own, { passive: true });
         el.addEventListener('scroll', () => {
             el.classList.toggle('is-scrolled-x', el.scrollLeft > 0);
             el.style.setProperty('--tv-sx', `${el.scrollLeft}px`);
@@ -1538,6 +1561,12 @@ export class TableGrid {
         for (let r = start; r < end; r++) {
             drawn.push(this.rowHtml(input, cw, this.lines[r], r, tops[r], tops[r + 1] - tops[r], r === bodyActive ? activeCol : -1, false, r));
         }
+        // A reveal of the agent's row moves no focus (spec 097 §5): the focused row stays drawn where it is, out of view.
+        const kept = this.keptLine(refocus, start, end);
+        if (kept >= 0) {
+            const d = this.rowHtml(input, cw, this.lines[kept], kept, tops[kept], tops[kept + 1] - tops[kept], kept === bodyActive ? activeCol : -1, false, kept);
+            drawn.push({ ...d, open: d.open.replace('class="tv-row', 'class="tv-row is-kept') });
+        }
         this.paintBody(drawn, this.body);
         // The pinned rows (spec 103 §3): all of them, as the body's rows; their place in the body for a screen reader.
         if (this.pinLines.length || this.drawnPins.length) {
@@ -1573,6 +1602,7 @@ export class TableGrid {
         if (line.kind !== 'more' && this.flashKeys.has(rk)) cls += ' is-flash';
         if (input.stale?.has(rk)) cls += ' is-stale';
         if (input.temp?.has(rk)) cls += ' is-temp';
+        if (line.kind === 'row' && input.agentKey === rk) cls += ' is-agent';
         if (pin) cls += ' is-pinned';
         if (outside) cls += ' is-outside';
         if (line.kind === 'row') {
@@ -2343,22 +2373,87 @@ export class TableGrid {
         if (focus) this.focusActive(true);
     }
 
-    /** Scroll a row into view (§8.3: the app's person search in the table) and draw. */
-    revealKey(key: string): void {
+    /**
+     * Scroll a row into view (§8.3: the app's person search in the table) and
+     * draw; the row becomes the active one. With `keepSelection` (spec 097 §5,
+     * O4: the agent's row in a window that follows it) only the scroll: the
+     * active cell, the selection and the focus stay, nothing when the row is
+     * all seen in the body (under the head and its pinned rows); `center` puts
+     * it in the middle of the body, `smooth` glides there (none under reduced
+     * motion). True when it scrolled.
+     */
+    revealKey(key: string, align: 'third' | 'center' = 'third', opts: { smooth?: boolean; keepSelection?: boolean } = {}): boolean {
         const at = this.lines.findIndex(l => lineKey(l) === key);
-        if (at < 0) return;
+        if (at < 0) return false;
         const tops = this.lineTops(this.rowHeight());
         const headH = this.head.offsetHeight;
         const view = Math.max(0, this.el.clientHeight - headH);
-        if (tops[at] < this.el.scrollTop || tops[at + 1] > this.el.scrollTop + view) {
-            this.el.scrollTop = Math.max(0, tops[at] - Math.round(view / 3));
+        const out = tops[at] < this.el.scrollTop || tops[at + 1] > this.el.scrollTop + view;
+        const to = Math.max(0, align === 'center'
+            ? Math.round((tops[at] + tops[at + 1]) / 2 - view / 2)
+            : tops[at] - Math.round(view / 3));
+        if (opts.keepSelection) {
+            if (!out || this.editor) return false;
+            const focused = document.activeElement?.closest<HTMLElement>('.tv-body .tv-row');
+            if (focused && this.body.contains(focused)) this.keepKey = focused.dataset.key ?? null;
+            this.scrollBodyTo(to, !!opts.smooth);
+            return true;
         }
+        this.stopGlide();
+        if (out) this.el.scrollTop = to;
         this.activePin = false;
         this.activeKey = key;
         this.activeCol = 0;
         this.cellChosen = false;
         this.bodyKey = '';
         this.draw();
+        return out;
+    }
+
+    /** The body's scroll to `top`: at once, or a glide of REVEAL_GLIDE_MS (at once under reduced motion). */
+    private scrollBodyTo(top: number, smooth: boolean): void {
+        this.stopGlide();
+        const el = this.el;
+        const from = el.scrollTop;
+        const reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (!smooth || reduced || from === top) {
+            el.scrollTop = top;
+            return;
+        }
+        const start = performance.now();
+        const step = (now: number): void => {
+            const t = Math.min(1, (now - start) / REVEAL_GLIDE_MS);
+            // Ease in and out.
+            const k = t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
+            el.scrollTop = Math.round(from + (top - from) * k);
+            this.glide = t < 1 ? requestAnimationFrame(step) : 0;
+        };
+        this.glide = requestAnimationFrame(step);
+    }
+
+    private stopGlide(): void {
+        if (this.glide) cancelAnimationFrame(this.glide);
+        this.glide = 0;
+    }
+
+    /**
+     * The focused row a reveal keeps drawn (its line, -1: none): only while
+     * its cell has the focus and it is out of the drawn rows.
+     */
+    private keptLine(focused: boolean, start: number, end: number): number {
+        const key = this.keepKey;
+        if (!key) return -1;
+        const row = document.activeElement?.closest<HTMLElement>('.tv-body .tv-row');
+        if (!focused || !row || !this.body.contains(row) || row.dataset.key !== key) {
+            this.keepKey = null;
+            return -1;
+        }
+        const at = this.lines.findIndex(l => lineKey(l) === key);
+        if (at < 0) {
+            this.keepKey = null;
+            return -1;
+        }
+        return at >= start && at < end ? -1 : at;
     }
 
     /**
@@ -2394,13 +2489,14 @@ export class TableGrid {
 
     /** The rows drawn now (their indexes), for tests and keyboard moves. */
     drawnRange(): { start: number; end: number } {
-        const rows = this.body.querySelectorAll<HTMLElement>('.tv-row[data-index]');
+        const rows = this.body.querySelectorAll<HTMLElement>('.tv-row[data-index]:not(.is-kept)');
         if (!rows.length) return { start: 0, end: 0 };
         return { start: Number(rows[0].dataset.index), end: Number(rows[rows.length - 1].dataset.index) + 1 };
     }
 
     destroy(): void {
         this.closeEdit(false);
+        this.stopGlide();
         if (this.frame) cancelAnimationFrame(this.frame);
         if (this.flashTimer) clearTimeout(this.flashTimer);
         this.resize?.disconnect();

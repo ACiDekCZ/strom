@@ -342,6 +342,8 @@ function wireAgentFollow(client: SatelliteClient, state: ReturnType<typeof start
         else if (before === null) queueMicrotask(() => UI.syncLiveFollow());
         if (ended) UI.showToast(strings.win.followEnded, SWITCHED_TOAST_MS);
         update();
+        // The Table's agent row: tinted, scrolled to again once attached, its hidden note (§5).
+        UI.tableAgentFollowChanged();
     });
 }
 

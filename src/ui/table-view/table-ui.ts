@@ -55,13 +55,14 @@ import { TableGrid, type CellEditSpec, type GridCellRef, type RowAction } from '
 import { editChangeOf, editOptionsOf, editTargetOf, editValueOf, type EditTarget } from './table-edit.js';
 import { cellChoices, copyPlainText } from './table-cell.js';
 import { fanZoomModifier } from '../../fan-zoom.js';
-import { createBar, createStatus, createWindowButton, updateBar, updateNav, updateResearchStatus, updateStatus } from './table-bar.js';
+import { createBar, createStatus, createWindowButton, updateAgentNote, updateBar, updateNav, updateResearchStatus, updateStatus } from './table-bar.js';
 import { JumpHistory, jumpTargetCell, type JumpStep } from './table-jump.js';
 import { PIN_MAX, TablePins, pinRanks, pinSvg } from './table-pins.js';
 import { createNotice, showNotice } from './table-notice.js';
 import { applyTableWindowState, readTableWindowState, tableWindowStateOf, type TableWindowState } from './table-window-state.js';
 import { canOpenWindows, openInNewWindow } from '../../windows/window-open.js';
 import { getWindowRole } from '../../windows/window-role.js';
+import { windowAgentFollow } from '../../windows/agent-follow-state.js';
 import {
     canMoveColumn, canPinColumn, catalogColumns, displayColumns, hideColumn, lockedColumn, moveColumnBy, moveColumnRun, moveColumnTo,
     filterChanged, normalizeColumns, pinColumn, resetColumns, setColumnWidth, setGroupCollapsed, setGroupShown, showColumn, sortAdd, sortClick,
@@ -227,6 +228,11 @@ export interface TableSelectionShare {
 let selectionShare: TableSelectionShare | null = null;
 /** Another window's selection that came during a cell's edit: taken when the edit ends. */
 let pendingShared: { person: PersonId | null; scroll: boolean } | null = null;
+/**
+ * The agent's row this window last scrolled to (spec 097 §5, O4: once per
+ * person of the agent; null: none yet, or the window paused or detached since).
+ */
+let agentRevealed: string | null = null;
 
 /** The people a row is about, the main one first: a person; a union's partners; an event's people; a source none. */
 function rowPeople(row: TableRow): PersonId[] {
@@ -650,6 +656,48 @@ export const tableMethods = uiModule({
     },
 
     /**
+     * The agent's row in another window that follows the agent (spec 097 §5,
+     * O4): an attached window scrolls it into the middle of the body when the
+     * agent moves on to another person and the row is not all seen (the
+     * active cell, the selection and the focus stay); a paused or detached one
+     * does not scroll. While following (attached or paused), a row the filter
+     * hides is said in the status line with Show for now (not scrolled to);
+     * a pinned row is seen under the head.
+     */
+    tableAgentRow(follow: ReturnType<typeof windowAgentFollow>, agentKey: string | null, inRows: boolean, pinned: boolean): void {
+        if (!mounted) return;
+        if (follow !== 'attached') agentRevealed = null;
+        const hidden = (follow === 'attached' || follow === 'paused') && !!agentKey && !inRows && !pinned;
+        updateAgentNote(mounted.status, hidden ? agentKey : null);
+        if (follow !== 'attached' || !agentKey || agentKey === agentRevealed || hidden) return;
+        agentRevealed = agentKey;
+        if (inRows && !pinned) mounted.grid.revealKey(agentKey, 'center', { smooth: true, keepSelection: true });
+    },
+
+    /** "Show for now" of the agent's hidden row (spec 097 §5, spec 103 2b): the row shown for now, scrolled to as the agent's. */
+    tableShowAgentRow(): void {
+        const person = this.liveFollowTarget();
+        if (!person) return;
+        const tree = treeKey();
+        const state = stateOf(tree);
+        if (state.rowType !== 'persons') return;
+        tempShown = { tree, person, ctx: peopleCtx(state) };
+        const el = document.getElementById('table-container');
+        if (!el || TreeRenderer.getViewMode() !== 'table') return;
+        // The note's button goes: the focus stays in the table, not on the page.
+        const fromNote = !!document.activeElement?.closest('.tv-status-agent');
+        this.renderTableView(el);
+        // Asked for (paused too): the row in the middle when not seen, the selection kept.
+        mounted?.grid.revealKey(`p:${person}`, 'center', { smooth: true, keepSelection: true });
+        if (fromNote) mounted?.grid.el.focus({ preventScroll: true });
+    },
+
+    /** This window's following of the agent changed (attached, paused, detached; spec 097 §5): the Table looks again. */
+    tableAgentFollowChanged(): void {
+        redrawTable(el => this.renderTableView(el));
+    },
+
+    /**
      * Another window's mirror of the agent's state changed (spec 097 K1.3):
      * the research's link or status may make the tree a research tree here
      * now (the model is built again), and the research's cells and views
@@ -868,6 +916,7 @@ export const tableMethods = uiModule({
                 });
             }
             const status = createStatus();
+            status.querySelector('.tv-status-agent-show')!.addEventListener('click', () => this.tableShowAgentRow());
             const legendBtn = status.querySelector<HTMLButtonElement>('.tv-legend-btn')!;
             legendBtn.addEventListener('click', () => this.showTableLegend(legendBtn));
             const colsBtn = document.createElement('button');
@@ -975,6 +1024,10 @@ export const tableMethods = uiModule({
         const pinned = this.tablePinnedLines(m, type, st, state.open[type], shownRows, pass, phone);
         const unionsButton = persons && hasMultiUnions(rows) ? (anyExpanded(st.unions, rows) ? 'collapse' : 'expand') : null;
         const summary = filterSummary(m, type, st.filter, st.search);
+        // Another window following the agent (spec 097 §5): the agent's row tinted, scrolled to, or said hidden.
+        const follow = windowAgentFollow();
+        const agentPerson = follow && research?.input.live ? this.liveFollowTarget() : null;
+        const agentKey = agentPerson && persons && m.personRows.has(agentPerson) ? `p:${agentPerson}` : null;
         const filterState: FilterBarState = {
             model: m, type, filter: st.filter, search: st.search, shown: rows.length, checking: !index || !!checks?.running, phone,
             pinned: phone ? 0 : pins.count(),
@@ -1035,6 +1088,7 @@ export const tableMethods = uiModule({
             agentAt: research?.input.live
                 ? (line) => (line.kind === 'row' && line.row.kind === 'person' ? researchAgentRow(research, line.row.person) : null)
                 : undefined,
+            agentKey,
             issueAt: index ? (line, col): CellIssueMark | null => {
                 const f = lineFindings(index, m, line, col)[0];
                 return f ? { severity: f.severity, label: translateValidationType(f.issue.type) } : null;
@@ -1051,6 +1105,7 @@ export const tableMethods = uiModule({
             } : undefined,
         }, restore);
         if (revealFocus) mounted.grid.revealKey(revealFocus);
+        this.tableAgentRow(follow, agentKey, shownRows.some(r => rowKey(r) === agentKey), !!pinned?.keys.has(agentKey ?? ''));
         showNotice(mounted.notice, hiddenJump ? hiddenJump.step.to.label : null);
         updateNav(mounted.bar, jumps.any(), jumps.canBack() ? jumps.backLabel() : null, jumps.canForward() ? jumps.forwardLabel() : null);
         if (flashNext) {

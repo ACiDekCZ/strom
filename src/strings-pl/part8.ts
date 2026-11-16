@@ -1463,6 +1463,7 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         filters: 'Filtry',
         clearFilters: 'Wyczyść filtry',
         outsideFilter: 'poza filtrem',
+        agentRowHidden: 'Wiersz agenta ukrywa filtr',
         link: {
             goTo: (name: string) => `Przejdź do ${name}`, pick: 'Przejdź do…', inCell: 'Osoby w komórce', enterHint: 'Enter: przejdź do osoby',
             hidden: (name: string) => `Ukryte przez filtr: ${name}.`, showTemp: 'Pokaż tymczasowo',

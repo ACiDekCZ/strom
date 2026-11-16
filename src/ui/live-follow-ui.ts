@@ -176,6 +176,29 @@ export function setLiveFollowScope(s: LiveFollowScope | null): void {
     scope = s;
 }
 
+/** Keys that move in the Table's rows or scroll it. */
+const TABLE_MOVE_KEY = /^(Arrow(Up|Down|Left|Right)|PageUp|PageDown|Home|End| )$/;
+
+/**
+ * The user takes the Table over (spec 097 §5: a pause, never the app's own
+ * scroll): the wheel over the grid, a press on its scroll bar or in its rows
+ * (a cell, a name), a key that moves in its rows or scrolls it (not while a
+ * cell is edited). Its bar, head and status line do not.
+ */
+function tableTakenOver(e: Event): boolean {
+    const target = e.target as HTMLElement | null;
+    const grid = target?.closest('.tv-grid');
+    if (!target || !grid) return false;
+    if (e.type === 'wheel') return true;
+    if (e.type === 'keydown') {
+        const k = e as KeyboardEvent;
+        if (k.ctrlKey || k.metaKey || k.altKey || target.closest('input, textarea, select, [contenteditable="true"]')) return false;
+        return TABLE_MOVE_KEY.test(k.key);
+    }
+    // The grid itself under the press: its scroll bar.
+    return target === grid || !!target.closest('.tv-body');
+}
+
 /** Following is switched on here: the window's own state, else the ◎ switch. */
 function isOn(): boolean {
     return scope ? scope.on() : followOn;
@@ -862,6 +885,11 @@ export const liveFollowMethods = uiModule({
         return followTarget() !== null;
     },
 
+    /** The person following goes to now: the first run's at work on a person of this tree (null: none). */
+    liveFollowTarget(): PersonId | null {
+        return followTarget();
+    },
+
     /** Back to the agent from another window's strip: the pause by hand, else the map's. */
     liveFollowBack(): void {
         if (pausedByUser) this.resumeLiveFollow();
@@ -897,6 +925,12 @@ export const liveFollowMethods = uiModule({
                 return;
             }
             const target = e.target as HTMLElement | null;
+            // The Table (spec 097 §5): only its own scroll or a press in its rows takes it over, not its bars or head.
+            if (TreeRenderer.getViewMode() === 'table') {
+                if (tableTakenOver(e)) this.pauseLiveFollow();
+                else if (pausedByUser) this.pauseLiveFollow();
+                return;
+            }
             // A press on a card or a control opens something (that holds the jump); on the canvas it drags.
             if (e.type !== 'wheel' && target?.closest('.person-card, button, a, input, .context-menu')) {
                 if (pausedByUser) this.pauseLiveFollow();
@@ -907,7 +941,11 @@ export const liveFollowMethods = uiModule({
         container.addEventListener('mousedown', touched, true);
         container.addEventListener('touchstart', touched, { capture: true, passive: true });
         container.addEventListener('wheel', touched, { capture: true, passive: true });
-        container.addEventListener('keydown', () => { if (pausedByUser) this.pauseLiveFollow(); }, true);
+        container.addEventListener('keydown', (e) => {
+            // A key that moves in the Table's rows (spec 097 §5) takes it over; any other key keeps a pause going.
+            if (followActive() && TreeRenderer.getViewMode() === 'table' && tableTakenOver(e)) this.pauseLiveFollow();
+            else if (pausedByUser) this.pauseLiveFollow();
+        }, true);
         // Someone else focused or another view since the last jump (search,
         // Focus in the menu, the view tabs): the user has the tree.
         const movedAway = (): void => {

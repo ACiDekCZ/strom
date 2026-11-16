@@ -9302,6 +9302,8 @@ const stringsEN = {
         filters: 'Filters',
         clearFilters: 'Clear filters',
         outsideFilter: 'outside the filter',
+        /** Another window following the agent: the agent's row is hidden by the filter (spec 097 §5). */
+        agentRowHidden: 'The agent’s row is hidden by the filter',
         link: {
             goTo: (name: string) => `Go to ${name}`, pick: 'Go to…', inCell: 'People in the cell', enterHint: 'Enter: go to the person',
             hidden: (name: string) => `Hidden by the filter: ${name}.`, showTemp: 'Show for now',
@@ -18435,6 +18437,7 @@ const stringsCZ: StringsType = {
         filters: 'Filtry',
         clearFilters: 'Zrušit filtry',
         outsideFilter: 'mimo filtr',
+        agentRowHidden: 'Řádek agenta skrývá filtr',
         link: {
             goTo: (name: string) => `Přejít na ${name}`, pick: 'Přejít na…', inCell: 'Osoby v buňce', enterHint: 'Enter: přejít na osobu',
             hidden: (name: string) => `Filtr skrývá: ${name}.`, showTemp: 'Zobrazit dočasně',
@@ -27484,6 +27487,7 @@ const stringsDE: StringsType = {
         filters: 'Filter',
         clearFilters: 'Filter aufheben',
         outsideFilter: 'außerhalb des Filters',
+        agentRowHidden: 'Die Zeile des Agenten ist ausgefiltert',
         link: {
             goTo: (name: string) => `Zu ${name} wechseln`, pick: 'Wechseln zu…', inCell: 'Personen in der Zelle', enterHint: 'Eingabe: zur Person wechseln',
             hidden: (name: string) => `Vom Filter ausgeblendet: ${name}.`, showTemp: 'Vorübergehend zeigen',

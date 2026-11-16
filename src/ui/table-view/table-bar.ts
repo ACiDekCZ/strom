@@ -149,6 +149,9 @@ export function createStatus(): HTMLElement {
     el.className = 'tv-status';
     el.innerHTML = '<span class="tv-status-count" aria-live="polite"></span>'
         + '<span class="tv-status-sort"></span>'
+        + '<span class="tv-status-agent" hidden><svg class="tv-status-agent-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true">'
+        + '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>'
+        + `<span class="tv-status-agent-text" aria-live="polite"></span><button type="button" class="tv-status-agent-show">${esc(strings.table.link.showTemp)}</button></span>`
         + '<span class="tv-status-right">'
         + '<span class="tv-status-res" hidden></span>'
         + `<span class="tv-status-checks" role="status" hidden><span class="tv-checks-ring" aria-hidden="true">◌</span> ${esc(strings.table.checksRunning)}</span>`
@@ -168,6 +171,27 @@ export function updateStatus(el: HTMLElement, type: RowType, shown: number, tota
     el.querySelector('.tv-status-count')!.textContent = countText(type, shown, total);
     el.querySelector('.tv-status-sort')!.textContent = sortText(type, sort);
     el.querySelector<HTMLElement>('.tv-status-checks')!.hidden = !checking;
+}
+
+/**
+ * Another window following the agent (spec 097 §5, dotaz 6): "◎ The agent's
+ * row is hidden by the filter · Show for now" after the sort while the
+ * agent's person (`person`) is hidden; null: none. The sentence is written
+ * (and so said) once per person of the agent.
+ */
+export function updateAgentNote(el: HTMLElement, person: string | null): void {
+    const note = el.querySelector<HTMLElement>('.tv-status-agent')!;
+    const text = note.querySelector<HTMLElement>('.tv-status-agent-text')!;
+    note.hidden = !person;
+    if (!person) {
+        delete note.dataset.person;
+        text.textContent = '';
+        return;
+    }
+    if (note.dataset.person === person) return;
+    note.dataset.person = person;
+    text.textContent = strings.table.agentRowHidden;
+    note.title = strings.table.agentRowHidden;
 }
 
 /**

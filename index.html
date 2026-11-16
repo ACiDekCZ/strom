@@ -10521,6 +10521,12 @@
         /* A row shown for now outside the filter (spec 103 2b): dimmed as a stale row, a stripe at its name. */
         .tv-body .tv-row.is-temp > .tv-cell:not(:first-child) { opacity: 0.55; }
         .tv-body .tv-row.is-temp > .tv-cell:first-child { box-shadow: inset 3px 0 0 var(--warning-text); }
+        /* The agent's row in a window following the agent (spec 097 §5): the follow tint over the whole row (its cells
+           inherit it), a 3 px line in the Name cell, the name bold; the line takes the place of the agent's bar there. */
+        .tv-body .tv-row.sel-opt.is-agent { background: var(--follow-c1-soft); }
+        .tv-body .tv-row.is-agent > .tv-name { box-shadow: inset 3px 0 0 var(--follow-c1); font-weight: 600; }
+        .tv-body .tv-row.is-agent.sel-opt[aria-selected="true"] > .tv-name { box-shadow: inset 3px 0 0 var(--follow-c1), inset 0 calc(-1 * var(--sel-line-w)) 0 var(--sel-line); }
+        .tv-body .tv-row.is-agent .tv-agent-bar { display: none; }
         .tv-outside {
             flex: none; margin-left: 8px; font-family: var(--font-sans); font-size: 11px; font-style: italic; font-weight: 400;
             color: var(--warning-text); white-space: nowrap; padding-right: 3px;
@@ -11064,6 +11070,16 @@
         .tv-status-res { color: var(--text-faint); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
         .tv-status-res.is-following { color: var(--primary); font-weight: 600; }
         .tv-status-res[hidden] { display: none; }
+        /* Spec 097 §5 (5d): another window following the agent, its row hidden by the filter: ◎ + the sentence + Show for now after the sort. */
+        .tv-status-agent { display: inline-flex; align-items: center; gap: 6px; min-width: 0; flex: 0 1 auto; color: var(--follow-c1); font-weight: 500; }
+        .tv-status-agent[hidden] { display: none; }
+        .tv-status-agent-mark { flex: none; width: 13px; height: 13px; }
+        .tv-status-agent-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+        .tv-status-agent-show {
+            flex: none; height: 24px; padding: 0 2px; margin-left: 4px; border: none; background: none; font: inherit; font-weight: 600;
+            color: inherit; text-decoration: underline; text-underline-offset: 2px; white-space: nowrap; cursor: pointer;
+        }
+        .tv-status-agent-show:focus-visible { outline: 2px solid var(--follow-c1); outline-offset: 1px; border-radius: 2px; }
         /* The research's state gives way with "…" before the legend leaves the status line (a phone, de). */
         .tv-status-right:has(> .tv-status-res:not([hidden])) { flex: 0 1 auto; min-width: 0; }
         /* A phone following a research: the table ends above the research's strip (its status line and legend stay in sight). */
@@ -11345,6 +11361,8 @@
             .tv-status:has(.tv-status-ro:not([hidden])) .tv-status-sort { display: none; }
             /* §16.2 on a phone: the research's state takes the sort's place too (the heads show the sort). */
             .tv-status:has(.tv-status-res:not([hidden])) .tv-status-sort { display: none; }
+            /* Spec 097 §5 in a narrow window: the agent's hidden-row note takes the sort's place too. */
+            .tv-status:has(.tv-status-agent:not([hidden])) .tv-status-sort { display: none; }
             .tv-ro-long { display: none; }
             .tv-ro-short { display: inline; }
             .tv-nav-btn { width: 44px; height: 44px; border: none; }
