@@ -756,10 +756,12 @@ test.describe('Customize panel: ⋯, a section\'s menu, Settings (spec 044)', ()
 });
 
 /** A fixed clock at the real now, kept away from midnight UTC (the bridge's own times are real ones). */
-async function fixClock(page: Page): Promise<void> {
+async function fixClock(page: Page): Promise<Date> {
     const now = Date.now();
     const h = new Date(now).getUTCHours();
-    await page.clock.setFixedTime(new Date(h >= 22 ? now - 3 * 3600_000 : h < 2 ? now + 3 * 3600_000 : now));
+    const fixed = new Date(h >= 22 ? now - 3 * 3600_000 : h < 2 ? now + 3 * 3600_000 : now);
+    await page.clock.setFixedTime(fixed);
+    return fixed;
 }
 
 const DEFAULT_ORDER = ['working', 'waiting', 'directions', 'changes', 'queue', 'knows'];
@@ -1618,8 +1620,10 @@ test.describe('Research overview', () => {
         const INSTRUCTION = 'Stáhnout snímky křestní matriky Chlumy 1850–1871 (kniha 4521) ze Státního oblastního archivu: přihlásit se na portálu archivu, '
             + 'otevřít knihu, vzít strany 12 až 48 v plném rozlišení a uložit je do složky images/chlumy-4521/ výzkumu; když nejde vzít celou knihu, '
             + 'stačí strany kolem roku 1865 (křty od února do září). Pak tady krok označit jako hotový, agent strany přečte a pokračuje u rodiny Fíškových, konec zadání.';
+        // A fixed clock away from midnight UTC, set before the page loads; the item's time from it.
+        const now = await fixClock(page);
         await follow(page, { width: 1440, height: 900 }, (b) => {
-            b.waiting = [{ id: 'T0004', what: 'Stáhnout snímky matriky', on: INSTRUCTION, person: 'P0012', at: new Date().toISOString() }];
+            b.waiting = [{ id: 'T0004', what: 'Stáhnout snímky matriky', on: INSTRUCTION, person: 'P0012', at: new Date(now.getTime() - 20 * 60_000).toISOString() }];
         });
         expect(INSTRUCTION.length).toBeGreaterThan(400);
         // The panel's row: the whole text, clamped to two lines by the style (on hover in its title).
