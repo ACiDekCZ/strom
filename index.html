@@ -22412,11 +22412,13 @@
             flex: none; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; box-sizing: border-box;
             border: 1px solid var(--text-faint); border-radius: 50%; font-size: 10.5px; font-weight: 600; line-height: 1; color: var(--text-light);
         }
+        /* An arrow and the step it leads to wrap as one: an arrow never ends a line (D13). */
+        .research-overview__deliver-pair { display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; }
         .research-overview__deliver-arrow { flex: none; font-size: 13px; color: var(--text-ghost); }
         .research-overview__deliver-step > .waiting-action { min-width: 0; }
         /* A narrow column (the small panel's dialog, a window's column under 380 px): the steps under each other, no arrows. */
         .research-overview__deliver-steps.is-column { flex-direction: column; align-items: flex-start; }
-        .research-overview__deliver-steps.is-column > .research-overview__deliver-arrow { display: none; }
+        .research-overview__deliver-steps.is-column .research-overview__deliver-arrow { display: none; }
         @container rov-phase (max-width: 379px) {
             .research-overview__deliver-steps { flex-direction: column; align-items: flex-start; }
             .research-overview__deliver-arrow { display: none; }

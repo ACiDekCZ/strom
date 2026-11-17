@@ -616,23 +616,26 @@ export type WaitingTaskTexts = typeof strings.live.waitingTask;
 /**
  * What an item waiting for images asks to be delivered: the numbers still
  * missing (null: not known — an older research, a count not known, none
- * left) and the title of its one book (null: none, the task's own folder).
+ * left) and the title of the book whose folder they go into (null: the
+ * task's own folder).
  */
 export interface WaitingDeliver {
     missing: number[] | null;
     book: string | null;
 }
 
-export function waitingDeliver(w: LiveWaiting, books?: LiveBooks | null): WaitingDeliver {
+/**
+ * `bookFolder`: the book's folder can be opened from here (the research's
+ * link to it). The sentence names the folder the folder step opens: the
+ * book's only for a book in the research's list with its folder, the task's
+ * otherwise (a book outside the list, without a folder, or no such link).
+ */
+export function waitingDeliver(w: LiveWaiting, books?: LiveBooks | null, bookFolder = true): WaitingDeliver {
     const img = imagesState(w);
     const missing = img?.detail === 'full' && img.missing && img.missing.length > 0 ? [...img.missing] : null;
     const id = itemBook(w);
-    let book: string | null = null;
-    if (id) {
-        const listed = books?.list.find(b => b.id === id);
-        book = listed ? bookTitle(listed) : stubTitle(w, id) ?? id;
-    }
-    return { missing, book };
+    const listed = id && bookFolder ? books?.list.find(b => b.id === id) : undefined;
+    return { missing, book: listed?.folder ? bookTitle(listed) : null };
 }
 
 /** The sentence of the Deliver block: which images, as files, into which folder. */

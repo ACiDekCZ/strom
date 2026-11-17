@@ -2,7 +2,8 @@
  * An item waiting for images (spec 105 U4 §5): the Deliver block says which
  * images go as files into which folder — the numbers still missing when the
  * research says them, else a sentence without numbers; the book's folder
- * with its title for an item of one book, the task's folder without one —
+ * with its title for an item of one book the research lists with its folder
+ * (and a link to open it), the task's folder otherwise, as its folder step —
  * and its steps come in their order (the archive's website, the folder,
  * "Add images"), a step that cannot go from here left out. Invented
  * archives and books only.
@@ -66,11 +67,19 @@ describe('the Deliver sentence of an item waiting for images', () => {
         expect(deliverSentence(waitingDeliver(none, null), T('de'))).toBe('Bilder als Dateien (JPG oder PNG) im Ordner der Aufgabe');
     });
 
-    it('a book outside the research\'s list: the title its inbox names, else its id', () => {
+    it('names the folder the folder step opens: the task\'s for a book outside the list, without a folder or a link to it', () => {
+        // A book outside the research's list: its folder cannot be opened, the step opens the task's.
         const named = item({ book: 'B0009', inbox: { dir: 'inbox/T0001', have: 0, want: 1, missing: [7], book: 'Dolní Vzorov 03', recordset: 'B0009' } });
-        expect(waitingDeliver(named, books).book).toBe('Dolní Vzorov 03');
-        const bare = item({ book: 'B0009' });
-        expect(waitingDeliver(bare, books).book).toBe('B0009');
+        expect(waitingDeliver(named, books)).toEqual({ missing: [7], book: null });
+        expect(deliverSentence(waitingDeliver(named, books), T('cs'))).toBe('Snímek 7 jako soubor (JPG nebo PNG) do složky úkolu');
+        expect(deliverSentence(waitingDeliver(item({ book: 'B0009' }), books), T('en'))).toBe('Images as files (JPG or PNG) in the task’s folder');
+        // A listed book without its folder.
+        const noFolder: LiveBooks = { ...books, list: [{ ...books.list[0], folder: undefined }] };
+        expect(waitingDeliver(item({ book: 'B0001' }), noFolder).book).toBeNull();
+        // A listed book with its folder, but no link to open it (an older research): the task's folder.
+        const listed = item({ book: 'B0001', inbox: { dir: 'inbox/T0001', have: 0, want: 2, missing: [3, 4] } });
+        expect(deliverSentence(waitingDeliver(listed, books, false), T('de'))).toBe('Bilder 3–4 als Dateien (JPG oder PNG) im Ordner der Aufgabe');
+        expect(waitingDeliver(listed, books, true).book).toBe('Horní Vzorov 01 1801–1838');
     });
 });
 

@@ -187,9 +187,11 @@ export const waitingTaskMethods = uiModule({
      * is delivered (the numbers still missing, as files, into the book's or
      * the task's folder), then on a computer the steps in their order —
      * ① the archive's website ↗, ② its folder (the book's through the bridge,
-     * no mark; without a book the task's, the terminal mark), ③ "Add images"
+     * no mark; otherwise the task's, the terminal mark; the sentence names
+     * the same folder), ③ "Add images"
      * the one main action — a step that cannot go from here is left out and
-     * the next takes its number; arrows between them, under each other in a
+     * the next takes its number; arrows between them, each with the step it
+     * leads to (never at the end of a line), under each other in a
      * narrow column (`column`, or the phase's container under 380 px). A
      * phone: the sentence and where images are saved, no steps. `upload`:
      * the upload area stands under the block (the panel's dialog), the
@@ -199,8 +201,12 @@ export const waitingTaskMethods = uiModule({
         const L = strings.live;
         const T = L.waitingTask;
         const box = el('div', 'research-overview__waiting-deliver');
+        const book = bookById(s, w.book);
+        // The book's folder through the bridge (as in its band); else the task's, in the terminal.
+        const bookFolder = w.book && book?.folder ? this.activeResearchLink('book', { book: w.book, bookDo: 'folder' }) : null;
         box.appendChild(el('span', 'research-overview__deliver-label', T.deliverLabel));
-        box.appendChild(el('p', 'research-overview__deliver-text', deliverSentence(waitingDeliver(w, s.books), T)));
+        // The sentence names the folder the folder step opens (a phone: the book's when the research has it).
+        box.appendChild(el('p', 'research-overview__deliver-text', deliverSentence(waitingDeliver(w, s.books, opts.phone || !!bookFolder), T)));
         if (opts.phone) {
             box.appendChild(el('p', 'research-overview__deliver-phone', T.deliverPhone));
             return box;
@@ -208,20 +214,21 @@ export const waitingTaskMethods = uiModule({
         if (!opts.steps) return box;
         const task = researchTaskRef(w.id);
         const views = waitingActions(w, { writes: this.liveWaitingWrites(s), links: this.researchLinkAvailable('task'), phone: false }) ?? [];
-        const book = bookById(s, w.book);
         const web = deliverWebUrl(w, book);
-        // The book's folder through the bridge (as in its band); else the task's, in the terminal.
-        const bookFolder = w.book && book?.folder ? this.activeResearchLink('book', { book: w.book, bookDo: 'folder' }) : null;
         const taskFolder = !bookFolder && task && views.some(v => v.key === 'folder') ? this.activeResearchLink('task', { task, taskDo: 'folder' }) : null;
         const steps = deliverSteps({ web, folder: !!(bookFolder || taskFolder), images: !opts.upload && views.some(v => v.key === 'images') });
         if (steps.length === 0) return box;
         const total = steps.length + (opts.upload ? 1 : 0);
         const row = el('div', `research-overview__deliver-steps${opts.column ? ' is-column' : ''}`);
         steps.forEach((step, i) => {
+            // The arrow goes with the step it leads to (one unit that does not wrap): never left at the end of a line.
+            let slot: HTMLElement = row;
             if (i > 0) {
+                slot = el('span', 'research-overview__deliver-pair');
                 const arrow = el('span', 'research-overview__deliver-arrow', '→');
                 arrow.setAttribute('aria-hidden', 'true');
-                row.appendChild(arrow);
+                slot.appendChild(arrow);
+                row.appendChild(slot);
             }
             const item = el('span', 'research-overview__deliver-step');
             const num = el('span', 'research-overview__deliver-num', String(i + 1));
@@ -269,7 +276,7 @@ export const waitingTaskMethods = uiModule({
             }
             action.dataset.action = step;
             item.appendChild(action);
-            row.appendChild(item);
+            slot.appendChild(item);
         });
         box.appendChild(row);
         return box;

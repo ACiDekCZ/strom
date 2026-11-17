@@ -689,6 +689,29 @@ test.describe('spec 105 U4 §5 an item waiting for images: images to deliver, no
         await expect(other.locator('[data-action="web"]')).toHaveCount(0);
     });
 
+    for (const lang of ['en', 'de']) test(`a docked overview at 1440 (${lang}): steps that wrap never leave an arrow at the end of a line`, async ({ page }) => {
+        await setup(page, { width: 1440, height: 900 }, lang === 'en' ? undefined : lang);
+        const item = await openItem(page, 'T0021');
+        const row = item.locator('.research-overview__deliver-steps');
+        const parts = await row.evaluate(r => [...r.querySelectorAll<HTMLElement>('.research-overview__deliver-arrow, .research-overview__deliver-step')]
+            .filter(e => e.getClientRects().length > 0)
+            .map(e => { const b = e.getBoundingClientRect(); return { arrow: e.classList.contains('research-overview__deliver-arrow'), mid: b.top + b.height / 2, top: b.top }; }));
+        // The column is narrow enough here that ③ goes to a line of its own (else this test proves nothing).
+        const steps = parts.filter(p => !p.arrow);
+        expect(steps.length).toBe(3);
+        expect(steps[2].top).toBeGreaterThan(steps[0].top + 4);
+        // Each arrow stands on the line of the step it leads to.
+        parts.forEach((p, i) => {
+            if (!p.arrow) return;
+            expect(parts[i + 1]?.arrow).toBe(false);
+            expect(Math.abs(parts[i + 1].mid - p.mid)).toBeLessThan(6);
+        });
+        await expect(item.locator('.research-overview__deliver-step')).toHaveText(lang === 'en'
+            ? ['1Archive website ↗', '2Open the book’s folder', '3Add images']
+            : ['1Archiv-Website ↗', '2Ordner des Buchs öffnen', '3Bilder hinzufügen']);
+        await fits(page, item);
+    });
+
     test('a column under 380 px: the steps under each other, no arrows, their order kept', async ({ page }) => {
         await setup(page, { width: 1440, height: 900 });
         await page.addStyleTag({ content: 'body { --overview-w: 340px !important; }' });
