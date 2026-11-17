@@ -253,8 +253,12 @@ test.describe('desktop in German (1440)', () => {
         const seg = (await page.locator('#table-container .tv-rowtype').boundingBox())!;
         expect(Math.abs((exp.y + exp.height / 2) - (seg.y + seg.height / 2))).toBeLessThan(2);
         expect(bar.height).toBeLessThanOrEqual(53);
-        // The search gave way, not below its 160 px.
-        expect((await page.locator('#table-container .tv-search-q').boundingBox())!.width).toBeGreaterThanOrEqual(159);
+        // The search gave way, not below the 80 px of the last fitting step (fitBarRow: a wider font
+        // narrows it earlier, as on CI's Linux).
+        expect((await page.locator('#table-container .tv-search-q').boundingBox())!.width).toBeGreaterThanOrEqual(79);
+        await expect(page.locator('#table-container .tv-slot-more')).toBeVisible();
+        const more = (await page.locator('#table-container .tv-slot-more').boundingBox())!;
+        expect(Math.abs((more.y + more.height / 2) - (seg.y + seg.height / 2))).toBeLessThan(2);
         await noPageOverflow(page);
     });
 });

@@ -15,7 +15,7 @@ import { columnById, columnLabel, columnOffered, type SortSpec } from './table-c
 import { ROW_KEY, ROW_TYPES, type RowType } from './table-model.js';
 import { listKindIcon } from '../list-kind-icon.js';
 import type { ListKind } from '../../person-lists.js';
-import { isDesktop } from '../../breakpoints.js';
+import { isPhoneBar } from '../../breakpoints.js';
 
 export interface BarHandlers {
     /** A row type was chosen (segment or sheet). */
@@ -172,7 +172,7 @@ export function updateScope(bar: HTMLElement, shown: ScopeShown): void {
 }
 
 /**
- * The steps a computer's row 1 takes before it would wrap (⧉ and ⋯ alone on
+ * The steps row 1 takes on a computer and at a tablet's width before it would wrap (⧉ and ⋯ alone on
  * a second row): 1 the labels Scope and View hidden, the whole tree as a list
  * glyph; 2 the search, the list's name and the view's name narrower (…);
  * 3 a list as its kind's icon + ▾ (its name in the title and the label);
@@ -198,12 +198,12 @@ function rowWraps(row: HTMLElement): boolean {
     return bottom - top >= 8;
 }
 
-/** Keep a computer's row 1 on one line: the fewest steps that fit (the tablet and the phone keep their own rules). */
+/** Keep row 1 on one line on a computer and at a tablet's width: the fewest steps that fit (the phone keeps its own rules). */
 export function fitBarRow(bar: HTMLElement): void {
     const row = bar.querySelector<HTMLElement>('.tv-bar-row1');
     if (!row) return;
     row.classList.remove(...FIT_STEPS);
-    if (!isDesktop() || row.offsetParent === null) return;
+    if (isPhoneBar() || row.offsetParent === null) return;
     let at: string | null = null;
     for (const step of FIT_STEPS) {
         if (!rowWraps(row)) return;

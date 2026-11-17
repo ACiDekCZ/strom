@@ -10939,8 +10939,8 @@
         .tv-scope-glyph { display: none; flex: none; color: var(--text-light); }
         @media (max-width: 1199px) { .tv-slot-scope .tv-scope-label { display: none; } }
         /* A tight bar: the whole tree as a list glyph (its name in the title and the label), the labels hidden;
-           a list keeps its name. A tablet's width with a changed view's buttons always; a computer's row 1 by
-           measure (fitBarRow in table-bar.ts) before ⧉ and ⋯ would wrap: step 1 this, step 2 the search,
+           a list keeps its name. A tablet's width with a changed view's buttons always; row 1 of a computer and
+           a tablet's width by measure (fitBarRow in table-bar.ts) before ⧉ and ⋯ would wrap: step 1 this, step 2 the search,
            the list's name and the view's name narrower, step 3 a list too as its kind's icon (its name in the
            title and the label), step 4 the search at 80 px. */
         @media (max-width: 1024px) {
@@ -10949,7 +10949,7 @@
             .tv-bar-row1:has(.tv-view-discard:not([hidden])) .tv-scope-btn:not(.is-list) .tv-scope-name { display: none; }
             .tv-bar-row1:has(.tv-view-discard:not([hidden])) .tv-scope-btn:not(.is-list) .tv-scope-glyph { display: block; }
         }
-        @media (min-width: 1025px) {
+        @media (min-width: 641px) {
             .tv-bar-row1:is(.tv-fit-1, .tv-fit-2, .tv-fit-3, .tv-fit-4) .tv-scope-label,
             .tv-bar-row1:is(.tv-fit-1, .tv-fit-2, .tv-fit-3, .tv-fit-4) .tv-slot-view .tv-view-label { display: none; }
             .tv-bar-row1:is(.tv-fit-1, .tv-fit-2, .tv-fit-3, .tv-fit-4) .tv-scope-btn:not(.is-list) .tv-scope-name { display: none; }
@@ -11008,10 +11008,11 @@
            Export; with the spacer's gap given back a changed view's buttons still fit one row at 1440 in de. */
         .tv-slot-window { display: flex; margin-left: -4px; }
         .tv-slot-window:has(> .tv-window-btn[hidden]) { display: none; }
-        /* A tablet's width with a mouse (641–1024): the search gives way to 120 px, so ⧉ stays in the row. */
+        /* A tablet's width with a mouse (641–1024): the search gives way to 120 px, so ⧉ stays in the row
+           (and to 80 px with step 4 of fitBarRow when a wider font still wraps it). */
         @media (min-width: 641px) and (max-width: 1024px) {
-            .tv-bar-row1:has(.tv-window-btn:not([hidden])) .tv-slot-search,
-            .tv-bar-row1:has(.tv-slot-more:not(.is-empty)) .tv-slot-search { flex-basis: 120px; }
+            .tv-bar-row1:not(.tv-fit-4):has(.tv-window-btn:not([hidden])) .tv-slot-search,
+            .tv-bar-row1:not(.tv-fit-4):has(.tv-slot-more:not(.is-empty)) .tv-slot-search { flex-basis: 120px; }
         }
         .tv-window-btn {
             display: inline-flex; align-items: center; justify-content: center; flex: none;

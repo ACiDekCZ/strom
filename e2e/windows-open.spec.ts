@@ -348,6 +348,20 @@ test.describe('tablet width with a mouse (1024)', () => {
         expect(b.x).toBeGreaterThan(exp.x + exp.width);
         expect(b.x + b.width).toBeLessThanOrEqual(1024);
     });
+
+    test('the Table\'s ⧉ stays in the first row in de with a wider font, as on Linux (row 1 fitted by measure)', async ({ page }) => {
+        await openMain(page);
+        // CI's Linux renders the same font a little wider: the row has to fit by measure, not by Mac metrics.
+        await page.addStyleTag({ content: '.tv-bar-row1, .tv-bar-row1 * { letter-spacing: 0.6px !important; }' });
+        await page.evaluate(() => window.Strom.UI.setLanguage('de'));
+        await page.evaluate(() => window.Strom.UI.setDisplayViewMode('table'));
+        const btn = tv(page, '.table-bar__window');
+        await expect(btn).toBeVisible();
+        const b = (await btn.boundingBox())!;
+        const seg = (await tv(page, '.tv-rowtype').boundingBox())!;
+        expect(Math.abs((b.y + b.height / 2) - (seg.y + seg.height / 2))).toBeLessThan(2);
+        expect(b.x + b.width).toBeLessThanOrEqual(1024);
+    });
 });
 
 const UA_WINDOWS = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36';
