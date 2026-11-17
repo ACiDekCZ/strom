@@ -7,7 +7,8 @@
  *  - on open: remember what had focus, then move focus into the dialog (the
  *    first visible enabled field, or the dialog container itself) unless the
  *    dialog already focused something inside itself;
- *  - Tab / Shift+Tab stay inside the top-most open dialog;
+ *  - Tab / Shift+Tab stay inside the top-most open dialog (or inside the
+ *    image viewer or a materials dialog above it while it holds the focus);
  *  - on close: focus returns to the remembered element when it still exists.
  */
 
@@ -141,9 +142,20 @@ export function topDialog(): HTMLElement | null {
     return null;
 }
 
+/**
+ * Layers drawn above the dialogs: the image viewer and the materials' own
+ * dialogs over it. While one holds the focus, Tab stays inside it (else the
+ * dialog below would pull the focus back to its first control).
+ */
+const LAYER_SELECTOR = '[data-over-viewer], #attachment-overlay.active';
+
 function trapTab(e: KeyboardEvent): void {
     if (e.key !== 'Tab' || e.altKey || e.ctrlKey || e.metaKey) return;
-    const top = topDialog();
+    const focused = document.activeElement;
+    const layer = focused instanceof Element ? focused.closest<HTMLElement>(LAYER_SELECTOR) : null;
+    // A layer that already moved the focus itself (its own wrap-around).
+    if (layer && e.defaultPrevented) return;
+    const top = layer ?? topDialog();
     if (!top) return;
     const items = focusableIn(top);
     if (items.length === 0) {

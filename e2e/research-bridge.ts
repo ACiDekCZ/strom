@@ -1535,7 +1535,7 @@ function serveMaterial(b: FakeBridge, method: string, url: URL, postData: string
     { status: number; body: unknown; headers?: Record<string, string> } | null {
     const m = b.material;
     const rest = url.pathname.replace(/^\/[^/]+/, '');
-    if (!m || !/^\/material(\/assign|\/hide)?$/.test(rest)) return null;
+    if (!m || !/^\/material(\/assign|\/hide|\/edit)?$/.test(rest)) return null;
     const features = b.features ?? [];
     const refusal = (status: number, code: string, params?: Record<string, unknown>) =>
         ({ status, body: { error: code, code, text: code, ...(params ? { params } : {}) } });
