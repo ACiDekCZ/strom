@@ -205,7 +205,7 @@ test.describe('Materials at the person', () => {
         await expect(rows(page)).toHaveCount(1);
         await rows(page).first().locator('.material-more').click();
         const menu = page.locator('#materials-item-menu');
-        await expect(menu.locator('[data-action="assign"]')).toHaveAttribute('aria-disabled', 'true');
+        await expect(menu.locator('[data-action="attach"]')).toHaveAttribute('aria-disabled', 'true');
         await expect(menu.locator('[data-action="hide"]')).toHaveAttribute('aria-disabled', 'true');
         await expect(menu.locator('[data-action="open"]')).not.toHaveAttribute('aria-disabled', 'true');
     });
@@ -220,7 +220,7 @@ test.describe('Materials at the person', () => {
         await expect(section(page).locator('.materials-bar')).toContainText('Materials from the archive load once the research runs.');
     });
 
-    test('person menu "Materials N" opens the editor at the materials; the tooltip says "Materials N"', async ({ page }) => {
+    test('person menu "Materials N" opens the window filtered to the person; the tooltip says "Materials N"', async ({ page }) => {
         await setup(page, { files: [materialFile(1, { persons: ['P0003'] }), materialFile(2, { persons: ['P0003'] })] });
         await expect(card(page, 'Jan').locator('.card-tooltip .tt-story')).toHaveText('Materials 2');
         await card(page, 'Jan').click();
@@ -228,9 +228,9 @@ test.describe('Materials at the person', () => {
         await expect(row).toContainText('Materials');
         await expect(row).toContainText('2');
         await row.click();
-        await expect(page.locator('#person-modal')).toBeVisible();
-        await expect(section(page)).toBeVisible();
-        await expect(rows(page)).toHaveCount(2);
+        await expect(page.locator('#materials-modal')).toBeVisible();
+        await expect(page.locator('#materials-modal .mw-canvas .mw-tile')).toHaveCount(2);
+        await expect(page.locator('#person-modal')).not.toHaveClass(/active/);
     });
 
     test('Research menu "Materials N" and the block\'s batch line open the window', async ({ page }) => {

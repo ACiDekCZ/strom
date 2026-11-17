@@ -609,7 +609,7 @@ export const contextMenuMethods = uiModule({
                 void runBulkFamily(personId, 'a', null, 'bottom');
                 break;
             case 'materials':
-                this.showPersonMaterials(personId);
+                this.openPersonMaterialsFromMenu(personId);
                 break;
             case 'sources':
                 this.clearDialogStack();

@@ -1,0 +1,363 @@
+import { test, expect, Page } from '@playwright/test';
+import {
+    fakeBridge, fakeMaterial, materialFile, materialSha, MATERIAL_FEATURES, openResearch, poll, researchGed, UUID, BRIDGE,
+    FakeBridge, FakeMaterial, FakeMaterialFile,
+} from './research-bridge.js';
+import { openApp, seedTree, cardAction, personModal } from './helpers.js';
+
+/**
+ * The tree's own writes on files (spec 102 §4, §9, §12h): "Link to…" (a
+ * person or several, an event, a union, a source; ←/→ switch the target,
+ * Enter links, P in the viewer), one undo step with a toast; material
+ * outside the tree linked with its working copy from the bridge (off while
+ * the research is stopped); "Remove from the tree…" with its warnings
+ * (without an archive the file is deleted); the same file added twice; the
+ * sentences of deleting a person or a source; the person menu's Materials.
+ * Invented data.
+ */
+
+const DESKTOP = { width: 1440, height: 900 };
+const PHONE = { width: 390, height: 844 };
+const PX = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+const AVATAR = 'e2e/fixtures/avatar.png';
+
+const win = (page: Page) => page.locator('#materials-modal');
+const tile = (page: Page, text: string) => win(page).locator('.mw-canvas .mw-tile', { hasText: text });
+const viewer = (page: Page) => page.locator('#attachment-overlay');
+const panel = (page: Page) => page.locator('#image-viewer-panel');
+const act = (page: Page, id: string) => panel(page).locator(`.mv-act[data-action="${id}"]`);
+const uses = (page: Page) => panel(page).locator('.mv-uses');
+const links = (page: Page) => uses(page).locator('.mv-use-link').allTextContents();
+const pill = (page: Page) => page.locator('body > .undo-toast.show');
+const dialog = (page: Page) => page.locator('.mdlg-overlay .mdlg');
+const seg = (page: Page, target: string) => dialog(page).locator(`.mdlg-seg [data-target="${target}"]`);
+const go = (page: Page) => dialog(page).locator('.mdlg-foot .mdlg-btn.is-primary');
+
+async function tree(page: Page): Promise<void> {
+    await openApp(page);
+    await seedTree(page, {
+        p1: { firstName: 'Florimund', lastName: 'Pfefferkorn', partners: ['p2'] },
+        p2: { firstName: 'Quirinella', lastName: 'Pfefferkornová', gender: 'female' },
+        p3: { firstName: 'Kasimir', lastName: 'Pfefferkorn', parents: ['p1', 'p2'], birthDate: '1925' },
+    }, 'Pfefferkorn', 'p3');
+}
+
+/** Kasimir's letter (only at him) and the register "Matrika Quellbach". */
+async function letter(page: Page): Promise<string> {
+    return page.evaluate(({ px }) => {
+        const dm = window.Strom.DataManager;
+        dm.addSource({ title: 'Matrika Quellbach' } as never);
+        return dm.addAttachment('p3' as never, { name: 'dopis.png', mimeType: 'image/png', dataUrl: px, sizeBytes: 70 } as never)!.id as string;
+    }, { px: PX });
+}
+
+async function view(page: Page, text: string): Promise<void> {
+    await page.evaluate(() => (window.Strom.UI as unknown as { openMaterials(o: unknown): void }).openMaterials({}));
+    await expect(win(page)).toBeVisible();
+    await tile(page, text).click();
+    await expect(viewer(page)).toHaveClass(/active/);
+    await expect(uses(page)).toBeVisible();
+}
+
+const placesOf = (page: Page, id: string) => page.evaluate((id) => JSON.stringify(window.Strom.DataManager.getMedia(id)?.places ?? []), id).then(s => JSON.parse(s) as Record<string, string>[]);
+const mediaCount = (page: Page) => page.evaluate(() => Object.keys(window.Strom.DataManager.getData().media ?? {}).length);
+
+test.describe('Link to… in a tree without a research', () => {
+    test.use({ viewport: DESKTOP });
+
+    test('P opens it; people already on the file are fixed; two people linked with one Undo', async ({ page }) => {
+        await tree(page);
+        const id = await letter(page);
+        await view(page, 'dopis.png');
+        await expect(act(page, 'attach')).toHaveText('Link to…');
+        await page.keyboard.press('p');
+        await expect(dialog(page).locator('.mdlg-title')).toHaveText('dopis.png');
+        await expect(dialog(page).locator('.mdlg-sub')).toHaveText('dopis.png · in the tree');
+        await expect(seg(page, 'person')).toHaveAttribute('aria-checked', 'true');
+        await expect(dialog(page).locator('.ppm-row', { hasText: 'Kasimir' })).toHaveClass(/is-fixed/);
+        await expect(go(page)).toBeDisabled();
+        await dialog(page).locator('.ppm-row', { hasText: 'Florimund' }).click();
+        await dialog(page).locator('.ppm-row', { hasText: 'Quirinella' }).click();
+        await expect(go(page)).toHaveText('Link (2 people)');
+        await go(page).click();
+        await expect(dialog(page)).toHaveCount(0);
+        await expect(pill(page).locator('.undo-toast-msg')).toHaveText('Linked to Florimund Pfefferkorn and Quirinella Pfefferkornová.');
+        expect((await placesOf(page, id)).map(p => p.personId)).toEqual(['p3', 'p1', 'p2']);
+        await expect.poll(() => links(page)).toEqual(['Kasimir Pfefferkorn', 'Florimund Pfefferkorn', 'Quirinella Pfefferkornová']);
+        await pill(page).locator('.undo-toast-btn').click();
+        await expect.poll(async () => (await placesOf(page, id)).length).toBe(1);
+    });
+
+    test('an event: ←/→ switch the target, the file\'s person is the start, Enter links to their birth', async ({ page }) => {
+        await tree(page);
+        const id = await letter(page);
+        await view(page, 'dopis.png');
+        await act(page, 'attach').click();
+        await seg(page, 'person').focus();
+        await page.keyboard.press('ArrowRight');
+        await expect(seg(page, 'event')).toHaveAttribute('aria-checked', 'true');
+        await expect(dialog(page).locator('.mdlg-attach-whoname')).toHaveText('Events of Kasimir Pfefferkorn');
+        const birth = dialog(page).locator('.mdlg-radio').first();
+        await birth.locator('input').check();
+        await expect(go(page)).toBeEnabled();
+        await page.keyboard.press('Enter');
+        await expect(dialog(page)).toHaveCount(0);
+        await expect(pill(page).locator('.undo-toast-msg')).toContainText('Linked to the event');
+        expect(await placesOf(page, id)).toContainEqual({ personId: 'p3', fact: 'birth' });
+    });
+
+    test('a union: a person without one says so; another person\'s union with the sentence about its photo', async ({ page }) => {
+        await tree(page);
+        const id = await letter(page);
+        await view(page, 'dopis.png');
+        await act(page, 'attach').click();
+        await seg(page, 'couple').click();
+        await expect(dialog(page).locator('.mdlg-attach-pane')).toContainText('This person has no union in the tree.');
+        await expect(dialog(page).locator('.mdlg-note')).toHaveText('The file is linked as an attachment of the union. The union’s photo is changed at the union (Use as union photo).');
+        await dialog(page).locator('.mdlg-attach-change').click();
+        await dialog(page).locator('.person-picker-input').fill('Florimund');
+        await dialog(page).locator('.person-picker-item', { hasText: 'Florimund' }).click();
+        await expect(dialog(page).locator('.mdlg-attach-whoname')).toHaveText('Unions of Florimund Pfefferkorn');
+        await dialog(page).locator('.mdlg-radio input').first().check();
+        await go(page).click();
+        await expect(pill(page).locator('.undo-toast-msg')).toContainText('Linked to the union');
+        expect((await placesOf(page, id)).some(p => !!p.partnershipId)).toBe(true);
+    });
+
+    test('a source: searched, the evidence sentence, linked', async ({ page }) => {
+        await tree(page);
+        const id = await letter(page);
+        await view(page, 'dopis.png');
+        await act(page, 'attach').click();
+        await seg(page, 'source').click();
+        await expect(dialog(page).locator('.mdlg-note')).toHaveText('The file becomes the source’s evidence.');
+        await dialog(page).locator('.mdlg-attach-search').fill('Quellbach');
+        await dialog(page).locator('.mdlg-radio', { hasText: 'Matrika Quellbach' }).locator('input').check();
+        await go(page).click();
+        await expect(pill(page).locator('.undo-toast-msg')).toHaveText(/^Linked to the source .*Matrika Quellbach/);
+        expect((await placesOf(page, id)).some(p => !!p.sourceId)).toBe(true);
+        await expect.poll(() => links(page)).toContain('Matrika Quellbach');
+    });
+
+    test('a phone: the dialog is a sheet from the bottom, the segment over the whole width', async ({ page }) => {
+        await page.setViewportSize(PHONE);
+        await tree(page);
+        await letter(page);
+        await page.evaluate(() => (window.Strom.UI as unknown as { openMaterials(o: unknown): void }).openMaterials({}));
+        await tile(page, 'dopis.png').click();
+        await expect(viewer(page)).toHaveClass(/active/);
+        await act(page, 'attach').click();
+        const box = (await dialog(page).boundingBox())!;
+        expect(Math.round(box.y + box.height)).toBe(PHONE.height);
+        expect(Math.round(box.width)).toBe(PHONE.width);
+        const segBox = (await dialog(page).locator('.mdlg-seg').boundingBox())!;
+        expect(segBox.width).toBeGreaterThan(PHONE.width - 40);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    });
+});
+
+test.describe('Remove from the tree without an archive', () => {
+    test.use({ viewport: DESKTOP });
+
+    test('the warning names the source\'s evidence, the excerpt and the portrait; the file is deleted with Undo', async ({ page }) => {
+        await tree(page);
+        const id = await page.evaluate(({ px }) => {
+            const dm = window.Strom.DataManager;
+            const data = dm.getData();
+            const att = dm.addAttachment('p3' as never, { name: 'svatba.png', mimeType: 'image/png', dataUrl: px, sizeBytes: 70 } as never)!;
+            const source = dm.addSource({ title: 'Matrika Quellbach' } as never)!;
+            dm.addMediaPlace(att.id, { sourceId: source.id } as never);
+            (data.persons as Record<string, { photoSource?: unknown }>).p3.photoSource = { attachmentId: att.id, x: 0, y: 0, w: 1, h: 1 };
+            (data.sources as Record<string, { excerpts?: unknown[] }>)[source.id].excerpts = [
+                { id: 'x1', dataUrl: px, width: 1, height: 1, sizeBytes: 70, fromAttachmentId: att.id },
+            ];
+            return att.id as string;
+        }, { px: PX });
+        await view(page, 'svatba.png');
+        await expect(act(page, 'hide')).toHaveCount(0);
+        await act(page, 'removeFromTree').click();
+        await expect(dialog(page).locator('.mdlg-title')).toHaveText('Delete the file from the tree?');
+        await expect(dialog(page).locator('.mdlg-text').first()).toHaveText('svatba.png is removed from every place in the tree (2) and deleted.');
+        await expect(dialog(page).locator('.mdlg-warn-row')).toHaveCount(3);
+        await expect(dialog(page).locator('.mdlg-warn-row[data-use="source"]')).toContainText('The source stays without evidence.');
+        await expect(dialog(page).locator('.mdlg-warn-row[data-use="excerpt"]')).toContainText('The excerpt stays.');
+        await expect(dialog(page).locator('.mdlg-warn-row[data-use="portrait"]')).toContainText('The portrait stays; its crop can no longer be changed.');
+        await expect(dialog(page).locator('input[name="mdlg-rm-reason"]')).toHaveCount(0);
+        await dialog(page).getByRole('button', { name: 'Delete the file' }).click();
+        await expect(viewer(page)).not.toHaveClass(/active/);
+        await expect.poll(() => page.evaluate((id) => !!window.Strom.DataManager.getMedia(id), id)).toBe(false);
+        await expect(pill(page).locator('.undo-toast-msg')).toHaveText('Deleted: svatba.png.');
+        await pill(page).locator('.undo-toast-btn').click();
+        await expect.poll(async () => (await placesOf(page, id)).length).toBe(2);
+    });
+});
+
+test.describe('The same file added twice without an archive', () => {
+    test.use({ viewport: DESKTOP });
+
+    async function addAvatar(page: Page, first: string): Promise<void> {
+        await cardAction(page, first, 'edit');
+        const modal = personModal(page);
+        await modal.locator('#input-attachment').setInputFiles(AVATAR);
+    }
+
+    test('Link here too (the default) links the file; Add as a new file adds a copy; Cancel nothing', async ({ page }) => {
+        await tree(page);
+        await addAvatar(page, 'Kasimir');
+        await expect(personModal(page).locator('#attachments-list .attachment-row')).toHaveCount(1);
+        await personModal(page).getByRole('button', { name: 'Save' }).click();
+        await expect.poll(() => mediaCount(page)).toBe(1);
+
+        await addAvatar(page, 'Florimund');
+        await expect(dialog(page).locator('.mdlg-title')).toHaveText('The file is already in the tree');
+        await expect(dialog(page).locator('.mdlg-text')).toHaveText('The same file is linked to Kasimir Pfefferkorn. Link it here too?');
+        await expect(dialog(page).getByRole('button', { name: 'Link here too' })).toBeFocused();
+        await page.keyboard.press('Enter');
+        await expect(dialog(page)).toHaveCount(0);
+        await expect(personModal(page).locator('#attachments-list .attachment-row')).toHaveCount(1);
+        expect(await mediaCount(page)).toBe(1);
+        const only = await page.evaluate(() => Object.keys(window.Strom.DataManager.getData().media ?? {})[0]);
+        expect((await placesOf(page, only)).map(p => p.personId)).toEqual(['p3', 'p1']);
+
+        // Once more at Quirinella: Cancel adds nothing, Add as a new file a second record.
+        await personModal(page).getByRole('button', { name: 'Save' }).click();
+        await addAvatar(page, 'Quirinella');
+        await dialog(page).getByRole('button', { name: 'Cancel' }).click();
+        await expect(personModal(page).locator('#attachments-list .attachment-row')).toHaveCount(0);
+        await personModal(page).locator('#input-attachment').setInputFiles(AVATAR);
+        await dialog(page).locator('.mdlg-dup-new').click();
+        await expect(personModal(page).locator('#attachments-list .attachment-row')).toHaveCount(1);
+        expect(await mediaCount(page)).toBe(2);
+    });
+});
+
+test.describe('Deleting a person or a source', () => {
+    test.use({ viewport: DESKTOP });
+
+    test('the person\'s confirmation names the files that stay and those that go; the source\'s its evidence used elsewhere', async ({ page }) => {
+        await tree(page);
+        await page.evaluate(({ px }) => {
+            const dm = window.Strom.DataManager;
+            const file = (name: string) => ({ name, mimeType: 'image/png', dataUrl: px, sizeBytes: 70 });
+            const shared = dm.addAttachment('p3' as never, file('svatba.png') as never)!;
+            dm.addMediaPlace(shared.id, { personId: 'p1' as never });
+            const source = dm.addSource({ title: 'Matrika Quellbach' } as never)!;
+            dm.addMediaPlace(shared.id, { sourceId: source.id } as never);
+            dm.addAttachment('p3' as never, file('dopis.png') as never);
+            dm.addAttachment('p3' as never, file('foto.png') as never);
+        }, { px: PX });
+        await cardAction(page, 'Kasimir', 'delete');
+        const confirm = page.locator('#confirmation-modal');
+        await expect(confirm).toHaveClass(/active/);
+        await expect(confirm.locator('#confirm-message')).toContainText('1 linked file stays in Materials, only without the link to this person.');
+        await expect(confirm.locator('#confirm-message')).toContainText('2 files that are only with this person are deleted with them.');
+        await confirm.getByRole('button', { name: 'Cancel' }).click();
+
+        const sourceId = await page.evaluate(() => Object.keys(window.Strom.DataManager.getData().sources ?? {})[0]);
+        await page.evaluate((id) => void (window.Strom.UI as unknown as { deleteSource(id: string): Promise<void> }).deleteSource(id), sourceId);
+        await expect(confirm).toHaveClass(/active/);
+        await expect(confirm.locator('#confirm-message')).toContainText('The evidence files (1) stay in Materials, only without the link to this source.');
+        await confirm.getByRole('button', { name: 'Cancel' }).click();
+    });
+});
+
+// ==================== BESIDE AN ARCHIVE ====================
+
+const MEDIA_ACCEPTS = { sync: { auto: 'off' }, sources: true, verified: true,
+    media: { max: 500 * 1024 * 1024, region: true, tasks: 'open', batch: { files: 5000, bytes: 20 * 1024 * 1024 * 1024, zip: true } } };
+const PEOPLE = { P0001: 'Josef Fíšek', P0002: 'Anna Svobodová', P0003: 'Jan Fíšek' };
+
+async function research(page: Page, files: FakeMaterialFile[]): Promise<{ bridge: FakeBridge; material: FakeMaterial }> {
+    const material = fakeMaterial({ files, batches: [], people: PEOPLE });
+    const bridge = await fakeBridge(page, { accepts: MEDIA_ACCEPTS, features: MATERIAL_FEATURES, material, treeGed: researchGed() });
+    await openResearch(page, { media: true });
+    await page.evaluate(({ uuid, base, accepts }) => {
+        localStorage.setItem(`strom-research-bridge:${uuid}`, JSON.stringify({ base, accepts }));
+    }, { uuid: UUID, base: BRIDGE, accepts: MEDIA_ACCEPTS });
+    await poll(page);
+    return { bridge, material };
+}
+
+const treeRecordOf = (page: Page, sha: string) => page.evaluate((sha) => {
+    const att = (Object.values(window.Strom.DataManager.getData().media ?? {}) as { original?: { sha256: string }; places: unknown[]; dataUrl: string; mimeType: string }[])
+        .find(a => a.original?.sha256 === sha);
+    return att ? { places: att.places.length, mime: att.mimeType, copy: att.dataUrl.startsWith('data:image/') } : null;
+}, sha);
+
+test.describe('Link to… beside an archive', () => {
+    test.use({ viewport: DESKTOP });
+
+    test('material only in the archive: from the empty "Where used", linked with a working copy from the bridge; the research is not written', async ({ page }) => {
+        const sha = materialSha('I0001');
+        const { material } = await research(page, [materialFile(1, { title: 'Křest' })]);
+        await view(page, 'Křest');
+        const none = uses(page).locator('.mv-uses-none');
+        await expect(none).toHaveText('Not in the tree yet. Link to…');
+        await none.locator('.mv-uses-attach').click();
+        await expect(dialog(page).locator('.mdlg-sub')).toHaveText('scan-1.jpg · only in the archive');
+        await expect(dialog(page).locator('.mdlg-attach-arch')).toHaveText('The file is only in the research so far. Linked, it is also in the tree: in exports, the book and on the phone.');
+        await dialog(page).locator('.ppm-row', { hasText: 'Jan Fíšek' }).click();
+        await go(page).click();
+        await expect(dialog(page)).toHaveCount(0);
+        await expect(pill(page).locator('.undo-toast-msg')).toHaveText('Linked to Jan Fíšek.');
+        await expect.poll(() => treeRecordOf(page, sha)).toEqual({ places: 1, mime: 'image/jpeg', copy: true });
+        expect(material.assigns).toHaveLength(0);
+        await expect.poll(() => links(page)).toEqual(['Jan Fíšek']);
+        // A file in the tree: Remove from the tree…, no Hide.
+        await expect(act(page, 'removeFromTree')).toBeVisible();
+        await expect(act(page, 'hide')).toHaveCount(0);
+    });
+
+    test('a person without a REFN can be linked, with the sentence; the research stopped: Link to… is off for material outside the tree', async ({ page }) => {
+        const { bridge } = await research(page, [materialFile(1, { title: 'Křest' })]);
+        await page.evaluate(() => window.Strom.DataManager.createPerson({ firstName: 'Petr', lastName: 'Nový', gender: 'male' }));
+        await view(page, 'Křest');
+        await act(page, 'attach').click();
+        await dialog(page).locator('.ppm-search').fill('Petr');
+        const petr = dialog(page).locator('.ppm-row', { hasText: 'Petr Nový' });
+        await expect(petr).not.toHaveClass(/is-blocked/);
+        await petr.click();
+        await expect(dialog(page).locator('.mdlg-note')).toHaveText('The research knows this person after the next tree save. The link is written with it.');
+        await page.keyboard.press('Escape');
+        await expect(dialog(page)).toHaveCount(0);
+        await page.keyboard.press('Escape');
+        await expect(viewer(page)).not.toHaveClass(/active/);
+
+        bridge.down = true;
+        await poll(page);
+        await tile(page, 'Křest').click();
+        await expect(viewer(page)).toHaveClass(/active/);
+        await expect(act(page, 'attach')).toHaveAttribute('aria-disabled', 'true');
+        await act(page, 'attach').click({ force: true });
+        await expect(dialog(page)).toHaveCount(0);
+    });
+
+    test('the person menu\'s Materials opens the window filtered to the person', async ({ page }) => {
+        await research(page, [materialFile(1, { persons: ['P0003'], title: 'Křest' }), materialFile(2, { title: 'Jiný' })]);
+        await cardAction(page, 'Jan', 'materials');
+        await expect(win(page)).toBeVisible();
+        await expect(tile(page, 'Křest')).toBeVisible();
+        await expect(tile(page, 'Jiný')).toHaveCount(0);
+        await expect(page.locator('#person-modal')).not.toHaveClass(/active/);
+    });
+
+    test('the same original added at another person is linked without asking', async ({ page }) => {
+        const sha = materialSha('I0001');
+        await research(page, [materialFile(1, { persons: ['P0003'] })]);
+        const anna = await page.evaluate(({ px, sha }) => {
+            const dm = window.Strom.DataManager;
+            const persons = Object.values(dm.getData().persons) as { id: string; firstName: string }[];
+            const jan = persons.find(p => p.firstName === 'Jan')!.id;
+            dm.addAttachment(jan as never, { name: 'scan-1.jpg', mimeType: 'image/png', dataUrl: px, sizeBytes: 70,
+                original: { sha256: sha, name: 'scan-1.jpg', mimeType: 'image/jpeg', bytes: 400_001 } } as never);
+            return persons.find(p => p.firstName === 'Anna')!.id;
+        }, { px: PX, sha });
+        const answer = await page.evaluate(({ anna, sha }) => (window.Strom.UI as unknown as {
+            sameFileTwice(id: string, f: unknown): Promise<string | null>;
+        }).sameFileTwice(anna, { original: { sha256: sha } }), { anna, sha });
+        expect(answer).toBe('linked');
+        await expect(dialog(page)).toHaveCount(0);
+        await expect(pill(page).locator('.undo-toast-msg')).toHaveText('The file was already in the tree; linked here too.');
+        await expect.poll(() => treeRecordOf(page, sha)).toMatchObject({ places: 2 });
+    });
+});

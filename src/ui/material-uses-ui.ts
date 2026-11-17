@@ -81,8 +81,20 @@ export const materialUsesMethods = uiModule({
                 block.appendChild(more);
             }
         } else {
-            // "Link to…" joins it when §4 comes.
-            block.appendChild(h('p', 'mv-uses-none', m.nowhereYet));
+            const none = h('p', 'mv-uses-none', m.nowhereYet);
+            // Link to… (spec 102 §4): the tree's file, or material outside the tree while the bridge runs (Q2).
+            const canLink = !DataManager.isReadOnly() && !item.removedId
+                && (att ? DataManager.canEditMedia(att.id) : !!item.file && !!ctx?.caps.assign && !!ctx.caps.bridgeUp && !!ctx.base);
+            if (canLink) {
+                const link = h('button', 'link-button mv-uses-attach', m.attach);
+                link.type = 'button';
+                link.addEventListener('click', () => {
+                    if (opts.where === 'dialog') opts.leave?.();
+                    this.openAttachDialog([item], { personId: this.materialContextPerson(), done: () => opts.changed?.() });
+                });
+                none.append(' ', link);
+            }
+            block.appendChild(none);
         }
 
         if (archive && item.file) {
@@ -211,21 +223,11 @@ export const materialUsesMethods = uiModule({
         const place = use.place;
         const att = DataManager.getMedia(mediaId);
         if (!place || !att) return;
-        const last = att.places.length === 1;
-        const kept = !!ctx?.caps.list && !!item.file;
-        if (last && !kept) {
-            const pid = placePersonId(place);
-            if (pid) {
-                if (opts.where === 'viewer') closeImageViewer();
-                else opts.leave?.();
-                await this.deleteAttachment(mediaId, pid);
-                return;
-            }
-            const d = strings.danger;
-            const ok = await this.showConfirm(d.undoHint, d.deleteAttachmentTitle(att.title || att.name), { confirmLabel: d.deleteAttachment, variant: 'danger' });
-            if (!ok) return;
-            if (opts.where === 'viewer') closeImageViewer();
-            else opts.leave?.();
+        // The last place (spec 102 §9): with an archive the file stays there (toast); without one it asks (9d).
+        if (att.places.length === 1) {
+            const leave = () => { if (opts.where === 'viewer') closeImageViewer(); else opts.leave?.(); };
+            if (await this.removeLastMaterialPlace({ ...item, attachment: att }, mediaId, place, what, leave)) opts.changed?.();
+            return;
         }
         if (DataManager.removeMediaPlace(mediaId, place, { toast: strings.materials.removedToast(what, item.title) })) opts.changed?.();
     },

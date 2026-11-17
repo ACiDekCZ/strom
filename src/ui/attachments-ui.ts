@@ -57,7 +57,7 @@ function esc(text: string): string {
 }
 
 /** Human-readable byte size (kB / MB). */
-function formatBytes(bytes: number): string {
+export function formatBytes(bytes: number): string {
     if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
     return `${Math.max(1, Math.round(bytes / 1024))} kB`;
 }
@@ -300,6 +300,9 @@ export const attachmentsMethods = uiModule({
             return;
         }
 
+        // The same file already in the tree (spec 102 §12h): linked there instead, or asked.
+        const same = await this.sameFileTwice(personId, { original, dataUrl });
+        if (same && same !== 'new') return;
         DataManager.addAttachment(personId, {
             name: file.name,
             mimeType,
@@ -496,6 +499,8 @@ export const attachmentsMethods = uiModule({
         }
         const mimeType = file.type || originalMimeOf(file.name);
         const original = { ...prepared, mimeType };
+        const same = await this.sameFileTwice(personId, { original, originalOnly: true });
+        if (same && same !== 'new') return true;
         const outcome = await this.queueOriginal(original, file, { personId });
         if (outcome === 'queued' || outcome === 'sent' || outcome === 'known' || outcome === 'knownFilled') {
             DataManager.addAttachment(personId, { name: file.name, mimeType, dataUrl: ORIGINAL_ONLY_DATA_URL, sizeBytes: 0, original, originalOnly: true });

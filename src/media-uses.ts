@@ -36,7 +36,8 @@ export interface MediaUse {
 
 const ORDER: Record<MediaUseKind, number> = { person: 0, portrait: 1, couple: 2, event: 3, source: 4, excerpt: 5 };
 
-function placeUse(place: MediaPlace): MediaUse {
+/** A place of the file as a use (its kind, person, couple, event or source). */
+export function placeUse(place: MediaPlace): MediaUse {
     if ('personId' in place) {
         if (place.fact || place.eventId) {
             return { kind: 'event', place, personId: place.personId, ...(place.fact ? { fact: place.fact } : { eventId: place.eventId }) };
@@ -166,4 +167,9 @@ export function mediaUseLabel(data: Pick<StromData, 'persons' | 'partnerships' |
         case 'excerpt':
             return { type: t.excerpt, text: data.sources?.[use.sourceId ?? '']?.title || m.unknownSource, sub: m.excerptCut };
     }
+}
+
+/** A place as the texts name it ("Birth 1890 · Jan Novák", "Jan Novák and Marie…", the source's title). */
+export function mediaPlaceLabel(data: Pick<StromData, 'persons' | 'partnerships' | 'sources'>, place: MediaPlace, S: Strings = appStrings): string {
+    return mediaUseLabel(data, placeUse(place), S).text;
 }

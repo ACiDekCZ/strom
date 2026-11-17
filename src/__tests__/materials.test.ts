@@ -268,14 +268,14 @@ describe('materialActions', () => {
     const by = Object.fromEntries(items.map(i => [i.key, i]));
     const ids = (a: { id: string }[]) => a.map(x => x.id);
 
-    it('archive item: open, assign, remove, hide, system, batch', () => {
+    it('archive item: open, link to, remove, hide, system, batch', () => {
         expect(ids(materialActions(by['m:I0001'], caps(), { person: 'P0001' })))
-            .toEqual(['open', 'assign', 'removeFromPerson', 'hide', 'openSystem', 'showInBatch']);
+            .toEqual(['open', 'attach', 'removeFromPerson', 'hide', 'openSystem', 'showInBatch']);
     });
 
     it('a hidden item restores instead of hiding', () => {
         expect(ids(materialActions(by['m:I0003'], caps(), { person: 'P0001' })))
-            .toEqual(['open', 'assign', 'removeFromPerson', 'restore', 'openSystem']);
+            .toEqual(['open', 'attach', 'removeFromPerson', 'restore', 'openSystem']);
     });
 
     it('a person only through the batch: removing offers the whole batch', () => {
@@ -284,13 +284,13 @@ describe('materialActions', () => {
         expect(remove).toEqual({ id: 'removeFromPerson', viaBatch: true });
     });
 
-    it('tree item: open, title and details, download, use as portrait, delete', () => {
-        expect(ids(materialActions(by['a:t'], caps(), { person: 'P0001' }))).toEqual(['open', 'edit', 'download', 'useAsPortrait', 'deleteFromTree']);
+    it('tree item: open, title and details, link to, download, use as portrait, remove from the tree', () => {
+        expect(ids(materialActions(by['a:t'], caps(), { person: 'P0001' }))).toEqual(['open', 'edit', 'attach', 'download', 'useAsPortrait', 'removeFromTree']);
     });
 
     it('use as portrait only for a picture the tree shows (not a PDF, not only its original)', () => {
         const pdf = personMaterials({ attachments: [att('p', { mimeType: 'application/pdf', name: 'p.pdf' })] })[0];
-        expect(ids(materialActions(pdf, caps()))).toEqual(['open', 'edit', 'download', 'deleteFromTree']);
+        expect(ids(materialActions(pdf, caps()))).toEqual(['open', 'edit', 'attach', 'download', 'removeFromTree']);
         const only = personMaterials({ attachments: [att('o', { originalOnly: true, dataUrl: '' })] })[0];
         expect(ids(materialActions(only, caps()))).not.toContain('useAsPortrait');
     });
@@ -299,7 +299,7 @@ describe('materialActions', () => {
         expect(ids(materialActions(by['m:I0001'], caps({ assign: false }), { person: 'P0001' })))
             .toEqual(['open', 'openSystem', 'showInBatch']);
         const down = materialActions(by['m:I0001'], caps({ bridgeUp: false }), { person: 'P0001' });
-        expect(down.filter(a => a.disabled === 'bridgeDown').map(a => a.id)).toEqual(['assign', 'removeFromPerson', 'hide']);
+        expect(down.filter(a => a.disabled === 'bridgeDown').map(a => a.id)).toEqual(['attach', 'removeFromPerson', 'hide']);
         expect(down.find(a => a.id === 'open')?.disabled).toBeUndefined();
     });
 

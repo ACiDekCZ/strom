@@ -138,3 +138,43 @@ describe('merge keeps attachments', () => {
         expect(DataManager.getPerson(remove.id)).toBeNull();
     });
 });
+
+describe('DataManager.linkMedia and sameFileMedia (spec 102 §4, §12h)', () => {
+    it('adds the places a tree file lacks, makes a new record from material outside the tree, one undo step', () => {
+        const a = DataManager.createPerson(personData('Alice', 'female'));
+        const b = DataManager.createPerson(personData('Bob'));
+        const att = DataManager.addAttachment(a.id, fakeAttachment())!;
+        const original = { sha256: 'ab'.repeat(32), name: 'scan.tif', mimeType: 'image/tiff', bytes: 9 };
+        const changed = DataManager.linkMedia(
+            [{ id: att.id }, { record: { ...fakeAttachment('scan.tif'), original } }],
+            [{ personId: a.id }, { personId: b.id }],
+        );
+        expect(changed).toHaveLength(2);
+        expect(DataManager.getMedia(att.id)!.places.map(p => 'personId' in p && p.personId)).toEqual([a.id, b.id]);
+        const added = DataManager.sameFileMedia({ original })!;
+        expect(added.places).toHaveLength(2);
+        expect(added.addedAt).toBeTruthy();
+        DataManager.undo();
+        expect(DataManager.getMedia(att.id)!.places).toHaveLength(1);
+        expect(DataManager.sameFileMedia({ original })).toBeUndefined();
+    });
+
+    it('leaves out a place that is not in the tree or of a locked person', () => {
+        const a = DataManager.createPerson(personData('Alice', 'female'));
+        const att = DataManager.addAttachment(a.id, fakeAttachment())!;
+        expect(DataManager.linkMedia([{ id: att.id }], [{ personId: 'nobody' as PersonId }])).toEqual([]);
+        expect(DataManager.getMedia(att.id)!.places).toHaveLength(1);
+    });
+
+    it('the same file: by the original, else by the same copy; a file taken out of the tree is not one', () => {
+        const a = DataManager.createPerson(personData('Alice', 'female'));
+        const att = DataManager.addAttachment(a.id, fakeAttachment())!;
+        expect(DataManager.sameFileMedia({ dataUrl: 'data:image/jpeg;base64,AAAA' })?.id).toBe(att.id);
+        expect(DataManager.sameFileMedia({ dataUrl: 'data:image/jpeg;base64,BBBB' })).toBeUndefined();
+        expect(DataManager.sameFileMedia({ dataUrl: 'data:image/jpeg;base64,AAAA', originalOnly: true })).toBeUndefined();
+        DataManager.removeMedia(att.id, { keep: true });
+        expect(DataManager.sameFileMedia({ dataUrl: 'data:image/jpeg;base64,AAAA' })).toBeUndefined();
+        expect(DataManager.restoreMedia(att.id)).toBe(true);
+        expect(DataManager.getMedia(att.id)!.places).toHaveLength(1);
+    });
+});

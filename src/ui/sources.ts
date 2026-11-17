@@ -19,8 +19,9 @@ import { MQ_MOBILE } from '../breakpoints.js';
 import { sourceTranslation } from '../source-translation.js';
 import { TreeRenderer } from '../renderer.js';
 import { TreeManager } from '../tree-manager.js';
+import { treeMedia } from '../media.js';
 import { SettingsManager } from '../settings.js';
-import { PersonId, PartnershipId, Source, SourceExcerpt, MediaOriginal, MAX_EXCERPTS_UI, StromData } from '../types.js';
+import { PersonId, PartnershipId, Source, SourceExcerpt, MediaOriginal, MediaPlace, MAX_EXCERPTS_UI, StromData } from '../types.js';
 import { strings } from '../strings.js';
 import { personEvidence } from '../evidence-level.js';
 import { uiModule } from './module.js';
@@ -403,7 +404,11 @@ export const sourcesMethods = uiModule({
         // same sentence and the wrong one is one click away.
         const title = DataManager.getData().sources?.[sourceId]?.title ?? '';
         const d = strings.danger;
-        const message = [count > 0 ? d.sourceCited(count) : '', d.undoHint].filter(Boolean).join(' ');
+        // Its evidence files that are used elsewhere too (spec 102 §9g) stay in the materials without the link.
+        const at = (p: MediaPlace) => 'sourceId' in p && p.sourceId === sourceId;
+        const archive = !!this.materialsContext()?.caps.list;
+        const files = treeMedia(DataManager.getData()).filter(a => a.places.some(at) && (archive || !a.places.every(at))).length;
+        const message = [count > 0 ? d.sourceCited(count) : '', files ? strings.sources.deleteFiles(files) : '', d.undoHint].filter(Boolean).join(' ');
         const confirmed = await this.showConfirm(message, d.deleteSourceTitle(title),
             { confirmLabel: d.deleteSource, variant: 'danger' });
         if (!confirmed) return;

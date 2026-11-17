@@ -1027,6 +1027,7 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
 
     // Sources / citations
     sources: {
+        deleteFiles: (n: number) => `Dowody (${n}) pozostaną w Materiałach, tylko bez połączenia z tym źródłem.`,
         citedFact: (person: string, fact: string) => `${person} – ${fact}`,
         menu: 'Źródła',
         title: 'Źródła',

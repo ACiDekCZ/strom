@@ -71,7 +71,7 @@ import { createSnapshot, getSnapshotPayload, SnapshotReason, hasAutoSnapshotOnDa
 import { ValidationIssue, stripUnsafeMediaDataUrls, cleanPortraitSources, isSafePhotoDataUrl, translateValidationType } from './validation.js';
 import { isPortraitSourceShape } from './photo.js';
 import { cloneTreeData } from './clone.js';
-import { sanitizeMediaRecords, moveLegacyAttachments, pruneMedia, findMedia, personMedia, mediaOf, mediaAt, placeKey as mediaPlaceKey, putMedia, dropMediaPlaces, deleteMedia, placePersonId } from './media.js';
+import { sanitizeMediaRecords, moveLegacyAttachments, pruneMedia, findMedia, treeMedia, personMedia, mediaOf, mediaAt, placeKey as mediaPlaceKey, putMedia, dropMediaPlaces, deleteMedia, placePersonId } from './media.js';
 import { UndoManager, type UndoMark } from './undo.js';
 import { applyLivingPrivacy, applyContentOptions, resolveContentOptions, ContentOptions, PrivacyMode } from './privacy.js';
 import { safeFileName } from './filenames.js';
@@ -4201,6 +4201,17 @@ class DataManagerClass {
         });
     }
 
+    /**
+     * A file of the tree that is the same file (spec 102 §12h): the same
+     * original (SHA-256), else the same copy; only one with a place in the tree.
+     */
+    sameFileMedia(file: { original?: { sha256: string } | null; dataUrl?: string; originalOnly?: boolean }): Attachment | undefined {
+        const sha = file.original?.sha256?.toLowerCase();
+        const url = !file.originalOnly && file.dataUrl ? file.dataUrl : '';
+        if (!sha && !url) return undefined;
+        return treeMedia(this.data).find(a => (sha ? a.original?.sha256?.toLowerCase() === sha : !a.originalOnly && a.dataUrl === url));
+    }
+
     /** Put a file at one more place (a person, a fact, an event, a couple, a source that is in the tree). */
     addMediaPlace(id: string, place: MediaPlace): boolean {
         const att = findMedia(this.data, id);
@@ -4213,6 +4224,50 @@ class DataManagerClass {
         this.commitMutation(strings.undo.mediaPlaceAdd(name));
         AuditLogManager.log(this.currentTreeId, 'attachment.update', strings.undo.mediaPlaceAdd(name));
         return true;
+    }
+
+    /**
+     * Link files to places as one undo step (spec 102 §4 "Link to…"): a file
+     * of the tree (`id`) gets the places it does not have yet; material
+     * outside the tree (`record`) becomes a file of the tree with them, the
+     * archive's original named in `record.original`. A file taken out of the
+     * tree comes back with the new places only. Returns the ids of the files
+     * that changed (none: nothing was written). `toast`: the Undo toast's sentence.
+     */
+    linkMedia(files: Array<{ id: string } | { record: Omit<Attachment, 'id' | 'places'> }>, places: MediaPlace[], opts: { toast?: string } = {}): string[] {
+        if (this.isReadOnly()) return [];
+        const targets = places.filter(p => this.placeExists(p) && !(placePersonId(p) && this.isPersonLocked(placePersonId(p)!)));
+        if (!targets.length) return [];
+        const plan: Array<{ att?: Attachment; record?: Omit<Attachment, 'id' | 'places'>; add: MediaPlace[] }> = [];
+        for (const f of files) {
+            if ('id' in f) {
+                const att = findMedia(this.data, f.id);
+                if (!att || !this.mediaEditable(att)) continue;
+                const add = targets.filter(p => !mediaAt(att, p));
+                if (add.length) plan.push({ att, add });
+            } else {
+                plan.push({ record: f.record, add: [...targets] });
+            }
+        }
+        if (!plan.length) return [];
+        this.beginMutation();
+        const changed: string[] = [];
+        for (const step of plan) {
+            if (step.att) {
+                if (step.att.removed) delete step.att.removed;
+                step.att.places.push(...step.add.map(p => ({ ...p })));
+                changed.push(step.att.id);
+            } else if (step.record) {
+                const att: Attachment = { ...step.record, id: generateAttachmentId(), places: step.add.map(p => ({ ...p })), addedAt: step.record.addedAt ?? new Date().toISOString() };
+                putMedia(this.data, att);
+                changed.push(att.id);
+            }
+        }
+        const first = findMedia(this.data, changed[0]);
+        const name = changed.length === 1 && first ? (first.title || first.name) : String(changed.length);
+        this.commitMutation(strings.undo.mediaPlaceAdd(name), false, undefined, opts.toast ? { text: opts.toast } : undefined);
+        AuditLogManager.log(this.currentTreeId, 'attachment.update', strings.undo.mediaPlaceAdd(name));
+        return changed;
     }
 
     /**
@@ -4243,7 +4298,7 @@ class DataManagerClass {
      * archive) the record stays with the places it had for "Restore"
      * (`removed`); without it the record goes (O1). One undo step.
      */
-    removeMedia(id: string, opts: { keep?: boolean; reason?: 'unrelated' | 'duplicate' } = {}): boolean {
+    removeMedia(id: string, opts: { keep?: boolean; reason?: 'unrelated' | 'duplicate'; toast?: string } = {}): boolean {
         const att = findMedia(this.data, id);
         if (!att || (!att.places.length && opts.keep) || !this.mediaEditable(att)) return false;
         this.beginMutation();
@@ -4258,13 +4313,13 @@ class DataManagerClass {
             this.forgetMediaLinks(id);
         }
         const name = att.title || att.name;
-        this.commitMutation(strings.undo.mediaRemove(name));
+        this.commitMutation(strings.undo.mediaRemove(name), false, undefined, opts.toast ? { text: opts.toast } : undefined);
         AuditLogManager.log(this.currentTreeId, 'attachment.remove', strings.undo.mediaRemove(name));
         return true;
     }
 
     /** Bring a file taken out back to the places it had that are still in the tree (spec 102 §9). */
-    restoreMedia(id: string): boolean {
+    restoreMedia(id: string, opts: { toast?: string } = {}): boolean {
         const att = findMedia(this.data, id);
         if (!att?.removed || this.isTreeLocked()) return false;
         const places = att.removed.places.filter(p => this.placeExists(p));
@@ -4273,7 +4328,7 @@ class DataManagerClass {
         att.places = places;
         delete att.removed;
         const name = att.title || att.name;
-        this.commitMutation(strings.undo.mediaRestore(name));
+        this.commitMutation(strings.undo.mediaRestore(name), false, undefined, opts.toast ? { text: opts.toast } : undefined);
         AuditLogManager.log(this.currentTreeId, 'attachment.add', strings.undo.mediaRestore(name));
         return true;
     }

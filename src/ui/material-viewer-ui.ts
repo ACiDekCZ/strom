@@ -12,7 +12,7 @@
  * See src/ui/module.ts for the composition pattern.
  */
 
-import { mediaPersonId } from '../media.js';
+import { mediaPersonId, treeMedia } from '../media.js';
 import { setResearchOpenLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
@@ -218,9 +218,16 @@ export const materialViewerMethods = uiModule({
             {
                 count: state.items.length, index,
                 show: (i, slots) => this.drawMaterialInViewer(i, slots),
-                // F2: the shown item's title, kind and date.
+                // F2: the shown item's title, kind and date; P: Link to… (spec 102 §4).
                 key: (e) => {
-                    if (e.key !== 'F2' || e.altKey || e.ctrlKey || e.metaKey || viewer !== state || state.editing) return false;
+                    if (e.altKey || e.ctrlKey || e.metaKey || viewer !== state || state.editing) return false;
+                    if (e.key === 'p' || e.key === 'P') {
+                        const btn = document.querySelector<HTMLElement>('#image-viewer-panel .mv-act[data-action="attach"]');
+                        if (!btn || btn.getAttribute('aria-disabled') === 'true') return false;
+                        btn.click();
+                        return true;
+                    }
+                    if (e.key !== 'F2') return false;
                     const item = state.items[viewerListIndex()];
                     if (!item || materialDetailsEdit(item, this.materialsContext()) !== 'on') return false;
                     this.editMaterialInViewer(item.key);
@@ -257,11 +264,23 @@ export const materialViewerMethods = uiModule({
             attachment = now?.places.length ? now : undefined;
         }
         if (!item.file) return attachment ? { ...attachmentItem(attachment, item.persons), ...(item.uses !== undefined ? { uses: item.uses } : {}) } : item;
+        // Linked here (spec 102 §4) or restored: the tree's record of the same original joins it.
+        if (!attachment && item.file.sha) {
+            const sha = item.file.sha.toLowerCase();
+            attachment = treeMedia(DataManager.getData()).find(a => a.original?.sha256?.toLowerCase() === sha);
+        }
         const ctx = this.materialsContext();
         const list = ctx ? cachedMaterialList(ctx.treeId) : null;
         const file = list?.files.find(f => f.id === item.file!.id);
-        if (!list || !file) return attachment === item.attachment ? item : { ...materialFileItem(item.file, { batches: [] }, attachment), batch: item.batch };
-        return materialFileItem(file, list, attachment);
+        const fresh = !list || !file
+            ? (attachment === item.attachment ? item : { ...materialFileItem(item.file, { batches: [] }, attachment), batch: item.batch })
+            : materialFileItem(file, list, attachment);
+        // Taken out of the tree and not back yet: still hidden "removed".
+        const wasId = item.removedId ?? item.attachment?.id;
+        const out = !attachment && wasId ? DataManager.getMedia(wasId) : undefined;
+        if (out && !out.places.length && out.removed) return { ...fresh, removedId: out.id, hidden: { reason: 'removed' } };
+        if (fresh.removedId && attachment) { const { removedId: _r, hidden: _h, ...rest } = fresh; return rest; }
+        return fresh;
     },
 
     drawMaterialInViewer(index: number, slots: ViewerSlots): void {
@@ -582,9 +601,15 @@ export const materialViewerMethods = uiModule({
             }
             actions.appendChild(a);
         };
+        // Link to… (spec 102 §4): the tree's file in the tree; material outside it needs the bridge (Q2).
+        const inTree = !!item.attachment?.places?.length;
+        const canAttach = inTree ? DataManager.canEditMedia(item.attachment!.id) : inArchive && !!ctx?.caps.assign && !item.removedId && !DataManager.isReadOnly();
+        if (canAttach) action(m.attach, () => this.openAttachDialog([item], { personId: this.materialContextPerson() }), { primary: true, write: !inTree, id: 'attach' });
         if (inArchive) {
-            if (ctx?.caps.assign) {
-                action(m.assign, () => this.materialAction('assign', [item], { where: 'viewer' }), { primary: true, write: true, id: 'assign' });
+            if (item.removedId && item.hidden) {
+                // Taken out of the tree: back with its places (the tree's own write).
+                if (!DataManager.isReadOnly()) action(m.restore, () => this.restoreRemovedMaterials([item]), { id: 'restore' });
+            } else if (ctx?.caps.assign && !inTree) {
                 if (item.hidden) action(m.restore, () => this.materialAction('restore', [item], { where: 'viewer' }), { write: true, id: 'restore' });
                 else action(m.hide, () => this.materialAction('hide', [item], { where: 'viewer' }), { write: true, id: 'hide' });
             }
@@ -604,18 +629,20 @@ export const materialViewerMethods = uiModule({
                     void this.useAttachmentAsPortrait(ownerId, att.id);
                 }, { id: 'useAsPortrait' });
             }
-            if (owner && !DataManager.isPersonLocked(owner.id)) {
-                action(m.deleteFromTree, () => {
-                    closeImageViewer();
-                    void this.deleteAttachment(att.id, owner.id);
-                }, { danger: true, id: 'deleteFromTree' });
-            }
+        }
+        if (inTree && DataManager.canEditMedia(item.attachment!.id)) {
+            action(m.removeFromTree, () => void this.openRemoveFromTreeDialog(item, { leave: () => closeImageViewer() }), { danger: true, id: 'removeFromTree' });
         }
         if ((writes || edit === 'off') && !up) foot.appendChild(h('p', 'mv-off', m.actionsWhenRunning));
         if (actions.childElementCount) foot.appendChild(actions);
 
         panel.append(head, body, h('div', 'mv-gap'), more);
         if (foot.childElementCount) panel.appendChild(foot);
+    },
+
+    /** The person the materials were opened from (their card is open), for Link to…'s event and union targets. */
+    materialContextPerson(): PersonId | null {
+        return document.getElementById('person-modal')?.classList.contains('active') ? this.currentId ?? null : null;
     },
 
     /** A tree person's chip: the viewer and the window close and the tree focuses on them (the menu does not open). */

@@ -29533,11 +29533,62 @@
         .mdlg-radio input { width: 18px; height: 18px; margin: 0; accent-color: var(--primary); flex: none; }
         .mdlg-check {
             display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; background: var(--surface-2);
-            border-radius: 8px; cursor: pointer;
+            border-radius: var(--r-md); cursor: pointer;
         }
         .mdlg-check input { width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--primary); flex: none; }
         .mdlg-check-text { display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
         .mdlg-check-hint { font-size: 12.5px; line-height: 1.4; color: var(--text-faint); text-wrap: pretty; }
+        /* Link to… (spec 102 §4): the target segment, its pane, the note; Remove from the tree's warning (§9). */
+        .mdlg--attach { width: 500px; }
+        .mdlg--remove { width: 500px; }
+        .mdlg-head.has-thumb { display: grid; grid-template-columns: 36px minmax(0, 1fr); column-gap: 12px; align-items: center; }
+        .mdlg-head.has-thumb > :not(.mdlg-attach-thumb) { grid-column: 2; }
+        .mdlg-attach-thumb { grid-row: 1 / span 2; width: 36px; height: 36px; object-fit: cover; border-radius: var(--r-sm); background: var(--surface-2); }
+        .mdlg-seg { align-self: flex-start; max-width: 100%; }
+        .mdlg-attach-pane { display: flex; flex-direction: column; gap: 8px; min-height: 120px; }
+        .mdlg-attach-who { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: 13.5px; color: var(--text-light); }
+        .mdlg-attach-whoname { overflow-wrap: anywhere; }
+        .mdlg-attach-list { display: flex; flex-direction: column; gap: 2px; max-height: 240px; overflow: auto; }
+        .mdlg-attach-list .mdlg-radio { padding: 0 4px; border-radius: var(--r-sm); }
+        .mdlg-radio input:disabled + .mdlg-radio-text { color: var(--text-faint); }
+        .mdlg-radio-text { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+        .mdlg-tag { flex: none; font-size: 12px; color: var(--text-faint); }
+        .mdlg-attach-search {
+            width: 100%; box-sizing: border-box; min-height: 38px; padding: 0 12px; border: 1px solid var(--border);
+            border-radius: var(--r-md); background: var(--surface); color: var(--text); font: inherit; font-size: 14px;
+        }
+        .mdlg-note { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-faint); text-wrap: pretty; }
+        .mdlg-note[hidden] { display: none; }
+        .mdlg-attach-off { color: var(--warning-text); }
+        .mdlg-warn {
+            display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid var(--warn-line);
+            border-radius: var(--r-md); background: var(--warning-soft); font-size: 13.5px; line-height: 1.45;
+        }
+        .mdlg-warn-title { margin: 0; font-weight: 600; color: var(--warning-text); }
+        .mdlg-warn-row { display: flex; flex-direction: column; gap: 1px; }
+        .mdlg-warn-ref { color: var(--text); overflow-wrap: anywhere; }
+        .mdlg-warn-keep { color: var(--text-light); font-size: 12.5px; }
+        .mdlg-dup-new { align-self: flex-start; font-size: 13.5px; }
+        .mv-uses-attach { font-size: 13px; }
+        @media (hover: hover) {
+            .mdlg-attach-list .mdlg-radio:hover { background: var(--hover-bg); }
+        }
+        @media (pointer: coarse) {
+            .mdlg-attach-search { min-height: 44px; }
+            .mdlg-radio { min-height: 44px; }
+        }
+        @media (min-width: 641px) and (max-width: 1024px) {
+            .mdlg--attach, .mdlg--remove { width: 480px; }
+        }
+        @media (max-width: 640px) {
+            .mdlg-seg { align-self: stretch; }
+            .mdlg-seg .sel-opt { flex: 1 1 0; }
+            .mdlg-attach-list { max-height: 40vh; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .mdlg-attach-pane { min-height: 0; }
+            .mdlg-attach-list { max-height: 30vh; }
+        }
         .mdlg-error {
             display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 9px 12px; border-radius: 8px;
             background: var(--danger-soft); color: var(--text); font-size: 13.5px; line-height: 1.45;

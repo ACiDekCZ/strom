@@ -37,13 +37,11 @@ test('attachments: add an image, it survives a reload, then delete it', { tag: '
 
     // Delete it — the confirmation says which file.
     await modal.locator('.attachment-more').click();
-    await page.locator('.materials-item-menu-row[data-action="deleteFromTree"]').click();
-    const confirm = page.locator('#confirmation-modal');
-    await expect(confirm).toBeVisible();
-    await expect(confirm).toHaveClass(/active/);
-    const confirmText = `${await confirm.locator('#confirm-title').innerText()}\n${await confirm.locator('#confirm-message').innerText()}`;
-    expect(confirmText).toContain('avatar.png');
-    await confirm.locator('#confirm-ok-btn').click();
+    await page.locator('.materials-item-menu-row[data-action="removeFromTree"]').click();
+    const confirm = page.locator('.mdlg-overlay .mdlg');
+    await expect(confirm.locator('.mdlg-title')).toHaveText('Delete the file from the tree?');
+    await expect(confirm.locator('.mdlg-text').first()).toContainText('avatar.png');
+    await confirm.getByRole('button', { name: 'Delete the file' }).click();
     await expect(modal.locator('#attachments-list')).not.toContainText('avatar');
     await expect(modal.locator('#attachments-list .attachment-row')).toHaveCount(0);
     // Nothing of this person's in the file: no size line (the whole tree's is not theirs).

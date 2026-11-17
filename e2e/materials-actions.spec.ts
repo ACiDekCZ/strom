@@ -78,6 +78,7 @@ const act = (page: Page, id: string) => panel(page).locator(`.mv-act[data-action
 const chips = (page: Page) => panel(page).locator('.mv-chip');
 const dialog = (page: Page) => page.locator('.mdlg-overlay .mdlg');
 const toast = (page: Page) => page.locator('.toast[data-kind="materials"]');
+const pill = (page: Page) => page.locator('body > .undo-toast.show');
 
 async function openWindow(page: Page, opts: { person?: string; batch?: string } = {}): Promise<void> {
     await page.evaluate((opts) => (window.Strom.UI as unknown as { openMaterials(o: unknown): void }).openMaterials(opts), opts);
@@ -87,6 +88,25 @@ async function openWindow(page: Page, opts: { person?: string; batch?: string } 
 /** The window, then one of its files in the viewer. */
 async function view(page: Page, text: string): Promise<void> {
     await openWindow(page);
+    await tile(page, text).click();
+    await expect(viewer(page)).toHaveClass(/active/);
+    await expect(panel(page).locator('.mv-title')).toBeVisible();
+}
+
+/**
+ * The research's Assign to a person for one file: the window's selection
+ * (the viewer's main action links into the tree instead, spec 102 §4).
+ */
+async function openAssign(page: Page, text: string): Promise<void> {
+    if (!(await win(page).isVisible())) await openWindow(page);
+    await win(page).locator('[data-mw="select"]').click();
+    await tile(page, text).click();
+    await win(page).locator('[data-mw="sel-assign"]').click();
+    await expect(dialog(page).locator('.mdlg-title')).toHaveText('Assign to a person');
+}
+
+/** A tile of the open window in the viewer. */
+async function viewTile(page: Page, text: string): Promise<void> {
     await tile(page, text).click();
     await expect(viewer(page)).toHaveClass(/active/);
     await expect(panel(page).locator('.mv-title')).toBeVisible();
@@ -221,17 +241,17 @@ test.describe('Materials viewer', () => {
         await expect(viewer(page)).toHaveClass(/active/);
         await expect(page.locator('#image-viewer-note')).toHaveText('Stored preview. Full quality once the research runs.');
         await expect(page.locator('#attachment-overlay-img')).toHaveAttribute('src', /^blob:/);
-        await expect(act(page, 'assign')).toHaveAttribute('aria-disabled', 'true');
+        await expect(act(page, 'attach')).toHaveAttribute('aria-disabled', 'true');
         await expect(act(page, 'hide')).toHaveAttribute('aria-disabled', 'true');
         await expect(panel(page).locator('.mv-off')).toHaveText('Linking, hiding and editing material outside the tree works while the research runs.');
-        await act(page, 'assign').click({ force: true });
+        await act(page, 'attach').click({ force: true });
         await expect(dialog(page)).toHaveCount(0);
         // The × on a person's chip is off the same way: dimmed as Assign / Hide, a click sends nothing.
         const x = chips(page).first().locator('.mv-chip-x');
         await expect(x).toHaveAttribute('aria-disabled', 'true');
         const opacity = (sel: string) => panel(page).locator(sel).first().evaluate(el => Number(getComputedStyle(el).opacity));
         // (A borderless faint × needs more than the buttons' 0.5 to look off.)
-        expect(await opacity('.mv-chip-x')).toBeLessThan(Math.min(0.45, await opacity('.mv-act[data-action="assign"]')));
+        expect(await opacity('.mv-chip-x')).toBeLessThan(Math.min(0.45, await opacity('.mv-act[data-action="attach"]')));
         await x.click({ force: true });
         await page.waitForTimeout(200);
         expect(material.assigns).toHaveLength(0);
@@ -241,7 +261,7 @@ test.describe('Materials viewer', () => {
         await setup(page, { features: ['material.list', 'material.thumb'], files: [materialFile(1, { persons: ['P0003'] })] });
         await view(page, 'scan-1.jpg');
         await expect(panel(page).locator('.mv-sentence.is-muted')).toHaveText('Assigning needs a newer research version.');
-        await expect(act(page, 'assign')).toHaveCount(0);
+        await expect(act(page, 'attach')).toHaveCount(0);
         await expect(act(page, 'hide')).toHaveCount(0);
         await expect(chips(page).locator('.mv-chip-x')).toHaveCount(0);
     });
@@ -254,9 +274,9 @@ test.describe('Assign to a person', () => {
         const { material } = await setup(page, { files: [materialFile(1, { title: 'Rodinná fotka' })] });
         await view(page, 'Rodinná fotka');
         await expect(chips(page)).toHaveCount(0);
-        await expect(panel(page).locator('.mv-uses-none')).toHaveText('Not in the tree yet.');
-        await act(page, 'assign').click();
-        await expect(dialog(page).locator('.mdlg-title')).toHaveText('Assign to a person');
+        await expect(panel(page).locator('.mv-uses-none')).toContainText('Not in the tree yet.');
+        await page.keyboard.press('Escape');
+        await openAssign(page, 'Rodinná fotka');
         await expect(dialog(page).locator('.mdlg-sub')).toHaveText('file Rodinná fotka');
         const go = dialog(page).locator('.mdlg-btn.is-primary');
         await expect(go).toBeDisabled();
@@ -266,6 +286,7 @@ test.describe('Assign to a person', () => {
         await expect(dialog(page)).toHaveCount(0);
         expect(material.assigns[0]).toEqual({ files: ['I0001'], add: expect.arrayContaining(['P0001', 'P0002', 'P0003']) });
         await expect(toast(page)).toContainText('Assigned: 1 file to');
+        await viewTile(page, 'Rodinná fotka');
         await expect(chips(page)).toHaveCount(3);
 
         await toast(page).locator('.toast-action').click();
@@ -275,9 +296,11 @@ test.describe('Assign to a person', () => {
         await expect(chips(page)).toHaveCount(0);
 
         // Assigned again: Jan's section has it.
-        await act(page, 'assign').click();
+        await page.keyboard.press('Escape');
+        await openAssign(page, 'Rodinná fotka');
         await pick(page, ['Jan Fíšek']);
         await dialog(page).locator('.mdlg-btn.is-primary').click();
+        await viewTile(page, 'Rodinná fotka');
         await expect(chips(page)).toHaveCount(1);
         await page.keyboard.press('Escape');
         await page.locator('#materials-modal .close-btn').click();
@@ -288,8 +311,7 @@ test.describe('Assign to a person', () => {
 
     test('people already on the file are fixed; Undo takes off only those added', async ({ page }) => {
         const { material } = await setup(page, { files: [materialFile(1, { persons: ['P0003'], title: 'Křest' })] });
-        await view(page, 'Křest');
-        await act(page, 'assign').click();
+        await openAssign(page, 'Křest');
         const jan = dialog(page).locator('.ppm-row', { hasText: 'Jan Fíšek' });
         await expect(jan).toHaveClass(/is-fixed/);
         await expect(jan.locator('input')).toBeChecked();
@@ -306,8 +328,7 @@ test.describe('Assign to a person', () => {
     test('a person without REFN cannot be picked', async ({ page }) => {
         await setup(page, { files: [materialFile(1)] });
         await page.evaluate(() => window.Strom.DataManager.createPerson({ firstName: 'Petr', lastName: 'Nový', gender: 'male' }));
-        await view(page, 'scan-1.jpg');
-        await act(page, 'assign').click();
+        await openAssign(page, 'scan-1.jpg');
         await dialog(page).locator('.ppm-search').fill('Petr');
         const petr = dialog(page).locator('.ppm-row', { hasText: 'Petr Nový' });
         await expect(petr).toHaveClass(/is-blocked/);
@@ -316,7 +337,7 @@ test.describe('Assign to a person', () => {
         await page.keyboard.press('Escape');
         await expect(dialog(page)).toHaveCount(0);
         // Esc closed the dialog only.
-        await expect(viewer(page)).toHaveClass(/active/);
+        await expect(win(page)).toBeVisible();
     });
 
     test('a batch\'s ⋯: the whole batch to a person, and a person off the whole batch', async ({ page }) => {
@@ -470,37 +491,34 @@ test.describe('Hide and Restore', () => {
         await expect.poll(() => material.hides.at(-1)).toEqual({ files: ['I0001'], hidden: true, reason: 'unrelated' });
     });
 
-    test('a file also in the tree: the attachment stays unless "Also delete" is ticked; Undo brings it back', async ({ page }) => {
+    test('a file also in the tree: no Hide; Remove from the tree… keeps it hidden as removed, Restore brings its places back', async ({ page }) => {
         const sha1 = materialSha('I0001');
-        const sha2 = materialSha('I0002');
         const { material } = await setup(page, {
-            files: [materialFile(1, { persons: ['P0003'], title: 'Kopie A' }), materialFile(2, { persons: ['P0003'], title: 'Kopie B', at: '2026-09-30T08:00:00.000Z' })],
-            before: async page => { await attachOriginal(page, 'a.png', sha1); await attachOriginal(page, 'b.png', sha2); },
+            files: [materialFile(1, { persons: ['P0003'], title: 'Kopie A' })],
+            before: async page => { await attachOriginal(page, 'a.png', sha1); },
         });
-        expect(await janAttachments(page)).toBe(2);
+        expect(await janAttachments(page)).toBe(1);
         await view(page, 'Kopie A');
-        await expect(panel(page).locator('.mv-sentence')).toHaveText('The file is in the research; the tree holds a reduced copy.');
-        await act(page, 'hide').click();
-        const check = dialog(page).locator('.mdlg-check input');
-        await expect(dialog(page).locator('.mdlg-check')).toContainText('Also delete the attachment from the tree');
-        await expect(check).not.toBeChecked();
-        await dialog(page).getByRole('button', { name: 'Hide', exact: true }).click();
-        await expect(toast(page)).toBeVisible();
-        await toast(page).evaluate(el => { el.dataset.first = ''; });
-        expect(await janAttachments(page)).toBe(2);
-
-        await page.keyboard.press('ArrowRight');
-        await expect(panel(page).locator('.mv-title')).toHaveText('Kopie B');
-        await act(page, 'hide').click();
-        await dialog(page).locator('.mdlg-check').click();
-        await dialog(page).getByRole('button', { name: 'Hide', exact: true }).click();
+        await expect(act(page, 'hide')).toHaveCount(0);
+        await act(page, 'removeFromTree').click();
+        await expect(dialog(page).locator('.mdlg-title')).toHaveText('Remove from the tree?');
+        await expect(dialog(page).locator('.mdlg-text').first()).toHaveText('Kopie A is removed from every place in the tree (1).');
+        await expect(dialog(page).locator('input[name="mdlg-rm-reason"][value="none"]')).toBeChecked();
+        await dialog(page).locator('input[name="mdlg-rm-reason"][value="duplicate"]').check();
+        await dialog(page).getByRole('button', { name: 'Remove from the tree', exact: true }).click();
+        await expect.poll(() => janAttachments(page)).toBe(0);
+        await expect(pill(page).locator('.undo-toast-msg')).toHaveText('Removed from the tree: Kopie A.');
+        // The tree's own write: the research is not asked to hide it.
+        expect(material.hides).toHaveLength(0);
+        const removed = await page.evaluate(() => (Object.values(window.Strom.DataManager.getData().media ?? {}) as { removed?: { reason?: string } }[])[0]?.removed);
+        expect(removed?.reason).toBe('duplicate');
+        // Taken out of the tree: Restore (no bridge write) instead of Link to… and Remove.
+        await expect(act(page, 'removeFromTree')).toHaveCount(0);
+        await expect(act(page, 'attach')).toHaveCount(0);
+        await act(page, 'restore').click();
         await expect.poll(() => janAttachments(page)).toBe(1);
-        expect(material.hides.at(-1)).toEqual({ files: ['I0002'], hidden: true, reason: 'unrelated' });
-        // The first toast with its Undo stands its 3 s before this one shows (round 7 §53)
-        await expect(page.locator('.toast[data-kind="materials"]:not([data-first])')).toBeVisible();
-        await toast(page).locator('.toast-action').click();
-        await expect.poll(() => janAttachments(page)).toBe(2);
-        await expect.poll(() => material.hides.at(-1)).toEqual({ files: ['I0002'], hidden: false });
+        await expect(pill(page).locator('.undo-toast-msg')).toHaveText('Back in the tree: Kopie A.');
+        expect(material.hides).toHaveLength(0);
     });
 
     test('the selection: hiding several files ends selecting', async ({ page }) => {
@@ -570,8 +588,7 @@ test.describe('The research\'s own commits', () => {
     test('Assign, its Undo and Hide move the research\'s head: still in step, no "newer version"', async ({ page }) => {
         const { bridge, material } = await setup(page, { files: [materialFile(1, { title: 'Rodinná fotka' })] });
         expect(await treeHead(page)).toBe(HEAD);
-        await view(page, 'Rodinná fotka');
-        await act(page, 'assign').click();
+        await openAssign(page, 'Rodinná fotka');
         await pick(page, ['Jan Fíšek']);
         await dialog(page).locator('.mdlg-btn.is-primary').click();
         await expect(toast(page)).toContainText('Assigned: 1 file to');
@@ -582,6 +599,7 @@ test.describe('The research\'s own commits', () => {
         await expect.poll(() => material.assigns.length).toBe(2);
         await expect.poll(() => treeHead(page)).toBe(bridge.head);
 
+        await viewTile(page, 'Rodinná fotka');
         await act(page, 'hide').click();
         await dialog(page).getByRole('button', { name: 'Hide', exact: true }).click();
         await expect(toast(page)).toHaveText(/Hidden: 1 file/);
@@ -596,24 +614,21 @@ test.describe('The research\'s own commits', () => {
         bridge.head = NEW_HEAD;
         bridge.treeGed = researchGed(NEW_HEAD);
         await poll(page);
-        await view(page, 'Rodinná fotka');
-        await act(page, 'assign').click();
+        await openAssign(page, 'Rodinná fotka');
         await pick(page, ['Jan Fíšek']);
         await dialog(page).locator('.mdlg-btn.is-primary').click();
         await expect(toast(page)).toContainText('Assigned: 1 file to');
         await page.waitForTimeout(200);
         expect(await treeHead(page)).toBe(HEAD);
-        await page.keyboard.press('Escape');
         await page.locator('#materials-modal .close-btn').click();
         await poll(page);
         await openResearchMenu(page);
         await expect(block(page)).toHaveAttribute('data-state', 'newer');
     });
 
-    /** Assign "Rodinná fotka" to Jan from the viewer; its toast said. */
+    /** Assign "Rodinná fotka" to Jan from the window's selection; its toast said. */
     async function assignToJan(page: Page): Promise<void> {
-        await view(page, 'Rodinná fotka');
-        await act(page, 'assign').click();
+        await openAssign(page, 'Rodinná fotka');
         await pick(page, ['Jan Fíšek']);
         await dialog(page).locator('.mdlg-btn.is-primary').click();
         await expect(toast(page)).toContainText('Assigned: 1 file to');
@@ -623,7 +638,6 @@ test.describe('The research\'s own commits', () => {
     async function newerOffered(page: Page, head: string): Promise<void> {
         await page.waitForTimeout(200);
         expect(await treeHead(page)).toBe(head);
-        await page.keyboard.press('Escape');
         await page.locator('#materials-modal .close-btn').click();
         await poll(page);
         await openResearchMenu(page);
@@ -659,7 +673,6 @@ test.describe('The research\'s own commits', () => {
         await expect.poll(() => material.assigns.length).toBe(2);
         await expect.poll(() => treeHead(page)).toBe(bridge.head);
         expect(statusAsks()).toBe(asked);
-        await page.keyboard.press('Escape');
         await page.locator('#materials-modal .close-btn').click();
         await inStep(page, bridge);
     });
@@ -667,8 +680,7 @@ test.describe('The research\'s own commits', () => {
     test('a write takes seconds: the button is busy, a second click sends nothing more', async ({ page }) => {
         const { material } = await setup(page, { files: [materialFile(1, { title: 'Rodinná fotka' })] });
         material.writeDelayMs = 1500;
-        await view(page, 'Rodinná fotka');
-        await act(page, 'assign').click();
+        await openAssign(page, 'Rodinná fotka');
         await pick(page, ['Jan Fíšek']);
         const go = dialog(page).locator('.mdlg-btn.is-primary');
         await go.click();
@@ -680,6 +692,7 @@ test.describe('The research\'s own commits', () => {
         expect(material.assigns).toHaveLength(1);
 
         // × on a chip: the chip waits, a second click sends nothing more.
+        await viewTile(page, 'Rodinná fotka');
         const x = chips(page).first().locator('.mv-chip-x');
         await x.click();
         await expect(x).toHaveAttribute('aria-busy', 'true');
@@ -694,26 +707,25 @@ test.describe('The research refuses', () => {
 
     test('busy: asked again quietly, then it goes through', async ({ page }) => {
         const { material } = await setup(page, { files: [materialFile(1)] });
-        await view(page, 'scan-1.jpg');
-        await act(page, 'assign').click();
+        await openAssign(page, 'scan-1.jpg');
         await pick(page, ['Jan Fíšek']);
         material.busyTimes = 2;
         await dialog(page).locator('.mdlg-btn.is-primary').click();
         await expect(toast(page)).toContainText('Assigned: 1 file to Jan Fíšek.');
         expect(material.assigns).toHaveLength(3);
+        await viewTile(page, 'scan-1.jpg');
         await expect(chips(page)).toHaveCount(1);
     });
 
     test('a person the research no longer has: the sentence in the dialog with Reload; nothing changes', async ({ page }) => {
         const { material } = await setup(page, { files: [materialFile(1)], people: { P0001: 'Josef Fíšek', P0003: 'Jan Fíšek' } });
-        await view(page, 'scan-1.jpg');
-        await act(page, 'assign').click();
+        await openAssign(page, 'scan-1.jpg');
         await pick(page, ['Anna Svobodová']);
         await dialog(page).locator('.mdlg-btn.is-primary').click();
         const err = dialog(page).locator('.mdlg-error');
         await expect(err).toContainText('The person is missing in the research (merged or removed). Nothing changed.');
         await expect(err.getByRole('button', { name: 'Reload' })).toBeVisible();
-        await expect(chips(page)).toHaveCount(0);
+        expect(material.files[0].persons).toEqual([]);
         const asks = material.asks.length;
         await err.getByRole('button', { name: 'Reload' }).click();
         await expect(dialog(page)).toHaveCount(0);

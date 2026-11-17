@@ -45,7 +45,8 @@ export type ThumbSize = typeof THUMB_SIZES[number];
 export type { MaterialKind };
 /** What a file is by its type, for its icon and label when it has no kind. */
 export type MaterialType = 'image' | 'pdf' | 'audio' | 'file';
-export type HiddenReason = 'unrelated' | 'duplicate';
+/** Why a file is hidden; 'removed': taken out of the tree (spec 102 §9, the research's M3). */
+export type HiddenReason = 'unrelated' | 'duplicate' | 'removed';
 
 export interface MaterialNote {
     at?: string;
@@ -168,6 +169,8 @@ export interface MaterialItem {
     state?: MaterialFile['state'];
     /** How many places of the tree it is used in (the overview; src/media-uses.ts). */
     uses?: number;
+    /** The tree's record of it, taken out of the tree (spec 102 §9): "Restore" brings it back with its places. */
+    removedId?: string;
 }
 
 // ==================== READING THE BRIDGE'S ANSWER ====================
@@ -204,7 +207,7 @@ function hiddenOf(v: unknown): MaterialHidden | undefined {
     if (at) out.at = at;
     const by = text(h.by, 40);
     if (by) out.by = by;
-    if (h.reason === 'unrelated' || h.reason === 'duplicate') out.reason = h.reason;
+    if (h.reason === 'unrelated' || h.reason === 'duplicate' || h.reason === 'removed') out.reason = h.reason;
     return out;
 }
 
@@ -656,7 +659,7 @@ export function materialCaps(env: MaterialEnv & { openLinks?: boolean }): Materi
 
 export type MaterialActionId =
     | 'open' | 'assign' | 'removeFromPerson' | 'hide' | 'restore'
-    | 'openSystem' | 'showInBatch' | 'download' | 'useAsPortrait' | 'deleteFromTree' | 'edit';
+    | 'openSystem' | 'showInBatch' | 'download' | 'useAsPortrait' | 'removeFromTree' | 'edit' | 'attach';
 
 export interface MaterialAction {
     id: MaterialActionId;
@@ -683,6 +686,9 @@ interface ActionRow {
 }
 
 const inArchive = (item: MaterialItem) => item.origin !== 'tree' && !!item.file;
+/** A file with a place in the tree. */
+// The tree's file (not one taken out of it, spec 102 §9).
+const inTree = (item: MaterialItem) => !!item.attachment && !item.attachment.removed;
 
 /**
  * The actions in their order (the ⋯ menu and the viewer are built from this;
@@ -692,20 +698,23 @@ const ACTION_ROWS: ActionRow[] = [
     { id: 'open', when: () => true },
     // Title, kind and date (spec 102 §2): the tree's file in the tree, material outside it in the research.
     { id: 'edit', writes: (i) => !i.attachment, when: (i, c) => (i.attachment ? true : inArchive(i) && c.edit) },
-    { id: 'assign', writes: true, when: (i, c) => inArchive(i) && c.assign },
+    // Link to… (spec 102 §4): a file of the tree in the tree; material outside it needs its working copy from the bridge.
+    { id: 'attach', writes: (i) => !inTree(i), when: (i, c) => inTree(i) || (inArchive(i) && c.assign) },
     {
         id: 'removeFromPerson', writes: true,
         when: (i, c, x) => inArchive(i) && c.assign && !!x.person && i.persons.includes(x.person),
         extra: (i, x) => (x.person && i.viaBatch.includes(x.person) ? { viaBatch: true } : {}),
     },
-    { id: 'hide', writes: true, when: (i, c) => inArchive(i) && c.assign && !i.hidden },
-    { id: 'restore', writes: true, when: (i, c) => inArchive(i) && c.assign && !!i.hidden },
+    // Hide… only for material outside the tree; a file in it is removed from the tree instead (§9).
+    { id: 'hide', writes: true, when: (i, c) => inArchive(i) && c.assign && !i.hidden && !inTree(i) },
+    // Restore: a file taken out of the tree comes back to the tree with its places (no bridge needed).
+    { id: 'restore', writes: (i) => !i.removedId, when: (i, c) => inArchive(i) && (c.assign || !!i.removedId) && !!i.hidden },
     { id: 'openSystem', when: (i, c) => inArchive(i) && c.openLinks !== false },
     { id: 'showInBatch', when: (i) => inArchive(i) && !!i.batch },
     { id: 'download', when: (i) => i.origin === 'tree' },
     // A picture of the tree's attachment as the person's portrait (spec 107 §4; the menu leaves it out where the person cannot change).
     { id: 'useAsPortrait', when: (i) => isPortraitCandidate(i.attachment) },
-    { id: 'deleteFromTree', when: (i) => i.origin === 'tree' },
+    { id: 'removeFromTree', when: (i) => inTree(i) },
 ];
 
 /** An attachment that can become a portrait: a picture the tree shows (not only its original kept by the research). */

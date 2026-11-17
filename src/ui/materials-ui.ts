@@ -230,12 +230,13 @@ const ACTION_LABEL: Record<MaterialActionId, () => string> = {
     showInBatch: () => strings.materials.showInBatch,
     download: () => strings.materials.download,
     useAsPortrait: () => strings.materials.useAsPortrait,
-    deleteFromTree: () => strings.materials.deleteFromTree,
+    removeFromTree: () => strings.materials.removeFromTree,
     edit: () => strings.materials.titleAndData,
+    attach: () => strings.materials.attach,
 };
 
 /** Where the item's ⋯ menu draws a line above (the research's writes, then the rest). */
-const DIVIDER_BEFORE: MaterialActionId[] = ['openSystem', 'deleteFromTree'];
+const DIVIDER_BEFORE: MaterialActionId[] = ['openSystem', 'removeFromTree'];
 
 // ==================== MODULE STATE ====================
 
@@ -668,6 +669,18 @@ export const materialsMethods = uiModule({
     },
 
     /** The person's editor, scrolled to their materials (menu "Materials N", the toast's "Show"). */
+    /**
+     * A person's materials from a menu: the Materials window filtered to them
+     * (by their REFN beside an archive, else in every tree's window, spec 102
+     * §1); a tree in view mode keeps their card's section.
+     */
+    openPersonMaterialsFromMenu(personId: PersonId): void {
+        const refn = DataManager.getPerson(personId)?.refn;
+        if (refn && this.materialsListOn()) this.openMaterials({ person: refn });
+        else if (!this.materialsListOn() && this.materialsWindowOn()) this.openMaterials({ person: personId, group: 'added' });
+        else this.showPersonMaterials(personId);
+    },
+
     showPersonMaterials(personId: PersonId): void {
         if (this.currentId !== personId || !document.getElementById('person-modal')?.classList.contains('active')) {
             this.clearDialogStack();
@@ -763,7 +776,7 @@ export const materialsMethods = uiModule({
         const actions = materialActions(item, caps, { person: refn, where: 'menu' })
             // Nothing to download from an attachment that is only its original; a locked person keeps its files.
             .filter(a => !(a.id === 'download' && (!item.attachment?.dataUrl || item.attachment.originalOnly)))
-            .filter(a => !(a.id === 'deleteFromTree' && locked))
+            .filter(a => !((a.id === 'removeFromTree' || a.id === 'attach') && (locked || DataManager.isReadOnly())))
             // Title and details: where they can change here (spec 102 §2).
             .filter(a => !(a.id === 'edit' && !['on', 'off'].includes(materialDetailsEdit(item, ctx) ?? '')))
             // Use as portrait: a person who can change, and not the portrait's source already (spec 107 §4).
@@ -776,7 +789,7 @@ export const materialsMethods = uiModule({
         menu.innerHTML = actions.map((a, i) => {
             const divider = i > 0 && DIVIDER_BEFORE.includes(a.id) ? '<div class="materials-item-menu-divider" role="separator"></div>' : '';
             const off = a.disabled ? ` aria-disabled="true" title="${esc(strings.materials.actionsWhenRunning)}"` : '';
-            const danger = a.id === 'deleteFromTree' ? ' is-danger' : '';
+            const danger = a.id === 'removeFromTree' ? ' is-danger' : '';
             return `${divider}<button type="button" role="menuitem" class="materials-item-menu-row${danger}" data-action="${a.id}"${off}>${researchActionLabel(ACTION_LABEL[a.id](), a.id === 'openSystem' ? researchLinkMark('media') : 'none')}</button>`;
         }).join('');
         document.body.appendChild(menu);
@@ -855,7 +868,9 @@ export const materialsMethods = uiModule({
                 break;
             }
             case 'useAsPortrait': if (item.attachment && this.currentId) void this.useAttachmentAsPortrait(this.currentId, item.attachment.id); break;
-            case 'deleteFromTree': if (item.attachment) void this.deleteAttachment(item.attachment.id); break;
+            case 'removeFromTree': void this.openRemoveFromTreeDialog(item); break;
+            case 'attach': this.openAttachDialog([item], { personId: this.currentId }); break;
+            case 'restore': if (item.removedId) { this.restoreRemovedMaterials([item]); break; } this.materialAction(action.id, [item], { person: refn, where: 'section' }); break;
             case 'edit': this.openMaterialDetailsDialog(item); break;
             default: this.materialAction(action.id, [item], { person: refn, where: 'section' });
         }

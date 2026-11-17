@@ -775,6 +775,8 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
 
     // Person modal
     personModal: {
+        deleteFiles: (n: number) => `${plPl(n, `${n} połączony plik pozostanie`, `${n} połączone pliki pozostaną`, `${n} połączonych plików pozostanie`)} w Materiałach, tylko bez połączenia z tą osobą.`,
+        deleteFilesOnly: (n: number) => plPl(n, `${n} plik, który jest tylko przy tej osobie, zostanie usunięty razem z nią.`, `${n} pliki, które są tylko przy tej osobie, zostaną usunięte razem z nią.`, `${n} plików, które są tylko przy tej osobie, zostanie usuniętych razem z nią.`),
         birthEstimate: (year: number) => `Urodzenie najpóźniej ~${year} (wywnioskowane z innych dat)`,
         birthEstimateApply: 'użyj',
         addTitle: 'Dodawanie osoby',

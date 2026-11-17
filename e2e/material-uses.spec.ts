@@ -120,18 +120,20 @@ test.describe('Where used, a tree without a research', () => {
         await expect(uses(page).locator('.mv-uses-count')).toHaveText('8 places');
     });
 
-    test('the last place of a file nothing else keeps asks first; confirmed, the file goes', async ({ page }) => {
+    test('the last place of a file nothing else keeps asks first (Delete the file); confirmed, the file goes with Undo', async ({ page }) => {
         await tree(page);
         const { letter } = await files(page);
         await view(page, 'dopis.png');
         await expect(uses(page).locator('.mv-uses-count')).toHaveText('1 place');
         await uses(page).locator('.mv-use-x').click();
-        const confirm = page.locator('#confirmation-modal');
-        await expect(confirm).toHaveClass(/active/);
-        await expect(confirm.locator('#confirm-title')).toHaveText('Delete attachment dopis.png?');
-        await confirm.locator('#confirm-ok-btn').click();
+        await expect(dialog(page).locator('.mdlg-title')).toHaveText('Delete the file from the tree?');
+        await expect(dialog(page).locator('.mdlg-rm-app')).toHaveText('The file is not stored anywhere else. Only Undo or a backup (Export all) brings it back.');
+        await dialog(page).getByRole('button', { name: 'Delete the file' }).click();
         await expect.poll(() => page.evaluate((id) => !!window.Strom.DataManager.getMedia(id), letter)).toBe(false);
         await expect(viewer(page)).not.toHaveClass(/active/);
+        await expect(pill(page).locator('.undo-toast-msg')).toHaveText('Deleted: dopis.png.');
+        await pill(page).locator('.undo-toast-btn').click();
+        await expect.poll(() => page.evaluate((id) => window.Strom.DataManager.getMedia(id)?.places.length ?? 0, letter)).toBe(1);
     });
 
     test('a person\'s link closes the viewer and the window and focuses them; a source\'s link opens the source', async ({ page }) => {
@@ -207,7 +209,7 @@ test.describe('Where used beside an archive', () => {
         await research(page, { files: [materialFile(1, { persons: ['P0003'], uses: USES })] });
         await view(page, 'scan-1.jpg');
         await expect(uses(page).locator('.mv-uses-sub')).toHaveText(['In the tree', 'In the archive']);
-        await expect(uses(page).locator('.mv-uses-none')).toHaveText('Not in the tree yet.');
+        await expect(uses(page).locator('.mv-uses-none')).toHaveText('Not in the tree yet. Link to…');
         await expect(uses(page).locator('.mv-uses-count')).toHaveCount(0);
         await expect(uses(page).locator('.mv-uses-persons .mv-label')).toHaveText('Assigned in the archive');
         await expect(uses(page).locator('.mv-chip')).toHaveText(['Jan Fíšek×']);
@@ -249,7 +251,7 @@ test.describe('Where used beside an archive', () => {
         await expect(uses(page).locator('.mv-chip')).toHaveCount(0);
         await uses(page).locator('.mv-use-x').click();
         await expect(page.locator('#confirmation-modal')).not.toHaveClass(/active/);
-        await expect(pill(page).locator('.undo-toast-msg')).toHaveText('Removed: Jan Fíšek from scan-1.jpg.');
+        await expect(pill(page).locator('.undo-toast-msg')).toHaveText('Removed: Jan Fíšek from scan-1.jpg. The file stays only in the research.');
         await expect.poll(() => page.evaluate((id) => window.Strom.DataManager.getMedia(id)?.places.length ?? 0, id)).toBe(0);
     });
 });

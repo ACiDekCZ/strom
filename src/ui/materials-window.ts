@@ -17,7 +17,7 @@
  * See src/ui/module.ts for the composition pattern.
  */
 
-import { treeMedia, mediaPersonIds } from '../media.js';
+import { allMedia, treeMedia, mediaPersonIds } from '../media.js';
 import { mediaUsesIndex } from '../media-uses.js';
 import type { PersonId } from '../types.js';
 import { researchActionLabel } from './research-open-mark.js';
@@ -184,9 +184,11 @@ function treeRecords(byRefn: boolean): TreeRecord[] {
     const data = DataManager.getData();
     const uses = mediaUsesIndex(data);
     const key = (id: PersonId): string | null => (byRefn ? researchPersonRef(DataManager.getPerson(id)?.refn) : id);
-    return treeMedia(data).map(att => ({
+    // With an archive a file taken out of the tree stays with it (Hidden · Removed from the tree, spec 102 §9).
+    const taken = byRefn ? allMedia(data).filter(a => !a.places?.length && !!a.removed && !!a.original?.sha256) : [];
+    return [...treeMedia(data), ...taken].map(att => ({
         att,
-        persons: mediaPersonIds(att).map(key).filter((k): k is string => !!k),
+        persons: mediaPersonIds(att.places.length ? att : { places: att.removed?.places ?? [] }).map(key).filter((k): k is string => !!k),
         uses: uses.get(att.id)?.length ?? 0,
     }));
 }

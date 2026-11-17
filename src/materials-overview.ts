@@ -77,9 +77,15 @@ export function overviewItems(list: MaterialList | null, tree: readonly TreeReco
         if (!had || (f.origin === 'app' && had.origin !== 'app')) bySha.set(f.sha, f);
     }
     const joined = new Map<string, TreeRecord>();
+    const removed = new Map<string, TreeRecord>();
     const treeOnly: MaterialItem[] = [];
     for (const rec of tree) {
         const file = rec.att.original?.sha256 ? bySha.get(rec.att.original.sha256.toLowerCase()) : undefined;
+        // Taken out of the tree (spec 102 §9): its archive file is hidden "removed" with Restore; nothing without one.
+        if (rec.att.removed && !rec.att.places?.length) {
+            if (file && !joined.has(file.id) && !removed.has(file.id)) removed.set(file.id, rec);
+            continue;
+        }
         if (file && !joined.has(file.id)) {
             joined.set(file.id, rec);
             continue;
@@ -94,6 +100,11 @@ export function overviewItems(list: MaterialList | null, tree: readonly TreeReco
         const rec = joined.get(f.id);
         const item = materialFileItem(f, list ?? { batches: [] }, rec?.att, batches);
         if (rec) item.uses = rec.uses;
+        const out = !rec ? removed.get(f.id) : undefined;
+        if (out) {
+            item.removedId = out.att.id;
+            item.hidden = { reason: 'removed' };
+        }
         return item;
     });
     return [...items, ...treeOnly];

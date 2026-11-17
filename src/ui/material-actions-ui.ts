@@ -199,8 +199,19 @@ export const materialActionsMethods = uiModule({
      * (`ctx.selection`) and "Restore" under a hidden tile.
      */
     materialAction(id: MaterialActionId, items: MaterialItem[], ctx: MaterialActionCtx = {}): boolean {
-        if (!['assign', 'removeFromPerson', 'hide', 'restore'].includes(id)) return false;
+        if (!['assign', 'attach', 'removeFromPerson', 'hide', 'restore'].includes(id)) return false;
         const mc = this.materialsContext();
+        // The tree's own writes (spec 102 §4, §9): Link to… for files, Restore of files taken out of the tree.
+        if (id === 'attach') {
+            ctx.settled?.();
+            this.openAttachDialog(items, { personId: this.materialContextPerson(), done: () => this.materialActionDone(ctx) });
+            return true;
+        }
+        if (id === 'restore' && items.some(i => i.removedId)) {
+            this.restoreRemovedMaterials(items.filter(i => i.removedId));
+            items = items.filter(i => !i.removedId);
+            if (!items.length) { ctx.settled?.(); return true; }
+        }
         if (!mc) { ctx.settled?.(); return false; }
         if (!mc.caps.bridgeUp || !mc.base || !mc.caps.assign) { ctx.settled?.(); return true; }
         const files = researchFiles(items);
@@ -525,6 +536,8 @@ export const materialActionsMethods = uiModule({
 
     openHideDialog(mc: MaterialsContext, files: MaterialItem[], ctx: MaterialActionCtx): void {
         const m = strings.materials;
+        // Hide… is for material outside the tree; a file in the tree is removed from it instead (spec 102 §9).
+        files = files.filter(i => !i.attachment?.places?.length);
         if (!files.length) return;
         const dialog = materialDialog({ title: m.hideTitle(files.length) });
         // One file: the sentence names it; several: the general sentence.
@@ -552,22 +565,6 @@ export const materialActionsMethods = uiModule({
             set.appendChild(label);
         }
         dialog.body.appendChild(set);
-        // Files that are also the tree's attachments: deleting those is a separate, unticked choice.
-        const withAttachment = files.filter(i => i.origin === 'both' && i.attachment);
-        let alsoDelete: HTMLInputElement | null = null;
-        if (withAttachment.length) {
-            const label = h('label', 'mdlg-check');
-            alsoDelete = h('input');
-            alsoDelete.type = 'checkbox';
-            alsoDelete.name = 'mdlg-hide-delete';
-            const text = h('span', 'mdlg-check-text');
-            text.append(
-                h('span', '', withAttachment.length === 1 ? m.hideAlsoDelete : m.hideAlsoDeleteN(withAttachment.length)),
-                h('span', 'mdlg-check-hint', m.hideAlsoDeleteHint),
-            );
-            label.append(alsoDelete, text);
-            dialog.body.appendChild(label);
-        }
         const go = button(m.hideConfirm, 'is-primary', () => void run());
         dialog.foot.append(button(strings.buttons.cancel, '', () => dialog.close()), go);
         set.querySelector<HTMLInputElement>('input:checked')?.focus();
@@ -585,44 +582,15 @@ export const materialActionsMethods = uiModule({
             }
             dialog.close();
             await mergeIntoCache(mc.treeId, res.value.files, res.value.people);
-            const undoDesc = alsoDelete?.checked ? this.deleteMaterialAttachments(withAttachment) : null;
             this.showToast((mc.agent ? m.hiddenToastResearch : m.hiddenToast)(files.length), TOAST_MS, {
                 closable: true, kind: 'materials',
                 action: {
                     label: strings.undo.undo,
-                    run: () => {
-                        if (undoDesc && DataManager.lastUndoDescription() === undoDesc) this.performUndo();
-                        void this.writeHidden(mc, ids, false, undefined);
-                    },
+                    run: () => void this.writeHidden(mc, ids, false, undefined),
                 },
             });
             this.materialActionDone(ctx);
         };
-    },
-
-    /** The tree's attachments of hidden files deleted as one undo step; its description (null: nothing deleted). */
-    deleteMaterialAttachments(items: MaterialItem[]): string | null {
-        const targets: { personId: PersonId; attId: string }[] = [];
-        for (const item of items) {
-            const attId = item.attachment?.id;
-            if (!attId) continue;
-            const ownerId = mediaPersonId(DataManager.getMedia(attId));
-            const owner = ownerId ? DataManager.getPerson(ownerId) : null;
-            if (owner && !DataManager.isPersonLocked(owner.id)) targets.push({ personId: owner.id, attId });
-        }
-        if (!targets.length) return null;
-        const first = DataManager.getPerson(targets[0].personId);
-        const desc = first ? strings.undo.removeAttachment(fullName(first)) : null;
-        DataManager.runBatch(desc, () => {
-            for (const t of targets) DataManager.removeAttachment(t.personId, t.attId);
-        });
-        if (document.getElementById('person-modal')?.classList.contains('active')) {
-            this.renderAttachmentsList();
-            this.renderMaterialsSection();
-        }
-        this.refreshMaterialsWindow();
-        this.materialViewerListChanged();
-        return DataManager.lastUndoDescription();
     },
 
     /** Hide or restore files quietly (an undo); a refusal says so in a toast. */
