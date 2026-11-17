@@ -112,6 +112,11 @@ describe('the map of research actions to their marks', () => {
         expect(RESEARCH_BRIDGE_MARKS['verify-stop']).toBe('none');
         // Splitting the older locations (spec 075 §5): the research's code, no agent, no terminal.
         expect(RESEARCH_BRIDGE_MARKS['sources-split']).toBe('none');
+        // Sort with the agent (spec 102 §13): an agent through the bridge, the AI badge alone.
+        expect(RESEARCH_BRIDGE_MARKS['material-sort']).toBe('bridgeAgent');
+        const sort = researchBridgeActionLabel(strings.materials.agentSort.sort, 'material-sort');
+        expect(sort).toContain('research-ai-badge');
+        expect(sort).not.toContain('research-open-mark');
         expect(researchBridgeActionLabel(strings.sources.split.go(3), 'sources-split')).toBe(strings.sources.split.go(3));
         const verify = researchBridgeActionLabel(strings.verify.start, 'verify');
         expect(verify).toContain('research-ai-badge');

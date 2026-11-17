@@ -119,7 +119,7 @@ export function researchLinkMark(action: ResearchLinkAction, p: ResearchLinkMark
  * from the scan or take it back, stop the verification not yet begun, split the older sources'
  * locations into fields and undo that split (spec 075 §5, no agent: the research's code).
  */
-export const RESEARCH_BRIDGE_ACTIONS = ['verify', 'verify-bulk', 'fact-confirm', 'verify-stop', 'sources-split'] as const;
+export const RESEARCH_BRIDGE_ACTIONS = ['verify', 'verify-bulk', 'fact-confirm', 'verify-stop', 'sources-split', 'material-sort'] as const;
 export type ResearchBridgeAction = typeof RESEARCH_BRIDGE_ACTIONS[number];
 
 /**
@@ -132,6 +132,8 @@ export type ResearchBridgeMark = 'none' | 'bridgeAgent';
 export const RESEARCH_BRIDGE_MARKS: Readonly<Record<ResearchBridgeAction, ResearchBridgeMark>> = {
     verify: 'bridgeAgent', 'verify-bulk': 'bridgeAgent',
     'fact-confirm': 'none', 'verify-stop': 'none', 'sources-split': 'none',
+    // The agent proposes titles, dates and links for files in the research's background (spec 102 §13).
+    'material-sort': 'bridgeAgent',
 };
 
 /**

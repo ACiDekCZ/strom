@@ -1169,6 +1169,139 @@ export async function editMaterial(base: string, req: EditRequest, opts: BridgeO
     return { ok: false, error: materialErrorOf(answer.status, answer.body, answer.retryAfter) };
 }
 
+// ==================== SORTING BY THE AGENT (`material.sort`, spec 102 §13) ====================
+
+/** The most files one sorting takes and the longest note (the research's limits). */
+export const SORT_MAX_FILES = 50;
+export const SORT_MAX_TEXT = 2000;
+
+export type SortState = 'queued' | 'working' | 'done' | 'failed' | 'cancelled';
+export type SortSure = 'high' | 'medium' | 'low';
+
+/** A link the agent proposes (research refs: P…, F…, S…; `event` a GEDCOM tag of a person's or a couple's event). */
+export interface SortLink {
+    type: 'person' | 'family' | 'event' | 'source';
+    ref: string;
+    event?: string;
+}
+
+/** The agent's proposal for one file (`id` = the file's I…). */
+export interface SortProposal {
+    id: string;
+    title?: string;
+    date?: string;
+    kind?: MaterialKind;
+    links: SortLink[];
+    why: string;
+    sure: SortSure;
+}
+
+/** A sorting as the research tells it (`GET /material/sort/<id>`). */
+export interface SortJob {
+    id: string;
+    state: SortState;
+    /** The files sent (I…). */
+    files: string[];
+    at: string;
+    proposals: SortProposal[];
+    reason?: string;
+}
+
+const SORT_ID = /^sort-[0-9A-Za-z-]{1,60}$/;
+const SORT_STATES: readonly SortState[] = ['queued', 'working', 'done', 'failed', 'cancelled'];
+const LINK_REF = /^[PFS]\d{1,9}$/;
+
+export function isSortId(id: unknown): id is string {
+    return typeof id === 'string' && SORT_ID.test(id);
+}
+
+function parseSortLink(raw: unknown): SortLink | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const o = raw as Record<string, unknown>;
+    const type = o.type;
+    if (type !== 'person' && type !== 'family' && type !== 'event' && type !== 'source') return null;
+    const ref = typeof o.ref === 'string' ? o.ref.trim() : '';
+    if (!LINK_REF.test(ref)) return null;
+    if (type === 'person' && ref[0] !== 'P') return null;
+    if (type === 'family' && ref[0] !== 'F') return null;
+    if (type === 'source' && ref[0] !== 'S') return null;
+    if (type === 'event' && ref[0] === 'S') return null;
+    const event = typeof o.event === 'string' && /^[A-Z_][A-Z0-9_]{1,15}$/.test(o.event) ? o.event : undefined;
+    if (type === 'event' && !event) return null;
+    return { type, ref, ...(event ? { event } : {}) };
+}
+
+/** One proposal as the research gives it (anything off: dropped, never shown on a guess). */
+export function parseSortProposal(raw: unknown): SortProposal | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const o = raw as Record<string, unknown>;
+    const id = typeof o.id === 'string' && FILE_ID.test(o.id) ? o.id : null;
+    if (!id) return null;
+    const title = cleanText(o.title, 200);
+    const date = cleanText(o.date, 100);
+    const kind = typeof o.kind === 'string' && KINDS.includes(o.kind as MaterialKind) ? o.kind as MaterialKind : undefined;
+    const links = Array.isArray(o.links) ? o.links.map(parseSortLink).filter((l): l is SortLink => !!l).slice(0, 20) : [];
+    const sure: SortSure = o.sure === 'high' || o.sure === 'low' ? o.sure : 'medium';
+    return {
+        id, links, sure, why: cleanText(o.why, 500) ?? '',
+        ...(title ? { title } : {}), ...(date ? { date } : {}), ...(kind ? { kind } : {}),
+    };
+}
+
+/** A sorting's state (null: not a sorting's answer). */
+export function parseSortJob(raw: unknown): SortJob | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const o = raw as Record<string, unknown>;
+    if (!isSortId(o.id) || !SORT_STATES.includes(o.state as SortState)) return null;
+    const files = Array.isArray(o.files) ? o.files.filter((f): f is string => typeof f === 'string' && FILE_ID.test(f)) : [];
+    const seen = new Set<string>();
+    const proposals = (Array.isArray(o.proposals) ? o.proposals : []).map(parseSortProposal)
+        .filter((p): p is SortProposal => !!p && !seen.has(p.id) && !!seen.add(p.id));
+    const reason = cleanText(o.reason, 300);
+    return {
+        id: o.id, state: o.state as SortState, files, at: typeof o.at === 'string' ? o.at : '', proposals,
+        ...(reason ? { reason } : {}),
+    };
+}
+
+/**
+ * Start the agent's sorting (`POST /material/sort {ids, text}`). Sent once
+ * (never retried quietly): it uses the subscription or credit.
+ */
+export async function startMaterialSort(base: string, req: { ids: string[]; text: string }, opts: BridgeOptions = {}): Promise<MaterialResult<{ id: string; state: SortState }>> {
+    if (!req.ids.length || req.ids.length > SORT_MAX_FILES || !req.ids.every(f => FILE_ID.test(f))) return bodyError();
+    const text = req.text.slice(0, SORT_MAX_TEXT);
+    const answer = await request(withAppVersion(`${base}/material/sort`), postInit({ ids: req.ids, text }), opts);
+    if ('kind' in answer) return { ok: false, error: answer };
+    if ((answer.status === 202 || answer.status === 200) && answer.body && typeof answer.body === 'object') {
+        const b = answer.body as Record<string, unknown>;
+        if (isSortId(b.id)) return { ok: true, value: { id: b.id, state: SORT_STATES.includes(b.state as SortState) ? b.state as SortState : 'queued' } };
+        return bodyError();
+    }
+    return { ok: false, error: materialErrorOf(answer.status, answer.body, answer.retryAfter) };
+}
+
+/** A sorting's state and proposal (`GET /material/sort/<id>`). */
+export async function fetchMaterialSort(base: string, id: string, opts: BridgeOptions = {}): Promise<MaterialResult<SortJob>> {
+    if (!isSortId(id)) return bodyError();
+    const answer = await request(withAppVersion(`${base}/material/sort/${encodeURIComponent(id)}`), { method: 'GET' }, opts);
+    if ('kind' in answer) return { ok: false, error: answer };
+    if (answer.status === 200) {
+        const job = parseSortJob(answer.body);
+        return job ? { ok: true, value: job } : bodyError();
+    }
+    return { ok: false, error: materialErrorOf(answer.status, answer.body, answer.retryAfter) };
+}
+
+/** Stop a sorting (`POST /material/sort/<id>/cancel`). */
+export async function cancelMaterialSort(base: string, id: string, opts: BridgeOptions = {}): Promise<MaterialResult<true>> {
+    if (!isSortId(id)) return bodyError();
+    const answer = await request(withAppVersion(`${base}/material/sort/${encodeURIComponent(id)}/cancel`), postInit({}), opts);
+    if ('kind' in answer) return { ok: false, error: answer };
+    if (answer.status >= 200 && answer.status < 300) return { ok: true, value: true };
+    return { ok: false, error: materialErrorOf(answer.status, answer.body, answer.retryAfter) };
+}
+
 /** The preview's URL (`GET /media/<sha>?thumb=<px>`). */
 export function thumbUrl(base: string, sha: string, px: ThumbSize): string {
     return withAppVersion(`${base}/media/${sha}?thumb=${px}`);

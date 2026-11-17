@@ -69,7 +69,7 @@ const FOCUSABLE = 'button:not(:disabled), [href], input:not(:disabled), select, 
  * leaves keys alone while it is open), Esc and the backdrop close it, Tab
  * stays inside.
  */
-export function materialDialog(opts: { title: string; sub?: string; modifier?: string; bubbleAt?: HTMLElement; onClose?: () => void }): MaterialDialog {
+export function materialDialog(opts: { title: string; sub?: string; modifier?: string; bubbleAt?: HTMLElement; onClose?: () => void; escape?: () => boolean }): MaterialDialog {
     openDialog?.close();
     const back = document.activeElement as HTMLElement | null;
     const overlay = h('div', `mdlg-overlay${opts.bubbleAt ? ' is-bubble' : ''}`);
@@ -112,6 +112,8 @@ export function materialDialog(opts: { title: string; sub?: string; modifier?: s
         if (e.key === 'Escape') {
             e.preventDefault();
             e.stopImmediatePropagation();
+            // Something inside takes Esc first (a row being edited closes, the dialog stays).
+            if (opts.escape?.()) return;
             dialog.close();
             return;
         }

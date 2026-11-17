@@ -32,7 +32,7 @@ import { MQ_MOBILE, MQ_PHONE_LANDSCAPE, MQ_TABLET } from '../breakpoints.js';
 import {
     MaterialItem, MaterialList, MaterialBatch, MaterialError, MaterialActionId, MaterialCaps,
     cachedMaterials, primeMaterials, fetchMaterial, saveMaterialList, materialKindLabel, materialErrorText,
-    materialType, materialDateForInput,
+    materialType, materialDateForInput, MATERIAL_SORT_FEATURE,
 } from '../materials.js';
 import {
     OverviewFilters, OverviewGroupMode, OverviewView, OverviewGroup, OverviewFolder, OverviewLayout, OverviewRow,
@@ -47,6 +47,8 @@ import {
     MaterialsOpenOptions, MaterialActionCtx, fileNameBreakParts, materialShortDate, materialStaleTime, materialTileLetters, materialItemSha, treeAttachmentsKey,
 } from './materials-ui.js';
 import { uiModule } from './module.js';
+import type { SortTarget } from './material-sort-ui.js';
+import { researchBridgeActionLabel } from './research-open-mark.js';
 
 const MODAL_ID = 'materials-modal';
 const VIEW_KEY = 'strom.materials.view';
@@ -179,6 +181,8 @@ interface SelAction {
     label: string;
     /** Offered, but not now: why. */
     why: string | null;
+    /** The label with its mark (escaped HTML), when it carries one. */
+    html?: string;
 }
 
 function capsKey(caps: MaterialCaps, base: string | null): string {
@@ -195,7 +199,7 @@ const alive = (gen: number): Win | null => (win && win.gen === gen ? win : null)
  * (`byRefn`: their REFN with an archive, people the research does not know
  * yet left out; else their PersonId) and how many places it is used in.
  */
-function treeRecords(byRefn: boolean): TreeRecord[] {
+export function treeRecords(byRefn: boolean): TreeRecord[] {
     const data = DataManager.getData();
     const uses = mediaUsesIndex(data);
     const key = (id: PersonId): string | null => (byRefn ? researchPersonRef(DataManager.getPerson(id)?.refn) : id);
@@ -247,6 +251,7 @@ export const materialsWindowMethods = uiModule({
         overlay.dataset.group = group;
         body.innerHTML = `
             <div class="mw-status" hidden></div>
+            <div class="mw-sort" role="status" hidden></div>
             <div class="mw-lhead" hidden></div>
             <div class="mw-scroll">
                 <div class="mw-sticky"></div>
@@ -390,6 +395,8 @@ export const materialsWindowMethods = uiModule({
         if (!ctx || ctx.treeId !== w.treeId) return;
         const cameUp = ctx.caps.bridgeUp && !w.bridgeUp;
         w.bridgeUp = ctx.caps.bridgeUp;
+        // The agent's sorting moves on its own (its progress, its proposal ready).
+        this.mwSortStrip();
         const changed = capsKey(ctx.caps, ctx.base) !== w.drawnCaps || (cachedMaterials(w.treeId)?.list ?? null) !== w.list
             || treeAttachmentsKey() !== w.drawnAttachments;
         if (changed && !w.raf) {
@@ -560,6 +567,7 @@ export const materialsWindowMethods = uiModule({
         this.mwHeader();
         this.mwTools();
         this.mwStatus();
+        this.mwSortStrip();
         this.mwListHead();
         const empty = this.mwEmpty();
         w.canvas.hidden = empty === 'skeleton';
@@ -671,7 +679,10 @@ export const materialsWindowMethods = uiModule({
         let state = 'live';
         if (w.model === 'app') {
             // A tree beside a research on a phone or a tablet: its own files here, the archive's on the computer (spec 102 §11f).
-            const note = this.materialsTouchLinked() ? (this.materialsContext()?.agent ? m.desktopOnlyResearch : m.desktopOnly) : '';
+            const linked = this.materialsTouchLinked() ? this.materialsContext() : null;
+            // A research whose agent sorts: that and its proposal are on the computer too (spec 102 §13l).
+            const sorts = !!linked?.agent && !!linked.env.features?.includes(MATERIAL_SORT_FEATURE);
+            const note = linked ? `${sorts ? `${m.agentSort.phone} ` : ''}${linked.agent ? m.desktopOnlyResearch : m.desktopOnly}` : '';
             w.overlay.dataset.state = 'live';
             el.hidden = !note;
             el.setAttribute('role', 'note');
@@ -690,6 +701,32 @@ export const materialsWindowMethods = uiModule({
         el.hidden = !html;
         el.setAttribute('role', 'status');
         el.innerHTML = html;
+    },
+
+    /**
+     * The strip of Sort with the agent (spec 102 §13, 13b/13e): over the files
+     * of a review filter (Without title / Without person), else the newest
+     * batch with files without a title or a person; the sorting at work or
+     * its proposal ready wins. It only opens the dialog: nothing is sent from here.
+     */
+    mwSortStrip(): void {
+        const w = win;
+        const el = w?.overlay.querySelector<HTMLElement>('.mw-sort');
+        if (!w || !el) return;
+        let target: SortTarget | null = null;
+        if (w.model === 'archive') {
+            if (w.filters.noTitle || w.filters.noPerson) {
+                target = { items: w.groups.flatMap(g => g.items), batch: null, filter: true };
+            } else {
+                const group = w.groups.find(g => g.kind === 'batch' && !g.pending && g.items.some(i => i.file && !i.hidden && (!i.titled || (!i.persons.length && !i.viaBatch.length))));
+                if (group) target = { items: group.items, batch: group.batch?.name ?? null };
+            }
+        }
+        const html = this.materialSortStripHtml(target);
+        el.hidden = !html;
+        if (el.innerHTML !== html) el.innerHTML = html;
+        el.onclick = (e) => this.materialSortStripClick(e, target);
+        if (html) this.materialSortWatch();
     },
 
     /** Nothing to show: loading (skeleton), not running without memory, no files at all (the tree's own), or no match. */
@@ -1125,14 +1162,14 @@ export const materialsWindowMethods = uiModule({
         const whole = this.mwWholeTarget();
         const acts = this.mwSelActions(items);
         // A phone: three actions and ⋯ (spec 102 §11); wider: Go through, Link to…, Title…, Kind…, Date… and ⋯.
-        const inline: string[] = media(MQ_MOBILE) ? ['sel-attach', 'sel-title', 'sel-review'] : ['sel-review', 'sel-attach', 'sel-title', 'sel-kind', 'sel-date'];
+        const inline: string[] = media(MQ_MOBILE) ? ['sel-attach', 'sel-title', 'sel-review'] : ['sel-review', 'sel-attach', 'sel-title', 'sel-kind', 'sel-date', 'sel-sort'];
         const shown = inline.map(id => acts.find(a => a.id === id)).filter((a): a is SelAction => !!a);
         const more = acts.filter(a => !inline.includes(a.id));
         bar.setAttribute('aria-label', n ? m.selected(n) : m.nothingSelected);
         redraw(bar, `
             <span class="mw-selcount">${esc(n ? m.selected(n) : m.nothingSelected)}</span>
             <span class="mw-selacts">
-                ${shown.map(a => `<button type="button" class="${a.id === 'sel-attach' ? 'primary' : 'secondary'} mw-selbtn" data-mw="${a.id}"${off(a.why)}>${esc(a.label)}</button>`).join('')}
+                ${shown.map(a => `<button type="button" class="${a.id === 'sel-attach' ? 'primary' : 'secondary'} mw-selbtn" data-mw="${a.id}"${off(a.why)}>${a.html ?? esc(a.label)}</button>`).join('')}
                 ${more.length ? `<button type="button" class="secondary mw-selbtn mw-selmore" data-mw="sel-more" aria-haspopup="menu" aria-label="${esc(m.selMore)}" title="${esc(m.selMore)}">⋯</button>` : ''}
             </span>
             <span class="mw-gap"></span>
@@ -1234,18 +1271,26 @@ export const materialsWindowMethods = uiModule({
         }
         const removable = items.filter(i => i.attachment && !i.removedId && (i.attachment.places?.length ?? 0) > 0 && DataManager.canEditMedia(i.attachment.id));
         if (removable.length) out.push({ id: 'sel-remove', label: m.removeFromTree, why: null });
+        // Sort with the agent (spec 102 §13, 13c): opens its dialog over the selected files of the research.
+        const sortGate = this.materialSortGate();
+        if (sortGate === 'on' || sortGate === 'offRun') {
+            const files = items.filter(i => !!i.file && !i.hidden).length;
+            const why = sortGate === 'offRun' ? m.agentSort.offRun : !n ? m.nothingSelected : !files ? m.skippedTree(n)
+                : this.materialSortBusy() ? m.agentSort.runNote : null;
+            out.push({ id: 'sel-sort', label: m.agentSort.sort, html: researchBridgeActionLabel(m.agentSort.sort, 'material-sort'), why });
+        }
         return out;
     },
 
     /** The selection's ⋯: the actions not in the bar. */
     mwFillSelMenu(pop: HTMLElement): void {
         const items = this.materialsSelection();
-        const inline = media(MQ_MOBILE) ? ['sel-attach', 'sel-title', 'sel-review'] : ['sel-review', 'sel-attach', 'sel-title', 'sel-kind', 'sel-date'];
+        const inline = media(MQ_MOBILE) ? ['sel-attach', 'sel-title', 'sel-review'] : ['sel-review', 'sel-attach', 'sel-title', 'sel-kind', 'sel-date', 'sel-sort'];
         const acts = this.mwSelActions(items).filter(a => !inline.includes(a.id));
         pop.innerHTML = acts.map(a => {
             const divider = a.id === 'sel-remove' ? '<div class="materials-item-menu-divider" role="separator"></div>' : '';
             const off = a.why ? ` aria-disabled="true" title="${esc(a.why)}"` : '';
-            return `${divider}<button type="button" role="menuitem" class="materials-item-menu-row${a.id === 'sel-remove' ? ' is-danger' : ''}" data-action="${a.id}"${off}>${esc(a.label)}</button>`;
+            return `${divider}<button type="button" role="menuitem" class="materials-item-menu-row${a.id === 'sel-remove' ? ' is-danger' : ''}" data-action="${a.id}"${off}>${a.html ?? esc(a.label)}</button>`;
         }).join('');
         pop.querySelectorAll<HTMLButtonElement>('[data-action]').forEach(btn => btn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -1265,6 +1310,7 @@ export const materialsWindowMethods = uiModule({
         const end = () => { if (alive(w.gen)) this.clearMaterialsSelection(); };
         switch (id) {
             case 'sel-review': this.mwReview(items); return;
+            case 'sel-sort': this.openSortDialog({ items, batch: null }); return;
             case 'sel-attach': this.mwRun('attach', items, { selection: true }); return;
             case 'sel-title': this.openBulkEditDialog('title', items, { done: end, refused: r => this.mwShowRefused(r) }); return;
             case 'sel-kind': this.openBulkEditDialog('kind', items, { done: end, refused: r => this.mwShowRefused(r) }); return;
@@ -1911,7 +1957,7 @@ export const materialsWindowMethods = uiModule({
                 case 'sel-more': this.mwOpenPop('selMenu', act); return;
                 case 'sort': this.mwSortBy(act.dataset.col as ListColumn); return;
                 case 'sel-review': case 'sel-attach': case 'sel-title': case 'sel-kind': case 'sel-date':
-                case 'sel-assign': case 'sel-hide': case 'sel-restore': case 'sel-remove': case 'sel-remove-person':
+                case 'sel-assign': case 'sel-hide': case 'sel-restore': case 'sel-remove': case 'sel-remove-person': case 'sel-sort':
                     if (disabled) return;
                     this.mwSelAction(act.dataset.mw);
                     return;

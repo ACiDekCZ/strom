@@ -356,7 +356,46 @@ const INTRO_KEY = 'strom-research-auto-intro-seen';
  * new version), the research's mode as last shown (a switch is said once),
  * the one-time offer to send by itself, and the user's edits not sent yet.
  */
+/** The agent's sorting of materials the app asked for (spec 102 §13): kept so its proposal outlives the window and a reload. */
+export interface ResearchSortRemembered {
+    /** The research's sorting (`sort-…`). */
+    id: string;
+    /** The files sent (I…). */
+    files: string[];
+    /** What was said about the files (sent as it is). */
+    text: string;
+    /** The batch the files came in (its name, for the header), when all of one batch. */
+    batch?: string;
+    at: string;
+    /** The rows decided here (I… → accepted / rejected). */
+    decided: Record<string, 'accepted' | 'rejected'>;
+    /** The sorting ended without a proposal (failed, cancelled): said once in the strip. */
+    ended?: 'failed' | 'cancelled';
+}
+
+function sortRememberedFrom(v: unknown): ResearchSortRemembered | null {
+    if (!v || typeof v !== 'object') return null;
+    const o = v as Record<string, unknown>;
+    if (typeof o.id !== 'string' || !/^sort-[0-9A-Za-z-]{1,60}$/.test(o.id) || !Array.isArray(o.files)) return null;
+    const files = o.files.filter((f): f is string => typeof f === 'string' && /^I\d{1,7}$/.test(f)).slice(0, 50);
+    const decided: Record<string, 'accepted' | 'rejected'> = {};
+    if (o.decided && typeof o.decided === 'object') {
+        for (const [k, d] of Object.entries(o.decided as Record<string, unknown>)) {
+            if (files.includes(k) && (d === 'accepted' || d === 'rejected')) decided[k] = d;
+        }
+    }
+    return {
+        id: o.id, files, decided,
+        text: typeof o.text === 'string' ? o.text.slice(0, 2000) : '',
+        at: typeof o.at === 'string' ? o.at : '',
+        ...(typeof o.batch === 'string' && o.batch ? { batch: o.batch.slice(0, 200) } : {}),
+        ...(o.ended === 'failed' || o.ended === 'cancelled' ? { ended: o.ended } : {}),
+    };
+}
+
 export interface ResearchAutoState {
+    /** The agent's sorting of materials (spec 102 §13). */
+    materialSort?: ResearchSortRemembered;
     /** The last send the research wrote, and the conflicts it left. */
     lastWritten?: { at: string; changes: number | null; conflicts: number; persons?: string[]; conflictIds?: string[]; intake?: string; fingerprint?: string };
     /** The research's mode the user last saw ("switched" is said once). */
@@ -687,6 +726,8 @@ export function researchAutoState(treeId: string): ResearchAutoState {
         if (sc && typeof sc.base === 'string' && Array.isArray(sc.ids)) {
             out.settledConflicts = { base: sc.base, ids: sc.ids.filter((x): x is string => typeof x === 'string' && /^X\d{1,9}$/.test(x)).slice(0, 50) };
         }
+        const sort = sortRememberedFrom(p.materialSort);
+        if (sort) out.materialSort = sort;
         if (Array.isArray(p.removedAsk)) {
             const asks = p.removedAsk.slice(0, 20).map(removedAskFrom).filter((a): a is ResearchRemovedAsk => !!a);
             if (asks.length) out.removedAsk = asks;

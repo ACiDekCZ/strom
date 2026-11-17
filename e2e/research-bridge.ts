@@ -1397,6 +1397,18 @@ export interface FakeMaterial {
     writeParent?: boolean;
     /** Before the next this many writes, right as each arrives, the research's agent commits a change of its own (foreignCommit). */
     foreignAtWrite?: number;
+    /** Every `POST /material/sort` body (only with the feature `material.sort`, spec 102 §13). */
+    sorts?: Record<string, unknown>[];
+    /** Every sorting cancelled (`POST /material/sort/<id>/cancel`). */
+    cancels?: string[];
+    /** The sortings, by id; a new one starts `working` (or `done` with `sortDoneAt` 0). */
+    sortJobs?: Map<string, { id: string; state: string; files: string[]; at: string; polls: number; proposals?: unknown[]; reason?: string }>;
+    /** What the agent proposes for each sorting (by default none: every file unassigned). */
+    sortProposals?: Record<string, unknown>[];
+    /** The sorting is done after this many GETs (default 1). */
+    sortDoneAt?: number;
+    /** `POST /material/sort` refuses with this code (`sort.limit`, `sort.queue`, `sort.not-ready`). */
+    sortRefuse?: string;
 }
 
 /**
@@ -1537,10 +1549,52 @@ function serveMaterial(b: FakeBridge, method: string, url: URL, postData: string
     { status: number; body: unknown; headers?: Record<string, string> } | null {
     const m = b.material;
     const rest = url.pathname.replace(/^\/[^/]+/, '');
-    if (!m || !/^\/material(\/assign|\/hide|\/edit)?$/.test(rest)) return null;
+    const sortPath = /^\/material\/sort(?:\/([^/]+)(\/cancel)?)?$/.exec(rest);
+    if (!m || (!sortPath && !/^\/material(\/assign|\/hide|\/edit)?$/.test(rest))) return null;
     const features = b.features ?? [];
     const refusal = (status: number, code: string, params?: Record<string, unknown>) =>
         ({ status, body: { error: code, code, text: code, ...(params ? { params } : {}) } });
+    if (sortPath) {
+        // Sort with the agent (spec 102 §13): only with an agent, only the research's files.
+        if (!features.includes('material.sort')) return { status: 404, body: '' };
+        const jobs = (m.sortJobs ??= new Map());
+        const [, id, cancel] = sortPath;
+        const shownJob = (j: NonNullable<FakeMaterial['sortJobs']> extends Map<string, infer J> ? J : never) => {
+            const { polls: _p, ...out } = j;
+            return out;
+        };
+        if (!id) {
+            if (method !== 'POST') return { status: 404, body: '' };
+            let body: Record<string, unknown>;
+            try { body = JSON.parse(postData ?? ''); } catch { return refusal(400, 'sort.body'); }
+            (m.sorts ??= []).push(body);
+            if (m.sortRefuse === 'sort.not-ready') {
+                return { status: 503, body: { error: 'not ready', code: 'sort.not-ready', text: 'not ready', params: { why: 'agent-busy' } }, headers: { 'retry-after': '30' } };
+            }
+            if (m.sortRefuse) return refusal(429, m.sortRefuse);
+            const files = Array.isArray(body.ids) ? body.ids.filter((x): x is string => typeof x === 'string') : [];
+            if (!files.length || files.length > 50 || files.some(f => !m.files.some(x => x.id === f))) return refusal(400, 'sort.ids');
+            const job = { id: `sort-20261117120000-${String(jobs.size + 1).padStart(4, '0')}`, state: m.sortDoneAt === 0 ? 'done' : 'queued', files, at: '2026-11-17T12:00:00Z', polls: 0 };
+            jobs.set(job.id, job);
+            return { status: 202, body: { id: job.id, state: job.state } };
+        }
+        const job = jobs.get(id);
+        if (!job) return refusal(404, 'sort.none');
+        if (cancel) {
+            if (method !== 'POST') return { status: 404, body: '' };
+            (m.cancels ??= []).push(id);
+            if (job.state === 'queued' || job.state === 'working') job.state = 'cancelled';
+            return { status: 200, body: shownJob(job) };
+        }
+        if (method !== 'GET') return { status: 404, body: '' };
+        job.polls++;
+        if ((job.state === 'queued' || job.state === 'working') && job.polls >= (m.sortDoneAt ?? 1)) job.state = 'done';
+        else if (job.state === 'queued') job.state = 'working';
+        if (job.state === 'done' && !job.proposals) {
+            job.proposals = (m.sortProposals ?? []).filter(p => job.files.includes(String(p.id)));
+        }
+        return { status: 200, body: shownJob(job) };
+    }
     const busy = () => {
         m.busyTimes = (m.busyTimes ?? 0) - 1;
         const retry = m.busyRetry ?? 0;

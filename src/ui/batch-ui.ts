@@ -7,7 +7,7 @@
  * folder again goes on, the files the research has are skipped.
  */
 
-import { researchActionLabel } from './research-open-mark.js';
+import { researchActionLabel, researchBridgeActionLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { strings, getCurrentLanguage } from '../strings.js';
@@ -531,6 +531,7 @@ export const batchMethods = uiModule({
                     ${refusedRow}
                     ${!stored && r.result?.tasks ? `<div class="batch-done-row"><span>${esc(b.tasks)}</span><strong>${r.result.tasks}</strong></div>` : ''}
                     <p class="batch-done-text">${esc(materials && stored ? b.doneTextMaterials : archive ? b.doneTextArchive : stored ? b.doneTextStored : b.doneText)}</p>
+                    ${materials ? this.batchSortHtml(received) : ''}
                     ${open && !materials ? `<button type="button" class="research-sync-link" data-act="open-research">${researchActionLabel(b.openInResearch, researchLinkMark('open'))}</button>` : ''}
                 </div>
                 <div class="buttons batch-footer">${materials ? `
@@ -540,6 +541,26 @@ export const batchMethods = uiModule({
                     <button type="button" class="primary" data-act="open-materials">${esc(b.openInMaterials)}</button>` : `
                     <span class="batch-foot-note"></span>
                     <button type="button" class="primary" data-act="close">${esc(strings.batch.done)}</button>`}
+                </div>`;
+    },
+
+    /**
+     * The end of a batch beside a research whose agent sorts (spec 102 §13a):
+     * what the new files lack and the button that opens the dialog of Sort
+     * with the agent. Nothing is sent from here; an older research is only said.
+     */
+    batchSortHtml(received: number): string {
+        const r = run!;
+        const gate = this.materialSortGate();
+        if (!gate || !r.id || received <= 0) return '';
+        const s = strings.materials.agentSort;
+        if (gate === 'older') return `<p class="batch-sort batch-sort-older">${esc(s.older)}</p>`;
+        const persons = !!r.personId;
+        const off = gate === 'offRun' ? ` aria-disabled="true" title="${esc(s.offRun)}"` : '';
+        return `<div class="batch-sort">
+                    <div class="batch-sort-title">${esc(s.doneSortTitle(received, persons ? 0 : received))}</div>
+                    <p class="batch-sort-text">${esc(gate === 'offRun' ? s.offRun : s.doneSortText)}</p>
+                    <button type="button" class="secondary batch-sort-btn" data-act="sort-agent"${off}>${researchBridgeActionLabel(s.sort, 'material-sort')}</button>
                 </div>`;
     },
 
@@ -590,6 +611,16 @@ export const batchMethods = uiModule({
                 case 'seal': this.researchSyncAction('sealTakeOver'); break;
                 case 'hide': this.hideBatchDialog(); break;
                 case 'cancel-run': void this.cancelBatchRun(); break;
+                case 'sort-agent': {
+                    // Only the dialog opens: what is sent and what it costs are said there before anything goes.
+                    if (el.getAttribute('aria-disabled') === 'true') break;
+                    const id = run?.id;
+                    const name = run?.name ?? '';
+                    this.closeBatchDialog();
+                    this.openMaterials(id ? { batch: id } : {});
+                    if (id) void this.openSortForBatch(id, name);
+                    break;
+                }
                 case 'open-materials': {
                     const id = run?.id;
                     this.closeBatchDialog();
