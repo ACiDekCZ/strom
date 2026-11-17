@@ -128,8 +128,8 @@ test.describe('Awaiting action in an order', () => {
         await expect(item(page, 'T0003').locator('.research-overview__since')).toHaveText('11/4');
         await expect(item(page, 'T0003').locator('time.research-overview__since')).toHaveAttribute('datetime', minAgo(6 * 1440));
         await expect(item(page, 'T0005').locator('.research-overview__since')).toHaveCount(0);
-        // After a place's name the time of its first item.
-        await expect(sec(page).locator('.research-overview__waiting-group[data-group="host:rodokmen.example"] .research-overview__group-since')).toHaveText('25 min. ago');
+        // Under a place's name (in its band, spec 105 U4) the time of its first item.
+        await expect(sec(page).locator('.research-overview__waiting-grouphead:has(> .research-overview__waiting-group[data-group="host:rodokmen.example"]) > .research-overview__group-since')).toHaveText('25 min. ago');
         // Awaiting a reply by time too.
         expect(await rowIds(page, 'sent')).toEqual(['T0008', 'T0007']);
 

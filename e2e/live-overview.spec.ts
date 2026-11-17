@@ -2014,6 +2014,9 @@ test.describe('Awaiting action from a research with waiting.groups', () => {
         await webItem.locator('.research-overview__waiting-row').click();
         const web = webItem.locator('a.research-overview__waiting-web');
         await expect(web).toHaveText('Open website ↗');
+        // Its target's host beside it and in its name (spec 105 U4 §2).
+        await expect(web).toHaveAttribute('aria-label', 'Open the website rodokmen.example in a new window');
+        await expect(webItem.locator('.research-overview__waiting-host')).toHaveText('rodokmen.example');
         await expect(web).toHaveAttribute('href', 'https://rodokmen.example/zaznam/1');
         await expect(web).toHaveAttribute('target', '_blank');
         await expect(web).toHaveAttribute('rel', 'noopener noreferrer');

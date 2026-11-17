@@ -10,7 +10,7 @@
 import { strings, getCurrentLanguage } from '../strings.js';
 import { formatWaitingSince } from '../live-time.js';
 import type { LiveWaiting } from '../research-link.js';
-import { ALL_WAITING_ORDERS, WaitingOrder, todoWaiting, waitingSince } from '../research-waiting.js';
+import { ALL_WAITING_ORDERS, GROUP_TITLE_LINES, WaitingOrder, todoWaiting, waitingSince } from '../research-waiting.js';
 import { waitingSeen } from './live-section-prefs.js';
 
 /** The order chosen (missing: recommended). Kept on this device for every tree. */
@@ -171,6 +171,72 @@ export function waitingDrawn(): { order: WaitingOrder; flat: boolean } {
 /** The name of the place an item belongs to, as its group's heading says it. */
 export function waitingGroupName(w: LiveWaiting): string {
     return w.kind === 'place' ? strings.places.waiting.group : w.group?.name ?? strings.live.waitingOtherGroup;
+}
+
+/** The "more" of each group title drawn, watched for its column's width (spec 105 U4 §1, 1h). */
+const titleMoreOf = new WeakMap<Element, HTMLButtonElement>();
+let titleObserver: ResizeObserver | null = null;
+
+/**
+ * Whether a group title needs its "more" / "less": cut at its cap (more than
+ * its lines), or unfolded beyond them. The cap is the title's
+ * `--group-title-lines` (3; 4 on a phone, in the panel, in a narrow column).
+ */
+function syncGroupTitleMore(title: HTMLElement): void {
+    const btn = titleMoreOf.get(title);
+    if (!btn || !title.isConnected) return;
+    let over: boolean;
+    if (title.classList.contains('is-full')) {
+        const cs = getComputedStyle(title);
+        const lines = Number.parseInt(cs.getPropertyValue('--group-title-lines'), 10) || GROUP_TITLE_LINES;
+        const lh = Number.parseFloat(cs.lineHeight) || 20;
+        over = title.clientHeight > lines * lh + 1;
+    } else {
+        over = title.scrollHeight > title.clientHeight + 1;
+    }
+    if (btn.hidden === over) btn.hidden = !over;
+}
+
+/**
+ * A group title's "more" (spec 105 U4 §1, 1h): a link button under the title,
+ * outside the fold button (it never folds the group), shown only when the
+ * title overflows its cap (measured once drawn and again when the column's
+ * width changes). A click unfolds the whole title in place ("less" folds it
+ * back); kept in the view under `title:<group key>` while the session lasts.
+ */
+export function groupTitleMoreEl(title: HTMLElement, key: string, open: Map<string, boolean>): HTMLButtonElement {
+    const L = strings.live;
+    const stateKey = `title:${key}`;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'link-button research-overview__group-more';
+    btn.hidden = true;
+    const paint = (full: boolean): void => {
+        title.classList.toggle('is-full', full);
+        btn.textContent = full ? L.titleLess : L.titleMore;
+        btn.setAttribute('aria-expanded', String(full));
+    };
+    paint(open.get(stateKey) === true);
+    btn.onclick = (e) => {
+        e.stopPropagation();
+        const full = !title.classList.contains('is-full');
+        if (full) open.set(stateKey, true);
+        else open.delete(stateKey);
+        paint(full);
+        syncGroupTitleMore(title);
+    };
+    titleMoreOf.set(title, btn);
+    if (typeof ResizeObserver !== 'undefined') {
+        titleObserver ??= new ResizeObserver(entries => {
+            for (const entry of entries) {
+                const t = entry.target as HTMLElement;
+                if (!t.isConnected) titleObserver?.unobserve(t);
+                else syncGroupTitleMore(t);
+            }
+        });
+        titleObserver.observe(title);
+    }
+    return btn;
 }
 
 /** A row's tag of its place in a list without groups (the whole name on hover). */

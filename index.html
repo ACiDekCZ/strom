@@ -8888,7 +8888,7 @@
         .waiting-browser-note__text { min-width: 0; }
         .waiting-browser-note .browser-ext-link, .waiting-browser-note .browser-permit { font-size: 12.5px; min-height: 0; }
         .research-overview__waiting-grouphead.has-browser-note { flex-wrap: wrap; }
-        .research-overview__waiting-grouphead > .waiting-browser-note { flex: 1 1 100%; margin: -2px 0 6px; padding-left: 22px; }
+        .research-overview__waiting-grouphead > .waiting-browser-note { flex: 1 1 100%; margin: 2px 0 0; padding-left: 20px; }
         .waiting-dialog__browser { margin: 0; }
         @media (prefers-reduced-motion: reduce) { .install-ready-rows > dd.install-ready-browser, .research-tree-agent > dd.install-ready-browser { transition: none; } }
         /* Touch and phones: the links at least 44px. */
@@ -19022,7 +19022,7 @@
         .live-panel-list li:last-child { border-bottom: 0; }
         .live-panel-list .live-empty { color: var(--text-faint); }
         .research-overview__older { display: block; margin: 8px 0 4px; font-size: 12px; color: var(--text-faint); }
-        .research-overview__group-more { margin: 2px 0 8px; color: var(--text-faint); font-size: 12px; }
+        p.research-overview__group-more { margin: 2px 0 8px; color: var(--text-faint); font-size: 12px; }
         .live-panel-list .live-time { display: block; color: var(--text-faint); font-size: 11px; }
         /* "Waiting on" in a compact row: two lines at most (the whole text is in the overview's detail). */
         .live-panel-list .live-waiting-on {
@@ -21890,10 +21890,65 @@
             flex: none; padding: 0 6px; border: 1px solid var(--border); border-radius: var(--r-tag);
             font-size: 11px; font-weight: 400; line-height: 1.5; color: var(--text-light);
         }
-        /* The heading (name, what it misses) keeps room for itself and takes what is left of the line: the actions
-           stay at the right end beside it, or wrap under it (from the left) when they do not fit. */
-        .research-overview__waiting-grouphead { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; }
-        .research-overview__waiting-grouphead > .research-overview__waiting-group { flex: 1 1 22rem; min-width: 0; }
+        /* A group's band (spec 105 U4 §1, §2), a book's and a place's alike: on --surface-2 in a --divider frame, its fold
+           button (the chevron, the title wrapped up to its cap, on the right its kind, new and how many), then each on its
+           own line under the title: "more", the time, the archive, the facts, what it misses, the group's actions. */
+        .research-overview__phase { container: rov-phase / inline-size; }
+        .research-overview__waiting-grouphead {
+            display: flex; flex-wrap: wrap; align-items: flex-start; column-gap: 8px; row-gap: 3px; min-width: 0;
+            margin-top: 12px; padding: 9px 12px 9px 8px; box-sizing: border-box;
+            background: var(--surface-2); border: 1px solid var(--divider); border-radius: var(--r-md);
+        }
+        .research-overview__phase > .research-overview__waiting-grouphead:first-child { margin-top: 6px; }
+        .research-overview__waiting-grouphead > * { flex: 1 1 100%; min-width: 0; }
+        .research-overview__waiting-grouphead > .research-overview__waiting-group {
+            flex: 1 1 100%; align-items: flex-start; gap: 8px; min-width: 0; margin: 0; padding: 0; border: 0;
+        }
+        .research-overview__waiting-group > .live-section__chevron { flex: none; width: 12px; margin-top: 0; line-height: 20px; }
+        .research-overview__waiting-group .research-overview__group-title {
+            --group-title-lines: 3;
+            flex: 1 1 auto; min-width: 0; font-size: 15px; font-weight: 600; line-height: 20px;
+            white-space: normal; overflow-wrap: anywhere; text-overflow: clip;
+            display: -webkit-box; -webkit-line-clamp: var(--group-title-lines); -webkit-box-orient: vertical; overflow: hidden;
+        }
+        .research-overview__waiting-group .research-overview__group-title.is-full { display: block; -webkit-line-clamp: unset; overflow: visible; }
+        .research-overview__group-side { flex: none; align-self: flex-start; display: flex; align-items: center; gap: 6px; min-height: 20px; }
+        /* "more" / "less" under a title cut at its cap: outside the fold button, it never folds the group. */
+        .link-button.research-overview__group-more {
+            flex: none; align-self: flex-start; margin: 0 0 0 20px; padding: 0; min-height: 0;
+            font-size: 12.5px; font-weight: 600; line-height: 1.4; text-decoration: none; color: var(--primary);
+        }
+        .live-waiting-grouphead > .link-button.research-overview__group-more { margin-left: 0; }
+        .research-overview__group-more[hidden] { display: none; }
+        .research-overview__group-more:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: var(--r-sm); }
+        @media (hover: hover) { .link-button.research-overview__group-more:hover { text-decoration: underline; } }
+        .research-overview__waiting-grouphead > .research-overview__group-since,
+        .research-overview__waiting-grouphead > .research-overview__book-archive,
+        .research-overview__waiting-grouphead > .research-overview__book-meta,
+        .research-overview__waiting-grouphead > .research-overview__group-missing { padding-left: 20px; box-sizing: border-box; }
+        /* The group's items: on a 2 px line under its band, indented under its title (none in a list without groups). */
+        .research-overview__waiting-rows.is-grouped { margin: 2px 0 0 13px; padding-left: 12px; border-left: 2px solid var(--border); }
+        .research-overview__waiting-rows.is-grouped > .research-overview__waiting-item:last-child { border-bottom: 0; }
+        .research-overview__waiting-rows.is-grouped > .research-overview__waiting-item.is-open { margin: 2px 0; }
+        /* A phone, the small panel and a narrow column (D1): the line at the edge, the text 8 px from it; a title of 4 lines. */
+        @container rov-phase (max-width: 379px) {
+            .research-overview__waiting-grouphead { padding: 8px 8px 8px 6px; }
+            .research-overview__waiting-group .research-overview__group-title { --group-title-lines: 4; }
+            .research-overview__waiting-rows.is-grouped { margin-left: 0; padding-left: 8px; }
+        }
+        @media (max-width: 640px) {
+            .research-overview__waiting-grouphead { padding: 8px 8px 8px 6px; }
+            .research-overview__waiting-group .research-overview__group-title { --group-title-lines: 4; font-size: 16px; }
+            .research-overview__waiting-rows.is-grouped { margin-left: 0; padding-left: 8px; }
+        }
+        @media (pointer: coarse) {
+            .link-button.research-overview__group-more { display: inline-flex; align-items: center; min-height: 44px; }
+            .link-button.research-overview__group-more[hidden] { display: none; }
+        }
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .link-button.research-overview__group-more { display: inline-flex; align-items: center; min-height: 44px; }
+            .link-button.research-overview__group-more[hidden] { display: none; }
+        }
         .research-overview__waiting-group:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         .research-overview__waiting-age { color: var(--text-faint); font-size: 11px; }
         .research-overview__waiting-groupchat { flex: none; margin-top: 8px; }
@@ -21902,7 +21957,7 @@
         @media (hover: hover) { .live-waiting-answer.is-primary:hover { background: var(--primary-hover, var(--primary)); } }
         .research-overview__waiting-rows { list-style: none; margin: 0; padding: 0; }
         .research-overview__waiting-item { border-bottom: 1px solid var(--divider); }
-        .research-overview__waiting-item.is-open { background: var(--warning-soft); border-radius: 6px; }
+        .research-overview__waiting-item.is-open { background: var(--warning-soft); border-radius: var(--r-md); }
         .research-overview__waiting-row {
             display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 6px 4px;
             border: 0; border-radius: 6px; background: none; cursor: pointer; text-align: left; font: inherit; color: var(--text);
@@ -21969,17 +22024,15 @@
             font: 500 12.5px/1 inherit; white-space: nowrap; cursor: pointer;
         }
         .research-overview__groups-btn-label { flex: none; color: var(--text-light); }
-        /* A book's group (spec 105 §1): the fold button over the book's actions, one divider under both. */
-        .research-overview__waiting-grouphead.is-book { flex-direction: column; flex-wrap: nowrap; align-items: stretch; border-bottom: 1px solid var(--divider); }
-        .research-overview__waiting-grouphead.is-book > .research-overview__waiting-group { flex: none; align-items: flex-start; border-bottom: 0; }
-        .research-overview__book-head > .live-section__chevron { margin-top: 2px; }
-        .research-overview__book-titles { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-        .research-overview__book-line { display: flex; align-items: center; gap: 6px; min-width: 0; }
+        /* A book's band (spec 105 U4 §1): its archive whole on a line, then the facts (they wrap). */
+        .research-overview__waiting-grouphead > .research-overview__book-archive {
+            font-size: 12.5px; line-height: 1.4; color: var(--text-light); white-space: normal; overflow-wrap: anywhere;
+        }
         .research-overview__book-meta {
             display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 5px; row-gap: 1px; min-width: 0;
-            font-size: 12px; font-weight: 400; line-height: 1.4; color: var(--text-light);
+            font-size: 12.5px; font-weight: 400; line-height: 1.4; color: var(--text-light);
         }
-        .research-overview__book-meta > span { flex: none; }
+        .research-overview__book-meta > span { flex: none; max-width: 100%; overflow-wrap: anywhere; }
         .research-overview__book-meta > .research-overview__book-archive {
             flex: 0 1 auto; min-width: 0; max-width: min(24rem, 100%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
@@ -21987,11 +22040,10 @@
         .research-overview__book-counts.is-key { font-weight: 600; color: var(--text); }
         .research-overview__book-pending { color: var(--text); }
         .research-overview__book-login { color: var(--text-faint); }
-        .research-overview__waiting-grouphead.is-book > .research-overview__book-actions { margin-top: 0; padding: 0 0 8px 18px; gap: 4px 8px; }
         .research-overview__book-offer { flex: 0 1 auto; min-width: 0; font-size: 12.5px; color: var(--text); }
         /* "No book": the places after the books. */
         .research-overview__nobook {
-            margin-top: 14px; padding-bottom: 2px; font-size: 11px; font-weight: 600; letter-spacing: .5px;
+            margin-top: 16px; padding-bottom: 2px; font-size: 11px; font-weight: 600; letter-spacing: .5px;
             text-transform: uppercase; color: var(--text-light);
         }
         @media (pointer: coarse) {
@@ -22001,15 +22053,11 @@
         }
         /* A phone and one held sideways: no "Book" tag, the archive on its own line, the second line wraps. */
         @media (max-width: 640px) {
-            .research-overview__book-line > .research-overview__group-kind { display: none; }
-            .research-overview__book-meta > .research-overview__book-archive { flex-basis: 100%; max-width: 100%; }
-            .research-overview__book-sep:has(+ .research-overview__book-archive), .research-overview__book-archive + .research-overview__book-sep { display: none; }
+            .research-overview__book-head .research-overview__group-kind { display: none; }
             .research-overview__book-actions > a.waiting-action--link { display: inline-flex; align-items: center; min-height: 44px; }
         }
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
-            .research-overview__book-line > .research-overview__group-kind { display: none; }
-            .research-overview__book-meta > .research-overview__book-archive { flex-basis: 100%; max-width: 100%; }
-            .research-overview__book-sep:has(+ .research-overview__book-archive), .research-overview__book-archive + .research-overview__book-sep { display: none; }
+            .research-overview__book-head .research-overview__group-kind { display: none; }
         }
         /* "Faster by downloading" (spec 105 §3): under the phases, a phase's heading with a line above it; folded by default.
            Open: a sentence with Settings…, a row per book (its title cut on one line, wrapped on a phone), its details, its actions. */
@@ -22037,11 +22085,22 @@
         .research-overview__urgent-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; margin-top: 4px; padding-left: 18px; }
         .research-overview__urgent-more { margin: 0; padding: 8px 0 0 18px; font-size: 12.5px; color: var(--text-light); }
         /* Awaiting action of the small panel with the books (spec 105 §5, 5g): compact heads, "No book", the line of the offer. */
+        /* A group's band (spec 105 U4 §1, §2, 1e): its title wrapped up to 4 lines, "more" under a cut one, its rows on a line at the edge (D1). */
         .live-waiting-grouphead {
-            display: flex; align-items: center; gap: 6px; min-width: 0; margin-top: 6px; padding: 6px 0;
-            border-bottom: 1px solid var(--divider); font-size: 13px; font-weight: 600; color: var(--text);
+            display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; column-gap: 6px; row-gap: 2px; min-width: 0; margin-top: 12px;
+            padding: 8px 8px 8px 6px; box-sizing: border-box; background: var(--surface-2); border: 1px solid var(--divider); border-radius: var(--r-md);
+            font-size: 14px; font-weight: 600; color: var(--text);
         }
-        .live-waiting-grouptitle { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .live-waiting-grouptitle {
+            --group-title-lines: 4;
+            min-width: 0; line-height: 20px; white-space: normal; overflow-wrap: anywhere; text-overflow: clip;
+            display: -webkit-box; -webkit-line-clamp: var(--group-title-lines); -webkit-box-orient: vertical; overflow: hidden;
+        }
+        .live-waiting-grouptitle.is-full { display: block; -webkit-line-clamp: unset; overflow: visible; }
+        .live-waiting-groupside { flex: none; display: flex; align-items: center; gap: 6px; min-height: 20px; }
+        .live-waiting-grouphead > .research-overview__group-more { grid-column: 1; justify-self: start; }
+        .live-panel-list.live-waiting.is-grouped { margin: 2px 0 0; padding-left: 8px; border-left: 2px solid var(--border); }
+        .live-panel-list.live-waiting.is-grouped > li:last-child { border-bottom: 0; }
         .live-waiting-groupwait, .live-waiting-groupcount { flex: none; font-size: 12px; font-weight: 400; color: var(--text-light); }
         .live-waiting-groupcount { font-variant-numeric: tabular-nums; }
         .live-waiting-nobook {
@@ -22086,13 +22145,11 @@
         .research-overview__since, .research-overview__waiting-meta .research-overview__since {
             font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; white-space: nowrap;
         }
-        /* The time of a group's first item right after its name; the name gives way first. */
-        .research-overview__group-title:has(+ .research-overview__group-since) { flex: 0 1 auto; }
+        /* The time of a group's first item on its own line under its title. */
         .research-overview__group-since {
-            flex: none; margin-right: auto; font-size: 11.5px; font-weight: 400; color: var(--text-faint);
+            font-size: 11.5px; font-weight: 400; line-height: 1.4; color: var(--text-faint);
             font-variant-numeric: tabular-nums; white-space: nowrap;
         }
-        .research-overview__group-since::before { content: '·\00a0'; }
         .research-overview__new {
             flex: none; padding: 1px 7px; border-radius: 999px; background: var(--warning-soft); color: var(--warning-text);
             font-size: 10.5px; font-weight: 600; line-height: 1.4; white-space: nowrap;
@@ -22137,6 +22194,11 @@
         /* Written through the research's bridge: Sent (an item, a place), Back to To do, Add a file, All queries' text. */
         .research-overview__waiting-groupactions { display: flex; flex: 0 1 auto; max-width: 100%; flex-wrap: wrap; justify-content: flex-start; align-items: center; gap: 6px; margin-top: 8px; }
         .research-overview__waiting-groupactions .research-overview__waiting-groupchat { margin-top: 0; }
+        /* In the band, a book's and a place's alike: under the facts, from the title's edge; buttons on --surface. */
+        .research-overview__waiting-grouphead > .research-overview__waiting-groupactions {
+            flex: 1 1 100%; margin-top: 4px; padding: 0 0 0 20px; box-sizing: border-box; gap: 4px 8px;
+        }
+        .research-overview__waiting-groupactions > button.live-waiting-answer { background: var(--surface); }
         .research-overview__waiting-write:disabled { opacity: 0.6; cursor: default; }
         .waiting-note-overlay { z-index: 1100; }
         .waiting-note-text {
@@ -22151,7 +22213,6 @@
         }
         /* Phone: the place's actions under its heading, the text as large as the rows. */
         @media (max-width: 640px) {
-            .research-overview__waiting-grouphead > .research-overview__waiting-group { flex-basis: 100%; }
             .research-overview__waiting-groupactions { margin-top: 0; padding-bottom: 6px; }
             .waiting-note-text { font-size: 15px; max-height: none; }
             /* A phone is touched: the writes at least 44px, whatever the pointer reports. */
@@ -22252,12 +22313,7 @@
         .wait-book__slot.is-saved { border: 1px solid transparent; background: var(--primary-soft); color: var(--text); }
         .wait-book__state { margin: 0; font-size: 13px; font-weight: 500; color: var(--text); }
         /* A place under an archive: its name in one line, what its items miss under it; its website beside Chat. */
-        .research-overview__group-titles { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-        .research-overview__group-titles > .research-overview__group-title { flex: none; font-size: 14px; }
-        .research-overview__group-missing {
-            font-size: 12.5px; font-weight: 400; color: var(--text-light);
-            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-        }
+        .research-overview__group-missing { font-size: 12.5px; font-weight: 400; line-height: 1.4; color: var(--text-light); overflow-wrap: anywhere; }
         .waiting-live-region {
             position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
             clip: rect(0 0 0 0); white-space: nowrap; border: 0;
@@ -22392,7 +22448,7 @@
         }
         /* A row that takes images while files are dragged over it. */
         .takes-images { position: relative; }
-        .takes-images.is-drop-target { outline: 2px dashed var(--primary); outline-offset: -2px; border-radius: 8px; }
+        .takes-images.is-drop-target { outline: 2px dashed var(--primary); outline-offset: -2px; border-radius: var(--r-lg); }
         .waiting-drop-overlay {
             position: absolute; inset: 0; z-index: 2; display: flex; align-items: center; justify-content: center; padding: 4px 8px;
             border-radius: 8px; background: color-mix(in srgb, var(--primary-soft) 92%, transparent); color: var(--primary-dark);

@@ -14,7 +14,7 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { LiveBooks, LiveWaiting, sanitizeBooks, sanitizeWaiting } from '../research-link.js';
 import {
-    ALL_WAITING_ORDERS, BOOK_GROUP_PREFIX, FLAT_GROUP, WAITING_ORDERS, groupWaiting, isTimeOrder, listedBook, todoWaiting, waitingOrdersFor, waitingPhases,
+    ALL_WAITING_ORDERS, BOOK_GROUP_PREFIX, FLAT_GROUP, WAITING_ORDERS, groupWaiting, isTimeOrder, listedBook, todoWaiting, waitingGroupBandLines, waitingOrdersFor, waitingPhases,
 } from '../research-waiting.js';
 import {
     WAITING_GROUPS_KEY, WAITING_ORDER_KEY, shownWaitingGroups, storeWaitingGroupMode, storeWaitingGroups, storeWaitingOrder, storedWaitingGroupMode,
@@ -219,5 +219,23 @@ describe('the choice of groups and Most tasks kept on this device', () => {
         expect(storedWaitingGroupMode()).toBe('archive');
         expect(storedWaitingOrder(true)).toBe('recommended');
         expect(() => storeWaitingGroupMode('book')).not.toThrow();
+    });
+});
+
+describe('the guessed height of a group\'s band (spec 105 U4 §1, §2)', () => {
+    it('a book: its title wrapped by ~70 characters up to the cap, its archive, facts and actions', () => {
+        expect(waitingGroupBandLines('Vzorov 3, N 1784–1820', { book: true, listed: true })).toBe(1 + 3);
+        expect(waitingGroupBandLines('x'.repeat(71), { book: true, listed: true })).toBe(2 + 3);
+        expect(waitingGroupBandLines('x'.repeat(140), { book: true, listed: true })).toBe(2 + 3);
+        // A title from a catalogue hundreds of characters long: never beyond the cap.
+        expect(waitingGroupBandLines('x'.repeat(400), { book: true, listed: true })).toBe(3 + 3);
+        // A book outside the research's list: its title only.
+        expect(waitingGroupBandLines('Vzorov 11', { book: true, listed: false })).toBe(1);
+    });
+
+    it('a place: its name, its actions under it, the images its items miss', () => {
+        expect(waitingGroupBandLines('Archiv ve Vzorově', {})).toBe(2);
+        expect(waitingGroupBandLines('Archiv ve Vzorově', { missing: true })).toBe(3);
+        expect(waitingGroupBandLines('y'.repeat(150), { missing: true })).toBe(3 + 1 + 1);
     });
 });

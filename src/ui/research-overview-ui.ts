@@ -27,7 +27,7 @@ import { waitingGroupSendable, waitingGroupHasNote, waitingSendable, waitingUnse
 import {
     FLAT_GROUP, PLACES_GROUP, WaitingFilter, WaitingGroupOpts, WaitingGroupRows, WaitingOrder, WaitingPhase, isTimeOrder, listedBook, sortWaitingByTime, waitingOrdersFor, effectiveWaitingFilter, waitingActionDo, waitingChatLeads, waitingChips, waitingDaysAgo, waitingGroupChatTask,
     waitingGroupOpenByDefault, waitingPhase, waitingPhases, waitingSection, waitingTaskActions, waitingTodoCount,
-    WaitActionView, imagesState, splitWaitingActions, waitingActions, waitingForImages, waitingGroupMissing,
+    WaitActionView, imagesState, splitWaitingActions, waitingActions, waitingForImages, waitingGroupBandLines, waitingGroupMissing,
 } from '../research-waiting.js';
 import { WaitingAnswerForm, waitingAnswerChangedNote } from './waiting-answer-form.js';
 import { appendImagesDetail, bindImagesDrop, clearImagesSeen, forgetImagesArrived, imagesShortEl, itemKey, noteImagesArrived } from './waiting-images-ui.js';
@@ -38,7 +38,7 @@ import { openHeadMenu } from './table-view/table-headmenu.js';
 import {
     ORDER_ICON, WaitingGroups, noteWaitingNew, setWaitingDrawn, shownWaitingGroups, storeWaitingGroupMode, storeWaitingGroups, storeWaitingOrder,
     storedWaitingGroupMode, storedWaitingGroups, storedWaitingOrder, waitingDrawn, waitingGroupModesFor, waitingGroupsLabel,
-    waitingGroupTagEl, waitingOrderLabel, waitingSideEl, waitingSinceEl, watchWaitingOrderStorage,
+    groupTitleMoreEl, waitingGroupTagEl, waitingOrderLabel, waitingSideEl, waitingSinceEl, watchWaitingOrderStorage,
 } from './waiting-order-ui.js';
 import { browserGroupNote, browserNote } from '../research-browser.js';
 import { uiModule } from './module.js';
@@ -268,6 +268,22 @@ function closeAnswerForm(): void {
     answerForms.get(answeringKey)?.keepDraftNow();
     answerChanged.delete(answeringKey);
     answeringKey = null;
+}
+
+/**
+ * The website an item's "Open website ↗" leads to (spec 105 U4 §2): its host
+ * beside the link (hidden on a phone) and in the link's name.
+ */
+function appendWaitingWebHost(link: HTMLElement, url: string): void {
+    let host = '';
+    try {
+        host = new URL(url).host;
+    } catch { /* no host said */ }
+    if (!host) return;
+    link.setAttribute('aria-label', strings.live.waitingWebHostAria(host));
+    const span = el('span', 'research-overview__waiting-host', host);
+    span.setAttribute('aria-hidden', 'true');
+    link.after(span);
 }
 
 /** An item's action drawn by its weight: the main one filled, the next outlined, the rest as links. */
@@ -1092,8 +1108,9 @@ export const researchOverviewMethods = uiModule({
         // Its guessed height in the own window's columns: phases and places without the search (rows when ungrouped).
         if (grouped) {
             const all = waitingPhases(s.waiting, filter, order, !flat, groupOpts);
-            // Without groups a phase's rows count, else its places' headings (a book's two, "No book" one).
-            const lines = (p: WaitingPhase): number => all[p].reduce((n, g) => n + (g.key === FLAT_GROUP ? g.items.length : g.book ? 2 : 1) + (g.afterBooks ? 1 : 0), 0);
+            // Without groups a phase's rows count, else its bands (a wrapped title, a book's archive, facts and actions,
+            // a place's actions and what it misses; spec 105 U4 §1, §2) and "No book".
+            const lines = (p: WaitingPhase): number => all[p].reduce((n, g) => n + (g.key === FLAT_GROUP ? g.items.length : this.waitingGroupBandRows(g)) + (g.afterBooks ? 1 : 0), 0);
             noteOverviewSectionRows('waiting', (['todo', 'sent'] as WaitingPhase[]).reduce((n, p) => n + (all[p].length > 0 ? 1 + lines(p) : 0), 0)
                 + this.overviewBooksOfferRows(s, filter));
         } else noteOverviewSectionRows('waiting', s.waiting.length + this.overviewBooksOfferRows(s, 'all'));
@@ -1106,8 +1123,9 @@ export const researchOverviewMethods = uiModule({
             },
         } : null;
         let listed = false;
-        const rows = (items: readonly LiveWaiting[]): HTMLElement => {
-            const list = el('ul', 'research-overview__waiting-rows');
+        const rows = (items: readonly LiveWaiting[], grouped = false): HTMLElement => {
+            // A group's items hang on its line under its band (spec 105 U4 §2); a list without groups has none.
+            const list = el('ul', `research-overview__waiting-rows${grouped ? ' is-grouped' : ''}`);
             // A hypothesis (spec 074 §9): its choices in the row, not behind a detail.
             for (const w of items) {
                 const hit = searching ? res.hits.get(w) : undefined;
@@ -1219,7 +1237,7 @@ export const researchOverviewMethods = uiModule({
                     toggleSectionPart(key, gOpen, searching, view.open, searchOpen);
                     this.renderResearchOverview();
                 }, mode));
-                if (gOpen) wrap.appendChild(rows(g.items));
+                if (gOpen) wrap.appendChild(rows(g.items, true));
             }
             host.appendChild(wrap);
         }
@@ -1581,48 +1599,75 @@ export const researchOverviewMethods = uiModule({
     },
 
     /**
-     * A group's heading: the place, its kind, how many, and a slot for the
-     * group's own actions (overviewWaitingGroupAction).
+     * The fold button of a group's band (spec 105 U4 §1, §2): the chevron, the
+     * title wrapped up to its cap (its "more" goes under the button, see
+     * groupTitleMoreEl), and at the top right its kind, new and how many.
      */
-    overviewWaitingGroupHead(s: LiveSession, g: WaitingGroupRows, phase: WaitingPhase, open: boolean, toggle: () => void, mode: Mode): HTMLElement {
-        if (g.book) return this.overviewWaitingBookHead(s, g, open, toggle, mode);
-        const L = strings.live;
-        const row = el('div', 'research-overview__waiting-grouphead');
-        const gh = el('button', 'research-overview__group-head research-overview__waiting-group');
+    waitingBandButton(g: WaitingGroupRows, open: boolean, toggle: () => void, h: {
+        cls: string; name: string; titleAttr: string; kind: string | null; newText: string; label: string;
+    }): { button: HTMLButtonElement; title: HTMLElement } {
+        const gh = el('button', `research-overview__group-head research-overview__waiting-group${h.cls ? ` ${h.cls}` : ''}`);
         gh.type = 'button';
         gh.dataset.group = g.key;
         gh.setAttribute('aria-expanded', String(open));
         const chevron = el('span', 'live-section__chevron', open ? '▾' : '▸');
         chevron.setAttribute('aria-hidden', 'true');
+        const title = el('span', 'research-overview__group-title', h.name);
+        title.title = h.titleAttr;
+        const side = el('span', 'research-overview__group-side');
+        if (h.kind) side.appendChild(el('span', 'research-overview__group-kind', h.kind));
+        if (h.newText) side.appendChild(el('span', 'research-overview__new', h.newText));
+        side.appendChild(el('span', 'research-overview__group-span', String(g.items.length)));
+        gh.append(chevron, title, side);
+        gh.setAttribute('aria-label', h.label);
+        gh.onclick = toggle;
+        return { button: gh, title };
+    },
+
+    /** The title of a group's band as drawn (a place, "Other", the questions about places, a book with its years). */
+    waitingGroupTitle(g: WaitingGroupRows): string {
+        if (g.book) {
+            const info = listedBook(g.book);
+            return info ? bookTitle(info) : g.book.title;
+        }
+        return g.key === PLACES_GROUP ? strings.places.waiting.group : g.group?.name ?? strings.live.waitingOtherGroup;
+    },
+
+    /** How many lines a group's band adds to the section's guessed height (the own window's columns). */
+    waitingGroupBandRows(g: WaitingGroupRows): number {
+        return waitingGroupBandLines(this.waitingGroupTitle(g), g.book
+            ? { book: true, listed: listedBook(g.book) !== null }
+            : { missing: g.key !== PLACES_GROUP && waitingGroupMissing(g.items) !== null });
+    },
+
+    /**
+     * A place's band (spec 105 U4 §1, §2): the fold button (its name wrapped,
+     * kind, new, how many), "more" under a cut name, the time of its first
+     * item in a time order, the images its items miss, and the place's own
+     * actions (overviewWaitingGroupAction) under them.
+     */
+    overviewWaitingGroupHead(s: LiveSession, g: WaitingGroupRows, phase: WaitingPhase, open: boolean, toggle: () => void, mode: Mode): HTMLElement {
+        if (g.book) return this.overviewWaitingBookHead(s, g, open, toggle, mode);
+        const L = strings.live;
+        const row = el('div', 'research-overview__waiting-grouphead');
         const places = g.key === PLACES_GROUP;
-        const name = places ? strings.places.waiting.group : g.group?.name ?? L.waitingOtherGroup;
-        const title = el('span', 'research-overview__group-title', name);
-        title.title = name;
+        const name = this.waitingGroupTitle(g);
         const kind = places ? name : L.waitingGroupKinds[g.group?.kind ?? 'other'];
-        // An archive's name is long (fond, institution): one line cut at its end, whole on hover;
-        // the place's actions go under the heading rather than squeeze it (CSS).
         // How many images its items miss together (a research that says which).
         const missing = places ? null : waitingGroupMissing(g.items);
         const missingText = missing ? L.waitingTask.groupMissing(missing) : '';
-        if (missing) {
-            const titles = el('span', 'research-overview__group-titles');
-            titles.append(title, el('span', 'research-overview__group-missing', missingText));
-            gh.append(chevron, titles);
-        } else {
-            gh.append(chevron, title);
-        }
-        // A time order (spec 083 §5): the time of its first item after the name.
-        const since = isTimeOrder(waitingDrawn().order) && g.items[0] ? waitingSinceEl(g.items[0], 'research-overview__group-since') : null;
-        if (since) title.after(since);
-        if (kind !== name) gh.appendChild(el('span', 'research-overview__group-kind', kind));
         // Folded with new items: how many (K5.3).
         const fresh = open ? 0 : g.items.filter(w => s.waitingView.tagged.has(w.id)).length;
         const newText = fresh > 0 ? L.waitingNewCount(fresh) : '';
-        if (fresh > 0) gh.appendChild(el('span', 'research-overview__new', newText));
-        gh.appendChild(el('span', 'research-overview__group-span', String(g.items.length)));
-        gh.setAttribute('aria-label', `${name} · ${g.items.length}${kind !== name ? `, ${kind}` : ''}${missingText ? `, ${missingText}` : ''}${newText ? `, ${newText}` : ''}`);
-        gh.onclick = toggle;
-        row.appendChild(gh);
+        const { button, title } = this.waitingBandButton(g, open, toggle, {
+            cls: '', name, titleAttr: name, kind: kind !== name ? kind : null, newText,
+            label: `${name} · ${g.items.length}${kind !== name ? `, ${kind}` : ''}${missingText ? `, ${missingText}` : ''}${newText ? `, ${newText}` : ''}`,
+        });
+        row.append(button, groupTitleMoreEl(title, g.key, s.waitingView.open));
+        // A time order (spec 083 §5): the time of its first item under the name.
+        const since = isTimeOrder(waitingDrawn().order) && g.items[0] ? waitingSinceEl(g.items[0], 'research-overview__group-since') : null;
+        if (since) row.appendChild(since);
+        if (missing) row.appendChild(el('span', 'research-overview__group-missing', missingText));
         const action = this.overviewWaitingGroupAction(s, g, phase, mode);
         if (action) row.appendChild(action);
         // Two or more of its items wait for images from one browser-only archive: said once, here (spec 048 §11.2).
@@ -1637,15 +1682,15 @@ export const researchOverviewMethods = uiModule({
     },
 
     /**
-     * A book's group heading (spec 105 §1, 1a, 1e, 2b, 5k): in its fold
-     * button the title (whole in `title`, with the archive and the tasks),
-     * the time of its first item in a time order, "Book", new and how many;
-     * under it the archive · waiting [· in the queue] · images [· to be taken
-     * in] [· sign-in] — in "Most tasks" the counts first and bold (the
-     * order's key, Q3). Under the button the book's actions: what can be
-     * downloaded, the archive's website ↗, its folder (no mark), Chat (AI and
-     * the terminal; not on a phone). A book outside the research's list: its
-     * title, "Book" and how many only.
+     * A book's band (spec 105 §1, U4 §1, §2): in its fold button the title
+     * wrapped up to its cap (whole in `title` with the archive and the tasks),
+     * "Book", new and how many; under it "more" for a cut title, the time of
+     * its first item in a time order, the archive whole on its own line, then
+     * tasks · waiting [· in the queue] [· parked] · images [· to be taken in]
+     * [· sign-in] — in "Most tasks" the counts bold (the order's key, Q3). Then
+     * the book's actions: what can be downloaded, the archive's website ↗,
+     * its folder (no mark), Chat (AI and the terminal; not on a phone). A
+     * book outside the research's list: its title, "Book" and how many only.
      */
     overviewWaitingBookHead(s: LiveSession, g: WaitingGroupRows, open: boolean, toggle: () => void, mode: Mode): HTMLElement {
         const L = strings.live;
@@ -1653,32 +1698,23 @@ export const researchOverviewMethods = uiModule({
         const book = g.book!;
         const info = listedBook(book);
         const row = el('div', 'research-overview__waiting-grouphead is-book');
-        const gh = el('button', 'research-overview__group-head research-overview__waiting-group research-overview__book-head');
-        gh.type = 'button';
-        gh.dataset.group = g.key;
-        gh.dataset.book = book.id;
-        gh.setAttribute('aria-expanded', String(open));
-        const chevron = el('span', 'live-section__chevron', open ? '▾' : '▸');
-        chevron.setAttribute('aria-hidden', 'true');
-        const name = info ? bookTitle(info) : book.title;
-        const titles = el('span', 'research-overview__book-titles');
-        const line1 = el('span', 'research-overview__book-line');
-        const title = el('span', 'research-overview__group-title', name);
-        title.title = info ? bookHeadTitle(info) : name;
-        line1.appendChild(title);
-        const since = isTimeOrder(waitingDrawn().order) && g.items[0] ? waitingSinceEl(g.items[0], 'research-overview__group-since') : null;
-        if (since) line1.appendChild(since);
-        line1.appendChild(el('span', 'research-overview__group-kind', B.kind));
+        const name = this.waitingGroupTitle(g);
         const fresh = open ? 0 : g.items.filter(w => s.waitingView.tagged.has(w.id)).length;
         const newText = fresh > 0 ? L.waitingNewCount(fresh) : '';
-        if (fresh > 0) line1.appendChild(el('span', 'research-overview__new', newText));
-        line1.appendChild(el('span', 'research-overview__group-span', String(g.items.length)));
-        titles.appendChild(line1);
-        let metaText = '';
+        const archive = info?.archive?.name ?? '';
+        const parts = info ? bookMetaParts(info) : [];
+        const metaText = parts.map(p => p.text).join(' · ');
+        const { button, title } = this.waitingBandButton(g, open, toggle, {
+            cls: 'research-overview__book-head', name, titleAttr: info ? bookHeadTitle(info) : name, kind: B.kind, newText,
+            label: [`${name} · ${g.items.length}`, B.kind, archive, metaText, newText].filter(Boolean).join(', '),
+        });
+        button.dataset.book = book.id;
+        row.append(button, groupTitleMoreEl(title, g.key, s.waitingView.open));
+        const since = isTimeOrder(waitingDrawn().order) && g.items[0] ? waitingSinceEl(g.items[0], 'research-overview__group-since') : null;
+        if (since) row.appendChild(since);
+        if (archive) row.appendChild(el('span', 'research-overview__book-archive', archive));
         if (info) {
             const most = waitingDrawn().order === 'most';
-            const parts = bookMetaParts(info, { most });
-            metaText = parts.map(p => p.text).join(' · ');
             const meta = el('span', 'research-overview__book-meta');
             parts.forEach((p, i) => {
                 if (i > 0) {
@@ -1686,16 +1722,10 @@ export const researchOverviewMethods = uiModule({
                     sep.setAttribute('aria-hidden', 'true');
                     meta.appendChild(sep);
                 }
-                const part = el('span', `research-overview__book-${p.kind}${p.kind === 'counts' && most ? ' is-key' : ''}`, p.text);
-                if (p.kind === 'archive') part.title = p.text;
-                meta.appendChild(part);
+                meta.appendChild(el('span', `research-overview__book-${p.kind}${p.kind === 'counts' && most ? ' is-key' : ''}`, p.text));
             });
-            titles.appendChild(meta);
+            row.appendChild(meta);
         }
-        gh.append(chevron, titles);
-        gh.setAttribute('aria-label', [`${name} · ${g.items.length}`, B.kind, metaText, newText].filter(Boolean).join(', '));
-        gh.onclick = toggle;
-        row.appendChild(gh);
         const actions = info ? this.overviewWaitingBookActions(info, g, mode) : null;
         if (actions) row.appendChild(actions);
         return row;
@@ -1721,10 +1751,10 @@ export const researchOverviewMethods = uiModule({
         const folder = b.folder ? this.activeResearchLink('book', { book: b.id, bookDo: 'folder' }) : null;
         if (folder) {
             const btn = setResearchActionLabel(el('button', 'live-waiting-answer research-overview__waiting-groupwrite research-overview__book-folder'),
-                L.waitingTask.openFolder, researchLinkMark('book'), { sr: false });
+                L.books.folderBook, researchLinkMark('book'), { sr: false });
             btn.type = 'button';
             btn.dataset.book = b.id;
-            btn.setAttribute('aria-label', `${L.waitingTask.openFolder} · ${bookTitle(b)}`);
+            btn.setAttribute('aria-label', `${L.books.folderBook} · ${bookTitle(b)}`);
             btn.onclick = (e) => {
                 e.stopPropagation();
                 this.launchResearchLink(folder);
@@ -1998,6 +2028,7 @@ export const researchOverviewMethods = uiModule({
             web.target = '_blank';
             web.rel = 'noopener noreferrer';
             actions.appendChild(web);
+            appendWaitingWebHost(web, w.url);
         }
         if (actions.childElementCount > 0) detail.appendChild(actions);
         if (hint) detail.appendChild(el('p', 'research-overview__waiting-hint', L.waitingAnswerHint));
@@ -2075,7 +2106,10 @@ export const researchOverviewMethods = uiModule({
         const { shown, more } = splitWaitingActions(list, { phone: mode === 'sheet' });
         if (shown.length > 0) {
             const row = el('div', 'research-overview__waiting-actions waiting-actions');
-            shown.forEach((a, i) => row.appendChild(waitingActionEl(a, i === 0 ? 'primary' : i === 1 ? 'secondary' : 'link')));
+            shown.forEach((a, i) => {
+                const action = row.appendChild(waitingActionEl(a, i === 0 ? 'primary' : i === 1 ? 'secondary' : 'link'));
+                if (a.key === 'web' && a.href) appendWaitingWebHost(action, a.href);
+            });
             if (more.length > 0) {
                 const btn = el('button', 'waiting-more', '⋯');
                 btn.type = 'button';

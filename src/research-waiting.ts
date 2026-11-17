@@ -593,6 +593,24 @@ export function waitingGroupMissing(items: readonly LiveWaiting[]): number | nul
     return sum > 0 ? sum : null;
 }
 
+/** About how many characters of a group's title one line of a column holds (the guessed height only). */
+export const GROUP_TITLE_LINE_CHARS = 70;
+/** The lines a group's title takes at most before "…" and "more" (spec 105 U4 §1; a phone and the panel 4). */
+export const GROUP_TITLE_LINES = 3;
+
+/**
+ * How many lines a group's band adds to the guessed height of Awaiting
+ * action (spec 105 U4 §1, §2): its title, one more line for every ~70
+ * characters up to the cap; a book of the research's list its archive, its
+ * facts and its actions; a place its actions under the title and the images
+ * its items miss. Guessed by the text's length, never measured.
+ */
+export function waitingGroupBandLines(title: string, head: { book?: boolean; listed?: boolean; missing?: boolean }): number {
+    const titleLines = Math.min(GROUP_TITLE_LINES, Math.max(1, Math.ceil(title.trim().length / GROUP_TITLE_LINE_CHARS)));
+    if (head.book) return titleLines + (head.listed ? 3 : 0);
+    return titleLines + 1 + (head.missing ? 1 : 0);
+}
+
 /** Files a task takes as images of its book (`<input accept>`; the research reads PDF page by page). */
 export const TASK_IMAGE_EXT: readonly string[] = ['jpg', 'jpeg', 'png', 'tif', 'tiff', 'heic', 'pdf'];
 export const TASK_IMAGE_ACCEPT = TASK_IMAGE_EXT.map(e => `.${e}`).join(',');

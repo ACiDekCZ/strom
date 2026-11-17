@@ -76,7 +76,7 @@ import {
     PrefKey, SECTION_PREFS_EVENT, SectionPref, autoFoldOrder, hasSectionPrefs, isImportantWaiting, resetSectionPrefs, restoreSectionPrefs, newWaiting, noteWaitingSeen, panelSectionOrder, sectionPrefs, sectionPrefsSnapshot, setSectionPref, topPrefs,
     waitingSeen, watchSectionPrefsStorage, PANEL_PREF_KEYS,
 } from './live-section-prefs.js';
-import { shownWaitingGroups, storedWaitingGroupMode, storedWaitingOrder, waitingGroupName, waitingSinceText } from './waiting-order-ui.js';
+import { groupTitleMoreEl, shownWaitingGroups, storedWaitingGroupMode, storedWaitingOrder, waitingGroupName, waitingSinceText } from './waiting-order-ui.js';
 import {
     QUEUE_ROWS_CAP, QueueFilter, QueueList, loadMoreQueueList, noteQueueRev, onQueueListsChange, queueList, queueListItem, queueRemote, requestQueueList,
     resetQueueLists, retryQueueList,
@@ -4211,14 +4211,17 @@ export const researchUiMethods = uiModule({
                 head.dataset.group = rows.key;
                 const book = listedBook(rows.book);
                 const name = rows.book ? (book ? bookTitle(book) : rows.book.title) : waitingGroupName(rows.items[0]);
+                // Its title wrapped up to four lines, "more" under a cut one (spec 105 U4 §1, 1e, 1h).
                 const title = el('span', 'live-waiting-grouptitle', name);
                 title.title = book ? bookHeadTitle(book) : name;
-                head.appendChild(title);
-                if (book) head.appendChild(el('span', 'live-waiting-groupwait', B.waiting(book.waiting)));
-                head.appendChild(el('span', 'live-waiting-groupcount', String(total)));
+                const side = el('span', 'live-waiting-groupside');
+                if (book) side.appendChild(el('span', 'live-waiting-groupwait', B.waiting(book.waiting)));
+                side.appendChild(el('span', 'live-waiting-groupcount', String(total)));
+                head.append(title, side, groupTitleMoreEl(title, rows.key, s.waitingView.open));
                 host.appendChild(head);
             }
-            const list = el('ul', 'live-panel-list live-waiting');
+            // A group's rows hang on its line under its band (spec 105 U4 §2, D1: no indent in the panel).
+            const list = el('ul', `live-panel-list live-waiting${rows.key !== FLAT_GROUP ? ' is-grouped' : ''}`);
             for (const w of rows.items) list.appendChild(rowOf(w));
             host.appendChild(list);
         }

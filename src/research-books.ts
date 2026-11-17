@@ -71,25 +71,30 @@ export function urgentBooks(books: LiveBooks | null | undefined): LiveBook[] {
     return books.list.filter(b => b.offer && b.waiting === 0).sort(sortBooksMost);
 }
 
-/** One piece of a book head's second line. */
+/** One piece of a book head's line of facts. */
 export interface BookMetaPart {
-    /** archive | counts (waiting · in the queue; the key of "Most tasks") | images | pending | login. */
-    kind: 'archive' | 'counts' | 'images' | 'pending' | 'login';
+    /** counts (tasks · waiting · in the queue · parked; the key of "Most tasks") | images | pending | login. */
+    kind: 'counts' | 'images' | 'pending' | 'login';
     text: string;
 }
 
 /**
- * The second line of a book's head (§1): archive · waiting [· in the queue] · images [· to be taken in]
- * [· sign-in]. In "Most tasks" (`most`) the counts come first (the order's key, drawn bold). Without an
- * archive said, none.
+ * The images of a book's head: "516 images · on disk 303 · missing 213"; a
+ * book whole on disk (nothing missing) "516 images · whole book on disk".
  */
-export function bookMetaParts(b: LiveBook, opts: { most?: boolean } = {}, L: BooksTexts = strings.live.books): BookMetaPart[] {
-    const counts: BookMetaPart = { kind: 'counts', text: [L.waiting(b.waiting), ...(b.open > 0 ? [L.inQueue(b.open)] : [])].join(' · ') };
-    const out: BookMetaPart[] = [];
-    if (opts.most) out.push(counts);
-    if (b.archive?.name) out.push({ kind: 'archive', text: b.archive.name });
-    if (!opts.most) out.push(counts);
-    out.push({ kind: 'images', text: bookImagesText(b, L) });
+export function bookHeadImagesText(b: Pick<LiveBook, 'images' | 'onDisk' | 'missing'>, L: BooksTexts = strings.live.books): string {
+    if (b.missing !== 0) return bookImagesText(b, L);
+    return [...(b.images !== undefined ? [L.images(b.images)] : []), L.wholeOnDisk].join(' · ');
+}
+
+/**
+ * The line of facts of a book's head (spec 105 U4 §1): tasks · waiting [· in
+ * the queue] [· parked] · images [· to be taken in] [· sign-in]. The archive
+ * stands whole on its own line above it.
+ */
+export function bookMetaParts(b: LiveBook, L: BooksTexts = strings.live.books): BookMetaPart[] {
+    const counts = [L.tasks(b.tasks), L.waiting(b.waiting), ...(b.open > 0 ? [L.inQueue(b.open)] : []), ...(b.parked > 0 ? [L.parked(b.parked)] : [])];
+    const out: BookMetaPart[] = [{ kind: 'counts', text: counts.join(' · ') }, { kind: 'images', text: bookHeadImagesText(b, L) }];
     if (b.pending) out.push({ kind: 'pending', text: L.pending(b.pending) });
     if (b.access === 'online-login') out.push({ kind: 'login', text: L.login });
     return out;

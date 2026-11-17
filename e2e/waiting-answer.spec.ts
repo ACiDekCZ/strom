@@ -143,11 +143,11 @@ test.describe('a research that takes answers and images (waiting.answer, accepts
         await follow(page, { width: 1440, height: 900 }, () => {});
         const ov = await openOverview(page);
 
-        // The archive's place: its long name in one line cut at its end (whole on hover), what it misses, its website, Chat.
+        // The archive's place: its long name wrapped, never cut with "…" (spec 105 U4 §1), what it misses, its website, Chat.
         const head = archiveHead(page);
         const title = head.locator('.research-overview__group-title');
-        await expect(title).toHaveCSS('white-space', 'nowrap');
-        await expect(title).toHaveCSS('text-overflow', 'ellipsis');
+        await expect(title).toHaveCSS('white-space', 'normal');
+        await expect(title).toHaveCSS('text-overflow', 'clip');
         await expect(title).toHaveAttribute('title', ARCHIVE.name);
         await expect(head.locator('.research-overview__group-missing')).toHaveText('3 images missing');
         const archiveWeb = head.locator('a.research-overview__waiting-archiveweb');
@@ -457,7 +457,7 @@ for (const older of [true, false]) {
     test.describe(`German: the archive's heading keeps its name and what it misses (${older ? 'with' : 'without'} Sent)`, () => {
         test.use({ locale: 'de-DE' });
         for (const width of [1440, 1024, 390]) {
-            test(`at ${width}px the name stays one line, the actions go under it rather than squeeze it`, async ({ page }) => {
+            test(`at ${width}px the name is whole and wrapped, what it misses one line, the actions in the band under them (spec 105 U4)`, async ({ page }) => {
                 await follow(page, { width, height: 900 }, (b) => withLetter(b, older));
                 if (width <= 640) await page.locator('#live-panel .live-panel-toggle').click();
                 else await openOverview(page);
@@ -470,18 +470,21 @@ for (const older of [true, false]) {
                 const missing = head.locator('.research-overview__group-missing');
                 await expect(title).toHaveAttribute('title', ARCHIVE.name);
                 await expect(missing).toHaveText('3 Bilder fehlen');
-                // One line each: the name cut at its end, what it misses whole.
-                for (const line of [title, missing]) {
-                    const m = await line.evaluate((n) => ({ h: n.getBoundingClientRect().height, lh: parseFloat(getComputedStyle(n).lineHeight) || 18, sw: n.scrollWidth, cw: n.clientWidth }));
-                    expect(m.h).toBeLessThan(m.lh * 1.6);
-                }
+                // The name whole, wrapped within its cap (no "more" for it); what it misses on one line.
+                const t = await title.evaluate((n) => ({ h: n.clientHeight, sh: n.scrollHeight, lh: parseFloat(getComputedStyle(n).lineHeight) }));
+                expect(t.sh).toBeLessThanOrEqual(t.h + 1);
+                expect(t.h).toBeLessThanOrEqual(4 * t.lh + 1);
+                await expect(head.locator('.research-overview__group-more')).toBeHidden();
+                const m = await missing.evaluate((n) => ({ h: n.getBoundingClientRect().height, lh: parseFloat(getComputedStyle(n).lineHeight) || 18 }));
+                expect(m.h).toBeLessThan(m.lh * 1.6);
                 expect(await missing.evaluate((n) => n.scrollWidth <= n.clientWidth + 1)).toBe(true);
-                // The heading keeps room for the name: the actions beside it or under it, never over it.
+                // The band takes the full width; the actions under the name and what it misses, never over them.
                 const g = (await group.boundingBox())!;
                 const a = (await actions.boundingBox())!;
+                const mb = (await missing.boundingBox())!;
                 const row = (await head.boundingBox())!;
-                expect(g.width).toBeGreaterThanOrEqual(Math.min(300, row.width));
-                expect(a.x >= g.x + g.width - 1 || a.y >= g.y + g.height - 1).toBe(true);
+                expect(g.width).toBeGreaterThanOrEqual(Math.min(300, row.width - 24));
+                expect(a.y).toBeGreaterThanOrEqual(mb.y + mb.height - 1);
                 expect(a.x + a.width).toBeLessThanOrEqual(row.x + row.width + 1);
                 expect(await head.evaluate((n) => n.scrollWidth - n.clientWidth)).toBeLessThanOrEqual(0);
             });

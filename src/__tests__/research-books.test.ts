@@ -226,19 +226,28 @@ describe('the books\' texts and orders', () => {
         expect(urgentBooks(undefined)).toEqual([]);
     });
 
-    it('the head\'s second line and title; the counts first in Most tasks', () => {
+    it('the head\'s line of facts and title: the tasks and parked ones seen, a book whole on disk said so (U4 §1)', () => {
         const cs = getStringsForLang('cs').live.books;
         const b = book({ archive: { name: 'Státní archiv v Lhotě' }, images: 516, missing: 213, pending: 12, access: 'online-login' });
-        expect(bookMetaParts(b, {}, cs)).toEqual([
-            { kind: 'archive', text: 'Státní archiv v Lhotě' },
-            { kind: 'counts', text: '2 čekají · +13 ve frontě' },
+        // The archive stands on its own line: not among the facts.
+        expect(bookMetaParts(b, cs)).toEqual([
+            { kind: 'counts', text: '16 úkolů · 2 čekají · +13 ve frontě · 1 odložený' },
             { kind: 'images', text: '516 snímků · na disku 303 · chybí 213' },
             { kind: 'pending', text: 'převezme se 12 souborů' },
             { kind: 'login', text: 'web archivu vyžaduje přihlášení' },
         ]);
-        expect(bookMetaParts(b, { most: true }, cs).map(p => p.kind)).toEqual(['counts', 'archive', 'images', 'pending', 'login']);
-        // Without an archive and nothing in the queue.
-        expect(bookMetaParts(book({ waiting: 5, open: 0 }), {}, cs).map(p => p.text)).toEqual(['5 čeká', 'na disku 303']);
+        // Nothing in the queue nor parked, no images known.
+        expect(bookMetaParts(book({ waiting: 5, open: 0, parked: 0 }), cs).map(p => p.text)).toEqual(['16 úkolů · 5 čeká', 'na disku 303']);
+        // Whole on disk: no "on disk N · missing 0".
+        expect(bookMetaParts(book({ images: 516, onDisk: 516, missing: 0 }), cs)[1].text).toBe('516 snímků · celá na disku');
+        expect(bookMetaParts(book({ images: 20, onDisk: 20, missing: 0, parked: 2 }), getStringsForLang('en').live.books).map(p => p.text))
+            .toEqual(['16 tasks · 2 waiting · +13 in the queue · 2 parked', '20 images · whole book on disk']);
+        expect(bookMetaParts(book({ images: 20, onDisk: 20, missing: 0, parked: 5 }), getStringsForLang('de').live.books).map(p => p.text))
+            .toEqual(['16 Aufgaben · 2 warten · +13 in der Warteschlange · 5 zurückgestellt', '20 Bilder · vollständig lokal']);
+        expect([1, 2, 5].map(n => cs.parked(n))).toEqual(['1 odložený', '2 odložené', '5 odložených']);
+        expect([1, 2, 5].map(n => getStringsForLang('pl').live.books.parked(n))).toEqual(['1 odłożone', '2 odłożone', '5 odłożonych']);
+        // The list of "Faster by downloading" keeps "on disk N · missing 0".
+        expect(bookImagesText(book({ images: 20, onDisk: 20, missing: 0 }), cs)).toBe('20 snímků · na disku 20 · chybí 0');
         expect(bookHeadTitle(b, cs)).toBe('Lhota 3, N · Státní archiv v Lhotě · 16 úkolů, z toho odložen 1');
         expect(bookHeadTitle(book({ parked: 0 }), getStringsForLang('en').live.books)).toBe('Lhota 3, N · 16 tasks');
         expect(bookWebUrl(book({ archive: { name: 'A', url: 'https://a.example/' } }))).toBe('https://a.example/');

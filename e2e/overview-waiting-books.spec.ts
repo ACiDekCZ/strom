@@ -60,14 +60,14 @@ function booksPart(): Record<string, unknown> {
     };
 }
 
-async function researchTree(page: Page, opts: { items?: Record<string, unknown>[]; width?: number; height?: number; features?: string[] } = {}): Promise<void> {
+async function researchTree(page: Page, opts: { items?: Record<string, unknown>[]; width?: number; height?: number; features?: string[]; books?: Record<string, unknown> } = {}): Promise<void> {
     const width = opts.width ?? 1440;
     await page.clock.setFixedTime(NOW);
     await page.setViewportSize({ width, height: opts.height ?? (width > 640 ? 900 : 844) });
     await openResearch(page);
     await fakeBridge(page, {
         accepts: ACCEPTS, links: LINKS, waiting: opts.items ?? waiting(), features: opts.features ?? FEATURES, treeGed: researchGed(),
-        books: { books: booksPart(), posts: [] },
+        books: { books: opts.books ?? booksPart(), posts: [] },
     });
     await poll(page);
 }
@@ -112,6 +112,38 @@ async function recordLaunches(page: Page): Promise<void> {
 }
 const launched = (page: Page) => page.evaluate(() => (window as unknown as { __launched: string[] }).__launched);
 
+/** A book's title from a catalogue, over 230 characters (spec 105 U4 1h), and an archive with a long name (invented). */
+const LONG_TITLE = 'Matrika Ukázkov 7, narození, oddaní a zemřelí farnosti Ukázkov s filiálními obcemi Nákresov, Příkladná Lhota a Zkušebná '
+    + '1801–1838 + rejstříky narozených a oddaných, opravy a dodatky farního úřadu Ukázkov z let 1839–1850, svazek druhý';
+const archive2 = {
+    key: 'repo:R0002', name: 'Státní archiv Ukázkov, pracoviště Nákresov – fond Farní úřad Ukázkov, matriky a rejstříky 1650–1950',
+    kind: 'archive', url: 'https://archiv-ukazkov.example/',
+};
+
+/** The items and books of the bands (U4): a third book with the long title, whole on disk, two of its tasks parked. */
+function bandItems(): Record<string, unknown>[] {
+    return [...waiting(), { id: 'T0009', order: 9, what: 'Přečíst zápis sňatku v matrice Ukázkov 7', kind: 'images', section: 'images', group: archive2, at: minAgo(60), book: 'B0007', actions: ['chat', 'folder'] }];
+}
+function bandBooks(): Record<string, unknown> {
+    const part = booksPart();
+    (part.list as Record<string, unknown>[]).push({
+        id: 'B0007', title: LONG_TITLE, folder: 'B0007 Matrika Ukázkov 7',
+        archive: { id: 'R0002', name: archive2.name, url: archive2.url }, access: 'online-free',
+        tasks: 9, waiting: 1, open: 8, parked: 2, images: 40, onDisk: 40, missing: 0, download: 'none',
+    });
+    return part;
+}
+
+/** Nothing of the section's bands and rows wider than its box (1 px rounding) and the page not scrolled sideways. */
+async function bandsFit(page: Page): Promise<void> {
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    const over = await sec(page).evaluate(el => [...el.querySelectorAll<HTMLElement>(
+        '.research-overview__waiting-grouphead, .research-overview__waiting-group, .research-overview__group-title, .research-overview__book-archive, '
+        + '.research-overview__book-meta, .research-overview__waiting-groupactions, .research-overview__waiting-rows')]
+        .filter(e => e.scrollWidth > e.clientWidth + 1).map(e => e.className));
+    expect(over).toEqual([]);
+}
+
 test.describe('Awaiting action by book', () => {
     test('Recommended: Archive | Book, by archive as before; Book: the books\' heads first, the places under "No book"', async ({ page }) => {
         await researchTree(page);
@@ -142,13 +174,15 @@ test.describe('Awaiting action by book', () => {
         await expect(b3.locator('.research-overview__group-title')).toHaveAttribute('title', 'Matrika Vzorov 3, N 1784–1820 · Archiv ve Vzorově · 16 tasks, 1 of them parked');
         await expect(b3.locator('.research-overview__group-kind')).toHaveText('Book');
         await expect(b3.locator('.research-overview__group-span')).toHaveText('2');
-        await expect(b3.locator('.research-overview__book-meta')).toHaveText('Archiv ve Vzorově·2 waiting · +13 in the queue·516 images · on disk 303 · missing 213');
+        // The archive whole on its own line; the tasks and the parked ones seen (U4 §1).
+        await expect(b3.locator('.research-overview__book-archive')).toHaveText('Archiv ve Vzorově');
+        await expect(b3.locator('.research-overview__book-meta')).toHaveText('16 tasks · 2 waiting · +13 in the queue · 1 parked·516 images · on disk 303 · missing 213');
         await expect(b3.locator('.research-overview__book-counts')).not.toHaveClass(/is-key/);
         // Its actions: the offer, the book's viewer ↗, its folder (no mark), Chat.
         await expect(b3.locator('.research-overview__book-offer')).toHaveText('Whole book can be downloaded · 516 images');
         await expect(b3.locator('a.research-overview__waiting-archiveweb')).toHaveAttribute('href', 'https://archiv-vzorov.example/kniha/3');
         const folder = b3.locator('.research-overview__book-folder');
-        await expect(folder).toHaveText('Open folder');
+        await expect(folder).toHaveText('Open the book’s folder');
         await expect(folder.locator('.research-open-mark, .ai-badge, svg')).toHaveCount(0);
         await expect(b3.locator('.research-overview__waiting-groupchat')).toHaveAttribute('data-task', 'T0001');
         await recordLaunches(page);
@@ -232,7 +266,7 @@ test.describe('Awaiting action by book', () => {
         // Always by book, whatever groups were chosen: B0005 (20 tasks) before B0003 (16).
         expect(await groupKeys(page)).toEqual(['book:B0005', 'book:B0003', 'to:MěÚ Vzorov']);
         const counts = bookHead(page, 'B0003').locator('.research-overview__book-meta > span').first();
-        await expect(counts).toHaveText('2 waiting · +13 in the queue');
+        await expect(counts).toHaveText('16 tasks · 2 waiting · +13 in the queue · 1 parked');
         await expect(counts).toHaveClass(/is-key/);
         expect(await counts.evaluate(el => getComputedStyle(el).fontWeight)).toBe('600');
         // No time beside the rows or after the titles.
@@ -315,17 +349,105 @@ test.describe('Awaiting action by book', () => {
         expect(await stored(page)).toEqual([null, 'book']);
         const b3 = bookHead(page, 'B0003');
         await expect(b3.locator('.research-overview__group-kind')).toBeHidden();
-        // The archive on its own line of the second line.
+        // The archive on its own line above the facts.
         const [archive, meta] = await Promise.all([
             b3.locator('.research-overview__book-archive').boundingBox(),
             b3.locator('.research-overview__book-meta').boundingBox(),
         ]);
-        expect(Math.round(archive!.width)).toBe(Math.round(meta!.width));
+        expect(archive!.y + archive!.height).toBeLessThanOrEqual(meta!.y + 1);
+        expect(Math.round(archive!.x)).toBe(Math.round(meta!.x));
         // Chat opens the research on the computer: not on a phone.
         await expect(b3.locator('.research-overview__waiting-groupchat')).toHaveCount(0);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
-        const over = await sec(page).evaluate(el => [...el.querySelectorAll<HTMLElement>('.research-overview__book-meta, .research-overview__book-line, .research-overview__waiting-grouphead')]
+        const over = await sec(page).evaluate(el => [...el.querySelectorAll<HTMLElement>('.research-overview__book-meta, .research-overview__book-archive, .research-overview__waiting-group, .research-overview__waiting-grouphead')]
             .filter(e => e.scrollWidth > e.clientWidth + 1).length);
         expect(over).toBe(0);
+    });
+
+    for (const size of [{ width: 390, height: 844, cap: 4, indent: [0, 8] }, { width: 1440, height: 900, cap: 3, indent: [13, 12] }]) test(`spec 105 U4 at ${size.width} in German: a book's whole title wrapped up to ${size.cap} lines, "more" only when cut and never folding; the archive, facts and actions in its band; its items on its line`, async ({ page }) => {
+        await researchTree(page, { items: bandItems(), books: bandBooks(), width: size.width, height: size.height });
+        await page.evaluate(() => {
+            window.Strom.UI.setLanguage('de');
+            localStorage.setItem('strom-live-overview-waiting-groups', 'book');
+        });
+        await openOverview(page);
+        const long = bookHead(page, 'B0007');
+        const title = long.locator('.research-overview__group-title');
+        // The research's title as the app keeps it (200 characters), whole in the band: no "…" of its own.
+        const kept = LONG_TITLE.slice(0, 199) + '…';
+        await expect(title).toHaveText(kept);
+        await expect(title).toHaveAttribute('title', `${kept} · ${archive2.name} · 9 Aufgaben, davon zurückgestellt 2`);
+        // Cut at its cap ("…" by the clamp, no ellipsis on one line), "more" under it.
+        const clamped = await title.evaluate(el => ({ h: el.clientHeight, sh: el.scrollHeight, lh: parseFloat(getComputedStyle(el).lineHeight), ws: getComputedStyle(el).whiteSpace }));
+        expect(clamped.ws).toBe('normal');
+        expect(clamped.h).toBeLessThanOrEqual(size.cap * clamped.lh + 1);
+        expect(clamped.h).toBeGreaterThan((size.cap - 1) * clamped.lh);
+        expect(clamped.sh).toBeGreaterThan(clamped.h + 1);
+        const more = long.locator('.research-overview__group-more');
+        await expect(more).toBeVisible();
+        await expect(more).toHaveText('mehr');
+        await expect(more).toHaveAttribute('aria-expanded', 'false');
+        // A title that fits has none.
+        await expect(bookHead(page, 'B0003').locator('.research-overview__group-more')).toBeHidden();
+        // The band: the archive whole on its own line, the facts with the tasks and the parked ones, whole on disk said so.
+        await expect(long.locator('.research-overview__book-archive')).toHaveText(archive2.name);
+        await expect(long.locator('.research-overview__book-meta')).toHaveText('9 Aufgaben · 1 wartet · +8 in der Warteschlange · 2 zurückgestellt·40 Bilder · vollständig lokal');
+        await expect(long.locator('.research-overview__book-folder')).toHaveText('Ordner des Buchs öffnen');
+        const look = await long.evaluate(el => {
+            const probe = document.createElement('span');
+            probe.style.backgroundColor = 'var(--surface-2)';
+            probe.style.color = 'var(--divider)';
+            el.appendChild(probe);
+            const p = getComputedStyle(probe);
+            const cs = getComputedStyle(el);
+            const out = { bg: cs.backgroundColor, border: cs.borderTopColor, width: cs.borderTopWidth, surface2: p.backgroundColor, divider: p.color, shadow: cs.boxShadow };
+            probe.remove();
+            return out;
+        });
+        expect(look).toMatchObject({ bg: look.surface2, border: look.divider, width: '1px', shadow: 'none' });
+        await bandsFit(page);
+
+        // "more" unfolds the whole title in place and never folds the group; "less" folds the title back.
+        const fold = long.locator('.research-overview__waiting-group');
+        const expanded = await fold.getAttribute('aria-expanded');
+        await more.click();
+        await expect(title).toHaveClass(/is-full/);
+        await expect(more).toHaveText('weniger');
+        await expect(more).toHaveAttribute('aria-expanded', 'true');
+        await expect(fold).toHaveAttribute('aria-expanded', expanded!);
+        expect(await title.evaluate(el => el.clientHeight)).toBeGreaterThan(clamped.h + 1);
+        await bandsFit(page);
+        await more.click();
+        await expect(title).not.toHaveClass(/is-full/);
+        await expect(more).toHaveText('mehr');
+        await expect(fold).toHaveAttribute('aria-expanded', expanded!);
+
+        // Its items hang on its line: 2 px, indented under the title on a computer, at the edge on a phone (D1).
+        if (expanded === 'false') await fold.click();
+        await expect(fold).toHaveAttribute('aria-expanded', 'true');
+        const list = todo(page).locator('.research-overview__waiting-grouphead:has([data-book="B0007"]) + ul.research-overview__waiting-rows');
+        await expect(list).toHaveClass(/is-grouped/);
+        await expect(list.locator('.research-overview__waiting-item[data-id="T0009"]')).toBeVisible();
+        const line = await list.evaluate(el => {
+            const cs = getComputedStyle(el);
+            return { width: cs.borderLeftWidth, style: cs.borderLeftStyle, margin: parseFloat(cs.marginLeft), padding: parseFloat(cs.paddingLeft) };
+        });
+        expect(line).toEqual({ width: '2px', style: 'solid', margin: size.indent[0], padding: size.indent[1] });
+        await bandsFit(page);
+
+        // By archive: the place's actions in its band under its name (no longer beside it).
+        await closeOverview(page);
+        await page.evaluate(() => localStorage.removeItem('strom-live-overview-waiting-groups'));
+        await openOverview(page);
+        const place = todo(page).locator('.research-overview__waiting-grouphead').filter({ has: page.locator('[data-group="repo:R0002"]') });
+        const [nameBox, actionsBox] = await Promise.all([
+            place.locator('.research-overview__group-title').boundingBox(),
+            place.locator('.research-overview__waiting-groupactions > :first-child').boundingBox(),
+        ]);
+        expect(actionsBox!.y).toBeGreaterThanOrEqual(nameBox!.y + nameBox!.height - 1);
+        expect(Math.abs(actionsBox!.x - nameBox!.x)).toBeLessThanOrEqual(1);
+        await expect(place.locator('.research-overview__waiting-groupactions a.research-overview__waiting-archiveweb')).toHaveAttribute('href', archive2.url);
+        await expect(place.locator('.research-overview__group-title')).toHaveCSS('white-space', 'normal');
+        await bandsFit(page);
     });
 });

@@ -156,7 +156,7 @@ test.describe('Faster by downloading', () => {
         await lhota.locator('.research-overview__urgent-toggle').click();
         const dl = urgentRow(page, 'B0008').locator('.research-overview__urgent-detail');
         await expect(dl.locator('dt')).toHaveText(['Tasks', 'Folder', 'Access']);
-        await expect(dl.locator('dd')).toHaveText(['8 · 1 of them parked', 'B0008 Pozemková kniha Lhota', 'archive website requires sign-in']);
+        await expect(dl.locator('dd')).toHaveText(['8 · 1 parked', 'B0008 Pozemková kniha Lhota', 'archive website requires sign-in']);
         await urgentRow(page, 'B0008').locator('.research-overview__urgent-toggle').click();
         await expect(urgentRow(page, 'B0008').locator('.research-overview__urgent-detail')).toHaveCount(0);
         await noOverflow(page, '#ov-sec-waiting');
@@ -280,6 +280,9 @@ test.describe('the small panel with the books', () => {
         await expect(head.locator('.live-waiting-grouptitle')).toHaveText('Matrika Vzorov 3, N 1784–1820');
         await expect(head.locator('.live-waiting-groupwait')).toHaveText('2 waiting');
         await expect(head.locator('.live-waiting-groupcount')).toHaveText('2');
+        // The book's rows hang on its line under its band (U4 §2, D1); a short title has no "more".
+        await expect(panel.locator('.live-waiting-grouphead.is-book + ul.live-waiting')).toHaveClass(/is-grouped/);
+        await expect(head.locator('.research-overview__group-more')).toBeHidden();
         // The book's actions stay in the overview.
         await expect(panel.locator('.research-overview__book-folder, .research-overview__book-meta')).toHaveCount(0);
         await expect(panel.locator('.live-waiting-nobook')).toHaveText('No book');
