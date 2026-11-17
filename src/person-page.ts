@@ -2696,13 +2696,16 @@ function galleryItems(c: Ctx, rows: PersonSourceRow[]): GalleryItem[] {
         if (isPdfAttachment(a) || isOriginalOnlyAttachment(a) || !a.mimeType.startsWith('image/')) continue;
         const src = safeImage(a.dataUrl);
         if (!src) continue;
-        const caption = stripResearchIds(a.note?.trim() || a.name.replace(/\.[^.]+$/, '')).text.trim() || a.name;
-        const m = YEAR_IN_TEXT.exec(`${a.note ?? ''} ${a.name}`);
+        // A titled file: its title, whole (spec 102 §2, Q1), its kind and its date's year.
+        const title = a.title?.trim();
+        const caption = title || stripResearchIds(a.note?.trim() || a.name.replace(/\.[^.]+$/, '')).text.trim() || a.name;
+        const m = YEAR_IN_TEXT.exec(a.date ?? '') ?? YEAR_IN_TEXT.exec(`${title ?? ''} ${a.note ?? ''} ${a.name}`);
         const year = m ? Number(m[1]) : null;
         const sourceId = mediaSourceId(a);
         const s = sourceId ? c.tree.sources?.[sourceId] : undefined;
         const sub = [s ? peekTitle(s.title) : '', year !== null && !caption.includes(String(year)) ? String(year) : ''].filter(Boolean).join(', ');
-        const kind: GalleryItem['kind'] = sourceId || DOCUMENT_WORDS.test(`${a.name} ${a.note ?? ''}`) ? 'document' : 'photo';
+        const kind: GalleryItem['kind'] = a.kind === 'photo' || a.kind === 'document' || a.kind === 'record' ? a.kind
+            : sourceId || DOCUMENT_WORDS.test(`${a.name} ${a.note ?? ''}`) ? 'document' : 'photo';
         const size = dataUrlImageSize(src);
         out.push({ src, kind, caption, sub, year, wide: !!size && isWide(kind, size.w, size.h) });
     }
@@ -2730,8 +2733,9 @@ function pdfItems(c: Ctx): PdfItem[] {
     if (!c.page.groups.pdf) return [];
     return personMedia(c.tree, c.person.id).filter(isPdfAttachment).map(a => {
         const href = safePdf(a);
-        const m = YEAR_IN_TEXT.exec(`${a.note ?? ''} ${a.name}`);
-        const name = stripResearchIds(a.note?.trim() || a.name).text.trim() || a.name;
+        const title = a.title?.trim();
+        const m = YEAR_IN_TEXT.exec(a.date ?? '') ?? YEAR_IN_TEXT.exec(`${title ?? ''} ${a.note ?? ''} ${a.name}`);
+        const name = title || stripResearchIds(a.note?.trim() || a.name).text.trim() || a.name;
         return { name, href, pages: href ? pdfPages(href) : null, year: m ? Number(m[1]) : null };
     });
 }

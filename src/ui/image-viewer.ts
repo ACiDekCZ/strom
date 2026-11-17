@@ -226,6 +226,14 @@ function onKey(e: KeyboardEvent): void {
     if (!isOpen()) return;
     // A dialog opened from the viewer (assigning, hiding) takes its own keys.
     if (document.querySelector('[data-over-viewer]')) return;
+    // A form in the panel (a material's title being edited) takes its own keys too.
+    if (e.target instanceof Element && e.target.closest('[data-own-keys]')) return;
+    if (list?.key?.(e)) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        return;
+    }
     const browse = !!list && (isFitted(view, box) || isCard());
     const handled = (() => {
         switch (e.key) {
@@ -514,6 +522,8 @@ export interface ViewerList {
     count: number;
     index: number;
     show: (index: number, slots: ViewerSlots) => void;
+    /** The list's own keys (F2 edits a material's title); true: handled. */
+    key?: (e: KeyboardEvent) => boolean;
 }
 
 let list: ViewerList | null = null;

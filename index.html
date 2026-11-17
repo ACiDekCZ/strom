@@ -28914,7 +28914,11 @@
         .mw-li .mw-thumb { grid-column: 2; width: 40px; height: 40px; border-radius: var(--r-sm); }
         .mw-li .mw-thumb .mw-check { display: none !important; }
         .mw-li .mw-type { font-size: 10px; }
-        .mw-li-title { grid-column: 3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+        .mw-li-name { grid-column: 3; display: flex; flex-direction: column; min-width: 0; }
+        .mw-li-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+        /* The file's name under its title (spec 102 §2); "no title" in italics. */
+        .mw-li-file { font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 11.5px; line-height: 15px; color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .mw-li-file.is-untitled { font-family: inherit; font-style: italic; }
         .mw-li-kind { grid-column: 4; color: var(--text-light); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .mw-li-persons { grid-column: 5; font-size: 12.5px; }
         .mw-li-size { grid-column: 6; color: var(--text-light); text-align: right; font-variant-numeric: tabular-nums; }
@@ -29014,7 +29018,8 @@
             .mw-hidden-label { font-size: 10px; left: 4px; bottom: 4px; padding: 1px 6px; }
             .mw-li { grid-template-columns: auto 40px minmax(0, 1fr) auto; grid-template-rows: auto auto; row-gap: 2px; padding: 0 4px; }
             .mw-li-check, .mw-li .mw-thumb { grid-row: 1 / span 2; }
-            .mw-li-title { grid-column: 3; grid-row: 1; align-self: end; }
+            .mw-li-name { grid-column: 3; grid-row: 1; align-self: end; }
+            .mw-li-file { display: none; }
             .mw-li-persons { grid-column: 3; grid-row: 2; align-self: start; }
             .mw-li-size { display: none; }
             .mw-li-at { grid-column: 4; grid-row: 1 / span 2; }
@@ -29150,6 +29155,25 @@
         @media (max-width: 640px) {
             .attachment-row:has(.attachment-portrait-btn) { flex-wrap: wrap; }
             .attachment-row:has(.attachment-portrait-btn) .attachment-actions { margin-left: auto; }
+        }
+        /* The row's ⋯ (spec 102 §2): its menu holds the row's actions and the Attachment dialog the note;
+           a phone's row keeps its buttons and the note field without a menu. */
+        .attachment-more {
+            flex: none; width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; padding: 0;
+            border: 1px solid transparent; border-radius: var(--r-md); background: none; color: var(--text-light);
+            font: inherit; font-size: 18px; line-height: 1; cursor: pointer;
+        }
+        .attachment-more[aria-expanded="true"] { border-color: var(--border); color: var(--text); }
+        .attachment-more:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .attachment-note-text { display: block; font-size: 12.5px; color: var(--text-light); overflow-wrap: anywhere; white-space: pre-line; }
+        @media (hover: hover) { .attachment-more:hover { background: var(--hover-bg); color: var(--text); } }
+        @media (pointer: coarse) { .attachment-more { width: 44px; height: 44px; } }
+        @media (min-width: 641px) {
+            .attachment-row.has-more .attachment-actions,
+            .attachment-row.has-more .attachment-note-input { display: none; }
+        }
+        @media (max-width: 640px) {
+            .attachment-more, .attachment-note-text { display: none; }
         }
         .attachments-total { color: var(--text-secondary, #777); font-size: 12px; margin-bottom: 8px; }
         .attachments-empty { color: var(--text-light); font-size: 13px; padding: 4px 0; }
@@ -29476,6 +29500,56 @@
             .mdlg-overlay { padding: 8px; }
             .mdlg-head { padding: 12px 20px 4px; }
             .mdlg-foot { padding: 8px 20px; }
+        }
+        /* A material's title, kind and date (spec 102 §2): ✎ by the viewer's title, the fields
+           (the viewer's in-place edit and the Attachment dialog share them), the file under a title. */
+        .mv-title-row { display: flex; align-items: flex-start; gap: 8px; }
+        .mv-title-row .mv-title { flex: 1; min-width: 0; }
+        .mv-edit {
+            flex: none; width: 28px; height: 28px; margin-top: 1px; display: inline-flex; align-items: center; justify-content: center;
+            padding: 0; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text-light); cursor: pointer;
+        }
+        .mv-edit[aria-disabled="true"] { opacity: 0.5; cursor: default; }
+        .mv-add-title { align-self: flex-start; font-size: 12.5px; padding: 0; }
+        .mv-fields dd.mv-file { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+        .mv-edit-form { display: flex; flex-direction: column; gap: 12px; }
+        .mv-edit-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+        .mv-keys { font-size: 12px; color: var(--text-faint); }
+        .mat-edit-fields { display: flex; flex-direction: column; gap: 10px; }
+        .mat-edit-row { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+        .mat-edit-label { font-size: 12.5px; color: var(--text-faint); }
+        .mat-edit-title, .mat-edit-date, .mat-edit-note {
+            box-sizing: border-box; width: 100%; min-height: 34px; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--r-md);
+            background: var(--surface); color: var(--text); font: inherit; font-size: 14px;
+        }
+        .mat-edit-title { font-size: 15px; }
+        .mat-edit-date { max-width: 220px; }
+        .mat-edit-note { resize: vertical; min-height: 64px; line-height: 1.4; }
+        .mat-edit-title:focus-visible, .mat-edit-date:focus-visible, .mat-edit-note:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .mat-edit-date.invalid { border-color: var(--danger); }
+        .mat-edit-hint { font-size: 12px; line-height: 1.4; color: var(--text-faint); text-wrap: pretty; }
+        .mat-edit-kind.sel-seg { align-self: flex-start; max-width: 100%; flex-wrap: wrap; overflow: hidden; }
+        .mat-edit-kind-opt { min-height: 30px; padding: 0 12px; border: none; border-radius: 0; font: inherit; font-size: 13px; cursor: pointer; }
+        .mdlg-file { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: var(--text-light); overflow-wrap: anywhere; }
+        @media (hover: hover) {
+            .mv-edit:not([aria-disabled="true"]):hover { background: var(--hover-bg); color: var(--text); }
+        }
+        @media (pointer: coarse) {
+            .mv-edit { width: 44px; height: 44px; }
+            .mat-edit-title, .mat-edit-date { min-height: 44px; }
+            .mat-edit-kind-opt { min-height: 44px; }
+            .mv-keys { display: none; }
+        }
+        @media (max-width: 640px) {
+            .mat-edit-date { max-width: none; }
+            .mat-edit-kind.sel-seg { align-self: stretch; }
+            .mat-edit-kind-opt { flex: 1 1 auto; }
+            .image-viewer-panel:not(.is-expanded) .mv-add-title,
+            .image-viewer-panel:not(.is-expanded) .mv-older-edit { display: none; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .mv-edit-form { gap: 8px; }
+            .mat-edit-fields { gap: 6px; }
         }
         /* The multi person picker (person-picker.ts MultiPersonPicker). */
         .person-picker--multi { display: flex; flex-direction: column; gap: 10px; }

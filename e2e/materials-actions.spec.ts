@@ -223,7 +223,7 @@ test.describe('Materials viewer', () => {
         await expect(page.locator('#attachment-overlay-img')).toHaveAttribute('src', /^blob:/);
         await expect(act(page, 'assign')).toHaveAttribute('aria-disabled', 'true');
         await expect(act(page, 'hide')).toHaveAttribute('aria-disabled', 'true');
-        await expect(panel(page).locator('.mv-off')).toHaveText('Assigning and hiding work while the research runs.');
+        await expect(panel(page).locator('.mv-off')).toHaveText('Linking, hiding and editing material outside the tree works while the research runs.');
         await act(page, 'assign').click({ force: true });
         await expect(dialog(page)).toHaveCount(0);
         // The × on a person's chip is off the same way: dimmed as Assign / Hide, a click sends nothing.

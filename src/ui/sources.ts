@@ -1322,7 +1322,7 @@ export const sourcesMethods = uiModule({
         grid.setAttribute('role', 'group');
         grid.setAttribute('aria-label', strings.sources.excerptPickPage);
         grid.innerHTML = pages.map((p, i) =>
-            `<button type="button" data-page="${i}" title="${esc(p.name)}" aria-label="${esc(p.name)}"><img src="${esc(p.dataUrl)}" alt=""></button>`).join('');
+            `<button type="button" data-page="${i}" title="${esc(p.title?.trim() || p.name)}" aria-label="${esc(p.title?.trim() || p.name)}"><img src="${esc(p.dataUrl)}" alt=""></button>`).join('');
         (anchor.closest('.excerpt-empty, .excerpt-item') ?? document.getElementById('source-excerpts'))?.appendChild(grid);
         grid.querySelectorAll<HTMLElement>('[data-page]').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -1394,8 +1394,8 @@ export const sourcesMethods = uiModule({
     },
 
     /** Image attachments of the context persons, to crop an excerpt from. */
-    excerptContextPages(): { id: string; dataUrl: string; name: string }[] {
-        const out: { id: string; dataUrl: string; name: string }[] = [];
+    excerptContextPages(): { id: string; dataUrl: string; name: string; title?: string }[] {
+        const out: { id: string; dataUrl: string; name: string; title?: string }[] = [];
         for (const pid of this.excerptContextPersonIds()) {
             for (const att of DataManager.personMedia(pid)) {
                 if (att.mimeType.startsWith('image/') && !att.originalOnly) out.push(att);

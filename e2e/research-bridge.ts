@@ -142,7 +142,7 @@ export interface FakeBridge {
     /** Reading a document (`/read*`, spec 013); its readings go into `/status.reads`. */
     read?: FakeRead;
     /**
-     * The family's material (`GET /material`, `POST /material/assign|hide`, `?thumb=`, spec 017).
+     * The family's material (`GET /material`, `POST /material/assign|hide|edit`, `?thumb=`, spec 017, 102).
      * Answered per `features`: `material.list`, `material.assign`, `material.thumb`.
      */
     material?: FakeMaterial;
@@ -1373,6 +1373,8 @@ export interface FakeMaterial {
     /** Every `POST /material/assign` and `/hide` body. */
     assigns: Record<string, unknown>[];
     hides: Record<string, unknown>[];
+    /** Every `POST /material/edit` body (only with the feature `material.edit`, spec 102 §2). */
+    edits?: Record<string, unknown>[];
     /** Every preview asked ("<sha>@<px>"). */
     thumbAsks: string[];
     /** The next this many requests to `/material*` answer 409 `material.busy`. */
@@ -1588,9 +1590,35 @@ function serveMaterial(b: FakeBridge, method: string, url: URL, postData: string
     }
 
     if (method !== 'POST' || !assignOn) return { status: 404, body: '' };
+    if (rest === '/material/edit' && !features.includes('material.edit')) return { status: 404, body: '' };
     let body: Record<string, unknown>;
     try { body = JSON.parse(postData ?? ''); } catch { return refusal(400, 'material.body'); }
     if (!body || typeof body !== 'object') return refusal(400, 'material.body');
+    if (rest === '/material/edit') {
+        (m.edits ??= []).push(body);
+        if ((m.busyTimes ?? 0) > 0) return busy();
+        if (m.readonly) return refusal(403, 'material.readonly');
+        const ids = body.ids;
+        const fields = (['title', 'kind', 'date'] as const).filter(k => body[k] !== undefined);
+        if (!Array.isArray(ids) || ids.length === 0 || ids.length > 500 || !ids.every(i => typeof i === 'string' && FILE_REF.test(i))
+            || fields.length === 0 || !fields.every(k => typeof body[k] === 'string')
+            || (body.kind !== undefined && !['', 'photo', 'document', 'record', 'other'].includes(body.kind as string))) {
+            return refusal(400, 'material.body');
+        }
+        const files = (ids as string[]).map(id => m.files.find(f => f.id === id));
+        const missing = (ids as string[]).find((_, i) => !files[i]);
+        if (missing) return refusal(404, 'material.file', { id: missing });
+        const was: Record<string, Record<string, string>> = {};
+        for (const f of files as FakeMaterialFile[]) {
+            was[f.id] = {};
+            for (const k of fields) {
+                was[f.id][k] = (f[k] as string | undefined) ?? '';
+                const v = body[k] as string;
+                if (v) (f as unknown as Record<string, string>)[k] = v; else delete f[k];
+            }
+        }
+        return { status: 200, body: { files: (files as FakeMaterialFile[]).map(shown), changed: files.length, was, people: peopleOf(files as FakeMaterialFile[], []), ...commitWrite(b) } };
+    }
     (rest === '/material/assign' ? m.assigns : m.hides).push(body);
     if ((m.busyTimes ?? 0) > 0) return busy();
     if (m.readonly) return refusal(403, 'material.readonly');

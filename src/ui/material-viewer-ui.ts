@@ -23,12 +23,14 @@ import { announcedResearchScheme } from '../research-device.js';
 import {
     MaterialItem, cachedMaterialList, materialFileItem, materialType, materialKindLabel, materialFolder,
     materialFromKey, fileExt, fileUrl, thumbUrl, materialSystemLink, getCachedThumb, researchMakesThumb,
-    batchFolderLabel, materialDate, isPortraitCandidate,
+    batchFolderLabel, materialDate, isPortraitCandidate, attachmentItem,
 } from '../materials.js';
+import { iconSvg } from '../icons.js';
+import { detailsKeys, materialDetailsEdit, materialDetailsFields, materialDetailsOf } from './material-details-ui.js';
 import { canEditPortrait } from './portrait-actions-ui.js';
 import { pdfBlobFromDataUrl } from '../attachments.js';
 import { formatBytesShort } from './originals-ui.js';
-import { openViewerList, closeImageViewer, viewerListOpen, redrawViewerList, relayoutViewer, ViewerSlots } from './image-viewer.js';
+import { openViewerList, closeImageViewer, viewerListOpen, viewerListIndex, redrawViewerList, relayoutViewer, ViewerSlots } from './image-viewer.js';
 import { MaterialOpenCtx, MaterialsContext, appendBreakable, materialItemSha, materialTileLetters, treeAttachmentsKey } from './materials-ui.js';
 import { uiModule } from './module.js';
 
@@ -50,6 +52,8 @@ interface ViewerState {
     expanded: boolean;
     /** The tree's attachments when it was last drawn (a commit that changed them redraws). */
     drawnAttachments: string;
+    /** The item whose title, kind and date are being edited (its key; spec 102 §2). */
+    editing: string | null;
 }
 
 let viewer: ViewerState | null = null;
@@ -220,10 +224,21 @@ export const materialViewerMethods = uiModule({
     openMaterialViewer(items: MaterialItem[], index: number, ctx: MaterialOpenCtx): void {
         if (!items[index]) return;
         this.closeMaterialsItemMenu();
-        const state: ViewerState = { items: [...items], ctx, urls: [], expanded: false, drawnAttachments: treeAttachmentsKey() };
+        const state: ViewerState = { items: [...items], ctx, urls: [], expanded: false, drawnAttachments: treeAttachmentsKey(), editing: null };
         viewer = state;
         openViewerList(
-            { count: state.items.length, index, show: (i, slots) => this.drawMaterialInViewer(i, slots) },
+            {
+                count: state.items.length, index,
+                show: (i, slots) => this.drawMaterialInViewer(i, slots),
+                // F2: the shown item's title, kind and date.
+                key: (e) => {
+                    if (e.key !== 'F2' || e.altKey || e.ctrlKey || e.metaKey || viewer !== state || state.editing) return false;
+                    const item = state.items[viewerListIndex()];
+                    if (!item || materialDetailsEdit(item, this.materialsContext()) !== 'on') return false;
+                    this.editMaterialInViewer(item.key);
+                    return true;
+                },
+            },
             () => {
                 releaseUrls(state);
                 if (viewer === state) viewer = null;
@@ -248,8 +263,9 @@ export const materialViewerMethods = uiModule({
     /** The item as it is now (the remembered list changed after an action; an attachment may be gone). */
     freshMaterialItem(item: MaterialItem): MaterialItem {
         let attachment = item.attachment;
-        if (attachment && !attachmentOwner(attachment.id)) attachment = undefined;
-        if (!item.file) return item;
+        // The tree's file as it is now (its title, kind or date may have changed).
+        if (attachment) attachment = attachmentOwner(attachment.id) ? DataManager.getMedia(attachment.id) ?? attachment : undefined;
+        if (!item.file) return attachment ? attachmentItem(attachment, item.persons[0] ?? null) : item;
         const ctx = this.materialsContext();
         const list = ctx ? cachedMaterialList(ctx.treeId) : null;
         const file = list?.files.find(f => f.id === item.file!.id);
@@ -264,8 +280,61 @@ export const materialViewerMethods = uiModule({
         st.items[index] = item;
         const ctx = this.materialsContext();
         slots.pos(strings.materials.viewerPos(index + 1, st.items.length, st.ctx.label ?? ''));
+        if (st.editing && st.editing !== item.key) st.editing = null;
         if (!slots.redraw) this.drawMaterialStage(item, ctx, slots, st);
         this.drawMaterialPanel(item, ctx, slots.panel, st);
+    },
+
+    /** The panel's title becomes its fields (✎, F2, "Add a title"). */
+    editMaterialInViewer(key: string): void {
+        const st = viewer;
+        if (!st) return;
+        st.editing = key;
+        st.expanded = true;
+        redrawViewerList();
+        const title = document.querySelector<HTMLInputElement>('#image-viewer-panel .mat-edit-title');
+        title?.focus();
+        title?.select();
+    },
+
+    /** Back from editing: the panel again, the focus on ✎. */
+    endMaterialEdit(): void {
+        const st = viewer;
+        if (!st) return;
+        st.editing = null;
+        redrawViewerList();
+        document.querySelector<HTMLElement>('#image-viewer-panel .mv-edit')?.focus();
+    },
+
+    /** The edit's fields with Save / Cancel (Enter, Esc; Esc does not close the viewer). */
+    materialEditForm(item: MaterialItem): HTMLElement {
+        const m = strings.materials;
+        const { note: _note, ...before } = materialDetailsOf(item);
+        const fields = materialDetailsFields(before);
+        const form = h('div', 'mv-edit-form');
+        form.appendChild(fields.root);
+        const bar = h('div', 'mv-edit-bar');
+        const save = h('button', 'mv-act is-primary', strings.buttons.save);
+        save.type = 'button';
+        save.dataset.action = 'saveDetails';
+        const cancel = h('button', 'mv-act', strings.buttons.cancel);
+        cancel.type = 'button';
+        cancel.dataset.action = 'cancelDetails';
+        bar.append(save, cancel, h('span', 'mv-keys', m.keysHint));
+        form.appendChild(bar);
+        const run = async () => {
+            if (save.getAttribute('aria-busy') === 'true') return;
+            const after = fields.read();
+            if (!after) return;
+            save.setAttribute('aria-busy', 'true');
+            const ok = await this.saveMaterialDetails(item, before, after);
+            save.removeAttribute('aria-busy');
+            if (ok && viewer?.editing === item.key) this.endMaterialEdit();
+        };
+        save.addEventListener('click', () => void run());
+        cancel.addEventListener('click', () => this.endMaterialEdit());
+        detailsKeys(form, () => void run(), () => this.endMaterialEdit());
+        return form;
     },
 
     /** The image, or the card for a file the browser does not show (§4.1, §8.1). */
@@ -360,16 +429,48 @@ export const materialViewerMethods = uiModule({
         const up = !!ctx?.caps.bridgeUp && !!ctx?.base;
         const sha = materialItemSha(item);
         panel.classList.toggle('is-expanded', st.expanded);
-        panel.setAttribute('aria-labelledby', 'mv-title');
+        const edit = materialDetailsEdit(item, ctx);
+        const editing = st.editing === item.key && edit === 'on';
+        if (editing) {
+            panel.removeAttribute('aria-labelledby');
+            panel.setAttribute('aria-label', item.title);
+        } else {
+            panel.removeAttribute('aria-label');
+            panel.setAttribute('aria-labelledby', 'mv-title');
+        }
 
-        // Title, the file's name (when it differs), the phone's one line.
+        // Title with ✎ (or its fields while editing), the phone's one line.
         const head = h('div', 'mv-head');
-        const title = h('h2', 'mv-title');
-        appendBreakable(title, item.title);
-        title.id = 'mv-title';
-        head.appendChild(title);
         const name = itemName(item);
-        if (name && name !== item.title) head.appendChild(h('div', 'mv-name', name));
+        if (editing) {
+            head.appendChild(this.materialEditForm(item));
+        } else {
+            const titleRow = h('div', 'mv-title-row');
+            const title = h('h2', 'mv-title');
+            appendBreakable(title, item.title);
+            title.id = 'mv-title';
+            titleRow.appendChild(title);
+            if (edit === 'on' || edit === 'off') {
+                const pen = h('button', 'mv-edit');
+                pen.type = 'button';
+                pen.innerHTML = iconSvg('pencil', { size: 14 });
+                pen.setAttribute('aria-label', m.editTitle);
+                pen.title = edit === 'off' ? m.actionsWhenRunning : m.editTitle;
+                if (edit === 'off') pen.setAttribute('aria-disabled', 'true');
+                const key = item.key;
+                pen.addEventListener('click', () => { if (edit === 'on') this.editMaterialInViewer(key); });
+                titleRow.appendChild(pen);
+            }
+            head.appendChild(titleRow);
+            if (!item.titled && edit === 'on') {
+                const add = h('button', 'link-button mv-add-title', m.addTitle);
+                add.type = 'button';
+                const key = item.key;
+                add.addEventListener('click', () => this.editMaterialInViewer(key));
+                head.appendChild(add);
+            }
+            if (edit === 'older') head.appendChild(h('p', 'mv-sentence is-muted mv-older-edit', m.olderEdit));
+        }
         const summary = [materialKindLabel(item), item.date ? materialDate(item.date) : '', item.origin === 'tree' ? '' : batchFolderLabel(item)].filter(Boolean).join(' · ');
         head.appendChild(h('div', 'mv-summary', summary));
         // The attachment the owner's portrait is cut from (spec 107 §4).
@@ -447,8 +548,15 @@ export const materialViewerMethods = uiModule({
             else dd.appendChild(value);
             fields.appendChild(dd);
         };
-        field(m.f.kind, materialKindLabel(item));
-        if (item.date) field(m.f.date, materialDate(item.date));
+        // The file's name under a title (spec 102 §2); kind and date are the fields while editing.
+        if (item.titled && name) {
+            field(m.f.file, name);
+            (fields.lastElementChild as HTMLElement).classList.add('mv-file');
+        }
+        if (!editing) {
+            field(m.f.kind, materialKindLabel(item));
+            if (item.date) field(m.f.date, materialDate(item.date));
+        }
         if (item.batch) {
             const batchId = item.batch.id;
             const link = h('button', 'link-button', item.batch.name);
@@ -560,7 +668,7 @@ export const materialViewerMethods = uiModule({
                 }, { danger: true, id: 'deleteFromTree' });
             }
         }
-        if (writes && !up) foot.appendChild(h('p', 'mv-off', m.actionsWhenRunning));
+        if ((writes || edit === 'off') && !up) foot.appendChild(h('p', 'mv-off', m.actionsWhenRunning));
         if (actions.childElementCount) foot.appendChild(actions);
 
         panel.append(head, body, h('div', 'mv-gap'), more);

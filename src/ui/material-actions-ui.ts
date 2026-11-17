@@ -33,7 +33,7 @@ const PICKER_ID = 'mdlg-assign-picker';
 const MAX_PEOPLE = 50;
 
 /** One open dialog over the materials (and over the viewer). */
-interface MaterialDialog {
+export interface MaterialDialog {
     box: HTMLElement;
     body: HTMLElement;
     foot: HTMLElement;
@@ -54,7 +54,7 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: s
     return el;
 }
 
-function button(label: string, cls: string, run: () => void): HTMLButtonElement {
+export function button(label: string, cls: string, run: () => void): HTMLButtonElement {
     const b = h('button', `mdlg-btn${cls ? ` ${cls}` : ''}`, label);
     b.type = 'button';
     // Disabled while the research answers: a click that still arrives (a script's, a double one) sends nothing.
@@ -69,7 +69,7 @@ const FOCUSABLE = 'button:not(:disabled), [href], input:not(:disabled), select, 
  * leaves keys alone while it is open), Esc and the backdrop close it, Tab
  * stays inside.
  */
-function materialDialog(opts: { title: string; sub?: string; modifier?: string; bubbleAt?: HTMLElement; onClose?: () => void }): MaterialDialog {
+export function materialDialog(opts: { title: string; sub?: string; modifier?: string; bubbleAt?: HTMLElement; onClose?: () => void }): MaterialDialog {
     openDialog?.close();
     const back = document.activeElement as HTMLElement | null;
     const overlay = h('div', `mdlg-overlay${opts.bubbleAt ? ' is-bubble' : ''}`);

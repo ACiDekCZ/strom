@@ -1481,6 +1481,23 @@ describe('person page 2 (§0, §3, §4)', () => {
         expect(PERSON_PAGE_CSS.match(/@media \(max-width: 640px\) \{[^@]*\.pp-gal-item--wide \{ grid-column: 1 \/ -1; \}/)).not.toBeNull();
     });
 
+    it("a titled file (spec 102 §2): the caption is its whole title, the kind and the year are the file's own", () => {
+        const d = fiskTree();
+        const long = 'Svatba před kostelem v Čapkově, celá rodina s hosty na schodech, květen 1924, vpravo strýc s houslemi';
+        setFiles(d, 'jan' as PersonId, [
+            { id: 'a1', name: 'scan-0042.png', mimeType: 'image/png', dataUrl: png(400, 300), sizeBytes: 50, note: 'z alba', title: long, kind: 'record', date: 'ABT 1931' },
+            { id: 'a2', name: 'scan-0043.png', mimeType: 'image/png', dataUrl: png(400, 300), sizeBytes: 50, note: 'Pohled na Čapkov' },
+        ]);
+        for (const html of [body(d), doc(d)]) {
+            const sec = html.match(/<section class="pp-sec pp-sec--materials" id="pp-sec-materials">.*?<\/section>/)?.[0] ?? '';
+            expect(sec).toContain(`<span class="pp-gal-cap">${long}</span>`);
+            expect(sec).toContain('<figure class="pp-gal-item pp-gal-item--record">');
+            expect(sec).toContain('1931');
+            // Without a title: as before (the note).
+            expect(sec).toContain('<span class="pp-gal-cap">Pohled na Čapkov</span>');
+        }
+    });
+
     it('the size line\'s image count is the attached images, each once, without the portrait (round 2, b)', () => {
         const d = withAttachments(2);
         d.persons['jan' as PersonId].photo = png(300, 400);

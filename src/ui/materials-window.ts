@@ -782,7 +782,7 @@ export const materialsWindowMethods = uiModule({
         }
         const sha = materialItemSha(item);
         const letters = `<span class="mw-type">${esc(materialTileLetters(item))}</span>`;
-        const lazy = !!sha && item.origin !== 'tree' && ['image', 'pdf'].includes(materialType(item.mime, item.title));
+        const lazy = !!sha && item.origin !== 'tree' && ['image', 'pdf'].includes(materialType(item.mime, item.name));
         if (!lazy || !sha) return `<span class="${cls}">${letters}${label}${check}</span>`;
         const ready = materialThumbs().urlOf(sha, THUMB_PX);
         const img = ready ? `<img src="${esc(ready)}" alt="">` : letters;
@@ -824,7 +824,10 @@ export const materialsWindowMethods = uiModule({
         return `<div class="mw-li sel-opt${selected ? ' is-selected' : ''}${item.hidden ? ' is-hidden' : ''}" role="gridcell" data-sel-form="row" tabindex="-1" data-key="${esc(item.key)}" aria-label="${esc(this.mwAriaLabel(item))}"${w.selecting ? ` aria-selected="${selected}"` : ''}>
             <span class="mw-li-check"><span class="mw-check" aria-hidden="true"></span></span>
             ${this.mwThumbHtml(item, group, true)}
-            <span class="mw-li-title" title="${esc(item.title)}">${esc(item.title)}</span>
+            <span class="mw-li-name">
+                <span class="mw-li-title" title="${esc(item.title)}">${esc(item.title)}</span>
+                ${item.titled ? `<span class="mw-li-file" title="${esc(item.name)}">${esc(item.name)}</span>` : `<span class="mw-li-file is-untitled">${esc(m.untitled)}</span>`}
+            </span>
             <span class="mw-li-kind" title="${esc(kind)}">${esc(kind)}</span>
             <span class="mw-li-persons${persons.none ? ' is-none' : ''}">${esc(persons.text)}</span>
             <span class="mw-li-size">${item.bytes ? esc(formatBytesShort(item.bytes)) : ''}</span>

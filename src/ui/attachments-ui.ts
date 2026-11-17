@@ -13,7 +13,8 @@ import { TreeManager } from '../tree-manager.js';
 import { Attachment, PersonId } from '../types.js';
 import { strings } from '../strings.js';
 import { dataUrlByteSize } from '../photo.js';
-import { isPortraitCandidate } from '../materials.js';
+import { MaterialCaps, attachmentItem, isPortraitCandidate, materialDate, personMaterials, cachedMaterialList } from '../materials.js';
+import { researchPersonRef } from '../research-link.js';
 import { canEditPortrait } from './portrait-actions-ui.js';
 import { ORIGINAL_ONLY_DATA_URL } from '../validation.js';
 import {
@@ -73,6 +74,31 @@ function isImage(att: Attachment): boolean {
  */
 
 /** Convert a data URL to a Blob (for opening PDFs via an object URL). */
+/** No research: the menu offers the tree's own actions only. */
+const NO_CAPS: MaterialCaps = { list: false, assign: false, thumb: false, bridgeUp: false, links: false, edit: false, uses: false, sort: false, mediaApp: false };
+
+/** The row's name: the title (the whole of it on hover), else the file's name (spec 102 §2). */
+function attachmentNameHtml(att: Attachment, esc: (t: string) => string): string {
+    const title = att.title?.trim();
+    return title ? `<span class="attachment-name" title="${esc(title)}">${esc(title)}</span>` : `<span class="attachment-name">${esc(att.name)}</span>`;
+}
+
+/** The row's line under the name: file · kind · date · size (the file only under a title). */
+function attachmentMeta(att: Attachment, size: string): string {
+    return [
+        att.title?.trim() ? att.name : '',
+        att.kind ? strings.materials.kind[att.kind] : '',
+        att.date ? materialDate(att.date) : '',
+        size,
+    ].filter(Boolean).join(' · ');
+}
+
+/** The row's ⋯ (not on a phone, whose row keeps its own buttons). */
+function attachmentMoreHtml(att: Attachment, esc: (t: string) => string): string {
+    const label = strings.materials.moreActions;
+    return `<button type="button" class="attachment-more" aria-haspopup="menu" aria-label="${esc(label)}" title="${esc(label)}" data-attachment-id="${esc(att.id)}">⋯</button>`;
+}
+
 export const attachmentsMethods = uiModule({
     /** Render the attachments list + total for the currently edited person. */
     renderAttachmentsList(): void {
@@ -102,9 +128,10 @@ export const attachmentsMethods = uiModule({
                 const thumb = isImage(att)
                     ? `<span class="attachment-thumb" data-attachment-id="${esc(att.id)}"><img src="${esc(att.dataUrl)}" alt=""></span>`
                     : `<span class="attachment-thumb" title="PDF" data-attachment-id="${esc(att.id)}">${iconSvg('file', { size: 18 })}</span>`;
+                // The note: a field on a phone's row; elsewhere its text (the Attachment dialog changes it).
                 const noteField = locked
                     ? (att.note ? `<span class="attachment-size">${esc(att.note)}</span>` : '')
-                    : `<input type="text" class="attachment-note-input" value="${esc(att.note ?? '')}"
+                    : `${att.note ? `<span class="attachment-note-text">${esc(att.note)}</span>` : ''}<input type="text" class="attachment-note-input" value="${esc(att.note ?? '')}"
                            data-i18n-placeholder="attachments.notePlaceholder"
                            data-attachment-id="${esc(att.id)}">`;
                 const isSource = att.id === sourceId;
@@ -123,15 +150,16 @@ export const attachmentsMethods = uiModule({
                     { sha: att.original?.sha256, bytes: att.original?.bytes, personId: this.currentId ?? undefined, previewBytes: att.sizeBytes },
                     att.original?.mimeType ?? att.mimeType, `data-attachment-id="${esc(att.id)}"`);
                 return `
-                    <div class="attachment-row">
+                    <div class="attachment-row has-more">
                         ${thumb}
                         <div class="attachment-main">
-                            <span class="attachment-name-row"><span class="attachment-name">${esc(att.name)}</span>${tag}</span>
-                            <span class="attachment-size">${esc(formatBytes(att.sizeBytes))}</span>
+                            <span class="attachment-name-row">${attachmentNameHtml(att, esc)}${tag}</span>
+                            <span class="attachment-size">${esc(attachmentMeta(att, formatBytes(att.sizeBytes)))}</span>
                             ${origLine}
                             ${noteField}
                         </div>
                         ${fullLink}
+                        ${attachmentMoreHtml(att, esc)}
                         ${del}
                     </div>`;
             }).join('');
@@ -154,6 +182,12 @@ export const attachmentsMethods = uiModule({
             });
             container.querySelectorAll<HTMLElement>('.media-full-quality[data-attachment-id]').forEach(el => {
                 el.addEventListener('click', () => this.openAttachmentFullQuality(el.dataset.attachmentId ?? ''));
+            });
+            container.querySelectorAll<HTMLElement>('.attachment-more[data-attachment-id]').forEach(el => {
+                el.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.showAttachmentMenu(el.dataset.attachmentId ?? '', el);
+                });
             });
         }
 
@@ -265,6 +299,22 @@ export const attachmentsMethods = uiModule({
             this.noteOriginalOutcome(outcome, file.size, { personId });
             this.renderAttachmentsList();
         }
+    },
+
+    /** The attachment row's ⋯ menu: the item as the materials know it (with the research's file when there is one). */
+    showAttachmentMenu(attachmentId: string, anchor: HTMLElement): void {
+        if (!this.currentId) return;
+        const person = DataManager.getPerson(this.currentId);
+        const att = person ? DataManager.personMedia(person.id).find(a => a.id === attachmentId) : undefined;
+        if (!person || !att) return;
+        const ctx = this.materialsContext();
+        const list = ctx ? cachedMaterialList(ctx.treeId) : null;
+        const refn = researchPersonRef(person.refn);
+        const item = (list ? personMaterials({ refn: person.refn, attachments: DataManager.personMedia(person.id) }, list) : [])
+            .find(i => i.attachment?.id === attachmentId) ?? attachmentItem(att, refn);
+        this.showMaterialItemMenu(item, anchor, ctx?.caps ?? NO_CAPS, {
+            open: () => (att.originalOnly ? this.openAttachmentFullQuality(att.id) : this.previewAttachment(att.id)),
+        });
     },
 
     /** Image → fullscreen overlay; PDF → new tab via an object URL. */
@@ -398,17 +448,18 @@ export const attachmentsMethods = uiModule({
                     </div>`;
         const note = locked
             ? (att.note ? `<span class="attachment-size">${esc(att.note)}</span>` : '')
-            : `<input type="text" class="attachment-note-input" value="${esc(att.note ?? '')}" placeholder="${esc(strings.attachments.notePlaceholder)}" data-attachment-id="${esc(att.id)}">`;
+            : `${att.note ? `<span class="attachment-note-text">${esc(att.note)}</span>` : ''}<input type="text" class="attachment-note-input" value="${esc(att.note ?? '')}" placeholder="${esc(strings.attachments.notePlaceholder)}" data-attachment-id="${esc(att.id)}">`;
         return `
-                    <div class="attachment-row is-original-only">
+                    <div class="attachment-row is-original-only has-more">
                         <span class="attachment-type-tile" aria-hidden="true">${esc(letters)}</span>
                         <div class="attachment-main">
-                            <span class="attachment-name">${esc(att.name)}</span>
-                            <span class="attachment-size">${esc(meta)}</span>
+                            ${attachmentNameHtml(att, esc)}
+                            <span class="attachment-size">${esc(attachmentMeta(att, meta))}</span>
                             ${state}
                             ${note}
                         </div>
                         ${link}
+                        ${attachmentMoreHtml(att, esc)}
                         ${del}
                     </div>`;
     },

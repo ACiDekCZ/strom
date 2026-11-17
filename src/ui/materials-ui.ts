@@ -18,7 +18,7 @@
 import { researchActionLabel, researchMarkFlags } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
-import { Person, PersonId, TreeId } from '../types.js';
+import { Attachment, Person, PersonId, TreeId } from '../types.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { setMaterialsCountProvider } from '../card-signals.js';
 import { personMediaIndex } from '../media.js';
@@ -38,6 +38,7 @@ import { materialThumbs } from '../material-thumbs.js';
 import { formatBytesShort } from './originals-ui.js';
 import { onComputer } from './research-ui.js';
 import { openImageViewer } from './image-viewer.js';
+import { materialDetailsEdit } from './material-details-ui.js';
 import { uiModule } from './module.js';
 import { canEditPortrait } from './portrait-actions-ui.js';
 
@@ -229,7 +230,7 @@ const ACTION_LABEL: Record<MaterialActionId, () => string> = {
     download: () => strings.materials.download,
     useAsPortrait: () => strings.materials.useAsPortrait,
     deleteFromTree: () => strings.materials.deleteFromTree,
-    edit: () => strings.materials.edit,
+    edit: () => strings.materials.titleAndData,
 };
 
 /** Where the item's ⋯ menu draws a line above (the research's writes, then the rest). */
@@ -239,6 +240,9 @@ const DIVIDER_BEFORE: MaterialActionId[] = ['openSystem', 'deleteFromTree'];
 
 /** The person's items as drawn in the section (by key), for the ⋯ menu and opening. */
 let sectionItems = new Map<string, MaterialItem>();
+/** An attachment with what the rows show of it (its title, kind, date and note; spec 102 §2). */
+const attachmentKey = (a: Attachment): string => [a.id, a.title ?? '', a.kind ?? '', a.date ?? '', a.note ?? ''].join('\u0001');
+
 /** Which attachments the tree holds and on whom: a change redraws what shows them (window, section, viewer). */
 export function treeAttachmentsKey(): string {
     const parts: string[] = [];
@@ -246,14 +250,14 @@ export function treeAttachmentsKey(): string {
     for (const p of DataManager.getAllPersons()) {
         const atts = index.get(p.id);
         if (!atts?.length) continue;
-        parts.push(`${p.id}|${p.refn ?? ''}|${atts.map(a => a.id).join(',')}`);
+        parts.push(`${p.id}|${p.refn ?? ''}|${atts.map(attachmentKey).join(',')}`);
     }
     return parts.join(';');
 }
 
 /** The attachments the open person's section and list were drawn with (ids). */
 let sectionAttachments = '';
-const personAttachmentIds = (p: Person): string => DataManager.personMedia(p.id).map(a => a.id).join(',');
+const personAttachmentIds = (p: Person): string => DataManager.personMedia(p.id).map(attachmentKey).join(',');
 /** People whose `?person=` is being asked now (REFN). */
 const personLoading = new Set<string>();
 /** Trees whose whole list was asked in this page (once per page; later answers come per person). */
@@ -700,14 +704,26 @@ export const materialsMethods = uiModule({
         const item = sectionItems.get(key);
         const ctx = this.materialsContext();
         if (!item || !ctx) return;
+        this.showMaterialItemMenu(item, anchor, ctx.caps);
+    },
+
+    /**
+     * An item's ⋯ menu (the section's rows, the person card's attachment rows,
+     * spec 102 §2). `caps`: the research's (none without one); `open`: how the
+     * row opens its item (else the section's way).
+     */
+    showMaterialItemMenu(item: MaterialItem, anchor: HTMLElement, caps: MaterialCaps, opts: { open?: () => void } = {}): void {
+        const ctx = this.materialsContext();
         this.closeMaterialsItemMenu();
         const person = this.currentId ? DataManager.getPerson(this.currentId) : null;
         const refn = researchPersonRef(person?.refn);
         const locked = !!this.currentId && DataManager.isPersonLocked(this.currentId);
-        const actions = materialActions(item, ctx.caps, { person: refn, where: 'menu' })
+        const actions = materialActions(item, caps, { person: refn, where: 'menu' })
             // Nothing to download from an attachment that is only its original; a locked person keeps its files.
             .filter(a => !(a.id === 'download' && (!item.attachment?.dataUrl || item.attachment.originalOnly)))
             .filter(a => !(a.id === 'deleteFromTree' && locked))
+            // Title and details: where they can change here (spec 102 §2).
+            .filter(a => !(a.id === 'edit' && !['on', 'off'].includes(materialDetailsEdit(item, ctx) ?? '')))
             // Use as portrait: a person who can change, and not the portrait's source already (spec 107 §4).
             .filter(a => !(a.id === 'useAsPortrait' && (!this.currentId || !canEditPortrait(this.currentId)
                 || (!!person && this.portraitSourceAttachmentShown(person) === item.attachment?.id))));
@@ -737,7 +753,8 @@ export const materialsMethods = uiModule({
             const action = actions.find(a => a.id === btn.dataset.action);
             this.closeMaterialsItemMenu();
             anchor.focus();
-            if (action) this.runMaterialItemAction(item, action, refn);
+            if (action?.id === 'open' && opts.open) opts.open();
+            else if (action) this.runMaterialItemAction(item, action, refn);
         }));
         menuKeyHandler = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
@@ -797,6 +814,7 @@ export const materialsMethods = uiModule({
             }
             case 'useAsPortrait': if (item.attachment && this.currentId) void this.useAttachmentAsPortrait(this.currentId, item.attachment.id); break;
             case 'deleteFromTree': if (item.attachment) void this.deleteAttachment(item.attachment.id); break;
+            case 'edit': this.openMaterialDetailsDialog(item); break;
             default: this.materialAction(action.id, [item], { person: refn, where: 'section' });
         }
     },

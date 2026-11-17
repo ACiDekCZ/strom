@@ -632,7 +632,7 @@ interface ActionRow {
     /** Offered for the item at all. */
     when: (item: MaterialItem, caps: MaterialCaps, ctx: MaterialActionContext) => boolean;
     /** Writes to the research: offered but disabled while the bridge does not answer. */
-    writes?: boolean;
+    writes?: boolean | ((item: MaterialItem) => boolean);
     extra?: (item: MaterialItem, ctx: MaterialActionContext) => Partial<MaterialAction>;
 }
 
@@ -644,6 +644,8 @@ const inArchive = (item: MaterialItem) => item.origin !== 'tree' && !!item.file;
  */
 const ACTION_ROWS: ActionRow[] = [
     { id: 'open', when: () => true },
+    // Title, kind and date (spec 102 §2): the tree's file in the tree, material outside it in the research.
+    { id: 'edit', writes: (i) => !i.attachment, when: (i, c) => (i.attachment ? true : inArchive(i) && c.edit) },
     { id: 'assign', writes: true, when: (i, c) => inArchive(i) && c.assign },
     {
         id: 'removeFromPerson', writes: true,
@@ -671,7 +673,8 @@ export function materialActions(item: MaterialItem, caps: MaterialCaps, ctx: Mat
     for (const row of ACTION_ROWS) {
         if (!row.when(item, caps, ctx)) continue;
         const action: MaterialAction = { id: row.id, ...(row.extra?.(item, ctx) ?? {}) };
-        if (row.writes && !caps.bridgeUp) action.disabled = 'bridgeDown';
+        const writes = typeof row.writes === 'function' ? row.writes(item) : row.writes;
+        if (writes && !caps.bridgeUp) action.disabled = 'bridgeDown';
         out.push(action);
     }
     return out;

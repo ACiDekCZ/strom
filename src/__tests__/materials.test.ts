@@ -271,13 +271,13 @@ describe('materialActions', () => {
         expect(remove).toEqual({ id: 'removeFromPerson', viaBatch: true });
     });
 
-    it('tree item: open, download, use as portrait, delete', () => {
-        expect(ids(materialActions(by['a:t'], caps(), { person: 'P0001' }))).toEqual(['open', 'download', 'useAsPortrait', 'deleteFromTree']);
+    it('tree item: open, title and details, download, use as portrait, delete', () => {
+        expect(ids(materialActions(by['a:t'], caps(), { person: 'P0001' }))).toEqual(['open', 'edit', 'download', 'useAsPortrait', 'deleteFromTree']);
     });
 
     it('use as portrait only for a picture the tree shows (not a PDF, not only its original)', () => {
         const pdf = personMaterials({ attachments: [att('p', { mimeType: 'application/pdf', name: 'p.pdf' })] })[0];
-        expect(ids(materialActions(pdf, caps()))).toEqual(['open', 'download', 'deleteFromTree']);
+        expect(ids(materialActions(pdf, caps()))).toEqual(['open', 'edit', 'download', 'deleteFromTree']);
         const only = personMaterials({ attachments: [att('o', { originalOnly: true, dataUrl: '' })] })[0];
         expect(ids(materialActions(only, caps()))).not.toContain('useAsPortrait');
     });
@@ -288,6 +288,15 @@ describe('materialActions', () => {
         const down = materialActions(by['m:I0001'], caps({ bridgeUp: false }), { person: 'P0001' });
         expect(down.filter(a => a.disabled === 'bridgeDown').map(a => a.id)).toEqual(['assign', 'removeFromPerson', 'hide']);
         expect(down.find(a => a.id === 'open')?.disabled).toBeUndefined();
+    });
+
+    it("title and details outside the tree: only with material.edit, disabled while the bridge is down; the tree's file always", () => {
+        expect(ids(materialActions(by['m:I0001'], caps(), { person: 'P0001' }))).not.toContain('edit');
+        expect(ids(materialActions(by['m:I0001'], caps({ edit: true }), { person: 'P0001' }))).toContain('edit');
+        const down = materialActions(by['m:I0001'], caps({ edit: true, bridgeUp: false }), { person: 'P0001' });
+        expect(down.find(a => a.id === 'edit')?.disabled).toBe('bridgeDown');
+        const tree = materialActions(by['a:t'], caps({ bridgeUp: false }), { person: 'P0001' });
+        expect(tree.find(a => a.id === 'edit')?.disabled).toBeUndefined();
     });
 });
 

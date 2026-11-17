@@ -15,8 +15,14 @@ test('attachments: add an image, it survives a reload, then delete it', { tag: '
     await modal.locator('#input-attachment').setInputFiles('e2e/fixtures/avatar.png');
     const list = modal.locator('#attachments-list');
     await expect(list.locator('.attachment-row')).toHaveCount(1);
-    await list.locator('.attachment-note-input').fill('Birth certificate');
-    await list.locator('.attachment-note-input').blur();
+    // On a wide screen the row's ⋯ holds the actions; the note is edited in the Attachment dialog (spec 102 §2).
+    await list.locator('.attachment-more').click();
+    await page.locator('.materials-item-menu-row[data-action="edit"]').click();
+    const details = page.locator('.mdlg-overlay .mdlg');
+    await details.locator('.mat-edit-note').fill('Birth certificate');
+    await details.getByRole('button', { name: 'Save' }).click();
+    await expect(details).toHaveCount(0);
+    await expect(list.locator('.attachment-note-text')).toHaveText('Birth certificate');
     await expect(modal.locator('#attachments-total')).toContainText(/^This person: 1 attachment \d/);
     await modal.getByRole('button', { name: 'Save' }).click();
     await expect(modal).toBeHidden();
@@ -27,10 +33,11 @@ test('attachments: add an image, it survives a reload, then delete it', { tag: '
     await expect(page.locator('.toolbar')).toBeVisible();
     await cardAction(page, 'Jan', 'edit');
     await expect(modal.locator('#attachments-list .attachment-row')).toHaveCount(1);
-    await expect(modal.locator('.attachment-note-input')).toHaveValue('Birth certificate');
+    await expect(modal.locator('.attachment-note-text')).toHaveText('Birth certificate');
 
     // Delete it — the confirmation says which file.
-    await modal.locator('.attachment-actions .attachment-delete-btn').click();
+    await modal.locator('.attachment-more').click();
+    await page.locator('.materials-item-menu-row[data-action="deleteFromTree"]').click();
     const confirm = page.locator('#confirmation-modal');
     await expect(confirm).toBeVisible();
     await expect(confirm).toHaveClass(/active/);
