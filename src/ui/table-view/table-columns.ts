@@ -28,6 +28,7 @@ import { givenNameOf } from '../../shared-with-line.js';
 import {
     researchCell, sourceImageCell, sourceResearchIdCell, unionResearchCell, unionResearchIdCell, type ResearchColumnId, type UnionResearchColumnId,
 } from './table-research.js';
+import { addedTime } from '../../person-lists-data.js';
 import { dateNumber, type CellName, type CellValue, type EventRow, type PersonRow, type RowType, type SourceRow, type TableContext, type TableModel, type TableRow, type UnionRow } from './table-model.js';
 
 export type ColumnKind = 'text' | 'date' | 'age' | 'number' | 'percent' | 'pill' | 'link' | 'thumb';
@@ -112,6 +113,23 @@ function textCell(value: string | null | undefined, computed = false): CellValue
 function numberCell(n: number | null | undefined, computed = true, text?: string): CellValue {
     if (n === null || n === undefined || !Number.isFinite(n)) return emptyCell(computed);
     return { ...EMPTY, text: text ?? String(n), sortKey: n, empty: false, computed };
+}
+
+/**
+ * The Added cell (spec 084 §8): the day the person came into the tree in the
+ * UI language, sorted by the moment (within a day by the time); without a
+ * recorded date "earlier" in italics, an empty cell (last in both directions,
+ * "Empty" in a filter).
+ */
+export function addedCell(ctx: TableContext, addedAt: string | undefined): CellValue {
+    const t = addedTime(addedAt);
+    if (!Number.isFinite(t)) return { ...emptyCell(), text: strings.table.earlier, word: true };
+    const d = new Date(t);
+    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const cell = dateCell(ctx, iso);
+    const midnight = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    // The time of day as a fraction below one: the year a date filter reads (sortKey / 10000) stays the same.
+    return typeof cell.sortKey === 'number' ? { ...cell, sortKey: cell.sortKey + Math.min(0.999, (t - midnight) / 86_400_000) } : cell;
 }
 
 /** A qualifier as the short word before a date (§5.3: "abt.", "bef.", "aft."). */
@@ -498,6 +516,8 @@ export const PERSON_COLUMNS: readonly ColumnDef[] = cols('persons', [
             return textCell(rod ? labels.get(rod) : '', true);
         },
     },
+    // When the person came into the tree (spec 084 §8); offered, not shown by default.
+    { id: 'added', group: 'person', label: 'added', width: 130, kind: 'date', get: (c, r) => addedCell(c, asPerson(r).addedAt) },
     // Birth and baptism
     {
         id: 'bDate', group: 'birth', label: 'bDate', width: 140, kind: 'date', get: (c, r) => {

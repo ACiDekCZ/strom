@@ -9196,7 +9196,7 @@ const stringsEN = {
         ruleSelf: 'person of the rule',
         earlier: 'earlier',
         empty: 'The tree has no list of people yet.',
-        emptySub: 'A list keeps chosen people under one name – for the Table, the slideshow and export. It is made from a family line, ancestors, descendants, a research line or by hand.',
+        emptySub: 'A list keeps chosen people under one name – for the Table and export. It is made from a family line, ancestors, descendants, a research line or by hand.',
         emptyList: 'The list has no people yet.',
         addedNone: (v: string) => `Nothing yet – the date added is recorded from version ${v}.`,
         large: (a: number, b: number) => `The first ${a} of ${b} people.`,
@@ -9300,6 +9300,8 @@ const stringsEN = {
         yes: 'yes',
         no: 'no',
         kinSelf: 'home person',
+        /** The Added column without a date (spec 084 §8): the person came before the date was recorded. */
+        earlier: 'earlier',
         evidence: { full: 'full', partial: 'partial', none: 'none' },
         group: {
             person: 'Person', birth: 'Birth and baptism', parents: 'Parents', union: 'Unions', divorce: 'Divorce',
@@ -9427,7 +9429,7 @@ const stringsEN = {
             },
         },
         col: {
-            num: '#', done: 'Done',
+            num: '#', done: 'Done', added: 'Added',
             name: 'Full name', firstName: 'First name', surname: 'Surname', birthSurname: 'Birth surname', marriedSurname: 'Married surname', titles: 'Titles',
             gender: 'Sex', living: 'Living', researchId: 'Research ID', refn: 'Ref. number', gen: 'Generation', kin: 'Relationship to home person', rod: 'Family line',
             bDate: 'Birth date', bPlace: 'Birthplace', bAddr: 'Birth address', bapDate: 'Baptism date', bapPlace: 'Baptism place',
@@ -18636,7 +18638,7 @@ const stringsCZ: StringsType = {
         ruleSelf: 'osoba pravidla',
         earlier: 'dříve',
         empty: 'Strom zatím nemá žádný seznam osob.',
-        emptySub: 'Seznam drží vybrané osoby pod jedním jménem – pro Tabulku, průlet stromem i export. Vzniká podle rodu, předků, potomků, linie nebo ručně.',
+        emptySub: 'Seznam drží vybrané osoby pod jedním jménem – pro Tabulku i export. Vzniká podle rodu, předků, potomků, linie nebo ručně.',
         emptyList: 'Seznam zatím nemá osoby.',
         addedNone: (v: string) => `Zatím nic – údaj o přidání se zapisuje od verze ${v}.`,
         large: (a: number, b: number) => `Ukázáno prvních ${a} z ${b} osob.`,
@@ -18737,6 +18739,7 @@ const stringsCZ: StringsType = {
         yes: 'ano',
         no: 'ne',
         kinSelf: 'hlavní osoba',
+        earlier: 'dříve',
         evidence: { full: 'úplné', partial: 'částečné', none: 'žádné' },
         group: {
             person: 'Osoba', birth: 'Narození a křest', parents: 'Rodiče', union: 'Svazky', divorce: 'Rozvod',
@@ -18866,7 +18869,7 @@ const stringsCZ: StringsType = {
             },
         },
         col: {
-            num: '#', done: 'Hotovo',
+            num: '#', done: 'Hotovo', added: 'Přidáno',
             name: 'Celé jméno', firstName: 'Křestní jméno', surname: 'Příjmení', birthSurname: 'Rodné příjmení', marriedSurname: 'Příjmení po sňatku', titles: 'Tituly',
             gender: 'Pohlaví', living: 'Žijící', researchId: 'ID výzkumu', refn: 'Ref. číslo', gen: 'Generace', kin: 'Vztah k hlavní osobě', rod: 'Rod',
             bDate: 'Datum narození', bPlace: 'Místo narození', bAddr: 'Adresa narození', bapDate: 'Datum křtu', bapPlace: 'Místo křtu',
@@ -27988,7 +27991,7 @@ const stringsDE: StringsType = {
         ruleSelf: 'Person der Regel',
         earlier: 'früher',
         empty: 'Der Stammbaum hat noch keine Personenliste.',
-        emptySub: 'Eine Liste hält ausgewählte Personen unter einem Namen – für Tabelle, Diashow und Export. Grundlage ist ein Stamm, Vorfahren, Nachkommen, eine Forschungslinie – oder die Auswahl von Hand.',
+        emptySub: 'Eine Liste hält ausgewählte Personen unter einem Namen – für Tabelle und Export. Grundlage ist ein Stamm, Vorfahren, Nachkommen, eine Forschungslinie – oder die Auswahl von Hand.',
         emptyList: 'Die Liste hat noch keine Personen.',
         addedNone: (v: string) => `Noch nichts – das Hinzufügedatum wird seit Version ${v} erfasst.`,
         large: (a: number, b: number) => `Die ersten ${a} von ${b} Personen.`,
@@ -28089,6 +28092,7 @@ const stringsDE: StringsType = {
         yes: 'ja',
         no: 'nein',
         kinSelf: 'Hauptperson',
+        earlier: 'früher',
         evidence: { full: 'vollständig', partial: 'teilweise', none: 'keine' },
         group: {
             person: 'Person', birth: 'Geburt und Taufe', parents: 'Eltern', union: 'Verbindungen', divorce: 'Scheidung',
@@ -28218,7 +28222,7 @@ const stringsDE: StringsType = {
             },
         },
         col: {
-            num: '#', done: 'Erledigt',
+            num: '#', done: 'Erledigt', added: 'Hinzugefügt',
             name: 'Vollständiger Name', firstName: 'Vorname', surname: 'Nachname', birthSurname: 'Geburtsname', marriedSurname: 'Ehename', titles: 'Titel',
             gender: 'Geschlecht', living: 'Lebend', researchId: 'Forschungs-ID', refn: 'Ref.-Nummer', gen: 'Generation', kin: 'Beziehung zur Hauptperson', rod: 'Stamm',
             bDate: 'Geburtsdatum', bPlace: 'Geburtsort', bAddr: 'Geburtsadresse', bapDate: 'Taufdatum', bapPlace: 'Taufort',

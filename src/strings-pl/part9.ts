@@ -60,7 +60,7 @@ export const plPart9: Pick<StringsType, 'lists'> = {
         ruleSelf: 'osoba reguły',
         earlier: 'wcześniej',
         empty: 'Drzewo nie ma jeszcze żadnej listy osób.',
-        emptySub: 'Lista trzyma wybrane osoby pod jedną nazwą – dla tabeli, przelotu i eksportu. Powstaje według rodu, przodków, potomków, linii badania lub ręcznie.',
+        emptySub: 'Lista trzyma wybrane osoby pod jedną nazwą – dla tabeli i eksportu. Powstaje według rodu, przodków, potomków, linii badania lub ręcznie.',
         emptyList: 'Lista nie ma jeszcze osób.',
         addedNone: (v: string) => `Na razie nic – data dodania jest zapisywana od wersji ${v}.`,
         large: (a: number, b: number) => `Pokazano pierwsze ${a} z ${b} osób.`,

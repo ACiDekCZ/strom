@@ -76,6 +76,8 @@ export interface CellValue {
     mark?: CellSeverity;
     /** A faint value: no findings ("0"), the checks still running ("…"). */
     ghost?: boolean;
+    /** A word in place of a missing value, shown faint in italics (spec 084 §8: Added "earlier"). */
+    word?: boolean;
     /** A reliability step for pill columns. */
     pill?: string;
     /** A percentage for completeness columns (0–100). */

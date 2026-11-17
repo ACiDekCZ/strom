@@ -1189,6 +1189,7 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         yes: 'tak',
         no: 'nie',
         kinSelf: 'osoba główna',
+        earlier: 'wcześniej',
         evidence: { full: 'pełne', partial: 'częściowe', none: 'brak' },
         group: {
             person: 'Osoba', birth: 'Urodzenie i chrzest', parents: 'Rodzice', union: 'Związki', divorce: 'Rozwód',
@@ -1318,7 +1319,7 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
             },
         },
         col: {
-            num: '#', done: 'Gotowe',
+            num: '#', done: 'Gotowe', added: 'Dodano',
             name: 'Imię i nazwisko', firstName: 'Imię', surname: 'Nazwisko', birthSurname: 'Nazwisko rodowe', marriedSurname: 'Nazwisko po ślubie', titles: 'Tytuły',
             gender: 'Płeć', living: 'Żyjący', researchId: 'ID badania', refn: 'Nr ref.', gen: 'Pokolenie', kin: 'Pokrewieństwo z osobą główną', rod: 'Ród',
             bDate: 'Data urodzenia', bPlace: 'Miejsce urodzenia', bAddr: 'Adres urodzenia', bapDate: 'Data chrztu', bapPlace: 'Miejsce chrztu',

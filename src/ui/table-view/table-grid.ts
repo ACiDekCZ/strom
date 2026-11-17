@@ -352,6 +352,7 @@ export function cellClasses(value: CellValue, col: ColumnDef, issue: CellSeverit
     if (value.uncertain) cls += ' tv-cell--uncertain';
     if (value.subst) cls += ' tv-cell--subst';
     if (value.ghost) cls += ' tv-cell--ghost';
+    if (value.word) cls += ' tv-cell--word';
     if (issue) cls += ` tv-cell--${issue} has-issue`;
     if (conflict) cls += ' has-conf';
     return cls;

@@ -10698,9 +10698,12 @@
         .tv-cell--subst .tv-cell-text { font-style: italic; }
         /* §5: a substitute's label, a date's qualifier word, a count in place of a union value. */
         .tv-cell--aggregate { color: var(--text-faint); font-style: italic; }
+        /* spec 084 §8: a word in place of a missing value (Added: "earlier"). */
+        .tv-cell--word { color: var(--text-faint); font-style: italic; }
         /* A slanted text's last letter leans past its box, clipped where the box clips its "…" (T54 H14: "living",
            "2 unions" cut): 3 px more room on the right for its ink, the text and its ellipsis where they were. */
         .tv-body .tv-cell--na .tv-cell-text, .tv-body .tv-cell--aggregate .tv-cell-text, .tv-body .tv-cell--subst .tv-cell-text,
+        .tv-body .tv-cell--word .tv-cell-text,
         .tv-body .tv-rpart--i { padding-inline-end: 3px; margin-inline-end: -3px; }
         .tv-subst {
             flex: none; display: inline-flex; align-items: center; height: 17px; padding: 0 4px; margin-right: 5px;

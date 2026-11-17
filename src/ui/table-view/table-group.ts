@@ -235,7 +235,7 @@ function valuesOf(env: GroupEnv, type: RowType, by: TableGroupKey, row: TableRow
 
 /** The label of the group of rows without the value. */
 function noValueLabel(by: TableGroupKey): string {
-    return by === 'addedDay' || by === 'addedMonth' || by === 'addedYear' ? strings.lists.earlier : strings.table.groupNoValue;
+    return by === 'addedDay' || by === 'addedMonth' || by === 'addedYear' ? strings.table.earlier : strings.table.groupNoValue;
 }
 
 /**

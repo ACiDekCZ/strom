@@ -601,6 +601,16 @@ describe('the texts', () => {
         setLanguage('de');
         expect(strings.lists.save.count(1)).toBe('Es wird 1 Person in der Reihenfolge der Tabelle gespeichert.');
     });
+
+    it('the empty overview names only what a list is for today: the Table and export, no fly-through yet', () => {
+        const flyThrough: Record<string, RegExp> = { en: /slideshow|fly/i, cs: /průlet/i, de: /Diashow|Rundflug/i, pl: /przelot/i };
+        for (const lang of ['en', 'cs', 'de', 'pl'] as const) {
+            setLanguage(lang);
+            expect(strings.lists.emptySub).not.toMatch(flyThrough[lang]);
+        }
+        setLanguage('cs');
+        expect(strings.lists.emptySub).toBe('Seznam drží vybrané osoby pod jedním jménem – pro Tabulku i export. Vzniká podle rodu, předků, potomků, linie nebo ručně.');
+    });
 });
 
 describe('performance: 5 000 people', () => {

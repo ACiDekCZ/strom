@@ -109,6 +109,39 @@ test.describe('Table scope: a computer', () => {
         await expect(tv(page, '.tv-headrow [data-col="num"]')).toHaveCount(0);
     });
 
+    test('the Added column (§8): offered in the Columns panel, the day or "earlier" in italics, sorted down with "earlier" at the end', async ({ page }) => {
+        await page.clock.setFixedTime(NOW);
+        await openApp(page);
+        await seedTree(page, {
+            q: { firstName: 'Quillon', lastName: 'Varnholm', birthDate: '1950', addedAt: '2026-11-02T09:00:00.000Z' },
+            t: { firstName: 'Tamsel', lastName: 'Varnholm', birthDate: '1921' },
+            w: { firstName: 'Wendrel', lastName: 'Varnholm', birthDate: '1953', addedAt: '2026-11-14T15:00:00.000Z' },
+        }, 'Varnholm', 'q');
+        await page.locator('#view-mode-table').click();
+        await expect(status(page)).toHaveText('3 of 3 people');
+        await expect(tv(page, '.tv-headrow [data-col="added"]')).toHaveCount(0);
+
+        await tv(page, '.tv-cols-btn').click();
+        const panel = page.getByRole('dialog', { name: 'Columns' });
+        await page.locator('.tv-cp-q').fill('added');
+        await panel.getByRole('checkbox', { name: 'Added', exact: true }).check();
+        await page.keyboard.press('Escape');
+        // In the Person group, right after the name.
+        await expect(tv(page, '.tv-headrow [data-col]').nth(1)).toHaveAttribute('data-col', 'added');
+        await expect(await cell(page, 'p:w', 'added')).toHaveText('14 Nov 2026');
+        const earlier = await cell(page, 'p:t', 'added');
+        await expect(earlier).toHaveText('earlier');
+        await expect(earlier).toHaveClass(/tv-cell--word/);
+        await expect(earlier.locator('.tv-cell-text')).toHaveCSS('font-style', 'italic');
+
+        const head = tv(page, '.tv-headrow [data-col="added"]');
+        await head.hover();
+        await head.getByRole('button', { name: 'Column menu: Added' }).click();
+        await page.getByRole('menuitem', { name: 'Sort descending' }).click();
+        await expect(tv(page, '.tv-status-sort')).toHaveText('Sort: Added ↓');
+        expect(await shownKeys(page)).toEqual(['p:w', 'p:q', 'p:t']);
+    });
+
     test('a jump to a person outside the list: Not in the list, Show for now, Whole tree; a deleted list', async ({ page }) => {
         await family(page);
         await openTable(page);
