@@ -1992,12 +1992,22 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             }
             for (const part of ownWitnesses) pushWitness(part);
             // The couple's citations are the marriage record's: under MARR, where
-            // other programs and Strom Research read a marriage's evidence.
-            pushFamilyCitations(2);
+            // other programs and Strom Research read a marriage's evidence —
+            // but not under a bare one (no date, place or witness: the "married"
+            // of one parent's family, say). Strom Research reads a bare MARR as
+            // no fact and its citations with it, and reported the family's own
+            // citations as not carried; on the record they are the family's,
+            // read back into the same list. A main citation keeps them under
+            // the MARR (only a fact's citations say one).
+            const bareWedding = !lines.slice(at + 1).some(l => /^2 (DATE|PLAC)\b/.test(l)) && !ownWitnesses.length;
+            const mainHere = writeMain && ownSources.length >= 2 && !!citationMainOf(partnership, 'sourceIds');
+            const citesOnRecord = bareWedding && !mainHere;
+            if (!citesOnRecord) pushFamilyCitations(2);
             pushNoted(marriageNoted.rest, true);
             pushFactImport(partnership, 'marriage');
             pushFactOrigin(partnership, 'marriage');
             sayOccurred(at);
+            if (citesOnRecord) pushFamilyCitations(1);
         } else {
             pushNoted(notedMarriage, false);
         }
