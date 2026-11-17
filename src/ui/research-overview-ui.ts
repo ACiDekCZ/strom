@@ -50,7 +50,7 @@ import {
 } from './research-ui.js';
 import { storyWaitingPeople } from './story-compare-ui.js';
 import {
-    WorkingLine, directionDragActive, directionGlyph, directionPersonIds, directionRedrawHeld, keepLineFocus, linesMulti, queueDirectionFilter, taskDirectionName, workingLineCount, workingLineGroups,
+    WorkingLine, directionDragActive, directionGlyph, directionPersonIds, directionRedrawHeld, keepLineFocus, taskDirectionName, workingLineCount, workingLineGroups,
 } from './research-directions-ui.js';
 import { conflictValueSaid, researchValueText } from './person-research-ui.js';
 import { shownName, fitNameHtml } from '../person-name.js';
@@ -2435,8 +2435,12 @@ export const researchOverviewMethods = uiModule({
         const L = strings.live;
         const w0 = s.working[0];
         const since0 = w0 ? Date.parse(w0.since) : NaN;
-        const multi = linesMulti(s);
-        const groups = multi ? workingLineGroups(s) : [];
+        // Now says who does what: by line while two or more lines work. The
+        // line selected in the panel or the queue is only the queue's filter,
+        // so it neither adds a row nor marks one here (Milan, 17 Nov 2026).
+        const all = workingLineGroups(s);
+        const multi = workingLineCount(all) >= 2;
+        const groups = multi ? all : [];
         const lines = workingLineCount(groups);
         const host = liveSection(body, {
             ...fold, title: lines >= 2 ? strings.otherResearch.nowLines(lines) : L.now,
@@ -2449,11 +2453,8 @@ export const researchOverviewMethods = uiModule({
         const list = el('ul', 'live-panel-list live-working research-overview__now');
         host.appendChild(list);
         if (multi) {
-            // Two or more lines at work: a row per line, the selected one marked (spec 011).
-            const sel = queueDirectionFilter(s);
-            for (const g of groups) list.appendChild(this.overviewNowLine(g, sel === g.id, mode));
-            const stopped = sel !== 'all' && !groups.some(g => g.id === sel) ? s.researches.find(d => d.id === sel) : undefined;
-            if (stopped) list.appendChild(this.overviewNowLine({ id: stopped.id, direction: stopped, workers: [] }, true, mode));
+            // Two or more lines at work: a row per line (spec 011).
+            for (const g of groups) list.appendChild(this.overviewNowLine(g, mode));
             this.appendOverviewNowWork(host, s);
             return;
         }
@@ -2527,38 +2528,22 @@ export const researchOverviewMethods = uiModule({
      * long", Show in tree (the line's people lit up; work outside the
      * directions: its person), Finish and stop (research) per session.
      */
-    overviewNowLine(g: WorkingLine, selected: boolean, mode: Mode): HTMLElement {
+    overviewNowLine(g: WorkingLine, mode: Mode): HTMLElement {
         const L = strings.live;
         const s = drawnSession();
         const li = el('li', 'research-overview__now-row research-overview__now-row--line');
         if (g.id) li.dataset.direction = g.id;
-        if (selected) {
-            // Not a control here (the panel selects): only the chosen row is a row of the one indicator.
-            li.classList.add('is-selected', 'sel-opt');
-            li.dataset.selForm = 'row';
-        }
         const glyph = el('span', 'live-line__glyph', g.id ? directionGlyph(g.direction) : '·');
         glyph.setAttribute('aria-hidden', 'true');
         li.appendChild(glyph);
         const text = el('div', 'research-overview__now-text');
         const name = g.direction?.name ?? L.dirOutside;
-        // Show in tree: the line's people lit up; work outside the directions: its person. Under the first session (or the idle line).
+        // Show in tree: the line's people lit up; work outside the directions: its person. Under the first session.
         const d = g.direction;
         const workerPerson = g.workers.map(w => personByRefn(w.person)).find((p): p is Person => !!p);
         const show = (d ? directionPersonIds(d) : workerPerson)
             ? () => (d ? this.showDirectionInTree(d, mode) : workerPerson && this.overviewShowPerson(workerPerson.id, mode))
             : null;
-        if (g.workers.length === 0) {
-            text.appendChild(el('strong', undefined, name));
-            text.appendChild(el('small', 'research-overview__now-meta', strings.otherResearch.lineIdle('')));
-            if (show) {
-                const row = el('div', 'research-overview__now-actions');
-                const btn = row.appendChild(el('button', 'link-button research-overview__show-in-tree', L.showInTree));
-                btn.type = 'button';
-                btn.onclick = show;
-                text.appendChild(row);
-            }
-        }
         g.workers.forEach((w, i) => {
             const head = el('div', 'research-overview__now-line');
             if (i === 0) head.appendChild(el('strong', undefined, name));

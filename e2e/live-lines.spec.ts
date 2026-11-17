@@ -205,7 +205,8 @@ test.describe('working lines in the live panel', () => {
         await expect(ov.locator('.live-section__title').first()).toHaveText('Now · 2 directions');
         const rows = ov.locator('.research-overview__now-row--line');
         await expect(rows).toHaveCount(2);
-        await expect(rows.first()).toHaveClass(/is-selected/);
+        // The selection is only the queue's filter: Now marks neither line (Milan, 17 Nov 2026).
+        await expect(ov.locator('.research-overview__now .is-selected, .research-overview__now .sel-opt')).toHaveCount(0);
         await expect(rows.first()).toContainText('Předci Jana Nováka — Křest Josefa Nováka 1842');
         await expect(rows.first().locator('.research-overview__now-meta')).toHaveText(/^agent-matriky · Josef Novák · since /);
         // The panel's Up next unfolded by hand is the same choice in the overview.
@@ -223,6 +224,21 @@ test.describe('working lines in the live panel', () => {
         await ov.locator('.research-overview__queue-filters .research-overview__filter[data-direction="G0002"]').click();
         await page.keyboard.press('Escape');
         await expect(line(page, 'G0002')).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    test('the overview\'s Now does not show a line picked by its pill while nobody works', async ({ page }) => {
+        await follow(page, []);
+        await panel(page).locator('.live-panel-expand').click();
+        const ov = page.locator('#research-overview');
+        await expect(ov).toBeVisible();
+        await ov.locator('.research-overview__queue-filters .research-overview__filter[data-direction="G0001"]').click();
+        await expect(ov.locator('.research-overview__queue-filters .research-overview__filter[data-direction="G0001"]')).toHaveAttribute('aria-checked', 'true');
+        // Now says who does what: nobody, no row for the picked line, nothing marked.
+        const now = ov.locator('.research-overview__now');
+        await expect(now.locator('.research-overview__now-row--line')).toHaveCount(0);
+        await expect(now).toContainText('Nobody is working');
+        await expect(now).not.toContainText('Not at work now');
+        await expect(now.locator('.is-selected, .sel-opt')).toHaveCount(0);
     });
 
     test('the selected line stops: it stays selected and last, saying since when it does not work', async ({ page }) => {
