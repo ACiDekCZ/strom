@@ -29830,6 +29830,8 @@
             .mat-edit-title, .mat-edit-date { min-height: 44px; }
             .mat-edit-kind-opt { min-height: 44px; }
             .mv-keys { display: none; }
+            /* Going through: the swipe's sentence instead of the keys (spec 102 §8c, §11). */
+            .mv-keys.is-swipe { display: block; flex-basis: 100%; }
         }
         @media (max-width: 640px) {
             .mat-edit-date { max-width: none; }

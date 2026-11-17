@@ -15,6 +15,7 @@ import { strings } from '../strings.js';
 import { dataUrlByteSize } from '../photo.js';
 import { MaterialCaps, attachmentItem, isPortraitCandidate, materialDate, personMaterials, cachedMaterialList } from '../materials.js';
 import { researchPersonRef } from '../research-link.js';
+import { mediaUseLabel, mediaUses } from '../media-uses.js';
 import { canEditPortrait } from './portrait-actions-ui.js';
 import { ORIGINAL_ONLY_DATA_URL } from '../validation.js';
 import {
@@ -184,7 +185,7 @@ export const attachmentsMethods = uiModule({
                 });
             });
             container.querySelectorAll<HTMLElement>('.attachment-delete-btn[data-attachment-id]').forEach(el => {
-                el.addEventListener('click', () => { void this.deleteAttachment(el.dataset.attachmentId ?? ''); });
+                el.addEventListener('click', () => { void this.removeAttachmentFromPerson(el.dataset.attachmentId ?? ''); });
             });
             container.querySelectorAll<HTMLElement>('.media-full-quality[data-attachment-id]').forEach(el => {
                 el.addEventListener('click', () => this.openAttachmentFullQuality(el.dataset.attachmentId ?? ''));
@@ -532,38 +533,28 @@ export const attachmentsMethods = uiModule({
         DataManager.updateAttachmentNote(this.currentId, attachmentId, note);
     },
 
-    async deleteAttachment(attachmentId: string, ownerId?: PersonId): Promise<void> {
-        const personId = ownerId ?? this.currentId;
-        if (!personId) return;
-        // Name the file — a list of scans all confirming "Delete this
-        // attachment?" tells you nothing about which one you hit.
-        const person = DataManager.getPerson(personId);
+    /**
+     * A phone's trash on the person's attachment row (spec 102 §9): the file
+     * leaves this person (toast with Undo); its last place asks as Remove
+     * from the tree…, or beside an archive the file stays there.
+     */
+    async removeAttachmentFromPerson(attachmentId: string): Promise<void> {
+        const person = this.currentId ? DataManager.getPerson(this.currentId) : null;
         const att = person ? DataManager.personMedia(person.id).find(a => a.id === attachmentId) : undefined;
-        if (!att) return;
-        const d = strings.danger;
-        const m = strings.media;
-        // Its original: waiting → discard it too (ticked), or send it and let the research detach it;
-        // in the research → it stays there, only detached.
-        const state = this.mediaStateOf({ sha: att.original?.sha256, bytes: att.original?.bytes, personId });
-        const queuedOriginal = state?.kind === 'queued' || state?.kind === 'sending';
-        // An archive keeps no attachments: only the original stays there (an attachment without one: no note).
-        const archiveNote = this.researchArchiveDeleteNote();
-        const researchNote = state?.kind === 'inResearch'
-            ? archiveNote ? { tag: archiveNote.tag, text: strings.sync.archiveDeleteAttachmentNote } : { tag: strings.research.brand, text: m.deleteDetach }
-            : undefined;
-        // The portrait's source (spec 107 §4d): the portrait stays, cut off from it.
-        const isSource = !!person && this.portraitSourceAttachmentShown(person) === attachmentId;
-        const note = isSource
-            ? { ...(researchNote?.tag ? { tag: researchNote.tag } : {}), text: [researchNote?.text, d.portraitSourceNote].filter(Boolean).join(' ') }
-            : researchNote;
-        const confirmed = await this.showConfirm(d.undoHint, d.deleteAttachmentTitle(att.name), {
-            confirmLabel: d.deleteAttachment, variant: 'danger', note,
-            ...(queuedOriginal ? { checkbox: { label: m.deleteDiscard(formatBytes(att.original?.bytes ?? 0)), hint: m.deleteDiscardHint, checked: true } } : {}),
+        if (!person || !att) return;
+        const ctx = this.materialsContext();
+        const list = ctx ? cachedMaterialList(ctx.treeId) : null;
+        const item = (list ? personMaterials({ refn: person.refn, attachments: DataManager.personMedia(person.id) }, list) : [])
+            .find(i => i.attachment?.id === attachmentId) ?? attachmentItem(att, researchPersonRef(person.refn));
+        const data = DataManager.getData();
+        const use = mediaUses(data, att.id).find(u => u.kind === 'person' && u.personId === person.id && u.place);
+        if (!use) {
+            if (await this.openRemoveFromTreeDialog(item)) this.renderAttachmentsList();
+            return;
+        }
+        await this.removeMaterialUse(item, att.id, use, mediaUseLabel(data, use).text, ctx, {
+            expanded: false, expand: () => { /* no list here */ }, where: 'dialog',
+            changed: () => this.renderAttachmentsList(),
         });
-        if (!confirmed) return;
-        const sha = att.original?.sha256;
-        if (queuedOriginal && sha) await this.settleQueuedOriginal(sha, this.confirmChecked);
-        DataManager.removeAttachment(personId, attachmentId);
-        this.renderAttachmentsList();
     },
 });

@@ -670,9 +670,12 @@ export const materialsWindowMethods = uiModule({
         let html = '';
         let state = 'live';
         if (w.model === 'app') {
+            // A tree beside a research on a phone or a tablet: its own files here, the archive's on the computer (spec 102 §11f).
+            const note = this.materialsTouchLinked() ? (this.materialsContext()?.agent ? m.desktopOnlyResearch : m.desktopOnly) : '';
             w.overlay.dataset.state = 'live';
-            el.hidden = true;
-            el.innerHTML = '';
+            el.hidden = !note;
+            el.setAttribute('role', 'note');
+            el.innerHTML = note ? `<span class="mw-status-note">${esc(note)}</span>` : '';
             return;
         }
         if (rec && !ctx.caps.bridgeUp) {
@@ -1803,6 +1806,8 @@ export const materialsWindowMethods = uiModule({
         });
         // Touch: a long press starts selecting with the item.
         w.canvas.addEventListener('pointerdown', (e) => {
+            // A new touch: a long press's click was not delivered (a phone sends none), the tap counts.
+            w.suppressClick = false;
             if (e.pointerType !== 'touch' || !this.mwCanSelect()) return;
             const cell = (e.target as HTMLElement).closest<HTMLElement>('[role="gridcell"][data-key]');
             if (!cell?.dataset.key) return;

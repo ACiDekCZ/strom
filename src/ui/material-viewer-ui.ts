@@ -331,13 +331,13 @@ export const materialViewerMethods = uiModule({
         const item = this.freshMaterialItem(st.items[index]);
         st.items[index] = item;
         const ctx = this.materialsContext();
+        let pending: (() => Promise<void>) | null = null;
         if (st.review) {
             // Another file: the one before keeps what was typed in it (← → and a swipe save as well).
             if (st.review.index !== index) {
-                const pending = st.review.pending;
+                pending = st.review.pending;
                 st.review.pending = null;
                 st.review.index = index;
-                if (pending) void pending();
             }
             slots.pos(`${strings.materials.reviewHead(index + 1, st.items.length, st.ctx.label ?? '')} · ${strings.materials.reviewEsc}`);
             st.editing = materialDetailsEdit(item, ctx) === 'on' ? item.key : null;
@@ -346,6 +346,8 @@ export const materialViewerMethods = uiModule({
         if (st.editing && st.editing !== item.key) st.editing = null;
         if (!slots.redraw) this.drawMaterialStage(item, ctx, slots, st);
         this.drawMaterialPanel(item, ctx, slots.panel, st);
+        // Saved after this file is drawn: the save's redraw draws the panel anew instead of a second copy.
+        if (pending) void pending();
         // Going through: the title field ready for typing (on a computer; a phone's keyboard waits for a tap).
         if (st.review && st.editing === item.key && !slots.redraw && !window.matchMedia?.('(pointer: coarse)').matches) {
             // After the viewer is shown (the first file is drawn before the overlay opens).
@@ -427,7 +429,7 @@ export const materialViewerMethods = uiModule({
         skip.textContent = m.skipFile;
         skip.dataset.action = 'skip';
         const touch = window.matchMedia?.('(pointer: coarse)').matches;
-        const keys = h('span', 'mv-keys', touch ? m.reviewSwipe : m.reviewKeys);
+        const keys = h('span', touch ? 'mv-keys is-swipe' : 'mv-keys', touch ? m.reviewSwipe : m.reviewKeys);
         if (st.ctx.noSource && this.canEditSources() && !DataManager.isReadOnly()) {
             const make = h('button', 'mv-act is-primary', m.makeSource);
             make.type = 'button';

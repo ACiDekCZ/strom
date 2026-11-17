@@ -355,10 +355,12 @@ test.describe('The portrait\'s source among the attachments (phone)', () => {
         await expect(attRow(page, 'louka.jpg').locator('.attachment-actions button')).toHaveClass([/attachment-portrait-btn/, /attachment-delete-btn/]);
         await expect(attRow(page, 'louka.jpg').locator('.attachment-note-input')).toBeVisible();
 
+        // The trash takes the file's last place off: it asks as Remove from the tree… (spec 102 §9).
         await attRow(page, 'louka.jpg').locator('.attachment-delete-btn').click();
-        const confirm = page.locator('#confirmation-modal');
-        await expect(confirm).toHaveClass(/active/);
+        const confirm = page.locator('.mdlg-overlay .mdlg');
+        await expect(confirm).toBeVisible();
         await confirm.getByRole('button', { name: 'Cancel' }).click();
+        await expect(confirm).toHaveCount(0);
 
         await btn.click();
         await expect(editor(page)).toBeVisible();
