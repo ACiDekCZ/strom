@@ -1,11 +1,12 @@
 /**
  * The tree's own pictures and files that only the browser keeps (spec 108
  * K1b.1): portraits, couples' photos and person attachments. Strom Research and
- * its archive take the tree's text from a write but none of these (the
- * archive holds at most an attachment's original as a material, never the
- * attachment itself), so a research that "holds" a tree's edits does not hold
- * them: the "only in browser" indicator keeps counting them until a file copy
- * has them, or until the archive holds them (spec 108 U8 — one switch below).
+ * its archive before 1.35 take the tree's text from a write but none of these
+ * (the archive holds at most an attachment's original as a material, never
+ * the attachment itself), so a research that "holds" a tree's edits does not
+ * hold them: the "only in browser" indicator keeps counting them until a file
+ * copy has them — or, with a research that keeps them (`media.app`, spec 108
+ * U8), once a write handed them to its archive (archiveHoldsAppMedia).
  *
  * Pure: the fingerprints live in TreeMetadata (mediaFp, fileCopyMediaFp);
  * tree-manager records them, the UI asks these functions.
@@ -14,11 +15,17 @@
 import type { StromData } from './types.js';
 
 /**
- * Does the archive (Strom Research) keep the app's portraits, couples' photos
- * and attachments, so a tree it holds is safe with them? Not yet: spec 108 U8
- * (K2.1–K2.7) turns this on once a write hands them to the archive.
+ * Does a tree's research keep its portraits, couples' photos and attachments,
+ * so a tree it holds is safe with them (spec 108 K2.6)? Only a research that
+ * keeps the app's files (`media.app`; `keeps` null: not asked in this page —
+ * its word at the write stands) and only once a write of this tree handed
+ * them to it saying it carries every file (`sentTo`, the research it went to:
+ * ResearchAutoState.appMediaSent). A picture added since is an edit not sent
+ * like any other: it waits as they do (researchHoldsTree).
  */
-export const ARCHIVE_HOLDS_APP_MEDIA = false;
+export function archiveHoldsAppMedia(o: { keeps: boolean | null; researchId: string; sentTo: string | undefined }): boolean {
+    return o.keeps !== false && !!o.researchId && o.sentTo === o.researchId;
+}
 
 function fnv(text: string, start: number, step: number, seed: number): number {
     let h = seed >>> 0;
@@ -86,8 +93,7 @@ export function treeHasAppMedia(data: StromData): boolean {
  * could not read either: locked) — not counted against the tree, as before
  * spec 108; it is known once the tree opens.
  */
-export function browserMediaSafe(current: string | undefined, fileCopy: string | undefined,
-    archiveHolds: boolean = ARCHIVE_HOLDS_APP_MEDIA): boolean {
+export function browserMediaSafe(current: string | undefined, fileCopy: string | undefined, archiveHolds: boolean): boolean {
     if (archiveHolds) return true;
     if (current === '' || current === undefined) return true;
     return current === fileCopy;

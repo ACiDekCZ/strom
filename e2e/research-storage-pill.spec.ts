@@ -7,8 +7,9 @@ import { fakeBridge, openResearch, editJan, poll } from './research-bridge.js';
  * has everything and while fresh edits are on their way; it shows once edits
  * stay unsent for 10 minutes — then they really are only in this browser.
  * A tree without a research keeps today's pill (storage specs). Its
- * portraits, couple photos and attachments the research does not keep: until a
- * file copy holds them, the pill shows (spec 108 K1b.1).
+ * portraits, couple photos and attachments a research without `media.app`
+ * does not keep: until a file copy holds them, the pill shows (spec 108
+ * K1b.1); one that keeps them holds them once a write handed them over (K2.6).
  */
 
 const DESKTOP = { width: 1440, height: 900 };
@@ -68,6 +69,39 @@ test.describe('the storage pill on a research tree', () => {
         // Another portrait: not in the file.
         await setPortrait('B');
         await page.clock.fastForward(1_000);
+        await expect(pill(page)).toBeVisible();
+    });
+
+    // Spec 108 K2.6: a research that keeps the tree's own files (`media.app`) holds them once a write handed them
+    // over; a picture added after it is an edit not sent like any other — it waits, then counts.
+    test('a research with media.app: the pictures count only until a write hands them over; a new one waits like any edit', async ({ page }) => {
+        await page.clock.install({ time: new Date('2026-11-17T10:30:00Z') });
+        await openResearch(page);
+        const b = await fakeBridge(page, { features: ['media.app'], accepts: { sync: { auto: 'write' }, sources: true, verified: true, media: null },
+            syncReply: { status: 200, body: { ok: true, inbox: false, changes: 1, applied: 1, input: 'I0042' } } });
+        await poll(page);
+        const setPortrait = (fill: string) => page.evaluate((fill) => {
+            const dm = window.Strom.DataManager;
+            const jan = Object.values(dm.getData().persons).find((p: any) => p.firstName === 'Jan') as any;
+            dm.updatePerson(jan.id, { photo: `data:image/jpeg;base64,${fill.repeat(3000)}` });
+        }, fill);
+
+        // Not handed over yet: only in this browser.
+        await setPortrait('A');
+        await page.clock.fastForward(1_000);
+        await expect(pill(page)).toBeVisible();
+
+        // Written with its files: the research holds them.
+        await page.evaluate(() => window.Strom.UI.researchSyncAction('send'));
+        await expect.poll(() => b.posts.length).toBe(1);
+        expect(b.postQueries?.[0].get('media')).toBe('app');
+        await expect(pill(page)).toBeHidden();
+
+        // Another portrait: on its way like any edit, then — ten minutes unsent — only here.
+        await setPortrait('B');
+        await page.clock.fastForward(5_000);
+        await expect(pill(page)).toBeHidden();
+        await page.clock.fastForward(10 * 60_000 + 1_000);
         await expect(pill(page)).toBeVisible();
     });
 

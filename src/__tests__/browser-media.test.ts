@@ -1,10 +1,10 @@
 /**
  * The pictures and files only the browser keeps (spec 108 K1b.1): the
  * fingerprint the "only in browser" indicator compares with the last file
- * copy on a tree linked to Strom Research, and the archive switch (U8).
+ * copy on a tree linked to Strom Research, and whether its archive keeps them (U8).
  */
 import { describe, it, expect } from 'vitest';
-import { browserMediaFingerprint, browserMediaSafe, ARCHIVE_HOLDS_APP_MEDIA } from '../browser-media.js';
+import { browserMediaFingerprint, browserMediaSafe, archiveHoldsAppMedia } from '../browser-media.js';
 import type { StromData } from '../types.js';
 
 const img = (fill: string, n = 4000) => `data:image/jpeg;base64,${fill.repeat(n)}`;
@@ -73,9 +73,23 @@ describe('browserMediaSafe', () => {
         expect(browserMediaSafe(undefined, 'x', false)).toBe(true);
     });
 
-    it('is safe whenever the archive keeps the app\'s pictures (spec 108 U8), which it does not yet', () => {
-        expect(ARCHIVE_HOLDS_APP_MEDIA).toBe(false);
+    it('is safe whenever the tree\'s archive keeps its pictures (spec 108 U8)', () => {
         expect(browserMediaSafe('x', undefined, true)).toBe(true);
-        expect(browserMediaSafe('x', undefined)).toBe(false);
+        expect(browserMediaSafe('x', 'y', true)).toBe(true);
+    });
+});
+
+describe('archiveHoldsAppMedia (spec 108 K2.6: per tree, not a switch)', () => {
+    it('holds once a write handed the files to a research that keeps them', () => {
+        expect(archiveHoldsAppMedia({ keeps: true, researchId: 'R1', sentTo: 'R1' })).toBe(true);
+        // Not asked in this page yet: its word at the write stands.
+        expect(archiveHoldsAppMedia({ keeps: null, researchId: 'R1', sentTo: 'R1' })).toBe(true);
+    });
+
+    it('does not hold before such a write, after one to another research, or for a research without media.app', () => {
+        expect(archiveHoldsAppMedia({ keeps: true, researchId: 'R1', sentTo: undefined })).toBe(false);
+        expect(archiveHoldsAppMedia({ keeps: true, researchId: 'R1', sentTo: 'R0' })).toBe(false);
+        expect(archiveHoldsAppMedia({ keeps: false, researchId: 'R1', sentTo: 'R1' })).toBe(false);
+        expect(archiveHoldsAppMedia({ keeps: null, researchId: '', sentTo: '' })).toBe(false);
     });
 });

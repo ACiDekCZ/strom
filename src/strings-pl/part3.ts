@@ -31,6 +31,8 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
         kindWitness: 'świadkowie',
         kindCitation: 'cytat',
         kindSource: 'źródło',
+        kindPhoto: 'zdjęcie',
+        kindPhotoRemoved: '− zdjęcie',
         kindAttachment: '+ załącznik',
         kindAttachmentRemoved: '− załącznik',
         kindNote: 'notatka',

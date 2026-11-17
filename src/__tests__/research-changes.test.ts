@@ -127,8 +127,12 @@ describe('changes per person since the research\'s version', () => {
         expect(JSON.stringify(base)).not.toContain('AAAAAAAA');
         const cur = tree();
         cur.persons['p3' as PersonId].photo = 'data:image/jpeg;base64,' + 'B'.repeat(500);
-        expect(diffByPerson(base, cur).find(c => c.personId === 'p3')!.kinds).toEqual(['other']);
+        // A portrait is its own kind (spec 108 K2.6): "photo", "− photo" when taken off.
+        expect(diffByPerson(base, cur).find(c => c.personId === 'p3')!.kinds).toEqual(['photo']);
         expect(diffByPerson(base, tree())).toEqual([]);
+        const off = tree();
+        delete off.persons['p3' as PersonId].photo;
+        expect(diffByPerson(base, off).find(c => c.personId === 'p3')!.kinds).toEqual(['photoRemoved']);
     });
 
     it('a changed source is told at the source, not at the people citing it', () => {

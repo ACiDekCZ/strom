@@ -44,7 +44,7 @@ import {
     researchIdsByContent, holdsResearchIds, ResearchSendRecord, AdoptIds, ExportXrefs, applySyncIds, sourceIdOfXref, researchGedcomTitles, researchSendsReadings, researchSendsSourceFields, SyncReading,
     researchHasTitles, hasTitles, withoutTitles, TITLES_FEATURE, researchConflictRef, isResearchHead, SYNC_REMOVED_FEATURE, SyncPersonConflict,
     SYNC_NW_CODES_FEATURE, researchLinkMark, researchUrlMark, type ResearchActionMark,
-    researchMediaOut, researchSendDeclaresMedia, researchSyncUrl, researchMediaFirstSendDue,
+    researchMediaOut, researchSendDeclaresMedia, researchSyncUrl, researchMediaFirstSendDue, researchKeepsAppMedia,
 } from '../research-link.js';
 import { SettingsManager } from '../settings.js';
 import { loadResearchCopy } from '../research-copy.js';
@@ -75,7 +75,7 @@ import {
     fetchWithTimeout, readStatusPart, readResearchTreeFile, postSync, onComputer, readTree, researchGedcom, researchGedcomExport,
 } from './research-ui.js';
 import { shownNameOrEmpty } from '../person-name.js';
-import { browserMediaFingerprint, browserMediaSafe, treeHasAppMedia } from '../browser-media.js';
+import { browserMediaFingerprint, browserMediaSafe, treeHasAppMedia, archiveHoldsAppMedia } from '../browser-media.js';
 
 /** A person's conflicts less those still open that were decided since (`settled`, by id); the same list when none goes. */
 function withoutSettled(list: ResearchConflict[], settled: Set<string> | null): ResearchConflict[] {
@@ -1340,7 +1340,10 @@ export const researchSyncMethods = uiModule({
         if (!fate.nothing) {
             patchResearchAutoState(treeId, { lastWritten: { at: closed.closedAt!, changes: closed.changes, conflicts: 0,
                 ...(closed.intake ? { intake: closed.intake } : {}), fingerprint: closed.fingerprint } });
-            this.researchNoteWritten(treeId, sent.fingerprint, closed.closedAt!);
+            // What it wrote of the tree's own files, as its record says (spec 108 K2.6, a research with `media.app`).
+            const mediaRec = fate.inherited ? undefined : status.sends?.find(r => r.intake === sent.intake && r.state === 'written');
+            this.researchNoteWritten(treeId, sent.fingerprint, closed.closedAt!, undefined,
+                { items: mediaRec?.media ?? [], count: mediaRec?.mediaCount ?? 0 });
         } else if (!fate.inherited) {
             this.researchNoteTookNothing(treeId, sent.fingerprint);
         }
@@ -2172,7 +2175,7 @@ export const researchSyncMethods = uiModule({
         // so the next sends name them even while its version is not loaded here (no duplicate person).
         const retagged = written && reply.ids && exported && active ? this.researchTakeSyncIds(treeId, exported.xrefs, reply.ids, sentFp) : null;
         // The research's version is the state sent with its numbers: the copy goes under the fingerprint the send now has.
-        if (written && reply.changes !== 0) this.researchNoteWritten(treeId, sentFp, now, retagged ?? undefined);
+        if (written && reply.changes !== 0) this.researchNoteWritten(treeId, sentFp, now, retagged ?? undefined, { items: reply.media, count: reply.mediaCount });
         // Nothing new taken: the copy stays the research's version, now for this send too (N40).
         else if (written && reply.changes === 0 && !undone) this.researchNoteTookNothing(treeId, sentFp, retagged?.fingerprint);
         // Edits since the send taken back were not in it: they still wait.
@@ -2858,14 +2861,14 @@ export const researchSyncMethods = uiModule({
      * by hand and not sent). `until`: when a "yes" turns into "no".
      * Only on a computer, for a research that says what it takes, and never
      * while the tree has portraits, couples' photos or attachments no file
-     * copy holds: the research does not keep those (spec 108 K1b.1, until
-     * ARCHIVE_HOLDS_APP_MEDIA).
+     * copy holds: the research does not keep those (spec 108 K1b.1) — unless
+     * it keeps them and a write handed them over (researchArchiveHoldsMedia).
      */
     researchHoldsTree(treeId: TreeId, now = Date.now()): { holds: boolean; until?: number } {
         const meta = TreeManager.getTreeMetadata(treeId);
         const link = meta?.research;
         if (!link || !onComputer() || !researchLinksEnabled() || !this.researchSyncCapable(link.id)) return { holds: false };
-        if (!browserMediaSafe(this.researchTreeMediaFp(treeId, meta), meta.fileCopyMediaFp)) return { holds: false };
+        if (!browserMediaSafe(this.researchTreeMediaFp(treeId, meta), meta.fileCopyMediaFp, this.researchArchiveHoldsMedia(treeId))) return { holds: false };
         const st = researchAutoState(treeId);
         const sentGone = link.sent?.state === 'discarded' || link.sent?.state === 'undone';
         let unsent: boolean;
@@ -2880,6 +2883,18 @@ export const researchSyncMethods = uiModule({
         if (!Number.isFinite(since)) return { holds: false };
         const until = since + RESEARCH_HOLD_MS;
         return now < until ? { holds: true, until } : { holds: false };
+    },
+
+    /**
+     * The tree's research keeps its portraits, couples' photos and attachments (spec 108 K2.6): it says
+     * `media.app` (not asked in this page: its word at the write) and a write of this tree handed them over.
+     */
+    researchArchiveHoldsMedia(treeId: TreeId): boolean {
+        const link = TreeManager.getTreeMetadata(treeId)?.research;
+        if (!link) return false;
+        const features = this.researchStatusOf(link.id)?.features;
+        return archiveHoldsAppMedia({ keeps: features ? researchKeepsAppMedia({ features }) : null, researchId: link.id,
+            sentTo: researchAutoState(treeId).appMediaSent });
     },
 
     /** The tree's fingerprint of the pictures and files only the browser keeps: the open one's from memory. */
@@ -3087,7 +3102,7 @@ export const researchSyncMethods = uiModule({
                 b.sub = [strings.changes.personsChanged(list.length), facts].filter(Boolean).join(timeOnly ? '\u00a0·\u00a0' : ' · ');
                 b.actions = [...(b.actions ?? []), { action: 'showChanges', label: strings.changes.whatWillBeSent, asLink: true }];
             }
-        } else if (state.kind === 'written' && treeId && ((w) => !!w && w.list.length + w.other.length > 0)(researchWrittenList(treeId)) && researchSendMode(link) !== 'off') {
+        } else if (state.kind === 'written' && treeId && ((w) => !!w && w.list.length + w.other.length + w.more > 0)(researchWrittenList(treeId)) && researchSendMode(link) !== 'off') {
             b.actions = [...(b.actions ?? []), { action: 'showWritten', label: strings.changes.whatWasWritten, asLink: true }];
         }
         // Changes of an older send taken back, left behind by Send again of a later one (R3 keeps them out of

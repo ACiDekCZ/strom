@@ -2791,6 +2791,12 @@ export interface ResearchSendRecord {
     notWritten?: SyncNotWritten[];
     notWrittenCount?: number;
     skipped?: SyncReply['skipped'];
+    /**
+     * What a written send wrote of the tree's own files (`media`, at most 50; spec 108, a research with
+     * `media.app`), and how many it wrote in all (`mediaCount`, never fewer than listed); absent = none said.
+     */
+    media?: SyncMediaWritten[];
+    mediaCount?: number;
 }
 
 const SEND_STATES = new Set(['pending', 'written', 'discarded', 'replaced', 'nothing', 'undone', 'failed']);
@@ -2826,6 +2832,7 @@ export function sanitizeSends(value: unknown, codes = false): ResearchSendRecord
             // Written again since: `resent: true` (1.12.0-rc.21), or `again` (the mark of that send).
             ...(r.resent === true || r.again === true ? { again: 'yes' } : headerToken(r.again) ? { again: headerToken(r.again)! } : {}),
             ...(codes && (r.state === 'written' || r.state === 'nothing') ? sendNotWritten(r) : {}),
+            ...(r.state === 'written' ? sendMedia(r) : {}),
         });
     }
     return out;
@@ -2841,6 +2848,13 @@ function sendNotWritten(r: Record<string, unknown>): Pick<ResearchSendRecord, 'n
         ...(items.length || count ? { notWrittenCount: Math.max(items.length, count ?? 0) } : {}),
         ...(skipped.length ? { skipped } : {}),
     };
+}
+
+/** A written send record's `media` (at most 50) and `mediaCount` (never fewer than listed), when it says them. */
+function sendMedia(r: Record<string, unknown>): Pick<ResearchSendRecord, 'media' | 'mediaCount'> {
+    const items = sanitizeMediaWritten(r.media, 50);
+    const count = Math.max(items.length, asCount(r.mediaCount) ?? 0);
+    return { ...(items.length ? { media: items } : {}), ...(count ? { mediaCount: count } : {}) };
 }
 
 /** Conflicts as a count, or a list of them (`[{ person: "P12" }, …]`); null when not said. */
@@ -4660,6 +4674,73 @@ export interface SyncReply {
     ids: AdoptIds | null;
     /** How the research took each source sent as an entry of a reading (`readings`, `read.sync`). */
     readings: SyncReading[];
+    /** What it wrote of the tree's own files (`media`, spec 108: a research with `media.app`); [] = none said. */
+    media: SyncMediaWritten[];
+    /** How many of them it wrote in all (the listed ones at least; 0 = none). */
+    mediaCount: number;
+}
+
+/** The kinds of a change of the tree's own files a write names (`media[].kind`, spec 108). */
+export const MEDIA_WRITTEN_KINDS = ['media.photo', 'media.photo.removed', 'media.couplePhoto', 'media.couplePhoto.removed',
+    'media.attachment', 'media.attachment.removed', 'media.edit', 'media.link', 'media.unlink'] as const;
+export type MediaWrittenKind = typeof MEDIA_WRITTEN_KINDS[number];
+
+/**
+ * One change of the tree's own files a write wrote (`media[]` of a send's
+ * answer and of `/status.sends`, spec 108): a portrait, a couple's photo or
+ * an attachment added, replaced or taken off, its details edited, or its place
+ * at an event or a source given or taken. Its place: a person ("P0001"), a
+ * couple ("F0003") or a source ("S0012") — at least one —, at an event its
+ * owner and the event ("E0042"); `record` the research's record of the file.
+ */
+export interface SyncMediaWritten {
+    kind: MediaWrittenKind;
+    person: string;
+    family: string;
+    source: string;
+    event: string;
+    /** The research's record of the file ("I0042"). */
+    record: string;
+    /** The file's title, the user's ('' = not said). */
+    title: string;
+    /** `media.edit`: what of the record changed ("title", "date"…); [] = not said. */
+    fields: string[];
+}
+
+const MEDIA_KIND_SET: ReadonlySet<string> = new Set(MEDIA_WRITTEN_KINDS);
+
+/**
+ * The `media[]` of a send's answer or of `/status.sends`, checked (at most
+ * `max`; untrusted): a known kind with its record and a place it is of, the
+ * ids by their shape, the title as plain text, the edited fields as short
+ * words. Anything else is left out.
+ */
+export function sanitizeMediaWritten(value: unknown, max = 200): SyncMediaWritten[] {
+    const id = (v: unknown, shape: RegExp): string => typeof v === 'string' && shape.test(v.trim()) ? v.trim() : '';
+    const out: SyncMediaWritten[] = [];
+    for (const x of Array.isArray(value) ? value.slice(0, max) : []) {
+        const r = asRecord(x);
+        if (!r || typeof r.kind !== 'string' || !MEDIA_KIND_SET.has(r.kind)) continue;
+        const record = id(r.record, /^I\d{1,9}$/);
+        const person = id(r.person, /^P\d{1,9}$/);
+        const family = id(r.family, /^F\d{1,9}$/);
+        const source = id(r.source, /^S\d{1,9}$/);
+        if (!record || (!person && !family && !source)) continue;
+        out.push({
+            kind: r.kind as MediaWrittenKind, person, family, source, event: id(r.event, /^E\d{1,9}$/), record,
+            title: cleanText(r.title, 200),
+            fields: Array.isArray(r.fields)
+                ? [...new Set(r.fields.slice(0, 12).filter((f): f is string => typeof f === 'string' && /^[a-z][a-zA-Z]{0,19}$/.test(f)))] : [],
+        });
+    }
+    return out;
+}
+
+/** How many a list said it holds (`mediaCount`, `media` of an answer without one): never fewer than kept. */
+function mediaCountOf(value: unknown, items: unknown, kept: number): number {
+    const said = asCount(value);
+    const listed = Array.isArray(items) ? Math.min(items.length, 1_000_000) : 0;
+    return Math.max(kept, said ?? listed);
 }
 
 /**
@@ -4822,10 +4903,11 @@ export function sanitizeSkipped(value: unknown, codes: boolean): SyncReply['skip
 export function sanitizeSyncReply(value: unknown, features?: readonly string[] | null): SyncReply {
     const codes = !!features?.includes(SYNC_NW_CODES_FEATURE);
     const r = asRecord(value);
-    if (!r) return { ok: false, changes: null, error: '', inbox: null, intake: '', head: '', applied: null, pending: false, conflicts: null, conflictPersons: [], conflictIds: [], conflictTakeIds: [], kept: null, reason: '', skipped: [], code: '', undoneSince: [], takenBack: null, notWritten: [], personConflicts: [], ids: null, readings: [] };
+    if (!r) return { ok: false, changes: null, error: '', inbox: null, intake: '', head: '', applied: null, pending: false, conflicts: null, conflictPersons: [], conflictIds: [], conflictTakeIds: [], kept: null, reason: '', skipped: [], code: '', undoneSince: [], takenBack: null, notWritten: [], personConflicts: [], ids: null, readings: [], media: [], mediaCount: 0 };
     const idsRec = asRecord(r.ids);
     const idPersons = adoptIdMap(idsRec?.persons, /^P\d{1,9}$/);
     const idSources = adoptIdMap(idsRec?.sources, /^S\d{1,9}$/);
+    const media = sanitizeMediaWritten(r.media);
     return {
         ok: r.ok === true,
         changes: asCount(r.changes),
@@ -4850,6 +4932,8 @@ export function sanitizeSyncReply(value: unknown, features?: readonly string[] |
         personConflicts: personConflictsOf(r.conflicts),
         ids: Object.keys(idPersons).length || Object.keys(idSources).length ? { persons: idPersons, sources: idSources } : null,
         readings: sanitizeSyncReadings(r.readings),
+        media,
+        mediaCount: mediaCountOf(r.mediaCount, r.media, media.length),
     };
 }
 
