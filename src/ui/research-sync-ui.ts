@@ -3002,7 +3002,7 @@ export const researchSyncMethods = uiModule({
             },
             // Out of "only load": what piled up meanwhile, nothing goes before it is seen.
             piled: () => {
-                const n = this.researchChangesNow()?.length ?? 0;
+                const n = this.researchChangesShown()?.length ?? 0;
                 return { tone: 'neutral', title: n ? strings.treeSettings.piled(n) : s.stateUnsentShort,
                     actions: [{ action: 'showChangesFirst', label: strings.treeSettings.whatWillBeSent }] };
             },
@@ -3095,7 +3095,7 @@ export const researchSyncMethods = uiModule({
         }
         // Changes per person: how many people, and "What will be sent ›" / "What was written ›".
         if (['unsent', 'autoWaiting', 'unsentBridgeDown', 'unsentAndNewer', 'notTaken'].includes(state.kind)) {
-            const list = this.researchChangesNow();
+            const list = this.researchChangesShown();
             if (list && list.length > 0) {
                 // The facts on one line (menu 1020 §2.2): "2 people changed · 14:32", not "… · Changed 14:32".
                 const timeOnly = (state.kind === 'unsent' || state.kind === 'unsentBridgeDown') && !!changed && b.sub === s.changedAt(changed);

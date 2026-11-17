@@ -76,7 +76,9 @@ const NO_OTHER: OtherChanges = { sources: [], couples: [] };
  */
 const pendingSent = new Map<string, { fingerprint: string; data: StromData; list: PersonChange[] | null; other: SentOtherRow[]; stands: string[];
     /** It went to a research that keeps the tree's own files (`media.app`): what it wrote of them is its answer's word. */
-    keepsMedia?: true }>();
+    keepsMedia?: true;
+    /** Something of the tree's files was not told as it is (the research does not write it, spec 102 §10). */
+    older?: true }>();
 
 function esc(text: string): string {
     return text
@@ -112,25 +114,26 @@ function sanitizeMediaAt(v: unknown): PersonChange['mediaAt'] | null {
  * "What was written": the last written send's people and its rows beyond them (null: none kept); `more`:
  * changes of the tree's own files it wrote beyond those rows (more than its answer listed, or none named here).
  */
-export function researchWrittenList(treeId: string): { at: string; list: PersonChange[]; other: SentOtherRow[]; more: number } | null {
+export function researchWrittenList(treeId: string): { at: string; list: PersonChange[]; other: SentOtherRow[]; more: number; older?: true } | null {
     try {
         const raw = localStorage.getItem(WRITTEN_KEY + treeId);
         if (!raw) return null;
-        const p = JSON.parse(raw) as { at?: unknown; list?: unknown; other?: unknown; more?: unknown };
+        const p = JSON.parse(raw) as { at?: unknown; list?: unknown; other?: unknown; more?: unknown; older?: unknown };
         if (typeof p.at !== 'string' || !Array.isArray(p.list)) return null;
         return {
             at: p.at, list: p.list.map(sanitizeChange).filter((c): c is PersonChange => !!c),
             other: Array.isArray(p.other) ? p.other.slice(0, WRITTEN_MAX).map(sanitizeSentOtherRow).filter((r): r is SentOtherRow => !!r) : [],
             more: typeof p.more === 'number' && p.more > 0 ? Math.min(Math.floor(p.more), 1_000_000) : 0,
+            ...(p.older === true ? { older: true as const } : {}),
         };
     } catch {
         return null;
     }
 }
 
-function storeWritten(treeId: string, at: string, list: PersonChange[], other: SentOtherRow[] = [], more = 0): void {
+function storeWritten(treeId: string, at: string, list: PersonChange[], other: SentOtherRow[] = [], more = 0, older = false): void {
     try {
-        localStorage.setItem(WRITTEN_KEY + treeId, JSON.stringify({ at, list: list.slice(0, WRITTEN_MAX),
+        localStorage.setItem(WRITTEN_KEY + treeId, JSON.stringify({ at, list: list.slice(0, WRITTEN_MAX), ...(older ? { older: true } : {}),
             ...(other.length ? { other: other.slice(0, WRITTEN_MAX) } : {}),
             // Rows not kept count with the rest.
             ...(more + Math.max(0, list.length - WRITTEN_MAX) + Math.max(0, other.length - WRITTEN_MAX) > 0
@@ -490,7 +493,21 @@ export const researchChangesMethods = uiModule({
     researchChangesCount(): { persons: number; other: number } | null {
         const list = this.researchChangesNow();
         if (!list) return null;
-        return { persons: list.length, other: otherRowCount(this.researchOtherNow()) };
+        const other = this.researchOtherNow();
+        const treeId = DataManager.getCurrentTreeId();
+        const w = treeId ? this.researchMediaWritesOf(treeId) : null;
+        // Counted as the list shows them (spec 102 §10): what the research does not write is not promised.
+        const g = w ? gateMediaChanges(list, other, w, { doc: true }) : { list, other };
+        return { persons: g.list.length, other: otherRowCount(g.other) };
+    },
+
+    /** The people "What will be sent" lists: the changes per person as the research writes them (spec 102 §10); null: not known. */
+    researchChangesShown(): PersonChange[] | null {
+        const list = this.researchChangesNow();
+        if (!list) return null;
+        const treeId = DataManager.getCurrentTreeId();
+        const w = treeId ? this.researchMediaWritesOf(treeId) : null;
+        return w ? gateMediaChanges(list, null, w).list : list;
     },
 
     /**
@@ -587,7 +604,8 @@ export const researchChangesMethods = uiModule({
         const other = list ? sentOtherRows(gated ? gated.other : this.researchOtherNow(), researchUnread(surnamesReadByResearch(treeId), lineageReadByResearch(treeId), keepsMedia)) : [];
         const link = TreeManager.getTreeMetadata(treeId)?.research;
         const stands = [link?.fingerprint ?? '', link?.sent?.state === 'written' ? link.sent.fingerprint : ''].filter(Boolean);
-        pendingSent.set(treeId, { fingerprint, data: baseCopy(data), list, other, stands, ...(keepsMedia ? { keepsMedia: true as const } : {}) });
+        pendingSent.set(treeId, { fingerprint, data: baseCopy(data), list, other, stands, ...(keepsMedia ? { keepsMedia: true as const } : {}),
+            ...(gated?.older ? { older: true as const } : {}) });
     },
 
     /**
@@ -655,9 +673,9 @@ export const researchChangesMethods = uiModule({
             const named = DataManager.getCurrentTreeId() === treeId ? DataManager.getData() : retagged?.data ?? p.data;
             const w = withWrittenMedia(p.list ?? [], p.other, media?.items ?? [], media?.count ?? 0, named,
                 researchUnread(surnamesReadByResearch(treeId), lineageReadByResearch(treeId), true));
-            storeWritten(treeId, at, w.list, w.other, w.more);
+            storeWritten(treeId, at, w.list, w.other, w.more, !!p.older);
         } else if (p.list) {
-            storeWritten(treeId, at, p.list, p.other);
+            storeWritten(treeId, at, p.list, p.other, 0, !!p.older);
         }
     },
 
@@ -758,6 +776,7 @@ export const researchChangesMethods = uiModule({
             const sentOther = w?.other ?? [];
             // Changes of the tree's own files beyond the rows (more than the answer listed, or none named here).
             const mediaMore = w?.more ?? 0;
+            olderMedia = !!w?.older;
             title = c.writtenTitle(clock(w?.at ?? lw?.at));
             const k = lw?.changes ?? list.length;
             const conflicts = lw?.conflicts ?? 0;
@@ -961,7 +980,8 @@ export const researchChangesMethods = uiModule({
                 + (moreWritten ? `<div class="research-changes-more">${esc(moreWrittenPeople ? c.andMore(moreWritten) : c.more(moreWritten))}</div>` : '')
                 // What the research does not read: quiet, under what was written.
                 + (appOnlyRows.length ? `<div class="research-changes-section" data-section="appOnly">${esc(c.appOnlySection(appOnlyRows.length))}</div>`
-                    + `<ul class="research-changes-list is-quiet" data-group="appOnly">${appOnlyRows.join('')}</ul>` : '');
+                    + `<ul class="research-changes-list is-quiet" data-group="appOnly">${appOnlyRows.join('')}</ul>` : '')
+                + (olderMedia ? `<p class="research-changes-note">${esc(c.olderMedia)}</p>` : '');
         }
         const panel = document.createElement('div');
         panel.id = PANEL_ID;

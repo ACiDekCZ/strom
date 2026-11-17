@@ -79,12 +79,18 @@ test.describe('what was written of the tree\'s own files', () => {
         await expect(panel.locator('.research-changes-body .research-changes-note')).toHaveText(/does not write photos of people and unions/);
         await expect(panel.locator('[data-kind="person"]').filter({ hasText: 'Jan Fíšek' })).toHaveCount(0);
         await expect(panel.locator('[data-kind="couple"]')).toHaveCount(0);
+        // The sync bar counts as the list shows: the portrait and the couple's photo are not counted.
+        const counted = await page.evaluate(() => (window.Strom.UI as unknown as { researchChangesCount(): { persons: number; other: number } | null }).researchChangesCount());
+        expect(counted?.persons).toBe(await panel.locator('[data-kind="person"]').count());
+        expect(counted?.other).toBe(0);
         await page.evaluate(() => window.Strom.UI.closeResearchChanges());
         await sendAndShowWritten(page, b);
         expect(b.postQueries?.[0].get('media')).toBeNull();
         await expect(panel.locator('[data-section="appOnly"]')).toHaveCount(0);
         await expect(panel.locator('[data-kind="couple"]')).toHaveCount(0);
         await expect(panel.locator('.research-changes-more')).toHaveCount(0);
+        // What was written says the same sentence (spec 102 §10).
+        await expect(panel.locator('.research-changes-body .research-changes-note')).toHaveText(/does not write photos of people and unions/);
     });
 
     test('a research with material.links: a file\'s title, its new place and a source\'s evidence are told as they are', async ({ page }) => {
