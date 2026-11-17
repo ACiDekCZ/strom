@@ -11,6 +11,7 @@ import { MaterialFile, MaterialList, MaterialResult, ThumbSize, researchMakesThu
 import {
     overviewItems, overviewGroups, overviewRows, overviewSummary, emptyFilters, passesFilters, activeFilterCount,
     rowsInView, stickyGroupAt, gridColumns, rangeKeys, nameWithoutYears, personsShort, parseViewPrefs, localDay,
+    parseFilters, storedFilters, sortOverviewGroups, itemInTree,
     fromKey, OverviewFilters, RowMetrics, firstFolderLine, inMaterialFolder, TreeRecord, itemWithoutPerson,
 } from '../materials-overview.js';
 import { MaterialThumbQueue, ThumbDeps, thumbSource } from '../material-thumbs.js';
@@ -148,7 +149,7 @@ describe('summary', () => {
     it('counts files, batches, files without a person and hidden ones', () => {
         const l = sample();
         expect(overviewSummary(overviewItems(l, [rec(att('t'), ['P1'])]), l, true))
-            .toEqual({ files: 7, batches: 2, noPerson: 3, hidden: 1 });
+            .toMatchObject({ files: 7, batches: 2, noPerson: 3, hidden: 1 });
     });
 
     it('takes the batches’ own counts while their files are not known', () => {
@@ -278,7 +279,7 @@ describe('groups of a tree without an archive (spec 102 §1)', () => {
             rec(att('b4', { places: [{ personId: 'p2' as never }] }), []),
         ]);
         expect(tree.filter(itemWithoutPerson).map(i => i.key)).toEqual(['a:b2', 'a:b3']);
-        expect(overviewSummary(tree, null, true, true)).toEqual({ files: 4, batches: 0, noPerson: 2, hidden: 0 });
+        expect(overviewSummary(tree, null, true, true)).toMatchObject({ files: 4, batches: 0, noPerson: 2, hidden: 0 });
         // With an archive the tree's own files stay out of the archive's counts.
         expect(overviewSummary(tree, null, true).files).toBe(0);
     });
@@ -365,11 +366,11 @@ describe('small helpers', () => {
     });
 
     it('the remembered view, defaults for anything else', () => {
-        expect(parseViewPrefs('{"group":"date","view":"list"}')).toEqual({ group: 'date', appGroup: 'added', view: 'list' });
-        expect(parseViewPrefs('{"group":"date","appGroup":"person"}')).toEqual({ group: 'date', appGroup: 'person', view: 'grid' });
-        expect(parseViewPrefs('{"group":"person","appGroup":"batch"}')).toEqual({ group: 'batch', appGroup: 'added', view: 'grid' });
-        expect(parseViewPrefs('nonsense')).toEqual({ group: 'batch', appGroup: 'added', view: 'grid' });
-        expect(parseViewPrefs(null)).toEqual({ group: 'batch', appGroup: 'added', view: 'grid' });
+        expect(parseViewPrefs('{"group":"date","view":"list"}')).toEqual({ group: 'date', appGroup: 'added', view: 'list', sort: null, filters: {} });
+        expect(parseViewPrefs('{"group":"date","appGroup":"person"}')).toEqual({ group: 'date', appGroup: 'person', view: 'grid', sort: null, filters: {} });
+        expect(parseViewPrefs('{"group":"person","appGroup":"batch"}')).toEqual({ group: 'batch', appGroup: 'added', view: 'grid', sort: null, filters: {} });
+        expect(parseViewPrefs('nonsense')).toEqual({ group: 'batch', appGroup: 'added', view: 'grid', sort: null, filters: {} });
+        expect(parseViewPrefs(null)).toEqual({ group: 'batch', appGroup: 'added', view: 'grid', sort: null, filters: {} });
     });
 });
 
@@ -517,5 +518,63 @@ describe('preview queue', () => {
         await tick(); await tick(); await tick();
         expect(asked).toEqual([`file:${sha(1)}`]);
         expect(cache.has(`${sha(1)}@256`)).toBe(true);
+    });
+});
+
+describe('review filters, counts and the list sort (spec 102 §8)', () => {
+    // I0001 is in the tree too (same original), I0002 and I0003 only in the archive; a:t is the tree's own.
+    const both = () => overviewItems(list([
+        file(1, { title: 'Wedding' } as Partial<MaterialFile>),
+        file(2, { date: '1931' } as Partial<MaterialFile>),
+        file(3, { title: 'Letter' } as Partial<MaterialFile>),
+    ]), [
+        { ...rec(att('j', { original: { sha256: sha(1), name: 'scan-1.jpg', mimeType: 'image/jpeg', bytes: 1 } }), ['P1']), source: 'Parish register' },
+        rec(att('t', { title: 'Grave', date: '1950' }), ['P1']),
+    ]);
+
+    it('without a title, without a source, in the tree or only in the archive', () => {
+        const items = both();
+        const pick = (f: Partial<OverviewFilters>) => items.filter(i => passesFilters(i, filters(f))).map(i => i.key).sort();
+        expect(items.filter(itemInTree).map(i => i.key).sort()).toEqual(['a:t', 'm:I0001']);
+        expect(pick({ where: 'tree' })).toEqual(['a:t', 'm:I0001']);
+        expect(pick({ where: 'archive' })).toEqual(['m:I0002', 'm:I0003']);
+        expect(pick({ noSource: true })).toEqual(['a:t', 'm:I0002', 'm:I0003']);
+        expect(pick({ noTitle: true })).toEqual(['m:I0002']);
+        expect(pick({ noTitle: true, where: 'tree' })).toEqual([]);
+        expect(activeFilterCount(filters({ noTitle: true, noSource: true, where: 'archive' }))).toBe(3);
+    });
+
+    it('the counts are over every file shown, the tree\u2019s own too', () => {
+        expect(overviewSummary(both(), null, true)).toMatchObject({ noTitle: 1, noSource: 3, inTree: 2, onlyArchive: 2 });
+    });
+
+    it('remembers kinds and the toggles, never the person or the search', () => {
+        const f = filters({ kinds: ['photo'], noTitle: true, where: 'archive', person: 'P1', query: 'x' });
+        const stored = storedFilters(f);
+        expect(stored).toEqual({ kinds: ['photo'], noTitle: true, where: 'archive' });
+        expect(parseFilters(JSON.parse(JSON.stringify(stored)))).toEqual({ kinds: ['photo'], noTitle: true, where: 'archive' });
+        expect(parseFilters({ kinds: ['nonsense', 'document'], where: 'elsewhere', noSource: 1 })).toEqual({ kinds: ['document'] });
+        expect(parseViewPrefs('{"sort":{"col":"date","dir":-1},"filters":{"noSource":true}}'))
+            .toMatchObject({ sort: { col: 'date', dir: -1 }, filters: { noSource: true } });
+        expect(parseViewPrefs('{"sort":{"col":"size","dir":1}}').sort).toBeNull();
+    });
+
+    it('sorts the list by a column both ways, empty values last, ties in the group\u2019s order', () => {
+        const tree = overviewItems(null, [
+            rec(att('a', { title: 'Grave', date: '1950' }), ['P1']),
+            { ...rec(att('b', { date: '1931' }), ['P1']), source: 'Parish register' },
+            rec(att('c', { title: 'Letter' }), ['P1']),
+            { ...rec(att('d', { title: 'Album', date: '1931' }), ['P1']), source: 'Census' },
+        ]);
+        const groups = () => overviewGroups({ items: tree, list: null, filters: filters(), mode: 'added', batchLoaded: () => true, now: Date.parse('2026-11-17T12:00:00.000Z'), personName: () => null });
+        expect(groups()).toHaveLength(1);
+        const order = (sort: { col: 'title' | 'date' | 'source'; dir: 1 | -1 } | null) =>
+            sortOverviewGroups(groups(), sort, { personName: () => null, kindLabel: () => '' }).flatMap(g => g.items.map(i => i.key));
+        const flat = order(null);
+        expect(order({ col: 'date', dir: 1 })).toEqual(['a:b', 'a:d', 'a:a', 'a:c']);
+        expect(order({ col: 'date', dir: -1 })).toEqual(['a:a', 'a:b', 'a:d', 'a:c']);
+        expect(order({ col: 'source', dir: 1 })).toEqual(['a:d', 'a:b', 'a:a', 'a:c']);
+        expect(order({ col: 'source', dir: -1 })).toEqual(['a:b', 'a:d', 'a:a', 'a:c']);
+        expect(order(null)).toEqual(flat);
     });
 });

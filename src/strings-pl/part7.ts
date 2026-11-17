@@ -276,6 +276,7 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         editAttachment: (name: string) => `edycja załącznika osoby ${name}`,
         mediaTitle: (name: string) => `tytuł pliku ${name}`,
         mediaDetails: (name: string) => `dane pliku ${name}`,
+        mediaDetailsN: (n: number) => `dane ${nPl(n, 'pliku', 'plików', 'plików')}`,
         mediaKind: (name: string) => `rodzaj pliku ${name}`,
         mediaDate: (name: string) => `data pliku ${name}`,
         mediaPlaceAdd: (name: string) => `połączenie pliku ${name}`,

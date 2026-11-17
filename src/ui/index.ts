@@ -99,6 +99,7 @@ import { materialActionsMethods } from './material-actions-ui.js';
 import { materialDetailsMethods } from './material-details-ui.js';
 import { materialUsesMethods } from './material-uses-ui.js';
 import { materialAttachMethods } from './material-attach-ui.js';
+import { materialBulkMethods } from './material-bulk-ui.js';
 import { sourceDocsMethods } from './source-docs-ui.js';
 import { researchUpdateMethods } from './research-update-ui.js';
 import { researchChangesMethods } from './research-changes-ui.js';
@@ -804,6 +805,10 @@ Object.assign(UIClass.prototype, materialUsesMethods);
 type MaterialAttachMethods = typeof materialAttachMethods;
 export interface UIClass extends MaterialAttachMethods {}
 Object.assign(UIClass.prototype, materialAttachMethods);
+
+type MaterialBulkMethods = typeof materialBulkMethods;
+export interface UIClass extends MaterialBulkMethods {}
+Object.assign(UIClass.prototype, materialBulkMethods);
 
 type SourceDocsMethods = typeof sourceDocsMethods;
 export interface UIClass extends SourceDocsMethods {}

@@ -169,6 +169,8 @@ export interface MaterialItem {
     state?: MaterialFile['state'];
     /** How many places of the tree it is used in (the overview; src/media-uses.ts). */
     uses?: number;
+    /** The first source it is evidence of or cut out for, by title (the overview; none: without a source). */
+    source?: string;
     /** The tree's record of it, taken out of the tree (spec 102 §9): "Restore" brings it back with its places. */
     removedId?: string;
 }

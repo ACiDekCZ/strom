@@ -30,7 +30,7 @@ import { detailsKeys, materialDetailsEdit, materialDetailsFields, materialDetail
 import { canEditPortrait } from './portrait-actions-ui.js';
 import { pdfBlobFromDataUrl } from '../attachments.js';
 import { formatBytesShort } from './originals-ui.js';
-import { openViewerList, closeImageViewer, viewerListOpen, viewerListIndex, redrawViewerList, relayoutViewer, ViewerSlots } from './image-viewer.js';
+import { openViewerList, closeImageViewer, viewerListOpen, viewerListIndex, redrawViewerList, relayoutViewer, goViewerList, ViewerSlots } from './image-viewer.js';
 import { MaterialOpenCtx, MaterialsContext, appendBreakable, materialItemSha, materialTileLetters, treeAttachmentsKey } from './materials-ui.js';
 import { uiModule } from './module.js';
 
@@ -56,6 +56,21 @@ interface ViewerState {
     editing: string | null;
     /** "Where used" shows all its places (§3; "+ N more" clicked). */
     usesOpen: boolean;
+    /** Go through (spec 102 §8c): the files saved, the shown file's unsaved change (saved when going on). */
+    review: { saved: Set<string>; pending: (() => Promise<void>) | null; index: number } | null;
+}
+
+/**
+ * A text field's caret (or selection) reaches its start / end: ← / → go
+ * along the review only from there (the whole title selected goes on).
+ */
+function caretAt(el: EventTarget | null, end: boolean): boolean {
+    if (!(el instanceof HTMLInputElement) || el.type !== 'text') return true;
+    return end ? (el.selectionEnd ?? 0) === el.value.length : (el.selectionStart ?? 0) === 0;
+}
+
+function inTextField(el: EventTarget | null): boolean {
+    return el instanceof HTMLTextAreaElement || (el instanceof HTMLInputElement && el.type === 'text');
 }
 
 let viewer: ViewerState | null = null;
@@ -212,7 +227,11 @@ export const materialViewerMethods = uiModule({
     openMaterialViewer(items: MaterialItem[], index: number, ctx: MaterialOpenCtx): void {
         if (!items[index]) return;
         this.closeMaterialsItemMenu();
-        const state: ViewerState = { items: [...items], ctx, urls: [], expanded: false, drawnAttachments: treeAttachmentsKey(), editing: null, usesOpen: false };
+        const review = ctx.where === 'review';
+        const state: ViewerState = {
+            items: [...items], ctx, urls: [], expanded: false, drawnAttachments: treeAttachmentsKey(), editing: null, usesOpen: false,
+            review: review ? { saved: new Set(), pending: null, index } : null,
+        };
         viewer = state;
         openViewerList(
             {
@@ -220,9 +239,12 @@ export const materialViewerMethods = uiModule({
                 show: (i, slots) => this.drawMaterialInViewer(i, slots),
                 // F2: the shown item's title, kind and date; P: Link to… (spec 102 §4).
                 key: (e) => {
-                    if (e.altKey || e.ctrlKey || e.metaKey || viewer !== state || state.editing) return false;
-                    if (e.key === 'p' || e.key === 'P') {
-                        const btn = document.querySelector<HTMLElement>('#image-viewer-panel .mv-act[data-action="attach"]');
+                    if (e.altKey || e.ctrlKey || e.metaKey || viewer !== state) return false;
+                    // Going through, the fields stay open: P and S work outside a text field (spec 102 §8c).
+                    if (state.editing && !(state.review && !inTextField(e.target))) return false;
+                    if (e.key === 'p' || e.key === 'P' || ((e.key === 's' || e.key === 'S') && state.review)) {
+                        const id = e.key === 'p' || e.key === 'P' ? 'attach' : 'makeSource';
+                        const btn = document.querySelector<HTMLElement>(`#image-viewer-panel .mv-act[data-action="${id}"]`);
                         if (!btn || btn.getAttribute('aria-disabled') === 'true') return false;
                         btn.click();
                         return true;
@@ -237,8 +259,28 @@ export const materialViewerMethods = uiModule({
             () => {
                 releaseUrls(state);
                 if (viewer === state) viewer = null;
+                if (state.review) {
+                    // Ended (Esc, ×, the last file): what was not saved stays as it was.
+                    state.review.pending = null;
+                    const saved = state.review.saved.size;
+                    this.showToast(strings.materials.bulkDone(saved, state.items.length), 5000, { closable: true, kind: 'materials' });
+                    state.ctx.done?.(saved);
+                }
             },
         );
+    },
+
+    /** Go through: save the shown file's change (if any) and go to the next one; after the last the review ends. */
+    async reviewNext(delta: 1 | -1, save: boolean): Promise<void> {
+        const st = viewer;
+        if (!st?.review) return;
+        const pending = st.review.pending;
+        st.review.pending = null;
+        if (save && pending) await pending();
+        if (viewer !== st) return;
+        const at = viewerListIndex();
+        if (delta > 0 && at >= st.items.length - 1) { closeImageViewer(); return; }
+        goViewerList(delta);
     },
 
     /** The remembered list changed: the shown item's details again (its image stays). */
@@ -289,10 +331,32 @@ export const materialViewerMethods = uiModule({
         const item = this.freshMaterialItem(st.items[index]);
         st.items[index] = item;
         const ctx = this.materialsContext();
-        slots.pos(strings.materials.viewerPos(index + 1, st.items.length, st.ctx.label ?? ''));
+        if (st.review) {
+            // Another file: the one before keeps what was typed in it (← → and a swipe save as well).
+            if (st.review.index !== index) {
+                const pending = st.review.pending;
+                st.review.pending = null;
+                st.review.index = index;
+                if (pending) void pending();
+            }
+            slots.pos(`${strings.materials.reviewHead(index + 1, st.items.length, st.ctx.label ?? '')} · ${strings.materials.reviewEsc}`);
+            st.editing = materialDetailsEdit(item, ctx) === 'on' ? item.key : null;
+            st.expanded = true;
+        } else slots.pos(strings.materials.viewerPos(index + 1, st.items.length, st.ctx.label ?? ''));
         if (st.editing && st.editing !== item.key) st.editing = null;
         if (!slots.redraw) this.drawMaterialStage(item, ctx, slots, st);
         this.drawMaterialPanel(item, ctx, slots.panel, st);
+        // Going through: the title field ready for typing (on a computer; a phone's keyboard waits for a tap).
+        if (st.review && st.editing === item.key && !slots.redraw && !window.matchMedia?.('(pointer: coarse)').matches) {
+            // After the viewer is shown (the first file is drawn before the overlay opens).
+            setTimeout(() => {
+                if (viewer !== st || viewerListIndex() !== index) return;
+                const title = slots.panel.querySelector<HTMLInputElement>('.mat-edit-title');
+                if (!title || document.activeElement === title) return;
+                title.focus();
+                title.select();
+            }, 0);
+        }
     },
 
     /** The panel's title becomes its fields (✎, F2, "Add a title"). */
@@ -330,6 +394,8 @@ export const materialViewerMethods = uiModule({
         const cancel = h('button', 'mv-act', strings.buttons.cancel);
         cancel.type = 'button';
         cancel.dataset.action = 'cancelDetails';
+        const st = viewer;
+        if (st?.review) return this.reviewEditForm(item, form, fields, before, bar, save, cancel);
         bar.append(save, cancel, h('span', 'mv-keys', m.keysHint));
         form.appendChild(bar);
         const run = async () => {
@@ -344,6 +410,72 @@ export const materialViewerMethods = uiModule({
         save.addEventListener('click', () => void run());
         cancel.addEventListener('click', () => this.endMaterialEdit());
         detailsKeys(form, () => void run(), () => this.endMaterialEdit());
+        return form;
+    },
+
+    /**
+     * The fields while going through (8c): "Save and next →" (under Without
+     * source: "Create a source from this file…" first), "Skip"; Enter or →
+     * at the field's end save and go on, ← goes back (saving), Esc ends.
+     */
+    reviewEditForm(item: MaterialItem, form: HTMLElement, fields: ReturnType<typeof materialDetailsFields>, before: ReturnType<typeof materialDetailsOf>, bar: HTMLElement, save: HTMLButtonElement, skip: HTMLButtonElement): HTMLElement {
+        const m = strings.materials;
+        const st = viewer!;
+        const review = st.review!;
+        save.textContent = m.saveNext;
+        save.dataset.action = 'saveNext';
+        skip.textContent = m.skipFile;
+        skip.dataset.action = 'skip';
+        const touch = window.matchMedia?.('(pointer: coarse)').matches;
+        const keys = h('span', 'mv-keys', touch ? m.reviewSwipe : m.reviewKeys);
+        if (st.ctx.noSource && this.canEditSources() && !DataManager.isReadOnly()) {
+            const make = h('button', 'mv-act is-primary', m.makeSource);
+            make.type = 'button';
+            make.dataset.action = 'reviewSource';
+            save.classList.remove('is-primary');
+            make.addEventListener('click', () => void (async () => {
+                await review.pending?.();
+                review.pending = null;
+                const fresh = this.freshMaterialItem(item);
+                if (await this.makeSourceFromMaterial(fresh, { personId: this.materialContextPerson() }) && viewer === st) {
+                    review.saved.add(item.key);
+                    void this.reviewNext(1, false);
+                }
+            })());
+            bar.append(make);
+        }
+        bar.append(save, skip, keys);
+        form.appendChild(bar);
+        // What would be saved now (none when nothing changed or the date cannot be read).
+        const pending = async (): Promise<void> => {
+            const after = fields.read();
+            if (!after) return;
+            const changed = after.title !== before.title || after.kind !== before.kind || after.date !== before.date;
+            if (!changed) return;
+            if (await this.saveMaterialDetails(item, before, after)) review.saved.add(item.key);
+        };
+        review.pending = pending;
+        save.addEventListener('click', () => void this.reviewNext(1, true));
+        skip.addEventListener('click', () => void this.reviewNext(1, false));
+        form.dataset.ownKeys = '';
+        form.addEventListener('keydown', (e) => {
+            if (e.isComposing) return;
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
+                review.pending = null;
+                closeImageViewer();
+            } else if (e.key === 'Enter' && e.target instanceof HTMLInputElement) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (fields.read()) void this.reviewNext(1, true);
+            } else if ((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && !e.shiftKey && caretAt(e.target, e.key === 'ArrowRight')
+                && !(e.target as HTMLElement).closest('.mat-edit-kind')) {
+                e.preventDefault();
+                e.stopPropagation();
+                void this.reviewNext(e.key === 'ArrowRight' ? 1 : -1, true);
+            }
+        });
         return form;
     },
 

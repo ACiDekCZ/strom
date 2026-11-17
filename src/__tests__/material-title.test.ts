@@ -119,6 +119,24 @@ describe('DataManager.setMediaDetails', () => {
         expect([m.title, m.kind, m.date, m.note]).toEqual([undefined, undefined, undefined, undefined]);
     });
 
+    it('many files at once are one undo step; unchanged files are left out (spec 102 §8d)', () => {
+        const p = DataManager.createPerson({ firstName: 'Ada', lastName: 'Test', gender: 'female' as Gender });
+        const one = (n: string) => DataManager.addAttachment(p.id, { name: n, mimeType: 'image/jpeg', dataUrl: 'data:image/jpeg;base64,AAAA', sizeBytes: 3 })!;
+        const a = one('a.jpg'), b = one('b.jpg'), c = one('c.jpg');
+        DataManager.setMediaDetails(c.id, { kind: 'record' });
+        const changed = DataManager.setMediaDetailsMany([
+            { id: a.id, details: { title: 'Box 1', kind: 'record' } },
+            { id: b.id, details: { title: 'Box 2', kind: 'record' } },
+            { id: c.id, details: { kind: 'record' } },
+            { id: 'missing', details: { title: 'x' } },
+        ]);
+        expect(changed).toEqual([a.id, b.id]);
+        expect([DataManager.getMedia(a.id)!.title, DataManager.getMedia(b.id)!.kind]).toEqual(['Box 1', 'record']);
+        DataManager.undo();
+        expect([DataManager.getMedia(a.id)!.title, DataManager.getMedia(b.id)!.title, DataManager.getMedia(c.id)!.kind]).toEqual([undefined, undefined, 'record']);
+        expect(DataManager.setMediaDetailsMany([{ id: c.id, details: { kind: 'record' } }])).toEqual([]);
+    });
+
     it('a read-only view changes nothing', () => {
         const p = DataManager.createPerson({ firstName: 'Ada', lastName: 'Test', gender: 'female' as Gender });
         const a = DataManager.addAttachment(p.id, { name: 'scan.jpg', mimeType: 'image/jpeg', dataUrl: 'data:image/jpeg;base64,AAAA', sizeBytes: 3 })!;

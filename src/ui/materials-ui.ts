@@ -83,9 +83,14 @@ export interface MaterialActionCtx {
 
 /** Where an item was opened from, for the viewer (its ‹ › go through `items`). */
 export interface MaterialOpenCtx {
-    where: 'section' | 'window';
-    /** What the items are ("Jan Novák", a batch's name) for the viewer's header. */
+    /** `review`: Go through (spec 102 §8c) – the panel's fields from the first file, saved on the way. */
+    where: 'section' | 'window' | 'review';
+    /** What the items are ("Jan Novák", a batch's name) for the viewer's header; in review the filter's name. */
     label?: string;
+    /** Review under "Without source": Create a source is the main action. */
+    noSource?: boolean;
+    /** Review ended (the viewer closed): how many files were saved. */
+    done?: (saved: number) => void;
 }
 
 /** What the materials need to know about the active tree (null: not linked to a research). */

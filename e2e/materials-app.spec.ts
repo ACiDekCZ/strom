@@ -82,8 +82,9 @@ test.describe('Materials window without a research', () => {
         await expect(groups(page).nth(2).locator('.mw-group-name')).toHaveText('Earlier');
         await expect(groups(page).nth(1).locator('.mw-group-meta')).toHaveText('added with Florimund Pfefferkorn, Quirinella Pfefferkornová');
         await expect(win(page).locator('.mw-canvas .mw-tile')).toHaveCount(3);
-        // No batches, no "In the tree" (everything is), the number of places on the tile.
-        await expect(win(page).locator('[data-mw="batch"], [data-mw="group-batch"], [data-mw="hidden"], [data-mw="select"]')).toHaveCount(0);
+        // No batches, no "In the tree" (everything is), the number of places on the tile; selecting is there (spec 102 §8).
+        await expect(win(page).locator('[data-mw="batch"], [data-mw="group-batch"], [data-mw="hidden"]')).toHaveCount(0);
+        await expect(win(page).locator('[data-mw="select"]')).toHaveCount(1);
         await expect(win(page).locator('.mw-intree')).toHaveCount(0);
         const wedding = win(page).locator('.mw-tile', { hasText: 'svatba.png' });
         await expect(wedding.locator('.mw-places')).toHaveText('2');

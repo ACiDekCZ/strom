@@ -220,7 +220,7 @@ test.describe('Materials window: loading, grouping and views', () => {
         await win(page).locator('[data-mw="view-list"]').click();
         await expect(win(page).locator('.mw-canvas .mw-li')).toHaveCount(3);
         await expect(win(page).locator('.mw-canvas .mw-tile')).toHaveCount(0);
-        expect(JSON.parse(await page.evaluate(() => localStorage.getItem('strom.materials.view') ?? '{}'))).toEqual({ group: 'date', appGroup: 'added', view: 'list' });
+        expect(JSON.parse(await page.evaluate(() => localStorage.getItem('strom.materials.view') ?? '{}'))).toMatchObject({ group: 'date', appGroup: 'added', view: 'list' });
         await win(page).locator('.close-btn').click();
         await openWindow(page);
         await expect(win(page)).toHaveAttribute('data-group', 'date');
@@ -304,8 +304,9 @@ test.describe('Materials window: selecting', () => {
         await win(page).locator('.mw-group-toggle', { hasText: 'Single files' }).click();
         await win(page).locator('.mw-tile', { hasText: 'jen-strom.png' }).click();
         await expect(bar.locator('.mw-selcount')).toHaveText('7 files selected');
-        await expect(win(page).locator('.mw-skipped')).toHaveText('1 only in the tree stay unchanged.');
-        await bar.locator('[data-mw="sel-assign"]').click();
+        // Assign… is in ⋯ (spec 102 §8b); the tree's file stays out of it.
+        await bar.locator('[data-mw="sel-more"]').click();
+        await page.locator('.mw-pop-selMenu [data-action="sel-assign"]').click();
         const acts = await actions(page);
         expect(acts[0].id).toBe('assign');
         expect(acts[0].keys).toHaveLength(6);
@@ -334,14 +335,18 @@ test.describe('Materials window: selecting', () => {
         await expect(win(page).locator('.mw-selbar .mw-selcount')).toHaveText('3 files selected');
     });
 
-    test('an older research (no assigning): no Select, no "Show hidden"', async ({ page }) => {
+    test('an older research (no assigning): no "Show hidden"; selecting without Assign or Hide (spec 102 §8)', async ({ page }) => {
         await setup(page, { files, batches, features: ['material.list'] });
         await openWindow(page);
         await expect(tiles(page).first()).toBeVisible();
-        await expect(win(page).locator('[data-mw="select"]')).toHaveCount(0);
         await expect(win(page).locator('[data-mw="hidden"]')).toHaveCount(0);
-        await tiles(page).first().click({ modifiers: ['Shift'] });
-        await expect(win(page).locator('.mw-selbar')).toBeHidden();
+        await win(page).locator('[data-mw="select"]').click();
+        await tiles(page).first().click();
+        await expect(win(page).locator('.mw-selbar')).toBeVisible();
+        // Title… needs material.edit: off, with the reason.
+        await expect(win(page).locator('[data-mw="sel-title"]')).toHaveAttribute('aria-disabled', 'true');
+        // Nothing for ⋯ (Assign and Hide need material.assign).
+        await expect(win(page).locator('[data-mw="sel-more"]')).toHaveCount(0);
     });
 });
 
@@ -367,12 +372,16 @@ test.describe('Materials window: the research not running', () => {
         await page.keyboard.press('Escape');
         await win(page).locator('[data-mw="select"]').click();
         await tiles(page).first().click();
-        await expect(win(page).locator('[data-mw="sel-assign"]')).toHaveAttribute('aria-disabled', 'true');
+        await win(page).locator('[data-mw="sel-more"]').click();
+        await expect(page.locator('.mw-pop-selMenu [data-action="sel-assign"]')).toHaveAttribute('aria-disabled', 'true');
+        await page.keyboard.press('Escape');
         // Running again: the strip goes, quietly.
         bridge.down = false;
         await poll(page);
         await expect(win(page).locator('.mw-status')).toBeHidden();
-        await expect(win(page).locator('[data-mw="sel-assign"]')).not.toHaveAttribute('aria-disabled', 'true');
+        await win(page).locator('[data-mw="sel-more"]').click();
+        await expect(page.locator('.mw-pop-selMenu [data-action="sel-assign"]')).not.toHaveAttribute('aria-disabled', 'true');
+        await page.keyboard.press('Escape');
     });
 
     test('never listed: the empty state and the tree\'s attachments', async ({ page }) => {
@@ -556,7 +565,7 @@ test.describe('Materials window: sizes', () => {
             await page.keyboard.press('Escape');
             await expect(win(page).locator('.mw-filters-btn')).toHaveText('Filter · 1');
             // The header stays one row: the active chip is counted in the button, not drawn beside it.
-            await expect(win(page).locator('.mw-chips')).toBeHidden();
+            await expect(win(page).locator('.mw-chips:visible')).toHaveCount(0);
             expect((await win(page).locator('.mw-head').boundingBox())!.height).toBeLessThan(70);
             const hidden = win(page).locator('.mw-tile.is-hidden');
             await expect(hidden).toHaveCount(1);

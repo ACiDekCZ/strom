@@ -101,7 +101,8 @@ async function openAssign(page: Page, text: string): Promise<void> {
     if (!(await win(page).isVisible())) await openWindow(page);
     await win(page).locator('[data-mw="select"]').click();
     await tile(page, text).click();
-    await win(page).locator('[data-mw="sel-assign"]').click();
+    await win(page).locator('[data-mw="sel-more"]').click();
+    await page.locator('.mw-pop-selMenu [data-action="sel-assign"]').click();
     await expect(dialog(page).locator('.mdlg-title')).toHaveText('Assign to a person');
 }
 
@@ -527,7 +528,8 @@ test.describe('Hide and Restore', () => {
         await win(page).locator('[data-mw="select"]').click();
         await tile(page, 'Sken 1').click();
         await tile(page, 'Sken 2').click();
-        await win(page).locator('[data-mw="sel-hide"]').click();
+        await win(page).locator('[data-mw="sel-more"]').click();
+        await page.locator('.mw-pop-selMenu [data-action="sel-hide"]').click();
         await expect(dialog(page).locator('.mdlg-title')).toHaveText('Hide 2 files?');
         await expect(dialog(page).locator('.mdlg-text')).toHaveText('The files stay in the research. They leave the lists, can be found with “Show hidden” and restored.');
         await dialog(page).getByRole('button', { name: 'Hide', exact: true }).click();

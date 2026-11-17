@@ -28,11 +28,11 @@ import { strings, getCurrentLanguage, joinAnd } from '../strings.js';
 import { researchPersonRef, researchSchemeUrl, researchLinkMark } from '../research-link.js';
 import { announcedResearchScheme } from '../research-device.js';
 import { PersonPicker } from '../person-picker.js';
-import { MQ_MOBILE, MQ_PHONE_LANDSCAPE } from '../breakpoints.js';
+import { MQ_MOBILE, MQ_PHONE_LANDSCAPE, MQ_TABLET } from '../breakpoints.js';
 import {
     MaterialItem, MaterialList, MaterialBatch, MaterialError, MaterialActionId, MaterialCaps,
     cachedMaterials, primeMaterials, fetchMaterial, saveMaterialList, materialKindLabel, materialErrorText,
-    materialType,
+    materialType, materialDateForInput,
 } from '../materials.js';
 import {
     OverviewFilters, OverviewGroupMode, OverviewView, OverviewGroup, OverviewFolder, OverviewLayout, OverviewRow,
@@ -40,9 +40,9 @@ import {
     emptyFilters, activeFilterCount, narrowing, overviewItems, overviewSummary, overviewGroups, overviewRows,
     rowsInView, stickyGroupAt, gridColumns, rangeKeys, personsShort, nameWithoutYears, parseViewPrefs,
     itemWithoutPerson, OverviewSummary, inMaterialFolder, firstFolderLine, ViewPrefs,
+    ListSort, ListColumn, sortOverviewGroups, storedFilters, itemInTree,
 } from '../materials-overview.js';
 import { materialThumbs, ThumbSnapshot } from '../material-thumbs.js';
-import { formatBytesShort } from './originals-ui.js';
 import {
     MaterialsOpenOptions, MaterialActionCtx, fileNameBreakParts, materialShortDate, materialStaleTime, materialTileLetters, materialItemSha, treeAttachmentsKey,
 } from './materials-ui.js';
@@ -106,10 +106,16 @@ function writePrefs(group: OverviewGroupMode, view: OverviewView): void {
     try { localStorage.setItem(VIEW_KEY, JSON.stringify(prefs)); } catch { /* blocked: this window only */ }
 }
 
+/** Remember the list's sort and the last filters (spec 102 §8). */
+function writeListPrefs(sort: ListSort | null, filters: OverviewFilters): void {
+    const prefs = readPrefs();
+    try { localStorage.setItem(VIEW_KEY, JSON.stringify({ ...prefs, sort, filters: storedFilters(filters) })); } catch { /* blocked: this window only */ }
+}
+
 /** The window's model: the research's archive with the tree's files, or the tree's own files alone. */
 type WindowModel = 'archive' | 'app';
 
-type PopKind = 'person' | 'kind' | 'batch' | 'sheet' | 'batchMenu' | 'folderMenu' | 'where';
+type PopKind = 'person' | 'kind' | 'batch' | 'sheet' | 'batchMenu' | 'folderMenu' | 'selMenu' | 'where';
 
 interface Win {
     gen: number;
@@ -122,6 +128,8 @@ interface Win {
     filters: OverviewFilters;
     group: OverviewGroupMode;
     view: OverviewView;
+    /** The list's column sort (spec 102 §8f). */
+    sort: ListSort | null;
     /** Groups and folders opened or closed by hand (others follow the defaults). */
     open: Map<string, boolean>;
     /** The batch the window was opened for (open by default). */
@@ -166,6 +174,13 @@ interface Win {
     drawnAttachments: string;
 }
 
+interface SelAction {
+    id: string;
+    label: string;
+    /** Offered, but not now: why. */
+    why: string | null;
+}
+
 function capsKey(caps: MaterialCaps, base: string | null): string {
     return `${caps.list}|${caps.assign}|${caps.thumb}|${caps.bridgeUp}|${caps.openLinks !== false}|${caps.links}|${caps.edit}|${caps.uses}|${caps.sort}|${caps.mediaApp}|${base ?? ''}`;
 }
@@ -186,11 +201,17 @@ function treeRecords(byRefn: boolean): TreeRecord[] {
     const key = (id: PersonId): string | null => (byRefn ? researchPersonRef(DataManager.getPerson(id)?.refn) : id);
     // With an archive a file taken out of the tree stays with it (Hidden · Removed from the tree, spec 102 §9).
     const taken = byRefn ? allMedia(data).filter(a => !a.places?.length && !!a.removed && !!a.original?.sha256) : [];
-    return [...treeMedia(data), ...taken].map(att => ({
-        att,
-        persons: mediaPersonIds(att.places.length ? att : { places: att.removed?.places ?? [] }).map(key).filter((k): k is string => !!k),
-        uses: uses.get(att.id)?.length ?? 0,
-    }));
+    return [...treeMedia(data), ...taken].map(att => {
+        const used = uses.get(att.id) ?? [];
+        const src = used.find(u => u.kind === 'source' || u.kind === 'excerpt');
+        const source = src?.sourceId ? (data.sources?.[src.sourceId]?.title || strings.materials.unknownSource) : undefined;
+        return {
+            att,
+            persons: mediaPersonIds(att.places.length ? att : { places: att.removed?.places ?? [] }).map(key).filter((k): k is string => !!k),
+            uses: used.length,
+            ...(source ? { source } : {}),
+        };
+    });
 }
 
 /** Person key → name: REFN (the tree's person first, else what the research calls them), or PersonId without an archive. */
@@ -226,6 +247,7 @@ export const materialsWindowMethods = uiModule({
         overlay.dataset.group = group;
         body.innerHTML = `
             <div class="mw-status" hidden></div>
+            <div class="mw-lhead" hidden></div>
             <div class="mw-scroll">
                 <div class="mw-sticky"></div>
                 <div class="mw-empty" hidden></div>
@@ -234,9 +256,12 @@ export const materialsWindowMethods = uiModule({
             <div class="mw-foot">
                 <div class="mw-skipped" role="note" hidden></div>
                 <div class="mw-thumbs" role="status" hidden></div>
+                <div class="mw-bulk" role="status" hidden></div>
                 <div class="mw-selbar" role="region" hidden></div>
             </div>`;
-        const filters = emptyFilters();
+        // The last filters come back (spec 102 §8), except for a window opened for a person or a batch.
+        const filters: OverviewFilters = { ...emptyFilters(), ...(opts.person || opts.batch ? {} : prefs.filters) };
+        if (model === 'app') filters.where = null;
         filters.person = opts.person;
         filters.batch = opts.batch;
         const w: Win = {
@@ -250,6 +275,7 @@ export const materialsWindowMethods = uiModule({
             filters,
             group,
             view: prefs.view,
+            sort: prefs.sort,
             open: new Map(),
             focusBatch: opts.batch,
             selecting: false,
@@ -268,7 +294,7 @@ export const materialsWindowMethods = uiModule({
             metrics: { view: 'grid', cols: 1, tileRow: 180, restoreExtra: 28, listRow: 48, group: 56, folder: 36, skeleton: 180, groupEnd: 12 },
             rendered: new Map(),
             names: new Map(),
-            summary: { files: 0, batches: 0, noPerson: 0, hidden: 0 },
+            summary: { files: 0, batches: 0, noPerson: 0, hidden: 0, noTitle: 0, noSource: 0, inTree: 0, onlyArchive: 0 },
             io: null,
             ro: null,
             unsubThumbs: null,
@@ -469,7 +495,9 @@ export const materialsWindowMethods = uiModule({
         const width = Math.max(120, w.width);
         const compact = phone || land;
         const gap = phone ? 6 : land ? 8 : 12;
-        const cols = phone ? 3 : gridColumns(width, land ? 88 : 124, gap);
+        // A tablet (641–1024) gets larger tiles for a finger: 5 columns at 1024 (spec 102 §11).
+        const tablet = !land && media(MQ_TABLET);
+        const cols = phone ? 3 : gridColumns(width, land ? 88 : tablet ? 176 : 124, gap);
         const tile = (width - gap * (cols - 1)) / cols;
         // Under a tile: its name (2 lines) and its people; nothing on a phone (the name is in the viewer).
         const text = compact ? 0 : 57;
@@ -520,17 +548,19 @@ export const materialsWindowMethods = uiModule({
             batchLoaded: id => !!rec?.full || w.loadedBatches.has(id),
             personName: key => w.names.get(key) ?? null,
         });
+        if (w.view === 'list') sortOverviewGroups(w.groups, w.sort, { personName: key => w.names.get(key) ?? null, kindLabel: materialKindLabel });
         w.drawnCaps = capsKey(ctx.caps, ctx.base);
         w.metrics = this.mwMetrics();
         w.layout = overviewRows(w.groups, key => this.mwIsOpen(key), w.metrics);
         w.overlay.dataset.group = w.group;
         w.overlay.dataset.model = model;
-        w.overlay.classList.toggle('can-select', ctx.caps.assign);
+        w.overlay.classList.toggle('can-select', this.mwCanSelect());
         w.overlay.classList.toggle('is-selecting', w.selecting);
         w.overlay.classList.toggle('is-list', w.view === 'list');
         this.mwHeader();
         this.mwTools();
         this.mwStatus();
+        this.mwListHead();
         const empty = this.mwEmpty();
         w.canvas.hidden = empty === 'skeleton';
         w.canvas.style.height = `${w.layout.height}px`;
@@ -590,6 +620,7 @@ export const materialsWindowMethods = uiModule({
                 ${ctx.caps.assign ? toggle('hidden', m.showHidden, f.showHidden) : ''}
                 ${count ? `<button type="button" class="link-button mw-clear" data-mw="clear">${esc(m.clearFilters)}</button>` : ''}
             </div>
+            ${this.mwReviewChips(toggle)}
             <button type="button" class="mw-chip sel-opt mw-filters-btn${count ? ' is-active' : ''}" data-mw="sheet" aria-haspopup="dialog">${esc(count ? m.filters(count) : m.filtersTitle)}</button>
             <span class="mw-gap"></span>
             ${seg('mw-seg-group', m.groupBy, w.model === 'app' ? [
@@ -603,7 +634,28 @@ export const materialsWindowMethods = uiModule({
                 { act: 'view-grid', label: m.grid, icon: '▦', on: w.view === 'grid' },
                 { act: 'view-list', label: m.list, icon: '☰', on: w.view === 'list' },
             ])}
-            ${ctx.caps.assign ? `<button type="button" class="mw-chip sel-opt mw-select${w.selecting ? ' is-active' : ''}" data-mw="select" aria-pressed="${w.selecting}">${esc(w.selecting ? m.done : m.select)}</button>` : ''}`);
+            ${this.mwCanSelect() ? `<button type="button" class="mw-chip sel-opt mw-select${w.selecting ? ' is-active' : ''}" data-mw="select" aria-pressed="${w.selecting}">${esc(w.selecting ? m.done : m.select)}</button>` : ''}`);
+    },
+
+    /**
+     * The review filters with their counts (spec 102 §8a): Without title,
+     * Without source | In the tree, Only in the archive (beside an archive).
+     */
+    mwReviewChips(toggle: (act: string, label: string, on: boolean) => string, cls = 'mw-chips mw-chips-review'): string {
+        const w = win!;
+        const m = strings.materials;
+        const f = w.filters;
+        const s = w.summary;
+        const where = w.model === 'archive'
+            ? `<span class="mw-chips-sep" aria-hidden="true"></span>
+                ${toggle('where-tree', m.filterCount(m.fInTree, s.inTree), f.where === 'tree')}
+                ${toggle('where-archive', m.filterCount(m.fOnlyArchive, s.onlyArchive), f.where === 'archive')}`
+            : '';
+        return `<div class="${cls}" role="group" aria-label="${esc(m.filtersTitle)}">
+                ${toggle('notitle', m.filterCount(m.fNoTitle, s.noTitle), f.noTitle)}
+                ${toggle('nosource', m.filterCount(m.fNoSource, s.noSource), f.noSource)}
+                ${where}
+            </div>`;
     },
 
     /** The strip above the content: not running (with the time), or the list's error. */
@@ -887,12 +939,23 @@ export const materialsWindowMethods = uiModule({
         </div>`;
     },
 
+    /**
+     * A list row with the columns of spec 102 §8f: Title (the file's name
+     * under it) · Kind · Date · People · Source · In the tree (beside an
+     * archive) · Used.
+     */
     mwListRowHtml(item: MaterialItem, group: OverviewGroup): string {
         const w = win!;
         const m = strings.materials;
         const persons = this.mwPersons(item);
         const selected = w.selected.has(item.key);
-        const kind = item.hidden ? `${materialKindLabel(item)} · ${m.hiddenLabel[item.hidden.reason ?? 'none'] ?? m.hiddenLabel.none}` : materialKindLabel(item);
+        const kind = item.hidden ? `${materialKindLabel(item)} · ${m.hiddenLabel[item.hidden.reason ?? 'none'] ?? m.hiddenLabel.none}` : (item.kind ? materialKindLabel(item) : '');
+        const date = item.date ? materialDateForInput(item.date) : '';
+        const inTree = w.model === 'archive'
+            ? `<span class="mw-li-intree">${itemInTree(item) ? `<span class="mw-intree-tag">${esc(m.inTreeTag)}</span>` : `<span class="is-none">${esc(m.onlyArchiveShort)}</span>`}</span>`
+            : '';
+        const used = item.hidden && this.mwRestoreHtml(item) ? this.mwRestoreHtml(item)
+            : item.uses ? esc(m.places(item.uses)) : `<span class="is-none">${esc(m.nowhere)}</span>`;
         return `<div class="mw-li sel-opt${selected ? ' is-selected' : ''}${item.hidden ? ' is-hidden' : ''}" role="gridcell" data-sel-form="row" tabindex="-1" data-key="${esc(item.key)}" aria-label="${esc(this.mwAriaLabel(item))}"${w.selecting ? ` aria-selected="${selected}"` : ''}>
             <span class="mw-li-check"><span class="mw-check" aria-hidden="true"></span></span>
             ${this.mwThumbHtml(item, group, true)}
@@ -901,10 +964,43 @@ export const materialsWindowMethods = uiModule({
                 ${item.titled ? `<span class="mw-li-file" title="${esc(item.name)}">${esc(item.name)}</span>` : `<span class="mw-li-file is-untitled">${esc(m.untitled)}</span>`}
             </span>
             <span class="mw-li-kind" title="${esc(kind)}">${esc(kind)}</span>
+            <span class="mw-li-date">${esc(date)}</span>
             <span class="mw-li-persons${persons.none ? ' is-none' : ''}">${esc(persons.text)}</span>
-            <span class="mw-li-size">${item.bytes ? esc(formatBytesShort(item.bytes)) : ''}</span>
-            <span class="mw-li-at">${item.hidden && this.mwRestoreHtml(item) ? this.mwRestoreHtml(item) : esc(materialShortDate(item.at))}</span>
+            <span class="mw-li-source${item.source ? '' : ' is-none'}" title="${esc(item.source ?? '')}">${esc(item.source ?? m.noSourceShort)}</span>
+            ${inTree}
+            <span class="mw-li-used">${used}</span>
         </div>`;
+    },
+
+    /** The list's column header: a click or Enter sorts by it, again the other way, a third time back to the groups' order. */
+    mwListHead(): void {
+        const w = win!;
+        const el = w.overlay.querySelector<HTMLElement>('.mw-lhead');
+        if (!el) return;
+        el.hidden = w.view !== 'list';
+        if (el.hidden) { el.innerHTML = ''; return; }
+        const m = strings.materials;
+        const cols: [ListColumn, string][] = [
+            ['title', m.colTitle], ['kind', m.colKind], ['date', m.colDate], ['persons', m.colPersons], ['source', m.colSource],
+            ...(w.model === 'archive' ? [['intree', m.colInTree] as [ListColumn, string]] : []), ['used', m.colUsed],
+        ];
+        const cell = ([col, label]: [ListColumn, string]) => {
+            const on = w.sort?.col === col ? w.sort.dir : 0;
+            const sort = on === 1 ? 'ascending' : on === -1 ? 'descending' : 'none';
+            return `<span class="mw-lh-cell mw-lh-${col}" role="columnheader" aria-sort="${sort}"><button type="button" class="mw-lh-btn" data-mw="sort" data-col="${col}">${esc(label)}<span class="mw-lh-arrow" aria-hidden="true">${on === 1 ? '▲' : on === -1 ? '▼' : ''}</span></button></span>`;
+        };
+        el.innerHTML = `<div class="mw-lh" role="row"><span class="mw-li-check" aria-hidden="true"></span><span class="mw-lh-thumb" aria-hidden="true"></span>${cols.map(cell).join('')}</div>`;
+    },
+
+    /** Sort the list by a column (ascending, descending, none); remembered with the view. */
+    mwSortBy(col: ListColumn): void {
+        const w = win;
+        if (!w) return;
+        const now = w.sort?.col === col ? w.sort.dir : 0;
+        w.sort = now === 0 ? { col, dir: 1 } : now === 1 ? { col, dir: -1 } : null;
+        writeListPrefs(w.sort, w.filters);
+        this.mwRebuild();
+        w.overlay.querySelector<HTMLElement>(`.mw-lhead [data-col="${col}"]`)?.focus();
     },
 
     /** The group header that stays at the top while its content scrolls. */
@@ -1016,21 +1112,22 @@ export const materialsWindowMethods = uiModule({
         const skipped = w.overlay.querySelector<HTMLElement>('.mw-skipped');
         if (!bar || !skipped) return;
         bar.hidden = !w.selecting;
-        const tree = items.filter(i => i.origin === 'tree').length;
-        skipped.hidden = !w.selecting || tree === 0;
-        skipped.textContent = tree ? m.skippedTree(tree) : '';
+        skipped.hidden = true;
+        skipped.textContent = '';
         if (!w.selecting) { bar.innerHTML = ''; return; }
-        const archive = items.filter(i => i.origin !== 'tree');
-        const onlyHidden = archive.length > 0 && archive.every(i => i.hidden);
-        const off = (why: string | null) => (why ? ` aria-disabled="true" title="${esc(why)}"` : '');
-        const why = !ctx.caps.bridgeUp ? m.actionsWhenRunning : archive.length === 0 ? (n ? m.skippedTree(tree) : m.nothingSelected) : null;
+        const off = (why: string | null | undefined) => (why ? ` aria-disabled="true" title="${esc(why)}"` : '');
         const whole = this.mwWholeTarget();
+        const acts = this.mwSelActions(items);
+        // A phone: three actions and ⋯ (spec 102 §11); wider: Go through, Link to…, Title…, Kind…, Date… and ⋯.
+        const inline: string[] = media(MQ_MOBILE) ? ['sel-attach', 'sel-title', 'sel-review'] : ['sel-review', 'sel-attach', 'sel-title', 'sel-kind', 'sel-date'];
+        const shown = inline.map(id => acts.find(a => a.id === id)).filter((a): a is SelAction => !!a);
+        const more = acts.filter(a => !inline.includes(a.id));
         bar.setAttribute('aria-label', n ? m.selected(n) : m.nothingSelected);
         redraw(bar, `
             <span class="mw-selcount">${esc(n ? m.selected(n) : m.nothingSelected)}</span>
             <span class="mw-selacts">
-                <button type="button" class="primary mw-selbtn" data-mw="sel-assign"${off(why)}>${esc(m.assign)}</button>
-                <button type="button" class="secondary mw-selbtn" data-mw="${onlyHidden ? 'sel-restore' : 'sel-hide'}"${off(why)}>${esc(onlyHidden ? m.restore : m.hide)}</button>
+                ${shown.map(a => `<button type="button" class="${a.id === 'sel-attach' ? 'primary' : 'secondary'} mw-selbtn" data-mw="${a.id}"${off(a.why)}>${esc(a.label)}</button>`).join('')}
+                ${more.length ? `<button type="button" class="secondary mw-selbtn mw-selmore" data-mw="sel-more" aria-haspopup="menu" aria-label="${esc(m.selMore)}" title="${esc(m.selMore)}">⋯</button>` : ''}
             </span>
             <span class="mw-gap"></span>
             ${whole ? `<button type="button" class="link-button mw-selwhole" data-mw="sel-whole">${esc(whole.label)}</button>` : ''}
@@ -1074,8 +1171,146 @@ export const materialsWindowMethods = uiModule({
         this.mwSelectionChanged();
     },
 
+    /** Selecting is offered for an editable tree (its own files) and for a research that can assign. */
     mwCanSelect(): boolean {
-        return !!this.materialsWindowContext()?.caps.assign;
+        const ctx = this.materialsWindowContext();
+        return !!ctx && (ctx.caps.assign || !DataManager.isReadOnly());
+    },
+
+    /**
+     * The selection's actions (spec 102 §8b): each with why it is off now.
+     * Archive writes (assign, hide) act on the research's files only; Title… /
+     * Kind… / Date… on the files that can change here.
+     */
+    mwSelActions(items: MaterialItem[]): SelAction[] {
+        const ctx = this.materialsWindowContext();
+        const m = strings.materials;
+        if (!ctx) return [];
+        const n = items.length;
+        const readOnly = DataManager.isReadOnly();
+        const archive = items.filter(i => i.origin !== 'tree');
+        const editable = items.filter(i => this.bulkEditable(i, ctx)).length;
+        const editWhy = !n ? m.nothingSelected : editable ? null : readOnly ? strings.materials.errReadonly : archive.length && !ctx.caps.bridgeUp ? m.actionsWhenRunning : m.selUnchanged(n);
+        const out: SelAction[] = [
+            // A phone's bar has room for the word only (the count is in the header).
+            { id: 'sel-review', label: media(MQ_MOBILE) ? m.reviewShort : m.review(n), why: n ? null : m.nothingSelected },
+            { id: 'sel-attach', label: m.attach, why: !n ? m.nothingSelected : readOnly ? strings.materials.errReadonly : null },
+            { id: 'sel-title', label: m.setTitle, why: editWhy },
+            { id: 'sel-kind', label: m.setKind, why: editWhy },
+            { id: 'sel-date', label: m.setDate, why: editWhy },
+        ];
+        if (ctx.caps.assign) {
+            const why = !ctx.caps.bridgeUp ? m.actionsWhenRunning : archive.length === 0 ? (n ? m.skippedTree(n) : m.nothingSelected) : null;
+            const onlyHidden = archive.length > 0 && archive.every(i => i.hidden);
+            out.push({ id: 'sel-assign', label: m.assign, why });
+            out.push({ id: onlyHidden ? 'sel-restore' : 'sel-hide', label: onlyHidden ? m.restore : m.hide, why });
+        }
+        const removable = items.filter(i => i.attachment && !i.removedId && (i.attachment.places?.length ?? 0) > 0 && DataManager.canEditMedia(i.attachment.id));
+        if (removable.length === 1) out.push({ id: 'sel-remove', label: m.removeFromTree, why: null });
+        return out;
+    },
+
+    /** The selection's ⋯: the actions not in the bar. */
+    mwFillSelMenu(pop: HTMLElement): void {
+        const items = this.materialsSelection();
+        const inline = media(MQ_MOBILE) ? ['sel-attach', 'sel-title', 'sel-review'] : ['sel-review', 'sel-attach', 'sel-title', 'sel-kind', 'sel-date'];
+        const acts = this.mwSelActions(items).filter(a => !inline.includes(a.id));
+        pop.innerHTML = acts.map(a => {
+            const divider = a.id === 'sel-remove' ? '<div class="materials-item-menu-divider" role="separator"></div>' : '';
+            const off = a.why ? ` aria-disabled="true" title="${esc(a.why)}"` : '';
+            return `${divider}<button type="button" role="menuitem" class="materials-item-menu-row${a.id === 'sel-remove' ? ' is-danger' : ''}" data-action="${a.id}"${off}>${esc(a.label)}</button>`;
+        }).join('');
+        pop.querySelectorAll<HTMLButtonElement>('[data-action]').forEach(btn => btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (btn.getAttribute('aria-disabled') === 'true') return;
+            const back = win?.popAnchor;
+            this.mwClosePop();
+            back?.focus();
+            this.mwSelAction(btn.dataset.action ?? '');
+        }));
+    },
+
+    /** Run a selection action (the bar's buttons, its ⋯). */
+    mwSelAction(id: string): void {
+        const w = win;
+        if (!w) return;
+        const items = this.mwOrdered(this.materialsSelection());
+        const end = () => { if (alive(w.gen)) this.clearMaterialsSelection(); };
+        switch (id) {
+            case 'sel-review': this.mwReview(items); return;
+            case 'sel-attach': this.mwRun('attach', items, { selection: true }); return;
+            case 'sel-title': this.openBulkEditDialog('title', items, { done: end, refused: r => this.mwShowRefused(r) }); return;
+            case 'sel-kind': this.openBulkEditDialog('kind', items, { done: end, refused: r => this.mwShowRefused(r) }); return;
+            case 'sel-date': this.openBulkEditDialog('date', items, { done: end, refused: r => this.mwShowRefused(r) }); return;
+            case 'sel-remove': {
+                const one = items.find(i => i.attachment && (i.attachment.places?.length ?? 0) > 0);
+                if (one) void this.openRemoveFromTreeDialog(one).then(ok => { if (ok) end(); });
+                return;
+            }
+            case 'sel-assign': case 'sel-hide': case 'sel-restore': {
+                const files = items.filter(i => i.origin !== 'tree');
+                const action: MaterialActionId = id === 'sel-assign' ? 'assign' : id === 'sel-hide' ? 'hide' : 'restore';
+                this.mwRun(action, files, { selection: true });
+                return;
+            }
+        }
+    },
+
+    /**
+     * Go through (spec 102 §8c): the viewer over the items with the fields
+     * open; the header names the review filter. At the end the window keeps
+     * its filters (files that no longer match leave it only now).
+     */
+    mwReview(items: MaterialItem[]): void {
+        const w = win;
+        if (!w || !items.length) return;
+        const m = strings.materials;
+        const f = w.filters;
+        const label = [f.noTitle ? m.fNoTitle : '', f.noSource ? m.fNoSource : '', f.noPerson ? m.noPerson : ''].filter(Boolean).join(' · ');
+        this.openMaterialViewer(items, 0, {
+            where: 'review', label, noSource: f.noSource,
+            done: () => { if (alive(w.gen)) { this.clearMaterialsSelection(); this.mwRebuild({ items: true }); } },
+        });
+    },
+
+    /** Items in the window's order (the groups' order; Title… numbers them so). */
+    mwOrdered(items: MaterialItem[]): MaterialItem[] {
+        const w = win;
+        if (!w) return items;
+        const at = new Map<string, number>();
+        w.groups.forEach(g => g.items.forEach(i => { if (!at.has(i.key)) at.set(i.key, at.size); }));
+        return [...items].sort((a, b) => (at.get(a.key) ?? Infinity) - (at.get(b.key) ?? Infinity));
+    },
+
+    /** "Show" on a refusal: the refused files selected. */
+    mwShowRefused(items: MaterialItem[]): void {
+        const w = win;
+        if (!w) return;
+        w.selected.clear();
+        this.mwSelectKeys(items.map(i => i.key));
+    },
+
+    /** Ctrl/⌘+A: every file the filters show (closed groups too). */
+    mwSelectAll(): void {
+        const w = win;
+        if (!w || !this.mwCanSelect()) return;
+        const keys = w.groups.flatMap(g => g.items.map(i => i.key));
+        this.mwSelectKeys(keys);
+    },
+
+    /**
+     * The footer's progress of a large change (spec 102 §8h): `k` of `n` with
+     * Cancel; null hides it.
+     */
+    mwBulkProgress(k: number | null, n: number, cancel: (() => void) | null): void {
+        const w = win;
+        const el = w?.overlay.querySelector<HTMLElement>('.mw-bulk');
+        if (!w || !el) return;
+        if (k === null) { el.hidden = true; el.innerHTML = ''; return; }
+        el.hidden = false;
+        const pct = n ? Math.round((k / n) * 100) : 0;
+        el.innerHTML = `<span class="mw-progress" aria-hidden="true"><span style="width:${pct}%"></span></span><span class="mw-thumbs-text">${esc(strings.materials.bulkProgress(k, n))}</span>${cancel ? `<button type="button" class="link-button mw-thumbs-toggle" data-mw="bulk-cancel">${esc(strings.buttons.cancel)}</button>` : ''}`;
+        el.querySelector('[data-mw="bulk-cancel"]')?.addEventListener('click', () => { cancel?.(); el.hidden = true; });
     },
 
     /** Note where an item is (its group and folder) for "Select whole …". */
@@ -1197,7 +1432,7 @@ export const materialsWindowMethods = uiModule({
         const m = strings.materials;
         const pop = document.createElement('div');
         pop.className = `mw-pop mw-pop-${kind}`;
-        const menu = kind === 'batchMenu' || kind === 'folderMenu';
+        const menu = kind === 'batchMenu' || kind === 'folderMenu' || kind === 'selMenu';
         pop.setAttribute('role', menu ? 'menu' : 'dialog');
         if (!menu) pop.setAttribute('aria-label', kind === 'where' ? m.whereTitle : kind === 'sheet' ? m.filtersTitle : kind === 'person' ? m.fPerson : kind === 'kind' ? m.fKind : m.fBatch);
         w.overlay.appendChild(pop);
@@ -1205,7 +1440,8 @@ export const materialsWindowMethods = uiModule({
         w.popKind = kind;
         w.popAnchor = anchor;
         anchor.setAttribute('aria-expanded', 'true');
-        if (menu) this.mwFillMenu(pop, data);
+        if (kind === 'selMenu') this.mwFillSelMenu(pop);
+        else if (menu) this.mwFillMenu(pop, data);
         else if (kind === 'where') this.mwFillWhere(pop);
         else this.mwFillFilters(pop, kind);
         this.mwPlacePop();
@@ -1326,6 +1562,7 @@ export const materialsWindowMethods = uiModule({
                 ${toggle('noperson', `${m.noPerson} · ${w.summary.noPerson.toLocaleString(getCurrentLanguage())}`, f.noPerson)}
                 ${ctx.caps.assign ? toggle('hidden', m.showHidden, f.showHidden) : ''}
             </div>`);
+            parts.push(this.mwReviewChips(toggle, 'mw-pop-section mw-pop-toggles mw-pop-review'));
             parts.push(`<div class="mw-pop-section">
                 <div class="mw-pop-title">${esc(m.groupBy)}</div>
                 <div class="mw-seg sel-seg" role="group" aria-label="${esc(m.groupBy)}">
@@ -1372,6 +1609,10 @@ export const materialsWindowMethods = uiModule({
             switch (btn.dataset.pop) {
                 case 'clear-person': w.filters.person = null; break;
                 case 'noperson': w.filters.noPerson = !w.filters.noPerson; break;
+                case 'notitle': w.filters.noTitle = !w.filters.noTitle; break;
+                case 'nosource': w.filters.noSource = !w.filters.noSource; break;
+                case 'where-tree': w.filters.where = w.filters.where === 'tree' ? null : 'tree'; break;
+                case 'where-archive': w.filters.where = w.filters.where === 'archive' ? null : 'archive'; break;
                 case 'hidden': w.filters.showHidden = !w.filters.showHidden; break;
                 case 'group-batch': this.mwSetGroup('batch'); break;
                 case 'group-date': this.mwSetGroup('date'); break;
@@ -1405,6 +1646,7 @@ export const materialsWindowMethods = uiModule({
         const w = win;
         if (!w) return;
         w.scroller.scrollTop = 0;
+        writeListPrefs(w.sort, w.filters);
         this.mwRebuild();
     },
 
@@ -1513,6 +1755,10 @@ export const materialsWindowMethods = uiModule({
             case 'clear-kind': f.kinds = []; break;
             case 'clear-batch': f.batch = null; w.focusBatch = null; break;
             case 'noperson': f.noPerson = !f.noPerson; break;
+            case 'notitle': f.noTitle = !f.noTitle; break;
+            case 'nosource': f.noSource = !f.noSource; break;
+            case 'where-tree': f.where = f.where === 'tree' ? null : 'tree'; break;
+            case 'where-archive': f.where = f.where === 'archive' ? null : 'archive'; break;
             case 'hidden': f.showHidden = !f.showHidden; break;
             case 'clear': this.mwClearFilters(); break;
             case 'group-batch': this.mwSetGroup('batch'); break;
@@ -1541,6 +1787,15 @@ export const materialsWindowMethods = uiModule({
         }, { passive: true });
         const body = w.overlay.querySelector<HTMLElement>('#materials-window-body')!;
         body.addEventListener('click', (e) => this.mwBodyClick(e));
+        // Ctrl/⌘+A: every file the filters show (not in a text field).
+        w.overlay.addEventListener('keydown', (e) => {
+            if (!(e.ctrlKey || e.metaKey) || e.altKey || e.key.toLowerCase() !== 'a') return;
+            const t = e.target as HTMLElement;
+            if (t.closest('input, textarea, [contenteditable="true"]') || w.pop) return;
+            if (!this.mwCanSelect()) return;
+            e.preventDefault();
+            this.mwSelectAll();
+        });
         w.canvas.addEventListener('keydown', (e) => this.mwKeydown(e));
         w.canvas.addEventListener('focusin', (e) => {
             const cell = (e.target as HTMLElement).closest<HTMLElement>('[role="gridcell"][data-key]');
@@ -1620,13 +1875,13 @@ export const materialsWindowMethods = uiModule({
                     if (whole) this.mwSelectKeys(whole.keys);
                     return;
                 }
-                case 'sel-assign': case 'sel-hide': case 'sel-restore': {
+                case 'sel-more': this.mwOpenPop('selMenu', act); return;
+                case 'sort': this.mwSortBy(act.dataset.col as ListColumn); return;
+                case 'sel-review': case 'sel-attach': case 'sel-title': case 'sel-kind': case 'sel-date':
+                case 'sel-assign': case 'sel-hide': case 'sel-restore': case 'sel-remove':
                     if (disabled) return;
-                    const items = this.materialsSelection().filter(i => i.origin !== 'tree');
-                    const id: MaterialActionId = act.dataset.mw === 'sel-assign' ? 'assign' : act.dataset.mw === 'sel-hide' ? 'hide' : 'restore';
-                    this.mwRun(id, items, { selection: true });
+                    this.mwSelAction(act.dataset.mw);
                     return;
-                }
             }
         }
         const cell = target.closest<HTMLElement>('.mw-canvas [role="gridcell"][data-key]');

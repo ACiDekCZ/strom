@@ -4191,6 +4191,46 @@ class DataManagerClass {
         });
     }
 
+    /**
+     * Title, kind or date of many files at once (spec 102 §8: Title… / Kind… /
+     * Date… for a selection) as one undo step. Files that cannot change here
+     * (locked person, missing) are left out; returns the ids changed.
+     */
+    setMediaDetailsMany(changes: readonly { id: string; details: { title?: string; kind?: MaterialKind | null; date?: string } }[]): string[] {
+        if (this.isReadOnly()) return [];
+        const apply = (att: Attachment, d: { title?: string; kind?: MaterialKind | null; date?: string }): void => {
+            if (d.title !== undefined) {
+                const text = d.title.trim();
+                if (text !== (att.title ?? '')) delete att.titleBy;
+                if (text) att.title = text; else delete att.title;
+            }
+            if (d.kind !== undefined) {
+                if ((d.kind ?? undefined) !== att.kind) delete att.kindBy;
+                if (d.kind) att.kind = d.kind; else delete att.kind;
+            }
+            if (d.date !== undefined) {
+                const text = d.date.trim();
+                if (text !== (att.date ?? '')) delete att.dateBy;
+                if (text) att.date = text; else delete att.date;
+            }
+        };
+        const todo: { att: Attachment; details: { title?: string; kind?: MaterialKind | null; date?: string } }[] = [];
+        for (const c of changes) {
+            const att = findMedia(this.data, c.id);
+            if (!att || !this.mediaEditable(att)) continue;
+            const probe = cloneTreeData(att);
+            apply(probe, c.details);
+            if (JSON.stringify(probe) !== JSON.stringify(att)) todo.push({ att, details: c.details });
+        }
+        if (!todo.length) return [];
+        this.beginMutation();
+        for (const t of todo) apply(t.att, t.details);
+        const label = todo.length === 1 ? strings.undo.mediaDetails(todo[0].att.title || todo[0].att.name) : strings.undo.mediaDetailsN(todo.length);
+        this.commitMutation(label);
+        AuditLogManager.log(this.currentTreeId, 'attachment.update', label);
+        return todo.map(t => t.att.id);
+    }
+
     /** A file's date as written (GEDCOM-like text; '' = none). */
     setMediaDate(id: string, date: string, by: MediaBy = 'user'): boolean {
         const text = date.trim();
