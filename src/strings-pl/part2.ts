@@ -404,6 +404,7 @@ export const plPart2: Pick<StringsType, 'crop' | 'portrait' | 'importImages' | '
         /** The state block's one button, short (the menu is 320 px). */
         sendShort: 'Wyślij',
         startShort: 'Uruchom',
+        mediaMissed: 'Nie udało się wczytać zdjęć z badania.',
         retry: 'Spróbuj ponownie',
         sendAgain: 'Wyślij ponownie',
         downloadGedcom: 'Pobierz GEDCOM',

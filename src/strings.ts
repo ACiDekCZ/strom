@@ -1891,6 +1891,8 @@ const stringsEN = {
         /** The state block's one button, short (the menu is 320 px). */
         sendShort: 'Send',
         startShort: 'Start',
+        /** A version came without the tree's own files and they could not be had again (spec 108). */
+        mediaMissed: 'The photos from the research could not be loaded.',
         retry: 'Try again',
         sendAgain: 'Send again',
         downloadGedcom: 'Download GEDCOM',
@@ -11480,6 +11482,7 @@ const stringsCZ: StringsType = {
         /** The state block's one button, short (the menu is 320 px). */
         sendShort: 'Poslat',
         startShort: 'Spustit',
+        mediaMissed: 'Fotky z výzkumu se nepodařilo načíst.',
         retry: 'Zkusit znovu',
         sendAgain: 'Poslat znovu',
         downloadGedcom: 'Stáhnout GEDCOM',
@@ -20932,6 +20935,7 @@ const stringsDE: StringsType = {
         /** The state block's one button, short (the menu is 320 px). */
         sendShort: 'Senden',
         startShort: 'Starten',
+        mediaMissed: 'Die Fotos aus der Forschung konnten nicht geladen werden.',
         retry: 'Erneut versuchen',
         sendAgain: 'Erneut senden',
         downloadGedcom: 'GEDCOM herunterladen',

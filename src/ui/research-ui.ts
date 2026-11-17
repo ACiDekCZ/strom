@@ -153,6 +153,7 @@ export function noteResearchMediaReturn(treeId: TreeId, researchId: string, rese
         mediaMissed: undefined,
     });
     if (!sent) researchMediaFirstAgain(treeId);
+    mediaRetryDone(treeId);
 }
 
 /**
@@ -164,6 +165,28 @@ export function noteResearchMediaReturn(treeId: TreeId, researchId: string, rese
  */
 export function noteResearchMediaMissed(treeId: TreeId, researchId: string): void {
     patchResearchAutoState(treeId, { mediaMissed: researchId });
+}
+
+/**
+ * After a version came without the tree's own files (noteResearchMediaMissed):
+ * the waits before each new attempt to have them, then the notice with "Try
+ * again". The images themselves are each asked again a few times already
+ * (IMAGE_RETRY_MS); these try the whole file with them once the bridge may
+ * have recovered.
+ */
+export const MEDIA_RETRY_MS: readonly number[] = [5_000, 30_000];
+/** Trees whose files are being tried again (attempts planned or running): one round each. */
+const mediaRetrying = new Set<TreeId>();
+/** Trees told this session that the research's photos could not be loaded (said once, unless asked again). */
+const mediaTold = new Set<TreeId>();
+/** The notice's kind (its toast is taken away once the photos come). */
+const MEDIA_MISSED_TOAST = 'research-media-missed';
+
+/** A version with the tree's own files came: no attempt or notice for it is due any more. */
+function mediaRetryDone(treeId: TreeId): void {
+    mediaTold.delete(treeId);
+    if (typeof document === 'undefined') return;
+    document.querySelector(`.toast[data-kind="${MEDIA_MISSED_TOAST}"]`)?.remove();
 }
 
 export interface LiveChangeItem {
@@ -1299,6 +1322,15 @@ async function fetchRefTree(url: string, opts: { stale?: boolean; etag?: string 
     }
 }
 
+/**
+ * The research's tree with the tree's own files (`images=ref&media=app`) and
+ * every image it names; null when they could not all be had — never the file
+ * with its images in it (an attempt to have the files again, researchRetryMedia).
+ */
+export async function fetchResearchTreeWithMedia(url: string): Promise<FetchedTree | null> {
+    return fetchRefTree(url, { media: true });
+}
+
 export async function fetchGedcomText(url: string): Promise<string> {
     return (await fetchResearchTree(url)).text;
 }
@@ -2344,7 +2376,7 @@ export const researchUiMethods = uiModule({
             ...(source.mode === 'archive' ? { mode: 'archive' as const } : {}),
         });
         if (source.appMedia && includeImages) noteResearchMediaReturn(treeId, source.treeId, data, carry.carried);
-        else if (treeAsksAppMedia(this.researchStatusOf(source.treeId)?.features, includeImages)) noteResearchMediaMissed(treeId, source.treeId);
+        else if (treeAsksAppMedia(this.researchStatusOf(source.treeId)?.features, includeImages)) this.researchMediaMissed(treeId, source.treeId);
         this.refreshResearchSyncUi();
         this.showToast(strings.sync.stateInSync, 4000);
         return true;
@@ -2592,7 +2624,7 @@ export const researchUiMethods = uiModule({
             // With the tree's own files and its images taken: the base of the next return (spec 108 §5).
             if (source.appMedia && includeImages) noteResearchMediaReturn(treeId, source.treeId, data, carried);
             // Asked with them and they did not come (the file with its images in it): its writes only add.
-            else if (treeAsksAppMedia(this.researchStatusOf(source.treeId)?.features, includeImages)) noteResearchMediaMissed(treeId, source.treeId);
+            else if (treeAsksAppMedia(this.researchStatusOf(source.treeId)?.features, includeImages)) this.researchMediaMissed(treeId, source.treeId);
             this.researchKeepCopy(treeId, base);
         }
         // "Restore the state before loading", offered while the tree is just what was loaded.
@@ -4000,7 +4032,7 @@ export const researchUiMethods = uiModule({
      * `head`: the change's; a bridge with `ged.stale` says the file's own head,
      * which is the state the tree then holds.
      */
-    async refreshLiveTree(s: LiveSession, head: string): Promise<StromData | null> {
+    async refreshLiveTree(s: LiveSession, head: string, prefetched?: FetchedTree): Promise<StromData | null> {
         let text: string;
         let fileHead: string | null = null;
         let etag: string | null = null;
@@ -4012,7 +4044,8 @@ export const researchUiMethods = uiModule({
         /** The file came with the tree's own files (spec 108 §5). */
         let appMedia = false;
         try {
-            const got = await fetchResearchTree(s.bridge.ged, { byHash: bridgeGivesImagesByHash(s.features), images: takeImages,
+            // `prefetched`: the file with the tree's own files an attempt to have them again got (researchRetryMedia).
+            const got = prefetched ?? await fetchResearchTree(s.bridge.ged, { byHash: bridgeGivesImagesByHash(s.features), images: takeImages,
                 media: treeAsksAppMedia(s.features, takeImages) });
             text = got.text;
             images = got.images;
@@ -4082,10 +4115,102 @@ export const researchUiMethods = uiModule({
         // With the tree's own files (asked only while images are taken): the base of the next return (spec 108 §5).
         if (appMedia) noteResearchMediaReturn(s.treeId, s.researchId, data, carry?.carried ?? 0);
         // Asked with them and they did not come (the file with its images in it): its writes only add.
-        else if (treeAsksAppMedia(s.features, takeImages)) noteResearchMediaMissed(s.treeId, s.researchId);
+        else if (treeAsksAppMedia(s.features, takeImages)) this.researchMediaMissed(s.treeId, s.researchId);
         // The file's tag (one sent with it): a reload while the research stays here keeps this tree (a 304).
         if (etag) this.researchKeepTreeEtag(s.treeId, s.researchId, etag, takeImages, variant, appMedia);
         return loaded;
+    },
+
+    /**
+     * A version of a research that keeps the tree's own files came into
+     * `treeId` without them (noteResearchMediaMissed: its writes only add
+     * meanwhile): tried again by itself after a while (MEDIA_RETRY_MS), and
+     * when the files still cannot be had, said once with "Try again".
+     */
+    researchMediaMissed(treeId: TreeId, researchId: string): void {
+        noteResearchMediaMissed(treeId, researchId);
+        if (mediaRetrying.has(treeId)) return;
+        mediaRetrying.add(treeId);
+        const attempt = (i: number): void => {
+            if (i >= MEDIA_RETRY_MS.length) {
+                mediaRetrying.delete(treeId);
+                this.tellResearchMediaMissed(treeId);
+                return;
+            }
+            setTimeout(() => {
+                void this.researchRetryMedia(treeId, true).then(got => {
+                    if (got === 'failed') return attempt(i + 1);
+                    mediaRetrying.delete(treeId);
+                    // Loading them would ask (changes here, or a newer version): said, "Try again" asks.
+                    if (got === 'asks') this.tellResearchMediaMissed(treeId);
+                });
+            }, MEDIA_RETRY_MS[i]);
+        };
+        attempt(0);
+    },
+
+    /** "The research's photos could not be loaded" with "Try again": once per tree, unless asked again by hand (`again`). */
+    tellResearchMediaMissed(treeId: TreeId, again = false): void {
+        if ((!again && mediaTold.has(treeId)) || DataManager.getCurrentTreeId() !== treeId) return;
+        mediaTold.add(treeId);
+        this.showToast(strings.sync.mediaMissed, Infinity, {
+            closable: true, notice: true, kind: MEDIA_MISSED_TOAST,
+            action: { label: strings.sync.retry, run: () => { void this.researchRetryMediaNow(treeId); } },
+        });
+    },
+
+    /** "Try again" of that notice: the file with the tree's own files asked once more, loading it may ask as any load. */
+    async researchRetryMediaNow(treeId: TreeId): Promise<void> {
+        if (mediaRetrying.has(treeId)) return;
+        mediaRetrying.add(treeId);
+        try {
+            if (await this.researchRetryMedia(treeId, false) === 'failed') this.tellResearchMediaMissed(treeId, true);
+        } finally {
+            mediaRetrying.delete(treeId);
+        }
+    },
+
+    /**
+     * One attempt to have the tree's own files of its research again (the
+     * file with them, never the one with its images in it): loaded as that
+     * version is (following live: as the next change). `auto`: only over a
+     * tree that is that very version, nothing asked ('asks' otherwise).
+     * 'gone': nothing to try any more (another tree open, the files came
+     * meanwhile, the question cancelled).
+     */
+    async researchRetryMedia(treeId: TreeId, auto: boolean): Promise<'loaded' | 'failed' | 'asks' | 'gone'> {
+        const link = TreeManager.getTreeMetadata(treeId)?.research;
+        const missed = researchAutoState(treeId).mediaMissed;
+        if (!link || !missed || missed.toLowerCase() !== link.id.toLowerCase() || DataManager.getCurrentTreeId() !== treeId) return 'gone';
+        const s = live && !live.ended && live.treeId === treeId ? live : null;
+        const ged = s ? s.bridge.ged : parseLiveBridge(storedResearchBridge(link.id)?.base)?.ged;
+        if (!ged) return 'failed';
+        let got: FetchedTree | null;
+        try {
+            got = await fetchResearchTreeWithMedia(ged);
+        } catch (err) {
+            console.warn('The research\'s files could not be had again', err);
+            got = null;
+        }
+        if (!got) return 'failed';
+        if (s) {
+            if (s.ended || live !== s) return 'gone';
+            return await this.refreshLiveTree(s, s.head, got) ? 'loaded' : 'failed';
+        }
+        const header = readResearchHeader(got.text);
+        const now = TreeManager.getTreeMetadata(treeId)?.research;
+        if (!now || header.treeId !== now.id || DataManager.getCurrentTreeId() !== treeId) return 'gone';
+        let research: StromData;
+        try {
+            research = convertToStrom(parseGedcom(got.text), { images: got.images }).data;
+        } catch {
+            return 'failed';
+        }
+        // The very version the tree is, unchanged here: its files go in quietly. Else the load asks as any.
+        const quiet = !!header.head && header.head === (now.head ?? '') && this.researchSyncFingerprints(treeId, now).matchesBase;
+        if (!quiet && auto) return 'asks';
+        const done = await this.applyResearch(research, { ...header, appMedia: true }, quiet ? { quiet: true } : {});
+        return done === treeId && !researchAutoState(treeId).mediaMissed ? 'loaded' : 'gone';
     },
 
     /** The user stops following (or a new ?live= replaces the session). */

@@ -69,9 +69,11 @@ interface Bridge {
     trees: Array<{ images: string | null; media: string | null; status: number }>;
     /** Every hash asked by `POST /images`. */
     asked: string[];
+    /** `POST /images` refused (404): the images by hash cannot be had. */
+    failImages?: boolean;
 }
 
-async function follow(page: Page, imgs: Img[], features: string[]): Promise<Bridge> {
+async function follow(page: Page, imgs: Img[], features: string[], opts: { failImages?: boolean } = {}): Promise<Bridge> {
     await page.clock.install({ time: new Date('2026-11-17T10:30:00Z') });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.addInitScript(() => {
@@ -80,7 +82,7 @@ async function follow(page: Page, imgs: Img[], features: string[]): Promise<Brid
         sessionStorage.setItem('seeded', '1');
         localStorage.setItem('strom-live-motion', '0');
     });
-    const bridge: Bridge = { head: H1, trees: [], asked: [] };
+    const bridge: Bridge = { head: H1, trees: [], asked: [], ...opts };
     const byId = new Map(imgs.map(i => [i.sha, i]));
     const keeps = features.includes('media.app');
     const status = () => ({ tree: { id: UUID, name: 'Pšeniční' }, head: bridge.head, persons: 2, working: [], waiting: [], queue: [], features });
@@ -106,6 +108,7 @@ async function follow(page: Page, imgs: Img[], features: string[]): Promise<Brid
         if (path.endsWith('/images') && req.method() === 'POST') {
             const shas = (JSON.parse(req.postData() ?? '{}') as { images: string[] }).images;
             bridge.asked.push(...shas);
+            if (bridge.failImages) return route.fulfill({ status: 404, headers: cors, body: '' });
             const images = shas.filter(s => byId.has(s)).map(sha => {
                 const img = byId.get(sha)!;
                 return { sha, mime: 'image/jpeg', bytes: Buffer.from(img.b64, 'base64').length, data: img.b64 };
@@ -176,6 +179,36 @@ test.describe('the tree\'s own files restored from a research that keeps them (m
         expect(bridge.asked).toEqual(asked);
         expect((await media(page)).attachments.map(a => a.name)).toEqual(['Svatební list', 'kronika.tif']);
         expect((await media(page)).portrait).toBe(portrait.url);
+    });
+
+    test('the images cannot be had: the tree without them, tried again by itself, then said once with Try again, which brings them', async ({ page }) => {
+        const imgs = await makeImages(page);
+        const [portrait, , couple] = imgs;
+        const bridge = await follow(page, imgs, ['ged.stale', 'ged.etag', 'ged.imagesByHash', 'media.app'], { failImages: true });
+        // The file with its images in it was taken: no portrait, no couple's photo.
+        expect(await media(page)).toMatchObject({ portrait: null, couple: null });
+        const withMedia = () => bridge.trees.filter(t => t.media === 'app').length;
+        const first = withMedia();
+        expect(first).toBeGreaterThan(0);
+        const notice = page.locator('.toast[data-kind="research-media-missed"]');
+        // Tried again by itself after a while; nothing said yet.
+        await page.clock.fastForward(5_000);
+        await expect.poll(withMedia).toBeGreaterThan(first);
+        await expect(notice).toHaveCount(0);
+        // Tried once more; still not had: said, with Try again.
+        await page.clock.fastForward(30_000);
+        await expect(notice).toBeVisible();
+        await expect(notice).toContainText('The photos from the research could not be loaded.');
+        // Meanwhile the tree's writes only add (the archive never loses the files this browser lacks).
+        const missed = () => page.evaluate(() => (JSON.parse(localStorage.getItem(`strom-research-auto:${window.Strom.DataManager.getCurrentTreeId()}`) ?? '{}') as { mediaMissed?: string }).mediaMissed ?? null);
+        expect(await missed()).toBe(UUID);
+        // The bridge gives them now: Try again brings the portrait and the couple's photo.
+        bridge.failImages = false;
+        await notice.getByRole('button', { name: 'Try again' }).click();
+        await expect.poll(async () => (await media(page)).portrait).toBe(portrait.url);
+        expect((await media(page)).couple).toBe(couple.url);
+        await expect(notice).toHaveCount(0);
+        expect(await missed()).toBeNull();
     });
 
     test('a research without the gate is asked as before: no media, no files of the tree', async ({ page }) => {
