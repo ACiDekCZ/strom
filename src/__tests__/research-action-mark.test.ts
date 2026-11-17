@@ -25,6 +25,8 @@ describe('the map of research actions to their marks', () => {
     it('sorts the actions by what their link does in the research', () => {
         // Without a terminal: the system's viewer, the app's window.
         for (const a of ['excerpt', 'media', 'app', 'live'] as const) expect(researchLinkMark(a)).toBe('none');
+        // A book's folder opened in the system's file manager (spec 105): no terminal, no agent.
+        expect(researchLinkMark('book')).toBe('none');
         // The terminal asks or writes tasks: nothing paid on the click (a kind of history added, its alignment,
         // a review, a new direction or its restart).
         // A hypothesis decided or its decision changed there, who decides them confirmed there (spec 060).
@@ -71,6 +73,9 @@ describe('the map of research actions to their marks', () => {
         // Work on the queue (spec 052 §5): automatically or a number of tasks, both the agent's.
         expect(researchUrlMark(url('work', { workDo: 'loop' }))).toBe('agent');
         expect(researchUrlMark(url('work', { workDo: 'tasks', n: 7 }))).toBe('agent');
+        expect(researchUrlMark(url('book', { book: 'B0003', bookDo: 'folder' }))).toBe('none');
+        expect(url('book', { book: 'B0003', bookDo: 'folder' })).toBe(`strom-research://book?tree=${TREE}&id=B0003&do=folder`);
+        expect(researchLinkFlags(url('book', { book: 'B0003', bookDo: 'folder' }))).toEqual({ research: false, ai: false });
         expect(researchUrlMark('https://example.org/places')).toBeNull();
         expect(researchUrlMark('strom-research://unknown?tree=x')).toBeNull();
         expect(researchLinkFlags(url('places', { placesDo: 'run' }))).toEqual({ research: true, ai: true });

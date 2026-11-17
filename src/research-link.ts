@@ -53,7 +53,7 @@ export const RESEARCH_LINK_ACTIONS = [
     'send', 'excerpt', 'app', 'open', 'chat', 'task', 'review', 'research',
     'new', 'update', 'sessions', 'conflict', 'story', 'sync-undo', 'setup', 'live',
     'direction', 'finish', 'media', 'archive', 'seal', 'experiment', 'history', 'fixes', 'doctor', 'places',
-    'history-kinds', 'history-align', 'hypothesis', 'hypotheses', 'work',
+    'history-kinds', 'history-align', 'hypothesis', 'hypotheses', 'work', 'book',
 ] as const;
 export type ResearchLinkAction = typeof RESEARCH_LINK_ACTIONS[number];
 
@@ -75,6 +75,8 @@ export const RESEARCH_LINK_MARKS: Readonly<Record<ResearchLinkAction, ResearchAc
     // The research answers without a terminal: an excerpt or an original in the system's viewer,
     // the tree into the app (as it is now, or followed live).
     excerpt: 'none', media: 'none', app: 'none', live: 'none',
+    // A book's folder in the shared inbox opens in the system's file manager (spec 105, V7): no terminal.
+    book: 'none',
     // Its terminal: shows, asks, writes tasks for later; nothing is paid on the click.
     send: 'terminal', open: 'terminal', task: 'terminal', review: 'terminal', research: 'terminal',
     new: 'terminal', update: 'terminal', sessions: 'terminal', conflict: 'terminal', story: 'terminal',
@@ -260,6 +262,11 @@ export function researchArchiveHost(value: unknown): string | null {
     return v.length <= 253 && /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/.test(v) ? v : null;
 }
 
+/** A book's id in the research ("B0003"), or null. */
+export function researchBookRef(id: unknown): string | null {
+    return typeof id === 'string' && /^B\d{1,7}$/.test(id.trim()) ? id.trim() : null;
+}
+
 /** A research direction's id ("G0002"), or null. */
 export function researchDirectionRef(id: unknown): string | null {
     return typeof id === 'string' && /^G\d{1,7}$/.test(id.trim()) ? id.trim() : null;
@@ -373,6 +380,9 @@ export interface ResearchLinkParams {
      * address (`do=start`), no new window and no terminal; without it the link also opens the app followed live.
      */
     liveDo?: 'start';
+    /** `book` (spec 105): the book of the research ("B0003") and what to do with it (only its folder for now). */
+    book?: string;
+    bookDo?: 'folder';
 }
 
 /** What a `work` link asks (spec 052 §5): automatic work, or only a number of tasks. */
@@ -558,6 +568,11 @@ export function researchSchemeUrl(action: ResearchLinkAction, p: ResearchLinkPar
             if (p.workDo !== 'tasks') return null;
             const n = workTasksCount(p.n);
             return n !== null ? `${base}&do=tasks&n=${n}` : null;
+        }
+        case 'book': {
+            // spec 105: the book by its id and the fixed `do=folder` (the research's default) — nothing else.
+            const id = researchBookRef(p.book);
+            return id && (p.bookDo === undefined || p.bookDo === 'folder') ? `${base}&id=${id}&do=folder` : null;
         }
         case 'places': {
             // spec 034: the fixed `do=run`, and one place only by its record id — never a place name.
@@ -2099,6 +2114,8 @@ export interface LiveWaiting {
     inbox?: WaitingInbox;
     /** The task link's actions the research offers at it (only those are ever offered). */
     actions?: WaitingAction[];
+    /** The one book the task waits for or works in ("B0002", spec 105); absent: none or several. */
+    book?: string;
 }
 
 /** What a place question asks: pick a candidate, a location against another, a change of the written place. */
@@ -2350,6 +2367,8 @@ export interface LiveStatus {
     caps?: ResearchCaps;
     /** `offLine` (with `offLine.branches` in `features`): work outside the directions by branches; absent: not said. */
     offLine?: LiveOffLine;
+    /** `books` (with `books` in `features`, spec 105): the books of the tasks; absent: not said (an archive, a research waiting for its agent, an older one). */
+    books?: LiveBooks;
     /** `queueCounts` (with `queue.page` in `features`): the queue's counts for the filters; absent: not said. */
     queueCounts?: LiveQueueCounts;
     /** The agent's name (`agent.name`, or a bare name); absent: none said (an archive has none). */
@@ -2846,6 +2865,10 @@ export interface LiveQueueItem {
     pos?: number;
     /** What the task makes (Strom Research 1.31): a person's story, or a piece of history; absent: neither said. */
     kind?: LiveQueueKind;
+    /** The one book the task waits for or works in ("B0002", spec 105); absent: none or several. */
+    book?: string;
+    /** Put forward by "Downloaded book first" (`queue.sameBook`): the book of the last session (spec 105). */
+    sameBook?: string;
 }
 
 /** The kinds of a queued task the research names. */
@@ -2918,6 +2941,157 @@ export const DIRECTIONS_PEOPLE_FEATURE = 'directions.people';
 export const DIRECTIONS_PLACES_FEATURE = 'directions.places';
 /** `/status.features`: branches outside the directions (`offLine.branches`, `GET|POST /offline…`). */
 export const OFF_LINE_BRANCHES_FEATURE = 'offLine.branches';
+
+// ==================== BOOKS OF THE TASKS (spec 105) ====================
+
+/** `/status.features`: the books of the tasks (`/status.books`, `book` on waiting and queued tasks, `POST /books`, the `book` link). */
+export const BOOKS_FEATURE = 'books';
+
+/** How a book's images may be downloaded (the research's word from the archive's terms). */
+export type LiveBookDownload = 'whole' | 'range' | 'selected' | 'none';
+
+/** One book of `/status.books.list`. Optional fields are absent when the research does not know them. */
+export interface LiveBook {
+    /** "B0003". */
+    id: string;
+    title: string;
+    /** "1784-1820" (shown with a dash, only when not in the title already). */
+    years?: string;
+    /** The archive that keeps the book (absent: not known). */
+    archive?: { id?: string; name: string; url?: string };
+    /** 'online-free' | 'online-login' or another word of the research. */
+    access?: string;
+    /** The book's viewer on the archive's website. */
+    url?: string;
+    tasks: number;
+    waiting: number;
+    open: number;
+    parked: number;
+    /** Images of the book (absent: not known). */
+    images?: number;
+    onDisk: number;
+    /** Images not on disk (only with `images`). */
+    missing?: number;
+    /** The images the tasks need ("57-58, 112"; range and selected). */
+    need?: string;
+    /** How many images `need` names (absent: not said, no count is shown). */
+    needCount?: number;
+    download: LiveBookDownload;
+    /** Offered in "Faster by downloading" (whole: even with nothing waiting). */
+    offer?: true;
+    /** The book's folder in the shared inbox. */
+    folder?: string;
+    /** Files in the folder not taken in yet (only > 0). */
+    pending?: number;
+}
+
+/** The research's settings of the books (`books.minTasks`, `queue.sameBook`), as `/status.books.settings` says them. */
+export interface LiveBooksSettings {
+    minTasks: number;
+    minTasksOwn: boolean;
+    sameBook: 'yes' | 'no';
+    sameBookOwn: boolean;
+    /** The default without the tree's own value (absent: 5 / 'no'). */
+    minTasksDefault?: number;
+    sameBookDefault?: 'yes' | 'no';
+}
+
+/** `/status.books`: the settings, the books something waits for or that are offered (at most 100) and how many more. */
+export interface LiveBooks {
+    settings: LiveBooksSettings;
+    list: LiveBook[];
+    more: number;
+}
+
+/** The fewest and the most tasks of "Book offered from this many tasks". */
+export const BOOKS_MIN_TASKS_MIN = 1;
+export const BOOKS_MIN_TASKS_MAX = 999;
+/** The defaults when the research does not say them. */
+export const BOOKS_MIN_TASKS_DEFAULT = 5;
+export const BOOKS_SAME_BOOK_DEFAULT: 'yes' | 'no' = 'no';
+/** Most books taken from one status (the research sends at most 100). */
+const MAX_BOOKS = 100;
+
+/** A value of "Book offered from this many tasks": a whole number 1–999, else null. */
+export function booksMinTasks(value: unknown): number | null {
+    return typeof value === 'number' && Number.isInteger(value) && value >= BOOKS_MIN_TASKS_MIN && value <= BOOKS_MIN_TASKS_MAX ? value : null;
+}
+
+const yesNo = (v: unknown): 'yes' | 'no' | null => v === 'yes' || v === 'no' ? v : null;
+
+/** `/status.books.settings` (and the `books.settings` of a `POST /books` answer), or null when it is not one. */
+export function sanitizeBooksSettings(value: unknown): LiveBooksSettings | null {
+    const r = asRecord(value);
+    if (!r) return null;
+    const minTasks = booksMinTasks(r.minTasks);
+    const sameBook = yesNo(r.sameBook);
+    if (minTasks === null || sameBook === null) return null;
+    const minDefault = booksMinTasks(r.minTasksDefault);
+    const sameDefault = yesNo(r.sameBookDefault);
+    return {
+        minTasks, minTasksOwn: r.minTasksOwn === true, sameBook, sameBookOwn: r.sameBookOwn === true,
+        ...(minDefault !== null ? { minTasksDefault: minDefault } : {}),
+        ...(sameDefault ? { sameBookDefault: sameDefault } : {}),
+    };
+}
+
+/** One book of `/status.books.list`, or null when its id is wrong. Untrusted input: every field is checked. */
+export function sanitizeBook(value: unknown): LiveBook | null {
+    const r = asRecord(value);
+    const id = researchBookRef(r?.id);
+    if (!r || !id) return null;
+    const a = asRecord(r.archive);
+    const archiveName = a ? cleanText(a.name, 160) : '';
+    const archiveId = a && typeof a.id === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(a.id) ? a.id : null;
+    const archiveUrl = a ? webUrl(a.url) : null;
+    const years = cleanText(r.years, 40);
+    const access = typeof r.access === 'string' && /^[a-z][a-z0-9-]{0,39}$/.test(r.access) ? r.access : null;
+    const url = webUrl(r.url);
+    const images = asCount(r.images);
+    const missing = images !== null ? asCount(r.missing) : null;
+    const need = cleanText(r.need, 200);
+    const needCount = need ? asCount(r.needCount) : null;
+    const download: LiveBookDownload = r.download === 'whole' || r.download === 'range' || r.download === 'selected' ? r.download : 'none';
+    const folder = cleanText(r.folder, 200);
+    const pending = asCount(r.pending);
+    return {
+        id, title: cleanText(r.title, 200) || id,
+        ...(years ? { years } : {}),
+        ...(archiveName ? { archive: { ...(archiveId ? { id: archiveId } : {}), name: archiveName, ...(archiveUrl ? { url: archiveUrl } : {}) } } : {}),
+        ...(access ? { access } : {}),
+        ...(url ? { url } : {}),
+        tasks: asCount(r.tasks) ?? 0, waiting: asCount(r.waiting) ?? 0, open: asCount(r.open) ?? 0, parked: asCount(r.parked) ?? 0,
+        ...(images !== null ? { images } : {}),
+        onDisk: asCount(r.onDisk) ?? 0,
+        ...(missing !== null ? { missing } : {}),
+        ...(need ? { need } : {}),
+        ...(needCount !== null && needCount > 0 ? { needCount } : {}),
+        download,
+        ...(r.offer === true && download !== 'none' ? { offer: true as const } : {}),
+        ...(folder ? { folder } : {}),
+        ...(pending ? { pending } : {}),
+    };
+}
+
+/** `/status.books`, or null when it is not one (no valid settings). */
+export function sanitizeBooks(value: unknown): LiveBooks | null {
+    const r = asRecord(value);
+    const settings = sanitizeBooksSettings(r?.settings);
+    if (!r || !settings) return null;
+    const list: LiveBook[] = [];
+    const seen = new Set<string>();
+    for (const raw of Array.isArray(r.list) ? r.list : []) {
+        if (list.length >= MAX_BOOKS) break;
+        const b = sanitizeBook(raw);
+        if (b && !seen.has(b.id)) { seen.add(b.id); list.push(b); }
+    }
+    return { settings, list, more: asCount(r.more) ?? 0 };
+}
+
+/** The books are shown: a research that announces them and said its part `books` (else everything stays as before). */
+export function booksOn(s: { features?: readonly string[] | null; books?: LiveBooks } | null | undefined): boolean {
+    return !!s?.features?.includes(BOOKS_FEATURE) && !!s.books;
+}
 /** `/status.features`: a task's own place in the queue (`POST /queue/<T…>`, `queue[].why`). */
 export const QUEUE_OWN_FEATURE = 'queue.own';
 /** `/status.features`: the whole queue by pages (`GET /queue`), each task's `pos` and `/status.queueCounts`. */
@@ -3271,6 +3445,7 @@ export function sanitizeWaiting(value: unknown, groups = false, branches = false
             ...(placeQ ?? {}),
             ...(branch ? { kind: 'branch' as const, branch, tasks: asCount(r.tasks) ?? 0, persons: asCount(r.persons ?? r.newPersons) ?? 0 } : {}),
             ...(groups ? waitingGroupFields(r, kind) : {}),
+            ...(researchBookRef(r.book) ? { book: researchBookRef(r.book)! } : {}),
         });
     }
     return out;
@@ -3312,11 +3487,14 @@ export function sanitizeQueue(value: unknown, offLine = false, branches = false,
         const pos = state === 'next' && typeof r.pos === 'number' && Number.isInteger(r.pos) && r.pos >= 1 && r.pos <= 10_000_000 ? r.pos : null;
         // What it makes (a story, history): only the kinds known here.
         const kind = r.kind === 'story' || r.kind === 'history' ? r.kind : null;
+        // The book of the task (spec 105): only a valid id.
+        const book = researchBookRef(r.book);
+        const sameBook = researchBookRef(r.sameBook);
         if (state) out.push({
             id, text, state, ...(person ? { person } : {}), ...(research ? { research } : {}),
             ...(off ? { offLine: off } : {}), ...(helps ? { helps } : {}),
             ...(branch ? { branch } : {}), ...(own ? { own } : {}), ...(why ? { why } : {}), ...(pos ? { pos } : {}),
-            ...(kind ? { kind } : {}),
+            ...(kind ? { kind } : {}), ...(book ? { book } : {}), ...(sameBook ? { sameBook } : {}),
         });
     }
     return out;
@@ -3701,6 +3879,7 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         ...(features?.includes(WORK_LINK_FEATURE) && sanitizeLiveWork(r.work) ? { work: sanitizeLiveWork(r.work)! } : {}),
         ...(sanitizeResearchCaps(r.caps) ? { caps: sanitizeResearchCaps(r.caps)! } : {}),
         ...(features?.includes(OFF_LINE_BRANCHES_FEATURE) && sanitizeOffLine(r.offLine) ? { offLine: sanitizeOffLine(r.offLine)! } : {}),
+        ...(features?.includes(BOOKS_FEATURE) && sanitizeBooks(r.books) ? { books: sanitizeBooks(r.books)! } : {}),
         ...(features?.includes(QUEUE_PAGE_FEATURE) && sanitizeQueueCounts(r.queueCounts) ? { queueCounts: sanitizeQueueCounts(r.queueCounts)! } : {}),
         ...agentSaid(r.agent),
         ...(sanitizeBrowser(r) ? { browser: sanitizeBrowser(r)! } : {}),

@@ -754,6 +754,22 @@ export const plPart2: Pick<StringsType, 'crop' | 'portrait' | 'importImages' | '
         modeWhereArchive: 'Na badanie Archiwum Strom przełącza się w badaniu, pierwszą pozycją jego menu: „Włącz badanie”.',
         modeWhereWaiting: 'Badanie czeka na agenta AI. Na górze jego menu: „Zainstaluj lub wybierz agenta AI” albo „Zostaw tylko jako Archiwum Strom”.',
         terminalWhere: 'Terminal, w którym otwiera się badanie, wybiera się w ustawieniach badania.',
+        // „Księgi” (spec 105 §4, `books`)
+        booksGroup: 'Księgi',
+        booksSum: (n: number, same: boolean) => `od ${nPl(n, 'zadania', 'zadań', 'zadań')} · ${same ? 'pobrana najpierw' : 'bez pierwszeństwa'}`,
+        booksSumShort: (n: number) => `od ${n}`,
+        minTasks: 'Księga proponowana od tylu zadań',
+        minTasksDesc: 'Księga pojawia się w Szybciej dzięki pobraniu, gdy potrzebuje jej co najmniej tyle zadań. Księgi, na które coś czeka, są widoczne zawsze.',
+        minTasksUnit: 'zadań',
+        minTasksInvalid: 'Liczba całkowita od 1 do 999.',
+        sameBook: 'Pierwszeństwo pobranej księgi',
+        sameBookDesc: 'Po zadaniu księgi, która jest na dysku, kolejka bierze następne zadanie tej samej księgi (najwyżej 5 sesji z rzędu). Linie i zadania poza liniami nadal mają pierwszeństwo.',
+        booksYes: 'tak',
+        booksNo: 'nie',
+        resetDefault: (v: string) => `Przywróć domyślne (${v})`,
+        booksOk: 'Badanie potwierdziło. Dotyczy też zmian w terminalu.',
+        booksBusyErr: 'Badanie jest teraz zajęte, nic się nie zmieniło.',
+        booksRetry: 'Spróbuj ponownie',
     },
 
     // Originals for the research: the state line of an attachment / excerpt, full quality

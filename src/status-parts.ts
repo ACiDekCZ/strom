@@ -15,6 +15,7 @@ export const STATUS_PARTS: Readonly<Record<string, readonly string[]>> = {
     waiting: ['waiting'],
     queue: ['queue', 'queueMore', 'queueCounts'],
     offLine: ['offLine'],
+    books: ['books'],
     researches: ['researches'],
 };
 

@@ -93,6 +93,11 @@ export interface FakeBridge {
     /** More fields of `/status` (e.g. `channel`, `linkScheme`). */
     statusExtra?: Record<string, unknown>;
     /**
+     * The books of the tasks (spec 105, `books` in `features`): `/status.books` (`books`; the part `books` of the light
+     * status), every `POST /books` body (`posts`), written into `books.settings` and said back; `reply` answers instead.
+     */
+    books?: { books: Record<string, unknown>; posts: Record<string, unknown>[]; reply?: { status: number; body: unknown } };
+    /**
      * Who decides hypotheses (spec 060, `hypotheses.decide`): `/status.hypotheses.decide` (`decide`, not said
      * when unset); `POST /hypotheses` bodies (`writes`); `person` written at once, `agent` 403
      * `hypotheses.link` (the terminal confirms; a test does it by changing `decide`); `reply` answers instead.
@@ -1914,10 +1919,29 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
             }
             return json(400, { error: 'Not a body /live takes.', code: 'live.body' });
         }
+        // The books' settings (spec 105 §4): a number of tasks or the downloaded book first, or back to the default.
+        if (b.books && method === 'POST' && /\/books$/.test(url.pathname) && b.features?.includes('books')) {
+            let body: Record<string, unknown> = {};
+            try { body = JSON.parse(route.request().postData() ?? '{}'); } catch { /* keep empty */ }
+            b.books.posts.push(body);
+            if (b.books.reply) return json(b.books.reply.status, b.books.reply.body);
+            const set = { ...(b.books.books.settings as Record<string, unknown>) };
+            if (body.minTasks === 'default') Object.assign(set, { minTasks: set.minTasksDefault ?? 5, minTasksOwn: false });
+            else if (typeof body.minTasks === 'number' && Number.isInteger(body.minTasks) && body.minTasks >= 1 && body.minTasks <= 999) {
+                Object.assign(set, { minTasks: body.minTasks, minTasksOwn: true });
+            } else if (body.sameBook === 'default') Object.assign(set, { sameBook: set.sameBookDefault ?? 'no', sameBookOwn: false });
+            else if (body.sameBook === 'yes' || body.sameBook === 'no') Object.assign(set, { sameBook: body.sameBook, sameBookOwn: true });
+            else return json(400, { error: 'Not a body /books takes.', code: 'books.body' });
+            b.books.books = { ...b.books.books, settings: set };
+            return json(200, { books: { settings: set }, head: b.head, parent: b.head });
+        }
         // A heavy part apart (research 1.26.0, `status.parts`): its rev and its fields as the full status has them.
         const partPath = /\/status\/([A-Za-z]+)$/.exec(url.pathname);
         if (partPath && method === 'GET' && b.features?.includes('status.parts')) {
             (b.partReads ??= []).push(partPath[1]);
+            if (partPath[1] === 'books' && b.books && b.features.includes('books')) {
+                return json(200, { part: 'books', rev: partRev(b.books.books), head: b.head, books: b.books.books });
+            }
             if (partPath[1] !== 'waiting') return json(404, { error: 'no such part', code: 'status.part' });
             return json(200, { part: 'waiting', rev: partRev(b.waiting), head: b.head, ...(b.waiting ? { waiting: b.waiting } : {}) });
         }
@@ -1939,7 +1963,8 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
                 ...(b.batches ? { batches: b.batches } : {}),
                 ...(b.strom ? { strom: b.strom } : {}),
                 ...(b.waiting && !light ? { waiting: b.waiting } : {}),
-                ...(light ? { parts: { waiting: partRev(b.waiting) } } : {}),
+                ...(light ? { parts: { waiting: partRev(b.waiting), ...(b.books && b.features?.includes('books') ? { books: partRev(b.books.books) } : {}) } } : {}),
+                ...(b.books && !light && b.features?.includes('books') ? { books: b.books.books } : {}),
                 ...(b.features ? { features: b.features } : {}),
                 ...(b.accepts ? { sends: b.sends } : {}),
                 ...(b.read ? { reads: b.read.reads } : {}),

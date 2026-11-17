@@ -48,7 +48,7 @@ import {
     humanizeChange, isGedcomFileName, isSafariBrowser,
     parseSendBridge, pickSendDefault, sanitizeSyncReply, researchSchemeUrl, researchTaskRef,
     ResearchLinkAction, ResearchLinkParams, LiveBridgeUrls, LiveStatus, LiveChange, LiveWorker, LiveWaiting,
-    LiveQueueItem, LiveSpend, LiveIntake, LiveDirection, LiveBusy, LiveWork, ResearchCaps, BrowserInfo, LiveOffLine, ResearchHeaderInfo, ExportXrefs, ResearchAccepts, statusAgentless,
+    LiveQueueItem, LiveSpend, LiveIntake, LiveDirection, LiveBusy, LiveWork, ResearchCaps, BrowserInfo, LiveOffLine, LiveBooks, ResearchHeaderInfo, ExportXrefs, ResearchAccepts, statusAgentless,
     LiveQueueCounts, QUEUE_PAGE_FEATURE, QUEUE_SEARCH_FEATURE,
     researchLinkMark, researchUrlMark,
 } from '../research-link.js';
@@ -205,6 +205,8 @@ export interface LiveSession {
     browser?: BrowserInfo;
     /** Work outside the directions by branches (its last status's `offLine`; absent: not said). */
     offLine?: LiveOffLine;
+    /** The books of the tasks (its last status's `books`, spec 105; absent: not said). */
+    books?: LiveBooks;
     /** Sections the panel folded by itself for lack of room (not remembered). */
     autoCollapsed: Set<LiveSectionKey>;
     /** Waiting task ids already shown: a new one unfolds "Waiting for you" (unless the user keeps it collapsed or hidden). */
@@ -3055,6 +3057,7 @@ export const researchUiMethods = uiModule({
         s.researches = status.researches;
         s.caps = status.caps;
         s.offLine = status.offLine;
+        s.books = status.books;
         s.update = status.update;
         s.busy = status.busy;
         s.work = status.work;
@@ -3499,6 +3502,7 @@ export const researchUiMethods = uiModule({
                 researches: status.researches,
                 ...(status.caps ? { caps: status.caps } : {}),
                 ...(status.offLine ? { offLine: status.offLine } : {}),
+                ...(status.books ? { books: status.books } : {}),
                 autoCollapsed: new Set(window.innerHeight < 700 ? ['queue'] : []),
                 seenWaiting: new Set(status.waiting.map(w => w.id)),
                 waitingPendingOpen: new Set(),
@@ -3777,6 +3781,7 @@ export const researchUiMethods = uiModule({
         s.researches = status.researches;
         s.caps = status.caps;
         s.offLine = status.offLine;
+        s.books = status.books;
         s.update = status.update;
         s.busy = status.busy;
         s.work = status.work;

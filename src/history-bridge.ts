@@ -14,6 +14,7 @@
 
 import {
     cleanText, isResearchHead, researchPersonRef, researchSchemeUrl, withAppVersion, type ResearchExperiment, type ResearchHypothesesDecide,
+    sanitizeBooksSettings, type LiveBooksSettings,
 } from './research-link.js';
 import { writeHeldOfRefusal, type ResearchWriteHeld } from './research-write-held.js';
 import { READ_TASK_NAMES, READ_TASK_SETTING_PATH, readTaskSettingBody, sanitizeTaskSetting, type ReadTaskSetting } from './research-read-task.js';
@@ -640,6 +641,49 @@ export async function postBridgeReadTask(base: string, value: ReadTaskSetting, f
     _check: { tree: string }): Promise<ReadTaskSettingResult> {
     const res = await postWrite(base, READ_TASK_SETTING_PATH, readTaskSettingBody(value));
     return res ? readTaskSettingReply(res.status, res.body, features) : { ok: false, code: 'network', status: 0, reason: '', bridgeCode: '' };
+}
+
+// ==================== BOOKS (spec 105 §4) ====================
+
+/** One setting of the books written at once: a number of tasks, the downloaded book first, or back to the default. */
+export type BooksSettingBody = { minTasks: number | 'default' } | { sameBook: 'yes' | 'no' | 'default' };
+
+/**
+ * Why `POST /books` did not go: `archive` 409 directions.archive (the tree became an archive); `invalid` 400
+ * books.body; `busy` 503 research.busy; `locked` 423; `held` sealed elsewhere / not downloaded / disk full;
+ * `full` 507 without the feature of a held write; `network` no answer; `unknown` anything else (500 books.failed).
+ */
+export type BooksSettingError = 'archive' | 'invalid' | 'busy' | 'locked' | 'held' | 'full' | 'network' | 'unknown';
+
+export type BooksSettingResult =
+    | { ok: true; settings?: LiveBooksSettings }
+    | { ok: false; code: BooksSettingError; status: number; reason: string; bridgeCode: string; held?: ResearchWriteHeld };
+
+/** The reply to `POST /books`, typed: the settings the research keeps now. */
+export function booksSettingReply(status: number, body: unknown, features: readonly string[] | null | undefined): BooksSettingResult {
+    const r = asRecord(body) ?? {};
+    if (status >= 200 && status < 300) {
+        const settings = sanitizeBooksSettings(asRecord(r.books)?.settings);
+        return { ok: true, ...(settings ? { settings } : {}) };
+    }
+    const reason = bridgeSentence(body);
+    const code = typeof r.code === 'string' && /^[A-Za-z0-9.-]{1,40}$/.test(r.code) ? r.code : '';
+    const out = (c: BooksSettingError, extra: { held?: ResearchWriteHeld } = {}): BooksSettingResult =>
+        ({ ok: false, code: c, status, reason, bridgeCode: code, ...extra });
+    const held = writeHeldOfRefusal(code, r.error, features, r.params);
+    if (held) return out('held', { held });
+    if (status === 400) return out('invalid');
+    if (status === 409 && (code === 'directions.archive' || code === 'books.archive')) return out('archive');
+    if (status === 503 || code === 'research.busy' || code === 'busy') return out('busy');
+    if (status === 423 || code === 'locked') return out('locked');
+    if (status === 507 || code === 'disk.full') return out('full');
+    return out('unknown');
+}
+
+/** A setting of the books (`POST <token>/books`), written at once; the reply carries the settings kept now. */
+export async function postBridgeBooks(base: string, body: BooksSettingBody, features: readonly string[] | null | undefined): Promise<BooksSettingResult> {
+    const res = await postWrite(base, '/books', body);
+    return res ? booksSettingReply(res.status, res.body, features) : { ok: false, code: 'network', status: 0, reason: '', bridgeCode: '' };
 }
 
 // ==================== KINDS OF EVENTS (spec 035) ====================

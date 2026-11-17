@@ -17,9 +17,10 @@ import { strings } from '../strings.js';
 import { TreeId, ResearchTranscripts, ResearchSendMode, StromData } from '../types.js';
 import {
     researchSchemeUrl, TERMINAL_CHOICE_FEATURE, STORIES_HISTORY_FEATURE, HYPOTHESES_DECIDE_FEATURE, researchLinkMark, researchUrlMark,
-    type ResearchHypothesesDecide,
+    booksOn, BOOKS_MIN_TASKS_DEFAULT, BOOKS_SAME_BOOK_DEFAULT, type ResearchHypothesesDecide, type LiveBooksSettings,
 } from '../research-link.js';
-import { postBridgeStories, postBridgeHypotheses, postBridgeReadTask } from '../history-bridge.js';
+import { postBridgeStories, postBridgeHypotheses, postBridgeReadTask, postBridgeBooks, type BooksSettingBody } from '../history-bridge.js';
+import { booksSettingHtml, booksMinTasksInput, type BooksSettingNote } from './books-setting-view.js';
 import { READ_SOURCE_TASK_FEATURE, type ReadTaskSetting } from '../research-read-task.js';
 import { readTaskSettingHtml, type ReadTaskSettingNote } from './read-task-setting-view.js';
 import { researchAutoState, patchResearchAutoState, researchSendPreviewSkipped, noteResearchSendPreviewSkipped, announcedResearchScheme } from '../research-device.js';
@@ -60,6 +61,35 @@ const hypos: { rid: string; note?: { text: string; link?: ResearchNoteLink }; wa
 const readTask: { rid: string; note?: ReadTaskSettingNote; want?: ReadTaskSetting; busy?: boolean; open?: boolean } = { rid: '' };
 /** How long the group stays highlighted when a link opens the dialog at it. */
 const READ_TASK_FLASH_MS = 1500;
+
+/**
+ * "Books" (spec 105 §4): the same parts as `readTask` — the settings the research confirmed until its status says
+ * them (`want`), the last write (`last`, for Try again), the number typed when it is not one (`invalid`), the group
+ * gone after the research said the tree is an archive (`gone`), a redraw held while the number field has the focus
+ * (`stale`) and the control a write came from (`focusId`).
+ */
+const books: {
+    rid: string; note?: BooksSettingNote; want?: LiveBooksSettings; last?: BooksSettingBody; busy?: boolean; open?: boolean;
+    invalid?: string; gone?: boolean; stale?: boolean; focusId?: string;
+} = { rid: '' };
+const BOOKS_FOCUSABLE = ['research-books-min', 'research-books-same', 'research-books-min-reset', 'research-books-same-reset', 'research-books-retry'];
+
+/** The same four values (what the research keeps; its defaults aside). */
+function sameBooksSettings(a: LiveBooksSettings, b: LiveBooksSettings): boolean {
+    return a.minTasks === b.minTasks && a.minTasksOwn === b.minTasksOwn && a.sameBook === b.sameBook && a.sameBookOwn === b.sameBookOwn;
+}
+
+/** The settings as a write asks them (shown while it is on its way). */
+function booksSettingsAsked(s: LiveBooksSettings, body: BooksSettingBody): LiveBooksSettings {
+    if ('minTasks' in body) {
+        return body.minTasks === 'default'
+            ? { ...s, minTasks: s.minTasksDefault ?? BOOKS_MIN_TASKS_DEFAULT, minTasksOwn: false }
+            : { ...s, minTasks: body.minTasks, minTasksOwn: true };
+    }
+    return body.sameBook === 'default'
+        ? { ...s, sameBook: s.sameBookDefault ?? BOOKS_SAME_BOOK_DEFAULT, sameBookOwn: false }
+        : { ...s, sameBook: body.sameBook, sameBookOwn: true };
+}
 
 /** A phone-sized or touch screen: short card texts, and a note instead of the effect box and the status line. */
 function compactScreen(): boolean {
@@ -205,8 +235,11 @@ export const researchTreeSettingsMethods = uiModule({
         return this.researchModeOf(link.id, link) !== 'archive' && !this.researchAgentAway(link.id, link);
     },
 
-    /** The dialog for a tree tied to a research that knows how a transcript weighs. */
-    async showResearchTreeSettings(treeId: TreeId): Promise<void> {
+    /**
+     * The dialog for a tree tied to a research that knows how a transcript weighs.
+     * `group: 'books'` opens it at "Books", open and highlighted for a moment (Faster by downloading › Settings…).
+     */
+    async showResearchTreeSettings(treeId: TreeId, opts: { group?: 'books' } = {}): Promise<void> {
         const meta = TreeManager.getTreeMetadata(treeId);
         const link = meta?.research;
         if (!meta || !link) return;
@@ -309,6 +342,7 @@ export const researchTreeSettingsMethods = uiModule({
                 <div class="research-stories-host" id="research-stories-host"></div>
                 ${archive || agentAway ? '' : `<div class="research-hypos-host" id="research-hypos-host"></div>`}
                 ${archive || agentAway ? '' : `<div class="research-readtask-host" id="research-readtask-host"></div>`}
+                ${archive || agentAway ? '' : `<div class="research-books-host" id="research-books-host"></div>`}
                 ${this.offLineSettingsOffered(treeId) ? `<div class="research-offline-host" id="research-offline-host" data-research="${esc(link.id)}"></div>` : ''}
                 <button type="button" class="link-button research-read-history" id="research-read-history" hidden></button>
                 ${modeWhereHtml}
@@ -446,6 +480,10 @@ export const researchTreeSettingsMethods = uiModule({
         readTask.rid = link.id;
         delete readTask.note; delete readTask.want; delete readTask.busy; delete readTask.open;
         this.renderResearchReadTaskRow();
+        books.rid = link.id;
+        delete books.note; delete books.want; delete books.last; delete books.busy; delete books.open;
+        delete books.invalid; delete books.gone; delete books.stale; delete books.focusId;
+        this.renderResearchBooksRow();
         // Work outside the directions (§9.5): the same condition as the transcripts, with the research's branches.
         this.startOffLineSettings(link.id);
         if (!storiesListening) {
@@ -455,6 +493,7 @@ export const researchTreeSettingsMethods = uiModule({
                 this.renderResearchStoriesRow();
                 this.renderResearchHypothesesRow();
                 this.renderResearchReadTaskRow();
+                this.renderResearchBooksRow();
                 this.renderOffLineSettings();
             });
         }
@@ -462,6 +501,9 @@ export const researchTreeSettingsMethods = uiModule({
         if (historyBtn) void this.fillReadHistoryRow(historyBtn, treeId);
         await renderOlder();
         overlay.querySelector<HTMLInputElement>('input[name="research-transcripts"]:checked')?.focus();
+        if (opts.group === 'books') {
+            this.flashResearchSettingsGroup('research-books-group', '#research-books-min', () => { books.open = true; });
+        }
     },
 
     /**
@@ -699,17 +741,141 @@ export const researchTreeSettingsMethods = uiModule({
         const id = TreeManager.getActiveTreeId();
         if (!id) return;
         void this.showResearchTreeSettings(id).then(() => {
-            const group = document.querySelector<HTMLDetailsElement>(`#${SETTINGS_ID} #research-readtask-group`);
-            if (!group) return;
-            group.open = true;
-            readTask.open = true;
-            let box: HTMLElement | null = group.parentElement;
-            while (box && box.scrollHeight <= box.clientHeight + 1) box = box.parentElement;
-            if (box) box.scrollTop += group.getBoundingClientRect().top - box.getBoundingClientRect().top - 12;
-            group.classList.add('is-flash');
-            window.setTimeout(() => group.classList.remove('is-flash'), READ_TASK_FLASH_MS);
-            group.querySelector<HTMLInputElement>('input[name="research-read-task"]:checked')?.focus({ preventScroll: true });
+            this.flashResearchSettingsGroup('research-readtask-group', 'input[name="research-read-task"]:checked', () => { readTask.open = true; });
         });
+    },
+
+    /** A group of the dialog opened, scrolled into view in the dialog (its own scroll, not the page's), highlighted for a moment and focused. */
+    flashResearchSettingsGroup(groupId: string, focusSelector: string, opened: () => void): void {
+        const group = document.querySelector<HTMLDetailsElement>(`#${SETTINGS_ID} #${groupId}`);
+        if (!group) return;
+        group.open = true;
+        opened();
+        let box: HTMLElement | null = group.parentElement;
+        while (box && box.scrollHeight <= box.clientHeight + 1) box = box.parentElement;
+        if (box) box.scrollTop += group.getBoundingClientRect().top - box.getBoundingClientRect().top - 12;
+        group.classList.add('is-flash');
+        window.setTimeout(() => group.classList.remove('is-flash'), READ_TASK_FLASH_MS);
+        group.querySelector<HTMLElement>(focusSelector)?.focus({ preventScroll: true });
+    },
+
+    /**
+     * Spec 105 §4: "Books" — only with `books` and its part said (not in an archive nor a research waiting for its
+     * agent: no host there); the values follow the research's status, also when they change in its terminal, but
+     * never under a number being typed (`force`: a redraw of this group's own write). Without the bridge the controls
+     * rest, dimmed, with its sentence.
+     */
+    renderResearchBooksRow(force = false): void {
+        const host = document.querySelector<HTMLElement>(`#${SETTINGS_ID} #research-books-host`);
+        if (!host) return;
+        const rid = books.rid;
+        const ctx = this.historyManageContext();
+        const last = (ctx?.researchId === rid ? ctx.lastStatus : this.researchStatusOf(rid)) ?? lastBridgeStatus(rid);
+        const features = ctx?.researchId === rid ? ctx.features : last?.features ?? [];
+        if (books.gone || !booksOn({ features, books: last?.books })) {
+            host.innerHTML = '';
+            return;
+        }
+        const active = document.activeElement as HTMLElement | null;
+        if (!force && active?.id === 'research-books-min' && host.contains(active)) {
+            books.stale = true;
+            return;
+        }
+        delete books.stale;
+        const was = host.querySelector<HTMLDetailsElement>('#research-books-group');
+        if (was) books.open = was.open;
+        const up = this.researchBridgeUp(rid);
+        const said = last!.books!.settings;
+        if (books.want && sameBooksSettings(said, books.want)) delete books.want;
+        const settings = books.want ?? said;
+        const note: BooksSettingNote | undefined = books.busy ? { kind: 'busy' }
+            : !up ? { kind: 'text', text: strings.history.storiesBridgeDown } : books.note;
+        const focusId = books.focusId ?? (active && host.contains(active) && BOOKS_FOCUSABLE.includes(active.id) ? active.id : '');
+        host.innerHTML = booksSettingHtml({ settings, open: !!books.open, up, note, invalid: books.invalid ?? null });
+        host.querySelector<HTMLDetailsElement>('#research-books-group')?.addEventListener('toggle', (e) => {
+            books.open = (e.currentTarget as HTMLDetailsElement).open;
+        });
+        const min = host.querySelector<HTMLInputElement>('#research-books-min');
+        if (min) {
+            const take = (): void => {
+                const text = min.value.trim();
+                if (!text && !min.validity.badInput) {
+                    // An empty field takes the research's value back.
+                    delete books.invalid;
+                    this.renderResearchBooksRow(true);
+                    return;
+                }
+                const n = booksMinTasksInput(text);
+                if (n === null) {
+                    books.invalid = text;
+                    books.focusId = 'research-books-min';
+                    this.renderResearchBooksRow(true);
+                    delete books.focusId;
+                    return;
+                }
+                delete books.invalid;
+                if (n === settings.minTasks) { this.renderResearchBooksRow(true); return; }
+                void this.setResearchBooks({ minTasks: n }, 'research-books-min');
+            };
+            min.addEventListener('change', take);
+            min.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); take(); } });
+            // A redraw held while typing comes when the field is left.
+            min.addEventListener('blur', () => {
+                window.setTimeout(() => { if (books.stale && document.activeElement?.id !== 'research-books-min') this.renderResearchBooksRow(); }, 0);
+            });
+        }
+        const same = host.querySelector<HTMLInputElement>('#research-books-same');
+        same?.addEventListener('change', () => { void this.setResearchBooks({ sameBook: same.checked ? 'yes' : 'no' }, 'research-books-same'); });
+        host.querySelector<HTMLButtonElement>('#research-books-min-reset')?.addEventListener('click', () => {
+            delete books.invalid;
+            void this.setResearchBooks({ minTasks: 'default' }, 'research-books-min');
+        });
+        host.querySelector<HTMLButtonElement>('#research-books-same-reset')?.addEventListener('click', () => {
+            void this.setResearchBooks({ sameBook: 'default' }, 'research-books-same');
+        });
+        host.querySelector<HTMLButtonElement>('#research-books-retry')?.addEventListener('click', () => {
+            if (books.last) void this.setResearchBooks(books.last, books.focusId ?? 'research-books-min');
+        });
+        if (focusId) {
+            const el = host.querySelector<HTMLElement>(`#${focusId}`) ?? (focusId.endsWith('-reset') ? host.querySelector<HTMLElement>(`#${focusId.replace('-reset', '')}`) : null);
+            if (el && !(el as HTMLInputElement).disabled) el.focus({ preventScroll: true });
+        }
+    },
+
+    /** Spec 105 §4: `POST /books` — written at once; the values stay as the research says. */
+    async setResearchBooks(body: BooksSettingBody, from: string): Promise<void> {
+        const rid = books.rid;
+        const ctx = this.historyManageContext();
+        const base = ctx?.researchId === rid ? ctx.base : null;
+        if (!base || books.busy) { this.renderResearchBooksRow(true); return; }
+        const status = ctx!.lastStatus?.books?.settings;
+        books.busy = true;
+        books.last = body;
+        if (status) books.want = booksSettingsAsked(books.want ?? status, body);
+        delete books.note;
+        this.renderResearchBooksRow(true);
+        const res = await postBridgeBooks(base, body, ctx!.features);
+        if (books.rid !== rid) return;
+        delete books.busy;
+        if (res.ok) {
+            if (res.settings) books.want = res.settings;
+            books.note = { kind: 'ok' };
+        } else {
+            delete books.want;
+            const W = strings.live.waitingWrite;
+            switch (res.code) {
+                case 'archive': books.gone = true; break;
+                case 'busy': books.note = { kind: 'text', text: strings.treeSettings.booksBusyErr, retry: true }; break;
+                case 'invalid': books.note = { kind: 'text', text: strings.treeSettings.minTasksInvalid }; break;
+                case 'locked': books.note = { kind: 'text', text: W.locked }; break;
+                case 'held': books.note = { kind: 'text', text: res.reason || this.researchWriteHeldText(res.held!, false).toast }; break;
+                case 'full': books.note = { kind: 'text', text: res.reason || W.fileFull }; break;
+                default: books.note = { kind: 'text', text: res.reason || W.writeFailed };
+            }
+        }
+        books.focusId = from;
+        this.renderResearchBooksRow(true);
+        delete books.focusId;
     },
 
     /** Save the choice at once (it goes with the next send). */
