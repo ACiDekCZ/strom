@@ -371,6 +371,7 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
         excerptCut: 'wycinek z tego pliku',
         couplePhoto: 'zdjęcie związku',
         docOf: 'dowód',
+        docCitedAt: (at: string) => `dowód · cytowane przy ${at}`,
         nowhereYet: 'W drzewie jeszcze nigdzie.',
         moreN: (n: number) => `+ ${n} więcej`,
         unlink: (what: string) => `Odłącz: ${what}`,

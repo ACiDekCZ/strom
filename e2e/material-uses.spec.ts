@@ -105,6 +105,19 @@ test.describe('Where used, a tree without a research', () => {
         await expect(panel(page).locator('.mv-sentence')).toHaveText('The file is only in this browser. Backup: Export all.');
     });
 
+    test('a source cited at a birth: its row says "evidence · cited at Birth" (5d)', async ({ page }) => {
+        await tree(page);
+        await files(page);
+        await page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            const src = (Object.values(dm.getData().sources ?? {}) as { id: string; title: string }[]).find(s => s.title === 'Matrika Quellbach')!;
+            dm.citePerson('p3' as never, src.id, 'birth' as never);
+        });
+        await view(page, 'svatba.png');
+        await uses(page).locator('.mv-uses-more').click();
+        await expect(uses(page).locator('.mv-use-sub')).toHaveText(['cut from this file', 'evidence · cited at Birth', 'excerpt cut from this file']);
+    });
+
     test('a read-only tree (spec 102 §12g): Where used with its links, no pencil, no ×, no action but Download', async ({ page }) => {
         await tree(page);
         await files(page);

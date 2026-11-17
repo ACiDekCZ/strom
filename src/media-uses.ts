@@ -162,11 +162,26 @@ export function mediaUseLabel(data: Pick<StromData, 'persons' | 'partnerships' |
             }
             return { type: t.event, text: `${label} · ${personName(data, use.personId, S)}` };
         }
-        case 'source':
-            return { type: t.source, text: data.sources?.[use.sourceId ?? '']?.title || m.unknownSource, sub: m.docOf };
+        case 'source': {
+            // Its evidence, and where the source is cited (5d): "evidence · cited at Birth".
+            const at = use.sourceId ? sourceCitedAt(data, use.sourceId, S) : null;
+            return { type: t.source, text: data.sources?.[use.sourceId ?? '']?.title || m.unknownSource, sub: at ? m.docCitedAt(at) : m.docOf };
+        }
         case 'excerpt':
             return { type: t.excerpt, text: data.sources?.[use.sourceId ?? '']?.title || m.unknownSource, sub: m.excerptCut };
     }
+}
+
+/** The first fact or event a source is cited at (a person's birth, death or life event); null: none such. */
+export function sourceCitedAt(data: Pick<StromData, 'persons'>, sourceId: string, S: Strings = appStrings): string | null {
+    for (const person of Object.values(data.persons ?? {})) {
+        if (!person) continue;
+        if (person.birthSourceIds?.includes(sourceId)) return S.events.types.birth;
+        if (person.deathSourceIds?.includes(sourceId)) return S.events.types.death;
+        const ev = person.events?.find(e => e.sourceIds?.includes(sourceId));
+        if (ev) return lifeEventLabel(ev, S);
+    }
+    return null;
 }
 
 /** A place as the texts name it ("Birth 1890 · Jan Novák", "Jan Novák and Marie…", the source's title). */

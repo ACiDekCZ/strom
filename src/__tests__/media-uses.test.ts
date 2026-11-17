@@ -111,6 +111,18 @@ describe('mediaUseLabel', () => {
         expect(labels[8]).toEqual({ type: m.usedType.excerpt, text: 'Parish register Ödeby 1898', sub: m.excerptCut });
     });
 
+    it('a source cited at a birth: "evidence · cited at Birth" (5d)', () => {
+        const data = tree();
+        const person = Object.values(data.persons)[0];
+        const sourceId = mediaUses(data, 'm1').find(u => u.kind === 'source')!.sourceId!;
+        person.birthSourceIds = [sourceId];
+        const label = mediaUseLabel(data, mediaUses(data, 'm1').find(u => u.kind === 'source')!);
+        expect(label.sub).toBe('evidence · cited at Birth');
+        setLanguage('cs');
+        expect(mediaUseLabel(data, mediaUses(data, 'm1').find(u => u.kind === 'source')!).sub).toBe('doklad · citace u Narození');
+        setLanguage('en');
+    });
+
     it('in Czech', () => {
         setLanguage('cs');
         const data = tree();

@@ -288,6 +288,9 @@ async function research(page: Page, files: FakeMaterialFile[]): Promise<{ bridge
     return { bridge, material };
 }
 
+/** The tree's stand-in image of a file whose original is only in the archive (validation.ts ORIGINAL_ONLY_DATA_URL). */
+const ORIGINAL_ONLY = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAIAAADYYG7QAAAAaklEQVR42u3YsQ2AMAwEwOw/AGuwGDtAQRsky2Aw0n3h+qT/NBlbswwgICCgyyzhvAfaA7lpKgGdtxcobSoE5Uy1oISpatTpd/c8aEoEAmoPWgNRGZBRqwzIqFUGBAT0PSgdP2hAQED/AR2hzcxJL1f+tQAAAABJRU5ErkJggg==';
+
 const treeRecordOf = (page: Page, sha: string) => page.evaluate((sha) => {
     const att = (Object.values(window.Strom.DataManager.getData().media ?? {}) as { original?: { sha256: string }; places: Record<string, string>[] }[])
         .find(a => a.original?.sha256 === sha);
@@ -313,6 +316,40 @@ test.describe('A source from material only in the archive', () => {
         await expect(pill(page).locator('.undo-toast-msg')).toHaveText('Source created: Křest, cited at Jan Fíšek.');
         await expect.poll(() => treeRecordOf(page, sha)).toEqual(['sourceId', 'personId']);
         expect(material.assigns).toHaveLength(0);
+    });
+
+    test('a new source at a person: the research\'s material in the offer shows its preview from the bridge', async ({ page }) => {
+        const { material } = await research(page, [materialFile(1, { title: 'Křest', persons: ['P0003'] })]);
+        await page.evaluate(() => (window.Strom.UI as unknown as { openMaterials(o: unknown): void }).openMaterials({}));
+        await expect(tile(page, 'Křest')).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(win(page)).toHaveCount(0);
+        const jan = await page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons) as { id: string; firstName: string }[]).find(p => p.firstName === 'Jan')!.id);
+        await newSourceAt(page, jan);
+        const offerTile = page.locator('#source-offer .source-offer-tile', { hasText: 'Křest' });
+        await expect(offerTile).toBeVisible();
+        await expect(offerTile.locator('.source-offer-thumb img')).toHaveCount(1);
+        expect(material.thumbAsks.length).toBeGreaterThan(0);
+    });
+
+    test('evidence whose original is only in the archive: its card offers Open in system (5e)', async ({ page }) => {
+        const sha = materialSha('I0001');
+        await research(page, [materialFile(1, { title: 'Kronika', persons: ['P0003'], mime: 'image/tiff', name: 'kronika.tif' })]);
+        const jan = await page.evaluate(({ sha, url }) => {
+            const dm = window.Strom.DataManager;
+            const id = (Object.values(dm.getData().persons) as { id: string; firstName: string }[]).find(p => p.firstName === 'Jan')!.id;
+            dm.addAttachment(id as never, {
+                name: 'kronika.tif', mimeType: 'image/tiff', dataUrl: url, sizeBytes: 70, originalOnly: true,
+                original: { sha256: sha, name: 'kronika.tif', mimeType: 'image/tiff', bytes: 70 },
+            } as never);
+            return id;
+        }, { sha, url: ORIGINAL_ONLY });
+        await newSourceAt(page, jan);
+        await page.locator('#source-offer .source-offer-tile').first().click();
+        const card = docs(page).locator('.source-doc-card');
+        await expect(card).toHaveCount(1);
+        await expect(card.locator('[data-doc-act="system"]')).toContainText('Open in system');
+        await expect(card.locator('[data-doc-act="cut"]')).toHaveCount(0);
     });
 
     test('the research stopped: the action is off for material outside the tree', async ({ page }) => {

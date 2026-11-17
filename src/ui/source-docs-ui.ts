@@ -20,13 +20,17 @@
 import { DataManager } from '../data.js';
 import { Attachment, MediaPlace, PartnershipId, Person, PersonId, Source, SourceExcerpt } from '../types.js';
 import { strings } from '../strings.js';
-import { MaterialItem, attachmentItem, materialDate, materialKindLabel } from '../materials.js';
+import { MaterialItem, attachmentItem, materialDate, materialKindLabel, materialSystemLink, materialType } from '../materials.js';
+import { announcedResearchScheme } from '../research-device.js';
+import { researchLinkMark } from '../research-link.js';
+import { researchActionLabel } from './research-open-mark.js';
+import { materialThumbs } from '../material-thumbs.js';
 import { findMedia, mediaOf, mediaPersonIds, mediaSourceIds } from '../media.js';
 import { formatFlexDate, parseFlexDate, yearOf } from '../dates.js';
 import { parseGedcomDate } from '../gedcom-date-read.js';
 import { eventTypeLabel } from './person-events.js';
 import { coupleEventLabel } from '../events.js';
-import { materialTileLetters } from './materials-ui.js';
+import { materialItemSha, materialTileLetters } from './materials-ui.js';
 import { attachmentPdf, openPdfBlob } from './material-viewer-ui.js';
 import { closeImageViewer } from './image-viewer.js';
 import { uiModule } from './module.js';
@@ -183,6 +187,18 @@ function thumbHtml(rec: Omit<Attachment, 'id' | 'places'>, cls: string): string 
     return `<span class="${cls}"><span class="material-row-tile">${esc(letters)}</span></span>`;
 }
 
+const OFFER_THUMB_PX = 128;
+
+/** A tile of the research's material: its preview when one is ready, else the type's letters (filled in by the queue). */
+function archiveThumbHtml(it: MaterialItem): string {
+    const letters = `<span class="material-row-tile">${esc(materialTileLetters(it))}</span>`;
+    const sha = materialItemSha(it);
+    if (!sha || !['image', 'pdf'].includes(materialType(it.mime, it.name))) return `<span class="source-offer-thumb">${letters}</span>`;
+    const ready = materialThumbs().urlOf(sha, OFFER_THUMB_PX);
+    if (ready) return `<span class="source-offer-thumb"><img src="${esc(ready)}" alt=""></span>`;
+    return `<span class="source-offer-thumb" data-sha="${esc(sha)}" data-item="${esc(it.key)}">${letters}</span>`;
+}
+
 function citationContextOf(place: MediaPlace | null, personId: PersonId): { personId: PersonId; eventId?: string; fact?: 'birth' | 'death' } | { partnershipId: PartnershipId; eventId?: string } {
     if (!place) return { personId };
     if ('personId' in place) return place.fact ? { personId: place.personId, fact: place.fact as 'birth' | 'death' } : { personId: place.personId, ...(place.eventId ? { eventId: place.eventId } : {}) };
@@ -320,6 +336,12 @@ export const sourceDocsMethods = uiModule({
             return;
         }
         box.hidden = false;
+        const mc = this.materialsContext();
+        // A file whose original is only in the archive (5e): "Open in the system" through the research's link.
+        const systemLink = (r: Omit<Attachment, 'id' | 'places'>): string | null => {
+            const sha = r.original?.sha256;
+            return r.originalOnly && sha && mc && mc.caps.openLinks !== false ? materialSystemLink(mc.researchId, sha, announcedResearchScheme()) : null;
+        };
         const cards = list.map(({ d, rec }) => {
             const r = rec!;
             const title = fileTitle(r);
@@ -330,7 +352,8 @@ export const sourceDocsMethods = uiModule({
             const pdf = r.mimeType === 'application/pdf' && !r.originalOnly && !!r.dataUrl;
             const act = isImage(r)
                 ? `<button type="button" class="secondary btn-sm" data-doc-act="cut">${esc(s.cutExcerpt)}</button>`
-                : pdf ? `<button type="button" class="secondary btn-sm" data-doc-act="pdf">${esc(strings.materials.openPdf)}</button>` : '';
+                : pdf ? `<button type="button" class="secondary btn-sm" data-doc-act="pdf">${esc(strings.materials.openPdf)}</button>`
+                    : systemLink(r) ? `<button type="button" class="secondary btn-sm" data-doc-act="system">${researchActionLabel(strings.materials.openSystem, researchLinkMark('media'))}</button>` : '';
             return `<div class="source-doc-card" data-doc="${esc(d.key)}">
                 <div class="source-doc-row">${thumbHtml(r, 'source-doc-thumb')}
                     <span class="source-doc-main"><span class="source-doc-title">${esc(title)}</span><span class="source-doc-meta">${esc(fileMeta(r))}</span></span>${remove}</div>
@@ -360,6 +383,9 @@ export const sourceDocsMethods = uiModule({
                 void this.addExcerptFromAttachment({ id: d.key, dataUrl: r.dataUrl }, -1);
             } else if (act === 'pdf' && r) {
                 openPdfBlob({ dataUrl: r.dataUrl, mimeType: r.mimeType });
+            } else if (act === 'system' && r) {
+                const link = systemLink(r);
+                if (link) this.launchResearchLink(link);
             }
         }));
     },
@@ -448,7 +474,7 @@ export const sourceDocsMethods = uiModule({
             const outside = !it.attachment;
             const off = outside && !bridgeUp;
             const att = it.attachment;
-            const thumb = att ? thumbHtml(att, 'source-offer-thumb') : `<span class="source-offer-thumb"><span class="material-row-tile">${esc(materialTileLetters(it))}</span></span>`;
+            const thumb = att ? thumbHtml(att, 'source-offer-thumb') : archiveThumbHtml(it);
             const meta = [materialKindLabel(it), it.date ? materialDate(it.date) : ''].filter(Boolean).join(' · ');
             return `<button type="button" class="source-offer-tile" data-item="${esc(it.key)}" aria-pressed="${on}"${off ? ` aria-disabled="true" title="${esc(strings.materials.actionsWhenRunning)}"` : ''}${fetching.has(it.key) ? ' aria-busy="true"' : ''}>
                 ${thumb}<span class="source-offer-check" aria-hidden="true"></span>
@@ -482,6 +508,17 @@ export const sourceDocsMethods = uiModule({
             box.querySelector<HTMLElement>('[data-offer-act="all"]')?.focus();
         });
         box.querySelector('[data-offer-act="file"]')?.addEventListener('click', () => this.pickExcerptFile(-1));
+        // The research's material: its preview from the bridge (the window's queue), the type's letters until then.
+        if (mc && bridgeUp) {
+            const queue = materialThumbs();
+            queue.setEnv({ treeId: mc.treeId, base: mc.base, thumb: mc.caps.thumb, bridgeUp: mc.caps.bridgeUp });
+            box.querySelectorAll<HTMLElement>('.source-offer-thumb[data-sha]').forEach(el => {
+                const it = items.find(x => x.key === el.dataset.item);
+                queue.want({ sha: el.dataset.sha!, px: OFFER_THUMB_PX, mime: it?.mime, name: it?.file?.name ?? it?.title, bytes: it?.bytes },
+                    url => { if (url && el.isConnected) el.innerHTML = `<img src="${esc(url)}" alt="">`; },
+                    () => el.isConnected);
+            });
+        }
         box.querySelectorAll<HTMLButtonElement>('.source-offer-tile').forEach(btn => btn.addEventListener('click', () => {
             if (btn.getAttribute('aria-disabled') === 'true' || btn.getAttribute('aria-busy') === 'true') return;
             const it = items.find(x => x.key === btn.dataset.item);
