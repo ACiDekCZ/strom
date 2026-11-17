@@ -369,6 +369,8 @@ export interface ResearchSortRemembered {
     at: string;
     /** The rows decided here (I… → accepted / rejected). */
     decided: Record<string, 'accepted' | 'rejected'>;
+    /** What undoes each accepted row (I… → SortRevert of src/material-sort.ts, checked when used). */
+    reverts?: Record<string, unknown>;
     /** The sorting ended without a proposal (failed, cancelled): said once in the strip. */
     ended?: 'failed' | 'cancelled';
 }
@@ -390,7 +392,18 @@ function sortRememberedFrom(v: unknown): ResearchSortRemembered | null {
         at: typeof o.at === 'string' ? o.at : '',
         ...(typeof o.batch === 'string' && o.batch ? { batch: o.batch.slice(0, 200) } : {}),
         ...(o.ended === 'failed' || o.ended === 'cancelled' ? { ended: o.ended } : {}),
+        ...sortReverts(o.reverts, decided),
     };
+}
+
+/** The accepted rows' reverts as stored (only of accepted rows; their shape is checked when used). */
+function sortReverts(v: unknown, decided: Record<string, 'accepted' | 'rejected'>): { reverts?: Record<string, unknown> } {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
+    const out: Record<string, unknown> = {};
+    for (const [k, r] of Object.entries(v as Record<string, unknown>)) {
+        if (decided[k] === 'accepted' && r && typeof r === 'object') out[k] = r;
+    }
+    return Object.keys(out).length ? { reverts: out } : {};
 }
 
 export interface ResearchAutoState {

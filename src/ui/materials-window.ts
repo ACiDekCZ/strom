@@ -47,7 +47,7 @@ import {
     MaterialsOpenOptions, MaterialActionCtx, fileNameBreakParts, materialShortDate, materialStaleTime, materialTileLetters, materialItemSha, treeAttachmentsKey,
 } from './materials-ui.js';
 import { uiModule } from './module.js';
-import type { SortTarget } from './material-sort-ui.js';
+import type { SortPlan, SortTarget } from './material-sort-ui.js';
 import { researchBridgeActionLabel } from './research-open-mark.js';
 
 const MODAL_ID = 'materials-modal';
@@ -58,6 +58,21 @@ const LONG_PRESS_MS = 500;
 /** Rows drawn above and below the view (px). */
 const OVERSCAN = 480;
 
+
+/**
+ * A sort strip drawn anew (its progress, the proposal ready) keeps the focus
+ * on its action: the same one, or the strip's first when that one is gone.
+ */
+const stripHtml = new WeakMap<HTMLElement, string>();
+function setStripHtml(el: HTMLElement, html: string): void {
+    if ((stripHtml.get(el) ?? el.innerHTML) === html) return;
+    stripHtml.set(el, html);
+    const had = el.contains(document.activeElement) ? (document.activeElement as HTMLElement).dataset.sort ?? '' : null;
+    el.innerHTML = html;
+    if (had === null) return;
+    const next = (had ? el.querySelector<HTMLElement>(`[data-sort="${CSS.escape(had)}"]`) : null) ?? el.querySelector<HTMLElement>('[data-sort]');
+    next?.focus();
+}
 function esc(text: string): string {
     return text
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -174,6 +189,8 @@ interface Win {
     drawnCaps: string;
     /** The tree's attachments its items were built from (see treeAttachmentsKey). */
     drawnAttachments: string;
+    /** Sort with the agent (spec 102 §13b/13e): the strips under batch headers, by group key, and the one over the list. */
+    sortPlan: SortPlan;
 }
 
 interface SelAction {
@@ -251,7 +268,7 @@ export const materialsWindowMethods = uiModule({
         overlay.dataset.group = group;
         body.innerHTML = `
             <div class="mw-status" hidden></div>
-            <div class="mw-sort" role="status" hidden></div>
+            <div class="mw-sort mw-sort--top" role="status" hidden></div>
             <div class="mw-lhead" hidden></div>
             <div class="mw-scroll">
                 <div class="mw-sticky"></div>
@@ -317,6 +334,7 @@ export const materialsWindowMethods = uiModule({
             bridgeUp: ctx.caps.bridgeUp,
             drawnCaps: '',
             drawnAttachments: '',
+            sortPlan: { rows: new Map(), top: null },
         };
         win = w;
         const thumbs = materialThumbs();
@@ -396,6 +414,7 @@ export const materialsWindowMethods = uiModule({
         const cameUp = ctx.caps.bridgeUp && !w.bridgeUp;
         w.bridgeUp = ctx.caps.bridgeUp;
         // The agent's sorting moves on its own (its progress, its proposal ready).
+        this.mwSortRows();
         this.mwSortStrip();
         const changed = capsKey(ctx.caps, ctx.base) !== w.drawnCaps || (cachedMaterials(w.treeId)?.list ?? null) !== w.list
             || treeAttachmentsKey() !== w.drawnAttachments;
@@ -519,6 +538,7 @@ export const materialsWindowMethods = uiModule({
             folder: coarse ? 44 : 36,
             skeleton: w.view === 'grid' ? tileRow : 96,
             groupEnd: 12,
+            sort: coarse ? 70 : 56,
         };
     },
 
@@ -558,7 +578,8 @@ export const materialsWindowMethods = uiModule({
         if (w.view === 'list') sortOverviewGroups(w.groups, w.sort, { personName: key => w.names.get(key) ?? null, kindLabel: materialKindLabel });
         w.drawnCaps = capsKey(ctx.caps, ctx.base);
         w.metrics = this.mwMetrics();
-        w.layout = overviewRows(w.groups, key => this.mwIsOpen(key), w.metrics);
+        w.sortPlan = this.mwSortPlan();
+        w.layout = overviewRows(w.groups, key => this.mwIsOpen(key), w.metrics, g => w.sortPlan.rows.has(g.key));
         w.overlay.dataset.group = w.group;
         w.overlay.dataset.model = model;
         w.overlay.classList.toggle('can-select', this.mwCanSelect());
@@ -704,29 +725,74 @@ export const materialsWindowMethods = uiModule({
     },
 
     /**
-     * The strip of Sort with the agent (spec 102 §13, 13b/13e): over the files
-     * of a review filter (Without title / Without person), else the newest
-     * batch with files without a title or a person; the sorting at work or
-     * its proposal ready wins. It only opens the dialog: nothing is sent from here.
+     * Where Sort with the agent stands (spec 102 §13b/13e): over the files of
+     * a review filter (Without title / Without person) one strip over the
+     * list; else a strip under each batch header with files without a title or
+     * a person. The sorting at work or its proposal ready stands in its batch
+     * (over the list when that batch is not shown) and the other batches offer
+     * nothing while it works.
      */
+    mwSortPlan(): SortPlan {
+        const w = win!;
+        const plan: SortPlan = { rows: new Map(), top: null };
+        if (w.model !== 'archive' || !this.materialSortGate()) return plan;
+        const r = this.materialSortRemembered();
+        if (w.filters.noTitle || w.filters.noPerson) {
+            plan.top = { target: { items: w.groups.flatMap(g => g.items), batch: null, filter: true }, state: !!r };
+            return plan;
+        }
+        const batches = w.groups.filter(g => g.kind === 'batch' && !g.pending);
+        const home = r ? batches.find(g => !!r.batch && g.batch?.name === r.batch) : undefined;
+        if (r && !home) plan.top = { target: null, state: true };
+        const busy = this.materialSortBusy();
+        for (const g of batches) {
+            const target: SortTarget = { items: g.items, batch: g.batch?.name ?? null };
+            if (g === home) plan.rows.set(g.key, { target, state: true });
+            else if (!busy && this.materialSortOfferHtml(target)) plan.rows.set(g.key, { target, state: false });
+        }
+        return plan;
+    },
+
+    /**
+     * The strips under the batches follow the sorting: a strip that comes or
+     * goes (sent, cancelled, done) lays the rows out again, otherwise the
+     * drawn strips are only rewritten (progress, the proposal ready).
+     */
+    mwSortRows(): void {
+        const w = win;
+        if (!w) return;
+        const plan = this.mwSortPlan();
+        const sig = (p: SortPlan): string => `${[...p.rows].map(([k, v]) => `${k}:${v.state ? 1 : 0}`).join('|')}#${p.top ? (p.top.state ? 1 : 0) : '-'}`;
+        if (sig(plan) !== sig(w.sortPlan)) {
+            if (!w.raf) {
+                w.raf = requestAnimationFrame(() => {
+                    w.raf = 0;
+                    if (alive(w.gen)) this.mwRebuild({ items: treeAttachmentsKey() !== w.drawnAttachments });
+                });
+            }
+            return;
+        }
+        w.sortPlan = plan;
+        for (const row of w.layout.rows) {
+            if (row.type !== 'sort') continue;
+            const el = w.rendered.get(row.key)?.querySelector<HTMLElement>('.mw-sort--row');
+            const p = plan.rows.get(row.group.key);
+            if (!el || !p) continue;
+            setStripHtml(el, p.state ? this.materialSortStateHtml() : this.materialSortOfferHtml(p.target));
+        }
+    },
+
+    /** The strip over the list (a review filter's, or the sorting whose batch is not shown). */
     mwSortStrip(): void {
         const w = win;
-        const el = w?.overlay.querySelector<HTMLElement>('.mw-sort');
+        const el = w?.overlay.querySelector<HTMLElement>('.mw-sort--top');
         if (!w || !el) return;
-        let target: SortTarget | null = null;
-        if (w.model === 'archive') {
-            if (w.filters.noTitle || w.filters.noPerson) {
-                target = { items: w.groups.flatMap(g => g.items), batch: null, filter: true };
-            } else {
-                const group = w.groups.find(g => g.kind === 'batch' && !g.pending && g.items.some(i => i.file && !i.hidden && (!i.titled || (!i.persons.length && !i.viaBatch.length))));
-                if (group) target = { items: group.items, batch: group.batch?.name ?? null };
-            }
-        }
-        const html = this.materialSortStripHtml(target);
+        const top = w.sortPlan.top;
+        const html = !top ? '' : top.state && this.materialSortRemembered() ? this.materialSortStateHtml() : this.materialSortOfferHtml(top.target);
         el.hidden = !html;
-        if (el.innerHTML !== html) el.innerHTML = html;
-        el.onclick = (e) => this.materialSortStripClick(e, target);
-        if (html) this.materialSortWatch();
+        setStripHtml(el, html);
+        el.onclick = (e) => this.materialSortStripClick(e, top?.target ?? null);
+        if (html || w.sortPlan.rows.size) this.materialSortWatch();
     },
 
     /** Nothing to show: loading (skeleton), not running without memory, no files at all (the tree's own), or no match. */
@@ -835,6 +901,14 @@ export const materialsWindowMethods = uiModule({
                     ? '<span class="mw-skel-tile"></span>'.repeat(Math.min(w.metrics.cols, 8))
                     : '<span class="mw-skel-line"></span><span class="mw-skel-line"></span>';
                 break;
+            case 'sort': {
+                // Sort with the agent under the batch's header (13b): it only opens the dialog, nothing is sent from here.
+                const plan = w.sortPlan.rows.get(row.group.key);
+                const html = plan ? (plan.state ? this.materialSortStateHtml() : this.materialSortOfferHtml(plan.target)) : '';
+                el.innerHTML = `<div class="mw-sort mw-sort--row" role="gridcell" aria-colspan="${w.metrics.cols}">${html}</div>`;
+                el.addEventListener('click', e => this.materialSortStripClick(e, plan?.target ?? null));
+                break;
+            }
             case 'end': el.setAttribute('aria-hidden', 'true'); el.removeAttribute('role'); break;
         }
         return el;

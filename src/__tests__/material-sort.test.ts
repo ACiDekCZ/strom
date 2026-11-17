@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { parseSortJob, startMaterialSort, type MaterialItem, type SortLink } from '../materials.js';
-import { sortCandidates, sortNeeds, sortRows, sortRowProposes, sortWrite, type SortChip, type SortRow } from '../material-sort.js';
+import { sortCandidates, sortNeeds, sortRows, sortRowProposes, sortWrite, sortChip, parseSortRevert, type SortChip, type SortRow, type SortTreeIndex } from '../material-sort.js';
+import type { PartnershipId } from '../types.js';
 import type { Attachment, PersonId } from '../types.js';
 
 /** Sort with the agent (spec 102 §13): the proposal's reading and what accepting it writes. Invented data. */
@@ -126,5 +127,74 @@ describe('the proposal against what a person set', () => {
     it('a person the file already has is no proposal', () => {
         const rows = sortRows(job, id => (id === 'I0001' ? item('I0001', { persons: ['P0001'] }) : null), chip);
         expect(rows[0].chips).toEqual([]);
+    });
+});
+
+describe('what accepting writes beyond people (spec 102 §13)', () => {
+    const tree: SortTreeIndex = {
+        person: ref => (ref === 'P0001' ? { id: 'p1' as PersonId, name: 'Josef Fíšek' } : null),
+        family: ref => (ref === 'F0001' ? { id: 'f1' as PartnershipId, name: 'Josef & Anna' } : null),
+        source: ref => (ref === 'S0001' ? { id: 'src1', title: 'Parish register' } : null),
+    };
+    const names = {
+        event: (t: string) => t, unknown: (r: string) => `${r}?`, eventLabel: (w: string) => `Event: ${w}`,
+        sourceLabel: (t: string) => `Source: ${t}`, newSource: (t: string) => `Source: ${t} (new)`,
+    };
+    const job = {
+        files: ['I0001'],
+        proposals: [{ id: 'I0001', title: 'Wedding 1924', sure: 'high' as const, why: '', links: [
+            { type: 'person' as const, ref: 'P0001' },
+            { type: 'event' as const, ref: 'P0001', event: 'BIRT' },
+            { type: 'event' as const, ref: 'F0001', event: 'MARR' },
+            { type: 'source' as const, ref: 'S0001' },
+            { type: 'source' as const, ref: 'S0009' },
+            { type: 'person' as const, ref: 'P0404' },
+        ] }],
+    };
+    const chipOf = (link: SortLink, title?: string) => sortChip(link, tree, names, title);
+
+    it('material outside the tree: people through the research, an event, a couple and a source in the tree, an unknown source made new', () => {
+        const [row] = sortRows(job, () => item('I0001'), chipOf);
+        expect(row.chips.find(c => c.link.ref === 'S0009')).toMatchObject({ newSource: 'S0009', place: null, label: 'Source: Wedding 1924 (new)' });
+        const w = sortWrite(row)!;
+        // A person the tree does not know is still the research's own: assigned there.
+        expect(w.persons).toEqual(['P0001', 'P0404']);
+        expect(w.places).toEqual([
+            { personId: 'p1', fact: 'birth', by: 'agent' },
+            { partnershipId: 'f1', by: 'agent' },
+            { sourceId: 'src1', by: 'agent' },
+        ]);
+        expect(w.newSources).toEqual([{ ref: 'S0009', title: 'Wedding 1924' }]);
+    });
+
+    it('a file of the tree: every known place, the unknown source made new under the title written', () => {
+        const [row] = sortRows(job, () => treeItem('I0001', {}), chipOf);
+        const w = sortWrite(row, { edit: { title: 'The wedding', chips: row.chips } })!;
+        expect(w.mediaId).toBe('att-I0001');
+        expect(w.places.map(p => Object.keys(p)[0])).toEqual(['personId', 'personId', 'partnershipId', 'sourceId']);
+        expect(w.places.every(p => p.by === 'user')).toBe(true);
+        expect(w.newSources).toEqual([{ ref: 'S0009', title: 'The wedding' }]);
+    });
+
+    it('a person added by hand without the research\'s REFN goes to the tree for material outside it', () => {
+        const [row] = sortRows(job, () => item('I0001'), chipOf);
+        const added: SortChip = { link: { type: 'person', ref: '' }, kind: 'person', person: null, place: { personId: 'p7' as PersonId }, label: 'Ema' };
+        const w = sortWrite(row, { edit: { chips: [added] } })!;
+        expect(w.persons).toEqual([]);
+        expect(w.places).toEqual([{ personId: 'p7', by: 'user' }]);
+    });
+
+    it('a stored undo is read back only in its shape (anything off dropped)', () => {
+        expect(parseSortRevert({
+            media: 'att-1', created: false, fields: { title: { value: 'Old', agent: true }, kind: { value: 5 } },
+            places: [{ personId: 'p1', fact: 'birth', by: 'agent' }, { nope: 1 }, { sourceId: 's1' }],
+            sources: ['s9', 3], was: { title: '', date: '1924' }, persons: ['P0001', 'X1'],
+        })).toEqual({
+            media: 'att-1', fields: { title: { value: 'Old', agent: true } },
+            places: [{ personId: 'p1', fact: 'birth', by: 'agent' }, { sourceId: 's1' }],
+            sources: ['s9'], was: { title: '', date: '1924' }, persons: ['P0001'],
+        });
+        expect(parseSortRevert({ places: [{ personId: 'p1' }] })).toBeNull();
+        expect(parseSortRevert('x')).toBeNull();
     });
 });

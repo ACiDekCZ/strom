@@ -579,6 +579,12 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
             undoStep: 'Przyjęcie propozycji agenta',
             notWritten: (n: number) => `Nie zapisano: ${nPl(n, 'propozycja', 'propozycje', 'propozycji')}.`,
             rowLabel: (title: string) => `Propozycja: ${title}`,
+            menuRun: 'Agent sortuje',
+            newSource: (title: string) => `Źródło: ${title} (nowe)`,
+            addPerson: '+ Osoba…',
+            revertStep: 'Cofnięcie przyjętej propozycji agenta',
+            reverted: 'Przyjęta propozycja została cofnięta.',
+            revertFailed: 'Badanie nie przyjęło cofnięcia; plik zostaje zgodnie z przyjętą propozycją.',
         },
     },
 

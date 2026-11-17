@@ -15,17 +15,19 @@
 
 import { DataManager } from '../data.js';
 import { strings } from '../strings.js';
-import type { MaterialKind, PersonId } from '../types.js';
+import type { Attachment, MaterialKind, MediaPlace, PersonId } from '../types.js';
 import {
-    MaterialItem, MaterialError, SortJob, SortLink, SORT_MAX_TEXT,
+    MaterialItem, MaterialError, SortJob, SortLink, SORT_MAX_TEXT, type EditRequest,
     startMaterialSort, fetchMaterialSort, cancelMaterialSort, fetchMaterial, cachedMaterialList,
     getCachedThumb, fileExt, mergeIntoCache, materialErrorText, materialKindLabel,
 } from '../materials.js';
 import { overviewItems, nameWithoutYears } from '../materials-overview.js';
 import {
-    sortCandidates, sortNeeds, sortRows, sortRowProposes, sortWrite, sortTreeIndex, sortChip,
-    type SortRow, type SortChoice, type SortChip,
+    sortCandidates, sortNeeds, sortRows, sortRowProposes, sortWrite, sortTreeIndex, sortChip, parseSortRevert,
+    type SortRow, type SortChoice, type SortChip, type SortRevert, type SortWrite,
 } from '../material-sort.js';
+import { researchPersonRef } from '../research-link.js';
+import { PersonPicker } from '../person-picker.js';
 import { researchAutoState, patchResearchAutoState, type ResearchSortRemembered } from '../research-device.js';
 import { researchBridgeActionLabel } from './research-open-mark.js';
 import { materialDialog, button, type MaterialDialog } from './material-actions-ui.js';
@@ -33,8 +35,9 @@ import { treeRecords, materialsWindowOpen } from './materials-window.js';
 import type { MaterialsContext } from './materials-ui.js';
 import { uiModule } from './module.js';
 
-const POLL_MS = 5_000;
-const POLL_HIDDEN_MS = 15_000;
+/** Asking about a sorting at work: every 2 s, 10 s while the page is hidden, 15 s while the bridge is down (spec 102 §13). */
+const POLL_MS = 2_000;
+const POLL_HIDDEN_MS = 10_000;
 const POLL_DOWN_MS = 15_000;
 const PREVIEWS = 6;
 const TOAST_MS = 8000;
@@ -49,6 +52,12 @@ export interface SortTarget {
     batch: string | null;
     /** The files of a review filter (Without title / Without person), not of a batch. */
     filter?: boolean;
+}
+
+/** Where the strips stand in the Materials window: under batch headers (by group key) and over the list. */
+export interface SortPlan {
+    rows: Map<string, { target: SortTarget; state: boolean }>;
+    top: { target: SortTarget | null; state: boolean } | null;
 }
 
 /** The sorting asked about now (one per page: the active tree's). */
@@ -141,6 +150,20 @@ export const materialSortMethods = uiModule({
         const r = this.materialSortRemembered();
         if (!r || r.ended) return false;
         return watch?.id === r.id ? running(watch.job) : true;
+    },
+
+    /**
+     * The sorting on the research menu's Materials row (13e): 'run' while the
+     * agent works (a green dot), 'ready' once its proposal waits (the waiting
+     * dot). Asking about a remembered sorting starts here too (GET only).
+     */
+    materialSortMenuMark(): 'run' | 'ready' | null {
+        const r = this.materialSortRemembered();
+        if (!r || r.ended || !this.materialSortGate()) return null;
+        this.materialSortWatch();
+        const job = watch?.id === r.id ? watch.job : null;
+        if (hasProposal(job)) return job!.proposals.some(p => !r.decided[p.id] && (p.title || p.date || p.kind || p.links.length)) ? 'ready' : null;
+        return running(job) ? 'run' : null;
     },
 
     /** The items the window shows (the research's list with the tree's files), by the research's I…. */
@@ -320,12 +343,18 @@ export const materialSortMethods = uiModule({
         if (made > 0) {
             const s = strings.materials.agentSort;
             const dialog = materialDialog({ title: s.discardAsk });
-            const keep = button(s.discardKeep, 'is-primary', () => { dialog.close(); void this.materialSortTick(); });
+            // The Cancel that asked is drawn anew: the focus goes to the strip's action, not to the page.
+            const refocus = () => requestAnimationFrame(() => {
+                if (document.activeElement && document.activeElement !== document.body) return;
+                document.querySelector<HTMLElement>('#materials-modal .mw-sort [data-sort]')?.focus();
+            });
+            const keep = button(s.discardKeep, 'is-primary', () => { dialog.close(); void this.materialSortTick().then(refocus); });
             dialog.foot.append(button(s.discard, '', () => {
                 dialog.close();
                 patchResearchAutoState(mc.treeId, { materialSort: undefined });
                 this.materialSortStop();
                 this.refreshMaterialsWindow();
+                refocus();
             }), keep);
             keep.focus();
             return;
@@ -336,34 +365,36 @@ export const materialSortMethods = uiModule({
     },
 
     /**
-     * The strip in the Materials window (13b, 13e): the sorting at work, its
-     * proposal ready, or — with no sorting — the files of a batch (or of a
-     * review filter) without a title or a person and the button that opens
-     * the dialog. '' = no strip.
+     * The strip in the Materials window (13b, 13e) for the remembered sorting:
+     * at work (progress, Cancel), its proposal ready (Open), or ended (Close).
      */
-    materialSortStripHtml(target: SortTarget | null): string {
+    materialSortStateHtml(): string {
         const s = strings.materials.agentSort;
         const r = this.materialSortRemembered();
-        const gate = this.materialSortGate();
-        if (r && gate) {
-            if (r.ended) {
-                return `<span class="mw-sort-text">${esc(r.ended === 'cancelled' ? s.cancelled : s.failed)}</span>
-                    <button type="button" class="link-button" data-sort="dismiss">${esc(s.dismiss)}</button>`;
-            }
-            const job = watch?.id === r.id ? watch.job : null;
-            if (hasProposal(job)) {
-                return `<span class="mw-sort-text">${esc(s.ready)}</span>
-                    <button type="button" class="link-button mw-sort-open" data-sort="open">${esc(s.open)}</button>`;
-            }
-            const total = job?.files.length || r.files.length;
-            const k = Math.min(total, job?.proposals.length ?? 0);
-            const pct = total ? Math.round((k / total) * 100) : 0;
-            const label = job && job.state !== 'queued' ? s.run(k, total) : s.queued;
-            return `<span class="mw-sort-text"><span class="mw-sort-run">${esc(label)}</span>
-                    <span class="mw-sort-bar" role="progressbar" aria-label="${esc(label)}" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${k}"><span style="width: ${pct}%"></span></span>
-                    <span class="mw-sort-note">${esc(s.runNote)}</span></span>
-                    <button type="button" class="link-button" data-sort="cancel">${esc(strings.buttons.cancel)}</button>`;
+        if (!r || !this.materialSortGate()) return '';
+        if (r.ended) {
+            return `<span class="mw-sort-text">${esc(r.ended === 'cancelled' ? s.cancelled : s.failed)}</span>
+                <button type="button" class="link-button" data-sort="dismiss">${esc(s.dismiss)}</button>`;
         }
+        const job = watch?.id === r.id ? watch.job : null;
+        if (hasProposal(job)) {
+            return `<span class="mw-sort-text">${esc(s.ready)}</span>
+                <button type="button" class="link-button mw-sort-open" data-sort="open">${esc(s.open)}</button>`;
+        }
+        const total = job?.files.length || r.files.length;
+        const k = Math.min(total, job?.proposals.length ?? 0);
+        const pct = total ? Math.round((k / total) * 100) : 0;
+        const label = job && job.state !== 'queued' ? s.run(k, total) : s.queued;
+        return `<span class="mw-sort-text"><span class="mw-sort-run">${esc(label)}</span>
+                <span class="mw-sort-bar" role="progressbar" aria-label="${esc(label)}" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${k}"><span style="width: ${pct}%"></span></span>
+                <span class="mw-sort-note">${esc(s.runNote)}</span></span>
+                <button type="button" class="link-button" data-sort="cancel">${esc(strings.buttons.cancel)}</button>`;
+    },
+
+    /** The offer over a batch's (or a review filter's) files without a title or a person; '' = none. */
+    materialSortOfferHtml(target: SortTarget | null): string {
+        const s = strings.materials.agentSort;
+        const gate = this.materialSortGate();
         if (!target || !gate) return '';
         const needs = sortNeeds(target.items.filter(i => !!i.file && !i.hidden));
         if (!needs.n || (!needs.t && !needs.p)) return '';
@@ -419,10 +450,13 @@ export const materialSortMethods = uiModule({
             unknown: (ref: string) => s.unknownRef(ref),
             eventLabel: s.event,
             sourceLabel: s.source,
+            newSource: s.newSource,
         };
-        const chipOf = (link: SortLink) => sortChip(link, tree, names);
+        const chipOf = (link: SortLink, title?: string) => sortChip(link, tree, names, title);
         const rows = sortRows(job, id => byId.get(id) ?? null, chipOf);
         const decided: Record<string, 'accepted' | 'rejected'> = { ...r.decided };
+        // What undoes each accepted row (Undo under Done): kept with the sorting, so it outlives a reload.
+        const reverts: Record<string, unknown> = { ...(r.reverts ?? {}) };
         const choices = new Map<string, SortChoice>();
         const selected = new Set<string>();
         let tab: 'proposals' | 'unassigned' | 'done' = 'proposals';
@@ -435,7 +469,10 @@ export const materialSortMethods = uiModule({
         const done = () => assigned.filter(x => decided[x.id]);
         const remember = () => {
             const now = researchAutoState(mc.treeId).materialSort;
-            if (now?.id === r.id) patchResearchAutoState(mc.treeId, { materialSort: { ...now, decided: { ...decided } } });
+            if (now?.id !== r.id) return;
+            const kept = Object.fromEntries(Object.entries(reverts).filter(([k]) => decided[k] === 'accepted'));
+            const { reverts: _old, ...rest } = now;
+            patchResearchAutoState(mc.treeId, { materialSort: { ...rest, decided: { ...decided }, ...(Object.keys(kept).length ? { reverts: kept } : {}) } });
         };
 
         const dialog: MaterialDialog = materialDialog({
@@ -533,8 +570,9 @@ export const materialSortMethods = uiModule({
                 );
             } else if (tab === 'done' && state) {
                 acts.appendChild(h('span', `msp-state is-${state}`, state === 'accepted' ? s.accepted : s.rejected));
-                // A rejected row comes back to the proposals; an accepted one is undone with the tree's Undo.
+                // A rejected row comes back to the proposals; an accepted one is written back as it was, then comes back too.
                 if (state === 'rejected') acts.appendChild(button(s.undoRow, 'msp-undo', () => { delete decided[row.id]; remember(); draw(); }));
+                else if (parseSortRevert(reverts[row.id])) acts.appendChild(button(s.undoRow, 'msp-undo', () => void revert(row.id)));
             }
             el.appendChild(acts);
             return el;
@@ -585,6 +623,30 @@ export const materialSortMethods = uiModule({
             };
             drawChips();
             form.appendChild(chipBox);
+            // + Person… (13g): a person of the tree, as Link to… picks one.
+            const addPerson = button(s.addPerson, 'is-link msp-add-person', () => {
+                if (form.querySelector('#msp-person-picker')) return;
+                const host = h('div', 'msp-person-pick');
+                host.id = 'msp-person-picker';
+                addPerson.after(host);
+                const picker = new PersonPicker({
+                    containerId: host.id,
+                    placeholder: strings.materials.attachPersonPh,
+                    showBirthYear: true,
+                    persons: DataManager.getAllPersons().filter(p => !p.isPlaceholder),
+                    onSelect: (id) => {
+                        host.remove();
+                        if (!chips.some(c => c.kind === 'person' && c.place && 'personId' in c.place && c.place.personId === id)) {
+                            const ref = researchPersonRef(DataManager.getPerson(id)?.refn) ?? null;
+                            chips = [...chips, { link: { type: 'person', ref: ref ?? '' }, kind: 'person', person: ref, place: { personId: id }, label: personName(id) }];
+                            drawChips();
+                        }
+                        addPerson.focus();
+                    },
+                });
+                picker.focusInput();
+            });
+            form.appendChild(addPerson);
             const save = () => {
                 choices.set(row.id, { ...choices.get(row.id), edit: { title: title.value.trim(), date: date.value.trim(), kind: kind.value as MaterialKind | '', chips } });
                 editing = null;
@@ -593,7 +655,7 @@ export const materialSortMethods = uiModule({
             const go = button(s.acceptEdited, 'is-primary msp-accept-edited', save);
             form.appendChild(go);
             form.addEventListener('keydown', e => {
-                if (e.key === 'Enter' && !(e.target instanceof HTMLButtonElement)) { e.preventDefault(); e.stopPropagation(); save(); }
+                if (e.key === 'Enter' && !(e.target instanceof HTMLButtonElement) && !(e.target as HTMLElement).closest('.msp-person-pick')) { e.preventDefault(); e.stopPropagation(); save(); }
             });
             setTimeout(() => title.focus(), 0);
             return form;
@@ -642,55 +704,159 @@ export const materialSortMethods = uiModule({
             const picked = ids.map(id => assigned.find(x => x.id === id)).filter((x): x is SortRow => !!x && !decided[x.id]);
             if (!picked.length) return;
             const writes = picked.map(x => ({ row: x, w: sortWrite(x, choices.get(x.id)) }));
-            const tree = writes.filter(x => x.w?.mediaId);
-            const archive = writes.filter(x => x.w && !x.w.mediaId && x.w.fileId);
             const ok = new Set<string>(writes.filter(x => !x.w).map(x => x.row.id));
-            const after = () => {
-                for (const id of ok) { decided[id] = 'accepted'; selected.delete(id); }
-                remember();
-                const a = Object.values(decided).filter(d => d === 'accepted').length;
-                const rj = Object.values(decided).filter(d => d === 'rejected').length;
-                return s.done(a, rj, unassigned.length);
-            };
+            const readOnly = DataManager.isReadOnly();
+            const byOf = (row: SortRow): 'user' | 'agent' => choices.get(row.id)?.edit?.chips ? 'user' : 'agent';
             let refused = 0;
             const now = this.materialsContext();
+            // Material outside the tree: its details and people through the bridge; what the research's
+            // assign does not carry (an event, a couple, a source) makes it a file of the tree (§4).
+            const staged: Array<{ row: SortRow; w: SortWrite; rv: SortRevert; id: string | null; record: Omit<Attachment, 'id' | 'places'> | null }> = [];
             dialog.busy(true);
-            for (const { row, w } of archive) {
-                if (!w || !now?.base || !now.caps.bridgeUp) { refused++; continue; }
+            for (const { row, w } of writes) {
+                if (!w || w.mediaId || !w.fileId) continue;
+                if (!now?.base || !now.caps.bridgeUp) { refused++; continue; }
+                const rv: SortRevert = {};
                 let good = true;
-                const edit: { ids: string[]; title?: string; kind?: MaterialKind | ''; date?: string } = { ids: [w.fileId!] };
+                const edit: EditRequest = { ids: [w.fileId] };
                 if (w.title) edit.title = w.title.value;
                 if (w.kind) edit.kind = w.kind.value;
                 if (w.date) edit.date = w.date.value;
                 if (Object.keys(edit).length > 1) {
                     if (!now.caps.edit) good = false;
-                    else good = (await this.writeMaterialEdit(now, edit)).ok;
+                    else {
+                        const res = await this.writeMaterialEdit(now, edit);
+                        good = res.ok;
+                        if (res.ok) {
+                            const was = res.value.was[w.fileId] ?? {};
+                            rv.was = {};
+                            for (const k of ['title', 'kind', 'date'] as const) if (edit[k] !== undefined) rv.was[k] = (was[k] as string | undefined) ?? '';
+                        }
+                    }
                 }
                 if (good && w.persons.length) {
+                    const added = w.persons.filter(p => !(row.item?.persons ?? []).includes(p));
                     if (!now.caps.assign) good = false;
-                    else good = (await this.writeAssign(now, { files: [w.fileId!], add: w.persons })).ok;
+                    else if (added.length) {
+                        good = (await this.writeAssign(now, { files: [w.fileId], add: added })).ok;
+                        if (good) rv.persons = added;
+                    }
                 }
-                if (good) ok.add(row.id); else refused++;
+                if (good && (w.places.length || w.newSources.length)) {
+                    const id = row.item?.removedId ?? null;
+                    const record = readOnly || id || !row.item ? null : await this.materialWorkingCopy(row.item, now);
+                    if (readOnly || (!id && !record)) good = false;
+                    else staged.push({ row, w, rv, id, record });
+                }
+                if (good) {
+                    ok.add(row.id);
+                    if (!staged.some(x => x.row === row) && Object.keys(rv).length) reverts[row.id] = rv;
+                } else refused++;
             }
             dialog.busy(false);
-            const treeOk = tree.filter(x => !DataManager.isReadOnly() && DataManager.canEditMedia(x.w!.mediaId!));
+            const tree = writes.filter(x => x.w?.mediaId);
+            const treeOk = tree.filter(x => !readOnly && DataManager.canEditMedia(x.w!.mediaId!));
             refused += tree.length - treeOk.length;
             for (const { row } of treeOk) ok.add(row.id);
-            const text = after();
-            if (treeOk.length) {
-                // The tree's files in one undo step; its Undo toast says what was accepted.
+            for (const id of ok) { decided[id] = 'accepted'; selected.delete(id); }
+            const a = Object.values(decided).filter(d => d === 'accepted').length;
+            const rj = Object.values(decided).filter(d => d === 'rejected').length;
+            const text = s.done(a, rj, unassigned.length);
+            const toast = refused ? `${text} ${s.notWritten(refused)}` : text;
+            if (treeOk.length || staged.length) {
+                // The tree's part in one undo step; its Undo toast says what was accepted.
                 DataManager.runBatch(s.undoStep, () => {
-                    for (const { w } of treeOk) {
+                    const sourcesFor = (w: SortWrite, by: 'user' | 'agent'): { ids: string[]; places: MediaPlace[] } => {
+                        const ids: string[] = [];
+                        for (const ns of w.newSources) {
+                            const src = DataManager.addSource({ title: ns.title });
+                            if (src) ids.push(src.id);
+                        }
+                        return { ids, places: ids.map(sourceId => ({ sourceId, by })) };
+                    };
+                    for (const { row, w } of treeOk) {
                         const id = w!.mediaId!;
-                        if (w!.title) DataManager.setMediaTitle(id, w!.title.value, w!.title.by);
-                        if (w!.kind) DataManager.setMediaKind(id, w!.kind.value || undefined, w!.kind.by);
-                        if (w!.date) DataManager.setMediaDate(id, w!.date.value, w!.date.by);
-                        for (const place of w!.places) DataManager.addMediaPlace(id, place);
+                        const att = DataManager.getMedia(id);
+                        if (!att) continue;
+                        const rv: SortRevert = { media: id, fields: {} };
+                        if (w!.title) { rv.fields!.title = { value: att.title ?? '', ...(att.titleBy === 'agent' ? { agent: true } : {}) }; DataManager.setMediaTitle(id, w!.title.value, w!.title.by); }
+                        if (w!.kind) { rv.fields!.kind = { value: att.kind ?? '', ...(att.kindBy === 'agent' ? { agent: true } : {}) }; DataManager.setMediaKind(id, w!.kind.value || undefined, w!.kind.by); }
+                        if (w!.date) { rv.fields!.date = { value: att.date ?? '', ...(att.dateBy === 'agent' ? { agent: true } : {}) }; DataManager.setMediaDate(id, w!.date.value, w!.date.by); }
+                        const made = sourcesFor(w!, byOf(row));
+                        const added: MediaPlace[] = [];
+                        for (const place of [...w!.places, ...made.places]) if (DataManager.addMediaPlace(id, place)) added.push(place);
+                        if (added.length) rv.places = added;
+                        if (made.ids.length) rv.sources = made.ids;
+                        reverts[row.id] = rv;
                     }
-                }, { text: refused ? `${text} ${s.notWritten(refused)}` : text });
+                    for (const st of staged) {
+                        const made = sourcesFor(st.w, byOf(st.row));
+                        const places = [...st.w.places, ...made.places];
+                        const [mid] = DataManager.linkMedia([st.id ? { id: st.id } : { record: st.record! }], places);
+                        if (mid) {
+                            st.rv.media = mid;
+                            if (!st.id) st.rv.created = true;
+                            else st.rv.places = places;
+                        }
+                        if (made.ids.length) st.rv.sources = made.ids;
+                        if (Object.keys(st.rv).length) reverts[st.row.id] = st.rv;
+                    }
+                }, { text: toast });
+                this.afterMediaChange();
             } else {
-                this.showToast(refused ? `${text} ${s.notWritten(refused)}` : text, TOAST_MS, { closable: true, kind: 'materials' });
+                this.showToast(toast, TOAST_MS, { closable: true, kind: 'materials' });
             }
+            remember();
+            draw();
+        };
+
+        /** Undo of an accepted row: the research's part through the bridge, the tree's in one undo step; then it is a proposal again. */
+        const revert = async (id: string) => {
+            const rv = parseSortRevert(reverts[id]);
+            if (!rv) return;
+            const now = this.materialsContext();
+            if (rv.was || rv.persons) {
+                if (!now?.base || !now.caps.bridgeUp) {
+                    this.showToast(strings.materials.actionsWhenRunning, TOAST_MS, { closable: true, kind: 'materials' });
+                    return;
+                }
+                dialog.busy(true);
+                let good = true;
+                if (rv.was) {
+                    const edit: EditRequest = { ids: [id] };
+                    if (rv.was.title !== undefined) edit.title = rv.was.title;
+                    if (rv.was.kind !== undefined) edit.kind = rv.was.kind as MaterialKind | '';
+                    if (rv.was.date !== undefined) edit.date = rv.was.date;
+                    good = (await this.writeMaterialEdit(now, edit)).ok;
+                }
+                if (good && rv.persons) good = (await this.writeAssign(now, { files: [id], remove: rv.persons })).ok;
+                dialog.busy(false);
+                if (!good) {
+                    this.showToast(s.revertFailed, TOAST_MS, { closable: true, kind: 'materials' });
+                    return;
+                }
+            }
+            if ((rv.media || rv.sources) && !DataManager.isReadOnly()) {
+                DataManager.runBatch(s.revertStep, () => {
+                    const mid = rv.media;
+                    if (mid && rv.created) {
+                        DataManager.removeMedia(mid);
+                    } else if (mid) {
+                        const f = rv.fields ?? {};
+                        if (f.title) DataManager.setMediaTitle(mid, f.title.value, f.title.agent ? 'agent' : 'user');
+                        if (f.kind) DataManager.setMediaKind(mid, (f.kind.value || undefined) as MaterialKind | undefined, f.kind.agent ? 'agent' : 'user');
+                        if (f.date) DataManager.setMediaDate(mid, f.date.value, f.date.agent ? 'agent' : 'user');
+                        for (const place of rv.places ?? []) DataManager.removeMediaPlace(mid, place, { keep: true });
+                    }
+                    for (const sid of rv.sources ?? []) DataManager.removeSource(sid);
+                }, { text: s.reverted });
+                this.afterMediaChange();
+            } else {
+                this.showToast(s.reverted, TOAST_MS, { closable: true, kind: 'materials' });
+            }
+            delete decided[id];
+            delete reverts[id];
+            remember();
             draw();
         };
 

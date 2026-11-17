@@ -1,7 +1,8 @@
+import { readFileSync } from 'node:fs';
 import { test, expect, Page } from '@playwright/test';
 import {
-    fakeBridge, fakeMaterial, materialFile, MATERIAL_FEATURES, openResearch, poll, researchGed, HEAD, UUID, BRIDGE,
-    FakeMaterial, FakeMaterialFile,
+    fakeBridge, fakeMaterial, materialFile, materialSha, MATERIAL_FEATURES, openResearch, openResearchMenu, poll, researchGed, HEAD, UUID, BRIDGE,
+    FakeBridge, FakeMaterial, FakeMaterialFile,
 } from './research-bridge.js';
 
 /**
@@ -22,7 +23,8 @@ const SORT_FEATURES = [...MATERIAL_FEATURES, 'material.edit', 'material.sort'];
 const BATCH = { id: 'b-12345678', name: 'Krabice od babičky', at: '2026-11-10T09:00:00Z' };
 
 const win = (page: Page) => page.locator('#materials-modal');
-const strip = (page: Page) => win(page).locator('.mw-sort');
+/** The strip under the batch's header (13b); the one over the list stands for a review filter. */
+const strip = (page: Page) => win(page).locator('.mw-sort--row');
 const sortDialog = (page: Page) => page.locator('.mdlg--sort');
 const proposal = (page: Page) => page.locator('#material-sort-proposal');
 
@@ -34,19 +36,23 @@ function files(): FakeMaterialFile[] {
     ];
 }
 
-async function setup(page: Page, opts: { features?: string[]; archive?: boolean } = {}): Promise<FakeMaterial> {
+const PROPOSALS = [
+    { id: 'I0001', title: 'Wedding 1924', kind: 'photo', links: [{ type: 'person', ref: 'P0001' }], why: 'A veil and a bouquet', sure: 'high' },
+    { id: 'I0002', title: 'Agent’s other title', links: [], why: 'A well', sure: 'low' },
+];
+
+async function setup(page: Page, opts: { features?: string[]; archive?: boolean; proposals?: Record<string, unknown>[]; bridge?: (b: FakeBridge) => void;
+    files?: FakeMaterialFile[]; batches?: typeof BATCH[] } = {}): Promise<FakeMaterial> {
     const material = fakeMaterial({
-        files: files(), batches: [BATCH], people: PEOPLE,
-        sortProposals: [
-            { id: 'I0001', title: 'Wedding 1924', kind: 'photo', links: [{ type: 'person', ref: 'P0001' }], why: 'A veil and a bouquet', sure: 'high' },
-            { id: 'I0002', title: 'Agent’s other title', links: [], why: 'A well', sure: 'low' },
-        ],
+        files: [...files(), ...(opts.files ?? [])], batches: [BATCH, ...(opts.batches ?? [])], people: PEOPLE,
+        sortProposals: opts.proposals ?? PROPOSALS,
     });
     const ged = opts.archive
         ? researchGed(HEAD).replace('1 _STROM_LINKS send open live app setup', '1 _STROM_LINKS send open live app setup\n1 _STROM_MODE archive')
         : researchGed();
     const accepts = opts.archive ? ARCHIVE : MEDIA_ACCEPTS;
-    await fakeBridge(page, { accepts, features: opts.features ?? SORT_FEATURES, material, treeGed: ged });
+    const bridge = await fakeBridge(page, { accepts, features: opts.features ?? SORT_FEATURES, material, treeGed: ged });
+    opts.bridge?.(bridge);
     await openResearch(page, { media: true, ged });
     await page.evaluate(({ uuid, base, accepts }) => {
         localStorage.setItem(`strom-research-bridge:${uuid}`, JSON.stringify({ base, accepts }));
@@ -129,6 +135,11 @@ test.describe('Sort with the agent', () => {
         expect(material.sorts![0].text).toBe('A box from the attic, the Fíšek family');
 
         await expect(strip(page)).toContainText('The agent’s proposal is ready');
+        // The research menu's Materials row carries the waiting dot (13e).
+        await openResearchMenu(page, { expandMore: true });
+        await expect(page.locator('#research-item-materials .research-item-attn')).toHaveCount(1);
+        await expect(page.locator('#research-item-materials')).toHaveAttribute('aria-label', /The agent’s proposal is ready/);
+        await page.keyboard.press('Escape');
         await strip(page).locator('[data-sort="open"]').click();
         await expect(proposal(page)).toBeVisible();
         const row1 = proposal(page).locator('.msp-row[data-id="I0001"]');
@@ -164,10 +175,149 @@ test.describe('Sort with the agent', () => {
     test('an archive without an agent offers nothing', async ({ page }) => {
         const material = await setup(page, { archive: true });
         await openWindow(page);
-        await expect(strip(page)).toBeHidden();
+        await expect(win(page).locator('.mw-sort:visible')).toHaveCount(0);
         await page.keyboard.press('ControlOrMeta+a');
         await expect(win(page).locator('.mw-selbar')).toBeVisible();
         await expect(win(page).locator('[data-mw="sel-sort"], [data-action="sel-sort"]')).toHaveCount(0);
         expect(material.sorts ?? []).toHaveLength(0);
+    });
+
+    test('a strip under each batch with files to sort; the sorting stands in its batch and the others wait', async ({ page }) => {
+        const other = { id: 'b-87654321', name: 'Dopisy z Talvan', at: '2026-11-12T09:00:00Z' };
+        const material = await setup(page, { batches: [other], files: [materialFile(7, { batch: other.id }), materialFile(8, { batch: other.id })] });
+        material.sortDoneAt = 99;
+        await openWindow(page);
+        // Only the newest batch is open; a closed batch shows no strip until it is opened.
+        await expect(strip(page)).toHaveCount(1);
+        await win(page).locator('.mw-group-toggle', { hasText: BATCH.name }).click();
+        await expect(strip(page)).toHaveCount(2);
+        await expect(win(page).locator('.mw-sort--top')).toBeHidden();
+        await strip(page).filter({ hasText: '3 new files' }).locator('[data-sort="sort"]').click();
+        await sortDialog(page).locator('.mdlg-sort-go').click();
+        // While it works, only its batch says so; the other batch offers nothing.
+        await expect(strip(page)).toHaveCount(1);
+        await expect(strip(page)).toContainText('of 3');
+        expect(material.sorts).toHaveLength(1);
+        await openResearchMenu(page, { expandMore: true });
+        await expect(page.locator('#research-item-materials .research-item-dot')).toHaveCount(1);
+        await page.keyboard.press('Escape');
+    });
+
+    test('Cancel with proposals made asks: keep them (the proposal stays) or discard them', async ({ page }) => {
+        const material = await setup(page);
+        material.sortDoneAt = 99;
+        material.sortWorkingProposals = 1;
+        await openWindow(page);
+        await strip(page).locator('[data-sort="sort"]').click();
+        await sortDialog(page).locator('.mdlg-sort-go').click();
+        await expect(strip(page)).toContainText('The agent is sorting · 1 of 3');
+        await strip(page).locator('[data-sort="cancel"]').click();
+        const ask = page.locator('.mdlg', { hasText: 'Discard the finished proposals?' });
+        await expect(ask).toBeVisible();
+        await expect(ask.getByRole('button', { name: 'Keep them' })).toBeFocused();
+        await ask.getByRole('button', { name: 'Keep them' }).click();
+        await expect(strip(page)).toContainText('The agent’s proposal is ready');
+        expect(material.cancels).toHaveLength(1);
+
+        // A new sorting from the selection, cancelled and its proposals discarded: the batch offers sorting again.
+        await page.keyboard.press('ControlOrMeta+a');
+        await win(page).locator('.mw-selbar [data-mw="sel-sort"]').click();
+        await sortDialog(page).locator('.mdlg-sort-go').click();
+        expect(material.sorts).toHaveLength(2);
+        await page.keyboard.press('Escape');
+        // A selection's sorting has no batch: it stands over the list and the batch offers nothing meanwhile.
+        const top = win(page).locator('.mw-sort--top');
+        await expect(top).toContainText('1 of 3');
+        await expect(strip(page)).toHaveCount(0);
+        await top.locator('[data-sort="cancel"]').click();
+        await page.locator('.mdlg', { hasText: 'Discard the finished proposals?' }).getByRole('button', { name: 'Discard', exact: true }).click();
+        await expect(strip(page)).toContainText('3 new files');
+        await expect(strip(page).locator('[data-sort="sort"]')).toBeVisible();
+        expect(material.cancels).toHaveLength(2);
+    });
+
+    test('the research turns a sorting down: said in the dialog, sent once per click, never again by itself', async ({ page }) => {
+        const material = await setup(page);
+        await openWindow(page);
+        const cases: Array<[string, string]> = [
+            ['sort.limit', 'The research’s limit for reading by the agent is used up for now.'],
+            ['sort.queue', 'Too many sortings are waiting in the research; it is possible again later.'],
+            ['sort.not-ready', 'The agent cannot work now: agent-busy'],
+        ];
+        await strip(page).locator('[data-sort="sort"]').click();
+        for (const [i, [code, text]] of cases.entries()) {
+            material.sortRefuse = code;
+            await sortDialog(page).locator('.mdlg-sort-go').click();
+            await expect(sortDialog(page).locator('.mdlg-error')).toHaveText(text);
+            expect(material.sorts).toHaveLength(i + 1);
+        }
+        await page.waitForTimeout(2500);
+        expect(material.sorts).toHaveLength(cases.length);
+        await expect(sortDialog(page)).toBeVisible();
+    });
+
+    test('a row edited (title, a link off, + Person…) is accepted as edited and undone back through the bridge', async ({ page }) => {
+        const material = await setup(page);
+        await openWindow(page);
+        await strip(page).locator('[data-sort="sort"]').click();
+        await sortDialog(page).locator('.mdlg-sort-go').click();
+        await strip(page).locator('[data-sort="open"]').click();
+        const row1 = proposal(page).locator('.msp-row[data-id="I0001"]');
+        await row1.locator('.msp-edit').click();
+        await row1.locator('.msp-edit-title').fill('Wedding of Josef and Anna');
+        await row1.locator('.msp-chip', { hasText: 'Josef Fíšek' }).locator('.msp-chip-x').click();
+        await row1.locator('.msp-add-person').click();
+        await row1.locator('.person-picker-input').fill('Anna');
+        await row1.locator('.person-picker-item', { hasText: 'Anna' }).first().click();
+        await expect(row1.locator('.msp-chip')).toHaveText(['Anna Svobodová×']);
+        await row1.locator('.msp-accept-edited').click();
+        await expect.poll(() => JSON.stringify(material.edits ?? [])).toContain('Wedding of Josef and Anna');
+        await expect.poll(() => JSON.stringify(material.assigns ?? [])).toContain('P0002');
+        expect(JSON.stringify(material.assigns)).not.toContain('P0001');
+
+        // Undo under Done: the research gets its title and people back, the row is a proposal again.
+        await proposal(page).locator('.msp-tab[data-tab="done"]').click();
+        const done1 = proposal(page).locator('.msp-row[data-id="I0001"]');
+        await expect(done1.locator('.msp-state')).toHaveText('Accepted');
+        const edits = material.edits!.length;
+        await done1.locator('.msp-undo').click();
+        await expect.poll(() => material.edits!.length).toBe(edits + 1);
+        expect(material.edits![edits]).toMatchObject({ ids: ['I0001'], title: '' });
+        await expect.poll(() => JSON.stringify(material.assigns!.at(-1))).toContain('remove');
+        expect(JSON.stringify(material.assigns!.at(-1))).toContain('P0002');
+        await proposal(page).locator('.msp-tab[data-tab="proposals"]').click();
+        await expect(proposal(page).locator('.msp-row[data-id="I0001"] .msp-accept')).toBeVisible();
+        expect(material.sorts).toHaveLength(1);
+    });
+
+    test('material outside the tree: an event, a known and a new source go into the tree; Undo takes them out', async ({ page }) => {
+        const material = await setup(page, {
+            proposals: [{ id: 'I0003', title: 'Marriage record', kind: 'record', why: 'A register page', sure: 'high',
+                links: [{ type: 'event', ref: 'F0001', event: 'MARR' }, { type: 'source', ref: 'S0001' }, { type: 'source', ref: 'S0099' }] }],
+            bridge: b => b.mediaFiles.set(materialSha('I0003'), { type: 'image/png', body: readFileSync('e2e/fixtures/avatar.png') }),
+        });
+        await openWindow(page);
+        await strip(page).locator('[data-sort="sort"]').click();
+        await sortDialog(page).locator('.mdlg-sort-go').click();
+        await strip(page).locator('[data-sort="open"]').click();
+        const row = proposal(page).locator('.msp-row[data-id="I0003"]');
+        await expect(row.locator('.msp-chip')).toContainText(['Event: Marriage · Josef Fíšek & Anna Svobodová', 'Source: Oddací matrika Čapkov', 'Source: Marriage record (new)']);
+        await row.locator('.msp-accept').click();
+        await expect.poll(() => JSON.stringify(material.edits ?? [])).toContain('Marriage record');
+        const tree = () => page.evaluate(() => {
+            const data = window.Strom.DataManager.getData();
+            const media = Object.values(data.media ?? {}) as Array<{ title?: string; places: Array<Record<string, string>> }>;
+            const sources = Object.values(data.sources ?? {}).map(src => src.title);
+            const file = media.find(m => m.places.some(p => p.partnershipId));
+            return { kinds: file ? file.places.map(p => Object.keys(p).filter(k => k !== 'by').join('+')).sort() : [], sources };
+        });
+        await expect.poll(async () => (await tree()).kinds).toEqual(['partnershipId', 'sourceId', 'sourceId']);
+        expect((await tree()).sources).toContain('Marriage record');
+
+        await proposal(page).locator('.msp-tab[data-tab="done"]').click();
+        await proposal(page).locator('.msp-row[data-id="I0003"] .msp-undo').click();
+        await expect.poll(async () => (await tree()).kinds).toEqual([]);
+        expect((await tree()).sources).not.toContain('Marriage record');
+        expect(material.sorts).toHaveLength(1);
     });
 });

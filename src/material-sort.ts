@@ -10,7 +10,7 @@
 
 import type { MaterialItem } from './materials.js';
 import { SORT_MAX_FILES, type SortJob, type SortLink, type SortProposal } from './materials.js';
-import type { MaterialKind, MediaPlace, PartnershipId, PersonId, StromData } from './types.js';
+import type { MaterialKind, MediaBy, MediaPlace, PartnershipId, PersonId, StromData } from './types.js';
 import { researchPersonRef } from './research-link.js';
 
 /** The files a sorting can take: the research's files (I…), not hidden, at most SORT_MAX_FILES. */
@@ -47,6 +47,8 @@ export interface SortChip {
     kind: 'person' | 'event' | 'source';
     /** The person's or the source's name, the event's name with its person. */
     label: string;
+    /** A source the tree does not know (its research ref): a new source of the tree when accepted (§5, titled by the file). */
+    newSource?: string;
 }
 
 export interface SortRow {
@@ -95,10 +97,27 @@ export function sortTreeIndex(data: StromData, nameOf: (id: PersonId) => string)
 }
 
 /** A proposed link as a chip: where it goes in the tree and what it is called. */
-export function sortChip(link: SortLink, tree: SortTreeIndex, names: { event: (tag: string) => string; unknown: (ref: string) => string; eventLabel: (what: string) => string; sourceLabel: (t: string) => string }): SortChip {
+export interface SortChipNames {
+    event: (tag: string) => string;
+    unknown: (ref: string) => string;
+    eventLabel: (what: string) => string;
+    sourceLabel: (t: string) => string;
+    /** A source the tree does not know, made new under the file's title. */
+    newSource?: (title: string) => string;
+}
+
+/**
+ * A proposed link as a chip: where it goes in the tree and what it is called.
+ * `title`: the file's proposed title — a source the tree does not know becomes
+ * a new source of that name (spec 102 §13, "a new source through §5 without the editor").
+ */
+export function sortChip(link: SortLink, tree: SortTreeIndex, names: SortChipNames, title?: string): SortChip {
     if (link.type === 'source') {
         const s = tree.source(link.ref);
-        return { link, kind: 'source', person: null, place: s ? { sourceId: s.id } : null, label: names.sourceLabel(s ? s.title : names.unknown(link.ref)) };
+        if (s) return { link, kind: 'source', person: null, place: { sourceId: s.id }, label: names.sourceLabel(s.title) };
+        const name = title?.trim();
+        if (name && names.newSource) return { link, kind: 'source', person: null, place: null, label: names.newSource(name), newSource: link.ref };
+        return { link, kind: 'source', person: null, place: null, label: names.sourceLabel(names.unknown(link.ref)) };
     }
     if (link.type === 'family' || (link.type === 'event' && link.ref.startsWith('F'))) {
         const f = tree.family(link.ref);
@@ -131,7 +150,7 @@ function humanValue<T>(item: MaterialItem | null, field: 'title' | 'date' | 'kin
 }
 
 /** The proposal's rows: a row per file sent (no proposal: unassigned). */
-export function sortRows(job: Pick<SortJob, 'files' | 'proposals'>, itemOf: (id: string) => MaterialItem | null, chip: (link: SortLink) => SortChip): SortRow[] {
+export function sortRows(job: Pick<SortJob, 'files' | 'proposals'>, itemOf: (id: string) => MaterialItem | null, chip: (link: SortLink, title?: string) => SortChip): SortRow[] {
     const byId = new Map(job.proposals.map(p => [p.id, p]));
     const ids = [...job.files, ...job.proposals.map(p => p.id).filter(id => !job.files.includes(id))];
     return ids.map(id => {
@@ -159,7 +178,7 @@ export function sortRows(job: Pick<SortJob, 'files' | 'proposals'>, itemOf: (id:
             seen.add(key);
             // A person the file already has is no proposal.
             if (link.type === 'person' && have.has(link.ref)) continue;
-            row.chips.push(chip(link));
+            row.chips.push(chip(link, proposal.title ?? (item?.titled ? item.title : undefined)));
         }
         return row;
     });
@@ -185,9 +204,16 @@ export interface SortWrite {
     title?: { value: string; by: 'user' | 'agent' };
     date?: { value: string; by: 'user' | 'agent' };
     kind?: { value: MaterialKind | ''; by: 'user' | 'agent' };
+    /**
+     * Places in the tree: of the tree's file; of material outside the tree the
+     * links the research's assign does not carry (an event, a couple, a source,
+     * a person without the research's REFN) — it becomes a file of the tree (§4).
+     */
     places: MediaPlace[];
-    /** People of material outside the tree (REFN). */
+    /** People of material outside the tree (REFN, `/material/assign`). */
     persons: string[];
+    /** Sources the tree does not know: made new (title) and the file placed there. */
+    newSources: Array<{ ref: string; title: string }>;
 }
 
 /** Accepting a row: the details that change (never a person's, unless used or edited on purpose) and the links. */
@@ -197,7 +223,7 @@ export function sortWrite(row: SortRow, choice: SortChoice = {}): SortWrite | nu
         id: row.id,
         mediaId: row.item.attachment && !row.item.removedId ? row.item.attachment.id : null,
         fileId: row.item.attachment && !row.item.removedId ? null : row.item.file?.id ?? null,
-        places: [], persons: [],
+        places: [], persons: [], newSources: [],
     };
     const e = choice.edit;
     const pick = <T>(name: 'title' | 'date' | 'kind', f: SortField<T> | undefined, edited: T | undefined): { value: T; by: 'user' | 'agent' } | undefined => {
@@ -213,13 +239,105 @@ export function sortWrite(row: SortRow, choice: SortChoice = {}): SortWrite | nu
     if (date) out.date = date;
     if (kind) out.kind = kind;
     const by = e?.chips ? 'user' : 'agent';
+    const newTitle = (out.title?.value || row.title?.proposed || (row.item.titled ? row.item.title : '') || row.item.name || '').trim();
     for (const c of e?.chips ?? row.chips) {
+        if (c.newSource) {
+            if (newTitle && !out.newSources.some(x => x.ref === c.newSource)) out.newSources.push({ ref: c.newSource, title: newTitle });
+            continue;
+        }
         if (out.mediaId) {
             if (c.place) out.places.push({ ...c.place, by });
-        } else if (c.person && !out.persons.includes(c.person)) {
-            out.persons.push(c.person);
+            continue;
         }
+        // Material outside the tree: its people through the research (an event's person too) ...
+        if (c.person && (c.kind === 'person' || c.kind === 'event') && !out.persons.includes(c.person)) out.persons.push(c.person);
+        // ... and what the research's assign does not carry, in the tree (an event, a couple, a source, a person it does not know).
+        if (!c.place) continue;
+        const plain = 'personId' in c.place && !c.place.fact && !c.place.eventId;
+        if (c.kind === 'source' || !c.person || !plain) out.places.push({ ...c.place, by });
     }
-    if (!out.title && !out.date && !out.kind && !out.places.length && !out.persons.length) return null;
+    if (!out.title && !out.date && !out.kind && !out.places.length && !out.persons.length && !out.newSources.length) return null;
     return out;
+}
+
+/**
+ * What undoes an accepted row ("Undo" under Done, spec 102 §13): the tree's
+ * file as it was (its details, the places added, a file made by the
+ * acceptance taken out, sources made for it removed), material outside the
+ * tree written back through the bridge (the research's `was`, the people added).
+ */
+export interface SortRevert {
+    /** The tree's file written. */
+    media?: string;
+    /** The tree's file was made by the acceptance (a working copy): undoing takes it out. */
+    created?: boolean;
+    /** The tree's file's details before ('' = none; agent: the agent's). */
+    fields?: { title?: SortRevertField; kind?: SortRevertField; date?: SortRevertField };
+    /** Places added to the tree's file. */
+    places?: MediaPlace[];
+    /** Sources made by the acceptance. */
+    sources?: string[];
+    /** Material outside the tree: the research's details before ('' = none). */
+    was?: { title?: string; kind?: string; date?: string };
+    /** People added in the research (REFN). */
+    persons?: string[];
+}
+
+export interface SortRevertField {
+    value: string;
+    agent?: boolean;
+}
+
+function revertPlace(raw: unknown): MediaPlace | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const o = raw as Record<string, unknown>;
+    const str = (v: unknown) => typeof v === 'string' && v.length > 0 && v.length <= 100;
+    const by: { by?: MediaBy } = o.by === 'agent' || o.by === 'user' ? { by: o.by } : {};
+    if (str(o.personId)) {
+        const fact: { fact?: 'birth' | 'death' } = o.fact === 'birth' || o.fact === 'death' ? { fact: o.fact } : {};
+        const ev = str(o.eventId) ? { eventId: o.eventId as string } : {};
+        return { personId: o.personId as PersonId, ...fact, ...ev, ...by };
+    }
+    if (str(o.partnershipId)) return { partnershipId: o.partnershipId as PartnershipId, ...(str(o.eventId) ? { eventId: o.eventId as string } : {}), ...by };
+    if (str(o.sourceId)) return { sourceId: o.sourceId as string, ...by };
+    return null;
+}
+
+/** A remembered revert as stored (anything off: dropped — no undo rather than a wrong one). */
+export function parseSortRevert(raw: unknown): SortRevert | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const o = raw as Record<string, unknown>;
+    const out: SortRevert = {};
+    const text = (v: unknown) => typeof v === 'string' ? v.slice(0, 2000) : undefined;
+    if (typeof o.media === 'string' && o.media) out.media = o.media;
+    if (o.created === true && out.media) out.created = true;
+    if (o.fields && typeof o.fields === 'object' && out.media) {
+        const f = o.fields as Record<string, unknown>;
+        const fields: NonNullable<SortRevert['fields']> = {};
+        for (const k of ['title', 'kind', 'date'] as const) {
+            const v = f[k] as Record<string, unknown> | undefined;
+            const value = v && typeof v === 'object' ? text(v.value) : undefined;
+            if (value !== undefined) fields[k] = { value, ...(v!.agent === true ? { agent: true } : {}) };
+        }
+        if (Object.keys(fields).length) out.fields = fields;
+    }
+    if (Array.isArray(o.places) && out.media) {
+        const places = o.places.map(revertPlace).filter((p): p is MediaPlace => !!p).slice(0, 40);
+        if (places.length) out.places = places;
+    }
+    if (Array.isArray(o.sources)) {
+        const ids = o.sources.filter((x): x is string => typeof x === 'string' && !!x).slice(0, 20);
+        if (ids.length) out.sources = ids;
+    }
+    if (o.was && typeof o.was === 'object') {
+        const w = o.was as Record<string, unknown>;
+        const was: NonNullable<SortRevert['was']> = {};
+        for (const k of ['title', 'kind', 'date'] as const) { const v = text(w[k]); if (v !== undefined) was[k] = v; }
+        if (Object.keys(was).length) out.was = was;
+    }
+    if (Array.isArray(o.persons)) {
+        const refs = o.persons.filter((x): x is string => typeof x === 'string' && /^P\d{1,9}$/.test(x)).slice(0, 40);
+        if (refs.length) out.persons = refs;
+    }
+    return Object.keys(out).length ? out : null;
 }

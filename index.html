@@ -29758,6 +29758,17 @@
         .mw-sort-bar > span { display: block; height: 100%; background: var(--primary); }
         .materials-window .mw-sort .link-button { font-size: 13px; padding: 2px 0; }
         .mw-sort-btn[aria-disabled="true"], .batch-sort-btn[aria-disabled="true"] { opacity: 0.55; cursor: default; }
+        /* The strip under a batch's header (13b/13e): one line in its row of the list. */
+        .mw-r-sort { display: flex; align-items: flex-start; }
+        .mw-sort--row {
+            flex: 1; min-width: 0; margin: 2px 0 8px; padding: 8px 12px; flex-wrap: nowrap; overflow: hidden;
+            border-radius: var(--r-md); background: var(--surface-2); color: var(--text-light);
+        }
+        .mw-sort--row .mw-sort-text { flex-wrap: nowrap; white-space: nowrap; overflow: hidden; }
+        .mw-sort--row .mw-sort-text > span:not(.mw-sort-bar), .mw-sort--row .mw-sort-text:not(:has(span)) { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+        .mw-sort--row .mw-sort-run { color: var(--text); }
+        .mw-sort--row .mw-sort-btn { flex: none; height: 30px; }
+        @media (pointer: coarse) { .mw-sort--row .mw-sort-btn { height: 44px; } }
         .batch-sort { margin: 0 0 14px; padding: 12px 14px; background: var(--surface-2); border-radius: var(--r-md); display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
         .batch-sort-title { font-size: 14px; font-weight: 600; color: var(--text); }
         .batch-sort-text, .batch-sort-older { margin: 0; font-size: 13px; color: var(--text-light); }
@@ -29807,7 +29818,7 @@
             .mdlg--sortprop { width: 100%; height: 100%; max-height: 100%; border-radius: 0; border: none; }
         }
         @media (max-width: 640px) {
-            .mw-sort { padding: 8px 16px; }
+            .mw-sort--top { padding: 8px 16px; }
             .msp-row { grid-template-columns: auto 48px minmax(0, 1fr); }
             .msp-row .msp-thumb { width: 48px; height: 48px; }
             .msp-acts { grid-column: 1 / -1; justify-content: flex-start; }

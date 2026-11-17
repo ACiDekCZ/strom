@@ -1407,6 +1407,8 @@ export interface FakeMaterial {
     sortProposals?: Record<string, unknown>[];
     /** The sorting is done after this many GETs (default 1). */
     sortDoneAt?: number;
+    /** While working, the sorting shows this many of its proposals already (a cancel then asks Keep / Discard). */
+    sortWorkingProposals?: number;
     /** `POST /material/sort` refuses with this code (`sort.limit`, `sort.queue`, `sort.not-ready`). */
     sortRefuse?: string;
 }
@@ -1590,6 +1592,9 @@ function serveMaterial(b: FakeBridge, method: string, url: URL, postData: string
         job.polls++;
         if ((job.state === 'queued' || job.state === 'working') && job.polls >= (m.sortDoneAt ?? 1)) job.state = 'done';
         else if (job.state === 'queued') job.state = 'working';
+        if (job.state === 'working' && m.sortWorkingProposals) {
+            job.proposals = (m.sortProposals ?? []).filter(p => job.files.includes(String(p.id))).slice(0, m.sortWorkingProposals);
+        }
         if (job.state === 'done' && !job.proposals) {
             job.proposals = (m.sortProposals ?? []).filter(p => job.files.includes(String(p.id)));
         }
