@@ -130,6 +130,7 @@ export function stripPhotos(data: StromData): StromData {
         delete union.photo;
         delete union.photoOriginalName;
         delete union.photoDate;
+        delete union.photoOriginal;
     }
     // An excerpt cut from such an original keeps its image, not the link.
     for (const src of Object.values(copy.sources ?? {})) {

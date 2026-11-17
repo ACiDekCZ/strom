@@ -909,6 +909,7 @@ export function stripUnsafeMediaDataUrls(data: StromData): number {
             delete union.photo;
             delete union.photoOriginalName;
             delete union.photoDate;
+            delete union.photoOriginal;
             dropped++;
         }
     }

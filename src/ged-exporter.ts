@@ -2116,7 +2116,8 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         // that keeps the app's files reads it by `_PRIM Y` (spec 108); the
         // family's other files, once the app has any (spec 102), go after it with `_PRIM N`.
         if (partnership.photo) {
-            pushMedia(partnership.photo, partnership.photoOriginalName ?? '', '', undefined, undefined, undefined, undefined, partnership.photoDate,
+            // Its original (spec 108 K2.4) by its hash, as an attachment's: the research holds it.
+            pushMedia(partnership.photo, partnership.photoOriginalName ?? '', '', undefined, undefined, partnership.photoOriginal, undefined, partnership.photoDate,
                 options.appMedia ? 'Y' : undefined);
         }
 

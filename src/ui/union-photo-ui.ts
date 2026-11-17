@@ -68,6 +68,8 @@ export const unionPhotoMethods = uiModule({
             this.showAlert(strings.attachments.unsupportedType, 'warning');
             return;
         }
+        // The file as it was, before it is shrunk: its original goes to a research that keeps it (spec 108 K2.4).
+        const original = await this.preparePhotoOriginal(file, file.name, 'couple');
         let photo: string;
         try {
             photo = await compressImageAttachment(file);
@@ -79,8 +81,12 @@ export const unionPhotoMethods = uiModule({
         if (!canEditUnionPhoto(pid)) return;
         const [a, b] = partnerNames(pid);
         DataManager.runBatch(strings.undo.unionPhoto(a, b), () => {
-            DataManager.updatePartnership(pid, { photo, photoOriginalName: file.name });
+            DataManager.updatePartnership(pid, { photo, photoOriginalName: file.name, ...(original ? { photoOriginal: original } : {}) });
         });
+        if (original && DataManager.getPartnership(pid)?.photoOriginal?.sha256 === original.sha256) {
+            const outcome = await this.queueOriginal(original, file, { partnershipId: pid });
+            this.noteOriginalOutcome(outcome, file.size, { partnershipId: pid });
+        }
         done?.();
     },
 

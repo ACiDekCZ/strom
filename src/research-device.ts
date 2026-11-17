@@ -244,6 +244,8 @@ function writeBridge(researchId: string, value: StoredResearchBridge): void {
                 verified: value.accepts.verified, ...(value.accepts.media ? { media: {
                     ...(value.accepts.mediaMaxBytes ? { max: value.accepts.mediaMaxBytes } : {}),
                     ...(value.accepts.mediaRegion ? { region: true } : {}),
+                    // A couple's original (spec 108 K2.4): a photo chosen while the bridge is not there still keeps its original.
+                    ...(value.accepts.mediaFamily ? { family: true } : {}),
                     ...(value.accepts.mediaBatch ? { batch: value.accepts.mediaBatch } : {}),
                     ...(value.accepts.mediaEstimate ? { estimate: value.accepts.mediaEstimate } : {}),
                 } } : {}),

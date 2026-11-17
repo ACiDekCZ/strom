@@ -1517,6 +1517,13 @@ export interface Partnership {
     photoOriginalName?: string;
     /** The photo's date as the file it came from wrote it (GEDCOM `_DATE`, see Person.photoDate); not shown. */
     photoDate?: string;
+    /**
+     * The original file behind the couple's photo (spec 108 K2.4): chosen in a
+     * tree whose research takes a couple's original (`accepts.media.family`),
+     * the file goes there (`PUT /media` with `X-Strom-Family`) and the photo
+     * names it (`2 _STROM_SHA` under the FAM's OBJE). Goes with the photo.
+     */
+    photoOriginal?: MediaOriginal;
     /** The import (StromData.imports id) the partner link came from. */
     importId?: string;
     /**
@@ -1611,7 +1618,7 @@ export interface CoupleEvent {
  */
 export type PartnershipUpdates = Partial<Pick<Partnership,
     'status' | 'startDate' | 'startPlace' | 'endDate' | 'endPlace' | 'address' | 'ages' | 'note' | 'isPrimary'
-    | 'photo' | 'photoOriginalName' | 'photoDate'>>;
+    | 'photo' | 'photoOriginalName' | 'photoDate' | 'photoOriginal'>>;
 
 // ==================== LAST FOCUSED MARKER ====================
 

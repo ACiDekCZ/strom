@@ -99,6 +99,7 @@ import {
 import { eventIsShareable } from './events.js';
 import { buildPersonNameIndex, type ParticipantRef, type PersonNameIndex } from './participant-match.js';
 import { foldName } from './godparents.js';
+import { normalizeSha256 } from './sha256.js';
 
 /** Extended updates for Partnership */
 
@@ -259,6 +260,8 @@ export function foldUnionPhoto(data: StromData, from: Partnership, into: Partner
         else delete into.photoOriginalName;
         if (from.photoDate) into.photoDate = from.photoDate;
         else delete into.photoDate;
+        if (from.photoOriginal) into.photoOriginal = from.photoOriginal;
+        else delete into.photoOriginal;
         for (const person of Object.values(data.persons ?? {})) {
             if (person?.photoSource?.partnershipId === from.id) person.photoSource.partnershipId = into.id;
         }
@@ -4267,6 +4270,7 @@ class DataManagerClass {
             if (photo) partnership.photo = photo; else delete partnership.photo;
             delete partnership.photoOriginalName;
             delete partnership.photoDate;
+            delete partnership.photoOriginal;
             unlinkPortraitsFromUnion(this.data, partnership.id);
             changed = true;
         }
@@ -4277,6 +4281,12 @@ class DataManagerClass {
             }
             if (updates.photoDate !== undefined && (updates.photoDate || undefined) !== partnership.photoDate) {
                 if (updates.photoDate) partnership.photoDate = updates.photoDate; else delete partnership.photoDate;
+                changed = true;
+            }
+            // The original behind the photo (spec 108 K2.4), set with the photo it belongs to.
+            const sha = normalizeSha256(updates.photoOriginal?.sha256);
+            if (updates.photoOriginal !== undefined && sha && sha !== partnership.photoOriginal?.sha256) {
+                partnership.photoOriginal = { ...updates.photoOriginal, sha256: sha };
                 changed = true;
             }
         }

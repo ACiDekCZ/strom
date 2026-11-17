@@ -42,6 +42,7 @@ import {
     Source,
     SourceReadBy,
     Attachment,
+    MediaOriginal,
     toPersonId,
     toPartnershipId,
     generateLifeEventId,
@@ -3265,6 +3266,9 @@ export function parseGedcom(content: string): ParsedGedcom {
                 else if (tag === 'FORM') { if (!m.form) m.form = value; }
                 else if (tag === 'TITL') { if (!m.title) m.title = value; }
                 else if (tag === '_STROM_KIND') m.stromKind = value;
+                // A couple's photo names its original kept by the research (spec 108 K2.4).
+                else if (tag === '_STROM_SHA') m.sha = normalizeSha256(value) ?? undefined;
+                else if (tag === '_STROM_ORIENT' && /^[2-8]$/.test(value.trim())) m.orient = Number(value.trim());
                 else if ((tag === '_PRIM' || tag === '_PRIMARY' || tag === '_PERSONALPHOTO') && value.trim() === 'Y') m.primary = true;
                 else if (tag === '_DATE') { if (!m.date) m.date = mediaDateValue(value); }
                 if (tag === '_PRIM') notePrim(m, value);
@@ -5857,7 +5861,7 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
     // longer kept for "Back to {prog}" (it is written from the photo); a file
     // outside the file is offered like a person's (externalMedia), its lines
     // kept until a file takes its place. The other pictures stay as written.
-    const familyPhotos = new Map<string, { photo: string; title?: string; date?: string } | Omit<ExternalMediaRef, 'partnershipId'>>();
+    const familyPhotos = new Map<string, { photo: string; title?: string; date?: string; original?: MediaOriginal } | Omit<ExternalMediaRef, 'partnershipId'>>();
     for (const [gedFamId, fam] of gedcom.families) {
         if (!fam.media?.length) continue;
         const read = fam.media.map(link => ({ link, media: link.ref ? familyLinkedMedia(link) : link }));
@@ -5873,7 +5877,13 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
             if (!file) continue;
             if (file.startsWith('data:')) {
                 if (!SAFE_PHOTO_DATA_URL.test(file)) continue;
-                familyPhotos.set(gedFamId, { photo: file, ...(media.title ? { title: media.title } : {}), ...(media.date ? { date: media.date } : {}) });
+                // Its original by its hash (`_STROM_SHA`, spec 108 K2.4): the research holds it.
+                const original: MediaOriginal | undefined = media.sha ? {
+                    sha256: media.sha, name: media.title || 'photo', mimeType: file.slice(5, file.indexOf(';')) || 'image/jpeg', bytes: 0,
+                    ...(media.orient ? { orientation: media.orient } : {}),
+                } : undefined;
+                familyPhotos.set(gedFamId, { photo: file, ...(media.title ? { title: media.title } : {}), ...(media.date ? { date: media.date } : {}),
+                    ...(original ? { original } : {}) });
                 if (link.extra) fam.extras = fam.extras?.filter(e => e !== link.extra);
                 if (link.ref) fam.keptMedia = fam.keptMedia?.filter(r => r !== link.ref);
             } else {
@@ -6443,6 +6453,7 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
             union.photo = pick.photo;
             if (pick.title) union.photoOriginalName = pick.title;
             if (pick.date) union.photoDate = pick.date;
+            if (pick.original) union.photoOriginal = pick.original;
         } else if (!union.photo && !externalMedia.some(r => r.partnershipId === union.id)) {
             externalMedia.push({ ...pick, partnershipId: union.id });
         }

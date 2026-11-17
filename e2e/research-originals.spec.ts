@@ -682,3 +682,105 @@ test.describe('a bridge busy at start (503)', () => {
         await expect.poll(() => queued(page)).toEqual([]);
     });
 });
+
+/**
+ * Strom Research 1.35 (spec 108 K2.4): the archive keeps the originals of a
+ * portrait from a new file (as the original of the person's attachment
+ * holding the whole photo) and of a couple's photo (`PUT /media` with
+ * `X-Strom-Family`), behind `material.links` and `accepts.media.family`.
+ * An older research: neither, as before.
+ */
+test.describe('originals of portraits and couples’ photos (1.35)', () => {
+    test.use({ viewport: DESKTOP });
+    const FAMILY_ACCEPTS = { ...MEDIA_ACCEPTS, media: { ...MEDIA_ACCEPTS.media, family: true } };
+
+    /** The couple's photo of Josef and Anna chosen from the fixture, as by "Choose photo". */
+    async function chooseCouplePhoto(page: Page): Promise<string> {
+        const b64 = readFileSync(AVATAR).toString('base64');
+        return page.evaluate(async (b64) => {
+            const union = Object.values(window.Strom.DataManager.getData().partnerships)[0] as any;
+            const bytes = Uint8Array.from(atob(b64), ch => ch.charCodeAt(0));
+            await (window.Strom.UI as any).setUnionPhotoFromFile(union.id, new File([bytes], 'svatba.png', { type: 'image/png' }));
+            return union.id as string;
+        }, b64);
+    }
+    const couple = (page: Page) => page.evaluate(() => {
+        const u = Object.values(window.Strom.DataManager.getData().partnerships)[0] as any;
+        return { photo: !!u.photo, original: u.photoOriginal ?? null };
+    });
+
+    /** A portrait of Jan from the fixture through the person editor (Done, Save). */
+    async function portraitOfJan(page: Page): Promise<void> {
+        await cardAction(page, 'Jan', 'edit');
+        const modal = personModal(page);
+        await modal.locator('#input-photo').setInputFiles(AVATAR);
+        await page.locator('.pe-overlay').getByRole('button', { name: 'Done' }).click();
+        await expect(modal.locator('#photo-preview img')).toHaveCount(1);
+        await modal.getByRole('button', { name: 'Save' }).click();
+        await expect(modal).toBeHidden();
+    }
+
+    test('a couple’s photo: its original goes with the couple’s number and is named in the tree', async ({ page }) => {
+        const b = await fakeBridge(page, { accepts: FAMILY_ACCEPTS, features: ['material.links'] });
+        await openResearch(page, { media: true });
+        await poll(page);
+        await chooseCouplePhoto(page);
+
+        await expect.poll(() => b.mediaPuts.length).toBe(1);
+        const put = b.mediaPuts[0];
+        expect(put.sha).toBe(AVATAR_SHA);
+        expect(put.bytes).toBe(AVATAR_BYTES);
+        expect(put.headers['x-strom-family']).toBe('F0001');
+        expect(put.headers['x-strom-person']).toBeUndefined();
+        expect(put.headers['x-strom-name']).toBe('svatba.png');
+        expect(await couple(page)).toEqual({ photo: true, original: { sha256: AVATAR_SHA, name: 'svatba.png', mimeType: 'image/png', bytes: AVATAR_BYTES } });
+        await expect.poll(() => queued(page)).toEqual([]);
+    });
+
+    test('a couple the research does not know yet: its original waits for the couple’s number', async ({ page }) => {
+        const b = await fakeBridge(page, { accepts: FAMILY_ACCEPTS, features: ['material.links'] });
+        await openResearch(page, { media: true });
+        await poll(page);
+        await page.evaluate(() => { delete (Object.values(window.Strom.DataManager.getData().partnerships)[0] as any).researchId; });
+        await chooseCouplePhoto(page);
+        await expect.poll(async () => (await queued(page)).length).toBe(1);
+        await poll(page);
+        expect(b.mediaPuts).toEqual([]);
+
+        // The next version from the research brings its number: it goes.
+        await page.evaluate(() => { (Object.values(window.Strom.DataManager.getData().partnerships)[0] as any).researchId = 'F0001'; });
+        await poll(page);
+        await expect.poll(() => b.mediaPuts.length).toBe(1);
+        expect(b.mediaPuts[0].headers['x-strom-family']).toBe('F0001');
+    });
+
+    test('a portrait from a new file: the whole photo’s original goes as the attachment’s, with the person', async ({ page }) => {
+        const b = await fakeBridge(page, { accepts: FAMILY_ACCEPTS, features: ['material.links'] });
+        await openResearch(page, { media: true });
+        await poll(page);
+        await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));
+        await portraitOfJan(page);
+
+        await expect.poll(() => b.mediaPuts.length).toBe(1);
+        expect(b.mediaPuts[0].sha).toBe(AVATAR_SHA);
+        expect(b.mediaPuts[0].headers['x-strom-person']).toBe('P0003');
+        expect(b.mediaPuts[0].headers['x-strom-family']).toBeUndefined();
+        const att = await janAttachment(page);
+        expect(att.original).toEqual({ sha256: AVATAR_SHA, name: 'avatar.png', mimeType: 'image/png', bytes: AVATAR_BYTES });
+    });
+
+    test('an older research (no material.links, no accepts.media.family): no original of either, as before', async ({ page }) => {
+        const b = await fakeBridge(page, { accepts: MEDIA_ACCEPTS, features: [] });
+        await openResearch(page, { media: true });
+        await poll(page);
+        await chooseCouplePhoto(page);
+        await portraitOfJan(page);
+        expect(await couple(page)).toEqual({ photo: true, original: null });
+        const att = await janAttachment(page);
+        expect(att).not.toBeNull();
+        expect(att.original).toBeUndefined();
+        await poll(page);
+        expect(b.mediaPuts).toEqual([]);
+        expect(await queued(page)).toEqual([]);
+    });
+});

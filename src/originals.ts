@@ -11,8 +11,8 @@
  * identity (Attachment.original, SourceExcerpt.originalSha).
  */
 
-import { StromData, PersonId, TreeId } from './types.js';
-import { researchPersonRef } from './research-link.js';
+import { StromData, PersonId, PartnershipId, TreeId } from './types.js';
+import { researchPersonRef, researchFamilyRef, MATERIAL_LINKS_FEATURE } from './research-link.js';
 import { normalizeSha256 } from './sha256.js';
 
 /** The queue never holds more than this… */
@@ -39,6 +39,11 @@ export interface QueuedOriginal {
     personId?: PersonId;
     /** The source it belongs to (app id; its REFN is looked up when sending). */
     sourceId?: string;
+    /**
+     * The couple whose photo it is the original of (app id; its number in the
+     * research, F…, is looked up when sending: `X-Strom-Family`, spec 108 K2.4).
+     */
+    partnershipId?: PartnershipId;
     /** Where the crop lies on this file, in its stored pixels (regionToStored). */
     region?: Region;
     /** EXIF orientation of the file (1 = as stored). */
@@ -205,10 +210,20 @@ export interface OriginalTargets {
     gone: boolean;
     person?: string;
     source?: string;
+    /** The couple (F…) of a couple's photo's original. */
+    family?: string;
 }
 
-export function originalTargets(rec: Pick<QueuedOriginal, 'personId' | 'sourceId'>, data: StromData): OriginalTargets {
+export function originalTargets(rec: Pick<QueuedOriginal, 'personId' | 'sourceId' | 'partnershipId'>, data: StromData): OriginalTargets {
     const out: OriginalTargets = { ready: true, gone: false };
+    if (rec.partnershipId) {
+        // A couple's original: its couple only (never with a source). The couple gone: nothing to send it with
+        // (a photo removed or replaced leaves the file unreferenced, see the queue). No number there yet: after the next write.
+        const union = data.partnerships?.[rec.partnershipId];
+        if (!union) return { ready: false, gone: true };
+        const ref = researchFamilyRef(union.researchId);
+        return ref ? { ready: true, gone: false, family: ref } : { ready: false, gone: false };
+    }
     if (rec.personId) {
         const person = data.persons[rec.personId];
         if (!person) return { ready: false, gone: true };
@@ -233,11 +248,12 @@ export function originalTargets(rec: Pick<QueuedOriginal, 'personId' | 'sourceId
 /**
  * The headers of `PUT /media/<sha256>` (values percent-encoded where text).
  * Only the ones the research's CORS allows: Name, Person, Source, Region, Note,
- * and Task (a file for a waiting task, `accepts.media.task`).
+ * Task (a file for a waiting task, `accepts.media.task`) and Family (a
+ * couple's original, `accepts.media.family`, spec 108; never with a source or task).
  * `targets.region: false` — the research does not take a region.
  */
 export function uploadHeaders(rec: Pick<QueuedOriginal, 'mimeType' | 'name' | 'region' | 'note'>,
-    targets: Pick<OriginalTargets, 'person' | 'source'> & { region?: boolean; task?: string }): Record<string, string> {
+    targets: Pick<OriginalTargets, 'person' | 'source' | 'family'> & { region?: boolean; task?: string }): Record<string, string> {
     const headers: Record<string, string> = {
         'Content-Type': rec.mimeType || 'application/octet-stream',
         'X-Strom-Name': encodeURIComponent(rec.name || 'file'),
@@ -248,7 +264,36 @@ export function uploadHeaders(rec: Pick<QueuedOriginal, 'mimeType' | 'name' | 'r
     if (rec.region && targets.region !== false) headers['X-Strom-Region'] = regionHeader(rec.region);
     if (rec.note) headers['X-Strom-Note'] = encodeURIComponent(rec.note.slice(0, 500));
     if (targets.task) headers['X-Strom-Task'] = targets.task;
+    // A couple's original: the research refuses the header beside a source or a task (media.bad-header).
+    if (targets.family && !targets.source && !targets.task) headers['X-Strom-Family'] = targets.family;
     return headers;
+}
+
+/** What a research said it takes of files (`/status.accepts`, ResearchAccepts). */
+interface MediaAcceptsSaid { media: boolean; mediaFamily?: true }
+
+/**
+ * A portrait from a new file: the research keeps its original as the
+ * original of the person's attachment holding its whole photo (spec 108
+ * K2.4, `material.links`). `features`: its status in this page (null: not
+ * asked yet — then what it said it takes before decides: `accepts.media.family`
+ * comes with `material.links`). Else as before: the attachment holds the
+ * preview only.
+ */
+export function takesPortraitOriginals(accepts: MediaAcceptsSaid | null | undefined, features: readonly string[] | null | undefined): boolean {
+    if (!accepts?.media) return false;
+    return features ? features.includes(MATERIAL_LINKS_FEATURE) : accepts.mediaFamily === true;
+}
+
+/**
+ * A couple's photo: the research takes its original (`PUT /media` with
+ * `X-Strom-Family`, spec 108 K2.4) — `accepts.media.family`, and
+ * `material.links` when its status in this page says its features. Else the
+ * photo has no original, as before.
+ */
+export function takesCoupleOriginals(accepts: MediaAcceptsSaid | null | undefined, features: readonly string[] | null | undefined): boolean {
+    if (!accepts?.media || accepts.mediaFamily !== true) return false;
+    return !features || features.includes(MATERIAL_LINKS_FEATURE);
 }
 
 /** What the bridge said about a file: the research's id for it ("I0042" / "M0123"), or null. */

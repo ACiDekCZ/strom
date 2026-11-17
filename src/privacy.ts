@@ -399,6 +399,7 @@ function stripPartnershipDetails(partnership: Partnership, mode: PrivacyMode): v
     delete partnership.photo;
     delete partnership.photoOriginalName;
     delete partnership.photoDate;
+    delete partnership.photoOriginal;
     if (startYear !== null) partnership.startDate = String(startYear);
 }
 

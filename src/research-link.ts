@@ -1086,6 +1086,17 @@ export function researchMediaFirstSendDue(o: { declares: boolean; hasMedia: bool
     return o.declares && o.hasMedia && o.sentTo !== o.researchId;
 }
 
+/**
+ * After a version with the tree's own files was loaded (spec 108 §5): the
+ * research its archive holds every file of the tree for (ResearchAutoState.appMediaSent),
+ * or undefined — files of the tree's own were carried over because the
+ * archive lacks them (`carried`, carryOverMedia), so one write with them is
+ * due again (researchMediaFirstSendDue) and they reach it without an edit.
+ */
+export function researchMediaSentAfterReturn(researchId: string, carried: number): string | undefined {
+    return carried > 0 ? undefined : researchId;
+}
+
 /** How a GEDCOM writes the titles of a name (see GedcomExportOptions.titles in ged-exporter.ts). */
 export type TitlesInGedcom = 'line' | 'tags' | 'none';
 
@@ -1961,12 +1972,19 @@ export function carryOverMedia(next: StromData, previous: StromData, base?: Read
             continue;
         }
         unionNow.set(uid, cur.id);
+        // The same photo back without its original's hash (a research that does not keep it): the original stays named.
+        if (cur.photo === old.photo && old.photoOriginal && !cur.photoOriginal) {
+            partnerships[cur.id] = { ...cur, photoOriginal: old.photoOriginal };
+            unionsChanged = true;
+            continue;
+        }
         if (cur.photo || archived) continue;
         carried++;
         partnerships[cur.id] = {
             ...cur, photo: old.photo,
             ...(old.photoOriginalName ? { photoOriginalName: old.photoOriginalName } : {}),
             ...(old.photoDate ? { photoDate: old.photoDate } : {}),
+            ...(old.photoOriginal ? { photoOriginal: old.photoOriginal } : {}),
         };
         unionsChanged = true;
     }

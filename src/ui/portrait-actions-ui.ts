@@ -10,7 +10,7 @@
  */
 
 import { DataManager, auditPersonName } from '../data.js';
-import { Person, PersonId, PortraitCrop, PortraitSource } from '../types.js';
+import { MediaOriginal, Person, PersonId, PortraitCrop, PortraitSource } from '../types.js';
 import { strings } from '../strings.js';
 import { dataUrlByteSize } from '../photo.js';
 import { shownName } from '../person-name.js';
@@ -31,6 +31,9 @@ export interface PendingPortrait {
     original?: string;
     fileName?: string;
     origin?: PortraitOrigin;
+    /** The new file itself and its identity, when the tree's research keeps its original (spec 108 K2.4). */
+    file?: Blob;
+    originalMeta?: MediaOriginal;
 }
 
 /** A portrait's crop without its origin. */
@@ -90,6 +93,18 @@ export function pickImageFile(onFile: (file: File) => void): void {
 
 export const portraitActionsMethods = uiModule({
     /**
+     * The original of a portrait's new file (spec 108 K2.4) to the research, as
+     * the original of the person's attachment holding its whole photo — once
+     * that attachment is in the tree.
+     */
+    async sendPortraitOriginal(personId: PersonId, original: MediaOriginal, file: Blob): Promise<void> {
+        if (!DataManager.getPerson(personId)?.attachments?.some(a => a.original?.sha256 === original.sha256)) return;
+        const outcome = await this.queueOriginal(original, file, { personId });
+        this.noteOriginalOutcome(outcome, file.size, { personId });
+        this.renderAttachmentsList();
+    },
+
+    /**
      * The attachment the person's portrait is cut from as it stands now (the
      * Portrait tag): in the person's open dialog the portrait in its preview
      * (one from the editor waiting for Save names its own, a removed one
@@ -145,6 +160,11 @@ export const portraitActionsMethods = uiModule({
             return;
         }
         if (!canEditPortrait(personId)) return;
+        // A new file's whole photo becomes the person's attachment; the file as it was is that attachment's
+        // original, kept by a research that takes it (spec 108 K2.4).
+        const file = !input.origin && result.original && input.source instanceof Blob ? input.source : null;
+        const original = file ? await this.preparePhotoOriginal(file, input.fileName || (file instanceof File ? file.name : '') || 'photo.jpg', 'portrait') : null;
+        if (!DataManager.getPerson(personId) || !canEditPortrait(personId)) return;
         const replaced = !!input.replace && !!now.photo;
         const name = shownName(now);
         const toast = { text: replaced ? strings.portrait.replaced(name) : strings.portrait.updated };
@@ -157,6 +177,7 @@ export const portraitActionsMethods = uiModule({
                     mimeType: 'image/jpeg',
                     dataUrl: result!.original,
                     sizeBytes: dataUrlByteSize(result!.original),
+                    ...(original ? { original } : {}),
                 });
                 if (att) origin = { attachmentId: att.id };
             }
@@ -165,6 +186,7 @@ export const portraitActionsMethods = uiModule({
                 photoSource: origin && !input.squareOnly ? { ...origin, ...step.crop } : undefined,
             });
         }, toast);
+        if (file && original) await this.sendPortraitOriginal(personId, original, file);
     },
 
     /**

@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { HEAD, editJan, fakeBridge, openResearch, poll, researchGed, FakeBridge } from './research-bridge.js';
+import { HEAD, editJan, fakeBridge, foreignCommit, openResearch, poll, researchGed, FakeBridge } from './research-bridge.js';
 
 /**
  * A research that keeps the app's own files (spec 108, Strom Research 1.35,
@@ -38,6 +38,32 @@ test('a research with media.app: the first write after the update goes by itself
     await page.evaluate(() => window.Strom.UI.researchSendNow());
     await expect.poll(() => bridge.posts.length).toBe(2);
     expect(bridge.postQueries?.[1].get('media')).toBe('app');
+});
+
+test('a version back without files the tree has (carried over): one write with them goes by itself again', async ({ page }) => {
+    // Its tree asked with the tree's own files (`?images=ref&media=app`): the return the archive is the truth for.
+    const bridge = await researchTree(page, ['media.app', 'ged.imagesByHash'], true);
+    await poll(page);
+    await expect.poll(() => bridge.posts.length).toBe(1);
+    // The research's own commit, its file without Jan's picture: taken, the picture carried over from here.
+    foreignCommit(bridge);
+    expect(bridge.treeGed).not.toContain(PORTRAIT.slice('data:image/jpeg;base64,'.length));
+    await poll(page);
+    await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+    await page.getByRole('dialog', { name: 'Load the research version?' }).getByRole('button', { name: 'Load' }).click();
+    await expect.poll(() => page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons) as any[])
+        .some(p => p.firstName === 'Jan Václav'))).toBe(true);
+    expect(await page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons) as any[])
+        .find(p => p.firstName === 'Jan Václav')?.attachments?.[0]?.dataUrl ?? null)).toBe(PORTRAIT);
+    await poll(page);
+    await expect.poll(() => bridge.posts.length).toBe(2);
+    expect(bridge.postQueries?.[1].get('media')).toBe('app');
+    expect(bridge.posts[1]).toContain(PORTRAIT.slice('data:image/jpeg;base64,'.length));
+    // Once: not again by itself.
+    await poll(page);
+    await page.clock.fastForward(5_000);
+    await poll(page);
+    expect(bridge.posts).toHaveLength(2);
 });
 
 test('images not taken into the app: a write to a research with media.app only adds (no ?media=app), nothing unasked', async ({ page }) => {

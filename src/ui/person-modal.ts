@@ -52,7 +52,7 @@ import { PersonPicker } from '../person-picker.js';
 import { AppExporter } from '../export.js';
 import { SettingsManager } from '../settings.js';
 import { lifelineChips, setLifelineChip, newLifelineCard } from '../lifeline-view.js';
-import { ThemeMode, LanguageSetting, AppMode, AuditLog, personSourceIds, isPrimaryName } from '../types.js';
+import { ThemeMode, LanguageSetting, AppMode, AuditLog, MediaOriginal, personSourceIds, isPrimaryName } from '../types.js';
 import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData } from '../crypto.js';
 import { validateTreeData, ValidationResult as TreeValidationResult, ValidationIssue } from '../validation.js';
 import * as CrossTree from '../cross-tree.js';
@@ -1402,12 +1402,17 @@ export const personModalMethods = uiModule({
             return person && portraitOriginImage(person, pending.origin) ? { photoSource: { ...pending.origin, ...pending.crop } } : {};
         }
         if (!pending.original) return {};
+        const meta = pending.originalMeta;
         const att = DataManager.addAttachment(personId, {
             name: pending.fileName || 'photo.jpg',
             mimeType: 'image/jpeg',
             dataUrl: pending.original,
             sizeBytes: dataUrlByteSize(pending.original),
+            ...(meta ? { original: meta } : {}),
         });
+        // The file as it was goes to the research as that attachment's original (spec 108 K2.4), once saved.
+        const file = pending.file;
+        if (att && meta && file) setTimeout(() => { void this.sendPortraitOriginal(personId, meta, file); }, 0);
         return att ? { photoSource: { attachmentId: att.id, ...pending.crop } } : {};
     },
 
@@ -1423,7 +1428,8 @@ export const personModalMethods = uiModule({
         if (this.currentId && !canEditPortrait(this.currentId)) return;
         const pending = this.pendingPortraitFor(photo);
         if (pending?.original) {
-            await this.portraitIntoPersonModal({ source: pending.original, initial: pending.crop, original: pending.original, fileName: pending.fileName });
+            await this.portraitIntoPersonModal({ source: pending.original, initial: pending.crop, original: pending.original, fileName: pending.fileName,
+                ...(pending.file ? { file: pending.file } : {}), ...(pending.originalMeta ? { originalMeta: pending.originalMeta } : {}) });
             return;
         }
         const stored = this.currentId ? DataManager.getPerson(this.currentId) : null;
@@ -1458,6 +1464,9 @@ export const personModalMethods = uiModule({
         onChooseAgain?: () => void;
         /** Another photo for a person with a portrait: Current → New. */
         replace?: boolean;
+        /** A recrop of a new file still waiting for Save: the file and its original's identity (spec 108 K2.4). */
+        file?: Blob;
+        originalMeta?: MediaOriginal;
     }): Promise<void> {
         const current = (document.querySelector('#photo-preview img') as HTMLImageElement | null)?.getAttribute('src') || undefined;
         let result: Awaited<ReturnType<typeof openPortraitEditor>>;
@@ -1477,12 +1486,20 @@ export const personModalMethods = uiModule({
         if (!result || !step) return;
         this.setPhotoPreview(step.photo);
         const original = result.original ?? opts.original;
-        this.pendingPortrait = opts.squareOnly ? null
+        const pending: PendingPortrait | null = opts.squareOnly ? null
             : opts.origin ? { photo: step.photo, crop: step.crop, origin: opts.origin }
             : original ? { photo: step.photo, crop: step.crop, original, fileName: opts.fileName ?? '' }
             : null;
+        this.pendingPortrait = pending;
         // The attachment named as the portrait's source shows its tag at once.
         this.renderAttachmentsList();
+        // A new file: its original's identity, taken while the file is at hand, for a research that keeps it
+        // (spec 108 K2.4) — put on the pending portrait when it is still the one waiting (Save may come first).
+        const file = opts.file ?? (opts.source instanceof Blob ? opts.source : undefined);
+        if (pending?.original && file) {
+            const meta = opts.originalMeta ?? await this.preparePhotoOriginal(file, opts.fileName || (file instanceof File ? file.name : '') || 'photo.jpg', 'portrait');
+            if (meta && this.pendingPortrait === pending) { pending.file = file; pending.originalMeta = meta; }
+        }
     },
 
     removePersonPhoto(): void {

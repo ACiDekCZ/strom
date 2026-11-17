@@ -236,6 +236,11 @@ let autoDueAt = 0;
 const autoDue = new Set<TreeId>();
 /** Trees whose first write with their files (spec 108 K2.7) went by itself on this page: not again after every answer. */
 const mediaFirstTried = new Set<TreeId>();
+
+/** A version with the tree's files left some of its own out of the archive: one write with them may go by itself again. */
+export function researchMediaFirstAgain(treeId: TreeId): void {
+    mediaFirstTried.delete(treeId);
+}
 /** The send whose "Written N, not written M" was told (its plain "Written" toast is then not shown too). */
 let toldNotWritten = '';
 /** Sends by hand the research wrote before sending by itself is offered. */

@@ -1710,13 +1710,15 @@ export function mergePartnershipData(
     if (!existing.endPlace && incoming.endPlace) existing.endPlace = incoming.endPlace;
     if (!existing.address && incoming.address) existing.address = incoming.address;
     // The couple's photo (spec 107): the tree's own stays, the incoming one
-    // fills a gap, its name and date riding along.
+    // fills a gap, its name, date and original riding along.
     if (!existing.photo && incoming.photo) {
         existing.photo = incoming.photo;
         if (incoming.photoOriginalName) existing.photoOriginalName = incoming.photoOriginalName;
         else delete existing.photoOriginalName;
         if (incoming.photoDate) existing.photoDate = incoming.photoDate;
         else delete existing.photoDate;
+        if (incoming.photoOriginal) existing.photoOriginal = incoming.photoOriginal;
+        else delete existing.photoOriginal;
     }
     // Ages are keyed by person: incoming ids become the merged tree's ids.
     for (const [pid, age] of Object.entries(incoming.ages ?? {})) {

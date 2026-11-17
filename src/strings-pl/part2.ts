@@ -795,6 +795,7 @@ export const plPart2: Pick<StringsType, 'crop' | 'portrait' | 'importImages' | '
         safariPreviewOnly: 'Safari nie wysyła do badania, w drzewie jest tylko podgląd. Aby zachować oryginał, wymagane jest dodanie pliku w Chrome, Edge lub Firefoksie.',
         originalOnlyNeedsResearch: (t: string) => `Plik ${t} przyjmie tylko badanie, a ono teraz nie działa. Wystarczy je uruchomić i dodać plik ponownie.`,
         queuedNoIdToast: 'Oryginał zostanie wysłany, gdy badanie rozpozna tę osobę (po następnej wysyłce drzewa).',
+        queuedNoIdCoupleToast: 'Oryginał zostanie wysłany, gdy badanie rozpozna tę parę (po następnej wysyłce drzewa).',
         previewSize: (px: string) => `podgląd ${px} px`,
         loadingOriginal: 'Wczytywanie oryginału z badania',
         loadedOf: (a: string, b: string) => `${a} z ${b}`,

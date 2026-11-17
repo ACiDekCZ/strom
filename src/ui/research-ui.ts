@@ -50,7 +50,7 @@ import {
     ResearchLinkAction, ResearchLinkParams, LiveBridgeUrls, LiveStatus, LiveChange, LiveWorker, LiveWaiting,
     LiveQueueItem, LiveSpend, LiveIntake, LiveDirection, LiveBusy, LiveWork, ResearchCaps, BrowserInfo, LiveOffLine, LiveBooks, ResearchHeaderInfo, ExportXrefs, ResearchAccepts, statusAgentless,
     LiveQueueCounts, QUEUE_PAGE_FEATURE, QUEUE_SEARCH_FEATURE,
-    researchLinkMark, researchUrlMark, researchMediaKeys, MEDIA_BASE_MAX,
+    researchLinkMark, researchUrlMark, researchMediaKeys, MEDIA_BASE_MAX, researchMediaSentAfterReturn,
 } from '../research-link.js';
 import { keepImports } from '../import-origin.js';
 import { uiModule } from './module.js';
@@ -96,7 +96,7 @@ import {
     noteResearchBridge, noteResearchBridgeStatus, researchTreeOfStatus, patchResearchAutoState, researchAutoState, researchIdAtBridge, ResearchLinkBefore,
     storedResearchBridge,
 } from '../research-device.js';
-import { rememberBridgeStatus, researchSendMode, researchStatusNow } from './research-sync-ui.js';
+import { rememberBridgeStatus, researchSendMode, researchStatusNow, researchMediaFirstAgain } from './research-sync-ui.js';
 import { sourceReadings, researchSendVouches, conflictTakeovers, heldConflicts } from '../research-sync.js';
 import { currentAppBrowser, appBrowserName } from '../research-transfer.js';
 import { localNetworkStatus } from '../local-network.js';
@@ -141,13 +141,17 @@ export function researchMediaBaseOf(treeId: TreeId | null | undefined, source: R
  * A file with the tree's own files was loaded into `treeId` with its images
  * (`research`, as it came): its media are the base of the next return, and
  * when nothing of the app's own had to be kept (`carried`), the archive
- * holds them all — no first write with them is due (K2.7, spec 108).
+ * holds them all — no first write with them is due (K2.7, spec 108); when
+ * some were, one write with them is due (researchMediaSentAfterReturn).
  */
 export function noteResearchMediaReturn(treeId: TreeId, researchId: string, research: StromData, carried: number): void {
+    // Files kept here that the archive lacks: the mark goes, and one write with them goes by itself (once more on this page).
+    const sent = researchMediaSentAfterReturn(researchId, carried);
     patchResearchAutoState(treeId, {
         mediaBase: { research: researchId, keys: researchMediaKeys(research).slice(0, MEDIA_BASE_MAX) },
-        ...(carried === 0 ? { appMediaSent: researchId } : {}),
+        appMediaSent: sent,
     });
+    if (!sent) researchMediaFirstAgain(treeId);
 }
 
 export interface LiveChangeItem {

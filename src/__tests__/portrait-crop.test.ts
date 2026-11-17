@@ -388,12 +388,16 @@ describe('DataManager and the portrait\'s original', () => {
         load(tree({ partnershipId: U, region: square }));
         DataManager.updatePartnership(U, { photoDate: '1925' });
         expect(DataManager.getData().partnerships[U].photoDate).toBe('1925');
+        // Its original (spec 108 K2.4) is set with it and goes with it.
+        DataManager.updatePartnership(U, { photoOriginal: { sha256: 'A'.repeat(64), name: 'wedding.tif', mimeType: 'image/tiff', bytes: 9000 } });
+        expect(DataManager.getData().partnerships[U].photoOriginal).toEqual({ sha256: 'a'.repeat(64), name: 'wedding.tif', mimeType: 'image/tiff', bytes: 9000 });
         expect(DataManager.getPerson(A)?.photoSource).toBeDefined();
         DataManager.updatePartnership(U, { photo: '' });
         const union = DataManager.getData().partnerships[U];
         expect(union.photo).toBeUndefined();
         expect(union.photoOriginalName).toBeUndefined();
         expect(union.photoDate).toBeUndefined();
+        expect(union.photoOriginal).toBeUndefined();
         expect(DataManager.getPerson(A)?.photoSource).toBeUndefined();
         // An unsafe one is not taken.
         DataManager.updatePartnership(U, { photo: 'data:text/html;base64,AA==' });

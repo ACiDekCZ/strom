@@ -19,7 +19,7 @@ import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { SettingsManager } from '../settings.js';
 import { StorageManager } from '../storage.js';
-import { MediaOriginal, PersonId, ResearchWriteHeld, StromData, TreeId } from '../types.js';
+import { MediaOriginal, PartnershipId, PersonId, ResearchWriteHeld, StromData, TreeId } from '../types.js';
 import { writeHeldOfCode } from '../research-write-held.js';
 import { storedResearchBridge, researchLinksEnabled, announcedResearchScheme } from '../research-device.js';
 import { parseLiveBridge, withAppVersion, researchSchemeUrl } from '../research-link.js';
@@ -27,11 +27,12 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { sha256OfBlob, normalizeSha256 } from '../sha256.js';
 import {
     QueuedOriginal, Region, queueKey, fitsBudget, exifOrientation, originalTargets, uploadHeaders, mediaReplyId,
-    regionToStored, originalsBudget, DEFAULT_MEDIA_MAX_BYTES,
+    regionToStored, originalsBudget, DEFAULT_MEDIA_MAX_BYTES, takesPortraitOriginals, takesCoupleOriginals,
 } from '../originals.js';
 import { onComputer, fetchWithTimeout, bridgeFailure } from './research-ui.js';
 import { uiModule } from './module.js';
 import { shownNameOrEmpty } from '../person-name.js';
+import { unionPhotoCaption } from '../union-photo.js';
 
 /** Head of the file read for its EXIF orientation. */
 const EXIF_HEAD_BYTES = 256 * 1024;
@@ -47,6 +48,20 @@ const SENT_MAX = 2000;
 
 /** Why an original was not queued (the attachment keeps its preview either way). 'sent': straight to a running research. */
 export type QueueOutcome = 'queued' | 'sent' | 'known' | 'knownFilled' | 'notLinked' | 'notTaken' | 'off' | 'safari' | 'encrypted' | 'tooLarge' | 'noRoom' | 'failed' | 'refused';
+
+/**
+ * Whom a file's original goes with: a person, a source, or a couple (the
+ * original of its photo, spec 108 K2.4); `region` is a crop on it as the user
+ * saw it, `material` a file sent on purpose from the material dialog.
+ */
+export interface OriginalTarget {
+    personId?: PersonId;
+    sourceId?: string;
+    partnershipId?: PartnershipId;
+    region?: Region;
+    note?: string;
+    material?: boolean;
+}
 
 /** Why only the preview is in the tree (the title of "preview only"). */
 export type PreviewOnlyWhy = 'room' | 'encrypted' | 'off' | 'older' | 'safari';
@@ -169,6 +184,10 @@ function referencedShas(data: StromData): Set<string> {
             if (sha) out.add(sha);
         }
     }
+    for (const u of Object.values(data.partnerships ?? {})) {
+        const sha = u?.photo ? normalizeSha256(u.photoOriginal?.sha256) : null;
+        if (sha) out.add(sha);
+    }
     return out;
 }
 
@@ -259,7 +278,7 @@ export const originalsMethods = uiModule({
      * send it. `region` is where a crop lies on the file as the user saw it.
      */
     async queueOriginal(original: MediaOriginal, file: Blob,
-        target: { personId?: PersonId; sourceId?: string; region?: Region; note?: string; material?: boolean }): Promise<QueueOutcome> {
+        target: OriginalTarget): Promise<QueueOutcome> {
         const link = this.researchOriginalsLink();
         if (!link) return 'notLinked';
         const accepts = this.researchMediaAccepts(link.researchId);
@@ -296,6 +315,7 @@ export const originalsMethods = uiModule({
             name: original.name, mimeType: original.mimeType, bytes: file.size, blob: file,
             ...(target.personId ? { personId: target.personId } : {}),
             ...(target.sourceId ? { sourceId: target.sourceId } : {}),
+            ...(target.partnershipId ? { partnershipId: target.partnershipId } : {}),
             ...(target.region ? { region: regionToStored(target.region, original.orientation) } : {}),
             orientation: original.orientation ?? 1,
             ...(target.note ? { note: target.note.slice(0, 500) } : {}),
@@ -321,6 +341,29 @@ export const originalsMethods = uiModule({
         const accepts = this.researchAcceptsOf(researchId);
         if (!accepts?.media) return null;
         return { maxBytes: accepts.mediaMaxBytes ?? DEFAULT_MEDIA_MAX_BYTES, region: accepts.mediaRegion };
+    },
+
+    /** A portrait's new file has its original sent to this research (takesPortraitOriginals, spec 108 K2.4). */
+    researchTakesPortraitOriginals(researchId: string): boolean {
+        return takesPortraitOriginals(this.researchAcceptsOf(researchId), this.researchStatusOf(researchId)?.features);
+    },
+
+    /** A couple's photo has its original sent to this research (takesCoupleOriginals, spec 108 K2.4). */
+    researchTakesCoupleOriginals(researchId: string): boolean {
+        return takesCoupleOriginals(this.researchAcceptsOf(researchId), this.researchStatusOf(researchId)?.features);
+    },
+
+    /**
+     * The original of a photo chosen for a portrait or a couple (spec 108 K2.4),
+     * hashed before it is shrunk — only when the open tree's research keeps it
+     * (researchTakesPortraitOriginals / researchTakesCoupleOriginals); else null,
+     * nothing computed, as before.
+     */
+    async preparePhotoOriginal(file: Blob, name: string, kind: 'portrait' | 'couple'): Promise<MediaOriginal | null> {
+        const link = this.researchOriginalsLink();
+        if (!link) return null;
+        const takes = kind === 'couple' ? this.researchTakesCoupleOriginals(link.researchId) : this.researchTakesPortraitOriginals(link.researchId);
+        return takes ? this.prepareOriginal(file, name) : null;
     },
 
 
@@ -421,7 +464,7 @@ export const originalsMethods = uiModule({
      * queue (the row then says "preview only" quietly). An older research is
      * not told: its line sits by the Attachments heading.
      */
-    noteOriginalOutcome(outcome: QueueOutcome, bytes: number, target: { personId?: PersonId; sourceId?: string }): void {
+    noteOriginalOutcome(outcome: QueueOutcome, bytes: number, target: Pick<OriginalTarget, 'personId' | 'sourceId' | 'partnershipId'>): void {
         const link = this.researchOriginalsLink();
         if (!link) return;
         const m = strings.media;
@@ -433,8 +476,8 @@ export const originalsMethods = uiModule({
         let reason: string = outcome;
         let say = reasons[outcome];
         if (outcome === 'queued' && !originalTargets(target, DataManager.getData()).ready) {
-            reason = 'noId';
-            say = () => ({ text: m.queuedNoIdToast });
+            reason = target.partnershipId ? 'noCoupleId' : 'noId';
+            say = () => ({ text: target.partnershipId ? m.queuedNoIdCoupleToast : m.queuedNoIdToast });
         }
         if (!say) return;
         const key = `strom-media-notice:${link.treeId}:${reason}`;
@@ -552,6 +595,8 @@ export const originalsMethods = uiModule({
             if (r.treeId !== openTree) return TreeManager.getTreeMetadata(r.treeId)?.name ?? '';
             const person = r.personId ? data.persons[r.personId] : undefined;
             const source = r.sourceId ? data.sources?.[r.sourceId] : undefined;
+            const union = r.partnershipId ? data.partnerships?.[r.partnershipId] : undefined;
+            if (union) return unionPhotoCaption(data, union);
             return person ? shownNameOrEmpty(person) : source?.title ?? '';
         };
         const since = (ms: number): string => new Date(ms).toLocaleDateString(getCurrentLanguage(), { day: 'numeric', month: 'numeric' })
@@ -694,7 +739,7 @@ export const originalsMethods = uiModule({
      * research has it now.
      */
     async sendOriginalNow(link: { treeId: TreeId; researchId: string }, original: MediaOriginal, file: Blob,
-        target: { personId?: PersonId; sourceId?: string; region?: Region; note?: string; material?: boolean }): Promise<boolean> {
+        target: OriginalTarget): Promise<boolean> {
         // Material: tried whenever the last answer was "up" (a failure leaves it to the queue).
         if (!(target.material ? this.researchBridgeUp(link.researchId) : this.researchBridgeFresh(link.researchId))) return false;
         const bridge = parseLiveBridge(storedResearchBridge(link.researchId)?.base);
@@ -704,13 +749,14 @@ export const originalsMethods = uiModule({
             name: original.name, mimeType: original.mimeType, bytes: file.size, blob: file,
             ...(target.personId ? { personId: target.personId } : {}),
             ...(target.sourceId ? { sourceId: target.sourceId } : {}),
+            ...(target.partnershipId ? { partnershipId: target.partnershipId } : {}),
             ...(target.region ? { region: regionToStored(target.region, original.orientation) } : {}),
             orientation: original.orientation ?? 1,
             ...(target.note ? { note: target.note.slice(0, 500) } : {}),
             addedAt: Date.now(), attempts: 0,
         };
         const targets = originalTargets(rec, DataManager.getData());
-        if (!targets.ready) return false;
+        if (!targets.ready || (rec.partnershipId && !this.researchTakesCoupleOriginals(link.researchId))) return false;
         // Material goes even when the research has the file (its note and person with it); it says "known" then.
         const result = await this.sendOneOriginal(bridge.base, rec,
             { ...targets, region: this.researchMediaAccepts(link.researchId)?.region ?? false }, { force: !!target.material });
@@ -800,8 +846,9 @@ export const originalsMethods = uiModule({
                         queuedAt.delete(key);
                         continue;
                     }
-                    // A person or source the research does not know yet: after the next send.
-                    if (!targets.ready) continue;
+                    // A person or source the research does not know yet: after the next send. A couple's original
+                    // only to a research that takes one (it may have gone back to an older version meanwhile).
+                    if (!targets.ready || (rec.partnershipId && !this.researchTakesCoupleOriginals(link.researchId))) continue;
                     sendingKey = key;
                     this.renderAttachmentsList();
                     this.refreshResearchSyncUi();
@@ -856,7 +903,7 @@ export const originalsMethods = uiModule({
      * large, hash mismatch), 'retry' (try again later) or 'down' (the bridge
      * does not answer — stop for now).
      */
-    async sendOneOriginal(base: string, rec: QueuedOriginal, targets: { person?: string; source?: string; region?: boolean },
+    async sendOneOriginal(base: string, rec: QueuedOriginal, targets: { person?: string; source?: string; family?: string; region?: boolean },
         opts: { force?: boolean } = {}): Promise<string | 'refused' | 'retry' | 'down' | 'full'> {
         const url = `${base}/media/${rec.sha256}`;
         refusedReplies.delete(rec.sha256);
