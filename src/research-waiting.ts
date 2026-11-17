@@ -724,9 +724,13 @@ export function imageNumberOfName(name: string): number | null {
  * How a file got its number: by its name, in order to the missing ones (the
  * counts match), by hand; 'pdf' — a lone PDF the research spreads over the
  * missing numbers itself; 'unknown' — the task does not know which images it
- * wants (sent without a number).
+ * wants (sent without a number). At a task that does not know how many it
+ * wants (K044, `next` known): 'next' — the book's next free number as
+ * foreseen; 'pdf' — a PDF, its pages from the next free on; 'unknown' — the
+ * next free, not foreseen (after a PDF): each goes with the next free number
+ * the research said last.
  */
-export type ImageAssignHow = 'name' | 'order' | 'hand' | 'pdf' | 'unknown';
+export type ImageAssignHow = 'name' | 'order' | 'hand' | 'pdf' | 'unknown' | 'next';
 
 export interface ImageAssignment {
     /** The file's place in the list given. */
@@ -743,6 +747,8 @@ export interface ImageAssignment {
     replace: 'no' | 'ask' | 'yes';
     /** It is not sent at all (checked before): not a kind the task takes, too large. */
     problem?: 'format' | 'size';
+    /** A number chosen by hand that another file has by hand too (it needs another before anything goes). */
+    twice?: number;
 }
 
 export interface ImagesAssigned {
@@ -765,7 +771,7 @@ export interface ImagesAssigned {
  * number (the research spreads its pages); the rest stay without one.
  */
 export function assignImages(files: readonly { name: string; size?: number }[], want: readonly number[] | null, have: readonly number[],
-    opts: { chosen?: readonly (number | null | undefined)[]; maxBytes?: number } = {}): ImagesAssigned {
+    opts: { chosen?: readonly (number | null | undefined)[]; maxBytes?: number; next?: number } = {}): ImagesAssigned {
     const wanted = want ? new Set(want) : null;
     const saved = new Set(have);
     const out: ImageAssignment[] = files.map((f, index) => {
@@ -778,7 +784,7 @@ export function assignImages(files: readonly { name: string; size?: number }[], 
     });
     const valid = out.filter(a => !a.problem);
     if (!wanted) {
-        for (const a of valid) a.how = 'unknown';
+        assignFree(valid, files, opts.chosen ?? [], opts.next);
         return summary(out);
     }
     const taken = new Set<number>();
@@ -804,6 +810,53 @@ export function assignImages(files: readonly { name: string; size?: number }[], 
         left[0].how = 'pdf';
     }
     return summary(out);
+}
+
+/**
+ * Numbers at a task that does not know which images it wants (K044), in the
+ * files' order: a number chosen by hand (another file with the same one by
+ * hand needs another); every other file the book's next free number as
+ * foreseen from `next` on (each past every number before it, as the
+ * research counts: highest + 1) — never the number of its name, which may
+ * be anything ("IMG_4821.JPG") and would leave a gap in the book. A PDF
+ * starts at the next free (its pages after it) and nothing after it is
+ * foreseen ('unknown': the next free the research says when it goes).
+ * `next` not known (an older research): only the hand; the rest goes
+ * without a number.
+ */
+function assignFree(valid: ImageAssignment[], files: readonly { name: string }[], chosen: readonly (number | null | undefined)[], next: number | undefined): void {
+    const taken = new Set<number>();
+    for (const a of valid) {
+        const n = chosen[a.index];
+        if (typeof n !== 'number') continue;
+        if (taken.has(n)) a.twice = n;
+        else taken.add(n);
+    }
+    let counter = next ?? null;
+    for (const a of valid) {
+        const n = chosen[a.index];
+        if (a.twice !== undefined) {
+            a.how = null;
+            continue;
+        }
+        if (typeof n === 'number') {
+            a.num = n;
+            a.how = 'hand';
+            if (counter !== null) counter = Math.max(counter, n + 1);
+            continue;
+        }
+        const pdf = fileExt(files[a.index].name) === 'pdf';
+        if (counter === null) {
+            a.how = 'unknown';
+            continue;
+        }
+        while (taken.has(counter)) counter++;
+        a.num = counter;
+        a.how = pdf ? 'pdf' : 'next';
+        taken.add(counter);
+        // A PDF's pages are not known here: nothing after it is foreseen.
+        counter = pdf ? null : counter + 1;
+    }
 }
 
 function summary(files: ImageAssignment[]): ImagesAssigned {

@@ -74,11 +74,16 @@ function onEscape(run: () => void): () => void {
 }
 
 export const waitingTaskMethods = uiModule({
-    /** The task's numbers as the research says them now: those asked for (null: not known) and those saved. */
+    /**
+     * The task's numbers as the research says them now: those asked for
+     * (null: not known) and those saved; at a task that does not know how
+     * many it wants, the book's next free number (K044).
+     */
     waitingImagesNumbers(s: LiveSession, id: string): UploadNumbers {
         const w = s.waiting.find(x => x.id === id);
         const img = w ? imagesState(w) : null;
-        if (!img || img.detail !== 'full' || !img.wanted) return { want: null, have: [] };
+        const next = img?.detail === 'unknown' ? w?.inbox?.next : undefined;
+        if (!img || img.detail !== 'full' || !img.wanted) return { want: null, have: [], ...(next !== undefined ? { next } : {}) };
         return { want: [...img.wanted], have: [...(img.saved ?? [])] };
     },
 

@@ -11,14 +11,20 @@
  */
 
 import { strings } from '../strings.js';
-import type { WaitingInbox } from '../research-link.js';
+import { MAX_IMAGE_NUMBER, type WaitingInbox } from '../research-link.js';
 import { ImageAssignment, ImagesAssigned, TASK_IMAGE_ACCEPT, assignImages, fileExt, imageRanges, imageSlotOptions } from '../research-waiting.js';
 import type { TaskImageResult } from '../research-waiting-write.js';
 
-/** The numbers the task asks for (null: not known — files go without one) and those saved already. */
+/**
+ * The numbers the task asks for (null: not known — a file goes with the
+ * number given it here, else without one) and those saved already; `next`:
+ * the book's next free number at a task that does not know how many it
+ * wants (K044; absent: an older research, which numbers no such file).
+ */
 export interface UploadNumbers {
     want: number[] | null;
     have: number[];
+    next?: number;
 }
 
 /** How the files went once none is left to send or decide. */
@@ -75,6 +81,12 @@ interface UpFile {
     state: FileState;
     /** The number it goes as once sending began (null: none — the research tells it). */
     num: number | null;
+    /**
+     * It goes as the book's next free number (K044): the one the research
+     * said last when a file before it went, else `num` as foreseen — always
+     * with the number, so a name's own number ("IMG_4821.JPG") never counts.
+     */
+    auto?: boolean;
     replace: boolean;
     sent: number;
     /** What the bridge said: the numbers it asks for (`unwanted`), still missing (`unknown`); its own sentence. */
@@ -118,6 +130,8 @@ export class WaitingImagesUpload {
     private woken = false;
     private gone = false;
     private lastInbox: WaitingInbox | null = null;
+    /** The book's next free number the last answer said (K044). */
+    private batchNext: number | null = null;
     private over = false;
     private frame = 0;
     private finished = false;
@@ -202,11 +216,12 @@ export class WaitingImagesUpload {
     // ==================== ASSIGNING ====================
 
     private assigned(): ImagesAssigned {
-        const { want, have } = this.opts.numbers();
+        const { want, have, next } = this.opts.numbers();
         const ready = this.files.filter(f => f.state === 'ready');
         const out = assignImages(ready.map(f => f.file), want, have, {
             chosen: ready.map(f => typeof f.chosen === 'number' ? f.chosen : undefined),
             maxBytes: this.opts.maxBytes,
+            ...(next !== undefined ? { next } : {}),
         });
         // A number cleared by hand stays cleared (nothing found for it by itself).
         ready.forEach((f, i) => {
@@ -238,12 +253,14 @@ export class WaitingImagesUpload {
     private send(): void {
         const a = this.assigned();
         if (a.sendable === 0 || a.needAssign > 0 || a.needDecide > 0) return;
+        const { want, next } = this.opts.numbers();
         const ready = this.files.filter(f => f.state === 'ready');
         const keep: UpFile[] = [];
         ready.forEach((f, i) => {
             const x = a.files[i];
             if (x.problem) return;
             f.num = x.num;
+            f.auto = !want && next !== undefined && (x.how === 'next' || x.how === 'pdf' || x.how === 'unknown');
             f.replace = x.replace === 'yes';
             f.state = 'queued';
             f.sent = 0;
@@ -266,6 +283,13 @@ export class WaitingImagesUpload {
                 if (!f) break;
                 f.state = 'sending';
                 f.sent = 0;
+                // The next free number as the research said it last (a file before it went), past the numbers typed for files still to go.
+                if (f.auto && this.batchNext !== null) {
+                    const typed = new Set(this.files.filter(x => x !== f && x.state === 'queued' && !x.auto && x.num !== null).map(x => x.num));
+                    let n = this.batchNext;
+                    while (typed.has(n)) n++;
+                    f.num = n;
+                }
                 this.render();
                 const result = await this.opts.upload(f.file, {
                     image: f.num,
@@ -279,6 +303,7 @@ export class WaitingImagesUpload {
                 // A PDF the research could not place: again with the first number still missing.
                 if ((f.state as FileState) === 'unknown' && f.num === null && fileExt(f.file.name) === 'pdf' && f.missing && f.missing.length > 0) {
                     f.num = f.missing[0];
+                    f.auto = false;
                     f.state = 'queued';
                 }
                 this.render();
@@ -297,6 +322,7 @@ export class WaitingImagesUpload {
             f.savedAs = r.images.length ? r.images : r.image !== null ? [r.image] : f.num !== null ? [f.num] : [];
             f.already = r.same;
             if (r.inbox) this.lastInbox = r.inbox;
+            if (r.inbox?.next !== undefined) this.batchNext = r.inbox.next;
             if (r.woken) this.woken = true;
             return;
         }
@@ -341,6 +367,7 @@ export class WaitingImagesUpload {
     /** Again: a refused file with its number (and Replace when said). */
     private again(f: UpFile, num: number | null, replace: boolean): void {
         f.num = num;
+        f.auto = false;
         f.replace = replace;
         f.state = 'queued';
         f.sent = 0;
@@ -480,12 +507,13 @@ export class WaitingImagesUpload {
             if (how) box.appendChild(node('span', 'waiting-upload__how', how));
             side.appendChild(box);
         } else {
-            side.appendChild(node('span', 'waiting-upload__fixed', T.noNumber));
+            side.appendChild(this.freeNumber(f, x));
         }
         side.appendChild(this.removeButton(f));
         li.appendChild(side);
         if (x.problem === 'format') li.appendChild(this.message(T.badFormat(ext), 'error'));
         else if (x.problem === 'size') li.appendChild(this.message(T.tooBig(mb(f.file.size), Math.round(this.opts.maxBytes / MB)), 'error'));
+        else if (x.twice !== undefined) li.appendChild(this.message(T.numTwice(x.twice), 'warn'));
         else if (x.num === null && x.unwanted && x.nameNum !== null && want) {
             li.appendChild(this.message(`${T.nameHas(x.nameNum)} ${T.unwanted(imageRanges(want), want.length)}`, 'warn'));
         } else if (x.replace === 'ask' && x.num !== null) {
@@ -519,8 +547,10 @@ export class WaitingImagesUpload {
         const T = strings.live.waitingTask;
         const li = this.fileShell(f);
         const side = node('div', 'waiting-upload__side');
-        const numText = f.num !== null ? T.assignTo(f.num) : T.noNumber;
-        const choosing = f.state === 'unwanted' || (f.state === 'unknown' && !!f.missing?.length);
+        // Saved: the number the research gave it (the next free may differ from the one foreseen).
+        const num = f.state === 'saved' && f.savedAs?.length ? f.savedAs[0] : f.num;
+        const numText = num !== null ? T.assignTo(num) : this.opts.numbers().next !== undefined ? T.nextFree : T.noNumber;
+        const choosing = f.state === 'unwanted' || f.state === 'unknown';
         if (!choosing && f.state !== 'kept') {
             const fixed = node('span', 'waiting-upload__fixed', numText);
             if (f.state === 'saved') fixed.classList.add('is-saved');
@@ -570,8 +600,14 @@ export class WaitingImagesUpload {
             case 'unwanted':
             case 'unknown': {
                 const nums = f.state === 'unwanted' ? f.want ?? [] : f.missing ?? [];
+                // No numbers to choose from (a task that knows none): never an empty list — the name gives none, a number is typed.
+                if (nums.length === 0) {
+                    if (f.state === 'unknown') li.appendChild(this.message(T.nameNoNumber, 'warn'));
+                    li.appendChild(this.renumberFree(f));
+                    break;
+                }
                 li.appendChild(this.message(f.state === 'unwanted' ? T.unwanted(imageRanges(nums), nums.length) : T.imageUnknown(imageRanges(nums), nums.length), 'warn'));
-                if (nums.length > 0) li.appendChild(this.renumber(f, nums));
+                li.appendChild(this.renumber(f, nums));
                 break;
             }
             case 'space':
@@ -629,6 +665,68 @@ export class WaitingImagesUpload {
         go.setAttribute('aria-disabled', 'true');
         sel.onchange = () => go.setAttribute('aria-disabled', String(!sel.value));
         box.append(sel, go, this.removeButton(f));
+        return box;
+    }
+
+    /**
+     * A file's number at a task that does not know which images it wants
+     * (K044): a field with the book's next free number foreseen, any number
+     * can be typed; empty — the next free one (not foreseen after a PDF).
+     */
+    private freeNumber(f: UpFile, x: ImageAssignment): HTMLElement {
+        const T = strings.live.waitingTask;
+        const next = this.opts.numbers().next;
+        const box = node('div', 'waiting-upload__pickbox');
+        const field = this.numberField(f, `num-${f.id}`, x.twice ?? x.num, next !== undefined ? T.nextFree : T.noNumber, (n) => {
+            f.chosen = n;
+            this.render();
+        });
+        if (x.twice !== undefined) field.classList.add('is-missing');
+        box.appendChild(field);
+        const how = x.how === 'next' ? T.nextFree : x.how === 'pdf' ? T.pdfNext : '';
+        if (how) box.appendChild(node('span', 'waiting-upload__how', how));
+        return box;
+    }
+
+    /** A number field (1…999999); a number not whole or out of range is not taken (the field shows the last one). */
+    private numberField(f: UpFile, fk: string, value: number | null, placeholder: string, set: (n: number | null) => void): HTMLInputElement {
+        const T = strings.live.waitingTask;
+        const field = node('input', 'waiting-upload__num waiting-upload__num--free');
+        field.type = 'text';
+        field.inputMode = 'numeric';
+        field.autocomplete = 'off';
+        field.maxLength = String(MAX_IMAGE_NUMBER).length;
+        field.dataset.fk = fk;
+        field.placeholder = placeholder;
+        field.value = value !== null ? String(value) : '';
+        field.setAttribute('aria-label', `${f.file.name}: ${T.numLabel}`);
+        field.onchange = () => {
+            const text = field.value.trim();
+            if (text === '') return set(null);
+            const n = /^\d{1,6}$/.test(text) ? Number(text) : NaN;
+            if (Number.isInteger(n) && n >= 1 && n <= MAX_IMAGE_NUMBER) set(n);
+            else field.value = value !== null ? String(value) : '';
+        };
+        return field;
+    }
+
+    /** Refused without numbers to choose from (an older research, a task that knows none): a number typed, sent again. */
+    private renumberFree(f: UpFile): HTMLElement {
+        const T = strings.live.waitingTask;
+        const box = node('div', 'waiting-upload__again');
+        const next = this.lastInbox?.next ?? this.opts.numbers().next ?? null;
+        let value: number | null = next;
+        const go = this.button('waiting-action waiting-action--link waiting-upload__retry', T.retry, `go-${f.id}`, () => {
+            if (value !== null) this.again(f, value, false);
+        });
+        const field = this.numberField(f, `again-${f.id}`, value, T.pickNum, (n) => {
+            value = n;
+            go.setAttribute('aria-disabled', String(value === null));
+        });
+        field.classList.add('is-missing');
+        field.oninput = () => go.setAttribute('aria-disabled', String(!/^\d{1,6}$/.test(field.value.trim()) || Number(field.value) < 1));
+        go.setAttribute('aria-disabled', String(value === null));
+        box.append(field, go, this.removeButton(f));
         return box;
     }
 

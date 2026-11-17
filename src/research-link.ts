@@ -2187,6 +2187,12 @@ export interface WaitingInbox {
     dir: string;
     /** Files lying in the folder, not taken yet. */
     lying?: number;
+    /**
+     * The book's next free image number — only at a task that does not know
+     * how many it wants (K044). Its presence says the research numbers a file
+     * without a number itself; an older research leaves it out.
+     */
+    next?: number;
 }
 /** Each kind's chip. */
 const KIND_SECTION: Record<string, WaitingSection> = {
@@ -3304,6 +3310,8 @@ export function sanitizeWaitingInbox(value: unknown): WaitingInbox | null {
     if (folder) out.folder = folder;
     const lying = asCount(r.lying);
     if (lying !== null) out.lying = lying;
+    const next = imageNumber(r.next);
+    if (next !== null && out.want === undefined) out.next = next;
     return out;
 }
 

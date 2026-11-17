@@ -322,6 +322,99 @@ test.describe('Add images in the overview (accepts.media.taskImages)', () => {
     });
 });
 
+/** A task that does not know how many images it wants (K044): the research says the book's next free number. */
+function unknownCount(b: Bridge, next: number | undefined): void {
+    const at = new Date(Date.now() - 86_400_000).toISOString();
+    b.waiting.push({
+        id: 'T0004', what: 'Prohlédnout sčítací operát obce Smyšlenov 1921', kind: 'images', section: 'images', group: ARCHIVE, at, order: 3,
+        inbox: { dir: 'inbox/T0004', have: 3, missing: [], book: 'Sčítací operát Smyšlenov 1921', ...(next !== undefined ? { next } : {}) },
+        actions: ['images', 'answer', 'chat', 'folder'],
+    });
+}
+const savedUnknown = (n: number, next: number) => ({ status: 200, body: {
+    task: 'T0004', image: n, images: [n], by: 'image', woken: false, added: ['M0201'], head: '',
+    inbox: { dir: 'inbox/T0004', have: n, missing: [], next },
+} });
+
+test.describe('a task that does not know how many images it wants (K044)', () => {
+    test('every file the next free number, sent with it even when its name has one; the next file the number the research said last', async ({ page }) => {
+        const bridge = await follow(page, { width: 1440, height: 900 }, (b) => {
+            unknownCount(b, 12);
+            // Meanwhile something else came in: the research says 20 is the next free after the first.
+            b.replies.push(savedUnknown(12, 20), savedUnknown(20, 21), savedUnknown(21, 22));
+        });
+        await openOverview(page);
+        const item = await openItem(page, 'T0004');
+        await item.locator('.research-overview__deliver-steps [data-action="images"]').click();
+        const area = item.locator('.waiting-upload');
+        await area.locator('.waiting-upload__input').setInputFiles([jpeg('Akta 1831 102.jpg'), jpeg('IMG_20241117_101500.jpg'), jpeg('IMG_4821.JPG')]);
+        const files = area.locator('.waiting-upload__file');
+        await expect(files).toHaveCount(3);
+        await expect(files.locator('.waiting-upload__num')).toHaveCount(3);
+        for (const [i, v] of ['12', '13', '14'].entries()) await expect(files.nth(i).locator('.waiting-upload__num')).toHaveValue(v);
+        await expect(files.locator('.waiting-upload__how')).toHaveText(['next free number', 'next free number', 'next free number']);
+        await expect(files.nth(0).locator('.waiting-upload__num')).toHaveAttribute('aria-label', 'Akta 1831 102.jpg: Image number');
+        await expect(area.locator('.waiting-upload__send')).toHaveAttribute('aria-disabled', 'false');
+        await area.locator('.waiting-upload__send').click();
+
+        await expect(area).toHaveCount(0);
+        expect(bridge.puts.map(p => [p.task, p.image, decodeURIComponent(p.name ?? '')])).toEqual([
+            ['T0004', '12', 'Akta 1831 102.jpg'], ['T0004', '20', 'IMG_20241117_101500.jpg'], ['T0004', '21', 'IMG_4821.JPG'],
+        ]);
+    });
+
+    test('a number typed by hand goes as typed; the same one twice waits, said', async ({ page }) => {
+        const bridge = await follow(page, { width: 1440, height: 900 }, (b) => {
+            unknownCount(b, 12);
+            b.replies.push(savedUnknown(12, 13), savedUnknown(30, 31), savedUnknown(31, 32));
+        });
+        const row = page.locator('#live-panel .live-waiting-row').filter({ has: page.locator('[data-action]') }).filter({ hasText: 'sčítací' });
+        await dragFiles(row, ['skan.jpg', 'skan-2.jpg', 'skan-3.jpg']);
+        const dialog = page.locator('.waiting-dialog');
+        const files = dialog.locator('.waiting-upload__file');
+        await expect(files).toHaveCount(3);
+        await files.nth(1).locator('.waiting-upload__num').fill('30');
+        await files.nth(1).locator('.waiting-upload__num').press('Tab');
+        await expect(files.nth(2).locator('.waiting-upload__num')).toHaveValue('31');
+        await files.nth(2).locator('.waiting-upload__num').fill('30');
+        await files.nth(2).locator('.waiting-upload__num').press('Tab');
+        await expect(files.nth(2).locator('.waiting-upload__msg.is-warn')).toHaveText('Image 30 is on another file too.');
+        await expect(dialog.locator('.waiting-upload__send')).toHaveAttribute('aria-disabled', 'true');
+        // Emptied: the next free again.
+        await files.nth(2).locator('.waiting-upload__num').fill('');
+        await files.nth(2).locator('.waiting-upload__num').press('Tab');
+        await expect(files.nth(2).locator('.waiting-upload__num')).toHaveValue('31');
+        await dialog.locator('.waiting-upload__send').click();
+        await expect(dialog).toHaveCount(0);
+        expect(bridge.puts.map(p => p.image)).toEqual(['12', '30', '31']);
+    });
+
+    test('an older research refusing a file without a number: never an empty list; the name gives none, a number is typed', async ({ page }) => {
+        const bridge = await follow(page, { width: 1440, height: 900 }, (b) => {
+            unknownCount(b, undefined);
+            b.replies.push({ status: 409, body: { error: 'unknown', code: 'waiting.image-unknown', missing: [] } }, savedUnknown(7, 8));
+        });
+        await openOverview(page);
+        const item = await openItem(page, 'T0004');
+        await item.locator('.research-overview__deliver-steps [data-action="images"]').click();
+        const area = item.locator('.waiting-upload');
+        await area.locator('.waiting-upload__input').setInputFiles([jpeg('Akta 1831 102.jpg')]);
+        await expect(area.locator('.waiting-upload__num')).toHaveValue('');
+        await area.locator('.waiting-upload__send').click();
+
+        const file = area.locator('.waiting-upload__file');
+        await expect(file.locator('.waiting-upload__msg.is-warn')).toHaveText('The file name does not give the image number.');
+        await expect(file).not.toContainText('Missing');
+        const again = file.locator('.waiting-upload__again');
+        await expect(again.locator('.waiting-upload__retry')).toHaveAttribute('aria-disabled', 'true');
+        await again.locator('.waiting-upload__num').fill('7');
+        await expect(again.locator('.waiting-upload__retry')).toHaveAttribute('aria-disabled', 'false');
+        await again.locator('.waiting-upload__retry').click();
+        await expect(area).toHaveCount(0);
+        expect(bridge.puts.map(p => p.image)).toEqual([null, '7']);
+    });
+});
+
 test.describe('the small panel', () => {
     test('a file the same as an image taken already (409 image-same): the dialog closes, the toast says it', async ({ page }) => {
         const bridge = await follow(page, { width: 1440, height: 900 }, (b) => {
