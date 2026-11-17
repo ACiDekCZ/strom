@@ -275,6 +275,7 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         removeAttachment: (name: string) => `usunięcie załącznika osoby ${name}`,
         editAttachment: (name: string) => `edycja załącznika osoby ${name}`,
         mediaTitle: (name: string) => `tytuł pliku ${name}`,
+        mediaDetails: (name: string) => `dane pliku ${name}`,
         mediaKind: (name: string) => `rodzaj pliku ${name}`,
         mediaDate: (name: string) => `data pliku ${name}`,
         mediaPlaceAdd: (name: string) => `połączenie pliku ${name}`,

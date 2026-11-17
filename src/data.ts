@@ -4155,6 +4155,42 @@ class DataManagerClass {
         });
     }
 
+    /** The file's title, kind, date and note may be changed here (not read-only, every person of it unlocked). */
+    canEditMedia(id: string): boolean {
+        const att = findMedia(this.data, id);
+        return !!att && !this.isReadOnly() && this.mediaEditable(att);
+    }
+
+    /**
+     * A file's title, kind, date and note at once (spec 102 §2: the viewer's
+     * and the Attachment dialog's Save) as one undo step. A field left out
+     * stays; '' / null clears it.
+     */
+    setMediaDetails(id: string, details: { title?: string; kind?: MaterialKind | null; date?: string; note?: string }): boolean {
+        if (this.isReadOnly()) return false;
+        return this.editMedia(id, strings.undo.mediaDetails, att => {
+            if (details.title !== undefined) {
+                const text = details.title.trim();
+                if (text !== (att.title ?? '')) delete att.titleBy;
+                if (text) att.title = text; else delete att.title;
+            }
+            if (details.kind !== undefined) {
+                if ((details.kind ?? undefined) !== att.kind) delete att.kindBy;
+                if (details.kind) att.kind = details.kind; else delete att.kind;
+            }
+            if (details.date !== undefined) {
+                const text = details.date.trim();
+                if (text !== (att.date ?? '')) delete att.dateBy;
+                if (text) att.date = text; else delete att.date;
+            }
+            if (details.note !== undefined) {
+                const text = details.note.trim();
+                if (text) att.note = text; else delete att.note;
+            }
+            return true;
+        });
+    }
+
     /** A file's date as written (GEDCOM-like text; '' = none). */
     setMediaDate(id: string, date: string, by: MediaBy = 'user'): boolean {
         const text = date.trim();

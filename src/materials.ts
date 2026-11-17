@@ -20,8 +20,9 @@ import { personMedia } from './media.js';
 import { cleanText, isResearchHead, researchPersonRef, researchSchemeUrl, withAppVersion, MATERIAL_LINKS_FEATURE, MEDIA_APP_FEATURE } from './research-link.js';
 import { strings } from './strings.js';
 import { ResearchWriteHeld, writeHeldOfCode } from './research-write-held.js';
-import { formatFlexDate, parseFlexDate } from './dates.js';
+import { formatDateForInput, formatFlexDate, normalizeDateInput, parseFlexDate } from './dates.js';
 import { parseGedcomDate } from './ged-parser.js';
+import { formatGedcomDate } from './ged-exporter.js';
 
 // ==================== CAPABILITIES ====================
 
@@ -122,8 +123,12 @@ export interface MaterialItem {
     origin: 'tree' | 'both' | 'archive';
     attachment?: Attachment;
     file?: MaterialFile;
-    /** file.title › file.name › attachment.name */
+    /** What the file is called where it is shown: the tree's title › the research's title › the file's name (spec 102 §2). */
     title: string;
+    /** The file's own name (file.name › attachment.name). */
+    name: string;
+    /** It has a title of its own (`title` is not just the name). */
+    titled: boolean;
     kind?: MaterialKind;
     date?: string;
     mime?: string;
@@ -342,10 +347,10 @@ function rawImageSuffix(mime: string | undefined, name: string | undefined): str
 }
 
 /** The kind as a label: its kind (Photo, Document…), else by type (Image TIFF, PDF, Audio, File). */
-export function materialKindLabel(item: Pick<MaterialItem, 'kind' | 'mime' | 'title' | 'file' | 'attachment'>): string {
+export function materialKindLabel(item: Pick<MaterialItem, 'kind' | 'mime' | 'file' | 'attachment'> & { name?: string; title?: string }): string {
     const m = strings.materials;
     if (item.kind) return m.kind[item.kind] ?? m.kind.other;
-    const name = item.file?.name ?? item.attachment?.name ?? item.title;
+    const name = item.file?.name ?? item.attachment?.name ?? item.name ?? item.title;
     const type = materialType(item.mime, name);
     const label = m.type[type] ?? m.type.file;
     const suffix = type === 'image' ? rawImageSuffix(item.mime, name) : '';
@@ -410,18 +415,24 @@ export function materialFileItem(
     const direct = [...file.persons];
     for (const p of file.sorted?.persons ?? []) if (!direct.includes(p)) direct.push(p);
     const viaBatch = (batch?.persons ?? []).filter(p => !direct.includes(p));
+    // A file in the tree: the tree's title, kind and date (they are written to the research with the tree).
+    const title = attachment?.title?.trim() || file.title?.trim() || '';
     const item: MaterialItem = {
         key: `m:${file.id}`,
         origin: attachment ? 'both' : 'archive',
         file,
-        title: file.title ?? file.name,
+        title: title || file.name,
+        name: file.name,
+        titled: !!title,
         persons: [...direct, ...viaBatch],
         viaBatch,
         here: file.here !== false,
     };
     if (attachment) item.attachment = attachment;
-    if (file.kind) item.kind = file.kind;
-    if (file.date) item.date = file.date;
+    const kind = attachment?.kind ?? file.kind;
+    if (kind) item.kind = kind;
+    const date = attachment?.date || file.date;
+    if (date) item.date = date;
     const mime = file.mime ?? attachment?.original?.mimeType ?? attachment?.mimeType;
     if (mime) item.mime = mime;
     const bytes = file.bytes ?? attachment?.original?.bytes;
@@ -442,13 +453,17 @@ export function attachmentItem(att: Attachment, refn: string | null): MaterialIt
         key: `a:${att.id}`,
         origin: 'tree',
         attachment: att,
-        title: att.name,
+        title: att.title?.trim() || att.name,
+        name: att.name,
+        titled: !!att.title?.trim(),
         mime: att.original?.mimeType ?? att.mimeType,
         bytes: att.original?.bytes ?? att.sizeBytes,
         persons: refn ? [refn] : [],
         viaBatch: [],
         here: true,
     };
+    if (att.kind) item.kind = att.kind;
+    if (att.date) item.date = att.date;
     if (att.note) item.noteUser = att.note;
     return item;
 }
@@ -1039,6 +1054,59 @@ export async function hideMaterial(base: string, req: HideRequest, opts: BridgeO
     return { ok: false, error: materialErrorOf(answer.status, answer.body, answer.retryAfter) };
 }
 
+export interface EditRequest {
+    ids: string[];
+    /** '' clears it. */
+    title?: string;
+    kind?: MaterialKind | '';
+    /** GEDCOM-like text; '' clears it. */
+    date?: string;
+}
+
+/** What a file had before an edit (the undo sends it back). */
+export type EditWas = Record<string, { title?: string; kind?: MaterialKind | ''; date?: string }>;
+
+/** The answer to `POST /material/edit`. */
+export interface EditAnswer {
+    files: MaterialFile[];
+    people: Record<string, string>;
+    was: EditWas;
+    head: string;
+    parent: string;
+}
+
+function parseWas(raw: unknown): EditWas {
+    const out: EditWas = {};
+    if (!raw || typeof raw !== 'object') return out;
+    for (const [id, v] of Object.entries(raw as Record<string, unknown>)) {
+        if (!FILE_ID.test(id) || !v || typeof v !== 'object') continue;
+        const o = v as Record<string, unknown>;
+        const was: EditWas[string] = {};
+        if (typeof o.title === 'string') was.title = cleanText(o.title, 500) ?? '';
+        if (o.kind === '' || (typeof o.kind === 'string' && KINDS.includes(o.kind as MaterialKind))) was.kind = o.kind as MaterialKind | '';
+        if (typeof o.date === 'string') was.date = cleanText(o.date, 100) ?? '';
+        out[id] = was;
+    }
+    return out;
+}
+
+/** A file's title, kind and date outside the tree (`POST /material/edit`, `material.edit`; spec 102 §2). */
+export async function editMaterial(base: string, req: EditRequest, opts: BridgeOptions = {}): Promise<MaterialResult<EditAnswer>> {
+    if (!req.ids.length || req.ids.length > 500 || !req.ids.every(f => FILE_ID.test(f))) return bodyError();
+    const body: Record<string, unknown> = { ids: req.ids };
+    if (req.title !== undefined) body.title = req.title;
+    if (req.kind !== undefined) body.kind = req.kind;
+    if (req.date !== undefined) body.date = req.date;
+    if (Object.keys(body).length === 1) return bodyError();
+    const answer = await withBusyRetry(withAppVersion(`${base}/material/edit`), postInit(body), opts);
+    if ('kind' in answer) return { ok: false, error: answer };
+    if (answer.status === 200 && answer.body && typeof answer.body === 'object') {
+        const b = answer.body as Record<string, unknown>;
+        return { ok: true, value: { files: parseFiles(b.files), people: parsePeople(b.people), was: parseWas(b.was), head: isResearchHead(b.head) ?? '', parent: isResearchHead(b.parent) ?? '' } };
+    }
+    return { ok: false, error: materialErrorOf(answer.status, answer.body, answer.retryAfter) };
+}
+
 /** The preview's URL (`GET /media/<sha>?thumb=<px>`). */
 export function thumbUrl(base: string, sha: string, px: ThumbSize): string {
     return withAppVersion(`${base}/media/${sha}?thumb=${px}`);
@@ -1478,4 +1546,24 @@ export function materialDate(date: string): string {
     if (parseFlexDate(date)) return formatFlexDate(date);
     const flex = parseGedcomDate(date);
     return flex && parseFlexDate(flex) ? formatFlexDate(flex) : date;
+}
+
+/** A file's date (GEDCOM-like text, or the app's flex form) as the date field shows it; one it cannot read as written. */
+export function materialDateForInput(date: string | undefined): string {
+    if (!date) return '';
+    const flex = parseGedcomDate(date);
+    if (flex && parseFlexDate(flex)) return formatDateForInput(flex);
+    return parseFlexDate(date) ? formatDateForInput(date) : date;
+}
+
+/**
+ * The date field's text as a file's date: GEDCOM text as the research and
+ * the files of other programs write it ("ABT 1910", "12 MAY 1924"); '' = no
+ * date; null = it cannot be read.
+ */
+export function materialDateFromInput(value: string): string | null {
+    const flex = normalizeDateInput(value);
+    if (flex === null) return null;
+    if (!flex) return '';
+    return formatGedcomDate(flex) ?? flex;
 }
