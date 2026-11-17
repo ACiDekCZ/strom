@@ -69,13 +69,45 @@ describe('presentActions', () => {
     });
 });
 
+describe('the agent at work beside a badge', () => {
+    const AGENT = 'Reading the parish register';
+    const research = (entry: { waiting?: string; agent?: string; done?: number }, p: Person, settings?: Partial<CardSignals>): CardSignalInfo => {
+        const data: StromData = createEmptyData();
+        data.persons[p.id] = p;
+        return cardSignalInfo(p, {
+            data, unions: new Map(), treeHasSources: false,
+            reliability: { researchTree: false, originFeature: false },
+            settings: { ...CARD_SIGNAL_DEFAULTS, ...settings },
+            research: new Map([['P0001', entry]]),
+        });
+    };
+
+    it('its arc shows with one badge (what waits, a conflict, a question) and with a stack', () => {
+        const waiting = research({ waiting: 'Confirm the year of birth', agent: AGENT }, person());
+        expect([waiting.action, waiting.showAgent]).toEqual(['waiting', true]);
+        const conflicted = research({ agent: AGENT }, person({ research: { conflicts: [conflict('X0001')] } } as Partial<Person>));
+        expect([conflicted.action, conflicted.showAgent]).toEqual(['conflict', true]);
+        const asked = research({ agent: AGENT }, person({ question: 'Who was the godfather?' }));
+        expect([asked.action, asked.showAgent]).toEqual(['question', true]);
+        const stack = all({}, { agent: AGENT });
+        expect([stack.actions.length, stack.showAgent]).toEqual([3, true]);
+    });
+
+    it('none with the agent switched off; the check after its work only where no badge stands', () => {
+        expect(research({ waiting: 'W', agent: AGENT }, person(), { agent: false }).showAgent).toBe(false);
+        expect(research({ done: 5 }, person()).doneSince).toBe(5);
+        const withBadge = research({ done: 5 }, person({ question: 'Q' }));
+        expect([withBadge.action, withBadge.showAgent, withBadge.doneSince]).toEqual(['question', false, null]);
+    });
+});
+
 describe('stackChoices', () => {
     it('what waits, the story, what the research knows (one choice), the agent at work', () => {
         expect(stackChoices(all())).toEqual(['waiting', 'knows']);
         expect(stackChoices(all({}, { waitingStory: true }))).toEqual(['waiting', 'story', 'knows']);
-        // The agent at work is offered beside the badges (its arc is not drawn then).
+        // The agent at work is offered beside the badges (its arc is drawn beside them too).
         const withAgent = all({}, { agent: 'Reading the parish register' });
-        expect(withAgent.showAgent).toBe(false);
+        expect(withAgent.showAgent).toBe(true);
         expect(stackChoices(withAgent)).toEqual(['waiting', 'knows', 'agent']);
     });
 

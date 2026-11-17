@@ -126,7 +126,7 @@ export interface CardSignalInfo {
     action: ActionSignal | null;
     /** Every action signal present and switched on, in ACTION_ORDER (0–3); two or more show as a stack. */
     actions: ActionSignal[];
-    /** Circle the avatar: the agent works on this person and no badge shows. */
+    /** Circle the avatar: the agent works on this person (beside a badge too). */
     showAgent: boolean;
     /** The check after the agent's work: since when (null: none). */
     doneSince: number | null;
@@ -213,10 +213,11 @@ export function cardSignalInfo(p: Person, ctx: CardSignalContext): CardSignalInf
     if (p.isPlaceholder) return { ...info, showStatus: false, showStory: false };
     info.actions = presentActions(info, ctx.settings);
     info.action = info.actions[0] ?? null;
-    // The amber badge comes first: then the agent is in the tooltip only.
-    if (!info.action && ctx.settings.agent) {
+    // The agent at work circles the avatar beside any badge (the badge keeps its corner);
+    // the check after its work shows only where no badge stands in that corner.
+    if (ctx.settings.agent) {
         info.showAgent = !!info.agent;
-        if (!info.agent && research?.done !== undefined) info.doneSince = research.done;
+        if (!info.action && !info.agent && research?.done !== undefined) info.doneSince = research.done;
     }
     return info;
 }
@@ -245,7 +246,7 @@ export type StackChoice = 'waiting' | 'story' | 'knows' | 'agent';
  * The choices a click on a stack of badges offers, in the menu's order:
  * what waits, a story's new version, what the research knows (conflicts,
  * hypotheses, the question — one choice), and following the research while
- * the agent works on the person (its arc is not drawn beside the badges).
+ * the agent works on the person.
  * One choice opens at once; two or more open the menu.
  */
 export function stackChoices(s: Pick<CardSignalInfo, 'waiting' | 'waitingStory' | 'conflicts' | 'question' | 'agent' | 'showAgent'>): StackChoice[] {

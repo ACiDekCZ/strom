@@ -1527,13 +1527,64 @@ test.describe('the agent at work', () => {
         expect(m).toEqual({ size: 88, spin: 'agSpin', running: 1 });
     });
 
-    test('the amber badge comes first: no arc, the agent in the tooltip', async ({ page }) => {
-        // Jan has an open conflict.
+    test('beside the amber badge the arc shows too: a round and a square avatar, and compact', async ({ page }) => {
+        // Jan has an open conflict, and the agent works on him.
+        await page.emulateMedia({ reducedMotion: 'no-preference' });
         await follow(page, { width: 1440, height: 900 }, (b) => { b.waiting = []; });
         const jan = card(page, 'Jan');
         await expect(jan.locator('.card-tooltip .tt-agent')).toHaveText('Research working: Sčítání 1921');
-        await expect(jan.locator('.card-signal')).toHaveText('≠');
-        await expect(jan.locator('.card-agent')).toHaveCount(0);
+        await expect(jan).toHaveAttribute('aria-label', /conflicting sources; research is working on this person/);
+        // The badge keeps its corner (6px out of the avatar's top right), the arc circles the avatar 4px out.
+        const marks = () => page.evaluate(() => {
+            const c = [...document.querySelectorAll('#tree-canvas .person-card')]
+                .find(el => el.querySelector('.name-text')?.textContent?.includes('Jan'))!;
+            const av = c.querySelector<HTMLElement>('.card-avatar-wrap > .card-avatar')!;
+            const badge = c.querySelector<HTMLElement>('.card-avatar-wrap > :is(.card-signal, .card-signal-stack)');
+            const mark = c.querySelector<HTMLElement>('.card-avatar-wrap > .card-agent-mark');
+            const k = av.offsetWidth / av.getBoundingClientRect().width;
+            const a = av.getBoundingClientRect(), b = badge?.getBoundingClientRect(), m = mark?.getBoundingClientRect();
+            return {
+                badge: badge?.textContent ?? null,
+                badgeVisible: !!badge && getComputedStyle(badge).display !== 'none',
+                badgeTopRight: b && badge.classList.contains('card-signal') ? [Math.round((a.top - b.top) * k), Math.round((b.right - a.right) * k)] : null,
+                arc: !!mark && getComputedStyle(mark).display !== 'none',
+                arcOut: m ? [Math.round((a.left - m.left) * k), Math.round((a.top - m.top) * k)] : null,
+                arcRadius: mark ? getComputedStyle(mark).borderTopLeftRadius : null,
+            };
+        });
+        for (const [shape, radius] of [['circle', null], ['rounded', '9px']] as const) {
+            await page.evaluate(async (shape) => {
+                window.Strom.SettingsManager.setCardPhoto({ size: 'small', shape });
+                await window.Strom.TreeRenderer.renderAsync();
+            }, shape);
+            await expect.poll(marks, { message: shape }).toMatchObject({
+                badge: '≠', badgeVisible: true, badgeTopRight: [6, 6], arc: true, arcOut: [4, 4], ...(radius ? { arcRadius: radius } : {}),
+            });
+        }
+        // Compact: no avatar; the agent's ring goes around the badge's dot, both seen, the same centre.
+        await page.evaluate(() => window.Strom.UI.setCardDensity('compact'));
+        const dot = jan.locator('.card-signal-dot:not(.card-signal-dot--back)');
+        const ring = jan.locator('.card-agent-dot');
+        await expect(dot).toBeVisible();
+        await expect(ring).toBeVisible();
+        await expect(ring).toHaveClass(/card-agent-dot--badge/);
+        const centres = () => jan.evaluate(c => {
+            const box = (sel: string) => {
+                const el = c.querySelector<HTMLElement>(sel)!;
+                return { x: el.offsetLeft + el.offsetWidth / 2, y: el.offsetTop + el.offsetHeight / 2, w: el.offsetWidth };
+            };
+            const d = box('.card-signal-dot:not(.card-signal-dot--back)'), r = box('.card-agent-dot');
+            return { dx: r.x - d.x, dy: r.y - d.y, dot: d.w, ring: r.w };
+        });
+        await expect.poll(centres).toEqual({ dx: 0, dy: 0, dot: 12, ring: 16 });
+    });
+
+    test('beside a stack of badges the arc shows too', async ({ page }) => {
+        // Jan: what waits and an open conflict, and the agent works on him.
+        await follow(page, { width: 1440, height: 900 });
+        const jan = card(page, 'Jan');
+        await expect(jan.locator('.card-avatar-wrap > .card-signal-stack')).toBeVisible();
+        await expect(jan.locator('.card-avatar-wrap > .card-agent-mark > .card-agent')).toBeVisible();
     });
 
     test('reduced motion: the arc stands still but stays', async ({ page }) => {

@@ -15757,6 +15757,8 @@
             background: var(--surface);
         }
         body[data-card-density="compact"] .card-agent-dot { display: block; }
+        /* Beside a badge: the ring goes around the badge's dot (same centre, under it). */
+        .card-agent-dot.card-agent-dot--badge { top: -7px; right: -7px; width: 16px; height: 16px; z-index: 1; }
         @keyframes agSpin { to { transform: rotate(360deg); } }
         #tree-container.tree-offscreen .card-agent,
         #tree-container.tree-offscreen .card-agent::before,
@@ -15844,6 +15846,12 @@
         }
         /* A stack becomes the one dot too. */
         #tree-canvas.zoom-far .card-signal-stack, #tree-canvas.zoom-far .card-signal-dot--back { display: none; }
+        /* The agent's ring around the badge's dot keeps that dot's centre, 4/3 of its size. */
+        #tree-canvas.zoom-far .card-agent-dot.card-agent-dot--badge {
+            --dot: max(12px, calc(8px * var(--zoom-inv, 1)));
+            width: calc(var(--dot) * 4 / 3); height: calc(var(--dot) * 4 / 3);
+            top: calc(-0.4 * var(--dot) - var(--dot) / 6); right: calc(-0.4 * var(--dot) - var(--dot) / 6);
+        }
 
         /* ---- Photo on the card (spec 096 §2, §5; Settings → Person card → Photo on the card).
            body[data-card-photo] is the drawn view's photo size (the chosen one where someone

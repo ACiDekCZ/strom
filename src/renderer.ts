@@ -5248,20 +5248,26 @@ class TreeRendererClass {
             // The fold takes the very corner; without it the status mark moves into it (index.html).
             if (stateHtml) card.classList.add('has-story');
             // The action badge on the avatar's corner (a dot on the card's
-            // corner where there is no avatar, or when zoomed far out). Without
-            // a badge: the agent's arc circling the avatar (a small ring at the
-            // card's corner), or the check once it is done with the person.
+            // corner where there is no avatar, or when zoomed far out). The
+            // agent at work: its arc circling the avatar (a small ring at the
+            // card's corner; around the badge's dot when there is one), beside
+            // the badge too. Without either: the check once it is done with the person.
             // Two or three signals: a stack of badges, its bubble a row per signal (src/card-signal-marks.ts).
             let badgeHtml = '';
             let dotHtml = '';
             const actionMarks = cardActionMarksHtml(id, signals,
                 signals.actions.length >= 2 && signals.waiting ? UI.waitingCountOf(id) : 1);
+            const agentHtml = signals.showAgent
+                ? `<span class="card-agent-mark" data-mark="agent"><span class="card-agent" style="animation-delay:${spinDelay}" aria-hidden="true"></span></span>`
+                    + markTip('agent', c.tipAgentHead, [clipText(signals.agent ?? '')], c.tipClickAgent) : '';
+            const agentDotHtml = signals.showAgent
+                ? `<span class="card-agent-dot${actionMarks ? ' card-agent-dot--badge' : ''}" style="animation-delay:${spinDelay}" aria-hidden="true"></span>` : '';
             if (actionMarks) {
-                ({ badgeHtml, dotHtml } = actionMarks);
+                badgeHtml = agentHtml + actionMarks.badgeHtml;
+                dotHtml = agentDotHtml + actionMarks.dotHtml;
             } else if (signals.showAgent) {
-                badgeHtml = `<span class="card-agent-mark" data-mark="agent"><span class="card-agent" style="animation-delay:${spinDelay}" aria-hidden="true"></span></span>`
-                    + markTip('agent', c.tipAgentHead, [clipText(signals.agent ?? '')], c.tipClickAgent);
-                dotHtml = `<span class="card-agent-dot" style="animation-delay:${spinDelay}" aria-hidden="true"></span>`;
+                badgeHtml = agentHtml;
+                dotHtml = agentDotHtml;
             } else if (signals.doneSince !== null) {
                 const since = Math.min(renderedAt - signals.doneSince, AGENT_DONE_MS + AGENT_DONE_FADE_MS);
                 const fade = `animation-delay:-${Math.max(0, since)}ms`;
@@ -6470,7 +6476,7 @@ class TreeRendererClass {
         if (s.action === 'waiting') tail.push(c.ariaWaiting);
         else if (s.action === 'conflict') tail.push(c.ariaConflict);
         else if (s.action === 'question') tail.push(c.ariaQuestion);
-        else if (s.showAgent) tail.push(c.ariaAgent);
+        if (s.showAgent) tail.push(c.ariaAgent);
         if (extra.crossTrees) tail.push(c.ariaCross(extra.crossTrees));
         if (extra.locked) tail.push(strings.lock.lockedTooltip.toLocaleLowerCase());
         return [head.join(', '), ...tail].join('; ');

@@ -257,12 +257,13 @@ function sampleCard(density: CardDensity, on: CardSignals, viewWidth: number | u
     const stripes = (on.status ? statusMarkHtml({ cls: 'cs-p1', source: 'evidence', facts: [] }) : '')
         + storyFoldHtml(on.story ? { kind: 'own', final: false } : null);
     const action: ActionSignal | null = on.waiting ? 'waiting' : on.conflict ? 'conflict' : on.question ? 'question' : null;
-    // Without a badge, the agent at work: its arc around the avatar (the ring at the corner on Compact), as in the tree.
-    const agent = !action && on.agent;
-    const badge = action ? `<span class="card-signal signal-${action}">${ACTION_GLYPH[action]}</span>`
-        : agent ? '<span class="card-agent-mark"><span class="card-agent"></span></span>' : '';
-    const dot = action ? `<span class="card-signal-dot signal-${action}"></span>`
-        : agent && density === 'compact' ? '<span class="card-agent-dot"></span>' : '';
+    // The agent at work, beside the badge too: its arc around the avatar (the ring at the corner on Compact,
+    // around the badge's dot when there is one), as in the tree.
+    const agent = on.agent;
+    const badge = (agent ? '<span class="card-agent-mark"><span class="card-agent"></span></span>' : '')
+        + (action ? `<span class="card-signal signal-${action}">${ACTION_GLYPH[action]}</span>` : '');
+    const dot = (agent && density === 'compact' ? `<span class="card-agent-dot${action ? ' card-agent-dot--badge' : ''}"></span>` : '')
+        + (action ? `<span class="card-signal-dot signal-${action}"></span>` : '');
     // The card carries its own photo size and shape (index.html .card-signals-preview [data-photo]).
     const touched = density !== 'compact' && (photo.size !== 'small' || photo.shape !== 'circle');
     const photoAttrs = touched ? ` data-photo="${photo.size}" data-shape="${photo.shape}"` : '';
