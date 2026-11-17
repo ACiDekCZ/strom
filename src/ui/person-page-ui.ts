@@ -840,6 +840,9 @@ export const personPageMethods = uiModule({
         if (action === 'materials') {
             if (person?.refn && this.materialsListOn()) {
                 this.openMaterials({ person: person.refn });
+            } else if (!this.materialsListOn() && this.materialsWindowOn()) {
+                // Every tree's window (spec 102 §1), filtered to the person as from their attachments.
+                this.openMaterials({ person: personId, group: 'added' });
             } else {
                 this.closePersonPage({ focus: false });
                 this.showPersonMaterials(personId);

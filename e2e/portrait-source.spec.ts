@@ -434,7 +434,9 @@ test.describe('Use as portrait… in the materials (desktop)', () => {
         await win.locator('.mw-canvas .mw-tile', { hasText: 'svatba.jpg' }).click();
         await expect(panel.locator('.mv-portrait-tag')).toHaveText('Portrait');
         await expect(panel.locator('.mv-act[data-action="useAsPortrait"]')).toHaveCount(0);
-        await page.keyboard.press('ArrowRight');
+        // The other file (the window orders the tree's files by the day added, newest first).
+        await page.keyboard.press('Escape');
+        await win.locator('.mw-canvas .mw-tile', { hasText: 'louka' }).click();
         await expect(panel.locator('.mv-title')).toHaveText(/louka/);
         await expect(panel.locator('.mv-portrait-tag')).toHaveCount(0);
         await expect(panel.locator('.mv-act')).toHaveText(['Download', 'Use as portrait…', 'Delete from the tree…']);

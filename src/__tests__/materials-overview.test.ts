@@ -67,6 +67,20 @@ describe('overview items', () => {
         expect(items).toHaveLength(10);
     });
 
+    it('material.links: the tree\'s file joins the research\'s own record of it (by its id), not a batch\'s copy; an older research by the hash (spec 102 §1)', () => {
+        const original = { sha256: sha(9), name: 'a.jpg', mimeType: 'image/jpeg', bytes: 1 };
+        const records = list([
+            file(1, { batch: 'b-box', sha: sha(9) }),
+            file(2, { sha: sha(9), origin: 'app', links: [{ type: 'person', ref: 'P0001' }] }),
+        ], { batches: [BOX] });
+        const items = overviewItems(records, [rec(att('a1', { original }), ['P0001'], 2)]);
+        expect(items.map(i => [i.key, i.origin])).toEqual([['m:I0001', 'archive'], ['m:I0002', 'both']]);
+        expect(items.find(i => i.key === 'm:I0002')?.uses).toBe(2);
+        // An older research (no origin, no links): one item, joined by the hash.
+        const older = overviewItems(list([file(3, { sha: sha(9) })]), [rec(att('a1', { original }), ['P0001'], 2)]);
+        expect(older.map(i => [i.key, i.origin])).toEqual([['m:I0003', 'both']]);
+    });
+
     it('one item per file: a file of two people is listed once with both (spec 102 §1)', () => {
         const items = overviewItems(null, [rec(att('a1', { addedAt: '2026-11-02T10:00:00.000Z' }), ['p_anna', 'p_karel'], 4)]);
         expect(items.map(i => i.key)).toEqual(['a:a1']);

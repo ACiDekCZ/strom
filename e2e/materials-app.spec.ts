@@ -37,7 +37,7 @@ async function files(page: Page): Promise<void> {
         const wedding = dm.addAttachment('p1' as never, file('svatba.png', 2))!;
         dm.addMediaPlace(wedding.id, { personId: 'p2' as never });
         dm.addAttachment('p3' as never, file('dopis.png', 0));
-        const source = dm.addSource({ title: 'Matrika Grünwald' } as never)!;
+        const source = dm.addSource({ title: 'Matrika Quellbach' } as never)!;
         const page = dm.addAttachment('p3' as never, file('matrika.png', 100), source.id)!;
         dm.removeMediaPlace(page.id, { personId: 'p3' as never });
     }, { px: PX, day: DAY });
@@ -154,6 +154,23 @@ test.describe('Materials window without a research', () => {
         await expect(win(page).locator('.mw-chip.is-active .mw-chip-main')).toHaveText('Person: Florimund Pfefferkorn');
         await expect(win(page).locator('.mw-canvas .mw-tile')).toHaveCount(1);
         await expect(win(page).locator('.mw-canvas .mw-tile')).toContainText('svatba.png');
+    });
+
+    test('the person page\'s Materials opens the window filtered to them (not the old list)', async ({ page }) => {
+        await tree(page);
+        await files(page);
+        await page.evaluate(() => window.Strom.UI.showPersonPage('p1' as never));
+        const open = page.locator('#pp-sec-materials .pp-gal-open');
+        await expect(open).toBeVisible();
+        await open.click();
+        await expect(win(page)).toBeVisible();
+        await expect(win(page)).toHaveAttribute('data-model', 'app');
+        await expect(win(page).locator('.mw-chip.is-active .mw-chip-main')).toHaveText('Person: Florimund Pfefferkorn');
+        await expect(win(page).locator('.mw-canvas .mw-tile')).toHaveCount(1);
+        await expect(win(page).locator('.mw-canvas .mw-tile')).toContainText('svatba.png');
+        // The window stands over the person page, its search reachable.
+        await win(page).locator('.mw-canvas .mw-tile').click();
+        await expect(page.locator('#attachment-overlay')).toHaveClass(/active/);
     });
 
     test('a person without files has no link', async ({ page }) => {

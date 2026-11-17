@@ -69,8 +69,13 @@ export interface TreeRecord {
  */
 export function overviewItems(list: MaterialList | null, tree: readonly TreeRecord[]): MaterialItem[] {
     const files = list?.files ?? [];
+    // A tree's file joins the research's record of it (`origin: 'app'`, material.links) before another
+    // record of the same original (it came in a batch too); an older research: the first by the hash.
     const bySha = new Map<string, MaterialFile>();
-    for (const f of files) if (!bySha.has(f.sha)) bySha.set(f.sha, f);
+    for (const f of files) {
+        const had = bySha.get(f.sha);
+        if (!had || (f.origin === 'app' && had.origin !== 'app')) bySha.set(f.sha, f);
+    }
     const joined = new Map<string, TreeRecord>();
     const treeOnly: MaterialItem[] = [];
     for (const rec of tree) {
