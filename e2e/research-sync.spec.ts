@@ -109,7 +109,7 @@ test.describe('the state of the tree and sending straight', () => {
         // Title and facts on the block's two lines; the sentence is its hint (menu 1020 §2.2).
         await expect(block(page).locator('.research-sync-title')).toHaveText("The research isn't running");
         await expect(block(page).locator('.research-sync-sub')).toHaveText(/^1 person changed\s·\s/);
-        await expect(block(page).locator('.research-sync-status')).toHaveAttribute('title', /The changes will wait, nothing is lost\./);
+        await expect(block(page).locator('.research-sync-status')).toHaveAttribute('title', /The changes wait in this browser for now\./);
         await page.evaluate(() => window.Strom.UI.researchSendNow());
         expect(bridge.posts).toHaveLength(0);
         expect(await links(page)).toContain(`strom-research://send?tree=${UUID}`);

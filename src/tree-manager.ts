@@ -43,6 +43,7 @@ import { fillResearchConfirmedValues, hasUnvaluedResearchConfirmations } from '.
 import { requestPersistentStorage } from './persistence.js';
 import { newTieSendMode } from './research-sync.js';
 import { asciiSlug } from './filenames.js';
+import { browserMediaFingerprint } from './browser-media.js';
 import { looksLikeSampleTree } from './demo-sample.js';
 import { announceTreeSaved, clearTreeStale, isTreeStale } from './tab-sync.js';
 import { cloneTreeDataAsJson, estimateJsonBytes } from './clone.js';
@@ -644,6 +645,12 @@ class TreeManagerClass {
             const count = realPersonCount(result.data);
             if (tree && tree.personCount !== count) {
                 tree.personCount = count;
+                changed = true;
+            }
+            // Its pictures and files only the browser keeps (a tree saved before this was counted is learnt here).
+            const mediaFp = browserMediaFingerprint(result.data);
+            if (tree && tree.mediaFp !== mediaFp) {
+                tree.mediaFp = mediaFp;
                 changed = true;
             }
             if (changed) this.saveIndex();
@@ -1347,6 +1354,7 @@ class TreeManagerClass {
             tree.personCount = realPersonCount(data);
             tree.partnershipCount = Object.keys(data.partnerships).length;
             tree.sizeBytes = sizeBytes;
+            tree.mediaFp = browserMediaFingerprint(data);
             this.saveIndex();
         }
     }
@@ -1385,8 +1393,9 @@ class TreeManagerClass {
             personCount: realPersonCount(data),
             partnershipCount: Object.keys(data.partnerships).length,
             sizeBytes,
+            mediaFp: browserMediaFingerprint(data),
             // The file it came from is a copy (a split-off part is not).
-            ...(fromFile ? { fileCopyAt: now } : {})
+            ...(fromFile ? { fileCopyAt: now, fileCopyMediaFp: browserMediaFingerprint(data) } : {})
         };
 
         // Add to index
@@ -1628,14 +1637,22 @@ class TreeManagerClass {
         if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('strom:user-change', { detail: { treeId } }));
     }
 
-    /** These trees were just written, whole, to a file (export, working file). */
-    noteFileCopy(treeIds: readonly TreeId[]): void {
+    /**
+     * These trees were just written, whole, to a file (export, working file).
+     * `written`: the data each file carried, so its pictures and files count
+     * as copied only when it had them (an export without photos does not
+     * copy them); without it they count as not known to be in the file.
+     */
+    noteFileCopy(treeIds: readonly TreeId[], written?: Readonly<Record<string, StromData | null | undefined>>): void {
         const now = new Date().toISOString();
         let any = false;
         for (const id of treeIds) {
             const tree = this.index.trees.find(t => t.id === id);
             if (!tree) continue;
             tree.fileCopyAt = now;
+            const data = written?.[id];
+            if (data) tree.fileCopyMediaFp = browserMediaFingerprint(data);
+            else delete tree.fileCopyMediaFp;
             any = true;
         }
         if (!any) return;

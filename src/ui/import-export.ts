@@ -390,7 +390,8 @@ export const importExportMethods = uiModule({
                 : `${safeFileName(metadata?.name, 'family-tree')}.ged`;
             a.click();
             URL.revokeObjectURL(url);
-            if (privacy === 'full' && !scoped) TreeManager.noteFileCopy([treeId]);
+            // The file carries the photos and attachments only when the content kept them (embedded).
+            if (privacy === 'full' && !scoped) TreeManager.noteFileCopy([treeId], content.photos && content.attachments ? { [treeId]: filtered } : undefined);
         }, false, { defaultPrivacy: 'initials', passwordless: true, content: true, format: 'gedcom', treeId, gedcomPurpose: opts.preset === 'back' ? 'back' : 'share' });
     },
 
@@ -1704,7 +1705,8 @@ export const importExportMethods = uiModule({
         a.click();
         URL.revokeObjectURL(a.href);
         if (privacyMode === 'full') {
-            TreeManager.noteFileCopy(Object.keys(allData) as TreeId[]);
+            TreeManager.noteFileCopy(Object.keys(allData) as TreeId[],
+                Object.fromEntries(Object.entries(allData).map(([id, t]) => [id, t.data])));
             // A full backup of every tree: the "Export all" reminder rests (Backups, ⋯ → Research).
             noteExportAll();
         }

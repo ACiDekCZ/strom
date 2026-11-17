@@ -2678,6 +2678,14 @@ export interface TreeMetadata {
     fileCopyAt?: string;
     /** The "changes only in the browser" notice was closed for this tree (ISO); it returns after the next file copy. */
     fileCopyNoticeClosedAt?: string;
+    /**
+     * Fingerprint of the portraits, couples' photos and attachments only the
+     * browser keeps ('' = none; src/browser-media.ts), as last saved or read.
+     * Missing: not known yet.
+     */
+    mediaFp?: string;
+    /** The same fingerprint of what the last file copy carried (missing: not known). */
+    fileCopyMediaFp?: string;
     /** The last choice of "Save as HTML" on a person page (spec 025): content groups and privacy. */
     personPageExport?: {
         groups: import('./person-page.js').PersonPageGroups;

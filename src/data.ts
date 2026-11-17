@@ -5013,6 +5013,11 @@ class DataManagerClass {
      * the same as a full JSON download.
      */
     async buildAttachedFileJson(treeId: TreeId): Promise<string> {
+        return (await this.buildAttachedFile(treeId)).json;
+    }
+
+    /** buildAttachedFileJson with the data the file carries (its pictures count as copied). */
+    async buildAttachedFile(treeId: TreeId): Promise<{ json: string; data: StromData }> {
         const data = await storedTreeForExport(treeId);
         if (!data) throw new Error('no tree data');
         const json = JSON.stringify(data, null, 2);
@@ -5022,9 +5027,9 @@ class DataManagerClass {
             const { CryptoSession } = await import('./crypto.js');
             if (!CryptoSession.isUnlocked()) throw new Error('locked');
             const encrypted = await CryptoSession.encrypt(json);
-            return JSON.stringify(encrypted, null, 2);
+            return { json: JSON.stringify(encrypted, null, 2), data };
         }
-        return json;
+        return { json, data };
     }
 
     /** Download a tree as JSON; returns the file name (null when there is no tree). */
@@ -5065,7 +5070,7 @@ class DataManagerClass {
         a.download = `${safeName || 'family-tree'}.json`;
         a.click();
         URL.revokeObjectURL(a.href);
-        if (privacyMode === 'full') TreeManager.noteFileCopy([treeId]);
+        if (privacyMode === 'full') TreeManager.noteFileCopy([treeId], { [treeId]: treeData });
         return a.download;
     }
 

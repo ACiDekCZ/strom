@@ -243,8 +243,10 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
         noRefnResearch: 'Badanie pozna osobę dopiero po kolejnym zapisie drzewa. Do tego czasu są tu tylko załączniki z drzewa.',
         desktopOnly: 'Materiały z Archiwum Strom są widoczne w aplikacji na komputerze.',
         desktopOnlyResearch: 'Materiały z badania są widoczne w aplikacji na komputerze.',
-        emptyText: 'Skany, zdjęcia, listy i inne pliki dotyczące tej osoby. Oryginały są przechowywane w Archiwum Strom.',
-        emptyTextResearch: 'Skany, zdjęcia, listy i inne pliki dotyczące tej osoby. Oryginały są przechowywane w badaniu.',
+        emptyText: 'Skany, zdjęcia, listy i inne pliki dotyczące tej osoby. Pliki dodane tutaj są zapisywane w Archiwum Strom. Archiwum nie przechowuje portretów ani zdjęć par; chroni je kopia zapasowa w pliku.',
+        emptyTextResearch: 'Skany, zdjęcia, listy i inne pliki dotyczące tej osoby. Pliki dodane tutaj są zapisywane w badaniu. Badanie nie przechowuje portretów ani zdjęć par; chroni je kopia zapasowa w pliku.',
+        emptyTextHeld: 'Skany, zdjęcia, listy i inne pliki dotyczące tej osoby. Oryginały są przechowywane w Archiwum Strom.',
+        emptyTextHeldResearch: 'Skany, zdjęcia, listy i inne pliki dotyczące tej osoby. Oryginały są przechowywane w badaniu.',
         assign: 'Przypisz do osoby…',
         assignTitle: 'Przypisanie do osoby',
         assignWhat: {

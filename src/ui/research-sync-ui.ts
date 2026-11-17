@@ -27,7 +27,7 @@ import { researchCitationsOut, setCitationFeaturesLookup } from '../citation-gat
 import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
 import { strings, getCurrentLanguage } from '../strings.js';
-import { TreeId, PersonId, ResearchLink, ResearchSend, ResearchSendMode, StromData, ResearchConflict, ResearchHypothesis } from '../types.js';
+import { TreeId, PersonId, ResearchLink, ResearchSend, ResearchSendMode, StromData, TreeMetadata, ResearchConflict, ResearchHypothesis } from '../types.js';
 import { HypothesisPick, hypothesisPickable } from '../research-hypothesis-pick.js';
 import { formatLiveClock } from '../live-time.js';
 import { PhoneSummary } from '../phone.js';
@@ -73,6 +73,7 @@ import {
     fetchWithTimeout, readStatusPart, readResearchTreeFile, postSync, onComputer, readTree, researchGedcom, researchGedcomExport,
 } from './research-ui.js';
 import { shownNameOrEmpty } from '../person-name.js';
+import { browserMediaFingerprint, browserMediaSafe } from '../browser-media.js';
 
 /** A person's conflicts less those still open that were decided since (`settled`, by id); the same list when none goes. */
 function withoutSettled(list: ResearchConflict[], settled: Set<string> | null): ResearchConflict[] {
@@ -250,6 +251,8 @@ let quietLoading = false;
  * before the startup tree was in, the empty stand-in's stayed until an edit.
  */
 let fpCache: { treeId: TreeId; current: string; matchesBase: boolean; base: string; data: StromData } | null = null;
+/** The open tree's fingerprint of the pictures and files only the browser keeps (browser-media.ts), with fpCache. */
+let mediaFpCache: { treeId: TreeId; fp: string; data: StromData } | null = null;
 /** The note under the mark (a new conflict, the first start of sending by itself). */
 let note: { kind: 'conflict' | 'intro'; html: string; timer: ReturnType<typeof setTimeout> | null } | null = null;
 
@@ -446,6 +449,7 @@ export const researchSyncMethods = uiModule({
         lastActiveTree = DataManager.getCurrentTreeId();
         const changed = (): void => {
             fpCache = null;
+            mediaFpCache = null;
             this.researchNoteTreeSwitch();
             if (recomputeTimer) clearTimeout(recomputeTimer);
             recomputeTimer = setTimeout(() => { recomputeTimer = null; this.refreshResearchSyncUi(); }, RECOMPUTE_DEBOUNCE_MS);
@@ -463,6 +467,7 @@ export const researchSyncMethods = uiModule({
         });
         window.addEventListener('strom:tree-switched', () => {
             fpCache = null;
+            mediaFpCache = null;
             this.researchNoteTreeSwitch();
             this.refreshResearchSyncUi();
             void this.pollResearchBridge();
@@ -952,7 +957,7 @@ export const researchSyncMethods = uiModule({
         const title = held.kind === 'seal' ? h.titleSeal : held.kind === 'cloud' ? h.titleCloud : h.titleDisk;
         const pill = held.kind === 'seal' ? h.pillSeal : held.kind === 'cloud' ? h.pillCloud : h.pillDisk;
         const own = held.kind === 'seal' ? h.aheadSeal : held.kind === 'cloud' ? h.aheadCloud(held.n ?? 0) : '';
-        // The research's sentence (in its language) says what to do there; the app adds that nothing is lost.
+        // The research's sentence (in its language) says what to do there; the app adds that the edits wait in this browser.
         const said = held.said || own;
         const sub = joinSaid(said, ahead ? h.keptAhead : h.kept);
         return { title, pill, sub, toast: held.said ? sub : joinSaid(title, sub) };
@@ -2809,12 +2814,16 @@ export const researchSyncMethods = uiModule({
      * send taken in), and while edits are fresh — they go within minutes;
      * no once they stay unsent for RESEARCH_HOLD_MS (the bridge down, refused,
      * by hand and not sent). `until`: when a "yes" turns into "no".
-     * Only on a computer, for a research that says what it takes.
+     * Only on a computer, for a research that says what it takes, and never
+     * while the tree has portraits, couples' photos or attachments no file
+     * copy holds: the research does not keep those (spec 108 K1b.1, until
+     * ARCHIVE_HOLDS_APP_MEDIA).
      */
     researchHoldsTree(treeId: TreeId, now = Date.now()): { holds: boolean; until?: number } {
         const meta = TreeManager.getTreeMetadata(treeId);
         const link = meta?.research;
         if (!link || !onComputer() || !researchLinksEnabled() || !this.researchSyncCapable(link.id)) return { holds: false };
+        if (!browserMediaSafe(this.researchTreeMediaFp(treeId, meta), meta.fileCopyMediaFp)) return { holds: false };
         const st = researchAutoState(treeId);
         const sentGone = link.sent?.state === 'discarded' || link.sent?.state === 'undone';
         let unsent: boolean;
@@ -2829,6 +2838,16 @@ export const researchSyncMethods = uiModule({
         if (!Number.isFinite(since)) return { holds: false };
         const until = since + RESEARCH_HOLD_MS;
         return now < until ? { holds: true, until } : { holds: false };
+    },
+
+    /** The tree's fingerprint of the pictures and files only the browser keeps: the open one's from memory. */
+    researchTreeMediaFp(treeId: TreeId, meta: TreeMetadata): string | undefined {
+        if (treeId !== DataManager.getCurrentTreeId()) return meta.mediaFp;
+        const data = DataManager.getData();
+        if (mediaFpCache?.treeId !== treeId || mediaFpCache.data !== data) {
+            mediaFpCache = { treeId, fp: browserMediaFingerprint(data), data };
+        }
+        return mediaFpCache.fp;
     },
 
     /** The state block at the top of the research menu: its tone, text and actions (null when there is none). */

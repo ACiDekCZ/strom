@@ -140,7 +140,7 @@ test.describe('Materials at the person', () => {
         await setup(page, { files: [materialFile(1, { persons: ['P0001'] })] });
         await editJanModal(page);
         await expect(rows(page)).toHaveCount(0);
-        await expect(section(page).locator('.materials-empty')).toContainText('Originals are kept in the research.');
+        await expect(section(page).locator('.materials-empty')).toContainText('The research does not keep portraits or couple photos; a backup to a file protects them.');
         await expect(section(page).locator('.materials-empty .materials-add')).toHaveText('Add material…');
         await expect(section(page).locator('.materials-all')).toHaveCount(0);
     });

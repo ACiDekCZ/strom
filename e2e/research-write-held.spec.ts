@@ -26,7 +26,7 @@ const REFUSALS = [
     { code: 'disk.full', feature: 'disk.full', status: 507, error: DISK, params: { where: '/Users/x/Strom' }, title: 'No room left on the disk' },
 ];
 
-const KEPT = 'The changes made here wait unsent; nothing is lost.';
+const KEPT = 'The changes made here wait unsent in this browser.';
 const dialog = (page: Page) => page.locator('#confirmation-modal');
 const pill = (page: Page) => page.locator('#research-sync-pill');
 const sealUrl = `strom-research://seal?tree=${UUID}`;
@@ -239,7 +239,7 @@ test.describe('said ahead by /status', () => {
         await openResearchMenu(page);
         await expect(block(page)).toHaveAttribute('data-state', 'writeHeld');
         await expect(block(page)).toContainText('This tree was sealed on another computer: nothing can be written to it here until it is taken over on this computer.');
-        await expect(block(page)).toContainText('Changes made here wait unsent until then; nothing is lost.');
+        await expect(block(page)).toContainText('Changes made here wait unsent in this browser until then.');
         await block(page).getByRole('menuitem', { name: 'Take over on this computer, opens in the research' }).click();
         expect(await links(page)).toContain(sealUrl);
         // Taken over there: the next answer says so, the edits go by themselves.

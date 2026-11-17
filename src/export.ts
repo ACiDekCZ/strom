@@ -275,7 +275,7 @@ class AppExporterClass {
 
             // Download
             this.downloadHtml(exportedHtml, filename);
-            if (privacyMode === 'full') TreeManager.noteFileCopy([targetTreeId]);
+            if (privacyMode === 'full') TreeManager.noteFileCopy([targetTreeId], { [targetTreeId]: data });
         } catch (error) {
             console.error('Export failed:', error);
             UI.showAlert(strings.export.failed, 'error');
@@ -359,7 +359,8 @@ class AppExporterClass {
             // Download with "all-trees" filename
             this.downloadHtml(exportedHtml, 'strom-all-trees.html');
             if (privacyMode === 'full') {
-                TreeManager.noteFileCopy(Object.keys(allTreesData) as TreeId[]);
+                TreeManager.noteFileCopy(Object.keys(allTreesData) as TreeId[],
+                    Object.fromEntries(Object.entries(allTreesData).map(([id, t]) => [id, t.data])));
                 // A full backup of every tree: the "Export all" reminder rests.
                 noteExportAll();
             }

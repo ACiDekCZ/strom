@@ -12,7 +12,7 @@
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { strings } from '../strings.js';
-import { TreeId } from '../types.js';
+import { TreeId, type StromData } from '../types.js';
 import {
     isFileAccessSupported, pickSaveFile, pickOpenFile, saveToHandle,
     ensurePermission, storeHandle, loadHandle, dropHandle, FileSystemFileHandleLike,
@@ -29,9 +29,9 @@ export const fileAccessMethods = uiModule({
     },
 
     /** Build the working-file JSON, refusing when encryption is locked. */
-    async buildFileJsonOrWarn(treeId: TreeId): Promise<string | null> {
+    async buildFileJsonOrWarn(treeId: TreeId): Promise<{ json: string; data: StromData } | null> {
         try {
-            return await DataManager.buildAttachedFileJson(treeId);
+            return await DataManager.buildAttachedFile(treeId);
         } catch (err) {
             if (err instanceof Error && err.message === 'locked') {
                 this.showToast(strings.fileAccess.lockedRefuse);
@@ -52,10 +52,10 @@ export const fileAccessMethods = uiModule({
         const handle = await pickSaveFile(meta?.name || 'family-tree');
         if (!handle) return;
 
-        const json = await this.buildFileJsonOrWarn(treeId);
-        if (json === null) return;
-        await saveToHandle(handle, json);
-        TreeManager.noteFileCopy([treeId]);
+        const file = await this.buildFileJsonOrWarn(treeId);
+        if (file === null) return;
+        await saveToHandle(handle, file.json);
+        TreeManager.noteFileCopy([treeId], { [treeId]: file.data });
         await storeHandle(treeId, handle);
         await this.updateFileIndicator();
         this.showToast(strings.fileAccess.saved(handle.name));
@@ -94,11 +94,11 @@ export const fileAccessMethods = uiModule({
             this.showToast(strings.fileAccess.permissionDenied);
             return;
         }
-        const json = await this.buildFileJsonOrWarn(treeId);
-        if (json === null) return;
+        const file = await this.buildFileJsonOrWarn(treeId);
+        if (file === null) return;
         try {
-            await saveToHandle(handle, json);
-            TreeManager.noteFileCopy([treeId]);
+            await saveToHandle(handle, file.json);
+            TreeManager.noteFileCopy([treeId], { [treeId]: file.data });
             this.showToast(strings.fileAccess.saved(handle.name));
         } catch {
             this.showToast(strings.fileAccess.saveFailed);

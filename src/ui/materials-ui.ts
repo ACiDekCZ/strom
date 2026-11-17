@@ -37,6 +37,7 @@ import { onComputer } from './research-ui.js';
 import { openImageViewer } from './image-viewer.js';
 import { uiModule } from './module.js';
 import { canEditPortrait } from './portrait-actions-ui.js';
+import { ARCHIVE_HOLDS_APP_MEDIA } from '../browser-media.js';
 
 const MODAL_ID = 'materials-modal';
 const SECTION_ID = 'materials-section';
@@ -478,7 +479,7 @@ export const materialsMethods = uiModule({
             ? `<div class="material-row is-skeleton" aria-hidden="true"><span class="material-thumb"></span><span class="material-skel-lines"><span></span><span></span></span></div>`.repeat(2)
             : '';
         const empty = items.length === 0 && !loading
-            ? `<div class="materials-empty"><p>${esc(ctx.agent ? m.emptyTextResearch : m.emptyText)}</p>${locked ? '' : `<button type="button" class="primary btn-sm materials-add" data-act="add">${esc(addLabel)}</button>`}</div>`
+            ? `<div class="materials-empty"><p>${esc(ARCHIVE_HOLDS_APP_MEDIA ? (ctx.agent ? m.emptyTextHeldResearch : m.emptyTextHeld) : ctx.agent ? m.emptyTextResearch : m.emptyText)}</p>${locked ? '' : `<button type="button" class="primary btn-sm materials-add" data-act="add">${esc(addLabel)}</button>`}</div>`
             : '';
         const more = items.length > PERSON_SECTION_ROWS
             ? `<button type="button" class="link-button materials-all" data-act="all-person">${esc(m.allForPerson(items.length))}</button>`

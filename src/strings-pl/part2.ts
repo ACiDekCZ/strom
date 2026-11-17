@@ -339,8 +339,8 @@ export const plPart2: Pick<StringsType, 'crop' | 'portrait' | 'importImages' | '
             aheadCloud: (n: number) => n > 0
                 ? `Z folderu w chmurze nie pobrano jeszcze plików drzewa (${n}): do tego czasu nic nie zostanie zapisane.`
                 : 'Z folderu w chmurze nie pobrano jeszcze wszystkich plików drzewa: do tego czasu nic nie zostanie zapisane.',
-            kept: 'Zmiany z aplikacji czekają niewysłane, nic nie przepada.',
-            keptAhead: 'Zmiany z aplikacji czekają do tego czasu niewysłane, nic nie przepada.',
+            kept: 'Zmiany z aplikacji czekają niewysłane w tej przeglądarce.',
+            keptAhead: 'Zmiany z aplikacji czekają do tego czasu niewysłane w tej przeglądarce.',
             sealButton: 'Przejmij na tym komputerze',
         },
         stateInSync: 'Zgodne z badaniem',
@@ -378,7 +378,7 @@ export const plPart2: Pick<StringsType, 'crop' | 'portrait' | 'importImages' | '
         notWrittenToast: (n: number) => `${notWrittenPl(n)} w badaniu, a badanie nie podało przyczyny. ${n === 1 ? 'Zostaje' : 'Zostają'} tutaj w aplikacji. Warto sprawdzić osobę w badaniu albo wysłać ponownie po kolejnej zmianie.`,
         stateAddressRefused: 'Badanie odrzuciło połączenie',
         addressRefusedSub: 'Pod adresem badania coś odpowiada, ale nie tej aplikacji (zmienił się jego klucz albo port przejęło badanie innego drzewa). Polecenie w terminalu ponownie połączy badanie z aplikacją: strom app --live',
-        unsentBridgeDownSub: 'Badanie nie działa. Zmiany poczekają, nic nie przepada.',
+        unsentBridgeDownSub: 'Badanie nie działa. Zmiany czekają na razie w tej przeglądarce.',
         stateRefused: 'Badanie nie przyjęło zmian',
         staysHere: 'Zmiany zostają tutaj.',
         stateRejected: (t: string) => `Wysyłka z ${t} została w badaniu odrzucona`,
