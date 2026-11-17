@@ -21,6 +21,8 @@ import { el, liveSession, LiveSession, researchSession } from './research-ui.js'
 import { UploadNumbers, UploadOutcome, WaitingImagesUpload } from './waiting-images-upload.js';
 import { WaitingAnswerForm, waitingAnswerChangedNote } from './waiting-answer-form.js';
 import { bindImagesDrop, imagesShortEl, itemKey } from './waiting-images-ui.js';
+import { auditExplain, type WaitingAudit } from '../research-audit.js';
+import { postWaitingAudit, type WaitingAuditResult } from '../research-waiting-write.js';
 
 const DIALOG_ID = 'waiting-dialog';
 const SHEET_ID = 'waiting-answer-sheet';
@@ -71,6 +73,83 @@ function onEscape(run: () => void): () => void {
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
+}
+
+/**
+ * A finding row's state by item (tree|id; spec 109 §2.1), kept outside the
+ * list so it survives every re-render (new data of the bridge):
+ * `keeping` while "Leave as is" is written, `kept` once written (the row
+ * stays hidden while the status still carries that finding's stamp). The
+ * fix's own states (loading, preview, writing) are kept here too, by
+ * `openWaitingAuditFix` (its preview replaces the row's actions).
+ */
+export interface AuditUiState {
+    phase: 'keeping' | 'kept';
+    /** The finding's stamp the state belongs to (another one: the state is dropped). */
+    stamp: string;
+}
+
+const auditStates = new Map<string, AuditUiState>();
+
+/** Where the overview is drawn (its docked column, over the tree, the phone's sheet, its own window). */
+export type AuditMode = 'docked' | 'overlay' | 'sheet' | 'window';
+
+/** The finding row's state of an item (none: idle). */
+export function waitingAuditState(key: string): AuditUiState | null {
+    return auditStates.get(key) ?? null;
+}
+
+/** Set (or clear) the finding row's state of an item. */
+export function setWaitingAuditState(key: string, state: AuditUiState | null): void {
+    if (state) auditStates.set(key, state);
+    else auditStates.delete(key);
+}
+
+/**
+ * The finding to show at an item (null: none — an older research, no
+ * finding, or one just left as it is). A state of a finding the status no
+ * longer carries goes.
+ */
+export function waitingAuditShown(s: { treeId: string } | null, w: LiveWaiting): WaitingAudit | null {
+    const key = s ? itemKey(s, w.id) : null;
+    const st = key ? auditStates.get(key) : undefined;
+    if (st && st.stamp !== w.audit?.stamp) {
+        auditStates.delete(key!);
+        return w.audit ?? null;
+    }
+    if (!w.audit || st?.phase === 'kept') return null;
+    return w.audit;
+}
+
+/** The finding's mark: a small warning triangle (its title and label: what it means; `decorative`: the text beside says it). */
+export function waitingAuditMarkEl(title: string, decorative = false): HTMLElement {
+    const mark = el('span', 'waiting-audit-mark');
+    const svgNs = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNs, 'svg');
+    svg.setAttribute('width', '14');
+    svg.setAttribute('height', '14');
+    svg.setAttribute('viewBox', '0 0 14 14');
+    svg.setAttribute('focusable', 'false');
+    if (decorative) {
+        svg.setAttribute('aria-hidden', 'true');
+    } else {
+        mark.title = title;
+        svg.setAttribute('role', 'img');
+        svg.setAttribute('aria-label', title);
+    }
+    for (const [cls, d] of [['tri', 'M7 1.2 13.2 12.4H.8Z'], ['ink', 'M6.3 5h1.4l-.2 4.1h-1zM7 10.1a.8.8 0 1 1 0 1.6.8.8 0 0 1 0-1.6z']]) {
+        const path = document.createElementNS(svgNs, 'path');
+        path.setAttribute('class', cls);
+        path.setAttribute('d', d);
+        svg.appendChild(path);
+    }
+    mark.appendChild(svg);
+    return mark;
+}
+
+/** The research takes no write now: it ended, or its bridge is lost (the last known items and findings stay). */
+export function auditResearchUnavailable(s: LiveSession): boolean {
+    return s.ended || s.lostSince !== null;
 }
 
 export const waitingTaskMethods = uiModule({
@@ -613,5 +692,149 @@ export const waitingTaskMethods = uiModule({
         if (back && id) {
             document.querySelector<HTMLElement>(`#research-overview .research-overview__waiting-item[data-id="${CSS.escape(id)}"] [data-action="answer"]`)?.focus();
         }
+    },
+
+    /**
+     * The finding row of a task (spec 109 §1, K1.4, K1.6): the heading with
+     * its mark, what it means, and Fix · Discuss with the agent · Leave as is
+     * (the fix's preview, while open, in place of these). Null: no finding to
+     * show (an older research, none, or just left as it is). Fix and Leave
+     * as is go through the bridge (no mark) and wait while the research is
+     * unavailable; Discuss is the task's chat link as ever (AI + terminal),
+     * only where the item offers it and task links open (never on a phone).
+     */
+    waitingAuditEl(s: LiveSession, w: LiveWaiting, mode: AuditMode): HTMLElement | null {
+        const audit = waitingAuditShown(s, w);
+        const task = researchTaskRef(w.id);
+        if (!audit || !task) return null;
+        const A = strings.live.waitingAudit;
+        const hasAgent = !!w.actions?.includes('chat');
+        const box = el('div', 'waiting-audit');
+        box.setAttribute('role', 'group');
+        box.setAttribute('aria-label', A.auditHead);
+        box.dataset.task = task;
+        const head = el('div', 'waiting-audit__head');
+        head.append(waitingAuditMarkEl(A.auditHead, true), el('span', 'waiting-audit__title', A.auditHead));
+        box.appendChild(head);
+        const text = auditExplain(audit.kinds, audit.fix, hasAgent, A);
+        if (text) box.appendChild(el('p', 'waiting-audit__text', text));
+        // The fix's loading, preview or outcome (part of K1.5): in place of the row's actions.
+        const fixArea = this.waitingAuditFixArea(s, w, mode);
+        if (fixArea) {
+            box.appendChild(fixArea);
+            return box;
+        }
+        const unavailable = auditResearchUnavailable(s);
+        const keeping = waitingAuditState(itemKey(s, w.id))?.phase === 'keeping';
+        const actions = el('div', 'waiting-audit__actions');
+        if (audit.fix !== 'none') {
+            const fix = el('button', 'waiting-audit__btn', A.auditFix);
+            fix.type = 'button';
+            fix.dataset.action = 'audit-fix';
+            fix.disabled = unavailable || keeping;
+            if (unavailable) fix.title = A.auditUnavailable;
+            fix.onclick = (e) => {
+                e.stopPropagation();
+                this.openWaitingAuditFix(s, w, mode);
+            };
+            actions.appendChild(fix);
+        }
+        const chatUrl = hasAgent && mode !== 'sheet' && this.researchLinkAvailable('task')
+            ? this.activeResearchLink('task', { task, taskDo: 'chat' }) : null;
+        if (chatUrl) {
+            const chat = setResearchActionLabel(el('button', 'waiting-audit__btn'), strings.live.waitingTask.discuss, researchLinkMark('task', { taskDo: 'chat' }));
+            chat.type = 'button';
+            chat.dataset.action = 'chat';
+            chat.title = A.auditChatTitle;
+            const hint = el('span', 'waiting-audit__hint', A.auditChatTitle);
+            hint.id = `waiting-audit-chat-${task}-${mode}`;
+            chat.setAttribute('aria-describedby', hint.id);
+            chat.onclick = (e) => {
+                e.stopPropagation();
+                this.launchResearchLink(chatUrl);
+            };
+            actions.append(chat, hint);
+        }
+        const keep = el('button', 'waiting-audit__keep', A.auditKeep);
+        keep.type = 'button';
+        keep.dataset.action = 'audit-keep';
+        keep.disabled = unavailable || keeping;
+        keep.onclick = (e) => {
+            e.stopPropagation();
+            void this.keepWaitingAudit(s, w);
+        };
+        actions.appendChild(keep);
+        box.appendChild(actions);
+        if (unavailable) box.appendChild(el('p', 'waiting-audit__msg', A.auditUnavailable));
+        return box;
+    },
+
+    /**
+     * Fix at a finding (spec 109 §2, K1.5): the research's preview of the fix
+     * opens in place of the row's actions (a phone: its sheet). The preview,
+     * the write and its Undo are the next part's; until then nothing opens.
+     */
+    openWaitingAuditFix(_s: LiveSession, _w: LiveWaiting, _mode: AuditMode): void {
+        // The fix's preview (GET <base>/waiting/<T…>/fix) comes with spec 109 §2.
+    },
+
+    /** The fix's loading, preview or outcome at an item, in place of the finding row's actions (null: none open). */
+    waitingAuditFixArea(_s: LiveSession, _w: LiveWaiting, _mode: AuditMode): HTMLElement | null {
+        return null;
+    },
+
+    /**
+     * Leave as is (spec 109 §4, K1.6): written at once, no question (the
+     * finding's stamp as `expect`); the row and its mark go, Discuss goes back
+     * to the item's actions, and a toast offers Undo (8 s). A finding gone or
+     * changed meanwhile: just the new data; the research busy, locked or its
+     * disk full: said, the row stays.
+     */
+    async keepWaitingAudit(s: LiveSession, w: LiveWaiting): Promise<void> {
+        const task = researchTaskRef(w.id);
+        const audit = w.audit;
+        const key = itemKey(s, w.id);
+        if (!task || !audit || auditResearchUnavailable(s) || auditStates.has(key)) return;
+        auditStates.set(key, { phase: 'keeping', stamp: audit.stamp });
+        this.renderLivePanel();
+        const before = await this.waitingHeadBeforeWrite(s);
+        const result = await postWaitingAudit(s.bridge.base, task, 'keep', { expect: audit.stamp });
+        if (result.ok) this.takeWaitingWriteHead(s, before, result);
+        const ok = result.ok || result.code === 'none' || result.code === 'audit-none' || result.code === 'changed';
+        if (result.ok) auditStates.set(key, { phase: 'kept', stamp: audit.stamp });
+        else auditStates.delete(key);
+        this.renderLivePanel();
+        this.researchStatusAfterWrite(s);
+        if (result.ok) {
+            const A = strings.live.waitingAudit;
+            this.showToast(A.auditKept, 8000, {
+                kind: 'waiting-audit-kept',
+                action: { label: strings.live.waitingWrite.undo, run: () => { void this.unkeepWaitingAudit(s, w.id); } },
+            });
+        } else if (!ok) {
+            this.showWaitingAuditRefused(result);
+        }
+    },
+
+    /** Undo of Leave as is: the finding is offered again (the next status brings it back). */
+    async unkeepWaitingAudit(s: LiveSession, id: string): Promise<void> {
+        const task = researchTaskRef(id);
+        if (!task) return;
+        const before = await this.waitingHeadBeforeWrite(s);
+        const result = await postWaitingAudit(s.bridge.base, task, 'unkeep');
+        if (result.ok) this.takeWaitingWriteHead(s, before, result);
+        auditStates.delete(itemKey(s, id));
+        this.renderLivePanel();
+        this.researchStatusAfterWrite(s);
+        if (!result.ok && result.code !== 'none' && result.code !== 'audit-none') this.showWaitingAuditRefused(result);
+    },
+
+    /** A refused write of a finding, said (spec 109 §2.6): the research writing, locked, its disk full, or another refusal. */
+    showWaitingAuditRefused(result: Exclude<WaitingAuditResult, { ok: true }>): void {
+        const A = strings.live.waitingAudit;
+        if (result.code === 'busy') this.showToast(A.auditErr503, 6000, { kind: 'waiting-failed' });
+        else if (result.code === 'locked') this.showToast(A.auditErrLocked, 6000, { kind: 'waiting-failed' });
+        else if (result.code === 'full' || (result.code === 'held' && result.held?.kind === 'disk')) this.showToast(A.auditErrDisk, 6000, { kind: 'waiting-failed' });
+        else this.showWaitingRefused(result);
     },
 });

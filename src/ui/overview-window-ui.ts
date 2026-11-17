@@ -255,6 +255,17 @@ export const overviewWindowMethods = uiModule({
                 if (!s) return false;
                 void this.markWaitingGroupSent(s, a.args.group);
                 return true;
+            case 'waiting-audit': {
+                if (!s) return false;
+                if (a.args.do === 'unkeep') {
+                    void this.unkeepWaitingAudit(s, a.args.itemId);
+                    return true;
+                }
+                const w = item(a.args.itemId);
+                if (!w?.audit) return false;
+                void this.keepWaitingAudit(s, w);
+                return true;
+            }
             case 'waiting-file': {
                 const w = item(a.args.itemId);
                 const task = w ? researchTaskRef(w.id) : null;

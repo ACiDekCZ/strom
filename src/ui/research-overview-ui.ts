@@ -31,7 +31,7 @@ import {
 } from '../research-waiting.js';
 import { WaitingAnswerForm, waitingAnswerChangedNote } from './waiting-answer-form.js';
 import { appendImagesDetail, bindImagesDrop, clearImagesSeen, forgetImagesArrived, imagesShortEl, itemKey, noteImagesArrived } from './waiting-images-ui.js';
-import { clearOverviewImages, foldOverviewImages, overviewImagesResult } from './waiting-task-ui.js';
+import { clearOverviewImages, foldOverviewImages, overviewImagesResult, waitingAuditMarkEl, waitingAuditShown } from './waiting-task-ui.js';
 import { formatLiveClock } from '../live-time.js';
 import { MQ_PHONE_BAR, isPhoneBar } from '../breakpoints.js';
 import { openHeadMenu } from './table-view/table-headmenu.js';
@@ -1892,6 +1892,8 @@ export const researchOverviewMethods = uiModule({
         row.setAttribute('aria-expanded', String(open));
         row.setAttribute('aria-controls', detailId);
         const head = el('span', 'research-overview__waiting-what');
+        // A finding of how the task is recorded (spec 109 §1.2): its mark before the title.
+        if (waitingAuditShown(s, w)) head.appendChild(waitingAuditMarkEl(L.waitingAudit.auditHead));
         if (w.kind === 'story') head.appendChild(el('span', 'live-kind-story', L.kindStory));
         else if (w.kind === 'branch') head.appendChild(el('span', 'live-kind live-kind--decide', L.waitBranchKind));
         else if (w.section || w.kind) head.appendChild(waitingKindLabel(w));
@@ -2030,6 +2032,9 @@ export const researchOverviewMethods = uiModule({
         const bNote = views && !browserNotedInHead.has(key) ? browserNote(s.browser, w, s.waiting, this.overviewBrowserContext(mode)) : null;
         const bNoteEl = bNote ? this.browserNoteEl(bNote, s.researchId) : null;
         if (bNoteEl) detail.appendChild(bNoteEl);
+        // A finding of how the task is recorded (spec 109 §1.2): under what it waits on and its images, above its actions.
+        const audit = this.waitingAuditEl(s, w, mode);
+        if (audit) detail.appendChild(audit);
         const meta = el('div', 'research-overview__waiting-meta');
         const person = personByRefn(w.person);
         if (person) {
@@ -2128,8 +2133,11 @@ export const researchOverviewMethods = uiModule({
             return;
         }
         if (answeringKey === key) closeAnswerForm();
+        // With a finding shown, Discuss with the agent lives in its row (spec 109 §3), not again here.
+        const audited = !!waitingAuditShown(s, w);
         const list: ItemAction[] = [];
         for (const v of views) {
+            if (v.key === 'chat' && audited) continue;
             if (v.key === 'web') {
                 if (w.url) list.push({ key: 'web', label: T.openWeb, href: w.url });
             } else if (v.key === 'images') {
@@ -2394,9 +2402,12 @@ export const researchOverviewMethods = uiModule({
                 host.appendChild(this.waitingWriteButton(W.unsent, 'unsent', () => { void this.markWaitingUnsent(s, w.id); }));
             }
         };
+        // With a finding shown, Discuss with the agent lives in its row (spec 109 §3), not again here.
+        const audited = !!waitingAuditShown(s, w);
         if (offered && task && (links || writes.sent || writes.file)) {
             let answer = false;
             for (const action of offered) {
+                if (action === 'chat' && audited) continue;
                 if (action === 'sent' && writes.sent && waitingSendable(w)) {
                     host.appendChild(this.waitingWriteButton(W.sent, 'sent', () => { void this.markWaitingSent(s, w); }));
                     continue;

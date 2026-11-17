@@ -22,6 +22,7 @@ import { readAgainSaid, waitingProposalsSaid, type ReadSourceProposal, type Read
 import { READ_CHOICES_NOW_FEATURE, READ_CHOOSE_FEATURE } from './read-choices.js';
 import { verifyStatusSaid, type LiveVerifyStatus } from './research-verify.js';
 import { researchPersonRef, researchFamilyRef, personResearchRef, familyResearchRef, confirmationEdits } from './verify.js';
+import { TASKS_AUDIT_FEATURE, sanitizeWaitingAudit, type WaitingAudit } from './research-audit.js';
 import { HISTORY_KINDS, isHistoryKind, parseHistoryKindList, type HistoryKind } from './history.js';
 import { sourcePlaceKey } from './source-location.js';
 
@@ -2368,6 +2369,8 @@ export interface LiveWaiting {
     actions?: WaitingAction[];
     /** The one book the task waits for or works in ("B0002", spec 105); absent: none or several. */
     book?: string;
+    /** What the research found wrong in how the task's waiting is recorded (spec 109; only with `tasks.audit`). */
+    audit?: WaitingAudit;
 }
 
 /** What a place question asks: pick a candidate, a location against another, a change of the written place. */
@@ -3691,7 +3694,7 @@ export function waitingPlaceFields(r: Record<string, unknown>): Partial<LiveWait
  * announces `waiting.groups` (kind, section, group, phase … are read only then).
  * A place question (kind 'place') is read with or without them.
  */
-export function sanitizeWaiting(value: unknown, groups = false, branches = false): LiveWaiting[] {
+export function sanitizeWaiting(value: unknown, groups = false, branches = false, audit = false): LiveWaiting[] {
     if (!Array.isArray(value)) return [];
     const out: LiveWaiting[] = [];
     for (const item of value.slice(0, MAX_WAITING)) {
@@ -3727,9 +3730,17 @@ export function sanitizeWaiting(value: unknown, groups = false, branches = false
             ...(branch ? { kind: 'branch' as const, branch, tasks: asCount(r.tasks) ?? 0, persons: asCount(r.persons ?? r.newPersons) ?? 0 } : {}),
             ...(groups ? waitingGroupFields(r, kind) : {}),
             ...(researchBookRef(r.book) ? { book: researchBookRef(r.book)! } : {}),
+            ...(audit ? waitingAuditField(r) : {}),
         });
     }
     return out;
+}
+
+/** A task's finding (`tasks.audit`, spec 109): only at a task ("T…"), only a well-formed one. */
+function waitingAuditField(r: Record<string, unknown>): Partial<LiveWaiting> {
+    if (!researchTaskRef(r.id)) return {};
+    const audit = sanitizeWaitingAudit(r.audit);
+    return audit ? { audit } : {};
 }
 
 /** A hypothesis item's own fields (V13): the agent's proposal (a version's letter or 'none') and `pick`. Anything else is dropped. */
@@ -4125,7 +4136,8 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         persons: asCount(r.persons),
         families: asCount(r.families),
         working: sanitizeWorking(r.working, !!features?.includes(WORKING_HELPS_FEATURE)),
-        waiting: sanitizeWaiting(r.waiting, !!features?.includes(WAITING_GROUPS_FEATURE), !!features?.includes(OFF_LINE_BRANCHES_FEATURE)),
+        waiting: sanitizeWaiting(r.waiting, !!features?.includes(WAITING_GROUPS_FEATURE), !!features?.includes(OFF_LINE_BRANCHES_FEATURE),
+            !!features?.includes(TASKS_AUDIT_FEATURE)),
         links: sanitizeResearchLinks(r.links),
         queue: sanitizeQueue(r.queue, !!features?.includes(TASKS_OFF_LINE_FEATURE), !!features?.includes(OFF_LINE_BRANCHES_FEATURE), undefined,
             !!features?.includes(OFF_LINE_BRANCHES_FEATURE) || !!features?.includes(QUEUE_NEXT_FEATURE)),

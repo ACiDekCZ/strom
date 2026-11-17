@@ -22,6 +22,7 @@
 
 import { allMedia } from '../media.js';
 import { noteOverviewSectionRows } from './overview-columns-ui.js';
+import { waitingAuditMarkEl, waitingAuditShown } from './waiting-task-ui.js';
 import { keepTableViews } from '../table-views-data.js';
 import { stampResearchTree } from '../person-lists-data.js';
 import { pressOnToast } from '../sheet-toasts.js';
@@ -4344,6 +4345,8 @@ export const researchUiMethods = uiModule({
                 return li;
             }
             const what = text.appendChild(el('span', 'live-waiting-what'));
+            // A finding of how the task is recorded (spec 109 §5.3): only its mark here; the overview shows the finding.
+            if (waitingAuditShown(liveSession(), w)) what.appendChild(waitingAuditMarkEl(strings.live.waitingAudit.auditMarkPanel));
             // A newer research names the kind: a short label before the text.
             if (w.kind === 'branch') what.appendChild(el('span', 'live-kind live-kind--decide', strings.live.waitBranchKind));
             else if (w.section) what.appendChild(waitingKindLabel(w));

@@ -129,7 +129,9 @@ export type WaitingWriteCode =
     | 'none' | 'not-sendable' | 'no-file' | 'locked' | 'app-only' | 'bad-body' | 'busy' | 'failed' | 'too-large' | 'type' | 'full' | 'network' | 'invalid' | 'unknown'
     // Held until something is settled in the research (sealed elsewhere, files not downloaded, its disk full; 017 U7).
     | 'held'
-    | 'changed' | 'no-answer' | 'image-exists' | 'image-unwanted' | 'image-unknown' | 'image-same' | 'pdf' | 'no-images';
+    | 'changed' | 'no-answer' | 'image-exists' | 'image-unwanted' | 'image-unknown' | 'image-same' | 'pdf' | 'no-images'
+    // A task's finding (spec 109): none to fix or keep any more (409 `audit.none`); a task the fix touched changed since (409 `audit.changed`, unfix).
+    | 'audit-none' | 'audit-changed';
 
 export interface WaitingWriteRefused {
     ok: false;
@@ -157,6 +159,8 @@ export interface WaitingWriteRefused {
     /** `image-same`: that image's book ("B0003") and number there. */
     sameRecordset?: string;
     sameImage?: number;
+    /** `audit-changed`: the tasks changed since the fix ("T0004"). */
+    changed?: string[];
 }
 
 export interface WaitingSentDone {
@@ -258,6 +262,8 @@ function refusal(status: number, body: unknown, retryAfter: string | null | unde
                 ...(book ? { sameRecordset: book } : {}), ...(sameImage !== null ? { sameImage } : {}),
             };
         }
+        if (code === 'audit.none') return out('audit-none');
+        if (code === 'audit.changed') return { ...out('audit-changed'), changed: taskList(r.changed) };
         return out(gone ? 'none' : code === 'waiting.not-sendable' ? 'not-sendable' : code === 'waiting.no-file' ? 'no-file'
             : code === 'waiting.no-answer' ? 'no-answer' : code === 'waiting.no-images' ? 'no-images' : 'unknown');
     }
@@ -555,6 +561,57 @@ export function answerWaiting(base: string, task: string, answer: { text: string
     const body = JSON.stringify({ do: 'answer', text, ...(expect ? { expect } : {}) });
     return bridgeRequest(`${base}|POST|waiting/${ref}|answer|${body}`, `${base}/waiting/${encodeURIComponent(ref)}`,
         { method: 'POST', headers: JSON_TEXT, body }, waitingAnswerReply, opts.timeoutMs ?? WAITING_WRITE_TIMEOUT_MS);
+}
+
+/** A write of a task's finding (spec 109, `tasks.audit`). */
+export type WaitingAuditDo = 'fix' | 'unfix' | 'keep' | 'unkeep';
+
+export interface WaitingAuditDone {
+    ok: true;
+    /** The task written ('' = not said). */
+    task: string;
+    /** fix / unfix: the tasks it touched (the task and those split off it). */
+    tasks: string[];
+    /** fix: the tasks it woke (their images were saved already). */
+    woke: string[];
+    /** keep: since when the finding is left as it is (`kept.at`); unkeep: null; fix / unfix: absent. */
+    kept?: { at: string } | null;
+    /** The research's version after the write ('' = not said), and the one it was made on. */
+    head: string;
+    parent?: string;
+}
+
+export type WaitingAuditResult = WaitingAuditDone | WaitingWriteRefused;
+
+/** The bridge's answer to a write of a task's finding, typed. */
+export function waitingAuditReply(status: number, body: unknown, retryAfter?: string | null): WaitingAuditResult {
+    if (status >= 200 && status < 300) {
+        const r = asRecord(body);
+        if (!r) return refusal(0, null, null);
+        const parent = isResearchHead(r.parent);
+        const kept = r.kept === null ? null : asRecord(r.kept);
+        return {
+            ok: true, task: researchTaskRef(r.task) ?? '', tasks: taskList(r.tasks), woke: taskList(r.woke),
+            ...(kept === null ? { kept: null } : kept ? { kept: { at: cleanText(kept.at, 40) } } : {}),
+            head: isResearchHead(r.head) ?? '', ...(parent ? { parent } : {}),
+        };
+    }
+    return refusal(status, body, retryAfter);
+}
+
+/**
+ * A task's finding written (`POST <base>/waiting/<T…>` `{do, expect}`): fixed by
+ * the research, the fix undone, left as it is, or offered again. `expect` (the
+ * finding's `stamp` as read) goes only with `fix` and `keep`: another finding
+ * now is 409 `changed`, nothing written; with `unfix`/`unkeep` it is a bad body.
+ */
+export function postWaitingAudit(base: string, task: string, what: WaitingAuditDo, opts: { expect?: string; timeoutMs?: number } = {}): Promise<WaitingAuditResult> {
+    const ref = researchTaskRef(task);
+    if (!ref || ref !== task || !['fix', 'unfix', 'keep', 'unkeep'].includes(what)) return Promise.resolve(notSent());
+    const expect = (what === 'fix' || what === 'keep') && typeof opts.expect === 'string' && opts.expect ? opts.expect : undefined;
+    const body = JSON.stringify({ do: what, ...(expect ? { expect } : {}) });
+    return bridgeRequest(`${base}|POST|waiting/${ref}|${body}`, `${base}/waiting/${encodeURIComponent(ref)}`,
+        { method: 'POST', headers: JSON_TEXT, body }, waitingAuditReply, opts.timeoutMs ?? WAITING_WRITE_TIMEOUT_MS);
 }
 
 /** A file's type as it goes: the browser's, else by its extension (a TIFF or HEIC often has none). */

@@ -15,6 +15,7 @@ import {
     type OverviewWindowHost, type OverviewWindowPort,
 } from '../ui/overview-window-view.js';
 import { overviewWindowScreen } from '../ui/overview-window-states.js';
+import { waitingAuditShown } from '../ui/waiting-task-ui.js';
 import {
     OVERVIEW_STATE_VERSION, emptyOverviewExtras, type OverviewActionId, type OverviewResearchState, type OverviewSessionData,
 } from '../windows/overview-window.js';
@@ -208,6 +209,27 @@ describe('the overview\'s controls ask the main window', () => {
             { action: 'answer-task', args: { itemId: 'W1' } },
         ]);
         expect(port.focusMain).not.toHaveBeenCalled();
+    });
+
+    it('Leave as is at a finding (spec 109 §4): asked of the main window, the row gone here at once; Undo too', async () => {
+        const { o, sent, port } = overrides();
+        const audit = { kinds: ['images-as-text'], fix: 'whole' as const, stamp: 'T0377@2026-11-12T09:00:00Z' };
+        const w = { id: 'T0377', what: 'x', on: 'user', at: '', audit } as LiveWaiting;
+        const s = { treeId: 'tree-w', ended: false, lostSince: null } as unknown as LiveSession;
+        const renderResearchOverview = vi.fn();
+        await o.keepWaitingAudit.call({ renderResearchOverview }, s, w);
+        expect(waitingAuditShown(s, w)).toBeNull();
+        await o.unkeepWaitingAudit.call({ renderResearchOverview }, s, 'T0377');
+        expect(waitingAuditShown(s, w)).toEqual(audit);
+        expect(sent).toEqual([
+            { action: 'waiting-audit', args: { itemId: 'T0377', do: 'keep' } },
+            { action: 'waiting-audit', args: { itemId: 'T0377', do: 'unkeep' } },
+        ]);
+        expect(renderResearchOverview).toHaveBeenCalledTimes(2);
+        expect(port.focusMain).not.toHaveBeenCalled();
+        // The research unavailable: nothing asked.
+        await o.keepWaitingAudit.call({ renderResearchOverview }, { ...s, lostSince: 1 }, w);
+        expect(sent).toHaveLength(2);
     });
 
     it('an answer waits for the main window\'s outcome (no answer: failed)', async () => {

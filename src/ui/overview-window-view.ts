@@ -28,6 +28,8 @@ import type { UIClass } from './index.js';
 import { el, setOverviewWindowDrawn, type LiveSession, type OverviewViewing } from './research-ui.js';
 import { applyDirectionsWindowState, setQueueDirectionFilter } from './research-directions-ui.js';
 import { setOverviewOwnWindow } from './research-overview-ui.js';
+import { auditResearchUnavailable, setWaitingAuditState } from './waiting-task-ui.js';
+import { itemKey } from './waiting-images-ui.js';
 import { SECTION_PREFS_EVENT, sectionPrefs, watchSectionPrefsStorage } from './live-section-prefs.js';
 import {
     overviewClosedStrip, overviewWindowScreen, renderOverviewWindowState,
@@ -292,6 +294,18 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
         async markWaitingSent(_s: LiveSession, w: LiveWaiting): Promise<void> { run('waiting-sent', { itemId: w.id }); },
         async markWaitingUnsent(_s: LiveSession, id: string): Promise<void> { run('waiting-unsent', { itemId: id }); },
         async markWaitingGroupSent(_s: LiveSession, key: string): Promise<void> { run('waiting-group-sent', { group: key }); },
+        // Leave as is at a finding (spec 109 §4): written by the main window (its toast with Undo); the row goes here at once.
+        async keepWaitingAudit(this: UIClass, s: LiveSession, w: LiveWaiting): Promise<void> {
+            if (!w.audit || auditResearchUnavailable(s)) return;
+            setWaitingAuditState(itemKey(s, w.id), { phase: 'kept', stamp: w.audit.stamp });
+            run('waiting-audit', { itemId: w.id, do: 'keep' });
+            this.renderResearchOverview();
+        },
+        async unkeepWaitingAudit(this: UIClass, s: LiveSession, id: string): Promise<void> {
+            setWaitingAuditState(itemKey(s, id), null);
+            run('waiting-audit', { itemId: id, do: 'unkeep' });
+            this.renderResearchOverview();
+        },
         async sendWaitingFile(s: LiveSession, task: string, file: File): Promise<void> {
             const w = s.waiting.find(x => researchTaskRef(x.id) === task);
             if (w) run('waiting-file', { itemId: w.id, file });

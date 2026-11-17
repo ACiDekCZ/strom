@@ -333,6 +333,8 @@ export type OverviewAction =
     | { action: 'waiting-unsent'; args: { itemId: string } }
     /** Mark a whole place's items sent. */
     | { action: 'waiting-group-sent'; args: { group: string } }
+    /** A task's finding (spec 109 §4): Leave as is, or its Undo (the main window writes it and says it with Undo). */
+    | { action: 'waiting-audit'; args: { itemId: string; do: 'keep' | 'unkeep' } }
     /** A file picked in the window for a task. */
     | { action: 'waiting-file'; args: { itemId: string; file: File } }
     /** Ask the research (its terminal) to decide a hypothesis of "Awaiting action". */
@@ -363,7 +365,7 @@ export const OVERVIEW_ACTION_IDS = [
     'waiting-images', 'line-edit', 'line-new', 'verify-bulk', 'offline-settings', 'books-settings',
     'hover-person', 'verify-stop', 'highlight-end', 'follow-live', 'stop-follow', 'follow-tree', 'follow-view', 'turn-on',
     'line-select', 'line-state', 'line-move', 'line-retry',
-    'waiting-answer', 'waiting-sent', 'waiting-unsent', 'waiting-group-sent', 'waiting-file',
+    'waiting-answer', 'waiting-sent', 'waiting-unsent', 'waiting-group-sent', 'waiting-file', 'waiting-audit',
     'hypothesis-ask', 'hypotheses-accept', 'answer-task', 'research-link',
     'queue-list', 'queue-order',
 ] as const satisfies readonly OverviewActionId[];
@@ -481,6 +483,8 @@ export function readOverviewAction(action: unknown, args: unknown): OverviewActi
             return str(a.itemId) ? { action, args: { itemId: a.itemId } } as OverviewAction : null;
         case 'waiting-group-sent':
             return str(a.group) ? { action, args: { group: a.group } } : null;
+        case 'waiting-audit':
+            return str(a.itemId) && (a.do === 'keep' || a.do === 'unkeep') ? { action, args: { itemId: a.itemId, do: a.do } } : null;
         case 'waiting-file':
             return str(a.itemId) && isFile(a.file) ? { action, args: { itemId: a.itemId, file: a.file } } : null;
         case 'hypothesis-ask': {
