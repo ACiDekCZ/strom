@@ -469,9 +469,10 @@ test.describe('Materials follow the tree\'s attachments', () => {
         await expect(rows(page)).toHaveCount(3);
         await page.evaluate(() => (window.Strom.UI as unknown as { openMaterials(o: unknown): void }).openMaterials({}));
         const win = page.locator('#materials-modal');
-        const treeCount = win.locator('.mw-canvas .mw-group', { has: page.locator('.mw-group-name', { hasText: 'In the tree' }) })
+        // The tree's files stand among the single files (one item per file, no group of their own).
+        const treeCount = win.locator('.mw-canvas .mw-group', { has: page.locator('.mw-group-name', { hasText: 'Single files' }) })
             .locator('.mw-group-count');
-        await expect(treeCount).toHaveText('2');
+        await expect(treeCount).toHaveText('3');
         // From now on the research's list does not change (no answers): only the tree does.
         await page.route(url => url.href.startsWith(`${BRIDGE}/material`), () => { /* never answered */ });
         // Removed elsewhere: both follow.
@@ -481,11 +482,11 @@ test.describe('Materials follow the tree\'s attachments', () => {
             const att = dm.personMedia(id as never).find(a => a.name === 'b.png')!;
             dm.removeAttachment(id as never, att.id);
         }, id);
-        await expect(treeCount).toHaveText('1');
+        await expect(treeCount).toHaveText('2');
         await expect(rows(page)).toHaveCount(2);
         // Undo brings it back into both.
         await page.evaluate(() => (window.Strom.UI as unknown as { performUndo(): void }).performUndo());
-        await expect(treeCount).toHaveText('2');
+        await expect(treeCount).toHaveText('3');
         await expect(rows(page)).toHaveCount(3);
     });
 });

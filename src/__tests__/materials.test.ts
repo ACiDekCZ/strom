@@ -56,6 +56,21 @@ function fakeFetch(answers: [number, unknown, Record<string, string>?][]) {
 beforeEach(() => setLanguage('en'));
 
 describe('parseMaterialList', () => {
+    it('reads where the research links and uses a file (spec 102: material.links, material.uses)', () => {
+        const l = parseMaterialList({ files: [
+            { id: 'I0001', sha: sha(1), name: 'a.jpg', origin: 'app', links: [{ type: 'person', ref: 'P0001' }, { type: 'family', ref: 'F0002', event: 'MARR' }, { ref: 'P1' }, 'x'],
+                uses: { excerpts: 3, sources: ['S0001', 'S0001', 7, 'S0002'], tasks: 2.5 } },
+            { id: 'I0002', sha: sha(2), name: 'b.jpg', origin: 'other', uses: { excerpts: -1 } },
+            { id: 'I0003', sha: sha(3), name: 'c.jpg', uses: 'many' },
+        ] });
+        expect(l.files[0].origin).toBe('app');
+        expect(l.files[0].links).toEqual([{ type: 'person', ref: 'P0001' }, { type: 'family', ref: 'F0002', event: 'MARR' }]);
+        expect(l.files[0].uses).toEqual({ excerpts: 3, sources: ['S0001', 'S0002'], tasks: 2 });
+        expect(l.files[1].origin).toBeUndefined();
+        expect(l.files[1].uses).toEqual({ excerpts: 0, sources: [], tasks: 0 });
+        expect(l.files[2].uses).toBeUndefined();
+    });
+
     it('keeps valid records and drops broken ones', () => {
         const l = parseMaterialList({
             files: [
@@ -199,9 +214,7 @@ describe('labels', () => {
         expect(batchFolderLabel({ batch: { id: 'b', name: 'Box' }, path: 'Letters/a.jpg' })).toBe('Box › Letters');
         expect(batchFolderLabel({ batch: { id: 'b', name: 'Box' }, path: 'a.jpg' })).toBe('Box');
         expect(batchFolderLabel({})).toBe(strings.materials.loose);
-        // A tree attachment without its original in the research: "In the tree", batch or not.
-        expect(batchFolderLabel({ origin: 'tree' })).toBe(strings.materials.inTreeGroup);
-        expect(batchFolderLabel({ origin: 'archive' })).toBe(strings.materials.loose);
+        expect(batchFolderLabel({ origin: 'tree' })).toBe(strings.materials.inTreeTag);
     });
 });
 

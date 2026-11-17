@@ -301,7 +301,7 @@ test.describe('Materials window: selecting', () => {
         await bar.locator('.mw-selwhole').click();
         await expect(bar.locator('.mw-selcount')).toHaveText('6 files selected');
         // The tree's attachment: counted, said to stay, left out of the action.
-        await win(page).locator('.mw-group-toggle', { hasText: 'In the tree' }).click();
+        await win(page).locator('.mw-group-toggle', { hasText: 'Single files' }).click();
         await win(page).locator('.mw-tile', { hasText: 'jen-strom.png' }).click();
         await expect(bar.locator('.mw-selcount')).toHaveText('7 files selected');
         await expect(win(page).locator('.mw-skipped')).toHaveText('1 only in the tree stay unchanged.');
@@ -380,7 +380,7 @@ test.describe('Materials window: the research not running', () => {
         await openWindow(page);
         await expect(win(page)).toHaveAttribute('data-state', 'nocache');
         await expect(win(page).locator('.mw-empty.is-nocache')).toContainText('Materials from the archive load once the research runs.');
-        const tree = groupHead(page, 'Attachments in the tree');
+        const tree = groupHead(page, 'Single files');
         await expect(tree).toBeVisible();
         await expect(tree.locator('.mw-group-count')).toHaveText('2');
         await expect(tiles(page)).toHaveCount(2);

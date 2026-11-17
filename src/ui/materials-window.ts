@@ -17,7 +17,9 @@
  * See src/ui/module.ts for the composition pattern.
  */
 
-import { personMediaIndex } from '../media.js';
+import { treeMedia, mediaPersonIds } from '../media.js';
+import { mediaUsesIndex } from '../media-uses.js';
+import type { PersonId } from '../types.js';
 import { researchActionLabel } from './research-open-mark.js';
 import type { UIClass } from './index.js';
 import { DataManager } from '../data.js';
@@ -33,7 +35,7 @@ import {
 } from '../materials.js';
 import {
     OverviewFilters, OverviewGroupMode, OverviewView, OverviewGroup, OverviewFolder, OverviewLayout, OverviewRow,
-    RowMetrics, KindFilter, KIND_FILTERS, TreeAttachments,
+    RowMetrics, KindFilter, KIND_FILTERS, TreeRecord,
     emptyFilters, activeFilterCount, narrowing, overviewItems, overviewSummary, overviewGroups, overviewRows,
     rowsInView, stickyGroupAt, gridColumns, rangeKeys, personsShort, nameWithoutYears, parseViewPrefs,
     itemWithoutPerson, OverviewSummary, inMaterialFolder, firstFolderLine,
@@ -163,12 +165,20 @@ let generation = 0;
 
 const alive = (gen: number): Win | null => (win && win.gen === gen ? win : null);
 
-/** Every person's attachments with their REFN. */
-function treeAttachments(): TreeAttachments[] {
-    const files = personMediaIndex(DataManager.getData());
-    return DataManager.getAllPersons()
-        .filter(p => (files.get(p.id)?.length ?? 0) > 0)
-        .map(p => ({ refn: researchPersonRef(p.refn), attachments: files.get(p.id) ?? [] }));
+/**
+ * Every file of the tree once, with its people as the overview's person keys
+ * (`byRefn`: their REFN with an archive, people the research does not know
+ * yet left out; else their PersonId) and how many places it is used in.
+ */
+function treeRecords(byRefn: boolean): TreeRecord[] {
+    const data = DataManager.getData();
+    const uses = mediaUsesIndex(data);
+    const key = (id: PersonId): string | null => (byRefn ? researchPersonRef(DataManager.getPerson(id)?.refn) : id);
+    return treeMedia(data).map(att => ({
+        att,
+        persons: mediaPersonIds(att).map(key).filter((k): k is string => !!k),
+        uses: uses.get(att.id)?.length ?? 0,
+    }));
 }
 
 /** REFN → name: the tree's person first, else what the research calls them. */
@@ -469,7 +479,7 @@ export const materialsWindowMethods = uiModule({
         if (opts.items || list !== w.list) {
             w.list = list;
             w.drawnAttachments = treeAttachmentsKey();
-            w.items = overviewItems(list, treeAttachments());
+            w.items = overviewItems(list, treeRecords(true));
             w.names = namesOf(list);
             const keys = new Set(w.items.map(i => i.key));
             for (const k of [...w.selected]) if (!keys.has(k)) w.selected.delete(k);
@@ -694,8 +704,12 @@ export const materialsWindowMethods = uiModule({
         switch (group.kind) {
             case 'batch': return group.batch?.name ?? '';
             case 'loose': return m.loose;
-            case 'tree': return cachedMaterials(win?.treeId) ? m.inTreeGroup : m.inTreeAttachments;
             case 'earlier': return m.earlier;
+            case 'person': {
+                const key = group.persons?.[0] ?? '';
+                return win?.names.get(key) ?? key;
+            }
+            case 'noperson': return m.noPerson;
             case 'day': {
                 const d = new Date(`${group.day}T12:00:00`);
                 return Number.isNaN(d.getTime()) ? group.day ?? '' : d.toLocaleDateString(getCurrentLanguage(), { day: 'numeric', month: 'numeric', year: 'numeric' });

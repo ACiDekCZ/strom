@@ -1,7 +1,9 @@
 /**
- * The materials overview (spec 017 §3): every file of the research and every
- * attachment of the tree as one list, filtered, grouped (by batch with its
- * folders, or by the day received) and laid out as rows of a virtual list.
+ * The materials overview (spec 017 §3, spec 102 §1): every file of the
+ * research and every file of the tree as one list (one item per file),
+ * filtered, grouped (by batch with its folders or by the day received; a
+ * tree without an archive by the day added or by person) and laid out as
+ * rows of a virtual list.
  *
  * UI-free and pure: the window (src/ui/materials-window.ts) keeps the state,
  * this module computes what to draw from it.
@@ -13,7 +15,10 @@ import {
     materialFileItem, attachmentItem, materialFolder, foldText,
 } from './materials.js';
 
-export type OverviewGroupMode = 'batch' | 'date';
+/** With an archive: by batch or the day received; without one (the tree's own files): by the day added or by person. */
+export type OverviewGroupMode = 'batch' | 'date' | 'added' | 'person';
+export type ArchiveGroupMode = 'batch' | 'date';
+export type AppGroupMode = 'added' | 'person';
 export type OverviewView = 'grid' | 'list';
 export type KindFilter = MaterialKind | 'none';
 export const KIND_FILTERS: KindFilter[] = ['photo', 'document', 'record', 'other', 'none'];
@@ -22,7 +27,7 @@ export const KIND_FILTERS: KindFilter[] = ['photo', 'document', 'record', 'other
 export const EARLIER_DAYS = 60;
 
 export interface OverviewFilters {
-    /** A person's REFN: their files (directly, from sorting or through the batch). */
+    /** A person's key (REFN with an archive, PersonId without): their files (directly, from sorting or through the batch). */
     person: string | null;
     kinds: KindFilter[];
     batch: string | null;
@@ -47,32 +52,45 @@ export function narrowing(f: OverviewFilters): boolean {
 
 // ==================== ITEMS ====================
 
-/** A person of the tree with their attachments (REFN: null when the research does not know them yet). */
-export interface TreeAttachments {
-    refn: string | null;
-    attachments: readonly Attachment[];
+/** A file of the tree (one record of StromData.media, in the tree). */
+export interface TreeRecord {
+    att: Attachment;
+    /** Its people as the overview's person keys (REFN with an archive, PersonId without), in the order of its places. */
+    persons: readonly string[];
+    /** How many places it is used in (src/media-uses.ts). */
+    uses: number;
 }
 
 /**
- * Every item: the research's files (joined with the tree's attachment of the
- * same original: `both`) and the tree's attachments without an original
- * there (`tree`). Hidden files are included (the filters decide).
+ * Every item, one per file: the research's files (joined with the tree's
+ * file of the same original: `both`) and the tree's files without an
+ * original there (`tree`, their time the one they were added). Hidden files
+ * are included (the filters decide).
  */
-export function overviewItems(list: MaterialList | null, tree: readonly TreeAttachments[]): MaterialItem[] {
+export function overviewItems(list: MaterialList | null, tree: readonly TreeRecord[]): MaterialItem[] {
     const files = list?.files ?? [];
     const bySha = new Map<string, MaterialFile>();
     for (const f of files) if (!bySha.has(f.sha)) bySha.set(f.sha, f);
-    const joined = new Map<string, Attachment>();
+    const joined = new Map<string, TreeRecord>();
     const treeOnly: MaterialItem[] = [];
-    for (const person of tree) {
-        for (const att of person.attachments) {
-            const file = att.original?.sha256 ? bySha.get(att.original.sha256.toLowerCase()) : undefined;
-            if (file && !joined.has(file.id)) joined.set(file.id, att);
-            else treeOnly.push(attachmentItem(att, person.refn));
+    for (const rec of tree) {
+        const file = rec.att.original?.sha256 ? bySha.get(rec.att.original.sha256.toLowerCase()) : undefined;
+        if (file && !joined.has(file.id)) {
+            joined.set(file.id, rec);
+            continue;
         }
+        const item = attachmentItem(rec.att, rec.persons);
+        item.uses = rec.uses;
+        if (rec.att.addedAt) item.at = rec.att.addedAt;
+        treeOnly.push(item);
     }
     const batches = new Map((list?.batches ?? []).map(b => [b.id, b]));
-    const items = files.map(f => materialFileItem(f, list ?? { batches: [] }, joined.get(f.id), batches));
+    const items = files.map(f => {
+        const rec = joined.get(f.id);
+        const item = materialFileItem(f, list ?? { batches: [] }, rec?.att, batches);
+        if (rec) item.uses = rec.uses;
+        return item;
+    });
     return [...items, ...treeOnly];
 }
 
@@ -178,10 +196,10 @@ function folderChain(label: string): string[] {
     return parts.map((_, i) => parts.slice(0, i + 1).join(' / '));
 }
 
-export type OverviewGroupKind = 'batch' | 'loose' | 'tree' | 'day' | 'earlier';
+export type OverviewGroupKind = 'batch' | 'loose' | 'day' | 'earlier' | 'person' | 'noperson';
 
 export interface OverviewGroup {
-    /** `b:<id>`, `loose`, `tree`, `d:<YYYY-MM-DD>`, `earlier` */
+    /** `b:<id>`, `loose`, `d:<YYYY-MM-DD>`, `earlier`, `p:<person key>`, `noperson` */
     key: string;
     kind: OverviewGroupKind;
     batch?: MaterialBatch;
@@ -202,6 +220,8 @@ export interface OverviewGroup {
     looseCount?: number;
     /** Single files: where they came from (`from` of the files). */
     froms?: string[];
+    /** By day: the people of its files (keys, each once, in order); by person: the group's person. */
+    persons?: string[];
 }
 
 export interface OverviewInput {
@@ -212,6 +232,8 @@ export interface OverviewInput {
     /** The batch's files are known (the whole list, or its `?batch=` answer). */
     batchLoaded: (id: string) => boolean;
     now?: number;
+    /** A person key's name (by person: the groups' order). */
+    personName?: (key: string) => string | null;
 }
 
 const collator = typeof Intl !== 'undefined' ? new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' }) : null;
@@ -332,15 +354,14 @@ export function overviewGroups(input: OverviewInput): OverviewGroup[] {
     const shown = (i: MaterialItem) => !i.hidden || filters.showHidden;
     const pass = (i: MaterialItem) => passesFilters(i, filters, words);
 
-    if (mode === 'date') return dateGroups(items, filters, input.now ?? Date.now(), pass, shown, narrow);
+    if (mode === 'date' || mode === 'added') return dateGroups(items, filters, input.now ?? Date.now(), pass, shown, narrow);
+    if (mode === 'person') return personGroups(items, input.personName ?? (() => null), pass, shown);
 
     const groups: OverviewGroup[] = [];
     const perBatch = new Map<string, MaterialItem[]>();
     const loose: MaterialItem[] = [];
-    const tree: MaterialItem[] = [];
     for (const item of items) {
-        if (item.origin === 'tree') tree.push(item);
-        else if (item.batch) {
+        if (item.batch) {
             const rows = perBatch.get(item.batch.id);
             if (rows) rows.push(item); else perBatch.set(item.batch.id, [item]);
         } else loose.push(item);
@@ -389,16 +410,50 @@ export function overviewGroups(input: OverviewInput): OverviewGroup[] {
             g.froms = froms;
             groups.push(g);
         }
-        const treeShown = tree.filter(shown);
-        const treeMatching = treeShown.filter(pass);
-        if (treeMatching.length) {
-            const g = emptyGroup('tree', 'tree');
-            g.items = treeMatching;
-            g.root = treeMatching;
-            g.total = treeShown.length;
-            groups.push(g);
+    }
+    return groups;
+}
+
+/** People of items, each once, in order. */
+function personsOf(items: readonly MaterialItem[]): string[] {
+    const out: string[] = [];
+    for (const i of items) for (const p of i.persons) if (!out.includes(p)) out.push(p);
+    return out;
+}
+
+/**
+ * By person (a tree without an archive): a group per person by name, a file
+ * under each of its people (newest first); files without a person last.
+ */
+function personGroups(
+    items: readonly MaterialItem[], name: (key: string) => string | null,
+    pass: (i: MaterialItem) => boolean, shown: (i: MaterialItem) => boolean,
+): OverviewGroup[] {
+    const per = new Map<string, MaterialItem[]>();
+    const none: MaterialItem[] = [];
+    for (const item of items) {
+        if (!shown(item)) continue;
+        if (item.persons.length === 0) { none.push(item); continue; }
+        for (const p of item.persons) {
+            const rows = per.get(p);
+            if (rows) rows.push(item); else per.set(p, [item]);
         }
     }
+    const groups: OverviewGroup[] = [];
+    const make = (key: string, kind: OverviewGroupKind, all: MaterialItem[], person?: string): void => {
+        const sorted = byNewest(all, i => i.at);
+        const matching = sorted.filter(pass);
+        if (matching.length === 0) return;
+        const g = emptyGroup(key, kind);
+        g.items = matching;
+        g.root = matching;
+        g.total = sorted.length;
+        if (person) g.persons = [person];
+        groups.push(g);
+    };
+    const keys = [...per.keys()].sort((a, b) => compareText(name(a) ?? a, name(b) ?? b));
+    for (const key of keys) make(`p:${key}`, 'person', per.get(key)!, key);
+    make('noperson', 'noperson', none);
     return groups;
 }
 
@@ -409,11 +464,9 @@ function dateGroups(
     const cutoff = now - EARLIER_DAYS * 86_400_000;
     const days = new Map<string, MaterialItem[]>();
     const earlier: MaterialItem[] = [];
-    const tree: MaterialItem[] = [];
     for (const item of items) {
         if (!shown(item)) continue;
         if (filters.batch && item.batch?.id !== filters.batch) continue;
-        if (item.origin === 'tree') { tree.push(item); continue; }
         const t = time(item.at);
         const day = localDay(item.at);
         if (!day || t < cutoff) { earlier.push(item); continue; }
@@ -430,20 +483,18 @@ function dateGroups(
         g.items = matching;
         g.root = matching;
         g.total = sorted.length;
-        if (kind !== 'tree') {
-            const names: string[] = [];
-            let single = 0;
-            for (const i of sorted) {
-                if (i.batch) { if (!names.includes(i.batch.name)) names.push(i.batch.name); } else single++;
-            }
-            g.batchNames = names;
-            g.looseCount = single;
+        const names: string[] = [];
+        let single = 0;
+        for (const i of sorted) {
+            if (i.batch) { if (!names.includes(i.batch.name)) names.push(i.batch.name); } else single++;
         }
+        g.batchNames = names;
+        g.looseCount = single;
+        g.persons = personsOf(sorted);
         groups.push(g);
     };
     for (const day of [...days.keys()].sort().reverse()) make(`d:${day}`, 'day', days.get(day)!, day);
     make('earlier', 'earlier', earlier);
-    if (!filters.batch) make('tree', 'tree', tree);
     return groups;
 }
 
@@ -588,16 +639,20 @@ export function personsShort(persons: readonly string[], name: (refn: string) =>
 }
 
 export interface ViewPrefs {
-    group: OverviewGroupMode;
+    /** With an archive. */
+    group: ArchiveGroupMode;
+    /** Without one (the tree's own files). */
+    appGroup: AppGroupMode;
     view: OverviewView;
 }
 
-/** The remembered grouping and view (`localStorage['strom.materials.view']`). */
+/** The remembered groupings and view (`localStorage['strom.materials.view']`). */
 export function parseViewPrefs(raw: string | null | undefined): ViewPrefs {
-    const prefs: ViewPrefs = { group: 'batch', view: 'grid' };
+    const prefs: ViewPrefs = { group: 'batch', appGroup: 'added', view: 'grid' };
     try {
         const parsed = raw ? JSON.parse(raw) as Record<string, unknown> : null;
         if (parsed?.group === 'date') prefs.group = 'date';
+        if (parsed?.appGroup === 'person') prefs.appGroup = 'person';
         if (parsed?.view === 'list') prefs.view = 'list';
     } catch { /* not ours: the defaults */ }
     return prefs;

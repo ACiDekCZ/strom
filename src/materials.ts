@@ -86,6 +86,25 @@ export interface MaterialFile {
     /** The document's own date as written (GEDCOM-like text), not when it came. */
     date?: string;
     hidden?: MaterialHidden;
+    /** 'app': a file of the tree (now or once), material.links. */
+    origin?: 'app';
+    /** Where the research has it linked (material.links): a person, family or source, maybe one of its events. */
+    links?: MaterialLink[];
+    /** Where the research uses it (material.uses; on every file with the gate). */
+    uses?: MaterialUses;
+}
+
+export interface MaterialLink {
+    type: string;
+    ref: string;
+    event?: string;
+}
+
+/** The research's uses of a file: excerpts cut from it, its sources, the open tasks holding it. */
+export interface MaterialUses {
+    excerpts: number;
+    sources: string[];
+    tasks: number;
 }
 
 export interface MaterialBatch {
@@ -133,7 +152,7 @@ export interface MaterialItem {
     date?: string;
     mime?: string;
     bytes?: number;
-    /** When it came (file.at; attachments carry no time). */
+    /** When it came (file.at; a file of the tree: when it was added, in the overview). */
     at?: string;
     batch?: { id: string; name: string };
     path?: string;
@@ -147,6 +166,8 @@ export interface MaterialItem {
     /** The file is on the research's computer (attachments: always). */
     here: boolean;
     state?: MaterialFile['state'];
+    /** How many places of the tree it is used in (the overview; src/media-uses.ts). */
+    uses?: number;
 }
 
 // ==================== READING THE BRIDGE'S ANSWER ====================
@@ -245,7 +266,32 @@ export function parseMaterialFile(raw: unknown): MaterialFile | null {
     if (date) file.date = date;
     const hidden = hiddenOf(r.hidden);
     if (hidden) file.hidden = hidden;
+    if (r.origin === 'app') file.origin = 'app';
+    if (Array.isArray(r.links)) {
+        const links = r.links.slice(0, 500).flatMap((l): MaterialLink[] => {
+            if (!l || typeof l !== 'object') return [];
+            const o = l as Record<string, unknown>;
+            const type = text(o.type, 40);
+            const ref = text(o.ref, 40);
+            if (!type || !ref) return [];
+            const event = text(o.event, 80);
+            return [{ type, ref, ...(event ? { event } : {}) }];
+        });
+        if (links.length) file.links = links;
+    }
+    const uses = usesOf(r.uses);
+    if (uses) file.uses = uses;
     return file;
+}
+
+const count = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.floor(v) : 0);
+
+function usesOf(v: unknown): MaterialUses | undefined {
+    if (!v || typeof v !== 'object') return undefined;
+    const u = v as Record<string, unknown>;
+    const sources = Array.isArray(u.sources)
+        ? [...new Set(u.sources.slice(0, 500).map(x => text(x, 40)).filter((x): x is string => !!x))] : [];
+    return { excerpts: count(u.excerpts), sources, tasks: count(u.tasks) };
 }
 
 export function parseMaterialBatch(raw: unknown): MaterialBatch | null {
@@ -365,10 +411,10 @@ export function materialFolder(path: string | undefined): string {
     return parts.join(' / ');
 }
 
-/** "batch › folder"; a file outside a batch: "Single files". */
+/** "batch › folder"; a file outside a batch (also the tree's own file): "Single files". */
 export function batchFolderLabel(item: Pick<MaterialItem, 'batch' | 'path'> & { origin?: MaterialItem['origin'] }): string {
-    // An attachment without its original in the research: "In the tree" (where it came from is not told apart).
-    if (item.origin === 'tree') return strings.materials.inTreeGroup;
+    // A file of the tree without its original in the research: "In the tree" (where it came from is not told apart).
+    if (item.origin === 'tree') return strings.materials.inTreeTag;
     if (!item.batch) return strings.materials.loose;
     const folder = materialFolder(item.path);
     return folder ? `${item.batch.name} › ${folder}` : item.batch.name;
@@ -447,8 +493,8 @@ export function materialFileItem(
     return item;
 }
 
-/** A tree attachment without its original in the research. */
-export function attachmentItem(att: Attachment, refn: string | null): MaterialItem {
+/** A file of the tree without its original in the research (`persons`: its people's keys, or one REFN). */
+export function attachmentItem(att: Attachment, persons: string | null | readonly string[]): MaterialItem {
     const item: MaterialItem = {
         key: `a:${att.id}`,
         origin: 'tree',
@@ -458,7 +504,7 @@ export function attachmentItem(att: Attachment, refn: string | null): MaterialIt
         titled: !!att.title?.trim(),
         mime: att.original?.mimeType ?? att.mimeType,
         bytes: att.original?.bytes ?? att.sizeBytes,
-        persons: refn ? [refn] : [],
+        persons: typeof persons === 'string' ? [persons] : persons ? [...persons] : [],
         viaBatch: [],
         here: true,
     };
