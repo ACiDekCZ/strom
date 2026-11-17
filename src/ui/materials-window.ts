@@ -1242,7 +1242,7 @@ export const materialsWindowMethods = uiModule({
         bar.setAttribute('aria-label', n ? m.selected(n) : m.nothingSelected);
         redraw(bar, `
             <span class="mw-selcount">${esc(n ? m.selected(n) : m.nothingSelected)}</span>
-            <span class="mw-selacts">
+            <span class="mw-selacts" lang="${getCurrentLanguage()}">
                 ${shown.map(a => `<button type="button" class="${a.id === 'sel-attach' ? 'primary' : 'secondary'} mw-selbtn" data-mw="${a.id}"${off(a.why)}>${a.html ?? esc(a.label)}</button>`).join('')}
                 ${more.length ? `<button type="button" class="secondary mw-selbtn mw-selmore" data-mw="sel-more" aria-haspopup="menu" aria-label="${esc(m.selMore)}" title="${esc(m.selMore)}">⋯</button>` : ''}
             </span>

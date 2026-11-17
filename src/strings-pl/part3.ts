@@ -190,7 +190,7 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
         type: { image: 'Obraz', pdf: 'PDF', audio: 'Dźwięk', file: 'Plik' } as Record<string, string>,
         agentDone: 'przetworzone',
         agentWaiting: 'czeka na przetworzenie',
-        summary: (f: number, b: number, p: number) => `${numPl(f)} ${plPl(f, 'plik', 'pliki', 'plików')} · ${nPl(b, 'partia', 'partie', 'partii')} · ${numPl(p)} bez osoby`,
+        summary: (f: number, b: number, p: number) => `${numPl(f)} ${plPl(f, 'plik', 'pliki', 'plików')}${b ? ` · ${nPl(b, 'partia', 'partie', 'partii')}` : ''} · ${numPl(p)} bez osoby`,
         summaryApp: (f: number, p: number) => `${numPl(f)} ${plPl(f, 'plik', 'pliki', 'plików')} · ${numPl(p)} bez osoby`,
         summaryHidden: (n: number) => `· ${nPl(n, 'ukryty', 'ukryte', 'ukrytych')}`,
         summaryNoPerson: (n: number, t: number) => `${numPl(n)} ${plPl(n, 'plik', 'pliki', 'plików')} bez osoby z ${numPl(t)}`,

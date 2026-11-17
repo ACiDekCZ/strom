@@ -110,6 +110,21 @@ test.describe('Materials on a phone', () => {
         await dialog(page).getByRole('button', { name: 'Cancel' }).click();
     });
 
+    test('in German the bar\'s long labels take two lines instead of an ellipsis, also on a 360 px phone', async ({ page }) => {
+        await tree(page);
+        await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
+        await openWindow(page);
+        await longPress(page, tiles(page).first());
+        const acts = bar(page).locator('.mw-selacts > button');
+        await expect(acts).toHaveText(['Verknüpfen mit…', 'Titel…', 'Durchgehen', '⋯']);
+        for (const width of [PHONE.width, 360]) {
+            await page.setViewportSize({ width, height: PHONE.height });
+            const cut = await acts.evaluateAll(els => els.filter(b => b.scrollWidth > b.clientWidth || b.scrollHeight > b.clientHeight).map(b => b.textContent));
+            expect(cut, `${width} px`).toEqual([]);
+            for (const b of await acts.all()) expect((await b.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        }
+    });
+
     test('the person\'s attachment row: a long file name wraps inside the row, the buttons go under it, the trash is 44 px', async ({ page }) => {
         await tree(page);
         await page.evaluate((px) => {
@@ -233,5 +248,20 @@ test.describe('Materials on a tablet and sideways', () => {
         await expect(win(page).locator('.mw-tile-title').first()).toBeHidden();
         await win(page).locator('[data-mw="view-list"]').click();
         await expect(win(page).locator('.mw-lhead')).toBeHidden();
+    });
+
+    test('sideways in German: the bar\'s count, actions and Clear selection fit on one row without an ellipsis', async ({ page }) => {
+        await page.setViewportSize(SIDEWAYS);
+        await tree(page);
+        await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
+        await openWindow(page);
+        await win(page).locator('[data-mw="select"]').click();
+        await tiles(page).first().click();
+        await tiles(page).nth(1).click();
+        const parts = bar(page).locator('.mw-selcount, .mw-selacts > button, .mw-selclear');
+        await expect(bar(page).locator('.mw-selclear')).toBeVisible();
+        const cut = await parts.evaluateAll(els => els.filter(b => b.scrollWidth > b.clientWidth).map(b => b.textContent));
+        expect(cut).toEqual([]);
+        expect((await bar(page).boundingBox())!.height).toBeLessThanOrEqual(49);
     });
 });

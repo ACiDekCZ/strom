@@ -5,7 +5,8 @@
  * labels, the remembered view, and the shared preview queue. Invented data.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
+import { strings, setLanguage } from '../strings.js';
 import { Attachment } from '../types.js';
 import { MaterialFile, MaterialList, MaterialResult, ThumbSize, researchMakesThumb } from '../materials.js';
 import {
@@ -576,5 +577,22 @@ describe('review filters, counts and the list sort (spec 102 §8)', () => {
         expect(order({ col: 'source', dir: 1 })).toEqual(['a:d', 'a:b', 'a:a', 'a:c']);
         expect(order({ col: 'source', dir: -1 })).toEqual(['a:b', 'a:d', 'a:a', 'a:c']);
         expect(order(null)).toEqual(flat);
+    });
+});
+
+describe('The archive window header without batches', () => {
+    afterEach(() => setLanguage('en'));
+    it('leaves out the batch count when there are none, in every language', () => {
+        const cases: [Parameters<typeof setLanguage>[0], string, string][] = [
+            ['en', '3 files · 1 without a person', '3 files · 2 batches · 1 without a person'],
+            ['cs', '3 soubory · 1 bez osoby', '3 soubory · 2 dávky · 1 bez osoby'],
+            ['de', '3 Dateien · 1 ohne Person', '3 Dateien · 2 Stapel · 1 ohne Person'],
+            ['pl', '3 pliki · 1 bez osoby', '3 pliki · 2 partie · 1 bez osoby'],
+        ];
+        for (const [lang, none, two] of cases) {
+            setLanguage(lang);
+            expect(strings.materials.summary(3, 0, 1)).toBe(none);
+            expect(strings.materials.summary(3, 2, 1)).toBe(two);
+        }
     });
 });

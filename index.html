@@ -29245,7 +29245,8 @@
             .mw-selacts { order: 3; flex-basis: 100%; display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 8px; }
             /* A phone's gap is 6px: 1px fill + 2px line. */
             .mw-tile.is-selected { box-shadow: 0 0 0 1px var(--sel-fill), 0 0 0 3px var(--text); }
-            .materials-window .mw-selbtn { padding: 7px 8px; overflow: hidden; text-overflow: ellipsis; }
+            /* A long label (de "Verknüpfen mit…") takes two lines instead of an ellipsis; one long word is hyphenated. */
+            .materials-window .mw-selbtn { padding: 4px 6px; overflow: hidden; white-space: normal; line-height: 1.15; font-size: 13px; hyphens: auto; overflow-wrap: break-word; }
             .materials-window .mw-selmore { min-width: 44px; }
             .materials-window .mw-selbtn { min-height: 44px; }
             .mw-pop-sheet {
@@ -29268,6 +29269,7 @@
             .mw-empty.is-none { padding: 16px 0; gap: 6px; }
             .mw-empty-file { width: 48px; height: 58px; }
             .mw-selbar { height: 48px; flex-wrap: nowrap; padding: 0 16px; padding-bottom: env(safe-area-inset-bottom); }
+            .mw-selbar { gap: 8px; } .materials-window .mw-selbtn { padding: 7px 10px; }
             .mw-pop-sheet { max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); }
         }
         @media (hover: hover) {
