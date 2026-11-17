@@ -27070,6 +27070,11 @@
             .source-offer.is-all .source-offer-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
             .source-offer:not(.is-all) .source-offer-search { display: none; }
         }
+        /* The phone's whole offer as a sheet from the bottom (11g): the dialog scrolls, the block has no frame of its own. */
+        .source-offer.source-offer-sheet { margin: 0; padding: 0; border: none; background: none; }
+        .source-offer-sheet.is-many .source-offer-body { max-height: none; }
+        .source-offer-sheet .source-offer-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        @media (min-width: 641px) { .source-offer-sheet .source-offer-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .source-offer-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
             .source-offer.is-many .source-offer-body { max-height: 260px; }

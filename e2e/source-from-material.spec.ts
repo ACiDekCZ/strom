@@ -256,18 +256,46 @@ test.describe('The source viewer: Taken from', () => {
 test.describe('On a phone', () => {
     test.use({ viewport: PHONE });
 
-    test('the offer is one row of tiles; All (N) shows the whole grid', async ({ page }) => {
+    test('the offer is one row of tiles; All (N) opens the whole grid as a sheet from the bottom', async ({ page }) => {
         await tree(page);
         for (let i = 1; i <= 5; i++) await addFile(page, 'p3', `strana-${i}.png`);
         await newSourceAt(page, 'p3');
         const all = offer(page).getByRole('button', { name: 'All (5) ›' });
         await expect(all).toBeVisible();
-        const tops = () => offer(page).locator('.source-offer-tile').evaluateAll(els => new Set(els.map(e => Math.round(e.getBoundingClientRect().top))).size);
-        expect(await tops()).toBe(1);
+        const tops = (root: ReturnType<typeof offer>) => root.locator('.source-offer-tile')
+            .evaluateAll(els => new Set(els.map(e => Math.round(e.getBoundingClientRect().top))).size);
+        expect(await tops(offer(page))).toBe(1);
         await all.click();
-        await expect(offer(page)).toHaveClass(/is-all/);
-        expect(await tops()).toBeGreaterThan(1);
+
+        // A sheet of its own over the editor, not the editor's block opened up.
+        const sheet = page.locator('.mdlg--offer-all');
+        await expect(sheet).toBeVisible();
+        await expect(sheet.locator('.mdlg-title')).toHaveText('Evidence from the person’s materials');
+        await expect(offer(page)).not.toHaveClass(/is-all/);
+        expect(await tops(offer(page))).toBe(1);
+        expect(await tops(sheet)).toBeGreaterThan(1);
+        const box = await sheet.boundingBox();
+        expect(Math.round(box!.y + box!.height)).toBe(844);
+        expect(Math.round(box!.width)).toBe(390);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+        // A tile chosen in the sheet is chosen in the editor too, the focus stays on it.
+        const tile = sheet.locator('.source-offer-tile', { hasText: 'strana-3.png' });
+        await tile.click();
+        await expect(tile).toHaveAttribute('aria-pressed', 'true');
+        await expect(tile).toBeFocused();
+        await expect(offerTile(page, 'strana-3.png')).toHaveAttribute('aria-pressed', 'true');
+
+        // Esc closes only the sheet; Done does the same, back to All (N).
+        await page.keyboard.press('Escape');
+        await expect(sheet).toHaveCount(0);
+        await expect(editor(page)).toBeVisible();
+        await expect(all).toBeFocused();
+        await all.click();
+        await page.locator('.mdlg--offer-all').getByRole('button', { name: 'Done' }).click();
+        await expect(page.locator('.mdlg--offer-all')).toHaveCount(0);
+        await expect(editor(page)).toBeVisible();
+        await expect(offerTile(page, 'strana-3.png')).toHaveAttribute('aria-pressed', 'true');
     });
 });
 

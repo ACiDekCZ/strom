@@ -34,6 +34,7 @@ import { materialItemSha, materialTileLetters } from './materials-ui.js';
 import { attachmentPdf, openPdfBlob } from './material-viewer-ui.js';
 import { closeImageViewer } from './image-viewer.js';
 import { uiModule } from './module.js';
+import { MaterialDialog, button, materialDialog } from './material-actions-ui.js';
 
 /** A file staged as the source's evidence in the editor. */
 interface DocDraft {
@@ -72,7 +73,8 @@ let fromFile = false;
 let offerShown = false;
 let offerNext = false;
 let offerQuery = '';
-let offerAll = false;
+/** The phone's whole offer as a sheet from the bottom (11g), over the editor. */
+let offerSheet: MaterialDialog | null = null;
 let pendingN = 0;
 /** Items of the offer being fetched (their working copy). */
 const fetching = new Set<string>();
@@ -265,7 +267,7 @@ export const sourceDocsMethods = uiModule({
     /** The editor's evidence for a source being filled in (fillSourceEditor). */
     resetSourceDocs(src: Partial<Source>): void {
         offerQuery = '';
-        offerAll = false;
+        offerSheet?.close();
         fetching.clear();
         if (seed) {
             docs = seed.docs;
@@ -457,6 +459,7 @@ export const sourceDocsMethods = uiModule({
         if (!items.length) {
             box.hidden = true;
             box.innerHTML = '';
+            offerSheet?.close();
             return;
         }
         const s = strings.sources;
@@ -485,45 +488,75 @@ export const sourceDocsMethods = uiModule({
         const many = items.length > OFFER_SEARCH_OVER;
         box.hidden = false;
         box.classList.toggle('is-many', many);
-        box.classList.toggle('is-all', offerAll);
+        const searchHtml = `<input type="search" class="source-offer-search" value="${esc(offerQuery)}" placeholder="${esc(s.offerSearch)}" aria-label="${esc(s.offerSearch)}">`;
+        const bodyHtml = `<div class="source-offer-body" role="group" aria-label="${esc(s.offerTitle)}">${group(s.offerNoSource(free.length), free)}${group(s.offerOther(other.length), other)}</div>`;
         box.innerHTML = `
             <div class="source-offer-head"><span class="source-offer-title-main">${esc(s.offerTitle)}</span>
                 <span class="source-offer-sub">${esc(s.offerSub(names, items.length))}</span>
-                <button type="button" class="link-button source-offer-all" data-offer-act="all" aria-expanded="${offerAll}">${esc(s.offerAll(items.length))}</button></div>
-            ${many ? `<input type="search" class="source-offer-search" value="${esc(offerQuery)}" placeholder="${esc(s.offerSearch)}" aria-label="${esc(s.offerSearch)}">` : ''}
-            <div class="source-offer-body" role="group" aria-label="${esc(s.offerTitle)}">${group(s.offerNoSource(free.length), free)}${group(s.offerOther(other.length), other)}</div>
+                <button type="button" class="link-button source-offer-all" data-offer-act="all" aria-haspopup="dialog">${esc(s.offerAll(items.length))}</button></div>
+            ${many ? searchHtml : ''}
+            ${bodyHtml}
             <div class="source-offer-foot"><button type="button" class="link-button" data-offer-act="file">${esc(s.otherFile)}</button></div>`;
-        const search = box.querySelector<HTMLInputElement>('.source-offer-search');
-        search?.addEventListener('input', () => {
-            offerQuery = search.value;
-            const pos = search.selectionStart;
-            this.renderSourceOffer();
-            const again = box.querySelector<HTMLInputElement>('.source-offer-search');
-            again?.focus();
-            if (again && pos !== null) again.setSelectionRange(pos, pos);
-        });
-        box.querySelector('[data-offer-act="all"]')?.addEventListener('click', () => {
-            offerAll = !offerAll;
-            this.renderSourceOffer();
-            box.querySelector<HTMLElement>('[data-offer-act="all"]')?.focus();
-        });
-        box.querySelector('[data-offer-act="file"]')?.addEventListener('click', () => this.pickExcerptFile(-1));
-        // The research's material: its preview from the bridge (the window's queue), the type's letters until then.
-        if (mc && bridgeUp) {
-            const queue = materialThumbs();
-            queue.setEnv({ treeId: mc.treeId, base: mc.base, thumb: mc.caps.thumb, bridgeUp: mc.caps.bridgeUp });
-            box.querySelectorAll<HTMLElement>('.source-offer-thumb[data-sha]').forEach(el => {
-                const it = items.find(x => x.key === el.dataset.item);
-                queue.want({ sha: el.dataset.sha!, px: OFFER_THUMB_PX, mime: it?.mime, name: it?.file?.name ?? it?.title, bytes: it?.bytes },
-                    url => { if (url && el.isConnected) el.innerHTML = `<img src="${esc(url)}" alt="">`; },
-                    () => el.isConnected);
+        // Search, tiles and previews of the editor's block and of the phone's sheet alike.
+        const wire = (root: HTMLElement, again: () => HTMLInputElement | null) => {
+            const search = root.querySelector<HTMLInputElement>('.source-offer-search');
+            search?.addEventListener('input', () => {
+                offerQuery = search.value;
+                const pos = search.selectionStart;
+                this.renderSourceOffer();
+                const next = again();
+                next?.focus();
+                if (next && pos !== null) next.setSelectionRange(pos, pos);
             });
+            // The research's material: its preview from the bridge (the window's queue), the type's letters until then.
+            if (mc && bridgeUp) {
+                const queue = materialThumbs();
+                queue.setEnv({ treeId: mc.treeId, base: mc.base, thumb: mc.caps.thumb, bridgeUp: mc.caps.bridgeUp });
+                root.querySelectorAll<HTMLElement>('.source-offer-thumb[data-sha]').forEach(el => {
+                    const it = items.find(x => x.key === el.dataset.item);
+                    queue.want({ sha: el.dataset.sha!, px: OFFER_THUMB_PX, mime: it?.mime, name: it?.file?.name ?? it?.title, bytes: it?.bytes },
+                        url => { if (url && el.isConnected) el.innerHTML = `<img src="${esc(url)}" alt="">`; },
+                        () => el.isConnected);
+                });
+            }
+            root.querySelectorAll<HTMLButtonElement>('.source-offer-tile').forEach(btn => btn.addEventListener('click', () => {
+                if (btn.getAttribute('aria-disabled') === 'true' || btn.getAttribute('aria-busy') === 'true') return;
+                const it = items.find(x => x.key === btn.dataset.item);
+                if (it) void this.toggleOfferItem(it);
+            }));
+        };
+        wire(box, () => box.querySelector<HTMLInputElement>('.source-offer-search'));
+        box.querySelector('[data-offer-act="all"]')?.addEventListener('click', () => this.openSourceOfferSheet());
+        box.querySelector('[data-offer-act="file"]')?.addEventListener('click', () => this.pickExcerptFile(-1));
+        const sheet = offerSheet;
+        if (sheet) {
+            sheet.body.innerHTML = `<div class="source-offer source-offer-sheet is-all${many ? ' is-many' : ''}">${many ? searchHtml : ''}${bodyHtml}</div>`;
+            wire(sheet.body, () => sheet.body.querySelector<HTMLInputElement>('.source-offer-search'));
         }
-        box.querySelectorAll<HTMLButtonElement>('.source-offer-tile').forEach(btn => btn.addEventListener('click', () => {
-            if (btn.getAttribute('aria-disabled') === 'true' || btn.getAttribute('aria-busy') === 'true') return;
-            const it = items.find(x => x.key === btn.dataset.item);
-            if (it) void this.toggleOfferItem(it);
-        }));
+    },
+
+    /** The phone's "All (N) ›": the whole offer as a sheet from the bottom over the editor (11g); Done goes back to the editor. */
+    openSourceOfferSheet(): void {
+        const s = strings.sources;
+        const persons = this.sourceOfferPersonIds();
+        const names = persons.map(pid => fullName(DataManager.getPerson(pid))).filter(Boolean).join(', ');
+        const back = document.querySelector<HTMLElement>('#source-offer [data-offer-act="all"]');
+        const dialog = materialDialog({
+            title: s.offerTitle, sub: names, modifier: 'offer-all',
+            onClose: () => {
+                if (offerSheet === dialog) offerSheet = null;
+                // The editor's block is drawn anew meanwhile: back to its "All (N) ›".
+                requestAnimationFrame(() => {
+                    if (document.activeElement && document.activeElement !== document.body) return;
+                    (document.querySelector<HTMLElement>('#source-offer [data-offer-act="all"]') ?? back)?.focus();
+                });
+            },
+        });
+        offerSheet = dialog;
+        const done = button(s.offerDone, 'is-primary', () => dialog.close());
+        dialog.foot.append(done);
+        this.renderSourceOffer();
+        (dialog.body.querySelector<HTMLElement>('.source-offer-tile') ?? done).focus();
     },
 
     /** A tile of the offer chosen or not: the file is (or is no longer) the source's evidence. */
@@ -543,7 +576,8 @@ export const sourceDocsMethods = uiModule({
             else docs.push({ key: `pending:${++pendingN}`, record, itemKey: it.key });
         }
         this.renderSourceDocs();
-        document.querySelector<HTMLElement>(`#source-offer .source-offer-tile[data-item="${CSS.escape(it.key)}"]`)?.focus();
+        // The tiles are drawn anew: the focus stays on the tile chosen (in the phone's sheet when it is open).
+        (offerSheet?.body ?? document.getElementById('source-offer'))?.querySelector<HTMLElement>(`.source-offer-tile[data-item="${CSS.escape(it.key)}"]`)?.focus();
     },
 
     // ==================== EXCERPTS FROM THE EVIDENCE ====================
@@ -640,7 +674,7 @@ export const sourceDocsMethods = uiModule({
         fromFile = false;
         offerShown = false;
         offerQuery = '';
-        offerAll = false;
+        offerSheet?.close();
         fetching.clear();
     },
 

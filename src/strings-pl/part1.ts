@@ -1136,6 +1136,7 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         offerSearch: 'Szukaj w tytule i nazwie',
         otherFile: 'Inny plik…',
         offerAll: (n: number) => `Wszystkie (${n}) ›`,
+        offerDone: 'Gotowe',
         viewerFrom: 'Pochodzi z',
         noDoc: 'Bez dowodu. Pliku, z którego pochodzi źródło, jeszcze tu nie ma.',
         excerptFrom: (file: string) => `Wycinek z ${file} ›`,
