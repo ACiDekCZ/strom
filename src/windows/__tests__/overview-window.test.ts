@@ -111,6 +111,9 @@ describe('the actions an overview window may ask for', () => {
         // The tree's choice beside "Outside the directions": Research for this tree opens in the main window (brought forward).
         expect(readOverviewAction('offline-settings', { extra: 1 })).toEqual({ action: 'offline-settings' });
         expect(OVERVIEW_ACTIONS_TO_MAIN.has('offline-settings')).toBe(true);
+        // Settings… of "Faster by downloading" (spec 105 §3): Research for this tree at Books in the main window (brought forward).
+        expect(readOverviewAction('books-settings', { extra: 1 })).toEqual({ action: 'books-settings' });
+        expect(OVERVIEW_ACTIONS_TO_MAIN.has('books-settings')).toBe(true);
         // The pill's light ended (a filter with nobody left): the kind it lit.
         expect(readOverviewAction('highlight-end', { kind: 'changed', label: 'x' })).toEqual({ action: 'highlight-end', args: { kind: 'changed' } });
         expect(OVERVIEW_ACTIONS_TO_MAIN.has('highlight-end')).toBe(false);

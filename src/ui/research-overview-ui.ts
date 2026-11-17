@@ -22,7 +22,7 @@ import { Person, PersonId, ResearchHypothesis } from '../types.js';
 import { acceptBatch, acceptBatchRowResult } from '../research-hypothesis-waiting.js';
 import { computeEvidenceGaps } from '../stats.js';
 import { LiveBook, LiveChangeKind, LiveWaiting, LiveWorker, ResearchActionMark, WAITING_SECTIONS, booksOn, researchConflictRef, researchPersonRef, researchTaskRef, recentAddsCount, researchLinkMark } from '../research-link.js';
-import { bookById, bookHeadTitle, bookMetaParts, bookOfferText, bookTitle, bookWebUrl } from '../research-books.js';
+import { bookById, bookHeadTitle, bookImagesText, bookMetaParts, bookOfferText, bookTitle, bookWebUrl, urgentBooks, urgentBooksShown } from '../research-books.js';
 import { waitingGroupSendable, waitingGroupHasNote, waitingSendable, waitingUnsendable, waitingFileWritable } from '../research-waiting-write.js';
 import {
     FLAT_GROUP, PLACES_GROUP, WaitingFilter, WaitingGroupOpts, WaitingGroupRows, WaitingOrder, WaitingPhase, isTimeOrder, listedBook, sortWaitingByTime, waitingOrdersFor, effectiveWaitingFilter, waitingActionDo, waitingChatLeads, waitingChips, waitingDaysAgo, waitingGroupChatTask,
@@ -754,7 +754,8 @@ export const researchOverviewMethods = uiModule({
                 if (shown('now')) this.appendOverviewNow(host, s, fold('now'), mode);
             },
             waiting: () => {
-                if (s.waiting.length === 0 || !shown('waiting')) return;
+                // Nothing waits: no section, unless the research offers books to download (spec 105 §3, 5i).
+                if ((s.waiting.length === 0 && !(booksOn(s) && urgentBooks(s.books).length > 0)) || !shown('waiting')) return;
                 if (fromTree) {
                     this.appendOverviewWaitingAsOf(host, s, fold('waiting'), mode, viewed?.waitingAt ?? 0);
                     return;
@@ -1093,8 +1094,9 @@ export const researchOverviewMethods = uiModule({
             const all = waitingPhases(s.waiting, filter, order, !flat, groupOpts);
             // Without groups a phase's rows count, else its places' headings (a book's two, "No book" one).
             const lines = (p: WaitingPhase): number => all[p].reduce((n, g) => n + (g.key === FLAT_GROUP ? g.items.length : g.book ? 2 : 1) + (g.afterBooks ? 1 : 0), 0);
-            noteOverviewSectionRows('waiting', (['todo', 'sent'] as WaitingPhase[]).reduce((n, p) => n + (all[p].length > 0 ? 1 + lines(p) : 0), 0));
-        } else noteOverviewSectionRows('waiting', s.waiting.length);
+            noteOverviewSectionRows('waiting', (['todo', 'sent'] as WaitingPhase[]).reduce((n, p) => n + (all[p].length > 0 ? 1 + lines(p) : 0), 0)
+                + this.overviewBooksOfferRows(s, filter));
+        } else noteOverviewSectionRows('waiting', s.waiting.length + this.overviewBooksOfferRows(s, 'all'));
         // The hypotheses the search shows (the picked ones outside it stay picked) and what matched each by its number.
         const hypoSearch: HypothesisListSearch | null = searching ? {
             found: new Set(res.shown.filter(w => w.kind === 'hypothesis').map(w => w.id)),
@@ -1131,6 +1133,7 @@ export const researchOverviewMethods = uiModule({
             const shown = isTimeOrder(order) ? sortWaitingByTime(res.shown, order) : res.shown;
             if (shown.length > 0) host.appendChild(rows(shown));
             outsideFoot();
+            this.appendOverviewBooksOffer(host, s, { filter: 'all', toks, searching, searchOpen: search?.searchOpen });
             return;
         }
 
@@ -1221,6 +1224,182 @@ export const researchOverviewMethods = uiModule({
             host.appendChild(wrap);
         }
         outsideFoot();
+        this.appendOverviewBooksOffer(host, s, { filter, toks, searching, searchOpen });
+    },
+
+    /** How many lines "Faster by downloading" adds to the section (the own window's columns): its heading, open its text, rows and "and N more". */
+    overviewBooksOfferRows(s: LiveSession, filter: WaitingFilter): number {
+        if (!booksOn(s)) return 0;
+        const list = urgentBooksShown(s.books, filter);
+        if (list.length === 0) return 0;
+        if (!s.waitingView.open.get('urgent')) return 1;
+        return 2 + list.length + ((s.books?.more ?? 0) > 0 ? 1 : 0);
+    },
+
+    /**
+     * "Faster by downloading" (spec 105 §3, 3a–3e, 5i): at the end of
+     * Awaiting action, under its phases (and under nothing when nothing
+     * waits), the books the research offers to download that nothing waits
+     * for, in the order of "Most tasks". Folded by default (`urgent`); open, a
+     * sentence with Settings… (Research for this tree at Books), a row per
+     * book (title, archive · tasks in the queue · images [· to be taken in]
+     * [· sign-in]; what can be downloaded, the archive's website ↗, its
+     * folder without a mark), its details under its title (`urgent:<id>`),
+     * and "and N more books are in the research". Only under the filter All
+     * or Images; searching, the books whose title or archive match. Never
+     * counted in the section's title, summary or "Waiting N".
+     */
+    appendOverviewBooksOffer(host: HTMLElement, s: LiveSession, ctx: {
+        filter: WaitingFilter; toks: ReturnType<typeof tokenize>; searching: boolean; searchOpen: Map<string, boolean> | null | undefined;
+    }): void {
+        if (!booksOn(s)) return;
+        const list = urgentBooksShown(s.books, ctx.filter, ctx.toks);
+        if (list.length === 0) return;
+        const B = strings.live.books;
+        const view = s.waitingView;
+        const open = sectionPartOpen('urgent', false, ctx.searching, view.open, ctx.searchOpen);
+        const box = el('div', 'research-overview__urgent');
+        const head = el('button', 'research-overview__phase-head research-overview__urgent-head');
+        head.type = 'button';
+        head.dataset.focusKey = 'waiting-urgent';
+        head.setAttribute('aria-expanded', String(open));
+        const chevron = el('span', 'live-section__chevron', open ? '▾' : '▸');
+        chevron.setAttribute('aria-hidden', 'true');
+        head.append(chevron, el('span', 'research-overview__phase-title', B.urgent), el('span', 'research-overview__urgent-count', `· ${B.urgentCount(list.length)}`));
+        head.onclick = () => {
+            toggleSectionPart('urgent', open, ctx.searching, view.open, ctx.searchOpen);
+            this.renderResearchOverview();
+        };
+        box.appendChild(head);
+        if (open) {
+            const text = el('p', 'research-overview__urgent-text', `${B.urgentText} `);
+            const settings = el('button', 'link-button research-overview__urgent-settings', B.urgentSettings);
+            settings.type = 'button';
+            settings.onclick = () => this.openBooksSettings();
+            text.appendChild(settings);
+            box.appendChild(text);
+            for (const b of list) box.appendChild(this.overviewUrgentBookRow(s, b));
+            const more = s.books?.more ?? 0;
+            if (more > 0 && !ctx.searching) box.appendChild(el('p', 'research-overview__urgent-more', B.more(more)));
+        }
+        host.appendChild(box);
+    },
+
+    /** A book of "Faster by downloading": its title and line, its details unfolded by a click on them, its offer and actions. */
+    overviewUrgentBookRow(s: LiveSession, b: LiveBook): HTMLElement {
+        const L = strings.live;
+        const B = L.books;
+        const key = `urgent:${b.id}`;
+        const open = s.waitingView.open.get(key) === true;
+        const row = el('div', 'research-overview__urgent-book');
+        row.dataset.book = b.id;
+        const toggle = el('button', 'research-overview__urgent-toggle');
+        toggle.type = 'button';
+        toggle.dataset.focusKey = key;
+        toggle.setAttribute('aria-expanded', String(open));
+        const chevron = el('span', 'live-section__chevron', open ? '▾' : '▸');
+        chevron.setAttribute('aria-hidden', 'true');
+        const titles = el('span', 'research-overview__urgent-titles');
+        const name = bookTitle(b);
+        const title = el('span', 'research-overview__urgent-title', name);
+        title.title = bookHeadTitle(b);
+        const meta = el('span', 'research-overview__book-meta research-overview__urgent-meta');
+        const parts: { cls: string; text: string }[] = [
+            ...(b.archive?.name ? [{ cls: 'archive', text: b.archive.name }] : []),
+            { cls: 'queue', text: B.inQueueTasks(b.open) },
+            { cls: 'images', text: bookImagesText(b) },
+            ...(b.pending ? [{ cls: 'pending', text: B.pending(b.pending) }] : []),
+            ...(b.access === 'online-login' ? [{ cls: 'login', text: B.login }] : []),
+        ];
+        parts.forEach((p, i) => {
+            if (i > 0) {
+                const sep = el('span', 'research-overview__book-sep', '·');
+                sep.setAttribute('aria-hidden', 'true');
+                meta.appendChild(sep);
+            }
+            const part = el('span', `research-overview__book-${p.cls}`, p.text);
+            if (p.cls === 'archive') part.title = p.text;
+            meta.appendChild(part);
+        });
+        titles.append(title, meta);
+        toggle.append(chevron, titles);
+        toggle.setAttribute('aria-label', [name, ...parts.map(p => p.text)].join(', '));
+        toggle.onclick = () => {
+            s.waitingView.open.set(key, !open);
+            this.renderResearchOverview();
+        };
+        row.appendChild(toggle);
+        if (open) {
+            const dl = el('dl', 'research-overview__urgent-detail');
+            const add = (label: string, value: string): void => {
+                dl.append(el('dt', '', label), el('dd', '', value));
+            };
+            add(B.detailTasks, `${b.tasks}${b.parked > 0 ? ` · ${B.parked(b.parked)}` : ''}`);
+            if (b.folder) add(B.detailFolder, b.folder);
+            if (b.access === 'online-login' || b.access === 'online-free') add(B.detailAccess, b.access === 'online-login' ? B.login : B.accessFree);
+            row.appendChild(dl);
+        }
+        const actions = el('div', 'research-overview__urgent-actions');
+        const offer = bookOfferText(b);
+        if (offer) actions.appendChild(el('span', 'research-overview__book-offer', offer));
+        const url = bookWebUrl(b);
+        if (url) {
+            const web = el('a', 'waiting-action waiting-action--link research-overview__waiting-archiveweb', L.waitingTask.archiveWeb);
+            web.href = url;
+            web.title = url;
+            web.target = '_blank';
+            web.rel = 'noopener noreferrer';
+            actions.appendChild(web);
+        }
+        // Its folder in the shared inbox: the research opens it without a terminal (V7, no mark).
+        const folder = b.folder ? this.activeResearchLink('book', { book: b.id, bookDo: 'folder' }) : null;
+        if (folder) {
+            const btn = setResearchActionLabel(el('button', 'live-waiting-answer research-overview__waiting-groupwrite research-overview__book-folder'),
+                L.waitingTask.openFolder, researchLinkMark('book'), { sr: false });
+            btn.type = 'button';
+            btn.dataset.book = b.id;
+            btn.setAttribute('aria-label', `${L.waitingTask.openFolder} · ${name}`);
+            btn.onclick = () => this.launchResearchLink(folder);
+            actions.appendChild(btn);
+        }
+        if (actions.childElementCount > 0) row.appendChild(actions);
+        return row;
+    },
+
+    /**
+     * Settings… of "Faster by downloading": Research for this tree at Books,
+     * open and highlighted (the overview as a phone's full-screen sheet goes
+     * first: it stays above every dialog).
+     */
+    openBooksSettings(): void {
+        const treeId = drawnSession()?.treeId ?? liveSession()?.treeId ?? overviewViewing()?.treeId;
+        if (!treeId) return;
+        if (document.querySelector('#research-overview.research-overview--sheet')) this.closeResearchOverview();
+        void this.showResearchTreeSettings(treeId, { group: 'books' });
+    },
+
+    /**
+     * "Faster by downloading · N books ⤢" of the small panel (spec 105 §5, Q2):
+     * the overview opens with Awaiting action shown and that part open, its
+     * heading at the top.
+     */
+    showOverviewBooksOffer(): void {
+        if (overviewInWindow()) {
+            focusOverviewWindow();
+            return;
+        }
+        if (!this.isResearchOverviewOpen()) this.openResearchOverview();
+        const s = drawnSession();
+        if (!s) return;
+        s.waitingView.open.set('urgent', true);
+        s.overviewShown.add('waiting');
+        this.renderLivePanel();
+        const body = document.querySelector<HTMLElement>('#research-overview .research-overview__body');
+        const heading = body?.querySelector<HTMLElement>('#ov-sec-waiting .research-overview__urgent-head');
+        if (body && heading) {
+            scrollHeadingToTop(body, heading);
+            heading.focus({ preventScroll: true });
+        }
     },
 
     /**
@@ -1232,8 +1411,10 @@ export const researchOverviewMethods = uiModule({
      * tasks". All stay in the app (no mark) and are kept on this device for
      * every tree.
      */
-    overviewWaitingOrderEl(order: WaitingOrder, grouped: boolean, mode: Mode, books = false): HTMLElement {
+    overviewWaitingOrderEl(order: WaitingOrder, grouped: boolean, mode: Mode, books = false,
+        opts: { compact?: boolean; redraw?: () => void } = {}): HTMLElement {
         const L = strings.live;
+        const redraw = opts.redraw ?? (() => this.renderResearchOverview());
         const orders = waitingOrdersFor(books);
         const bar = el('div', 'research-overview__order');
         const btn = el('button', `research-overview__order-btn${isTimeOrder(order) ? ' is-time' : ''}`);
@@ -1250,7 +1431,7 @@ export const researchOverviewMethods = uiModule({
         const choose = (o: WaitingOrder): void => {
             if (o === storedWaitingOrder(books)) return;
             storeWaitingOrder(o);
-            this.renderResearchOverview();
+            redraw();
         };
         const sheet = mode === 'sheet' || isPhoneBar();
         btn.onclick = () => this.openWaitingChoice(btn, {
@@ -1259,7 +1440,7 @@ export const researchOverviewMethods = uiModule({
         });
         bar.appendChild(btn);
         if (books && order !== 'most') {
-            bar.appendChild(this.waitingGroupsChoiceEl(order, { compact: sheet, sheet, redraw: () => this.renderResearchOverview() }));
+            bar.appendChild(this.waitingGroupsChoiceEl(order, { compact: sheet || !!opts.compact, sheet, redraw }));
         } else if (isTimeOrder(order) && grouped && !books) {
             const on = storedWaitingGroups();
             const sw = el('button', 'research-overview__groups');
@@ -1273,7 +1454,7 @@ export const researchOverviewMethods = uiModule({
             sw.append(track, el('span', 'research-overview__groups-label', L.waitingGroups));
             sw.onclick = () => {
                 storeWaitingGroups(!on);
-                this.renderResearchOverview();
+                redraw();
             };
             bar.appendChild(sw);
         }

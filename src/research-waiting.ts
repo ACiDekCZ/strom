@@ -280,6 +280,45 @@ export function panelWaiting<T extends LiveWaiting>(items: readonly T[], n = PAN
     return { shown, more: todo.length - shown.length };
 }
 
+/** A group of the small panel: its items shown (cut to the panel's rows) and how many it has to do in all. */
+export interface PanelWaitingGroup<T extends LiveWaiting = LiveWaiting> {
+    rows: WaitingGroupRows<T>;
+    total: number;
+}
+
+/**
+ * The small panel with the research's books (spec 105 §5, 5g): the items to
+ * do in the order and groups chosen (by book, by archive, or one list), cut
+ * to the panel's `n` rows as they stand in that order; the items in `focus`
+ * all shown, however many. Each group keeps how many it has in all; a group
+ * left without a row goes, "No book" stands before the first place after a
+ * book. `more`: the items to do not shown (as panelWaiting counts them).
+ */
+export function panelWaitingGroups<T extends LiveWaiting>(items: readonly T[], order: WaitingOrder, groups: boolean, opts: WaitingGroupOpts = {},
+    n = PANEL_WAITING, focus: ReadonlySet<string> = new Set()): { groups: PanelWaitingGroup<T>[]; shown: number; more: number } {
+    const todo = todoWaiting(items);
+    const all = waitingPhases(todo, 'all', order, groups, opts).todo;
+    const drawn = all.flatMap(g => g.items);
+    const first = drawn.filter(w => focus.has(w.id));
+    const keep = new Set<T>([...first, ...drawn.filter(w => !focus.has(w.id)).slice(0, Math.max(0, n - first.length))]);
+    const out: PanelWaitingGroup<T>[] = [];
+    let afterBook = false;
+    let noBookSaid = false;
+    for (const g of all) {
+        const rows = g.items.filter(w => keep.has(w));
+        if (rows.length === 0) continue;
+        const { afterBooks: _drop, ...rest } = g;
+        const next: WaitingGroupRows<T> = { ...rest, items: rows };
+        if (g.book) afterBook = true;
+        else if (afterBook && !noBookSaid && g.key !== FLAT_GROUP) {
+            next.afterBooks = true;
+            noBookSaid = true;
+        }
+        out.push({ rows: next, total: g.items.length });
+    }
+    return { groups: out, shown: keep.size, more: todo.length - keep.size };
+}
+
 /**
  * What waits on one person (their `refn`), in order: the items to do naming
  * them, and a story's new version of a couple they are part of — the same

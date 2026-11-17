@@ -8,6 +8,7 @@
 
 import { strings } from './strings.js';
 import type { LiveBook, LiveBooks } from './research-link.js';
+import { foldSearch2, matchDoc, type SearchToken } from './section-search-match.js';
 
 /** The texts of the books (`strings.live.books` of a language). */
 export type BooksTexts = typeof strings.live.books;
@@ -102,4 +103,16 @@ export function bookHeadTitle(b: LiveBook, L: BooksTexts = strings.live.books): 
 /** The archive's website of the book: its viewer, else the archive's own address (null: none said). */
 export function bookWebUrl(b: Pick<LiveBook, 'url' | 'archive'>): string | null {
     return b.url ?? b.archive?.url ?? null;
+}
+
+/**
+ * "Faster by downloading" as the section shows it (§3): under the filter All
+ * or Images only (none under another kind); searching, only the books whose
+ * title or archive match the words (none: nothing).
+ */
+export function urgentBooksShown(books: LiveBooks | null | undefined, filter: string, toks: readonly SearchToken[] = []): LiveBook[] {
+    if (filter !== 'all' && filter !== 'images') return [];
+    const list = urgentBooks(books);
+    if (toks.length === 0) return list;
+    return list.filter(b => matchDoc({ hay: foldSearch2([bookTitle(b), b.archive?.name ?? ''].join(' ')) }, toks) !== null);
 }

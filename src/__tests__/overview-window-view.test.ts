@@ -252,6 +252,13 @@ describe('the overview\'s controls ask the main window', () => {
         expect(port.focusMain).toHaveBeenCalledTimes(1);
     });
 
+    it('Settings… of "Faster by downloading": Research for this tree at Books opens in the main window (forward)', () => {
+        const { o, sent, port } = overrides(stateOf());
+        o.openBooksSettings();
+        expect(sent).toEqual([{ action: 'books-settings', args: undefined }]);
+        expect(port.focusMain).toHaveBeenCalledTimes(1);
+    });
+
     it('the tree\'s choice is offered as a link only where the main window says Research for this tree has its group', () => {
         expect(overrides(stateOf()).o.offLineSettingsOffered(null)).toBe(false);
         expect(overrides(stateOf({ extras: { ...emptyOverviewExtras(), offLineSettings: true } })).o.offLineSettingsOffered(null)).toBe(true);

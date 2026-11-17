@@ -190,6 +190,8 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
         showVerifyBulkDialog(): void { run('verify-bulk'); },
         // Research for this tree at the work outside the directions: a dialog of the main window.
         openOffLineSettings(): void { run('offline-settings'); },
+        // Research for this tree at Books (Faster by downloading › Settings…): a dialog of the main window.
+        openBooksSettings(): void { run('books-settings'); },
         offLineSettingsOffered(): boolean { return extras().offLineSettings === true; },
         // Its own overview (no small panel here); none opened or closed here.
         renderLivePanel(this: UIClass): void { this.renderResearchOverview(); },

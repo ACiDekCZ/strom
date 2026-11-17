@@ -191,6 +191,9 @@ export const overviewWindowMethods = uiModule({
             case 'offline-settings':
                 this.openOffLineSettings();
                 return true;
+            case 'books-settings':
+                this.openBooksSettings();
+                return true;
             case 'verify-stop':
                 if (!this.treeVerifyNow()?.stop) return false;
                 void this.verifyStop(null);

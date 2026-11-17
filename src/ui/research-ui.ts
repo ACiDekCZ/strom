@@ -55,7 +55,7 @@ import {
 import { keepImports } from '../import-origin.js';
 import { uiModule } from './module.js';
 import { returnFocusAfterViewer } from './sources.js';
-import { withAppVersion, researchGedcomTitles, researchSendsReadings, researchSendsSourceFields, TitlesInGedcom, changeKind, changeAdds, sanitizeLiveLog, sourceIdsByRef, findSourceTitle, lineNewerThanLoaded, textKind, textPersonRefs, textWithoutRefs, LiveChangeKind, LiveLogEntry, LiveCommitAdds, LiveRecent, waitingAnswerPlace } from '../research-link.js';
+import { withAppVersion, researchGedcomTitles, researchSendsReadings, researchSendsSourceFields, TitlesInGedcom, changeKind, changeAdds, sanitizeLiveLog, sourceIdsByRef, findSourceTitle, lineNewerThanLoaded, textKind, textPersonRefs, textWithoutRefs, LiveChangeKind, LiveLogEntry, LiveCommitAdds, LiveRecent, waitingAnswerPlace, booksOn } from '../research-link.js';
 import { overviewInWindow } from '../windows/overview-window.js';
 import { AGENT_DONE_MS, AGENT_DONE_FADE_MS, ResearchCardInfo, setResearchCardInfoProvider } from '../card-signals.js';
 import {
@@ -69,13 +69,14 @@ import {
 } from './research-offline-ui.js';
 import { directionPlacesKept, type TaskOrderDo, type DirectionPlaces } from '../research-directions-write.js';
 import { agentMirror } from '../windows/agent-mirror.js';
-import { OTHER_GROUP, panelWaiting, textWithLinks, todoWaiting, waitingSection, waitingTodoCount } from '../research-waiting.js';
+import { FLAT_GROUP, OTHER_GROUP, listedBook, panelWaiting, panelWaitingGroups, textWithLinks, todoWaiting, waitingSection, waitingTodoCount, type WaitingGroupOpts } from '../research-waiting.js';
+import { bookHeadTitle, bookTitle, urgentBooks } from '../research-books.js';
 import { agoShort } from '../research-others.js';
 import {
     PrefKey, SECTION_PREFS_EVENT, SectionPref, autoFoldOrder, hasSectionPrefs, isImportantWaiting, resetSectionPrefs, restoreSectionPrefs, newWaiting, noteWaitingSeen, panelSectionOrder, sectionPrefs, sectionPrefsSnapshot, setSectionPref, topPrefs,
     waitingSeen, watchSectionPrefsStorage, PANEL_PREF_KEYS,
 } from './live-section-prefs.js';
-import { waitingSinceText } from './waiting-order-ui.js';
+import { shownWaitingGroups, storedWaitingGroupMode, storedWaitingOrder, waitingGroupName, waitingSinceText } from './waiting-order-ui.js';
 import {
     QUEUE_ROWS_CAP, QueueFilter, QueueList, loadMoreQueueList, noteQueueRev, onQueueListsChange, queueList, queueListItem, queueRemote, requestQueueList,
     resetQueueLists, retryQueueList,
@@ -4092,10 +4093,10 @@ export const researchUiMethods = uiModule({
             row.appendChild(helpMark('waiting'));
             host = body;
         }
-        const list = el('ul', 'live-panel-list live-waiting');
-        host.appendChild(list);
-        const { shown, more } = panelWaiting(items, undefined, waitingFocusIds());
-        for (const w of shown) {
+        // The research's books (spec 105 §5, 5g): the order and the groups chosen, the books' heads compact.
+        const ls = liveSession();
+        const books = !!ls && ls.waiting === items && booksOn(ls) && items.some(w => w.section);
+        const rowOf = (w: LiveWaiting): HTMLLIElement => {
             const li = el('li', 'live-waiting-row');
             markWaitingFocus(li, w);
             const text = el('div', 'live-waiting-text');
@@ -4107,8 +4108,7 @@ export const researchUiMethods = uiModule({
                 const whyStory = waitingWhyEl(w);
                 if (whyStory) text.appendChild(whyStory);
                 li.append(text, compare);
-                list.appendChild(li);
-                continue;
+                return li;
             }
             const what = text.appendChild(el('span', 'live-waiting-what'));
             // A newer research names the kind: a short label before the text.
@@ -4144,7 +4144,17 @@ export const researchUiMethods = uiModule({
                 answer.onclick = () => this.answerResearchTask(w);
                 li.appendChild(answer);
             }
-            list.appendChild(li);
+            return li;
+        };
+        let more: number;
+        if (books && ls) {
+            more = this.appendPanelWaitingBooks(host, ls, items, rowOf);
+        } else {
+            const list = el('ul', 'live-panel-list live-waiting');
+            host.appendChild(list);
+            const panel = panelWaiting(items, undefined, waitingFocusIds());
+            for (const w of panel.shown) list.appendChild(rowOf(w));
+            more = panel.more;
         }
         if (more > 0) {
             // The rest in the overview (where it can open), else just how many.
@@ -4157,7 +4167,58 @@ export const researchUiMethods = uiModule({
                 host.appendChild(el('p', 'live-waiting-more', L.waitingMore(more).replace(/\s*⤢$/, '')));
             }
         }
+        // The books offered to download (spec 105 §5, Q2): one line, never counted; the overview opens with them.
+        const urgent = ls && ls.waiting === items && booksOn(ls) ? urgentBooks(ls.books).length : 0;
+        if (urgent > 0) {
+            const text = L.books.panelUrgent(urgent);
+            if (this.canExpandLivePanel()) {
+                const btn = el('button', 'link-button live-waiting-urgent', text);
+                btn.type = 'button';
+                btn.onclick = () => this.showOverviewBooksOffer();
+                host.appendChild(btn);
+            } else {
+                host.appendChild(el('p', 'live-waiting-urgent', text.replace(/\s*⤢$/, '')));
+            }
+        }
         return host;
+    },
+
+    /**
+     * Awaiting action of the small panel with the research's books (spec 105
+     * §5, 5g): "⇅ Order ▾" and "Groups: … ▾" (a menu; a sheet on a phone),
+     * the first rows to do in that order and grouping — a book's head its
+     * title, how many wait for it and how many, a place's its name and how
+     * many, "No book" before the places after the books; the books' actions
+     * stay in the overview. Returns how many more there are to do.
+     */
+    appendPanelWaitingBooks(host: HTMLElement, s: LiveSession, items: readonly LiveWaiting[], rowOf: (w: LiveWaiting) => HTMLLIElement): number {
+        const B = strings.live.books;
+        const order = storedWaitingOrder(true);
+        const groupsShown = shownWaitingGroups(storedWaitingGroupMode(), order, true);
+        const opts: WaitingGroupOpts = groupsShown === 'book' ? { by: 'book', books: s.books } : {};
+        if (todoWaiting(items).length >= 2) {
+            host.appendChild(this.overviewWaitingOrderEl(order, true, 'docked', true, { compact: true, redraw: () => this.renderLivePanel() }));
+        }
+        const { groups, more } = panelWaitingGroups(items, order, groupsShown !== 'none', opts, undefined, waitingFocusIds());
+        for (const { rows, total } of groups) {
+            if (rows.key !== FLAT_GROUP) {
+                if (rows.afterBooks) host.appendChild(el('div', 'live-waiting-nobook', B.noBook));
+                const head = el('div', `live-waiting-grouphead${rows.book ? ' is-book' : ''}`);
+                head.dataset.group = rows.key;
+                const book = listedBook(rows.book);
+                const name = rows.book ? (book ? bookTitle(book) : rows.book.title) : waitingGroupName(rows.items[0]);
+                const title = el('span', 'live-waiting-grouptitle', name);
+                title.title = book ? bookHeadTitle(book) : name;
+                head.appendChild(title);
+                if (book) head.appendChild(el('span', 'live-waiting-groupwait', B.waiting(book.waiting)));
+                head.appendChild(el('span', 'live-waiting-groupcount', String(total)));
+                host.appendChild(head);
+            }
+            const list = el('ul', 'live-panel-list live-waiting');
+            for (const w of rows.items) list.appendChild(rowOf(w));
+            host.appendChild(list);
+        }
+        return more;
     },
 
     /** Fold or unfold a section of the small panel: a lasting choice (this device, panel and overview alike). */
