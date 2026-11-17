@@ -14,6 +14,7 @@
  */
 
 import { DataManager } from '../data.js';
+import { allMedia } from '../media.js';
 import { strings } from '../strings.js';
 import type { Attachment, MaterialKind, MediaPlace, PersonId } from '../types.js';
 import {
@@ -766,13 +767,25 @@ export const materialSortMethods = uiModule({
             if (treeOk.length || staged.length) {
                 // The tree's part in one undo step; its Undo toast says what was accepted.
                 DataManager.runBatch(s.undoStep, () => {
+                    // A source of the research the tree does not know yet: made with the research's number (REFN S…),
+                    // as one loaded from it, so a send pairs it with the research's own and a load never doubles it.
+                    // Once per number: several files of one source, or a source already made, take the same one.
+                    // One an accepted proposal made is each such row's to take out (the last of them does, see revert).
+                    const sortMade = (sid: string): boolean => Object.values(reverts).some(x => parseSortRevert(x)?.sources?.includes(sid));
                     const sourcesFor = (w: SortWrite, by: 'user' | 'agent'): { ids: string[]; places: MediaPlace[] } => {
                         const ids: string[] = [];
+                        const made: string[] = [];
                         for (const ns of w.newSources) {
-                            const src = DataManager.addSource({ title: ns.title });
-                            if (src) ids.push(src.id);
+                            const known = Object.values(DataManager.getData().sources ?? {}).find(x => x.refn?.trim() === ns.ref);
+                            if (known) {
+                                if (!ids.includes(known.id)) ids.push(known.id);
+                                if (sortMade(known.id) && !made.includes(known.id)) made.push(known.id);
+                                continue;
+                            }
+                            const src = DataManager.addSource({ title: ns.title, refn: ns.ref });
+                            if (src) { ids.push(src.id); made.push(src.id); }
                         }
-                        return { ids, places: ids.map(sourceId => ({ sourceId, by })) };
+                        return { ids: made, places: ids.map(sourceId => ({ sourceId, by })) };
                     };
                     for (const { row, w } of treeOk) {
                         const id = w!.mediaId!;
@@ -848,7 +861,9 @@ export const materialSortMethods = uiModule({
                         if (f.date) DataManager.setMediaDate(mid, f.date.value, f.date.agent ? 'agent' : 'user');
                         for (const place of rv.places ?? []) DataManager.removeMediaPlace(mid, place, { keep: true });
                     }
-                    for (const sid of rv.sources ?? []) DataManager.removeSource(sid);
+                    // A source it made that another accepted file still has (one source of several files) stays.
+                    const inUse = (sid: string): boolean => allMedia(DataManager.getData()).some(a => a.places.some(pl => 'sourceId' in pl && pl.sourceId === sid));
+                    for (const sid of rv.sources ?? []) if (!inUse(sid)) DataManager.removeSource(sid);
                 }, { text: s.reverted });
                 this.afterMediaChange();
             } else {

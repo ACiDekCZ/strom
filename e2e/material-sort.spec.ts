@@ -290,34 +290,58 @@ test.describe('Sort with the agent', () => {
         expect(material.sorts).toHaveLength(1);
     });
 
-    test('material outside the tree: an event, a known and a new source go into the tree; Undo takes them out', async ({ page }) => {
+    test('material outside the tree: an event, a known and a research source the tree lacks go into the tree; Undo takes them out', async ({ page }) => {
+        let fb!: FakeBridge;
         const material = await setup(page, {
-            proposals: [{ id: 'I0003', title: 'Marriage record', kind: 'record', why: 'A register page', sure: 'high',
-                links: [{ type: 'event', ref: 'F0001', event: 'MARR' }, { type: 'source', ref: 'S0001' }, { type: 'source', ref: 'S0099' }] }],
-            bridge: b => b.mediaFiles.set(materialSha('I0003'), { type: 'image/png', body: readFileSync('e2e/fixtures/avatar.png') }),
+            proposals: [
+                { id: 'I0003', title: 'Marriage record', kind: 'record', why: 'A register page', sure: 'high',
+                    links: [{ type: 'event', ref: 'F0001', event: 'MARR' }, { type: 'source', ref: 'S0001' }, { type: 'source', ref: 'S0099' }] },
+                { id: 'I0002', title: 'Marriage record, back', kind: 'record', why: 'The page behind', sure: 'high', links: [{ type: 'source', ref: 'S0099' }] },
+            ],
+            bridge: b => {
+                fb = b;
+                b.mediaFiles.set(materialSha('I0003'), { type: 'image/png', body: readFileSync('e2e/fixtures/avatar.png') });
+                b.mediaFiles.set(materialSha('I0002'), { type: 'image/png', body: readFileSync('e2e/fixtures/avatar.png') });
+            },
         });
         await openWindow(page);
         await strip(page).locator('[data-sort="sort"]').click();
         await sortDialog(page).locator('.mdlg-sort-go').click();
         await strip(page).locator('[data-sort="open"]').click();
         const row = proposal(page).locator('.msp-row[data-id="I0003"]');
-        await expect(row.locator('.msp-chip')).toContainText(['Event: Marriage · Josef Fíšek & Anna Svobodová', 'Source: Oddací matrika Čapkov', 'Source: Marriage record (new)']);
+        await expect(row.locator('.msp-chip')).toContainText(['Event: Marriage · Josef Fíšek & Anna Svobodová', 'Source: Oddací matrika Čapkov', 'Source: Marriage record (from the research)']);
         await row.locator('.msp-accept').click();
         await expect.poll(() => JSON.stringify(material.edits ?? [])).toContain('Marriage record');
         const tree = () => page.evaluate(() => {
             const data = window.Strom.DataManager.getData();
             const media = Object.values(data.media ?? {}) as Array<{ title?: string; places: Array<Record<string, string>> }>;
-            const sources = Object.values(data.sources ?? {}).map(src => src.title);
+            const sources = Object.values(data.sources ?? {}).map(src => ({ title: src.title, refn: src.refn ?? null }));
             const file = media.find(m => m.places.some(p => p.partnershipId));
-            return { kinds: file ? file.places.map(p => Object.keys(p).filter(k => k !== 'by').join('+')).sort() : [], sources };
+            const at99 = Object.values(data.sources ?? {}).filter(src => src.refn === 'S0099').map(src => src.id);
+            return { kinds: file ? file.places.map(p => Object.keys(p).filter(k => k !== 'by').join('+')).sort() : [], sources,
+                at99: media.filter(m => m.places.some(p => at99.includes(p.sourceId))).length };
         });
         await expect.poll(async () => (await tree()).kinds).toEqual(['partnershipId', 'sourceId', 'sourceId']);
-        expect((await tree()).sources).toContain('Marriage record');
+        // The source the research has and the tree did not: made with the research's number, as one loaded from it.
+        expect((await tree()).sources.filter(src => src.refn === 'S0099')).toEqual([{ title: 'Marriage record', refn: 'S0099' }]);
+        // Another file of the same source: the same source, never a second one.
+        await proposal(page).locator('.msp-row[data-id="I0002"] .msp-accept').click();
+        await expect.poll(async () => (await tree()).at99).toBe(2);
+        expect((await tree()).sources.filter(src => src.refn === 'S0099' || src.title === 'Marriage record')).toHaveLength(1);
+        // Written to the research: the source by its number, once (it pairs with the research's own).
+        await page.evaluate(() => window.Strom.UI.researchSendNow({ previewed: true }));
+        await expect.poll(() => fb.posts.length).toBeGreaterThan(0);
+        const sent = fb.posts.at(-1)!;
+        expect(sent.match(/\n1 REFN S0099\r?\n/g)).toHaveLength(1);
+        expect(sent.match(/\n1 TITL Marriage record\r?\n/g)).toHaveLength(1);
 
         await proposal(page).locator('.msp-tab[data-tab="done"]').click();
         await proposal(page).locator('.msp-row[data-id="I0003"] .msp-undo').click();
         await expect.poll(async () => (await tree()).kinds).toEqual([]);
-        expect((await tree()).sources).not.toContain('Marriage record');
+        // The other file still has it: the source stays until that one is undone too.
+        expect((await tree()).sources.map(src => src.title)).toContain('Marriage record');
+        await proposal(page).locator('.msp-row[data-id="I0002"] .msp-undo').click();
+        await expect.poll(async () => (await tree()).sources.map(src => src.title)).not.toContain('Marriage record');
         expect(material.sorts).toHaveLength(1);
     });
 });

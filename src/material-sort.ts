@@ -47,7 +47,7 @@ export interface SortChip {
     kind: 'person' | 'event' | 'source';
     /** The person's or the source's name, the event's name with its person. */
     label: string;
-    /** A source the tree does not know (its research ref): a new source of the tree when accepted (§5, titled by the file). */
+    /** A source the tree does not know (its research ref): a new source of the tree when accepted (§5, titled by the file, its REFN this ref). */
     newSource?: string;
 }
 
