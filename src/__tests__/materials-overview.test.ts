@@ -11,7 +11,7 @@ import { MaterialFile, MaterialList, MaterialResult, ThumbSize, researchMakesThu
 import {
     overviewItems, overviewGroups, overviewRows, overviewSummary, emptyFilters, passesFilters, activeFilterCount,
     rowsInView, stickyGroupAt, gridColumns, rangeKeys, nameWithoutYears, personsShort, parseViewPrefs, localDay,
-    fromKey, OverviewFilters, RowMetrics, firstFolderLine, inMaterialFolder, TreeRecord,
+    fromKey, OverviewFilters, RowMetrics, firstFolderLine, inMaterialFolder, TreeRecord, itemWithoutPerson,
 } from '../materials-overview.js';
 import { MaterialThumbQueue, ThumbDeps, thumbSource } from '../material-thumbs.js';
 
@@ -253,6 +253,20 @@ describe('groups of a tree without an archive (spec 102 §1)', () => {
         expect(g[2].items.map(i => i.key)).toEqual(['a:a1', 'a:a5']);
         expect(g[2].persons).toEqual(['p_oskar']);
         expect(g[3].items.map(i => i.key)).toEqual(['a:a4']);
+    });
+
+    it('the tree\u2019s files count in the summary; a file only at a source or a union is without a person', () => {
+        const tree = overviewItems(null, [
+            rec(att('b1', { places: [{ personId: 'p1' as never }] }), ['p1']),
+            rec(att('b2', { places: [{ sourceId: 's1' }] }), []),
+            rec(att('b3', { places: [{ partnershipId: 'u1' as never }] }), []),
+            // At a person the research does not know yet (no REFN): not "without a person".
+            rec(att('b4', { places: [{ personId: 'p2' as never }] }), []),
+        ]);
+        expect(tree.filter(itemWithoutPerson).map(i => i.key)).toEqual(['a:b2', 'a:b3']);
+        expect(overviewSummary(tree, null, true, true)).toEqual({ files: 4, batches: 0, noPerson: 2, hidden: 0 });
+        // With an archive the tree's own files stay out of the archive's counts.
+        expect(overviewSummary(tree, null, true).files).toBe(0);
     });
 
     it('the person filter and the search apply by person too', () => {

@@ -9,7 +9,7 @@ import { researchOpenMark, setResearchOpenLabel } from './research-open-mark.js'
 import { iconSvg } from '../icons.js';
 import { PersonId } from '../types.js';
 import { uiModule } from './module.js';
-import { strings } from '../strings.js';
+import { strings, getCurrentLanguage } from '../strings.js';
 import { SettingsManager } from '../settings.js';
 import { TreeRenderer } from '../renderer.js';
 import { TreeManager } from '../tree-manager.js';
@@ -436,6 +436,9 @@ export const bottomSheetMethods = uiModule({
             blocks.push({ divider: blocks.length > 0, rows: [
                 ...(active ? [annRow] : []),
                 ...(active && this.isSourcesMenuOffered() ? [{ label: s.sources.menu, run: () => this.showSourcesDialog() }] : []),
+                // Materials N (spec 102 §1) on a tablet; a phone's sheet keeps its first level without scrolling.
+                ...(active && this.isMaterialsMenuOffered() && !isPhoneBar()
+                    ? [{ label: s.materials.menu, id: 'sheet-materials', value: this.materialsAppCount().toLocaleString(getCurrentLanguage()), run: () => this.openMaterials() }] : []),
                 ...(active ? [listsRow] : []),
                 // One Export…: the whole tree or the current view, chosen in its dialog
                 // (locked data exports what it shows).

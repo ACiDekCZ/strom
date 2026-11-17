@@ -23,6 +23,7 @@ import type { PersonId } from '../types.js';
 import { researchActionLabel } from './research-open-mark.js';
 import type { UIClass } from './index.js';
 import { DataManager } from '../data.js';
+import { SettingsManager } from '../settings.js';
 import { strings, getCurrentLanguage, joinAnd } from '../strings.js';
 import { researchPersonRef, researchSchemeUrl, researchLinkMark } from '../research-link.js';
 import { announcedResearchScheme } from '../research-device.js';
@@ -38,7 +39,7 @@ import {
     RowMetrics, KindFilter, KIND_FILTERS, TreeRecord,
     emptyFilters, activeFilterCount, narrowing, overviewItems, overviewSummary, overviewGroups, overviewRows,
     rowsInView, stickyGroupAt, gridColumns, rangeKeys, personsShort, nameWithoutYears, parseViewPrefs,
-    itemWithoutPerson, OverviewSummary, inMaterialFolder, firstFolderLine,
+    itemWithoutPerson, OverviewSummary, inMaterialFolder, firstFolderLine, ViewPrefs,
 } from '../materials-overview.js';
 import { materialThumbs, ThumbSnapshot } from '../material-thumbs.js';
 import { formatBytesShort } from './originals-ui.js';
@@ -88,7 +89,7 @@ function innerWidth(el: HTMLElement): number {
     return Math.max(0, el.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0));
 }
 
-function readPrefs(): { group: OverviewGroupMode; view: OverviewView } {
+function readPrefs(): ViewPrefs {
     try {
         return parseViewPrefs(localStorage.getItem(VIEW_KEY));
     } catch {
@@ -96,14 +97,23 @@ function readPrefs(): { group: OverviewGroupMode; view: OverviewView } {
     }
 }
 
+/** Remember the grouping (of its model: with an archive or the tree's own files) and the view. */
 function writePrefs(group: OverviewGroupMode, view: OverviewView): void {
-    try { localStorage.setItem(VIEW_KEY, JSON.stringify({ group, view })); } catch { /* blocked: this window only */ }
+    const prefs = readPrefs();
+    if (group === 'batch' || group === 'date') prefs.group = group;
+    else prefs.appGroup = group;
+    prefs.view = view;
+    try { localStorage.setItem(VIEW_KEY, JSON.stringify(prefs)); } catch { /* blocked: this window only */ }
 }
 
-type PopKind = 'person' | 'kind' | 'batch' | 'sheet' | 'batchMenu' | 'folderMenu';
+/** The window's model: the research's archive with the tree's files, or the tree's own files alone. */
+type WindowModel = 'archive' | 'app';
+
+type PopKind = 'person' | 'kind' | 'batch' | 'sheet' | 'batchMenu' | 'folderMenu' | 'where';
 
 interface Win {
     gen: number;
+    model: WindowModel;
     treeId: string;
     overlay: HTMLElement;
     scroller: HTMLElement;
@@ -181,9 +191,13 @@ function treeRecords(byRefn: boolean): TreeRecord[] {
     }));
 }
 
-/** REFN → name: the tree's person first, else what the research calls them. */
-function namesOf(list: MaterialList | null): Map<string, string> {
+/** Person key → name: REFN (the tree's person first, else what the research calls them), or PersonId without an archive. */
+function namesOf(list: MaterialList | null, model: WindowModel): Map<string, string> {
     const names = new Map<string, string>();
+    if (model === 'app') {
+        for (const p of DataManager.getAllPersons()) names.set(p.id, `${p.firstName} ${p.lastName}`.trim() || p.id);
+        return names;
+    }
     for (const [refn, name] of Object.entries(list?.people ?? {})) names.set(refn, name);
     for (const p of DataManager.getAllPersons()) {
         const refn = researchPersonRef(p.refn);
@@ -202,10 +216,11 @@ export const materialsWindowMethods = uiModule({
         this.teardownMaterialsWindow();
         const overlay = document.getElementById(MODAL_ID);
         const body = overlay?.querySelector<HTMLElement>('#materials-window-body');
-        const ctx = this.materialsContext();
+        const ctx = this.materialsWindowContext();
         if (!overlay || !body || !ctx) return;
         const prefs = readPrefs();
-        const group: OverviewGroupMode = opts.group ?? prefs.group;
+        const model: WindowModel = ctx.caps.list ? 'archive' : 'app';
+        const group: OverviewGroupMode = opts.group ?? (model === 'app' ? prefs.appGroup : prefs.group);
         overlay.dataset.group = group;
         body.innerHTML = `
             <div class="mw-status" hidden></div>
@@ -224,6 +239,7 @@ export const materialsWindowMethods = uiModule({
         filters.batch = opts.batch;
         const w: Win = {
             gen: ++generation,
+            model,
             treeId: ctx.treeId,
             overlay,
             scroller: body.querySelector<HTMLElement>('.mw-scroll')!,
@@ -342,7 +358,7 @@ export const materialsWindowMethods = uiModule({
     refreshMaterialsWindow(): void {
         const w = win;
         if (!w || !document.getElementById(MODAL_ID)) return;
-        const ctx = this.materialsContext();
+        const ctx = this.materialsWindowContext();
         if (!ctx || ctx.treeId !== w.treeId) return;
         const cameUp = ctx.caps.bridgeUp && !w.bridgeUp;
         w.bridgeUp = ctx.caps.bridgeUp;
@@ -367,7 +383,7 @@ export const materialsWindowMethods = uiModule({
     /** Batches and people, the open batches' files, then the whole list in the background. */
     async mwLoad(): Promise<void> {
         const w = win;
-        const ctx = this.materialsContext();
+        const ctx = this.materialsWindowContext();
         if (!w || w.loading || !ctx?.caps.list || !ctx.caps.bridgeUp || !ctx.base) return;
         const gen = w.gen;
         const base = ctx.base;
@@ -402,7 +418,7 @@ export const materialsWindowMethods = uiModule({
     /** One batch's files (`?batch=`), unless the whole list is known. */
     async mwLoadBatch(id: string): Promise<void> {
         const w = win;
-        const ctx = this.materialsContext();
+        const ctx = this.materialsWindowContext();
         if (!w || !ctx?.caps.bridgeUp || !ctx.base) return;
         if (cachedMaterials(w.treeId)?.full || w.loadedBatches.has(id) || w.loadingBatches.has(id)) return;
         const gen = w.gen;
@@ -433,7 +449,7 @@ export const materialsWindowMethods = uiModule({
         if (!w) return false;
         const set = w.open.get(key);
         if (set !== undefined) return set;
-        if (narrowing(w.filters) || w.group === 'date') return true;
+        if (narrowing(w.filters) || w.group !== 'batch') return true;
         // The batch it was opened for, else the first group; a batch's first folder with it
         // (and down its line while a folder holds only folders).
         const first = w.groups.find(g => w.focusBatch ? g.batch?.id === w.focusBatch : true) ?? w.groups[0];
@@ -472,29 +488,41 @@ export const materialsWindowMethods = uiModule({
     /** Recompute what is shown from the state (items again when the list changed) and draw it. */
     mwRebuild(opts: { items?: boolean } = {}): void {
         const w = win;
-        const ctx = this.materialsContext();
+        const ctx = this.materialsWindowContext();
         if (!w || !ctx) return;
-        const rec = cachedMaterials(w.treeId);
+        const model: WindowModel = ctx.caps.list ? 'archive' : 'app';
+        if (model !== w.model) {
+            // A research came or went while open: the other model's grouping and filters.
+            w.model = model;
+            const prefs = readPrefs();
+            w.group = model === 'app' ? prefs.appGroup : prefs.group;
+            w.filters = { ...emptyFilters(), query: w.filters.query };
+            w.focusBatch = null;
+            opts = { ...opts, items: true };
+        }
+        const rec = model === 'archive' ? cachedMaterials(w.treeId) : null;
         const list = rec?.list ?? null;
         if (opts.items || list !== w.list) {
             w.list = list;
             w.drawnAttachments = treeAttachmentsKey();
-            w.items = overviewItems(list, treeRecords(true));
-            w.names = namesOf(list);
+            w.items = overviewItems(list, treeRecords(model === 'archive'));
+            w.names = namesOf(list, model);
             const keys = new Set(w.items.map(i => i.key));
             for (const k of [...w.selected]) if (!keys.has(k)) w.selected.delete(k);
         }
         // A research without assigning never sends hidden files; "Show hidden" is not offered.
         if (!ctx.caps.assign) w.filters.showHidden = false;
-        w.summary = overviewSummary(w.items, list, !!rec?.full);
+        w.summary = overviewSummary(w.items, list, !!rec?.full, model === 'app');
         w.groups = overviewGroups({
             items: w.items, list, filters: w.filters, mode: w.group,
             batchLoaded: id => !!rec?.full || w.loadedBatches.has(id),
+            personName: key => w.names.get(key) ?? null,
         });
         w.drawnCaps = capsKey(ctx.caps, ctx.base);
         w.metrics = this.mwMetrics();
         w.layout = overviewRows(w.groups, key => this.mwIsOpen(key), w.metrics);
         w.overlay.dataset.group = w.group;
+        w.overlay.dataset.model = model;
         w.overlay.classList.toggle('can-select', ctx.caps.assign);
         w.overlay.classList.toggle('is-selecting', w.selecting);
         w.overlay.classList.toggle('is-list', w.view === 'list');
@@ -516,14 +544,15 @@ export const materialsWindowMethods = uiModule({
     /** The header's counts (or "Loading…"). */
     mwHeader(): void {
         const w = win!;
-        const ctx = this.materialsContext();
+        const ctx = this.materialsWindowContext();
         const el = w.overlay.querySelector<HTMLElement>('.mw-summary');
         if (!el || !ctx) return;
         const m = strings.materials;
         const rec = cachedMaterials(w.treeId);
         const s = w.summary;
         let text = '';
-        if (!rec) text = ctx.caps.bridgeUp && !w.loadError ? m.loading : '';
+        if (w.model === 'app') text = w.filters.noPerson ? m.summaryNoPerson(s.noPerson, s.files) : m.summaryApp(s.files, s.noPerson);
+        else if (!rec) text = ctx.caps.bridgeUp && !w.loadError ? m.loading : '';
         else if (w.filters.noPerson) text = m.summaryNoPerson(s.noPerson, s.files);
         else text = `${m.summary(s.files, s.batches, s.noPerson)}${w.filters.showHidden ? ` ${m.summaryHidden(s.hidden)}` : ''}`;
         el.textContent = text;
@@ -533,7 +562,7 @@ export const materialsWindowMethods = uiModule({
     /** Filters, grouping, view and "Select" (the search field stays, it keeps its focus). */
     mwTools(): void {
         const w = win!;
-        const ctx = this.materialsContext();
+        const ctx = this.materialsWindowContext();
         const tools = w.overlay.querySelector<HTMLElement>('.mw-tools');
         if (!tools || !ctx) return;
         const m = strings.materials;
@@ -554,14 +583,17 @@ export const materialsWindowMethods = uiModule({
             <div class="mw-chips">
                 ${chip('person', m.fPerson, f.person ? m.filterChip(m.fPerson, personName) : null)}
                 ${chip('kind', m.fKind, f.kinds.length ? m.filterChip(m.fKind, f.kinds.map(kindLabel).join(', ')) : null)}
-                ${chip('batch', m.fBatch, f.batch ? m.filterChip(m.fBatch, batchName) : null)}
+                ${w.model === 'archive' ? chip('batch', m.fBatch, f.batch ? m.filterChip(m.fBatch, batchName) : null) : ''}
                 ${toggle('noperson', `${m.noPerson} · ${w.summary.noPerson.toLocaleString(getCurrentLanguage())}`, f.noPerson)}
                 ${ctx.caps.assign ? toggle('hidden', m.showHidden, f.showHidden) : ''}
                 ${count ? `<button type="button" class="link-button mw-clear" data-mw="clear">${esc(m.clearFilters)}</button>` : ''}
             </div>
             <button type="button" class="mw-chip sel-opt mw-filters-btn${count ? ' is-active' : ''}" data-mw="sheet" aria-haspopup="dialog">${esc(count ? m.filters(count) : m.filtersTitle)}</button>
             <span class="mw-gap"></span>
-            ${seg('mw-seg-group', m.groupBy, [
+            ${seg('mw-seg-group', m.groupBy, w.model === 'app' ? [
+                { act: 'group-added', label: m.groupAdded, on: w.group === 'added' },
+                { act: 'group-person', label: m.groupPerson, on: w.group === 'person' },
+            ] : [
                 { act: 'group-batch', label: m.groupBatch, on: w.group === 'batch' },
                 { act: 'group-date', label: m.groupDate, on: w.group === 'date' },
             ])}
@@ -575,7 +607,7 @@ export const materialsWindowMethods = uiModule({
     /** The strip above the content: not running (with the time), or the list's error. */
     mwStatus(): void {
         const w = win!;
-        const ctx = this.materialsContext();
+        const ctx = this.materialsWindowContext();
         const el = w.overlay.querySelector<HTMLElement>('.mw-status');
         if (!el || !ctx) return;
         const m = strings.materials;
@@ -583,6 +615,12 @@ export const materialsWindowMethods = uiModule({
         const start = this.researchStartUrl() ? `<button type="button" class="link-button materials-start" data-mw="start">${this.researchSyncActionLabel('startResearch', strings.sync.startResearch)}</button>` : '';
         let html = '';
         let state = 'live';
+        if (w.model === 'app') {
+            w.overlay.dataset.state = 'live';
+            el.hidden = true;
+            el.innerHTML = '';
+            return;
+        }
         if (rec && !ctx.caps.bridgeUp) {
             state = 'stale';
             html = `<span>${esc(m.stale(materialStaleTime(rec.list.fetchedAt || Date.now())))}</span>${start}`;
@@ -596,17 +634,25 @@ export const materialsWindowMethods = uiModule({
         el.innerHTML = html;
     },
 
-    /** Nothing to show: loading (skeleton), not running without memory, or no match. */
-    mwEmpty(): 'skeleton' | 'nocache' | 'nomatch' | null {
+    /** Nothing to show: loading (skeleton), not running without memory, no files at all (the tree's own), or no match. */
+    mwEmpty(): 'skeleton' | 'nocache' | 'none' | 'nomatch' | null {
         const w = win!;
-        const ctx = this.materialsContext();
+        const ctx = this.materialsWindowContext();
         const el = w.overlay.querySelector<HTMLElement>('.mw-empty');
         if (!el || !ctx) return null;
         const m = strings.materials;
-        const rec = cachedMaterials(w.treeId);
-        let kind: 'skeleton' | 'nocache' | 'nomatch' | null = null;
+        const rec = w.model === 'app' ? null : cachedMaterials(w.treeId);
+        let kind: 'skeleton' | 'nocache' | 'none' | 'nomatch' | null = null;
         let html = '';
-        if (!rec && ctx.caps.bridgeUp && !w.loadError) {
+        if (w.model === 'app') {
+            if (w.items.length === 0 && !activeFilterCount(w.filters) && !w.filters.query) {
+                kind = 'none';
+                html = `<span class="mw-empty-file" aria-hidden="true">JPG</span><h3 class="mw-empty-title">${esc(m.emptyTreeTitle)}</h3><p>${esc(m.emptyTreeText)}</p><p class="mw-empty-where">${esc(m.whereApp)}</p>`;
+            } else if (w.groups.length === 0) {
+                kind = 'nomatch';
+                html = `<p>${esc(m.noMatch)}</p>${activeFilterCount(w.filters) || w.filters.query ? `<button type="button" class="link-button" data-mw="clear">${esc(m.clearFilters)}</button>` : ''}`;
+            }
+        } else if (!rec && ctx.caps.bridgeUp && !w.loadError) {
             kind = 'skeleton';
             const square = '<span class="mw-skel-tile"></span>';
             const head = '<div class="mw-skel-head"><span></span><span></span></div>';
@@ -623,6 +669,7 @@ export const materialsWindowMethods = uiModule({
         el.className = `mw-empty${kind ? ` is-${kind}` : ''}`;
         el.setAttribute('aria-hidden', kind === 'skeleton' ? 'true' : 'false');
         el.innerHTML = html;
+        w.overlay.classList.toggle('is-bare', kind === 'none');
         return kind;
     },
 
@@ -731,6 +778,10 @@ export const materialsWindowMethods = uiModule({
             const froms = (group.froms ?? []).map(k => m.from[k]).filter(Boolean);
             return froms.length ? `${m.looseSub} · ${joinAnd(lang, froms)}` : m.looseSub;
         }
+        if ((group.kind === 'day' || group.kind === 'earlier') && w.model === 'app') {
+            const people = (group.persons ?? []).map(p => nameWithoutYears(w.names.get(p) ?? p));
+            return people.length ? m.addedWith(people) : '';
+        }
         if (group.kind === 'day' || group.kind === 'earlier') {
             return [(group.batchNames ?? []).join(', '), group.looseCount ? m.looseCount(group.looseCount) : ''].filter(Boolean).join(' · ');
         }
@@ -791,16 +842,21 @@ export const materialsWindowMethods = uiModule({
         const label = hiddenLabel && !small ? `<span class="mw-hidden-label">${esc(hiddenLabel)}</span>` : '';
         const check = '<span class="mw-check" aria-hidden="true"></span>';
         const cls = `mw-thumb${item.hidden ? ' is-hidden' : ''}`;
+        // "In the tree" only beside an archive (without one everything is); a hidden file keeps its own label.
+        const inTree = win?.model === 'archive' && !hiddenLabel && (!!item.attachment || (item.uses ?? 0) > 0)
+            ? `<span class="mw-intree">${esc(m.inTreeTag)}</span>` : '';
+        const places = item.uses ? `<span class="mw-places" aria-label="${esc(m.places(item.uses))}" title="${esc(m.places(item.uses))}">${item.uses.toLocaleString(getCurrentLanguage())}</span>` : '';
+        const marks = `${label}${inTree}${places}${check}`;
         if (att && !att.originalOnly && att.mimeType.startsWith('image/') && att.dataUrl) {
-            return `<span class="${cls} has-thumb"><img src="${esc(att.dataUrl)}" alt="" loading="lazy">${label}${check}</span>`;
+            return `<span class="${cls} has-thumb"><img src="${esc(att.dataUrl)}" alt="" loading="lazy">${marks}</span>`;
         }
         const sha = materialItemSha(item);
         const letters = `<span class="mw-type">${esc(materialTileLetters(item))}</span>`;
         const lazy = !!sha && item.origin !== 'tree' && ['image', 'pdf'].includes(materialType(item.mime, item.name));
-        if (!lazy || !sha) return `<span class="${cls}">${letters}${label}${check}</span>`;
+        if (!lazy || !sha) return `<span class="${cls}">${letters}${marks}</span>`;
         const ready = materialThumbs().urlOf(sha, THUMB_PX);
         const img = ready ? `<img src="${esc(ready)}" alt="">` : letters;
-        return `<span class="${cls}${ready ? ' has-thumb' : ''}"${ready ? '' : ` data-sha="${esc(sha)}" data-group="${esc(group.key)}" data-item="${esc(item.key)}"`}>${img}${label}${check}</span>`;
+        return `<span class="${cls}${ready ? ' has-thumb' : ''}"${ready ? '' : ` data-sha="${esc(sha)}" data-group="${esc(group.key)}" data-item="${esc(item.key)}"`}>${img}${marks}</span>`;
     },
 
     mwAriaLabel(item: MaterialItem): string {
@@ -811,7 +867,7 @@ export const materialsWindowMethods = uiModule({
     },
 
     mwRestoreHtml(item: MaterialItem): string {
-        const ctx = this.materialsContext();
+        const ctx = this.materialsWindowContext();
         if (!item.hidden || !ctx?.caps.assign) return '';
         const off = ctx.caps.bridgeUp ? '' : ` aria-disabled="true" title="${esc(strings.materials.actionsWhenRunning)}"`;
         return `<button type="button" class="link-button mw-restore" data-mw="restore" data-key="${esc(item.key)}"${off}>${esc(strings.materials.restore)}</button>`;
@@ -932,7 +988,7 @@ export const materialsWindowMethods = uiModule({
     /** Selection marks, the bar and the phone header (`marks`: also the drawn tiles). */
     mwSelectionChanged(marks = true): void {
         const w = win;
-        const ctx = this.materialsContext();
+        const ctx = this.materialsWindowContext();
         if (!w || !ctx) return;
         const m = strings.materials;
         w.overlay.classList.toggle('is-selecting', w.selecting);
@@ -1017,7 +1073,7 @@ export const materialsWindowMethods = uiModule({
     },
 
     mwCanSelect(): boolean {
-        return !!this.materialsContext()?.caps.assign;
+        return !!this.materialsWindowContext()?.caps.assign;
     },
 
     /** Note where an item is (its group and folder) for "Select whole …". */
@@ -1055,7 +1111,7 @@ export const materialsWindowMethods = uiModule({
 
     /** A batch's (or its folder's) actions (3b). */
     mwBatchActions(group: OverviewGroup, folder: OverviewFolder | undefined): { id: string; label: string; writes?: boolean; divider?: boolean }[] {
-        const ctx = this.materialsContext();
+        const ctx = this.materialsWindowContext();
         const batch = group.batch;
         if (!ctx || !batch) return [];
         const m = strings.materials;
@@ -1104,7 +1160,7 @@ export const materialsWindowMethods = uiModule({
             case 'removePerson': this.mwRun('removeFromPerson', await this.mwBatchItems(batch), { batch }); break;
             case 'hide': this.mwRun('hide', await this.mwBatchItems(batch, folder?.label), { batch, ...folderCtx }); break;
             case 'research': {
-                const ctx = this.materialsContext();
+                const ctx = this.materialsWindowContext();
                 const url = ctx ? researchSchemeUrl('open', { tree: ctx.researchId }, announcedResearchScheme()) : null;
                 if (url) this.launchResearchLink(url);
                 break;
@@ -1141,13 +1197,14 @@ export const materialsWindowMethods = uiModule({
         pop.className = `mw-pop mw-pop-${kind}`;
         const menu = kind === 'batchMenu' || kind === 'folderMenu';
         pop.setAttribute('role', menu ? 'menu' : 'dialog');
-        if (!menu) pop.setAttribute('aria-label', kind === 'sheet' ? m.filtersTitle : kind === 'person' ? m.fPerson : kind === 'kind' ? m.fKind : m.fBatch);
+        if (!menu) pop.setAttribute('aria-label', kind === 'where' ? m.whereTitle : kind === 'sheet' ? m.filtersTitle : kind === 'person' ? m.fPerson : kind === 'kind' ? m.fKind : m.fBatch);
         w.overlay.appendChild(pop);
         w.pop = pop;
         w.popKind = kind;
         w.popAnchor = anchor;
         anchor.setAttribute('aria-expanded', 'true');
         if (menu) this.mwFillMenu(pop, data);
+        else if (kind === 'where') this.mwFillWhere(pop);
         else this.mwFillFilters(pop, kind);
         this.mwPlacePop();
         w.popKey = (e: KeyboardEvent) => {
@@ -1174,6 +1231,7 @@ export const materialsWindowMethods = uiModule({
         document.addEventListener('keydown', w.popKey, true);
         document.addEventListener('mousedown', w.popOutside, true);
         if (kind === 'person') w.picker?.focusInput();
+        else if (kind === 'where') { pop.tabIndex = -1; pop.focus(); }
         else pop.querySelector<HTMLElement>('[role="menuitem"]:not([aria-disabled="true"]), input, button')?.focus();
     },
 
@@ -1193,7 +1251,7 @@ export const materialsWindowMethods = uiModule({
 
     mwFillMenu(pop: HTMLElement, data: { group?: string; folder?: string }): void {
         const w = win!;
-        const ctx = this.materialsContext();
+        const ctx = this.materialsWindowContext();
         const group = w.groups.find(g => g.key === data.group);
         const folder = data.folder ? group?.folders.find(f => f.key === data.folder) : undefined;
         if (!group || !ctx) return;
@@ -1214,10 +1272,24 @@ export const materialsWindowMethods = uiModule({
         }));
     },
 
+    /** ⓘ "Where the files are": one sentence by the model, a second one for an encrypted tree (1c, 1d). */
+    mwFillWhere(pop: HTMLElement): void {
+        const w = win!;
+        const ctx = this.materialsWindowContext();
+        const m = strings.materials;
+        const agent = !!ctx?.agent;
+        const encrypted = SettingsManager.isEncryptionEnabled();
+        const lines = [
+            w.model === 'app' ? m.whereApp : agent ? m.whereArchiveResearch : m.whereArchive,
+            encrypted && w.model === 'archive' ? (agent ? m.whereEncryptedResearch : m.whereEncrypted) : '',
+        ].filter(Boolean);
+        pop.innerHTML = `<div class="mw-pop-head">${esc(m.whereTitle)}</div>${lines.map(t => `<p class="mw-where-text">${esc(t)}</p>`).join('')}`;
+    },
+
     /** The filter popovers (wide) and the filters sheet (≤ 1024). */
     mwFillFilters(pop: HTMLElement, kind: PopKind): void {
         const w = win!;
-        const ctx = this.materialsContext();
+        const ctx = this.materialsWindowContext();
         if (!ctx) return;
         const m = strings.materials;
         const f = w.filters;
@@ -1237,7 +1309,7 @@ export const materialsWindowMethods = uiModule({
                 ${KIND_FILTERS.map(k => `<label class="mw-check-row"><input type="checkbox" data-pop="kind" value="${k}"${f.kinds.includes(k) ? ' checked' : ''}> ${esc(k === 'none' ? m.kindNone : m.kind[k] ?? k)}</label>`).join('')}
             </div>`);
         }
-        if (kind === 'batch' || sheet) {
+        if (kind === 'batch' || (sheet && w.model === 'archive')) {
             const batches = [...(w.list?.batches ?? [])].sort((a, b) => (Date.parse(b.at ?? '') || 0) - (Date.parse(a.at ?? '') || 0));
             parts.push(`<div class="mw-pop-section" role="radiogroup" aria-label="${esc(m.fBatch)}">
                 ${sheet ? `<div class="mw-pop-title">${esc(m.fBatch)}</div>` : ''}
@@ -1255,8 +1327,10 @@ export const materialsWindowMethods = uiModule({
             parts.push(`<div class="mw-pop-section">
                 <div class="mw-pop-title">${esc(m.groupBy)}</div>
                 <div class="mw-seg sel-seg" role="group" aria-label="${esc(m.groupBy)}">
-                    <button type="button" class="sel-opt" data-sel-form="seg" data-pop="group-batch" aria-pressed="${w.group === 'batch'}">${esc(m.groupBatch)}</button>
-                    <button type="button" class="sel-opt" data-sel-form="seg" data-pop="group-date" aria-pressed="${w.group === 'date'}">${esc(m.groupDate)}</button>
+                    ${(w.model === 'app'
+                        ? [['added', m.groupAdded], ['person', m.groupPerson]]
+                        : [['batch', m.groupBatch], ['date', m.groupDate]]).map(([g, label]) =>
+                        `<button type="button" class="sel-opt" data-sel-form="seg" data-pop="group-${g}" aria-pressed="${w.group === g}">${esc(label)}</button>`).join('')}
                 </div>
             </div>`);
             parts.push(`<div class="mw-pop-foot">
@@ -1268,11 +1342,11 @@ export const materialsWindowMethods = uiModule({
         if (pop.querySelector('#mw-person-picker')) {
             w.picker = new PersonPicker({
                 containerId: 'mw-person-picker',
-                filter: p => !!researchPersonRef(p.refn),
+                filter: p => w.model === 'app' || !!researchPersonRef(p.refn),
                 onSelect: (id) => {
-                    const refn = researchPersonRef(DataManager.getPerson(id)?.refn);
-                    if (!refn) return;
-                    w.filters.person = refn;
+                    const key = w.model === 'app' ? (DataManager.getPerson(id) ? id : null) : researchPersonRef(DataManager.getPerson(id)?.refn);
+                    if (!key) return;
+                    w.filters.person = key;
                     this.mwFiltersChanged();
                     if (sheet) this.mwRefillSheet(); else { const back = w.popAnchor; this.mwClosePop(); back?.focus(); }
                 },
@@ -1299,6 +1373,8 @@ export const materialsWindowMethods = uiModule({
                 case 'hidden': w.filters.showHidden = !w.filters.showHidden; break;
                 case 'group-batch': this.mwSetGroup('batch'); break;
                 case 'group-date': this.mwSetGroup('date'); break;
+                case 'group-added': this.mwSetGroup('added'); break;
+                case 'group-person': this.mwSetGroup('person'); break;
                 case 'clear': this.mwClearFilters(); break;
                 case 'done': { const back = w.popAnchor; this.mwClosePop(); back?.focus(); return; }
                 default: return;
@@ -1415,7 +1491,7 @@ export const materialsWindowMethods = uiModule({
         });
         w.overlay.querySelector('.mw-selhead-done')?.addEventListener('click', () => this.clearMaterialsSelection());
         w.overlay.querySelector('.mw-head')?.addEventListener('click', (e) => {
-            const btn = (e.target as HTMLElement).closest<HTMLElement>('.mw-tools [data-mw]');
+            const btn = (e.target as HTMLElement).closest<HTMLElement>('.mw-tools [data-mw], .mw-where');
             if (!btn) return;
             this.mwToolAction(btn);
         });
@@ -1430,6 +1506,7 @@ export const materialsWindowMethods = uiModule({
             case 'kind': this.mwOpenPop('kind', btn); return;
             case 'batch': this.mwOpenPop('batch', btn); return;
             case 'sheet': this.mwOpenPop('sheet', btn); return;
+            case 'where': this.mwOpenPop('where', btn); return;
             case 'clear-person': f.person = null; break;
             case 'clear-kind': f.kinds = []; break;
             case 'clear-batch': f.batch = null; w.focusBatch = null; break;
@@ -1438,6 +1515,8 @@ export const materialsWindowMethods = uiModule({
             case 'clear': this.mwClearFilters(); break;
             case 'group-batch': this.mwSetGroup('batch'); break;
             case 'group-date': this.mwSetGroup('date'); break;
+            case 'group-added': this.mwSetGroup('added'); break;
+            case 'group-person': this.mwSetGroup('person'); break;
             case 'view-grid': this.mwSetView('grid'); return;
             case 'view-list': this.mwSetView('list'); return;
             case 'select':

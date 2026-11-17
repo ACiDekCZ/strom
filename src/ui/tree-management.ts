@@ -340,6 +340,17 @@ export const treeManagementMethods = uiModule({
         }
         const sourcesRow = document.getElementById('actions-sources-row');
         if (sourcesRow) sourcesRow.style.display = this.isSourcesMenuOffered() ? '' : 'none';
+        // Materials with their count: a tree without a research that lists them (spec 102 §1).
+        const materialsRow = document.getElementById('actions-materials-row');
+        if (materialsRow) {
+            const on = this.isMaterialsMenuOffered();
+            materialsRow.style.display = on ? '' : 'none';
+            const n = on ? this.materialsAppCount() : 0;
+            const val = document.getElementById('actions-materials-count');
+            if (val) val.textContent = on ? n.toLocaleString(getCurrentLanguage()) : '';
+            if (on) materialsRow.setAttribute('aria-label', `${strings.materials.menu} ${n.toLocaleString(getCurrentLanguage())}`);
+            else materialsRow.removeAttribute('aria-label');
+        }
         // Strom Research "New" label on its menu row.
         this.refreshResearchNewMarker();
         this.refreshUndoRedoToolbar();
@@ -683,6 +694,15 @@ export const treeManagementMethods = uiModule({
     treeActionSources(): void {
         this.closeActionsMenu();
         this.showSourcesDialog();
+    },
+    /** The Actions menu's Materials (a tree without a research that lists them; spec 102 §1). */
+    isMaterialsMenuOffered(): boolean {
+        return this.materialsWindowOn() && !this.materialsListOn();
+    },
+    /** ⋯ › Materials: the tree's own files (spec 102 §1). */
+    treeActionMaterials(): void {
+        this.closeActionsMenu();
+        this.openMaterials();
     },
     /** ⋯ › Lists of people… (spec 084 §2). */
     treeActionLists(): void {

@@ -100,6 +100,12 @@ function attachmentMoreHtml(att: Attachment, esc: (t: string) => string): string
 }
 
 export const attachmentsMethods = uiModule({
+    /** The edited person's files in the Materials window, by person (spec 102 §1). */
+    openPersonMaterialsWindow(): void {
+        if (!this.currentId) return;
+        this.openMaterials({ person: this.currentId, group: 'added' });
+    },
+
     /** Render the attachments list + total for the currently edited person. */
     renderAttachmentsList(): void {
         const container = document.getElementById('attachments-list');
@@ -189,6 +195,14 @@ export const attachmentsMethods = uiModule({
                     this.showAttachmentMenu(el.dataset.attachmentId ?? '', el);
                 });
             });
+        }
+
+        // The person's files in the Materials window (a tree without a research that lists them; spec 102 §1).
+        const all = document.getElementById('attachments-all-materials');
+        if (all) {
+            const show = attachments.length > 0 && this.materialsWindowOn() && !this.materialsListOn();
+            all.hidden = !show;
+            all.textContent = show ? strings.materials.allForPerson(attachments.length) : '';
         }
 
         // What this person brings into the file, each part named (the whole

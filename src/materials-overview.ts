@@ -113,9 +113,14 @@ export function queryWords(query: string): string[] {
     return foldText(query).split(/\s+/).filter(Boolean);
 }
 
-/** A research file nobody is on (directly, from sorting or through its batch). */
+/**
+ * A file nobody is on: a research file (directly, from sorting or through
+ * its batch), or a file of the tree at no person (only at a source or a
+ * union; a person the research does not know yet still counts as one).
+ */
 export function itemWithoutPerson(item: MaterialItem): boolean {
-    return item.origin !== 'tree' && item.persons.length === 0;
+    if (item.persons.length > 0) return false;
+    return item.origin !== 'tree' || !item.attachment?.places?.some(p => 'personId' in p);
 }
 
 /** Does the item pass the filters? (`words`: `queryWords(f.query)`, computed once.) */
@@ -147,11 +152,12 @@ export interface OverviewSummary {
  * The window's header counts. While only some files are known (the whole
  * list not loaded yet), the batches' own counts stand in for theirs.
  */
-export function overviewSummary(items: readonly MaterialItem[], list: MaterialList | null, full: boolean): OverviewSummary {
+export function overviewSummary(items: readonly MaterialItem[], list: MaterialList | null, full: boolean, withTree = false): OverviewSummary {
     let files = 0, noPerson = 0, hidden = 0;
     const loadedPerBatch = new Map<string, number>();
     for (const item of items) {
-        if (item.origin === 'tree') continue;
+        // The tree's own files count only where they are the whole list (a tree without an archive).
+        if (item.origin === 'tree' && !withTree) continue;
         if (item.hidden) { hidden++; continue; }
         files++;
         if (itemWithoutPerson(item)) noPerson++;

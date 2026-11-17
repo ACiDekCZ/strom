@@ -220,7 +220,7 @@ test.describe('Materials window: loading, grouping and views', () => {
         await win(page).locator('[data-mw="view-list"]').click();
         await expect(win(page).locator('.mw-canvas .mw-li')).toHaveCount(3);
         await expect(win(page).locator('.mw-canvas .mw-tile')).toHaveCount(0);
-        expect(JSON.parse(await page.evaluate(() => localStorage.getItem('strom.materials.view') ?? '{}'))).toEqual({ group: 'date', view: 'list' });
+        expect(JSON.parse(await page.evaluate(() => localStorage.getItem('strom.materials.view') ?? '{}'))).toEqual({ group: 'date', appGroup: 'added', view: 'list' });
         await win(page).locator('.close-btn').click();
         await openWindow(page);
         await expect(win(page)).toHaveAttribute('data-group', 'date');

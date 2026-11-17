@@ -28799,6 +28799,28 @@
         .mw-titles { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 12px; }
         .mw-titles h2 { margin: 0; flex-shrink: 0; }
         .mw-summary { min-width: 0; font-size: 13px; color: var(--text-light); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+        /* ⓘ "Where the files are" (spec 102 §1, 1c/1d): after the counts, a popover with one sentence. */
+        .materials-window .mw-where {
+            flex-shrink: 0; align-self: center; width: 26px; height: 26px; padding: 0; border: none; border-radius: var(--r-pill);
+            background: none; color: var(--text-light); font-size: 16px; line-height: 1; cursor: pointer;
+        }
+        .materials-window .mw-where[aria-expanded="true"] { background: var(--surface-2); color: var(--text); }
+        .materials-window .mw-where:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
+        .mw-pop-where { width: 380px; padding: 12px 14px; gap: 6px; }
+        .mw-pop-where .mw-pop-head { padding: 0; }
+        .mw-where-text { margin: 0; font-size: 13.5px; line-height: 1.45; color: var(--text-light); }
+        .mw-pop-where:focus { outline: none; }
+        /* The empty tree (1e): only the search stays in the toolbar. */
+        #materials-modal.is-bare .mw-tools { display: none; }
+        .mw-empty.is-none { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; padding: 72px 0 24px; }
+        .mw-empty.is-none p { max-width: 520px; margin: 0; }
+        .mw-empty-file {
+            display: flex; align-items: center; justify-content: center; width: 72px; height: 88px; box-sizing: border-box;
+            border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface-2);
+            color: var(--text-light); font-size: 13px; font-weight: 700; letter-spacing: 0.04em;
+        }
+        .mw-empty-title { margin: 0; font-size: 16px; font-weight: 600; color: var(--text); }
+        .mw-empty .mw-empty-where { font-size: 12.5px; color: var(--text-light); }
         .mw-selhead { display: none; flex: 1; min-width: 0; align-items: center; gap: 12px; font-weight: 600; }
         .mw-selhead-count { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .materials-window .mw-head .close-btn { order: 2; }
@@ -28885,6 +28907,18 @@
             position: absolute; left: 6px; bottom: 6px; max-width: calc(100% - 12px); padding: 2px 8px; border-radius: var(--r-tag);
             background: var(--text); color: var(--bg); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
+        /* With an archive: "In the tree" bottom left; the number of places top right (spec 102 §1). */
+        .mw-intree {
+            position: absolute; left: 6px; bottom: 6px; max-width: calc(100% - 12px); padding: 1px 7px; box-sizing: border-box;
+            border-radius: var(--r-tag); border: 1px solid var(--border); background: var(--surface); color: var(--text);
+            font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .mw-places {
+            position: absolute; top: 6px; right: 6px; min-width: 20px; box-sizing: border-box; padding: 1px 7px; text-align: center;
+            border-radius: var(--r-pill); background: var(--text); color: var(--bg); font-size: 11px; font-weight: 600;
+            font-variant-numeric: tabular-nums;
+        }
+        .mw-li .mw-intree, .mw-li .mw-places { display: none; }
         .mw-check {
             display: none; position: absolute; top: 6px; left: 6px; width: 22px; height: 22px; box-sizing: border-box;
             border: 2px solid var(--border); border-radius: 50%; background: var(--surface); align-items: center; justify-content: center;
@@ -28974,6 +29008,7 @@
             .materials-window .mw-group-toggle:hover .mw-group-name, .materials-window .mw-folder-toggle:hover .mw-folder-name { color: var(--primary-dark); }
             .materials-window .mw-more:hover { background: var(--surface-2); color: var(--text); }
             .mw-check-row:hover { background: var(--hover-bg); }
+            .materials-window .mw-where:hover { background: var(--surface-2); color: var(--text); }
         }
         @media (pointer: coarse) {
             .materials-window .mw-chip, #materials-modal .mw-search { height: 40px; }
@@ -28981,6 +29016,7 @@
             .materials-window .mw-more { width: 44px; height: 44px; }
             .mw-check-row { min-height: 44px; }
             .mw-check { width: 26px; height: 26px; }
+            .materials-window .mw-where { width: 40px; height: 40px; }
         }
         @media (max-width: 1024px) {
             .materials-window .mw-filters-btn { display: inline-flex; }
@@ -29001,8 +29037,12 @@
         }
         @media (max-width: 640px) {
             .materials-window .mw-head { padding: 12px 16px 8px; }
-            .mw-titles { flex-direction: column; align-items: flex-start; gap: 2px; }
-            .mw-summary { white-space: normal; }
+            .mw-titles { flex-wrap: wrap; align-items: center; gap: 2px 8px; }
+            .mw-summary { white-space: normal; order: 2; flex-basis: 100%; }
+            .mw-intree { font-size: 10px; left: 4px; bottom: 4px; padding: 0 5px; }
+            .mw-places { top: 4px; right: 4px; font-size: 10px; padding: 0 6px; }
+            .mw-pop-where { width: calc(100vw - 32px); }
+            .mw-empty.is-none { padding: 40px 0 16px; }
             #materials-modal.is-selecting .mw-titles { display: none; }
             #materials-modal.is-selecting .mw-selhead { display: flex; }
             /* The header's Done ends selecting here; the toolbar chip would be a second one. */
@@ -29045,6 +29085,8 @@
             .mw-scroll { padding: 0 16px; }
             .mw-r-tiles, .mw-r-skeleton { column-gap: 8px; }
             .mw-tile-title, .mw-tile-persons { display: none; }
+            .mw-empty.is-none { padding: 16px 0; gap: 6px; }
+            .mw-empty-file { width: 48px; height: 58px; }
             .mw-selbar { height: 48px; flex-wrap: nowrap; padding: 0 16px; padding-bottom: env(safe-area-inset-bottom); }
             .materials-window .mw-selbtn { min-height: 36px; }
             .mw-pop-sheet { max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); }
@@ -29176,6 +29218,10 @@
             .attachment-more, .attachment-note-text { display: none; }
         }
         .attachments-total { color: var(--text-secondary, #777); font-size: 12px; margin-bottom: 8px; }
+        /* The person's files in the Materials window (a tree without a research that lists them; spec 102 §1). */
+        .attachments-all-materials { display: block; margin: 2px 0 8px; font-size: 13px; font-weight: 600; text-align: left; }
+        .attachments-all-materials[hidden] { display: none; }
+        @media (pointer: coarse) { .attachments-all-materials { min-height: 44px; } }
         .attachments-empty { color: var(--text-light); font-size: 13px; padding: 4px 0; }
         .attachments-empty.empty-block--compact { font-size: inherit; padding: 8px 0 4px; }
         /* Fullscreen image preview */
@@ -31036,6 +31082,11 @@
                 <div class="tree-switcher-action edit-only" id="actions-sources-row" style="display:none;" onclick="window.Strom.UI.treeActionSources()" tabindex="0" role="menuitem">
                     <span data-i18n="sources.menu"></span>
                 </div>
+                <!-- Materials (spec 102 §1): every tree without a research that lists them (with one: the Research menu); a locked or newer tree shows it too, without edits. -->
+                <div class="tree-switcher-action" id="actions-materials-row" style="display:none;" onclick="window.Strom.UI.treeActionMaterials()" tabindex="0" role="menuitem">
+                    <span data-i18n="materials.menu"></span>
+                    <span id="actions-materials-count" class="research-item-val" aria-hidden="true"></span>
+                </div>
                 <!-- Lists of people (spec 084 §2): always shown, an exported page reads them too. -->
                 <div class="tree-switcher-action" id="actions-lists-row" onclick="window.Strom.UI.treeActionLists()" tabindex="0" role="menuitem">
                     <span data-i18n="menu.lists"></span>
@@ -31657,6 +31708,7 @@
                     <div class="form-group" id="attachments-section">
                         <label data-i18n="attachments.title"></label> <span class="media-older-note" id="attachments-older-research" hidden></span>
                         <div id="attachments-list" class="attachments-list"></div>
+                        <button type="button" class="link-button attachments-all-materials" id="attachments-all-materials" hidden onclick="window.Strom.UI.openPersonMaterialsWindow()"></button>
                         <div id="attachments-total" class="attachments-total"></div>
                         <input type="file" id="input-attachment" accept="image/jpeg,image/png,application/pdf" style="display:none" onchange="window.Strom.UI.handleAttachmentInput(event)">
                         <button type="button" class="secondary" id="btn-add-attachment" onclick="document.getElementById('input-attachment').click()" data-i18n="attachments.add"></button>
