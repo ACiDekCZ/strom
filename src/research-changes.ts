@@ -7,7 +7,7 @@
 
 import { StromData, Person, Partnership, PartnershipId, Source, EventParticipant, PersonId, LifeEvent, Attachment, PlaceGeo, isPrimaryName, personSourceIds } from './types.js';
 import { isPurePlaceholder } from './single-parent.js';
-import { mediaPersonIds, mediaSourceId, mediaSourceIds, personMediaIndex } from './media.js';
+import { mediaPersonIds, mediaSourceId, mediaSourceIds, personMediaIndex, placePersonId, placeSourceId, samePlace } from './media.js';
 import { collectPlaces } from './places.js';
 import { factValueSignature, handedConfirmations } from './verify.js';
 import type { FactHolder } from './import-origin.js';
@@ -17,14 +17,17 @@ import { sourcePlaceDiffers, sourcePlaceKey } from './source-location.js';
 export type ChangeKind =
     | 'added' | 'deleted' | 'name' | 'gender' | 'birth' | 'death' | 'marriage' | 'event'
     | 'godparent' | 'witness' | 'citation' | 'source' | 'photo' | 'photoRemoved' | 'attachment' | 'attachmentRemoved' | 'attachmentEdited'
+    /** A file's title, kind or date (spec 102 §10); a file put at one of the person's facts or events; a file taken off a source. */
+    | 'attachmentTitle' | 'attachmentAt' | 'attachmentFrom'
     | 'note' | 'parents' | 'other';
 
-/** The order kinds are told in (the most telling first). */
-const KIND_ORDER: ChangeKind[] = ['added', 'deleted', 'name', 'gender', 'birth', 'death', 'marriage', 'event', 'godparent', 'witness',
-    'citation', 'source', 'photo', 'photoRemoved', 'attachment', 'attachmentRemoved', 'attachmentEdited', 'note', 'parents', 'other'];
+/** The order kinds are told in (the most telling first; the portrait right after the name, spec 102 §10). */
+const KIND_ORDER: ChangeKind[] = ['added', 'deleted', 'name', 'photo', 'photoRemoved', 'gender', 'birth', 'death', 'marriage', 'event', 'godparent', 'witness',
+    'citation', 'source', 'attachment', 'attachmentRemoved', 'attachmentTitle', 'attachmentAt', 'attachmentFrom', 'attachmentEdited', 'note', 'parents', 'other'];
 
 /** The kinds that are the tree's own files (a portrait, attachments): a write with `media.app` names them itself. */
-const PERSON_MEDIA_KINDS: ReadonlySet<ChangeKind> = new Set<ChangeKind>(['photo', 'photoRemoved', 'attachment', 'attachmentRemoved', 'attachmentEdited']);
+const PERSON_MEDIA_KINDS: ReadonlySet<ChangeKind> = new Set<ChangeKind>(['photo', 'photoRemoved', 'attachment', 'attachmentRemoved', 'attachmentEdited',
+    'attachmentTitle', 'attachmentAt', 'attachmentFrom']);
 
 export interface PersonChange {
     personId: PersonId;
@@ -34,6 +37,10 @@ export interface PersonChange {
     deleted?: boolean;
     /** A removed person's number in the research (its REFN in the base), to pair what the research did not write. */
     refn?: string;
+    /** `attachmentAt`: the fact or event a file was put at (the first one). */
+    mediaAt?: { fact?: 'birth' | 'death'; eventId?: string };
+    /** `attachmentFrom`: the title of the source a file was taken off (the first one). */
+    mediaFrom?: string;
 }
 
 const NAME_FIELDS: (keyof Person)[] = ['firstName', 'lastName', 'titleBefore', 'titleAfter', 'marriedSurname', 'marriedFirstName', 'primaryName', 'nameVariants'];
@@ -121,10 +128,13 @@ function participantKinds(before: EventParticipant[] | undefined, after: EventPa
     return [...out];
 }
 
-/** A person's files in two versions (data v24: StromData.media, by person). */
-interface PersonFiles { before: readonly Attachment[]; after: readonly Attachment[] }
+/** A person's files in two versions (data v24: StromData.media, by person); a source's title by its id. */
+interface PersonFiles { before: readonly Attachment[]; after: readonly Attachment[]; sourceTitle?: (id: string) => string }
 
-function personKinds(before: Person, after: Person, files: PersonFiles): Set<ChangeKind> {
+/** Where a person's file went or which source it left (the row's `mediaAt` / `mediaFrom`). */
+type PersonFileDetail = Pick<PersonChange, 'mediaAt' | 'mediaFrom'>;
+
+function personKinds(before: Person, after: Person, files: PersonFiles, detail: PersonFileDetail = {}): Set<ChangeKind> {
     const kinds = new Set<ChangeKind>();
     if (NAME_FIELDS.some(f => differs(before[f], after[f]))) kinds.add('name');
     if (before.gender !== after.gender) kinds.add('gender');
@@ -157,6 +167,25 @@ function personKinds(before: Person, after: Person, files: PersonFiles): Set<Cha
     const attAfter = new Set(ownAfter.map(a => a.id));
     if ([...attAfter].some(id => !attBefore.has(id))) kinds.add('attachment');
     if ([...attBefore].some(id => !attAfter.has(id))) kinds.add('attachmentRemoved');
+    // A file in both versions (spec 102 §10): its title, kind or date; a new place at one of the person's facts
+    // or events; a source it was taken off. A file of a source keeps its title change at the source (diffOther).
+    const wasHere = new Map(files.before.map(a => [a.id, a]));
+    for (const b of files.after) {
+        const a = wasHere.get(b.id);
+        if (!a) continue;
+        if (!ofSource.has(b.id) && ((a.title ?? '') !== (b.title ?? '') || (a.kind ?? '') !== (b.kind ?? '') || (a.date ?? '') !== (b.date ?? ''))) kinds.add('attachmentTitle');
+        for (const pl of b.places) {
+            if (placePersonId(pl) !== after.id || !('personId' in pl) || (!pl.fact && !pl.eventId) || a.places.some(x => samePlace(x, pl))) continue;
+            kinds.add('attachmentAt');
+            detail.mediaAt ??= pl.fact ? { fact: pl.fact } : { eventId: pl.eventId };
+        }
+        for (const pl of a.places) {
+            const sid = placeSourceId(pl);
+            if (!sid || b.places.some(x => samePlace(x, pl))) continue;
+            kinds.add('attachmentFrom');
+            detail.mediaFrom ??= files.sourceTitle?.(sid) ?? sid;
+        }
+    }
     // A changed source this person cites is the source's change (diffOther), not the person's: told once.
     // Anything else of the person (gender, the number, the question, the story, parents…).
     const known = new Set<string>([...NAME_FIELDS, ...BIRTH_FIELDS, ...DEATH_FIELDS, ...CITATION_FIELDS, 'gender', 'notes', 'events', 'attachments', 'photo', 'photoSource', 'id']);
@@ -168,7 +197,10 @@ function personKinds(before: Person, after: Person, files: PersonFiles): Set<Cha
     if (differs(rest(before), rest(after))) kinds.add('other');
     // A fact confirmed, or a confirmation taken back, goes to the research (`_STROM_CONFIRMED`).
     if (confirmationsDiffer(before, after)) kinds.add('other');
-    if (differs(ownBefore.map(a => ({ ...a, dataUrl: undefined })), ownAfter.map(a => ({ ...a, dataUrl: undefined })))
+    // What else of a file (its note, a crop): not its title, kind, date or places, told above.
+    const plain = (a: Attachment): Record<string, unknown> => ({ ...a, dataUrl: undefined, title: undefined, kind: undefined, date: undefined,
+        titleBy: undefined, kindBy: undefined, dateBy: undefined, places: undefined });
+    if (differs(ownBefore.map(plain), ownAfter.map(plain))
         && !kinds.has('attachment') && !kinds.has('attachmentRemoved')) kinds.add('other');
     return kinds;
 }
@@ -185,9 +217,11 @@ export function diffByPerson(base: StromData, current: StromData): PersonChange[
     const cp = current.persons as Record<string, Person>;
     const filesBefore = personMediaIndex(base);
     const filesAfter = personMediaIndex(current);
+    const sourceTitle = (sid: string): string => current.sources?.[sid]?.title?.trim() || base.sources?.[sid]?.title?.trim() || sid;
     const filesOf = (id: string): PersonFiles => ({
-        before: filesBefore.get(id as PersonId) ?? [], after: filesAfter.get(id as PersonId) ?? [],
+        before: filesBefore.get(id as PersonId) ?? [], after: filesAfter.get(id as PersonId) ?? [], sourceTitle,
     });
+    const details = new Map<string, PersonFileDetail>();
 
     for (const p of Object.values(cp)) {
         const before = bp[p.id];
@@ -205,8 +239,10 @@ export function diffByPerson(base: StromData, current: StromData): PersonChange[
         // Most people did not change: one comparison of the whole record, not one per field.
         const files = filesOf(p.id);
         if (stable(before) === stable(p) && stable(files.before) === stable(files.after)) continue;
-        const kinds = personKinds(before, p, files);
+        const detail: PersonFileDetail = {};
+        const kinds = personKinds(before, p, files, detail);
         if (kinds.size) kinds.forEach(k => touch(p.id, fullName(p)).add(k));
+        if (detail.mediaAt || detail.mediaFrom) details.set(p.id, detail);
     }
     for (const p of Object.values(bp)) {
         if (cp[p.id] || p.isPlaceholder) continue;
@@ -256,17 +292,20 @@ export function diffByPerson(base: StromData, current: StromData): PersonChange[
             kinds: KIND_ORDER.filter(k => e.kinds.has(k)),
             ...(e.deleted ? { deleted: true } : {}),
             ...(e.deleted && e.refn ? { refn: e.refn } : {}),
+            ...(details.get(personId)?.mediaAt ? { mediaAt: details.get(personId)!.mediaAt } : {}),
+            ...(details.get(personId)?.mediaFrom ? { mediaFrom: details.get(personId)!.mediaFrom } : {}),
         }))
         .sort((x, y) => x.name.localeCompare(y.name));
 }
 
 // ==================== CHANGES BEYOND PEOPLE ====================
 
-export type SourceChangeKind = 'added' | 'deleted' | 'title' | 'transcript' | 'page' | 'excerptAdded' | 'excerptRemoved' | 'attachment' | 'other';
+/** `doc`: the source's evidence files (its `attachment` told so to a research with `material.links`, spec 102 §10). */
+export type SourceChangeKind = 'added' | 'deleted' | 'title' | 'transcript' | 'page' | 'excerptAdded' | 'excerptRemoved' | 'attachment' | 'doc' | 'other';
 export type CoupleChangeKind = 'childOrder' | 'mainMarriage' | 'marriageEvidence' | 'singleParent'
     | 'photo' | 'photoRemoved' | 'attachment' | 'attachmentRemoved' | 'attachmentEdited';
 
-const SOURCE_KIND_ORDER: SourceChangeKind[] = ['added', 'deleted', 'title', 'transcript', 'page', 'excerptAdded', 'excerptRemoved', 'attachment', 'other'];
+const SOURCE_KIND_ORDER: SourceChangeKind[] = ['added', 'deleted', 'title', 'transcript', 'page', 'excerptAdded', 'excerptRemoved', 'attachment', 'doc', 'other'];
 const COUPLE_KIND_ORDER: CoupleChangeKind[] = ['childOrder', 'mainMarriage', 'marriageEvidence', 'singleParent',
     'photo', 'photoRemoved', 'attachment', 'attachmentRemoved', 'attachmentEdited'];
 /** A couple's kinds that are its own files (its photo): a write with `media.app` names them itself. */
@@ -594,6 +633,61 @@ export function lineageAppOnly(unread: ReadonlySet<string> = RESEARCH_UNREAD_KIN
     return unread.has('lineage');
 }
 
+// ==================== WHAT A RESEARCH WRITES OF THE TREE'S FILES ====================
+
+/**
+ * What the research writes of the tree's files (spec 102 §10): `photos` —
+ * the portraits and the couples' photos (`media.app`); `links` — the files'
+ * titles and links (`material.links`).
+ */
+export interface MediaWrites { photos: boolean; links: boolean }
+
+/**
+ * The rows as a research of `w` writes them (spec 102 §10, R10 b): without
+ * `photos` a portrait or a couple's photo is not promised (no "app only"
+ * step); without `links` a file's title or new place is told as "other" and
+ * a file taken off a source only at the source. `doc`: a source's files
+ * named its evidence (`material.links`; not for rows kept for a write's
+ * answer, which names them `attachment`). `older`: something was not told as
+ * it is (one sentence under the list).
+ */
+export function gateMediaChanges(list: readonly PersonChange[], other: OtherChanges | null, w: MediaWrites, opts: { doc?: boolean } = {}):
+    { list: PersonChange[]; other: OtherChanges | null; older: boolean } {
+    let older = false;
+    const persons: PersonChange[] = [];
+    for (const ch of list) {
+        const kinds = new Set<ChangeKind>();
+        for (const k of ch.kinds) {
+            if (!w.photos && (k === 'photo' || k === 'photoRemoved')) { older = true; continue; }
+            if (!w.links && (k === 'attachmentTitle' || k === 'attachmentAt')) { older = true; kinds.add('other'); continue; }
+            if (!w.links && k === 'attachmentFrom') { older = true; continue; }
+            kinds.add(k);
+        }
+        if (!kinds.size && !ch.deleted) continue;
+        const { mediaAt, mediaFrom, ...rest } = ch;
+        persons.push({ ...rest, kinds: KIND_ORDER.filter(k => kinds.has(k)),
+            ...(kinds.has('attachmentAt') && mediaAt ? { mediaAt } : {}), ...(kinds.has('attachmentFrom') && mediaFrom ? { mediaFrom } : {}) });
+    }
+    if (!other) return { list: persons, other, older };
+    const sources = other.sources.map(sc => !(opts.doc && w.links) || !sc.kinds.includes('attachment') ? sc
+        : { ...sc, kinds: SOURCE_KIND_ORDER.filter(k => k !== 'attachment' && (k === 'doc' || sc.kinds.includes(k))) });
+    const couples: CoupleChange[] = [];
+    for (const cc of other.couples) {
+        if (w.photos || !cc.kinds.some(k => k === 'photo' || k === 'photoRemoved')) { couples.push(cc); continue; }
+        older = true;
+        const kinds = cc.kinds.filter(k => k !== 'photo' && k !== 'photoRemoved');
+        if (kinds.length) couples.push({ ...cc, kinds });
+    }
+    return { list: persons, other: { ...other, sources, couples }, older };
+}
+
+/** A written send's rows beyond the people with a source's files named its evidence (`material.links`). */
+export function docSentRows(rows: readonly SentOtherRow[], links: boolean): SentOtherRow[] {
+    if (!links) return [...rows];
+    return rows.map(r => r.type !== 'source' || !r.kinds.includes('attachment') ? r
+        : { ...r, kinds: SOURCE_KIND_ORDER.filter(k => k !== 'attachment' && (k === 'doc' || r.kinds.includes(k))) });
+}
+
 // ==================== WHAT A SEND CARRIED BEYOND THE PEOPLE ====================
 
 /**
@@ -683,7 +777,8 @@ function writtenMediaKind(kind: string): ChangeKind | null {
         case 'media.photo.removed': case 'media.couplePhoto.removed': return 'photoRemoved';
         case 'media.attachment': return 'attachment';
         case 'media.attachment.removed': return 'attachmentRemoved';
-        case 'media.edit': case 'media.link': case 'media.unlink': return 'attachmentEdited';
+        case 'media.edit': return 'attachmentTitle';
+        case 'media.link': case 'media.unlink': return 'attachmentEdited';
         default: return null;
     }
 }

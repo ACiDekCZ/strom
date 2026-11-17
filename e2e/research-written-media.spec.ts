@@ -59,23 +59,58 @@ test.describe('what was written of the tree\'s own files', () => {
         const panel = page.locator('#research-changes-panel');
         const jan = panel.locator('[data-kind="person"]').filter({ hasText: 'Jan Fíšek' });
         await expect(jan.locator('.research-changes-kinds')).toHaveText('photo');
+        // The new portrait's preview at the row's end (spec 102 §10).
+        await expect(jan.locator('img.research-changes-pic')).toHaveCount(1);
         const couple = panel.locator('[data-kind="couple"]');
         await expect(couple.locator('.research-changes-name')).toHaveText('Josef Fíšek and Anna Svobodová');
-        await expect(couple.locator('.research-changes-kinds')).toHaveText('photo');
+        await expect(couple.locator('.research-changes-kinds')).toHaveText('photo of the union');
         // Nothing of the files stays in the app only.
         await expect(panel.locator('[data-section="appOnly"]')).toHaveCount(0);
         await expect(panel.locator('.research-changes-tag')).toHaveCount(0);
         await expect(panel.locator('.research-changes-more')).toHaveText('+ 1 more');
     });
 
-    test('a research without media.app: the couple\'s photo stays "app only", as before', async ({ page }) => {
+    test('a research without media.app: the photos are not promised, no "app only" step (spec 102 §10, R10 b)', async ({ page }) => {
         const b = await researchTree(page, []);
         await addPhotos(page);
+        // About to send: one sentence why, no row of the portrait or the couple's photo.
+        await page.evaluate(() => window.Strom.UI.showResearchChanges('send'));
+        const panel = page.locator('#research-changes-panel');
+        await expect(panel.locator('.research-changes-body .research-changes-note')).toHaveText(/does not write photos of people and unions/);
+        await expect(panel.locator('[data-kind="person"]').filter({ hasText: 'Jan Fíšek' })).toHaveCount(0);
+        await expect(panel.locator('[data-kind="couple"]')).toHaveCount(0);
+        await page.evaluate(() => window.Strom.UI.closeResearchChanges());
         await sendAndShowWritten(page, b);
         expect(b.postQueries?.[0].get('media')).toBeNull();
-        const panel = page.locator('#research-changes-panel');
-        await expect(panel.locator('[data-section="appOnly"]')).toHaveText('App only · 1');
-        await expect(panel.locator('[data-group="appOnly"] .research-changes-name')).toHaveText('Josef Fíšek and Anna Svobodová');
+        await expect(panel.locator('[data-section="appOnly"]')).toHaveCount(0);
+        await expect(panel.locator('[data-kind="couple"]')).toHaveCount(0);
         await expect(panel.locator('.research-changes-more')).toHaveCount(0);
+    });
+
+    test('a research with material.links: a file\'s title, its new place and a source\'s evidence are told as they are', async ({ page }) => {
+        const b = await researchTree(page, ['media.app', 'material.links']);
+        await page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            const d = dm.getData();
+            const jan = (Object.values(d.persons) as any[]).find(p => p.firstName === 'Jan');
+            const att = dm.addAttachment(jan.id, { name: 'mlyn.jpg', mimeType: 'image/jpeg', dataUrl: 'data:image/jpeg;base64,AAAA', sizeBytes: 3 });
+            return att?.id;
+        });
+        // Written there: the research's version has the file, the next changes are its title and its place at the birth.
+        await sendAndShowWritten(page, b);
+        await page.evaluate(() => window.Strom.UI.closeResearchChanges());
+        await page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            const d = dm.getData();
+            const jan = (Object.values(d.persons) as any[]).find(p => p.firstName === 'Jan');
+            const att = (Object.values(d.media) as any[]).find(a => a.name === 'mlyn.jpg');
+            dm.setMediaDetails(att.id, { title: 'Jan at the mill' });
+            dm.addMediaPlace(att.id, { personId: jan.id, fact: 'birth' });
+        });
+        await page.evaluate(() => window.Strom.UI.showResearchChanges('send'));
+        const jan = page.locator('#research-changes-panel [data-kind="person"]').filter({ hasText: 'Jan Fíšek' });
+        await expect(jan.locator('.research-changes-kinds')).toContainText('attachment title');
+        await expect(jan.locator('.research-changes-kinds')).toContainText('+ attachment at birth');
+        await expect(page.locator('#research-changes-panel .research-changes-body .research-changes-note')).toHaveCount(0);
     });
 });
