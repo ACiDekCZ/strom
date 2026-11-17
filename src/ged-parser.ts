@@ -1039,12 +1039,15 @@ function isMilitaryLabel(label: string): boolean {
  * line in the note is the honest middle: nothing disappears, and it is written
  * where a reader looks for context.
  *
+ * EMAIL right under the person is not GEDCOM 5.5.1 (it belongs in an address
+ * structure), yet some programs write it so: its line in the note, too.
+ *
  * Deliberately absent: ANCI, DESI, RFN, AFN, RESN and the platform sync ids.
  * Those are bookkeeping of the program that wrote the file, not something a
  * register ever said about a person.
  */
 const NOTED_INDI_TAGS = new Set(['BLES', 'RETI', 'CAST', 'DSCR', 'IDNO', 'NCHI',
-    'NMR', 'PROP', 'SSN', 'FACT', 'ALIA']);
+    'NMR', 'PROP', 'SSN', 'FACT', 'ALIA', 'EMAIL']);
 // The couple's events (banns, a contract, a census…) are events of their own
 // since data version 10 (see coupleEventTypeOfTag); only the count is left.
 const NOTED_FAM_TAGS = new Set(['NCHI']);

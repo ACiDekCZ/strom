@@ -859,6 +859,7 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
             SSN: 'Numer ubezpieczenia',
             FACT: 'Informacja',
             ALIA: 'Występuje także jako',
+            EMAIL: 'E-mail',
         } as Record<string, string>,
         genericEvent: 'Zdarzenie',
         altBirth: 'Urodzenie (alternatywny zapis)',

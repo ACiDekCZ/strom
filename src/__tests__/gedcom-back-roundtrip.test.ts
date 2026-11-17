@@ -510,11 +510,21 @@ describe('links to media records in a file of another program (1 OBJE @O1@): a p
 describe('an e-mail written right under the person (1 EMAIL, not GEDCOM 5.5.1)', () => {
     const file = MYHERITAGE.replace('1 SEX F\n', '1 SEX F\n1 EMAIL libuna@@example.org\n');
 
-    it('is named in the import summary as not carried over', () => {
+    it('goes into the person\'s note as a labelled line, not counted as left out', () => {
         const r = load(file);
-        expect(r.stats.droppedTagSummary ?? '').toContain('EMAIL');
+        expect(r.stats.droppedTagSummary ?? '').not.toContain('EMAIL');
+        const women = Object.values(r.data.persons).filter(p => (p.notes ?? '').includes('E-mail: '));
+        expect(women).toHaveLength(1);
+        expect(women[0].notes!.split('\n')).toContain('E-mail: libuna@example.org');
         // The e-mail under RESI is carried over, never counted.
         expect(load(MYHERITAGE).stats.droppedTagSummary ?? '').not.toContain('EMAIL');
+    });
+
+    it('goes back with "Back to" as the file wrote it, not as a line of the note', () => {
+        const data = migrateData(load(file).data);
+        const back = backTo(data);
+        expect(back).toMatch(/^1 EMAIL libuna@@example\.org$/m);
+        expect(back).not.toContain('E-mail: libuna');
     });
 });
 

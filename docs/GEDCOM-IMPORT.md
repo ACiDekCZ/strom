@@ -669,7 +669,7 @@ these is understood in one place only:
 
 | Under | Tags |
 |---|---|
-| `INDI` | `BLES` `RETI` `CAST` `DSCR` `IDNO` `NCHI` `NMR` `PROP` `SSN` `FACT` `ALIA` |
+| `INDI` | `BLES` `RETI` `CAST` `DSCR` `IDNO` `NCHI` `NMR` `PROP` `SSN` `FACT` `ALIA` `EMAIL` |
 | `FAM` | `NCHI` |
 
 The couple's events (above) are read only **inside the family** too: write the
@@ -717,7 +717,8 @@ the record ids, the export to the program the tree came from keeps:
 - `EMAIL` under a fact (`1 RESI` / `2 EMAIL`): shown as a line of the fact's
   note, written back as `2 EMAIL` while that line is there (other exports
   keep the note line); an `EMAIL` written right under the person (`1 EMAIL`,
-  not GEDCOM 5.5.1) is not carried over and is counted as unsupported;
+  not GEDCOM 5.5.1) becomes a labelled line of the person's note
+  ("E-mail: …"), as a fact of the table above;
 - a structure that became lines of the record's note — a fact of the table
   above (`1 NCHI 3` → "Number of children: 3"), a source's `PUBL` (with its
   `CONT` / `CONC`), and the `NOTE`, `RELI`, `CAUS`, `AGE`, `ADDR` or
