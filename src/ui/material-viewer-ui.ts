@@ -95,12 +95,12 @@ function attachmentImage(item: MaterialItem): string | null {
     return att && !att.originalOnly && att.mimeType.startsWith('image/') && att.dataUrl ? att.dataUrl : null;
 }
 
-function attachmentPdf(item: MaterialItem): { dataUrl: string; mimeType: string } | null {
+export function attachmentPdf(item: MaterialItem): { dataUrl: string; mimeType: string } | null {
     const att = item.attachment;
     return att && !att.originalOnly && att.dataUrl && att.mimeType === 'application/pdf' ? { dataUrl: att.dataUrl, mimeType: att.mimeType } : null;
 }
 
-function openPdfBlob(pdf: { dataUrl: string; mimeType: string }): boolean {
+export function openPdfBlob(pdf: { dataUrl: string; mimeType: string }): boolean {
     const blob = pdfBlobFromDataUrl(pdf.dataUrl, pdf.mimeType);
     if (!blob) return false;
     const url = URL.createObjectURL(blob);
@@ -605,6 +605,8 @@ export const materialViewerMethods = uiModule({
         const inTree = !!item.attachment?.places?.length;
         const canAttach = inTree ? DataManager.canEditMedia(item.attachment!.id) : inArchive && !!ctx?.caps.assign && !item.removedId && !DataManager.isReadOnly();
         if (canAttach) action(m.attach, () => this.openAttachDialog([item], { personId: this.materialContextPerson() }), { primary: true, write: !inTree, id: 'attach' });
+        // Create a source from this file… (spec 102 §5): the second action, the same conditions as Link to….
+        if (canAttach && this.canEditSources()) action(m.makeSource, () => void this.makeSourceFromMaterial(item, { personId: this.materialContextPerson() }), { write: !inTree, id: 'makeSource' });
         if (inArchive) {
             if (item.removedId && item.hidden) {
                 // Taken out of the tree: back with its places (the tree's own write).

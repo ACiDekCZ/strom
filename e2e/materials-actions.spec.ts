@@ -542,6 +542,8 @@ test.describe('Hide and Restore', () => {
         await page.setViewportSize({ width: 390, height: 844 });
         await setup(page, { files: [materialFile(1, { persons: ['P0003'], title: long })] });
         await view(page, long.slice(0, 20));
+        // The collapsed sheet has Link to… and Create a source…; Hide… is under All details.
+        await panel(page).locator('.mv-more').click();
         await act(page, 'hide').click();
         await expect(dialog(page).locator('.mdlg-text')).toContainText('stays in the research');
         const m = await dialog(page).evaluate(d => {
@@ -761,7 +763,7 @@ test.describe('Materials viewer on a phone', () => {
         await expect(viewer(page)).toHaveClass(/active/);
         await expect(panel(page).locator('.mv-summary')).toBeVisible();
         await expect(panel(page).locator('.mv-fields')).toBeHidden();
-        await expect(panel(page).locator('.mv-act:visible')).toHaveCount(2);
+        await expect(panel(page).locator('.mv-act:visible')).toHaveText(['Link to…', 'Create a source from this file…']);
         const more = panel(page).locator('.mv-more');
         await expect(more).toHaveText('All details');
         await more.click();

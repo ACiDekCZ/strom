@@ -659,7 +659,7 @@ export function materialCaps(env: MaterialEnv & { openLinks?: boolean }): Materi
 
 export type MaterialActionId =
     | 'open' | 'assign' | 'removeFromPerson' | 'hide' | 'restore'
-    | 'openSystem' | 'showInBatch' | 'download' | 'useAsPortrait' | 'removeFromTree' | 'edit' | 'attach';
+    | 'openSystem' | 'showInBatch' | 'download' | 'useAsPortrait' | 'removeFromTree' | 'edit' | 'attach' | 'makeSource';
 
 export interface MaterialAction {
     id: MaterialActionId;
@@ -700,6 +700,8 @@ const ACTION_ROWS: ActionRow[] = [
     { id: 'edit', writes: (i) => !i.attachment, when: (i, c) => (i.attachment ? true : inArchive(i) && c.edit) },
     // Link to… (spec 102 §4): a file of the tree in the tree; material outside it needs its working copy from the bridge.
     { id: 'attach', writes: (i) => !inTree(i), when: (i, c) => inTree(i) || (inArchive(i) && c.assign) },
+    // Create a source from this file… (spec 102 §5): as Link to…, the file becomes the source's evidence.
+    { id: 'makeSource', writes: (i) => !inTree(i), when: (i, c) => inTree(i) || (inArchive(i) && c.assign) },
     {
         id: 'removeFromPerson', writes: true,
         when: (i, c, x) => inArchive(i) && c.assign && !!x.person && i.persons.includes(x.person),

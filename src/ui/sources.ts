@@ -586,7 +586,7 @@ export const sourcesMethods = uiModule({
                     <img src="${esc(excerptImageUrl(exc))}" alt="${esc(alt)}" data-excerpt-index="${i}">
                     <button type="button" class="viewer-zoom" data-excerpt-index="${i}" aria-label="${esc(s.viewerZoom)}">⤢</button>
                     ${loaded ? this.researchExcerptExtrasHtml(exc, src) : exc.caption ? `<figcaption>${esc(exc.caption)}</figcaption>` : ''}
-                </figure>${again ? `<div class="viewer-excerpt-links">${full}${again}</div>` : full}`);
+                </figure>${this.excerptFromHtml(exc)}${again ? `<div class="viewer-excerpt-links">${full}${again}</div>` : full}`);
         });
         // What is only in the research: loading slots, one line with a button, or why not here.
         chunks.push(this.researchImagesViewerHtml(src));
@@ -663,6 +663,8 @@ export const sourcesMethods = uiModule({
             }
             return personName(ref.personId);
         };
+        // What the source is taken from (spec 102 §7), before what it supports.
+        chunks.push(this.sourceViewerDocsHtml(src, editable, excerpts));
         const cites = DataManager.listSourceCitations(src.id)
             .map(ref => ({ text: citeText(ref), main: isMainAt(ref) })).filter(c => c.text);
         if (cites.length > 0) {
@@ -696,6 +698,7 @@ export const sourcesMethods = uiModule({
         this.wireResearchImagesViewer(body, src);
         this.wireSourceConfirm(body, src);
         this.wireReadSourceAgain(body, src, excerpts);
+        this.wireSourceViewerDocs(body, src);
 
         const editBtn = document.getElementById('source-viewer-edit');
         if (editBtn) editBtn.hidden = !editable;
@@ -764,6 +767,8 @@ export const sourcesMethods = uiModule({
         const titleInput = document.getElementById('input-source-title') as HTMLInputElement | null;
         if (titleInput) titleInput.placeholder = titlePlaceholder;
         this.excerptDrafts = (src.excerpts ?? []).map(e => ({ excerpt: structuredClone(e) }));
+        // The files it is taken from (spec 102 §5/§6): staged until Save.
+        this.resetSourceDocs(src);
         this.sourceQualityDraft = src.quality;
         this.sourceEditorOriginal = { ...src, excerpts: undefined };
         this.sourceUserReadingShown = false;
@@ -782,6 +787,7 @@ export const sourcesMethods = uiModule({
         // Whoever opened the editor without a context (the catalog) cites nothing.
         if (this.sourceEditorContext === null && this.citationContext) this.sourceEditorContext = this.citationContext;
         this.wireSourceEditor();
+        this.renderSourceDocs();
         this.renderExcerptBlock();
         this.renderQualityControl();
         this.renderSourceReading();
@@ -909,7 +915,7 @@ export const sourcesMethods = uiModule({
             (document.getElementById(`input-source-${f}`) as HTMLInputElement | null)?.value ?? '');
         const excerpts = this.excerptDrafts.map(d => [d.excerpt.dataUrl.length, d.excerpt.dataUrl.slice(-64), d.excerpt.caption ?? '']);
         const verified = (document.getElementById('input-source-verified') as HTMLInputElement | null)?.checked ?? false;
-        return JSON.stringify([fields, excerpts, this.sourceQualityDraft ?? null, verified]);
+        return JSON.stringify([fields, excerpts, this.sourceQualityDraft ?? null, verified, this.sourceDocsState()]);
     },
 
     hasSourceEditorChanges(): boolean {
@@ -939,6 +945,7 @@ export const sourcesMethods = uiModule({
         this.sourceUserReadingShown = false;
         this.resetSourceLocationNote();
         this.sourceEditorContext = null;
+        this.clearSourceDocs();
         document.querySelector('.excerpt-page-picker')?.remove();
         // If this editor was opened from the picker, tear the picker down too.
         if (this.citeSourceAfterCreate) {
@@ -1002,9 +1009,11 @@ export const sourcesMethods = uiModule({
         // Originals to hand to the research once the source has its id.
         const originals: { meta: MediaOriginal; blob: Blob; personId?: PersonId; region?: CropRegion }[] = [];
         let savedSourceId: string | null = editingId;
+        // "Create a source from this file…": the toast says what was made (filled in when it is known).
+        const madeToast = !editingId && this.sourceFromFile() ? { text: '' } : undefined;
 
-        // One user action, one undo step: pages kept as attachments, the source
-        // and (from the picker) its citation.
+        // One user action, one undo step: pages kept as attachments, the source,
+        // its evidence (spec 102 §5) and (from the picker or "Cite at") its citation.
         DataManager.runBatch(editingId ? strings.undo.editSource(title) : strings.undo.addSource(title), () => {
             const excerpts: SourceExcerpt[] = drafts.map(d => {
                 const exc = { ...d.excerpt };
@@ -1060,13 +1069,16 @@ export const sourcesMethods = uiModule({
                     this.noteRecentSource(created.id);
                 }
             }
-        });
+            const citedAt = savedSourceId ? this.saveSourceDocs(savedSourceId, !editingId) : null;
+            if (madeToast) madeToast.text = strings.materials.sourceMadeToast(title, citedAt);
+        }, madeToast);
 
         // forceCloseSourceEditor tears down the picker too when it was a create+cite.
         this.forceCloseSourceEditor();
         if (!citeAfterCreate) this.renderSourcesList();
         this.refreshCitationChips();
         if (drafts.some(d => d.pendingPage)) this.renderAttachmentsList();
+        this.afterMediaChange();
         // A source cited on a partnership shows in the relationships panel.
         if (citedPartnership) this.refreshRelationshipsPanel();
         for (const o of originals) {
@@ -1111,6 +1123,7 @@ export const sourcesMethods = uiModule({
                         <button type="button" class="excerpt-remove" data-action="remove" title="${esc(s.excerptRemove)}"
                             aria-label="${esc(s.excerptRemove)}">${iconSvg('trash')}</button>
                     </div>
+                    ${this.excerptFromHtml(d.excerpt)}
                 </div>`;
         }).join('');
         const count = this.excerptDrafts.length;
@@ -1149,8 +1162,10 @@ export const sourcesMethods = uiModule({
                 else if (action === 'paste') void this.pasteExcerptFromClipboard(Number((e.currentTarget as HTMLElement).dataset.target));
                 else if (action === 'upload') this.pickExcerptFile(Number((e.currentTarget as HTMLElement).dataset.target));
                 else if (action === 'from-attachment') this.showAttachmentPagePicker(el, Number((e.currentTarget as HTMLElement).dataset.target));
+                else if (action === 'from-doc') this.cutFromSourceDoc(el, Number((e.currentTarget as HTMLElement).dataset.target));
             });
         });
+        box.querySelectorAll<HTMLElement>('[data-excerpt-from]').forEach(el => el.addEventListener('click', () => this.openSourceDocFile(el.dataset.excerptFrom ?? '')));
 
         // Drop an image on the empty block.
         const empty = box.querySelector<HTMLElement>('.excerpt-empty');
@@ -1175,11 +1190,13 @@ export const sourcesMethods = uiModule({
         const s = strings.sources;
         const kbd = isCoarsePointer() ? '' : ` <kbd>${isMac() ? '⌘V' : 'Ctrl+V'}</kbd>`;
         const pages = this.excerptContextPages();
+        const docPages = this.sourceDocPages();
         const buttons = `
             <div class="excerpt-actions">
                 <button type="button" class="secondary" data-action="paste" data-target="${target}">${esc(s.excerptPaste)}${kbd}</button>
                 <button type="button" class="secondary" data-action="upload" data-target="${target}">${esc(s.excerptUpload)}</button>
-                ${pages.length > 0 ? `<button type="button" class="secondary" data-action="from-attachment" data-target="${target}">${esc(s.excerptFromAttachment)}</button>` : ''}
+                ${docPages.length > 0 ? `<button type="button" class="secondary" data-action="from-doc" data-target="${target}">${esc(s.cutFromDoc)}</button>` : ''}
+                ${pages.some(p => !docPages.some(d => d.id === p.id)) ? `<button type="button" class="secondary" data-action="from-attachment" data-target="${target}">${esc(s.excerptFromAttachment)}</button>` : ''}
             </div>`;
         return empty ? `<div class="excerpt-empty"><p>${esc(s.excerptEmpty)}</p>${buttons}</div>` : buttons;
     },
@@ -1197,6 +1214,7 @@ export const sourcesMethods = uiModule({
                 menu.remove();
                 if (el.dataset.action === 'paste') void this.pasteExcerptFromClipboard(t);
                 else if (el.dataset.action === 'upload') this.pickExcerptFile(t);
+                else if (el.dataset.action === 'from-doc') this.cutFromSourceDoc(anchor, t);
                 else this.showAttachmentPagePicker(anchor, t);
             });
         });
@@ -1318,9 +1336,16 @@ export const sourcesMethods = uiModule({
     },
 
     /** "Crop from attachment": a small grid of the context's page images. */
-    showAttachmentPagePicker(anchor: HTMLElement, target: number): void {
+    /** "Cut from the evidence": one picture straight into the crop, several to choose from (spec 102 §5). */
+    cutFromSourceDoc(anchor: HTMLElement, target: number): void {
+        const pages = this.sourceDocPages();
+        if (pages.length === 1) void this.addExcerptFromAttachment(pages[0], target);
+        else this.showAttachmentPagePicker(anchor, target, pages);
+    },
+
+    showAttachmentPagePicker(anchor: HTMLElement, target: number, only?: { id: string; dataUrl: string; name: string; title?: string }[]): void {
         document.querySelector('.excerpt-page-picker')?.remove();
-        const pages = this.excerptContextPages();
+        const pages = only ?? this.excerptContextPages();
         if (pages.length === 0) return;
         const grid = document.createElement('div');
         grid.className = 'excerpt-page-picker';
@@ -1377,7 +1402,7 @@ export const sourcesMethods = uiModule({
     /** The person attachment an excerpt was cut from, while it still exists. */
     attachmentForExcerpt(exc: SourceExcerpt): { id: string; dataUrl: string } | null {
         if (!exc.fromAttachmentId) return null;
-        return DataManager.getMedia(exc.fromAttachmentId) ?? null;
+        return DataManager.getMedia(exc.fromAttachmentId) ?? this.pendingDocPage(exc.fromAttachmentId);
     },
 
     /** Persons whose attachments the editor may crop from (person, or both partners). */

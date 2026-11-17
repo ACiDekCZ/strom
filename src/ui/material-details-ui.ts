@@ -302,6 +302,18 @@ export const materialDetailsMethods = uiModule({
             if (ok) dialog.close();
         };
         detailsKeys(fields.root, () => void save(), () => dialog.close());
+        // Create a source from this file… (spec 102 §5): the file as the evidence of a new source.
+        const inTree = !!item.attachment?.places?.length && DataManager.canEditMedia(item.attachment.id);
+        const outside = !item.attachment && !!item.file && item.origin !== 'tree' && !!ctx?.caps.assign;
+        if ((inTree || outside) && this.canEditSources() && !DataManager.isReadOnly()) {
+            const make = h('button', 'link-button mdlg-make-source', m.makeSource);
+            make.type = 'button';
+            make.addEventListener('click', () => {
+                dialog.close();
+                void this.makeSourceFromMaterial(item, { personId: this.materialContextPerson() });
+            });
+            dialog.foot.appendChild(make);
+        }
         dialog.foot.append(button(strings.buttons.cancel, '', () => dialog.close()), button(strings.buttons.save, 'is-primary', () => void save()));
         fields.title.focus();
         fields.title.select();

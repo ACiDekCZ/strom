@@ -233,6 +233,7 @@ const ACTION_LABEL: Record<MaterialActionId, () => string> = {
     removeFromTree: () => strings.materials.removeFromTree,
     edit: () => strings.materials.titleAndData,
     attach: () => strings.materials.attach,
+    makeSource: () => strings.materials.makeSource,
 };
 
 /** Where the item's ⋯ menu draws a line above (the research's writes, then the rest). */
@@ -776,7 +777,7 @@ export const materialsMethods = uiModule({
         const actions = materialActions(item, caps, { person: refn, where: 'menu' })
             // Nothing to download from an attachment that is only its original; a locked person keeps its files.
             .filter(a => !(a.id === 'download' && (!item.attachment?.dataUrl || item.attachment.originalOnly)))
-            .filter(a => !((a.id === 'removeFromTree' || a.id === 'attach') && (locked || DataManager.isReadOnly())))
+            .filter(a => !((a.id === 'removeFromTree' || a.id === 'attach' || a.id === 'makeSource') && (locked || DataManager.isReadOnly())))
             // Title and details: where they can change here (spec 102 §2).
             .filter(a => !(a.id === 'edit' && !['on', 'off'].includes(materialDetailsEdit(item, ctx) ?? '')))
             // Use as portrait: a person who can change, and not the portrait's source already (spec 107 §4).
@@ -870,6 +871,7 @@ export const materialsMethods = uiModule({
             case 'useAsPortrait': if (item.attachment && this.currentId) void this.useAttachmentAsPortrait(this.currentId, item.attachment.id); break;
             case 'removeFromTree': void this.openRemoveFromTreeDialog(item); break;
             case 'attach': this.openAttachDialog([item], { personId: this.currentId }); break;
+            case 'makeSource': void this.makeSourceFromMaterial(item, { personId: this.currentId }); break;
             case 'restore': if (item.removedId) { this.restoreRemovedMaterials([item]); break; } this.materialAction(action.id, [item], { person: refn, where: 'section' }); break;
             case 'edit': this.openMaterialDetailsDialog(item); break;
             default: this.materialAction(action.id, [item], { person: refn, where: 'section' });

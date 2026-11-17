@@ -295,6 +295,17 @@ export const materialAttachMethods = uiModule({
                 };
                 input.addEventListener('input', draw);
                 pane.append(input, host);
+                // New source from this file… (spec 102 §5): one file becomes the evidence of a new source.
+                if (one && this.canEditSources()) {
+                    const make = h('button', 'link-button mdlg-attach-newsource', m.newSourceFromFile);
+                    make.type = 'button';
+                    make.disabled = off;
+                    make.addEventListener('click', () => {
+                        dialog.close();
+                        void this.makeSourceFromMaterial(one, { personId: anchorPerson });
+                    });
+                    pane.appendChild(make);
+                }
                 draw();
                 input.focus();
             }

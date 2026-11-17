@@ -254,11 +254,11 @@ test.describe('The portrait\'s source among the attachments (desktop)', () => {
         await expect(attRow(page, 'louka.jpg').locator('.attachment-portrait-btn')).toBeHidden();
         await expect(attRow(page, 'louka.jpg').locator('.attachment-delete-btn')).toBeHidden();
         await openRowMenu(page, 'svatba.jpg');
-        await expect(rowMenu(page)).toHaveText(['Open', 'Title and details…', 'Link to…', 'Download', 'Remove from the tree…']);
+        await expect(rowMenu(page)).toHaveText(['Open', 'Title and details…', 'Link to…', 'Create a source from this file…', 'Download', 'Remove from the tree…']);
         await page.keyboard.press('Escape');
         await openRowMenu(page, 'louka.jpg');
         // Use as portrait… before Delete.
-        await expect(rowMenu(page)).toHaveText(['Open', 'Title and details…', 'Link to…', 'Download', 'Use as portrait…', 'Remove from the tree…']);
+        await expect(rowMenu(page)).toHaveText(['Open', 'Title and details…', 'Link to…', 'Create a source from this file…', 'Download', 'Use as portrait…', 'Remove from the tree…']);
         await page.keyboard.press('Escape');
         await personModal(page).locator('#photo-remove-btn').click();
         await expect(personModal(page).locator('#attachments-list .attachment-tag')).toHaveCount(0);
@@ -413,7 +413,7 @@ test.describe('Use as portrait… in the materials (desktop)', () => {
         await page.keyboard.press('Escape');
         await row('louka.jpg').locator('.material-more').click();
         const items = page.locator('#materials-item-menu [data-action]');
-        await expect(items).toHaveText(['Open', 'Title and details…', 'Link to…', 'Download', 'Use as portrait…', 'Remove from the tree…']);
+        await expect(items).toHaveText(['Open', 'Title and details…', 'Link to…', 'Create a source from this file…', 'Download', 'Use as portrait…', 'Remove from the tree…']);
         await page.locator('#materials-item-menu [data-action="useAsPortrait"]').click();
         await expect(editor(page)).toBeVisible();
         await expect(editor(page).locator('.pe-note-replace')).toBeVisible();
@@ -439,7 +439,7 @@ test.describe('Use as portrait… in the materials (desktop)', () => {
         await win.locator('.mw-canvas .mw-tile', { hasText: 'louka' }).click();
         await expect(panel.locator('.mv-title')).toHaveText(/louka/);
         await expect(panel.locator('.mv-portrait-tag')).toHaveCount(0);
-        await expect(panel.locator('.mv-act')).toHaveText(['Link to…', 'Download', 'Use as portrait…', 'Remove from the tree…']);
+        await expect(panel.locator('.mv-act')).toHaveText(['Link to…', 'Create a source from this file…', 'Download', 'Use as portrait…', 'Remove from the tree…']);
         await panel.locator('.mv-act[data-action="useAsPortrait"]').click();
         await expect(page.locator('#attachment-overlay')).not.toHaveClass(/active/);
         await expect(editor(page)).toBeVisible();
