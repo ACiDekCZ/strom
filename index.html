@@ -21930,7 +21930,8 @@
             border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text);
             font: 500 12.5px/1 inherit; cursor: pointer; white-space: nowrap;
         }
-        .research-overview__order-btn.is-time { background: var(--primary-soft); border-color: var(--primary); }
+        /* A time order: a dark 1 px frame on the plain surface (the Line selection, no green fill). */
+        .research-overview__order-btn.is-time { background: var(--surface); border-color: var(--text); }
         .research-overview__order-icon { flex: none; color: var(--text-light); }
         .research-overview__order-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
         .research-overview__order-caret { flex: none; font-size: 9px; color: var(--text-light); }
@@ -21950,6 +21951,58 @@
         .research-overview__groups[aria-checked="true"] .research-overview__groups-track { background: var(--primary); }
         .research-overview__groups[aria-checked="true"] .research-overview__groups-knob { transform: translateX(12px); }
         @media (prefers-reduced-motion: reduce) { .research-overview__groups-track, .research-overview__groups-knob { transition: none; } }
+        /* The choice of groups with the research's books (spec 105 §1): wide a segment "Groups Archive | Book [| No groups]",
+           narrow (a phone, one held sideways, the small panel) a button "Groups: Book ▾" like the order's. */
+        .research-overview__groups-choice { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0; }
+        .research-overview__groups-choice-label { flex: none; font-size: 12.5px; color: var(--text-light); }
+        .research-overview__groups-seg.sel-seg { --sel-r: var(--r-sm); flex: none; overflow: hidden; }
+        .research-overview__groups-opt.sel-opt {
+            display: inline-flex; align-items: center; height: 26px; padding: 0 10px; box-sizing: border-box;
+            font: 500 12.5px/1 inherit; white-space: nowrap; cursor: pointer;
+        }
+        .research-overview__groups-btn-label { flex: none; color: var(--text-light); }
+        /* A book's group (spec 105 §1): the fold button over the book's actions, one divider under both. */
+        .research-overview__waiting-grouphead.is-book { flex-direction: column; flex-wrap: nowrap; align-items: stretch; border-bottom: 1px solid var(--divider); }
+        .research-overview__waiting-grouphead.is-book > .research-overview__waiting-group { flex: none; align-items: flex-start; border-bottom: 0; }
+        .research-overview__book-head > .live-section__chevron { margin-top: 2px; }
+        .research-overview__book-titles { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+        .research-overview__book-line { display: flex; align-items: center; gap: 6px; min-width: 0; }
+        .research-overview__book-meta {
+            display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 5px; row-gap: 1px; min-width: 0;
+            font-size: 12px; font-weight: 400; line-height: 1.4; color: var(--text-light);
+        }
+        .research-overview__book-meta > span { flex: none; }
+        .research-overview__book-meta > .research-overview__book-archive {
+            flex: 0 1 auto; min-width: 0; max-width: min(24rem, 100%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .research-overview__book-sep { color: var(--text-ghost); }
+        .research-overview__book-counts.is-key { font-weight: 600; color: var(--text); }
+        .research-overview__book-pending { color: var(--text); }
+        .research-overview__book-login { color: var(--text-faint); }
+        .research-overview__waiting-grouphead.is-book > .research-overview__book-actions { margin-top: 0; padding: 0 0 8px 18px; gap: 4px 8px; }
+        .research-overview__book-offer { flex: 0 1 auto; min-width: 0; font-size: 12.5px; color: var(--text); }
+        /* "No book": the places after the books. */
+        .research-overview__nobook {
+            margin-top: 14px; padding-bottom: 2px; font-size: 11px; font-weight: 600; letter-spacing: .5px;
+            text-transform: uppercase; color: var(--text-light);
+        }
+        @media (pointer: coarse) {
+            .research-overview__groups-opt.sel-opt { position: relative; height: 32px; }
+            .research-overview__groups-opt.sel-opt::before { content: ''; position: absolute; left: 0; right: 0; top: -6px; bottom: -6px; }
+            .research-overview__book-actions > a.waiting-action--link { display: inline-flex; align-items: center; min-height: 44px; }
+        }
+        /* A phone and one held sideways: no "Book" tag, the archive on its own line, the second line wraps. */
+        @media (max-width: 640px) {
+            .research-overview__book-line > .research-overview__group-kind { display: none; }
+            .research-overview__book-meta > .research-overview__book-archive { flex-basis: 100%; max-width: 100%; }
+            .research-overview__book-sep:has(+ .research-overview__book-archive), .research-overview__book-archive + .research-overview__book-sep { display: none; }
+            .research-overview__book-actions > a.waiting-action--link { display: inline-flex; align-items: center; min-height: 44px; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .research-overview__book-line > .research-overview__group-kind { display: none; }
+            .research-overview__book-meta > .research-overview__book-archive { flex-basis: 100%; max-width: 100%; }
+            .research-overview__book-sep:has(+ .research-overview__book-archive), .research-overview__book-archive + .research-overview__book-sep { display: none; }
+        }
         /* Beside a row: the "new" tag over the time it has waited since. */
         .research-overview__waiting-row.has-side { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 10px; row-gap: 2px; }
         .research-overview__waiting-row.has-side > :not(.research-overview__waiting-side) { grid-column: 1; }

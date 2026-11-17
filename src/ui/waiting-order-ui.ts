@@ -1,25 +1,33 @@
 /**
  * The order of "Awaiting action" in the Research overview (spec 083 U6,
  * K5.1–K5.4): the choice of order (recommended / newest first / oldest
- * first) and the Groups switch, both kept on this device for every tree;
- * an item's "new" tag and "waits since" time beside its row.
+ * first; with the research's books "Most tasks", spec 105 §2) and of the
+ * groups (by archive, by book, none; before the books the Groups switch),
+ * both kept on this device for every tree; an item's "new" tag and "waits
+ * since" time beside its row.
  */
 
 import { strings, getCurrentLanguage } from '../strings.js';
 import { formatWaitingSince } from '../live-time.js';
 import type { LiveWaiting } from '../research-link.js';
-import { WAITING_ORDERS, WaitingOrder, todoWaiting, waitingSince } from '../research-waiting.js';
+import { ALL_WAITING_ORDERS, WaitingOrder, todoWaiting, waitingSince } from '../research-waiting.js';
 import { waitingSeen } from './live-section-prefs.js';
 
 /** The order chosen (missing: recommended). Kept on this device for every tree. */
 export const WAITING_ORDER_KEY = 'strom-live-overview-waiting-order';
-/** The Groups switch of a time order ('0': off; missing: on). */
+/** The groups chosen: missing — by archive (the Groups switch on); '0' — none (the switch off); 'book' — by book. */
 export const WAITING_GROUPS_KEY = 'strom-live-overview-waiting-groups';
 
-export function storedWaitingOrder(): WaitingOrder {
+/**
+ * The order kept on this device: "Most tasks" only where the research says
+ * its books (`books`), else Recommended — the kept value stays for a research
+ * with books.
+ */
+export function storedWaitingOrder(books = false): WaitingOrder {
     try {
         const v = localStorage.getItem(WAITING_ORDER_KEY);
-        return (WAITING_ORDERS as readonly string[]).includes(v ?? '') ? v as WaitingOrder : 'recommended';
+        if (!(ALL_WAITING_ORDERS as readonly string[]).includes(v ?? '')) return 'recommended';
+        return v === 'most' && !books ? 'recommended' : v as WaitingOrder;
     } catch {
         return 'recommended';
     }
@@ -32,19 +40,57 @@ export function storeWaitingOrder(order: WaitingOrder): void {
     } catch { /* not kept */ }
 }
 
-export function storedWaitingGroups(): boolean {
+/** How Awaiting action is grouped (spec 105 §1): by archive (the places, as before), by book, or none (a time order). */
+export type WaitingGroups = 'archive' | 'book' | 'none';
+export const WAITING_GROUP_MODES: readonly WaitingGroups[] = ['archive', 'book', 'none'];
+
+/** The groups kept on this device (missing or unknown: by archive; '0': none, as the switch off kept it). */
+export function storedWaitingGroupMode(): WaitingGroups {
     try {
-        return localStorage.getItem(WAITING_GROUPS_KEY) !== '0';
+        const v = localStorage.getItem(WAITING_GROUPS_KEY);
+        return v === '0' ? 'none' : v === 'book' ? 'book' : 'archive';
     } catch {
-        return true;
+        return 'archive';
     }
 }
 
-export function storeWaitingGroups(on: boolean): void {
+export function storeWaitingGroupMode(mode: WaitingGroups): void {
     try {
-        if (on) localStorage.removeItem(WAITING_GROUPS_KEY);
-        else localStorage.setItem(WAITING_GROUPS_KEY, '0');
+        if (mode === 'archive') localStorage.removeItem(WAITING_GROUPS_KEY);
+        else localStorage.setItem(WAITING_GROUPS_KEY, mode === 'none' ? '0' : 'book');
     } catch { /* not kept */ }
+}
+
+/** The Groups switch (a research without books): on unless none was chosen. */
+export function storedWaitingGroups(): boolean {
+    return storedWaitingGroupMode() !== 'none';
+}
+
+export function storeWaitingGroups(on: boolean): void {
+    storeWaitingGroupMode(on ? 'archive' : 'none');
+}
+
+/**
+ * The groups as drawn: "Most tasks" always by book; without the books by
+ * book is by archive; Recommended has no "No groups" (by archive). The kept
+ * value is never rewritten by this.
+ */
+export function shownWaitingGroups(stored: WaitingGroups, order: WaitingOrder, books: boolean): WaitingGroups {
+    if (books && order === 'most') return 'book';
+    if (stored === 'book' && !books) return 'archive';
+    if (stored === 'none' && order === 'recommended') return 'archive';
+    return stored;
+}
+
+/** The groups offered in an order (with the books): Recommended without "No groups"; none in "Most tasks". */
+export function waitingGroupModesFor(order: WaitingOrder): readonly WaitingGroups[] {
+    return order === 'most' ? [] : order === 'recommended' ? ['archive', 'book'] : WAITING_GROUP_MODES;
+}
+
+/** A choice of groups' name ("Book"). */
+export function waitingGroupsLabel(mode: WaitingGroups): string {
+    const B = strings.live.books;
+    return mode === 'book' ? B.groupBook : mode === 'none' ? B.groupNone : B.groupArchive;
 }
 
 let watched = false;
@@ -61,7 +107,7 @@ export function watchWaitingOrderStorage(redraw: () => void): void {
 /** The order's name ("Newest first"). */
 export function waitingOrderLabel(order: WaitingOrder): string {
     const L = strings.live;
-    return order === 'newest' ? L.waitingOrderNew : order === 'oldest' ? L.waitingOrderOld : L.waitingOrderRec;
+    return order === 'newest' ? L.waitingOrderNew : order === 'oldest' ? L.waitingOrderOld : order === 'most' ? L.books.orderMost : L.waitingOrderRec;
 }
 
 /**

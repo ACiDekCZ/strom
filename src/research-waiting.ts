@@ -7,8 +7,9 @@
  */
 
 import {
-    LiveWaiting, WAITING_SECTIONS, WaitingGroup, WaitingInbox, WaitingLinkAction, WaitingSection, imageNumber, researchTaskRef,
+    LiveBook, LiveBooks, LiveWaiting, WAITING_SECTIONS, WaitingGroup, WaitingInbox, WaitingLinkAction, WaitingSection, imageNumber, researchTaskRef,
 } from './research-link.js';
+import { sortBooksMost } from './research-books.js';
 import type { WaitingWrites } from './research-waiting-write.js';
 
 export type WaitingPhase = 'todo' | 'sent';
@@ -67,22 +68,80 @@ export function filterWaiting<T extends LiveWaiting>(items: readonly T[], filter
     return filter === 'all' ? [...items] : items.filter(w => waitingSection(w) === filter);
 }
 
+/** A book's group whose book is outside the research's list (spec 105, 5k): its id and the title its items say. */
+export interface WaitingBookStub {
+    id: string;
+    title: string;
+}
+
 export interface WaitingGroupRows<T extends LiveWaiting = LiveWaiting> {
     key: string;
-    /** The place (null: an item without one, in "Other"). */
+    /** The place (null: an item without one, in "Other"; a book's group). */
     group: WaitingGroup | null;
     items: T[];
+    /** Grouped by book (spec 105 §1): the book from the research's list, or only its id and title when outside it. */
+    book?: LiveBook | WaitingBookStub;
+    /** The first group without a book after its phase's books ("No book" stands before it). */
+    afterBooks?: true;
 }
+
+/** A book's group: what the research's list says of the book (null: a book outside the list, its title only). */
+export function listedBook(b: LiveBook | WaitingBookStub | undefined): LiveBook | null {
+    return b && 'tasks' in b ? b : null;
+}
+
+/** Groups by the place an item is done at (as before), or by its one book (spec 105 §1). */
+export type WaitingGroupBy = 'archive' | 'book';
+
+/** How the groups are made: by place or by book, and the research's books (`/status.books`). */
+export interface WaitingGroupOpts {
+    by?: WaitingGroupBy;
+    books?: LiveBooks | null;
+}
+
+/** The key of a book's group. */
+export const BOOK_GROUP_PREFIX = 'book:';
 
 /** The key of the group an item goes under: "Places" for a question about places, its place, else "other". */
 export function waitingGroupKey(w: LiveWaiting): string {
     return w.kind === 'place' ? PLACES_GROUP : w.group?.key ?? OTHER_GROUP;
 }
 
-/** Items by their place in the order given, each group where its first item stands. */
-function groupInOrder<T extends LiveWaiting>(items: readonly T[]): WaitingGroupRows<T>[] {
+/** The book an item is grouped under (a question about places never: it stays under "Places"). */
+function itemBook(w: LiveWaiting): string | null {
+    return w.book && w.kind !== 'place' ? w.book : null;
+}
+
+/** The title of a book outside the research's list: as its item's inbox names it, else its id. */
+function stubTitle(w: LiveWaiting, id: string): string | null {
+    const inbox = w.inbox;
+    return inbox?.book && (!inbox.recordset || inbox.recordset === id) ? inbox.book : null;
+}
+
+/**
+ * Items by their place in the order given, each group where its first item
+ * stands; with `byBook` an item of one book goes under its book instead.
+ */
+function groupInOrder<T extends LiveWaiting>(items: readonly T[], opts: WaitingGroupOpts = {}): WaitingGroupRows<T>[] {
+    const byBook = opts.by === 'book';
     const groups = new Map<string, WaitingGroupRows<T>>();
     for (const w of items) {
+        const book = byBook ? itemBook(w) : null;
+        if (book) {
+            const key = BOOK_GROUP_PREFIX + book;
+            let g = groups.get(key);
+            if (!g) {
+                const known = opts.books?.list.find(b => b.id === book) ?? null;
+                g = { key, group: null, items: [], book: known ?? { id: book, title: stubTitle(w, book) ?? book } };
+                groups.set(key, g);
+            } else if (!listedBook(g.book) && g.book!.title === book) {
+                // A later item names the title the first one did not.
+                const title = stubTitle(w, book);
+                if (title) g.book = { id: book, title };
+            }
+            g.items.push(w);
+            continue;
+        }
         // The research's questions about places go under one group "Places", whatever group they name.
         const place = w.kind === 'place';
         const key = waitingGroupKey(w);
@@ -98,21 +157,53 @@ function groupInOrder<T extends LiveWaiting>(items: readonly T[]): WaitingGroupR
     return [...groups.values()];
 }
 
+const listed = <T extends LiveWaiting>(g: WaitingGroupRows<T>): boolean => listedBook(g.book) !== null;
+
+/** The books' groups first (in the order given), then the rest, the first of them marked to stand after the books. */
+function booksFirst<T extends LiveWaiting>(books: WaitingGroupRows<T>[], rest: WaitingGroupRows<T>[]): WaitingGroupRows<T>[] {
+    if (books.length === 0 || rest.length === 0) return [...books, ...rest];
+    return [...books, { ...rest[0], afterBooks: true }, ...rest.slice(1)];
+}
+
 /**
  * Items by their place, each group where its first item stands (in the
  * research's order); items without a place and the "other" group at the bottom.
+ * By book (spec 105 §1): the books' groups first, each where its first item
+ * stands; in "Most tasks" (`most`) the books by their tasks (sortBooksMost),
+ * a book outside the research's list after them.
  */
-export function groupWaiting<T extends LiveWaiting>(items: readonly T[]): WaitingGroupRows<T>[] {
-    const list = groupInOrder(orderWaiting(items));
-    return [...list.filter(g => g.key !== OTHER_GROUP), ...list.filter(g => g.key === OTHER_GROUP)];
+export function groupWaiting<T extends LiveWaiting>(items: readonly T[], opts: WaitingGroupOpts = {}, most = false): WaitingGroupRows<T>[] {
+    const list = groupInOrder(orderWaiting(items), opts);
+    const books = list.filter(g => g.book);
+    const places = list.filter(g => !g.book);
+    const rest = [...places.filter(g => g.key !== OTHER_GROUP), ...places.filter(g => g.key === OTHER_GROUP)];
+    if (most) {
+        const known = books.filter(listed).sort((a, b) => sortBooksMost(a.book as LiveBook, b.book as LiveBook));
+        return booksFirst([...known, ...books.filter(g => !listed(g))], rest);
+    }
+    return booksFirst(books, rest);
 }
 
 /**
  * The order of Awaiting action (spec 083 K5.1): the research's (phases,
- * places, lines), or by when an item has waited since (`at`).
+ * places, lines), or by when an item has waited since (`at`); with the
+ * research's books (spec 105 §2) also "Most tasks" — the books by their tasks.
  */
-export type WaitingOrder = 'recommended' | 'newest' | 'oldest';
+export type WaitingOrder = 'recommended' | 'newest' | 'oldest' | 'most';
+/** The orders of every research (without its books). */
 export const WAITING_ORDERS: readonly WaitingOrder[] = ['recommended', 'newest', 'oldest'];
+/** Every order there is (a kept one is checked against it). */
+export const ALL_WAITING_ORDERS: readonly WaitingOrder[] = [...WAITING_ORDERS, 'most'];
+
+/** The orders offered: "Most tasks" only when the research says its books (booksOn). */
+export function waitingOrdersFor(books: boolean): readonly WaitingOrder[] {
+    return books ? ALL_WAITING_ORDERS : WAITING_ORDERS;
+}
+
+/** An order by when the items have waited since (its time beside the rows and after the groups' names). */
+export function isTimeOrder(order: WaitingOrder): order is 'newest' | 'oldest' {
+    return order === 'newest' || order === 'oldest';
+}
 /** The key of a phase's one list without groups (it has no heading). */
 export const FLAT_GROUP = '*';
 
@@ -139,25 +230,31 @@ export function sortWaitingByTime<T extends LiveWaiting>(items: readonly T[], or
 }
 
 /** One phase's rows in an order: in groups, or (a time order only) one list without them. */
-function phaseRows<T extends LiveWaiting>(items: readonly T[], order: WaitingOrder, groups: boolean): WaitingGroupRows<T>[] {
-    if (order === 'recommended') return groupWaiting(items);
+function phaseRows<T extends LiveWaiting>(items: readonly T[], order: WaitingOrder, groups: boolean, opts: WaitingGroupOpts): WaitingGroupRows<T>[] {
+    // "Most tasks" is always by book: the books by their tasks, the rest by place, all within in the research's order.
+    if (order === 'most') return groupWaiting(items, { ...opts, by: 'book' }, true);
+    if (order === 'recommended') return groupWaiting(items, opts);
     const sorted = sortWaitingByTime(items, order);
     if (!groups) return sorted.length > 0 ? [{ key: FLAT_GROUP, group: null, items: sorted }] : [];
     // Each group where its newest (oldest) item stands; "Other" and "Places" too, not kept at the bottom.
-    return groupInOrder(sorted);
+    const list = groupInOrder(sorted, opts);
+    return booksFirst(list.filter(g => g.book), list.filter(g => !g.book));
 }
 
 /**
  * Both phases (after the filter), each in groups: in the research's order
  * (recommended), or by time (spec 083 K5.1, K5.2) — within each group and
  * the groups by their first item, or (`groups` off) one list per phase.
+ * By book (`opts.by`, spec 105 §1; always in "Most tasks"): an item of one
+ * book under its book, the books first in each phase (a book in both phases
+ * when its items are), the rest by place after them.
  */
 export function waitingPhases<T extends LiveWaiting>(items: readonly T[], filter: WaitingFilter,
-    order: WaitingOrder = 'recommended', groups = true): Record<WaitingPhase, WaitingGroupRows<T>[]> {
+    order: WaitingOrder = 'recommended', groups = true, opts: WaitingGroupOpts = {}): Record<WaitingPhase, WaitingGroupRows<T>[]> {
     const shown = filterWaiting(items, filter);
     return {
-        todo: phaseRows(shown.filter(w => waitingPhase(w) === 'todo'), order, groups),
-        sent: phaseRows(shown.filter(w => waitingPhase(w) === 'sent'), order, groups),
+        todo: phaseRows(shown.filter(w => waitingPhase(w) === 'todo'), order, groups, opts),
+        sent: phaseRows(shown.filter(w => waitingPhase(w) === 'sent'), order, groups, opts),
     };
 }
 

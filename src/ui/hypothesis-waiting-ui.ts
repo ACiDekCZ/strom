@@ -12,6 +12,7 @@
  */
 
 import { waitingDrawn, waitingGroupTagEl, waitingSideEl } from './waiting-order-ui.js';
+import { isTimeOrder } from '../research-waiting.js';
 import { DataManager } from '../data.js';
 import { strings } from '../strings.js';
 import type { PersonId, ResearchHypothesis } from '../types.js';
@@ -484,7 +485,7 @@ export const hypothesisWaitingMethods = uiModule({
         // Awaiting action in a time order (spec 083 §5): without groups its place's tag; the "new" tag over the time.
         const drawnAs = waitingDrawn();
         if (drawnAs.flat) main.appendChild(el('div', 'hwr-tags hwr-place')).appendChild(waitingGroupTagEl(w));
-        const side = waitingSideEl(w, { isNew: !!liveSession()?.waitingView.tagged?.has(w.id), time: drawnAs.order !== 'recommended' });
+        const side = waitingSideEl(w, { isNew: !!liveSession()?.waitingView.tagged?.has(w.id), time: isTimeOrder(drawnAs.order) });
         if (side) li.appendChild(side);
         return li;
     },
