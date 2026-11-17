@@ -119,8 +119,9 @@ describe('data v24: StromData.media', () => {
     it('a v23 tree goes to v24 and its GEDCOM reads back with the same files', () => {
         const data = migrateData(v23Tree());
         const ged = exportToGedcom(data).content;
-        // One place each: the files stay written in place as before, the scan with its source.
-        expect(ged).toContain('2 _SOUR @S');
+        // The scan at two people is one media record with its source (spec 102), the letter in place as before.
+        expect(ged).toMatch(/\n0 @M1@ OBJE\n(?:[1-9] .*\n)*1 _SOUR @S\d+@\n/);
+        expect(ged.match(/\n1 OBJE @M1@\n/g)).toHaveLength(2);
         const back = migrateData(convertToStrom(parseGedcom(ged)).data as StromData);
         const byName = (first: string) => Object.values(back.persons).find(p => p.firstName === first)!;
         const files = (first: string) => personMedia(back, byName(first).id).map(a => ({

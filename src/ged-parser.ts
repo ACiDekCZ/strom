@@ -42,6 +42,8 @@ import {
     Source,
     SourceReadBy,
     Attachment,
+    MaterialKind,
+    MediaPlace,
     MediaOriginal,
     toPersonId,
     toPartnershipId,
@@ -104,6 +106,7 @@ import { imageRefSha, resolveImageFile } from './research-image-refs';
 import { normalizeSha256 } from './sha256';
 import { isConfirmDay, isTranscriptMark } from './source-confirm';
 import { ORIGINAL_ONLY_DATA_URL } from './validation';
+import { samePlace } from './media';
 import { parseRegion, regionFromStored } from './originals';
 import { parseName, readGedcomName, PRIMARY_NAME_TAG, type GedcomNameParts } from './gedcom-names';
 import { appUnknownIsNoSurname } from './app-version';
@@ -1197,12 +1200,18 @@ interface RawMedia {
     title: string;
     form: string;
     file: string;
+    /** `_STROM_NAME`: the file's name beside its title (TITL; spec 102). Without it TITL is the name. */
+    name?: string;
+    /** `TYPE` under FORM: what the file is (spec 102), one of MaterialKind. */
+    kind?: MaterialKind;
     /** Custom marker: 'photo' = the person's portrait (Strom extension). */
     stromKind: string;
     /** NOTE on the media link (attachment note). */
     note?: string;
-    /** _SOUR @Sx@ — the source the scan belongs to (Strom extension). */
+    /** _SOUR @Sx@ — the source the scan belongs to (Strom extension); the first one. */
     sourceXref?: string;
+    /** Every `_SOUR` of the file (spec 102: each a source it is at). */
+    sourceXrefs?: string[];
     /** _STROM_SHA: the original file behind the preview (Strom extension). */
     sha?: string;
     /** _STROM_ORIENT: that original's EXIF orientation. */
@@ -1225,6 +1234,8 @@ interface RawMedia {
 
 interface RawEvent {
     type: LifeEventType;
+    /** `2 OBJE` under the event (spec 102): its files (the app's and the research's own files). */
+    media?: RawMedia[];
     /** Label for 'custom' events (e.g. an alternative birth fact). */
     customLabel?: string;
     date?: string;
@@ -1303,6 +1314,8 @@ type RawCoupleFact = 'marriage' | 'divorce';
 /** An event of the couple under FAM (MARB, CENS, EVEN…), as the file gave it. */
 interface RawCoupleEvent {
     type: CoupleEventType;
+    /** `2 OBJE` under the event (spec 102): its files (the app's and the research's own files). */
+    media?: RawMedia[];
     customLabel?: string;
     date?: string;
     place?: string;
@@ -1495,6 +1508,83 @@ interface RawSourceMedia {
     region?: string;
     /** _STROM_ORIENT: that original's EXIF orientation (the crop lies as stored). */
     orient?: number;
+    /** `_STROM_KIND` as written (excerpt: a crop of the entry). */
+    stromKind?: string;
+    /** The OBJE read as a file of the source (spec 102): one without the marks of a crop in the app's and the research's own files. */
+    asFile: RawMedia;
+    asFileState: ObjeLineState;
+}
+
+/** Where a reader of an OBJE's lines is (readObjeLine). */
+interface ObjeLineState {
+    /** The tag of the last line right under the OBJE, and under that one. */
+    sub: string;
+    sub2: string;
+    /** The FILE being read is the OBJE's first (the one taken). */
+    firstFile: boolean;
+}
+
+const MATERIAL_KIND_WORDS = new Set<string>(['photo', 'document', 'record', 'other']);
+
+/** The lines right under an OBJE that readObjeLine takes (any other `_XXX` of another program is counted). */
+const OBJE_READ_TAGS = new Set(['FILE', 'FORM', 'TITL', '_STROM_NAME', '_STROM_KIND', 'NOTE', '_SOUR', 'SOUR', '_STROM_SHA', '_STROM_ORIENT', '_PRIM', '_PRIMARY', '_PERSONALPHOTO', '_DATE']);
+
+/** `TYPE` under FORM: a kind of file (spec 102), another word says nothing. */
+function noteObjeKind(m: RawMedia, value: string): void {
+    const k = value.trim().toLowerCase();
+    if (!m.kind && MATERIAL_KIND_WORDS.has(k)) m.kind = k as MaterialKind;
+}
+
+/** `_SOUR @Sx@` under an OBJE: a source the file belongs to. */
+function noteObjeSource(m: RawMedia, value: string): void {
+    const v = value.trim();
+    if (!v) return;
+    m.sourceXref ??= v;
+    (m.sourceXrefs ??= []).push(v);
+}
+
+/**
+ * One line of an OBJE written in place, `rel` levels below its `n OBJE`
+ * line: FILE (CONC-joined, FORM and TITL under it as GEDCOM 5.5.1 writes
+ * them), FORM with the kind (`TYPE`), TITL and `_STROM_NAME`, NOTE, the
+ * marks, the sources, the original's hash, the date.
+ */
+function readObjeLine(m: RawMedia, st: ObjeLineState, rel: number, tag: string, value: string): void {
+    if (rel === 1) {
+        st.sub = tag;
+        st.sub2 = '';
+        if (tag === 'FILE') {
+            st.firstFile = !m.file;
+            if (st.firstFile) m.file = value;
+        } else if (tag === 'FORM') { if (!m.form) m.form = value; }
+        else if (tag === 'TITL') { if (!m.title) m.title = value; }
+        else if (tag === '_STROM_NAME') { if (!m.name) m.name = value; }
+        else if (tag === '_STROM_KIND') m.stromKind = value;
+        else if (tag === 'NOTE') m.note = m.note ? `${m.note}\n${value}` : value;
+        else if (tag === '_SOUR' || tag === 'SOUR') noteObjeSource(m, value);
+        else if (tag === '_STROM_SHA') m.sha = normalizeSha256(value) ?? undefined;
+        else if (tag === '_STROM_ORIENT' && /^[2-8]$/.test(value.trim())) m.orient = Number(value.trim());
+        else if ((tag === '_PRIM' || tag === '_PRIMARY' || tag === '_PERSONALPHOTO') && value.trim() === 'Y') m.primary = true;
+        else if (tag === '_DATE') { if (!m.date) m.date = mediaDateValue(value); }
+        if (tag === '_PRIM') {
+            const v = value.trim().toUpperCase();
+            if (!m.prim && (v === 'Y' || v === 'N')) m.prim = v;
+        }
+    } else if (rel === 2) {
+        st.sub2 = tag;
+        if (st.sub === 'FILE') {
+            if (!st.firstFile) return;
+            if (tag === 'CONC') m.file += value;
+            else if (tag === 'FORM') { if (!m.form) m.form = value; }
+            else if (tag === 'TITL') { if (!m.title) m.title = value; }
+        } else if (st.sub === 'FORM' && (tag === 'TYPE' || tag === 'MEDI')) noteObjeKind(m, value);
+        else if (st.sub === 'NOTE' && (tag === 'CONT' || tag === 'CONC')) m.note = (m.note ?? '') + (tag === 'CONT' ? '\n' : '') + value;
+        else if (st.sub === 'TITL' && tag === 'CONC') m.title += value;
+        else if (st.sub === '_STROM_NAME' && tag === 'CONC' && m.name !== undefined) m.name += value;
+    } else if (rel === 3 && st.sub === 'FILE' && st.firstFile) {
+        if (st.sub2 === 'FORM' && (tag === 'TYPE' || tag === 'MEDI')) noteObjeKind(m, value);
+        else if (st.sub2 === 'TITL' && tag === 'CONC') m.title += value;
+    }
 }
 
 // ==================== TYPES ====================
@@ -1610,6 +1700,8 @@ interface GedcomIndividual {
      * "birth record" / "death record" event created for them.
      */
     birthParticipants: RawParticipant[];
+    /** `2 OBJE` under the birth or the death (spec 102): the files of the fact (the app's and the research's own files). */
+    factMedia?: { fact: 'birth' | 'death'; media: RawMedia }[];
     deathParticipants: RawParticipant[];
     /**
      * Every FAMC with its own PEDI. A person may be a child of more than one
@@ -1637,6 +1729,8 @@ interface GedcomFamily {
     keptMedia?: string[];
     /** The family's pictures, written in place or linked (`1 OBJE`): the first image is the couple's photo (spec 107). */
     media?: RawMedia[];
+    /** `2 OBJE` under the wedding or the divorce (spec 102): files of the couple (the app's and the research's own files). */
+    factMedia?: RawMedia[];
     /** The record's `0 @F1@ FAM` line in the file. */
     recordLine?: number;
     /**
@@ -2867,8 +2961,10 @@ export function parseGedcom(content: string): ParsedGedcom {
     const mediaRecordLines = new Map<string, number>();
     /** The media record being read, its level-1 tag, and whether that FILE is the record's first (later ones are left). */
     let currentObje: RawMedia | null = null;
-    let objeSubTag: string | null = null;
-    let objeFirstFile = false;
+    /** A file under a fact or an event being read (`2 OBJE`, spec 102). */
+    let nestedObje: { media: RawMedia; level: number; state: ObjeLineState } | null = null;
+    /** Where the reader of the media record's lines is. */
+    const objeState: ObjeLineState = { sub: '', sub2: '', firstFile: false };
     /**
      * Another program's level-1 `_XXX` of a person or a family being kept
      * (spec 066 G8): from its line in the file down; a pointer under it (an
@@ -3227,59 +3323,19 @@ export function parseGedcom(content: string): ParsedGedcom {
         if (!m.prim && (v === 'Y' || v === 'N')) m.prim = v;
     };
     const readMediaRecordLine = (m: RawMedia, level: number, tag: string, value: string): void => {
-        if (level === 1) {
-            objeSubTag = tag;
-            if (tag === 'FILE') {
-                objeFirstFile = !m.file;
-                if (objeFirstFile) m.file = value;
-            } else if (tag === 'FORM') { if (!m.form) m.form = value; }
-            else if (tag === 'TITL') { if (!m.title) m.title = value; }
-            else if (tag === 'NOTE') m.note = m.note ? `${m.note}\n${value}` : value;
-            else if (tag === '_STROM_KIND') m.stromKind = value;
-            else if (tag === '_SOUR' || tag === 'SOUR') m.sourceXref = value;
-            else if (tag === '_STROM_SHA') m.sha = normalizeSha256(value) ?? undefined;
-            else if (tag === '_STROM_ORIENT' && /^[2-8]$/.test(value.trim())) m.orient = Number(value.trim());
-            else if ((tag === '_PRIM' || tag === '_PRIMARY' || tag === '_PERSONALPHOTO') && value.trim() === 'Y') m.primary = true;
-            else if (tag === '_DATE') { if (!m.date) m.date = mediaDateValue(value); }
-            else if (isUnreadUnderscoreTag(tag) && !stromApp && !stromResearch) drop(tag);
-            if (tag === '_PRIM') notePrim(m, value);
-        } else if (level === 2 && objeSubTag === 'FILE' && objeFirstFile) {
-            // Data-URL payloads are CONC-wrapped (255-char physical lines).
-            if (tag === 'CONC') m.file += value;
-            else if (tag === 'FORM') { if (!m.form) m.form = value; }
-            else if (tag === 'TITL') { if (!m.title) m.title = value; }
-        } else if (level === 2 && objeSubTag === 'NOTE' && (tag === 'CONT' || tag === 'CONC')) {
-            m.note = (m.note ?? '') + (tag === 'CONT' ? '\n' : '') + value;
-        }
+        readObjeLine(m, objeState, level, tag, value);
+        if (level === 1 && !OBJE_READ_TAGS.has(tag) && isUnreadUnderscoreTag(tag) && !stromApp && !stromResearch) drop(tag);
     };
     /**
      * A picture written in place (`1 OBJE` and its lines as written): its
      * file (CONC-joined), form, title, date and portrait mark.
      */
     const readInPlaceMedia = (m: RawMedia, raw: string[]): void => {
-        let sub = '';
-        let firstFile = false;
+        const st: ObjeLineState = { sub: '', sub2: '', firstFile: false };
+        const top = Number(/^\s*(\d+)/.exec(raw[0] ?? '')?.[1] ?? 1);
         for (const line of raw.slice(1)) {
             const parts = /^\s*(\d+)\s+(\S+)(?: (.*))?$/.exec(line);
-            if (!parts) continue;
-            const lv = Number(parts[1]), tag = parts[2], value = parts[3] ?? '';
-            if (lv === 2) {
-                sub = tag;
-                if (tag === 'FILE') { firstFile = !m.file; if (firstFile) m.file = value; }
-                else if (tag === 'FORM') { if (!m.form) m.form = value; }
-                else if (tag === 'TITL') { if (!m.title) m.title = value; }
-                else if (tag === '_STROM_KIND') m.stromKind = value;
-                // A couple's photo names its original kept by the research (spec 108 K2.4).
-                else if (tag === '_STROM_SHA') m.sha = normalizeSha256(value) ?? undefined;
-                else if (tag === '_STROM_ORIENT' && /^[2-8]$/.test(value.trim())) m.orient = Number(value.trim());
-                else if ((tag === '_PRIM' || tag === '_PRIMARY' || tag === '_PERSONALPHOTO') && value.trim() === 'Y') m.primary = true;
-                else if (tag === '_DATE') { if (!m.date) m.date = mediaDateValue(value); }
-                if (tag === '_PRIM') notePrim(m, value);
-            } else if (lv === 3 && sub === 'FILE' && firstFile) {
-                if (tag === 'CONC') m.file += value;
-                else if (tag === 'FORM') { if (!m.form) m.form = value; }
-                else if (tag === 'TITL') { if (!m.title) m.title = value; }
-            }
+            if (parts) readObjeLine(m, st, Number(parts[1]) - top, parts[2], parts[3] ?? '');
         }
     };
     /**
@@ -3569,6 +3625,34 @@ export function parseGedcom(content: string): ParsedGedcom {
                 openDetail.parts.push(value.trim());
             }
         }
+        // A file under a fact or an event (spec 102: `2 OBJE` under BIRT,
+        // DEAT, an event, a wedding or a couple's event), in the app's and
+        // the research's own files: read as an OBJE in place, or a link.
+        if (nestedObje && level <= nestedObje.level) nestedObje = null;
+        if (nestedObje) {
+            readObjeLine(nestedObje.media, nestedObje.state, level - nestedObje.level, tag, value);
+            continue;
+        }
+        if (level === 2 && tag === 'OBJE' && (stromApp || stromResearch) && currentRecord && !currentStory) {
+            const ref = GED_POINTER.test(value.trim()) ? value.trim() : undefined;
+            const media: RawMedia = { title: '', form: '', file: '', stromKind: '', ...(ref ? { ref } : {}) };
+            let held = true;
+            if (currentType === 'INDI') {
+                const indi = currentRecord as GedcomIndividual;
+                if (currentEvent) (currentEvent.media ??= []).push(media);
+                else if (currentSubTag === 'BIRT' || currentSubTag === 'DEAT') (indi.factMedia ??= []).push({ fact: currentSubTag === 'BIRT' ? 'birth' : 'death', media });
+                else held = false;
+            } else if (currentType === 'FAM') {
+                const fam = currentRecord as GedcomFamily;
+                if (currentFamEvent) (currentFamEvent.media ??= []).push(media);
+                else if (currentSubTag === 'MARR' || currentSubTag === 'DIV') (fam.factMedia ??= []).push(media);
+                else held = false;
+            } else held = false;
+            if (held) {
+                nestedObje = { media, level, state: { sub: '', sub2: '', firstFile: false } };
+                continue;
+            }
+        }
         readNoted(rec.src, level, tag);
         if (level === 2 && (tag === 'AGE' || tag === 'CAUS' || tag === 'ADDR' || tag === 'DATE')) {
             const sink = factDetailSink();
@@ -3784,7 +3868,8 @@ export function parseGedcom(content: string): ParsedGedcom {
             const recordType = hasXref ? value.split(/\s+/)[0] : tag;
             const recordId = hasXref ? tag : `@__anon${anonRecordSeq++}__@`;
             currentObje = null;
-            objeSubTag = null;
+            objeState.sub = objeState.sub2 = '';
+            objeState.firstFile = false;
 
             if (recordType === 'INDI') {
                 currentRecord = {
@@ -4011,7 +4096,11 @@ export function parseGedcom(content: string): ParsedGedcom {
                 else if (tag === IMPORT_TAG) { const mark = readImportMark(value); if (mark) src.importMark = mark.id; }
                 // The record's ids in the program that wrote the file (`1 RIN MH:S1`), for "Back to {prog}".
                 else if (ORIGINAL_ID_TAGS.has(tag)) readFileId(src, tag, value);
-                else if (tag === 'OBJE') src.media.push({ title: '', file: '', ...(GED_POINTER.test(value.trim()) ? { ref: value.trim() } : {}) });
+                else if (tag === 'OBJE') {
+                    const ref = GED_POINTER.test(value.trim()) ? value.trim() : undefined;
+                    src.media.push({ title: '', file: '', ...(ref ? { ref } : {}),
+                        asFile: { title: '', form: '', file: '', stromKind: '', ...(ref ? { ref } : {}) }, asFileState: { sub: '', sub2: '', firstFile: false } });
+                }
                 else if (tag === '_STROM_IMG_OMITTED') src.imageHeld = imageHeldReason(value);
                 else if (tag === 'QUAY') { const q = parseInt(value, 10); if (q >= 0 && q <= 3) src.quality = q; }
                 else if (tag === 'WWW' || tag === 'URL') src.url = value;
@@ -4079,6 +4168,8 @@ export function parseGedcom(content: string): ParsedGedcom {
                 } else if (currentSubTag === 'OBJE' && src.media.length > 0) {
                     const media = src.media[src.media.length - 1];
                     sourceMediaSubTag = tag;
+                    readObjeLine(media.asFile, media.asFileState, 1, tag, value);
+                    if (tag === '_STROM_KIND') media.stromKind = value.trim();
                     if (tag === 'FILE') media.file = value;
                     else if (tag === 'TITL') media.title = value;
                     else if (tag === '_URL') media.pageUrl = value;
@@ -4092,9 +4183,10 @@ export function parseGedcom(content: string): ParsedGedcom {
             } else if (level >= 3 && currentSubTag === 'DATA') {
                 // The period of an EVEN (`3 DATE`), anything under DATA's AGNC: no field to keep it in — counted once.
                 if (!sourceDataCounted) { sourceDataCounted = true; count('DATA'); }
-            } else if (level === 3 && currentSubTag === 'OBJE' && sourceMediaSubTag === 'FILE'
-                && tag === 'CONC' && src.media.length > 0) {
-                src.media[src.media.length - 1].file += value;
+            } else if (level >= 3 && currentSubTag === 'OBJE' && src.media.length > 0) {
+                const media = src.media[src.media.length - 1];
+                if (level === 3 && sourceMediaSubTag === 'FILE' && tag === 'CONC') media.file += value;
+                readObjeLine(media.asFile, media.asFileState, level - 1, tag, value);
             } else if (level === 3 && currentSubTag === IMPORT_TAG && tag === 'TYPE' && value.trim()) {
                 // `3 TYPE` under `2 EXID` of the record's `1 _STROM_IMPORT`: the system of that id.
                 const last = src.importIdLines?.[src.importIdLines.length - 1];
@@ -4729,9 +4821,10 @@ export function parseGedcom(content: string): ParsedGedcom {
                         if (tag === 'TITL') currentMedia.title = value;
                         else if (tag === 'FORM') currentMedia.form = value;
                         else if (tag === 'FILE') currentMedia.file = value;
+                        else if (tag === '_STROM_NAME') currentMedia.name = value;
                         else if (tag === '_STROM_KIND') currentMedia.stromKind = value;
                         else if (tag === 'NOTE') currentMedia.note = value;
-                        else if (tag === '_SOUR' || tag === 'SOUR') currentMedia.sourceXref = value;
+                        else if (tag === '_SOUR' || tag === 'SOUR') noteObjeSource(currentMedia, value);
                         else if (tag === '_STROM_SHA') currentMedia.sha = normalizeSha256(value) ?? undefined;
                         else if (tag === '_STROM_ORIENT' && /^[2-8]$/.test(value.trim())) currentMedia.orient = Number(value.trim());
                         else if ((tag === '_PRIM' || tag === '_PRIMARY' || tag === '_PERSONALPHOTO') && value === 'Y') currentMedia.primary = true;
@@ -4975,6 +5068,12 @@ export function parseGedcom(content: string): ParsedGedcom {
             } else if (level === 3 && currentMedia && currentMediaSubTag === 'NOTE'
                 && (tag === 'CONT' || tag === 'CONC')) {
                 currentMedia.note = (currentMedia.note ?? '') + (tag === 'CONT' ? '\n' : '') + value;
+            } else if (level === 3 && currentMedia && currentMediaSubTag === 'FORM' && (tag === 'TYPE' || tag === 'MEDI')) {
+                // What the file is (spec 102).
+                noteObjeKind(currentMedia, value);
+            } else if (level === 3 && currentMedia && tag === 'CONC' && (currentMediaSubTag === 'TITL' || currentMediaSubTag === '_STROM_NAME')) {
+                if (currentMediaSubTag === 'TITL') currentMedia.title += value;
+                else if (currentMedia.name !== undefined) currentMedia.name += value;
             } else if (level === 3 && currentType === 'INDI' && currentEvent
                 && currentEventSubTag === 'SOUR' && tag === 'PAGE' && currentCitationId) {
                 citePage(value);
@@ -5372,6 +5471,9 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
             ...rec, title: m.title || rec.title, stromKind: m.stromKind || rec.stromKind,
             note: m.note ?? rec.note, sourceXref: m.sourceXref ?? rec.sourceXref, sha: m.sha ?? rec.sha, orient: m.orient ?? rec.orient,
             date: m.date ?? rec.date,
+            ...(m.name ?? rec.name ? { name: m.name ?? rec.name } : {}),
+            ...(m.kind ?? rec.kind ? { kind: m.kind ?? rec.kind } : {}),
+            ...(m.sourceXrefs || rec.sourceXrefs ? { sourceXrefs: [...(rec.sourceXrefs ?? []), ...(m.sourceXrefs ?? [])] } : {}),
             ...(m.primary || rec.primary ? { primary: true } : {}),
         };
     };
@@ -5390,6 +5492,96 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         usedMedia.add(m.ref);
         return { ...m, file: rec.file, title: m.title || rec.title, sha: m.sha ?? rec.sha, orient: m.orient ?? rec.orient };
     };
+
+    /** The tree's files (data v24): one record per file with its places. */
+    const files: Record<string, Attachment> = {};
+    /**
+     * The same file at several places (spec 102) is one record: by the
+     * media record its links name (`@Mn@`), by its original's hash, by its
+     * data (an OBJE in place at each place, as the research writes them).
+     */
+    const fileByKey = new Map<string, Attachment>();
+    const fileKeysOf = (media: RawMedia): string[] => [
+        ...(media.ref ? [`ref:${media.ref}`] : []),
+        ...(media.sha ? [`sha:${media.sha.toLowerCase()}`] : []),
+        ...(media.file.startsWith('data:') ? [`url:${media.file}`] : []),
+    ];
+    /**
+     * A file of the tree at `place` (with the sources its `_SOUR` names):
+     * the record of the same file gets the place, else a new record. A data
+     * URL of a type the app keeps, or an original only by its hash (the
+     * research holds it); anything else is no file (false).
+     */
+    const putFile = (media: RawMedia, place: MediaPlace): boolean => {
+        const keys = fileKeysOf(media);
+        let att = keys.map(k => fileByKey.get(k)).find((a): a is Attachment => !!a);
+        const name = (fallback: string): string => media.name?.trim() || media.title || fallback;
+        if (media.file.startsWith('data:')) {
+            if (!SAFE_ATTACHMENT_DATA_URL.test(media.file)) return false;
+            const mimeType = media.file.slice(5, media.file.indexOf(';')) || 'application/octet-stream';
+            const sizeBytes = Math.round((media.file.length - media.file.indexOf(',') - 1) * 0.75);
+            if (att?.originalOnly) {
+                // The file itself where its record had only its original.
+                delete att.originalOnly;
+                Object.assign(att, { dataUrl: media.file, mimeType, sizeBytes });
+            } else if (!att) {
+                att = { id: generateId('att'), places: [], name: name('attachment'), mimeType, dataUrl: media.file, sizeBytes };
+                if (media.sha) {
+                    att.original = {
+                        sha256: media.sha, name: att.name, mimeType: att.mimeType, bytes: 0,
+                        ...(media.orient ? { orientation: media.orient } : {}),
+                    };
+                }
+            }
+        } else if (media.file && media.sha && /^[0-9a-f]{64}$/.test(media.sha) && media.stromKind !== 'photo') {
+            if (!att) {
+                // Only the original, held by Strom Research by its hash (no preview yet).
+                const fileName = name(media.file.split(/[\\/]/).pop() || 'file');
+                const mimeType = originalMimeOf(media.file) || originalMimeOf(fileName);
+                att = {
+                    id: generateId('att'), places: [], name: fileName, mimeType, dataUrl: ORIGINAL_ONLY_DATA_URL, sizeBytes: 0, originalOnly: true,
+                    original: { sha256: media.sha, name: fileName, mimeType, bytes: 0, ...(media.orient ? { orientation: media.orient } : {}) },
+                };
+            }
+        } else return false;
+        // The title beside the file's name (`_STROM_NAME`; TITL alone is the name), its kind (spec 102):
+        // what one place of the file says and another does not.
+        if (!att.title && media.name?.trim() && media.title.trim()) att.title = media.title;
+        if (!att.kind && media.kind) att.kind = media.kind;
+        if (!att.note && media.note) att.note = media.note;
+        if (!att.date && media.date) att.date = media.date;
+        files[att.id] = att;
+        for (const k of keys) if (!fileByKey.has(k)) fileByKey.set(k, att);
+        const places: MediaPlace[] = [place];
+        for (const ref of media.sourceXrefs ?? (media.sourceXref ? [media.sourceXref] : [])) {
+            const sourceId = sourceIdMap.get(ref.trim());
+            if (sourceId) places.push({ sourceId });
+        }
+        for (const p of places) if (!att.places.some(q => samePlace(q, p))) att.places.push(p);
+        return true;
+    };
+    /** A file of the tree read as an OBJE in place: its media record's lines, an image by its hash resolved, a file this browser holds by its hash. */
+    const fileMedia = (link: RawMedia): RawMedia | null => {
+        const linked = linkedMedia(link);
+        if (!linked) return null;
+        // An image named by its hash: the image itself, else left out (never a file path).
+        const resolved = imageRefSha(linked.file) ? { ...linked, file: resolveImageFile(linked.file, options.images) } : linked;
+        // A file the archive names only (its name and hash, spec 108 §5) that this browser holds (the
+        // tree's own attachment, found by its hash): the file itself, as the tree had it.
+        const heldFile = resolved.file && !resolved.file.startsWith('data:') && resolved.sha && resolved.stromKind !== 'photo'
+            ? options.images?.get(resolved.sha.toLowerCase()) : undefined;
+        return heldFile && SAFE_ATTACHMENT_DATA_URL.test(heldFile)
+            ? { ...resolved, file: heldFile, title: resolved.title || resolved.file.split(/[\\/]/).pop() || resolved.file } : resolved;
+    };
+    /** A file at `place` (spec 102); one that is none is counted. */
+    const takeFileAt = (link: RawMedia, place: MediaPlace): void => {
+        const media = fileMedia(link);
+        if (!media || !putFile(media, place)) skipMedia();
+    };
+    /** Files of places that are known only once the couples are (spec 102): taken after them, in the order read. */
+    const laterFiles: { media: RawMedia | null; place: () => MediaPlace | null }[] = [];
+    /** The id each event with files got (its files' place). */
+    const eventIdOfRaw = new Map<RawEvent | RawCoupleEvent, string>();
 
     // Build the source catalog and a GEDCOM-id -> new-id map for citations.
     const sourceIdMap = new Map<string, string>();
@@ -5435,6 +5627,14 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         // raster images come in; a path or URL (another program's media
         // folder) or any other payload is skipped and counted.
         for (const link of raw.media) {
+            // A file of the source alone (spec 102: an OBJE of the app's or the research's own file without the
+            // marks of a crop): a file of the tree at this source, taken with the unions' files.
+            if (ownFile && link.stromKind !== 'excerpt' && !link.clip && !link.pageUrl && !link.region
+                && (!link.ref || gedcom.mediaRecords?.get(link.ref)?.stromKind !== 'excerpt')) {
+                const sourceId = newId;
+                laterFiles.push({ media: link.asFile, place: () => ({ sourceId }) });
+                continue;
+            }
             const linked = linkedSourceMedia(link);
             if (!linked) { skipMedia(); continue; }
             // An image named by its hash: the image itself (or left out).
@@ -5523,8 +5723,6 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
 
     // Create persons
     const persons: Record<PersonId, Person> = {};
-    /** The tree's files (data v24): one record per file with its places. */
-    const files: Record<string, Attachment> = {};
     const externalMedia: ExternalMediaRef[] = [];
     for (const [gedId, indi] of validIndividuals) {
         const personId = personIdMap.get(gedId)!;
@@ -5618,6 +5816,7 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         if (indi.events.length > 0) {
             person.events = indi.events.map((ev): LifeEvent => {
                 const out: LifeEvent = { id: generateLifeEventId(), type: ev.type };
+                if (ev.media?.length) eventIdOfRaw.set(ev, out.id);
                 if (ev.customLabel) out.customLabel = ev.customLabel;
                 if (ev.date) out.date = ev.date;
                 if (ev.place) out.place = ev.place;
@@ -5769,14 +5968,7 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         for (const link of indi.media) {
             const linked = linkedMedia(link);
             if (!linked) { skipMedia(); continue; }
-            // An image named by its hash: the image itself, else left out (never a file path).
-            const resolved = imageRefSha(linked.file) ? { ...linked, file: resolveImageFile(linked.file, options.images) } : linked;
-            // A file the archive names only (its name and hash, spec 108 §5) that this browser holds (the
-            // tree's own attachment, found by its hash): the file itself, as the tree had it.
-            const heldFile = resolved.file && !resolved.file.startsWith('data:') && resolved.sha && resolved.stromKind !== 'photo'
-                ? options.images?.get(resolved.sha.toLowerCase()) : undefined;
-            const media = heldFile && SAFE_ATTACHMENT_DATA_URL.test(heldFile)
-                ? { ...resolved, file: heldFile, title: resolved.title || resolved.file.split(/[\\/]/).pop() || resolved.file } : resolved;
+            const media = fileMedia(link)!;
             if (!media.file && linked.file) { skipMedia(); continue; }
             if (media.file.startsWith('data:')) {
                 // Only the formats the app itself stores come in: a portrait
@@ -5792,40 +5984,10 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
                     person.photo = media.file;
                     if (media.title) person.photoOriginalName = media.title;
                     if (media.date) person.photoDate = media.date;
-                } else {
-                    const att: Attachment = {
-                        id: generateId('att'),
-                        places: [{ personId }],
-                        name: media.title || 'attachment',
-                        mimeType: media.file.slice(5, media.file.indexOf(';')) || 'application/octet-stream',
-                        dataUrl: media.file,
-                        sizeBytes: Math.round((media.file.length - media.file.indexOf(',') - 1) * 0.75),
-                    };
-                    if (media.note) att.note = media.note;
-                    if (media.date) att.date = media.date;
-                    if (media.sha) {
-                        att.original = {
-                            sha256: media.sha, name: att.name, mimeType: att.mimeType, bytes: 0,
-                            ...(media.orient ? { orientation: media.orient } : {}),
-                        };
-                    }
-                    const attSource = media.sourceXref ? sourceIdMap.get(media.sourceXref) : undefined;
-                    if (attSource) att.places.push({ sourceId: attSource });
-                    files[att.id] = att;
-                }
+                } else putFile(media, { personId });
             } else if (media.file && media.sha && /^[0-9a-f]{64}$/.test(media.sha) && media.stromKind !== 'photo') {
                 // Only the original, held by Strom Research by its hash (no preview yet).
-                const name = media.title || media.file.split(/[\\/]/).pop() || 'file';
-                const mimeType = originalMimeOf(media.file) || originalMimeOf(name);
-                const att: Attachment = {
-                    id: generateId('att'), places: [{ personId }], name, mimeType, dataUrl: ORIGINAL_ONLY_DATA_URL, sizeBytes: 0, originalOnly: true,
-                    original: { sha256: media.sha, name, mimeType, bytes: 0, ...(media.orient ? { orientation: media.orient } : {}) },
-                };
-                if (media.note) att.note = media.note;
-                if (media.date) att.date = media.date;
-                const attSource = media.sourceXref ? sourceIdMap.get(media.sourceXref) : undefined;
-                if (attSource) att.places.push({ sourceId: attSource });
-                files[att.id] = att;
+                putFile(media, { personId });
             } else if (media.file) {
                 // Platform exports (MyHeritage, Ancestry) reference media by
                 // path — remember the ref so the user can attach the files.
@@ -5858,6 +6020,12 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
                 // A media record with no file to take (a BLOB of GEDCOM 5.5, nothing at all).
                 skipMedia();
             }
+        }
+        // The files of the birth, the death and the events (spec 102; the app's and the research's own files).
+        for (const { fact, media } of indi.factMedia ?? []) takeFileAt(media, { personId, fact });
+        for (const ev of indi.events) {
+            const eventId = eventIdOfRaw.get(ev);
+            for (const media of ev.media ?? []) takeFileAt(media, eventId ? { personId, eventId } : { personId });
         }
 
         persons[personId] = person;
@@ -5907,10 +6075,34 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
             if (link.ref) usedMedia.add(link.ref);
             break;
         }
-        for (const m of fam.media) {
-            if (m !== taken && m.droppedTag) droppedTags.set(m.droppedTag, (droppedTags.get(m.droppedTag) ?? 0) + 1);
+        for (const { link, media } of read) {
+            if (link === taken) continue;
+            // The family's other files in the app's and the research's own files (`_PRIM N`, spec 102): files
+            // of the union, taken once the unions are; another program's stay as written.
+            if (ownFile && media && (media.file.startsWith('data:') || (media.sha && !imageRefSha(media.file)))) {
+                laterFiles.push({ media: link, place: () => { const u = famPartnership.get(gedFamId); return u ? { partnershipId: u.id } : null; } });
+                if (link.extra) fam.extras = fam.extras?.filter(e => e !== link.extra);
+                if (link.ref) { fam.keptMedia = fam.keptMedia?.filter(r => r !== link.ref); usedMedia.add(link.ref); }
+                continue;
+            }
+            if (link.droppedTag) droppedTags.set(link.droppedTag, (droppedTags.get(link.droppedTag) ?? 0) + 1);
         }
     }
+    // The files of a wedding, a divorce and a couple's event (spec 102): of the union, of the union's event.
+    for (const [gedFamId, fam] of gedcom.families) {
+        const unionPlace = (): MediaPlace | null => { const u = famPartnership.get(gedFamId); return u ? { partnershipId: u.id } : null; };
+        for (const media of fam.factMedia ?? []) laterFiles.push({ media, place: unionPlace });
+        for (const ev of fam.events) {
+            for (const media of ev.media ?? []) {
+                laterFiles.push({ media, place: () => {
+                    const at = unionPlace();
+                    const eventId = eventIdOfRaw.get(ev);
+                    return at && eventId ? { ...at, eventId } : at;
+                } });
+            }
+        }
+    }
+    for (const { media } of laterFiles) if (media?.ref && gedcom.mediaRecords?.has(media.ref)) usedMedia.add(media.ref);
     // A family's picture kept as written (or counted with the family's other kept tags).
     for (const fam of gedcom.families.values()) for (const ref of fam.keptMedia ?? []) usedMedia.add(ref);
     // Media records no person, family or source took (one nobody links): counted once each.
@@ -6025,6 +6217,7 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         if (fam.events.length > 0) {
             partnership.events = fam.events.map((ev): CoupleEvent => {
                 const out: CoupleEvent = { id: generateLifeEventId(), type: ev.type };
+                if (ev.media?.length) eventIdOfRaw.set(ev, out.id);
                 if (ev.customLabel) out.customLabel = ev.customLabel;
                 if (ev.date) out.date = ev.date;
                 if (ev.place) out.place = ev.place;
@@ -6463,6 +6656,12 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         } else if (!union.photo && !externalMedia.some(r => r.partnershipId === union.id)) {
             externalMedia.push({ ...pick, partnershipId: union.id });
         }
+    }
+    // The files of the unions, their events and the sources alone (spec 102), now that the unions are.
+    for (const { media, place } of laterFiles) {
+        const at = place();
+        if (media && at) takeFileAt(media, at);
+        else skipMedia();
     }
 
     /**

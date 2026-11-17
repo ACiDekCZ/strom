@@ -22,10 +22,10 @@
  * the 255-byte line limit, and the importer joins it back.
  */
 
-import { allMedia, mediaSourceId, personMedia } from './media.js';
+import { allMedia, mediaSourceIds, personMediaIndex, placeKey as mediaPlaceKey, placePartnershipId, treeMedia } from './media.js';
 import { researchHeaderLines, ResearchHeaderInfo, TitlesInGedcom } from './research-link.js';
 import { isPurePlaceholder } from './single-parent.js';
-import { APP_VERSION, StromData, Person, Partnership, CoupleEvent, EventParticipant, Source, PersonId, OriginalIds, PartnershipId, LifeEventType, LifeEvent, ParticipantRole, PlaceGeo, Story, ParentChildRelType, MediaOriginal, Attachment, AlsoChildOf, FactStatus, ResearchFactOrigin, ResearchFactWas, coupleSides } from './types.js';
+import { APP_VERSION, StromData, Person, Partnership, CoupleEvent, EventParticipant, Source, PersonId, OriginalIds, PartnershipId, LifeEventType, LifeEvent, ParticipantRole, PlaceGeo, Story, ParentChildRelType, MediaOriginal, Attachment, MaterialKind, MediaPlace, AlsoChildOf, FactStatus, ResearchFactOrigin, ResearchFactWas, coupleSides } from './types.js';
 import { normalizeSha256 } from './sha256.js';
 import { sourceReadState } from './source-confirm.js';
 import { regionHeader, regionToStored } from './originals.js';
@@ -149,6 +149,29 @@ export interface GedcomExportOptions {
      */
     mediaDates?: boolean;
 }
+
+/** What an OBJE of the file says (see pushObje in exportToGedcom). */
+interface ObjeWrite {
+    file: string;
+    /** TITL: the title, else the file's name. */
+    title: string;
+    /** `_STROM_NAME`: the file's name beside a title (spec 102). */
+    name?: string;
+    /** `_STROM_KIND`: a person's portrait. */
+    kind: 'photo' | '';
+    /** `TYPE` under FORM: what the file is (spec 102). */
+    type?: MaterialKind;
+    note?: string;
+    /** `_SOUR`: the sources the file belongs to, as xrefs. */
+    srcRefs: string[];
+    original?: MediaOriginal;
+    fileMime?: string;
+    date?: string;
+    prim?: 'Y' | 'N';
+}
+
+/** A line that holds the place of a file until all are written (exportToGedcom's media slots). */
+const MEDIA_SLOT = '\u0000media:';
 
 /**
  * An xref another program gave that this file can use as it is: GEDCOM
@@ -1059,9 +1082,9 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         (!!holder.importId && back.imports.has(holder.importId)) || (holder.originalIds ?? []).some(e => back.imports.has(e.from));
     /** Xrefs in use, without the @ signs (people, families, sources, repositories and the submitter share them). */
     const taken = new Set<string>(['SUBM1', ...back.reserved]);
-    const counters: Record<string, number> = { I: 1, F: 1, S: 1, R: 1 };
+    const counters: Record<string, number> = { I: 1, F: 1, S: 1, R: 1, M: 1 };
     /** The next free `@{prefix}n@`. */
-    const freshXref = (prefix: 'I' | 'F' | 'S' | 'R'): string => {
+    const freshXref = (prefix: 'I' | 'F' | 'S' | 'R' | 'M'): string => {
         let n = counters[prefix];
         while (taken.has(`${prefix}${n}`)) n++;
         counters[prefix] = n + 1;
@@ -1546,31 +1569,88 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
     // to keep physical lines within the spec limit.
     // `prim`: the family's picture among the family's files (`2 _PRIM Y` / `N`, a research that keeps the app's files).
     const pushMedia = (file: string, title: string, kind: 'photo' | '', note?: string, srcId?: string, original?: MediaOriginal, fileMime?: string, date?: string, prim?: 'Y' | 'N'): void => {
-        const mime = file.startsWith('data:') ? file.slice(5, file.indexOf(';')) : fileMime ?? '';
-        const form = mime.includes('/') ? mime.split('/')[1] : 'jpeg';
-        lines.push('1 OBJE');
-        lines.push(`2 FORM ${form}`);
-        if (title) pushWrapped(lines, 2, 'TITL', title);
-        if (kind) lines.push(`2 _STROM_KIND ${kind}`);
-        if (prim) lines.push(`2 _PRIM ${prim}`);
-        if (note) pushLongValue(lines, 2, 'NOTE', note);
+        const srcRef = srcId ? sourceIdMap.get(srcId) : undefined;
+        pushObje(lines, 1, { file, title, kind, note, srcRefs: srcRef ? [srcRef] : [], original, fileMime, date, prim });
+    };
+    /**
+     * One OBJE written in place at `level`: FORM (with the file's kind as
+     * `TYPE` under it, spec 102), TITL (the title, `_STROM_NAME` the file's
+     * name beside it; without a title TITL is the name), the marks, NOTE, the
+     * sources (`_SOUR`), the original's hash, FILE and the date.
+     */
+    const pushObje = (out: string[], level: number, m: ObjeWrite): void => {
+        const l = level + 1;
+        out.push(`${level} OBJE`);
+        out.push(`${l} FORM ${objeForm(m)}`);
+        if (m.type) out.push(`${l + 1} TYPE ${m.type}`);
+        if (m.title) pushWrapped(out, l, 'TITL', m.title);
+        if (m.name) pushWrapped(out, l, '_STROM_NAME', m.name);
+        if (m.kind) out.push(`${l} _STROM_KIND ${m.kind}`);
+        if (m.prim) out.push(`${l} _PRIM ${m.prim}`);
+        pushObjeRest(out, l, m, true);
+    };
+    /** FORM of a file: its data URL's type, else the type it names. */
+    const objeForm = (m: ObjeWrite): string => {
+        const mime = m.file.startsWith('data:') ? m.file.slice(5, m.file.indexOf(';')) : m.fileMime ?? '';
+        return mime.includes('/') ? mime.split('/')[1] : 'jpeg';
+    };
+    /** NOTE, `_SOUR`, the original's hash, FILE (in place) and the date of an OBJE, at level `l`. */
+    const pushObjeRest = (out: string[], l: number, m: ObjeWrite, withFile = false): void => {
+        if (m.note) pushLongValue(out, l, 'NOTE', m.note);
         // The source this scan belongs to. 5.5.1 has no SOUR under a
         // multimedia link, hence the underscore tag.
-        const srcRef = srcId ? sourceIdMap.get(srcId) : undefined;
-        if (srcRef) lines.push(`2 _SOUR ${srcRef}`);
+        for (const ref of m.srcRefs) out.push(`${l} _SOUR ${ref}`);
         // The original behind the preview, by its hash: Strom Research holds it.
-        const sha = normalizeSha256(original?.sha256);
+        const sha = normalizeSha256(m.original?.sha256);
         if (sha) {
-            lines.push(`2 _STROM_SHA ${sha}`);
-            const o = original?.orientation;
-            if (o && o >= 2 && o <= 8) lines.push(`2 _STROM_ORIENT ${o}`);
+            out.push(`${l} _STROM_SHA ${sha}`);
+            const o = m.original?.orientation;
+            if (o && o >= 2 && o <= 8) out.push(`${l} _STROM_ORIENT ${o}`);
         }
-        pushWrapped(lines, 2, 'FILE', file);
+        if (withFile) pushWrapped(out, l, 'FILE', m.file);
         // The picture's date: back under its OBJE for the program it came from (spec 066 G8), and to a
         // research that keeps it (spec 108 §3).
-        const day = (back.imports.size > 0 || options.mediaDates) && date ? mediaDateValue(date) : undefined;
-        if (day) lines.push(`2 _DATE ${day}`);
+        const day = (back.imports.size > 0 || options.mediaDates) && m.date ? mediaDateValue(m.date) : undefined;
+        if (day) out.push(`${l} _DATE ${day}`);
     };
+
+    // The tree's files (data v24, spec 102 §0) are written where they are:
+    // at the person, under the birth, death or event, at the couple or its
+    // event, at a source. Each place first takes a slot in the lines; once
+    // all are written, a file of one place is an OBJE in place there (as
+    // ever), a file of several places a media record (`0 @Mn@ OBJE`, after
+    // the other records) and a link to it at each place.
+    const mediaSlots: { att: Attachment; level: number; prim?: 'N'; at: 'person' | 'union' | 'source' }[] = [];
+    const slotsOfMedia = new Map<string, number[]>();
+    const pushMediaSlot = (att: Attachment, level: number, at: 'person' | 'union' | 'source', prim?: 'N'): void => {
+        const i = mediaSlots.length;
+        mediaSlots.push({ att, level, at, ...(prim ? { prim } : {}) });
+        lines.push(`${MEDIA_SLOT}${i}`);
+        const list = slotsOfMedia.get(att.id);
+        if (list) list.push(i);
+        else slotsOfMedia.set(att.id, [i]);
+    };
+    /** The places of the files written under a fact or an event (placeKey): not written there, a file goes to its owner. */
+    const writtenMediaPlaces = new Set<string>();
+    const mediaByPerson = personMediaIndex(data);
+    const mediaByUnion = new Map<PartnershipId, Attachment[]>();
+    for (const att of treeMedia(data)) {
+        for (const uid of new Set(att.places.map(placePartnershipId).filter((id): id is PartnershipId => !!id))) {
+            const list = mediaByUnion.get(uid);
+            if (list) list.push(att);
+            else mediaByUnion.set(uid, [att]);
+        }
+    }
+    /** Slots for the files at a fact or an event (`place`) written right here. */
+    const pushPlaceMedia = (holder: Attachment[] | undefined, place: MediaPlace, level: number, at: 'person' | 'union'): void => {
+        const key = mediaPlaceKey(place);
+        writtenMediaPlaces.add(key);
+        for (const att of holder ?? []) if (att.places.some(p => mediaPlaceKey(p) === key)) pushMediaSlot(att, level, at);
+    };
+    /** At the owner itself: the files of its own place, and of its facts and events not written. */
+    const atOwner = (place: MediaPlace, own: (p: MediaPlace) => boolean): boolean =>
+        own(place) && (('personId' in place && !place.fact && !place.eventId) || ('partnershipId' in place && !place.eventId)
+            || !writtenMediaPlaces.has(mediaPlaceKey(place)));
 
     // ==================== INDIVIDUALS ====================
     for (const [personId, person] of Object.entries(data.persons) as [PersonId, Person][]) {
@@ -1655,6 +1735,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             pushDetails(lines, { age: person.birthAge, address: person.birthAddress });
             pushStatus(lines, person.birthStatus);
             pushCitations(2, { personId, fact: 'birth' });
+            pushPlaceMedia(mediaByPerson.get(personId), { personId, fact: 'birth' }, 2, 'person');
             pushNoted(birthNoted.rest, true);
             pushFactImport(person, 'birth');
             pushFactOrigin(person, 'birth');
@@ -1679,6 +1760,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             pushDetails(lines, { cause: person.deathCause, age: person.deathAge, address: person.deathAddress });
             pushStatus(lines, person.deathStatus);
             pushCitations(2, { personId, fact: 'death' });
+            pushPlaceMedia(mediaByPerson.get(personId), { personId, fact: 'death' }, 2, 'person');
             pushNoted(deathNoted.rest, true);
             pushFactImport(person, 'death');
             pushFactOrigin(person, 'death');
@@ -1690,6 +1772,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             lines.push(...deathNoted.date);
             // Where that came from goes along (the research's DEAT Y has one).
             pushStatus(lines, person.deathStatus);
+            pushPlaceMedia(mediaByPerson.get(personId), { personId, fact: 'death' }, 2, 'person');
             pushNoted(deathNoted.rest, true);
             pushFactImport(person, 'death');
             pushFactOrigin(person, 'death');
@@ -1803,6 +1886,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
 
             // Source citations on the event (2 SOUR @Sx@ + 3 PAGE).
             pushCitations(2, { personId, eventId: event.id });
+            pushPlaceMedia(mediaByPerson.get(personId), { personId, eventId: event.id }, 2, 'person');
             pushFactImport(person, `event:${event.id}`);
             pushFactOrigin(person, `event:${event.id}`);
         }
@@ -1814,11 +1898,8 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         if (person.photo) {
             pushMedia(person.photo, person.photoOriginalName ?? '', 'photo', undefined, undefined, undefined, undefined, person.photoDate);
         }
-        for (const att of personMedia(data, personId)) {
-            const srcId = mediaSourceId(att);
-            // Only the original (the research holds it): the file's name and hash, no data.
-            if (att.originalOnly) pushMedia(att.name || 'file', att.name, '', att.note, srcId, att.original, att.original?.mimeType ?? att.mimeType, att.date);
-            else pushMedia(att.dataUrl, att.name, '', att.note, srcId, att.original, undefined, att.date);
+        for (const att of mediaByPerson.get(personId) ?? []) {
+            if (att.places.some(p => atOwner(p, q => 'personId' in q && q.personId === personId))) pushMediaSlot(att, 1, 'person');
         }
 
         // Family as spouse (FAMS) - partnerships where this person is a partner
@@ -2083,6 +2164,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             if (event.note) pushNote(lines, 2, event.note);
             for (const part of event.participants ?? []) pushParticipant(lines, part, personIdMap);
             pushCitations(2, { partnershipId, eventId: event.id });
+            pushPlaceMedia(mediaByUnion.get(partnershipId), { partnershipId, eventId: event.id }, 2, 'union');
             pushFactImport(partnership, `event:${event.id}`);
             pushFactOrigin(partnership, `event:${event.id}`);
         };
@@ -2117,11 +2199,15 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         // Strom tag — any program shows it as the family's picture. A research
         // that keeps the app's files reads it by `_PRIM Y` (spec 108); the
         // family's other files, once the app has any (spec 102), go after it with `_PRIM N`.
+        // The family's files say `_PRIM N`, the photo then `_PRIM Y`: a file read back never becomes the photo.
+        const unionFiles = (mediaByUnion.get(partnershipId) ?? [])
+            .filter(att => att.places.some(p => atOwner(p, q => 'partnershipId' in q && q.partnershipId === partnershipId)));
         if (partnership.photo) {
             // Its original (spec 108 K2.4) by its hash, as an attachment's: the research holds it.
             pushMedia(partnership.photo, partnership.photoOriginalName ?? '', '', undefined, undefined, partnership.photoOriginal, undefined, partnership.photoDate,
-                options.appMedia ? 'Y' : undefined);
+                options.appMedia || unionFiles.length ? 'Y' : undefined);
         }
+        for (const att of unionFiles) pushMediaSlot(att, 1, 'union', 'N');
 
         pushGedcomExtra(partnership);
 
@@ -2198,6 +2284,15 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
     // ==================== SOURCES ====================
     // Page attachments by id: an excerpt cut from one says where on its original it lies.
     const attachmentById = new Map<string, Attachment>(allMedia(data).map(a => [a.id, a] as const));
+    /** The files of each source record, by its xref (the sources written as one record share it). */
+    const mediaBySource = new Map<string, Attachment[]>();
+    for (const att of treeMedia(data)) {
+        for (const ref of new Set(mediaSourceIds(att).map(id => sourceIdMap.get(id)).filter((r): r is string => !!r))) {
+            const list = mediaBySource.get(ref);
+            if (list) list.push(att);
+            else mediaBySource.set(ref, [att]);
+        }
+    }
     // Standard 5.5.1: repositories are separate @Rx@ records referenced by
     // pointer; the reference/page lives on citations (see pushCitation). PAGE
     // is still emitted on the record too, purely for our own round-trip of
@@ -2302,6 +2397,10 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             }
             pushWrapped(lines, 2, 'FILE', exc.dataUrl);
         }
+        // The files of the source (spec 102): one at a person too goes there with this source as its `_SOUR`.
+        for (const att of mediaBySource.get(gedcomId) ?? []) {
+            if (!(slotsOfMedia.get(att.id) ?? []).some(i => mediaSlots[i].at === 'person')) pushMediaSlot(att, 1, 'source');
+        }
         // The record's own tags of another program, once (every page's source keeps them).
         pushGedcomExtra(members ? { gedcomExtra: members.flatMap(m => m.gedcomExtra ?? []) } : source);
     }
@@ -2310,6 +2409,60 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
     for (const [name, repoId] of repoIdMap) {
         lines.push(`0 ${repoId} REPO`);
         pushWrapped(lines, 1, 'NAME', name);
+    }
+
+    // ==================== MEDIA ====================
+    // Each file in its slots (see pushMediaSlot): in place where it has one,
+    // else a link to its record, the records after all the others.
+    if (mediaSlots.length) {
+        const recordOf = new Map<string, string>();
+        for (const slot of mediaSlots) {
+            if (!recordOf.has(slot.att.id) && (slotsOfMedia.get(slot.att.id)?.length ?? 0) > 1) recordOf.set(slot.att.id, freshXref('M'));
+        }
+        /** What the file's OBJE says; its sources as `_SOUR` when it is at a person (else each source has it as its own). */
+        const objeOf = (att: Attachment): ObjeWrite => {
+            const atPerson = (slotsOfMedia.get(att.id) ?? []).some(i => mediaSlots[i].at === 'person');
+            const srcRefs = atPerson ? [...new Set(mediaSourceIds(att).map(id => sourceIdMap.get(id)).filter((r): r is string => !!r))] : [];
+            const title = att.title?.trim() ? att.title : undefined;
+            return {
+                // Only the original (the research holds it): the file's name and hash, no data.
+                file: att.originalOnly ? att.name || 'file' : att.dataUrl,
+                ...(att.originalOnly ? { fileMime: att.original?.mimeType ?? att.mimeType } : {}),
+                title: title ?? att.name,
+                ...(title ? { name: att.name } : {}),
+                kind: '',
+                ...(att.kind ? { type: att.kind } : {}),
+                note: att.note, srcRefs, original: att.original, date: att.date,
+            };
+        };
+        const written: string[] = [];
+        for (const line of lines) {
+            if (!line.startsWith(MEDIA_SLOT)) {
+                written.push(line);
+                continue;
+            }
+            const slot = mediaSlots[Number(line.slice(MEDIA_SLOT.length))];
+            const ref = recordOf.get(slot.att.id);
+            if (!ref) {
+                pushObje(written, slot.level, { ...objeOf(slot.att), ...(slot.prim ? { prim: slot.prim } : {}) });
+                continue;
+            }
+            written.push(`${slot.level} OBJE ${ref}`);
+            if (slot.prim) written.push(`${slot.level + 1} _PRIM ${slot.prim}`);
+        }
+        // A media record (GEDCOM 5.5.1): FILE with FORM, TYPE and TITL under it, then the rest of the OBJE.
+        for (const [id, ref] of recordOf) {
+            const m = objeOf(mediaSlots[slotsOfMedia.get(id)![0]].att);
+            written.push(`0 ${ref} OBJE`);
+            pushWrapped(written, 1, 'FILE', m.file);
+            written.push(`2 FORM ${objeForm(m)}`);
+            if (m.type) written.push(`3 TYPE ${m.type}`);
+            if (m.title) pushWrapped(written, 2, 'TITL', m.title);
+            if (m.name) pushWrapped(written, 1, '_STROM_NAME', m.name);
+            pushObjeRest(written, 1, m);
+        }
+        lines.length = 0;
+        for (const l of written) lines.push(l);
     }
 
     // ==================== TRAILER ====================

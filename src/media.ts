@@ -326,15 +326,6 @@ export function moveLegacyAttachments(data: StromData): number {
     return joined;
 }
 
-/** The person's files as the attachment list of v23 (Person.attachments with `sourceId`), for code that reads old shapes. */
-export function legacyAttachments(data: Pick<StromData, 'media'>, personId: PersonId): (Omit<Attachment, 'places'> & { sourceId?: string })[] {
-    return personMedia(data, personId).map(a => {
-        const { places, ...rest } = a;
-        const sourceId = mediaSourceId(a);
-        return sourceId ? { ...rest, sourceId } : rest;
-    });
-}
-
 const KINDS = new Set(['photo', 'document', 'record', 'other']);
 const isBy = (v: unknown): v is 'user' | 'agent' => v === 'user' || v === 'agent';
 
