@@ -42,7 +42,8 @@ describe('the waiting item of an archive', () => {
             const [w] = sanitizeWaiting([permission(host)]);
             expect(w.kind).toBeUndefined();
             expect(w.host).toBeUndefined();
-            expect(w.on.length).toBeLessThanOrEqual(120);
+            // A plain item keeps its whole "on" too (a manual step's whole instruction).
+            expect(w.on).toBe(TERMS);
             expect(w.id.length).toBeLessThanOrEqual(40);
         }
     });
@@ -63,8 +64,8 @@ describe('the waiting item of an archive', () => {
             { id: 'T0003', what: 'Úkol', on: TERMS, person: 'P0002', host: 'archive.example.org' },
             { kind: 'takeover', id: 'takeover', what: 'Převzít stahovače', on: '', at: '2026-10-11T10:00:00Z', connectors: ['a'] },
         ])).toEqual([
-            { id: 'P0001', what: 'Nová verze vyprávění', on: TERMS.slice(0, 119) + '…', at: '', person: 'P0001', kind: 'story' },
-            { id: 'T0003', what: 'Úkol', on: TERMS.slice(0, 119) + '…', at: '', person: 'P0002' },
+            { id: 'P0001', what: 'Nová verze vyprávění', on: TERMS, at: '', person: 'P0001', kind: 'story' },
+            { id: 'T0003', what: 'Úkol', on: TERMS, at: '', person: 'P0002' },
             { id: 'takeover', what: 'Převzít stahovače', on: '', at: '2026-10-11T10:00:00Z' },
         ]);
     });

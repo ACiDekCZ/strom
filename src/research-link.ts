@@ -688,7 +688,10 @@ export function cleanText(value: unknown, max = MAX_TEXT): string {
     if (typeof value !== 'string') return '';
     // eslint-disable-next-line no-control-regex
     const flat = value.replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim();
-    return flat.length > max ? flat.slice(0, max - 1) + '…' : flat;
+    if (flat.length <= max) return flat;
+    // Never cut between the two halves of a surrogate pair (an emoji, a rare CJK character).
+    const cut = /[\uD800-\uDBFF]/.test(flat[max - 2] ?? '') ? max - 2 : max - 1;
+    return flat.slice(0, cut) + '…';
 }
 
 /**
@@ -3232,8 +3235,12 @@ export function sanitizeWorking(value: unknown, helpsSaid = false): LiveWorker[]
 
 const TASK_KINDS: readonly WaitingTaskKind[] = ['takeover', 'check', 'images', 'letter', 'family', 'web', 'other'];
 
-/** Longest archive terms kept with a permission question. */
-const MAX_TERMS = 600;
+/**
+ * Longest "on" kept with a waiting item: an archive's terms, or the whole
+ * instruction of a manual step (archive, book, year, where to save, what is
+ * enough; commonly 300-500 characters). Only an extreme text is cut.
+ */
+const MAX_WAITING_ON = 1500;
 /** Most waiting items taken (a research may wait on many; other lists keep MAX_ITEMS). */
 export const MAX_WAITING = 200;
 
@@ -3436,7 +3443,7 @@ export function sanitizeWaiting(value: unknown, groups = false, branches = false
         const hypo = groups && !story && !host && r.kind === 'hypothesis' ? researchHypothesisRef(r.id) : null;
         const kind: LiveWaiting['kind'] = story ? 'story' : host ? 'permission' : placeQ ? 'place' : branch ? 'branch' : hypo ? 'hypothesis' : task ?? undefined;
         out.push({
-            id: host ? `permission:${host}` : cleanText(r.id, 40), what, on: cleanText(r.on, host ? MAX_TERMS : 120), at: cleanText(r.at ?? r.since, 40),
+            id: host ? `permission:${host}` : cleanText(r.id, 40), what, on: cleanText(r.on, MAX_WAITING_ON), at: cleanText(r.at ?? r.since, 40),
             ...(person ? { person } : {}), ...(research ? { research } : {}),
             ...(story ? { kind: 'story' as const } : {}), ...(partner && partner !== person ? { partner } : {}),
             ...(host ? { kind: 'permission' as const, host } : {}),

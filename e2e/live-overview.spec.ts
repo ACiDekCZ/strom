@@ -1614,6 +1614,39 @@ test.describe('a run waiting for its gate', () => {
 });
 
 test.describe('Research overview', () => {
+    test('a manual step\'s whole instruction: two lines in the panel, whole in the item\'s detail (no overflow)', async ({ page }) => {
+        const INSTRUCTION = 'Stáhnout snímky křestní matriky Chlumy 1850–1871 (kniha 4521) ze Státního oblastního archivu: přihlásit se na portálu archivu, '
+            + 'otevřít knihu, vzít strany 12 až 48 v plném rozlišení a uložit je do složky images/chlumy-4521/ výzkumu; když nejde vzít celou knihu, '
+            + 'stačí strany kolem roku 1865 (křty od února do září). Pak tady krok označit jako hotový, agent strany přečte a pokračuje u rodiny Fíškových, konec zadání.';
+        await follow(page, { width: 1440, height: 900 }, (b) => {
+            b.waiting = [{ id: 'T0004', what: 'Stáhnout snímky matriky', on: INSTRUCTION, person: 'P0012', at: new Date().toISOString() }];
+        });
+        expect(INSTRUCTION.length).toBeGreaterThan(400);
+        // The panel's row: the whole text, clamped to two lines by the style (on hover in its title).
+        const on = page.locator('#live-panel .live-waiting-row .live-waiting-on');
+        await expect(on).toHaveText(`waiting on: ${INSTRUCTION}`);
+        await expect(on).toHaveAttribute('title', `waiting on: ${INSTRUCTION}`);
+        // The panel redraws when the change comes: measured until it holds.
+        await expect.poll(() => on.evaluate((n) => {
+            const ems = n.getBoundingClientRect().height / parseFloat(getComputedStyle(n).fontSize);
+            return ems > 0 && ems <= 3.2 && n.scrollHeight > n.clientHeight + 1;
+        }).catch(() => false)).toBe(true);
+        // The overview's detail: the whole text, wrapped, the end visible.
+        const ov = await openOverview(page);
+        const item = ov.locator('.research-overview__waiting-item').first();
+        await item.locator('.research-overview__waiting-row').click();
+        const whole = item.locator('.research-overview__waiting-on');
+        await expect(whole).toContainText('konec zadání.');
+        await whole.scrollIntoViewIfNeeded();
+        await expect(whole).toBeInViewport();
+        const wide = await item.evaluate((n) => [...n.querySelectorAll<HTMLElement>('*')]
+            .filter(e => e.scrollWidth > e.clientWidth + 1 && getComputedStyle(e).overflowX !== 'visible').map(e => e.className));
+        expect(wide).toEqual([]);
+        const box = await whole.boundingBox();
+        const ovBox = await ov.boundingBox();
+        expect(box!.x + box!.width).toBeLessThanOrEqual(ovBox!.x + ovBox!.width + 0.5);
+    });
+
     test('desktop: beside a narrower tree; summary, waiting, progress, filters, hover, changed, Escape', async ({ page }) => {
         await follow(page);
         const panel = page.locator('#live-panel');

@@ -19024,6 +19024,10 @@
         .research-overview__older { display: block; margin: 8px 0 4px; font-size: 12px; color: var(--text-faint); }
         .research-overview__group-more { margin: 2px 0 8px; color: var(--text-faint); font-size: 12px; }
         .live-panel-list .live-time { display: block; color: var(--text-faint); font-size: 11px; }
+        /* "Waiting on" in a compact row: two lines at most (the whole text is in the overview's detail). */
+        .live-panel-list .live-waiting-on {
+            display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+        }
         .live-panel-list .live-task { color: var(--text-light); }
         /* Every change row looks the same; one that shows a person is a
            button with a hover background, not an underlined link. */

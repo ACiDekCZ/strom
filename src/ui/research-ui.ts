@@ -4118,7 +4118,11 @@ export const researchUiMethods = uiModule({
             if (w.kind === 'hypothesis') what.append(el('strong', 'hwr-id', w.id), ' · ');
             what.append(w.kind === 'branch' ? waitBranchText(w, liveSession()) : w.what);
             // "on" is the agent's free text; "user" only repeats the heading.
-            if (!waitsOnUser(w.on)) text.appendChild(el('small', 'live-time', r.waitingOn(w.on!)));
+            // A compact row: a long instruction is clamped to two lines here, whole in the overview.
+            if (!waitsOnUser(w.on)) {
+                const on = text.appendChild(el('small', 'live-time live-waiting-on', r.waitingOn(w.on!)));
+                on.title = on.textContent ?? '';
+            }
             const at = timeEl(w.at, 'ago');
             if (at) text.appendChild(at);
             const why = waitingWhyEl(w);
