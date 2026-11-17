@@ -85,3 +85,50 @@ test('an older research (no media.app): the plain /sync as before, nothing goes 
     expect(bridge.postQueries?.[0].has('media')).toBe(false);
     expect(bridge.postQueries?.[0].get('app')).toBeTruthy();
 });
+
+test('a version whose own files could not all be had (the file with its images in it): writes only add until a version with them', async ({ page }) => {
+    const bridge = await researchTree(page, ['media.app', 'ged.imagesByHash'], false);
+    // The research's own commit; its file with the tree's files names a picture by its hash, which cannot be had.
+    foreignCommit(bridge);
+    const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type, if-none-match' };
+    const missing = `1 OBJE\n2 FILE strom-image:${'d'.repeat(64)}\n3 _MIME image/jpeg\n3 _BYTES 4096\n`;
+    await page.route(/\/tree\.ged(\?|$)/, async (route) => {
+        const q = new URL(route.request().url()).searchParams;
+        if (q.get('images') !== 'ref' || q.get('media') !== 'app') return route.fallback();
+        await route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/plain; charset=utf-8', 'x-strom-images': 'ref' },
+            body: bridge.treeGed.replace('1 NAME Jan Václav /Fíšek/\n', `1 NAME Jan Václav /Fíšek/\n${missing}`) });
+    });
+    await page.route(/\/images(\?|$)/, (route) => route.request().method() === 'OPTIONS'
+        ? route.fulfill({ status: 204, headers: cors, body: '' })
+        : route.fulfill({ status: 404, headers: cors, body: '' }));
+    await poll(page);
+    await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+    await page.getByRole('dialog', { name: 'Load the research version?' }).getByRole('button', { name: 'Load' }).click();
+    const jan = () => page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons) as any[])
+        .find(p => p.firstName === 'Jan Václav') ?? null);
+    await expect.poll(async () => !!(await jan())).toBe(true);
+    const editJanVaclav = (place: string) => page.evaluate((place) => {
+        const dm = window.Strom.DataManager;
+        const p = (Object.values(dm.getData().persons) as any[]).find(x => x.firstName === 'Jan Václav');
+        dm.updatePerson(p.id, { birthPlace: place });
+    }, place);
+    await editJanVaclav('Praha');
+    await page.evaluate(() => window.Strom.UI.researchSendNow());
+    await expect.poll(() => bridge.posts.length).toBe(1);
+    // Without the archive's files the tree may lack some: never said to carry every file.
+    expect(bridge.postQueries?.[0].has('media')).toBe(false);
+
+    // A version with them again: the next write says it carries every file.
+    await page.unroute(/\/tree\.ged(\?|$)/);
+    await page.unroute(/\/images(\?|$)/);
+    foreignCommit(bridge);
+    await poll(page);
+    await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+    // The first write still waits in the research's inbox: loaded over it.
+    await page.getByRole('button', { name: 'Load without changes' }).click();
+    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe(bridge.head);
+    await editJanVaclav('Brno');
+    await page.evaluate(() => window.Strom.UI.researchSendNow());
+    await expect.poll(() => bridge.posts.length).toBe(2);
+    expect(bridge.postQueries?.[1].get('media')).toBe('app');
+});

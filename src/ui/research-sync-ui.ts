@@ -1724,18 +1724,21 @@ export const researchSyncMethods = uiModule({
 
     /**
      * A write of this tree says it carries every file of the tree (`POST /sync?media=app`, spec 108 P4): a research
-     * that keeps the app's files, and the tree holds the research's files too (images taken: the setting, its last load).
+     * that keeps the app's files, and the tree holds the research's files too (images taken: the setting, its last load;
+     * its last version came with the tree's files, not the file with its images in it after they could not all be had).
      */
-    researchSendDeclaresMediaFor(link: ResearchLink): boolean {
+    researchSendDeclaresMediaFor(treeId: TreeId, link: ResearchLink): boolean {
+        const missed = researchAutoState(treeId).mediaMissed;
         return researchSendDeclaresMedia(this.researchStatusOf(link.id), {
-            importImages: SettingsManager.isImportImages(), loadedWithoutImages: link.treeEtag?.images === false,
+            importImages: SettingsManager.isImportImages(),
+            loadedWithoutImages: link.treeEtag?.images === false || (!!missed && missed.toLowerCase() === link.id.toLowerCase()),
         });
     },
 
     /** The tree's files have not reached its research's archive yet (spec 108 K2.7, researchMediaFirstSendDue). */
     researchMediaFirstDue(treeId: TreeId, link: ResearchLink, data: StromData | null | undefined): boolean {
         if (!data) return false;
-        return researchMediaFirstSendDue({ declares: this.researchSendDeclaresMediaFor(link), hasMedia: treeHasAppMedia(data),
+        return researchMediaFirstSendDue({ declares: this.researchSendDeclaresMediaFor(treeId, link), hasMedia: treeHasAppMedia(data),
             researchId: link.id, sentTo: researchAutoState(treeId).appMediaSent });
     },
 
@@ -1966,7 +1969,7 @@ export const researchSyncMethods = uiModule({
         // Every file of the tree goes (portraits, couples' photos, attachments; an attachment only its original
         // by name and hash): said so (`?media=app`), the archive takes off what the tree no longer has (spec 108 P4).
         // A send taken back, written again, is as it was said then (the research keeps that).
-        const declaresMedia = !again && this.researchSendDeclaresMediaFor(link);
+        const declaresMedia = !again && this.researchSendDeclaresMediaFor(treeId, link);
         const exported = again ? null : researchGedcomExport(data, meta?.name ?? '', {
             id: link.id, head: link.head, appTree: treeId, transcripts: this.researchTranscriptsLink(link).transcripts, sent: fps.current,
             ...(since ? { since } : {}),

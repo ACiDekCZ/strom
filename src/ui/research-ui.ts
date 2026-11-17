@@ -150,8 +150,20 @@ export function noteResearchMediaReturn(treeId: TreeId, researchId: string, rese
     patchResearchAutoState(treeId, {
         mediaBase: { research: researchId, keys: researchMediaKeys(research).slice(0, MEDIA_BASE_MAX) },
         appMediaSent: sent,
+        mediaMissed: undefined,
     });
     if (!sent) researchMediaFirstAgain(treeId);
+}
+
+/**
+ * A version of a research that keeps the tree's own files was loaded into
+ * `treeId` without them (its images by hash could not all be had, so the file
+ * with its images in it came, which never has them): the tree may lack files
+ * the archive holds, so its writes only add, never take one off there, until
+ * a version with them comes (noteResearchMediaReturn).
+ */
+export function noteResearchMediaMissed(treeId: TreeId, researchId: string): void {
+    patchResearchAutoState(treeId, { mediaMissed: researchId });
 }
 
 export interface LiveChangeItem {
@@ -2332,6 +2344,7 @@ export const researchUiMethods = uiModule({
             ...(source.mode === 'archive' ? { mode: 'archive' as const } : {}),
         });
         if (source.appMedia && includeImages) noteResearchMediaReturn(treeId, source.treeId, data, carry.carried);
+        else if (treeAsksAppMedia(this.researchStatusOf(source.treeId)?.features, includeImages)) noteResearchMediaMissed(treeId, source.treeId);
         this.refreshResearchSyncUi();
         this.showToast(strings.sync.stateInSync, 4000);
         return true;
@@ -2578,6 +2591,8 @@ export const researchUiMethods = uiModule({
             patchResearchAutoState(treeId, { edits: undefined, unsentSince: undefined });
             // With the tree's own files and its images taken: the base of the next return (spec 108 §5).
             if (source.appMedia && includeImages) noteResearchMediaReturn(treeId, source.treeId, data, carried);
+            // Asked with them and they did not come (the file with its images in it): its writes only add.
+            else if (treeAsksAppMedia(this.researchStatusOf(source.treeId)?.features, includeImages)) noteResearchMediaMissed(treeId, source.treeId);
             this.researchKeepCopy(treeId, base);
         }
         // "Restore the state before loading", offered while the tree is just what was loaded.
@@ -4066,6 +4081,8 @@ export const researchUiMethods = uiModule({
         this.researchKeepCopy(s.treeId, base);
         // With the tree's own files (asked only while images are taken): the base of the next return (spec 108 §5).
         if (appMedia) noteResearchMediaReturn(s.treeId, s.researchId, data, carry?.carried ?? 0);
+        // Asked with them and they did not come (the file with its images in it): its writes only add.
+        else if (treeAsksAppMedia(s.features, takeImages)) noteResearchMediaMissed(s.treeId, s.researchId);
         // The file's tag (one sent with it): a reload while the research stays here keeps this tree (a 304).
         if (etag) this.researchKeepTreeEtag(s.treeId, s.researchId, etag, takeImages, variant, appMedia);
         return loaded;

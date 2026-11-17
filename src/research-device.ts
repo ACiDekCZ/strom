@@ -421,6 +421,14 @@ export interface ResearchAutoState {
      * gave that is gone now was taken off there, one not in it is kept.
      */
     mediaBase?: { research: string; keys: string[] };
+    /**
+     * The research (its id) whose last version came without the tree's own
+     * files although it keeps them (its images by hash could not all be had,
+     * so the file with its images in it was taken, which never has them):
+     * the tree may lack files its archive holds, so a write only adds
+     * (researchSendDeclaresMedia) until a version with them comes.
+     */
+    mediaMissed?: string;
     /** How changes go was chosen or asked once (the hand-over, or the one-time question after 3.9). */
     modeAsked?: true;
     /** Sends by hand the research wrote: after a few, sending by itself is offered (once). */
@@ -670,6 +678,7 @@ export function researchAutoState(treeId: string): ResearchAutoState {
         if (mb && typeof mb.research === 'string' && mb.research && mb.research.length <= 80 && Array.isArray(mb.keys)) {
             out.mediaBase = { research: mb.research, keys: mb.keys.filter((k): k is string => typeof k === 'string' && /^[0-9a-z]{1,8}\.[0-9a-z]{1,8}$/.test(k)).slice(0, 20000) };
         }
+        if (typeof p.mediaMissed === 'string' && p.mediaMissed && p.mediaMissed.length <= 80) out.mediaMissed = p.mediaMissed;
         if (p.modeAsked === true) out.modeAsked = true;
         if (typeof p.manualWrites === 'number' && p.manualWrites > 0) out.manualWrites = Math.min(Math.floor(p.manualWrites), 9999);
         if (p.skipPreview === true) out.skipPreview = true;
