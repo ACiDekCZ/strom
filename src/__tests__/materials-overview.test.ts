@@ -97,6 +97,20 @@ describe('filters', () => {
         expect(keys({ query: 'letters' })).toEqual(['m:I0003']);
     });
 
+    it('searches a titled file by its title, its file name and its note (spec 102 §2)', () => {
+        const titled = overviewItems(list([file(9, { name: 'IMG_0042.jpg' })]), [{ refn: 'P0001', attachments: [
+            att('a1', { title: 'Wedding outside the church', note: 'From aunt Ermelinda', original: { sha256: sha(9), name: 'IMG_0042.jpg', mimeType: 'image/jpeg', bytes: 1 } }),
+            att('a2', { name: 'letter-1931.jpg', title: 'Letter from Bohdalec' }),
+        ] }]);
+        const found = (query: string) => titled.filter(i => passesFilters(i, filters({ query }))).map(i => i.key);
+        expect(found('church')).toEqual(['m:I0009']);
+        expect(found('img_0042')).toEqual(['m:I0009']);
+        expect(found('ermelinda')).toEqual(['m:I0009']);
+        expect(found('bohdalec')).toEqual(['a:a2']);
+        expect(found('letter-1931')).toEqual(['a:a2']);
+        expect(found('funeral')).toEqual([]);
+    });
+
     it('counts the active filters (not the search)', () => {
         expect(activeFilterCount(filters({ person: 'P1', kinds: ['photo', 'none'], query: 'x' }))).toBe(2);
         expect(activeFilterCount(filters({ batch: 'b', noPerson: true, showHidden: true }))).toBe(3);

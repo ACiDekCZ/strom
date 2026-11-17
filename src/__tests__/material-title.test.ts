@@ -63,10 +63,10 @@ describe('the item: title, name, titled', () => {
     });
 
     it('search reads the title, the file name and the note', () => {
-        const [item] = personMaterials({ refn: 'P0001', attachments: [att('scan-0042', { title: 'Wedding outside the church', note: 'aunt Rosalie' })] });
+        const [item] = personMaterials({ refn: 'P0001', attachments: [att('scan-0042', { title: 'Wedding outside the church', note: 'aunt Ermelinda' })] });
         expect(materialMatches(item, 'church')).toBe(true);
         expect(materialMatches(item, '0042')).toBe(true);
-        expect(materialMatches(item, 'rosalie')).toBe(true);
+        expect(materialMatches(item, 'ermelinda')).toBe(true);
         expect(materialMatches(item, 'funeral')).toBe(false);
     });
 });
