@@ -28220,6 +28220,8 @@
         }
         .pe-bar:empty { display: none; }
         .pe-zoom, .pe-angle { display: flex; align-items: center; gap: 6px; }
+        /* The app's sliders (as .map-time-range): the thumb and the filled part in the primary green, not the system blue. */
+        .pe-zoom-range, .pe-angle-range { accent-color: var(--primary, #4a7c59); cursor: pointer; }
         .pe-zoom-range { width: 180px; }
         .pe-angle-range { flex: 1; min-width: 0; }
         .pe-pct, .pe-deg { min-width: 48px; text-align: right; font-size: 13px; font-variant-numeric: tabular-nums; }

@@ -188,6 +188,31 @@ test.describe('portrait editor (desktop)', () => {
         expect(s.source).toMatchObject({ quarterTurns: 3, angle: -5, mirror: true });
     });
 
+    test('the sliders are the app\'s green in the light and the dark theme, never the system blue', async ({ page }) => {
+        await openForZbyhoslav(page);
+        await choose(page, await quartersPng(page, 900, 600));
+        /** Each slider's accent colour and the theme's primary green, both as the browser computes them. */
+        const colors = () => page.evaluate(() => {
+            const probe = document.createElement('span');
+            probe.style.color = 'var(--primary)';
+            document.body.append(probe);
+            const primary = getComputedStyle(probe).color;
+            probe.remove();
+            const accent = (sel: string) => getComputedStyle(document.querySelector(sel)!).accentColor;
+            return { primary, zoom: accent('.pe-zoom-range'), angle: accent('.pe-angle-range') };
+        });
+        const light = await colors();
+        expect(light.zoom).toBe(light.primary);
+        expect(light.angle).toBe(light.primary);
+        await page.evaluate(() => window.Strom.SettingsManager.setTheme('dark'));
+        await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+        const dark = await colors();
+        expect(dark.primary).not.toBe(light.primary);
+        expect(dark.zoom).toBe(dark.primary);
+        expect(dark.angle).toBe(dark.primary);
+        await page.evaluate(() => window.Strom.SettingsManager.setTheme('system'));
+    });
+
     test('Cancel keeps the dialog as it was; the dialog closed without Save keeps nothing', async ({ page }) => {
         await openForZbyhoslav(page);
         const png = await quartersPng(page, 600, 600);
