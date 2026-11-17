@@ -4358,6 +4358,67 @@ class DataManagerClass {
         return true;
     }
 
+    /**
+     * Take several files out of the tree in one undo step (spec 102 §8, the
+     * selection's Remove from the tree…): as removeMedia for each — `keep`
+     * says which stay taken out (kept by an archive), the rest go. Files that
+     * cannot change here are skipped. Returns the ids taken out.
+     */
+    removeMediaMany(ids: readonly string[], opts: { keep?: boolean | ((id: string) => boolean); reason?: 'unrelated' | 'duplicate'; toast?: string } = {}): string[] {
+        const keeps = (id: string) => typeof opts.keep === 'function' ? opts.keep(id) : !!opts.keep;
+        const atts = [...new Set(ids)].map(id => findMedia(this.data, id))
+            .filter((a): a is Attachment => !!a && a.places.length > 0 && this.mediaEditable(a));
+        if (!atts.length) return [];
+        this.beginMutation();
+        const at = new Date().toISOString();
+        const kept = new Set<string>();
+        const gone: string[] = [];
+        for (const att of atts) {
+            if (keeps(att.id)) {
+                att.removed = { at, ...(opts.reason ? { reason: opts.reason } : {}), places: [...att.places] };
+                att.places = [];
+                kept.add(att.id);
+            } else {
+                gone.push(att.id);
+            }
+        }
+        for (const person of Object.values(this.data.persons)) {
+            if (person.photoSource?.attachmentId && kept.has(person.photoSource.attachmentId)) delete person.photoSource;
+        }
+        if (gone.length) {
+            deleteMedia(this.data, gone);
+            for (const id of gone) this.forgetMediaLinks(id);
+        }
+        const label = atts.length === 1 ? strings.undo.mediaRemove(atts[0].title || atts[0].name) : strings.undo.mediaRemoveMany(atts.length);
+        this.commitMutation(label, false, undefined, opts.toast ? { text: opts.toast } : undefined);
+        AuditLogManager.log(this.currentTreeId, 'attachment.remove', label);
+        return atts.map(a => a.id);
+    }
+
+    /**
+     * Take a person off several files in one undo step (spec 102 §8, the
+     * selection's Remove a person…): every place of the files at that person.
+     * A file left without a place goes from the tree as §3's × does (kept by
+     * an archive it stays there; otherwise it is deleted, O1). Returns the ids
+     * changed.
+     */
+    removeMediaPerson(ids: readonly string[], personId: PersonId, opts: { toast?: string } = {}): string[] {
+        const atts = [...new Set(ids)].map(id => findMedia(this.data, id))
+            .filter((a): a is Attachment => !!a && this.mediaEditable(a) && a.places.some(p => placePersonId(p) === personId));
+        if (!atts.length) return [];
+        const set = new Set(atts.map(a => a.id));
+        this.beginMutation();
+        const gone = dropMediaPlaces(this.data, (p, a) => set.has(a.id) && placePersonId(p) === personId);
+        const person = this.data.persons[personId];
+        if (person?.photoSource?.attachmentId && set.has(person.photoSource.attachmentId)) delete person.photoSource;
+        for (const id of gone) this.forgetMediaLinks(id);
+        const name = person ? (`${person.firstName} ${person.lastName}`.trim() || personId) : personId;
+        const label = strings.undo.mediaPersonRemove(name, atts.length);
+        this.commitMutation(label, false, undefined, opts.toast ? { text: opts.toast } : undefined);
+        AuditLogManager.log(this.currentTreeId, 'attachment.remove', label);
+        return atts.map(a => a.id);
+    }
+
     /** Bring a file taken out back to the places it had that are still in the tree (spec 102 §9). */
     restoreMedia(id: string, opts: { toast?: string } = {}): boolean {
         const att = findMedia(this.data, id);

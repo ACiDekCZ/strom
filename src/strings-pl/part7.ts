@@ -282,6 +282,8 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         mediaPlaceAdd: (name: string) => `połączenie pliku ${name}`,
         mediaPlaceRemove: (name: string) => `usunięcie powiązania pliku ${name}`,
         mediaRemove: (name: string) => `usunięcie pliku ${name} z drzewa`,
+        mediaRemoveMany: (k: number) => `usunięcie ${nPl(k, 'pliku', 'plików', 'plików')} z drzewa`,
+        mediaPersonRemove: (name: string, k: number) => `usunięcie ${name} z ${nPl(k, 'pliku', 'plików', 'plików')}`,
         mediaRestore: (name: string) => `przywrócenie pliku ${name}`,
         setParentRelType: (child: string) => `typ relacji osoby ${child}`,
         confirmFact: (name: string) => `potwierdzenie danej osoby ${name} według skanu`,

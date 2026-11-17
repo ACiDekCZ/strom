@@ -300,10 +300,12 @@ test.describe('Materials window: selecting', () => {
         await expect(win(page).locator('.mw-tile[aria-selected="true"]')).toHaveCount(3);
         await bar.locator('.mw-selwhole').click();
         await expect(bar.locator('.mw-selcount')).toHaveText('6 files selected');
+        await expect(win(page).locator('.mw-skipped')).toBeHidden();
         // The tree's attachment: counted, said to stay, left out of the action.
         await win(page).locator('.mw-group-toggle', { hasText: 'Single files' }).click();
         await win(page).locator('.mw-tile', { hasText: 'jen-strom.png' }).click();
         await expect(bar.locator('.mw-selcount')).toHaveText('7 files selected');
+        await expect(win(page).locator('.mw-skipped')).toHaveText('1 only in the tree stay unchanged.');
         // Assign… is in ⋯ (spec 102 §8b); the tree's file stays out of it.
         await bar.locator('[data-mw="sel-more"]').click();
         await page.locator('.mw-pop-selMenu [data-action="sel-assign"]').click();

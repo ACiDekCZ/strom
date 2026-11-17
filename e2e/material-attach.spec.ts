@@ -361,3 +361,75 @@ test.describe('Link to… beside an archive', () => {
         await expect.poll(() => treeRecordOf(page, sha)).toMatchObject({ places: 2 });
     });
 });
+
+test.describe('The selection in a tree without an archive (spec 102 §8, O1)', () => {
+    test.use({ viewport: DESKTOP });
+
+    /** Three files: a photo at Florimund and Quirinella, a letter at Florimund, a letter at Kasimir. */
+    async function three(page: Page): Promise<void> {
+        await page.evaluate((px) => {
+            const dm = window.Strom.DataManager;
+            const add = (pid: string, title: string) => {
+                const a = dm.addAttachment(pid as never, { name: `${title}.png`, mimeType: 'image/png', dataUrl: px, sizeBytes: 70 } as never)!;
+                dm.setMediaDetails(a.id, { title });
+                return a.id as string;
+            };
+            const photo = add('p1', 'Photo Q');
+            dm.addMediaPlace(photo, { personId: 'p2' as never });
+            add('p1', 'Letter F');
+            add('p3', 'Letter K');
+        }, PX);
+    }
+
+    async function select(page: Page, titles: string[]): Promise<void> {
+        await page.evaluate(() => (window.Strom.UI as unknown as { openMaterials(o: unknown): void }).openMaterials({}));
+        await expect(win(page)).toBeVisible();
+        await win(page).locator('[data-mw="select"]').click();
+        for (const t of titles) await tile(page, t).first().click();
+        await win(page).locator('[data-mw="sel-more"]').click();
+    }
+
+    test('Remove from the tree… deletes every selected file in one step, the warning says so; one Undo brings them all back', async ({ page }) => {
+        await tree(page);
+        await three(page);
+        expect(await mediaCount(page)).toBe(3);
+        await select(page, ['Photo Q', 'Letter F', 'Letter K']);
+        // Hide… is the research's: not offered without one.
+        await expect(page.locator('.mw-pop-selMenu [data-action="sel-hide"]')).toHaveCount(0);
+        await page.locator('.mw-pop-selMenu [data-action="sel-remove"]').click();
+        await expect(dialog(page).locator('.mdlg-title')).toHaveText('Delete the files from the tree?');
+        await expect(dialog(page).locator('.mdlg-text').first()).toHaveText('3 files are removed from every place in the tree (4) and deleted.');
+        await expect(dialog(page).locator('.mdlg-rm-app')).toBeVisible();
+        await dialog(page).getByRole('button', { name: 'Delete the files' }).click();
+        await expect.poll(() => mediaCount(page)).toBe(0);
+        await expect(pill(page).locator('.undo-toast-msg')).toHaveText('Deleted: 3 files.');
+        await expect(win(page).locator('.mw-selbar')).toBeHidden();
+        await pill(page).locator('.undo-toast-btn').click();
+        await expect.poll(() => mediaCount(page)).toBe(3);
+    });
+
+    test('Remove a person… takes the chosen person off the selected files in one step; a file left without a place goes, said first', async ({ page }) => {
+        await tree(page);
+        await three(page);
+        await select(page, ['Photo Q', 'Letter F']);
+        await page.locator('.mw-pop-selMenu [data-action="sel-remove-person"]').click();
+        await expect(dialog(page).locator('.mdlg-title')).toHaveText('Remove a person from the files');
+        // The person on the most files first.
+        await expect(dialog(page).locator('.mdlg-radio')).toHaveText(['Florimund Pfefferkorn (2)', 'Quirinella Pfefferkornová (1)']);
+        await expect(dialog(page).locator('.mdlg-rm-app')).toHaveText('1 file has no other place in the tree and is deleted.');
+        await dialog(page).locator('.mdlg-radio', { hasText: 'Quirinella' }).locator('input').check();
+        await expect(dialog(page).locator('.mdlg-rm-app')).toBeHidden();
+        await dialog(page).locator('.mdlg-radio', { hasText: 'Florimund' }).locator('input').check();
+        await dialog(page).getByRole('button', { name: 'Remove the person' }).click();
+        // The photo stays at Quirinella; the letter, only Florimund's, is gone.
+        await expect.poll(() => mediaCount(page)).toBe(2);
+        const left = await page.evaluate(() => JSON.stringify(Object.values(window.Strom.DataManager.getData().media ?? {})
+            .map(a => [(a as { title?: string }).title, (a as { places: { personId?: string }[] }).places.map(p => p.personId)])));
+        expect(JSON.parse(left)).toEqual(expect.arrayContaining([['Photo Q', ['p2']], ['Letter K', ['p3']]]));
+        await expect(pill(page).locator('.undo-toast-msg')).toContainText('Florimund Pfefferkorn');
+        await pill(page).locator('.undo-toast-btn').click();
+        await expect.poll(() => mediaCount(page)).toBe(3);
+        await expect.poll(() => page.evaluate(() => Object.values(window.Strom.DataManager.getData().media ?? {})
+            .find(a => (a as { title?: string }).title === 'Photo Q')?.places.length)).toBe(2);
+    });
+});

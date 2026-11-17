@@ -1116,8 +1116,10 @@ export const materialsWindowMethods = uiModule({
         const skipped = w.overlay.querySelector<HTMLElement>('.mw-skipped');
         if (!bar || !skipped) return;
         bar.hidden = !w.selecting;
-        skipped.hidden = true;
-        skipped.textContent = '';
+        // Assign… and Hide… act on the research's files only: the files only in the tree stay unchanged (spec 102 §8).
+        const onlyTree = this.mwSkippedTree(items);
+        skipped.hidden = !w.selecting || !onlyTree;
+        skipped.textContent = w.selecting && onlyTree ? m.skippedTree(onlyTree) : '';
         if (!w.selecting) { bar.innerHTML = ''; return; }
         const off = (why: string | null | undefined) => (why ? ` aria-disabled="true" title="${esc(why)}"` : '');
         const whole = this.mwWholeTarget();
@@ -1138,6 +1140,18 @@ export const materialsWindowMethods = uiModule({
             <button type="button" class="link-button mw-selclear" data-mw="sel-clear">${esc(m.clearSelection)}</button>`);
         // On a phone held sideways the bar is one row: the content keeps its height free below.
         w.scroller.style.paddingBottom = '';
+    },
+
+    /**
+     * The selection's files only in the tree that the research's actions
+     * (Assign…, Hide…) leave as they are — counted when the selection also
+     * has the research's files those act on (0: no sentence).
+     */
+    mwSkippedTree(items: MaterialItem[]): number {
+        const ctx = this.materialsWindowContext();
+        if (!ctx?.caps.assign || !ctx.caps.bridgeUp) return 0;
+        const tree = items.filter(i => i.origin === 'tree').length;
+        return tree && tree < items.length ? tree : 0;
     },
 
     /** "Select whole folder" / "Select whole batch (N)" for the last picked item's place. */
@@ -1205,12 +1219,21 @@ export const materialsWindowMethods = uiModule({
         ];
         if (ctx.caps.assign) {
             const why = !ctx.caps.bridgeUp ? m.actionsWhenRunning : archive.length === 0 ? (n ? m.skippedTree(n) : m.nothingSelected) : null;
-            const onlyHidden = archive.length > 0 && archive.every(i => i.hidden);
             out.push({ id: 'sel-assign', label: m.assign, why });
+        }
+        // ⋯: Remove a person…, Hide…, Remove from the tree… (spec 102 §8), each on its own files.
+        if (ctx.caps.assign || (!readOnly && items.some(i => (i.attachment?.places?.length ?? 0) > 0))) {
+            const people = n ? this.selRemovePersonOptions(items).length : 0;
+            out.push({ id: 'sel-remove-person', label: m.selRemovePerson,
+                why: !n ? m.nothingSelected : people ? null : readOnly ? strings.materials.treeReadOnly : archive.length && !ctx.caps.bridgeUp ? m.actionsWhenRunning : m.selNoPerson });
+        }
+        if (ctx.caps.assign) {
+            const why = !ctx.caps.bridgeUp ? m.actionsWhenRunning : archive.length === 0 ? (n ? m.skippedTree(n) : m.nothingSelected) : null;
+            const onlyHidden = archive.length > 0 && archive.every(i => i.hidden);
             out.push({ id: onlyHidden ? 'sel-restore' : 'sel-hide', label: onlyHidden ? m.restore : m.hide, why });
         }
         const removable = items.filter(i => i.attachment && !i.removedId && (i.attachment.places?.length ?? 0) > 0 && DataManager.canEditMedia(i.attachment.id));
-        if (removable.length === 1) out.push({ id: 'sel-remove', label: m.removeFromTree, why: null });
+        if (removable.length) out.push({ id: 'sel-remove', label: m.removeFromTree, why: null });
         return out;
     },
 
@@ -1246,11 +1269,13 @@ export const materialsWindowMethods = uiModule({
             case 'sel-title': this.openBulkEditDialog('title', items, { done: end, refused: r => this.mwShowRefused(r) }); return;
             case 'sel-kind': this.openBulkEditDialog('kind', items, { done: end, refused: r => this.mwShowRefused(r) }); return;
             case 'sel-date': this.openBulkEditDialog('date', items, { done: end, refused: r => this.mwShowRefused(r) }); return;
-            case 'sel-remove': {
-                const one = items.find(i => i.attachment && (i.attachment.places?.length ?? 0) > 0);
-                if (one) void this.openRemoveFromTreeDialog(one).then(ok => { if (ok) end(); });
+            case 'sel-remove': void this.openRemoveManyFromTreeDialog(items).then(ok => { if (ok) end(); }); return;
+            case 'sel-remove-person':
+                this.openSelRemovePersonDialog(items, {
+                    done: end,
+                    research: (files, refn) => this.mwRun('removeFromPerson', files, { selection: true, person: refn }),
+                });
                 return;
-            }
             case 'sel-assign': case 'sel-hide': case 'sel-restore': {
                 const files = items.filter(i => i.origin !== 'tree');
                 const action: MaterialActionId = id === 'sel-assign' ? 'assign' : id === 'sel-hide' ? 'hide' : 'restore';
@@ -1886,7 +1911,7 @@ export const materialsWindowMethods = uiModule({
                 case 'sel-more': this.mwOpenPop('selMenu', act); return;
                 case 'sort': this.mwSortBy(act.dataset.col as ListColumn); return;
                 case 'sel-review': case 'sel-attach': case 'sel-title': case 'sel-kind': case 'sel-date':
-                case 'sel-assign': case 'sel-hide': case 'sel-restore': case 'sel-remove':
+                case 'sel-assign': case 'sel-hide': case 'sel-restore': case 'sel-remove': case 'sel-remove-person':
                     if (disabled) return;
                     this.mwSelAction(act.dataset.mw);
                     return;

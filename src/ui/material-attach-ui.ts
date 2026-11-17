@@ -15,7 +15,7 @@
 import { DataManager } from '../data.js';
 import { Attachment, MediaPlace, PartnershipId, Person, PersonId, Source } from '../types.js';
 import { strings } from '../strings.js';
-import { MaterialItem, fileUrl } from '../materials.js';
+import { MaterialItem, directPersons, fileUrl } from '../materials.js';
 import { mediaPersonIds, placePersonId } from '../media.js';
 import { mediaPlaceLabel, mediaUseLabel, mediaUses } from '../media-uses.js';
 import { MultiPersonPicker, PersonPicker } from '../person-picker.js';
@@ -516,6 +516,200 @@ export const materialAttachMethods = uiModule({
             dialog.foot.append(cancel, go);
             cancel.focus();
         });
+    },
+
+    /**
+     * "Remove from the tree…" of a selection (spec 102 §8, §9): the files
+     * that have a place in the tree and can change here, in one undo step.
+     * Kept by an archive: taken out (Restore); otherwise deleted (O1). The
+     * warning names what refers to them. True when they were removed.
+     */
+    async openRemoveManyFromTreeDialog(items: MaterialItem[]): Promise<boolean> {
+        const m = strings.materials;
+        const files = items.flatMap(item => {
+            const att = item.attachment ? DataManager.getMedia(item.attachment.id) : undefined;
+            return att?.places.length && !item.removedId && DataManager.canEditMedia(att.id) ? [{ item, att }] : [];
+        });
+        if (files.length < 2) return files.length === 1 ? this.openRemoveFromTreeDialog(files[0].item) : false;
+        const mc = this.materialsContext();
+        const kept = files.filter(f => this.materialKeptByArchive(f.item));
+        const gone = files.filter(f => !this.materialKeptByArchive(f.item));
+        const places = (list: typeof files) => list.reduce((sum, f) => sum + f.att.places.length, 0);
+        const dialog: MaterialDialog = materialDialog({ title: kept.length ? m.rmTitle : m.rmManyAppTitle, modifier: 'remove' });
+        if (kept.length) dialog.body.appendChild(h('p', 'mdlg-text', m.rmManyText(kept.length, places(kept))));
+        if (gone.length) dialog.body.appendChild(h('p', 'mdlg-text', m.rmManyAppText(gone.length, places(gone))));
+        const data = DataManager.getData();
+        const refs = files.flatMap(f => mediaUses(data, f.att.id).filter(u => u.kind === 'source' || u.kind === 'excerpt' || u.kind === 'portrait'));
+        if (refs.length) {
+            const warn = h('div', 'mdlg-warn');
+            warn.appendChild(h('p', 'mdlg-warn-title', m.rmRefs));
+            const SHOWN = 5;
+            for (const use of refs.slice(0, SHOWN)) {
+                const what = mediaUseLabel(data, use).text;
+                const row = h('div', 'mdlg-warn-row');
+                row.dataset.use = use.kind;
+                row.append(
+                    h('span', 'mdlg-warn-ref', use.kind === 'source' ? m.rmRefDoc(what) : use.kind === 'excerpt' ? m.rmRefExcerpt(what) : m.rmRefPortrait(what)),
+                    h('span', 'mdlg-warn-keep', use.kind === 'source' ? m.rmKeepDoc : use.kind === 'excerpt' ? m.rmKeepExcerpt : m.rmKeepPortrait),
+                );
+                warn.appendChild(row);
+            }
+            if (refs.length > SHOWN) warn.appendChild(h('span', 'mdlg-warn-keep', m.moreN(refs.length - SHOWN)));
+            dialog.body.appendChild(warn);
+        }
+        let set: HTMLFieldSetElement | null = null;
+        if (kept.length) {
+            dialog.body.appendChild(h('p', 'mdlg-text', mc?.agent ? m.rmArchiveResearch : m.rmArchive));
+            set = h('fieldset', 'mdlg-radios');
+            set.appendChild(h('legend', '', m.reasonOptional));
+            for (const reason of ['none', 'unrelated', 'duplicate']) {
+                const label = h('label', 'mdlg-radio');
+                const input = h('input');
+                input.type = 'radio';
+                input.name = 'mdlg-rm-reason';
+                input.value = reason;
+                input.checked = reason === 'none';
+                label.append(input, h('span', '', m.reason[reason]));
+                set.appendChild(label);
+            }
+            dialog.body.appendChild(set);
+        }
+        if (gone.length) dialog.body.appendChild(h('p', 'mdlg-text mdlg-rm-app', m.rmApp));
+        // Originals still waiting to be sent: discarded too (ticked), or sent and detached by the research.
+        const queued = files.flatMap(f => {
+            const sha = f.att.original?.sha256;
+            const state = sha ? this.mediaStateOf({ sha, bytes: f.att.original?.bytes, personId: mediaPersonIds(f.att)[0] }) : null;
+            return sha && (state?.kind === 'queued' || state?.kind === 'sending') ? [{ sha, bytes: f.att.original?.bytes ?? 0 }] : [];
+        });
+        let discard: HTMLInputElement | null = null;
+        if (queued.length) {
+            const label = h('label', 'mdlg-check');
+            discard = h('input');
+            discard.type = 'checkbox';
+            discard.name = 'mdlg-rm-discard';
+            discard.checked = true;
+            const text = h('span', 'mdlg-check-text');
+            text.append(h('span', '', strings.media.deleteDiscard(formatBytes(queued.reduce((sum, q) => sum + q.bytes, 0)))), h('span', 'mdlg-check-hint', strings.media.deleteDiscardHint));
+            label.append(discard, text);
+            dialog.body.appendChild(label);
+        }
+        return new Promise<boolean>((resolve) => {
+            let result = false;
+            const go = button(kept.length ? m.rmBtn : m.rmManyAppBtn, 'is-danger', async () => {
+                if (discard) for (const q of queued) await this.settleQueuedOriginal(q.sha, discard.checked);
+                const value = set?.querySelector<HTMLInputElement>('input:checked')?.value;
+                const reason = value === 'unrelated' || value === 'duplicate' ? value : undefined;
+                const keep = new Set(kept.map(f => f.att.id));
+                const done = DataManager.removeMediaMany(files.map(f => f.att.id), {
+                    keep: id => keep.has(id), ...(reason ? { reason } : {}),
+                    toast: gone.length && !kept.length ? m.rmManyAppDoneToast(files.length) : m.rmManyDoneToast(files.length),
+                });
+                result = done.length > 0;
+                dialog.close();
+                if (result) this.afterMediaChange();
+            });
+            const cancel = button(strings.buttons.cancel, '', () => dialog.close());
+            const close = dialog.close;
+            dialog.close = () => { close(); resolve(result); };
+            dialog.foot.append(cancel, go);
+            cancel.focus();
+        });
+    },
+
+    /**
+     * "Remove a person…" of a selection (spec 102 §8): one of the people on
+     * the selected files, taken off all of them — the tree's files in one undo
+     * step (a file left without a place: kept by an archive it stays there,
+     * otherwise it is deleted and the dialog says so), the research's
+     * material through the bridge (its toast offers Undo).
+     */
+    openSelRemovePersonDialog(items: MaterialItem[], opts: { done?: () => void; research?: (files: MaterialItem[], refn: string) => void } = {}): boolean {
+        const m = strings.materials;
+        const options = this.selRemovePersonOptions(items);
+        if (!options.length) return false;
+        const dialog: MaterialDialog = materialDialog({ title: m.selRemovePersonTitle, sub: m.selRemovePersonText(items.length) });
+        const set = h('fieldset', 'mdlg-radios');
+        set.appendChild(h('legend', '', m.f.persons));
+        options.forEach((o, i) => {
+            const label = h('label', 'mdlg-radio');
+            const input = h('input');
+            input.type = 'radio';
+            input.name = 'mdlg-sel-person';
+            input.value = String(i);
+            input.checked = i === 0;
+            label.append(input, h('span', '', `${o.name} (${o.tree.length + o.research.length})`));
+            set.appendChild(label);
+        });
+        dialog.body.appendChild(set);
+        const lastNote = h('p', 'mdlg-text mdlg-rm-app');
+        dialog.body.appendChild(lastNote);
+        const chosen = () => options[Number(set.querySelector<HTMLInputElement>('input:checked')?.value ?? 0)] ?? options[0];
+        // Without an archive a file whose only places are this person's goes with it: said before it happens.
+        const showLast = () => {
+            const o = chosen();
+            const last = o.tree.filter(f => !this.materialKeptByArchive(f.item) && f.att.places.every(p => placePersonId(p) === o.personId)).length;
+            lastNote.textContent = last ? m.selRemovePersonLast(last) : '';
+            lastNote.hidden = !last;
+        };
+        set.addEventListener('change', showLast);
+        showLast();
+        const go = button(m.selRemovePersonBtn, 'is-danger', () => {
+            const o = chosen();
+            dialog.close();
+            if (o.tree.length && o.personId) {
+                const what = o.tree.length === 1 ? o.tree[0].item.title : m.assignWhat.filesOnly(o.tree.length);
+                const ok = DataManager.removeMediaPerson(o.tree.map(f => f.att.id), o.personId, {
+                    toast: m.removedToast(o.name, what),
+                });
+                if (ok.length) this.afterMediaChange();
+            }
+            if (o.research.length && o.refn) opts.research?.(o.research, o.refn);
+            opts.done?.();
+        });
+        dialog.foot.append(button(strings.buttons.cancel, '', () => dialog.close()), go);
+        set.querySelector<HTMLInputElement>('input:checked')?.focus();
+        return true;
+    },
+
+    /**
+     * The people on the selected files (spec 102 §8): per person the tree's
+     * files with a place at them and the research's material naming them
+     * directly; the most files first.
+     */
+    selRemovePersonOptions(items: MaterialItem[]): { name: string; personId?: PersonId; refn?: string; tree: { item: MaterialItem; att: Attachment }[]; research: MaterialItem[] }[] {
+        const mc = this.materialsContext();
+        const bridge = !!mc?.caps.assign && !!mc.caps.bridgeUp;
+        const byRefn = new Map<string, Person>();
+        for (const p of DataManager.getAllPersons()) {
+            const refn = researchPersonRef(p.refn);
+            if (refn) byRefn.set(refn, p);
+        }
+        type Option = { name: string; personId?: PersonId; refn?: string; tree: { item: MaterialItem; att: Attachment }[]; research: MaterialItem[] };
+        const options = new Map<string, Option>();
+        const optionOf = (person: Person | undefined, refn: string | undefined): Option => {
+            const key = person ? `p:${person.id}` : `r:${refn}`;
+            let o = options.get(key);
+            if (!o) {
+                const ref = refn ?? (person ? researchPersonRef(person.refn) : null);
+                o = { name: person ? (`${person.firstName} ${person.lastName}`.trim() || person.id) : this.materialPersonName(refn ?? ''),
+                    ...(person ? { personId: person.id } : {}), ...(ref ? { refn: ref } : {}), tree: [], research: [] };
+                options.set(key, o);
+            }
+            return o;
+        };
+        for (const item of items) {
+            const att = item.attachment ? DataManager.getMedia(item.attachment.id) : undefined;
+            if (att?.places.length && !item.removedId) {
+                if (DataManager.isReadOnly() || !DataManager.canEditMedia(att.id)) continue;
+                for (const pid of mediaPersonIds(att)) {
+                    const person = DataManager.getPerson(pid);
+                    if (person) optionOf(person, undefined).tree.push({ item, att });
+                }
+            } else if (bridge && item.origin !== 'tree' && item.file) {
+                for (const refn of directPersons(item.file)) optionOf(byRefn.get(refn), refn).research.push(item);
+            }
+        }
+        return [...options.values()].sort((a, b) => (b.tree.length + b.research.length) - (a.tree.length + a.research.length) || a.name.localeCompare(b.name));
     },
 
     /** "Restore" of files taken out of the tree: back with the places they had (one undo step each). */

@@ -100,7 +100,7 @@ test.describe('Materials on a phone', () => {
         await expect(acts).toHaveText(['Link to…', 'Title…', 'Go through', '⋯']);
         for (const b of await acts.all()) expect((await b.boundingBox())!.height).toBeGreaterThanOrEqual(44);
         await bar(page).locator('[data-mw="sel-more"]').click();
-        await expect(page.locator('.mw-pop-selMenu [data-action]')).toHaveText(['Kind…', 'Date…']);
+        await expect(page.locator('.mw-pop-selMenu [data-action]')).toHaveText(['Kind…', 'Date…', 'Remove a person…', 'Remove from the tree…']);
         await page.keyboard.press('Escape');
         // Title… as a sheet from the bottom.
         await bar(page).locator('[data-mw="sel-title"]').click();

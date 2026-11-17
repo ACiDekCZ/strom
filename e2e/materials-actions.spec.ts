@@ -539,6 +539,50 @@ test.describe('Hide and Restore', () => {
         await expect(win(page).locator('.mw-canvas .mw-tile')).toHaveCount(1);
     });
 
+    test('the selection: Remove from the tree… of two files in the tree is one step; the archive keeps them, one Undo', async ({ page }) => {
+        const { material } = await setup(page, {
+            files: [materialFile(1, { persons: ['P0003'], title: 'Kopie A' }), materialFile(2, { persons: ['P0003'], title: 'Kopie B' })],
+            before: async page => { await attachOriginal(page, 'a.png', materialSha('I0001')); await attachOriginal(page, 'b.png', materialSha('I0002')); },
+        });
+        expect(await janAttachments(page)).toBe(2);
+        await openWindow(page);
+        await win(page).locator('[data-mw="select"]').click();
+        await tile(page, 'Kopie A').click();
+        await tile(page, 'Kopie B').click();
+        await win(page).locator('[data-mw="sel-more"]').click();
+        await page.locator('.mw-pop-selMenu [data-action="sel-remove"]').click();
+        await expect(dialog(page).locator('.mdlg-title')).toHaveText('Remove from the tree?');
+        await expect(dialog(page).locator('.mdlg-text').first()).toHaveText('2 files are removed from every place in the tree (2).');
+        await expect(dialog(page).locator('input[name="mdlg-rm-reason"][value="none"]')).toBeChecked();
+        await dialog(page).getByRole('button', { name: 'Remove from the tree', exact: true }).click();
+        await expect.poll(() => janAttachments(page)).toBe(0);
+        await expect(pill(page).locator('.undo-toast-msg')).toHaveText('Removed from the tree: 2 files.');
+        // The tree's own write: the research is not asked to hide them.
+        expect(material.hides).toHaveLength(0);
+        await pill(page).locator('.undo-toast-btn').click();
+        await expect.poll(() => janAttachments(page)).toBe(2);
+    });
+
+    test('the selection: Remove a person… on the research\'s files goes through the bridge', async ({ page }) => {
+        const { material } = await setup(page, { files: [
+            materialFile(1, { persons: ['P0001', 'P0003'], title: 'Svatba 1' }),
+            materialFile(2, { persons: ['P0003'], title: 'Svatba 2' }),
+        ] });
+        await openWindow(page);
+        await win(page).locator('[data-mw="select"]').click();
+        await tile(page, 'Svatba 1').click();
+        await tile(page, 'Svatba 2').click();
+        await win(page).locator('[data-mw="sel-more"]').click();
+        await page.locator('.mw-pop-selMenu [data-action="sel-remove-person"]').click();
+        await expect(dialog(page).locator('.mdlg-radio').first()).toContainText('(2)');
+        await dialog(page).getByRole('button', { name: 'Remove the person' }).click();
+        await expect.poll(() => material.assigns.length).toBe(1);
+        expect(material.assigns[0].remove).toEqual(['P0003']);
+        expect((material.assigns[0].files as string[]).sort()).toEqual(['I0001', 'I0002']);
+        await expect(toast(page)).toHaveText(/Removed: Jan Fíšek/);
+        await expect(win(page).locator('.mw-selbar')).toBeHidden();
+    });
+
     test('a phone: a long name without a break point wraps in the dialog, the body does not scroll sideways', async ({ page }) => {
         const long = 'Vymyslov_matriky_narozeni_1850_1870_folio_0123_skenovano_vysoke_rozliseni.jpg';
         await page.setViewportSize({ width: 390, height: 844 });
