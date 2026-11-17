@@ -25275,6 +25275,8 @@
         }
         /* Made in a dialog (a citation's chip, the source viewer's citation bar): over it, its Undo takes a click. */
         .undo-toast.undo-toast-over-dialog { z-index: 1020; }
+        /* Made in the image viewer or a materials dialog (spec 102 §3's "×"): over them, as the materials' toasts. */
+        .undo-toast.undo-toast-over-viewer { z-index: 3200; }
         .undo-toast-btn {
             flex-shrink: 0;
             border: none; background: transparent; cursor: pointer;
@@ -29387,7 +29389,6 @@
         .mv-summary { display: none; font-size: 13px; color: var(--text-light); }
         .mv-body { padding: 12px 20px; display: flex; flex-direction: column; gap: 10px; }
         .mv-label { font-size: 12px; color: var(--text-faint); }
-        .mv-persons { display: flex; flex-direction: column; gap: 6px; }
         .mv-chips { display: flex; flex-wrap: wrap; gap: 6px; }
         .mv-chip {
             display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-height: 28px; box-sizing: border-box;
@@ -29409,7 +29410,34 @@
         .mv-chip-x[aria-disabled="true"] { color: var(--text-faint); opacity: 0.35; cursor: default; }
         .mv-chip-x[aria-busy="true"] { opacity: 0.45; cursor: progress; }
         @media (hover: hover) { .mv-chip-x:not([aria-disabled="true"]):hover { background: var(--hover-bg); color: var(--text); } }
-        .mv-none { font-size: 13px; color: var(--accent-text); }
+        /* "Where used" (spec 102 §3): the kind, the link with its sentence, "×" for a place of its own. */
+        .mv-uses { display: flex; flex-direction: column; gap: 8px; }
+        .mv-uses-head { display: flex; align-items: baseline; gap: 8px; }
+        .mv-uses-title { margin: 0; flex: 1; font-size: 13px; font-weight: 600; color: var(--text); }
+        .mv-uses-count { font-size: 12px; color: var(--text-faint); white-space: nowrap; }
+        .mv-uses-sub { margin-top: 2px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-faint); }
+        .mv-uses-grid { display: grid; grid-template-columns: max-content minmax(0, 1fr) auto; column-gap: 10px; row-gap: 7px; align-items: start; }
+        .mv-use-type { padding-top: 3px; font-size: 12px; color: var(--text-faint); white-space: nowrap; }
+        .mv-use-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+        .mv-use-link {
+            border: none; background: none; padding: 0; font: inherit; font-size: 13px; line-height: 1.35; color: var(--primary);
+            cursor: pointer; text-align: left; text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere;
+        }
+        .mv-use-link.is-person { font-family: var(--font-serif); font-size: 14px; }
+        .mv-use-sub { font-size: 11.5px; color: var(--text-faint); }
+        .mv-use-x {
+            width: 22px; height: 22px; align-self: start; border: none; border-radius: var(--r-sm); background: none; padding: 0;
+            color: var(--text-light); font-size: 15px; line-height: 1; cursor: pointer;
+            display: inline-flex; align-items: center; justify-content: center;
+        }
+        @media (hover: hover) { .mv-use-x:hover { background: var(--hover-bg); color: var(--text); } }
+        .mv-uses-more { align-self: flex-start; font-size: 12.5px; padding: 0; }
+        .mv-uses-none { margin: 0; font-size: 13px; color: var(--text-light); }
+        .mv-uses-archive { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+        .mv-uses-persons { display: flex; flex-direction: column; gap: 6px; }
+        .mv-uses-arch { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-light); text-wrap: pretty; }
+        .mv-uses-arch.is-faint { font-size: 12.5px; color: var(--text-faint); }
+        .mdlg .mv-uses { padding-top: 12px; border-top: 1px solid var(--divider); }
         .mv-fields { display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 6px 8px; margin: 0; font-size: 13px; line-height: 1.4; }
         .mv-fields dt { color: var(--text-faint); }
         .mv-fields dd { margin: 0; word-break: break-word; overflow-wrap: anywhere; white-space: pre-line; }
@@ -29433,7 +29461,7 @@
             .mv-act:not([aria-disabled="true"]):hover { background: var(--hover-bg); }
             .mv-act.is-primary:not([aria-disabled="true"]):hover { background: var(--primary-dark); }
         }
-        @media (pointer: coarse) { .mv-act { min-height: 44px; } .mv-chip-x { width: 32px; height: 32px; } }
+        @media (pointer: coarse) { .mv-act { min-height: 44px; } .mv-chip-x, .mv-use-x { width: 32px; height: 32px; } .mv-uses-more { min-height: 32px; } }
         @media (min-width: 641px) and (max-width: 1024px) {
             #attachment-overlay.is-list { --iv-panel: 300px; }
             .is-list .image-viewer-card { padding: 64px 64px 24px; }
@@ -29469,6 +29497,7 @@
             .mv-foot { padding: 8px 16px 12px; border-top: none; }
             .image-viewer-panel:not(.is-expanded) .mv-name,
             .image-viewer-panel:not(.is-expanded) .mv-label,
+            .image-viewer-panel:not(.is-expanded) .mv-uses,
             .image-viewer-panel:not(.is-expanded) .mv-fields,
             .image-viewer-panel:not(.is-expanded) .mv-sentence,
             .image-viewer-panel:not(.is-expanded) .mv-gap { display: none; }

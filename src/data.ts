@@ -4218,9 +4218,9 @@ class DataManagerClass {
     /**
      * Take a file off one place. Its last place: the file goes from the tree
      * (a tree without an archive, spec 102 §9) unless `keep`, which takes it
-     * out as removeMedia does.
+     * out as removeMedia does. `toast`: the Undo toast's sentence (§3's ×).
      */
-    removeMediaPlace(id: string, place: MediaPlace, opts: { keep?: boolean } = {}): boolean {
+    removeMediaPlace(id: string, place: MediaPlace, opts: { keep?: boolean; toast?: string } = {}): boolean {
         const att = findMedia(this.data, id);
         if (!att || !mediaAt(att, place) || !this.mediaEditable(att)) return false;
         this.beginMutation();
@@ -4233,7 +4233,7 @@ class DataManagerClass {
         if (person?.photoSource?.attachmentId === id && !att.places.some(p => placePersonId(p) === pid)) delete person.photoSource;
         if (gone.includes(id)) this.forgetMediaLinks(id);
         const name = att.title || att.name;
-        this.commitMutation(strings.undo.mediaPlaceRemove(name));
+        this.commitMutation(strings.undo.mediaPlaceRemove(name), false, undefined, opts.toast ? { text: opts.toast } : undefined);
         AuditLogManager.log(this.currentTreeId, 'attachment.remove', strings.undo.mediaPlaceRemove(name));
         return true;
     }

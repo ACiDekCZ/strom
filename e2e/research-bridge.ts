@@ -1350,6 +1350,8 @@ export interface FakeMaterialFile {
     kind?: 'photo' | 'document' | 'record' | 'other';
     date?: string;
     hidden?: { at?: string; by?: string; reason?: 'unrelated' | 'duplicate' };
+    /** Where the research uses it (`material.uses`). */
+    uses?: { excerpts: number; sources: string[]; tasks: number };
 }
 
 export interface FakeMaterialBatch {

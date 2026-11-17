@@ -253,7 +253,8 @@ test.describe('Assign to a person', () => {
     test('a file without anyone to three people: the toast, the chips, the person\'s section; Undo takes them off', async ({ page }) => {
         const { material } = await setup(page, { files: [materialFile(1, { title: 'Rodinná fotka' })] });
         await view(page, 'Rodinná fotka');
-        await expect(panel(page).locator('.mv-none')).toHaveText('No person');
+        await expect(chips(page)).toHaveCount(0);
+        await expect(panel(page).locator('.mv-uses-none')).toHaveText('Not in the tree yet.');
         await act(page, 'assign').click();
         await expect(dialog(page).locator('.mdlg-title')).toHaveText('Assign to a person');
         await expect(dialog(page).locator('.mdlg-sub')).toHaveText('file Rodinná fotka');
@@ -271,7 +272,7 @@ test.describe('Assign to a person', () => {
         await expect.poll(() => material.assigns.length).toBe(2);
         expect(material.assigns[1]).toMatchObject({ files: ['I0001'] });
         expect((material.assigns[1].remove as string[]).sort()).toEqual(['P0001', 'P0002', 'P0003']);
-        await expect(panel(page).locator('.mv-none')).toBeVisible();
+        await expect(chips(page)).toHaveCount(0);
 
         // Assigned again: Jan's section has it.
         await act(page, 'assign').click();
@@ -381,7 +382,7 @@ test.describe('Removing a person', () => {
         await bubble.getByRole('button', { name: 'Remove from the whole batch' }).click();
         await expect.poll(() => material.assigns.length).toBe(1);
         expect(material.assigns[0]).toEqual({ batch: 'b-box', remove: ['P0003'] });
-        await expect(panel(page).locator('.mv-none')).toBeVisible();
+        await expect(chips(page)).toHaveCount(0);
         await toast(page).locator('.toast-action').click();
         await expect.poll(() => material.assigns.length).toBe(2);
         expect(material.assigns[1]).toEqual({ batch: 'b-box', add: ['P0003'] });
@@ -478,7 +479,7 @@ test.describe('Hide and Restore', () => {
         });
         expect(await janAttachments(page)).toBe(2);
         await view(page, 'Kopie A');
-        await expect(panel(page).locator('.mv-sentence')).toHaveText('Also in the tree: in exports, the book and on the phone.');
+        await expect(panel(page).locator('.mv-sentence')).toHaveText('The file is in the research; the tree holds a reduced copy.');
         await act(page, 'hide').click();
         const check = dialog(page).locator('.mdlg-check input');
         await expect(dialog(page).locator('.mdlg-check')).toContainText('Also delete the attachment from the tree');
@@ -712,7 +713,7 @@ test.describe('The research refuses', () => {
         const err = dialog(page).locator('.mdlg-error');
         await expect(err).toContainText('The person is missing in the research (merged or removed). Nothing changed.');
         await expect(err.getByRole('button', { name: 'Reload' })).toBeVisible();
-        await expect(panel(page).locator('.mv-none')).toBeVisible();
+        await expect(chips(page)).toHaveCount(0);
         const asks = material.asks.length;
         await err.getByRole('button', { name: 'Reload' }).click();
         await expect(dialog(page)).toHaveCount(0);

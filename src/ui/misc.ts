@@ -1905,21 +1905,25 @@ export const miscMethods = uiModule({
         this.dismissUndoToast();
         // A toast of its own made in a dialog (a citation's chip, the source viewer's citation bar):
         // it stands over the dialog (any other pill waits for the dialogs to close, as before).
+        // Made in the materials viewer or a materials dialog (spec 102 §3's "×"): over them too.
         const overDialog = ownToast && document.querySelector('.modal-overlay.active') !== null;
-        whenFree('undo', () => this.putUndoToast(description, note, overDialog));
+        const overViewer = ownToast && document.querySelector('#attachment-overlay.active, .mdlg-overlay') !== null;
+        whenFree('undo', () => this.putUndoToast(description, note, overDialog, overViewer));
     },
 
     /**
      * Put the undo pill on the screen now (showUndoToast, its turn come).
      * `note`: a second sentence under it (the pill wraps, stands 10 s);
      * `overDialog`: the change was made in a dialog, the pill stands over it
-     * so its "Undo" can be clicked there (spec 095 §2, §3).
+     * so its "Undo" can be clicked there (spec 095 §2, §3); `overViewer`: the
+     * same over the image viewer and the materials dialogs (spec 102 §3).
      */
-    putUndoToast(description: string, note?: string, overDialog = false): void {
+    putUndoToast(description: string, note?: string, overDialog = false, overViewer = false): void {
         const el = document.createElement('div');
         el.className = 'undo-toast';
         if (note) el.classList.add('undo-toast-roomy');
         if (overDialog) el.classList.add('undo-toast-over-dialog');
+        if (overViewer) el.classList.add('undo-toast-over-viewer');
         el.setAttribute('role', 'status');
         el.setAttribute('aria-live', 'polite');
 

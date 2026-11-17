@@ -18,7 +18,7 @@ import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { Person, PersonId } from '../types.js';
 import { strings, getCurrentLanguage } from '../strings.js';
-import { researchPersonRef, researchLinkMark } from '../research-link.js';
+import { researchLinkMark } from '../research-link.js';
 import { announcedResearchScheme } from '../research-device.js';
 import {
     MaterialItem, cachedMaterialList, materialFileItem, materialType, materialKindLabel, materialFolder,
@@ -54,6 +54,8 @@ interface ViewerState {
     drawnAttachments: string;
     /** The item whose title, kind and date are being edited (its key; spec 102 §2). */
     editing: string | null;
+    /** "Where used" shows all its places (§3; "+ N more" clicked). */
+    usesOpen: boolean;
 }
 
 let viewer: ViewerState | null = null;
@@ -63,20 +65,6 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: s
     if (cls) el.className = cls;
     if (text !== undefined) el.textContent = text;
     return el;
-}
-
-function fullName(p: Person): string {
-    return `${p.firstName} ${p.lastName}`.trim();
-}
-
-/** REFN → the tree's person. */
-function treePersonsByRefn(): Map<string, Person> {
-    const out = new Map<string, Person>();
-    for (const p of DataManager.getAllPersons()) {
-        const refn = researchPersonRef(p.refn);
-        if (refn && !out.has(refn)) out.set(refn, p);
-    }
-    return out;
 }
 
 /** The person whose attachment this is (null: it is gone). */
@@ -224,7 +212,7 @@ export const materialViewerMethods = uiModule({
     openMaterialViewer(items: MaterialItem[], index: number, ctx: MaterialOpenCtx): void {
         if (!items[index]) return;
         this.closeMaterialsItemMenu();
-        const state: ViewerState = { items: [...items], ctx, urls: [], expanded: false, drawnAttachments: treeAttachmentsKey(), editing: null };
+        const state: ViewerState = { items: [...items], ctx, urls: [], expanded: false, drawnAttachments: treeAttachmentsKey(), editing: null, usesOpen: false };
         viewer = state;
         openViewerList(
             {
@@ -264,8 +252,11 @@ export const materialViewerMethods = uiModule({
     freshMaterialItem(item: MaterialItem): MaterialItem {
         let attachment = item.attachment;
         // The tree's file as it is now (its title, kind or date may have changed).
-        if (attachment) attachment = attachmentOwner(attachment.id) ? DataManager.getMedia(attachment.id) ?? attachment : undefined;
-        if (!item.file) return attachment ? attachmentItem(attachment, item.persons[0] ?? null) : item;
+        if (attachment) {
+            const now = DataManager.getMedia(attachment.id);
+            attachment = now?.places.length ? now : undefined;
+        }
+        if (!item.file) return attachment ? { ...attachmentItem(attachment, item.persons), ...(item.uses !== undefined ? { uses: item.uses } : {}) } : item;
         const ctx = this.materialsContext();
         const list = ctx ? cachedMaterialList(ctx.treeId) : null;
         const file = list?.files.find(f => f.id === item.file!.id);
@@ -482,61 +473,12 @@ export const materialViewerMethods = uiModule({
             head.appendChild(tag);
         }
 
-        // People.
+        // Where it is used (§3; it took the place of the people's chips).
         const body = h('div', 'mv-body');
-        const persons = h('div', 'mv-persons');
-        persons.appendChild(h('span', 'mv-label', m.f.persons));
-        const chips = h('div', 'mv-chips');
-        const byRefn = treePersonsByRefn();
-        const known = ctx ? cachedMaterialList(ctx.treeId)?.people ?? {} : {};
-        const people: { refn: string | null; person: Person | null; name: string }[] = [];
-        if (item.origin === 'tree' && item.attachment) {
-            const owner = attachmentOwner(item.attachment.id);
-            if (owner) people.push({ refn: researchPersonRef(owner.refn), person: owner, name: fullName(owner) });
-        } else {
-            for (const refn of item.persons) {
-                const person = byRefn.get(refn) ?? null;
-                people.push({ refn, person, name: person ? fullName(person) || known[refn] || refn : known[refn] || refn });
-            }
-        }
-        const canRemove = inArchive && !!ctx?.caps.assign;
-        for (const p of people) {
-            const chip = h('span', 'mv-chip');
-            if (p.person) {
-                const link = h('button', 'mv-chip-link', p.name);
-                link.type = 'button';
-                const id = p.person.id;
-                link.addEventListener('click', () => this.focusMaterialPerson(id));
-                chip.appendChild(link);
-            } else {
-                const plain = h('span', 'mv-chip-name', p.name);
-                plain.title = agent ? m.personNotInTreeResearch : m.personNotInTree;
-                plain.tabIndex = 0;
-                chip.appendChild(plain);
-            }
-            if (p.refn && item.viaBatch.includes(p.refn)) chip.appendChild(h('span', 'mv-chip-via', m.viaBatch));
-            if (canRemove && p.refn) {
-                const x = h('button', 'mv-chip-x', '×');
-                x.type = 'button';
-                x.setAttribute('aria-label', m.removePerson(p.name));
-                x.title = up ? m.removeFromThis : m.actionsWhenRunning;
-                if (!up) x.setAttribute('aria-disabled', 'true');
-                const refn = p.refn;
-                x.addEventListener('click', () => {
-                    if (x.getAttribute('aria-disabled') === 'true' || x.getAttribute('aria-busy') === 'true') return;
-                    // The research takes seconds to commit: the × waits (a second click sends nothing).
-                    x.setAttribute('aria-busy', 'true');
-                    this.materialAction('removeFromPerson', [item], {
-                        person: refn, where: 'viewer', anchor: chip, settled: () => x.removeAttribute('aria-busy'),
-                    });
-                });
-                chip.appendChild(x);
-            }
-            chips.appendChild(chip);
-        }
-        if (people.length === 0) chips.appendChild(h('span', 'mv-none', m.noPerson));
-        persons.appendChild(chips);
-        body.appendChild(persons);
+        body.appendChild(this.materialUsesBlock(item, ctx, {
+            expanded: st.usesOpen, where: 'viewer',
+            expand: () => { st.usesOpen = true; redrawViewerList(); },
+        }));
 
         // The fields that are known.
         const fields = h('dl', 'mv-fields');
@@ -589,8 +531,9 @@ export const materialViewerMethods = uiModule({
         if (fields.childElementCount) body.appendChild(fields);
 
         // Where it is kept (§2.4), and an older research.
-        if (item.origin === 'tree') body.appendChild(h('p', 'mv-sentence', `${agent ? m.onlyTreeResearch : m.onlyTree} ${m.treeOnePerson}`));
-        else if (item.origin === 'both') body.appendChild(h('p', 'mv-sentence', m.alsoTree));
+        if (item.origin === 'both') body.appendChild(h('p', 'mv-sentence', agent ? m.keptArchiveResearch : m.keptArchive));
+        else if (item.origin === 'tree') body.appendChild(h('p', 'mv-sentence', m.keptApp));
+        else if (inArchive) body.appendChild(h('p', 'mv-sentence', agent ? m.archiveOnlyResearch : m.archiveOnly));
         if (inArchive && ctx?.caps.list && !ctx.caps.assign) body.appendChild(h('p', 'mv-sentence is-muted', m.assignNewer));
 
         // The phone's "All details".

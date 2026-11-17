@@ -264,7 +264,8 @@ export const materialDetailsMethods = uiModule({
 
     /**
      * The Attachment dialog (2e): the file on top, its title, kind, date and
-     * (for the tree's file) the note; Save writes what changed.
+     * (for the tree's file) the note, then "Where used" (§3); Save writes
+     * what changed.
      */
     openMaterialDetailsDialog(item: MaterialItem): void {
         const m = strings.materials;
@@ -277,6 +278,21 @@ export const materialDetailsMethods = uiModule({
         const before = materialDetailsOf(item);
         const fields = materialDetailsFields(before, { hint: true });
         dialog.body.appendChild(fields.root);
+        // Where it is used (§3), drawn again after a "×".
+        let usesOpen = false;
+        let uses: HTMLElement | null = null;
+        const drawUses = () => {
+            const next = this.materialUsesBlock(item, this.materialsContext(), {
+                expanded: usesOpen, where: 'dialog',
+                expand: () => { usesOpen = true; drawUses(); },
+                leave: () => dialog.close(),
+                changed: () => { if (DataManager.getMedia(item.attachment?.id ?? '')?.places.length) drawUses(); else dialog.close(); },
+            });
+            if (uses) uses.replaceWith(next);
+            else dialog.body.appendChild(next);
+            uses = next;
+        };
+        drawUses();
         const save = async () => {
             const after = fields.read();
             if (!after) return;

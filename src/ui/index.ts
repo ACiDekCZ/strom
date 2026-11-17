@@ -97,6 +97,7 @@ import { materialsWindowMethods } from './materials-window.js';
 import { materialViewerMethods } from './material-viewer-ui.js';
 import { materialActionsMethods } from './material-actions-ui.js';
 import { materialDetailsMethods } from './material-details-ui.js';
+import { materialUsesMethods } from './material-uses-ui.js';
 import { researchUpdateMethods } from './research-update-ui.js';
 import { researchChangesMethods } from './research-changes-ui.js';
 import { batchMethods } from './batch-ui.js';
@@ -793,6 +794,10 @@ Object.assign(UIClass.prototype, materialActionsMethods);
 type MaterialDetailsMethods = typeof materialDetailsMethods;
 export interface UIClass extends MaterialDetailsMethods {}
 Object.assign(UIClass.prototype, materialDetailsMethods);
+
+type MaterialUsesMethods = typeof materialUsesMethods;
+export interface UIClass extends MaterialUsesMethods {}
+Object.assign(UIClass.prototype, materialUsesMethods);
 
 type ResearchUpdateMethods = typeof researchUpdateMethods;
 export interface UIClass extends ResearchUpdateMethods {}
