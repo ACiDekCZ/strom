@@ -11,6 +11,7 @@
  * page, no slug and no link, and is in the search index by the protected name.
  */
 
+import { personMedia, personMediaCount } from './media.js';
 import { Partnership, PartnershipId, Person, PersonId, StromData, personSourceIds } from './types.js';
 import { PrivacyMode } from './privacy.js';
 import { getStringsForLang, Language } from './strings.js';
@@ -204,10 +205,10 @@ export const PAGE_SET_MINIMAL_FROM_PAGES = 1000;
  * death without a place, no story, portrait, attachment, note or source of
  * their own. Read on the protected tree.
  */
-export function isMinimalPerson(p: Person): boolean {
+export function isMinimalPerson(p: Person, mediaCount = 0): boolean {
     if (p.birthPlace?.trim() || p.deathPlace?.trim() || p.birthAddress?.trim() || p.deathAddress?.trim()) return false;
     if ((p.events ?? []).length) return false;
-    if (p.story?.text?.trim() || p.photo || (p.attachments ?? []).length || p.notes?.trim()) return false;
+    if (p.story?.text?.trim() || p.photo || mediaCount > 0 || p.notes?.trim()) return false;
     return personSourceIds(p).length === 0;
 }
 
@@ -588,7 +589,7 @@ export function buildPageSet(data: StromData, spec: BookSelectionSpec, opts: Pag
     const mayHavePage = sel.personIds.filter(id => !!realPerson(tree, id) && !isProtectedPerson(prot, id));
     // People with only a name and years (1102 §7.3); the person a branch or a pedigree starts from keeps the page.
     const start = 'person' in spec ? spec.person : null;
-    const minimalIds = new Set(mayHavePage.filter(id => id !== start && isMinimalPerson(tree.persons[id]!)));
+    const minimalIds = new Set(mayHavePage.filter(id => id !== start && isMinimalPerson(tree.persons[id]!, personMediaCount(tree, id))));
     const withPage = options.minimal ? mayHavePage.filter(id => !minimalIds.has(id)) : mayHavePage;
     if (whole) {
         for (const id of withPage) {
@@ -900,7 +901,7 @@ export function pageSetImages(set: PageSet): PageSetImage[] {
         const p = tree.persons[id];
         if (!p) continue;
         add(p.photo, 'photo');
-        for (const a of p.attachments ?? []) if (a.mimeType?.startsWith('image/')) add(a.dataUrl, 'photo');
+        for (const a of personMedia(tree, id)) if (a.mimeType?.startsWith('image/')) add(a.dataUrl, 'photo');
         for (const s of personSourceIds(p)) sources.add(s);
         for (const uid of p.partnerships ?? []) {
             const u = tree.partnerships[uid];

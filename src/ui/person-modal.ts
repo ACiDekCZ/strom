@@ -634,7 +634,7 @@ export const personModalMethods = uiModule({
 
         const sourceParts: string[] = [];
         const citeCount = personSourceIds(person).length;
-        const scanCount = person.attachments?.length || 0;
+        const scanCount = DataManager.personMedia(person.id).length;
         if (citeCount) sourceParts.push(S.sumCitations(citeCount));
         if (scanCount) sourceParts.push(S.sumScans(scanCount));
         set('pm-sum-sources', sourceParts);
@@ -775,7 +775,7 @@ export const personModalMethods = uiModule({
             'refn-group': !!person?.refn?.trim(),
             'question-group': !!person?.question?.trim(),
             'person-sources-section': !!person?.sourceIds?.length,
-            'attachments-section': !!person?.attachments?.length,
+            'attachments-section': !!person && DataManager.personMedia(person.id).length > 0,
         };
         for (const [id, hasValue] of Object.entries(filled)) {
             const el = document.getElementById(id);

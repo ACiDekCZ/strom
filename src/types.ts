@@ -323,7 +323,7 @@ export interface PortraitCrop {
  * SourceExcerpt.fromAttachmentId + region.
  */
 export interface PortraitSource extends PortraitCrop {
-    /** An image attachment of the same person (Person.attachments[].id)… */
+    /** An image file of the same person (StromData.media, a place of the person)… */
     attachmentId?: string;
     /** …or the photo of one of the person's unions (Partnership.photo). */
     partnershipId?: PartnershipId;
@@ -584,8 +584,6 @@ export interface Attachment {
     dataUrl: string;
     sizeBytes: number;
     note?: string;
-    /** Optional link to a Source (StromData.sources). */
-    sourceId?: string;
     /** The original file behind the preview (a tree linked to Strom Research). */
     original?: MediaOriginal;
     /**
@@ -600,7 +598,44 @@ export interface Attachment {
      * written back by "Back to {prog}" only.
      */
     date?: string;
+    /** The file's title (spec 102 K1.1); missing or empty = none, the file's name stands for it. */
+    title?: string;
+    /** What the file is (spec 102), as the research's materials say it. */
+    kind?: MaterialKind;
+    /** Who gave the title, the date and the kind (spec 102 §13: an agent never overwrites a person's); missing = 'user'. */
+    titleBy?: MediaBy;
+    dateBy?: MediaBy;
+    kindBy?: MediaBy;
+    /**
+     * Where the file is in the tree, in the order it was put there (data v24):
+     * a person, a person's fact or event, a couple, a couple's event or a
+     * source. Empty only on a record taken out of the tree (`removed`).
+     */
+    places: MediaPlace[];
+    /** Taken out of a tree linked to an archive (spec 102 §9): the places it had, for "Restore". */
+    removed?: { at: string; reason?: 'unrelated' | 'duplicate'; places: MediaPlace[] };
+    /** When the file came into the tree (ISO); missing = earlier. */
+    addedAt?: string;
 }
+
+/** What a file of the tree is (spec 102): the same words as the research's materials. */
+export type MaterialKind = 'photo' | 'document' | 'record' | 'other';
+
+/** Who gave a file's detail: a person or the research's agent (spec 102 §13). */
+export type MediaBy = 'user' | 'agent';
+
+/**
+ * One place of a file in the tree (data v24, StromData.media): shaped as a
+ * citation's context, plus a source. Each may say who put it there (`by`,
+ * spec 102 §13; missing = 'user').
+ */
+export type MediaPlace = (
+    /** The person, their birth or death (`fact`) or one of their events (`eventId`, LifeEvent.id); at most one of the two. */
+    | { personId: PersonId; fact?: 'birth' | 'death'; eventId?: string }
+    /** The couple or one of its events (CoupleEvent.id). */
+    | { partnershipId: PartnershipId; eventId?: string }
+    | { sourceId: string }
+) & { by?: MediaBy };
 
 export interface Person {
     id: PersonId;
@@ -769,8 +804,6 @@ export interface Person {
      * citations are no fact (an entry there is dropped when the tree is read).
      */
     citationMain?: CitationMain<PersonCitationField>;
-    /** Attached documents (scans, certificates, letters…). */
-    attachments?: Attachment[];
     /**
      * Per-parent relationship type, keyed by parent PersonId. A missing entry
      * (or 'biological') is the default, so existing data needs no migration.
@@ -1817,8 +1850,16 @@ export function partnershipParticipants(u: Pick<Partnership, 'participants' | 'e
  *   unchanged, nothing is made. An older app (v22) would drop the couple's
  *   photo and the portraits' originals on a re-save, so the bump makes it
  *   warn first.
+ * v24 (2026-11, spec 102): the tree's files are records of their own
+ *   (StromData.media, one record per file) with the places where each is in
+ *   the tree (a person, a fact or event, a couple, a source), a title, a
+ *   kind and who gave them; Person.attachments and Attachment.sourceId go:
+ *   a tree of v23 is moved over when read (each attachment a record at its
+ *   person and its source; the same file at several people one record).
+ *   An older app (v23) would find no attachments and drop them on a
+ *   re-save, so the bump makes it warn first.
  */
-export const STROM_DATA_VERSION = 23;
+export const STROM_DATA_VERSION = 24;
 
 /** The rows of a saved Table view (spec 073 §2; events and sources come later). */
 export type TableViewRowType = 'persons' | 'unions' | 'events' | 'sources';
@@ -2054,6 +2095,15 @@ export interface StromData {
 
     /** Per-tree catalog of sources/citations, keyed by Source id. */
     sources?: Record<string, Source>;
+
+    /**
+     * The tree's files (data v24, spec 102): scans, photos, letters and
+     * documents, one record per file keyed by its id, each with the places
+     * where it is in the tree (Attachment.places). The order is the order
+     * they were added; a person's attachments are the records with a place
+     * of that person (src/media.ts).
+     */
+    media?: Record<string, Attachment>;
 
     // Default person settings (exports with tree)
     defaultPersonId?: PersonId | LastFocusedMarker;  // undefined = first person, LAST_FOCUSED = where user left off, PersonId = specific

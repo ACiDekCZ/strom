@@ -15,6 +15,7 @@ import {
     computeCoverCrop, PortraitView, stripPhotos, totalPhotoBytes, dataUrlByteSize,
 } from '../photo.js';
 import { countImages } from '../attachments.js';
+import { addPersonMedia, personMedia } from '../media.js';
 import { applyContentOptions, applyLivingPrivacy } from '../privacy.js';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { createMergeState, updateConflictResolution } from '../merge/matching.js';
@@ -237,11 +238,12 @@ function person(id: PersonId, over: Partial<Person> = {}): Person {
 function tree(sourceA?: PortraitSource, sourceC?: PortraitSource): StromData {
     return {
         persons: {
-            [A]: person(A, { partnerships: [U], photo: PORTRAIT, photoSource: sourceA, attachments: [{ id: 'att1', name: 'studio.png', mimeType: 'image/png', dataUrl: png(400, 300), sizeBytes: 33 }] }),
+            [A]: person(A, { partnerships: [U], photo: PORTRAIT, photoSource: sourceA }),
             [B]: person(B, { gender: 'female', partnerships: [U] }),
             [C]: person(C, { photo: PORTRAIT, photoSource: sourceC }),
         },
         partnerships: { [U]: { id: U, person1Id: A, person2Id: B, childIds: [], status: 'married', photo: png(400, 300), photoOriginalName: 'wedding.png', photoDate: '1924' } },
+        media: { att1: { id: 'att1', name: 'studio.png', mimeType: 'image/png', dataUrl: png(400, 300), sizeBytes: 33, places: [{ personId: A }] } },
     };
 }
 
@@ -294,7 +296,7 @@ describe('portrait source on load', () => {
 
     it('an image whose size cannot be read keeps its source', () => {
         const d = tree({ attachmentId: 'att1', region: { x: 0, y: 0, w: 0.5, h: 1 } });
-        d.persons[A].attachments![0].dataUrl = 'data:image/jpeg;base64,AA==';
+        d.media!.att1.dataUrl = 'data:image/jpeg;base64,AA==';
         expect(cleanPortraitSources(d)).toBe(0);
     });
 
@@ -433,12 +435,12 @@ describe('photos left out of an export', () => {
 
     it('stripPhotos takes the portraits, their originals and the couples\' photos', () => {
         const d = tree({ attachmentId: 'att1', region: square });
-        d.persons[A].attachments!.push({ id: 'att2', name: 'letter.png', mimeType: 'image/png', dataUrl: png(10, 10), sizeBytes: 33 });
+        addPersonMedia(d, A, { id: 'att2', name: 'letter.png', mimeType: 'image/png', dataUrl: png(10, 10), sizeBytes: 33 });
         const out = stripPhotos(d);
         expect(out.persons[A].photo).toBeUndefined();
         expect(out.persons[A].photoSource).toBeUndefined();
         // The original is a photo of the person; another attachment stays.
-        expect(out.persons[A].attachments?.map(a => a.id)).toEqual(['att2']);
+        expect(personMedia(out, A).map(a => a.id)).toEqual(['att2']);
         expect(out.partnerships[U]).not.toHaveProperty('photo');
         expect(out.partnerships[U]).not.toHaveProperty('photoOriginalName');
         expect(out.partnerships[U]).not.toHaveProperty('photoDate');
@@ -471,7 +473,7 @@ describe('living people under a privacy mode', () => {
         Object.assign(d.persons[B], DEAD);
         const out = applyLivingPrivacy(d, 'anonymous', 2026, { keepDeceasedSources: true });
         expect(out.persons[A].photoSource).toBeUndefined();
-        expect(out.persons[A].attachments).toBeUndefined();
+        expect(personMedia(out, A)).toHaveLength(0);
     });
 
     it('the couple\'s photo goes when either partner is living, with the deceased one\'s link to it', () => {
@@ -524,7 +526,7 @@ describe('merging a tree with portraits and a couple photo', () => {
     function incomingTree(): StromData {
         const d = importGed();
         const he = named(d, 'Zorbin'), she = named(d, 'Ottavine'), u = union(d);
-        he.attachments = [{ id: 'att-in', name: 'studio.png', mimeType: 'image/png', dataUrl: png(400, 300), sizeBytes: 33 }];
+        addPersonMedia(d, he.id, { id: 'att-in', name: 'studio.png', mimeType: 'image/png', dataUrl: png(400, 300), sizeBytes: 33 });
         he.photo = PORTRAIT;
         he.photoSource = { attachmentId: 'att-in', region: square, angle: 5 };
         u.photo = png(400, 300);
@@ -541,7 +543,7 @@ describe('merging a tree with portraits and a couple photo', () => {
     it('into a tree without them: the portraits bring their originals, the union its photo', async () => {
         const existing = importGed();
         // The same studio photo is in the tree already, under its own id.
-        named(existing, 'Zorbin').attachments = [{ id: 'att-own', name: 'studio.png', mimeType: 'image/png', dataUrl: png(400, 300), sizeBytes: 33 }];
+        addPersonMedia(existing, named(existing, 'Zorbin').id, { id: 'att-own', name: 'studio.png', mimeType: 'image/png', dataUrl: png(400, 300), sizeBytes: 33 });
         const result = await executeMerge(createMergeState(existing, incomingTree()));
         expect(result.success).toBe(true);
         const merged = result.mergedData;
@@ -566,7 +568,7 @@ describe('merging a tree with portraits and a couple photo', () => {
     it('the winning portrait brings its source: the tree\'s own by default, the file\'s when chosen', async () => {
         const existing = importGed();
         const own = named(existing, 'Zorbin');
-        own.attachments = [{ id: 'att-old', name: 'old.png', mimeType: 'image/png', dataUrl: png(300, 300), sizeBytes: 33 }];
+        addPersonMedia(existing, own.id, { id: 'att-old', name: 'old.png', mimeType: 'image/png', dataUrl: png(300, 300), sizeBytes: 33 });
         own.photo = 'data:image/jpeg;base64,/9j/CCCC';
         own.photoSource = { attachmentId: 'att-old', region: { x: 0, y: 0, w: 1, h: 1 } };
 
@@ -591,8 +593,9 @@ describe('an update from the research keeps the app\'s portrait sources and coup
     function fromResearch(previous: StromData): StromData {
         const next = structuredClone(previous);
         for (const p of Object.values(next.persons)) {
-            delete p.photo; delete p.photoSource; delete p.attachments;
+            delete p.photo; delete p.photoSource;
         }
+        delete next.media;
         for (const u of Object.values(next.partnerships)) {
             delete u.photo; delete u.photoOriginalName; delete u.photoDate;
         }

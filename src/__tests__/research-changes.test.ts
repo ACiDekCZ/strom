@@ -6,6 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import { diffByPerson, baseCopy } from '../research-changes.js';
 import { normalizeSingleParents } from '../single-parent.js';
+import { addPersonMedia } from '../media.js';
 import { StromData, Person, PersonId, PartnershipId } from '../types.js';
 
 const person = (id: string, first: string, extra: Partial<Person> = {}): Person => ({
@@ -41,7 +42,7 @@ describe('changes per person since the research\'s version', () => {
         josef.birthPlace = 'Čáslav';
         josef.events![0].participants = [{ id: 'g1', role: 'godparent', name: 'Marie Dvořáková' }];
         josef.birthSourceIds = ['s1'];
-        josef.attachments = [{ id: 'a1', name: 'scan.jpg', mimeType: 'image/jpeg', dataUrl: 'data:image/jpeg;base64,AAAA', sizeBytes: 3 }];
+        addPersonMedia(cur, josef.id, { id: 'a1', name: 'scan.jpg', mimeType: 'image/jpeg', dataUrl: 'data:image/jpeg;base64,AAAA', sizeBytes: 3 });
         cur.persons['p3' as PersonId].firstName = 'Jan Nepomuk';
         const changes = diffByPerson(base, cur);
         expect(changes.map(c => c.name)).toEqual(['Jan Nepomuk Fíšek', 'Josef Fíšek']);

@@ -22,6 +22,7 @@
  * Links: Person.importedParents (parent id -> import id), Partnership.importId.
  */
 
+import { personMedia } from './media.js';
 import { eventValueIsOnTag } from './events.js';
 import {
     CoupleEvent, FactOriginKind, FactPart, GedcomExtra, ImportRecord, ImportedValue, LifeEvent, OriginalIdLine, OriginalIds,
@@ -1327,7 +1328,7 @@ export function keepImports(next: StromData, previous: StromData, features?: rea
         // Another program's own tags never go to the research: the tree keeps its own.
         for (const entry of from.gedcomExtra ?? []) addGedcomExtra(into, entry);
         // Nor a picture's date from the file (spec 066 G8): it stays with the same picture.
-        if (!isPartnership(into) && !isPartnership(from)) keepMediaDates(into, from);
+        if (!isPartnership(into) && !isPartnership(from)) keepMediaDates(into, from, out, previous);
     };
     for (const [prevId, nextId] of prevToNext) {
         const before = previous.persons[prevId as PersonId];
@@ -1366,11 +1367,12 @@ export function keepImports(next: StromData, previous: StromData, features?: rea
 }
 
 /** A picture's date from the file (photoDate, Attachment.date) back on the same picture of `into`. */
-function keepMediaDates(into: Person, from: Person): void {
+function keepMediaDates(into: Person, from: Person, intoData: StromData, fromData: StromData): void {
     if (from.photoDate && !into.photoDate && into.photo && into.photo === from.photo) into.photoDate = from.photoDate;
-    for (const att of from.attachments ?? []) {
+    const intoMedia = personMedia(intoData, into.id);
+    for (const att of personMedia(fromData, from.id)) {
         if (!att.date) continue;
-        const same = into.attachments?.find(a => !a.date && (a.id === att.id
+        const same = intoMedia.find(a => !a.date && (a.id === att.id
             || (!!a.dataUrl && !a.originalOnly && a.dataUrl === att.dataUrl)
             || (!!a.original?.sha256 && a.original.sha256 === att.original?.sha256)));
         if (same) same.date = att.date;

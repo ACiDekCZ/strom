@@ -15,8 +15,9 @@
  * Nothing here changes the tree: attachments stay as they are.
  */
 
-import { Attachment, Person } from './types.js';
-import { cleanText, isResearchHead, researchPersonRef, researchSchemeUrl, withAppVersion } from './research-link.js';
+import { Attachment, MaterialKind, Person, StromData } from './types.js';
+import { personMedia } from './media.js';
+import { cleanText, isResearchHead, researchPersonRef, researchSchemeUrl, withAppVersion, MATERIAL_LINKS_FEATURE, MEDIA_APP_FEATURE } from './research-link.js';
 import { strings } from './strings.js';
 import { ResearchWriteHeld, writeHeldOfCode } from './research-write-held.js';
 import { formatFlexDate, parseFlexDate } from './dates.js';
@@ -40,7 +41,7 @@ export type ThumbSize = typeof THUMB_SIZES[number];
 
 // ==================== TYPES ====================
 
-export type MaterialKind = 'photo' | 'document' | 'record' | 'other';
+export type { MaterialKind };
 /** What a file is by its type, for its icon and label when it has no kind. */
 export type MaterialType = 'image' | 'pdf' | 'audio' | 'file';
 export type HiddenReason = 'unrelated' | 'duplicate';
@@ -480,7 +481,18 @@ export function sortMaterialItems(items: MaterialItem[]): MaterialItem[] {
  * without a REFN (or without a list): attachments only. Hidden files are left
  * out unless asked for.
  */
-export function personMaterials(person: Pick<Person, 'refn' | 'attachments'>, list?: MaterialList | null, opts: { includeHidden?: boolean } = {}): MaterialItem[] {
+/** A person as the materials see them: the REFN and the files at the person (data v24: StromData.media). */
+export interface MaterialPerson {
+    refn?: string;
+    attachments?: readonly Attachment[];
+}
+
+/** The person's REFN and files, from the tree. */
+export function materialPerson(data: StromData, person: Pick<Person, 'id' | 'refn'>): MaterialPerson {
+    return { refn: person.refn, attachments: personMedia(data, person.id) };
+}
+
+export function personMaterials(person: MaterialPerson, list?: MaterialList | null, opts: { includeHidden?: boolean } = {}): MaterialItem[] {
     const refn = researchPersonRef(person.refn);
     const attachments = person.attachments ?? [];
     if (!list || !refn) return attachments.map(a => attachmentItem(a, refn));
@@ -556,19 +568,34 @@ export interface MaterialCaps {
     assign: boolean;
     thumb: boolean;
     bridgeUp: boolean;
+    /** The research keeps the files' titles and places and gives them back (`material.links`). */
+    links: boolean;
+    /** The research edits a file outside the tree (`material.edit`). */
+    edit: boolean;
+    /** The research says where each file is used (`material.uses`). */
+    uses: boolean;
+    /** The research's agent sorts files (`material.sort`). */
+    sort: boolean;
+    /** The research keeps the tree's own files (`media.app`). */
+    mediaApp: boolean;
     /** Links into the research open (`/status.links`, also remembered); default yes. */
-    links?: boolean;
+    openLinks?: boolean;
 }
 
-export function materialCaps(env: MaterialEnv & { links?: boolean }): MaterialCaps {
-    const caps: MaterialCaps = { list: matList(env), assign: matAssign(env), thumb: matThumb(env), bridgeUp: env.bridgeUp };
-    if (env.links !== undefined) caps.links = env.links;
+export function materialCaps(env: MaterialEnv & { openLinks?: boolean }): MaterialCaps {
+    const caps: MaterialCaps = {
+        list: matList(env), assign: matAssign(env), thumb: matThumb(env), bridgeUp: env.bridgeUp,
+        links: env.linked && has(env, MATERIAL_LINKS_FEATURE),
+        edit: matEdit(env), uses: matUses(env), sort: matSort(env),
+        mediaApp: env.linked && has(env, MEDIA_APP_FEATURE),
+    };
+    if (env.openLinks !== undefined) caps.openLinks = env.openLinks;
     return caps;
 }
 
 export type MaterialActionId =
     | 'open' | 'assign' | 'removeFromPerson' | 'hide' | 'restore'
-    | 'openSystem' | 'showInBatch' | 'download' | 'useAsPortrait' | 'deleteFromTree';
+    | 'openSystem' | 'showInBatch' | 'download' | 'useAsPortrait' | 'deleteFromTree' | 'edit';
 
 export interface MaterialAction {
     id: MaterialActionId;
@@ -610,7 +637,7 @@ const ACTION_ROWS: ActionRow[] = [
     },
     { id: 'hide', writes: true, when: (i, c) => inArchive(i) && c.assign && !i.hidden },
     { id: 'restore', writes: true, when: (i, c) => inArchive(i) && c.assign && !!i.hidden },
-    { id: 'openSystem', when: (i, c) => inArchive(i) && c.links !== false },
+    { id: 'openSystem', when: (i, c) => inArchive(i) && c.openLinks !== false },
     { id: 'showInBatch', when: (i) => inArchive(i) && !!i.batch },
     { id: 'download', when: (i) => i.origin === 'tree' },
     // A picture of the tree's attachment as the person's portrait (spec 107 §4; the menu leaves it out where the person cannot change).
@@ -700,7 +727,7 @@ export function batchUndoRequest(batch: Pick<MaterialBatch, 'id' | 'persons'>, a
 }
 
 /** How many materials the person has (menu, card tooltip): items without hidden ones; without the list: attachments. */
-export function personMaterialCount(person: Pick<Person, 'refn' | 'attachments'>, list: MaterialList | null | undefined, listOn: boolean): number {
+export function personMaterialCount(person: MaterialPerson, list: MaterialList | null | undefined, listOn: boolean): number {
     if (!listOn) return person.attachments?.length ?? 0;
     return personMaterials(person, list).length;
 }
@@ -709,7 +736,7 @@ export function personMaterialCount(person: Pick<Person, 'refn' | 'attachments'>
  * Counts for many people at once (card tooltips): the same number as
  * `personMaterials(person, list).length`, with the list indexed once.
  */
-export function materialCounter(list: MaterialList | null | undefined): (person: Pick<Person, 'refn' | 'attachments'>) => number {
+export function materialCounter(list: MaterialList | null | undefined): (person: MaterialPerson) => number {
     if (!list) return person => person.attachments?.length ?? 0;
     const batches = batchMap(list);
     const bySha = new Map<string, MaterialFile>();

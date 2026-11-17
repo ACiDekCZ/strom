@@ -77,7 +77,7 @@ async function seedZbyhoslav(page: Page, kind: 'source' | 'plain' | 'noPhoto', e
 
 const stored = (page: Page) => page.evaluate(() => {
     const p = window.Strom.DataManager.getAllPersons().find(x => x.firstName === 'Zbyhoslav')!;
-    return { photo: p.photo, source: p.photoSource, attachments: p.attachments ?? [] };
+    return { photo: p.photo, source: p.photoSource, attachments: window.Strom.DataManager.personMedia(p.id) };
 });
 
 async function openDialog(page: Page): Promise<void> {
@@ -306,8 +306,9 @@ test.describe('The portrait\'s source among the attachments (desktop)', () => {
         const img = await seedZbyhoslav(page, 'source', { isLocked: true });
         await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));
         await page.evaluate((dataUrl) => {
-            const p = window.Strom.DataManager.getPerson('zb' as never)!;
-            p.attachments!.push({ id: 'att_louka', name: 'louka.jpg', mimeType: 'image/jpeg', dataUrl, sizeBytes: 20000 });
+            // Straight into the data: a locked person takes no attachment through DataManager.
+            const media = (window.Strom.DataManager.getData().media ??= {});
+            media.att_louka = { id: 'att_louka', name: 'louka.jpg', mimeType: 'image/jpeg', dataUrl, sizeBytes: 20000, places: [{ personId: 'zb' as never }] };
         }, img.original);
         // A locked person's dialog (read-only; the card menu offers no Edit).
         await page.evaluate(() => {
@@ -349,7 +350,7 @@ test.describe('Use as portrait… in the materials (desktop)', () => {
 
     const janStored = (page: Page, id: string) => page.evaluate((id) => {
         const p = window.Strom.DataManager.getPerson(id as never)!;
-        return { photo: p.photo, source: p.photoSource, names: (p.attachments ?? []).map(a => [a.id, a.name]) };
+        return { photo: p.photo, source: p.photoSource, names: window.Strom.DataManager.personMedia(p.id).map(a => [a.id, a.name]) };
     }, id);
 
     test('the person\'s materials: the tag on the source, Use as portrait… in another picture\'s ⋯, waiting for Save', async ({ page }) => {

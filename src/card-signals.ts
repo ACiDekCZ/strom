@@ -12,6 +12,7 @@
  * card); the tooltip keeps its status rows either way. Pure.
  */
 
+import { personMediaCount } from './media.js';
 import { Partnership, Person, PersonId, ResearchConflict, StromData } from './types.js';
 import { PersonEvidence } from './evidence-level.js';
 import type { CardSignals } from './settings.js';
@@ -192,7 +193,7 @@ export function cardSignalInfo(p: Person, ctx: CardSignalContext): CardSignalInf
         status,
         evidence,
         story,
-        attachments: p.attachments?.length ?? 0,
+        attachments: personMediaCount(ctx.data, p.id),
         materials: materialsCountProvider?.(p) ?? null,
         waiting: research?.waiting ?? null,
         waitingStory: !!research?.waitingStory,

@@ -359,10 +359,14 @@ export function joinQualityOnlySources(data: StromData): number {
     remapCitations(data, map, before);
     const fix = (ids: string[]): string[] => ids.map(id => map.get(id) ?? id);
     for (const person of Object.values(data.persons ?? {})) {
-        for (const att of person.attachments ?? []) {
-            if (att.sourceId && map.has(att.sourceId)) att.sourceId = map.get(att.sourceId);
+        // A tree of v18 and older still holds its attachments on the people (moved into StromData.media later, data v24).
+        for (const att of (person as { attachments?: { sourceId?: string }[] }).attachments ?? []) {
+            if (att?.sourceId && map.has(att.sourceId)) att.sourceId = map.get(att.sourceId);
         }
         rewriteStorySources(person.story, fix);
+    }
+    for (const att of Object.values(data.media ?? {})) {
+        att.places = att.places.map(pl => ('sourceId' in pl && map.has(pl.sourceId) ? { ...pl, sourceId: map.get(pl.sourceId)! } : pl));
     }
     for (const partnership of Object.values(data.partnerships ?? {})) rewriteStorySources(partnership.story, fix);
     return map.size;

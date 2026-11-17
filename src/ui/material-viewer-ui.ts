@@ -12,6 +12,7 @@
  * See src/ui/module.ts for the composition pattern.
  */
 
+import { mediaPersonId } from '../media.js';
 import { setResearchOpenLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
@@ -76,10 +77,8 @@ function treePersonsByRefn(): Map<string, Person> {
 
 /** The person whose attachment this is (null: it is gone). */
 export function attachmentOwner(attachmentId: string): Person | null {
-    for (const p of DataManager.getAllPersons()) {
-        if (p.attachments?.some(a => a.id === attachmentId)) return p;
-    }
-    return null;
+    const id = mediaPersonId(DataManager.getMedia(attachmentId));
+    return id ? DataManager.getPerson(id) : null;
 }
 
 function receivedTime(iso: string): string {
@@ -280,7 +279,7 @@ export const materialViewerMethods = uiModule({
         const attImage = attachmentImage(item);
         const pdf = attachmentPdf(item);
         const type = materialType(item.mime, itemName(item));
-        const systemLink = inArchive && ctx && sha && ctx.caps.links !== false
+        const systemLink = inArchive && ctx && sha && ctx.caps.openLinks !== false
             ? materialSystemLink(ctx.researchId, sha, announcedResearchScheme()) : null;
         const openSystem: CardButton[] = systemLink ? [{ label: m.openSystem, run: () => this.launchResearchLink(systemLink), research: researchLinkMark('media') !== 'none' }] : [];
         const startUrl = this.researchStartUrl();
@@ -538,7 +537,7 @@ export const materialViewerMethods = uiModule({
                 if (item.hidden) action(m.restore, () => this.materialAction('restore', [item], { where: 'viewer' }), { write: true, id: 'restore' });
                 else action(m.hide, () => this.materialAction('hide', [item], { where: 'viewer' }), { write: true, id: 'hide' });
             }
-            const link = ctx && sha && ctx.caps.links !== false ? materialSystemLink(ctx.researchId, sha, announcedResearchScheme()) : null;
+            const link = ctx && sha && ctx.caps.openLinks !== false ? materialSystemLink(ctx.researchId, sha, announcedResearchScheme()) : null;
             if (link) action(m.openSystem, () => this.launchResearchLink(link), { id: 'openSystem', research: researchLinkMark('media') !== 'none' });
             if (up && sha && item.here) download(fileUrl(ctx!.base!, sha), name);
             else if (item.attachment?.dataUrl && !item.attachment.originalOnly) download(item.attachment.dataUrl, item.attachment.name);

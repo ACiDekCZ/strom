@@ -116,7 +116,7 @@ test.describe('Materials at the person', () => {
         await expect(section(page).locator('.materials-all')).toHaveText('All materials ›');
         expect(material.asks).toContain('person=P0003');
         // The tree's attachments are untouched.
-        expect(await page.evaluate((id) => window.Strom.DataManager.getPerson(id as never)!.attachments!.length, await janId(page))).toBe(2);
+        expect(await page.evaluate((id) => window.Strom.DataManager.personMedia(id as never).length, await janId(page))).toBe(2);
     });
 
     test('the first 6 rows, then "All materials of this person (8)" opens the window filtered', async ({ page }) => {
@@ -283,7 +283,7 @@ test.describe('Add material… (Strom archive)', () => {
         await expect(dialog.locator('h2')).toHaveText('Save material to the Strom archive');
         return dialog;
     };
-    const janAttachments = async (page: Page) => page.evaluate((id) => window.Strom.DataManager.getPerson(id as never)!.attachments?.length ?? 0, await janId(page));
+    const janAttachments = async (page: Page) => page.evaluate((id) => window.Strom.DataManager.personMedia(id as never).length, await janId(page));
 
     test('"Also save to the tree" checked: the image goes to the archive and the tree; the toast shows it', async ({ page }) => {
         const { bridge, material } = await setup(page, { archive: true });
@@ -478,7 +478,7 @@ test.describe('Materials follow the tree\'s attachments', () => {
         const id = await janId(page);
         await page.evaluate((id) => {
             const dm = window.Strom.DataManager;
-            const att = dm.getPerson(id as never)!.attachments!.find(a => a.name === 'b.png')!;
+            const att = dm.personMedia(id as never).find(a => a.name === 'b.png')!;
             dm.removeAttachment(id as never, att.id);
         }, id);
         await expect(treeCount).toHaveText('1');

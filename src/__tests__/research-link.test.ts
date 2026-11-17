@@ -24,6 +24,7 @@ import {
 } from '../research-link.js';
 import { getStringsForLang } from '../strings.js';
 import { exportToGedcom } from '../ged-exporter.js';
+import { addPersonMedia, personMedia, mediaSourceId } from '../media.js';
 import { StromData, PersonId } from '../types.js';
 
 const UUID = '3f2c9a10-7b1e-4c55-9d2a-0e8f6b4a1c77';
@@ -446,7 +447,7 @@ describe('carryOverMedia', () => {
         const josef = data.persons[idOf(data, 'P0001')];
         josef.photo = IMG('photo');
         josef.photoOriginalName = 'josef.jpg';
-        josef.attachments = [{ id: 'att1', name: 'page.jpg', mimeType: 'image/jpeg', dataUrl: IMG('page'), sizeBytes: 2000, sourceId: 'src1' }];
+        addPersonMedia(data, josef.id, { id: 'att1', name: 'page.jpg', mimeType: 'image/jpeg', dataUrl: IMG('page'), sizeBytes: 2000 }, 'src1');
         const ludmila = data.persons[idOf(data, 'P0004')];
         ludmila.photo = IMG('ludmila');
         data.sources = {
@@ -456,6 +457,12 @@ describe('carryOverMedia', () => {
             ] },
         };
         return data;
+    }
+    /** The tree's files with their places on the app's own ids (`app_<id>`), as a tree handed over from the app holds them. */
+    function appIdMedia(previous: StromData): StromData['media'] {
+        return Object.fromEntries(Object.entries(previous.media ?? {}).map(([k, a]) => [k, {
+            ...a, places: a.places.map(pl => ('personId' in pl ? { ...pl, personId: `app_${pl.personId}` as PersonId } : pl)),
+        }]));
     }
     /** The next research state: no images (the research never had them). */
     function update(previous: StromData, opts: { extraPerson?: boolean; source?: boolean } = {}): StromData {
@@ -474,7 +481,7 @@ describe('carryOverMedia', () => {
         const josef = data.persons[idOf(previous, 'P0001')];
         expect(josef.photo).toBe(IMG('photo'));
         expect(josef.photoOriginalName).toBe('josef.jpg');
-        expect(josef.attachments).toEqual(previous.persons[josef.id].attachments);
+        expect(personMedia(data, josef.id)).toEqual(personMedia(previous, josef.id));
         expect(data.persons[idOf(previous, 'P0004')].photo).toBe(IMG('ludmila'));
         // The app's crop comes back; the research's own (clip) is the research's business.
         expect(data.sources!.src1.excerpts!.map(e => e.id)).toEqual(['exc1']);
@@ -485,11 +492,11 @@ describe('carryOverMedia', () => {
         const next = update(previous);
         const josefId = idOf(previous, 'P0001');
         next.persons[josefId].photo = IMG('newer');
-        next.persons[josefId].attachments = [{ id: 'other', name: 'p.jpg', mimeType: 'image/jpeg', dataUrl: IMG('page'), sizeBytes: 2000 }];
+        addPersonMedia(next, josefId, { id: 'other', name: 'p.jpg', mimeType: 'image/jpeg', dataUrl: IMG('page'), sizeBytes: 2000 });
         next.sources!.src1.excerpts = [{ id: 'exc1', dataUrl: IMG('crop'), width: 10, height: 10, sizeBytes: 2000 }];
         const { data } = carryOverMedia(next, previous);
         expect(data.persons[josefId].photo).toBe(IMG('newer'));
-        expect(data.persons[josefId].attachments!.map(a => a.id)).toEqual(['other']);
+        expect(personMedia(data, josefId).map(a => a.id)).toEqual(['other']);
         expect(data.sources!.src1.excerpts!.map(e => e.id)).toEqual(['exc1']);
     });
 
@@ -509,9 +516,9 @@ describe('carryOverMedia', () => {
         const { data, lost } = carryOverMedia(next, previous);
         // Ludmila's photo and the source's own crop have nowhere to go.
         expect(lost).toBe(2);
-        const att = data.persons[idOf(previous, 'P0001')].attachments![0];
+        const att = personMedia(data, idOf(previous, 'P0001'))[0];
         expect(att.id).toBe('att1');
-        expect(att.sourceId).toBeUndefined();
+        expect(mediaSourceId(att)).toBeUndefined();
     });
 
     it('a tree handed over from the app (no REFN, other ids) keeps its photos', () => {
@@ -522,12 +529,13 @@ describe('carryOverMedia', () => {
             const id = `app_${p.id}` as PersonId;
             own.persons[id] = { ...p, id, refn: undefined };
         }
+        own.media = appIdMedia(previous);
         const next = stabilizeIds(importData(researchGed({ extraPerson: true })), own);
         const { data, lost } = carryOverMedia(next, own);
         expect(lost).toBe(1); // the source's crop: the research has no such source
         const josef = data.persons[idOf(next, 'P0001')];
         expect(josef.photo).toBe(IMG('photo'));
-        expect(josef.attachments![0].sourceId).toBeUndefined();
+        expect(mediaSourceId(personMedia(data, josef.id)[0])).toBeUndefined();
         expect(data.persons[idOf(next, 'P0004')].photo).toBe(IMG('ludmila'));
     });
 
@@ -538,6 +546,7 @@ describe('carryOverMedia', () => {
             const id = `app_${p.id}` as PersonId;
             own.persons[id] = { ...p, id, refn: undefined, firstName: 'Jan', lastName: 'Fíšek', gender: 'male' };
         }
+        own.media = appIdMedia(previous);
         const next = stabilizeIds(importData(researchGed({ extraPerson: true })), own);
         const { data, lost } = carryOverMedia(next, own);
         expect(lost).toBe(4);

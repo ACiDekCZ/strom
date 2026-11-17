@@ -71,11 +71,7 @@ function fullTree(): Required<StromData> {
         version: STROM_DATA_VERSION,
         persons: {
             // Alice holds the full page the source excerpt was cut from.
-            [ALICE]: { ...person(ALICE, 'Alice'), attachments: [{
-                id: 'att1', name: 'page-57.jpg', mimeType: 'image/jpeg',
-                dataUrl: 'data:image/jpeg;base64,AA==', sizeBytes: 1,
-                original: { sha256: 'b'.repeat(64), name: 'page-57.tif', mimeType: 'image/tiff', bytes: 148_000_000, orientation: 6 },
-            }], importId: 'I1', importedValues: { firstName: { from: 'I1', value: 'Alice' } }, addedAt: '2026-11-01T08:30:00.000Z',
+            [ALICE]: { ...person(ALICE, 'Alice'), importId: 'I1', importedValues: { firstName: { from: 'I1', value: 'Alice' } }, addedAt: '2026-11-01T08:30:00.000Z',
             // Her portrait cut from that page, turned and straightened (spec 107, data v23).
             photo: 'data:image/jpeg;base64,AA==', photoSource: { attachmentId: 'att1', region: { x: 0.2, y: 0.1, w: 0.3, h: 0.3 }, quarterTurns: 1, angle: 3.5 },
             // One census of both (spec 085, data v20; its main citation, spec 095, v21): the share, a role of one's own, a godparent's own
@@ -90,6 +86,16 @@ function fullTree(): Required<StromData> {
                 { id: 'ev_census_b', type: 'census', date: '1921-02-15', place: 'Kolín', age: '42', sourceIds: ['s1'], citationMain: { sourceIds: 's1' }, shareId: 'SH7K2QX', shareRole: 'lodger' },
                 { id: 'ev_bapt_b', type: 'baptism', date: '1909-03-14' },
             ] },
+        },
+        // The tree's files (data v24, spec 102): Alice's page, a document of the source too.
+        media: {
+            att1: {
+                id: 'att1', name: 'page-57.jpg', mimeType: 'image/jpeg',
+                dataUrl: 'data:image/jpeg;base64,AA==', sizeBytes: 1,
+                original: { sha256: 'b'.repeat(64), name: 'page-57.tif', mimeType: 'image/tiff', bytes: 148_000_000, orientation: 6 },
+                title: 'Page 57', kind: 'record', addedAt: '2026-11-01T08:31:00.000Z',
+                places: [{ personId: ALICE }, { sourceId: 's1' }],
+            },
         },
         // The couple's photo (spec 107, data v23).
         partnerships: { [UNION]: { ...partnership(), importId: 'I1', photo: 'data:image/png;base64,iVBORw0KGgo=', photoOriginalName: 'wedding.png', photoDate: '1924-06-14' } },
@@ -359,7 +365,6 @@ type OwnedElsewhere =
     | 'sourceIds'           // citePerson / uncitePerson
     | 'birthSourceIds'      // citePerson / uncitePerson with the birth
     | 'deathSourceIds'      // citePerson / uncitePerson with the death
-    | 'attachments'         // addAttachment / removeAttachment
     | 'photoOriginalName'   // set with the photo itself (import / upload)
     | 'photoDate'           // GEDCOM import only (G8): the portrait's date from the file, dropped with a new photo
     | 'refnType'            // GEDCOM import only; updatePerson drops it with a changed refn
@@ -460,8 +465,11 @@ describe('updatePerson applies every field it owns', () => {
     /** A new person holding the image photoSource above names as its original. */
     function createWithOriginal(): Person {
         const created = DataManager.createPerson({ firstName: 'Jan', lastName: 'Novak', gender: 'male' });
-        DataManager.addAttachment(created.id, { name: 'studio.jpg', mimeType: 'image/png', dataUrl: 'data:image/png;base64,iVBORw0KGgo=', sizeBytes: 8 });
-        DataManager.getPerson(created.id)!.attachments![0].id = 'att-src';
+        const att = DataManager.addAttachment(created.id, { name: 'studio.jpg', mimeType: 'image/png', dataUrl: 'data:image/png;base64,iVBORw0KGgo=', sizeBytes: 8 })!;
+        // The record under the id photoSource names (StromData.media is keyed by it).
+        const media = DataManager.getData().media!;
+        delete media[att.id];
+        media['att-src'] = { ...att, id: 'att-src' };
         return created;
     }
 

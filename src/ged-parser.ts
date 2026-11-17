@@ -5523,6 +5523,8 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
 
     // Create persons
     const persons: Record<PersonId, Person> = {};
+    /** The tree's files (data v24): one record per file with its places. */
+    const files: Record<string, Attachment> = {};
     const externalMedia: ExternalMediaRef[] = [];
     for (const [gedId, indi] of validIndividuals) {
         const personId = personIdMap.get(gedId)!;
@@ -5793,6 +5795,7 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
                 } else {
                     const att: Attachment = {
                         id: generateId('att'),
+                        places: [{ personId }],
                         name: media.title || 'attachment',
                         mimeType: media.file.slice(5, media.file.indexOf(';')) || 'application/octet-stream',
                         dataUrl: media.file,
@@ -5807,22 +5810,22 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
                         };
                     }
                     const attSource = media.sourceXref ? sourceIdMap.get(media.sourceXref) : undefined;
-                    if (attSource) att.sourceId = attSource;
-                    (person.attachments ??= []).push(att);
+                    if (attSource) att.places.push({ sourceId: attSource });
+                    files[att.id] = att;
                 }
             } else if (media.file && media.sha && /^[0-9a-f]{64}$/.test(media.sha) && media.stromKind !== 'photo') {
                 // Only the original, held by Strom Research by its hash (no preview yet).
                 const name = media.title || media.file.split(/[\\/]/).pop() || 'file';
                 const mimeType = originalMimeOf(media.file) || originalMimeOf(name);
                 const att: Attachment = {
-                    id: generateId('att'), name, mimeType, dataUrl: ORIGINAL_ONLY_DATA_URL, sizeBytes: 0, originalOnly: true,
+                    id: generateId('att'), places: [{ personId }], name, mimeType, dataUrl: ORIGINAL_ONLY_DATA_URL, sizeBytes: 0, originalOnly: true,
                     original: { sha256: media.sha, name, mimeType, bytes: 0, ...(media.orient ? { orientation: media.orient } : {}) },
                 };
                 if (media.note) att.note = media.note;
                 if (media.date) att.date = media.date;
                 const attSource = media.sourceXref ? sourceIdMap.get(media.sourceXref) : undefined;
-                if (attSource) att.sourceId = attSource;
-                (person.attachments ??= []).push(att);
+                if (attSource) att.places.push({ sourceId: attSource });
+                files[att.id] = att;
             } else if (media.file) {
                 // Platform exports (MyHeritage, Ancestry) reference media by
                 // path — remember the ref so the user can attach the files.
@@ -6521,9 +6524,7 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
     // hash) links them again, its region back in the page as shown.
     if (excerptRegions.size > 0) {
         const pages = new Map<string, Attachment>();
-        for (const p of Object.values(persons)) {
-            for (const a of p.attachments ?? []) if (a.original) pages.set(a.original.sha256, a);
-        }
+        for (const a of Object.values(files)) if (a.original) pages.set(a.original.sha256, a);
         for (const [exc, region] of excerptRegions) {
             const page = exc.originalSha ? pages.get(exc.originalSha) : undefined;
             if (!page) continue;
@@ -6572,6 +6573,7 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
             persons,
             partnerships,
             ...(Object.keys(sources).length > 0 ? { sources } : {}),
+            ...(Object.keys(files).length > 0 ? { media: files } : {}),
             ...(gedcom.places.size > 0 ? { places: Object.fromEntries(gedcom.places) } : {}),
             // Strom Research's place records (spec 034): the research's, read as they come.
             ...(gedcom.placeRecords?.size ? { placeRecords: Object.fromEntries(gedcom.placeRecords) } : {}),

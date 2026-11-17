@@ -17,7 +17,7 @@ async function researchTree(page: Page, features: string[], auto: boolean): Prom
     await page.clock.install({ time: new Date('2026-11-17T10:30:00Z') });
     await openResearch(page, { auto, ged: withPortrait });
     expect(await page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons) as any[])
-        .find(p => p.firstName === 'Jan')?.attachments?.[0]?.dataUrl ?? null)).toBe(PORTRAIT);
+        .filter(p => p.firstName === 'Jan').flatMap(p => window.Strom.DataManager.personMedia(p.id))[0]?.dataUrl ?? null)).toBe(PORTRAIT);
     const bridge = await fakeBridge(page, { features, accepts: { mode: 'research', sync: { auto: 'write' }, sources: true, verified: true, media: null } });
     await page.evaluate(() => localStorage.setItem('strom-research-auto-intro-seen', '1'));
     return bridge;
@@ -54,7 +54,7 @@ test('a version back without files the tree has (carried over): one write with t
     await expect.poll(() => page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons) as any[])
         .some(p => p.firstName === 'Jan Václav'))).toBe(true);
     expect(await page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons) as any[])
-        .find(p => p.firstName === 'Jan Václav')?.attachments?.[0]?.dataUrl ?? null)).toBe(PORTRAIT);
+        .filter(p => p.firstName === 'Jan Václav').flatMap(p => window.Strom.DataManager.personMedia(p.id))[0]?.dataUrl ?? null)).toBe(PORTRAIT);
     await poll(page);
     await expect.poll(() => bridge.posts.length).toBe(2);
     expect(bridge.postQueries?.[1].get('media')).toBe('app');

@@ -22,6 +22,7 @@ import {
 } from '../privacy.js';
 import { stripPhotos } from '../photo.js';
 import { stripAttachments } from '../attachments.js';
+import { personMedia, mediaSourceId } from '../media.js';
 import {
     StromData, Person, Partnership, PersonId, PartnershipId,
     toPersonId, toPartnershipId,
@@ -46,11 +47,6 @@ function richTree(): StromData {
         photo: 'data:image/jpeg;base64,AAAA',
         photoOriginalName: 'alice.jpg',
         sourceIds: ['s1'],
-        attachments: [{
-            id: 'a1', name: 'letter.pdf', mimeType: 'application/pdf',
-            dataUrl: 'data:application/pdf;base64,BBBB', sizeBytes: 4,
-            note: 'A letter.', sourceId: 's1',
-        }],
         events: [{
             id: 'e1', type: 'baptism', date: '1900', note: 'In the village church.',
             sourceIds: ['s1'],
@@ -69,11 +65,19 @@ function richTree(): StromData {
         persons: { [ALICE]: alice, [BOB]: bob },
         partnerships: { [UNION]: union },
         sources: { s1: { id: 's1', title: 'Parish register, Kolín', quality: 3 } },
+        media: {
+            a1: {
+                id: 'a1', name: 'letter.pdf', mimeType: 'application/pdf',
+                dataUrl: 'data:application/pdf;base64,BBBB', sizeBytes: 4,
+                note: 'A letter.', places: [{ personId: ALICE }, { sourceId: 's1' }],
+            },
+        },
     };
 }
 
 const alice = (d: StromData) => d.persons[ALICE];
 const union = (d: StromData) => d.partnerships[UNION];
+const aliceMedia = (d: StromData) => personMedia(d, ALICE);
 
 describe('stripNotes', () => {
     it('removes every note but nothing else', () => {
@@ -85,7 +89,7 @@ describe('stripNotes', () => {
         expect(union(out).note).toBeUndefined();
         // Unrelated fields survive.
         expect(alice(out).photo).toBeDefined();
-        expect(alice(out).attachments).toHaveLength(1);
+        expect(aliceMedia(out)).toHaveLength(1);
         expect(alice(out).sourceIds).toEqual(['s1']);
         expect(alice(out).events?.[0].sourceIds).toEqual(['s1']);
         expect(out.sources?.s1).toBeDefined();
@@ -107,13 +111,13 @@ describe('stripSources', () => {
         expect(out.sources).toBeUndefined();
         expect(alice(out).sourceIds).toBeUndefined();
         expect(alice(out).events?.[0].sourceIds).toBeUndefined();
-        expect(alice(out).attachments?.[0].sourceId).toBeUndefined();
+        expect(mediaSourceId(aliceMedia(out)[0])).toBeUndefined();
         expect(union(out).sourceIds).toBeUndefined();
         // Unrelated fields survive, including the attachment payload + note.
         expect(alice(out).notes).toBe('Kept bees.');
         expect(alice(out).photo).toBeDefined();
-        expect(alice(out).attachments?.[0].dataUrl).toBeDefined();
-        expect(alice(out).attachments?.[0].note).toBe('A letter.');
+        expect(aliceMedia(out)[0].dataUrl).toBeDefined();
+        expect(aliceMedia(out)[0].note).toBe('A letter.');
         expect(union(out).note).toBe('Married in spring.');
     });
 
@@ -122,7 +126,7 @@ describe('stripSources', () => {
         stripSources(src);
         expect(src.sources?.s1).toBeDefined();
         expect(alice(src).sourceIds).toEqual(['s1']);
-        expect(alice(src).attachments?.[0].sourceId).toBe('s1');
+        expect(mediaSourceId(aliceMedia(src)[0])).toBe('s1');
     });
 });
 
@@ -150,7 +154,7 @@ describe('applyContentOptions', () => {
         const out = applyContentOptions(richTree(), CONTENT_PRESETS.skeleton);
         expect(alice(out).photo).toBeUndefined();
         expect(alice(out).photoOriginalName).toBeUndefined();
-        expect(alice(out).attachments).toBeUndefined();
+        expect(aliceMedia(out)).toHaveLength(0);
         expect(alice(out).notes).toBeUndefined();
         expect(alice(out).sourceIds).toBeUndefined();
         expect(out.sources).toBeUndefined();
@@ -164,7 +168,7 @@ describe('applyContentOptions', () => {
     it('"small file to send" keeps text, drops media', () => {
         const out = applyContentOptions(richTree(), CONTENT_PRESETS.small);
         expect(alice(out).photo).toBeUndefined();
-        expect(alice(out).attachments).toBeUndefined();
+        expect(aliceMedia(out)).toHaveLength(0);
         expect(alice(out).notes).toBe('Kept bees.');
         expect(out.sources?.s1).toBeDefined();
         expect(alice(out).sourceIds).toEqual(['s1']);
@@ -173,7 +177,7 @@ describe('applyContentOptions', () => {
     it('selectively keeps photos only', () => {
         const out = applyContentOptions(richTree(), { photos: true, attachments: false, notes: false, sources: false });
         expect(alice(out).photo).toBeDefined();
-        expect(alice(out).attachments).toBeUndefined();
+        expect(aliceMedia(out)).toHaveLength(0);
         expect(alice(out).notes).toBeUndefined();
         expect(out.sources).toBeUndefined();
     });
@@ -181,7 +185,7 @@ describe('applyContentOptions', () => {
     it('accepts the legacy boolean flag', () => {
         const out = applyContentOptions(richTree(), true);
         expect(alice(out).photo).toBeUndefined();
-        expect(alice(out).attachments).toBeUndefined();
+        expect(aliceMedia(out)).toHaveLength(0);
         expect(alice(out).notes).toBe('Kept bees.');
     });
 });
@@ -191,7 +195,7 @@ describe('content presets', () => {
         // Sanity: composing the two dedicated helpers equals the media strip.
         const media = stripAttachments(stripPhotos(richTree()));
         expect(alice(media).photo).toBeUndefined();
-        expect(alice(media).attachments).toBeUndefined();
+        expect(aliceMedia(media)).toHaveLength(0);
         expect(alice(media).notes).toBe('Kept bees.');
     });
 
@@ -224,13 +228,13 @@ describe('source images chosen apart from attachments', () => {
     it('none drops the excerpts but keeps attachments', () => {
         const out = applyContentOptions(withExcerpt(), { ...ALL_CONTENT, sourceImages: 'none', researchExcerpts: loaded });
         expect(out.sources?.s1.excerpts).toBeUndefined();
-        expect(alice(out).attachments).toHaveLength(1);
+        expect(aliceMedia(out)).toHaveLength(1);
     });
 
     it('app writes the loaded images as the source\'s own, without duplicates', () => {
         const out = applyContentOptions(withExcerpt(), { ...ALL_CONTENT, attachments: false, sourceImages: 'app', researchExcerpts: loaded });
         expect(out.sources?.s1.excerpts?.map(e => e.clip)).toEqual(['c1', 'c2']);
-        expect(alice(out).attachments).toBeUndefined();
+        expect(aliceMedia(out)).toHaveLength(0);
     });
 
     it('without the choice, attachments carry the excerpts as before', () => {

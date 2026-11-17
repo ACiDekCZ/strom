@@ -7,6 +7,7 @@
 
 import { Person, StromData, personSourceIds, partnershipSourceIds } from './types.js';
 import { dataUrlByteSize, stripPhotos } from './photo.js';
+import { allMedia, personMedia as personMediaOf } from './media.js';
 
 /** Longest edge (px) an attached image is downscaled to. */
 export const ATTACHMENT_MAX_SIDE = 1600;
@@ -91,9 +92,7 @@ export function totalExcerptBytes(data: StromData): number {
  */
 export function totalAttachmentBytes(data: StromData): number {
     let total = totalExcerptBytes(data);
-    for (const person of Object.values(data.persons)) {
-        for (const att of person.attachments ?? []) total += att.sizeBytes || dataUrlByteSize(att.dataUrl);
-    }
+    for (const att of allMedia(data)) total += att.sizeBytes || dataUrlByteSize(att.dataUrl);
     return total;
 }
 
@@ -111,7 +110,7 @@ export function personMedia(person: Person, data: StromData): PersonMedia {
         photoBytes: person.photo ? dataUrlByteSize(person.photo) : 0,
         attachments: 0, attachmentBytes: 0, excerpts: 0, excerptBytes: 0,
     };
-    for (const att of person.attachments ?? []) {
+    for (const att of personMediaOf(data, person.id)) {
         out.attachments++;
         out.attachmentBytes += att.sizeBytes || dataUrlByteSize(att.dataUrl);
     }
@@ -150,9 +149,7 @@ export function stripExcerpts(data: StromData): StromData {
  */
 export function stripAttachments(data: StromData): StromData {
     const copy = structuredClone(data);
-    for (const person of Object.values(copy.persons)) {
-        delete person.attachments;
-    }
+    delete copy.media;
     dropExcerptsInPlace(copy);
     return copy;
 }
@@ -160,9 +157,7 @@ export function stripAttachments(data: StromData): StromData {
 /** Deep copy with all images (photos, attachments, excerpts) removed, for lean files. */
 export function stripMedia(data: StromData): StromData {
     const copy = stripPhotos(data);
-    for (const person of Object.values(copy.persons)) {
-        delete person.attachments;
-    }
+    delete copy.media;
     dropExcerptsInPlace(copy);
     return copy;
 }
@@ -183,10 +178,10 @@ export function countImages(data: StromData): ImageCount {
             out.photos++;
             out.bytes += dataUrlByteSize(person.photo);
         }
-        for (const att of person.attachments ?? []) {
-            out.attachments++;
-            out.bytes += att.sizeBytes || dataUrlByteSize(att.dataUrl);
-        }
+    }
+    for (const att of allMedia(data)) {
+        out.attachments++;
+        out.bytes += att.sizeBytes || dataUrlByteSize(att.dataUrl);
     }
     // The couples' photos count with the photos (spec 107); a portrait's
     // original is an attachment already.

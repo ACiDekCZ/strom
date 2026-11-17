@@ -66,7 +66,7 @@ async function choose(page: Page, png: Buffer, name = 'zbyhoslav.png'): Promise<
 
 const stored = (page: Page) => page.evaluate(() => {
     const p = window.Strom.DataManager.getAllPersons().find(x => x.firstName === 'Zbyhoslav')!;
-    return { photo: p.photo, source: p.photoSource, attachments: p.attachments ?? [] };
+    return { photo: p.photo, source: p.photoSource, attachments: window.Strom.DataManager.personMedia(p.id) };
 });
 
 test.describe('portrait editor (desktop)', () => {

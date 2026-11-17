@@ -42,7 +42,7 @@ const treeDataCache = new Map<string, { stamp: string; name: string; data: impor
 function leanForMatching(data: import('./types.js').StromData): import('./types.js').StromData {
     const persons: import('./types.js').StromData['persons'] = {};
     for (const [id, p] of Object.entries(data.persons ?? {})) {
-        const { photo, photoOriginalName, attachments, story, ...rest } = p;
+        const { photo, photoOriginalName, story, ...rest } = p;
         persons[id as keyof typeof persons] = rest;
     }
     return { persons, partnerships: data.partnerships ?? {} };

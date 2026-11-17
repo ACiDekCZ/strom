@@ -12,7 +12,8 @@
  * tree-manager records them, the UI asks these functions.
  */
 
-import type { StromData } from './types.js';
+import { hasTreeMedia, personFilesAnyVersion } from './media.js';
+import type { PersonId, StromData } from './types.js';
 
 /**
  * Does a tree's research keep its portraits, couples' photos and attachments,
@@ -61,7 +62,7 @@ export function browserMediaFingerprint(data: StromData): string {
         const p = data.persons[id as keyof typeof data.persons];
         if (!p) continue;
         // An attachment that is only its original (no preview) lives in the research, not here.
-        const atts = (p.attachments ?? []).filter(a => a.dataUrl);
+        const atts = personFilesAnyVersion(data, id as PersonId).filter(a => a.dataUrl);
         if (!p.photo && atts.length === 0) continue;
         parts.push(`p${id}:${token(p.photo)}:${atts.map(a => `${a.id}=${token(a.dataUrl)}`).join(',')}`);
     }
@@ -80,7 +81,11 @@ export function browserMediaFingerprint(data: StromData): string {
  * hands to its archive (spec 108 K2.7).
  */
 export function treeHasAppMedia(data: StromData): boolean {
-    for (const p of Object.values(data.persons ?? {})) if (p?.photo || p?.attachments?.length) return true;
+    if (hasTreeMedia(data)) return true;
+    for (const p of Object.values(data.persons ?? {})) {
+        const legacy = (p as { attachments?: unknown } | undefined)?.attachments;
+        if (p?.photo || (Array.isArray(legacy) && legacy.length > 0)) return true;
+    }
     for (const u of Object.values(data.partnerships ?? {})) if (u?.photo) return true;
     return false;
 }

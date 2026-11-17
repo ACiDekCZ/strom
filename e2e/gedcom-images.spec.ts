@@ -111,9 +111,9 @@ async function readBack(page: Page, first: string, last: string) {
         return {
             photo: p.photo ?? null,
             photoName: p.photoOriginalName ?? null,
-            attachments: (p.attachments ?? []).map(a => ({
+            attachments: window.Strom.DataManager.personMedia(p.id).map(a => ({
                 name: a.name, mimeType: a.mimeType, dataUrl: a.dataUrl, note: a.note ?? null,
-                linkedToSource: !!src && a.sourceId === src.id,
+                linkedToSource: !!src && a.places.some(pl => 'sourceId' in pl && pl.sourceId === src.id),
             })),
             source: src ? {
                 title: src.title, reference: src.reference ?? null, transcript: src.transcript ?? null,

@@ -55,17 +55,20 @@ test('a 3.8.1 (v10) JSON tree imports with everything kept and is stored as the 
     const stored = await page.evaluate(async () => {
         const id = window.Strom.TreeManager.getActiveTreeId()!;
         const d = await window.Strom.TreeManager.getTreeData(id);
-        const p1 = d!.persons['p1' as never] as { photo?: string; events?: unknown[]; attachments?: unknown[]; birthSourceIds?: string[] };
+        const p1 = d!.persons['p1' as never] as { photo?: string; events?: unknown[]; birthSourceIds?: string[] };
+        // Since data v24 the tree's files are records of `media`, each with its places.
+        const p1Files = Object.values(d!.media ?? {}).filter(a => a.places.some(pl => 'personId' in pl && pl.personId === 'p1'));
         const u1 = d!.partnerships['u1' as never] as { events?: unknown[]; sourceIds?: string[] };
         return {
             version: d!.version, persons: Object.keys(d!.persons).length, partnerships: Object.keys(d!.partnerships).length,
-            photo: !!p1.photo, events: p1.events?.length, attachments: p1.attachments?.length, birthSources: p1.birthSourceIds,
+            photo: !!p1.photo, events: p1.events?.length, attachments: p1Files.length,
+            attachmentSources: p1Files.flatMap(a => a.places.flatMap(pl => 'sourceId' in pl ? [pl.sourceId] : [])), birthSources: p1.birthSourceIds,
             coupleEvents: u1.events?.length, coupleSources: u1.sourceIds,
             excerpts: d!.sources?.s1?.excerpts?.length, transcript: d!.sources?.s1?.transcript,
         };
     });
     expect(stored).toEqual({
-        version: 23, persons: 3, partnerships: 1, photo: true, events: 1, attachments: 1, birthSources: ['s1'],
+        version: 24, persons: 3, partnerships: 1, photo: true, events: 1, attachments: 1, attachmentSources: ['s1'], birthSources: ['s1'],
         coupleEvents: 1, coupleSources: ['s1'], excerpts: 1, transcript: 'Jan a Marie oddani',
     });
     await expect(page.locator('.person-card').first()).toBeVisible();
@@ -80,7 +83,7 @@ test('newer data embedded in an HTML file opens read-only, its import disabled',
 
     const modal = page.locator('#newer-version-viewmode-modal');
     await expect(modal).toBeVisible();
-    await expect(modal.locator('#viewmode-your-version')).toHaveText('23');
+    await expect(modal.locator('#viewmode-your-version')).toHaveText('24');
     await expect(modal.locator('#viewmode-data-version')).toHaveText('99');
     await modal.getByRole('button', { name: 'View only (read-only)' }).click();
 

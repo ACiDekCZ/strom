@@ -16,6 +16,7 @@ import { extractSubtree } from '../subtree.js';
 import { StorageManager } from '../storage.js';
 import { StromData, Person, Partnership, PersonId, PartnershipId, Gender } from '../types.js';
 import { strings } from '../strings.js';
+import { addPersonMedia, personMedia } from '../media.js';
 
 // ---------- helpers ----------
 
@@ -169,7 +170,7 @@ describe('V15: merging the same GEDCOM twice does not double its content', () =>
         const jan = byFirst(d, 'Jan');
         expect(jan.events?.filter(e => e.type === 'baptism')).toHaveLength(1);
         expect(jan.events?.filter(e => e.type === 'occupation')).toHaveLength(1);
-        expect(jan.attachments).toHaveLength(1);
+        expect(personMedia(d, jan.id)).toHaveLength(1);
         expect(Object.keys(d.sources ?? {})).toHaveLength(1);
         const srcId = Object.keys(d.sources!)[0];
         expect(jan.events?.find(e => e.type === 'baptism')?.sourceIds).toEqual([srcId]);
@@ -434,7 +435,7 @@ describe('embedded media types', () => {
         ].join('\n')));
         const jan = byFirst(r.data, 'Jan');
         expect(jan.photo).toBe('data:image/png;base64,iVBORw==');
-        expect(jan.attachments?.map(a => a.mimeType)).toEqual(['application/pdf']);
+        expect(personMedia(r.data, jan.id).map(a => a.mimeType)).toEqual(['application/pdf']);
         expect(r.stats.skippedMedia).toBe(2);
     });
 });
@@ -515,8 +516,8 @@ describe('export -> import round-trip', () => {
     it('S16: content options leave the embedded media out', () => {
         const d = tree([P('a', 'Jan', 'Novák', {
             photo: 'data:image/jpeg;base64,AAAA',
-            attachments: [{ id: 'x', name: 'scan', mimeType: 'image/png', dataUrl: 'data:image/png;base64,BBBB', sizeBytes: 3 }],
         })]);
+        addPersonMedia(d, 'a' as PersonId, { id: 'x', name: 'scan', mimeType: 'image/png', dataUrl: 'data:image/png;base64,BBBB', sizeBytes: 3 });
         const full = exportToGedcom(d).content;
         expect(full).toContain('base64');
         const lean = exportToGedcom(d, undefined, {

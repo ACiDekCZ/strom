@@ -30,7 +30,7 @@
 
 import {
     StromData, Person, Partnership, PersonId, PartnershipId, Gender, PlaceGeo, Source, LifeEvent,
-    EventParticipant, toPersonId, toPartnershipId, STROM_DATA_VERSION,
+    EventParticipant, Attachment, toPersonId, toPartnershipId, STROM_DATA_VERSION,
 } from './types.js';
 import { strings } from './strings.js';
 import { localAge } from './recorded-age.js';
@@ -81,6 +81,7 @@ class DemoFamily {
     readonly persons: Record<PersonId, Person> = {};
     readonly partnerships: Record<PartnershipId, Partnership> = {};
     readonly sources: Record<string, Source> = {};
+    readonly media: Record<string, Attachment> = {};
     private seq = 0;
 
     private next(prefix: string): string {
@@ -149,6 +150,11 @@ class DemoFamily {
         return id;
     }
 
+    /** A file of the tree (data v24: StromData.media) at its places. */
+    file(att: Attachment): void {
+        this.media[att.id] = att;
+    }
+
     build(): StromData {
         const places: Record<string, PlaceGeo> = {};
         for (const [name, geo] of Object.entries(PLACES)) places[placeKey(name)] = geo;
@@ -157,6 +163,7 @@ class DemoFamily {
             persons: this.persons,
             partnerships: this.partnerships,
             sources: this.sources,
+            ...(Object.keys(this.media).length ? { media: this.media } : {}),
             places,
             surnameVariants: [['Berg', 'Bergh']],
         };
@@ -264,13 +271,14 @@ export function getDemoTree(images?: DemoImageMaker): StromData {
             { type: 'naturalization', date: '1874', place: 'Minneapolis' },
             { type: 'burial', date: '1899-11-05', place: 'Minneapolis' },
         ],
-        ...(baptismImage && baptismPage ? {
-            attachments: [{
-                id: baptismPage, name: t.pageName('Voss', 112), mimeType: 'image/jpeg',
-                dataUrl: baptismImage.page.dataUrl, sizeBytes: baptismImage.page.sizeBytes, sourceId: srcBaptism,
-            }],
-        } : {}),
     });
+    if (baptismImage && baptismPage) {
+        f.file({
+            id: baptismPage, name: t.pageName('Voss', 112), mimeType: 'image/jpeg',
+            dataUrl: baptismImage.page.dataUrl, sizeBytes: baptismImage.page.sizeBytes,
+            places: [{ personId: johan }, { sourceId: srcBaptism }],
+        });
+    }
     // Karl stayed behind and moved to the coast.
     const karl = f.person('karl', 'Karl', 'Berg', 'male', {
         birthDate: '1829-05', birthPlace: 'Voss', deathDate: '1915', deathPlace: 'Bergen',

@@ -82,7 +82,7 @@ export const attachmentsMethods = uiModule({
         const person = DataManager.getPerson(this.currentId);
         if (!person) return;
 
-        const attachments = person.attachments ?? [];
+        const attachments = DataManager.personMedia(person.id);
         const locked = DataManager.isPersonLocked(this.currentId);
         // The attachment the portrait is cut from: its tag, and no "As portrait…" (spec 107 §4).
         const sourceId = this.portraitSourceAttachmentShown(person);
@@ -270,7 +270,7 @@ export const attachmentsMethods = uiModule({
     /** Image → fullscreen overlay; PDF → new tab via an object URL. */
     previewAttachment(attachmentId: string): void {
         if (!this.currentId) return;
-        const att = DataManager.getPerson(this.currentId)?.attachments?.find(a => a.id === attachmentId);
+        const att = DataManager.personMedia(this.currentId).find(a => a.id === attachmentId);
         if (!att) return;
         if (isImage(att)) {
             const sha = att.original?.sha256;
@@ -293,7 +293,7 @@ export const attachmentsMethods = uiModule({
     /** "Full quality" on an attachment's row: here (from the bridge) or in the research. */
     openAttachmentFullQuality(attachmentId: string): void {
         if (!this.currentId) return;
-        const att = DataManager.getPerson(this.currentId)?.attachments?.find(a => a.id === attachmentId);
+        const att = DataManager.personMedia(this.currentId).find(a => a.id === attachmentId);
         const sha = att?.original?.sha256;
         if (!att || !sha) return;
         this.openFullQuality(sha, att.original?.mimeType ?? att.mimeType, att.original?.bytes ?? 0, isImage(att) && !att.originalOnly ? att.dataUrl : null);
@@ -468,7 +468,7 @@ export const attachmentsMethods = uiModule({
         // Name the file — a list of scans all confirming "Delete this
         // attachment?" tells you nothing about which one you hit.
         const person = DataManager.getPerson(personId);
-        const att = person?.attachments?.find(a => a.id === attachmentId);
+        const att = person ? DataManager.personMedia(person.id).find(a => a.id === attachmentId) : undefined;
         if (!att) return;
         const d = strings.danger;
         const m = strings.media;

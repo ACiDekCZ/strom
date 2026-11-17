@@ -53,10 +53,10 @@ export function portraitOriginOf(source: PortraitSource): PortraitOrigin | null 
 }
 
 /** The image an origin names, when it is still there and can be shown (not an original kept only by the research). */
-export function portraitOriginImage(person: Pick<Person, 'attachments'>, origin: PortraitOrigin | null): string | null {
+export function portraitOriginImage(person: Pick<Person, 'id'>, origin: PortraitOrigin | null): string | null {
     if (!origin) return null;
     if ('attachmentId' in origin) {
-        const att = person.attachments?.find(a => a.id === origin.attachmentId);
+        const att = DataManager.personMedia(person.id).find(a => a.id === origin.attachmentId);
         return att && !att.originalOnly && att.mimeType.startsWith('image/') && att.dataUrl ? att.dataUrl : null;
     }
     return DataManager.getPartnership(origin.partnershipId)?.photo || null;
@@ -98,7 +98,7 @@ export const portraitActionsMethods = uiModule({
      * that attachment is in the tree.
      */
     async sendPortraitOriginal(personId: PersonId, original: MediaOriginal, file: Blob): Promise<void> {
-        if (!DataManager.getPerson(personId)?.attachments?.some(a => a.original?.sha256 === original.sha256)) return;
+        if (!DataManager.personMedia(personId).some(a => a.original?.sha256 === original.sha256)) return;
         const outcome = await this.queueOriginal(original, file, { personId });
         this.noteOriginalOutcome(outcome, file.size, { personId });
         this.renderAttachmentsList();

@@ -20,6 +20,7 @@ import {
     generateLifeEventId,
     partnershipParticipants,
     Attachment,
+    MediaPlace,
     Source,
     generatePersonId,
     generatePartnershipId,
@@ -27,6 +28,7 @@ import {
     ImportRecord,
     PortraitSource,
 } from '../types.js';
+import { allMedia, findMedia, personMedia, putMedia, samePlace } from '../media.js';
 import { dropDanglingPortraitSources } from '../photo.js';
 import { importProgramName } from '../import-next.js';
 import { addSurnameGroup, surnameKey } from '../surnames.js';
@@ -473,6 +475,8 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
 
         // When this merge brings people into the tree (spec 084 §8).
         const mergedAt = new Date().toISOString();
+        /** Incoming persons whose data came into the tree (merged or added): their files come along. */
+        const carriedPersons = new Set<PersonId>();
         // Process confirmed matches - merge person data
         for (const match of state.matches) {
             const decision = state.decisions.get(match.incomingId);
@@ -482,6 +486,7 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
                 if (existingPerson) {
                     // Merge data according to conflict resolutions
                     mergePersonData(existingPerson, shared(match.incomingPerson), match.conflicts, mapping.persons, state.incomingData.persons);
+                    carriedPersons.add(match.incomingId);
                     carryMergedImports(existingPerson, state.existingData.persons[match.existingId], match.incomingPerson, importMap);
                     keepEarlierAddedAt(existingPerson, match.incomingPerson);
                     mergedCount++;
@@ -490,6 +495,7 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
                 const existingPerson = mergedData.persons[decision.targetId];
                 if (existingPerson) {
                     mergePersonData(existingPerson, shared(match.incomingPerson), match.conflicts, mapping.persons, state.incomingData.persons);
+                    carriedPersons.add(match.incomingId);
                     carryMergedImports(existingPerson, state.existingData.persons[decision.targetId], match.incomingPerson, importMap);
                     keepEarlierAddedAt(existingPerson, match.incomingPerson);
                     mergedCount++;
@@ -506,6 +512,7 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
             const existingPerson = mergedData.persons[existingId];
             if (!existingPerson?.isPlaceholder) continue;
             mergePersonData(existingPerson, shared(incoming), [], mapping.persons, state.incomingData.persons);
+            carriedPersons.add(incomingId);
             carryMergedImports(existingPerson, state.existingData.persons[existingId], incoming, importMap);
         }
 
@@ -539,6 +546,7 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
             if (!incoming) continue;
 
             const newId = mapping.persons.get(incomingId)!;
+            carriedPersons.add(incomingId);
 
             // Create new person with remapped IDs
             const newPerson: Person = {
@@ -721,6 +729,8 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
             }
         }
 
+        // The incoming tree's files at the persons, couples and sources that came along (data v24).
+        carryIncomingMedia(mergedData, state.incomingData, mapping.persons, carriedPersons, unionTarget, sourceRemap);
         // The original of each portrait that came from the incoming tree (spec 107).
         carryPortraitSources(mergedData, state, mapping.persons, unionTarget);
         carryAlsoChildOf(mergedData, state, mapping, unionTarget);
@@ -1288,8 +1298,8 @@ function carryPortraitSources(
         if (!src || !incoming.photo || incoming.photo !== target.photo) continue;
         const next: PortraitSource = structuredClone(src);
         if (src.attachmentId) {
-            const att = incoming.attachments?.find(a => a.id === src.attachmentId);
-            const kept = att && target.attachments?.find(a => a.dataUrl === att.dataUrl && !a.originalOnly);
+            const att = findMedia(state.incomingData, src.attachmentId);
+            const kept = att && personMedia(data, target.id).find(a => a.dataUrl === att.dataUrl && !a.originalOnly);
             if (!kept) continue;
             next.attachmentId = kept.id;
         } else if (src.partnershipId) {
@@ -1304,14 +1314,54 @@ function carryPortraitSources(
 }
 
 /**
+ * The incoming tree's files (data v24) at what came into the tree: a place at
+ * a merged or added person, a couple that came along or a source (the kept
+ * one when deduplicated). A file the tree already holds (same id, or the same
+ * bytes) takes the places; otherwise it comes as its own record. Places at
+ * what stayed behind go.
+ */
+function carryIncomingMedia(
+    data: StromData,
+    incoming: StromData,
+    personMap: ReadonlyMap<PersonId, PersonId>,
+    carriedPersons: ReadonlySet<PersonId>,
+    unionTarget: ReadonlyMap<PartnershipId, PartnershipId>,
+    sourceRemap: ReadonlyMap<string, string>,
+): void {
+    for (const att of allMedia(incoming)) {
+        const places: MediaPlace[] = [];
+        for (const pl of att.places) {
+            const by = pl.by ? { by: pl.by } : {};
+            if ('personId' in pl) {
+                const target = carriedPersons.has(pl.personId) ? personMap.get(pl.personId) : undefined;
+                if (target && data.persons[target]) places.push({ ...pl, personId: target, ...by });
+            } else if ('partnershipId' in pl) {
+                const target = unionTarget.get(pl.partnershipId);
+                if (target && data.partnerships[target]) places.push({ ...pl, partnershipId: target, ...by });
+            } else {
+                const target = sourceRemap.get(pl.sourceId) ?? pl.sourceId;
+                if (data.sources?.[target]) places.push({ ...pl, sourceId: target, ...by });
+            }
+        }
+        if (places.length === 0) continue;
+        const same = allMedia(data).find(a => sameAttachment(a, att));
+        if (same) {
+            for (const pl of places) if (!same.places.some(o => samePlace(o, pl))) same.places.push(pl);
+            continue;
+        }
+        const copy: Attachment = structuredClone(att);
+        delete copy.removed;
+        copy.places = places;
+        putMedia(data, copy);
+    }
+}
+
+/**
  * Excerpts whose full-page attachment did not survive the merge (dropped as a
  * duplicate of the same bytes under another id) lose only their re-crop link.
  */
 function unlinkOrphanExcerpts(data: StromData): void {
-    const attachmentIds = new Set<string>();
-    for (const person of Object.values(data.persons)) {
-        for (const att of person.attachments ?? []) attachmentIds.add(att.id);
-    }
+    const attachmentIds = new Set(allMedia(data).map(a => a.id));
     for (const src of Object.values(data.sources ?? {})) {
         for (const exc of src.excerpts ?? []) {
             if (exc.fromAttachmentId && !attachmentIds.has(exc.fromAttachmentId)) {
@@ -1331,10 +1381,11 @@ function unlinkOrphanExcerpts(data: StromData): void {
 function remapSourceReferences(data: StromData, remap: Map<string, string>, incoming: Record<string, Source> | undefined): void {
     if (remap.size === 0) return;
     remapCitations(data, remap, incoming);
+    for (const att of allMedia(data)) {
+        const places = att.places.map(pl => ('sourceId' in pl && remap.has(pl.sourceId) ? { ...pl, sourceId: remap.get(pl.sourceId)! } : pl));
+        att.places = places.filter((pl, i) => places.findIndex(o => samePlace(o, pl)) === i);
+    }
     for (const person of Object.values(data.persons)) {
-        for (const att of person.attachments ?? []) {
-            if (att.sourceId && remap.has(att.sourceId)) att.sourceId = remap.get(att.sourceId);
-        }
         rewriteStorySources(person.story, ids => ids.map(id => remap.get(id) ?? id));
     }
     for (const partnership of Object.values(data.partnerships)) {
@@ -1646,16 +1697,6 @@ export function mergePersonData(
                     existing.parentRelTypes[pid as PersonId] = type;
                 }
             }
-        }
-    }
-
-    // Merge attachments: union by id, keeping the existing one on id clash.
-    // The same document under a fresh id (identical data URL) is not added twice.
-    if (incoming.attachments && incoming.attachments.length > 0) {
-        if (!existing.attachments) existing.attachments = [];
-        for (const att of incoming.attachments) {
-            if (existing.attachments.some(a => sameAttachment(a, att))) continue;
-            existing.attachments.push({ ...att });
         }
     }
 

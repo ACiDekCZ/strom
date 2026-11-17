@@ -7,6 +7,7 @@ import { StromData, Person, Partnership, PersonId, PartnershipId, Source, LifeEv
 import { parseFlexDate, FlexDate, ageRangeBetween, approxAgeBetween } from './dates.js';
 import { dataUrlImageSize, isPortraitRegionSquare, isPortraitSourceShape } from './photo.js';
 import { collectPlaces } from './places.js';
+import { allMedia, filterMedia, mediaSourceId, personMedia, personMediaById } from './media.js';
 import { godparentLeads } from './godparents.js';
 import { strings } from './strings.js';
 import { shownNameOrEmpty } from './person-name.js';
@@ -892,16 +893,12 @@ export function stripUnsafeMediaDataUrls(data: StromData): number {
             delete person.photo;
             dropped++;
         }
-        if (Array.isArray(person.attachments)) {
-            const kept = person.attachments.filter(att =>
-                att && typeof att.dataUrl === 'string' && (isSafeAttachmentDataUrl(att.dataUrl) || isOriginalOnlyAttachment(att)));
-            dropped += person.attachments.length - kept.length;
-            // Held as an original only: the page icon as its data, so a 3.8.x app keeps it (see ORIGINAL_ONLY_DATA_URL).
-            for (const att of kept) if (att.dataUrl === '' && isOriginalOnlyAttachment(att)) att.dataUrl = ORIGINAL_ONLY_DATA_URL;
-            if (kept.length > 0) person.attachments = kept;
-            else delete person.attachments;
-        }
     }
+    // The tree's files (data v24): an image or a PDF, or a file held as its original only.
+    dropped += filterMedia(data, att =>
+        !!att && typeof att.dataUrl === 'string' && (isSafeAttachmentDataUrl(att.dataUrl) || isOriginalOnlyAttachment(att)));
+    // Held as an original only: the page icon as its data, so an older app keeps it (see ORIGINAL_ONLY_DATA_URL).
+    for (const att of allMedia(data)) if (att.dataUrl === '' && isOriginalOnlyAttachment(att)) att.dataUrl = ORIGINAL_ONLY_DATA_URL;
     // The couple's photo (spec 107): the same rule as a person's.
     for (const union of Object.values(data.partnerships ?? {}) as Partnership[]) {
         if (!union || typeof union !== 'object') continue;
@@ -948,7 +945,7 @@ export function cleanPortraitSources(data: StromData): number {
         let image: string | undefined;
         if (person.photo && isPortraitSourceShape(src) && isValidRegion(src.region)) {
             if (src.attachmentId) {
-                const att = person.attachments?.find(a => a.id === src.attachmentId);
+                const att = personMediaById(data, person.id, src.attachmentId);
                 if (att && !isOriginalOnlyAttachment(att) && SAFE_IMAGE_DATA_URL.test(att.dataUrl)) image = att.dataUrl;
             } else if (src.partnershipId) {
                 const union = data.partnerships?.[src.partnershipId];
@@ -1202,8 +1199,9 @@ function checkSourceIntegrity(data: StromData, addIssue: AddIssue): void {
                     [personId], undefined, `${label}: ${id}`);
             }
         }
-        for (const att of person.attachments ?? []) {
-            if (att.sourceId && !sourceIds.has(att.sourceId)) {
+        for (const att of personMedia(data, personId)) {
+            const attSource = mediaSourceId(att);
+            if (attSource && !sourceIds.has(attSource)) {
                 addIssue('warning', 'citationMissingSource',
                     `${name}: attachment links a source that no longer exists`,
                     [personId], undefined, att.name);

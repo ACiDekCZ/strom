@@ -26,6 +26,7 @@
  *   evidence pill with "Back to overview", which reopens it where it was).
  */
 
+import { treeMedia } from '../media.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
@@ -1883,7 +1884,8 @@ export const treeOverviewMethods = uiModule({
             const persons = Object.values(data.persons).filter(p => !p.isPlaceholder);
             const year = new Date().getFullYear();
             const bounds = inferBirthUpperBounds(data);
-            let deceased = 0, deceasedWithDeathDate = 0, photos = 0, events = 0, attachments = 0;
+            let deceased = 0, deceasedWithDeathDate = 0, photos = 0, events = 0;
+            const attachments = treeMedia(data).length;
             for (const p of persons) {
                 if (!isLivingPerson(p, year, bounds)) {
                     deceased++;
@@ -1891,7 +1893,6 @@ export const treeOverviewMethods = uiModule({
                 }
                 if (p.photo) photos++;
                 events += p.events?.length ?? 0;
-                attachments += p.attachments?.length ?? 0;
             }
             // A couple's photo is a photo too (spec 107).
             for (const u of Object.values(data.partnerships)) if (u.photo) photos++;

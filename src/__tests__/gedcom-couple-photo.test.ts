@@ -10,6 +10,7 @@ import { describe, it, expect } from 'vitest';
 import { parseGedcom, convertToStrom, GedcomImportOrigin } from '../ged-parser.js';
 import { exportToGedcom } from '../ged-exporter.js';
 import { migrateData } from '../data.js';
+import { personMedia } from '../media.js';
 import { applyLivingPrivacy, CONTENT_PRESETS } from '../privacy.js';
 import { attachGedcomMediaFile, gedcomMediaAttachedText, GedcomMediaReaders } from '../ged-media-attach.js';
 import { Partnership, Person, PersonId, StromData } from '../types.js';
@@ -315,10 +316,10 @@ describe('connecting a file to the import (attachGedcomMediaFile)', () => {
         expect(he.photo).toBe(PORTRAIT_JPEG);
         expect(he.photoDate).toBe('1920');
         expect(await attachGedcomMediaFile(data, ref, jpegFile('c.jpg'), fakeReaders(OTHER_JPEG))).toBe('attachment');
-        expect(he.attachments?.[0]).toMatchObject({ name: 'Bratrolib 1920', dataUrl: OTHER_JPEG, date: '1920' });
+        expect(personMedia(data, he.id)[0]).toMatchObject({ name: 'Bratrolib 1920', dataUrl: OTHER_JPEG, date: '1920' });
         const pdf = new File([new Uint8Array([0x25, 0x50, 0x44, 0x46])], 'd.pdf', { type: 'application/pdf' });
         expect(await attachGedcomMediaFile(data, ref, pdf, fakeReaders(OTHER_JPEG))).toBe('attachment');
-        expect(he.attachments).toHaveLength(2);
+        expect(personMedia(data, he.id)).toHaveLength(2);
     });
 
     it('the sentence after connecting splits the count only when a couple’s photo came in', () => {

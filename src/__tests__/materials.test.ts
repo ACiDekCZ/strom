@@ -33,10 +33,12 @@ function list(files: MaterialFile[], extra: Partial<MaterialList> = {}): Materia
 }
 
 function att(id: string, init: Partial<Attachment> = {}): Attachment {
-    return { id, name: `${id}.jpg`, mimeType: 'image/jpeg', dataUrl: 'data:image/jpeg;base64,AA==', sizeBytes: 10, ...init };
+    return { id, name: `${id}.jpg`, mimeType: 'image/jpeg', dataUrl: 'data:image/jpeg;base64,AA==', sizeBytes: 10, places: [], ...init };
 }
 
-const caps = (over: Partial<MaterialCaps> = {}): MaterialCaps => ({ list: true, assign: true, thumb: true, bridgeUp: true, ...over });
+const caps = (over: Partial<MaterialCaps> = {}): MaterialCaps => ({
+    list: true, assign: true, thumb: true, bridgeUp: true, links: false, edit: false, uses: false, sort: false, mediaApp: false, ...over,
+});
 
 /** A fetch answering from a queue of [status, body, headers]. */
 function fakeFetch(answers: [number, unknown, Record<string, string>?][]) {
@@ -237,7 +239,9 @@ describe('gates', () => {
         expect(matThumb(env)).toBe(true);
         expect(matThumb({ ...env, bridgeUp: false })).toBe(false);
         expect(matThumb({ ...env, features: ['material.list', 'material.assign'] })).toBe(false);
-        expect(materialCaps({ ...env, onComputer: false })).toEqual({ list: false, assign: false, thumb: false, bridgeUp: true });
+        expect(materialCaps({ ...env, onComputer: false })).toEqual({
+            list: false, assign: false, thumb: false, bridgeUp: true, links: false, edit: false, uses: false, sort: false, mediaApp: false,
+        });
     });
 });
 

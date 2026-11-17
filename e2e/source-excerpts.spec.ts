@@ -248,7 +248,7 @@ test.describe('the excerpt block in the editor', () => {
             const d = window.Strom.DataManager.getData();
             const person = Object.values(d.persons as Record<string, any>)[0];
             const src = Object.values(d.sources as Record<string, any>)[0];
-            return { atts: person.attachments ?? [], exc: src.excerpts[0], cited: person.sourceIds };
+            return { atts: window.Strom.DataManager.personMedia(person.id), exc: src.excerpts[0], cited: person.sourceIds };
         });
         expect(state.atts).toHaveLength(1);
         expect(state.exc.fromAttachmentId).toBe(state.atts[0].id);

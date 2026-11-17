@@ -11,6 +11,7 @@ import { AuditLogManager } from '../audit-log.js';
 import { UndoManager } from '../undo.js';
 import { StromData, PersonId, TreeId, NewPersonData, Gender, Person, Source, LifeEvent } from '../types.js';
 import { applyLivingPrivacy } from '../privacy.js';
+import { addPersonMedia, mediaSourceId } from '../media.js';
 
 const TREE = 'sources-test-tree' as TreeId;
 
@@ -129,15 +130,13 @@ describe('removing a source clears attachment links', () => {
         const a = DataManager.createPerson(personData('A'));
         const src = DataManager.addSource({ title: 'Scan source' })!;
         const keep = DataManager.addSource({ title: 'Other' })!;
-        const p = DataManager.getPerson(a.id)!;
-        p.attachments = [
-            { id: 'x1', name: 'a.jpg', mimeType: 'image/jpeg', dataUrl: 'data:image/jpeg;base64,AA==', sizeBytes: 1, sourceId: src.id },
-            { id: 'x2', name: 'b.jpg', mimeType: 'image/jpeg', dataUrl: 'data:image/jpeg;base64,AA==', sizeBytes: 1, sourceId: keep.id },
-        ];
+        const data = (DataManager as unknown as { data: StromData }).data;
+        addPersonMedia(data, a.id, { id: 'x1', name: 'a.jpg', mimeType: 'image/jpeg', dataUrl: 'data:image/jpeg;base64,AA==', sizeBytes: 1 }, src.id);
+        addPersonMedia(data, a.id, { id: 'x2', name: 'b.jpg', mimeType: 'image/jpeg', dataUrl: 'data:image/jpeg;base64,AA==', sizeBytes: 1 }, keep.id);
         expect(DataManager.removeSource(src.id)).toBe(true);
-        const atts = DataManager.getPerson(a.id)!.attachments!;
-        expect(atts[0].sourceId).toBeUndefined();
-        expect(atts[1].sourceId).toBe(keep.id);
+        const atts = DataManager.personMedia(a.id);
+        expect(mediaSourceId(atts[0])).toBeUndefined();
+        expect(mediaSourceId(atts[1])).toBe(keep.id);
     });
 });
 

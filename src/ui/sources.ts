@@ -1345,8 +1345,7 @@ export const sourcesMethods = uiModule({
                 { width: result.width, height: result.height };
             if (!result.rotated) { extra.fromAttachmentId = page.id; extra.region = result.region; }
             // The page's original in the research: the crop lies on it too.
-            const pageSha = Object.values(DataManager.getData().persons)
-                .flatMap(p => p.attachments ?? []).find(a => a.id === page.id)?.original?.sha256;
+            const pageSha = DataManager.getMedia(page.id)?.original?.sha256;
             if (pageSha && !result.rotated) extra.originalSha = pageSha;
             const exc = excerptFromDataUrl(result.dataUrl, extra);
             if (exc) this.putExcerptDraft({ excerpt: exc }, target);
@@ -1373,11 +1372,7 @@ export const sourcesMethods = uiModule({
     /** The person attachment an excerpt was cut from, while it still exists. */
     attachmentForExcerpt(exc: SourceExcerpt): { id: string; dataUrl: string } | null {
         if (!exc.fromAttachmentId) return null;
-        for (const person of Object.values(DataManager.getData().persons)) {
-            const att = person.attachments?.find(a => a.id === exc.fromAttachmentId);
-            if (att) return att;
-        }
-        return null;
+        return DataManager.getMedia(exc.fromAttachmentId) ?? null;
     },
 
     /** Persons whose attachments the editor may crop from (person, or both partners). */
@@ -1402,7 +1397,7 @@ export const sourcesMethods = uiModule({
     excerptContextPages(): { id: string; dataUrl: string; name: string }[] {
         const out: { id: string; dataUrl: string; name: string }[] = [];
         for (const pid of this.excerptContextPersonIds()) {
-            for (const att of DataManager.getPerson(pid)?.attachments ?? []) {
+            for (const att of DataManager.personMedia(pid)) {
                 if (att.mimeType.startsWith('image/') && !att.originalOnly) out.push(att);
             }
         }

@@ -16,6 +16,7 @@ import { UndoManager } from '../undo.js';
 import { StromData, PersonId, TreeId, Gender, Person } from '../types.js';
 import { validateTreeData, isSafeAttachmentDataUrl, isSafePhotoDataUrl } from '../validation.js';
 import { normalizeDateInput } from '../dates.js';
+import { personMedia } from '../media.js';
 import { newestLifeEvent } from '../events.js';
 
 const TREE = 'review-editing-tree' as TreeId;
@@ -277,7 +278,7 @@ describe('media data URLs', () => {
         });
         const p = data.persons['p1' as PersonId];
         expect(p.photo).toBeUndefined();
-        expect(p.attachments!.map(a => a.id)).toEqual(['a2']);
+        expect(personMedia(data, p.id).map(a => a.id)).toEqual(['a2']);
     });
 });
 

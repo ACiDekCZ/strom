@@ -6,6 +6,7 @@
  * images (research-changes.ts baseCopy).
  */
 
+import { moveLegacyAttachments } from './media.js';
 import { StromData } from './types.js';
 import { normalizeSingleParents } from './single-parent.js';
 import { saveBaseline, loadBaseline, deleteBaselinesForTree } from './share-baselines.js';
@@ -52,7 +53,7 @@ export async function loadResearchCopy(treeId: string, fp?: string): Promise<Str
         // had on load (same ids), so the changes per person do not show those families as weddings.
         // Likewise the sources made only for another QUAY (data v19), joined as in the tree,
         // and the shares of events cleaned as in the tree (data v20).
-        if (base) { normalizeSingleParents(markOlderCopy(base)); joinQualityOnlySources(base); cleanEventShares(base); }
+        if (base) { normalizeSingleParents(markOlderCopy(base)); joinQualityOnlySources(base); cleanEventShares(base); moveLegacyAttachments(base); }
         return base;
     } catch {
         return null;
@@ -72,7 +73,7 @@ export async function saveResearchPrevCopy(treeId: string, data: StromData, fp: 
 export async function loadResearchPrevCopy(treeId: string, fp: string): Promise<StromData | null> {
     try {
         const base = standsFor(await loadBaseline(prevKey(treeId)) as KeptCopy | null, fp);
-        if (base) { normalizeSingleParents(markOlderCopy(base)); joinQualityOnlySources(base); cleanEventShares(base); }
+        if (base) { normalizeSingleParents(markOlderCopy(base)); joinQualityOnlySources(base); cleanEventShares(base); moveLegacyAttachments(base); }
         return base;
     } catch {
         return null;

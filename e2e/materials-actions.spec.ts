@@ -54,7 +54,7 @@ async function attachOriginal(page: Page, name: string, sha: string): Promise<vo
 }
 
 const janAttachments = async (page: Page) => page.evaluate((id) =>
-    window.Strom.DataManager.getPerson(id as never)!.attachments?.length ?? 0, await personId(page, 'Jan'));
+    window.Strom.DataManager.personMedia(id as never).length, await personId(page, 'Jan'));
 
 async function editJanModal(page: Page): Promise<void> {
     const id = await personId(page, 'Jan');

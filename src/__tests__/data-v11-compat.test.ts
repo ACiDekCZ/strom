@@ -12,6 +12,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { migrateData } from '../data.js';
+import { moveLegacyAttachments, personMedia } from '../media.js';
 import { validateJsonImport } from '../merge/validation.js';
 import { buildChangePacket, applyPacketOntoData, applyChangePacket } from '../share-diff.js';
 import { StromData, STROM_DATA_VERSION } from '../types.js';
@@ -19,6 +20,7 @@ import { ORIGINAL_ONLY_DATA_URL } from '../validation.js';
 
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 const SHA = 'ab'.repeat(32);
+const SHA2 = 'cd'.repeat(32);
 
 /** A tree in the shape 3.8.1 stores and exports (data version 10). */
 function v10Tree(): StromData {
@@ -78,7 +80,7 @@ function v11Tree(): StromData {
     d.persons.p1.attachments[0].original = { sha256: SHA, name: 'page.tif', mimeType: 'image/tiff', bytes: 1234, orientation: 6 };
     d.persons.p1.attachments.push({
         id: 'a2', name: 'scan.tif', mimeType: 'image/tiff', dataUrl: ORIGINAL_ONLY_DATA_URL, sizeBytes: 0, originalOnly: true,
-        original: { sha256: SHA, name: 'scan.tif', mimeType: 'image/tiff', bytes: 99999 },
+        original: { sha256: SHA2, name: 'scan.tif', mimeType: 'image/tiff', bytes: 99999 },
     });
     d.partnerships.u1.startStatus = 'probable';
     d.partnerships.u1.endStatus = 'lead';
@@ -86,9 +88,14 @@ function v11Tree(): StromData {
     return d as unknown as StromData;
 }
 
-/** The tree without its version stamp (migrateData does not carry it; saving re-stamps it). */
+/**
+ * The tree without its version stamp (migrateData does not carry it; saving
+ * re-stamps it), with the people's attachments moved into the tree's files
+ * as data v24 holds them (the only transformation since).
+ */
 function unstamped(d: StromData): StromData {
     const { version: _v, ...rest } = structuredClone(d) as StromData & { version?: number };
+    moveLegacyAttachments(rest as StromData);
     return rest as StromData;
 }
 
@@ -107,8 +114,9 @@ describe('data format 10 -> 11', () => {
         // citation of a fact and the events a source records (spec 095), 22
         // for the named lists of people and the date a person was added
         // (spec 084), 23 for the original a portrait was cut from and the
-        // couple's photo (spec 107).
-        expect(STROM_DATA_VERSION).toBe(23);
+        // couple's photo (spec 107), 24 for the tree's files as records with
+        // their places (spec 102).
+        expect(STROM_DATA_VERSION).toBe(24);
         // A raise would stop an older build at its start (VersionError) — the
         // whole app, also an older exported HTML file: never raised again.
         const storage = readFileSync(new URL('../storage.ts', import.meta.url), 'utf8');
@@ -140,8 +148,9 @@ describe('data format 10 -> 11', () => {
     });
 
     it('an only-original attachment and the source marks travel in a change packet between 3.9 users', () => {
-        const base = v10Tree();
-        const current = v11Tree();
+        // Both users hold their trees as loaded (data v24: the files in StromData.media).
+        const base = migrateData(v10Tree());
+        const current = migrateData(v11Tree());
         const packet = buildChangePacket(base, current, { baseExportId: 'exp_test' });
         // The packet carries no data version: an older recipient is not warned.
         expect(JSON.stringify(packet)).not.toContain('"version"');
@@ -153,11 +162,11 @@ describe('data format 10 -> 11', () => {
         const accepted = applyPacketOntoData(structuredClone(base), packet, base);
         const p1 = accepted.persons['p1' as keyof typeof accepted.persons];
         expect(p1.birthStatus).toBe('proven');
-        expect(p1.attachments?.map(a => a.id)).toEqual(['a1', 'a2']);
-        expect(p1.attachments?.[1].originalOnly).toBe(true);
+        expect(personMedia(accepted, p1.id).map(a => a.id)).toEqual(['a1', 'a2']);
+        expect(personMedia(accepted, p1.id)[1].originalOnly).toBe(true);
         expect(accepted.sources?.s1.transcriptVerified).toBe(true);
         expect(accepted.sources?.s1.readBy).toBe('both');
         // ...and a load after accepting keeps the only-original attachment.
-        expect(migrateData(accepted).persons['p1' as keyof typeof accepted.persons].attachments).toHaveLength(2);
+        expect(personMedia(migrateData(accepted), p1.id)).toHaveLength(2);
     });
 });

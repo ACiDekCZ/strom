@@ -13,6 +13,7 @@ import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { carryOverMedia as carryOver, researchMediaKeys, stabilizeIds, MEDIA_APP_FEATURE } from '../research-link.js';
 import { refTreeUrl, resolveImageRefs, findImageRefs, findNamedFileShas, forgetHeldImages, sha256Hex, type ImageResolveDeps } from '../research-image-refs.js';
 import { storedTreeEtag, treeAsksAppMedia } from '../research-tree-file.js';
+import { addPersonMedia, personMedia, mediaSourceId } from '../media.js';
 import type { Attachment, Person, StromData } from '../types.js';
 
 /** A small JPEG; `salt` makes its bytes (and hash) its own. */
@@ -65,7 +66,7 @@ const person = (data: StromData, refn: string): Person => {
     if (!p) throw new Error(`no ${refn}`);
     return p;
 };
-const atts = (data: StromData, refn: string): Attachment[] => person(data, refn).attachments ?? [];
+const atts = (data: StromData, refn: string): Attachment[] => personMedia(data, person(data, refn).id);
 const clone = (d: StromData): StromData => JSON.parse(JSON.stringify(d)) as StromData;
 /** As a load does it: the next version on the previous one's ids first. */
 const carryOverMedia = (next: StromData, previous: StromData, base?: ReadonlySet<string> | null) => carryOver(stabilizeIds(next, previous), previous, base);
@@ -111,7 +112,8 @@ describe('the tree\'s own files read from the file', () => {
         const [scan, big] = atts(data, 'P0001');
         expect(scan).toMatchObject({ name: 'Svatební list', mimeType: 'image/jpeg', dataUrl: urlOf(SCAN), note: 'Opis z fary', date: '12 MAY 1924' });
         expect(scan.original).toMatchObject({ sha256: SCAN_ORIGINAL_SHA, orientation: 6 });
-        expect(scan.sourceId && data.sources?.[scan.sourceId]?.title).toBe('Matriky Lhota u Brodu 1920–1930');
+        const scanSource = mediaSourceId(scan);
+        expect(scanSource && data.sources?.[scanSource]?.title).toBe('Matriky Lhota u Brodu 1920–1930');
         expect(big).toMatchObject({ name: 'kronika.tif', originalOnly: true, original: { sha256: BIG_ORIGINAL_SHA } });
         // No reference ever comes into the tree.
         expect(JSON.stringify(data)).not.toContain('strom-image:');
@@ -189,9 +191,9 @@ describe('the archive is the truth for the files it gave (carryOverMedia with a 
 
     it('a file taken off in the archive (another window) is not kept; one added here since is', () => {
         const { tree, base } = returned();
-        const added: Attachment = { id: 'att_added', name: 'pohlednice.jpg', mimeType: 'image/jpeg', dataUrl: urlOf(jpeg(320, 200, 21)), sizeBytes: 320 };
+        const added: Omit<Attachment, 'places'> = { id: 'att_added', name: 'pohlednice.jpg', mimeType: 'image/jpeg', dataUrl: urlOf(jpeg(320, 200, 21)), sizeBytes: 320 };
         const previous = clone(tree);
-        person(previous, 'P0001').attachments!.push(added);
+        addPersonMedia(previous, person(previous, 'P0001').id, added);
         const next = read(mediaFile({ pdf: false, scan: false }));
         const r = carryOverMedia(next, previous, base);
         const names = atts(r.data, 'P0001').map(a => a.name).sort();
@@ -223,7 +225,7 @@ describe('the archive is the truth for the files it gave (carryOverMedia with a 
     it('lost counts only what the archive did not give: a person gone with files added here', () => {
         const { tree, base } = returned();
         const previous = clone(tree);
-        person(previous, 'P0001').attachments!.push({ id: 'att_x', name: 'x.jpg', mimeType: 'image/jpeg', dataUrl: urlOf(jpeg(30, 30, 31)), sizeBytes: 30 });
+        addPersonMedia(previous, person(previous, 'P0001').id, { id: 'att_x', name: 'x.jpg', mimeType: 'image/jpeg', dataUrl: urlOf(jpeg(30, 30, 31)), sizeBytes: 30 });
         const next = clone(previous);
         const gone = person(next, 'P0001').id;
         delete next.persons[gone];

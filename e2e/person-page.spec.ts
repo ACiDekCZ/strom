@@ -497,7 +497,9 @@ test.describe('desktop', () => {
         await seedFisek(page);
         const pdf = `data:application/pdf;base64,${Buffer.from('%PDF-1.4\n1 0 obj<</Type /Page>>endobj\n%%EOF').toString('base64')}`;
         await page.evaluate((pdf) => {
-            window.Strom.DataManager.getPerson('jan' as never)!.attachments = [{ id: 'a1', name: 'contract-1902.pdf', mimeType: 'application/pdf', dataUrl: pdf, sizeBytes: 60 }];
+            // Jan's only file (data v24: a record of the tree's media with his place).
+            const media = (window.Strom.DataManager.getData().media ??= {});
+            media.a1 = { id: 'a1', name: 'contract-1902.pdf', mimeType: 'application/pdf', dataUrl: pdf, sizeBytes: 60, places: [{ personId: 'jan' as never }] };
         }, pdf);
         await page.evaluate(() => window.Strom.UI.showPersonPage('jan' as never));
         const w = win(page);

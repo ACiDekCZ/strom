@@ -8,6 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import { preparePersonPageData, buildPersonPageBody, PERSON_PAGE_ALL_GROUPS, PersonPageOptions } from '../person-page.js';
 import { buildFamilyBook } from '../book.js';
+import { addPersonMedia } from '../media.js';
 import { StromData, PersonId, PartnershipId, Person, Gender } from '../types.js';
 
 const IMG = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==';
@@ -46,7 +47,7 @@ const page = (d: StromData, o: Partial<PersonPageOptions> = {}) => {
 describe('the couple\'s photo on the person page (spec 107 §8)', () => {
     it('stands first in the gallery, captioned in the page\'s language and counted', () => {
         const d = tree();
-        d.persons['w' as PersonId].attachments = [{ id: 'x', name: 'farm.jpg', mimeType: 'image/jpeg', dataUrl: IMG, sizeBytes: 50, note: 'The farm' }];
+        addPersonMedia(d, 'w' as PersonId, { id: 'x', name: 'farm.jpg', mimeType: 'image/jpeg', dataUrl: IMG, sizeBytes: 50, note: 'The farm' });
         const sec = page(d);
         expect(sec).toContain('<span class="pp-count">2</span>');
         const caps = [...sec.matchAll(/<span class="pp-gal-cap">([^<]*)<\/span>/g)].map(m => m[1]);

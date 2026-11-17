@@ -23,7 +23,8 @@ import { computePersonLifeline } from '../timeline.js';
 import { parseHistoryPayload, HistoryPayload } from '../history.js';
 import { getStringsForLang } from '../strings.js';
 import { placeKey } from '../places.js';
-import { StromData, PersonId, PartnershipId, Person, Gender, Partnership } from '../types.js';
+import { StromData, PersonId, PartnershipId, Person, Gender, Partnership, Attachment } from '../types.js';
+import { addPersonMedia } from '../media.js';
 
 /** A 1×1 JPEG. */
 const IMG = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==';
@@ -33,6 +34,12 @@ function p(id: string, first: string, last: string, gender: Gender, extra: Parti
     return { id: id as PersonId, firstName: first, lastName: last, gender, isPlaceholder: false, parentIds: [], childIds: [], partnerships: [], ...extra } as Person;
 }
 const ids = (...xs: string[]) => xs as PersonId[];
+
+/** The person's files (data v24: records in StromData.media with the person's place), replacing any they had. */
+function setFiles(d: StromData, personId: PersonId, files: Omit<Attachment, 'places'>[]): void {
+    for (const [id, att] of Object.entries(d.media ?? {})) if (att.places.some(p => 'personId' in p && p.personId === personId)) delete d.media![id];
+    for (const f of files) addPersonMedia(d, personId, f);
+}
 
 function fiskTree(): StromData {
     const persons: StromData['persons'] = {};
@@ -298,10 +305,10 @@ describe('sections', () => {
 
     it('the gallery shows safe images, with or without research (§3.3)', () => {
         const d = fiskTree();
-        d.persons['jan' as PersonId].attachments = [
+        setFiles(d, 'jan' as PersonId, [
             { id: 'a1', name: 'dum.jpg', mimeType: 'image/jpeg', dataUrl: IMG, sizeBytes: 100, note: 'Dům čp. 12' },
             { id: 'a2', name: 'zlé.svg', mimeType: 'image/svg+xml', dataUrl: 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=', sizeBytes: 10 },
-        ];
+        ]);
         const withResearch = body(d);
         expect(withResearch).toContain('pp-sec-materials');
         expect(withResearch).toContain('Dům čp. 12');
@@ -1350,10 +1357,10 @@ describe('person page 2 (§0, §3, §4)', () => {
     const PDF = `data:application/pdf;base64,${Buffer.from('%PDF-1.4\n1 0 obj<</Type /Page>>endobj\n2 0 obj<</Type /Page>>endobj\n%%EOF').toString('base64')}`;
     function withAttachments(n: number): StromData {
         const d = fiskTree();
-        d.persons['jan' as PersonId].attachments = [
+        setFiles(d, 'jan' as PersonId, [
             ...Array.from({ length: n }, (_, i) => ({ id: `a${i}`, name: `foto${i}.png`, mimeType: 'image/png', dataUrl: png(10 + i, 20), sizeBytes: 50, note: `Fotografie ${i + 1}` })),
             { id: 'pdf1', name: 'smlouva-1902.pdf', mimeType: 'application/pdf', dataUrl: PDF, sizeBytes: 90 },
-        ];
+        ]);
         return d;
     }
 
@@ -1448,10 +1455,10 @@ describe('person page 2 (§0, §3, §4)', () => {
         // A register line 900 x 300 (3 : 1), a near-square entry, a wide photo and a wide document attachment.
         d.sources!['s1'].excerpts = [{ id: 'x1', dataUrl: png(900, 300), width: 900, height: 300, sizeBytes: 100 }];
         d.sources!['s2'].excerpts = [{ id: 'x2', dataUrl: png(400, 300), width: 400, height: 300, sizeBytes: 100 }];
-        d.persons['jan' as PersonId].attachments = [
+        setFiles(d, 'jan' as PersonId, [
             { id: 'a1', name: 'krajina.png', mimeType: 'image/png', dataUrl: png(1000, 400), sizeBytes: 50, note: 'Pohled na Čapkov' },
             { id: 'a2', name: 'dopis.png', mimeType: 'image/png', dataUrl: png(800, 400), sizeBytes: 50, note: 'Dopis bratrovi' },
-        ];
+        ]);
         for (const html of [body(d), doc(d)]) {
             const sec = html.match(/<section class="pp-sec pp-sec--materials" id="pp-sec-materials">.*?<\/section>/)?.[0] ?? '';
             const classes = [...sec.matchAll(/<figure class="([^"]+)">/g)].map(m => m[1]);
@@ -1558,7 +1565,7 @@ describe('person page 2 (§0, §3, §4)', () => {
             },
             sources: {},
         } as StromData;
-        d.persons['karel' as PersonId].attachments = [{ id: 'ph', name: 'dum-1960.png', mimeType: 'image/png', dataUrl: png(5, 5), sizeBytes: 9, note: 'Dům čp. 12' }];
+        setFiles(d, 'karel' as PersonId, [{ id: 'ph', name: 'dum-1960.png', mimeType: 'image/png', dataUrl: png(5, 5), sizeBytes: 9, note: 'Dům čp. 12' }]);
         const html = doc(d, { personId: 'karel' as PersonId, privacy: 'initials' });
         expect(html).toContain('<span class="pp-ft-card pp-ft-card--kid pp-ft-card--living" style=');
         expect(html).toContain('<span class="pp-ft-name" title="E. F.">E. F.</span><span class="pp-ft-years">* 1952</span>');

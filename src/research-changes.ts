@@ -7,6 +7,7 @@
 
 import { StromData, Person, Partnership, PartnershipId, Source, EventParticipant, PersonId, LifeEvent, Attachment, PlaceGeo, isPrimaryName, personSourceIds } from './types.js';
 import { isPurePlaceholder } from './single-parent.js';
+import { mediaPersonIds, mediaSourceId, mediaSourceIds, personMediaIndex } from './media.js';
 import { collectPlaces } from './places.js';
 import { factValueSignature, handedConfirmations } from './verify.js';
 import type { FactHolder } from './import-origin.js';
@@ -83,8 +84,9 @@ export function baseCopy(data: StromData): StromData {
     // when it is kept again (retagged, taken back): an empty list there would read as all of them changed.
     const older = (data as BaseCopy).olderCopy === true;
     const kept = older
-        ? { persons: data.persons, partnerships: data.partnerships, sources: data.sources ?? {}, olderCopy: true }
+        ? { persons: data.persons, partnerships: data.partnerships, sources: data.sources ?? {}, ...(data.media ? { media: data.media } : {}), olderCopy: true }
         : { persons: data.persons, partnerships: data.partnerships, sources: data.sources ?? {},
+            ...(data.media ? { media: data.media } : {}),
             places: data.places ?? {}, surnameVariants: data.surnameVariants ?? [],
             // The rejected spelling suggestions: what the research holds of them (its "not sent yet").
             surnameRejections: data.surnameRejections ?? [] };
@@ -119,7 +121,10 @@ function participantKinds(before: EventParticipant[] | undefined, after: EventPa
     return [...out];
 }
 
-function personKinds(before: Person, after: Person): Set<ChangeKind> {
+/** A person's files in two versions (data v24: StromData.media, by person). */
+interface PersonFiles { before: readonly Attachment[]; after: readonly Attachment[] }
+
+function personKinds(before: Person, after: Person, files: PersonFiles): Set<ChangeKind> {
     const kinds = new Set<ChangeKind>();
     if (NAME_FIELDS.some(f => differs(before[f], after[f]))) kinds.add('name');
     if (before.gender !== after.gender) kinds.add('gender');
@@ -145,10 +150,11 @@ function personKinds(before: Person, after: Person): Set<ChangeKind> {
     }
     // Attachments: added, removed (by id); a changed note or crop is "other". One that belongs to a
     // source (here or in the research's version) is the source's change, told there (diffOther).
-    const ofSource = new Set([...(before.attachments ?? []), ...(after.attachments ?? [])].filter(a => a.sourceId).map(a => a.id));
-    const ownAtts = (p: Person): Attachment[] => (p.attachments ?? []).filter(a => !ofSource.has(a.id));
-    const attBefore = new Set(ownAtts(before).map(a => a.id));
-    const attAfter = new Set(ownAtts(after).map(a => a.id));
+    const ofSource = new Set([...files.before, ...files.after].filter(a => mediaSourceId(a)).map(a => a.id));
+    const ownBefore = files.before.filter(a => !ofSource.has(a.id));
+    const ownAfter = files.after.filter(a => !ofSource.has(a.id));
+    const attBefore = new Set(ownBefore.map(a => a.id));
+    const attAfter = new Set(ownAfter.map(a => a.id));
     if ([...attAfter].some(id => !attBefore.has(id))) kinds.add('attachment');
     if ([...attBefore].some(id => !attAfter.has(id))) kinds.add('attachmentRemoved');
     // A changed source this person cites is the source's change (diffOther), not the person's: told once.
@@ -162,7 +168,7 @@ function personKinds(before: Person, after: Person): Set<ChangeKind> {
     if (differs(rest(before), rest(after))) kinds.add('other');
     // A fact confirmed, or a confirmation taken back, goes to the research (`_STROM_CONFIRMED`).
     if (confirmationsDiffer(before, after)) kinds.add('other');
-    if (differs(ownAtts(before).map(a => ({ ...a, dataUrl: undefined })), ownAtts(after).map(a => ({ ...a, dataUrl: undefined })))
+    if (differs(ownBefore.map(a => ({ ...a, dataUrl: undefined })), ownAfter.map(a => ({ ...a, dataUrl: undefined })))
         && !kinds.has('attachment') && !kinds.has('attachmentRemoved')) kinds.add('other');
     return kinds;
 }
@@ -177,6 +183,11 @@ export function diffByPerson(base: StromData, current: StromData): PersonChange[
     };
     const bp = base.persons as Record<string, Person>;
     const cp = current.persons as Record<string, Person>;
+    const filesBefore = personMediaIndex(base);
+    const filesAfter = personMediaIndex(current);
+    const filesOf = (id: string): PersonFiles => ({
+        before: filesBefore.get(id as PersonId) ?? [], after: filesAfter.get(id as PersonId) ?? [],
+    });
 
     for (const p of Object.values(cp)) {
         const before = bp[p.id];
@@ -192,8 +203,9 @@ export function diffByPerson(base: StromData, current: StromData): PersonChange[
             continue;
         }
         // Most people did not change: one comparison of the whole record, not one per field.
-        if (stable(before) === stable(p)) continue;
-        const kinds = personKinds(before, p);
+        const files = filesOf(p.id);
+        if (stable(before) === stable(p) && stable(files.before) === stable(files.after)) continue;
+        const kinds = personKinds(before, p, files);
         if (kinds.size) kinds.forEach(k => touch(p.id, fullName(p)).add(k));
     }
     for (const p of Object.values(bp)) {
@@ -382,16 +394,18 @@ export function diffOther(base: StromData | null, current: StromData): OtherChan
     // Attachments that belong to a source, of the people in both versions (a new or deleted person's
     // attachments are that person's), by source: added, removed or changed.
     const attChanged = new Map<string, Attachment>();
-    for (const id of Object.keys(cp)) {
-        const before = bp[id];
-        if (!before) continue;
-        const a = new Map((before.attachments ?? []).map(x => [x.id, x]));
-        const b = new Map((cp[id].attachments ?? []).map(x => [x.id, x]));
-        for (const attId of new Set([...a.keys(), ...b.keys()])) {
-            const x = a.get(attId);
-            const y = b.get(attId);
-            if (x && y && !differs(x, y)) continue;
-            for (const att of [x, y]) if (att?.sourceId && !attChanged.has(att.sourceId)) attChanged.set(att.sourceId, att);
+    const bm = base.media ?? {};
+    const cm = current.media ?? {};
+    const inBoth = (pid: PersonId): boolean => !!bp[pid] && !!cp[pid];
+    for (const attId of new Set([...Object.keys(bm), ...Object.keys(cm)])) {
+        const x = bm[attId];
+        const y = cm[attId];
+        if (x && y && !differs(x, y)) continue;
+        for (const att of [x, y]) {
+            if (!att) continue;
+            const people = mediaPersonIds(att);
+            if (people.length > 0 && !people.some(inBoth)) continue;
+            for (const sid of mediaSourceIds(att)) if (!attChanged.has(sid)) attChanged.set(sid, att);
         }
     }
 

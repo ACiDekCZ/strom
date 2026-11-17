@@ -12,6 +12,7 @@
  * the output.
  */
 
+import { mediaSourceId, personMedia, personMediaById, placePersonId } from './media.js';
 import { unionPhotoCaption } from './union-photo.js';
 import { StromData, Person, PersonId, Partnership, PartnershipId, Source, SourceExcerpt, LifeEvent, EventParticipant, Story, Attachment, PlaceGeo, FactStatus } from './types.js';
 import { applyLivingPrivacy, stripResearchWork, isLivingPerson, inferBirthUpperBounds, PrivacyMode } from './privacy.js';
@@ -508,9 +509,13 @@ export function preparePersonPageData(data: StromData, opts: PersonPageOptions, 
         };
     }
     const person: Person = structuredClone(src);
-    if (person.attachments) {
-        person.attachments = person.attachments.filter(a => (isPdfAttachment(a) ? groups.pdf : groups.materials));
-        if (!person.attachments.length) delete person.attachments;
+    // The person's own files only, at the person alone (data v24: StromData.media).
+    for (const a of personMedia(full, id)) {
+        if (!(isPdfAttachment(a) ? groups.pdf : groups.materials)) continue;
+        const own = structuredClone(a);
+        own.places = own.places.filter(pl => placePersonId(pl) === id || 'sourceId' in pl);
+        delete own.removed;
+        (tree.media ??= {})[own.id] = own;
     }
     if (!groups.research) delete person.research;
     tree.persons[id] = person;
@@ -690,10 +695,10 @@ function countGroups(page: PersonPageData): PersonPageGroupCounts {
                 .reduce((n, s) => n + s.rows.filter(r => r.kind === 'kid').length, 0)
             : 0,
         excerpts: sources.reduce((n, s) => n + (s.excerpts?.length ?? 0), 0),
-        materials: (person?.attachments ?? []).filter(a => !isPdfAttachment(a) && !!safeImage(a.dataUrl) && !isOriginalOnlyAttachment(a)).length
+        materials: personMedia(page.tree, page.personId).filter(a => !isPdfAttachment(a) && !!safeImage(a.dataUrl) && !isOriginalOnlyAttachment(a)).length
             // The couples' photos (spec 107 §8).
             + (page.groups.materials ? (person?.partnerships ?? []).filter(id => !!safeImage(page.tree.partnerships[id]?.photo)).length : 0),
-        pdf: (person?.attachments ?? []).filter(a => !!safePdf(a)).length,
+        pdf: personMedia(page.tree, page.personId).filter(a => !!safePdf(a)).length,
         sources: page.groups.sources ? sources.length : 0,
         research: researchItems(page, page.lang).count + researchIdCount(page),
     };
@@ -2687,16 +2692,17 @@ function galleryItems(c: Ctx, rows: PersonSourceRow[]): GalleryItem[] {
             }
         }
     }
-    for (const a of c.person.attachments ?? []) {
+    for (const a of personMedia(c.tree, c.person.id)) {
         if (isPdfAttachment(a) || isOriginalOnlyAttachment(a) || !a.mimeType.startsWith('image/')) continue;
         const src = safeImage(a.dataUrl);
         if (!src) continue;
         const caption = stripResearchIds(a.note?.trim() || a.name.replace(/\.[^.]+$/, '')).text.trim() || a.name;
         const m = YEAR_IN_TEXT.exec(`${a.note ?? ''} ${a.name}`);
         const year = m ? Number(m[1]) : null;
-        const s = a.sourceId ? c.tree.sources?.[a.sourceId] : undefined;
+        const sourceId = mediaSourceId(a);
+        const s = sourceId ? c.tree.sources?.[sourceId] : undefined;
         const sub = [s ? peekTitle(s.title) : '', year !== null && !caption.includes(String(year)) ? String(year) : ''].filter(Boolean).join(', ');
-        const kind: GalleryItem['kind'] = a.sourceId || DOCUMENT_WORDS.test(`${a.name} ${a.note ?? ''}`) ? 'document' : 'photo';
+        const kind: GalleryItem['kind'] = sourceId || DOCUMENT_WORDS.test(`${a.name} ${a.note ?? ''}`) ? 'document' : 'photo';
         const size = dataUrlImageSize(src);
         out.push({ src, kind, caption, sub, year, wide: !!size && isWide(kind, size.w, size.h) });
     }
@@ -2722,7 +2728,7 @@ function pdfPages(dataUrl: string): number | null {
 
 function pdfItems(c: Ctx): PdfItem[] {
     if (!c.page.groups.pdf) return [];
-    return (c.person.attachments ?? []).filter(isPdfAttachment).map(a => {
+    return personMedia(c.tree, c.person.id).filter(isPdfAttachment).map(a => {
         const href = safePdf(a);
         const m = YEAR_IN_TEXT.exec(`${a.note ?? ''} ${a.name}`);
         const name = stripResearchIds(a.note?.trim() || a.name).text.trim() || a.name;
@@ -2804,11 +2810,11 @@ function lightboxHtml(c: Ctx): string {
  * (an attachment of the person or the couple's photo; a file without
  * attachments has no portrait source at all).
  */
-export function portraitWholeImage(tree: Pick<StromData, 'partnerships'>, person: Person): string | null {
+export function portraitWholeImage(tree: Pick<StromData, 'partnerships' | 'media'>, person: Person): string | null {
     const src = person.photo ? person.photoSource : undefined;
     if (!src) return null;
     if (src.attachmentId) {
-        const att = person.attachments?.find(a => a.id === src.attachmentId);
+        const att = personMediaById(tree, person.id, src.attachmentId);
         return att && !att.originalOnly && att.mimeType.startsWith('image/') ? safeImage(att.dataUrl) : null;
     }
     if (src.partnershipId) return safeImage(tree.partnerships[src.partnershipId]?.photo);

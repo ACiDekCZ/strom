@@ -15,6 +15,7 @@ import { yearOf } from './dates.js';
 import { forgetHiddenImports } from './import-origin.js';
 import { tidyShares } from './shared-events.js';
 import { stripPhotos, dropDanglingPortraitSources } from './photo.js';
+import { allMedia, dropMediaPlaces, mediaSourceIds, placePartnershipId, placePersonId, pruneMedia } from './media.js';
 import { stripAttachments, stripExcerpts } from './attachments.js';
 
 export type PrivacyMode = 'full' | 'initials' | 'anonymous' | 'minimal';
@@ -123,6 +124,8 @@ export function stripNotes(data: StromData): StromData {
 export function stripSources(data: StromData): StromData {
     const copy = structuredClone(data);
     delete copy.sources;
+    // A file that was a source's document stays where else it is (a person's attachment).
+    dropMediaPlaces(copy, place => 'sourceId' in place);
     for (const person of Object.values(copy.persons)) {
         delete person.sourceIds;
         delete person.birthSourceIds;
@@ -130,7 +133,6 @@ export function stripSources(data: StromData): StromData {
         // The research's conflicts and searches are part of the source apparatus.
         delete person.research;
         for (const ev of person.events ?? []) delete ev.sourceIds;
-        for (const att of person.attachments ?? []) delete att.sourceId;
         rewriteStorySources(person.story, () => []);
     }
     for (const partnership of Object.values(copy.partnerships)) {
@@ -215,7 +217,7 @@ export function applyContentOptions(data: StromData, content: boolean | ContentO
     if (!opts.photos) out = stripPhotos(out);
     if (opts.sourceImages !== undefined) {
         // Attachments and source images are chosen apart.
-        if (!opts.attachments) for (const person of Object.values(out.persons)) delete person.attachments;
+        if (!opts.attachments) delete out.media;
         if (opts.sourceImages === 'none') out = stripExcerpts(out);
         else if (opts.researchExcerpts) {
             for (const [id, extra] of Object.entries(opts.researchExcerpts)) {
@@ -347,8 +349,7 @@ function stripDetails(person: Person): void {
     delete person.sourceIds;
     delete person.birthSourceIds;
     delete person.deathSourceIds;
-    // Attachments (scans, letters) are private documents — always drop.
-    delete person.attachments;
+    // Attachments (scans, letters) are private documents — always dropped (by the caller, StromData.media).
     // Name variants carry the full real name (e.g. a GEDCOM second NAME line
     // under "Living person"); the open question is free text about the person;
     // a REFN is an identifier that finds them in other databases.
@@ -431,11 +432,11 @@ export function applyLivingPrivacy(
     // too, so no person/event points at a source that is no longer present.
     if (!options.keepDeceasedSources) {
         delete copy.sources;
+        delete copy.media;
         for (const person of Object.values(copy.persons)) {
             delete person.sourceIds;
             delete person.birthSourceIds;
             delete person.deathSourceIds;
-            delete person.attachments;
             for (const ev of person.events ?? []) delete ev.sourceIds;
             rewriteStorySources(person.story, () => []);
         }
@@ -500,6 +501,14 @@ export function applyLivingPrivacy(
         // The file's values of what was just hidden must not stay behind.
         forgetHiddenImports(person, true);
     }
+    // Attachments (scans, letters) of the living and of their couples are private documents — always dropped.
+    dropMediaPlaces(copy, place => {
+        const pid = placePersonId(place);
+        if (pid) return living.has(pid);
+        const uid = placePartnershipId(place);
+        const union = uid ? copy.partnerships[uid] : undefined;
+        return !!union && (living.has(union.person1Id) || living.has(union.person2Id));
+    });
     // A deceased person's own godparent or witness event keeps its role but
     // not whose event it was when that is a living person or a couple whose
     // details went (GEDCOM's `_STROM_AT` would name them), and a shared event
@@ -539,7 +548,6 @@ export function applyLivingPrivacy(
             cite(p.birthSourceIds);
             cite(p.deathSourceIds);
             for (const ev of p.events ?? []) cite(ev.sourceIds);
-            for (const a of p.attachments ?? []) if (a.sourceId) cited.add(a.sourceId);
             cite(storySourceIds(p.story));
         }
         for (const u of Object.values(copy.partnerships)) {
@@ -548,11 +556,13 @@ export function applyLivingPrivacy(
             for (const ev of u.events ?? []) cite(ev.sourceIds);
             cite(storySourceIds(u.story));
         }
+        for (const a of allMedia(copy)) cite(mediaSourceIds(a));
         for (const id of Object.keys(copy.sources)) if (!cited.has(id)) delete copy.sources[id];
     }
 
     // A deceased partner's portrait cut from the photo of a couple with a
     // living person, or from an attachment that went: the link goes too.
+    pruneMedia(copy);
     dropDanglingPortraitSources(copy);
     return copy;
 }

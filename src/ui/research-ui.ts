@@ -20,6 +20,7 @@
  * The pure logic lives in src/research-link.ts.
  */
 
+import { allMedia } from '../media.js';
 import { noteOverviewSectionRows } from './overview-columns-ui.js';
 import { keepTableViews } from '../table-views-data.js';
 import { stampResearchTree } from '../person-lists-data.js';
@@ -1236,8 +1237,8 @@ async function researchTreeImages(researchId: string): Promise<string[]> {
     }
     for (const p of Object.values(data?.persons ?? {})) {
         if (p?.photo) out.push(p.photo);
-        for (const a of p?.attachments ?? []) if (!a.originalOnly && a.dataUrl) out.push(a.dataUrl);
     }
+    for (const a of data ? allMedia(data) : []) if (!a.originalOnly && a.dataUrl) out.push(a.dataUrl);
     for (const u of Object.values(data?.partnerships ?? {})) if (u?.photo) out.push(u.photo);
     return out;
 }

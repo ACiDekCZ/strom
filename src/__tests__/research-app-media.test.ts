@@ -19,6 +19,7 @@ import { researchAutoState, patchResearchAutoState } from '../research-device.js
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { exportToGedcom } from '../ged-exporter.js';
 import { migrateData } from '../data.js';
+import { addPersonMedia, personMedia } from '../media.js';
 import { SettingsManager } from '../settings.js';
 import { Partnership, Person, StromData, TreeId, ResearchLink } from '../types.js';
 
@@ -83,7 +84,7 @@ function treeWithFiles(): StromData {
     wife.photo = PORTRAIT_JPEG;
     wife.photoOriginalName = 'zvonimira.jpg';
     wife.photoDate = '1930';
-    wife.attachments = [{ id: 'att_1', name: 'list 👪 家族.jpg', mimeType: 'image/jpeg', dataUrl: OTHER_JPEG, sizeBytes: 40, date: '3 MAR 1912' } as never];
+    addPersonMedia(data, wife.id, { id: 'att_1', name: 'list 👪 家族.jpg', mimeType: 'image/jpeg', dataUrl: OTHER_JPEG, sizeBytes: 40, date: '3 MAR 1912' });
     return data;
 }
 
@@ -146,8 +147,8 @@ describe('the write that says it carries every file (POST /sync?media=app, P4)',
     it('the write carries every file: portraits, the couple’s photo, attachments, one only its original by name and hash', () => {
         const data = treeWithFiles();
         const sha = 'a'.repeat(64);
-        byName(data, 'Bratrolib').attachments = [{ id: 'att_2', name: 'matrika.tif', mimeType: 'image/tiff', dataUrl: '', sizeBytes: 9e6,
-            originalOnly: true, original: { sha256: sha, mimeType: 'image/tiff', sizeBytes: 9e6 } } as never];
+        addPersonMedia(data, byName(data, 'Bratrolib').id, { id: 'att_2', name: 'matrika.tif', mimeType: 'image/tiff', dataUrl: '', sizeBytes: 9e6,
+            originalOnly: true, original: { sha256: sha, mimeType: 'image/tiff', sizeBytes: 9e6 } } as never);
         const ged = exportToGedcom(data, 'T', { research: { id: 'r', head: 'h', appTree: 't' }, appMedia: true, mediaDates: true }).content;
         expect(ged).toContain(PORTRAIT_JPEG.slice(0, 40));
         expect(ged).toContain(OTHER_JPEG.slice(0, 40));
@@ -179,7 +180,7 @@ describe('the couple’s photo marked _PRIM Y for a research that keeps the app�
         expect(union.photoOriginalName).toBe('svatba 1911 💍 婚礼 Škoda.jpg');
         expect(union.photoDate).toBe('12 JUN 1911');
         expect(union.gedcomExtra).toBeUndefined();
-        const att = byName(back.data, 'Zvonimíra').attachments?.[0];
+        const att = personMedia(back.data, byName(back.data, 'Zvonimíra').id)[0];
         expect(att?.name).toBe('list 👪 家族.jpg');
         const again = exportToGedcom(migrateData(back.data), 'T', { appMedia: true, mediaDates: true }).content;
         expect(famRecords(again)).toEqual(famRecords(first));
@@ -272,7 +273,7 @@ describe('the first write after the update goes by itself (K2.7)', () => {
         onlyCouple(data).photo = COUPLE_JPEG;
         expect(treeHasAppMedia(data)).toBe(true);
         delete onlyCouple(data).photo;
-        byName(data, 'Bratrolib').attachments = [{ id: 'a', name: 'x.tif', mimeType: 'image/tiff', dataUrl: '', sizeBytes: 1, originalOnly: true } as never];
+        addPersonMedia(data, byName(data, 'Bratrolib').id, { id: 'a', name: 'x.tif', mimeType: 'image/tiff', dataUrl: '', sizeBytes: 1, originalOnly: true });
         expect(treeHasAppMedia(data)).toBe(true);
     });
 

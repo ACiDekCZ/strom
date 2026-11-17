@@ -3,6 +3,7 @@
  * see src/ui/module.ts for the composition pattern.
  */
 
+import { allMedia, hasTreeMedia, mediaSourceIds } from '../media.js';
 import { DataManager, auditPersonName, storedTreeForExport } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
@@ -71,8 +72,8 @@ let detachedEncryptBlock: HTMLElement | null = null;
 /** The tree holds anything a privacy mode leaves out of an export: sources, citations, attachments. */
 function hasSourcesOrAttachments(data: StromData): boolean {
     if (Object.keys(data.sources ?? {}).length > 0) return true;
-    return Object.values(data.persons).some(p => (p.attachments?.length ?? 0) > 0
-        || PERSON_CITATION_FIELDS.some(f => (p[f]?.length ?? 0) > 0));
+    if (hasTreeMedia(data)) return true;
+    return Object.values(data.persons).some(p => PERSON_CITATION_FIELDS.some(f => (p[f]?.length ?? 0) > 0));
 }
 
 export const encryptionUiMethods = uiModule({
@@ -770,8 +771,8 @@ export const encryptionUiMethods = uiModule({
                 if (ev.sourceIds) sourcesSlice.push(ev.sourceIds);
                 for (const part of ev.participants ?? []) if (part.note) notesSlice.push(part.note);
             }
-            for (const att of person.attachments ?? []) if (att.sourceId) sourcesSlice.push(att.sourceId);
         }
+        for (const att of allMedia(data)) for (const sid of mediaSourceIds(att)) sourcesSlice.push(sid);
         for (const partnership of Object.values(data.partnerships)) {
             if (partnership.note) notesSlice.push(partnership.note);
             if (partnership.sourceIds) sourcesSlice.push(partnership.sourceIds);

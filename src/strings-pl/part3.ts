@@ -225,6 +225,7 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
         download: 'Pobierz',
         useAsPortrait: 'Użyj jako portretu…',
         deleteFromTree: 'Usuń z drzewa…',
+        edit: 'Edytuj…',
         notHere: 'Pliku nie ma na tym komputerze. Wpis w archiwum pozostaje.',
         notHereResearch: 'Pliku nie ma na tym komputerze. Wpis w badaniu pozostaje.',
         viewerPos: (i: number, n: number, c: string) => `${i} / ${n}${c ? ` · ${c}` : ''}`,

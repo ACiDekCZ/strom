@@ -20,6 +20,7 @@ vi.mock('../research-copy.js', async (importOriginal) => ({
 import { parseGedcom, convertToStrom, GedcomImportOrigin } from '../ged-parser.js';
 import { exportToGedcom } from '../ged-exporter.js';
 import { migrateData } from '../data.js';
+import { mediaSourceId } from '../media.js';
 import { TreeManager } from '../tree-manager.js';
 import { createSnapshot } from '../snapshots.js';
 import { CONTENT_PRESETS } from '../privacy.js';
@@ -444,9 +445,14 @@ describe('a tree of 3.26: sources made only for another QUAY are joined (K1.5)',
     it('joinQualityOnlySources also moves an attachment naming the derived source', () => {
         const { data, census, derived } = storedBy326(18);
         const p = named(data, 'Drahoslav');
-        p.attachments = [{ id: 'att1', name: 'scan', mimeType: 'image/jpeg', dataUrl: JPEG, sizeBytes: 50, sourceId: derived.id }];
+        // A tree of v23 and older holds its attachments on the people.
+        const legacy = p as unknown as { attachments: { id: string; name: string; mimeType: string; dataUrl: string; sizeBytes: number; sourceId?: string }[] };
+        legacy.attachments = [{ id: 'att1', name: 'scan', mimeType: 'image/jpeg', dataUrl: JPEG, sizeBytes: 50, sourceId: derived.id }];
+        // A record of the tree's files (data v24) with the derived source's place.
+        data.media = { att2: { id: 'att2', name: 'scan2', mimeType: 'image/jpeg', dataUrl: JPEG, sizeBytes: 50, places: [{ personId: p.id }, { sourceId: derived.id }] } };
         expect(joinQualityOnlySources(data)).toBe(1);
-        expect(p.attachments[0].sourceId).toBe(census.id);
+        expect(legacy.attachments[0].sourceId).toBe(census.id);
+        expect(mediaSourceId(data.media.att2)).toBe(census.id);
     });
 
     describe('TreeManager.readTreeData', () => {

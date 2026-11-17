@@ -30,6 +30,9 @@ import {
     Source,
     generateAttachmentId,
     Attachment,
+    MediaPlace,
+    MediaBy,
+    MaterialKind,
     ParentChildRelType,
     generatePartnershipId,
     LAST_FOCUSED,
@@ -68,6 +71,7 @@ import { createSnapshot, getSnapshotPayload, SnapshotReason, hasAutoSnapshotOnDa
 import { ValidationIssue, stripUnsafeMediaDataUrls, cleanPortraitSources, isSafePhotoDataUrl, translateValidationType } from './validation.js';
 import { isPortraitSourceShape } from './photo.js';
 import { cloneTreeData } from './clone.js';
+import { sanitizeMediaRecords, moveLegacyAttachments, pruneMedia, findMedia, personMedia, mediaOf, mediaAt, placeKey as mediaPlaceKey, putMedia, dropMediaPlaces, deleteMedia, placePersonId } from './media.js';
 import { UndoManager, type UndoMark } from './undo.js';
 import { applyLivingPrivacy, applyContentOptions, resolveContentOptions, ContentOptions, PrivacyMode } from './privacy.js';
 import { safeFileName } from './filenames.js';
@@ -373,6 +377,13 @@ export function migrateData(data: unknown): StromData {
     if ((typeof d.version === 'number' ? d.version : 1) < 20) convertLegacyCensusEvents(result);
     cleanEventShares(result);
 
+    // v24 (spec 102): the tree's files are records with their places; the
+    // attachments of a tree of v23 and older move into them (one record per
+    // file), then only places that name what is in the tree stay.
+    const media = sanitizeMediaRecords(d.media);
+    if (media) result.media = media;
+    moveLegacyAttachments(result);
+
     // Photos/attachments/excerpts must be image (or PDF) data URLs — anything
     // else (data:text/html…) from a crafted file is dropped before it can be
     // stored or rendered. After the sources are in: excerpts live there.
@@ -468,6 +479,8 @@ export function migrateData(data: unknown): StromData {
 
     // A child with one known parent is kept one way: a family with a "?" stand-in (src/single-parent.ts).
     normalizeSingleParents(result);
+    // The places of the files name only what is in the tree (after the people and couples are settled).
+    pruneMedia(result);
 
     return result;
 }
@@ -1566,6 +1579,8 @@ class DataManagerClass {
      * mutation methods. During a batch this defers to commitBatch (no push/save).
      */
     private commitMutation(description: string, silent = false, mark?: UndoMark, toast?: MutationToast): void {
+        // The files' places name only what is still in the tree (a person, couple, event or source deleted).
+        pruneMedia(this.data);
         if (this.batchActive) {
             this.batchDirty = true;
             if (this.batchFirstDescription === null) this.batchFirstDescription = description;
@@ -3469,6 +3484,8 @@ class DataManagerClass {
         this.beginMutation();
         delete this.data.sources![sourceId];
         if (Object.keys(this.data.sources!).length === 0) delete this.data.sources;
+        // A file that was the source's document stays where else it is (a person's attachment).
+        dropMediaPlaces(this.data, place => 'sourceId' in place && place.sourceId === sourceId);
         for (const person of Object.values(this.data.persons)) {
             for (const field of PERSON_CITATION_FIELDS) {
                 const ids = person[field];
@@ -3484,9 +3501,6 @@ class DataManagerClass {
                     if (ev.sourceIds.length === 0) delete ev.sourceIds;
                 }
                 cleanCitationQuay(ev, ['sourceIds']);
-            }
-            for (const att of person.attachments ?? []) {
-                if (att.sourceId === sourceId) delete att.sourceId;
             }
             rewriteStorySources(person.story, ids => ids.filter(id => id !== sourceId));
         }
@@ -4022,34 +4036,49 @@ class DataManagerClass {
 
     // ==================== ATTACHMENTS ====================
 
-    /** Attach a document to a person. Returns the created attachment, or null. */
-    addAttachment(personId: PersonId, attachment: Omit<Attachment, 'id'>): Attachment | null {
+    /**
+     * Attach a document to a person: a new file record with the person's
+     * place (and the source's, `sourceId`: the person's scan of that source).
+     * Returns the created record, or null.
+     */
+    addAttachment(personId: PersonId, attachment: Omit<Attachment, 'id' | 'places'> & { places?: MediaPlace[] }, sourceId?: string): Attachment | null {
         const person = this.data.persons[personId];
         if (!person) return null;
         if (this.isPersonLocked(personId)) return null;
 
         this.beginMutation();
-        const newAttachment: Attachment = { ...attachment, id: generateAttachmentId() };
-        if (!person.attachments) person.attachments = [];
-        person.attachments.push(newAttachment);
+        const places: MediaPlace[] = [{ personId }];
+        if (sourceId && this.data.sources?.[sourceId]) places.push({ sourceId });
+        const newAttachment: Attachment = { ...attachment, id: generateAttachmentId(), places, addedAt: attachment.addedAt ?? new Date().toISOString() };
+        putMedia(this.data, newAttachment);
         this.commitMutation(strings.undo.addAttachment(auditPersonName(person)));
         AuditLogManager.log(this.currentTreeId, 'attachment.add', strings.auditLog.addedAttachment(auditPersonName(person)));
         return newAttachment;
     }
 
+    /**
+     * Take a document off a person: their places go, with the source's place
+     * it came with when the person was its only one; a file left nowhere goes
+     * from the tree (as an attachment did before data v24).
+     */
     removeAttachment(personId: PersonId, attachmentId: string): boolean {
         const person = this.data.persons[personId];
-        if (!person?.attachments?.some(a => a.id === attachmentId)) return false;
+        const att = findMedia(this.data, attachmentId);
+        if (!person || !att?.places.some(p => placePersonId(p) === personId)) return false;
         if (this.isPersonLocked(personId)) return false;
 
         this.beginMutation();
-        person.attachments = person.attachments.filter(a => a.id !== attachmentId);
-        if (person.attachments.length === 0) delete person.attachments;
-        // Excerpts cut from this page keep their image; they just can no
-        // longer be re-cropped.
-        unlinkExcerptsFromAttachment(this.data, attachmentId);
+        const othersHold = att.places.some(p => (placePersonId(p) !== undefined && placePersonId(p) !== personId) || 'partnershipId' in p);
+        const gone = dropMediaPlaces(this.data, (place, a) => a.id === attachmentId
+            && (placePersonId(place) === personId || (!othersHold && 'sourceId' in place)));
+        if (gone.includes(attachmentId)) {
+            // Excerpts cut from this page keep their image; they just can no
+            // longer be re-cropped.
+            unlinkExcerptsFromAttachment(this.data, attachmentId);
+        }
         // The portrait cut from it stays, without its original (spec 107 §4d).
-        unlinkPortraitFromAttachment(this.data, attachmentId);
+        if (person.photoSource?.attachmentId === attachmentId) delete person.photoSource;
+        if (gone.includes(attachmentId)) unlinkPortraitFromAttachment(this.data, attachmentId);
         this.commitMutation(strings.undo.removeAttachment(auditPersonName(person)));
         AuditLogManager.log(this.currentTreeId, 'attachment.remove', strings.auditLog.removedAttachment(auditPersonName(person)));
         return true;
@@ -4057,8 +4086,8 @@ class DataManagerClass {
 
     updateAttachmentNote(personId: PersonId, attachmentId: string, note: string): boolean {
         const person = this.data.persons[personId];
-        const att = person?.attachments?.find(a => a.id === attachmentId);
-        if (!person || !att) return false;
+        const att = findMedia(this.data, attachmentId);
+        if (!person || !att?.places.some(p => placePersonId(p) === personId)) return false;
         if (this.isPersonLocked(personId)) return false;
 
         this.beginMutation();
@@ -4067,6 +4096,169 @@ class DataManagerClass {
         this.commitMutation(strings.undo.editAttachment(auditPersonName(person)));
         AuditLogManager.log(this.currentTreeId, 'attachment.update', strings.auditLog.updatedAttachment(auditPersonName(person)));
         return true;
+    }
+
+    // ==================== FILES OF THE TREE (data v24, spec 102 §0) ====================
+
+    /** A file of the tree by its id (also one taken out of it). */
+    getMedia(id: string): Attachment | undefined {
+        return findMedia(this.data, id);
+    }
+
+    /** The files at exactly this place, in their order. */
+    mediaOf(place: MediaPlace): Attachment[] {
+        return mediaOf(this.data, place);
+    }
+
+    /** The person's files: those with any place of theirs (themselves, a fact, an event), in their order. */
+    personMedia(personId: PersonId): Attachment[] {
+        return personMedia(this.data, personId);
+    }
+
+    /** Every person a file is with may be changed (a file of no person: the tree). */
+    private mediaEditable(att: Attachment): boolean {
+        if (this.isTreeLocked()) return false;
+        return att.places.every(p => { const pid = placePersonId(p); return !pid || !this.isPersonLocked(pid); });
+    }
+
+    /** Change a file's detail as one undo step. */
+    private editMedia(id: string, label: (name: string) => string, change: (att: Attachment) => boolean): boolean {
+        const att = findMedia(this.data, id);
+        if (!att || !this.mediaEditable(att)) return false;
+        const before = JSON.stringify(att);
+        const probe = cloneTreeData(att);
+        if (!change(probe) || JSON.stringify(probe) === before) return false;
+        this.beginMutation();
+        change(att);
+        const name = att.title || att.name;
+        this.commitMutation(label(name));
+        AuditLogManager.log(this.currentTreeId, 'attachment.update', label(name));
+        return true;
+    }
+
+    /** A file's title ('' = none, its name stands for it); `by` the agent's (spec 102 §13). */
+    setMediaTitle(id: string, title: string, by: MediaBy = 'user'): boolean {
+        const text = title.trim();
+        return this.editMedia(id, strings.undo.mediaTitle, att => {
+            if (text) att.title = text; else delete att.title;
+            if (text && by === 'agent') att.titleBy = 'agent'; else delete att.titleBy;
+            return true;
+        });
+    }
+
+    /** A file's kind (undefined = none). */
+    setMediaKind(id: string, kind: MaterialKind | undefined, by: MediaBy = 'user'): boolean {
+        return this.editMedia(id, strings.undo.mediaKind, att => {
+            if (kind) att.kind = kind; else delete att.kind;
+            if (kind && by === 'agent') att.kindBy = 'agent'; else delete att.kindBy;
+            return true;
+        });
+    }
+
+    /** A file's date as written (GEDCOM-like text; '' = none). */
+    setMediaDate(id: string, date: string, by: MediaBy = 'user'): boolean {
+        const text = date.trim();
+        return this.editMedia(id, strings.undo.mediaDate, att => {
+            if (text) att.date = text; else delete att.date;
+            if (text && by === 'agent') att.dateBy = 'agent'; else delete att.dateBy;
+            return true;
+        });
+    }
+
+    /** Put a file at one more place (a person, a fact, an event, a couple, a source that is in the tree). */
+    addMediaPlace(id: string, place: MediaPlace): boolean {
+        const att = findMedia(this.data, id);
+        if (!att || mediaAt(att, place) || !this.placeExists(place)) return false;
+        const pid = placePersonId(place);
+        if (!this.mediaEditable(att) || (pid && this.isPersonLocked(pid))) return false;
+        this.beginMutation();
+        att.places.push(place);
+        const name = att.title || att.name;
+        this.commitMutation(strings.undo.mediaPlaceAdd(name));
+        AuditLogManager.log(this.currentTreeId, 'attachment.update', strings.undo.mediaPlaceAdd(name));
+        return true;
+    }
+
+    /**
+     * Take a file off one place. Its last place: the file goes from the tree
+     * (a tree without an archive, spec 102 §9) unless `keep`, which takes it
+     * out as removeMedia does.
+     */
+    removeMediaPlace(id: string, place: MediaPlace, opts: { keep?: boolean } = {}): boolean {
+        const att = findMedia(this.data, id);
+        if (!att || !mediaAt(att, place) || !this.mediaEditable(att)) return false;
+        this.beginMutation();
+        const key = mediaPlaceKey(place);
+        const last = att.places.length === 1;
+        if (last && opts.keep) att.removed = { at: new Date().toISOString(), places: [...att.places] };
+        const gone = dropMediaPlaces(this.data, (p, a) => a.id === id && mediaPlaceKey(p) === key);
+        const pid = placePersonId(place);
+        const person = pid ? this.data.persons[pid] : undefined;
+        if (person?.photoSource?.attachmentId === id && !att.places.some(p => placePersonId(p) === pid)) delete person.photoSource;
+        if (gone.includes(id)) this.forgetMediaLinks(id);
+        const name = att.title || att.name;
+        this.commitMutation(strings.undo.mediaPlaceRemove(name));
+        AuditLogManager.log(this.currentTreeId, 'attachment.remove', strings.undo.mediaPlaceRemove(name));
+        return true;
+    }
+
+    /**
+     * Take a file out of the tree (spec 102 §9): with `keep` (a tree with an
+     * archive) the record stays with the places it had for "Restore"
+     * (`removed`); without it the record goes (O1). One undo step.
+     */
+    removeMedia(id: string, opts: { keep?: boolean; reason?: 'unrelated' | 'duplicate' } = {}): boolean {
+        const att = findMedia(this.data, id);
+        if (!att || (!att.places.length && opts.keep) || !this.mediaEditable(att)) return false;
+        this.beginMutation();
+        if (opts.keep) {
+            att.removed = { at: new Date().toISOString(), ...(opts.reason ? { reason: opts.reason } : {}), places: [...att.places] };
+            att.places = [];
+            for (const person of Object.values(this.data.persons)) {
+                if (person.photoSource?.attachmentId === id) delete person.photoSource;
+            }
+        } else {
+            deleteMedia(this.data, [id]);
+            this.forgetMediaLinks(id);
+        }
+        const name = att.title || att.name;
+        this.commitMutation(strings.undo.mediaRemove(name));
+        AuditLogManager.log(this.currentTreeId, 'attachment.remove', strings.undo.mediaRemove(name));
+        return true;
+    }
+
+    /** Bring a file taken out back to the places it had that are still in the tree (spec 102 §9). */
+    restoreMedia(id: string): boolean {
+        const att = findMedia(this.data, id);
+        if (!att?.removed || this.isTreeLocked()) return false;
+        const places = att.removed.places.filter(p => this.placeExists(p));
+        if (!places.length) return false;
+        this.beginMutation();
+        att.places = places;
+        delete att.removed;
+        const name = att.title || att.name;
+        this.commitMutation(strings.undo.mediaRestore(name));
+        AuditLogManager.log(this.currentTreeId, 'attachment.add', strings.undo.mediaRestore(name));
+        return true;
+    }
+
+    /** The place names what is in the tree. */
+    private placeExists(place: MediaPlace): boolean {
+        if ('personId' in place) {
+            const person = this.data.persons[place.personId];
+            return !!person && (!place.eventId || !!person.events?.some(e => e.id === place.eventId));
+        }
+        if ('partnershipId' in place) {
+            const union = this.data.partnerships[place.partnershipId];
+            return !!union && (!place.eventId || !!union.events?.some(e => e.id === place.eventId));
+        }
+        return !!this.data.sources?.[place.sourceId];
+    }
+
+    /** A file gone from the tree: excerpts cut from it and portraits cut from it keep their image, not the link. */
+    private forgetMediaLinks(id: string): void {
+        unlinkExcerptsFromAttachment(this.data, id);
+        unlinkPortraitFromAttachment(this.data, id);
     }
 
     // ==================== PARENT-CHILD RELATIONSHIP TYPE ====================
@@ -5378,12 +5570,14 @@ class DataManagerClass {
         const touchedShares = applyPersonMergeShares(this.data, keepPerson, shareRows, sharedChoices);
         // A citation only the removed person had keeps its own QUAY.
         for (const field of PERSON_CITATION_FIELDS) unionCitations(keepPerson, removePerson, field);
-        if (removePerson.attachments && removePerson.attachments.length > 0) {
-            if (!keepPerson.attachments) keepPerson.attachments = [];
-            const seenAtt = new Set(keepPerson.attachments.map(a => a.id));
-            for (const att of removePerson.attachments) {
-                if (!seenAtt.has(att.id)) keepPerson.attachments.push(att);
+        // The removed person's files become the kept one's (a file both had is there once).
+        for (const att of personMedia(this.data, removePerson.id)) {
+            const moved: MediaPlace[] = [];
+            for (const place of att.places) {
+                const now: MediaPlace = placePersonId(place) === removePerson.id ? { ...place, personId: keepPerson.id } as MediaPlace : place;
+                if (!moved.some(q => mediaPlaceKey(q) === mediaPlaceKey(now))) moved.push(now);
             }
+            att.places = moved;
         }
         // Carry the removed person's own parent relationship types for parents
         // the kept person actually ended up with (keep's own entry wins).

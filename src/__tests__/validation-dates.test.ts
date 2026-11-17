@@ -14,7 +14,7 @@ import {
 interface POpts {
     birthDate?: string; deathDate?: string; gender?: Gender; events?: LifeEvent[];
     parentIds?: string[]; childIds?: string[]; partnerships?: string[];
-    sourceIds?: string[]; attachments?: Attachment[];
+    sourceIds?: string[];
     parentRelTypes?: Record<string, 'biological' | 'adoptive' | 'step' | 'foster'>;
 }
 function person(id: string, o: POpts = {}): Person {
@@ -28,7 +28,6 @@ function person(id: string, o: POpts = {}): Person {
         ...(o.deathDate ? { deathDate: o.deathDate } : {}),
         ...(o.events ? { events: o.events } : {}),
         ...(o.sourceIds ? { sourceIds: o.sourceIds } : {}),
-        ...(o.attachments ? { attachments: o.attachments } : {}),
         ...(o.parentRelTypes ? { parentRelTypes: o.parentRelTypes as Person['parentRelTypes'] } : {}),
     };
 }
@@ -153,29 +152,33 @@ describe('source and attachment integrity', () => {
     it('flags citations to missing sources on person, event and attachment', () => {
         const att: Attachment = {
             id: 'at1', name: 'scan.jpg', mimeType: 'image/jpeg',
-            dataUrl: 'data:image/jpeg;base64,QUJDREVGR0hJSktMTU5PUFFSUw==', sizeBytes: 20, sourceId: 'gone',
+            dataUrl: 'data:image/jpeg;base64,QUJDREVGR0hJSktMTU5PUFFSUw==', sizeBytes: 20,
+            places: [{ personId: 'a' as PersonId }, { sourceId: 'gone' }],
         };
         const d = data([person('a', {
             sourceIds: ['s1', 'missing'],
             events: [{ id: 'e1', type: 'baptism', sourceIds: ['also-missing'] }],
-            attachments: [att],
         })], [], src);
+        d.media = { [att.id]: att };
         const hits = validateTreeData(d).issues.filter(i => i.type === 'citationMissingSource');
         expect(hits).toHaveLength(3);
     });
 
     it('flags an attachment without usable data', () => {
-        const att: Attachment = { id: 'at1', name: 'broken.pdf', mimeType: 'application/pdf', dataUrl: '', sizeBytes: 0 };
-        const d = data([person('a', { attachments: [att] })]);
+        const att: Attachment = { id: 'at1', name: 'broken.pdf', mimeType: 'application/pdf', dataUrl: '', sizeBytes: 0, places: [{ personId: 'a' as PersonId }] };
+        const d = data([person('a')]);
+        d.media = { [att.id]: att };
         expect(types(d)).toContain('attachmentNoData');
     });
 
     it('accepts valid citations and attachments', () => {
         const att: Attachment = {
             id: 'at1', name: 'scan.jpg', mimeType: 'image/jpeg',
-            dataUrl: 'data:image/jpeg;base64,QUJDREVGR0hJSktMTU5PUFFSUw==', sizeBytes: 20, sourceId: 's1',
+            dataUrl: 'data:image/jpeg;base64,QUJDREVGR0hJSktMTU5PUFFSUw==', sizeBytes: 20,
+            places: [{ personId: 'a' as PersonId }, { sourceId: 's1' }],
         };
-        const d = data([person('a', { sourceIds: ['s1'], attachments: [att] })], [], src);
+        const d = data([person('a', { sourceIds: ['s1'] })], [], src);
+        d.media = { [att.id]: att };
         const t = types(d);
         expect(t).not.toContain('citationMissingSource');
         expect(t).not.toContain('attachmentNoData');

@@ -24,7 +24,8 @@
  * new StromData registry, decide here whether it belongs in the packet.
  */
 
-import { StromData, Person, Partnership, Source, PlaceGeo, PersonId, PartnershipId, STROM_DATA_VERSION } from './types.js';
+import { moveLegacyAttachments, personMediaCount, pruneMedia } from './media.js';
+import { StromData, Person, Partnership, Source, Attachment, PlaceGeo, PersonId, PartnershipId, STROM_DATA_VERSION } from './types.js';
 import { addSurnameGroup } from './surnames.js';
 import { shownNameOrEmpty } from './person-name.js';
 
@@ -48,8 +49,8 @@ export interface KeyedChanges<T> {
 
 export interface ChangePacket {
     kind: 'strom-changes';
-    /** 1 = original (persons/partnerships/sources only); 2 = adds places + surnameVariants. */
-    formatVersion: 1 | 2;
+    /** 1 = original (persons/partnerships/sources only); 2 = adds places + surnameVariants; 3 = adds media (data v24). */
+    formatVersion: 1 | 2 | 3;
     baseExportId: string;
     senderName?: string;
     senderMessage?: string;
@@ -57,6 +58,8 @@ export interface ChangePacket {
     persons: EntityChanges<Person>;
     partnerships: EntityChanges<Partnership>;
     sources: EntityChanges<Source>;
+    /** The tree's files (data v24, StromData.media); an older packet carries them on its persons (`attachments`). */
+    media?: EntityChanges<Attachment>;
     /** Place coordinates the sender added/changed/removed since the baseline. */
     places?: KeyedChanges<PlaceGeo>;
     /** Surname-equivalence groups the sender added since the baseline (unioned on apply). */
@@ -130,9 +133,11 @@ export function buildChangePacket(base: StromData, current: StromData, meta: Cha
     // so a plain person-only packet stays v1 and still applies in older apps.
     const hasRegistryChanges =
         Object.keys(places.changed).length > 0 || places.removedKeys.length > 0 || surnameVariants.length > 0;
+    const media = diffCollection(base.media ?? {}, current.media ?? {});
+    const hasMedia = media.added.length > 0 || media.changed.length > 0 || media.removedIds.length > 0;
     return {
         kind: 'strom-changes',
-        formatVersion: hasRegistryChanges ? 2 : 1,
+        formatVersion: hasMedia ? 3 : hasRegistryChanges ? 2 : 1,
         baseExportId: meta.baseExportId,
         ...(meta.senderName ? { senderName: meta.senderName } : {}),
         ...(meta.senderMessage ? { senderMessage: meta.senderMessage } : {}),
@@ -140,6 +145,7 @@ export function buildChangePacket(base: StromData, current: StromData, meta: Cha
         persons: diffCollection(base.persons as Record<string, Person>, current.persons as Record<string, Person>),
         partnerships: diffCollection(base.partnerships as Record<string, Partnership>, current.partnerships as Record<string, Partnership>),
         sources: diffCollection(base.sources ?? {}, current.sources ?? {}),
+        ...(hasMedia ? { media } : {}),
         ...(hasRegistryChanges ? { places, surnameVariants } : {}),
     };
 }
@@ -162,6 +168,8 @@ export function applyChangePacket(base: StromData, packet: ChangePacket): StromD
         partnerships: applyChanges(base.partnerships as Record<string, Partnership>, packet.partnerships) as Record<PartnershipId, Partnership>,
         sources: applyChanges(base.sources ?? {}, packet.sources),
     };
+    const media = packet.media ? applyChanges(base.media ?? {}, packet.media) : base.media;
+    if (media && Object.keys(media).length) out.media = media;
 
     // Places (keyed): start from the baseline, set/remove what the packet carries.
     if (packet.places || base.places) {
@@ -184,6 +192,9 @@ export function applyChangePacket(base: StromData, packet: ChangePacket): StromD
         if (acc.surnameVariants && acc.surnameVariants.length > 0) out.surnameVariants = acc.surnameVariants;
     }
 
+    // A packet of an older app carries its files on its persons (data v23).
+    moveLegacyAttachments(out);
+    pruneMedia(out);
     return out;
 }
 
@@ -193,7 +204,7 @@ export function isChangePacket(json: unknown): json is ChangePacket {
     const p = json as Partial<ChangePacket>;
     // Accept both v1 (person-only) and v2 (with places/surnameVariants) packets.
     return p.kind === 'strom-changes'
-        && (p.formatVersion === 1 || p.formatVersion === 2)
+        && (p.formatVersion === 1 || p.formatVersion === 2 || p.formatVersion === 3)
         && typeof p.baseExportId === 'string';
 }
 
@@ -204,6 +215,7 @@ export function isEmptyPacket(packet: ChangePacket): boolean {
         || (Object.keys(packet.places.changed).length === 0 && packet.places.removedKeys.length === 0);
     const surnamesEmpty = !packet.surnameVariants || packet.surnameVariants.length === 0;
     return empty(packet.persons) && empty(packet.partnerships) && empty(packet.sources)
+        && (!packet.media || empty(packet.media))
         && placesEmpty && surnamesEmpty;
 }
 
@@ -251,9 +263,9 @@ function personLabel(p: Person): string {
 }
 
 /** True when `after` carries a photo or attachment that `before` did not. */
-function gainedMedia(before: Person | undefined, after: Person): boolean {
+function gainedMedia(before: Person | undefined, after: Person, beforeData: StromData, afterData: StromData): boolean {
     if (after.photo && after.photo !== before?.photo) return true;
-    return (after.attachments?.length ?? 0) > (before?.attachments?.length ?? 0);
+    return personMediaCount(afterData, after.id) > (before ? personMediaCount(beforeData, before.id) : 0);
 }
 
 /** Which named fields (plus a generic 'fieldOther') differ between two persons. */
@@ -289,10 +301,10 @@ export function summarizeChangePacket(current: StromData, packet: ChangePacket, 
         const before = curPersons[p.id];
         if (!before) {
             newPersons.push({ id: p.id, name: personLabel(p) });
-            if (gainedMedia(undefined, p)) mediaCount++;
+            if (gainedMedia(undefined, p, current, after)) mediaCount++;
         } else if (stableStringify(before) !== stableStringify(p)) {
             modifiedPersons.push({ id: p.id, name: personLabel(p), changedFieldKeys: diffPersonFields(before, p) });
-            if (gainedMedia(before, p)) mediaCount++;
+            if (gainedMedia(before, p, current, after)) mediaCount++;
         }
     }
     const removedPersonCount = Object.keys(curPersons).filter(id => !(id in after.persons)).length;
@@ -370,6 +382,11 @@ export function applyPacketOntoData(current: StromData, packet: ChangePacket, ba
     ) as Record<PartnershipId, Partnership>;
     const sources = applyThreeWay(out.sources ?? {}, packet.sources, base?.sources ?? undefined);
     if (Object.keys(sources).length > 0 || out.sources) out.sources = sources;
+    if (packet.media) {
+        const media = applyThreeWay(out.media ?? {}, packet.media, base?.media ?? undefined);
+        out.media = Object.keys(media).length > 0 ? media : undefined;
+        if (!out.media) delete out.media;
+    }
 
     if (packet.places) {
         const places: Record<string, PlaceGeo> = { ...(out.places ?? {}) };
@@ -388,6 +405,9 @@ export function applyPacketOntoData(current: StromData, packet: ChangePacket, ba
     }
 
     reconcileRelations(out);
+    // A packet of an older app carries its files on its persons (data v23).
+    moveLegacyAttachments(out);
+    pruneMedia(out);
     return out;
 }
 

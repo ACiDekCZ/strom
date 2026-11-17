@@ -14,6 +14,7 @@
  * interrupted send is simply repeated later.
  */
 
+import { allMedia } from '../media.js';
 import { researchMarkFlags } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
@@ -172,11 +173,9 @@ function noteSent(researchId: string, sha: string, id: string): void {
 /** Every original hash the tree still refers to (attachments and excerpts). */
 function referencedShas(data: StromData): Set<string> {
     const out = new Set<string>();
-    for (const p of Object.values(data.persons)) {
-        for (const a of p.attachments ?? []) {
-            const sha = normalizeSha256(a.original?.sha256);
-            if (sha) out.add(sha);
-        }
+    for (const a of allMedia(data)) {
+        const sha = normalizeSha256(a.original?.sha256);
+        if (sha) out.add(sha);
     }
     for (const s of Object.values(data.sources ?? {})) {
         for (const e of s.excerpts ?? []) {

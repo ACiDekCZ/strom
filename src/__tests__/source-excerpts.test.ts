@@ -321,9 +321,10 @@ describe('subtree', () => {
         const data: StromData = {
             persons: {
                 a: person('a', 'Jan', { sourceIds: ['s1'] }),
-                b: person('b', 'Petr', { attachments: [{ id: 'att1', name: 'p', mimeType: 'image/jpeg', dataUrl: JPEG, sizeBytes: 50 }] }),
+                b: person('b', 'Petr'),
             } as StromData['persons'],
             partnerships: {},
+            media: { att1: { id: 'att1', name: 'p', mimeType: 'image/jpeg', dataUrl: JPEG, sizeBytes: 50, places: [{ personId: 'b' as PersonId }] } },
             sources: { s1: { id: 's1', title: 'Křest', excerpts: [excerpt({ fromAttachmentId: 'att1', region: { x: 0, y: 0, w: 1, h: 0.2 } })] } },
         };
         const sub = extractSubtree(data, new Set(['a' as PersonId]));

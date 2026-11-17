@@ -6,6 +6,7 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 import { getDemoTree, DEMO_FOCUS, DemoImageMaker } from '../demo-tree.js';
+import { personMedia, mediaSourceId } from '../media.js';
 import { customCardSize, cardPreset, cardLines } from '../card-fields.js';
 import { validateTreeData, stripUnsafeMediaDataUrls } from '../validation.js';
 import { collectPlaces } from '../places.js';
@@ -171,7 +172,8 @@ describe('sample pictures', () => {
 
     it('comes without pictures when nothing can draw them', () => {
         const data = getDemoTree();
-        expect(Object.values(data.persons).some(p => p.photo || p.attachments)).toBe(false);
+        expect(Object.values(data.persons).some(p => p.photo || personMedia(data, p.id).length)).toBe(false);
+        expect(data.media).toBeUndefined();
         expect(Object.values(data.sources!).some(s => s.excerpts)).toBe(false);
     });
 
@@ -179,8 +181,8 @@ describe('sample pictures', () => {
         const data = getDemoTree(maker);
         expect(Object.values(data.persons).filter(p => p.photo)).toHaveLength(4);
         expect(data.persons[DEMO_FOCUS].photo).toBe(jpeg);
-        const page = data.persons[DEMO_FOCUS].attachments![0];
-        expect(page.sourceId).toBe('demo_src_baptism');
+        const page = personMedia(data, DEMO_FOCUS)[0];
+        expect(mediaSourceId(page)).toBe('demo_src_baptism');
         const crop = data.sources!.demo_src_baptism.excerpts![0];
         expect(crop.fromAttachmentId).toBe(page.id);
         expect(Object.values(data.sources!).filter(s => s.excerpts)).toHaveLength(3);

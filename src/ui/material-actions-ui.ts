@@ -11,6 +11,7 @@
  * See src/ui/module.ts for the composition pattern.
  */
 
+import { mediaPersonId } from '../media.js';
 import { researchMarkFlags, setResearchActionLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { Person, PersonId } from '../types.js';
@@ -605,7 +606,8 @@ export const materialActionsMethods = uiModule({
         for (const item of items) {
             const attId = item.attachment?.id;
             if (!attId) continue;
-            const owner = DataManager.getAllPersons().find(p => p.attachments?.some(a => a.id === attId));
+            const ownerId = mediaPersonId(DataManager.getMedia(attId));
+            const owner = ownerId ? DataManager.getPerson(ownerId) : null;
             if (owner && !DataManager.isPersonLocked(owner.id)) targets.push({ personId: owner.id, attId });
         }
         if (!targets.length) return null;

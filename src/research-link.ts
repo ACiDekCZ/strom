@@ -9,7 +9,8 @@
  */
 
 import { keepPersonListData } from './person-lists-data.js';
-import { StromData, Person, PersonId, PartnershipId, Partnership, ResearchLink, Source, APP_VERSION, isPrimaryName, PlaceRecordBy, LifeEvent, EventRoleAt, PortraitSource } from './types.js';
+import { StromData, Person, PersonId, PartnershipId, Partnership, ResearchLink, Source, APP_VERSION, isPrimaryName, PlaceRecordBy, LifeEvent, EventRoleAt, PortraitSource, Attachment, MediaPlace } from './types.js';
+import { allMedia, isPersonPlace, personMedia, personMediaIndex, placePersonId, samePlace } from './media.js';
 import { eventIsShareable, eventValueIsOnTag } from './events.js';
 import { SUPPORTED_LANGUAGES, getStringsForLang } from './strings.js';
 import { withoutConvertedStandIns, isPurePlaceholder } from './single-parent.js';
@@ -1888,12 +1889,13 @@ export function researchMediaKeys(data: StromData): string[] {
     const add = (key: string | null): void => {
         if (key && out.size < MEDIA_BASE_MAX) out.add(key);
     };
+    const files = personMediaIndex(data);
     for (const p of Object.values(data.persons ?? {})) {
         if (!p) continue;
         const owner = researchPersonRef(p.refn);
         if (!owner) continue;
         add(mediaPlaceKey(owner, 'p', p.photo));
-        for (const a of p.attachments ?? []) add(mediaPlaceKey(owner, 'a', attachmentContent(a)));
+        for (const a of files.get(p.id) ?? []) add(mediaPlaceKey(owner, 'a', attachmentContent(a)));
     }
     for (const u of Object.values(data.partnerships ?? {})) {
         if (u?.photo) add(mediaPlaceKey(researchFamilyRef(u.researchId), 'c', u.photo));
@@ -1989,19 +1991,40 @@ export function carryOverMedia(next: StromData, previous: StromData, base?: Read
         unionsChanged = true;
     }
 
+    // The tree's files (data v24: StromData.media), by record: a record is
+    // replaced (never changed in place) when it takes a picture or a place.
+    const media: Record<string, Attachment> = { ...(next.media ?? {}) };
+    let mediaChanged = false;
+    const view = { media };
+    const previousFiles = personMediaIndex(previous);
+    /** The same file as `a` among `have`: by id, the same picture or (an original only, or with the files) the same original. */
+    const sameFileIn = (have: readonly Attachment[], a: Attachment): Attachment | undefined => {
+        const sha = a.original?.sha256?.toLowerCase();
+        return have.find(h => h.id === a.id
+            || (!!a.dataUrl && !a.originalOnly && !h.originalOnly && h.dataUrl === a.dataUrl)
+            || (!!sha && (a.originalOnly || base !== undefined) && h.original?.sha256?.toLowerCase() === sha));
+    };
+    const addPlaces = (rec: Attachment, places: readonly MediaPlace[]): void => {
+        const add = places.filter(pl => !rec.places.some(o => samePlace(o, pl)));
+        if (!add.length) return;
+        media[rec.id] = { ...rec, places: [...rec.places, ...add] };
+        mediaChanged = true;
+    };
+
     for (const [id, old] of Object.entries(previous.persons ?? {})) {
         if (!old) continue;
         const owner = researchPersonRef(old.refn);
         const photoArchived = !!old.photo && fromArchive(owner, 'p', old.photo);
-        const ownAttachments = (old.attachments ?? []).filter(a => !fromArchive(owner, 'a', attachmentContent(a)));
-        const media = (old.photo && !photoArchived ? 1 : 0) + ownAttachments.length;
+        const oldFiles = previousFiles.get(id as PersonId) ?? [];
+        const ownAttachments = oldFiles.filter(a => !fromArchive(owner, 'a', attachmentContent(a)));
+        const count = (old.photo && !photoArchived ? 1 : 0) + ownAttachments.length;
         /** With the tree's files: a picture held here of a file the archive may name by its name alone. */
-        const shows = base !== undefined && !!old.attachments?.some(a => !a.originalOnly && a.original?.sha256);
-        if (!media && !shows) continue;
+        const shows = base !== undefined && oldFiles.some(a => !a.originalOnly && a.original?.sha256);
+        if (!count && !shows) continue;
         const curId = currentId(id as PersonId);
         const cur = curId ? persons[curId] : undefined;
         if (!curId || !cur) {
-            lost += media;
+            lost += count;
             continue;
         }
         const out = { ...cur };
@@ -2013,40 +2036,34 @@ export function carryOverMedia(next: StromData, previous: StromData, base?: Read
             if (old.photoDate) out.photoDate = old.photoDate;
             changed = true;
         }
-        let have = cur.attachments ?? [];
         // With the tree's files: one the archive names by its name alone keeps the picture held here of it.
-        if (base !== undefined && have.some(a => a.originalOnly)) {
-            const shown = new Map((old.attachments ?? []).filter(a => !a.originalOnly && a.original?.sha256)
+        if (base !== undefined) {
+            const shown = new Map(oldFiles.filter(a => !a.originalOnly && a.original?.sha256)
                 .map(a => [a.original!.sha256.toLowerCase(), a] as const));
-            const merged = have.map(a => {
+            for (const a of personMedia(view, curId)) {
                 const was = a.originalOnly && a.original?.sha256 ? shown.get(a.original.sha256.toLowerCase()) : undefined;
-                if (!was) return a;
+                if (!was) continue;
                 const { originalOnly: _only, ...rest } = a;
-                return { ...rest, dataUrl: was.dataUrl, mimeType: was.mimeType, sizeBytes: was.sizeBytes, original: { ...a.original!, ...was.original! } };
-            });
-            if (merged.some((a, i) => a !== have[i])) {
-                have = merged;
-                out.attachments = merged;
-                changed = true;
+                media[a.id] = { ...rest, dataUrl: was.dataUrl, mimeType: was.mimeType, sizeBytes: was.sizeBytes, original: { ...a.original!, ...was.original! } };
+                mediaChanged = true;
             }
         }
-        const ids = new Set(have.map(a => a.id));
-        // An original only carries the shared page icon as its data: found by its hash, never by that.
-        const urls = new Set(have.filter(a => !a.originalOnly).map(a => a.dataUrl).filter(Boolean));
-        const shas = new Set(have.map(a => a.original?.sha256?.toLowerCase()).filter(Boolean));
-        // With the tree's files the same original is the same file, whatever picture of it either holds.
-        const sameOriginal = (a: { originalOnly?: boolean; original?: { sha256: string } }): boolean =>
-            (a.originalOnly || base !== undefined) && !!a.original?.sha256 && shas.has(a.original.sha256.toLowerCase());
-        const extra = ownAttachments
-            .filter(a => !ids.has(a.id) && !(a.dataUrl && !a.originalOnly && urls.has(a.dataUrl)) && !sameOriginal(a))
-            .map(a => {
-                if (a.sourceId === undefined || sourceExists(a.sourceId)) return a;
-                const { sourceId: _gone, ...rest } = a;
-                return rest;
-            });
-        if (extra.length) {
-            out.attachments = [...have, ...extra];
-            carried += extra.length;
+        const have = personMedia(view, curId);
+        for (const a of ownAttachments) {
+            if (sameFileIn(have, a)) continue;
+            // At this person as the file was (a fact, an event), at its sources still there.
+            const places: MediaPlace[] = [
+                ...a.places.filter(pl => placePersonId(pl) === id).map(pl => ({ ...pl, personId: curId } as MediaPlace)),
+                ...a.places.filter(pl => 'sourceId' in pl && sourceExists(pl.sourceId)),
+            ];
+            const there = media[a.id];
+            if (there) addPlaces(there, places);
+            else {
+                const { removed: _removed, ...rest } = a;
+                media[a.id] = { ...rest, places };
+                mediaChanged = true;
+            }
+            carried++;
             changed = true;
         }
         // The original the portrait was cut from (spec 107): the research
@@ -2054,23 +2071,62 @@ export function carryOverMedia(next: StromData, previous: StromData, base?: Read
         // to while its original is still there.
         const src = old.photoSource;
         if (src && old.photo && out.photo === old.photo && !cur.photoSource) {
-            let carried: PortraitSource | undefined;
+            let carriedSource: PortraitSource | undefined;
             if (src.attachmentId) {
-                const att = old.attachments?.find(a => a.id === src.attachmentId);
-                const now = att && (out.attachments ?? []).find(a => a.id === att.id || (!a.originalOnly && a.dataUrl === att.dataUrl));
-                if (now) carried = { ...src, attachmentId: now.id };
+                const att = oldFiles.find(a => a.id === src.attachmentId);
+                const now = att && personMedia(view, curId).find(a => a.id === att.id || (!a.originalOnly && a.dataUrl === att.dataUrl));
+                if (now) carriedSource = { ...src, attachmentId: now.id };
             } else if (src.partnershipId) {
                 const uid = unionNow.get(src.partnershipId);
                 const union = uid ? partnerships[uid] : undefined;
                 if (union && union.photo === previous.partnerships[src.partnershipId]?.photo
-                    && (union.person1Id === curId || union.person2Id === curId)) carried = { ...src, partnershipId: union.id };
+                    && (union.person1Id === curId || union.person2Id === curId)) carriedSource = { ...src, partnershipId: union.id };
             }
-            if (carried) {
-                out.photoSource = carried;
+            if (carriedSource) {
+                out.photoSource = carriedSource;
                 changed = true;
             }
         }
         if (changed) persons[curId] = out;
+    }
+
+    // Files at couples and files of a source alone: the research's file does
+    // not carry them, so they come along to the couple (same id, else the
+    // same two people) and the source still there.
+    const unionOf = (uid: PartnershipId): PartnershipId | undefined => {
+        if (partnerships[uid]) return uid;
+        const old = previous.partnerships?.[uid];
+        if (!old) return undefined;
+        const a = currentId(old.person1Id), b = currentId(old.person2Id);
+        return a && b ? Object.values(partnerships).find(u =>
+            (u.person1Id === a && u.person2Id === b) || (u.person1Id === b && u.person2Id === a))?.id : undefined;
+    };
+    for (const a of allMedia(previous)) {
+        const atPerson = a.places.some(pl => isPersonPlace(pl));
+        const places: MediaPlace[] = [];
+        let gone = false;
+        for (const pl of a.places) {
+            if ('partnershipId' in pl) {
+                const uid = unionOf(pl.partnershipId);
+                if (uid) places.push({ ...pl, partnershipId: uid });
+                else gone = true;
+            } else if (!atPerson && 'sourceId' in pl) {
+                if (sourceExists(pl.sourceId)) places.push(pl);
+                else gone = true;
+            }
+        }
+        if (!places.length) {
+            if (gone && !atPerson) lost++;
+            continue;
+        }
+        const there = media[a.id] ?? sameFileIn(Object.values(media), a);
+        if (there) addPlaces(there, places);
+        else {
+            const { removed: _removed, ...rest } = a;
+            media[a.id] = { ...rest, places };
+            mediaChanged = true;
+            carried++;
+        }
     }
 
     for (const [id, old] of Object.entries(previous.sources ?? {})) {
@@ -2110,7 +2166,7 @@ export function carryOverMedia(next: StromData, previous: StromData, base?: Read
     // The lists of people and the date each person came into the tree are the
     // tree's own (spec 084 §8): a person new here gets the research's date or now.
     const data = keepPersonListData(
-        keepPlaceOrigins(carryOverTreeDecisions({ ...next, persons, ...(unionsChanged ? { partnerships } : {}), ...(sources ? { sources } : {}) }, previous), previous),
+        keepPlaceOrigins(carryOverTreeDecisions({ ...next, persons, ...(unionsChanged ? { partnerships } : {}), ...(sources ? { sources } : {}), ...(mediaChanged ? { media } : {}) }, previous), previous),
         previous, new Date().toISOString());
     return { data, lost, carried };
 }

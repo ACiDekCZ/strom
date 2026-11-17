@@ -21,12 +21,14 @@ import { TreeRenderer } from '../renderer.js';
 import { Person, PersonId, TreeId } from '../types.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { setMaterialsCountProvider } from '../card-signals.js';
+import { personMediaIndex } from '../media.js';
 import { researchPersonRef, parseLiveBridge, researchLinkMark } from '../research-link.js';
 import { storedResearchBridge, announcedResearchScheme, researchLinksEnabled } from '../research-device.js';
 import {
     MATERIAL_LIST_FEATURE, MATERIAL_ASSIGN_FEATURE, MATERIAL_THUMB_FEATURE, MATERIAL_USES_FEATURE, MATERIAL_EDIT_FEATURE,
     MATERIAL_SORT_FEATURE, MATERIALS_EVENT,
     MaterialCaps, MaterialEnv, MaterialItem, MaterialList, MaterialAction, MaterialActionId, MaterialFile, MaterialBatch,
+    MaterialPerson, materialPerson,
     materialCaps, materialActions, personMaterials, materialCounter, materialKindLabel, batchFolderLabel,
     materialType, fileExt, primeMaterials, cachedMaterials, cachedMaterialList, saveMaterialList,
     fetchMaterial, getCachedThumb, fileUrl, materialSystemLink,
@@ -227,6 +229,7 @@ const ACTION_LABEL: Record<MaterialActionId, () => string> = {
     download: () => strings.materials.download,
     useAsPortrait: () => strings.materials.useAsPortrait,
     deleteFromTree: () => strings.materials.deleteFromTree,
+    edit: () => strings.materials.edit,
 };
 
 /** Where the item's ⋯ menu draws a line above (the research's writes, then the rest). */
@@ -239,23 +242,25 @@ let sectionItems = new Map<string, MaterialItem>();
 /** Which attachments the tree holds and on whom: a change redraws what shows them (window, section, viewer). */
 export function treeAttachmentsKey(): string {
     const parts: string[] = [];
+    const index = personMediaIndex(DataManager.getData());
     for (const p of DataManager.getAllPersons()) {
-        if (!p.attachments?.length) continue;
-        parts.push(`${p.id}|${p.refn ?? ''}|${p.attachments.map(a => a.id).join(',')}`);
+        const atts = index.get(p.id);
+        if (!atts?.length) continue;
+        parts.push(`${p.id}|${p.refn ?? ''}|${atts.map(a => a.id).join(',')}`);
     }
     return parts.join(';');
 }
 
 /** The attachments the open person's section and list were drawn with (ids). */
 let sectionAttachments = '';
-const personAttachmentIds = (p: Person): string => (p.attachments ?? []).map(a => a.id).join(',');
+const personAttachmentIds = (p: Person): string => DataManager.personMedia(p.id).map(a => a.id).join(',');
 /** People whose `?person=` is being asked now (REFN). */
 const personLoading = new Set<string>();
 /** Trees whose whole list was asked in this page (once per page; later answers come per person). */
 const fullAsked = new Set<string>();
 /** What the cards and the gates showed last (a change redraws the cards). */
 let drawnSignature = '';
-let providerState: { on: boolean; count: ((p: Person) => number) | null } = { on: false, count: null };
+let providerState: { on: boolean; count: ((p: MaterialPerson) => number) | null } = { on: false, count: null };
 /** The last state of the gates and the bridge the section was drawn with. */
 let lastBridgeKey = '';
 
@@ -284,7 +289,7 @@ export const materialsMethods = uiModule({
             researchId,
             base: parseLiveBridge(storedResearchBridge(researchId)?.base)?.base ?? null,
             env,
-            caps: materialCaps({ ...env, ...(links ? {} : { links: false }) }),
+            caps: materialCaps({ ...env, ...(links ? {} : { openLinks: false }) }),
             agent: !this.researchAgentlessFor(researchId, ctx.link),
         };
     },
@@ -305,7 +310,7 @@ export const materialsMethods = uiModule({
         const person = DataManager.getPerson(personId);
         if (!person) return [];
         const ctx = this.materialsContext();
-        return personMaterials(person, ctx?.caps.list ? cachedMaterialList(ctx.treeId) : null);
+        return personMaterials(materialPerson(DataManager.getData(), person), ctx?.caps.list ? cachedMaterialList(ctx.treeId) : null);
     },
 
     /** The person menu's "Materials N" (0: no row; only where materials are shown). */
@@ -684,7 +689,7 @@ export const materialsMethods = uiModule({
             return;
         }
         // Anything the browser does not show: the system's program, through the research.
-        const link = ctx.caps.links !== false ? materialSystemLink(ctx.researchId, file.sha, announcedResearchScheme()) : null;
+        const link = ctx.caps.openLinks !== false ? materialSystemLink(ctx.researchId, file.sha, announcedResearchScheme()) : null;
         if (link) this.launchResearchLink(link);
         else window.open(fileUrl(ctx.base, file.sha), '_blank', 'noopener');
     },
@@ -926,7 +931,7 @@ export const materialsMethods = uiModule({
     },
 
     initMaterials(): void {
-        setMaterialsCountProvider((p: Person) => (providerState.on && providerState.count ? providerState.count(p) : null));
+        setMaterialsCountProvider((p: Person) => (providerState.on && providerState.count ? providerState.count(materialPerson(DataManager.getData(), p)) : null));
         window.addEventListener(MATERIALS_EVENT, (e) => {
             const treeId = (e as CustomEvent<{ treeId?: string }>).detail?.treeId;
             if (treeId) this.materialsListChanged(treeId);

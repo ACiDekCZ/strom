@@ -8,6 +8,7 @@
  * browser), so the decisions here stay testable without one.
  */
 
+import { addPersonMedia } from './media.js';
 import { PersonId, PartnershipId, StromData, uniqueIdSuffix } from './types.js';
 import { MAX_PDF_BYTES } from './attachments.js';
 import { dropMediaLink } from './import-origin.js';
@@ -65,7 +66,7 @@ export async function attachGedcomMediaFile(
                 if (ref.date) person.photoDate = ref.date;
                 kind = 'portrait';
             } else {
-                (person.attachments ??= []).push({
+                addPersonMedia(data, person.id, {
                     id: `att_${Date.now()}_${uniqueIdSuffix()}`,
                     name: ref.title || file.name,
                     mimeType: 'image/jpeg',
@@ -76,7 +77,7 @@ export async function attachGedcomMediaFile(
                 kind = 'attachment';
             }
         } else if (file.type === 'application/pdf' && file.size <= MAX_PDF_BYTES) {
-            (person.attachments ??= []).push({
+            addPersonMedia(data, person.id, {
                 id: `att_${Date.now()}_${uniqueIdSuffix()}`,
                 name: ref.title || file.name,
                 mimeType: 'application/pdf',

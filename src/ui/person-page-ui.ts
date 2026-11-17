@@ -7,6 +7,7 @@
  * "Save as HTML" dialog with sharing on phones and tablets.
  */
 
+import { personMedia } from '../media.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { strings, getCurrentLanguage } from '../strings.js';
@@ -103,13 +104,14 @@ async function shrinkAttachments(list: readonly Attachment[]): Promise<Map<strin
 
 /** The tree with one person's attachments swapped for their reduced copies (the tree itself untouched). */
 function withShrunkAttachments(data: StromData, personId: PersonId, shrunk: ReadonlyMap<string, string>): StromData {
-    const p = data.persons[personId];
-    if (!p?.attachments || !shrunk.size) return data;
-    const attachments = p.attachments.map(a => {
+    const own = personMedia(data, personId);
+    if (!own.length || !shrunk.size) return data;
+    const media = { ...(data.media ?? {}) };
+    for (const a of own) {
         const small = shrunk.get(a.id);
-        return small ? { ...a, dataUrl: small, mimeType: 'image/jpeg', sizeBytes: Math.round(small.length * 0.75) } : a;
-    });
-    return { ...data, persons: { ...data.persons, [personId]: { ...p, attachments } } };
+        if (small) media[a.id] = { ...a, dataUrl: small, mimeType: 'image/jpeg', sizeBytes: Math.round(small.length * 0.75) };
+    }
+    return { ...data, media };
 }
 const PRIVACY_MODES = PERSON_PAGE_PRIVACY_MODES;
 
@@ -1280,7 +1282,7 @@ export const personPageMethods = uiModule({
         });
         refresh();
         // Reduce the large attachment images meanwhile; the size and the file follow.
-        const shrinking = shrinkAttachments(data.persons[personId]?.attachments ?? []).then(map => {
+        const shrinking = shrinkAttachments(personMedia(data, personId)).then(map => {
             if (!map.size) return;
             shrunk = map;
             fullProt = protectPersonPageTree(fileData(), 'full', now);

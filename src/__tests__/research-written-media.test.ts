@@ -13,6 +13,7 @@ import {
     type PersonChange, type SentOtherRow, type NotWrittenItem,
 } from '../research-changes.js';
 import { getStringsForLang, setLanguage } from '../strings.js';
+import { addPersonMedia } from '../media.js';
 import type { StromData, Person, PersonId, PartnershipId } from '../types.js';
 
 const P = (id: string): PersonId => id as PersonId;
@@ -103,7 +104,7 @@ describe('a photo is a change of its own', () => {
         const base = baseCopy(tree());
         const cur = tree();
         // An attachment of a person that belongs to the source: told at the source.
-        cur.persons[P('p3')].attachments = [{ id: 'a1', dataUrl: 'data:application/pdf;base64,QUJD', name: 'zapis.pdf', sizeBytes: 3, sourceId: 's1' }] as never;
+        addPersonMedia(cur, P('p3'), { id: 'a1', dataUrl: 'data:application/pdf;base64,QUJD', name: 'zapis.pdf', mimeType: 'application/pdf', sizeBytes: 3 }, 's1');
         const o = diffOther(base, cur)!;
         expect(o.sources[0].kinds).toContain('attachment');
         expect(sentOtherRows(o)[0].appOnly).toBe(true);

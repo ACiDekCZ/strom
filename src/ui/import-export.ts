@@ -3,6 +3,7 @@
  * see src/ui/module.ts for the composition pattern.
  */
 
+import { allMedia } from '../media.js';
 import type { PrivacyMode, ContentOptions } from '../privacy.js';
 import { noteExportAll } from '../research-device.js';
 import { DataManager, auditPersonName, storedTreeForExport } from '../data.js';
@@ -728,10 +729,8 @@ export const importExportMethods = uiModule({
         }
         const matched = [...became.values()].reduce((a, b) => a + b, 0);
         // Fix attachment sizes from data URLs (compression changed them).
-        for (const person of Object.values(this.gedcomResult.data.persons)) {
-            for (const att of person.attachments ?? []) {
-                if (!att.sizeBytes && !att.originalOnly) att.sizeBytes = dataUrlByteSize(att.dataUrl);
-            }
+        for (const att of allMedia(this.gedcomResult.data)) {
+            if (!att.sizeBytes && !att.originalOnly) att.sizeBytes = dataUrlByteSize(att.dataUrl);
         }
 
         this.gedcomResult.externalMedia = remaining;

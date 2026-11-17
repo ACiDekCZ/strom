@@ -62,8 +62,11 @@ async function pngBuffer(page: Page, width: number, height: number): Promise<Buf
 }
 
 const getData = (page: Page) => page.evaluate(() => window.Strom.DataManager.getData() as unknown as {
-    persons: Record<string, any>; partnerships: Record<string, any>; sources?: Record<string, any>;
+    persons: Record<string, any>; partnerships: Record<string, any>; sources?: Record<string, any>; media?: Record<string, any>;
 });
+/** A person's files (data v24): the records of `media` with a place of theirs, in their order. */
+const filesOf = (data: { media?: Record<string, any> }, personId: string): any[] =>
+    Object.values(data.media ?? {}).filter((a: any) => a.places?.some((pl: any) => pl.personId === personId));
 
 /** The toasts sit over the bottom of the dialogs: clear them before clicking there. */
 async function clearToasts(page: Page): Promise<void> {
@@ -284,7 +287,7 @@ test.describe('excerpts', () => {
         await page.evaluate((scan) => {
             window.Strom.DataManager.addAttachment('j' as never, { name: 'matrika-57.jpg', mimeType: 'image/jpeg', dataUrl: scan, sizeBytes: 1000 });
         }, scan);
-        const attId = (await getData(page)).persons.j.attachments[0].id;
+        const attId = filesOf(await getData(page), 'j')[0].id;
 
         await cardAction(page, 'Jan', 'edit');
         await personModal(page).locator('#btn-cite-person').click();
@@ -316,7 +319,7 @@ test.describe('excerpts', () => {
         expect(exc.width).toBe(800);
         expect(exc.height).toBe(120);
         // No second copy of the page was stored.
-        expect(data.persons.j.attachments).toHaveLength(1);
+        expect(filesOf(data, 'j')).toHaveLength(1);
 
         // Crop again: the frame starts where it was; one step right keeps the link.
         await page.evaluate((sid) => window.Strom.UI.showEditSourceModal(sid), sid);
@@ -696,7 +699,7 @@ test.describe('attachments beyond one image', () => {
         await expect(list.locator('.attachment-row')).toHaveCount(1);
         await expect(list.locator('.attachment-name')).toHaveText('oddaci-list.pdf');
         await expect(list.locator('.attachment-thumb')).toHaveAttribute('title', 'PDF');
-        const att = (await getData(page)).persons.j.attachments[0];
+        const att = filesOf(await getData(page), 'j')[0];
         expect(att.mimeType).toBe('application/pdf');
         expect(att.dataUrl.startsWith('data:application/pdf;base64,')).toBe(true);
 
@@ -728,7 +731,7 @@ test.describe('attachments beyond one image', () => {
         await expect(confirmDlg(page).locator('#confirm-message')).toHaveText('Unsupported file type. Use JPG, PNG or PDF.');
         await confirmDlg(page).locator('#confirm-ok-btn').click();
         await expect(list.locator('.attachment-row')).toHaveCount(2);
-        expect((await getData(page)).persons.j.attachments).toHaveLength(2);
+        expect(filesOf(await getData(page), 'j')).toHaveLength(2);
     });
 
     test('an attachment from a foreign file that claims to be a PDF but is not one never opens', async ({ page }) => {

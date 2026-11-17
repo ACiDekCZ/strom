@@ -30,7 +30,7 @@ function list(files: MaterialFile[], extra: Partial<MaterialList> = {}): Materia
 }
 
 function att(id: string, init: Partial<Attachment> = {}): Attachment {
-    return { id, name: `${id}.jpg`, mimeType: 'image/jpeg', dataUrl: 'data:image/jpeg;base64,AA==', sizeBytes: 10, ...init };
+    return { id, name: `${id}.jpg`, mimeType: 'image/jpeg', dataUrl: 'data:image/jpeg;base64,AA==', sizeBytes: 10, places: [], ...init };
 }
 
 function memoryStorage(): Storage {

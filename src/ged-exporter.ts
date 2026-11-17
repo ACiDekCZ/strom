@@ -22,6 +22,7 @@
  * the 255-byte line limit, and the importer joins it back.
  */
 
+import { allMedia, mediaSourceId, personMedia } from './media.js';
 import { researchHeaderLines, ResearchHeaderInfo, TitlesInGedcom } from './research-link.js';
 import { isPurePlaceholder } from './single-parent.js';
 import { APP_VERSION, StromData, Person, Partnership, CoupleEvent, EventParticipant, Source, PersonId, OriginalIds, PartnershipId, LifeEventType, LifeEvent, ParticipantRole, PlaceGeo, Story, ParentChildRelType, MediaOriginal, Attachment, AlsoChildOf, FactStatus, ResearchFactOrigin, ResearchFactWas, coupleSides } from './types.js';
@@ -1813,10 +1814,11 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         if (person.photo) {
             pushMedia(person.photo, person.photoOriginalName ?? '', 'photo', undefined, undefined, undefined, undefined, person.photoDate);
         }
-        for (const att of person.attachments ?? []) {
+        for (const att of personMedia(data, personId)) {
+            const srcId = mediaSourceId(att);
             // Only the original (the research holds it): the file's name and hash, no data.
-            if (att.originalOnly) pushMedia(att.name || 'file', att.name, '', att.note, att.sourceId, att.original, att.original?.mimeType ?? att.mimeType, att.date);
-            else pushMedia(att.dataUrl, att.name, '', att.note, att.sourceId, att.original, undefined, att.date);
+            if (att.originalOnly) pushMedia(att.name || 'file', att.name, '', att.note, srcId, att.original, att.original?.mimeType ?? att.mimeType, att.date);
+            else pushMedia(att.dataUrl, att.name, '', att.note, srcId, att.original, undefined, att.date);
         }
 
         // Family as spouse (FAMS) - partnerships where this person is a partner
@@ -2195,8 +2197,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
 
     // ==================== SOURCES ====================
     // Page attachments by id: an excerpt cut from one says where on its original it lies.
-    const attachmentById = new Map<string, Attachment>();
-    for (const p of Object.values(data.persons)) for (const a of p.attachments ?? []) attachmentById.set(a.id, a);
+    const attachmentById = new Map<string, Attachment>(allMedia(data).map(a => [a.id, a] as const));
     // Standard 5.5.1: repositories are separate @Rx@ records referenced by
     // pointer; the reference/page lives on citations (see pushCitation). PAGE
     // is still emitted on the record too, purely for our own round-trip of

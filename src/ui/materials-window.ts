@@ -17,6 +17,7 @@
  * See src/ui/module.ts for the composition pattern.
  */
 
+import { personMediaIndex } from '../media.js';
 import { researchActionLabel } from './research-open-mark.js';
 import type { UIClass } from './index.js';
 import { DataManager } from '../data.js';
@@ -26,7 +27,7 @@ import { announcedResearchScheme } from '../research-device.js';
 import { PersonPicker } from '../person-picker.js';
 import { MQ_MOBILE, MQ_PHONE_LANDSCAPE } from '../breakpoints.js';
 import {
-    MaterialItem, MaterialList, MaterialBatch, MaterialError, MaterialActionId,
+    MaterialItem, MaterialList, MaterialBatch, MaterialError, MaterialActionId, MaterialCaps,
     cachedMaterials, primeMaterials, fetchMaterial, saveMaterialList, materialKindLabel, materialErrorText,
     materialType,
 } from '../materials.js';
@@ -153,8 +154,8 @@ interface Win {
     drawnAttachments: string;
 }
 
-function capsKey(caps: { list: boolean; assign: boolean; thumb: boolean; bridgeUp: boolean; links?: boolean }, base: string | null): string {
-    return `${caps.list}|${caps.assign}|${caps.thumb}|${caps.bridgeUp}|${caps.links !== false}|${base ?? ''}`;
+function capsKey(caps: MaterialCaps, base: string | null): string {
+    return `${caps.list}|${caps.assign}|${caps.thumb}|${caps.bridgeUp}|${caps.openLinks !== false}|${caps.links}|${caps.edit}|${caps.uses}|${caps.sort}|${caps.mediaApp}|${base ?? ''}`;
 }
 
 let win: Win | null = null;
@@ -164,9 +165,10 @@ const alive = (gen: number): Win | null => (win && win.gen === gen ? win : null)
 
 /** Every person's attachments with their REFN. */
 function treeAttachments(): TreeAttachments[] {
+    const files = personMediaIndex(DataManager.getData());
     return DataManager.getAllPersons()
-        .filter(p => (p.attachments?.length ?? 0) > 0)
-        .map(p => ({ refn: researchPersonRef(p.refn), attachments: p.attachments ?? [] }));
+        .filter(p => (files.get(p.id)?.length ?? 0) > 0)
+        .map(p => ({ refn: researchPersonRef(p.refn), attachments: files.get(p.id) ?? [] }));
 }
 
 /** REFN → name: the tree's person first, else what the research calls them. */
@@ -1053,7 +1055,7 @@ export const materialsWindowMethods = uiModule({
                 rows.push({ id: 'hide', label: m.batchHide, writes: true });
             }
         }
-        if (ctx.caps.links !== false) rows.push({ id: 'research', label: strings.batch.openInResearch, divider: rows.length > 0 });
+        if (ctx.caps.openLinks !== false) rows.push({ id: 'research', label: strings.batch.openInResearch, divider: rows.length > 0 });
         return rows;
     },
 

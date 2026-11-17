@@ -25,7 +25,7 @@ function file(n: number, init: Partial<MaterialFile> = {}): MaterialFile {
 }
 
 function att(id: string, init: Partial<Attachment> = {}): Attachment {
-    return { id, name: `${id}.jpg`, mimeType: 'image/jpeg', dataUrl: 'data:image/jpeg;base64,AA==', sizeBytes: 10, ...init };
+    return { id, name: `${id}.jpg`, mimeType: 'image/jpeg', dataUrl: 'data:image/jpeg;base64,AA==', sizeBytes: 10, places: [], ...init };
 }
 
 function list(files: MaterialFile[], extra: Partial<MaterialList> = {}): MaterialList {

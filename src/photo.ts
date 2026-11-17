@@ -7,6 +7,7 @@
  */
 
 import { StromData, PortraitCrop, PortraitSource, Person } from './types.js';
+import { deleteMedia, personMediaById } from './media.js';
 
 /** Target avatar size in device-independent pixels. */
 export const PHOTO_SIZE = 256;
@@ -116,16 +117,13 @@ export function stripPhotos(data: StromData): StromData {
     const gone = new Set<string>();
     for (const person of Object.values(copy.persons)) {
         const fromAttachment = person.photoSource?.attachmentId;
-        if (fromAttachment && person.attachments?.some(a => a.id === fromAttachment)) {
-            gone.add(fromAttachment);
-            person.attachments = person.attachments.filter(a => a.id !== fromAttachment);
-            if (person.attachments.length === 0) delete person.attachments;
-        }
+        if (fromAttachment && personMediaById(copy, person.id, fromAttachment)) gone.add(fromAttachment);
         delete person.photo;
         delete person.photoOriginalName;
         delete person.photoDate;
         delete person.photoSource;
     }
+    deleteMedia(copy, gone);
     for (const union of Object.values(copy.partnerships)) {
         delete union.photo;
         delete union.photoOriginalName;
@@ -164,7 +162,10 @@ export function dropDanglingPortraitSources(data: StromData): number {
 export function portraitSourceExists(data: StromData, person: Person): boolean {
     const src = person.photoSource;
     if (!src || !person.photo) return false;
-    if (src.attachmentId) return !!person.attachments?.some(a => a.id === src.attachmentId && !a.originalOnly);
+    if (src.attachmentId) {
+        const att = personMediaById(data, person.id, src.attachmentId);
+        return !!att && !att.originalOnly;
+    }
     if (src.partnershipId) {
         const union = data.partnerships[src.partnershipId];
         return !!union?.photo && (union.person1Id === person.id || union.person2Id === person.id);

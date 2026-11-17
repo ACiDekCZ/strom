@@ -32,7 +32,7 @@ async function attachToJan(page: Page) {
 function janAttachment(page: Page) {
     return page.evaluate(() => {
         const jan = Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === 'Jan') as any;
-        return jan.attachments?.[0] ?? null;
+        return window.Strom.DataManager.personMedia(jan.id)[0] ?? null;
     });
 }
 

@@ -25,7 +25,7 @@ test('empty state offers a demo tree that loads with a focus, a hint, the Regist
         const persons = Object.values(d.persons);
         return {
             photos: persons.filter(p => p.photo?.startsWith('data:image/jpeg')).length,
-            pages: persons.flatMap(p => p.attachments ?? []).length,
+            pages: Object.values(d.media ?? {}).filter(a => a.places.some(pl => 'personId' in pl)).length,
             crops: Object.values(d.sources ?? {}).flatMap(s => s.excerpts ?? []).length,
         };
     });

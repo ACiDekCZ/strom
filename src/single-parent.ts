@@ -10,6 +10,7 @@
  * one left behind with nothing to stand for goes. Pure: works on the data.
  */
 
+import { personMediaCount } from './media.js';
 import { StromData, Person, PersonId, PartnershipId, Partnership, oppositeGender } from './types.js';
 
 /**
@@ -24,7 +25,7 @@ export function isPurePlaceholder(data: StromData, id: PersonId): boolean {
     if (p.parentIds.length > 0) return false;
     const own: (keyof Person)[] = ['birthDate', 'birthPlace', 'deathDate', 'deathPlace', 'deathCause', 'notes', 'photo', 'refn', 'question'];
     if (own.some(k => { const v = p[k]; return typeof v === 'string' ? v.trim() !== '' : v !== undefined && v !== null && v !== false; })) return false;
-    if ((p.events?.length ?? 0) > 0 || (p.attachments?.length ?? 0) > 0) return false;
+    if ((p.events?.length ?? 0) > 0 || personMediaCount(data, id) > 0) return false;
     if ((p.sourceIds?.length ?? 0) + (p.birthSourceIds?.length ?? 0) + (p.deathSourceIds?.length ?? 0) > 0) return false;
     return true;
 }

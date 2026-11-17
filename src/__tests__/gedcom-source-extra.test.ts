@@ -10,6 +10,7 @@ import { describe, it, expect } from 'vitest';
 import { parseGedcom, convertToStrom, GedcomImportOrigin } from '../ged-parser.js';
 import { exportToGedcom } from '../ged-exporter.js';
 import { migrateData } from '../data.js';
+import { personMedia } from '../media.js';
 import { cleanImportOrigin, keepImports, pruneImportOrigin } from '../import-origin.js';
 import { GedcomExtra, Person, Source, StromData } from '../types.js';
 
@@ -189,7 +190,7 @@ describe('a picture’s _DATE', () => {
         const r = load(MYHERITAGE);
         const p = byName(r.data, 'Mlhoslav');
         expect(p.photoDate).toBe('3 MAR 1931');
-        expect(p.attachments?.map(a => [a.name, a.date])).toEqual([['Dopis z Kořenova', 'ABT 1925']]);
+        expect(personMedia(r.data, p.id).map(a => [a.name, a.date])).toEqual([['Dopis z Kořenova', 'ABT 1925']]);
         // The files the GEDCOM only names: the date waits with them (attach / download).
         expect(r.externalMedia.map(m => [m.fileName, m.date])).toEqual([
             ['mlhoslav.jpg', '24 JUL 2007'], ['statek.jpg', '1 JAN 1930'],
@@ -220,7 +221,7 @@ describe('a picture’s _DATE', () => {
 
     it('a date that is not one line is not kept', () => {
         const r = load(MYHERITAGE.replace('2 _DATE ABT 1925', `2 _DATE ${'9'.repeat(101)}`));
-        expect(byName(r.data, 'Mlhoslav').attachments?.[0].date).toBeUndefined();
+        expect(personMedia(r.data, byName(r.data, 'Mlhoslav').id)[0]?.date).toBeUndefined();
     });
 
     it('a research version keeps it on the same picture, never on another', () => {
@@ -230,10 +231,16 @@ describe('a picture’s _DATE', () => {
         const next = structuredClone(previous);
         const p = byName(next, 'Mlhoslav');
         delete p.photoDate;
-        for (const a of p.attachments ?? []) { delete a.date; a.id = 'att_research'; }
-        const kept = byName(keepImports(next, previous), 'Mlhoslav');
+        for (const a of personMedia(next, p.id)) {
+            delete a.date;
+            delete next.media![a.id];
+            a.id = 'att_research';
+            next.media![a.id] = a;
+        }
+        const keptData = keepImports(next, previous);
+        const kept = byName(keptData, 'Mlhoslav');
         expect(kept.photoDate).toBe('3 MAR 1931');
-        expect(kept.attachments?.[0].date).toBe('ABT 1925');
+        expect(personMedia(keptData, kept.id)[0]?.date).toBe('ABT 1925');
         // Another picture in the research's version: no date carried over to it.
         const other = structuredClone(previous);
         byName(other, 'Mlhoslav').photo = LETTER;

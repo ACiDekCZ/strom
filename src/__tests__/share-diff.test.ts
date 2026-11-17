@@ -85,10 +85,11 @@ describe('isChangePacket', () => {
         expect(isChangePacket(null)).toBe(false);
     });
 
-    it('accepts both v1 and v2 format versions', () => {
+    it('accepts the v1, v2 and v3 (the tree\'s files, data v24) format versions', () => {
         expect(isChangePacket({ kind: 'strom-changes', formatVersion: 1, baseExportId: 'X' })).toBe(true);
         expect(isChangePacket({ kind: 'strom-changes', formatVersion: 2, baseExportId: 'X' })).toBe(true);
-        expect(isChangePacket({ kind: 'strom-changes', formatVersion: 3, baseExportId: 'X' })).toBe(false);
+        expect(isChangePacket({ kind: 'strom-changes', formatVersion: 3, baseExportId: 'X' })).toBe(true);
+        expect(isChangePacket({ kind: 'strom-changes', formatVersion: 4, baseExportId: 'X' })).toBe(false);
     });
 });
 

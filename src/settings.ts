@@ -3,6 +3,7 @@
  * Settings are NOT exported with tree data - they are local preferences
  */
 
+import { personMediaCount } from './media.js';
 import { AppSettings, ThemeMode, SurnameDisplay, SURNAME_DISPLAYS, LanguageSetting, CardDensity, TreeSpacing, SETTINGS_KEY, StromData, personSourceIds, CARD_SIZE, CardPhotoSize, CardPhotoShape, NORMAL_PHOTO_BOX } from './types.js';
 import { CardFieldSettings, normalizeCardFields, customCardSize, normalizeCardDensity, effectiveCardFields, normalizeCardPhoto } from './card-fields.js';
 import { initLanguage, Language } from './strings.js';
@@ -476,7 +477,7 @@ class SettingsManagerClass {
         if (this.settings.advancedFields !== undefined) return;
         const researchInUse = Object.keys(data.sources ?? {}).length > 0
             || Object.values(data.persons).some(p =>
-                personSourceIds(p).length > 0 || (p.attachments?.length ?? 0) > 0
+                personSourceIds(p).length > 0 || personMediaCount(data, p.id) > 0
                 || !!p.refn || !!p.question || (p.nameVariants?.length ?? 0) > 0);
         if (researchInUse) {
             this.settings.advancedFields = true;

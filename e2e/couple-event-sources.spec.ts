@@ -52,8 +52,11 @@ function jpegDataUrl(page: Page, width: number, height: number): Promise<string>
 }
 
 const getData = (page: Page) => page.evaluate(() => window.Strom.DataManager.getData() as unknown as {
-    persons: Record<string, any>; partnerships: Record<string, any>; sources?: Record<string, any>;
+    persons: Record<string, any>; partnerships: Record<string, any>; sources?: Record<string, any>; media?: Record<string, any>;
 });
+/** A person's files (data v24): the records of `media` with a place of theirs, in their order. */
+const filesOf = (data: { media?: Record<string, any> }, personId: string): any[] =>
+    Object.values(data.media ?? {}).filter((a: any) => a.places?.some((pl: any) => pl.personId === personId));
 const eventSources = async (page: Page) => (await getData(page)).partnerships.u1.events[0].sourceIds;
 
 const panel = (page: Page) => page.locator('#relationships-modal');
@@ -145,7 +148,7 @@ test.describe("sources on a couple's events", () => {
             dm.addAttachment('j' as never, { name: 'jan-list.jpg', mimeType: 'image/jpeg', dataUrl: scanJ, sizeBytes: 1000 });
             dm.addAttachment('m' as never, { name: 'ohlasky-57.jpg', mimeType: 'image/jpeg', dataUrl: scanM, sizeBytes: 1000 });
         }, { scanJ, scanM });
-        const marieAtt = (await getData(page)).persons.m.attachments[0].id;
+        const marieAtt = filesOf(await getData(page), 'm')[0].id;
 
         await openFirstEvent(page, 'j');
         await page.locator('#btn-cite-event').click();
@@ -191,8 +194,8 @@ test.describe("sources on a couple's events", () => {
         expect(created.excerpts).toHaveLength(1);
         expect(created.excerpts[0].fromAttachmentId).toBe(marieAtt);
         // Nothing was added to either partner.
-        expect(data.persons.j.attachments).toHaveLength(1);
-        expect(data.persons.m.attachments).toHaveLength(1);
+        expect(filesOf(data, 'j')).toHaveLength(1);
+        expect(filesOf(data, 'm')).toHaveLength(1);
         expect(data.persons.j.sourceIds).toBeUndefined();
         expect(data.persons.m.sourceIds).toBeUndefined();
     });

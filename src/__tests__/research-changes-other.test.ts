@@ -9,6 +9,7 @@ import { diffByPerson, diffOther, baseCopy, markOlderCopy, otherRowCount, previe
 import { researchAutoState } from '../research-device.js';
 import { getStringsForLang } from '../strings.js';
 import { normalizeSingleParents } from '../single-parent.js';
+import { addPersonMedia } from '../media.js';
 import { StromData, Person, PersonId, PartnershipId } from '../types.js';
 
 const P = (id: string): PersonId => id as PersonId;
@@ -94,13 +95,13 @@ describe('changes beyond the people', () => {
     it('an attachment of a source is told at the source only, not at the person holding it', () => {
         const base = baseCopy(tree());
         const cur = copyOf(tree());
-        cur.persons[P('p3')].attachments = [{ id: 'a1', name: 'scan.jpg', mimeType: 'image/jpeg', dataUrl: 'data:image/jpeg;base64,AAAA', sizeBytes: 3, sourceId: 's2' }];
+        addPersonMedia(cur, P('p3'), { id: 'a1', name: 'scan.jpg', mimeType: 'image/jpeg', dataUrl: 'data:image/jpeg;base64,AAAA', sizeBytes: 3 }, 's2');
         const o = diffOther(base, cur)!;
         expect(o.sources).toEqual([{ sourceId: 's2', title: 'Sčítání lidu 1921', kinds: ['attachment'], citedBy: { persons: 0 } }]);
         expect(diffByPerson(base, cur)).toEqual([]);
         // An attachment of the person's own (no source) stays the person's.
         const own = copyOf(tree());
-        own.persons[P('p3')].attachments = [{ id: 'a2', name: 'foto.jpg', mimeType: 'image/jpeg', dataUrl: 'data:image/jpeg;base64,AAAA', sizeBytes: 3 }];
+        addPersonMedia(own, P('p3'), { id: 'a2', name: 'foto.jpg', mimeType: 'image/jpeg', dataUrl: 'data:image/jpeg;base64,AAAA', sizeBytes: 3 });
         expect(diffOther(base, own)!.sources).toEqual([]);
         expect(diffByPerson(base, own)).toEqual([{ personId: 'p3', name: 'Petr Dvořák', kinds: ['attachment'] }]);
     });
@@ -108,7 +109,7 @@ describe('changes beyond the people', () => {
     it('an attachment naming a source in neither version: a row of its own named by its file (no link)', () => {
         const base = baseCopy(tree());
         const cur = copyOf(tree());
-        cur.persons[P('p3')].attachments = [{ id: 'a1', name: 'list.pdf', mimeType: 'application/pdf', dataUrl: 'data:application/pdf;base64,AAAA', sizeBytes: 3, sourceId: 's77' }];
+        addPersonMedia(cur, P('p3'), { id: 'a1', name: 'list.pdf', mimeType: 'application/pdf', dataUrl: 'data:application/pdf;base64,AAAA', sizeBytes: 3 }, 's77');
         expect(diffOther(base, cur)!.sources).toEqual([{ sourceId: 's77', title: 'list.pdf', kinds: ['attachment'], citedBy: { persons: 0 }, attachmentOnly: true }]);
     });
 

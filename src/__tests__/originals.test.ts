@@ -15,6 +15,7 @@ import {
 import { sanitizeAccepts } from '../research-link.js';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { exportToGedcom } from '../ged-exporter.js';
+import { personMedia } from '../media.js';
 import { StromData, PersonId } from '../types.js';
 
 const hex = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
@@ -194,13 +195,16 @@ describe('_STROM_SHA and _STROM_REGION in GEDCOM', () => {
             p1: {
                 id: 'p1' as PersonId, firstName: 'Anna', lastName: 'Fíšková', gender: 'female', isPlaceholder: false,
                 partnerships: [], parentIds: [], childIds: [], sourceIds: ['s1'],
-                attachments: [{
-                    id: 'att1', name: 'IMG_4021.jpg', mimeType: 'image/jpeg', dataUrl: PNG, sizeBytes: 70,
-                    original: { sha256: SHA, name: 'IMG_4021.jpg', mimeType: 'image/jpeg', bytes: 3_100_000, orientation: 6 },
-                }],
             },
         },
         partnerships: {},
+        media: {
+            att1: {
+                id: 'att1', name: 'IMG_4021.jpg', mimeType: 'image/jpeg', dataUrl: PNG, sizeBytes: 70,
+                original: { sha256: SHA, name: 'IMG_4021.jpg', mimeType: 'image/jpeg', bytes: 3_100_000, orientation: 6 },
+                places: [{ personId: 'p1' as PersonId }],
+            },
+        },
         sources: {
             s1: {
                 id: 's1', title: 'Křestní matrika Čáslav',
@@ -222,7 +226,7 @@ describe('_STROM_SHA and _STROM_REGION in GEDCOM', () => {
     it('reads them back: the original, and the crop linked to its page again', () => {
         const back = convertToStrom(parseGedcom(exportToGedcom(tree()).content)).data;
         const anna = Object.values(back.persons)[0];
-        const att = anna.attachments![0];
+        const att = personMedia(back, anna.id)[0];
         expect(att.original).toMatchObject({ sha256: SHA, orientation: 6 });
         const exc = Object.values(back.sources!)[0].excerpts![0];
         expect(exc.originalSha).toBe(SHA);
@@ -236,7 +240,7 @@ describe('_STROM_SHA and _STROM_REGION in GEDCOM', () => {
             .replace(`2 _STROM_SHA ${SHA}\n2 _STROM_ORIENT 6`, '2 _STROM_SHA nonsense\n2 _STROM_ORIENT 9')
             .replace('2 _STROM_REGION 0,0,0.25,1', '2 _STROM_REGION 2,2,2,2');
         const back = convertToStrom(parseGedcom(ged)).data;
-        expect(Object.values(back.persons)[0].attachments![0].original).toBeUndefined();
+        expect(personMedia(back, Object.values(back.persons)[0].id)[0].original).toBeUndefined();
         const exc = Object.values(back.sources!)[0].excerpts![0];
         expect(exc.originalSha).toBe(SHA);
         expect(exc.fromAttachmentId).toBeUndefined();
@@ -244,7 +248,7 @@ describe('_STROM_SHA and _STROM_REGION in GEDCOM', () => {
 
     it('a tree without originals exports as before (no new lines)', () => {
         const t = tree();
-        delete t.persons['p1' as PersonId].attachments![0].original;
+        delete t.media!.att1.original;
         delete t.sources!.s1.excerpts![0].originalSha;
         const ged = exportToGedcom(t).content;
         expect(ged).not.toMatch(/_STROM_SHA|_STROM_REGION|_STROM_ORIENT/);

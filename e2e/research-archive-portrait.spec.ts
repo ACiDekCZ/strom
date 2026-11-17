@@ -128,7 +128,7 @@ const images = (page: Page) => page.evaluate(() => {
     const person = (name: string) => {
         const p = people.find(x => x.firstName === name);
         return { id: p.id, photo: p.photo ?? null, source: p.photoSource ?? null,
-            attachments: (p.attachments ?? []).map((a: any) => ({ id: a.id, name: a.name, dataUrl: a.dataUrl })) };
+            attachments: window.Strom.DataManager.personMedia(p.id).map(a => ({ id: a.id, name: a.name, dataUrl: a.dataUrl })) };
     };
     const unions = Object.values(d.partnerships).map((u: any) => ({ id: u.id, photo: u.photo ?? null, name: u.photoOriginalName ?? null, date: u.photoDate ?? null }));
     return { jan: person('Jan'), josef: person('Josef'), anna: person('Anna'), unions };

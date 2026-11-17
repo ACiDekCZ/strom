@@ -718,7 +718,8 @@ test.describe('Start research with this tree (G3)', () => {
     const media = (page: Page) => page.evaluate(() => {
         const persons = Object.values(window.Strom.DataManager.getData().persons) as any[];
         const by = (n: string) => persons.find(p => p.firstName === n);
-        return { karel: by('Karel')?.photo ?? null, petr: (by('Petr')?.attachments ?? []).map((a: any) => a.id) };
+        const petr = by('Petr');
+        return { karel: by('Karel')?.photo ?? null, petr: petr ? window.Strom.DataManager.personMedia(petr.id).map(a => a.id) : [] };
     });
 
     test('adopted tree: "load the new version" without edits keeps the photos and attachments', async ({ page }) => {

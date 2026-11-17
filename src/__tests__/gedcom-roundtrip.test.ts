@@ -10,6 +10,7 @@ import { describe, it, expect } from 'vitest';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { exportToGedcom } from '../ged-exporter.js';
 import { validateTreeData } from '../validation.js';
+import { addPersonMedia, personMedia, mediaSourceId } from '../media.js';
 import { StromData, PersonId, PartnershipId } from '../types.js';
 
 function importGed(ged: string): StromData {
@@ -403,11 +404,11 @@ describe('GEDCOM media (OBJE) and standard sources', () => {
         const person = Object.values(r.data.persons)[0];
         person.photo = PNG;
         person.photoOriginalName = 'grandpa.png';
-        person.attachments = [{
+        const att1 = addPersonMedia(r.data, person.id, {
             id: 'att1', name: 'oddaci-list.pdf', mimeType: 'application/pdf',
             dataUrl: 'data:application/pdf;base64,' + 'UERGREFUQQ=='.repeat(60),
             sizeBytes: 480,
-        }];
+        });
         const out = exportToGedcom(r.data).content;
         for (const line of out.split('\n')) expect(line.length).toBeLessThanOrEqual(255);
 
@@ -415,10 +416,11 @@ describe('GEDCOM media (OBJE) and standard sources', () => {
         const p2 = Object.values(again.data.persons)[0];
         expect(p2.photo).toBe(PNG);
         expect(p2.photoOriginalName).toBe('grandpa.png');
-        expect(p2.attachments).toHaveLength(1);
-        expect(p2.attachments![0].name).toBe('oddaci-list.pdf');
-        expect(p2.attachments![0].mimeType).toBe('application/pdf');
-        expect(p2.attachments![0].dataUrl).toBe(person.attachments[0].dataUrl);
+        const files2 = personMedia(again.data, p2.id);
+        expect(files2).toHaveLength(1);
+        expect(files2[0].name).toBe('oddaci-list.pdf');
+        expect(files2[0].mimeType).toBe('application/pdf');
+        expect(files2[0].dataUrl).toBe(att1.dataUrl);
     });
 
     it('big images export in linear time and come back whole (40 MB export took 45 s)', () => {
@@ -427,15 +429,16 @@ describe('GEDCOM media (OBJE) and standard sources', () => {
         const person = Object.values(r.data.persons)[0];
         // ~6 MB of base64 in three attachments: the quadratic chunker needed minutes.
         const big = (seed: string) => 'data:image/jpeg;base64,' + (seed + 'AbCdEfGh+/').repeat(200_000);
-        person.attachments = ['A', 'B', 'C'].map((k, i) => ({
+        ['A', 'B', 'C'].forEach((k, i) => addPersonMedia(r.data, person.id, {
             id: `att${i}`, name: `scan-${k}.jpg`, mimeType: 'image/jpeg', dataUrl: big(k), sizeBytes: 1,
         }));
         const t = performance.now();
         const out = exportToGedcom(r.data).content;
         expect(performance.now() - t).toBeLessThan(3000);
         for (const line of out.split('\n')) expect(line.length).toBeLessThanOrEqual(255);
-        const p2 = Object.values(conv(out).data.persons)[0];
-        expect(p2.attachments!.map(a => a.dataUrl)).toEqual(person.attachments.map(a => a.dataUrl));
+        const again = conv(out).data;
+        const p2 = Object.values(again.persons)[0];
+        expect(personMedia(again, p2.id).map(a => a.dataUrl)).toEqual(personMedia(r.data, person.id).map(a => a.dataUrl));
     });
 
     it('long Czech and emoji text splits on byte limits without losing a character', () => {
@@ -458,17 +461,17 @@ describe('GEDCOM media (OBJE) and standard sources', () => {
         const r = conv(ged);
         const person = Object.values(r.data.persons)[0];
         const srcId = Object.keys(r.data.sources!)[0];
-        person.attachments = [{
+        addPersonMedia(r.data, person.id, {
             id: 'att1', name: 'strana-57.jpg', mimeType: 'image/png', dataUrl: PNG, sizeBytes: 60,
-            note: 'Levá strana, zápis č. 12\nkmotr soused', sourceId: srcId,
-        }];
+            note: 'Levá strana, zápis č. 12\nkmotr soused',
+        }, srcId);
         const out = exportToGedcom(r.data).content;
         expect(out).toContain('2 _SOUR @S1@');
 
         const again = conv(out);
-        const att = Object.values(again.data.persons)[0].attachments![0];
+        const att = personMedia(again.data, Object.values(again.data.persons)[0].id)[0];
         expect(att.note).toBe('Levá strana, zápis č. 12\nkmotr soused');
-        expect(att.sourceId).toBe(Object.keys(again.data.sources!)[0]);
+        expect(mediaSourceId(att)).toBe(Object.keys(again.data.sources!)[0]);
     });
 
     it('external OBJE file paths are collected for bulk media attachment', () => {
@@ -477,7 +480,7 @@ describe('GEDCOM media (OBJE) and standard sources', () => {
             '1 OBJE', '2 FORM jpeg', '2 FILE C:\\photos\\jan.jpg',
         ].join('\n'));
         const r = conv(ged);
-        expect(Object.values(r.data.persons)[0].attachments).toBeUndefined();
+        expect(personMedia(r.data, Object.values(r.data.persons)[0].id)).toHaveLength(0);
         // External refs are no longer dropped: they are collected so the
         // import summary can offer bulk media attachment (M3).
         expect(r.externalMedia).toHaveLength(1);

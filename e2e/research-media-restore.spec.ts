@@ -138,11 +138,14 @@ const media = (page: Page) => page.evaluate(() => {
         portrait: man?.photo ?? null,
         portraitDate: man?.photoDate ?? null,
         couple: couple?.photo ?? null,
-        attachments: (man?.attachments ?? []).map(a => ({
+        attachments: (man ? window.Strom.DataManager.personMedia(man.id) : []).map(a => {
+            const sourceId = a.places.flatMap(pl => 'sourceId' in pl ? [pl.sourceId] : [])[0];
+            return {
             name: a.name, dataUrl: a.originalOnly ? null : a.dataUrl, note: a.note ?? null, date: a.date ?? null,
-            source: a.sourceId ? data.sources?.[a.sourceId]?.title ?? null : null,
+            source: sourceId ? data.sources?.[sourceId]?.title ?? null : null,
             originalOnly: !!a.originalOnly, sha: a.original?.sha256 ?? null,
-        })),
+            };
+        }),
     };
 });
 
