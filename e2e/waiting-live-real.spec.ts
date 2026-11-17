@@ -148,7 +148,7 @@ test.describe('waiting for images and the answer against a real research bridge'
         });
         touch(bridge, 'Hradec nad Moravicí');
         await expect(item.locator('.img-dot')).toHaveCount(3, { timeout: 30_000 });
-        await item.locator('.waiting-actions [data-action="images"]').click();
+        await item.locator('.research-overview__deliver-steps [data-action="images"]').click();
         let area = item.locator('.waiting-upload');
         await area.locator('.waiting-upload__input').setInputFiles([await jpeg(page, 'kniha-0060.jpg', 'snímek 60')]);
         await expect(area.locator('.waiting-upload__file .waiting-upload__num')).toHaveValue('60');
@@ -169,7 +169,7 @@ test.describe('waiting for images and the answer against a real research bridge'
 
         // The last one: the task woken, the item gone.
         item = await openItem(page, group!.name, bridge.images);
-        await item.locator('.waiting-actions [data-action="images"]').click();
+        await item.locator('.research-overview__deliver-steps [data-action="images"]').click();
         area = item.locator('.waiting-upload');
         await area.locator('.waiting-upload__input').setInputFiles([await jpeg(page, 'kniha-0058.jpg', 'snímek 58')]);
         await expect(area.locator('.waiting-upload__file .waiting-upload__num')).toHaveValue('58');
@@ -183,7 +183,7 @@ test.describe('waiting for images and the answer against a real research bridge'
         // The website's task (no book): answered in the overview, gone; the research has it as given in the app.
         const webGroup = status.waiting?.find(w => w.id === bridge.web)?.group?.name ?? '';
         const web = await openItem(page, webGroup, bridge.web);
-        await expect(web.locator('.waiting-actions [data-action="images"]')).toHaveCount(0);
+        await expect(web.locator('[data-action="images"]')).toHaveCount(0);
         await web.locator('.waiting-actions [data-action="answer"]').click();
         const form = web.locator('.waiting-answer');
         const text = 'Seznam knih oddaných 1880–1890 na stránce není, je tam jen kontakt na faru.';

@@ -316,7 +316,7 @@ test.describe('Waiting for images from a browser-only archive', () => {
             return [!!(book.compareDocumentPosition(n) & Node.DOCUMENT_POSITION_FOLLOWING), !!(n.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING)];
         });
         expect(order).toEqual([true, true]);
-        await item.locator('.waiting-actions [data-action="images"]').click();
+        await item.locator('.research-overview__deliver-steps [data-action="images"]').click();
         await expect(item.locator('.waiting-upload')).toBeVisible();
         await expect(note).toHaveCount(0);
 

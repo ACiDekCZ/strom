@@ -11,10 +11,11 @@ import { browserNote } from '../research-browser.js';
 import { isHelpOpen } from './help-ui.js';
 import { strings } from '../strings.js';
 import { LiveWaiting, researchLinkMark, researchTaskRef } from '../research-link.js';
-import { WaitActionView, imagesState, waitingActions } from '../research-waiting.js';
+import { WaitActionView, deliverSentence, deliverSteps, deliverWebUrl, imagesState, waitingActions, waitingDeliver } from '../research-waiting.js';
+import { bookById } from '../research-books.js';
 import { DEFAULT_MEDIA_MAX_BYTES } from '../originals.js';
 import { MQ_PHONE_BAR, isPhoneBar } from '../breakpoints.js';
-import { setResearchActionLabel } from './research-open-mark.js';
+import { researchOpenSrText, setResearchActionLabel } from './research-open-mark.js';
 import { uiModule } from './module.js';
 import { el, liveSession, LiveSession, researchSession } from './research-ui.js';
 import { UploadNumbers, UploadOutcome, WaitingImagesUpload } from './waiting-images-upload.js';
@@ -165,6 +166,113 @@ export const waitingTaskMethods = uiModule({
     overviewImagesArea(s: LiveSession, w: LiveWaiting): HTMLElement | null {
         if (overviewImagesKey !== itemKey(s, w.id)) return null;
         return this.waitingImagesUpload(s, w, 'ov')?.root ?? null;
+    },
+
+    // ==================== DELIVERING IMAGES (spec 105 U4 §5) ====================
+
+    /** An item takes images through the bridge (on a computer): it is drawn as images to deliver, not an answer. */
+    waitingTakesImages(s: LiveSession, w: LiveWaiting): boolean {
+        return !!waitingActions(w, { writes: this.liveWaitingWrites(s), links: false, phone: false })?.some(v => v.key === 'images');
+    },
+
+    /** The answer's heading and hint of an item: one taking images says why they cannot be had (5b). */
+    waitingAnswerTexts(s: LiveSession, w: LiveWaiting): { label?: string; hint?: string } {
+        if (!this.waitingTakesImages(s, w)) return {};
+        const T = strings.live.waitingTask;
+        return { label: T.answerImagesLabel, hint: T.answerImagesHint };
+    },
+
+    /**
+     * The Deliver block of an item taking images (spec 105 U4 §5, 5a–5h): what
+     * is delivered (the numbers still missing, as files, into the book's or
+     * the task's folder), then on a computer the steps in their order —
+     * ① the archive's website ↗, ② its folder (the book's through the bridge,
+     * no mark; without a book the task's, the terminal mark), ③ "Add images"
+     * the one main action — a step that cannot go from here is left out and
+     * the next takes its number; arrows between them, under each other in a
+     * narrow column (`column`, or the phase's container under 380 px). A
+     * phone: the sentence and where images are saved, no steps. `upload`:
+     * the upload area stands under the block (the panel's dialog), the
+     * last step it is, no button for it.
+     */
+    waitingDeliverEl(s: LiveSession, w: LiveWaiting, opts: { phone: boolean; steps: boolean; column?: boolean; upload?: boolean }): HTMLElement {
+        const L = strings.live;
+        const T = L.waitingTask;
+        const box = el('div', 'research-overview__waiting-deliver');
+        box.appendChild(el('span', 'research-overview__deliver-label', T.deliverLabel));
+        box.appendChild(el('p', 'research-overview__deliver-text', deliverSentence(waitingDeliver(w, s.books), T)));
+        if (opts.phone) {
+            box.appendChild(el('p', 'research-overview__deliver-phone', T.deliverPhone));
+            return box;
+        }
+        if (!opts.steps) return box;
+        const task = researchTaskRef(w.id);
+        const views = waitingActions(w, { writes: this.liveWaitingWrites(s), links: this.researchLinkAvailable('task'), phone: false }) ?? [];
+        const book = bookById(s, w.book);
+        const web = deliverWebUrl(w, book);
+        // The book's folder through the bridge (as in its band); else the task's, in the terminal.
+        const bookFolder = w.book && book?.folder ? this.activeResearchLink('book', { book: w.book, bookDo: 'folder' }) : null;
+        const taskFolder = !bookFolder && task && views.some(v => v.key === 'folder') ? this.activeResearchLink('task', { task, taskDo: 'folder' }) : null;
+        const steps = deliverSteps({ web, folder: !!(bookFolder || taskFolder), images: !opts.upload && views.some(v => v.key === 'images') });
+        if (steps.length === 0) return box;
+        const total = steps.length + (opts.upload ? 1 : 0);
+        const row = el('div', `research-overview__deliver-steps${opts.column ? ' is-column' : ''}`);
+        steps.forEach((step, i) => {
+            if (i > 0) {
+                const arrow = el('span', 'research-overview__deliver-arrow', '→');
+                arrow.setAttribute('aria-hidden', 'true');
+                row.appendChild(arrow);
+            }
+            const item = el('span', 'research-overview__deliver-step');
+            const num = el('span', 'research-overview__deliver-num', String(i + 1));
+            num.setAttribute('aria-hidden', 'true');
+            item.appendChild(num);
+            let action: HTMLElement;
+            if (step === 'web') {
+                const a = el('a', 'waiting-action waiting-action--link research-overview__deliver-web', T.archiveWeb);
+                a.href = web!;
+                a.title = web!;
+                a.target = '_blank';
+                a.rel = 'noopener noreferrer';
+                a.setAttribute('aria-label', T.stepAria(i + 1, total, T.archiveWeb));
+                a.onclick = (e) => e.stopPropagation();
+                action = a;
+            } else {
+                const btn = el('button', `waiting-action ${step === 'images' ? 'waiting-action--primary' : 'waiting-action--secondary'} research-overview__waiting-action`);
+                btn.type = 'button';
+                if (step === 'images') {
+                    btn.textContent = T.haveImages;
+                    btn.dataset.write = 'bridge';
+                    btn.setAttribute('aria-label', T.stepAria(i + 1, total, T.haveImages));
+                    btn.onclick = (e) => {
+                        e.stopPropagation();
+                        this.openWaitingImages(s, w);
+                    };
+                } else if (bookFolder) {
+                    setResearchActionLabel(btn, L.books.folderBook, researchLinkMark('book'), { sr: false });
+                    btn.dataset.book = w.book!;
+                    btn.setAttribute('aria-label', T.stepAria(i + 1, total, L.books.folderBook));
+                    btn.onclick = (e) => {
+                        e.stopPropagation();
+                        this.launchResearchLink(bookFolder);
+                    };
+                } else {
+                    const mark = researchLinkMark('task', { taskDo: 'folder' });
+                    setResearchActionLabel(btn, T.openFolder, mark, { sr: false });
+                    btn.setAttribute('aria-label', `${T.stepAria(i + 1, total, T.openFolder)}${mark === 'none' ? '' : researchOpenSrText(mark === 'agent')}`);
+                    btn.onclick = (e) => {
+                        e.stopPropagation();
+                        this.launchResearchLink(taskFolder!);
+                    };
+                }
+                action = btn;
+            }
+            action.dataset.action = step;
+            item.appendChild(action);
+            row.appendChild(item);
+        });
+        box.appendChild(row);
+        return box;
     },
 
     // ==================== SMALL PANEL ====================
@@ -336,6 +444,8 @@ export const waitingTaskMethods = uiModule({
             const phone = isPhoneBar();
             const note = browserNote(s.browser, w, s.waiting, { phone, links: !phone && this.researchLinkAvailable('archive') });
             if (note) body.appendChild(this.browserNoteEl(note, s.researchId, 'waiting-dialog__browser'));
+            // What is delivered and the steps before it, under each other (5d); the upload area is the last step.
+            body.appendChild(this.waitingDeliverEl(s, w, { phone: false, steps: true, column: true, upload: true }));
             body.appendChild(upload.root);
             document.body.appendChild(overlay);
             upload.focus();
@@ -356,6 +466,7 @@ export const waitingTaskMethods = uiModule({
         if (kept && !kept.spent) return kept;
         const form = new WaitingAnswerForm({
             treeId: s.treeId, task, idPrefix: `dlg-answer-${w.id}`,
+            ...this.waitingAnswerTexts(s, w),
             send: async (text) => {
                 const now = s.waiting.find(x => x.id === w.id) ?? w;
                 const outcome = await this.sendWaitingAnswer(s, now, text);
@@ -425,6 +536,7 @@ export const waitingTaskMethods = uiModule({
         if (!form || form.spent) {
             form = new WaitingAnswerForm({
                 treeId: s.treeId, task, idPrefix: `sheet-answer-${w.id}`, buttons: false,
+                ...this.waitingAnswerTexts(s, w),
                 send: async (text) => {
                     const now = s.waiting.find(x => x.id === w.id) ?? w;
                     const outcome = await this.sendWaitingAnswer(s, now, text);

@@ -2006,6 +2006,15 @@ export const researchOverviewMethods = uiModule({
         // The body (spec 105 U4 §3): the text stands once, whole, in the open row above; first what changed of the answer,
         // then what it waits on, the images, the browser's note, the person · direction, the actions and their hint.
         if (views && answerChanged.has(key)) detail.appendChild(waitingAnswerChangedNote());
+        // Images to deliver (spec 105 U4 §5): what and where first, the steps in their order (hidden while the upload
+        // area is open or an answer is written); a phone only says where they are saved.
+        const deliver = !!views && this.waitingTakesImages(s, w);
+        if (deliver) {
+            const task = researchTaskRef(w.id);
+            const busy = !!this.overviewImagesArea(s, w)
+                || (answeringKey === key && !!task && views!.some(v => v.key === 'answer' && v.via === 'bridge'));
+            detail.appendChild(this.waitingDeliverEl(s, w, { phone: mode === 'sheet', steps: !busy }));
+        }
         const onBox = this.overviewWaitingOnBox(s, w);
         if (onBox) detail.appendChild(onBox);
         // The addresses of its text: links here (the row is a button and holds none).
@@ -2037,7 +2046,7 @@ export const researchOverviewMethods = uiModule({
         if (!img && w.inbox?.want !== undefined) meta.appendChild(el('span', 'research-overview__waiting-inbox', L.waitingInbox(w.inbox.have, w.inbox.want)));
         detail.appendChild(meta);
         if (views) {
-            this.appendWaitingTaskActions(detail, s, w, views, mode);
+            this.appendWaitingTaskActions(detail, s, w, views, mode, deliver);
             // Not beside the open "Have images" area or an answer being written.
             if (bNoteEl && detail.querySelector('.waiting-upload, .waiting-answer')) bNoteEl.remove();
             return detail;
@@ -2093,7 +2102,7 @@ export const researchOverviewMethods = uiModule({
      * them. "Answer" through the bridge opens the answer in the detail (the
      * actions hide meanwhile); through the terminal, its hint goes under them.
      */
-    appendWaitingTaskActions(detail: HTMLElement, s: LiveSession, w: LiveWaiting, views: readonly WaitActionView[], mode: Mode): void {
+    appendWaitingTaskActions(detail: HTMLElement, s: LiveSession, w: LiveWaiting, views: readonly WaitActionView[], mode: Mode, deliver = false): void {
         const L = strings.live;
         const T = L.waitingTask;
         const W = L.waitingWrite;
@@ -2152,35 +2161,65 @@ export const researchOverviewMethods = uiModule({
         if (task && writes.sent && waitingUnsendable(w)) {
             list.push({ key: 'unsent', label: W.unsent, write: true, run: () => { void this.markWaitingUnsent(s, w.id); } });
         }
-        const { shown, more } = splitWaitingActions(list, { phone: mode === 'sheet' });
-        if (shown.length > 0) {
-            const row = el('div', 'research-overview__waiting-actions waiting-actions');
-            shown.forEach((a, i) => {
-                const action = row.appendChild(waitingActionEl(a, i === 0 ? 'primary' : i === 1 ? 'secondary' : 'link'));
-                if (a.key === 'web' && a.href) appendWaitingWebHost(action, a.href);
-            });
-            if (more.length > 0) {
-                const btn = el('button', 'waiting-more', '⋯');
-                btn.type = 'button';
-                btn.dataset.more = w.id;
-                btn.title = T.more;
-                btn.setAttribute('aria-label', T.more);
-                btn.setAttribute('aria-haspopup', 'menu');
-                btn.setAttribute('aria-expanded', String(moreMenuFor === w.id));
-                btn.onclick = (e) => {
-                    e.stopPropagation();
-                    this.openWaitingMoreMenu(btn, w.id, more);
-                };
-                row.appendChild(btn);
+        const moreBtn = (more: readonly ItemAction[]): HTMLElement => {
+            const btn = el('button', 'waiting-more', '⋯');
+            btn.type = 'button';
+            btn.dataset.more = w.id;
+            btn.title = T.more;
+            btn.setAttribute('aria-label', T.more);
+            btn.setAttribute('aria-haspopup', 'menu');
+            btn.setAttribute('aria-expanded', String(moreMenuFor === w.id));
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                this.openWaitingMoreMenu(btn, w.id, more);
+            };
+            return btn;
+        };
+        let shown: ItemAction[];
+        let more: ItemAction[];
+        if (deliver) {
+            // Images to deliver (spec 105 U4 §5): the website, the folder and "Add images" are the Deliver block's steps;
+            // the answer is "Images can't be obtained…" as a link, the rest under ⋯ (none on a phone).
+            const rest = list.filter(a => a.key !== 'images' && a.key !== 'web' && a.key !== 'folder');
+            const answer = rest.find(a => a.key === 'answer') ?? null;
+            shown = answer ? [answer] : [];
+            more = phone ? [] : rest.filter(a => a !== answer);
+            if (answer || more.length > 0) {
+                const row = el('div', 'research-overview__waiting-actions waiting-actions is-deliver');
+                if (answer) {
+                    const link = el('button', 'link-button waiting-cannot-get');
+                    link.type = 'button';
+                    link.dataset.action = 'answer';
+                    if (answer.mark) setResearchActionLabel(link, T.cannotGet, answer.mark);
+                    else link.textContent = T.cannotGet;
+                    link.onclick = (e) => {
+                        e.stopPropagation();
+                        answer.run?.();
+                    };
+                    row.appendChild(link);
+                }
+                if (more.length > 0) row.appendChild(moreBtn(more));
+                detail.appendChild(row);
             }
-            detail.appendChild(row);
+        } else {
+            ({ shown, more } = splitWaitingActions(list, { phone: mode === 'sheet' }));
+            if (shown.length > 0) {
+                const row = el('div', 'research-overview__waiting-actions waiting-actions');
+                shown.forEach((a, i) => {
+                    const action = row.appendChild(waitingActionEl(a, i === 0 ? 'primary' : i === 1 ? 'secondary' : 'link'));
+                    if (a.key === 'web' && a.href) appendWaitingWebHost(action, a.href);
+                });
+                if (more.length > 0) row.appendChild(moreBtn(more));
+                detail.appendChild(row);
+            }
         }
         // Answered in the terminal: the answer is kept with the task.
         if ([...shown, ...more].some(a => a.key === 'answer' && !!a.mark)) {
             detail.appendChild(el('p', 'research-overview__waiting-hint', T.answerHintOld));
         }
-        // A phone adds no images and answers only through the bridge: it says where the rest is done.
-        if (phone && waitingForImages(w)) detail.appendChild(el('p', 'research-overview__muted waiting-phone-note', T.phoneImages));
+        // A phone adds no images and answers only through the bridge: it says where the rest is done
+        // (images to deliver say it in their Deliver block).
+        if (phone && waitingForImages(w) && !deliver) detail.appendChild(el('p', 'research-overview__muted waiting-phone-note', T.phoneImages));
         if (phone && !views.some(v => v.key === 'answer' && v.via === 'bridge')) {
             detail.appendChild(el('p', 'research-overview__muted waiting-phone-note', T.phoneNoAnswer));
         }
@@ -2213,6 +2252,7 @@ export const researchOverviewMethods = uiModule({
         };
         form = new WaitingAnswerForm({
             treeId: s.treeId, task, idPrefix: `ov-answer-${w.id}`,
+            ...this.waitingAnswerTexts(s, w),
             send: async (text) => {
                 // The item as the research says it now (its wording may have changed meanwhile).
                 const now = s.waiting.find(x => x.id === w.id) ?? w;

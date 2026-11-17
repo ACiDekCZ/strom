@@ -9,7 +9,8 @@
 import {
     LiveBook, LiveBooks, LiveWaiting, WAITING_SECTIONS, WaitingGroup, WaitingInbox, WaitingLinkAction, WaitingSection, imageNumber, researchTaskRef,
 } from './research-link.js';
-import { bookWholeOnDisk, sortBooksMost } from './research-books.js';
+import { bookTitle, bookWebUrl, bookWholeOnDisk, sortBooksMost } from './research-books.js';
+import type { strings } from './strings.js';
 import type { WaitingWrites } from './research-waiting-write.js';
 
 export type WaitingPhase = 'todo' | 'sent';
@@ -605,6 +606,59 @@ export function imagesState(w: LiveWaiting): ImagesState | null {
         detail,
         ...(nums ? { wanted: nums.wanted, saved: nums.saved } : {}),
     };
+}
+
+// ==================== DELIVERING IMAGES (spec 105 U4 §5) ====================
+
+/** The texts of an item's actions (`strings.live.waitingTask` of a language). */
+export type WaitingTaskTexts = typeof strings.live.waitingTask;
+
+/**
+ * What an item waiting for images asks to be delivered: the numbers still
+ * missing (null: not known — an older research, a count not known, none
+ * left) and the title of its one book (null: none, the task's own folder).
+ */
+export interface WaitingDeliver {
+    missing: number[] | null;
+    book: string | null;
+}
+
+export function waitingDeliver(w: LiveWaiting, books?: LiveBooks | null): WaitingDeliver {
+    const img = imagesState(w);
+    const missing = img?.detail === 'full' && img.missing && img.missing.length > 0 ? [...img.missing] : null;
+    const id = itemBook(w);
+    let book: string | null = null;
+    if (id) {
+        const listed = books?.list.find(b => b.id === id);
+        book = listed ? bookTitle(listed) : stubTitle(w, id) ?? id;
+    }
+    return { missing, book };
+}
+
+/** The sentence of the Deliver block: which images, as files, into which folder. */
+export function deliverSentence(d: WaitingDeliver, T: WaitingTaskTexts): string {
+    if (d.missing) {
+        const list = imageRanges(d.missing);
+        return d.book !== null ? T.deliverBook(list, d.missing.length, d.book) : T.deliverTask(list, d.missing.length);
+    }
+    return d.book !== null ? T.deliverBookAny(d.book) : T.deliverTaskAny;
+}
+
+/** A step of delivering images, in their order: the archive's website, the folder, "Add images". */
+export type DeliverStep = 'web' | 'folder' | 'images';
+
+/** The website of step ①: the item's own, else its book's (or the book's archive's); null: no such step. */
+export function deliverWebUrl(w: LiveWaiting, book: Pick<LiveBook, 'url' | 'archive'> | null): string | null {
+    return w.url ?? (book ? bookWebUrl(book) : null);
+}
+
+/** The steps an item shows, in their order: each only when it can go from here (the next takes its number). */
+export function deliverSteps(o: { web: string | null; folder: boolean; images: boolean }): DeliverStep[] {
+    const out: DeliverStep[] = [];
+    if (o.web) out.push('web');
+    if (o.folder) out.push('folder');
+    if (o.images) out.push('images');
+    return out;
 }
 
 /** The numbers that arrived between two states of one item (missing before, not now). */

@@ -48,6 +48,9 @@ export interface WaitingAnswerFormOptions {
     buttons?: boolean;
     /** Whether it can be sent, it is being sent or an error is shown changed (the host's own buttons). */
     onChange?: (form: WaitingAnswerForm) => void;
+    /** The field's heading and its hint (default: an answer to the task; images: why they cannot be had, spec 105 U4 §5). */
+    label?: string;
+    hint?: string;
 }
 
 /** Characters from which the counter shows. */
@@ -81,7 +84,7 @@ export class WaitingAnswerForm {
         const id = opts.idPrefix.replace(/[^A-Za-z0-9_-]/g, '_');
         this.root = node('div', 'waiting-answer');
         this.root.dataset.task = opts.task;
-        const label = node('label', 'waiting-answer__label', T.answerLabel);
+        const label = node('label', 'waiting-answer__label', opts.label ?? T.answerLabel);
         label.htmlFor = `${id}-text`;
         this.textarea = node('textarea', 'waiting-answer__text');
         this.textarea.id = `${id}-text`;
@@ -91,7 +94,7 @@ export class WaitingAnswerForm {
         this.textarea.value = readWaitingDraft(opts.treeId, opts.task);
         this.textarea.setAttribute('aria-describedby', `${id}-hint ${id}-error`);
         const foot = node('div', 'waiting-answer__foot');
-        const hint = node('p', 'waiting-answer__hint', T.answerHint);
+        const hint = node('p', 'waiting-answer__hint', opts.hint ?? T.answerHint);
         hint.id = `${id}-hint`;
         this.count = node('span', 'waiting-answer__count');
         this.count.setAttribute('aria-live', 'polite');

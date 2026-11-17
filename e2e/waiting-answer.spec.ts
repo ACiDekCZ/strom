@@ -176,30 +176,62 @@ test.describe('a research that takes answers and images (waiting.answer, accepts
         await expect(book.locator('.wait-book__state')).toHaveText('1 of 2 images saved – image 58 missing.');
         await expect(item.locator('.research-overview__waiting-inbox')).toHaveCount(0);
 
-        // Add images (filled, through the bridge: no mark), the book's website (outlined), Answer (a link), the rest under ⋯.
+        // Images to deliver (spec 105 U4 §5, 5a, 5c): the Deliver block first — which images, as files, into the task's
+        // folder (no book) — with its steps in their order: ① the archive's website ↗, ② the task's folder (the terminal
+        // mark), ③ Add images, the one main action (through the bridge: no mark); arrows between them.
+        const deliver = item.locator('.research-overview__waiting-deliver');
+        await expect(deliver.locator('.research-overview__deliver-label')).toHaveText('Deliver');
+        await expect(deliver.locator('.research-overview__deliver-text')).toHaveText('Image 58 as a file (JPG or PNG) in the task’s folder');
+        expect(await item.evaluate((li) => {
+            const d = li.querySelector('.research-overview__waiting-deliver')!;
+            const b = li.querySelector('.wait-book')!;
+            return !!(d.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+        })).toBe(true);
+        const steps = deliver.locator('.research-overview__deliver-step');
+        await expect(steps).toHaveCount(3);
+        await expect(steps.locator('.research-overview__deliver-num')).toHaveText(['1', '2', '3']);
+        await expect(steps.locator('.research-overview__deliver-num').first()).toHaveAttribute('aria-hidden', 'true');
+        await expect(deliver.locator('.research-overview__deliver-arrow')).toHaveCount(2);
+        const web = steps.nth(0).locator('a[data-action="web"]');
+        await expect(web).toHaveText('Archive website ↗');
+        await expect(web).toHaveAttribute('href', 'https://archiv.example/kniha/12');
+        await expect(web).toHaveAttribute('target', '_blank');
+        await expect(web).toHaveAttribute('aria-label', 'Step 1 of 3: Archive website ↗');
+        const folder = steps.nth(1).locator('[data-action="folder"]');
+        await expect(folder).toHaveClass(/waiting-action--secondary/);
+        await expect(folder.locator('.research-open-mark')).toHaveCount(1);
+        await expect(folder.locator('.research-ai-badge')).toHaveCount(0);
+        await expect(folder).toHaveAttribute('aria-label', 'Step 2 of 3: Open folder, opens in the research');
+        const add = steps.nth(2).locator('[data-action="images"]');
+        await expect(add).toHaveText('Add images');
+        await expect(add).toHaveClass(/waiting-action--primary/);
+        await expect(add.locator('.research-open-mark')).toHaveCount(0);
+        await expect(add).toHaveAttribute('aria-label', 'Step 3 of 3: Add images');
+        // Once each, the one main action of the item.
+        await expect(item.locator('[data-action="images"]')).toHaveCount(1);
+        await expect(item.locator('[data-action="web"]')).toHaveCount(1);
+        await expect(item.locator('[data-action="folder"]')).toHaveCount(1);
+        await expect(item.locator('.waiting-action--primary')).toHaveCount(1);
+        await folder.click();
+        expect(await launched(page)).toEqual([`strom-research://task?tree=${UUID}&task=T0001&do=folder`]);
+
+        // Under the item: "Images can't be obtained…" a link (not a button beside Add images), the rest under ⋯.
         const row = item.locator('.waiting-actions');
-        const shown = row.locator('> .waiting-action');
-        await expect(shown).toHaveCount(3);
-        await expect(shown.nth(0)).toHaveAttribute('data-action', 'images');
-        await expect(shown.nth(0)).toHaveClass(/waiting-action--primary/);
-        await expect(shown.nth(0)).toHaveText('Add images');
-        await expect(shown.nth(0).locator('.research-open-mark')).toHaveCount(0);
-        await expect(shown.nth(1)).toHaveAttribute('data-action', 'web');
-        await expect(shown.nth(1)).toHaveClass(/waiting-action--secondary/);
-        await expect(shown.nth(1)).toHaveText('Open website ↗');
-        await expect(shown.nth(1)).toHaveAttribute('href', 'https://archiv.example/kniha/12');
-        await expect(shown.nth(1)).toHaveAttribute('title', 'https://archiv.example/kniha/12');
-        await expect(shown.nth(2)).toHaveAttribute('data-action', 'answer');
-        await expect(shown.nth(2)).toHaveClass(/waiting-action--link/);
-        await expect(shown.nth(2)).toHaveText('Answer');
+        await expect(row.locator('> .waiting-action')).toHaveCount(0);
+        const cannot = row.locator('[data-action="answer"]');
+        await expect(cannot).toHaveText('Images can’t be obtained…');
+        await expect(cannot).toHaveClass(/link-button/);
+        await expect(cannot).not.toHaveClass(/waiting-action/);
         // No terminal answer here: no hint of it.
         await expect(item.locator('.research-overview__waiting-hint')).toHaveCount(0);
-        // "Add images" opens the upload area in the detail (the actions hide meanwhile); Cancel brings them back.
-        await shown.nth(0).click();
+        // "Add images" opens the upload area in the detail (the actions and steps hide meanwhile); Cancel brings them back.
+        await add.click();
         await expect(item.locator('.waiting-upload')).toBeVisible();
         await expect(row).toHaveCount(0);
+        await expect(item.locator('.research-overview__deliver-steps')).toHaveCount(0);
         await item.locator('.waiting-upload__cancel').click();
         await expect(item.locator('.waiting-upload')).toHaveCount(0);
+        await expect(add).toBeFocused();
 
         const more = row.locator('.waiting-more');
         await expect(more).toHaveAttribute('aria-haspopup', 'menu');
@@ -209,18 +241,16 @@ test.describe('a research that takes answers and images (waiting.answer, accepts
         await expect(menu).toHaveAttribute('role', 'menu');
         await expect(more).toHaveAttribute('aria-expanded', 'true');
         const entries = menu.locator('[role="menuitem"]');
-        await expect(entries).toHaveText(['Discuss with the agent, AI, opens in the researchAI', 'Open folder, opens in the research']);
+        await expect(entries).toHaveText(['Discuss with the agent, AI, opens in the researchAI']);
         await expect(entries.nth(0).locator('.research-ai-badge')).toHaveCount(1);
-        await expect(entries.nth(1).locator('.research-ai-badge')).toHaveCount(0);
-        await expect(entries.nth(1).locator('.research-open-mark')).toHaveCount(1);
         await page.keyboard.press('Escape');
         await expect(menu).toHaveCount(0);
         await expect(ov).toBeVisible();
         await expect(more).toBeFocused();
         await more.click();
-        await menu.locator('[data-action="folder"]').click();
+        await menu.locator('[data-action="chat"]').click();
         await expect(menu).toHaveCount(0);
-        expect(await launched(page)).toEqual([`strom-research://task?tree=${UUID}&task=T0001&do=folder`]);
+        expect((await launched(page))[1]).toBe(`strom-research://task?tree=${UUID}&task=T0001&do=chat`);
         // A click elsewhere closes it too.
         await more.click();
         await expect(menu).toBeVisible();
@@ -240,7 +270,11 @@ test.describe('a research that takes answers and images (waiting.answer, accepts
         await expect(item.locator('.waiting-actions')).toHaveCount(0);
         const field = form.locator('textarea');
         await expect(field).toBeFocused();
-        await expect(form.locator('label')).toHaveText('Answer to the task');
+        // Its own heading and hint (5b): why the images cannot be had; the steps hide while it is written.
+        await expect(form.locator('label')).toHaveText('Why the images can’t be obtained');
+        await expect(form.locator('.waiting-answer__hint')).toHaveText('This is for why the images can’t be supplied or what the archive lacks. A reading of the entry does not belong here: the research reads the images.');
+        await expect(item.locator('.research-overview__deliver-steps')).toHaveCount(0);
+        await expect(item.locator('.research-overview__waiting-deliver')).toBeVisible();
         await expect(field).toHaveAttribute('maxlength', '4000');
         const send = form.locator('.waiting-answer__send');
         await expect(send).toHaveAttribute('aria-disabled', 'true');
@@ -410,7 +444,7 @@ test.describe('German at a tablet\'s width', () => {
         await follow(page, { width: 1024, height: 768 }, () => {});
         const ov = await openOverview(page);
         const item = await openItem(page, 'T0001');
-        await expect(item.locator('.waiting-actions [data-action="images"]')).toBeVisible();
+        await expect(item.locator('.research-overview__deliver-steps [data-action="images"]')).toBeVisible();
         const spill = await ov.locator('.research-overview__body').evaluate((b) => b.scrollWidth - b.clientWidth);
         expect(spill).toBeLessThanOrEqual(0);
         const box = await item.locator('.waiting-actions').boundingBox();

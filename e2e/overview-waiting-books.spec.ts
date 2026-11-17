@@ -593,3 +593,136 @@ test.describe('Awaiting action by book', () => {
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
     });
 });
+
+test.describe('spec 105 U4 §5 an item waiting for images: images to deliver, not an answer', () => {
+    const IMG_ACCEPTS = { ...ACCEPTS, media: { taskImages: true } };
+    const IMG_FEATURES = [...FEATURES, 'waiting.answer'];
+    /** Items taking images: B0003 with its website and folder, B0005 with its folder only (no website). */
+    function imageItems(): Record<string, unknown>[] {
+        return [
+            {
+                id: 'T0021', order: 0, what: 'Uložit snímky 112–113 matriky Vzorov 3', kind: 'images', section: 'images', group: archive, at: minAgo(30), book: 'B0003',
+                inbox: { dir: 'inbox/B0003', have: 1, want: 3, missing: [112, 113], images: '111–113' }, actions: ['images', 'answer', 'chat', 'folder'],
+            },
+            {
+                id: 'T0022', order: 1, what: 'Uložit snímek 40 matriky Vzorov 5', kind: 'images', section: 'images', group: archive, at: minAgo(60), book: 'B0005',
+                inbox: { dir: 'inbox/B0005', have: 0, want: 1, missing: [40], images: '40' }, actions: ['images', 'answer', 'chat', 'folder'],
+            },
+        ];
+    }
+    async function setup(page: Page, size: { width: number; height: number }, lang?: string): Promise<void> {
+        await page.clock.setFixedTime(NOW);
+        await page.setViewportSize(size);
+        await openResearch(page);
+        await fakeBridge(page, {
+            accepts: IMG_ACCEPTS, links: LINKS, waiting: imageItems(), features: IMG_FEATURES, treeGed: researchGed(),
+            books: { books: booksPart(), posts: [] },
+        });
+        await poll(page);
+        if (lang) await page.evaluate((l) => window.Strom.UI.setLanguage(l as never), lang);
+        await openOverview(page);
+        await recordLaunches(page);
+    }
+    async function openItem(page: Page, id: string) {
+        const group = sec(page).locator('.research-overview__waiting-group[data-group="repo:R0001"]');
+        if (await group.getAttribute('aria-expanded') === 'false') await group.click();
+        const item = sec(page).locator(`.research-overview__waiting-item[data-id="${id}"]`);
+        await item.locator('.research-overview__waiting-row').click();
+        await expect(item).toHaveClass(/is-open/);
+        return item;
+    }
+    /** Nothing in the item wider than its box, and the page not scrolled sideways. */
+    async function fits(page: Page, item: ReturnType<Page['locator']>): Promise<void> {
+        const spill = await item.evaluate((o) => [o, ...o.querySelectorAll<HTMLElement>('*')]
+            .filter(n => n.scrollWidth > n.clientWidth + 1 && getComputedStyle(n).overflowX !== 'hidden' && getComputedStyle(n).overflowX !== 'clip' && n.clientWidth > 0)
+            .map(n => `${n.className} ${n.scrollWidth}/${n.clientWidth}`));
+        expect(spill).toEqual([]);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+        const box = (await item.boundingBox())!;
+        const deliver = (await item.locator('.research-overview__waiting-deliver').boundingBox())!;
+        expect(deliver.x + deliver.width).toBeLessThanOrEqual(box.x + box.width + 0.5);
+    }
+
+    test('a book\'s item: the numbers and the book\'s folder; ① its website ↗ ② its folder without a mark ③ Add images, the one main action; without a website the folder is ①', async ({ page }) => {
+        await setup(page, { width: 1440, height: 900 });
+        const item = await openItem(page, 'T0021');
+        const deliver = item.locator('.research-overview__waiting-deliver');
+        await expect(deliver.locator('.research-overview__deliver-text')).toHaveText('Images 112–113 as files (JPG or PNG) in the folder of the book Matrika Vzorov 3, N 1784–1820');
+        // The body's first block.
+        expect(await item.locator('.research-overview__waiting-detail').evaluate(el => el.firstElementChild?.className)).toBe('research-overview__waiting-deliver');
+        const steps = deliver.locator('.research-overview__deliver-step');
+        await expect(steps).toHaveText(['1Archive website ↗', '2Open the book’s folder', '3Add images']);
+        await expect(steps.nth(0).locator('a')).toHaveAttribute('href', 'https://archiv-vzorov.example/kniha/3');
+        const folder = steps.nth(1).locator('[data-action="folder"]');
+        await expect(folder.locator('.research-open-mark, .research-ai-badge')).toHaveCount(0);
+        await expect(folder).toHaveAttribute('aria-label', 'Step 2 of 3: Open the book’s folder');
+        // Read in their order (wrapped as the room allows), arrows between them at this width.
+        const at = await steps.evaluateAll(els => els.map(e => e.getBoundingClientRect()).map(r => ({ top: Math.round(r.top), left: r.left })));
+        for (let i = 1; i < at.length; i++) expect(at[i].top > at[i - 1].top || (at[i].top === at[i - 1].top && at[i].left > at[i - 1].left)).toBe(true);
+        await expect(deliver.locator('.research-overview__deliver-arrow')).toHaveCount(2);
+        await expect(item.locator('.waiting-action--primary')).toHaveCount(1);
+        await expect(item.locator('.waiting-action--primary')).toHaveAttribute('data-action', 'images');
+        await expect(item.locator('[data-action="images"]')).toHaveCount(1);
+        await folder.click();
+        expect((await launched(page))[0]).toMatch(/^strom-research:\/\/book\?tree=[^&]+&id=B0003&do=folder$/);
+        // Under it: "Images can't be obtained…" as a link, Discuss with the agent under ⋯ (the task's folder not again).
+        const cannot = item.locator('.waiting-actions [data-action="answer"]');
+        await expect(cannot).toHaveText('Images can’t be obtained…');
+        await expect(cannot).toHaveClass(/link-button/);
+        await item.locator('.waiting-more').click();
+        await expect(page.locator('#waiting-more-menu [role="menuitem"]')).toHaveText(['Discuss with the agent, AI, opens in the researchAI']);
+        await page.keyboard.press('Escape');
+        // It opens the field with its own heading and hint; the steps hide while it is written.
+        await cannot.click();
+        const form = item.locator('.waiting-answer');
+        await expect(form.locator('.waiting-answer__label')).toHaveText('Why the images can’t be obtained');
+        await expect(form.locator('.waiting-answer__hint')).toHaveText(/^This is for why the images can’t be supplied/);
+        await expect(item.locator('.research-overview__deliver-steps')).toHaveCount(0);
+        await form.locator('.waiting-answer__cancel').click();
+        await expect(item.locator('.research-overview__deliver-steps')).toBeVisible();
+
+        // A book without a website: no step ①, the folder takes its number.
+        const other = await openItem(page, 'T0022');
+        await expect(other.locator('.research-overview__deliver-text')).toHaveText('Image 40 as a file (JPG or PNG) in the folder of the book Matrika Vzorov 5, O 1820–1850');
+        await expect(other.locator('.research-overview__deliver-step')).toHaveText(['1Open the book’s folder', '2Add images']);
+        await expect(other.locator('[data-action="images"]')).toHaveAttribute('aria-label', 'Step 2 of 2: Add images');
+        await expect(other.locator('[data-action="web"]')).toHaveCount(0);
+    });
+
+    test('a column under 380 px: the steps under each other, no arrows, their order kept', async ({ page }) => {
+        await setup(page, { width: 1440, height: 900 });
+        await page.addStyleTag({ content: 'body { --overview-w: 340px !important; }' });
+        const item = await openItem(page, 'T0021');
+        const steps = item.locator('.research-overview__deliver-step');
+        await expect(steps).toHaveText(['1Archive website ↗', '2Open the book’s folder', '3Add images']);
+        const boxes = await steps.evaluateAll(els => els.map(e => e.getBoundingClientRect()).map(r => ({ top: r.top, bottom: r.bottom })));
+        for (let i = 1; i < boxes.length; i++) expect(boxes[i].top).toBeGreaterThanOrEqual(boxes[i - 1].bottom - 0.5);
+        await expect(item.locator('.research-overview__deliver-arrow').first()).toBeHidden();
+        await fits(page, item);
+    });
+
+    for (const size of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) test(`German at ${size.width}: nothing spills; a phone shows the Deliver block alone, its link opens the sheet with the new heading`, async ({ page }) => {
+        await setup(page, size, 'de');
+        const item = await openItem(page, 'T0021');
+        const deliver = item.locator('.research-overview__waiting-deliver');
+        await expect(deliver.locator('.research-overview__deliver-label')).toHaveText('Liefern');
+        await expect(deliver.locator('.research-overview__deliver-text')).toHaveText('Bilder 112–113 als Dateien (JPG oder PNG) im Ordner des Buchs Matrika Vzorov 3, N 1784–1820');
+        const cannot = item.locator('.waiting-actions [data-action="answer"]');
+        await expect(cannot).toHaveText('Bilder nicht erhältlich…');
+        if (size.width > 640) {
+            await expect(deliver.locator('.research-overview__deliver-step')).toHaveText(['1Archiv-Website ↗', '2Ordner des Buchs öffnen', '3Bilder hinzufügen']);
+            await fits(page, item);
+            return;
+        }
+        await expect(deliver.locator('.research-overview__deliver-text')).toHaveCSS('font-size', '15px');
+        await expect(deliver.locator('.research-overview__deliver-phone')).toHaveText('Bilder werden am Computer gespeichert.');
+        await expect(item.locator('.research-overview__deliver-steps, [data-action="images"], [data-action="web"], .waiting-more')).toHaveCount(0);
+        expect((await cannot.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        await fits(page, item);
+        await cannot.click();
+        const sheet = page.locator('.waiting-answer-sheet');
+        await expect(sheet).toBeVisible();
+        await expect(sheet.locator('.waiting-answer__label')).toHaveText('Warum die Bilder nicht erhältlich sind');
+        await expect(sheet.locator('.waiting-answer__hint')).toHaveText(/^Hierher gehört, warum die Bilder nicht geliefert werden können/);
+    });
+});
