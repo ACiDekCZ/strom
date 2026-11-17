@@ -202,7 +202,7 @@ export const treeManagementMethods = uiModule({
             const currentName = DataManager.getCurrentEmbeddedTreeName();
 
             if (nameEl) {
-                nameEl.textContent = currentName || '...';
+                nameEl.textContent = currentName || '…';
             }
 
             if (dropdown) {
@@ -250,7 +250,7 @@ export const treeManagementMethods = uiModule({
         // Normal mode: show storage trees
         const activeTree = TreeManager.getActiveTreeMetadata();
         if (nameEl) {
-            nameEl.textContent = activeTree?.name || '...';
+            nameEl.textContent = activeTree?.name || '…';
         }
 
         if (!dropdown) return;

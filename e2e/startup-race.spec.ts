@@ -42,7 +42,7 @@ test('a person added while the startup tree is still loading is kept', async ({ 
     await waitForPersist(page, 'Jan');
 
     // Startup finishes (the switcher names the tree); Jan must still be there.
-    await expect(page.locator('#current-tree-name')).not.toHaveText('...', { timeout: 10_000 });
+    await expect(page.locator('#current-tree-name')).not.toHaveText('…', { timeout: 10_000 });
     await expect.poll(() => page.evaluate(() =>
         window.Strom.DataManager.getAllPersons().map((p: { firstName: string }) => p.firstName))).toEqual(['Jan']);
     const stored = await page.evaluate(async () => {

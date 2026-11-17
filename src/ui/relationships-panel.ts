@@ -610,7 +610,7 @@ export const relationshipsPanelMethods = uiModule({
                         ${this.coupleEventsBlockHtml(partnership, this.coupleEventsReadOnly(currentPersonId))}
                         ${primaryCheckboxHtml}
                         <textarea class="partnership-note" data-partnership-id="${this.escapeHtml(partnership.id)}"
-                            placeholder="${strings.labels.note}...">${this.escapeHtml(partnership.note || '')}</textarea>
+                            placeholder="${strings.labels.note}…">${this.escapeHtml(partnership.note || '')}</textarea>
                         <div class="partnership-citations sources-chips"${
                             // Citing a marriage record is research: same rule as on a
                             // person — hidden unless asked for, but never hidden once

@@ -1347,7 +1347,7 @@ const stringsEN = {
         chipOpenMain: (title: string) => `${title} – main citation, open`,
         // The source viewer's citation bar and the removal toasts (spec 095 §2, §3); {f}: strings.events.typesOf
         citeAt: (fact: string, who: string) => `${fact} · ${who}`,
-        citePos: (i: number, n: number) => `${i} of ${n} citations`,
+        citePos: (i: number, n: number) => `Citation ${i} of ${n}`,
         citeFirstWhy: (why: string) => `first because: ${why}`,
         whyPrimary: (fact: string) => `the ${fact} record, original`,
         whyOriginal: 'original',
@@ -10956,7 +10956,7 @@ const stringsCZ: StringsType = {
         chipOpenMain: (title: string) => `${title} – hlavní citace, otevřít`,
         // Pruh citace v prohlížeči a toasty odebrání (spec 095 §2, §3); {f}: strings.events.typesOf (2. pád)
         citeAt: (fact: string, who: string) => `${fact} · ${who}`,
-        citePos: (i: number, n: number) => `${i}. ze ${n} citací`,
+        citePos: (i: number, n: number) => `Citace ${i} ${zeCs(n)} ${n}`,
         citeFirstWhy: (why: string) => `stojí první: ${why}`,
         whyPrimary: (fact: string) => `zápis ${fact}, originál`,
         whyOriginal: 'originál',
@@ -20410,7 +20410,7 @@ const stringsDE: StringsType = {
         chipOpenMain: (title: string) => `${title} – Hauptzitat, öffnen`,
         // Zitatleiste im Quellenbetrachter und Entfernen-Meldungen (spec 095 §2, §3); {F}: strings.events.typesOf (Nominativ, in Klammern)
         citeAt: (fact: string, who: string) => `${fact} · ${who}`,
-        citePos: (i: number, n: number) => `${i}. von ${n} Zitaten`,
+        citePos: (i: number, n: number) => `Zitat ${i} von ${n}`,
         citeFirstWhy: (why: string) => `steht zuerst: ${why}`,
         whyPrimary: (fact: string) => `Eintrag (${fact}), Original`,
         whyOriginal: 'Original',

@@ -368,7 +368,7 @@ export const contextMenuMethods = uiModule({
                 ...researchInGroup,
                 ...submenuRow('more', c.more, [
                     { action: 'toggle-lock', label: strings.lock.lockPerson },
-                    { action: 'merge', label: `${strings.personMerge.mergeWith}...` },
+                    { action: 'merge', label: `${strings.personMerge.mergeWith}…` },
                     { action: 'delete', label: c.delete, danger: true, divider: true },
                 ]),
             ]),

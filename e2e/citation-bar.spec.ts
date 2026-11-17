@@ -82,11 +82,11 @@ test.describe('the citation bar in the source viewer', () => {
         await tree(page);
         await openFromBirthChip(page, 'Matrika N');
         await expect(bar(page).locator('.viewer-cite-what')).toHaveText('Birth · Dobromil Ostružník');
-        await expect(bar(page).locator('.viewer-cite-pos')).toHaveText('1 of 3 citations · first because: the birth record, original');
+        await expect(bar(page).locator('.viewer-cite-pos')).toHaveText('Citation 1 of 3 · first because: the birth record, original');
         await page.locator('#source-viewer-modal .close-btn').first().click();
 
         await birthChips(page).filter({ hasText: 'Matrika Z' }).locator('.source-chip-open').click();
-        await expect(bar(page).locator('.viewer-cite-pos')).toHaveText('2 of 3 citations');
+        await expect(bar(page).locator('.viewer-cite-pos')).toHaveText('Citation 2 of 3');
         const mark = bar(page).locator('.viewer-cite-main');
         await expect(mark).toHaveText('☆︎ Mark as main');
         await mark.click();
@@ -102,7 +102,7 @@ test.describe('the citation bar in the source viewer', () => {
         await expect(pill(page).locator('.undo-toast-msg')).toHaveText('Main citation for the birth: Matrika Z Vrbovec 1900–1930');
         if (SHOTS) await page.screenshot({ path: `${SHOTS}/2c-main-marked-1440.png` });
         await pill(page).locator('.undo-toast-btn').click();
-        await expect(bar(page).locator('.viewer-cite-pos')).toHaveText('2 of 3 citations');
+        await expect(bar(page).locator('.viewer-cite-pos')).toHaveText('Citation 2 of 3');
         expect((await birth(page)).main).toBeUndefined();
         await expect(birthChips(page).first()).toContainText('Matrika N');
         // One history entry: nothing more to undo.
@@ -114,7 +114,7 @@ test.describe('the citation bar in the source viewer', () => {
         await openFromBirthChip(page, 'Matrika Z');
         await expect(bar(page).locator('.viewer-cite-pos')).toHaveText('★︎ Main citation for the birth');
         await bar(page).locator('.viewer-cite-main').click();
-        await expect(bar(page).locator('.viewer-cite-pos')).toHaveText('2 of 3 citations');
+        await expect(bar(page).locator('.viewer-cite-pos')).toHaveText('Citation 2 of 3');
         await expect(bar(page).locator('.viewer-cite-main')).toBeFocused();
         await expect(pill(page).locator('.undo-toast-msg')).toHaveText('Main citation for the birth unmarked; the order is automatic again');
         expect((await birth(page)).main).toBeUndefined();
@@ -143,7 +143,7 @@ test.describe('the citation bar in the source viewer', () => {
     test('a research that says nothing of citations: no Mark, no ★, the note; the long sentence once, then the short tail', async ({ page }) => {
         await tree(page, { main: true, research: true });
         await page.evaluate(() => window.Strom.UI.showSourceViewer('s3', { personId: 'r' as never, fact: 'birth' }));
-        await expect(bar(page).locator('.viewer-cite-pos')).toHaveText('1 of 3 citations');
+        await expect(bar(page).locator('.viewer-cite-pos')).toHaveText('Citation 1 of 3');
         await expect(bar(page).locator('.viewer-cite-main')).toHaveCount(0);
         await expect(bar(page)).not.toContainText('★');
         await expect(bar(page).locator('.viewer-cite-note')).toHaveText('The research does not take removals yet.');
@@ -243,7 +243,7 @@ for (const s of SIZES) {
             test('the buttons and the note fit, 44 px to tap on touch, the toast whole', async ({ page }) => {
                 await tree(page, { lang: 'de', size: s.size, dark, research: true });
                 await openFromBirthChip(page, 'Matrika Z');
-                await expect(bar(page).locator('.viewer-cite-pos')).toHaveText('2. von 3 Zitaten');
+                await expect(bar(page).locator('.viewer-cite-pos')).toHaveText('Zitat 2 von 3');
                 // A research that has said nothing: no "Mark"; the remove button and its note.
                 await expect(bar(page).locator('.viewer-cite-note')).toHaveText('Die Forschung übernimmt Entfernungen noch nicht.');
                 await fits(page, s.size.width);

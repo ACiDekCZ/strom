@@ -470,7 +470,7 @@ export class PersonPicker {
 
         this.dropdown.innerHTML = itemsToShow
             .map((person, index) => this.renderItem(person, index))
-            .join('') + (hasMore ? '<div class="person-picker-loading">...</div>' : '');
+            .join('') + (hasMore ? '<div class="person-picker-loading">…</div>' : '');
 
         // Attach click listeners
         this.dropdown.querySelectorAll('.person-picker-item').forEach(item => {

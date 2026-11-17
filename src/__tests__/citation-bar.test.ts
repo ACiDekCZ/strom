@@ -12,7 +12,7 @@ import { TreeManager } from '../tree-manager.js';
 import { AuditLogManager } from '../audit-log.js';
 import { UndoManager } from '../undo.js';
 import { CiteBarGates, citeBar, citeBarHtml, citeMainToast, resetUnciteWarned, unciteToast } from '../citation-bar.js';
-import { setLanguage } from '../strings.js';
+import { setLanguage, strings } from '../strings.js';
 import { Person, Source, StromData, TreeId, toPartnershipId, toPersonId } from '../types.js';
 
 const TREE = 'citation-bar-tree' as TreeId;
@@ -82,25 +82,25 @@ describe('citeBar: the states of §2', () => {
         const bar = citeBar(dm.data, BIRTH, 'births', OPEN)!;
         expect(bar.state).toBe('first');
         expect(bar.what).toBe('Birth · Dobroslav Zderadil');
-        expect(bar.pos).toBe('1 of 3 citations · first because: the birth record, original');
+        expect(bar.pos).toBe('Citation 1 of 3 · first because: the birth record, original');
         expect(bar).toMatchObject({ setMain: true, clearMain: false, remove: true, note: false });
     });
 
     it('the first because it is an original (step 3), the highest reliability (step 4), or nothing said (step 5)', () => {
         expect(citeBar(dm.data, { personId: P, eventId: 'ev_c1' }, 'census', OPEN)!.pos)
-            .toBe('1 of 2 citations · first because: highest reliability');
+            .toBe('Citation 1 of 2 · first because: highest reliability');
         dm.data.sources!.copy.quality = 2;
-        expect(citeBar(dm.data, { personId: P, eventId: 'ev_c1' }, 'census', OPEN)!.pos).toBe('1 of 2 citations');
+        expect(citeBar(dm.data, { personId: P, eventId: 'ev_c1' }, 'census', OPEN)!.pos).toBe('Citation 1 of 2');
         dm.data.sources!.census.quality = 3;
         delete dm.data.sources!.census.events;
         expect(citeBar(dm.data, { personId: P, eventId: 'ev_c1' }, 'census', OPEN)!.pos)
-            .toBe('1 of 2 citations · first because: original');
+            .toBe('Citation 1 of 2 · first because: original');
     });
 
     it('another in the order: only its place', () => {
         const bar = citeBar(dm.data, BIRTH, 'census', OPEN)!;
         expect(bar.state).toBe('next');
-        expect(bar.pos).toBe('3 of 3 citations');
+        expect(bar.pos).toBe('Citation 3 of 3');
         expect(bar.setMain).toBe(true);
     });
 
@@ -116,7 +116,7 @@ describe('citeBar: the states of §2', () => {
         expect(html).toContain('data-cite-act="clear"');
         expect(html).not.toContain('data-cite-act="set"');
         // The record now second, by the order alone.
-        expect(citeBar(dm.data, BIRTH, 'births', OPEN)!.pos).toBe('2 of 3 citations');
+        expect(citeBar(dm.data, BIRTH, 'births', OPEN)!.pos).toBe('Citation 2 of 3');
     });
 
     it('the only citation: "The only citation for the death", Remove alone', () => {
@@ -133,7 +133,7 @@ describe('citeBar: the states of §2', () => {
         const bar = citeBar(dm.data, BIRTH, 'census', gates)!;
         // The stored main citation still stands first (as the chips), without a word of it.
         expect(bar.state).toBe('first');
-        expect(bar.pos).toBe('1 of 3 citations');
+        expect(bar.pos).toBe('Citation 1 of 3');
         expect(bar).toMatchObject({ setMain: false, clearMain: false, remove: true, note: true });
         const html = citeBarHtml(bar);
         expect(html).not.toContain('★');
@@ -165,21 +165,23 @@ describe('citeBar: the states of §2', () => {
     it('a person\'s own citations are not a fact: no bar; a wedding and a couple\'s event are', () => {
         expect(citeBar(dm.data, { personId: P }, 'census', OPEN)).toBeNull();
         expect(citeBar(dm.data, { partnershipId: U }, 'index', OPEN)!.what).toBe('Marriage · Dobroslav Zderadil & Velemíra Zderadil');
-        expect(citeBar(dm.data, { partnershipId: U }, 'index', OPEN)!.pos).toBe('1 of 2 citations · first because: highest reliability');
+        expect(citeBar(dm.data, { partnershipId: U }, 'index', OPEN)!.pos).toBe('Citation 1 of 2 · first because: highest reliability');
     });
 
     it('in Czech, German and Polish: the fact in its form', () => {
         dm.data.persons[P].citationMain = { birthSourceIds: 'census' };
         setLanguage('cs');
         expect(citeBar(dm.data, BIRTH, 'census', OPEN)!.pos).toBe('Hlavní citace u narození');
-        expect(citeBar(dm.data, BIRTH, 'births', OPEN)!.pos).toBe('2. ze 3 citací');
+        expect(citeBar(dm.data, BIRTH, 'births', OPEN)!.pos).toBe('Citace 2 ze 3');
+        // "z" or "ze" as the count is read.
+        expect([5, 12, 21].map(n => strings.sources.citePos(1, n))).toEqual(['Citace 1 z 5', 'Citace 1 ze 12', 'Citace 1 ze 21']);
         expect(citeBar(dm.data, { personId: P, eventId: 'ev_c1' }, 'census', OPEN)!.what).toBe('Sčítání lidu · Dobroslav Zderadil');
         setLanguage('de');
         expect(citeBar(dm.data, BIRTH, 'census', OPEN)!.pos).toBe('Hauptzitat (Geburt)');
         delete dm.data.persons[P].citationMain;
-        expect(citeBar(dm.data, BIRTH, 'births', OPEN)!.pos).toBe('1. von 3 Zitaten · steht zuerst: Eintrag (Geburt), Original');
+        expect(citeBar(dm.data, BIRTH, 'births', OPEN)!.pos).toBe('Zitat 1 von 3 · steht zuerst: Eintrag (Geburt), Original');
         setLanguage('pl');
-        expect(citeBar(dm.data, BIRTH, 'births', OPEN)!.pos).toBe('1. z 3 cytatów · jest pierwszy: zapis urodzenia, oryginał');
+        expect(citeBar(dm.data, BIRTH, 'births', OPEN)!.pos).toBe('Cytat 1 z 3 · jest pierwszy: zapis urodzenia, oryginał');
     });
 });
 

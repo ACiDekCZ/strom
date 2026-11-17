@@ -1086,7 +1086,7 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         chipOpenMain: (title: string) => `${title} – cytat główny, otwórz`,
         // Pasek cytatu w przeglądarce źródła i komunikaty usunięcia (spec 095 §2, §3); {f}: strings.events.typesOf (dopełniacz)
         citeAt: (fact: string, who: string) => `${fact} · ${who}`,
-        citePos: (i: number, n: number) => `${i}. z ${n} cytatów`,
+        citePos: (i: number, n: number) => `Cytat ${i} z ${n}`,
         citeFirstWhy: (why: string) => `jest pierwszy: ${why}`,
         whyPrimary: (fact: string) => `zapis ${fact}, oryginał`,
         whyOriginal: 'oryginał',
