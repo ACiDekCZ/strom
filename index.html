@@ -10889,6 +10889,9 @@
         .tv-menu-icon > svg, .bottom-sheet-icon > svg { display: block; margin: 0 auto; }
         .tv-menu-label { flex: 1 1 auto; min-width: 0; }
         .tv-menu-hint { flex: none; font-size: 11.5px; color: var(--text-faint); }
+        /* An item's quiet second line ("Most tasks": books to download first). */
+        .tv-menu-item.has-desc { height: auto; min-height: 32px; padding-top: 5px; padding-bottom: 5px; }
+        .tv-menu-desc { display: block; font-size: 11.5px; font-weight: 400; line-height: 1.35; color: var(--text-light); }
         /* §4.4 the Columns button and panel (a sheet from the bottom on a phone). */
         .tv-cols-btn {
             display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px; white-space: nowrap;
@@ -11442,6 +11445,7 @@
             .export-table-link { min-height: 44px; }
             .tv-head-menu { display: none; }
             .tv-menu-item { height: 44px; }
+            .tv-menu-item.has-desc { height: auto; min-height: 44px; }
             .tv-cp-item, .tv-cp-ghead, .tv-cp-gtoggle { min-height: 44px; }
             .tv-cp-move { opacity: 1; width: 40px; height: 40px; }
             /* §3.2: the ▾/▸ target 44 px wide on touch (into the cell's padding); the "more" line as tall as a row. */
@@ -21974,6 +21978,48 @@
         .research-overview__waiting-detail { display: flex; flex-direction: column; gap: 6px; padding: 2px 4px 10px; }
         .research-overview__waiting-text { font-size: 14px; overflow-wrap: anywhere; }
         .research-overview__waiting-on { color: var(--text-faint); font-size: 12px; overflow-wrap: anywhere; }
+        /* An open item (spec 105 U4 §3): its text whole in the row (no clamp, not even sideways), not again in the body. */
+        .research-overview__waiting-item.is-open .research-overview__waiting-what { display: block; -webkit-line-clamp: unset; overflow: visible; }
+        /* "Waiting on": the research's whole instruction in a framed block, clamped at 10 lines with "more" (3 sideways). */
+        .research-overview__waiting-on-box {
+            --on-lines: 10;
+            display: flex; flex-direction: column; align-items: stretch; gap: 2px; min-width: 0; padding: 8px 10px;
+            background: var(--surface); border: 1px solid var(--read-amber-line); border-radius: var(--r-md);
+        }
+        .research-overview__waiting-on-label {
+            font-size: 11px; font-weight: 600; line-height: 1.4; letter-spacing: .4px; text-transform: uppercase; color: var(--text-light);
+        }
+        .research-overview__waiting-on-box > .research-overview__waiting-on {
+            margin: 0; font-size: 14px; line-height: 1.5; color: var(--text); overflow-wrap: anywhere;
+            display: -webkit-box; -webkit-line-clamp: var(--on-lines); -webkit-box-orient: vertical; overflow: hidden;
+        }
+        .research-overview__waiting-on-box > .research-overview__waiting-on.is-full { display: block; -webkit-line-clamp: unset; overflow: visible; }
+        .link-button.research-overview__waiting-on-more {
+            align-self: flex-start; margin: 0; padding: 0; min-height: 0;
+            font-size: 12.5px; font-weight: 600; line-height: 1.4; text-decoration: none; color: var(--primary);
+        }
+        .research-overview__waiting-on-more[hidden] { display: none; }
+        .research-overview__waiting-on-more:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: var(--r-sm); }
+        @media (hover: hover) { .link-button.research-overview__waiting-on-more:hover { text-decoration: underline; } }
+        .research-overview__waiting-to { margin: 0; font-size: 12.5px; line-height: 1.4; color: var(--text-light); overflow-wrap: anywhere; }
+        .research-overview__waiting-on-box > .research-overview__waiting-to { margin-top: 2px; }
+        .research-overview__waiting-to-label { font-weight: 600; }
+        /* The addresses of an open item's text (the row is a button and holds no link). */
+        .research-overview__waiting-links { display: flex; flex-wrap: wrap; gap: 2px 12px; min-width: 0; font-size: 13px; overflow-wrap: anywhere; }
+        @media (max-width: 640px) {
+            .research-overview__waiting-on-box > .research-overview__waiting-on { font-size: 15px; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .research-overview__waiting-on-box { --on-lines: 3; }
+        }
+        @media (pointer: coarse) {
+            .link-button.research-overview__waiting-on-more { display: inline-flex; align-items: center; min-height: 44px; }
+            .link-button.research-overview__waiting-on-more[hidden] { display: none; }
+        }
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .link-button.research-overview__waiting-on-more { display: inline-flex; align-items: center; min-height: 44px; }
+            .link-button.research-overview__waiting-on-more[hidden] { display: none; }
+        }
         .research-overview__waiting-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
         a.research-overview__waiting-web { display: inline-block; text-decoration: none; }
         .research-overview__waiting-hint { margin: 0; font-size: 12px; color: var(--text-light); }
@@ -22037,7 +22083,6 @@
             flex: 0 1 auto; min-width: 0; max-width: min(24rem, 100%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
         .research-overview__book-sep { color: var(--text-ghost); }
-        .research-overview__book-counts.is-key { font-weight: 600; color: var(--text); }
         .research-overview__book-pending { color: var(--text); }
         .research-overview__book-login { color: var(--text-faint); }
         .research-overview__book-offer { flex: 0 1 auto; min-width: 0; font-size: 12.5px; color: var(--text); }
@@ -22046,6 +22091,12 @@
             margin-top: 16px; padding-bottom: 2px; font-size: 11px; font-weight: 600; letter-spacing: .5px;
             text-transform: uppercase; color: var(--text-light);
         }
+        /* "Most tasks" (spec 105 U4 §4): the parts of the books, "To download · N books" and "Whole on disk · N books". */
+        .research-overview__phase > .research-overview__books-part:first-child { margin-top: 6px; }
+        .research-overview__book-meta .is-key { font-weight: 600; color: var(--text); }
+        /* Under the order in "Most tasks": what it puts first. */
+        .research-overview__order-note { margin: 2px 0 6px; font-size: 12.5px; line-height: 1.4; color: var(--text-light); }
+        .research-overview__order-sheet .bottom-sheet-sub { font-size: 11.5px; color: var(--text-light); }
         @media (pointer: coarse) {
             .research-overview__groups-opt.sel-opt { position: relative; height: 32px; }
             .research-overview__groups-opt.sel-opt::before { content: ''; position: absolute; left: 0; right: 0; top: -6px; bottom: -6px; }

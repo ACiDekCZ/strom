@@ -9,7 +9,7 @@
 import {
     LiveBook, LiveBooks, LiveWaiting, WAITING_SECTIONS, WaitingGroup, WaitingInbox, WaitingLinkAction, WaitingSection, imageNumber, researchTaskRef,
 } from './research-link.js';
-import { sortBooksMost } from './research-books.js';
+import { bookWholeOnDisk, sortBooksMost } from './research-books.js';
 import type { WaitingWrites } from './research-waiting-write.js';
 
 export type WaitingPhase = 'todo' | 'sent';
@@ -83,7 +83,16 @@ export interface WaitingGroupRows<T extends LiveWaiting = LiveWaiting> {
     book?: LiveBook | WaitingBookStub;
     /** The first group without a book after its phase's books ("No book" stands before it). */
     afterBooks?: true;
+    /**
+     * "Most tasks" (spec 105 U4 §4): the first book of its part — to download
+     * or whole on disk — with how many books the part has in the phase; only
+     * when the phase has books of both parts ("To download · N books" before it).
+     */
+    part?: { kind: BookPart; count: number };
 }
+
+/** A part of the books in "Most tasks": to download (images missing or not known), whole on disk. */
+export type BookPart = 'download' | 'disk';
 
 /** A book's group: what the research's list says of the book (null: a book outside the list, its title only). */
 export function listedBook(b: LiveBook | WaitingBookStub | undefined): LiveBook | null {
@@ -179,9 +188,27 @@ export function groupWaiting<T extends LiveWaiting>(items: readonly T[], opts: W
     const rest = [...places.filter(g => g.key !== OTHER_GROUP), ...places.filter(g => g.key === OTHER_GROUP)];
     if (most) {
         const known = books.filter(listed).sort((a, b) => sortBooksMost(a.book as LiveBook, b.book as LiveBook));
-        return booksFirst([...known, ...books.filter(g => !listed(g))], rest);
+        // A book outside the research's list: its images not known, so the last of the books to download.
+        const disk = known.filter(g => bookWholeOnDisk(g.book as LiveBook));
+        const download = [...known.filter(g => !disk.includes(g)), ...books.filter(g => !listed(g))];
+        return booksFirst(markPart(download, 'download', disk.length > 0).concat(markPart(disk, 'disk', download.length > 0)), rest);
     }
     return booksFirst(books, rest);
+}
+
+/** A part's first book marked with the part and its count (`both`: the phase has books of the other part too). */
+function markPart<T extends LiveWaiting>(groups: WaitingGroupRows<T>[], kind: BookPart, both: boolean): WaitingGroupRows<T>[] {
+    if (!both || groups.length === 0) return groups;
+    return [{ ...groups[0], part: { kind, count: groups.length } }, ...groups.slice(1)];
+}
+
+/**
+ * A phase's lines for the guessed height of the section in the own window's
+ * columns: its rows without groups, else each group's band (`bandRows`),
+ * "No book" and the subheadings of "Most tasks" (spec 105 U4 §4).
+ */
+export function waitingPhaseLines<T extends LiveWaiting>(groups: readonly WaitingGroupRows<T>[], bandRows: (g: WaitingGroupRows<T>) => number): number {
+    return groups.reduce((n, g) => n + (g.key === FLAT_GROUP ? g.items.length : bandRows(g)) + (g.afterBooks ? 1 : 0) + (g.part ? 1 : 0), 0);
 }
 
 /**

@@ -23,6 +23,8 @@ export interface HeadMenuItem {
     title?: string;
     /** The shortcut on the right. */
     hint?: string;
+    /** A quiet second line under the label (what the choice does). */
+    desc?: string;
     disabled?: boolean;
     /** The chosen one of a list (the open view, §9.2): a check before the label. */
     checked?: boolean;
@@ -114,11 +116,11 @@ export function openHeadMenu(anchor: HTMLElement, title: string, note: string, e
         if ('heading' in e) { html += `<div class="tv-menu-heading" role="presentation">${esc(e.heading)}</div>`; return; }
         if ('note' in e) { html += `<div class="tv-menu-note tv-menu-foot" role="presentation">${esc(e.note)}</div>`; return; }
         const checkable = e.checked !== undefined;
-        html += `<button type="button" class="tv-menu-item" role="${checkable ? 'menuitemradio' : 'menuitem'}" tabindex="-1" data-i="${i}" data-id="${esc(e.id)}"`
+        html += `<button type="button" class="tv-menu-item${e.desc ? ' has-desc' : ''}" role="${checkable ? 'menuitemradio' : 'menuitem'}" tabindex="-1" data-i="${i}" data-id="${esc(e.id)}"`
             + (checkable ? ` aria-checked="${e.checked}"` : '')
             + `${e.disabled ? ' aria-disabled="true"' : ''}${e.title ? ` title="${esc(e.title)}"` : ''}>`
             + `<span class="tv-menu-icon" aria-hidden="true">${e.iconHtml && !e.checked ? e.iconHtml : esc(e.checked ? '✓' : e.icon)}</span>`
-            + `<span class="tv-menu-label">${esc(e.label)}</span>`
+            + `<span class="tv-menu-label">${esc(e.label)}${e.desc ? `<span class="tv-menu-desc">${esc(e.desc)}</span>` : ''}</span>`
             + (e.hint ? `<span class="tv-menu-hint" aria-hidden="true">${esc(e.hint)}</span>` : '')
             + '</button>';
     });

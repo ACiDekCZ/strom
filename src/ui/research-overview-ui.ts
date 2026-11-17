@@ -27,7 +27,7 @@ import { waitingGroupSendable, waitingGroupHasNote, waitingSendable, waitingUnse
 import {
     FLAT_GROUP, PLACES_GROUP, WaitingFilter, WaitingGroupOpts, WaitingGroupRows, WaitingOrder, WaitingPhase, isTimeOrder, listedBook, sortWaitingByTime, waitingOrdersFor, effectiveWaitingFilter, waitingActionDo, waitingChatLeads, waitingChips, waitingDaysAgo, waitingGroupChatTask,
     waitingGroupOpenByDefault, waitingPhase, waitingPhases, waitingSection, waitingTaskActions, waitingTodoCount,
-    WaitActionView, imagesState, splitWaitingActions, waitingActions, waitingForImages, waitingGroupBandLines, waitingGroupMissing,
+    WaitActionView, imagesState, splitWaitingActions, waitingActions, waitingForImages, waitingGroupBandLines, waitingGroupMissing, waitingPhaseLines, textWithLinks,
 } from '../research-waiting.js';
 import { WaitingAnswerForm, waitingAnswerChangedNote } from './waiting-answer-form.js';
 import { appendImagesDetail, bindImagesDrop, clearImagesSeen, forgetImagesArrived, imagesShortEl, itemKey, noteImagesArrived } from './waiting-images-ui.js';
@@ -38,7 +38,7 @@ import { openHeadMenu } from './table-view/table-headmenu.js';
 import {
     ORDER_ICON, WaitingGroups, noteWaitingNew, setWaitingDrawn, shownWaitingGroups, storeWaitingGroupMode, storeWaitingGroups, storeWaitingOrder,
     storedWaitingGroupMode, storedWaitingGroups, storedWaitingOrder, waitingDrawn, waitingGroupModesFor, waitingGroupsLabel,
-    groupTitleMoreEl, waitingGroupTagEl, waitingOrderLabel, waitingSideEl, waitingSinceEl, watchWaitingOrderStorage,
+    groupTitleMoreEl, waitingOnMoreEl, waitingGroupTagEl, waitingOrderLabel, waitingSideEl, waitingSinceEl, watchWaitingOrderStorage,
 } from './waiting-order-ui.js';
 import { browserGroupNote, browserNote } from '../research-browser.js';
 import { uiModule } from './module.js';
@@ -1109,10 +1109,10 @@ export const researchOverviewMethods = uiModule({
         if (grouped) {
             const all = waitingPhases(s.waiting, filter, order, !flat, groupOpts);
             // Without groups a phase's rows count, else its bands (a wrapped title, a book's archive, facts and actions,
-            // a place's actions and what it misses; spec 105 U4 §1, §2) and "No book".
-            const lines = (p: WaitingPhase): number => all[p].reduce((n, g) => n + (g.key === FLAT_GROUP ? g.items.length : this.waitingGroupBandRows(g)) + (g.afterBooks ? 1 : 0), 0);
+            // a place's actions and what it misses; spec 105 U4 §1, §2), "No book" and the parts of "Most tasks" (U4 §4).
+            const lines = (p: WaitingPhase): number => waitingPhaseLines(all[p], g => this.waitingGroupBandRows(g));
             noteOverviewSectionRows('waiting', (['todo', 'sent'] as WaitingPhase[]).reduce((n, p) => n + (all[p].length > 0 ? 1 + lines(p) : 0), 0)
-                + this.overviewBooksOfferRows(s, filter));
+                + (orderRow && order === 'most' ? 1 : 0) + this.overviewBooksOfferRows(s, filter));
         } else noteOverviewSectionRows('waiting', s.waiting.length + this.overviewBooksOfferRows(s, 'all'));
         // The hypotheses the search shows (the picked ones outside it stay picked) and what matched each by its number.
         const hypoSearch: HypothesisListSearch | null = searching ? {
@@ -1196,6 +1196,8 @@ export const researchOverviewMethods = uiModule({
                 this.renderResearchOverview();
             },
         });
+        // "Most tasks" says what it puts first (spec 105 U4 §4), under the order (outside its sticky head).
+        if (orderRow && order === 'most') host.appendChild(el('p', 'research-overview__order-note', L.books.mostNote));
 
         // Searching: only what was found, each phase and place with a match open unless folded during the search.
         const phases = waitingPhases(res.matched, filter, order, !flat, groupOpts);
@@ -1227,6 +1229,11 @@ export const researchOverviewMethods = uiModule({
                 if (g.key === FLAT_GROUP) {
                     wrap.appendChild(rows(g.items));
                     continue;
+                }
+                // "Most tasks" with books of both parts in the phase (spec 105 U4 §4): each part under its subheading.
+                if (g.part) {
+                    wrap.appendChild(el('div', `research-overview__nobook research-overview__books-part is-${g.part.kind}`,
+                        g.part.kind === 'download' ? L.books.toDownload(g.part.count) : L.books.onDiskAll(g.part.count)));
                 }
                 // The places after the books (spec 105 §1): under "No book".
                 if (g.afterBooks) wrap.appendChild(el('div', 'research-overview__nobook', L.books.noBook));
@@ -1454,7 +1461,8 @@ export const researchOverviewMethods = uiModule({
         const sheet = mode === 'sheet' || isPhoneBar();
         btn.onclick = () => this.openWaitingChoice(btn, {
             title: L.waitingOrder, sheet, sheetClass: 'research-overview__order-sheet', menuClass: 'research-overview__order-menu',
-            options: orders.map(o => ({ id: `order-${o}`, label: waitingOrderLabel(o), on: o === order, run: () => choose(o) })),
+            // "Most tasks" says what it puts first (spec 105 U4 §4).
+            options: orders.map(o => ({ id: `order-${o}`, label: waitingOrderLabel(o), sub: o === 'most' ? L.books.orderMostSub : undefined, on: o === order, run: () => choose(o) })),
         });
         bar.appendChild(btn);
         if (books && order !== 'most') {
@@ -1486,10 +1494,10 @@ export const researchOverviewMethods = uiModule({
      */
     openWaitingChoice(btn: HTMLElement, c: {
         title: string; sheet: boolean; sheetClass: string; menuClass: string;
-        options: { id: string; label: string; on: boolean; run: () => void }[];
+        options: { id: string; label: string; sub?: string; on: boolean; run: () => void }[];
     }): void {
         if (c.sheet) {
-            this.presentMenuSheet(c.title, [{ rows: c.options.map(o => ({ label: o.label, active: o.on, run: o.run })) }],
+            this.presentMenuSheet(c.title, [{ rows: c.options.map(o => ({ label: o.label, sub: o.sub, active: o.on, run: o.run })) }],
                 { overlayClass: c.sheetClass });
             // The choices are a choice of one.
             const sheet = [...document.querySelectorAll<HTMLElement>(`.${c.sheetClass} .bottom-sheet-menu`)].pop();
@@ -1502,7 +1510,7 @@ export const researchOverviewMethods = uiModule({
         btn.setAttribute('aria-expanded', 'true');
         const menu = openHeadMenu(btn, '', '', [
             { heading: c.title },
-            ...c.options.map(o => ({ id: o.id, label: o.label, icon: '', checked: o.on, run: o.run })),
+            ...c.options.map(o => ({ id: o.id, label: o.label, desc: o.sub, icon: '', checked: o.on, run: o.run })),
         ]);
         menu.classList.add(c.menuClass);
         menu.setAttribute('aria-label', c.title);
@@ -1716,13 +1724,24 @@ export const researchOverviewMethods = uiModule({
         if (info) {
             const most = waitingDrawn().order === 'most';
             const meta = el('span', 'research-overview__book-meta');
+            const sep = (): HTMLElement => {
+                const dot = el('span', 'research-overview__book-sep', '·');
+                dot.setAttribute('aria-hidden', 'true');
+                return dot;
+            };
             parts.forEach((p, i) => {
-                if (i > 0) {
-                    const sep = el('span', 'research-overview__book-sep', '·');
-                    sep.setAttribute('aria-hidden', 'true');
-                    meta.appendChild(sep);
+                if (i > 0) meta.appendChild(sep());
+                // "Most tasks": its keys bold — the tasks, and the images missing (none for a book whole on disk; U4 §4).
+                if (!most || p.key < 0) {
+                    meta.appendChild(el('span', `research-overview__book-${p.kind}`, p.text));
+                    return;
                 }
-                meta.appendChild(el('span', `research-overview__book-${p.kind}${p.kind === 'counts' && most ? ' is-key' : ''}`, p.text));
+                const span = el('span', `research-overview__book-${p.kind}`);
+                p.pieces.forEach((piece, j) => {
+                    if (j > 0) span.append(' · ');
+                    span.appendChild(j === p.key ? el('span', 'is-key', piece) : document.createTextNode(piece));
+                });
+                meta.appendChild(span);
             });
             row.appendChild(meta);
         }
@@ -1947,9 +1966,13 @@ export const researchOverviewMethods = uiModule({
         return li;
     },
 
-    /** An item's detail: the whole text (addresses as links), what it waits on, whom, the person, and its actions. */
+    /**
+     * An item's detail (its text whole in the open row above, not again):
+     * what it waits on and whom, its text's addresses as links, the images,
+     * the person · direction, and its actions. A story and a growing branch
+     * keep their own.
+     */
     overviewWaitingDetail(s: LiveSession, w: LiveWaiting, mode: Mode): HTMLElement {
-        const r = strings.research;
         const L = strings.live;
         const detail = el('div', 'research-overview__waiting-detail');
         if (w.kind === 'story') {
@@ -1980,17 +2003,18 @@ export const researchOverviewMethods = uiModule({
         const writes = this.liveWaitingWrites(s);
         const views = waitingActions(w, { writes, links: mode !== 'sheet' && this.researchLinkAvailable('task'), phone: mode === 'sheet' });
         const key = itemKey(s, w.id);
+        // The body (spec 105 U4 §3): the text stands once, whole, in the open row above; first what changed of the answer,
+        // then what it waits on, the images, the browser's note, the person · direction, the actions and their hint.
         if (views && answerChanged.has(key)) detail.appendChild(waitingAnswerChangedNote());
-        const text = el('div', 'research-overview__waiting-text');
-        appendLinkedText(text, w.what);
-        detail.appendChild(text);
-        // "on" is the agent's free text (an archive's terms); "user" only repeats the heading.
-        if (!waitsOnUser(w.on)) {
-            const on = el('small', 'research-overview__waiting-on');
-            appendLinkedText(on, r.waitingOn(w.on));
-            detail.appendChild(on);
+        const onBox = this.overviewWaitingOnBox(s, w);
+        if (onBox) detail.appendChild(onBox);
+        // The addresses of its text: links here (the row is a button and holds none).
+        const links = textWithLinks(w.what).filter(p => p.url);
+        if (links.length > 0) {
+            const line = el('div', 'research-overview__waiting-links');
+            appendLinkedText(line, links.map(p => p.text).join(' '));
+            detail.appendChild(line);
         }
-        if (w.to) detail.appendChild(el('small', 'research-overview__waiting-on', L.waitingTo(w.to)));
         const img = views ? imagesState(w) : null;
         if (img) appendImagesDetail(detail, img);
         // An archive only the agent's browser reaches (spec 048 §11.2): under the book, unless its group's heading says it.
@@ -2034,6 +2058,31 @@ export const researchOverviewMethods = uiModule({
         if (hint) detail.appendChild(el('p', 'research-overview__waiting-hint', L.waitingAnswerHint));
         if (mode === 'sheet') detail.appendChild(el('div', 'research-overview__muted', L.answerOnComputer));
         return detail;
+    },
+
+    /**
+     * "Waiting on" of an item's detail (spec 105 U4 §3, 3b–3h): the research's
+     * whole instruction in a framed block — its heading, the text (addresses
+     * as links) clamped at 10 lines (3 on a phone held sideways) with "more"
+     * / "less" only when it overflows (kept under `on:<id>`), and whom it goes
+     * to as its second line. None when it waits on the user alone ("user"
+     * only repeats the heading); then whom it goes to stands on its own.
+     */
+    overviewWaitingOnBox(s: LiveSession, w: LiveWaiting): HTMLElement | null {
+        const L = strings.live;
+        const to = (): HTMLElement => {
+            const line = el('p', 'research-overview__waiting-to');
+            line.append(el('span', 'research-overview__waiting-to-label', L.waitingToLabel), ' ', w.to!);
+            return line;
+        };
+        if (waitsOnUser(w.on)) return w.to ? to() : null;
+        const box = el('div', 'research-overview__waiting-on-box');
+        box.appendChild(el('span', 'research-overview__waiting-on-label', L.waitingOnLabel));
+        const text = el('p', 'research-overview__waiting-on');
+        appendLinkedText(text, w.on!);
+        box.append(text, waitingOnMoreEl(text, w.id, s.waitingView.open));
+        if (w.to) box.appendChild(to());
+        return box;
     },
 
     /**

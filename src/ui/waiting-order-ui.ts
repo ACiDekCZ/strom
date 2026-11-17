@@ -173,70 +173,84 @@ export function waitingGroupName(w: LiveWaiting): string {
     return w.kind === 'place' ? strings.places.waiting.group : w.group?.name ?? strings.live.waitingOtherGroup;
 }
 
-/** The "more" of each group title drawn, watched for its column's width (spec 105 U4 §1, 1h). */
-const titleMoreOf = new WeakMap<Element, HTMLButtonElement>();
-let titleObserver: ResizeObserver | null = null;
+/** The "more" of each clamped text drawn (a group's title, an item's "Waiting on"), watched for its column's width. */
+const clampMoreOf = new WeakMap<Element, { btn: HTMLButtonElement; linesVar: string; lines: number }>();
+let clampObserver: ResizeObserver | null = null;
 
 /**
- * Whether a group title needs its "more" / "less": cut at its cap (more than
- * its lines), or unfolded beyond them. The cap is the title's
- * `--group-title-lines` (3; 4 on a phone, in the panel, in a narrow column).
+ * Whether a clamped text needs its "more" / "less": cut at its cap (more
+ * than its lines), or unfolded beyond them. The cap is the text's CSS
+ * variable of lines (a group title's `--group-title-lines`: 3, 4 on a phone,
+ * in the panel, in a narrow column; "Waiting on"'s `--on-lines`: 10, 3 on a
+ * phone held sideways).
  */
-function syncGroupTitleMore(title: HTMLElement): void {
-    const btn = titleMoreOf.get(title);
-    if (!btn || !title.isConnected) return;
+function syncClampMore(text: HTMLElement): void {
+    const c = clampMoreOf.get(text);
+    if (!c || !text.isConnected) return;
     let over: boolean;
-    if (title.classList.contains('is-full')) {
-        const cs = getComputedStyle(title);
-        const lines = Number.parseInt(cs.getPropertyValue('--group-title-lines'), 10) || GROUP_TITLE_LINES;
+    if (text.classList.contains('is-full')) {
+        const cs = getComputedStyle(text);
+        const lines = Number.parseInt(cs.getPropertyValue(c.linesVar), 10) || c.lines;
         const lh = Number.parseFloat(cs.lineHeight) || 20;
-        over = title.clientHeight > lines * lh + 1;
+        over = text.clientHeight > lines * lh + 1;
     } else {
-        over = title.scrollHeight > title.clientHeight + 1;
+        over = text.scrollHeight > text.clientHeight + 1;
     }
-    if (btn.hidden === over) btn.hidden = !over;
+    if (c.btn.hidden === over) c.btn.hidden = !over;
 }
 
 /**
- * A group title's "more" (spec 105 U4 §1, 1h): a link button under the title,
- * outside the fold button (it never folds the group), shown only when the
- * title overflows its cap (measured once drawn and again when the column's
- * width changes). A click unfolds the whole title in place ("less" folds it
- * back); kept in the view under `title:<group key>` while the session lasts.
+ * A clamped text's "more" (spec 105 U4 §1, 1h; §3): a link button under the
+ * text (outside any fold button: it never folds what holds it), shown only
+ * when the text overflows its cap (measured once drawn and again when the
+ * column's width changes). A click unfolds the whole text in place ("less"
+ * folds it back); kept in the view under `stateKey` while the session lasts.
  */
-export function groupTitleMoreEl(title: HTMLElement, key: string, open: Map<string, boolean>): HTMLButtonElement {
+function clampMoreEl(text: HTMLElement, stateKey: string, open: Map<string, boolean>, c: { cls: string; linesVar: string; lines: number }): HTMLButtonElement {
     const L = strings.live;
-    const stateKey = `title:${key}`;
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'link-button research-overview__group-more';
+    btn.className = `link-button ${c.cls}`;
     btn.hidden = true;
     const paint = (full: boolean): void => {
-        title.classList.toggle('is-full', full);
+        text.classList.toggle('is-full', full);
         btn.textContent = full ? L.titleLess : L.titleMore;
         btn.setAttribute('aria-expanded', String(full));
     };
     paint(open.get(stateKey) === true);
     btn.onclick = (e) => {
         e.stopPropagation();
-        const full = !title.classList.contains('is-full');
+        const full = !text.classList.contains('is-full');
         if (full) open.set(stateKey, true);
         else open.delete(stateKey);
         paint(full);
-        syncGroupTitleMore(title);
+        syncClampMore(text);
     };
-    titleMoreOf.set(title, btn);
+    clampMoreOf.set(text, { btn, linesVar: c.linesVar, lines: c.lines });
     if (typeof ResizeObserver !== 'undefined') {
-        titleObserver ??= new ResizeObserver(entries => {
+        clampObserver ??= new ResizeObserver(entries => {
             for (const entry of entries) {
                 const t = entry.target as HTMLElement;
-                if (!t.isConnected) titleObserver?.unobserve(t);
-                else syncGroupTitleMore(t);
+                if (!t.isConnected) clampObserver?.unobserve(t);
+                else syncClampMore(t);
             }
         });
-        titleObserver.observe(title);
+        clampObserver.observe(text);
     }
     return btn;
+}
+
+/** A group title's "more" (spec 105 U4 §1, 1h), kept under `title:<group key>`. */
+export function groupTitleMoreEl(title: HTMLElement, key: string, open: Map<string, boolean>): HTMLButtonElement {
+    return clampMoreEl(title, `title:${key}`, open, { cls: 'research-overview__group-more', linesVar: '--group-title-lines', lines: GROUP_TITLE_LINES });
+}
+
+/** The lines of an item's "Waiting on" before its "more" (spec 105 U4 §3; 3 on a phone held sideways, by `--on-lines`). */
+export const WAITING_ON_LINES = 10;
+
+/** An item's "Waiting on" "more" (spec 105 U4 §3, Q1 a), kept under `on:<item id>`. */
+export function waitingOnMoreEl(text: HTMLElement, id: string, open: Map<string, boolean>): HTMLButtonElement {
+    return clampMoreEl(text, `on:${id}`, open, { cls: 'research-overview__waiting-on-more', linesVar: '--on-lines', lines: WAITING_ON_LINES });
 }
 
 /** A row's tag of its place in a list without groups (the whole name on hover). */

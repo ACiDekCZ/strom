@@ -1635,8 +1635,8 @@ test.describe('Research overview', () => {
         const ov = await openOverview(page);
         const item = ov.locator('.research-overview__waiting-item').first();
         await item.locator('.research-overview__waiting-row').click();
-        const whole = item.locator('.research-overview__waiting-on');
-        await expect(whole).toContainText('konec zadání.');
+        const whole = item.locator('.research-overview__waiting-on-box .research-overview__waiting-on');
+        await expect(whole).toHaveText(INSTRUCTION);
         await whole.scrollIntoViewIfNeeded();
         await expect(whole).toBeInViewport();
         const wide = await item.evaluate((n) => [...n.querySelectorAll<HTMLElement>('*')]
@@ -1995,7 +1995,7 @@ test.describe('Awaiting action from a research with waiting.groups', () => {
         await expect(actions.nth(1)).toBeVisible();
         await expect(actions.nth(1)).not.toHaveClass(/is-primary/);
         await expect(letter.locator('.research-overview__waiting-hint')).toHaveText('The answer is saved with the task; the agent takes it up in its next work.');
-        await expect(letter.locator('.research-overview__waiting-on')).toContainText('to: MěÚ Vzorov');
+        await expect(letter.locator('.research-overview__waiting-to')).toHaveText('To MěÚ Vzorov');
         const task = await letter.getAttribute('data-id');
         await actions.nth(0).click();
         await actions.nth(1).click();
@@ -2020,11 +2020,13 @@ test.describe('Awaiting action from a research with waiting.groups', () => {
         await expect(web).toHaveAttribute('href', 'https://rodokmen.example/zaznam/1');
         await expect(web).toHaveAttribute('target', '_blank');
         await expect(web).toHaveAttribute('rel', 'noopener noreferrer');
-        const inText = webItem.locator('.research-overview__waiting-text a.live-text-link');
+        // The text once, in the open row; its addresses as links in the body (spec 105 U4 §3).
+        await expect(webItem.locator('.research-overview__waiting-text')).toHaveCount(0);
+        const inText = webItem.locator('.research-overview__waiting-links a.live-text-link');
         await expect(inText).toHaveText('https://rodokmen.example/hledat?q=1');
         await expect(inText).toHaveAttribute('href', 'https://rodokmen.example/hledat?q=1');
         await expect(inText).toHaveAttribute('rel', 'noopener noreferrer');
-        // The row itself holds no link (the text is clamped there).
+        // The row itself holds no link (it is a button).
         await expect(webItem.locator('.research-overview__waiting-row a')).toHaveCount(0);
 
         // Awaiting a reply: unfolds to its places; the rows say when they were sent.

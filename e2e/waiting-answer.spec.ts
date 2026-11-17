@@ -224,7 +224,7 @@ test.describe('a research that takes answers and images (waiting.answer, accepts
         // A click elsewhere closes it too.
         await more.click();
         await expect(menu).toBeVisible();
-        await item.locator('.research-overview__waiting-text').click();
+        await item.locator('.research-overview__waiting-detail').click({ position: { x: 2, y: 1 } });
         await expect(menu).toHaveCount(0);
     });
 
@@ -271,7 +271,7 @@ test.describe('a research that takes answers and images (waiting.answer, accepts
         await expect(note).toHaveAttribute('role', 'alert');
         await expect(note).toContainText('The task now waits for something else; the answer was not sent.');
         await expect(form.locator('.waiting-answer__error')).toBeHidden();
-        await expect(item.locator('.research-overview__waiting-text')).toHaveText('Uložit snímek 58 oddací matriky Horní Vzorov', { timeout: 10000 });
+        await expect(item.locator('.research-overview__waiting-what')).toContainText('Uložit snímek 58 oddací matriky Horní Vzorov', { timeout: 10000 });
         await expect(field).toHaveValue('Snímek 58 v archivu chybí, zápis je jen na 57.');
 
         // Saved: the row goes, the toast says so, the draft goes.

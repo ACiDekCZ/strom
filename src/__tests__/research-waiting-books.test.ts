@@ -14,7 +14,7 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { LiveBooks, LiveWaiting, sanitizeBooks, sanitizeWaiting } from '../research-link.js';
 import {
-    ALL_WAITING_ORDERS, BOOK_GROUP_PREFIX, FLAT_GROUP, WAITING_ORDERS, groupWaiting, isTimeOrder, listedBook, todoWaiting, waitingGroupBandLines, waitingOrdersFor, waitingPhases,
+    ALL_WAITING_ORDERS, BOOK_GROUP_PREFIX, FLAT_GROUP, WAITING_ORDERS, groupWaiting, isTimeOrder, listedBook, todoWaiting, waitingGroupBandLines, waitingOrdersFor, waitingPhaseLines, waitingPhases,
 } from '../research-waiting.js';
 import {
     WAITING_GROUPS_KEY, WAITING_ORDER_KEY, shownWaitingGroups, storeWaitingGroupMode, storeWaitingGroups, storeWaitingOrder, storedWaitingGroupMode,
@@ -108,6 +108,42 @@ describe('Awaiting action by book', () => {
         expect(p.todo[5].afterBooks).toBe(true);
         // "groups off" has no say in Most tasks.
         expect(waitingPhases(more, 'all', 'most', false, byBook)).toEqual(p);
+    });
+
+    it('Most tasks (U4 §4): to download first, then whole on disk; each part under its subheading only when both have books in the phase', () => {
+        const parts: LiveBooks = sanitizeBooks({
+            settings: { minTasks: 5, minTasksOwn: false, sameBook: 'no', sameBookOwn: false },
+            list: [
+                book('B0021', 30, 3, { images: 200, onDisk: 200, missing: 0 }),
+                book('B0022', 4, 1, { images: 120, onDisk: 20, missing: 100 }),
+                book('B0023', 6, 1),
+                book('B0024', 12, 2, { images: 50, onDisk: 50, missing: 0 }),
+            ],
+            more: 0,
+        })!;
+        const items = sanitizeWaiting([
+            { id: 'T0021', what: 'a', kind: 'images', section: 'images', group: archive, order: 0, book: 'B0021' },
+            { id: 'T0022', what: 'b', kind: 'images', section: 'images', group: archive, order: 1, book: 'B0022' },
+            { id: 'T0023', what: 'c', kind: 'images', section: 'images', group: archive, order: 2, book: 'B0023' },
+            { id: 'T0024', what: 'd', kind: 'images', section: 'images', group: archive, order: 3, book: 'B0024' },
+            // Outside the list: its images not known, the last of the books to download.
+            { id: 'T0025', what: 'e', kind: 'images', section: 'images', group: archive, order: 4, book: 'B0099' },
+            { id: 'T0026', what: 'f', kind: 'letter', section: 'letter', group: office, order: 5 },
+            { id: 'T0027', what: 'g', kind: 'images', section: 'images', group: archive, order: 6, phase: 'sent', book: 'B0021' },
+            { id: 'T0028', what: 'h', kind: 'images', section: 'images', group: archive, order: 7, phase: 'sent', book: 'B0024' },
+        ], true);
+        const p = waitingPhases(items, 'all', 'most', true, { by: 'book', books: parts });
+        expect(keys(p.todo)).toEqual(['book:B0023', 'book:B0022', 'book:B0099', 'book:B0021', 'book:B0024', 'to:MěÚ Vzorov']);
+        expect(p.todo.map(g => g.part ?? null)).toEqual([{ kind: 'download', count: 3 }, null, null, { kind: 'disk', count: 2 }, null, null]);
+        // The sent phase has books whole on disk only: no subheading (counted in the phase).
+        expect(keys(p.sent)).toEqual(['book:B0021', 'book:B0024']);
+        expect(p.sent.some(g => g.part)).toBe(false);
+        // Not in another order.
+        expect(waitingPhases(items, 'all', 'recommended', true, { by: 'book', books: parts }).todo.some(g => g.part)).toBe(false);
+        // The height: a line per band, one per subheading and one for "No book".
+        expect(waitingPhaseLines(p.todo, () => 2)).toEqual(6 * 2 + 2 + 1);
+        expect(waitingPhaseLines(p.sent, () => 2)).toEqual(4);
+        expect(waitingPhaseLines([{ key: FLAT_GROUP, group: null, items: [...todoWaiting(items)] }], () => 9)).toBe(6);
     });
 
     it('a book outside the research\'s list: the title its item names (its record set), else its id; after the listed ones in Most tasks', () => {

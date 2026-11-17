@@ -263,12 +263,15 @@ test.describe('Awaiting action by book', () => {
         await expect(orderBtn(page)).not.toHaveClass(/is-time/);
         await expect(seg(page)).toHaveCount(0);
         await expect(groupsBtn(page)).toHaveCount(0);
-        // Always by book, whatever groups were chosen: B0005 (20 tasks) before B0003 (16).
+        // Always by book, whatever groups were chosen: B0005 (20 tasks) before B0003 (16); both to download, so no subheading.
         expect(await groupKeys(page)).toEqual(['book:B0005', 'book:B0003', 'to:MěÚ Vzorov']);
+        await expect(todo(page).locator('.research-overview__books-part')).toHaveCount(0);
         const counts = bookHead(page, 'B0003').locator('.research-overview__book-meta > span').first();
         await expect(counts).toHaveText('16 tasks · 2 waiting · +13 in the queue · 1 parked');
-        await expect(counts).toHaveClass(/is-key/);
-        expect(await counts.evaluate(el => getComputedStyle(el).fontWeight)).toBe('600');
+        // Its keys bold: the tasks and the images missing (U4 §4).
+        const keys = bookHead(page, 'B0003').locator('.research-overview__book-meta .is-key');
+        await expect(keys).toHaveText(['16 tasks', 'missing 213']);
+        expect(await keys.first().evaluate(el => getComputedStyle(el).fontWeight)).toBe('600');
         // No time beside the rows or after the titles.
         await expect(sec(page).locator('.research-overview__group-since, .research-overview__waiting-side .research-overview__since')).toHaveCount(0);
         expect(await stored(page)).toEqual(['most', null]);
@@ -362,6 +365,12 @@ test.describe('Awaiting action by book', () => {
         const over = await sec(page).evaluate(el => [...el.querySelectorAll<HTMLElement>('.research-overview__book-meta, .research-overview__book-archive, .research-overview__waiting-group, .research-overview__waiting-grouphead')]
             .filter(e => e.scrollWidth > e.clientWidth + 1).length);
         expect(over).toBe(0);
+        // The orders' sheet: "Most tasks" says what it puts first on its second line (spec 105 U4 §4).
+        await orderBtn(page).click();
+        const orders = page.getByRole('menu', { name: 'Order' });
+        await expect(orders).toBeVisible();
+        await expect(orders.locator('.bottom-sheet-sub')).toHaveText(['books to download first']);
+        await expect(orders.getByRole('menuitemradio', { name: /Most tasks/ }).locator('.bottom-sheet-sub')).toHaveText('books to download first');
     });
 
     for (const size of [{ width: 390, height: 844, cap: 4, indent: [0, 8] }, { width: 1440, height: 900, cap: 3, indent: [13, 12] }]) test(`spec 105 U4 at ${size.width} in German: a book's whole title wrapped up to ${size.cap} lines, "more" only when cut and never folding; the archive, facts and actions in its band; its items on its line`, async ({ page }) => {
@@ -449,5 +458,138 @@ test.describe('Awaiting action by book', () => {
         await expect(place.locator('.research-overview__waiting-groupactions a.research-overview__waiting-archiveweb')).toHaveAttribute('href', archive2.url);
         await expect(place.locator('.research-overview__group-title')).toHaveCSS('white-space', 'normal');
         await bandsFit(page);
+    });
+    test('spec 105 U4 §4 Most tasks: the books to download first, then those whole on disk, each part under its subheading; what it puts first said under the order and in the menu', async ({ page }) => {
+        const books = bandBooks();
+        // The book whole on disk has the most tasks: still under the books to download.
+        (books.list as Record<string, unknown>[]).find(b => b.id === 'B0007')!.tasks = 30;
+        await researchTree(page, { items: bandItems(), books });
+        await openOverview(page);
+        await orderBtn(page).click();
+        const menu = page.getByRole('menu', { name: 'Order' });
+        await expect(menu.locator('.tv-menu-item[data-id="order-most"] .tv-menu-desc')).toHaveText('books to download first');
+        await expect(menu.locator('.tv-menu-desc')).toHaveCount(1);
+        await menu.getByRole('menuitemradio', { name: /Most tasks/ }).click();
+        await expect(orderBtn(page)).toHaveAttribute('aria-label', 'Order: Most tasks');
+        expect(await groupKeys(page)).toEqual(['book:B0005', 'book:B0003', 'book:B0007', 'to:MěÚ Vzorov']);
+        const parts = todo(page).locator('.research-overview__books-part');
+        await expect(parts).toHaveText(['To download · 2 books', 'Whole on disk · 1 book']);
+        // Each right before the first book of its part; "No book" before the places as before.
+        expect(await todo(page).evaluate(el => [...el.querySelectorAll('.research-overview__books-part, .research-overview__nobook:not(.research-overview__books-part)')]
+            .map(n => (n.nextElementSibling?.querySelector('.research-overview__waiting-group') as HTMLElement | null)?.dataset.group))).toEqual(['book:B0005', 'book:B0007', 'to:MěÚ Vzorov']);
+        // The sentence under the order.
+        const note = sec(page).locator('.research-overview__order-note');
+        await expect(note).toHaveText('Books missing images come first: downloading them settles the most tasks at once. Books whole on disk follow.');
+        expect(await note.evaluate(el => el.previousElementSibling?.classList.contains('research-overview__order'))).toBe(true);
+        // A book whole on disk: only its tasks bold.
+        await expect(bookHead(page, 'B0007').locator('.research-overview__book-meta .is-key')).toHaveText(['30 tasks']);
+        await expect(bookHead(page, 'B0003').locator('.research-overview__book-meta .is-key')).toHaveText(['16 tasks', 'missing 213']);
+        await bandsFit(page);
+
+        // Another order: no sentence, no subheading, nothing bold.
+        await chooseOrder(page, 'Recommended');
+        await expect(note).toHaveCount(0);
+        await expect(parts).toHaveCount(0);
+        await expect(sec(page).locator('.research-overview__book-meta .is-key')).toHaveCount(0);
+    });
+
+    /** "Waiting on" of a manual step, about 240 characters (invented). */
+    const ON240 = 'Badatelna archivu ve Vzorově vydává snímky jen na žádost: vyplnit formulář na webu archivu, uvést signaturu knihy 4 a strany 112 až 113, '
+        + 'zaplatit poplatek převodem a počkat na odkaz e-mailem; snímky pak uložit do složky úkolu výzkumu.';
+    const WEB_WHAT = 'Dohledat sňatek v digitalizované matrice Vzorov 4 a ověřit jméno nevěsty';
+    function itemsOn(on: string): Record<string, unknown>[] {
+        return [
+            { id: 'T0011', order: 0, what: WEB_WHAT, kind: 'web', section: 'web', group: archive, url: 'https://archiv-vzorov.example/kniha/4',
+                on, to: 'Archiv ve Vzorově, badatelna', at: minAgo(30), actions: ['answer', 'chat'] },
+            { id: 'T0012', order: 1, what: 'Uložit snímky matriky Vzorov 5', kind: 'images', section: 'images', group: archive, on: 'user', at: minAgo(40), book: 'B0005', actions: ['folder'] },
+        ];
+    }
+    async function openItem(page: Page, id: string) {
+        const group = sec(page).locator('.research-overview__waiting-group[data-group="repo:R0001"]');
+        if (await group.getAttribute('aria-expanded') === 'false') await group.click();
+        const item = sec(page).locator(`.research-overview__waiting-item[data-id="${id}"]`);
+        await item.locator('.research-overview__waiting-row').click();
+        await expect(item).toHaveClass(/is-open/);
+        return item;
+    }
+    /** A clamped text's lines: its height in line heights, and whether it is cut. */
+    const linesOf = (loc: ReturnType<Page['locator']>) => loc.evaluate(el => {
+        const lh = parseFloat(getComputedStyle(el).lineHeight);
+        return { lines: el.clientHeight / lh, cut: el.scrollHeight > el.clientHeight + 1, wide: el.scrollWidth > el.clientWidth + 1 };
+    });
+
+    for (const size of [{ width: 390, height: 844 }, { width: 1440, height: 900 }]) test(`spec 105 U4 §3 at ${size.width} in German: the open item's text whole once in its row; "Waiting on" whole in its block, whom it goes to under it; none when it waits on the user`, async ({ page }) => {
+        await researchTree(page, { items: itemsOn(ON240), ...size });
+        await page.evaluate(() => window.Strom.UI.setLanguage('de'));
+        await openOverview(page);
+        expect(ON240.length).toBeGreaterThanOrEqual(230);
+        const item = await openItem(page, 'T0011');
+        // The text once: whole in the row (no clamp), not again in the body.
+        const what = item.locator('.research-overview__waiting-what');
+        await expect(what).toContainText(WEB_WHAT);
+        expect((await linesOf(what)).cut).toBe(false);
+        const detail = item.locator('.research-overview__waiting-detail');
+        await expect(detail.locator('.research-overview__waiting-text')).toHaveCount(0);
+        expect(await detail.innerText()).not.toContain(WEB_WHAT);
+        // "Waiting on": the body's first block, its heading, the whole text (no "waiting on:" before it), not cut, no "more".
+        const box = detail.locator('.research-overview__waiting-on-box');
+        await expect(box).toHaveCount(1);
+        expect(await detail.evaluate(el => el.firstElementChild?.className)).toBe('research-overview__waiting-on-box');
+        await expect(box.locator('.research-overview__waiting-on-label')).toHaveText('Wartet auf');
+        const on = box.locator('.research-overview__waiting-on');
+        await expect(on).toHaveText(ON240);
+        const fit = await linesOf(on);
+        expect(fit.cut).toBe(false);
+        expect(fit.wide).toBe(false);
+        expect(fit.lines).toBeGreaterThanOrEqual(2);
+        expect(await on.evaluate(el => getComputedStyle(el).fontSize)).toBe(size.width <= 640 ? '15px' : '14px');
+        await expect(box.locator('.research-overview__waiting-on-more')).toBeHidden();
+        // Whom it goes to: the block's second line.
+        await expect(box.locator('.research-overview__waiting-to')).toHaveText('An Archiv ve Vzorově, badatelna');
+        // Then the person · direction and the actions under it.
+        const [boxBox, metaBox, actionsBox] = await Promise.all([
+            box.boundingBox(), detail.locator('.research-overview__waiting-meta').boundingBox(), detail.locator('.research-overview__waiting-actions, .waiting-actions').first().boundingBox(),
+        ]);
+        expect(metaBox!.y).toBeGreaterThanOrEqual(boxBox!.y + boxBox!.height - 1);
+        expect(actionsBox!.y).toBeGreaterThanOrEqual(metaBox!.y);
+        // Nothing wider than the item.
+        const itemBox = await item.boundingBox();
+        expect(boxBox!.x + boxBox!.width).toBeLessThanOrEqual(itemBox!.x + itemBox!.width + 0.5);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+
+        // An item waiting on the user alone: no block; the body starts with what else it has.
+        const user = await openItem(page, 'T0012');
+        await expect(user.locator('.research-overview__waiting-on-box, .research-overview__waiting-on')).toHaveCount(0);
+        await expect(user.locator('.research-overview__waiting-detail .research-overview__waiting-text')).toHaveCount(0);
+    });
+
+    test('spec 105 U4 §3 a phone held sideways: the open item\'s text whole in its row; a long "Waiting on" cut at 3 lines with "more" that unfolds it, "less" folds it back', async ({ page }) => {
+        const long = `${ON240} ${ON240} ${ON240}`;
+        await researchTree(page, { items: itemsOn(long), width: 844, height: 390 });
+        await openOverview(page);
+        const item = await openItem(page, 'T0011');
+        expect((await linesOf(item.locator('.research-overview__waiting-what'))).cut).toBe(false);
+        const on = item.locator('.research-overview__waiting-on-box .research-overview__waiting-on');
+        await expect(on).toHaveText(long);
+        const cut = await linesOf(on);
+        expect(cut.cut).toBe(true);
+        expect(cut.lines).toBeLessThanOrEqual(3.05);
+        expect(cut.lines).toBeGreaterThan(2.5);
+        const more = item.locator('.research-overview__waiting-on-more');
+        await expect(more).toBeVisible();
+        await expect(more).toHaveText('more');
+        await expect(more).toHaveAttribute('aria-expanded', 'false');
+        await more.click();
+        await expect(on).toHaveClass(/is-full/);
+        await expect(more).toHaveText('less');
+        // The item stays open.
+        await expect(item).toHaveClass(/is-open/);
+        const whole = await linesOf(on);
+        expect(whole.cut).toBe(false);
+        expect(whole.lines).toBeGreaterThan(3.5);
+        await more.click();
+        await expect(on).not.toHaveClass(/is-full/);
+        await expect(more).toHaveText('more');
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
     });
 });

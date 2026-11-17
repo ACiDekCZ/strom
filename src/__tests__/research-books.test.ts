@@ -11,7 +11,7 @@ import {
     researchSchemeUrl, researchLinkMark, researchUrlMark, type LiveBook, type LiveBooks,
 } from '../research-link.js';
 import {
-    bookById, bookTitle, bookImagesText, bookOfferText, urgentBooks, sortBooksMost, bookMetaParts, bookHeadTitle, bookWebUrl, dashRanges,
+    bookById, bookTitle, bookImagesText, bookOfferText, urgentBooks, sortBooksMost, bookMetaParts, bookWholeOnDisk, bookHeadTitle, bookWebUrl, dashRanges,
 } from '../research-books.js';
 import { STATUS_PARTS_FEATURE, completeStatus, forgetStatusParts } from '../status-parts.js';
 import { setLanguage, getStringsForLang, strings } from '../strings.js';
@@ -211,6 +211,33 @@ describe('the books\' texts and orders', () => {
         expect([...list].sort(sortBooksMost).map(b => b.id)).toEqual(['B0003', 'B0100', 'B0002', 'B0010']);
     });
 
+    it('Most tasks (U4 §4): the books to download first, a book whole on disk with more tasks under one to download with fewer', () => {
+        const list = [
+            book({ id: 'B0001', tasks: 30, waiting: 3, images: 200, onDisk: 200, missing: 0 }),
+            book({ id: 'B0002', tasks: 4, waiting: 1, images: 120, onDisk: 20, missing: 100 }),
+            // Images not known: to download.
+            book({ id: 'B0003', tasks: 6, waiting: 0 }),
+            book({ id: 'B0004', tasks: 12, waiting: 2, images: 50, onDisk: 50, missing: 0 }),
+            book({ id: 'B0005', tasks: 6, waiting: 2, images: 80, onDisk: 0, missing: 80 }),
+        ];
+        expect([...list].sort(sortBooksMost).map(b => b.id)).toEqual(['B0005', 'B0003', 'B0002', 'B0001', 'B0004']);
+        expect(list.map(bookWholeOnDisk)).toEqual([true, false, false, true, false]);
+        // "missing 0" without the images known is not whole on disk.
+        expect(bookWholeOnDisk({ missing: 0 })).toBe(false);
+    });
+
+    it('the keys of Most tasks: the tasks, and the images missing (none for a book whole on disk)', () => {
+        const cs = getStringsForLang('cs').live.books;
+        const parts = bookMetaParts(book({ images: 516, missing: 213 }), cs);
+        expect(parts[0].pieces[parts[0].key]).toBe('16 úkolů');
+        expect(parts[1].pieces[parts[1].key]).toBe('chybí 213');
+        expect(parts.map(p => p.pieces.join(' · '))).toEqual(parts.map(p => p.text));
+        const whole = bookMetaParts(book({ images: 516, onDisk: 516, missing: 0 }), cs);
+        expect(whole[0].key).toBe(0);
+        expect(whole[1].key).toBe(-1);
+        expect(bookMetaParts(book(), cs)[1].key).toBe(-1);
+    });
+
     it('Faster by downloading: offered with nothing waiting, in the order of Most tasks', () => {
         const books: LiveBooks = {
             settings: { minTasks: 5, minTasksOwn: false, sameBook: 'no', sameBookOwn: false },
@@ -230,7 +257,7 @@ describe('the books\' texts and orders', () => {
         const cs = getStringsForLang('cs').live.books;
         const b = book({ archive: { name: 'Státní archiv v Lhotě' }, images: 516, missing: 213, pending: 12, access: 'online-login' });
         // The archive stands on its own line: not among the facts.
-        expect(bookMetaParts(b, cs)).toEqual([
+        expect(bookMetaParts(b, cs).map(({ kind, text }) => ({ kind, text }))).toEqual([
             { kind: 'counts', text: '16 úkolů · 2 čekají · +13 ve frontě · 1 odložený' },
             { kind: 'images', text: '516 snímků · na disku 303 · chybí 213' },
             { kind: 'pending', text: 'převezme se 12 souborů' },
