@@ -6078,8 +6078,9 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         for (const { link, media } of read) {
             if (link === taken) continue;
             // The family's other files in the app's and the research's own files (`_PRIM N`, spec 102): files
-            // of the union, taken once the unions are; another program's stay as written.
-            if (ownFile && media && (media.file.startsWith('data:') || (media.sha && !imageRefSha(media.file)))) {
+            // of the union, taken once the unions are; another program's stay as written. An image named by
+            // its hash (`?images=ref`) is one too: fileMedia resolves it as at a person.
+            if (ownFile && media && (media.file.startsWith('data:') || !!imageRefSha(media.file) || !!media.sha)) {
                 laterFiles.push({ media: link, place: () => { const u = famPartnership.get(gedFamId); return u ? { partnershipId: u.id } : null; } });
                 if (link.extra) fam.extras = fam.extras?.filter(e => e !== link.extra);
                 if (link.ref) { fam.keptMedia = fam.keptMedia?.filter(r => r !== link.ref); usedMedia.add(link.ref); }

@@ -24,10 +24,10 @@ const BIG_SHA = 'c'.repeat(64);
 
 type Img = { b64: string; sha: string; url: string };
 
-/** Three small JPEGs of their own colours (portrait, scan, couple's photo), made by the browser. */
+/** Small JPEGs of their own colours (portrait, scan, couple's photo, a letter), made by the browser. */
 async function makeImages(page: Page): Promise<Img[]> {
     await page.goto('about:blank');
-    const urls = await page.evaluate(() => ['#a73', '#3a7', '#73a'].map((color, i) => {
+    const urls = await page.evaluate(() => ['#a73', '#3a7', '#73a', '#37a'].map((color, i) => {
         const c = document.createElement('canvas');
         c.width = 48 + i * 12;
         c.height = 40;
@@ -44,8 +44,12 @@ async function makeImages(page: Page): Promise<Img[]> {
 
 const ref = (img: Img) => [`2 FILE strom-image:${img.sha}`, '3 _MIME image/jpeg', `3 _BYTES ${Buffer.from(img.b64, 'base64').length}`];
 
-/** The research's tree; `media`: with the tree's own files (`media=app`). H2 adds a child. */
-function ged(head: string, [portrait, scan, couple]: Img[], media: boolean): string {
+/**
+ * The research's tree; `media`: with the tree's own files (`media=app`). H2 adds a child. `shared`: a
+ * letter at the man and the couple (one media record, the couple's link `_PRIM N`).
+ */
+function ged(head: string, [portrait, scan, couple, letter]: Img[], media: boolean, shared = false): string {
+    const both = media && shared;
     return [
         '0 HEAD', '1 SOUR STROM_RESEARCH', '1 DATE 17 NOV 2026', `1 _STROM_TREE ${UUID}`, `1 _STROM_HEAD ${head}`, '1 CHAR UTF-8', '1 NOTE Pšeniční',
         '0 @S0001@ SOUR', '1 TITL Oddací matrika Lhota u Brodu 1924', '1 REFN S0001',
@@ -55,10 +59,14 @@ function ged(head: string, [portrait, scan, couple]: Img[], media: boolean): str
             '1 OBJE', ...ref(scan), '2 TITL Svatební list', '2 NOTE Opis z fary', '2 _DATE 12 MAY 1924', '2 _SOUR @S0001@',
             '1 OBJE', '2 FILE kronika.tif', '2 TITL kronika.tif', `2 _STROM_SHA ${BIG_SHA}`,
         ] : []),
+        ...(both ? ['1 OBJE @M0001@'] : []),
         '0 @P0002@ INDI', '1 NAME Ctirada /Pšeničná/', '1 SEX F', '1 BIRT', '2 DATE 1901', '1 REFN P0002', '1 FAMS @F0001@',
         ...(head === H2 ? ['0 @P0003@ INDI', '1 NAME Radovan /Pšeničný/', '1 SEX M', '1 BIRT', '2 DATE 1926', '1 REFN P0003', '1 FAMC @F0001@'] : []),
         '0 @F0001@ FAM', '1 HUSB @P0001@', '1 WIFE @P0002@', '1 MARR', '2 DATE 12 MAY 1924', ...(head === H2 ? ['1 CHIL @P0003@'] : []),
         ...(media ? ['1 OBJE', ...ref(couple), '2 _PRIM Y'] : []),
+        ...(both ? ['1 OBJE @M0001@', '2 _PRIM N',
+            '0 @M0001@ OBJE', ...ref(letter).map(l => l.replace(/^(\d)/, d => String(Number(d) - 1))),
+            '1 FORM jpg', '2 TYPE document', '1 TITL Dopis z Lhoty', '1 _STROM_NAME dopis.jpg', '1 _PRIM N'] : []),
         '0 TRLR',
     ].join('\n');
 }
@@ -71,9 +79,13 @@ interface Bridge {
     asked: string[];
     /** `POST /images` refused (404): the images by hash cannot be had. */
     failImages?: boolean;
+    /** The letter at the man and the couple in the file (see ged). */
+    shared?: boolean;
+    /** Every write (`POST /sync`): its query and body. */
+    writes: Array<{ media: string | null; body: string }>;
 }
 
-async function follow(page: Page, imgs: Img[], features: string[], opts: { failImages?: boolean } = {}): Promise<Bridge> {
+async function follow(page: Page, imgs: Img[], features: string[], opts: { failImages?: boolean; shared?: boolean } = {}): Promise<Bridge> {
     await page.clock.install({ time: new Date('2026-11-17T10:30:00Z') });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.addInitScript(() => {
@@ -82,10 +94,12 @@ async function follow(page: Page, imgs: Img[], features: string[], opts: { failI
         sessionStorage.setItem('seeded', '1');
         localStorage.setItem('strom-live-motion', '0');
     });
-    const bridge: Bridge = { head: H1, trees: [], asked: [], ...opts };
+    const bridge: Bridge = { head: H1, trees: [], asked: [], writes: [], ...opts };
     const byId = new Map(imgs.map(i => [i.sha, i]));
     const keeps = features.includes('media.app');
-    const status = () => ({ tree: { id: UUID, name: 'Pšeniční' }, head: bridge.head, persons: 2, working: [], waiting: [], queue: [], features });
+    const status = () => ({ tree: { id: UUID, name: 'Pšeniční' }, head: bridge.head, persons: 2, working: [], waiting: [], queue: [], features,
+        // A research that takes the app's writes (only where a test writes).
+        ...(bridge.shared ? { accepts: { sync: { auto: 'off' }, sources: true, verified: true, media: null } } : {}) });
     await page.route(`${BRIDGE}/**`, async (route) => {
         const req = route.request();
         const url = new URL(req.url());
@@ -103,7 +117,7 @@ async function follow(page: Page, imgs: Img[], features: string[], opts: { failI
                 return route.fulfill({ status: 304, headers: heads, body: '' });
             }
             bridge.trees.push({ images, media, status: 200 });
-            return route.fulfill({ status: 200, headers: { ...heads, 'content-type': 'text/plain; charset=utf-8' }, body: ged(bridge.head, imgs, withMedia) });
+            return route.fulfill({ status: 200, headers: { ...heads, 'content-type': 'text/plain; charset=utf-8' }, body: ged(bridge.head, imgs, withMedia, bridge.shared) });
         }
         if (path.endsWith('/images') && req.method() === 'POST') {
             const shas = (JSON.parse(req.postData() ?? '{}') as { images: string[] }).images;
@@ -115,6 +129,11 @@ async function follow(page: Page, imgs: Img[], features: string[], opts: { failI
             });
             return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' },
                 body: JSON.stringify({ images, missing: shas.filter(s => !byId.has(s)), more: [] }) });
+        }
+        if (path.endsWith('/sync') && req.method() === 'POST') {
+            bridge.writes.push({ media: url.searchParams.get('media'), body: req.postData() ?? '' });
+            return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' },
+                body: JSON.stringify({ ok: true, input: 'I0042', changes: 0, inbox: true, intake: 'R1' }) });
         }
         if (path.endsWith('/events')) {
             return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/event-stream' }, body: `event: hello\ndata: ${JSON.stringify(status())}\n\n` });
@@ -212,6 +231,30 @@ test.describe('the tree\'s own files restored from a research that keeps them (m
         expect((await media(page)).couple).toBe(couple.url);
         await expect(notice).toHaveCount(0);
         expect(await missed()).toBeNull();
+    });
+
+    test('a file at a person and the couple by its hash: both places come in, and the next write keeps the couple\'s', async ({ page }) => {
+        const imgs = await makeImages(page);
+        const letter = imgs[3];
+        const bridge = await follow(page, imgs, ['ged.stale', 'ged.etag', 'ged.imagesByHash', 'media.app'], { shared: true });
+        expect(bridge.trees[0]).toMatchObject({ images: 'ref', media: 'app', status: 200 });
+        const letterPlaces = () => page.evaluate(() => {
+            const data = window.Strom.DataManager.getData();
+            const file = Object.values(data.media ?? {}).find(a => a.title === 'Dopis z Lhoty');
+            return file ? { dataUrl: file.dataUrl, places: file.places.map(pl => 'personId' in pl ? 'person' : 'partnershipId' in pl ? 'couple' : 'source').sort() } : null;
+        });
+        await expect.poll(letterPlaces).toEqual({ dataUrl: letter.url, places: ['couple', 'person'] });
+        // The next write carries the file at the couple too (the research never withdraws its place there).
+        // An edit to send (the tree as loaded is the research's own version: nothing to write).
+        await page.evaluate(() => { window.Strom.DataManager.createPerson({ firstName: 'Ctiboja', lastName: 'Pšeničná', gender: 'female' }); });
+        await page.clock.fastForward(3_000);
+        await page.evaluate(() => window.Strom.UI.researchSendNow({ previewed: true }));
+        await expect.poll(() => bridge.writes.length).toBeGreaterThan(0);
+        const sent = bridge.writes[bridge.writes.length - 1];
+        expect(sent.media).toBe('app');
+        const fam = sent.body.slice(sent.body.indexOf(' FAM\n'));
+        expect(fam.slice(0, fam.indexOf('\n0 '))).toMatch(/\n1 OBJE @M\d+@\n2 _PRIM N(?:\n|$)/);
+        expect(sent.body).toContain(letter.b64.slice(0, 60));
     });
 
     test('a research without the gate is asked as before: no media, no files of the tree', async ({ page }) => {

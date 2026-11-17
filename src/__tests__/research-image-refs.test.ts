@@ -20,6 +20,8 @@ import {
 } from '../research-image-refs.js';
 import { storedTreeEtag, bridgeGivesImagesByHash, treeReplyImages } from '../research-tree-file.js';
 import type { StromData } from '../types.js';
+import { allMedia } from '../media.js';
+import { migrateData } from '../data.js';
 
 /** A small JPEG of `width` × `height`; `salt` makes its bytes (and hash) its own. */
 function jpeg(width: number, height: number, salt: number): Buffer {
@@ -178,6 +180,53 @@ describe('reading the file with its images by hash', () => {
             expect(urls.sort()).toEqual([dataUrlOf(IMG_A), dataUrlOf(IMG_A), dataUrlOf(IMG_B), dataUrlOf(IMG_C)].sort());
             expect(Object.values(back.persons).find(p => p.firstName === 'Velimír')?.photo).toBe(dataUrlOf(PHOTO));
         }
+    });
+});
+
+describe('the tree\'s files by hash keep every place (spec 102)', () => {
+    /** The research's tree with the app's files (`?images=ref&media=app`): one file at a person and the couple, others at a birth, an event, a couple's event and a source. */
+    function filesTree(ref: boolean): string {
+        const inPlace = (lvl: number, img: Buffer, title: string): string[] => [
+            `${lvl} OBJE`, `${lvl + 1} FORM jpg`, `${lvl + 1} TITL ${title}`,
+            ...fileLines(img, ref).map(l => l.replace(/^(\d+)/, (_, n: string) => String(Number(n) + lvl - 1))),
+        ];
+        return [
+            '0 HEAD', '1 SOUR STROM_RESEARCH', '1 DATE 9 NOV 2026', `1 _STROM_TREE ${UUID}`, '1 _STROM_HEAD 7c1e9a3b5d20', '1 CHAR UTF-8',
+            '0 @P0001@ INDI', '1 NAME Velimír /Šťovíček/', '1 SEX M', '1 REFN P0001',
+            '1 BIRT', '2 DATE 1851', ...inPlace(2, IMG_B, 'krest.jpg'),
+            '1 OCCU kovář', ...inPlace(2, IMG_C, 'vyucni-list.jpg'),
+            '1 OBJE @M1@', '1 FAMS @F0001@',
+            '0 @P0002@ INDI', '1 NAME Vlastislava /Řeřichová/', '1 SEX F', '1 REFN P0002', '1 FAMS @F0001@',
+            '0 @F0001@ FAM', '1 HUSB @P0001@', '1 WIFE @P0002@', '1 MARR', '2 DATE 1874', '1 ENGA', '2 DATE 1873', ...inPlace(2, PHOTO, 'oddaci-list.jpg'),
+            '1 OBJE @M1@', '2 _PRIM N',
+            '0 @S0001@ SOUR', '1 TITL Křestní matrika Mechovice 1851', '1 REFN S0001', ...inPlace(1, IMG_B, 'matrika.jpg'),
+            '0 @M1@ OBJE', ...fileLines(IMG_A, ref).map(l => l.replace(/^(\d+)/, (_, n: string) => String(Number(n) - 1))),
+            '1 FORM jpg', '2 TYPE document', '1 TITL Dopis z Ameriky', '1 _STROM_NAME dopis.jpg', '1 _PRIM N',
+            '0 TRLR',
+        ].join('\n');
+    }
+    const IMAGES = new Map([...ALL_IMAGES, [shaOf(PHOTO), dataUrlOf(PHOTO)]]);
+    const places = (data: StromData): string[] => allMedia(data).map(a => `${a.title || a.name}: ${a.places.map(p =>
+        'personId' in p ? `person${p.fact ? `/${p.fact}` : ''}${p.eventId ? '/event' : ''}`
+            : 'partnershipId' in p ? `couple${p.eventId ? '/event' : ''}` : 'source').sort().join(', ')}`).sort();
+
+    it('a file at a person and the couple (_PRIM N), at a birth, an event, a couple\'s event and a source: each place, as with the images in', () => {
+        const slim = read(filesTree(true), IMAGES);
+        expect(places(slim)).toEqual([
+            'Dopis z Ameriky: couple, person',
+            'krest.jpg: person/birth, source',
+            'oddaci-list.jpg: couple/event',
+            'vyucni-list.jpg: person/event',
+        ]);
+        expect(places(slim)).toEqual(places(read(filesTree(false))));
+        expect(Object.values(slim.partnerships)[0].photo).toBeUndefined();
+    });
+
+    it('written back to the research, the couple keeps the file (no place withdrawn)', () => {
+        const ged = exportToGedcom(migrateData(read(filesTree(true), IMAGES)), 'T', { appMedia: true }).content;
+        const fam = ged.slice(ged.indexOf(' FAM\n'));
+        expect(fam.slice(0, fam.indexOf('\n0 '))).toMatch(/\n1 OBJE @M\d+@\n2 _PRIM N(?:\n|$)/);
+        expect(places(read(ged))).toContain('Dopis z Ameriky: couple, person');
     });
 });
 
