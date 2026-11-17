@@ -408,6 +408,24 @@ test.describe('The selection in a tree without an archive (spec 102 §8, O1)', (
         await expect.poll(() => mediaCount(page)).toBe(3);
     });
 
+    test('Remove from the tree… of files that are evidence of one source: the warning names the source once, in the plural', async ({ page }) => {
+        await tree(page);
+        await three(page);
+        await page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            const source = dm.addSource({ title: 'Matrika Quellbach' } as never)!;
+            for (const a of Object.values(dm.getData().media ?? {}) as { id: string; title?: string }[]) {
+                if (a.title === 'Letter F' || a.title === 'Letter K') dm.addMediaPlace(a.id, { sourceId: source.id } as never);
+            }
+        });
+        await select(page, ['Letter F', 'Letter K']);
+        await page.locator('.mw-pop-selMenu [data-action="sel-remove"]').click();
+        await expect(dialog(page).locator('.mdlg-warn-title')).toHaveText('The files are referred to by');
+        await expect(dialog(page).locator('.mdlg-warn-row')).toHaveCount(1);
+        await expect(dialog(page).locator('.mdlg-warn-row[data-use="source"]')).toContainText('Matrika Quellbach');
+        await expect(dialog(page).locator('.mdlg-rm-app')).toHaveText('The files are not stored anywhere else. Only Undo or a backup (Export all) brings them back.');
+    });
+
     test('Remove a person… takes the chosen person off the selected files in one step; a file left without a place goes, said first', async ({ page }) => {
         await tree(page);
         await three(page);

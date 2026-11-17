@@ -539,10 +539,18 @@ export const materialAttachMethods = uiModule({
         if (kept.length) dialog.body.appendChild(h('p', 'mdlg-text', m.rmManyText(kept.length, places(kept))));
         if (gone.length) dialog.body.appendChild(h('p', 'mdlg-text', m.rmManyAppText(gone.length, places(gone))));
         const data = DataManager.getData();
-        const refs = files.flatMap(f => mediaUses(data, f.att.id).filter(u => u.kind === 'source' || u.kind === 'excerpt' || u.kind === 'portrait'));
+        // Two files that are evidence of one source name it once.
+        const seen = new Set<string>();
+        const refs = files.flatMap(f => mediaUses(data, f.att.id).filter(u => u.kind === 'source' || u.kind === 'excerpt' || u.kind === 'portrait'))
+            .filter(u => {
+                const key = `${u.kind}\u0000${mediaUseLabel(data, u).text}`;
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            });
         if (refs.length) {
             const warn = h('div', 'mdlg-warn');
-            warn.appendChild(h('p', 'mdlg-warn-title', m.rmRefs));
+            warn.appendChild(h('p', 'mdlg-warn-title', m.rmRefsMany));
             const SHOWN = 5;
             for (const use of refs.slice(0, SHOWN)) {
                 const what = mediaUseLabel(data, use).text;
@@ -574,7 +582,7 @@ export const materialAttachMethods = uiModule({
             }
             dialog.body.appendChild(set);
         }
-        if (gone.length) dialog.body.appendChild(h('p', 'mdlg-text mdlg-rm-app', m.rmApp));
+        if (gone.length) dialog.body.appendChild(h('p', 'mdlg-text mdlg-rm-app', m.rmAppMany));
         // Originals still waiting to be sent: discarded too (ticked), or sent and detached by the research.
         const queued = files.flatMap(f => {
             const sha = f.att.original?.sha256;

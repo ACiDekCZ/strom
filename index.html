@@ -27055,6 +27055,7 @@
             .source-doc-remove, .viewer-doc-remove, .source-cite-x { width: 44px; height: 44px; }
             .source-cite-chip { min-height: 44px; }
             .source-offer-tile { min-height: 44px; }
+            .source-offer-all, .source-offer-foot .link-button { min-height: 44px; }
         }
         @media (min-width: 641px) and (max-width: 1024px) {
             .source-offer-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -28945,7 +28946,7 @@
         .mw-toolbar { order: 3; flex-basis: 100%; display: flex; align-items: center; gap: 8px; min-width: 0; }
         #materials-modal .mw-search {
             width: 210px; flex-shrink: 0; height: 32px; box-sizing: border-box; padding: 0 10px; font: inherit; font-size: 13px;
-            border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text);
+            border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text); text-overflow: ellipsis;
         }
         #materials-modal .mw-search:focus-visible { outline: none; box-shadow: var(--shadow-focus); border-color: var(--primary); }
         .mw-tools { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
@@ -29176,12 +29177,14 @@
             .materials-window .mw-lh-btn:hover { color: var(--text); background: var(--surface-2); }
         }
         @media (pointer: coarse) {
-            .materials-window .mw-chip, #materials-modal .mw-search { height: 40px; }
-            .materials-window .mw-seg button { height: 38px; }
+            .materials-window .mw-chip, #materials-modal .mw-search { height: 44px; }
+            .materials-window .mw-seg button { height: 44px; }
+            .materials-window .mw-selbtn, .materials-window .mw-selclear, .materials-window .mw-selhead-done { min-height: 44px; }
+            .mw-pop-foot button { min-height: 44px; }
             .materials-window .mw-more { width: 44px; height: 44px; }
             .mw-check-row { min-height: 44px; }
             .mw-check { width: 26px; height: 26px; }
-            .materials-window .mw-where { width: 40px; height: 40px; }
+            .materials-window .mw-where { width: 44px; height: 44px; }
             .mw-lh { height: 44px; }
             .materials-window .mw-lh-btn { height: 44px; }
             .mdlg-input { height: 44px; }
@@ -29265,7 +29268,6 @@
             .mw-empty.is-none { padding: 16px 0; gap: 6px; }
             .mw-empty-file { width: 48px; height: 58px; }
             .mw-selbar { height: 48px; flex-wrap: nowrap; padding: 0 16px; padding-bottom: env(safe-area-inset-bottom); }
-            .materials-window .mw-selbtn { min-height: 36px; }
             .mw-pop-sheet { max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); }
         }
         @media (hover: hover) {
@@ -29293,7 +29295,7 @@
         }
         .attachment-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
         .attachment-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .attachment-size { color: var(--text-secondary, #777); font-size: 12px; }
+        .attachment-size { color: var(--text-secondary, #777); font-size: 12px; overflow-wrap: anywhere; }
         /* Where an attachment's / excerpt's original stands (originals-ui.ts, the same vocabulary as the toolbar mark):
            an empty ring = the research does not have it yet, a dot = it has it, nothing = nothing to say. */
         .media-state { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary, #777); line-height: 1.35; }
@@ -29374,7 +29376,9 @@
         @media (max-width: 640px) {
             .attachment-row:has(.attachment-portrait-btn) { flex-wrap: wrap; }
             .attachment-row:has(.attachment-portrait-btn) .attachment-actions { margin-left: auto; }
+            .attachment-row:has(.attachment-portrait-btn) .attachment-main { flex-basis: 160px; }
         }
+        @media (pointer: coarse) { .modal .attachment-actions button.attachment-delete-btn { min-width: 44px; min-height: 44px; } }
         /* The row's ⋯ (spec 102 §2): its menu holds the row's actions and the Attachment dialog the note;
            a phone's row keeps its buttons and the note field without a menu. */
         .attachment-more {
@@ -29636,7 +29640,7 @@
             .mv-act:not([aria-disabled="true"]):hover { background: var(--hover-bg); }
             .mv-act.is-primary:not([aria-disabled="true"]):hover { background: var(--primary-dark); }
         }
-        @media (pointer: coarse) { .mv-act { min-height: 44px; } .mv-chip-x, .mv-use-x { width: 32px; height: 32px; } .mv-uses-more { min-height: 32px; } }
+        @media (pointer: coarse) { .mv-act { min-height: 44px; } .mv-chip-x, .mv-use-x { width: 32px; height: 32px; } .mv-uses-more, .mv-add-title { min-height: 44px; } }
         @media (min-width: 641px) and (max-width: 1024px) {
             #attachment-overlay.is-list { --iv-panel: 300px; }
             .is-list .image-viewer-card { padding: 64px 64px 24px; }
@@ -29656,7 +29660,7 @@
             #attachment-overlay.is-list .image-viewer-stage,
             .is-list .image-viewer-card { bottom: var(--iv-sheet, 45vh); }
             .is-list .image-viewer-card { padding: 60px 16px 12px; }
-            .is-list .image-viewer-pos { max-width: calc(100% - 170px); left: 8px; }
+            .is-list .image-viewer-pos { max-width: calc(100% - 234px); left: 8px; }
             .is-list .image-viewer-nav { display: none; }
             .is-list .image-viewer-note { bottom: calc(var(--iv-sheet, 45vh) + 12px); }
             .is-list .image-viewer-panel {
@@ -29668,7 +29672,7 @@
             .mv-head::before { content: ''; align-self: center; width: 36px; height: 4px; border-radius: 2px; background: var(--border); margin-bottom: 6px; }
             .mv-title { font-size: 17px; }
             .mv-body { padding: 4px 16px 8px; }
-            .mv-more { display: block; align-self: flex-start; margin: 0 16px 6px; min-height: 36px; }
+            .mv-more { display: block; align-self: flex-start; margin: 0 16px 6px; min-height: 44px; }
             .mv-foot { padding: 8px 16px 12px; border-top: none; }
             .image-viewer-panel:not(.is-expanded) .mv-name,
             .image-viewer-panel:not(.is-expanded) .mv-label,
@@ -29720,6 +29724,7 @@
         .mdlg-head.has-thumb > :not(.mdlg-attach-thumb) { grid-column: 2; }
         .mdlg-attach-thumb { grid-row: 1 / span 2; width: 36px; height: 36px; object-fit: cover; border-radius: var(--r-sm); background: var(--surface-2); }
         .mdlg-seg { align-self: flex-start; max-width: 100%; }
+        .mdlg-seg .sel-opt { padding: 0 14px; }
         .mdlg-attach-pane { display: flex; flex-direction: column; gap: 8px; min-height: 120px; }
         .mdlg-attach-who { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: 13.5px; color: var(--text-light); }
         .mdlg-attach-whoname { overflow-wrap: anywhere; }
@@ -29859,7 +29864,7 @@
         }
         @media (max-width: 640px) {
             .mdlg-seg { align-self: stretch; }
-            .mdlg-seg .sel-opt { flex: 1 1 0; }
+            .mdlg-seg .sel-opt { flex: 1 1 0; padding: 0 4px; }
             .mdlg-attach-list { max-height: 40vh; }
         }
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
@@ -29889,7 +29894,7 @@
             .mdlg-btn:not(:disabled):hover { background: var(--hover-bg); }
             .mdlg-btn.is-primary:not(:disabled):hover { background: var(--primary-dark); }
         }
-        @media (pointer: coarse) { .mdlg-btn { min-height: 44px; } }
+        @media (pointer: coarse) { .mdlg-btn, .mdlg-attach-change, .mdlg-attach-newsource, .mdlg-dup-new { min-height: 44px; } }
         @media (max-width: 640px) {
             .mdlg-overlay:not(.is-bubble) { align-items: flex-end; padding: 0; }
             .mdlg:not(.mdlg--bubble) { width: 100%; max-height: 92vh; border-radius: var(--r-lg) var(--r-lg) 0 0; }

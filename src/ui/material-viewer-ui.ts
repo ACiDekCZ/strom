@@ -339,7 +339,9 @@ export const materialViewerMethods = uiModule({
                 st.review.pending = null;
                 st.review.index = index;
             }
-            slots.pos(`${strings.materials.reviewHead(index + 1, st.items.length, st.ctx.label ?? '')} · ${strings.materials.reviewEsc}`);
+            // "Esc ends" only where there is a keyboard: a touch screen's line would run under the zoom buttons.
+            const esc = window.matchMedia('(pointer: coarse)').matches ? '' : ` · ${strings.materials.reviewEsc}`;
+            slots.pos(`${strings.materials.reviewHead(index + 1, st.items.length, st.ctx.label ?? '')}${esc}`);
             st.editing = materialDetailsEdit(item, ctx) === 'on' ? item.key : null;
             st.expanded = true;
         } else slots.pos(strings.materials.viewerPos(index + 1, st.items.length, st.ctx.label ?? ''));

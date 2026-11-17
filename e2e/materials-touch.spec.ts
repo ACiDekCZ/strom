@@ -110,6 +110,30 @@ test.describe('Materials on a phone', () => {
         await dialog(page).getByRole('button', { name: 'Cancel' }).click();
     });
 
+    test('the person\'s attachment row: a long file name wraps inside the row, the buttons go under it, the trash is 44 px', async ({ page }) => {
+        await tree(page);
+        await page.evaluate((px) => {
+            const dm = window.Strom.DataManager;
+            const a = dm.addAttachment('p1' as never, { name: 'Hochzeitsfoto_Pfefferkorn_Quellbach_Kirchplatz_1924_Originalabzug_Scan.png', mimeType: 'image/png', dataUrl: px, sizeBytes: 70 })!;
+            dm.setMediaDetails(a.id, { title: 'Wedding outside the church in Quellbach, summer 1924', kind: 'photo' });
+        }, PX);
+        await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));
+        await cardAction(page, 'Florimund', 'edit');
+        const row = personModal(page).locator('#attachments-list .attachment-row', { hasText: 'Quellbach, summer 1924' });
+        await row.scrollIntoViewIfNeeded();
+        const fit = await row.evaluate((el) => {
+            const meta = el.querySelector('.attachment-size') as HTMLElement;
+            const r = el.getBoundingClientRect();
+            const m = meta.getBoundingClientRect();
+            const main = el.querySelector('.attachment-main')!.getBoundingClientRect();
+            const actions = el.querySelector('.attachment-actions')!.getBoundingClientRect();
+            return { row: el.scrollWidth <= el.clientWidth, meta: meta.scrollWidth <= meta.clientWidth && m.right <= r.right, below: actions.top >= main.bottom - 1 };
+        });
+        expect(fit).toEqual({ row: true, meta: true, below: true });
+        const trash = (await row.locator('.attachment-delete-btn').boundingBox())!;
+        expect(Math.min(trash.width, trash.height)).toBeGreaterThanOrEqual(44);
+    });
+
     test('Go through in the viewer\'s sheet: the swipe sentence; a swipe saves and goes to the next file', async ({ page }) => {
         await tree(page);
         await openWindow(page);
@@ -119,6 +143,11 @@ test.describe('Materials on a phone', () => {
         await bar(page).locator('[data-mw="sel-review"]').click();
         await expect(viewer(page)).toHaveClass(/active/);
         await expect(page.locator('#image-viewer-pos')).toContainText('Going through · 1 of 2');
+        // No keyboard: no "Esc ends", and the line stays clear of the zoom buttons.
+        await expect(page.locator('#image-viewer-pos')).not.toContainText('Esc');
+        const pos = (await page.locator('#image-viewer-pos').boundingBox())!;
+        const zoom = (await page.locator('#image-viewer-out').boundingBox())!;
+        expect(pos.x + pos.width).toBeLessThanOrEqual(zoom.x);
         await expect(panel(page).locator('.mv-keys')).toHaveText('Swipe left and right for the next and previous file.');
         await panel(page).locator('.mat-edit-title').fill('Letter from Quellbach');
         await swipe(page, -160);
@@ -171,6 +200,27 @@ test.describe('Materials on a tablet and sideways', () => {
         const box = (await panel(page).boundingBox())!;
         expect(Math.round(box.width)).toBe(300);
         expect(Math.round(box.x + box.width)).toBe(TABLET.width);
+    });
+
+    test('1024: the window\'s controls and the selection bar are 44 px touch targets', async ({ page }) => {
+        await page.setViewportSize(TABLET);
+        await tree(page);
+        await openWindow(page);
+        const tall = async (sel: string) => {
+            for (const b of await win(page).locator(sel).filter({ visible: true }).all()) {
+                const r = (await b.boundingBox())!;
+                expect(Math.min(r.width, r.height), sel).toBeGreaterThanOrEqual(44);
+            }
+        };
+        await tall('.mw-where');
+        await tall('.mw-chip');
+        await tall('#materials-search');
+        await win(page).locator('[data-mw="select"]').click();
+        await tiles(page).nth(1).click();
+        await expect(bar(page)).toBeVisible();
+        for (const b of await bar(page).locator('button').filter({ visible: true }).all()) {
+            expect((await b.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        }
     });
 
     test('sideways: 88 px tiles without text, the list header hidden', async ({ page }) => {
