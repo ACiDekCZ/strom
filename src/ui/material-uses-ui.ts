@@ -173,7 +173,7 @@ export const materialUsesMethods = uiModule({
                 chip.appendChild(plain);
             }
             if (item.viaBatch.includes(refn)) chip.appendChild(h('span', 'mv-chip-via', m.viaBatch));
-            if (ctx.caps.assign) {
+            if (ctx.caps.assign && !DataManager.isReadOnly()) {
                 const x = h('button', 'mv-chip-x', '×');
                 x.type = 'button';
                 x.setAttribute('aria-label', m.removePerson(name));

@@ -363,7 +363,9 @@ test.describe('Materials window: the research not running', () => {
         await poll(page);
         await openWindow(page);
         await expect(win(page)).toHaveAttribute('data-state', 'stale');
-        await expect(win(page).locator('.mw-status')).toContainText('The research is not running · state from');
+        // What can be edited now (spec 102 §12a): the tree's files, not the material outside it.
+        await expect(win(page).locator('.mw-status')).toContainText('The research is not running · as of');
+        await expect(win(page).locator('.mw-status')).toContainText('Titles and links of files in the tree can be edited');
         // The first group (the batch) is open, the single files closed.
         await expect(tiles(page)).toHaveCount(1);
         await win(page).locator('.mw-canvas [data-mw="batch-menu"]').first().click();

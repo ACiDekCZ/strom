@@ -680,7 +680,8 @@ export const materialsWindowMethods = uiModule({
         }
         if (rec && !ctx.caps.bridgeUp) {
             state = 'stale';
-            html = `<span>${esc(m.stale(materialStaleTime(rec.list.fetchedAt || Date.now())))}</span>${start}`;
+            // What can be edited now: the tree's files (written with the tree), not the material outside it (spec 102 §12a).
+            html = `<span>${esc(m.staleEdit(materialStaleTime(rec.list.fetchedAt || Date.now())))}</span>${start}`;
         } else if (w.loadError && ctx.caps.bridgeUp) {
             state = 'error';
             html = `<span>${esc(materialErrorText(w.loadError, ctx.agent))}</span><button type="button" class="link-button materials-start" data-mw="retry">${esc(m.retry)}</button>`;
@@ -1193,11 +1194,11 @@ export const materialsWindowMethods = uiModule({
         const readOnly = DataManager.isReadOnly();
         const archive = items.filter(i => i.origin !== 'tree');
         const editable = items.filter(i => this.bulkEditable(i, ctx)).length;
-        const editWhy = !n ? m.nothingSelected : editable ? null : readOnly ? strings.materials.errReadonly : archive.length && !ctx.caps.bridgeUp ? m.actionsWhenRunning : m.selUnchanged(n);
+        const editWhy = !n ? m.nothingSelected : editable ? null : readOnly ? strings.materials.treeReadOnly : archive.length && !ctx.caps.bridgeUp ? m.actionsWhenRunning : m.selUnchanged(n);
         const out: SelAction[] = [
             // A phone's bar has room for the word only (the count is in the header).
             { id: 'sel-review', label: media(MQ_MOBILE) ? m.reviewShort : m.review(n), why: n ? null : m.nothingSelected },
-            { id: 'sel-attach', label: m.attach, why: !n ? m.nothingSelected : readOnly ? strings.materials.errReadonly : null },
+            { id: 'sel-attach', label: m.attach, why: !n ? m.nothingSelected : readOnly ? strings.materials.treeReadOnly : null },
             { id: 'sel-title', label: m.setTitle, why: editWhy },
             { id: 'sel-kind', label: m.setKind, why: editWhy },
             { id: 'sel-date', label: m.setDate, why: editWhy },
@@ -1500,7 +1501,9 @@ export const materialsWindowMethods = uiModule({
         const actions = this.mwBatchActions(group, folder);
         pop.innerHTML = actions.map(a => {
             const divider = a.divider ? '<div class="materials-item-menu-divider" role="separator"></div>' : '';
-            const off = a.writes && !ctx.caps.bridgeUp ? ` aria-disabled="true" title="${esc(m.actionsWhenRunning)}"` : '';
+            // A read-only tree (locked, a newer version's data, an exported page) writes nothing (spec 102 §12g).
+            const why = !a.writes ? null : DataManager.isReadOnly() ? m.treeReadOnly : !ctx.caps.bridgeUp ? m.actionsWhenRunning : null;
+            const off = why ? ` aria-disabled="true" title="${esc(why)}"` : '';
             return `${divider}<button type="button" role="menuitem" class="materials-item-menu-row" data-action="${a.id}"${off}>${researchActionLabel(a.label, a.id === 'research' ? researchLinkMark('open') : 'none')}</button>`;
         }).join('');
         pop.querySelectorAll<HTMLButtonElement>('[data-action]').forEach(btn => btn.addEventListener('click', (e) => {

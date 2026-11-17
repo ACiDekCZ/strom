@@ -105,6 +105,18 @@ test.describe('Where used, a tree without a research', () => {
         await expect(panel(page).locator('.mv-sentence')).toHaveText('The file is only in this browser. Backup: Export all.');
     });
 
+    test('a read-only tree (spec 102 §12g): Where used with its links, no pencil, no ×, no action but Download', async ({ page }) => {
+        await tree(page);
+        await files(page);
+        await page.evaluate(() => { window.Strom.DataManager.isReadOnly = () => true; });
+        await view(page, 'svatba.png');
+        await expect(uses(page).locator('.mv-uses-count')).toHaveText('8 places');
+        await expect(uses(page).locator('.mv-use-link').first()).toBeEnabled();
+        await expect(uses(page).locator('.mv-use-x')).toHaveCount(0);
+        await expect(panel(page).locator('.mv-edit')).toHaveCount(0);
+        expect(await panel(page).locator('.mv-act').evaluateAll(els => els.map(e => (e as HTMLElement).dataset.action))).toEqual(['download']);
+    });
+
     test('× takes the file off one place: the toast with Undo, the block redrawn; Undo brings the place back', async ({ page }) => {
         await tree(page);
         const { wedding } = await files(page);

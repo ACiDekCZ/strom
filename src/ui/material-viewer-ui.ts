@@ -745,12 +745,13 @@ export const materialViewerMethods = uiModule({
             if (item.removedId && item.hidden) {
                 // Taken out of the tree: back with its places (the tree's own write).
                 if (!DataManager.isReadOnly()) action(m.restore, () => this.restoreRemovedMaterials([item]), { id: 'restore' });
-            } else if (ctx?.caps.assign && !inTree) {
+            } else if (ctx?.caps.assign && !inTree && !DataManager.isReadOnly()) {
                 if (item.hidden) action(m.restore, () => this.materialAction('restore', [item], { where: 'viewer' }), { write: true, id: 'restore' });
                 else action(m.hide, () => this.materialAction('hide', [item], { where: 'viewer' }), { write: true, id: 'hide' });
             }
             const link = ctx && sha && ctx.caps.openLinks !== false ? materialSystemLink(ctx.researchId, sha, announcedResearchScheme()) : null;
-            if (link) action(m.openSystem, () => this.launchResearchLink(link), { id: 'openSystem', research: researchLinkMark('media') !== 'none' });
+            // A read-only tree (spec 102 §12g): only Download.
+            if (link && !DataManager.isReadOnly()) action(m.openSystem, () => this.launchResearchLink(link), { id: 'openSystem', research: researchLinkMark('media') !== 'none' });
             if (up && sha && item.here) download(fileUrl(ctx!.base!, sha), name);
             else if (item.attachment?.dataUrl && !item.attachment.originalOnly) download(item.attachment.dataUrl, item.attachment.name);
         } else if (item.attachment) {
