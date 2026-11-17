@@ -230,6 +230,15 @@ test.describe('Materials on a tablet and sideways', () => {
         await tall('.mw-where');
         await tall('.mw-chip');
         await tall('#materials-search');
+        await tall('.mw-seg button');
+        await win(page).locator('.mw-filters-btn').click();
+        for (const c of await page.locator('.mw-pop .mw-chip').filter({ visible: true }).all()) {
+            expect((await c.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        }
+        await page.keyboard.press('Escape');
+        await win(page).locator('[data-mw="view-list"]').click();
+        await tall('.mw-lh-btn');
+        await win(page).locator('[data-mw="view-grid"]').click();
         await win(page).locator('[data-mw="select"]').click();
         await tiles(page).nth(1).click();
         await expect(bar(page)).toBeVisible();
@@ -263,5 +272,6 @@ test.describe('Materials on a tablet and sideways', () => {
         const cut = await parts.evaluateAll(els => els.filter(b => b.scrollWidth > b.clientWidth).map(b => b.textContent));
         expect(cut).toEqual([]);
         expect((await bar(page).boundingBox())!.height).toBeLessThanOrEqual(49);
+        expect((await bar(page).locator('.mw-selmore').boundingBox())!.width).toBeGreaterThanOrEqual(44);
     });
 });

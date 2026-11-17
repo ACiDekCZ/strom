@@ -29177,8 +29177,8 @@
             .materials-window .mw-lh-btn:hover { color: var(--text); background: var(--surface-2); }
         }
         @media (pointer: coarse) {
-            .materials-window .mw-chip, #materials-modal .mw-search { height: 44px; }
-            .materials-window .mw-seg button { height: 44px; }
+            .materials-window .mw-chip, .mw-pop .mw-chip, #materials-modal .mw-search { height: 44px; }
+            .materials-window .mw-seg button, .mw-pop .mw-seg button { height: 44px; min-width: 44px; }
             .materials-window .mw-selbtn, .materials-window .mw-selclear, .materials-window .mw-selhead-done { min-height: 44px; }
             .mw-pop-foot button { min-height: 44px; }
             .materials-window .mw-more { width: 44px; height: 44px; }
@@ -29186,7 +29186,7 @@
             .mw-check { width: 26px; height: 26px; }
             .materials-window .mw-where { width: 44px; height: 44px; }
             .mw-lh { height: 44px; }
-            .materials-window .mw-lh-btn { height: 44px; }
+            .materials-window .mw-lh-btn { height: 44px; min-width: 44px; }
             .mdlg-input { height: 44px; }
         }
         @media (max-width: 1024px) {
@@ -29269,7 +29269,7 @@
             .mw-empty.is-none { padding: 16px 0; gap: 6px; }
             .mw-empty-file { width: 48px; height: 58px; }
             .mw-selbar { height: 48px; flex-wrap: nowrap; padding: 0 16px; padding-bottom: env(safe-area-inset-bottom); }
-            .mw-selbar { gap: 8px; } .materials-window .mw-selbtn { padding: 7px 10px; }
+            .mw-selbar { gap: 8px; } .materials-window .mw-selbtn { padding: 7px 10px; } .materials-window .mw-selmore { min-width: 44px; }
             .mw-pop-sheet { max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); }
         }
         @media (hover: hover) {
