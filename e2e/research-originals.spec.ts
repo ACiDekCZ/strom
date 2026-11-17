@@ -376,7 +376,9 @@ test.describe('originals: the full UI (beta.10)', () => {
         await openResearch(page, { media: true });
         b.down = true;
         const modal = await attachToJan(page);
-        await modal.locator('.attachment-delete-btn').click();
+        // (From 641 px the row's ⋯ holds Delete; spec 102 §2.)
+        await modal.locator('.attachment-more').click();
+        await page.locator('#materials-item-menu [data-action="deleteFromTree"]').click();
         const confirm = page.locator('#confirmation-modal');
         await expect(confirm.locator('#confirm-check-input')).toBeChecked();
         await expect(confirm).toContainText('Also discard the original waiting to be sent');
@@ -386,7 +388,9 @@ test.describe('originals: the full UI (beta.10)', () => {
         // Once more, unticked: the original stays and goes when the bridge answers.
         await modal.locator('#input-attachment').setInputFiles(AVATAR);
         await expect(modal.locator('#attachments-list .attachment-row')).toHaveCount(1);
-        await modal.locator('.attachment-delete-btn').click();
+        // (From 641 px the row's ⋯ holds Delete; spec 102 §2.)
+        await modal.locator('.attachment-more').click();
+        await page.locator('#materials-item-menu [data-action="deleteFromTree"]').click();
         await confirm.locator('#confirm-check-input').uncheck();
         await confirm.locator('#confirm-ok-btn').click();
         await expect(modal.locator('#attachments-list .attachment-row')).toHaveCount(0);

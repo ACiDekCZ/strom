@@ -227,6 +227,16 @@ async function addSecondPicture(page: Page, original: string): Promise<void> {
 }
 
 const attRow = (page: Page, name: string) => personModal(page).locator('#attachments-list .attachment-row', { hasText: name });
+/** The attachment row's ⋯ menu (from 641 px; spec 102 §2): its actions in order. */
+const rowMenu = (page: Page) => page.locator('#materials-item-menu [data-action]');
+async function openRowMenu(page: Page, name: string): Promise<void> {
+    await attRow(page, name).locator('.attachment-more').click();
+    await expect(page.locator('#materials-item-menu')).toBeVisible();
+}
+async function rowAction(page: Page, name: string, action: 'useAsPortrait' | 'deleteFromTree'): Promise<void> {
+    await openRowMenu(page, name);
+    await page.locator(`#materials-item-menu [data-action="${action}"]`).click();
+}
 
 test.describe('The portrait\'s source among the attachments (desktop)', () => {
     test.use({ viewport: { width: 1440, height: 900 } });
@@ -239,17 +249,22 @@ test.describe('The portrait\'s source among the attachments (desktop)', () => {
         const tag = attRow(page, 'svatba.jpg').locator('.attachment-tag');
         await expect(tag).toHaveText('Portrait');
         await expect(tag).toHaveAttribute('title', 'The person’s portrait is cut from this photo.');
-        await expect(attRow(page, 'svatba.jpg').locator('.attachment-portrait-btn')).toHaveCount(0);
         await expect(attRow(page, 'louka.jpg').locator('.attachment-tag')).toHaveCount(0);
-        const btn = attRow(page, 'louka.jpg').locator('.attachment-portrait-btn');
-        await expect(btn).toHaveText('As portrait…');
-        const box = (await btn.boundingBox())!;
-        expect(Math.round(box.height)).toBe(30);
-        // Before the trash.
-        await expect(attRow(page, 'louka.jpg').locator('.attachment-actions button')).toHaveClass([/attachment-portrait-btn/, /attachment-delete-btn/]);
+        // The row's own buttons are a phone's; here they wait in the ⋯ menu.
+        await expect(attRow(page, 'louka.jpg').locator('.attachment-portrait-btn')).toBeHidden();
+        await expect(attRow(page, 'louka.jpg').locator('.attachment-delete-btn')).toBeHidden();
+        await openRowMenu(page, 'svatba.jpg');
+        await expect(rowMenu(page)).toHaveText(['Open', 'Title and details…', 'Download', 'Delete from the tree…']);
+        await page.keyboard.press('Escape');
+        await openRowMenu(page, 'louka.jpg');
+        // Use as portrait… before Delete.
+        await expect(rowMenu(page)).toHaveText(['Open', 'Title and details…', 'Download', 'Use as portrait…', 'Delete from the tree…']);
+        await page.keyboard.press('Escape');
         await personModal(page).locator('#photo-remove-btn').click();
         await expect(personModal(page).locator('#attachments-list .attachment-tag')).toHaveCount(0);
-        await expect(attRow(page, 'svatba.jpg').locator('.attachment-portrait-btn')).toBeVisible();
+        await openRowMenu(page, 'svatba.jpg');
+        await expect(page.locator('#materials-item-menu [data-action="useAsPortrait"]')).toBeVisible();
+        await page.keyboard.press('Escape');
         // Saved: the portrait and its source go, the attachment stays.
         await personModal(page).getByRole('button', { name: 'Save' }).click();
         const s = await stored(page);
@@ -263,7 +278,7 @@ test.describe('The portrait\'s source among the attachments (desktop)', () => {
         await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));
         await addSecondPicture(page, img.original);
         await openDialog(page);
-        await attRow(page, 'louka.jpg').locator('.attachment-portrait-btn').click();
+        await rowAction(page, 'louka.jpg', 'useAsPortrait');
         await expect(editor(page)).toBeVisible();
         await expect(editor(page).locator('.pe-note-replace')).toBeVisible();
         await editor(page).getByRole('button', { name: 'Done' }).click();
@@ -286,12 +301,12 @@ test.describe('The portrait\'s source among the attachments (desktop)', () => {
         await addSecondPicture(page, img.original);
         await openDialog(page);
         // Another attachment: no note.
-        await attRow(page, 'louka.jpg').locator('.attachment-delete-btn').click();
+        await rowAction(page, 'louka.jpg', 'deleteFromTree');
         const confirm = page.locator('#confirmation-modal');
         await expect(confirm).toHaveClass(/active/);
         await expect(confirm).not.toContainText('portrait’s source');
         await confirm.getByRole('button', { name: 'Cancel' }).click();
-        await attRow(page, 'svatba.jpg').locator('.attachment-delete-btn').click();
+        await rowAction(page, 'svatba.jpg', 'deleteFromTree');
         await expect(confirm).toContainText('This is the portrait’s source. The portrait stays; its crop can then only change within the finished square.');
         await confirm.locator('#confirm-ok-btn').click();
         await expect(attRow(page, 'svatba.jpg')).toHaveCount(0);
@@ -320,6 +335,35 @@ test.describe('The portrait\'s source among the attachments (desktop)', () => {
         await expect(attRow(page, 'svatba.jpg').locator('.attachment-tag')).toHaveText('Portrait');
         await expect(personModal(page).locator('.attachment-portrait-btn')).toHaveCount(0);
         await expect(personModal(page).locator('#photo-recrop-btn')).not.toBeEnabled();
+    });
+});
+
+test.describe('The portrait\'s source among the attachments (phone)', () => {
+    test.use({ viewport: { width: 390, height: 844 } });
+
+    test('a phone\'s row keeps its buttons: As portrait… before the trash, no ⋯; both work', async ({ page }) => {
+        const img = await seedZbyhoslav(page, 'source');
+        await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));
+        await addSecondPicture(page, img.original);
+        await openDialog(page);
+        await expect(attRow(page, 'svatba.jpg').locator('.attachment-tag')).toHaveText('Portrait');
+        await expect(attRow(page, 'svatba.jpg').locator('.attachment-portrait-btn')).toHaveCount(0);
+        await expect(personModal(page).locator('.attachment-more').first()).toBeHidden();
+        const btn = attRow(page, 'louka.jpg').locator('.attachment-portrait-btn');
+        await expect(btn).toHaveText('As portrait…');
+        expect(Math.round((await btn.boundingBox())!.height)).toBe(30);
+        await expect(attRow(page, 'louka.jpg').locator('.attachment-actions button')).toHaveClass([/attachment-portrait-btn/, /attachment-delete-btn/]);
+        await expect(attRow(page, 'louka.jpg').locator('.attachment-note-input')).toBeVisible();
+
+        await attRow(page, 'louka.jpg').locator('.attachment-delete-btn').click();
+        const confirm = page.locator('#confirmation-modal');
+        await expect(confirm).toHaveClass(/active/);
+        await confirm.getByRole('button', { name: 'Cancel' }).click();
+
+        await btn.click();
+        await expect(editor(page)).toBeVisible();
+        await editor(page).getByRole('button', { name: 'Done' }).click();
+        await expect(attRow(page, 'louka.jpg').locator('.attachment-tag')).toHaveText('Portrait');
     });
 });
 
@@ -369,7 +413,7 @@ test.describe('Use as portrait… in the materials (desktop)', () => {
         await page.keyboard.press('Escape');
         await row('louka.jpg').locator('.material-more').click();
         const items = page.locator('#materials-item-menu [data-action]');
-        await expect(items).toHaveText(['Open', 'Download', 'Use as portrait…', 'Delete from the tree…']);
+        await expect(items).toHaveText(['Open', 'Title and details…', 'Download', 'Use as portrait…', 'Delete from the tree…']);
         await page.locator('#materials-item-menu [data-action="useAsPortrait"]').click();
         await expect(editor(page)).toBeVisible();
         await expect(editor(page).locator('.pe-note-replace')).toBeVisible();
