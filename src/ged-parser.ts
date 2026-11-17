@@ -1184,6 +1184,12 @@ interface RawMedia {
     ref?: string;
     /** _PRIM / _PRIMARY / _PERSONALPHOTO Y — preferred as the person's portrait. */
     primary?: boolean;
+    /**
+     * `_PRIM` as written (Y or N). At a family (spec 108): once any of its
+     * pictures says it, the couple's photo is only the one with Y — the
+     * others are the family's files, not its photo.
+     */
+    prim?: 'Y' | 'N';
     title: string;
     form: string;
     file: string;
@@ -3208,6 +3214,11 @@ export function parseGedcom(content: string): ParsedGedcom {
     };
 
     /** A line of a media record: FILE (5.5.1 and 7 with FORM and TITL under it, 5.5 beside it), TITL, the portrait marks, Strom's own. */
+    /** `_PRIM Y` / `N` as written (the first one counts); any other value says nothing. */
+    const notePrim = (m: RawMedia, value: string): void => {
+        const v = value.trim().toUpperCase();
+        if (!m.prim && (v === 'Y' || v === 'N')) m.prim = v;
+    };
     const readMediaRecordLine = (m: RawMedia, level: number, tag: string, value: string): void => {
         if (level === 1) {
             objeSubTag = tag;
@@ -3224,6 +3235,7 @@ export function parseGedcom(content: string): ParsedGedcom {
             else if ((tag === '_PRIM' || tag === '_PRIMARY' || tag === '_PERSONALPHOTO') && value.trim() === 'Y') m.primary = true;
             else if (tag === '_DATE') { if (!m.date) m.date = mediaDateValue(value); }
             else if (isUnreadUnderscoreTag(tag) && !stromApp && !stromResearch) drop(tag);
+            if (tag === '_PRIM') notePrim(m, value);
         } else if (level === 2 && objeSubTag === 'FILE' && objeFirstFile) {
             // Data-URL payloads are CONC-wrapped (255-char physical lines).
             if (tag === 'CONC') m.file += value;
@@ -3252,6 +3264,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                 else if (tag === '_STROM_KIND') m.stromKind = value;
                 else if ((tag === '_PRIM' || tag === '_PRIMARY' || tag === '_PERSONALPHOTO') && value.trim() === 'Y') m.primary = true;
                 else if (tag === '_DATE') { if (!m.date) m.date = mediaDateValue(value); }
+                if (tag === '_PRIM') notePrim(m, value);
             } else if (lv === 3 && sub === 'FILE' && firstFile) {
                 if (tag === 'CONC') m.file += value;
                 else if (tag === 'FORM') { if (!m.form) m.form = value; }
@@ -4790,6 +4803,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                         if (tag === 'TITL') currentMedia.title = value;
                         else if ((tag === '_PRIM' || tag === '_PRIMARY' || tag === '_PERSONALPHOTO') && value.trim() === 'Y') currentMedia.primary = true;
                         else if (tag === '_DATE') { if (!currentMedia.date) currentMedia.date = mediaDateValue(value); }
+                        if (tag === '_PRIM') notePrim(currentMedia, value);
                     } else if (currentSubTag === 'SOUR' && tag === 'PAGE' && currentCitationId) {
                         citePage(value);
                     } else if (currentSubTag === 'SOUR' && tag === 'QUAY' && currentCitationId) {
@@ -5355,7 +5369,8 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
     const familyLinkedMedia = (m: RawMedia): RawMedia | null => {
         const rec = m.ref ? gedcom.mediaRecords?.get(m.ref) : undefined;
         if (!rec) return null;
-        return { ...rec, title: m.title || rec.title, date: m.date ?? rec.date, ...(m.primary || rec.primary ? { primary: true } : {}) };
+        const prim = m.prim ?? rec.prim;
+        return { ...rec, title: m.title || rec.title, date: m.date ?? rec.date, ...(m.primary || rec.primary ? { primary: true } : {}), ...(prim ? { prim } : {}) };
     };
     /** A source's link to a media record, the same way. */
     const linkedSourceMedia = (m: RawSourceMedia): RawSourceMedia | null => {
@@ -5838,7 +5853,12 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
         if (!fam.media?.length) continue;
         const read = fam.media.map(link => ({ link, media: link.ref ? familyLinkedMedia(link) : link }));
         let taken: RawMedia | undefined;
-        for (const { link, media } of [...read.filter(r => r.media?.primary), ...read.filter(r => !r.media?.primary)]) {
+        // A family whose pictures say `_PRIM` (spec 108: Strom Research marks the couple's photo Y, the
+        // family's other files N): only the one with Y is its photo. Without: its first image.
+        const primSaid = read.some(r => r.media?.prim);
+        const candidates = primSaid ? read.filter(r => r.media?.prim === 'Y')
+            : [...read.filter(r => r.media?.primary), ...read.filter(r => !r.media?.primary)];
+        for (const { link, media } of candidates) {
             if (!media?.file) continue;
             const file = imageRefSha(media.file) ? resolveImageFile(media.file, options.images) : media.file;
             if (!file) continue;

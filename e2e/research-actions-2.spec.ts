@@ -695,6 +695,26 @@ test.describe('Start research with this tree (G3)', () => {
         return { img, att };
     }
 
+    test('a research that keeps the app’s files (media.app): the images are offered and go with the tree (spec 108)', async ({ page }) => {
+        await appTree(page, ALL);
+        await page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            const url = `data:image/jpeg;base64,${'A'.repeat(3000)}`;
+            dm.updatePerson('a', { photo: url });
+            dm.addAttachment('b', { name: 'page.jpg', mimeType: 'image/jpeg', dataUrl: url, sizeBytes: 2250 });
+        });
+        await page.evaluate(() => window.Strom.UI.startResearchAdopt(window.Strom.DataManager.getCurrentTreeId()));
+        const token = (await launched(page))[0].match(TOKEN_RE)![1];
+        const calls = { cancel: [] as string[], posted: [] as string[] };
+        await routeBridge(page, token, calls, { ged: adoptedGed(), status: { features: ['media.app'] } });
+        await page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: b })), BRIDGE);
+        const box = page.locator('#research-adopt-modal #research-adopt-images');
+        await expect(box).toBeChecked();
+        await page.locator('#research-adopt-confirm').click();
+        await expect(page.locator('.toast')).toContainText('Dvořákovi is now linked to the research.', AFTER_HAND_OVER);
+        expect(calls.posted[0]).toContain('AAAA');
+    });
+
     const media = (page: Page) => page.evaluate(() => {
         const persons = Object.values(window.Strom.DataManager.getData().persons) as any[];
         const by = (n: string) => persons.find(p => p.firstName === n);

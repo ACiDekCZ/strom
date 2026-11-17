@@ -44,7 +44,9 @@ import {
     researchIdsByContent, holdsResearchIds, ResearchSendRecord, AdoptIds, ExportXrefs, applySyncIds, sourceIdOfXref, researchGedcomTitles, researchSendsReadings, researchSendsSourceFields, SyncReading,
     researchHasTitles, hasTitles, withoutTitles, TITLES_FEATURE, researchConflictRef, isResearchHead, SYNC_REMOVED_FEATURE, SyncPersonConflict,
     SYNC_NW_CODES_FEATURE, researchLinkMark, researchUrlMark, type ResearchActionMark,
+    researchMediaOut, researchSendDeclaresMedia, researchSyncUrl, researchMediaFirstSendDue,
 } from '../research-link.js';
+import { SettingsManager } from '../settings.js';
 import { loadResearchCopy } from '../research-copy.js';
 import { foreignSendCheck } from '../research-foreign-send.js';
 import { ResearchWriteHeld, joinSaid, writeHeldOfRefusal, writeHeldOfStatus, writeHeldSettled } from '../research-write-held.js';
@@ -73,7 +75,7 @@ import {
     fetchWithTimeout, readStatusPart, readResearchTreeFile, postSync, onComputer, readTree, researchGedcom, researchGedcomExport,
 } from './research-ui.js';
 import { shownNameOrEmpty } from '../person-name.js';
-import { browserMediaFingerprint, browserMediaSafe } from '../browser-media.js';
+import { browserMediaFingerprint, browserMediaSafe, treeHasAppMedia } from '../browser-media.js';
 
 /** A person's conflicts less those still open that were decided since (`settled`, by id); the same list when none goes. */
 function withoutSettled(list: ResearchConflict[], settled: Set<string> | null): ResearchConflict[] {
@@ -232,6 +234,8 @@ let autoTimerTree: TreeId | null = null;
 let autoDueAt = 0;
 /** Trees whose quiet time ran out while the bridge was not there: sent when it comes back. */
 const autoDue = new Set<TreeId>();
+/** Trees whose first write with their files (spec 108 K2.7) went by itself on this page: not again after every answer. */
+const mediaFirstTried = new Set<TreeId>();
 /** The send whose "Written N, not written M" was told (its plain "Written" toast is then not shown too). */
 let toldNotWritten = '';
 /** Sends by hand the research wrote before sending by itself is offered. */
@@ -1620,7 +1624,7 @@ export const researchSyncMethods = uiModule({
      * way, and the bridge answers. The bridge not there: nothing is opened,
      * the changes wait ("not running") and go when it answers again.
      */
-    async researchAutoSend(treeId: TreeId, why: 'quiet' | 'switch' | 'leave' | 'bridge' | 'newer'): Promise<void> {
+    async researchAutoSend(treeId: TreeId, why: 'quiet' | 'switch' | 'leave' | 'bridge' | 'newer' | 'media'): Promise<void> {
         const link = TreeManager.getTreeMetadata(treeId)?.research;
         if (!link || !this.researchAutoOn(link) || link.refused) return;
         // A send taken back and a research that would write it again from a copy: the user decides first
@@ -1644,8 +1648,9 @@ export const researchSyncMethods = uiModule({
         const data = active ? DataManager.getDataFor(treeId) : await readTree(treeId);
         if (!data) return;
         const fps = active ? this.researchSyncFingerprints(treeId, link) : fingerprintsOf(data, link);
-        // Nothing the research lacks: its version, the state sent, or the state it discarded (sent again only after an edit).
-        if (fps.matchesBase || fps.current === link.sent?.fingerprint) {
+        // Nothing the research lacks: its version, the state sent, or the state it discarded (sent again only after an edit) —
+        // unless the tree's files have not reached its archive yet (spec 108 K2.7).
+        if ((fps.matchesBase || fps.current === link.sent?.fingerprint) && !this.researchMediaFirstDue(treeId, link, data)) {
             autoDue.delete(treeId);
             return;
         }
@@ -1700,7 +1705,30 @@ export const researchSyncMethods = uiModule({
                 || (this.researchHeld(treeId)?.takeovers.length ?? 0) > 0;
             if (kind === 'unsentAndNewer' && !conflictsLeft) { await this.researchAutoSend(treeId, 'newer'); return; }
             if (autoDue.has(treeId)) { await this.researchAutoSend(treeId, kind === 'unsentAndNewer' ? 'newer' : 'bridge'); return; }
+            // A research that now keeps the app's files, and the tree's have not reached it (spec 108 K2.7): one write goes
+            // by itself, even with nothing else to send — once on this page; a failure waits as any send (autoDue).
+            if (!mediaFirstTried.has(treeId) && this.researchMediaFirstDue(treeId, link, DataManager.getDataFor(treeId))) {
+                mediaFirstTried.add(treeId);
+                await this.researchAutoSend(treeId, 'media');
+            }
         }
+    },
+
+    /**
+     * A write of this tree says it carries every file of the tree (`POST /sync?media=app`, spec 108 P4): a research
+     * that keeps the app's files, and the tree holds the research's files too (images taken: the setting, its last load).
+     */
+    researchSendDeclaresMediaFor(link: ResearchLink): boolean {
+        return researchSendDeclaresMedia(this.researchStatusOf(link.id), {
+            importImages: SettingsManager.isImportImages(), loadedWithoutImages: link.treeEtag?.images === false,
+        });
+    },
+
+    /** The tree's files have not reached its research's archive yet (spec 108 K2.7, researchMediaFirstSendDue). */
+    researchMediaFirstDue(treeId: TreeId, link: ResearchLink, data: StromData | null | undefined): boolean {
+        if (!data) return false;
+        return researchMediaFirstSendDue({ declares: this.researchSendDeclaresMediaFor(link), hasMedia: treeHasAppMedia(data),
+            researchId: link.id, sentTo: researchAutoState(treeId).appMediaSent });
     },
 
     // ==================== SENDING ====================
@@ -1847,7 +1875,8 @@ export const researchSyncMethods = uiModule({
         const bridge = parseLiveBridge(storedResearchBridge(link.id)?.base);
         if (!data || !bridge) return;
         const fps = active ? this.researchSyncFingerprints(treeId, link) : fingerprintsOf(data, link);
-        if (fps.matchesBase) {
+        // The tree's files not in the research's archive yet (spec 108 K2.7): the tree goes even as its version.
+        if (fps.matchesBase && !this.researchMediaFirstDue(treeId, link, data)) {
             TreeManager.patchResearchLink(treeId, { refused: undefined });
             if (!opts.auto) {
                 // "Send, then load": nothing to send, its version loads (asked as any load) — never "the same tree".
@@ -1926,10 +1955,15 @@ export const researchSyncMethods = uiModule({
         // The titles as the research takes them (B-1); a send that carries them, once written, leaves them there (B18-1).
         const titles = researchGedcomTitles(this.researchStatusOf(link.id));
         const carriesTitles = again ? !!again.titles : titles === 'line';
+        // Every file of the tree goes (portraits, couples' photos, attachments; an attachment only its original
+        // by name and hash): said so (`?media=app`), the archive takes off what the tree no longer has (spec 108 P4).
+        // A send taken back, written again, is as it was said then (the research keeps that).
+        const declaresMedia = !again && this.researchSendDeclaresMediaFor(link);
         const exported = again ? null : researchGedcomExport(data, meta?.name ?? '', {
             id: link.id, head: link.head, appTree: treeId, transcripts: this.researchTranscriptsLink(link).transcripts, sent: fps.current,
             ...(since ? { since } : {}),
-        }, titles, researchSendsReadings(this.researchStatusOf(link.id)), researchSendsSourceFields(this.researchStatusOf(link.id)), researchCitationsOut(this.researchStatusOf(link.id)));
+        }, titles, researchSendsReadings(this.researchStatusOf(link.id)), researchSendsSourceFields(this.researchStatusOf(link.id)), researchCitationsOut(this.researchStatusOf(link.id)),
+        researchMediaOut(this.researchStatusOf(link.id)));
         const gedcom = exported?.content ?? '';
         // What this send carries, person by person (what was written, once it is).
         if (!again) this.researchNoteSending(treeId, data, fps.current);
@@ -1949,7 +1983,7 @@ export const researchSyncMethods = uiModule({
         }
         let res: Response;
         try {
-            res = await postSync(again ? `${bridge.base}/sync/${encodeURIComponent(again.intake!)}/again` : `${bridge.base}/sync`,
+            res = await postSync(again ? `${bridge.base}/sync/${encodeURIComponent(again.intake!)}/again` : researchSyncUrl(bridge.base, declaresMedia),
                 gedcom, SEND_TIMEOUT_MS, !!opts.keepalive && gedcom.length < KEEPALIVE_MAX_CHARS);
             // The page is still here: the answer is taken in as any.
             if (opts.keepalive) patchResearchAutoState(treeId, { leftSend: undefined });
@@ -1983,6 +2017,8 @@ export const researchSyncMethods = uiModule({
         if (res.ok && reply.ok && reply.intake && !again) {
             patchResearchAutoState(treeId, { lastCopy: { intake: reply.intake, base: link.head ?? '', ...(version ? { version } : {}) } });
         }
+        // The tree's files went with it, said so: its research's archive has them (spec 108 K2.7).
+        if (res.ok && reply.ok && declaresMedia) patchResearchAutoState(treeId, { appMediaSent: link.id });
         // The first send out of "only load" went (through the preview): sending by itself may go on.
         if (res.ok && reply.ok && link.previewDue) TreeManager.patchResearchLink(treeId, { previewDue: undefined });
         // Busy (503): not a refusal — it goes again at the next look.

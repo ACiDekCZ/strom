@@ -133,6 +133,20 @@ export interface GedcomExportOptions {
      * the order of spec 095 K1.1 (src/citation-order.ts).
      */
     citationFileOrder?: boolean;
+    /**
+     * A write for a research that keeps the app's files (`media.app`, spec
+     * 108): the couple's photo says it is the family's picture (`2 _PRIM Y`),
+     * so the research tells it from the family's other files (`2 _PRIM N`,
+     * once the app has any: spec 102). Default: none, the photo the family's
+     * first picture as any program reads it (spec 107).
+     */
+    appMedia?: boolean;
+    /**
+     * Each portrait's, couple photo's and attachment's date (`2 _DATE`) for a
+     * research that keeps it (`material.links`, spec 108 §3). Without it only
+     * "Back to {prog}" writes the date (spec 066 G8).
+     */
+    mediaDates?: boolean;
 }
 
 /**
@@ -1529,13 +1543,15 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
     // A multimedia link (1 OBJE): a person's portrait (marked) and
     // attachments, a couple's photo (spec 107). Data URLs are CONC-wrapped
     // to keep physical lines within the spec limit.
-    const pushMedia = (file: string, title: string, kind: 'photo' | '', note?: string, srcId?: string, original?: MediaOriginal, fileMime?: string, date?: string): void => {
+    // `prim`: the family's picture among the family's files (`2 _PRIM Y` / `N`, a research that keeps the app's files).
+    const pushMedia = (file: string, title: string, kind: 'photo' | '', note?: string, srcId?: string, original?: MediaOriginal, fileMime?: string, date?: string, prim?: 'Y' | 'N'): void => {
         const mime = file.startsWith('data:') ? file.slice(5, file.indexOf(';')) : fileMime ?? '';
         const form = mime.includes('/') ? mime.split('/')[1] : 'jpeg';
         lines.push('1 OBJE');
         lines.push(`2 FORM ${form}`);
         if (title) pushWrapped(lines, 2, 'TITL', title);
         if (kind) lines.push(`2 _STROM_KIND ${kind}`);
+        if (prim) lines.push(`2 _PRIM ${prim}`);
         if (note) pushLongValue(lines, 2, 'NOTE', note);
         // The source this scan belongs to. 5.5.1 has no SOUR under a
         // multimedia link, hence the underscore tag.
@@ -1549,8 +1565,9 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             if (o && o >= 2 && o <= 8) lines.push(`2 _STROM_ORIENT ${o}`);
         }
         pushWrapped(lines, 2, 'FILE', file);
-        // The picture's date from the program's file (spec 066 G8): back under its OBJE, "Back to {prog}" only.
-        const day = back.imports.size > 0 && date ? mediaDateValue(date) : undefined;
+        // The picture's date: back under its OBJE for the program it came from (spec 066 G8), and to a
+        // research that keeps it (spec 108 §3).
+        const day = (back.imports.size > 0 || options.mediaDates) && date ? mediaDateValue(date) : undefined;
         if (day) lines.push(`2 _DATE ${day}`);
     };
 
@@ -2095,9 +2112,12 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         }
 
         // The couple's photo (spec 107): a plain OBJE of the family, no
-        // Strom tag — any program shows it as the family's picture.
+        // Strom tag — any program shows it as the family's picture. A research
+        // that keeps the app's files reads it by `_PRIM Y` (spec 108); the
+        // family's other files, once the app has any (spec 102), go after it with `_PRIM N`.
         if (partnership.photo) {
-            pushMedia(partnership.photo, partnership.photoOriginalName ?? '', '', undefined, undefined, undefined, undefined, partnership.photoDate);
+            pushMedia(partnership.photo, partnership.photoOriginalName ?? '', '', undefined, undefined, undefined, undefined, partnership.photoDate,
+                options.appMedia ? 'Y' : undefined);
         }
 
         pushGedcomExtra(partnership);

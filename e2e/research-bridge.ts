@@ -54,6 +54,8 @@ export interface FakeBridge {
     down: boolean;
     links: string[];
     posts: string[];
+    /** The query of each `POST /sync` (`?media=app&app=…`, spec 108), beside `posts`. */
+    postQueries?: URLSearchParams[];
     /** The bridge takes this long to answer a send (ms). */
     syncDelayMs?: number;
     /** A write at once (the research's reply has `inbox: false` and no `pending`): the version it makes. */
@@ -2002,6 +2004,7 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
             if (b.syncDelayMs) await new Promise(r => setTimeout(r, b.syncDelayMs));
             const body = route.request().postData() ?? '';
             b.posts.push(body);
+            (b.postQueries ??= []).push(url.searchParams);
             const sent = /1 _STROM_SENT (\S+)/.exec(body)?.[1] ?? '';
             const appTree = /1 _STROM_APP_TREE (\S+)/.exec(body)?.[1] ?? UUID;
             const intake = `R${Date.now()}-${b.posts.length}`;

@@ -1017,6 +1017,75 @@ export function researchSendsReadings(status: { features: readonly string[] | nu
     return !!status?.features?.includes(READ_SYNC_FEATURE);
 }
 
+/**
+ * `/status.features` (Strom Research 1.35, spec 108): the archive keeps the
+ * tree's own files — portraits, couples' photos and attachments — from a
+ * write that says it carries all of them (`POST /sync?media=app`), and gives
+ * them back by reference (`/tree.ged?images=ref&media=app`). Without it a
+ * write carries them as ever and the research passes them by.
+ */
+export const MEDIA_APP_FEATURE = 'media.app';
+/**
+ * `/status.features` (Strom Research 1.35, spec 108 §3): the research keeps
+ * what the app says of a file — its date (`2 _DATE`), and later its title,
+ * kind and places (spec 102) — and takes a couple's original
+ * (`X-Strom-Family`, `accepts.media.family`).
+ */
+export const MATERIAL_LINKS_FEATURE = 'material.links';
+
+/** The research keeps the app's files from a write (`media.app`); not known: no. */
+export function researchKeepsAppMedia(status: { features: readonly string[] | null } | null | undefined): boolean {
+    return !!status?.features?.includes(MEDIA_APP_FEATURE);
+}
+
+/** How a tree's files go in the file a research's bridge gets (see GedcomExportOptions.appMedia / mediaDates). */
+export interface ResearchMediaOut {
+    /** The couple's photo marked as the family's picture (`2 _PRIM Y`): a research that keeps the app's files. */
+    appMedia: boolean;
+    /** Each file's date (`2 _DATE`): a research that keeps what the app says of a file. */
+    mediaDates: boolean;
+}
+
+/** A research that has said nothing: the files go as they always went. */
+export const NO_MEDIA_FEATURES: ResearchMediaOut = { appMedia: false, mediaDates: false };
+
+/** How a tree's files go to this research, by its `/status.features` (not reached: as ever). */
+export function researchMediaOut(status: { features: readonly string[] | null } | null | undefined): ResearchMediaOut {
+    const features = status?.features ?? [];
+    return { appMedia: features.includes(MEDIA_APP_FEATURE), mediaDates: features.includes(MATERIAL_LINKS_FEATURE) };
+}
+
+/**
+ * Does a write of this tree say it carries every file of the tree
+ * (`POST /sync?media=app`, spec 108 P4)? Then the archive takes off a file
+ * the tree no longer has. Only to a research that keeps the app's files, and
+ * only while the tree holds the research's files too: with images not taken
+ * (the import setting off, or its last load without them) it lacks the ones
+ * the research gave, and a write must never take those off — it only adds.
+ */
+export function researchSendDeclaresMedia(
+    status: { features: readonly string[] | null } | null | undefined,
+    tree: { importImages: boolean; loadedWithoutImages: boolean },
+): boolean {
+    return researchKeepsAppMedia(status) && tree.importImages && !tree.loadedWithoutImages;
+}
+
+/** The address a write goes to: `<base>/sync`, with `?media=app` when it says it carries every file. */
+export function researchSyncUrl(base: string, declaresMedia: boolean): string {
+    return `${base}/sync${declaresMedia ? '?media=app' : ''}`;
+}
+
+/**
+ * The tree's files have not reached the archive yet (spec 108 K2.7): a tree
+ * with portraits, couples' photos or attachments, linked to a research that
+ * keeps them, that has not gone there in a write that said it carries them.
+ * Then one write goes by itself even with nothing else to send — once, the
+ * mark kept by the research it went to (`sentTo`, ResearchAutoState.appMediaSent).
+ */
+export function researchMediaFirstSendDue(o: { declares: boolean; hasMedia: boolean; researchId: string; sentTo: string | undefined }): boolean {
+    return o.declares && o.hasMedia && o.sentTo !== o.researchId;
+}
+
 /** How a GEDCOM writes the titles of a name (see GedcomExportOptions.titles in ged-exporter.ts). */
 export type TitlesInGedcom = 'line' | 'tags' | 'none';
 
@@ -2712,6 +2781,8 @@ export interface ResearchAccepts {
     mediaMaxBytes: number | null;
     /** It takes a crop's region with a file (`accepts.media.region`). */
     mediaRegion: boolean;
+    /** It takes a couple's original (`accepts.media.family`: `X-Strom-Family` with `PUT /media/<sha256>`, spec 108); absent: no. */
+    mediaFamily?: true;
     /** It takes a file for a waiting task (`accepts.media.task`: `X-Strom-Task` with `PUT /media/<sha256>`); absent: no. */
     mediaTask?: true;
     /**
@@ -2810,6 +2881,7 @@ export function sanitizeAccepts(value: unknown): ResearchAccepts | null {
         media: !!asRecord(r.media),
         mediaMaxBytes: mediaMaxBytes(asRecord(r.media)?.max ?? asRecord(r.media)?.maxBytes),
         mediaRegion: asRecord(r.media)?.region === true,
+        ...(asRecord(r.media)?.family === true ? { mediaFamily: true as const } : {}),
         ...(asRecord(r.media)?.task === true ? { mediaTask: true as const } : {}),
         ...(asRecord(r.media)?.taskImages === true ? { mediaTaskImages: true as const } : {}),
         mediaTypes: mediaTypes(asRecord(r.media)?.types),

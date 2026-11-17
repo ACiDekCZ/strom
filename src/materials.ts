@@ -27,6 +27,12 @@ import { parseGedcomDate } from './ged-parser.js';
 export const MATERIAL_LIST_FEATURE = 'material.list';
 export const MATERIAL_ASSIGN_FEATURE = 'material.assign';
 export const MATERIAL_THUMB_FEATURE = 'material.thumb';
+/** `uses {excerpts, sources, tasks}` on each file of `/material`, `GET /material/<I…>/uses` (Strom Research 1.35, spec 102). */
+export const MATERIAL_USES_FEATURE = 'material.uses';
+/** `POST /material/edit {ids, title?, kind?, date?}`: a file's title, kind and date (Strom Research 1.35, spec 102). */
+export const MATERIAL_EDIT_FEATURE = 'material.edit';
+/** `POST /material/sort`: the research's agent proposes titles and places for files (only a research with an agent). */
+export const MATERIAL_SORT_FEATURE = 'material.sort';
 
 /** Preview sizes the bridge makes (longer side, px). */
 export const THUMB_SIZES = [128, 256, 512] as const;
@@ -528,6 +534,21 @@ export function matAssign(env: MaterialEnv): boolean {
 /** The research makes previews now. */
 export function matThumb(env: MaterialEnv): boolean {
     return matList(env) && env.bridgeUp && has(env, MATERIAL_THUMB_FEATURE);
+}
+
+/** The research says where each file is used (`material.uses`). */
+export function matUses(env: MaterialEnv): boolean {
+    return matList(env) && has(env, MATERIAL_USES_FEATURE);
+}
+
+/** The research edits a file's title, kind and date (`material.edit`). */
+export function matEdit(env: MaterialEnv): boolean {
+    return matList(env) && has(env, MATERIAL_EDIT_FEATURE);
+}
+
+/** The research's agent sorts files (`material.sort`; never an archive or a research waiting for its agent). */
+export function matSort(env: MaterialEnv): boolean {
+    return matList(env) && has(env, MATERIAL_SORT_FEATURE);
 }
 
 export interface MaterialCaps {

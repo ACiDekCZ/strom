@@ -405,6 +405,13 @@ export interface ResearchAutoState {
     loadBackup?: { id: string; at: string; fingerprint: string; before?: ResearchLinkBefore };
     /** A backup was taken before this tree's first send from this browser. */
     firstSendBackup?: true;
+    /**
+     * The research (its id) a write of this tree went to saying it carries
+     * every file of the tree (`POST /sync?media=app`, spec 108 K2.7): the
+     * tree's portraits, couples' photos and attachments reached its archive.
+     * Until then one write goes by itself, even with nothing else to send.
+     */
+    appMediaSent?: string;
     /** How changes go was chosen or asked once (the hand-over, or the one-time question after 3.9). */
     modeAsked?: true;
     /** Sends by hand the research wrote: after a few, sending by itself is offered (once). */
@@ -649,6 +656,7 @@ export function researchAutoState(treeId: string): ResearchAutoState {
             out.loadBackup = { id: lb.id, at: lb.at, fingerprint: lb.fingerprint, ...(before ? { before } : {}) };
         }
         if (p.firstSendBackup === true) out.firstSendBackup = true;
+        if (typeof p.appMediaSent === 'string' && p.appMediaSent && p.appMediaSent.length <= 80) out.appMediaSent = p.appMediaSent;
         if (p.modeAsked === true) out.modeAsked = true;
         if (typeof p.manualWrites === 'number' && p.manualWrites > 0) out.manualWrites = Math.min(Math.floor(p.manualWrites), 9999);
         if (p.skipPreview === true) out.skipPreview = true;

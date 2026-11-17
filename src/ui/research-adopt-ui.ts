@@ -27,7 +27,7 @@ import { NO_CITATION_FEATURES, researchCitationsOut, type ResearchCitationsOut }
 import {
     parseLiveBridge, sanitizeAdoptOffer, sanitizeAdoptReply, newAdoptToken, researchNewUrl, contentFingerprint, researchSchemeUrl,
     readResearchHeader, applyAdoptIds, AdoptOffer, AdoptIds, researchGedcomTitles, researchSendsSourceFields, TitlesInGedcom, sanitizeLiveStatus, statusAgentless, type BrowserInfo,
-    researchLinkMark,
+    researchLinkMark, researchKeepsAppMedia, researchMediaOut, NO_MEDIA_FEATURES, type ResearchMediaOut,
 } from '../research-link.js';
 import { newTieSendMode } from '../research-sync.js';
 import { uiModule } from './module.js';
@@ -48,8 +48,6 @@ const READY_ID = 'research-ready-modal';
 const APP_ICON_SVG = '<svg class="install-ready-app-icon" viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="5.3" fill="#3f6b4f"/><g transform="translate(3.6 3.6) scale(0.7)" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 19a4 4 0 0 1-2.24-7.32A3.5 3.5 0 0 1 9 6.03V6a3 3 0 1 1 6 0v.04a3.5 3.5 0 0 1 3.24 5.65A4 4 0 0 1 16 19Z"/><path d="M12 19v3"/></g></svg>';
 /** How long the research has to come back for the tree. */
 const TOKEN_MAX_AGE_MS = 60 * 60 * 1000;
-/** Strom Research takes photos and attachments over with a tree (not yet: it skips data URLs). */
-const RESEARCH_TAKES_IMAGES = false;
 /** Tries at the research's version right after a hand-over (ms to wait before each): it may write it a moment later. */
 const ADOPT_LOAD_WAITS = [0, 1000, 3000];
 
@@ -80,29 +78,34 @@ async function researchMovesTrees(base: string): Promise<boolean> {
  * any research reads right. And whether it reads the sources' place field by
  * field (sources.fields): not reached, not.
  */
-async function researchTitlesAt(base: string): Promise<{ titles: TitlesInGedcom; sourceFields: boolean; citations: ResearchCitationsOut }> {
+async function researchTitlesAt(base: string): Promise<{ titles: TitlesInGedcom; sourceFields: boolean; citations: ResearchCitationsOut; media: ResearchMediaOut }> {
     try {
         const res = await fetchWithTimeout(`${base}/status`, 4000);
-        if (!res.ok) return { titles: 'tags', sourceFields: false, citations: NO_CITATION_FEATURES };
+        if (!res.ok) return { titles: 'tags', sourceFields: false, citations: NO_CITATION_FEATURES, media: NO_MEDIA_FEATURES };
         const body = await res.json() as { features?: unknown } | null;
         const features = Array.isArray(body?.features) ? body.features.filter((f): f is string => typeof f === 'string') : null;
         // The sources' place field by field only to a research that reads it (sources.fields).
         // The main citations only to a research that keeps them (citations.main).
-        return { titles: researchGedcomTitles({ features }), sourceFields: researchSendsSourceFields({ features }), citations: researchCitationsOut({ features }) };
+        return { titles: researchGedcomTitles({ features }), sourceFields: researchSendsSourceFields({ features }), citations: researchCitationsOut({ features }),
+            media: researchMediaOut({ features }) };
     } catch {
-        return { titles: 'tags', sourceFields: false, citations: NO_CITATION_FEATURES };
+        return { titles: 'tags', sourceFields: false, citations: NO_CITATION_FEATURES, media: NO_MEDIA_FEATURES };
     }
 }
 
-/** Whether the research behind this bridge works without an agent: an archive, or one waiting for its agent (its /status). Not said: not. */
-async function researchAgentlessAt(base: string): Promise<boolean> {
+/**
+ * What the research behind this bridge says of itself for a hand-over (its /status; not said: not):
+ * it works without an agent (an archive, or one waiting for its agent), and it keeps the tree's
+ * photos and attachments (`media.app`, spec 108) — a hand-over with them only adds them there.
+ */
+async function researchAdoptStatusAt(base: string): Promise<{ agentless: boolean; takesImages: boolean }> {
     try {
         const res = await fetchWithTimeout(`${base}/status`, 4000);
-        if (!res.ok) return false;
+        if (!res.ok) return { agentless: false, takesImages: false };
         const status = sanitizeLiveStatus(await res.json());
-        return !!status && statusAgentless(status);
+        return { agentless: !!status && statusAgentless(status), takesImages: researchKeepsAppMedia(status) };
     } catch {
-        return false;
+        return { agentless: false, takesImages: false };
     }
 }
 
@@ -279,8 +282,8 @@ export const researchAdoptMethods = uiModule({
             await this.endEmptyHandOver(tree.id, fromInstall ? offer.token : null);
             return;
         }
-        const agentless = await researchAgentlessAt(bridge.base);
-        const choice = await this.askResearchAdopt(tree, offer, data, { install: ownInstall || !!moved, ...(moved ? { movedFrom: moved.from } : {}), agentless });
+        const { agentless, takesImages } = await researchAdoptStatusAt(bridge.base);
+        const choice = await this.askResearchAdopt(tree, offer, data, { install: ownInstall || !!moved, ...(moved ? { movedFrom: moved.from } : {}), agentless, takesImages });
         if (choice === null) {
             postCancel(cancelUrl, 'cancelled');
             // The installation's hand-over declined: nothing waits to be finished any more.
@@ -293,11 +296,11 @@ export const researchAdoptMethods = uiModule({
         if (DataManager.getCurrentTreeId() === tree.id && await DataManager.snapshotNow('pre-first-send')) {
             patchResearchAutoState(tree.id, { firstSendBackup: true });
         }
-        // The research does not take photos over yet: they stay here only.
+        // Photos and attachments go only to a research that keeps them (`media.app`), when asked: else they stay here only.
         // A research that knows no titles gets the names without them (B-1): they stay here.
-        const { titles, sourceFields, citations } = await researchTitlesAt(bridge.base);
+        const { titles, sourceFields, citations, media } = await researchTitlesAt(bridge.base);
         // (A tree the research has not had yet: its citations in the order of K1.1, never the list's own.)
-        const exported = exportToGedcom(choice.images ? data : stripMedia(data), tree.name, { titles, sourceFields, citationMain: citations.citationMain });
+        const exported = exportToGedcom(choice.images ? data : stripMedia(data), tree.name, { titles, sourceFields, citationMain: citations.citationMain, ...media });
         let reply: { tree: string; head: string | null; ids: AdoptIds | null } | null = null;
         let refusedEmpty = false;
         let held: ResearchWriteHeld | null = null;
@@ -660,7 +663,7 @@ export const researchAdoptMethods = uiModule({
         (copy ?? overlay.querySelector<HTMLElement>('.buttons .primary'))?.focus();
     },
 
-    askResearchAdopt(tree: TreeMetadata, offer: AdoptOffer, data: ReturnType<typeof DataManager.getData>, opts: { install?: boolean; movedFrom?: AppBrowser; agentless?: boolean } = {}): Promise<{ images: boolean; sendMode: ResearchSendMode } | null> {
+    askResearchAdopt(tree: TreeMetadata, offer: AdoptOffer, data: ReturnType<typeof DataManager.getData>, opts: { install?: boolean; movedFrom?: AppBrowser; agentless?: boolean; takesImages?: boolean } = {}): Promise<{ images: boolean; sendMode: ResearchSendMode } | null> {
         document.getElementById(ADOPT_ID)?.remove();
         const r = strings.research;
         // As the research counts them: people with a name (an unnamed "?" stays out of its count).
@@ -668,8 +671,8 @@ export const researchAdoptMethods = uiModule({
         const families = countFamilies(data);
         const sources = Object.keys(data.sources ?? {}).length;
         const images = countImages(data);
-        // "Include photos and attachments" waits until the research takes them over.
-        const files = RESEARCH_TAKES_IMAGES ? images.photos + images.attachments + images.excerpts : 0;
+        // "Include photos and attachments" only for a research that keeps them (`media.app`, spec 108).
+        const files = opts.takesImages ? images.photos + images.attachments + images.excerpts : 0;
         const researchName = offer.name || r.defaultName;
         const t = strings.treeSettings;
         // Into an archive (or a research waiting for its agent) by itself, with an agent by hand (audit 017 a-D5).

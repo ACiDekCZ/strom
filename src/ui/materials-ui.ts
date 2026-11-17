@@ -24,7 +24,8 @@ import { setMaterialsCountProvider } from '../card-signals.js';
 import { researchPersonRef, parseLiveBridge, researchLinkMark } from '../research-link.js';
 import { storedResearchBridge, announcedResearchScheme, researchLinksEnabled } from '../research-device.js';
 import {
-    MATERIAL_LIST_FEATURE, MATERIAL_ASSIGN_FEATURE, MATERIAL_THUMB_FEATURE, MATERIALS_EVENT,
+    MATERIAL_LIST_FEATURE, MATERIAL_ASSIGN_FEATURE, MATERIAL_THUMB_FEATURE, MATERIAL_USES_FEATURE, MATERIAL_EDIT_FEATURE,
+    MATERIAL_SORT_FEATURE, MATERIALS_EVENT,
     MaterialCaps, MaterialEnv, MaterialItem, MaterialList, MaterialAction, MaterialActionId, MaterialFile, MaterialBatch,
     materialCaps, materialActions, personMaterials, materialCounter, materialKindLabel, batchFolderLabel,
     materialType, fileExt, primeMaterials, cachedMaterials, cachedMaterialList, saveMaterialList,
@@ -48,7 +49,8 @@ export const PERSON_SECTION_ROWS = 6;
 const THUMB_PX = 128;
 /** The research's material capabilities, remembered per research (`/status` is gone while it is not running). */
 const FEATURES_KEY = 'strom-material-features:';
-const MATERIAL_FEATURE_NAMES = [MATERIAL_LIST_FEATURE, MATERIAL_ASSIGN_FEATURE, MATERIAL_THUMB_FEATURE];
+const MATERIAL_FEATURE_NAMES = [MATERIAL_LIST_FEATURE, MATERIAL_ASSIGN_FEATURE, MATERIAL_THUMB_FEATURE,
+    MATERIAL_USES_FEATURE, MATERIAL_EDIT_FEATURE, MATERIAL_SORT_FEATURE];
 /** Images the browser shows itself (others open in the system or as a file). */
 const VIEWABLE_IMAGES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 const BATCH_ID = /^[A-Za-z0-9_.-]{1,120}$/;

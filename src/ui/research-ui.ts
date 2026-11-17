@@ -55,7 +55,7 @@ import {
 import { keepImports } from '../import-origin.js';
 import { uiModule } from './module.js';
 import { returnFocusAfterViewer } from './sources.js';
-import { withAppVersion, researchGedcomTitles, researchSendsReadings, researchSendsSourceFields, TitlesInGedcom, changeKind, changeAdds, sanitizeLiveLog, sourceIdsByRef, findSourceTitle, lineNewerThanLoaded, textKind, textPersonRefs, textWithoutRefs, LiveChangeKind, LiveLogEntry, LiveCommitAdds, LiveRecent, waitingAnswerPlace, booksOn } from '../research-link.js';
+import { withAppVersion, researchGedcomTitles, researchSendsReadings, researchSendsSourceFields, researchMediaOut, NO_MEDIA_FEATURES, type ResearchMediaOut, TitlesInGedcom, changeKind, changeAdds, sanitizeLiveLog, sourceIdsByRef, findSourceTitle, lineNewerThanLoaded, textKind, textPersonRefs, textWithoutRefs, LiveChangeKind, LiveLogEntry, LiveCommitAdds, LiveRecent, waitingAnswerPlace, booksOn } from '../research-link.js';
 import { overviewInWindow } from '../windows/overview-window.js';
 import { AGENT_DONE_MS, AGENT_DONE_FADE_MS, ResearchCardInfo, setResearchCardInfoProvider } from '../card-signals.js';
 import {
@@ -1332,16 +1332,16 @@ export function researchTitlesBase(loaded: StromData, research: StromData, knows
  * research and version. `titles`: how the names carry their titles, by what
  * the research said of itself (researchGedcomTitles).
  */
-export function researchGedcom(data: StromData, treeName: string, link: ResearchHeaderInfo, titles: TitlesInGedcom, readings = false, sourceFields = false, citations: ResearchCitationsOut = NO_CITATION_FEATURES): string {
-    return exportToGedcom(data, treeName, { research: link, titles, readings, sourceFields, ...citations }).content;
+export function researchGedcom(data: StromData, treeName: string, link: ResearchHeaderInfo, titles: TitlesInGedcom, readings = false, sourceFields = false, citations: ResearchCitationsOut = NO_CITATION_FEATURES, media: ResearchMediaOut = NO_MEDIA_FEATURES): string {
+    return exportToGedcom(data, treeName, { research: link, titles, readings, sourceFields, ...citations, ...media }).content;
 }
 
 /**
  * researchGedcom with the xrefs it gave the records (a send's `ids` answer by
  * them). `readings`: the sources' reading marks go along (researchSendsReadings).
  */
-export function researchGedcomExport(data: StromData, treeName: string, link: ResearchHeaderInfo, titles: TitlesInGedcom, readings = false, sourceFields = false, citations: ResearchCitationsOut = NO_CITATION_FEATURES): { content: string; xrefs: ExportXrefs } {
-    const r = exportToGedcom(data, treeName, { research: link, titles, readings, sourceFields, ...citations });
+export function researchGedcomExport(data: StromData, treeName: string, link: ResearchHeaderInfo, titles: TitlesInGedcom, readings = false, sourceFields = false, citations: ResearchCitationsOut = NO_CITATION_FEATURES, media: ResearchMediaOut = NO_MEDIA_FEATURES): { content: string; xrefs: ExportXrefs } {
+    const r = exportToGedcom(data, treeName, { research: link, titles, readings, sourceFields, ...citations, ...media });
     return { content: r.content, xrefs: r.xrefs };
 }
 
@@ -3196,7 +3196,7 @@ export const researchUiMethods = uiModule({
             return;
         }
         const research = { id: meta.research.id, head: meta.research.head, appTree: treeId, transcripts: this.researchTranscriptsLink(meta.research).transcripts };
-        const blob = new Blob([researchGedcom(data, meta.name, research, researchGedcomTitles(this.researchStatusOf(meta.research.id)), researchSendsReadings(this.researchStatusOf(meta.research.id)), researchSendsSourceFields(this.researchStatusOf(meta.research.id)), researchCitationsOut(this.researchStatusOf(meta.research.id)))], { type: 'text/plain;charset=utf-8' });
+        const blob = new Blob([researchGedcom(data, meta.name, research, researchGedcomTitles(this.researchStatusOf(meta.research.id)), researchSendsReadings(this.researchStatusOf(meta.research.id)), researchSendsSourceFields(this.researchStatusOf(meta.research.id)), researchCitationsOut(this.researchStatusOf(meta.research.id)), researchMediaOut(this.researchStatusOf(meta.research.id)))], { type: 'text/plain;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;

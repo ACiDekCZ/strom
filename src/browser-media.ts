@@ -68,6 +68,17 @@ export function browserMediaFingerprint(data: StromData): string {
 }
 
 /**
+ * The tree has any portrait, couple's photo or attachment (one that is only
+ * its original too): what a write to a research that keeps the app's files
+ * hands to its archive (spec 108 K2.7).
+ */
+export function treeHasAppMedia(data: StromData): boolean {
+    for (const p of Object.values(data.persons ?? {})) if (p?.photo || p?.attachments?.length) return true;
+    for (const u of Object.values(data.partnerships ?? {})) if (u?.photo) return true;
+    return false;
+}
+
+/**
  * The tree's pictures and files are safe without a file copy beyond the one
  * made: it has none, the archive keeps them, or the last file copy holds
  * exactly these. `current` undefined: not known (an index saved before spec
