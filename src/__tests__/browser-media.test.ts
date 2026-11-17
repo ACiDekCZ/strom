@@ -61,11 +61,16 @@ describe('browserMediaSafe', () => {
         expect(browserMediaSafe('x', 'x', false)).toBe(true);
     });
 
-    it('is not safe for pictures no file copy holds, or not known yet', () => {
+    it('is not safe for pictures no file copy holds', () => {
         expect(browserMediaSafe('x', undefined, false)).toBe(false);
         expect(browserMediaSafe('x', 'y', false)).toBe(false);
         expect(browserMediaSafe('x', '', false)).toBe(false);
-        expect(browserMediaSafe(undefined, undefined, false)).toBe(false);
+    });
+
+    // An index saved before spec 108 knows no fingerprint of a tree not read since (N1): not counted against it.
+    it('does not count a tree whose pictures are not known against it', () => {
+        expect(browserMediaSafe(undefined, undefined, false)).toBe(true);
+        expect(browserMediaSafe(undefined, 'x', false)).toBe(true);
     });
 
     it('is safe whenever the archive keeps the app\'s pictures (spec 108 U8), which it does not yet', () => {

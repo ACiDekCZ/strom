@@ -946,6 +946,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Where the data is: the "changes only in the browser" indicator, and
         // the notice at an edit no file holds (src/file-copy.ts).
         void UI.refreshUnsavedIndicator();
+        // Research trees an older index knows no pictures of (spec 108): learnt from their stored data, then painted again.
+        void TreeManager.learnMediaFingerprints().then(n => { if (n > 0) UI.refreshUnsavedForResearch(); }).catch(() => undefined);
         window.addEventListener(PERSISTENCE_EVENT, () => { void UI.refreshUnsavedIndicator(); });
         window.addEventListener(FILE_COPY_EVENT, (e) => {
             void UI.handleFileCopyChange((e as CustomEvent<{ treeId: string }>).detail.treeId);

@@ -659,6 +659,34 @@ class TreeManagerClass {
     }
 
     /**
+     * A tree linked to a research that an index saved before spec 108 knows
+     * no fingerprint of its pictures and files for (mediaFp) learns it from
+     * its stored record, so the "only in browser" indicator judges a tree not
+     * open yet by what it has. Only reads: no migration, no save of the tree.
+     * The open tree is left out (its fingerprint comes from memory), and so is
+     * one that cannot be read now (locked): it stays unknown until it opens.
+     * Returns how many trees learnt one.
+     */
+    async learnMediaFingerprints(): Promise<number> {
+        const unknown = this.index.trees.filter(t => t.research && t.mediaFp === undefined && t.id !== this.index.activeTreeId);
+        let learnt = 0;
+        for (const tree of unknown) {
+            // A read that fails here marks nothing: the tree is judged unreadable only when it is opened.
+            const wasUnreadable = this.unreadableTrees.has(tree.id);
+            const result = await this.readTreeRecord(tree.id).catch(() => null);
+            if (result?.status !== 'ok') {
+                if (!wasUnreadable) this.unreadableTrees.delete(tree.id);
+                continue;
+            }
+            if (tree.mediaFp !== undefined) continue;
+            tree.mediaFp = browserMediaFingerprint(result.data);
+            learnt++;
+        }
+        if (learnt > 0) this.saveIndex();
+        return learnt;
+    }
+
+    /**
      * The tree was saved by a newer app (its data version is above this
      * one's): it opens read-only and saveTreeData refuses to write it, so
      * nothing this version does not know is lost.

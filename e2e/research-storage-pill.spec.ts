@@ -70,4 +70,75 @@ test.describe('the storage pill on a research tree', () => {
         await page.clock.fastForward(1_000);
         await expect(pill(page)).toBeVisible();
     });
+
+    // An index saved before spec 108 knows no fingerprint of a research tree's pictures (N1): a tree
+    // not open is not judged by that, and the app learns what it has from its stored data.
+    for (const photo of [false, true]) {
+        test(`a research tree not open whose pictures an older index does not know: judged by what it has (${photo ? 'a portrait' : 'none'})`, async ({ page }) => {
+            await page.clock.install();
+            await fakeBridge(page, { accepts: { sync: { auto: 'write' }, sources: true, verified: true, media: null },
+                syncReply: { status: 200, body: { ok: true, inbox: false, changes: 1, applied: 1, input: 'I0042' } } });
+            await openResearch(page);
+            await poll(page);
+            if (photo) {
+                await page.evaluate(() => {
+                    const dm = window.Strom.DataManager;
+                    const jan = Object.values(dm.getData().persons).find((p: any) => p.firstName === 'Jan') as any;
+                    dm.updatePerson(jan.id, { photo: `data:image/jpeg;base64,${'A'.repeat(3000)}` });
+                });
+            } else {
+                await editJan(page);
+            }
+            await page.clock.fastForward(5_000);
+            // Another tree opens; the research tree's fingerprint is gone, as in an index of an older version.
+            // Judged at once: a read of the tree elsewhere learns it again.
+            const before = await page.evaluate(async () => {
+                const S = window.Strom as any;
+                const rid = S.DataManager.getCurrentTreeId();
+                const other = S.TreeManager.createTree('Second');
+                await S.DataManager.switchTree(other);
+                // Its last save landed (a save records the fingerprint).
+                await S.TreeManager.flush();
+                delete S.TreeManager.index.trees.find((t: any) => t.id === rid).mediaFp;
+                S.UI.renderUnsavedIndicator();
+                return { rid, holds: S.UI.researchHoldsTree(rid).holds, shown: S.UI.isUnsavedInBrowser() };
+            });
+            // Not known: not counted against it — the research holds the fresh edit.
+            expect(before).toMatchObject({ holds: true, shown: false });
+
+            // Learnt from the stored tree: a portrait no file holds lights the pill, none keeps it out.
+            const learnt = await page.evaluate(async (rid) => {
+                const S = window.Strom as any;
+                await S.TreeManager.flush();
+                delete S.TreeManager.index.trees.find((t: any) => t.id === rid).mediaFp;
+                const n = await S.TreeManager.learnMediaFingerprints();
+                S.UI.refreshUnsavedForResearch();
+                return { n, fp: S.TreeManager.getTreeMetadata(rid)?.mediaFp };
+            }, before.rid);
+            expect(learnt.n).toBe(1);
+            if (photo) expect(learnt.fp).toBeTruthy(); else expect(learnt.fp).toBe('');
+            if (photo) await expect(pill(page)).toBeVisible(); else await expect(pill(page)).toBeHidden();
+        });
+    }
+
+    // The cards' cross-tree badges read every visible tree: a hidden one, with them off, nothing else reads.
+    test('a start learns the pictures of a research tree not open that an older index does not know', async ({ page }) => {
+        await openResearch(page);
+        const rid = await page.evaluate(async () => {
+            const S = window.Strom as any;
+            S.SettingsManager.setCrossTreeBadges(false);
+            const rid = S.DataManager.getCurrentTreeId();
+            const other = S.TreeManager.createTree('Second');
+            await S.DataManager.switchTree(other);
+            await S.TreeManager.flush();
+            delete S.TreeManager.index.trees.find((t: any) => t.id === rid).mediaFp;
+            S.TreeManager.toggleTreeVisibility(rid);
+            await S.TreeManager.flush();
+            return rid;
+        });
+        // Opens the visible tree (not the research tree an address would name).
+        await page.goto(page.url().split('?')[0]);
+        await expect.poll(() => page.evaluate(() => window.Strom?.TreeManager.getTreeMetadata(window.Strom.TreeManager.getActiveTreeId()!)?.name ?? null)).toBe('Second');
+        await expect.poll(() => page.evaluate((rid) => window.Strom?.TreeManager.getTreeMetadata(rid)?.mediaFp ?? null, rid)).toBe('');
+    });
 });

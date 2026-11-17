@@ -70,12 +70,14 @@ export function browserMediaFingerprint(data: StromData): string {
 /**
  * The tree's pictures and files are safe without a file copy beyond the one
  * made: it has none, the archive keeps them, or the last file copy holds
- * exactly these. `current` undefined: not known yet (a tree no version since
- * spec 108 has read) — not safe while it may have some.
+ * exactly these. `current` undefined: not known (an index saved before spec
+ * 108, for a tree not read since, which TreeManager.learnMediaFingerprints
+ * could not read either: locked) — not counted against the tree, as before
+ * spec 108; it is known once the tree opens.
  */
 export function browserMediaSafe(current: string | undefined, fileCopy: string | undefined,
     archiveHolds: boolean = ARCHIVE_HOLDS_APP_MEDIA): boolean {
     if (archiveHolds) return true;
-    if (current === '') return true;
-    return current !== undefined && current === fileCopy;
+    if (current === '' || current === undefined) return true;
+    return current === fileCopy;
 }
