@@ -50,7 +50,7 @@ import {
     ResearchLinkAction, ResearchLinkParams, LiveBridgeUrls, LiveStatus, LiveChange, LiveWorker, LiveWaiting,
     LiveQueueItem, LiveSpend, LiveIntake, LiveDirection, LiveBusy, LiveWork, ResearchCaps, BrowserInfo, LiveOffLine, LiveBooks, ResearchHeaderInfo, ExportXrefs, ResearchAccepts, statusAgentless,
     LiveQueueCounts, QUEUE_PAGE_FEATURE, QUEUE_SEARCH_FEATURE,
-    researchLinkMark, researchUrlMark,
+    researchLinkMark, researchUrlMark, researchMediaKeys, MEDIA_BASE_MAX,
 } from '../research-link.js';
 import { keepImports } from '../import-origin.js';
 import { uiModule } from './module.js';
@@ -104,8 +104,8 @@ import { pendingAdopt } from './pending-adopt.js';
 import { shownName, shownNameOrEmpty, fitNameHtml } from '../person-name.js';
 import { bindSectionMenu, keepSectionControlFocus, sectionClickSwallowed, sectionMovedNow } from './live-section-edit-ui.js';
 import { BRIDGE_ANSWER_MS } from '../bridge-ask.js';
-import { bridgeGivesEtag, bridgeGivesImagesByHash, bridgeGivesStale, staleTreeUrl, storedTreeEtag, treeFamilyPartners, treeFileState, treeReplyEtag, treeReplyHeads, treeReplyImages, TREE_GED_TIMEOUT_MS, type TreeReplyHeads } from '../research-tree-file.js';
-import { findImageRefs, forgetHeldImages, imagesUrlOf, refTreeUrl, resolveImageRefs, sha256Hex, type ImageResolveDeps } from '../research-image-refs.js';
+import { bridgeGivesEtag, bridgeGivesImagesByHash, bridgeGivesStale, staleTreeUrl, storedTreeEtag, treeAsksAppMedia, treeFamilyPartners, treeFileState, treeReplyEtag, treeReplyHeads, treeReplyImages, TREE_GED_TIMEOUT_MS, type TreeReplyHeads } from '../research-tree-file.js';
+import { findImageRefs, findNamedFileShas, forgetHeldImages, imagesUrlOf, refTreeUrl, resolveImageRefs, sha256Hex, type ImageResolveDeps } from '../research-image-refs.js';
 import { completeStatus, statusAskUrl } from '../status-parts.js';
 
 /** What a research open needs to know from the file (or the bridge). */
@@ -119,6 +119,35 @@ export interface ResearchSource {
     head?: string | null;
     /** `_STROM_MODE archive`: the research works without an agent. */
     mode?: 'archive' | null;
+    /** The file came with the tree's own files (`media=app`, spec 108 §5): its media are the archive's. */
+    appMedia?: true;
+}
+
+/**
+ * The media the archive gave tree `treeId` at its last return with them
+ * (spec 108 §5), as researchMediaKeys: what is in it and missing now was
+ * taken away there and is not kept. Null — every medium of the app kept —
+ * when none came yet (K2.7); undefined when this file did not come with them
+ * (carryOverMedia as ever).
+ */
+export function researchMediaBaseOf(treeId: TreeId | null | undefined, source: ResearchSource): ReadonlySet<string> | null | undefined {
+    if (!source.appMedia || !source.treeId) return undefined;
+    if (!treeId) return null;
+    const base = researchAutoState(treeId).mediaBase;
+    return base && base.research === source.treeId ? new Set(base.keys) : null;
+}
+
+/**
+ * A file with the tree's own files was loaded into `treeId` with its images
+ * (`research`, as it came): its media are the base of the next return, and
+ * when nothing of the app's own had to be kept (`carried`), the archive
+ * holds them all — no first write with them is due (K2.7, spec 108).
+ */
+export function noteResearchMediaReturn(treeId: TreeId, researchId: string, research: StromData, carried: number): void {
+    patchResearchAutoState(treeId, {
+        mediaBase: { research: researchId, keys: researchMediaKeys(research).slice(0, MEDIA_BASE_MAX) },
+        ...(carried === 0 ? { appMediaSent: researchId } : {}),
+    });
 }
 
 export interface LiveChangeItem {
@@ -1149,9 +1178,15 @@ export interface FetchedTree extends TreeReplyHeads {
     variant: TreeImagesVariant;
     /** The images the file names by their hash, resolved: the parser takes them (convertToStrom `images`). */
     images?: ReadonlyMap<string, string>;
+    /** It came with the tree's own files (`media=app`, spec 108 §5): its portraits, couples' photos and attachments are the archive's. */
+    media?: true;
 }
 
-/** The excerpt images of the tree stored for a research (the open one as it is in memory). */
+/**
+ * The images and files of the tree stored for a research (the open one as it
+ * is in memory): its excerpts, and its portraits, couples' photos and
+ * attachments — what a file with the tree's own files (spec 108) names again.
+ */
 async function researchTreeImages(researchId: string): Promise<string[]> {
     const meta = TreeManager.findTreeByResearchId(researchId);
     if (!meta || TreeManager.isTreeUnreadable(meta.id)) return [];
@@ -1160,6 +1195,11 @@ async function researchTreeImages(researchId: string): Promise<string[]> {
     for (const src of Object.values(data?.sources ?? {})) {
         for (const exc of src.excerpts ?? []) if (exc.dataUrl) out.push(exc.dataUrl);
     }
+    for (const p of Object.values(data?.persons ?? {})) {
+        if (p?.photo) out.push(p.photo);
+        for (const a of p?.attachments ?? []) if (!a.originalOnly && a.dataUrl) out.push(a.dataUrl);
+    }
+    for (const u of Object.values(data?.partnerships ?? {})) if (u?.photo) out.push(u.photo);
     return out;
 }
 
@@ -1182,8 +1222,11 @@ const imageDeps: ImageResolveDeps = {
  * only the images not held here are downloaded (`etag` must then be a tag of
  * that variant); `images: false` leaves them out (not resolved). Anything
  * that keeps an image from being had loads the file with its images in it.
+ * `media` (with `byHash`, treeAsksAppMedia): the file with the tree's own
+ * files (`media=app`, spec 108 §5) — the answer says so (`media`); the file
+ * with the images in it it falls back to never has them.
  */
-export async function fetchResearchTree(url: string, opts: { stale?: boolean; etag?: string | null; byHash?: boolean; images?: boolean } = {}): Promise<FetchedTree> {
+export async function fetchResearchTree(url: string, opts: { stale?: boolean; etag?: string | null; byHash?: boolean; images?: boolean; media?: boolean } = {}): Promise<FetchedTree> {
     if (opts.byHash) {
         const got = await fetchRefTree(url, opts);
         if (got) return got;
@@ -1207,18 +1250,19 @@ export async function fetchResearchTree(url: string, opts: { stale?: boolean; et
  * null when they could not all be had (the caller then takes the file with
  * them in it). A bridge that cannot be reached throws, as for the whole file.
  */
-async function fetchRefTree(url: string, opts: { stale?: boolean; etag?: string | null; images?: boolean }): Promise<FetchedTree | null> {
-    const res = await fetchWithTimeout(refTreeUrl(opts.stale ? staleTreeUrl(url) : url), TREE_GED_TIMEOUT_MS,
+async function fetchRefTree(url: string, opts: { stale?: boolean; etag?: string | null; images?: boolean; media?: boolean }): Promise<FetchedTree | null> {
+    const res = await fetchWithTimeout(refTreeUrl(opts.stale ? staleTreeUrl(url) : url, !!opts.media), TREE_GED_TIMEOUT_MS,
         opts.etag ? { 'If-None-Match': opts.etag } : undefined);
     const get = (name: string): string | null => res.headers?.get(name) ?? null;
-    if (opts.etag && res.status === 304) return { text: '', notModified: true, variant: 'ref', etag: treeReplyEtag(get) ?? opts.etag, ...treeReplyHeads(get) };
+    const media = opts.media ? { media: true as const } : {};
+    if (opts.etag && res.status === 304) return { text: '', notModified: true, variant: 'ref', etag: treeReplyEtag(get) ?? opts.etag, ...treeReplyHeads(get), ...media };
     if (!res.ok) {
         console.warn('The tree with its images by hash was refused, loading the whole file', res.status);
         return null;
     }
     const text = decodeGedcomFile(await res.arrayBuffer());
     const said = treeReplyImages(get);
-    const base = { text, etag: treeReplyEtag(get), ...treeReplyHeads(get) };
+    const base = { text, etag: treeReplyEtag(get), ...treeReplyHeads(get), ...media };
     noteFamilyPartners(url, researchFamilyPartners(text));
     // The bridge sent the file with its images in it after all: it is complete as it is.
     if (said === 'data') {
@@ -1227,8 +1271,10 @@ async function fetchRefTree(url: string, opts: { stale?: boolean; etag?: string 
     }
     if (opts.images === false) return { ...base, variant: 'ref' };
     const refs = findImageRefs(text);
+    // The tree's files the archive names by their name alone: the very files this browser holds stay (a PDF).
+    const files = opts.media ? findNamedFileShas(text) : [];
     try {
-        const got = await resolveImageRefs({ researchId: readResearchHeader(text).treeId, refs, imagesUrl: imagesUrlOf(url) }, imageDeps);
+        const got = await resolveImageRefs({ researchId: readResearchHeader(text).treeId, refs, imagesUrl: imagesUrlOf(url), files }, imageDeps);
         return { ...base, variant: 'ref', images: got.images };
     } catch (err) {
         console.warn('The images by hash could not all be had, loading the whole file', err);
@@ -1244,11 +1290,13 @@ export async function fetchGedcomText(url: string): Promise<string> {
 /**
  * The research's tree for reading, its images as the file with them in it
  * would carry: by their hash when the bridge's `features` (its last status)
- * say it gives them so, else the whole file.
+ * say it gives them so, else the whole file — with the tree's own files when
+ * the research keeps them and the tree takes images (treeAsksAppMedia;
+ * `media`: they came).
  */
-export async function readResearchTreeFile(url: string, features: readonly string[] | null | undefined): Promise<{ text: string; images?: ReadonlyMap<string, string> }> {
-    const got = await fetchResearchTree(url, { byHash: bridgeGivesImagesByHash(features) });
-    return { text: got.text, ...(got.images ? { images: got.images } : {}) };
+export async function readResearchTreeFile(url: string, features: readonly string[] | null | undefined): Promise<{ text: string; images?: ReadonlyMap<string, string>; media?: true }> {
+    const got = await fetchResearchTree(url, { byHash: bridgeGivesImagesByHash(features), media: treeAsksAppMedia(features, SettingsManager.isImportImages()) });
+    return { text: got.text, ...(got.images ? { images: got.images } : {}), ...(got.media ? { media: true as const } : {}) };
 }
 
 /** The partners of the research's families by the tree's address (its last read), for rows of `working[]` about a couple. */
@@ -2055,8 +2103,15 @@ export const researchUiMethods = uiModule({
         }
         await enqueueOpen(async () => {
             let text: string;
+            let images: ReadonlyMap<string, string> | undefined;
+            let media: true | undefined;
+            // A bridge known here whose research keeps the tree's own files: the file with them (spec 108 §5);
+            // any other as always, the whole file.
+            const at = /\/tree\.ged$/.test(url.pathname) ? researchIdAtBridge(`${url.origin}${url.pathname.replace(/\/tree\.ged$/, '')}`) : null;
+            const features = at ? this.researchStatusOf(at)?.features : null;
             try {
-                text = await fetchGedcomText(url.href);
+                if (treeAsksAppMedia(features, SettingsManager.isImportImages())) ({ text, images, media } = await readResearchTreeFile(url.href, features));
+                else text = await fetchGedcomText(url.href);
             } catch (err) {
                 console.warn('Fetching the research failed', err);
                 await this.offerManualImport(strings.research.fetchFailed);
@@ -2071,7 +2126,7 @@ export const researchUiMethods = uiModule({
                 const base = `${url.origin}${url.pathname.replace(/\/tree\.ged$/, '')}`;
                 void fetchStatus(`${base}/status`).then(() => this.refreshResearchSyncUi()).catch(() => undefined);
             }
-            await this.openGedcomText(text, opts);
+            await this.openGedcomText(text, { ...opts, ...(images ? { images } : {}), ...(media ? { appMedia: true } : {}) });
         });
     },
 
@@ -2218,7 +2273,11 @@ export const researchUiMethods = uiModule({
      * GEDCOM text from outside. A Strom Research file opens its research
      * tree; any other GEDCOM goes to the normal import dialog.
      */
-    async openGedcomText(text: string, opts: { afterSend?: TreeId; plainAsk?: boolean; takeSame?: boolean } = {}): Promise<void> {
+    async openGedcomText(text: string, opts: { afterSend?: TreeId; plainAsk?: boolean; takeSame?: boolean;
+        /** The images the research's file names by their hash, resolved (readResearchTreeFile). */
+        images?: ReadonlyMap<string, string>;
+        /** The file came with the tree's own files (spec 108 §5). */
+        appMedia?: boolean } = {}): Promise<void> {
         if (DataManager.isViewMode()) {
             this.showToast(strings.research.notInViewMode, 5000);
             return;
@@ -2226,7 +2285,7 @@ export const researchUiMethods = uiModule({
         const header = readResearchHeader(text);
         let result;
         try {
-            result = convertToStrom(parseGedcom(text));
+            result = convertToStrom(parseGedcom(text), opts.images ? { images: opts.images } : {});
         } catch (err) {
             console.error('GEDCOM parse error:', err);
             await this.showAlert(strings.gedcom.parseError, 'error');
@@ -2242,7 +2301,7 @@ export const researchUiMethods = uiModule({
             return;
         }
         if (!await this.ensureLocalUnlocked()) return;
-        await this.applyResearch(result.data, header, { ...(opts.afterSend ? { afterSend: opts.afterSend } : {}), ...(opts.plainAsk ? { plainAsk: true } : {}),
+        await this.applyResearch(result.data, { ...header, ...(opts.appMedia ? { appMedia: true as const } : {}) }, { ...(opts.afterSend ? { afterSend: opts.afterSend } : {}), ...(opts.plainAsk ? { plainAsk: true } : {}),
             ...(opts.takeSame ? { takeSame: true } : {}) });
     },
 
@@ -2258,7 +2317,8 @@ export const researchUiMethods = uiModule({
         const link = TreeManager.getTreeMetadata(treeId)?.research;
         if (!head || !link || !source.treeId || DataManager.getCurrentTreeId() !== treeId || head === link.head) return false;
         const incoming = includeImages ? data : stripMedia(data);
-        const kept = carryOverMedia(stabilizeIds(incoming, previous), previous).data;
+        const carry = carryOverMedia(stabilizeIds(incoming, previous), previous, includeImages ? researchMediaBaseOf(treeId, source) : undefined);
+        const kept = carry.data;
         const stable = this.researchKeepsLoneFamilies(source.treeId) ? kept : carryOverUnknownPartners(kept, previous);
         if (contentFingerprint(stable) !== contentFingerprint(previous)) return false;
         const { base, titlesIn } = researchTitlesBase(stable, research, knowsTitles, link.titlesIn);
@@ -2267,6 +2327,7 @@ export const researchUiMethods = uiModule({
             head, syncedAt: new Date().toISOString(), titlesIn,
             ...(source.mode === 'archive' ? { mode: 'archive' as const } : {}),
         });
+        if (source.appMedia && includeImages) noteResearchMediaReturn(treeId, source.treeId, data, carry.carried);
         this.refreshResearchSyncUi();
         this.showToast(strings.sync.stateInSync, 4000);
         return true;
@@ -2304,6 +2365,10 @@ export const researchUiMethods = uiModule({
         const research = data;
         const features = source.treeId ? this.researchStatusOf(source.treeId)?.features : null;
         const knowsTitles = !!features?.includes(TITLES_FEATURE);
+        /** Media the archive gave at its last return with them (spec 108 §5): those it took away since are not kept. */
+        const mediaBase = researchMediaBaseOf(existing?.id, source);
+        /** Media of the app's own kept over the archive's (none for a new tree). */
+        let carried = 0;
         if (opts.noDialog && (!existing || TreeManager.isTreeUnreadable(existing.id))) return null;
         if (existing) {
             const unreadable = TreeManager.isTreeUnreadable(existing.id);
@@ -2320,7 +2385,7 @@ export const researchUiMethods = uiModule({
             // the research dropped would go — never without asking, even over a
             // tree unchanged since.
             const edited = action === 'ask';
-            const lost = previous ? carryOverMedia(stabilizeIds(data, previous), previous).lost : 0;
+            const lost = previous ? carryOverMedia(stabilizeIds(data, previous), previous, mediaBase).lost : 0;
             if (lost > 0) action = 'ask';
             // Nothing here the research lacks: the last send was written there and
             // the tree has not changed since — its newer version holds it all.
@@ -2370,7 +2435,7 @@ export const researchUiMethods = uiModule({
                 // "The research has a newer version" only when it has (not a ?live= with the same head, N61-4).
                 const incoming = opts.head || source.head || '';
                 const newer = !incoming || incoming !== (existing.research.head ?? '');
-                const choice = await this.showResearchUpdateConflict(existing.id, existing.name, data, includeImages, newer);
+                const choice = await this.showResearchUpdateConflict(existing.id, existing.name, data, includeImages, newer, mediaBase);
                 if (choice === null) return null;
                 if (choice === 'sendThenLoad') {
                     const live = opts.live;
@@ -2476,7 +2541,9 @@ export const researchUiMethods = uiModule({
         } else {
             treeId = existing.id;
             if (existing.isHidden) TreeManager.setTreeVisibility(treeId, false);
-            const kept = carryOverMedia(stabilizeIds(data, previous!), previous!).data;
+            const carry = carryOverMedia(stabilizeIds(data, previous!), previous!, includeImages ? mediaBase : undefined);
+            carried = carry.carried;
+            const kept = carry.data;
             // "Married, the spouse unknown": a research that drops such a family never takes it from here (N1).
             const stable = source.treeId && this.researchKeepsLoneFamilies(source.treeId) ? kept : carryOverUnknownPartners(kept, previous!);
             if (DataManager.getCurrentTreeId() !== treeId) {
@@ -2505,6 +2572,8 @@ export const researchUiMethods = uiModule({
             if (!titlesIn) TreeManager.patchResearchLink(treeId, { titlesIn: undefined });
             // The load itself counted as an edit (it went through the edit path before the tie moved on): nothing waits now.
             patchResearchAutoState(treeId, { edits: undefined, unsentSince: undefined });
+            // With the tree's own files and its images taken: the base of the next return (spec 108 §5).
+            if (source.appMedia && includeImages) noteResearchMediaReturn(treeId, source.treeId, data, carried);
             this.researchKeepCopy(treeId, base);
         }
         // "Restore the state before loading", offered while the tree is just what was loaded.
@@ -2560,14 +2629,15 @@ export const researchUiMethods = uiModule({
      * `newer`: the research's version is newer than the one the tree builds on.
      * Resolves 'sendThenLoad' | 'update' | 'copy', or null (cancelled).
      */
-    async showResearchUpdateConflict(treeId: TreeId, treeName: string, data: StromData, includeImages: boolean, newer = true): Promise<'sendThenLoad' | 'update' | 'copy' | null> {
+    async showResearchUpdateConflict(treeId: TreeId, treeName: string, data: StromData, includeImages: boolean, newer = true,
+        mediaBase?: ReadonlySet<string> | null): Promise<'sendThenLoad' | 'update' | 'copy' | null> {
         const u = strings.researchUpdate;
         const r = strings.research;
         const link = TreeManager.getTreeMetadata(treeId)?.research;
         const bridgeUp = !!link && await this.researchBridgeReady(link.id);
         const previous = await readTree(treeId);
         // The app's images stay; only those of people or sources the research dropped would go.
-        const lost = previous ? carryOverMedia(stabilizeIds(data, previous), previous).lost : 0;
+        const lost = previous ? carryOverMedia(stabilizeIds(data, previous), previous, mediaBase).lost : 0;
         const own = previous ? countImages(previous) : null;
         const mediaLine = lost > 0 ? r.mediaLost(lost)
             : own && own.photos + own.attachments + own.excerpts > 0 ? r.mediaKept : '';
@@ -3214,24 +3284,26 @@ export const researchUiMethods = uiModule({
      * load gave, the tree unchanged since, its images taken as the setting
      * says now, the tag of the file's `variant` about to be asked (the one
      * with its images by hash and the one with them in it have their own
-     * tags). Null otherwise (the file is then asked without a tag).
+     * tags; `media`: the one with the tree's own files, spec 108, has its
+     * own too). Null otherwise (the file is then asked without a tag).
      */
-    async researchHeldFile(researchId: string, variant: TreeImagesVariant = 'data'): Promise<HeldResearchFile | null> {
+    async researchHeldFile(researchId: string, variant: TreeImagesVariant = 'data', media = false): Promise<HeldResearchFile | null> {
         const meta = TreeManager.findTreeByResearchId(researchId);
         const link = meta?.research;
         if (!meta || !link?.treeEtag || TreeManager.isTreeUnreadable(meta.id)) return null;
         const data = await readTree(meta.id);
         if (!data) return null;
-        const etag = storedTreeEtag(link, fingerprintLike(data, link.fingerprint), SettingsManager.isImportImages(), variant);
+        const etag = storedTreeEtag(link, fingerprintLike(data, link.fingerprint), SettingsManager.isImportImages(), variant, media);
         if (!etag) return null;
         return { treeId: meta.id, etag, data, head: link.head ?? '', mode: link.mode ?? null };
     },
 
-    /** Keep the tag of the file just loaded into `treeId` with its tie (only that research's, not a copy's), with the file's variant. */
-    researchKeepTreeEtag(treeId: TreeId, researchId: string, tag: string, images: boolean, variant: TreeImagesVariant = 'data'): void {
+    /** Keep the tag of the file just loaded into `treeId` with its tie (only that research's, not a copy's), with the file's variant (and whether it had the tree's own files). */
+    researchKeepTreeEtag(treeId: TreeId, researchId: string, tag: string, images: boolean, variant: TreeImagesVariant = 'data', media = false): void {
         const link = TreeManager.getTreeMetadata(treeId)?.research;
         if (!link || link.copy || link.id !== researchId.toLowerCase() || !link.fingerprint) return;
-        TreeManager.patchResearchLink(treeId, { treeEtag: { tag, head: link.head ?? '', fingerprint: link.fingerprint, images, ...(variant === 'ref' ? { variant } : {}) } });
+        TreeManager.patchResearchLink(treeId, { treeEtag: { tag, head: link.head ?? '', fingerprint: link.fingerprint, images,
+            ...(variant === 'ref' ? { variant } : {}), ...(media ? { media: true as const } : {}) } });
     },
 
     /**
@@ -3367,6 +3439,8 @@ export const researchUiMethods = uiModule({
             // A bridge with `ged.imagesByHash`: the file with its images by their hash, and those images.
             let images: ReadonlyMap<string, string> | undefined;
             let variant: TreeImagesVariant = 'data';
+            /** The file came with the tree's own files (spec 108 §5). */
+            let appMedia = false;
             try {
                 status = opts.resume || auto
                     ? await fetchStatus(bridge.status, auto ? AUTO_CONNECT_MS : undefined)
@@ -3384,20 +3458,23 @@ export const researchUiMethods = uiModule({
                 const tagged = bridgeGivesEtag(status.features);
                 const byHash = bridgeGivesImagesByHash(status.features);
                 const asked: TreeImagesVariant = byHash ? 'ref' : 'data';
-                const ask = tagged ? await this.researchHeldFile(status.treeId, asked) : null;
-                let got = await fetchResearchTree(bridge.ged, { stale, etag: ask?.etag, byHash });
+                // With the tree's own files when the research keeps them and the tree takes images (spec 108 §5).
+                const media = treeAsksAppMedia(status.features, SettingsManager.isImportImages());
+                const ask = tagged ? await this.researchHeldFile(status.treeId, asked, media) : null;
+                let got = await fetchResearchTree(bridge.ged, { stale, etag: ask?.etag, byHash, media });
                 if (got.notModified) {
                     // Still exactly that tree (nothing changed it meanwhile): kept. Else the file itself.
-                    const now = await this.researchHeldFile(status.treeId, asked);
+                    const now = await this.researchHeldFile(status.treeId, asked, media);
                     if (now && now.etag === ask?.etag && now.treeId === ask.treeId) {
                         held = now;
                     } else {
-                        got = await fetchResearchTree(bridge.ged, { stale, byHash });
+                        got = await fetchResearchTree(bridge.ged, { stale, byHash, media });
                     }
                 }
                 text = got.text;
                 images = got.images;
                 variant = got.variant;
+                appMedia = !!got.media && !got.notModified;
                 if (stale) reply = got;
                 if (tagged) etag = got.etag;
             } catch (err) {
@@ -3458,12 +3535,13 @@ export const researchUiMethods = uiModule({
                 ? await this.researchKeepHeldFile(held, status.treeId, { head: file.head, quiet: opts.resume, noDialog: !!auto })
                 : await this.applyResearch(
                     data,
-                    { treeId: status.treeId, name, date: header.date, ...(header.asOf ? { asOf: header.asOf } : {}), mode: header.mode },
+                    { treeId: status.treeId, name, date: header.date, ...(header.asOf ? { asOf: header.asOf } : {}), mode: header.mode,
+                        ...(appMedia ? { appMedia: true as const } : {}) },
                     { head: file.head, quiet: opts.resume, noAsk: true, live: raw, ...(auto ? { noDialog: true } : {}), taken }
                 );
             // The file's tag kept with the tree it was loaded into (only a file sent with one: one built without
             // all its images has none and is never kept as a finished state).
-            if (treeId && etag && !held) this.researchKeepTreeEtag(treeId, status.treeId, etag, taken.images, variant);
+            if (treeId && etag && !held) this.researchKeepTreeEtag(treeId, status.treeId, etag, taken.images, variant, appMedia);
             if (!treeId) {
                 if (opts.resume) forgetLiveBridge();
                 passive();
@@ -3912,11 +3990,15 @@ export const researchUiMethods = uiModule({
         const takeImages = SettingsManager.isImportImages();
         let images: ReadonlyMap<string, string> | undefined;
         let variant: TreeImagesVariant = 'data';
+        /** The file came with the tree's own files (spec 108 §5). */
+        let appMedia = false;
         try {
-            const got = await fetchResearchTree(s.bridge.ged, { byHash: bridgeGivesImagesByHash(s.features), images: takeImages });
+            const got = await fetchResearchTree(s.bridge.ged, { byHash: bridgeGivesImagesByHash(s.features), images: takeImages,
+                media: treeAsksAppMedia(s.features, takeImages) });
             text = got.text;
             images = got.images;
             variant = got.variant;
+            appMedia = !!got.media;
             if (!takeImages) forgetHeldImages();
             if (bridgeGivesEtag(s.features)) etag = got.etag;
             if (ownHead) fileHead = got.head ?? readResearchHeader(text).head;
@@ -3950,7 +4032,9 @@ export const researchUiMethods = uiModule({
         const knowsTitles = !!features?.includes(TITLES_FEATURE);
         const link = TreeManager.getTreeMetadata(s.treeId)?.research;
         const known = previous ? keepEventShares(keepTableViews(keepImports(keepLineageOverrides(keepSurnameVariants(keepMarriedSurname(keepTitles(data, previous, features, researchHasTitles(link, features)), previous, features), previous), previous), previous, features), previous), previous, features) : data;
-        const kept = previous ? carryOverMedia(stabilizeIds(known, previous), previous).data : data;
+        const mediaBase = researchMediaBaseOf(s.treeId, { treeId: s.researchId, name: null, date: null, ...(appMedia ? { appMedia: true as const } : {}) });
+        const carry = previous ? carryOverMedia(stabilizeIds(known, previous), previous, mediaBase) : null;
+        const kept = carry ? carry.data : data;
         const stable = migrateData(previous && !this.researchKeepsLoneFamilies(s.researchId) ? carryOverUnknownPartners(kept, previous) : kept);
         if (active) {
             // Following replaces the tree again and again: one backup, before the first time.
@@ -3976,8 +4060,10 @@ export const researchUiMethods = uiModule({
         }, { agentless: this.researchAgentlessFor(s.researchId, header.mode === 'archive' ? { mode: 'archive' } : undefined) });
         if (!titlesIn) TreeManager.patchResearchLink(s.treeId, { titlesIn: undefined });
         this.researchKeepCopy(s.treeId, base);
+        // With the tree's own files (asked only while images are taken): the base of the next return (spec 108 §5).
+        if (appMedia) noteResearchMediaReturn(s.treeId, s.researchId, data, carry?.carried ?? 0);
         // The file's tag (one sent with it): a reload while the research stays here keeps this tree (a 304).
-        if (etag) this.researchKeepTreeEtag(s.treeId, s.researchId, etag, takeImages, variant);
+        if (etag) this.researchKeepTreeEtag(s.treeId, s.researchId, etag, takeImages, variant, appMedia);
         return loaded;
     },
 
@@ -4433,7 +4519,8 @@ export const researchUiMethods = uiModule({
         const url = s.bridge.ged;
         familiesReading.add(url);
         // Only its families are read: the file with its images by hash is enough, its images are not asked.
-        void fetchResearchTree(url, { byHash: bridgeGivesImagesByHash(s.features), images: false }).then(() => {
+        void fetchResearchTree(url, { byHash: bridgeGivesImagesByHash(s.features), images: false,
+            media: treeAsksAppMedia(s.features, SettingsManager.isImportImages()) }).then(() => {
             if (live === s) this.renderLivePanel();
         }, () => { /* the next status tries again */ }).finally(() => familiesReading.delete(url));
     },

@@ -412,6 +412,13 @@ export interface ResearchAutoState {
      * Until then one write goes by itself, even with nothing else to send.
      */
     appMediaSent?: string;
+    /**
+     * The places of the tree's own files in the last version of the research
+     * (its id) that came with them (`tree.ged?…&media=app`, researchMediaKeys):
+     * the next such version is read against it (carryOverMedia) — a file it
+     * gave that is gone now was taken off there, one not in it is kept.
+     */
+    mediaBase?: { research: string; keys: string[] };
     /** How changes go was chosen or asked once (the hand-over, or the one-time question after 3.9). */
     modeAsked?: true;
     /** Sends by hand the research wrote: after a few, sending by itself is offered (once). */
@@ -657,6 +664,10 @@ export function researchAutoState(treeId: string): ResearchAutoState {
         }
         if (p.firstSendBackup === true) out.firstSendBackup = true;
         if (typeof p.appMediaSent === 'string' && p.appMediaSent && p.appMediaSent.length <= 80) out.appMediaSent = p.appMediaSent;
+        const mb = p.mediaBase as Record<string, unknown> | undefined;
+        if (mb && typeof mb.research === 'string' && mb.research && mb.research.length <= 80 && Array.isArray(mb.keys)) {
+            out.mediaBase = { research: mb.research, keys: mb.keys.filter((k): k is string => typeof k === 'string' && /^[0-9a-z]{1,8}\.[0-9a-z]{1,8}$/.test(k)).slice(0, 20000) };
+        }
         if (p.modeAsked === true) out.modeAsked = true;
         if (typeof p.manualWrites === 'number' && p.manualWrites > 0) out.manualWrites = Math.min(Math.floor(p.manualWrites), 9999);
         if (p.skipPreview === true) out.skipPreview = true;

@@ -2302,8 +2302,9 @@ export const researchSyncMethods = uiModule({
         if (!bridge) return { ok: false, why: 'unreachable' };
         let text: string;
         let images: ReadonlyMap<string, string> | undefined;
+        let media: true | undefined;
         try {
-            ({ text, images } = await readResearchTreeFile(bridge.ged, this.researchStatusOf(link.id)?.features));
+            ({ text, images, media } = await readResearchTreeFile(bridge.ged, this.researchStatusOf(link.id)?.features));
         } catch (err) {
             console.warn('Loading the research version for its numbers failed', err);
             return { ok: false, why: 'unreachable' };
@@ -2315,7 +2316,7 @@ export const researchSyncMethods = uiModule({
         }
         const research = convertToStrom(parseGedcom(text), { images }).data;
         if (this.researchSyncFingerprints(treeId, link).matchesBase) {
-            const done = await this.applyResearch(research, header, { quiet: true });
+            const done = await this.applyResearch(research, { ...header, ...(media ? { appMedia: true as const } : {}) }, { quiet: true });
             return done === treeId && !TreeManager.getTreeMetadata(treeId)?.research?.awaitingIds
                 ? { ok: true } : { ok: false, why: 'unavailable' };
         }

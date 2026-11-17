@@ -1834,6 +1834,60 @@ export interface MediaCarryOver {
     data: StromData;
     /** Photos, attachments and excerpts of people / sources the update no longer has. */
     lost: number;
+    /**
+     * The tree's own portraits, couples' photos and attachments carried over
+     * because the update lacked them (excerpts and originals of a portrait
+     * not counted): a version with the tree's files (`media=app`) that still
+     * needs a write to hold them.
+     */
+    carried: number;
+}
+
+/** Most places of files the base of a tree keeps (a larger tree keeps only the first: the rest carried as ever). */
+export const MEDIA_BASE_MAX = 20000;
+
+/** One place of a file in the base (researchMediaKeys): its owner in the research, what it is there, its content. */
+function mediaPlaceKey(owner: string | null, kind: 'p' | 'c' | 'a', content: string | null | undefined): string | null {
+    if (!owner || !content) return null;
+    const text = `${owner}|${kind}|${content.startsWith('data:') ? imageToken(content) : content}`;
+    return `${fnv1a(text, 0x811c9dc5).toString(36)}.${fnv1a(text, 0x01000193).toString(36)}`;
+}
+
+/**
+ * An attachment's content for its key: the file it stands for by its hash
+ * (its original's — the archive's copy of it may be another picture of the
+ * same file), else its data. An original only carries no data of its own.
+ */
+function attachmentContent(a: { dataUrl?: string; originalOnly?: boolean; original?: { sha256?: string } }): string | null {
+    if (a.original?.sha256) return `sha:${a.original.sha256.toLowerCase()}`;
+    return a.originalOnly ? null : a.dataUrl || null;
+}
+
+/**
+ * The places of the tree's own files in a version of the research that
+ * came with them (`tree.ged?…&media=app`, spec 108 §5): each portrait,
+ * couple's photo and attachment as its owner in the research (P…, F…), what
+ * it is there and a sample of its content — the base a later version is read
+ * against (carryOverMedia `base`): a file at a place of the base that the
+ * archive no longer gives there was taken off (another window removed it),
+ * one not in the base was added here since and is kept. Small: no data.
+ */
+export function researchMediaKeys(data: StromData): string[] {
+    const out = new Set<string>();
+    const add = (key: string | null): void => {
+        if (key && out.size < MEDIA_BASE_MAX) out.add(key);
+    };
+    for (const p of Object.values(data.persons ?? {})) {
+        if (!p) continue;
+        const owner = researchPersonRef(p.refn);
+        if (!owner) continue;
+        add(mediaPlaceKey(owner, 'p', p.photo));
+        for (const a of p.attachments ?? []) add(mediaPlaceKey(owner, 'a', attachmentContent(a)));
+    }
+    for (const u of Object.values(data.partnerships ?? {})) {
+        if (u?.photo) add(mediaPlaceKey(researchFamilyRef(u.researchId), 'c', u.photo));
+    }
+    return [...out];
 }
 
 /**
@@ -1855,10 +1909,32 @@ export interface MediaCarryOver {
  * - the tree's decisions on its data quality (carryOverTreeDecisions);
  * - the app's own fields of locations that did not move (keepPlaceOrigins).
  * What belongs to a person or source missing from `next` is counted as lost.
+ * `base` (spec 108 K2.3): `next` came with the tree's own files from a
+ * research that keeps them; the places its last such version gave
+ * (researchMediaKeys). A portrait, couple's photo or attachment at one of
+ * them is the archive's: never carried over, never lost. Null: no such
+ * version came yet (the first write with the files not gone) — all kept.
+ * With the files (a base or null), a file the archive names by its name
+ * alone (an original only) whose picture the previous state holds (an
+ * attachment with that original) keeps that picture in its place. Left out
+ * (undefined): a version without them, all as ever.
  * Returns a new object; neither input is changed.
  */
-export function carryOverMedia(next: StromData, previous: StromData): MediaCarryOver {
+export function carryOverMedia(next: StromData, previous: StromData, base?: ReadonlySet<string> | null): MediaCarryOver {
     let lost = 0;
+    let carried = 0;
+    /**
+     * A research that keeps the tree's own files, `next` a version with them
+     * (`base`: the places its last such version gave, researchMediaKeys):
+     * the archive is the truth for what it gave — a file at a place of the
+     * base is never carried over (the archive took it off) nor lost (it keeps
+     * it). Only files added here since are kept. Without a base all as ever.
+     */
+    const fromArchive = (owner: string | null, kind: 'p' | 'c' | 'a', content: string | null | undefined): boolean => {
+        if (!base) return false;
+        const key = mediaPlaceKey(owner, kind, content);
+        return !!key && base.has(key);
+    };
     const persons = { ...(next.persons ?? {}) };
     const unlinked = matchUnlinkedPersons(next, previous);
     const sources = next.sources ? { ...next.sources } : undefined;
@@ -1873,6 +1949,7 @@ export function carryOverMedia(next: StromData, previous: StromData): MediaCarry
     const unionNow = new Map<PartnershipId, PartnershipId>();
     for (const [uid, old] of Object.entries(previous.partnerships ?? {}) as [PartnershipId, Partnership][]) {
         if (!old?.photo) continue;
+        const archived = fromArchive(researchFamilyRef(old.researchId), 'c', old.photo);
         let cur: Partnership | undefined = partnerships[uid];
         if (!cur) {
             const a = currentId(old.person1Id), b = currentId(old.person2Id);
@@ -1880,11 +1957,12 @@ export function carryOverMedia(next: StromData, previous: StromData): MediaCarry
                 (u.person1Id === a && u.person2Id === b) || (u.person1Id === b && u.person2Id === a)) : undefined;
         }
         if (!cur) {
-            lost++;
+            if (!archived) lost++;
             continue;
         }
         unionNow.set(uid, cur.id);
-        if (cur.photo) continue;
+        if (cur.photo || archived) continue;
+        carried++;
         partnerships[cur.id] = {
             ...cur, photo: old.photo,
             ...(old.photoOriginalName ? { photoOriginalName: old.photoOriginalName } : {}),
@@ -1895,8 +1973,13 @@ export function carryOverMedia(next: StromData, previous: StromData): MediaCarry
 
     for (const [id, old] of Object.entries(previous.persons ?? {})) {
         if (!old) continue;
-        const media = (old.photo ? 1 : 0) + (old.attachments?.length ?? 0);
-        if (!media) continue;
+        const owner = researchPersonRef(old.refn);
+        const photoArchived = !!old.photo && fromArchive(owner, 'p', old.photo);
+        const ownAttachments = (old.attachments ?? []).filter(a => !fromArchive(owner, 'a', attachmentContent(a)));
+        const media = (old.photo && !photoArchived ? 1 : 0) + ownAttachments.length;
+        /** With the tree's files: a picture held here of a file the archive may name by its name alone. */
+        const shows = base !== undefined && !!old.attachments?.some(a => !a.originalOnly && a.original?.sha256);
+        if (!media && !shows) continue;
         const curId = currentId(id as PersonId);
         const cur = curId ? persons[curId] : undefined;
         if (!curId || !cur) {
@@ -1905,19 +1988,39 @@ export function carryOverMedia(next: StromData, previous: StromData): MediaCarry
         }
         const out = { ...cur };
         let changed = false;
-        if (old.photo && !cur.photo) {
+        if (old.photo && !cur.photo && !photoArchived) {
+            carried++;
             out.photo = old.photo;
             if (old.photoOriginalName) out.photoOriginalName = old.photoOriginalName;
             if (old.photoDate) out.photoDate = old.photoDate;
             changed = true;
         }
-        const have = cur.attachments ?? [];
+        let have = cur.attachments ?? [];
+        // With the tree's files: one the archive names by its name alone keeps the picture held here of it.
+        if (base !== undefined && have.some(a => a.originalOnly)) {
+            const shown = new Map((old.attachments ?? []).filter(a => !a.originalOnly && a.original?.sha256)
+                .map(a => [a.original!.sha256.toLowerCase(), a] as const));
+            const merged = have.map(a => {
+                const was = a.originalOnly && a.original?.sha256 ? shown.get(a.original.sha256.toLowerCase()) : undefined;
+                if (!was) return a;
+                const { originalOnly: _only, ...rest } = a;
+                return { ...rest, dataUrl: was.dataUrl, mimeType: was.mimeType, sizeBytes: was.sizeBytes, original: { ...a.original!, ...was.original! } };
+            });
+            if (merged.some((a, i) => a !== have[i])) {
+                have = merged;
+                out.attachments = merged;
+                changed = true;
+            }
+        }
         const ids = new Set(have.map(a => a.id));
         // An original only carries the shared page icon as its data: found by its hash, never by that.
         const urls = new Set(have.filter(a => !a.originalOnly).map(a => a.dataUrl).filter(Boolean));
-        const shas = new Set(have.map(a => a.original?.sha256).filter(Boolean));
-        const extra = (old.attachments ?? [])
-            .filter(a => !ids.has(a.id) && !(a.dataUrl && !a.originalOnly && urls.has(a.dataUrl)) && !(a.originalOnly && shas.has(a.original?.sha256)))
+        const shas = new Set(have.map(a => a.original?.sha256?.toLowerCase()).filter(Boolean));
+        // With the tree's files the same original is the same file, whatever picture of it either holds.
+        const sameOriginal = (a: { originalOnly?: boolean; original?: { sha256: string } }): boolean =>
+            (a.originalOnly || base !== undefined) && !!a.original?.sha256 && shas.has(a.original.sha256.toLowerCase());
+        const extra = ownAttachments
+            .filter(a => !ids.has(a.id) && !(a.dataUrl && !a.originalOnly && urls.has(a.dataUrl)) && !sameOriginal(a))
             .map(a => {
                 if (a.sourceId === undefined || sourceExists(a.sourceId)) return a;
                 const { sourceId: _gone, ...rest } = a;
@@ -1925,6 +2028,7 @@ export function carryOverMedia(next: StromData, previous: StromData): MediaCarry
             });
         if (extra.length) {
             out.attachments = [...have, ...extra];
+            carried += extra.length;
             changed = true;
         }
         // The original the portrait was cut from (spec 107): the research
@@ -1990,7 +2094,7 @@ export function carryOverMedia(next: StromData, previous: StromData): MediaCarry
     const data = keepPersonListData(
         keepPlaceOrigins(carryOverTreeDecisions({ ...next, persons, ...(unionsChanged ? { partnerships } : {}), ...(sources ? { sources } : {}) }, previous), previous),
         previous, new Date().toISOString());
-    return { data, lost };
+    return { data, lost, carried };
 }
 
 /**

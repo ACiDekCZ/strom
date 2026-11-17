@@ -43,7 +43,8 @@ const cardStates = new Map<string, ConflictCardState>();
 const drawn = new WeakMap<Element, string>();
 
 /** The research's version as read from its bridge (for "The research has N more changes"), by research and head. */
-interface ResearchVersion { key: string; data: StromData; header: ResearchHeader }
+/** `header.appMedia`: the file came with the tree's own files (spec 108 §5). */
+interface ResearchVersion { key: string; data: StromData; header: ResearchHeader & { appMedia?: true } }
 let versionRead: ResearchVersion | null = null;
 /** A read on its way (one at a time, by the same key). */
 let versionAsk: { key: string; job: Promise<ResearchVersion | null> } | null = null;
@@ -632,10 +633,11 @@ export const conflictDecideMethods = uiModule({
         const researchId = ctx.link.id;
         const job = (async (): Promise<ResearchVersion | null> => {
             try {
-                const { text, images } = await readResearchTreeFile(bridge.ged, this.researchStatusOf(researchId)?.features);
+                const { text, images, media } = await readResearchTreeFile(bridge.ged, this.researchStatusOf(researchId)?.features);
                 const header = readResearchHeader(text);
                 if (!header.isStromResearch || header.treeId !== researchId) return null;
-                return { key: header.head ? `${researchId}|${header.head}` : key, data: convertToStrom(parseGedcom(text), { images }).data, header };
+                return { key: header.head ? `${researchId}|${header.head}` : key, data: convertToStrom(parseGedcom(text), { images }).data,
+                    header: { ...header, ...(media ? { appMedia: true as const } : {}) } };
             } catch {
                 return null;
             }

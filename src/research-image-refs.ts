@@ -20,8 +20,15 @@
  * Images the app already holds are never downloaded again: the images of the
  * last file loaded (one research at a time, exactly that file's, so nothing a
  * tree dropped is kept alive), and in a new session those of the tree stored
- * for that research, found by hashing its excerpts once. No copy of its own:
- * the stored tree (and its image pool) is the store.
+ * for that research, found by hashing its excerpts, portraits, couples'
+ * photos and attachments once. No copy of its own: the stored tree (and its
+ * image pool) is the store.
+ *
+ * A file with the tree's own files (`media=app`, spec 108 §5) names a file
+ * the archive gives no copy of (a PDF, a TIFF) by its name and its hash
+ * (`2 _STROM_SHA`) alone: when the stored tree holds that very file (an
+ * attachment whose bytes give the hash), it is taken from there too — never
+ * asked of the bridge — so the tree keeps the file it had.
  *
  * Pure of the UI: the network, the hashing and the stored tree come in as
  * dependencies (tests, a real bridge).
@@ -73,6 +80,44 @@ export interface ImageRef {
     bytes?: number;
 }
 
+/**
+ * The hashes of the files a file names by their name alone (`FILE <name>`
+ * with `_STROM_SHA <sha>` under one OBJE: a file the archive gives no copy
+ * of, spec 108 §5), lower case, each once.
+ */
+export function findNamedFileShas(text: string): string[] {
+    const out = new Set<string>();
+    let level = -1;
+    let file: string | null = null;
+    let sha: string | null = null;
+    const flush = (): void => {
+        if (sha && file && !file.startsWith('data:') && !imageRefSha(file)) out.add(sha);
+        level = -1;
+        file = null;
+        sha = null;
+    };
+    for (const raw of text.split('\n')) {
+        const m = /^\s*(\d+)[ \t]+(?:@[^@\s]+@[ \t]+)?(\S+)(?:[ \t]+(.*?))?\s*$/.exec(raw);
+        if (!m) continue;
+        const n = Number(m[1]);
+        if (m[2] === 'OBJE') {
+            flush();
+            level = n;
+            continue;
+        }
+        if (level < 0) continue;
+        if (n <= level) {
+            flush();
+            continue;
+        }
+        if (n !== level + 1) continue;
+        if (m[2] === 'FILE') file = m[3] ?? '';
+        else if (m[2] === '_STROM_SHA' && /^[0-9a-fA-F]{64}$/.test(m[3] ?? '')) sha = m[3]!.toLowerCase();
+    }
+    flush();
+    return [...out];
+}
+
 /** The images a file names by their hashes, each once (first mention wins). */
 export function findImageRefs(text: string): ImageRef[] {
     const out = new Map<string, ImageRef>();
@@ -117,11 +162,17 @@ export function imagesUrlOf(gedUrl: string): string {
     }
 }
 
-/** The address of the file with its images by reference (`images=ref`), the rest kept. */
-export function refTreeUrl(gedUrl: string): string {
+/**
+ * The address of the file with its images by reference (`images=ref`), the
+ * rest kept. `media`: with the tree's own files too (`media=app`, a research
+ * that keeps them, spec 108 §5) — only ever with `images=ref`.
+ */
+export function refTreeUrl(gedUrl: string, media = false): string {
     try {
         const url = new URL(gedUrl);
         url.searchParams.set('images', 'ref');
+        if (media) url.searchParams.set('media', 'app');
+        else url.searchParams.delete('media');
         return url.toString();
     } catch {
         return gedUrl;
@@ -146,7 +197,7 @@ export interface ImageFetchDeps {
     address?(url: string): string;
 }
 
-/** What resolving needs besides: the excerpt images of the tree stored for a research. */
+/** What resolving needs besides: the images and files (data URLs) of the tree stored for a research. */
 export interface ImageResolveDeps extends ImageFetchDeps {
     treeImages(researchId: string): Promise<Iterable<string>>;
 }
@@ -324,10 +375,12 @@ export interface ImagesResolved {
  * found by hashing them, and the rest from the bridge at `imagesUrl`.
  * Throws when any cannot be had (the caller loads the whole file). After
  * success the images held are exactly these (the same strings the parsed
- * tree carries).
+ * tree carries). `files`: hashes of files the file names by name alone
+ * (findNamedFileShas) — taken only when the tree holds them as a file that is no
+ * image (an attachment's PDF), never asked of the bridge, none missed.
  */
 export async function resolveImageRefs(
-    o: { researchId: string | null; refs: readonly ImageRef[]; imagesUrl: string },
+    o: { researchId: string | null; refs: readonly ImageRef[]; imagesUrl: string; files?: readonly string[] },
     deps: ImageResolveDeps,
 ): Promise<ImagesResolved> {
     const researchId = o.researchId ? o.researchId.toLowerCase() : null;
@@ -339,15 +392,32 @@ export async function resolveImageRefs(
         if (url && url.startsWith(`data:${ref.mime};base64,`)) images.set(ref.sha, url);
         else want.set(ref.sha, ref);
     }
+    const files = new Set<string>();
+    for (const sha of o.files ?? []) {
+        if (images.has(sha)) continue;
+        const url = known?.get(sha);
+        if (url && !url.startsWith('data:image/')) images.set(sha, url);
+        else files.add(sha);
+    }
     const fromHeld = images.size;
     let seeded = 0;
-    // A new session (or another research): the stored tree's images, hashed once.
-    if (want.size && researchId && !known) {
+    // A new session (or another research): the stored tree's images, hashed once. Its other files (few: an
+    // attachment's PDF) whenever the file names one not held — one added here since comes back by its name.
+    const seedImages = !known && want.size > 0;
+    if ((seedImages || files.size) && researchId) {
         for (const url of await deps.treeImages(researchId)) {
-            if (!want.size) break;
+            const image = url.startsWith('data:image/');
+            if (!(seedImages && want.size) && !files.size) break;
+            if (image ? !(seedImages && want.size) : !files.size) continue;
             const bytes = dataUrlBytes(url);
             if (!bytes) continue;
             const sha = await deps.sha256Hex(bytes);
+            if (!image) {
+                if (!files.delete(sha)) continue;
+                images.set(sha, url);
+                seeded++;
+                continue;
+            }
             const ref = want.get(sha);
             if (!ref || !url.startsWith(`data:${ref.mime};base64,`)) continue;
             images.set(sha, url);

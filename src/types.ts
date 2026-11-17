@@ -2807,6 +2807,8 @@ export interface ResearchTreeEtag {
     images: boolean;
     /** The file's variant: `ref` its images by their hash (`ged.imagesByHash`); absent: with them in it. */
     variant?: 'ref';
+    /** The file came with the tree's own files (`media=app`, spec 108); absent: without them. */
+    media?: true;
 }
 
 /** A research's file with its images by their hash (`ref`) or in it (`data`). */

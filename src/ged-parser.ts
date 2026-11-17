@@ -1812,6 +1812,9 @@ export interface GedcomConvertOptions {
      * spec 071), as the data URLs the file with its images in it would carry.
      * A reference not in it (or without it) leaves its image out, as such a
      * file was always read; the reference itself never comes into the tree.
+     * It may also hold, by its `_STROM_SHA`, a file a person's OBJE names by
+     * its name alone (spec 108 §5: the archive gives no copy of a PDF) that
+     * the browser holds: the attachment then keeps that file.
      */
     images?: ReadonlyMap<string, string>;
 }
@@ -5758,7 +5761,13 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
             const linked = linkedMedia(link);
             if (!linked) { skipMedia(); continue; }
             // An image named by its hash: the image itself, else left out (never a file path).
-            const media = imageRefSha(linked.file) ? { ...linked, file: resolveImageFile(linked.file, options.images) } : linked;
+            const resolved = imageRefSha(linked.file) ? { ...linked, file: resolveImageFile(linked.file, options.images) } : linked;
+            // A file the archive names only (its name and hash, spec 108 §5) that this browser holds (the
+            // tree's own attachment, found by its hash): the file itself, as the tree had it.
+            const heldFile = resolved.file && !resolved.file.startsWith('data:') && resolved.sha && resolved.stromKind !== 'photo'
+                ? options.images?.get(resolved.sha.toLowerCase()) : undefined;
+            const media = heldFile && SAFE_ATTACHMENT_DATA_URL.test(heldFile)
+                ? { ...resolved, file: heldFile, title: resolved.title || resolved.file.split(/[\\/]/).pop() || resolved.file } : resolved;
             if (!media.file && linked.file) { skipMedia(); continue; }
             if (media.file.startsWith('data:')) {
                 // Only the formats the app itself stores come in: a portrait

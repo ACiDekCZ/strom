@@ -17,7 +17,7 @@
  * says its head, and a head other than the research's status says it is older.
  */
 
-import { isResearchHead, parseLoopbackUrl, researchFamilyRef, researchPersonRef } from './research-link.js';
+import { isResearchHead, MEDIA_APP_FEATURE, parseLoopbackUrl, researchFamilyRef, researchPersonRef } from './research-link.js';
 import type { ResearchLink, StromData, TreeImagesVariant } from './types.js';
 
 /** The bridge answers `tree.ged?stale=1` with the last file it built (Strom Research 1.30.0). */
@@ -135,19 +135,21 @@ export function treeReplyEtag(get: (name: string) => string | null): string | nu
  * tree changed since (`fingerprint`: the stored tree's now, in the link's
  * format), images taken otherwise than the setting says now, or a tag of the
  * other variant of the file than the one asked (`variant`: the file with its
- * images by reference, or with them in it — each has its own tags).
+ * images by reference, or with them in it; `media`: with the tree's own
+ * files, `media=app` — each has its own tags).
  */
 export function storedTreeEtag(
     link: Pick<ResearchLink, 'fingerprint' | 'head' | 'copy' | 'treeEtag'> | null | undefined,
     fingerprint: string | null,
     images: boolean,
     variant: TreeImagesVariant = 'data',
+    media = false,
 ): string | null {
     const kept = link?.treeEtag;
     if (!link || link.copy || !kept || !readTreeEtag(kept.tag)) return null;
     if (!link.fingerprint || kept.fingerprint !== link.fingerprint || kept.head !== (link.head ?? '')) return null;
     if (fingerprint !== link.fingerprint || kept.images !== images) return null;
-    if ((kept.variant ?? 'data') !== variant) return null;
+    if ((kept.variant ?? 'data') !== variant || !!kept.media !== media) return null;
     return kept.tag;
 }
 
@@ -165,6 +167,19 @@ export const GED_IMAGES_BY_HASH_FEATURE = 'ged.imagesByHash';
 /** Whether the bridge gives the tree with its images by their hash (`ged.imagesByHash` in its features). */
 export function bridgeGivesImagesByHash(features: readonly string[] | null | undefined): boolean {
     return !!features?.includes(GED_IMAGES_BY_HASH_FEATURE);
+}
+
+/**
+ * Is the tree asked with its own files (`tree.ged?images=ref&media=app`,
+ * spec 108 §5)? Only from a research that keeps them (`media.app`) and gives
+ * its images by hash (never `media=app` without `images=ref`), and only for
+ * a tree that takes images (`takeImages`: the import setting, the load's
+ * choice) — one that leaves them out would only download them to drop them.
+ * Every read of the research's tree asks alike: the file's tag and what a
+ * comparison sees depend on it.
+ */
+export function treeAsksAppMedia(features: readonly string[] | null | undefined, takeImages: boolean): boolean {
+    return takeImages && bridgeGivesImagesByHash(features) && !!features?.includes(MEDIA_APP_FEATURE);
 }
 
 /** Which file came (`X-Strom-Images`): `ref` its images by hash, `data` in it; null when not said or not readable. */
