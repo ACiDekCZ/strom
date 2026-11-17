@@ -219,6 +219,19 @@ describe('groups by batch', () => {
         expect(groups().find(g => g.key === 'loose')?.froms).toEqual(['cli', 'app']);
         expect([fromKey('batch from the Strom app'), fromKey('from a phone'), fromKey(undefined)]).toEqual(['batch', 'phone', null]);
     });
+
+    it('a path (strom intake gives the file\'s own) is the terminal\'s; a value nothing knows says nothing', () => {
+        expect(['/Users/vera/Skeny/telefon/list.jpg', '~/Skeny/batch/a.png', 'C:\\Skeny\\app\\b.jpg', 'd:/x.pdf', '\\\\nas\\skeny\\c.jpg'].map(fromKey))
+            .toEqual(['cli', 'cli', 'cli', 'cli', 'cli']);
+        expect([fromKey('app'), fromKey('the Strom app'), fromKey('research'), fromKey('xyz'), fromKey('   ')]).toEqual(['app', 'app', null, null, null]);
+        const loose = (from: string) => {
+            const one = list([file(1, { from })]);
+            return overviewGroups({ items: overviewItems(one, []), list: one, filters: filters(), mode: 'batch', batchLoaded: () => true })
+                .find(g => g.key === 'loose')?.froms;
+        };
+        expect(loose('/Users/vera/Skeny/list.jpg')).toEqual(['cli']);
+        expect(loose('xyz')).toEqual([]);
+    });
 });
 
 describe('groups by date', () => {

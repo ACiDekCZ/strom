@@ -338,14 +338,21 @@ export function localDay(iso: string | undefined): string {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-/** Where single files came from, as `strings.materials.from` keys. */
+/**
+ * Where single files came from, as `strings.materials.from` keys. A path
+ * (`strom intake` gives the file's own: `/…`, `~/…`, `C:\…`, `\\server\…`)
+ * is the terminal's; a value nothing here knows says nothing (null).
+ */
 export function fromKey(from: string | undefined): 'app' | 'batch' | 'phone' | 'cli' | null {
-    const f = (from ?? '').toLowerCase();
-    if (!f) return null;
-    if (/terminal|cli|command/.test(f)) return 'cli';
+    const raw = (from ?? '').trim();
+    if (!raw) return null;
+    if (/^(?:[/~]|[a-z]:[\\/]|\\\\)/i.test(raw)) return 'cli';
+    const f = raw.toLowerCase();
+    if (/terminal|\bcli\b|command/.test(f)) return 'cli';
     if (/phone|mobil|telefon/.test(f)) return 'phone';
     if (/batch|dávk|stapel/.test(f)) return 'batch';
-    return 'app';
+    if (/\bapp\b|strom|aplikac|browser|web/.test(f)) return 'app';
+    return null;
 }
 
 /**
