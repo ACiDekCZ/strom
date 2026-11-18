@@ -131,9 +131,10 @@ export const viewLinksUiMethods = uiModule({
      * person stands in the family it shows), a small confirmation names them
      * first and they go off with it. The notice offers to undo. `near`: where
      * the confirmation opens; `restoreFocus`: the keyboard goes back to the
-     * person's stub or "+ family" once drawn again. False: cancelled.
+     * person's stub or "+ family" once drawn again; `beforeLayout`: runs once confirmed, before the layout
+     * (the switch's working state painted first). False: cancelled.
      */
-    async viewLinkUnlink(hypo: string, opts: { near?: HTMLElement | null; restoreFocus?: boolean } = {}): Promise<boolean> {
+    async viewLinkUnlink(hypo: string, opts: { near?: HTMLElement | null; restoreFocus?: boolean; beforeLayout?: () => Promise<void> } = {}): Promise<boolean> {
         const treeId = DataManager.getCurrentTreeId();
         if (!treeId) return false;
         const data = DataManager.getData();
@@ -146,6 +147,7 @@ export const viewLinksUiMethods = uiModule({
         if (dependents.length > 0 && !(await this.confirmViewLinkChain(link, dependents, opts.near ?? null))) return false;
         const change = unlinkViewLink(data, before, hypo, ctx);
         this.hideResearchEdgeBubble();
+        await opts.beforeLayout?.();
         await TreeRenderer.refreshViewLinks(() => saveViewLinks(treeId, change.links));
         if (opts.restoreFocus) {
             const card = `.person-card[data-id="${CSS.escape(link.anchorId)}"]`;

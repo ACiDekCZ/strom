@@ -13,6 +13,7 @@ import { TreeManager } from '../tree-manager.js';
 import { Source, SourceExcerpt, StromData, TreeId } from '../types.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { uiModule } from './module.js';
+import { runBusy } from './busy.js';
 import { onComputer } from './research-ui.js';
 import { heldReasonKey } from './sources.js';
 import { storedResearchBridge } from '../research-device.js';
@@ -533,18 +534,22 @@ export const researchImagesMethods = uiModule({
         box.hidden = false;
         box.innerHTML = `<div class="sources-bulk-line"><span>${esc(r.bulkLine(images, held.length))}</span>
             <button type="button" class="link-button" id="sources-bulk-open">${esc(r.bulkLoad)}</button></div>`;
-        box.querySelector('#sources-bulk-open')?.addEventListener('click', () => void this.openBulkImageWarning());
+        // A202: the list of what is missing comes from the research (15 s at most): the link waits meanwhile.
+        const open = box.querySelector<HTMLElement>('#sources-bulk-open');
+        open?.addEventListener('click', () => void runBusy(open, ctl => this.openBulkImageWarning(ctl.signal), { kind: 'bridge' }));
         box.querySelector('.sources-bulk-line')?.append(helpMark('imagesHeld'));
     },
 
     /** "Load all from the research…": the warning with counts, size and free space. */
-    async openBulkImageWarning(): Promise<void> {
+    async openBulkImageWarning(signal?: AbortSignal): Promise<void> {
         const env = this.researchImagesEnv();
         if (env.mode !== 'fetch') return;
         const held = this.heldSources();
         const images = held.reduce((n, h) => n + h.clips.length, 0);
         let list: MissingList | null = null;
-        try { list = await fetchMissingList(env.base); } catch { list = null; }
+        try { list = await fetchMissingList(env.base, signal); } catch { list = null; }
+        // The time ran out: the link says so, no warning comes later.
+        if (signal?.aborted) return;
         const known = new Map((list?.sources ?? []).map(s => [s.source, s]));
         // Sizes the research knows; the rest at their average.
         const withSize = held.filter(h => (known.get(sourceRefOf(h.src) ?? '')?.bytes ?? 0) > 0);
@@ -557,6 +562,7 @@ export const researchImagesMethods = uiModule({
             const est = await navigator.storage?.estimate?.();
             if (est && typeof est.quota === 'number' && typeof est.usage === 'number') free = Math.max(0, est.quota - est.usage);
         } catch { free = null; }
+        if (signal?.aborted) return;
         bulkPlan = { list, free, images, sources: held.length, bytes, ready };
         bulkView = 'warn';
         this.renderResearchImagesBulk();

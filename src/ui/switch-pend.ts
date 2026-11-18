@@ -27,6 +27,8 @@ export interface PendOpts {
     label?: string;
     /** When the words become "Waiting for the research" (default 5 s; Infinity: never). */
     waitMs?: number;
+    /** A heavy computation follows (§8): the words at once, no 120 ms wait (timers do not run while it computes). */
+    now?: boolean;
     /** The limit (default none: the write's own limit ends it); `onLimit` says what follows. */
     limitMs?: number;
     onLimit?: () => void;
@@ -72,6 +74,11 @@ export function startPend(key: string, opts: PendOpts): void {
     const p: Pend = { phase: 'lock', label: opts.label ?? strings.busy.saving, shownAt: 0, timers: [] };
     pends.set(key, p);
     const mine = (): boolean => pends.get(key) === p;
+    if (opts.now) {
+        p.phase = 'shown';
+        p.shownAt = Date.now();
+        announceBusy(p.label);
+    }
     p.timers.push(setTimeout(() => {
         if (!mine() || p.phase !== 'lock') return;
         p.phase = 'shown';

@@ -68,6 +68,35 @@ test.describe('History in the life timeline: Settings', () => {
         expect(view).toBeNull();
     });
 
+    test('6.1 (B170): switched on, the toggle stays dashed with "Loading…" until the history is read; a click meanwhile is ignored', async ({ page }) => {
+        const { history } = await setup(page, { layerOn: false });
+        // A new history in the research meanwhile: switching on reads it.
+        history.rev = 'h-new';
+        await poll(page);
+        await openSettings(page);
+        let answer: () => void = () => {};
+        const gate = new Promise<void>(r => { answer = r; });
+        await page.route(/\/history(\?|$)/, async (route) => { await gate; await route.fallback(); });
+        const reads = history.reads;
+        await toggle(page).check();
+        await expect(toggle(page)).toBeChecked();
+        await expect(toggle(page)).toHaveAttribute('data-pend', '1');
+        await expect(toggle(page)).toHaveAttribute('aria-busy', 'true');
+        // Dashed though clicked (focused): the dialog's focus rule does not take the dash away.
+        await expect(toggle(page)).toBeFocused();
+        expect(await toggle(page).evaluate(el => getComputedStyle(el).outlineStyle)).toBe('dashed');
+        const label = page.locator('label.settings-checkbox', { has: toggle(page) });
+        await expect(label.locator('.busy-st')).toHaveText('Loading…');
+        await toggle(page).click({ force: true });
+        await expect(toggle(page)).toBeChecked();
+        answer();
+        await expect(toggle(page)).not.toHaveAttribute('data-pend', '1');
+        await expect(label.locator('.busy-st')).toHaveCount(0);
+        await expect(toggle(page)).not.toHaveAttribute('aria-disabled', 'true');
+        expect(history.reads).toBe(reads + 1);
+        await expect(toggle(page)).toBeChecked();
+    });
+
     test('on for a tree without a research: says so', async ({ page }) => {
         await openApp(page);
         await openSettings(page);

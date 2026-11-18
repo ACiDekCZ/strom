@@ -11257,9 +11257,9 @@
         .tv-mark--info { width: 10px; height: 10px; margin-right: 3px; border-radius: 50%; border: 1.5px solid var(--text-faint); }
         .tv-mark--unusual { width: 16px; height: 16px; color: var(--text-faint); font-size: 14px; }
         .tv-band > .tv-mark { margin: 0; }
-        .tv-status-checks { color: var(--text-faint); font-size: 12px; white-space: nowrap; }
+        /* C101: the checks still running, the 12 px spinner before the words (6.3). */
+        .tv-status-checks { display: inline-flex; align-items: center; gap: 6px; color: var(--text-faint); font-size: 12px; white-space: nowrap; }
         .tv-status-checks[hidden] { display: none; }
-        .tv-checks-ring { display: inline-block; }
         /* §7.4 the bubble of a finding and the legend: a panel under the cell, a sheet on a phone. */
         .tv-bubble {
             position: fixed; z-index: 3000; width: 310px; max-width: calc(100vw - 16px); box-sizing: border-box;
@@ -18813,6 +18813,8 @@
         .view-link-switch[data-pend] { outline: none; }
         .view-link-switch[data-pend] .view-link-switch__track { outline: 1.5px dashed var(--text-faint); outline-offset: 2px; opacity: 1 !important; }
         [data-pend]:focus-visible { outline: 2px solid var(--primary); }
+        /* A dialog's checkbox clicked keeps its focus, and ".modal input:focus" would take the dash away (B170). */
+        .modal input[data-pend]:focus:not(:focus-visible) { outline: 1.5px dashed var(--text-faint); outline-offset: 2px; }
         .view-link-switch[data-pend]:focus-visible .view-link-switch__track { outline: 2px solid var(--primary); }
         /* Its words under the label (the label's own line stays as it is). */
         .pend-st { display: flex; width: fit-content; margin-top: 3px; white-space: normal; }
@@ -29924,7 +29926,6 @@
         }
         /* Off while the research does not run: as dim as Assign / Hide beside it. */
         .mv-chip-x[aria-disabled="true"] { color: var(--text-faint); opacity: 0.35; cursor: default; }
-        .mv-chip-x[aria-busy="true"] { opacity: 0.45; cursor: progress; }
         @media (hover: hover) { .mv-chip-x:not([aria-disabled="true"]):hover { background: var(--hover-bg); color: var(--text); } }
         /* "Where used" (spec 102 §3): the kind, the link with its sentence, "×" for a place of its own. */
         .mv-uses { display: flex; flex-direction: column; gap: 8px; }

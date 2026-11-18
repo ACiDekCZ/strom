@@ -287,6 +287,27 @@ test.describe('The setting "Task from a new reading"', () => {
         await expect(group).toHaveAttribute('open', '');
     });
 
+    test('6.1 (A144): a slow write dashes the choice with "Saving…" in its row, the others locked, until the research answers', async ({ page }) => {
+        const b = await setup(page);
+        await openTreeSettings(page);
+        await page.locator('#research-readtask-group summary').click();
+        let answer: () => void = () => {};
+        const gate = new Promise<void>(r => { answer = r; });
+        await page.route(/\/sourceTask(\?|$)/, async (route) => { await gate; await route.fallback(); });
+        const input = (v: string) => page.locator(`input[name="research-read-task"][value="${v}"]`);
+        const rowOf = (v: string) => page.locator('.research-readtask-row', { has: input(v) });
+        await input('always').check();
+        await expect(rowOf('always')).toHaveAttribute('data-pend', '1');
+        await expect(rowOf('always').locator('.busy-st')).toHaveText('Saving…');
+        await expect(input('never')).toHaveAttribute('aria-disabled', 'true');
+        await expect(page.locator('#research-readtask .read-task-spin')).toHaveCount(0);
+        answer();
+        await expect(page.locator('#research-readtask-note')).toHaveText(/The research confirmed\./);
+        await expect(rowOf('always')).not.toHaveAttribute('data-pend', '1');
+        await expect(page.locator('#research-readtask .busy-st')).toHaveCount(0);
+        expect(b.read!.settingPosts).toEqual([{ sourceTask: 'always' }]);
+    });
+
     test('a refusal leaves the research\'s value; the bridge down dims the choices', async ({ page }) => {
         const b = await setup(page, { sourceTask: 'never' });
         b.read!.settingReply = { status: 409, body: { code: 'sourceTask.archive', reason: 'The archive does not create tasks.' } };

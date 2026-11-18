@@ -79,6 +79,18 @@ export interface MaterialActionCtx {
     anchor?: HTMLElement;
     /** Called once a write started without a dialog has its answer (the element that asked for it stops waiting). */
     settled?: () => void;
+    /**
+     * A refused write said at the element that asked for it (§5: the sentence under the viewer's chip) instead of a
+     * toast: the text, "Try again" when it may help, one more way (Reload, the research's own way).
+     */
+    refused?: (end: MaterialRefusal) => void;
+}
+
+/** A refused write's end at its element (`retry`: "Try again"; `alt`: one more action with its research mark). */
+export interface MaterialRefusal {
+    text: string;
+    retry?: () => void;
+    alt?: { label: string; run: () => void; research?: boolean; ai?: boolean };
 }
 
 /** Where an item was opened from, for the viewer (its ‹ › go through `items`). */

@@ -305,6 +305,25 @@ test.describe('the Research menu: Images only in the research', () => {
         await expect(page.locator('#research-images-badge, .research-images-badge')).toHaveCount(0);
     });
 
+    test('A202: "Load all from the research…" waits with its spinner while the research lists what is missing', async ({ page }) => {
+        await setup(page, { auto: false });
+        await openMenu(page);
+        await row(page).click();
+        const modal = page.locator('#sources-modal');
+        await expect(modal.locator('.source-row')).toHaveCount(2);
+        let answer: () => void = () => {};
+        const gate = new Promise<void>(r => { answer = r; });
+        await page.route(/\/excerpts\?missing=1/, async (route) => { await gate; await route.fallback(); });
+        const open = modal.locator('#sources-bulk-open');
+        await open.click();
+        await expect(open).toHaveAttribute('data-busy', 'busy');
+        await expect(open).toHaveAttribute('aria-busy', 'true');
+        await expect(open.locator('.b-busy .busy-spin')).toBeVisible();
+        await expect(modal.locator('#sources-bulk-go')).toHaveCount(0);
+        answer();
+        await expect(modal.locator('#sources-bulk-go')).toBeVisible();
+    });
+
     test('no row while the research is not running; back once it runs', async ({ page }) => {
         const { b } = await setup(page, { auto: false });
         b.down = true;

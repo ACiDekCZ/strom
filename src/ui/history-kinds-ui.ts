@@ -146,6 +146,11 @@ function pendKey(rid: string, what: string): string {
     return `hk:${rid.toLowerCase()}:${what}`;
 }
 
+/** The key of a search of origin switched off (Settings and the manager's "Switch off" share its state). */
+export function historyOriginPendKey(rid: string, which: Origin): string {
+    return pendKey(rid, `origin:${which}`);
+}
+
 /** A kind's row: its name with the write's words under it, the refusal's sentence after the row (6a). */
 function kindRowHtml(rid: string, k: HistoryKind, state: 'on' | 'off' | 'pend', locked: boolean, size: number, cls: string): string {
     const name = kindName(k);

@@ -488,6 +488,32 @@ test.describe('linked in the view only: What research knows → Hypotheses', () 
         });
     }
 
+    test('6.1 (A122): "Show" is on at once, dashed with "Calculating the layout…" while the tree is laid out anew, then at rest', async ({ page }) => {
+        await setup(page);
+        const dialog = await openResearchDialog(page, 'P0010');
+        const b = variant(dialog, 'H0022', 'B');
+        // Every state the switch passes through (the layout is quicker than a poll could see).
+        await page.evaluate(() => {
+            const seen: string[] = [];
+            (window as unknown as { __pendSeen: string[] }).__pendSeen = seen;
+            const row = '[data-hypo="H0022"] .person-research-variant[data-variant="B"]';
+            new MutationObserver(() => {
+                const sw = document.querySelector(`${row} .view-link-switch[data-pend]`);
+                if (!sw) return;
+                const said = `${sw.getAttribute('aria-checked')}|${sw.getAttribute('aria-disabled')}|${document.querySelector(`${row} .pend-st`)?.textContent ?? ''}`;
+                if (seen.at(-1) !== said) seen.push(said);
+            }).observe(document.body, { subtree: true, childList: true, attributes: true });
+        });
+        await b.locator('.view-link-switch').click();
+        await expect(ghosts(page)).toHaveCount(5);
+        await expect(b.locator('.view-link-switch')).not.toHaveAttribute('data-pend', '1');
+        await expect(b.locator('.pend-st')).toHaveCount(0);
+        await expect(b.locator('.view-link-switch')).toHaveAttribute('aria-checked', 'true');
+        await expect(b.locator('.view-link-switch')).toBeFocused();
+        const seen = await page.evaluate(() => (window as unknown as { __pendSeen: string[] }).__pendSeen);
+        expect(seen[0]).toBe('true|true|Calculating the layout…');
+    });
+
     test('"Find" closes the dialog and brings the person and the family into view', async ({ page }) => {
         await setup(page);
         await store(page, [B]);

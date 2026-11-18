@@ -20,6 +20,10 @@ import { researchPersonRef } from '../research-link.js';
 import { closeImageViewer } from './image-viewer.js';
 import type { MaterialsContext } from './materials-ui.js';
 import { uiModule } from './module.js';
+import { runBusy } from './busy.js';
+
+/** The longest a material write takes: its own 30 s and the research's busy retries (§10.3). */
+const MATERIAL_WRITE_MS = 45_000;
 
 /** Up to this many places all show; more: the first COLLAPSED_ROWS and "+ N more". */
 const COLLAPSE_OVER = 5;
@@ -181,12 +185,19 @@ export const materialUsesMethods = uiModule({
                 x.title = up ? m.removeFromThis : m.actionsWhenRunning;
                 if (!up) x.setAttribute('aria-disabled', 'true');
                 x.addEventListener('click', () => {
-                    if (x.getAttribute('aria-disabled') === 'true' || x.getAttribute('aria-busy') === 'true') return;
-                    // The research takes seconds to commit: the × waits (a second click sends nothing).
-                    x.setAttribute('aria-busy', 'true');
-                    this.materialAction('removeFromPerson', [item], {
-                        person: refn, where: 'viewer', anchor: chip, settled: () => x.removeAttribute('aria-busy'),
-                    });
+                    if (x.getAttribute('aria-disabled') === 'true') return;
+                    // §5 (B100): the research takes seconds to commit; the spinner takes the ×'s place (a second
+                    // click sends nothing) and a refusal is a sentence under the chip with "Try again".
+                    void runBusy(x, ctl => new Promise<void>(resolve => {
+                        this.materialAction('removeFromPerson', [item], {
+                            person: refn, where: 'viewer', anchor: chip, settled: () => resolve(),
+                            refused: end => ctl.end({
+                                ok: false, kind: 'error', text: end.text,
+                                ...(end.retry ? { retry: () => { if (x.isConnected) x.click(); else end.retry!(); } } : {}),
+                                ...(end.alt ? { alt: end.alt } : {}),
+                            }),
+                        });
+                    }), { kind: 'write', timeoutMs: MATERIAL_WRITE_MS });
                 });
                 chip.appendChild(x);
             }

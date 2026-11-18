@@ -23,6 +23,24 @@ afterEach(() => {
 });
 
 describe('a switch that writes', () => {
+    it('before a heavy computation (now): its words at once, no 120 ms wait, and 300 ms at least (A122)', async () => {
+        const redraw = vi.fn();
+        startPend('view-link:H1:A', { label: strings.busy.layout, now: true, waitMs: Infinity, redraw });
+        expect(pendOf('view-link:H1:A')?.phase).toBe('shown');
+        expect(pendStatusHtml('view-link:H1:A')).toContain(strings.busy.layout);
+        expect(pendAttrs('view-link:H1:A')).toContain('data-pend="1"');
+        let done = false;
+        const end = endPend('view-link:H1:A').then(v => { done = v; });
+        await vi.advanceTimersByTimeAsync(299);
+        expect(done).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        await end;
+        expect(done).toBe(true);
+        // Without the wait's words: nothing came later either.
+        vi.advanceTimersByTime(PEND_WAIT_MS);
+        expect(pendOf('view-link:H1:A')).toBeNull();
+    });
+
     it('locked at once, its words after 120 ms, at rest when confirmed (300 ms at least once shown)', async () => {
         const redraw = vi.fn();
         startPend('k:war', { redraw });

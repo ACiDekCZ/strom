@@ -195,6 +195,28 @@ test.describe('Who decides hypotheses: Research for this tree', () => {
         expect((await links(page)).some(u => u.startsWith('https:'))).toBe(false);
     });
 
+    test('6.1 (A143): a slow write dashes the choice with "Saving…" and locks the other until the research answers', async ({ page }) => {
+        const bridge = await settingsSetup(page, { hypotheses: { decide: 'agent', writes: [] } });
+        await openTreeSettings(page);
+        // The research answers when the test says.
+        let answer: () => void = () => {};
+        const gate = new Promise<void>(r => { answer = r; });
+        await page.route(/\/hypotheses(\?|$)/, async (route) => { await gate; await route.fallback(); });
+        await option(page, 'person').click();
+        await expect(choice(page, 'person')).toBeChecked();
+        await expect(option(page, 'person')).toHaveAttribute('data-pend', '1');
+        await expect(option(page, 'person').locator('.busy-st')).toHaveText('Saving…');
+        await expect(option(page, 'person').locator('.busy-st .busy-spin')).toBeVisible();
+        await expect(choice(page, 'agent')).toHaveAttribute('aria-disabled', 'true');
+        await expect(option(page, 'agent')).not.toHaveAttribute('data-pend', '1');
+        answer();
+        await expect.poll(() => bridge.hypotheses!.writes).toEqual([{ decide: 'person' }]);
+        await expect(option(page, 'person')).not.toHaveAttribute('data-pend', '1');
+        await expect(row(page).locator('.busy-st')).toHaveCount(0);
+        await expect(choice(page, 'person')).toBeChecked();
+        await expect(choice(page, 'agent')).not.toHaveAttribute('aria-disabled', 'true');
+    });
+
     test('The user decides: written at once', async ({ page }) => {
         const bridge = await settingsSetup(page, { hypotheses: { decide: 'agent', writes: [] } });
         await openTreeSettings(page);

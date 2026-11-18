@@ -739,12 +739,21 @@ test.describe('The research\'s own commits', () => {
         await expect(toast(page)).toContainText('Assigned: 1 file to');
         expect(material.assigns).toHaveLength(1);
 
-        // × on a chip: the chip waits, a second click sends nothing more.
+        // × on a chip (§5, B100): the spinner takes the ×'s place until the research answers, a second click sends nothing more.
         await viewTile(page, 'Rodinná fotka');
+        let answer: () => void = () => {};
+        const gate = new Promise<void>(r => { answer = r; });
+        await page.route(/\/material\/assign(\?|$)/, async (route) => { await gate; await route.fallback(); });
         const x = chips(page).first().locator('.mv-chip-x');
         await x.click();
+        await expect(x).toHaveAttribute('data-busy', 'busy');
         await expect(x).toHaveAttribute('aria-busy', 'true');
+        await expect(x.locator('.b-busy .busy-spin')).toBeVisible();
+        await expect(x.locator('.b-idle')).toBeHidden();
+        // Not dimmed: a working element is not a disabled one.
+        expect(await x.evaluate(el => Number(getComputedStyle(el).opacity))).toBe(1);
         await x.dispatchEvent('click');
+        answer();
         await expect(chips(page)).toHaveCount(0);
         expect(material.assigns).toHaveLength(2);
     });
@@ -794,8 +803,12 @@ test.describe('The research refuses', () => {
         material.files = [materialFile(1, { persons: ['P0003'] })];
         material.readonly = true;
         await chips(page).first().locator('.mv-chip-x').click();
-        await expect(toast(page)).toHaveText(/The research cannot be written to right now\./);
-        await expect(toast(page).locator('.toast-action')).toHaveCount(0);
+        // §5 (B100): the refusal is a sentence under the chip, no toast.
+        const msg = panel(page).locator('.mv-chips > .busy-msg');
+        await expect(msg).toHaveText(/The research cannot be written to right now\./);
+        await expect(msg).toHaveAttribute('role', 'alert');
+        await expect(msg.locator('button')).toHaveCount(0);
+        await expect(toast(page)).toHaveCount(0);
         await expect(chips(page)).toHaveCount(1);
     });
 });

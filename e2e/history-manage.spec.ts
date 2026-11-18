@@ -172,6 +172,39 @@ test.describe('History of places: the manager', () => {
         expect(history.offs).toEqual([{ regions: false }]);
     });
 
+    test('6.1 (B197): Turn off is dashed with "Turning off…" until the research answers; refused, its sentence with Try again, no toast', async ({ page }) => {
+        const history = fakeHistoryR1({ split: { regions: true, places: true } });
+        await setup(page, { history, features: [...HISTORY_R1_FEATURES, 'experiments.split'] });
+        await openManager(page);
+        const sw = (key: string) => modal(page).locator(`.hm-switch[data-switch="${key}"]`);
+        let answer: () => void = () => {};
+        let gate = new Promise<void>(r => { answer = r; });
+        await page.route(/\/experiments(\?|$)/, async (route) => { await gate; await route.fallback(); });
+        // Refused first.
+        history.offReply = { status: 409, body: { error: 'refused', code: 'experiments.refused', text: 'a history read is running' } };
+        const off = sw('places').getByRole('button', { name: 'Turn off' });
+        await off.click();
+        await expect(off).toHaveAttribute('data-pend', '1');
+        await expect(off).toHaveAttribute('aria-disabled', 'true');
+        await expect(sw('places').locator('.busy-st')).toHaveText('Turning off…');
+        await off.click({ force: true });
+        answer();
+        const msg = sw('places').locator('.pend-msg');
+        await expect(msg).toContainText('Unchanged: a history read is running');
+        await expect(msg).toHaveAttribute('role', 'alert');
+        await expect(off).not.toHaveAttribute('data-pend', '1');
+        await expect(sw('places').locator('.busy-st')).toHaveCount(0);
+        await expect(page.locator('.toast', { hasText: 'history read' })).toHaveCount(0);
+        expect(history.offs).toEqual([{ places: false }]);
+        // Try again: it goes through now.
+        delete history.offReply;
+        gate = Promise.resolve();
+        await msg.getByRole('button', { name: 'Try again' }).click();
+        await expect.poll(() => history.offs.length).toBe(2);
+        await expect(sw('places').locator('.pend-msg')).toHaveCount(0);
+        await expect(modal(page).locator('.hm-switch-text')).toHaveText(['Regional history: on', 'Local history: off']);
+    });
+
     test('split: a region first refused with 409 history.off leads to the link of that switch', async ({ page }) => {
         const history = fakeHistoryR1({ split: { regions: true, places: true } });
         await setup(page, { history, features: [...HISTORY_R1_FEATURES, 'experiments.split'] });

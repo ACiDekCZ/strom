@@ -11,6 +11,7 @@
  */
 
 import { strings } from '../../strings.js';
+import { busySpinHtml } from '../busy.js';
 import { columnById, columnLabel, columnOffered, type SortSpec } from './table-columns.js';
 import { ROW_KEY, ROW_TYPES, type RowType } from './table-model.js';
 import { listKindIcon } from '../list-kind-icon.js';
@@ -240,7 +241,7 @@ export function createStatus(): HTMLElement {
         + `<span class="tv-status-agent-text" aria-live="polite"></span><button type="button" class="tv-status-agent-show">${esc(strings.table.link.showTemp)}</button></span>`
         + '<span class="tv-status-right">'
         + '<span class="tv-status-res" hidden></span>'
-        + `<span class="tv-status-checks" role="status" hidden><span class="tv-checks-ring" aria-hidden="true">◌</span> ${esc(strings.table.checksRunning)}</span>`
+        + `<span class="tv-status-checks" role="status" hidden>${busySpinHtml(12)}${esc(strings.table.checksRunning)}</span>`
         + `<span class="tv-status-ro" title="${esc(strings.table.readOnly)}" hidden><span class="tv-ro-long">${esc(strings.table.readOnly)}</span>`
         + `<span class="tv-ro-short">${esc(strings.table.readOnlyShort)}</span></span>`
         + `<button type="button" class="tv-legend-btn" aria-haspopup="dialog">${esc(strings.table.legend)} ⓘ</button>`

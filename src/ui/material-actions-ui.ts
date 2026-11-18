@@ -26,7 +26,7 @@ import {
 import { MultiPersonPicker } from '../person-picker.js';
 import { nameWithoutYears } from '../materials-overview.js';
 import { materialPersonLabel } from '../media-uses.js';
-import { MaterialActionCtx, MaterialsContext, appendBreakable } from './materials-ui.js';
+import { MaterialActionCtx, MaterialRefusal, MaterialsContext, appendBreakable } from './materials-ui.js';
 import { uiModule } from './module.js';
 import { undoInToast } from './toast.js';
 
@@ -267,6 +267,18 @@ export const materialActionsMethods = uiModule({
         this.showToast(materialErrorText(err, mc.agent), TOAST_MS, { closable: true, kind: 'materials', ...(action ? { action } : {}) });
     },
 
+    /** The same refusal as a sentence at its element (§5): Try again, Reload or the research's own way beside it. */
+    materialErrorEnd(mc: MaterialsContext, err: MaterialError, retry: () => void): MaterialRefusal {
+        const m = strings.materials;
+        const act = materialErrorAction(err);
+        const seal = err.held ? this.researchSealAction(err.held)[0] : undefined;
+        const text = materialErrorText(err, mc.agent);
+        if (act === 'retry') return { text, retry };
+        if (act === 'reload') return { text, alt: { label: m.reload, run: () => void this.reloadMaterialList() } };
+        if (seal) return { text, alt: { label: seal.label, run: () => this.researchSyncAction(seal.action), ...researchMarkFlags(this.researchSyncActionMark(seal.action)) } };
+        return { text };
+    },
+
     /** A refusal inside a dialog (it stays open; Reload closes it once the list is loaded again). */
     materialErrorInDialog(dialog: MaterialDialog, mc: MaterialsContext, err: MaterialError, retry: () => void): void {
         const m = strings.materials;
@@ -455,7 +467,9 @@ export const materialActionsMethods = uiModule({
         const before = currentRecords(mc.treeId, files);
         const res = await this.writeAssign(mc, { files: files.map(i => i.file!.id), remove: [refn] });
         if (!res.ok) {
-            this.materialErrorToast(mc, res.error, () => void this.removeFromFiles(mc, files, refn, ctx));
+            const retry = (): void => void this.removeFromFiles(mc, files, refn, ctx);
+            if (ctx.refused) ctx.refused(this.materialErrorEnd(mc, res.error, retry));
+            else this.materialErrorToast(mc, res.error, retry);
             return;
         }
         const kept = res.value.kept.filter(k => k.person === refn);

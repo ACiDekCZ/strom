@@ -33,6 +33,8 @@ import { historyKindSvg } from '../history-symbols.js';
 import { HISTORY_MANAGE_DIALOG_ID } from './history-ui.js';
 import { mapUndoBody } from './history-map-ui.js';
 import { uiModule } from './module.js';
+import { historyOriginPendKey } from './history-kinds-ui.js';
+import { endPend, isPend, pendAttrs, pendRefusalHtml, pendStatusHtml, startPend, type PendRefusal } from './switch-pend.js';
 
 /** Rows drawn at once per group; "Show n more rows" adds as many again. */
 const PAGE = 200;
@@ -263,8 +265,10 @@ export const historyManageMethods = uiModule({
         const switches = head.switches.length
             ? `<ul class="hm-switches">${head.switches.map(sw => `<li class="hm-switch${sw.on ? ' is-on' : ''}" data-switch="${sw.key}">`
                 + `<span class="hm-switch-text">${esc(sw.text)}</span>`
-                + (sw.action === 'off' ? ` <button type="button" class="link hm-state-link" data-hm="switchOff" data-key="${sw.key}">${esc(h.switchOff)}</button>`
+                + (sw.action === 'off' ? ` <button type="button" class="link hm-state-link" data-hm="switchOff" data-key="${sw.key}"${pendAttrs(historyOriginPendKey(d.rid, sw.key))}>${esc(h.switchOff)}</button>`
+                    + pendStatusHtml(historyOriginPendKey(d.rid, sw.key))
                     : sw.action === 'linkOn' ? ` <button type="button" class="link hm-state-link" data-hm="switchOn" data-key="${sw.key}">${researchActionLabel(h.switchOnLink, researchLinkMark('experiment', { experimentDo: 'on' }), { size: 12 })}</button>` : '')
+                + pendRefusalHtml(historyOriginPendKey(d.rid, sw.key))
                 + '</li>').join('')}</ul>`
             : '';
         stateEl.innerHTML = `<p class="hm-state-text">${esc(head.text)}${link}</p>`
@@ -704,6 +708,28 @@ export const historyManageMethods = uiModule({
         });
     },
 
+    /**
+     * The header's "Switch off" of the history of regions or of places (6.1, B197): the link dashed and locked with
+     * "Turning off…" until the research answers; refused, its sentence under the switch's line with "Try again".
+     */
+    async historyManageSwitchOff(which: 'regions' | 'places'): Promise<void> {
+        const rid = this.historyManageDrawn()?.rid;
+        if (!rid) return;
+        const key = historyOriginPendKey(rid, which);
+        if (isPend(key)) return;
+        startPend(key, { label: strings.busy.turningOff, redraw: () => this.renderHistoryManage() });
+        this.renderHistoryManage();
+        let refused: PendRefusal | undefined;
+        const ok = await this.historyDisableSearch(which, {
+            onRefused: (text, alt) => {
+                refused = { text, retry: () => void this.historyManageSwitchOff(which), ...(alt ? { alt } : {}) };
+            },
+        });
+        await endPend(key, ok ? undefined : refused);
+        this.renderHistoryManage();
+        this.renderHistorySettingsIfOpen();
+    },
+
     historyManageTab(tab: ManageTab): void {
         if (view.tab === tab) return;
         view.tab = tab;
@@ -725,7 +751,7 @@ export const historyManageMethods = uiModule({
                 return;
             case 'back': this.closeHistoryManageDetail(); return;
             case 'enable': this.historyEnableSearch(); return;
-            case 'switchOff': if (key === 'regions' || key === 'places') void this.historyDisableSearch(key); return;
+            case 'switchOff': if (key === 'regions' || key === 'places') void this.historyManageSwitchOff(key); return;
             case 'switchOn': if (key === 'regions' || key === 'places') this.historyLaunchExperiment('on', key); return;
             case 'state':
                 view.stateOpen = !view.stateOpen;

@@ -7,7 +7,8 @@
  * computer whose research announced them.
  */
 
-import { runBusy } from './busy.js';
+import { nextPaint, runBusy } from './busy.js';
+import { endPend, isPend, pendAttrs, pendStatusHtml, startPend, type PendRefusal } from './switch-pend.js';
 import { researchActionLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
@@ -58,6 +59,15 @@ function hypothesisKey(researchId: string, hypothesisId: string): string {
 
 /** Draws the open dialog's hypotheses again (set while the dialog is open). */
 let redrawHypotheses: (() => void) | null = null;
+
+/** The "Show" switch of a hypothesis's version while the tree is laid out anew (6.1): its state's key. */
+function viewLinkPendKey(hypo: string, variant: string): string {
+    return `view-link:${hypo}:${variant}`;
+}
+/** The state each switch shows while it lays out (its new one). */
+const viewLinkPendTo = new Map<string, boolean>();
+/** Switches whose change waits for the chain's confirmation (a click meanwhile is ignored). */
+const viewLinkAsking = new Set<string>();
 
 /** The one listener of the waits (registered once; it draws the dialog that is open). */
 function redrawPendingHypotheses(): void {
@@ -447,11 +457,16 @@ export const personResearchMethods = uiModule({
             : `<span class="prv-title">${esc(title)}</span>`;
     },
 
-    /** A version's "Show" switch (the view link). */
-    researchVariantSwitchHtml(variant: ResearchHypothesisVariant, shown: boolean): string {
+    /**
+     * A version's "Show" switch (the view link). While the tree is laid out anew (6.1, A122) it shows its new
+     * state, dashed and locked; its words stand under the version's claim (`researchVariantPendHtml`).
+     */
+    researchVariantSwitchHtml(variant: ResearchHypothesisVariant, shown: boolean, hypo = ''): string {
         const v = strings.viewLinks;
+        const key = viewLinkPendKey(hypo, variant.id);
+        const on = isPend(key) ? viewLinkPendTo.get(key) ?? shown : shown;
         return `
-                    <button type="button" class="view-link-switch" role="switch" aria-checked="${shown ? 'true' : 'false'}"
+                    <button type="button" class="view-link-switch" role="switch" aria-checked="${on ? 'true' : 'false'}"${pendAttrs(key)}
                         data-variant="${esc(variant.id)}" aria-label="${esc(v.switchAria(variant.id))}">
                         <span class="view-link-switch__label" aria-hidden="true">${esc(v.switchLabel)}</span>
                         <span class="view-link-switch__track" aria-hidden="true"></span>
@@ -494,10 +509,10 @@ export const personResearchMethods = uiModule({
                     : o.state.state === 'invalid' ? v.reason[o.state.reason] : '';
                 metaHtml = esc([chosen ? r.hypoChosen : '', what, state].filter(Boolean).join(' · '));
             }
-            const sw = canSwitch ? this.researchVariantSwitchHtml(variant, !!o!.shown) : '';
+            const sw = canSwitch ? this.researchVariantSwitchHtml(variant, !!o!.shown, h.id ?? '') : '';
             return `<div class="person-research-variant sel-opt${o?.shown ? ' is-shown' : ''}${chosen ? ' is-chosen' : ''}" data-sel-form="row" role="listitem" data-variant="${esc(variant.id)}">
                     <span class="prv-id" aria-hidden="true">${esc(variant.id)}</span>
-                    <span class="prv-text">${this.researchVariantTitleHtml(variant)}<span class="prv-meta">${metaHtml}</span></span>${sw}
+                    <span class="prv-text">${this.researchVariantTitleHtml(variant)}<span class="prv-meta">${metaHtml}</span>${canSwitch ? pendStatusHtml(viewLinkPendKey(h.id ?? '', variant.id)) : ''}</span>${sw}
                 </div>`;
         }).join('');
         const mergeHtml = pick === 'merge' ? `<p class="prh-info">${esc(r.hypoMerge)}</p>` : '';
@@ -587,13 +602,13 @@ export const personResearchMethods = uiModule({
             const pickHtml = vp.pick ? `
                         <button type="button" class="secondary prv-pick" data-hypo-pick="${esc(variant.id)}" aria-label="${esc(r.hypoPickAria(variant.id))}"${off(vp.pick)}>${researchActionLabel(r.hypoPick, terminal, { sr: false })}</button>` : '';
             const waitHtml = vp.waiting && pending ? this.researchHypothesisWaitHtml(h, pending) : '';
-            const sw = canSwitch ? this.researchVariantSwitchHtml(variant, !!o!.shown) : '';
+            const sw = canSwitch ? this.researchVariantSwitchHtml(variant, !!o!.shown, h.id ?? '') : '';
             const cls = [o?.shown ? 'is-shown' : '', vp.tag ? 'is-chosen' : '', vp.dim ? 'is-dim' : ''].filter(Boolean).join(' ');
             return `<div class="person-research-variant sel-opt${cls ? ` ${cls}` : ''}" data-sel-form="row" role="listitem" data-variant="${esc(variant.id)}">
                     <span class="prv-id" aria-hidden="true">${esc(variant.id)}</span>
                     <span class="prv-text">${this.researchVariantTitleHtml(variant)}<span class="prv-meta">${metaHtml}</span>${proposalHtml}${sources ? `
                         <button type="button" class="link-button prv-sources-toggle" aria-expanded="false">${esc(r.hypoSources(sources.count))}</button>${sources.html}` : ''}${noteText ? `
-                        <span class="prv-kindnote">${esc(noteText)}</span>` : ''}${pickHtml}${waitHtml}</span>${sw}
+                        <span class="prv-kindnote">${esc(noteText)}</span>` : ''}${pickHtml}${waitHtml}${canSwitch ? pendStatusHtml(viewLinkPendKey(h.id ?? '', variant.id)) : ''}</span>${sw}
                 </div>`;
         }).join('');
         const proposalNoneHtml = plan.proposalNone && proposal ? `
@@ -879,16 +894,41 @@ export const personResearchMethods = uiModule({
             const sw = target.closest<HTMLButtonElement>('.view-link-switch');
             if (!sw || sw.disabled) return;
             const variant = sw.dataset.variant!;
-            sw.disabled = true;
+            const key = viewLinkPendKey(hypo, variant);
+            // One change at a time: a click while it asks (the chain's confirmation) or lays out is ignored.
+            if (isPend(key) || viewLinkAsking.has(key)) return;
+            const on = sw.getAttribute('aria-checked') !== 'true';
+            const drawn = (): void => { if (host.isConnected) redraw({ hypo, variant }); };
+            // 6.1 (A122): the new state at once, dashed and locked, "Calculating the layout…" painted before the
+            // layout is computed (the page stands still meanwhile, so the words cannot wait 120 ms).
+            const start = async (): Promise<void> => {
+                viewLinkPendTo.set(key, on);
+                startPend(key, { label: strings.busy.layout, now: true, waitMs: Infinity, redraw: drawn });
+                drawn();
+                await nextPaint();
+            };
+            viewLinkAsking.add(key);
             void (async () => {
-                if (sw.getAttribute('aria-checked') === 'true') {
-                    await this.viewLinkUnlink(hypo, { near: sw });
-                } else {
-                    const choice = this.viewLinkOffersFor(hypo).find(o => o.variant === variant)?.choice;
-                    if (choice) await this.viewLinkShow(choice);
+                let refusal: PendRefusal | undefined;
+                try {
+                    if (!on) {
+                        await this.viewLinkUnlink(hypo, { near: sw, beforeLayout: start });
+                    } else {
+                        const choice = this.viewLinkOffersFor(hypo).find(o => o.variant === variant)?.choice;
+                        if (choice) {
+                            await start();
+                            await this.viewLinkShow(choice);
+                        }
+                    }
+                } catch {
+                    refusal = { text: strings.busy.failed, retry: () => host.querySelector<HTMLElement>(`[data-hypo="${CSS.escape(hypo)}"] .view-link-switch[data-variant="${CSS.escape(variant)}"]`)?.click() };
+                } finally {
+                    viewLinkAsking.delete(key);
                 }
+                if (isPend(key)) await endPend(key, refusal);
+                viewLinkPendTo.delete(key);
                 // The dialog may have gone meanwhile (Esc).
-                if (host.isConnected) redraw({ hypo, variant });
+                drawn();
             })();
         });
     },

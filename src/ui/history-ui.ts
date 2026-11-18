@@ -44,6 +44,10 @@ import {
 import { loadHistoryCache, saveHistoryCache, loadHideQueue, saveHideQueue } from '../history-store.js';
 import { onBridgeStatus } from './research-sync-ui.js';
 import { uiModule } from './module.js';
+import { applyPend, endPend, isPend, pendStatusEl, startPend } from './switch-pend.js';
+
+/** The layer's switch in Settings while switching it on reads the history (6.1, B170). */
+const HISTORY_LAYER_PEND = 'history-layer';
 
 /** The manager "History of places" (history-manage-ui.ts). */
 export const HISTORY_MANAGE_DIALOG_ID = 'history-modal';
@@ -171,7 +175,7 @@ export const historyMethods = uiModule({
         }
         await this.ensureHistoryCache(rid);
         const status = this.researchBridgeUp(rid) ? this.researchStatusOf(rid) : null;
-        if (status) this.noteHistoryStatus(rid, status);
+        if (status) await this.noteHistoryStatus(rid, status);
         else this.historyChanged();
     },
 
@@ -224,7 +228,7 @@ export const historyMethods = uiModule({
      * the tree is open, `history.events` is said and its `history.rev` is not
      * the one read; send the waiting hidings; redraw the Settings row.
      */
-    noteHistoryStatus(researchId: string, status: LiveStatus): void {
+    noteHistoryStatus(researchId: string, status: LiveStatus): Promise<void> {
         const rid = researchId.toLowerCase();
         lastFeatures.set(rid, status.features ?? []);
         this.noteHistoryKindsStatus(rid, status);
@@ -241,21 +245,23 @@ export const historyMethods = uiModule({
         }
         if (!SettingsManager.isHistoryLayer() || rid !== activeResearchId()) {
             this.renderHistorySettingsIfOpen();
-            return;
+            return Promise.resolve();
         }
-        void this.ensureHistoryCache(rid).then(() => {
+        // Resolves once the research's history (when it was stale) is read.
+        let read: Promise<void> = Promise.resolve();
+        return this.ensureHistoryCache(rid).then(() => {
             const features = status.features ?? [];
             if (features.includes(HISTORY_EVENTS_FEATURE)) {
                 const rev = status.historyRev;
                 const stale = !cache.get(rid) || (rev ? loadedRev.get(rid) !== rev : !readHere.has(rid));
-                if (stale) void this.readBridgeHistory(rid, rev);
+                if (stale) read = this.readBridgeHistory(rid, rev).catch(() => { /* the read's own end */ });
             }
             if (features.includes(HISTORY_HIDE_FEATURE)) void this.flushHistoryQueue(rid);
             this.syncHistoryStrip();
             this.renderHistorySettingsIfOpen();
             // The manager's header and actions follow the status (search on/off, pace, features).
             if (document.getElementById(HISTORY_MANAGE_DIALOG_ID)?.classList.contains('active')) this.renderHistoryManage();
-        });
+        }).then(() => read);
     },
 
     /** The stream's `history {rev}` event: a change without a new commit (spec 020 A3). */
@@ -634,9 +640,25 @@ export const historyMethods = uiModule({
 
     /** The layer switched on or off in Settings. Switching it on reads; it never writes to the research. */
     toggleHistoryLayer(on: boolean): void {
+        // Still reading after it was switched on (6.1, B170): a click meanwhile is ignored, visibly.
+        if (isPend(HISTORY_LAYER_PEND)) {
+            const toggle = document.getElementById('history-setting-toggle') as HTMLInputElement | null;
+            if (toggle) toggle.checked = true;
+            return;
+        }
         SettingsManager.setHistoryLayer(on);
-        if (on) void this.refreshHistoryForActiveTree();
-        else this.historyChanged();
+        if (!on) {
+            this.historyChanged();
+            return;
+        }
+        // On: the device's copy and the research's history are read; the switch stays dashed with "Loading…"
+        // (after 120 ms) until they are in.
+        startPend(HISTORY_LAYER_PEND, { label: strings.busy.generic, redraw: () => this.renderHistorySettingsIfOpen() });
+        this.renderHistorySettingsIfOpen();
+        void this.refreshHistoryForActiveTree().finally(async () => {
+            await endPend(HISTORY_LAYER_PEND);
+            this.renderHistorySettingsIfOpen();
+        });
     },
 
     /** The `experiment` link may be offered for the research (§1.3 canLinkOn / canLinkOff). */
@@ -661,7 +683,15 @@ export const historyMethods = uiModule({
         const row = document.getElementById('history-setting-status');
         const link = document.getElementById('history-manage-link');
         const layerOn = SettingsManager.isHistoryLayer();
-        if (toggle) toggle.checked = layerOn;
+        if (toggle) {
+            toggle.checked = layerOn;
+            applyPend(toggle, HISTORY_LAYER_PEND);
+            if (!isPend(HISTORY_LAYER_PEND)) toggle.removeAttribute('aria-disabled');
+            const name = document.getElementById('history-setting-name');
+            name?.parentElement?.querySelector(':scope > .pend-st')?.remove();
+            const st = pendStatusEl(HISTORY_LAYER_PEND);
+            if (st && name) name.after(st);
+        }
         if (!row || !link) return;
         const rid = activeResearchId();
         if (rid && layerOn && !cache.has(rid)) {
