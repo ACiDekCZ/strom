@@ -413,18 +413,23 @@ test.describe('finding the families of a large tree (B210/B211, waiting buttons 
 
         // Another cut: its segment shows the spinner and the hint under the segments says what happens, before
         // the families are computed again.
+        // A tree this large shows the state at the click itself: it is read then, without waiting the many
+        // seconds of the computation that follows.
         const other = modal.locator('.splitfam-mode-btn:not(.active)').first();
-        await other.evaluate((b) => {
-            const w = window as unknown as { __said: string[] };
-            w.__said = [];
+        await expect(other).toBeVisible();
+        const said = await other.evaluate(async (b: HTMLButtonElement) => {
+            const said: string[] = [];
             const hint = document.querySelector('#split-families-modal .splitfam-mode-hint')!;
             new MutationObserver(() => {
-                if (b.getAttribute('aria-busy') === 'true') w.__said.push(hint.textContent ?? '');
+                if (b.getAttribute('aria-busy') === 'true') said.push(hint.textContent ?? '');
             }).observe(b, { attributes: true, childList: true, subtree: true, characterData: true });
+            b.click();
+            for (let i = 0; i < 3; i++) await Promise.resolve();
+            return said;
         });
-        await other.click();
-        await expect(modal.locator('.splitfam-mode-btn.active')).toBeVisible({ timeout: 60_000 });
-        const said = await page.evaluate(() => (window as unknown as { __said: string[] }).__said);
         expect(said.some(t => t.includes('Finding the families…'))).toBe(true);
+        // The computation the click started is not looked at: stopped, so closing the page does not wait for it.
+        const cdp = await page.context().newCDPSession(page);
+        await cdp.send('Runtime.terminateExecution');
     });
 });
