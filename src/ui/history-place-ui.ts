@@ -17,6 +17,9 @@ import { postBridgePlace, type HistoryWriteRefusal } from '../history-bridge.js'
 import { HISTORY_PLACE_DIRECT_FEATURE, researchLinkMark, researchUrlMark } from '../research-link.js';
 import { uiModule } from './module.js';
 
+/** Places whose history is asked again and not answered yet (B192). */
+const placeAgainAsking = new Set<string>();
+
 export const HISTORY_PLACE_DIALOG_ID = 'history-place-modal';
 
 interface PlaceFindState {
@@ -213,8 +216,15 @@ export const historyPlaceMethods = uiModule({
     async historyPlaceSearchAgain(key: string): Promise<void> {
         const d = this.historyManageDrawn();
         const id = d?.payload?.places[key]?.id;
-        if (!d?.base || !id) return;
-        const r = await postBridgePlace(d.base, id, d.features, this.historyOffCheck(d.rid, 'places'));
+        // Asked already and not answered (the detail drawn anew meanwhile has a new link): nothing more.
+        if (!d?.base || !id || placeAgainAsking.has(key)) return;
+        placeAgainAsking.add(key);
+        let r: Awaited<ReturnType<typeof postBridgePlace>>;
+        try {
+            r = await postBridgePlace(d.base, id, d.features, this.historyOffCheck(d.rid, 'places'));
+        } finally {
+            placeAgainAsking.delete(key);
+        }
         if (r.ok) {
             this.showToast(strings.history.placeToast(d.names.place(key)), 6000, { kind: 'history-place' });
             this.historyManageWritten(d.rid, this.researchHeadNow(d.rid), r);

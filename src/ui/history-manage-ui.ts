@@ -37,7 +37,7 @@ import { uiModule } from './module.js';
 import { undoInToast } from './toast.js';
 import { historyOriginPendKey } from './history-kinds-ui.js';
 import { endPend, isPend, pendAttrs, pendRefusalHtml, pendStatusHtml, startPend, type PendRefusal } from './switch-pend.js';
-import { busySpinHtml } from './busy.js';
+import { busySpinHtml, runBusy } from './busy.js';
 
 /**
  * A row's link in text ("Search again", "Map automatically", §5, 5b): its 12 px slot drawn from the start, so
@@ -805,7 +805,8 @@ export const historyManageMethods = uiModule({
             case 'showAgain': this.historyManageShowAgain(key); return;
             case 'assign': this.historyManagePlaceHook('assign')?.(key); return;
             case 'find': this.historyManagePlaceHook('find')?.(key); return;
-            case 'placeAgain': void this.historyPlaceSearchAgain(key); return;
+            // Working from the click until the research answers (B192): one send however often it is asked.
+            case 'placeAgain': void runBusy(el, () => this.historyPlaceSearchAgain(key), { label: strings.busy.sending, kind: 'write' }); return;
             case 'restoreHidden': this.historyManageRestoreHidden(Number(el.dataset.index)); return;
             case 'kindsToggle': this.historyKindsManageToggle(); return;
             case 'align': this.openHistoryAlign(); return;

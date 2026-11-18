@@ -211,6 +211,25 @@ test.describe('History in the life timeline: Settings', () => {
         await expect(status(page)).toBeHidden();
     });
 
+    test('Turn off the search says Turning off… on its link until the research answers; one write however often clicked', async ({ page }) => {
+        const { history } = await setup(page, { layerOn: true });
+        await openSettings(page);
+        await toggle(page).uncheck();
+        let release!: () => void;
+        const held = new Promise<void>(r => { release = r; });
+        await page.route(url => url.pathname.endsWith('/experiments'), async route => {
+            if (route.request().method() === 'POST') await held;
+            await route.fallback();
+        });
+        const off = status(page).getByRole('button', { name: 'Turn off the search for this tree' });
+        await off.click();
+        await expect(status(page).locator('[data-history-action="off"]')).toHaveAttribute('data-busy', 'busy');
+        await status(page).locator('[data-history-action="off"]').click({ force: true });
+        release();
+        await expect(page.locator('.toast').filter({ hasText: 'The search for events is off for this tree.' })).toBeVisible();
+        expect(history.offs).toEqual([{ history: false }]);
+    });
+
     test('the research not searching: the search is switched on by its terminal (the experiment link)', async ({ page }) => {
         const { history } = await setup(page, { layerOn: true, history: { searching: false } });
         await openSettings(page);

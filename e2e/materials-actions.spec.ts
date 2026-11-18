@@ -316,6 +316,21 @@ test.describe('Assign to a person', () => {
         await expect(rows(page).first()).toContainText('Rodinná fotka');
     });
 
+    test('Assign says Saving… on its button until the research writes; a second click sends nothing', async ({ page }) => {
+        const { material } = await setup(page, { files: [materialFile(1, { title: 'Rodinná fotka' })] });
+        await openAssign(page, 'Rodinná fotka');
+        await pick(page, ['Jan Fíšek']);
+        material.writeDelayMs = 1500;
+        const go = dialog(page).locator('.mdlg-btn.is-primary');
+        await go.click();
+        await expect(go).toHaveAttribute('data-busy', 'busy');
+        await expect(go).toContainText('Saving…');
+        await go.click({ force: true });
+        await expect(dialog(page)).toHaveCount(0);
+        material.writeDelayMs = 0;
+        expect(material.assigns).toHaveLength(1);
+    });
+
     test('people already on the file are fixed; Undo takes off only those added', async ({ page }) => {
         const { material } = await setup(page, { files: [materialFile(1, { persons: ['P0003'], title: 'Křest' })] });
         await openAssign(page, 'Křest');

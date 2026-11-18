@@ -29,6 +29,7 @@ import { materialPersonLabel } from '../media-uses.js';
 import { MaterialActionCtx, MaterialRefusal, MaterialsContext, appendBreakable } from './materials-ui.js';
 import { uiModule } from './module.js';
 import { undoInToast, type ToastAction, type ToastWorkEnd } from './toast.js';
+import { setBusy } from './busy.js';
 
 const TOAST_MS = 8000;
 const PICKER_ID = 'mdlg-assign-picker';
@@ -42,8 +43,8 @@ export interface MaterialDialog {
     /** The research's refusal inside the dialog (null: hide it). */
     /** A refusal's sentence; its action carries the mark of the research link it launches (none: stays here). */
     error(text: string | null, action?: { label: string; run: () => void; mark?: ResearchActionMark }): void;
-    /** The confirm button busy while the research answers. */
-    busy(on: boolean): void;
+    /** The confirm button working while the research answers (its words, default "Saving…"; §1). */
+    busy(on: boolean, label?: string): void;
     close(): void;
 }
 
@@ -140,12 +141,11 @@ export function materialDialog(opts: { title: string; sub?: string; modifier?: s
             err.appendChild(h('span', '', text));
             if (action) err.appendChild(setResearchActionLabel(button(action.label, '', action.run), action.label, action.mark ?? 'none'));
         },
-        busy(on) {
+        busy(on, label = strings.busy.saving) {
             box.setAttribute('aria-busy', String(on));
-            foot.querySelectorAll<HTMLButtonElement>('.mdlg-btn.is-primary, .mdlg-btn.is-danger').forEach(b => {
-                if (on) { b.dataset.wasDisabled = String(b.disabled); b.disabled = true; }
-                else { b.disabled = b.dataset.wasDisabled === 'true'; delete b.dataset.wasDisabled; }
-            });
+            // The working state on the button (B81–B84): locked at once, its words after 120 ms, a second click
+            // goes nowhere.
+            foot.querySelectorAll<HTMLButtonElement>('.mdlg-btn.is-primary, .mdlg-btn.is-danger').forEach(b => setBusy(b, on, { label }));
         },
         close() {
             if (closed) return;

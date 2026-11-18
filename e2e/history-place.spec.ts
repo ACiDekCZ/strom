@@ -190,9 +190,20 @@ test.describe('History of places: a place\'s own history on request (§6a)', () 
         await expect(modal(page).locator('.hm-detail-body')).toContainText('A sugar factory opened near Čapkov.');
         const again = modal(page).locator('[data-hm="placeAgain"]');
         await expect(again).toHaveText('Search again in the research');
+        // Working from the click until the research answers: a second click sends nothing.
+        let release!: () => void;
+        const held = new Promise<void>(r => { release = r; });
+        await page.route(url => url.pathname.endsWith('/history/place'), async route => {
+            if (route.request().method() === 'POST') await held;
+            await route.fallback();
+        });
         await again.click();
+        await expect(again).toHaveAttribute('data-busy', 'busy');
+        await again.click({ force: true });
+        release();
         await expect.poll(() => history.writes.place).toEqual([{ place: 'L0001' }]);
         await expect.poll(async () => (await links(page)).at(-1)).toMatch(LINK_L0001);
+        expect(history.writes.place).toHaveLength(1);
     });
 
     test('Places: the research\'s suggestions and a place\'s "⋯" lead to the confirmation', async ({ page }) => {

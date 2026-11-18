@@ -42,7 +42,7 @@ import {
     fetchBridgeHistory, hideRequestBody, postBridgeHide, postBridgeExperimentsOff, experimentOfSwitch, HISTORY_READ_TIMEOUT_MS,
     type ExperimentSwitch,
 } from '../history-bridge.js';
-import { busySpinHtml } from './busy.js';
+import { busySpinHtml, runBusy, activatedElement } from './busy.js';
 import { loadHistoryCache, saveHistoryCache, loadHideQueue, saveHideQueue } from '../history-store.js';
 import { onBridgeStatus } from './research-sync-ui.js';
 import { uiModule } from './module.js';
@@ -867,7 +867,12 @@ export const historyMethods = uiModule({
 
     historySettingsAction(action: HistorySettingsAction | 'errLink'): void {
         if (action === 'linkOn') this.historyEnableSearch();
-        else if (action === 'off') void this.historyDisableSearch();
+        else if (action === 'off') {
+            // Through the bridge: the link working from the click until the research answers (B172), one write.
+            const el = activatedElement() ?? document.querySelector<HTMLElement>('[data-history-action="off"]');
+            if (el) void runBusy(el, () => this.historyDisableSearch(), { label: strings.busy.turningOff, kind: 'write' });
+            else void this.historyDisableSearch();
+        }
         else if (action === 'linkOff') this.historyLaunchExperiment('off');
         else if (action === 'errLink' && offError?.link) this.launchResearchLink(offError.link, 'terminal');
     },

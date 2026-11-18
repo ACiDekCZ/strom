@@ -35,6 +35,7 @@ import { materialDialog, button, type MaterialDialog } from './material-actions-
 import { treeRecords, materialsWindowOpen } from './materials-window.js';
 import type { MaterialsContext } from './materials-ui.js';
 import { uiModule } from './module.js';
+import { runBusy } from './busy.js';
 
 /** Asking about a sorting at work: every 2 s, 10 s while the page is hidden, 15 s while the bridge is down (spec 102 §13). */
 const POLL_MS = 2_000;
@@ -123,6 +124,9 @@ function running(job: SortJob | null): boolean {
 function hasProposal(job: SortJob | null): boolean {
     return !!job && (job.state === 'done' || (job.state === 'cancelled' && job.proposals.length > 0));
 }
+
+/** A sorting's cancel asked and not answered yet (one request however often clicked). */
+let cancelAsking = false;
 
 export const materialSortMethods = uiModule({
     // ==================== GATES ====================
@@ -239,7 +243,7 @@ export const materialSortMethods = uiModule({
                 return;
             }
             sent = true;
-            dialog.busy(true);
+            dialog.busy(true, strings.busy.sending);
             dialog.error(null);
             const ids = send.map(i => i.file!.id);
             const text = area.value.trim().slice(0, SORT_MAX_TEXT);
@@ -337,8 +341,15 @@ export const materialSortMethods = uiModule({
     async materialSortCancel(): Promise<void> {
         const mc = this.materialsContext();
         const w = watch;
-        if (!mc?.base || !w) return;
-        const res = await cancelMaterialSort(mc.base, w.id);
+        // Asked already and not answered (the strip drawn anew meanwhile has a new button): nothing more.
+        if (!mc?.base || !w || cancelAsking) return;
+        cancelAsking = true;
+        let res: Awaited<ReturnType<typeof cancelMaterialSort>>;
+        try {
+            res = await cancelMaterialSort(mc.base, w.id);
+        } finally {
+            cancelAsking = false;
+        }
         if (!res.ok) { this.materialErrorToast(mc, res.error, () => void this.materialSortCancel()); return; }
         const made = w.job?.proposals.length ?? 0;
         if (made > 0) {
@@ -415,7 +426,8 @@ export const materialSortMethods = uiModule({
         switch (btn.dataset.sort) {
             case 'sort': if (target) this.openSortDialog(target); return;
             case 'open': void this.openSortProposal(); return;
-            case 'cancel': void this.materialSortCancel(); return;
+            // Said from the click until the research answers (a strip drawn anew meanwhile: a toast says it).
+            case 'cancel': void runBusy(btn, () => this.materialSortCancel(), { label: strings.busy.cancelling, kind: 'bridge', toastWhenGone: true }); return;
             case 'dismiss':
                 if (mc) patchResearchAutoState(mc.treeId, { materialSort: undefined });
                 this.materialSortStop();
@@ -833,7 +845,7 @@ export const materialSortMethods = uiModule({
                     this.showToast(strings.materials.actionsWhenRunning, TOAST_MS, { closable: true, kind: 'materials' });
                     return;
                 }
-                dialog.busy(true);
+                dialog.busy(true, strings.busy.reverting);
                 let good = true;
                 if (rv.was) {
                     const edit: EditRequest = { ids: [id] };

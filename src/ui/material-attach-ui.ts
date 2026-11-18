@@ -28,6 +28,7 @@ import { MaterialDialog, button, materialDialog } from './material-actions-ui.js
 import { formatBytes } from './attachments-ui.js';
 import { type MaterialsContext, materialItemSha } from './materials-ui.js';
 import { uiModule } from './module.js';
+import { isBusy } from './busy.js';
 
 type Target = 'person' | 'event' | 'couple' | 'source';
 const TARGETS: Target[] = ['person', 'event', 'couple', 'source'];
@@ -341,7 +342,7 @@ export const materialAttachMethods = uiModule({
         show('person');
 
         const run = async () => {
-            if (confirm.disabled) return;
+            if (confirm.disabled || isBusy(confirm)) return;
             const places: MediaPlace[] = target === 'person' ? chosenPeople.map(id => ({ personId: id })) : chosenPlace ? [chosenPlace] : [];
             if (!places.length) return;
             dialog.busy(true);

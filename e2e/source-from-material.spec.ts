@@ -346,6 +346,25 @@ test.describe('A source from material only in the archive', () => {
         expect(material.assigns).toHaveLength(0);
     });
 
+    test('the working copy on its way from the bridge: Loading… on the viewer\'s action until the editor opens', async ({ page }) => {
+        const sha = materialSha('I0001');
+        await research(page, [materialFile(1, { title: 'Křest', persons: ['P0003'] })]);
+        await view(page, 'Křest');
+        let release!: () => void;
+        const held = new Promise<void>(r => { release = r; });
+        await page.route(url => url.pathname.endsWith(`/media/${sha}`) && url.searchParams.get('file') === '1', async route => {
+            await held;
+            await route.fallback();
+        });
+        const make = act(page, 'makeSource');
+        await make.click();
+        await expect(make).toHaveAttribute('data-busy', 'busy');
+        await expect(make).toContainText('Loading…');
+        await expect(editor(page)).toBeHidden();
+        release();
+        await expect(editor(page)).toBeVisible();
+    });
+
     test('a new source at a person: the research\'s material in the offer shows its preview from the bridge', async ({ page }) => {
         const { material } = await research(page, [materialFile(1, { title: 'Křest', persons: ['P0003'] })]);
         await page.evaluate(() => (window.Strom.UI as unknown as { openMaterials(o: unknown): void }).openMaterials({}));

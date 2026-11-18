@@ -261,6 +261,37 @@ test.describe('Sort with the agent', () => {
         expect(material.cancels).toHaveLength(2);
     });
 
+    test('Sort with the agent says Sending… on its button and the strip\'s Cancel Cancelling… until the research answers', async ({ page }) => {
+        const material = await setup(page);
+        material.sortDoneAt = 99;
+        material.sortWorkingProposals = 1;
+        await openWindow(page);
+        let release!: () => void;
+        let held = new Promise<void>(r => { release = r; });
+        await page.route(url => /\/material\/sort(\/[^/]+\/cancel)?$/.test(url.pathname), async route => {
+            if (route.request().method() === 'POST') await held;
+            await route.fallback();
+        });
+        await strip(page).locator('[data-sort="sort"]').click();
+        const go = sortDialog(page).locator('.mdlg-sort-go');
+        await go.click();
+        await expect(go).toHaveAttribute('data-busy', 'busy');
+        await expect(go).toContainText('Sending…');
+        release();
+        await expect(strip(page)).toContainText('The agent is sorting · 1 of 3');
+        expect(material.sorts).toHaveLength(1);
+
+        held = new Promise<void>(r => { release = r; });
+        const cancel = strip(page).locator('[data-sort="cancel"]');
+        await cancel.click();
+        await expect(cancel).toHaveAttribute('data-busy', 'busy');
+        await expect(cancel).toContainText('Cancelling…');
+        await cancel.click();
+        release();
+        await expect(page.locator('.mdlg', { hasText: 'Discard the finished proposals?' })).toBeVisible();
+        expect(material.cancels).toHaveLength(1);
+    });
+
     test('the research turns a sorting down: said in the dialog, sent once per click, never again by itself', async ({ page }) => {
         const material = await setup(page);
         await openWindow(page);

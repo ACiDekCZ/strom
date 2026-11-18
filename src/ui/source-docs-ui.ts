@@ -35,6 +35,7 @@ import { attachmentPdf, openPdfBlob } from './material-viewer-ui.js';
 import { closeImageViewer } from './image-viewer.js';
 import { uiModule } from './module.js';
 import { MaterialDialog, button, materialDialog } from './material-actions-ui.js';
+import { runBusy, activatedElement } from './busy.js';
 
 /** A file staged as the source's evidence in the editor. */
 interface DocDraft {
@@ -218,6 +219,8 @@ export const sourceDocsMethods = uiModule({
      */
     async makeSourceFromMaterial(item: MaterialItem, ctx: { personId?: PersonId | null; leave?: () => void } = {}): Promise<boolean> {
         if (DataManager.isReadOnly() || !this.canEditSources()) return false;
+        // The element of the click, before anything waits (its dialog or menu may close meanwhile).
+        const el = activatedElement();
         const att = item.attachment && !item.attachment.removed && item.attachment.places?.length ? DataManager.getMedia(item.attachment.id) : undefined;
         let draft: DocDraft;
         if (att) {
@@ -228,7 +231,11 @@ export const sourceDocsMethods = uiModule({
                 this.showToast(strings.materials.actionsWhenRunning);
                 return false;
             }
-            const record = await this.materialWorkingCopy(item, mc);
+            // The file from the bridge before the editor: said on the element clicked, or in a progress toast
+            // when it went with its dialog or menu (§2.1).
+            let record: Omit<Attachment, 'id' | 'places'> | null = null;
+            await runBusy(el ?? document.createElement('button'), async () => { record = await this.materialWorkingCopy(item, mc); },
+                { label: strings.busy.generic, toastWhenGone: true });
             if (!record) {
                 this.showToast(strings.materials.attachFailed);
                 return false;
