@@ -526,12 +526,13 @@ export const cardSignalsUiMethods = uiModule({
         if (help) help.onclick = () => { void openHelp(HELP_TOPICS.reliability, help); };
     },
 
-    /** "Branch colours: Tree settings ›": the Settings scroll to the branch colours' switch, which takes the focus. */
+    /** "Lineage markers: Tree settings ›": the Settings scroll to the markers' shapes; the chosen one takes the focus. */
     showBranchColorsSetting(): void {
-        const toggle = document.getElementById('branch-colors-toggle') as HTMLInputElement | null;
-        const row = toggle?.closest<HTMLElement>('.settings-row');
-        if (!toggle || !row) return;
-        row.scrollIntoView({ block: 'center', behavior: 'smooth' });
-        toggle.focus({ preventScroll: true });
+        const group = document.getElementById('branch-marker-setting');
+        const chosen = group?.querySelector<HTMLInputElement>('input[name="branch-marker"]:checked')
+            ?? group?.querySelector<HTMLInputElement>('input[name="branch-marker"]');
+        if (!group || !chosen) return;
+        group.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        chosen.focus({ preventScroll: true });
     },
 });

@@ -742,8 +742,9 @@ test.describe('card signals', () => {
         const branch = settings.locator('.card-signals-branch-link');
         await expect(branch).toHaveText('Lineage markers: Tree settings ›');
         await branch.click();
-        await expect(page.locator('#branch-colors-toggle')).toBeFocused();
-        await expect(page.locator('#branch-colors-toggle')).toBeInViewport();
+        const chosenShape = page.locator('#branch-marker-setting input[name="branch-marker"]:checked');
+        await expect(chosenShape).toBeFocused();
+        await expect(chosenShape).toBeInViewport();
         const help = settings.locator('.card-signals-help-link');
         await expect(help).toHaveText('What the marks mean');
         await help.click();

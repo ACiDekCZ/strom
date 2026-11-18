@@ -11,6 +11,7 @@ import { initClosedPopups } from './closed-popups.js';
 import { initSheetSlide } from './sheet-slide.js';
 import { initKeyboardAccess } from './keyboard-access.js';
 import { syncTreeLegendLift } from './legend-lift.js';
+import { syncBranchLegend, syncBranchMarkerSetting } from './branch-marker-ui.js';
 import { DataManager, auditPersonName } from '../data.js';
 import { announcedResearchLinks, researchLinksEnabled, setResearchLinksEnabled } from '../research-device.js';
 import { TreeManager } from '../tree-manager.js';
@@ -387,8 +388,9 @@ export const miscMethods = uiModule({
         if (relCardToggle) relCardToggle.checked = SettingsManager.isReliabilityCardEnabled();
         this.syncSurnameDisplaySetting();
         this.syncTreeSpacingSetting();
-        const branchColorsToggle = document.getElementById('branch-colors-toggle') as HTMLInputElement | null;
-        if (branchColorsToggle) branchColorsToggle.checked = SettingsManager.isBranchMarkerOn();
+        // The previews draw with the tag's letters of the language (also before a tree is drawn).
+        this.applyBranchMarkerAttrs();
+        syncBranchMarkerSetting(SettingsManager.getBranchMarker(), SettingsManager.isBranchTintChosen());
         const descFamiliesToggle = document.getElementById('descendants-families-default-toggle') as HTMLInputElement | null;
         if (descFamiliesToggle) descFamiliesToggle.checked = SettingsManager.isDescendantsFullFamiliesDefault();
 
@@ -615,21 +617,24 @@ export const miscMethods = uiModule({
         // shown (family/descendants — not timeline, not fan).
         const cardsShown = mode === 'family' || mode === 'descendants';
         const treeLegend = document.getElementById('tree-legend');
+        // The lineage part (spec 112 §3): the signs in the cards' shape, the lines'
+        // names (numbered under R5, read from the canvas the cards were drawn on).
+        const legend = document.getElementById('branch-legend');
+        const branchShown = !!legend && cardsShown && SettingsManager.isBranchLegendEnabled()
+            && syncBranchLegend(legend, SettingsManager.getBranchMarker(),
+                !!document.getElementById('tree-canvas')?.classList.contains('branch-numbered'));
+        if (legend) legend.style.display = branchShown ? 'flex' : 'none';
         if (treeLegend) {
             const hasPersons = DataManager.getAllPersons().length > 0;
             const shown = cardsShown && hasPersons && SettingsManager.isBranchLegendEnabled();
             treeLegend.style.display = shown ? 'flex' : 'none';
+            treeLegend.classList.toggle('has-branch', branchShown);
             syncTreeLegendLift(treeLegend, shown);
         }
         // The ring of an unknown sex is explained only when such a person is in view.
         const unknownItem = document.getElementById('legend-unknown');
         if (unknownItem) {
             unknownItem.style.display = document.querySelector('#tree-canvas .person-card.unknown') ? '' : 'none';
-        }
-        const legend = document.getElementById('branch-legend');
-        if (legend) {
-            legend.style.display = (cardsShown && SettingsManager.isBranchMarkerOn()
-                && SettingsManager.isBranchLegendEnabled()) ? 'flex' : 'none';
         }
         if (treeLegend) {
             this.updateLegendMarks(treeLegend);

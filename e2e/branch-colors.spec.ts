@@ -27,17 +27,91 @@ test('branch colours toggle adds card classes and a legend', async ({ page }) =>
     await expect(page.locator('.person-card.branch-paternal, .person-card.branch-maternal, .person-card.branch-descendant').first()).toBeVisible();
     await page.evaluate(() => window.Strom.SettingsManager.setTheme('system'));
 
-    // Disable → stripes and legend gone.
+    // Off → stripes and legend gone.
     await page.evaluate(() => window.Strom.UI.showSettingsDialog());
-    await page.locator('#branch-colors-toggle').uncheck();
+    await page.locator('input[name="branch-marker"][value="off"]').check();
     await expect(legend).toBeHidden();
     await expect.poll(() =>
         page.locator('.person-card.branch-paternal, .person-card.branch-maternal, .person-card.branch-descendant').count()
     ).toBe(0);
 
-    // Re-enable → they come back.
-    await page.locator('#branch-colors-toggle').check();
+    // A shape again → they come back.
+    await page.locator('input[name="branch-marker"][value="arc"]').check();
     await expect(legend).toBeVisible();
+});
+
+/** Settings > Tree view (spec 112, R1): five shapes with previews, the tint disabled while off and remembered. */
+test('the lineage markers\' settings: shapes, previews, the tint under off (spec 112)', async ({ page }) => {
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(card(page, 'Johan')).toBeVisible();
+    await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+    const group = page.locator('#branch-marker-setting');
+    await expect(group.locator('legend .settings-name')).toHaveText('Lineage markers');
+    const opts = group.locator('.branch-marker-opt');
+    await expect(opts.locator('.bm-name')).toHaveText(['Arc', 'Letter tag', 'Stripe', 'Corner', 'Off']);
+    await expect(group.locator('.bm-default')).toHaveCount(1);
+    await expect(opts.first().locator('.bm-default')).toHaveText('default');
+    // The default: the arc, chosen as a "Linka" selection (filled).
+    const arc = group.locator('input[value="arc"]');
+    await expect(arc).toBeChecked();
+    const fill = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--sel-fill').trim());
+    const rowBg = await opts.first().evaluate(el => getComputedStyle(el).backgroundColor);
+    expect(rowBg).not.toBe('rgba(0, 0, 0, 0)');
+    expect(fill).not.toBe('');
+    // Each shape's preview draws the shape with the cards' rules; Off's card has none.
+    const preview = (v: string) => group.locator(`.branch-marker-opt:has(input[value="${v}"]) .bm-card`);
+    expect(await preview('tag').evaluate(el => getComputedStyle(el, '::after').content)).toBe('"P"');
+    expect(await preview('stripe').evaluate(el => getComputedStyle(el, '::before').width)).toBe('3px');
+    expect(await preview('off').evaluate(el => getComputedStyle(el, '::before').content)).toBe('none');
+    // No preview is a card of the tree.
+    await expect(group.locator('.person-card')).toHaveCount(0);
+
+    // The tint: on, then Off disables it (shown unchecked), a shape brings it back checked.
+    const tint = page.locator('#branch-tint-toggle');
+    await expect(tint).toBeEnabled();
+    await tint.check();
+    await expect(page.locator('body')).toHaveAttribute('data-branch-tint', '');
+    await group.locator('input[value="off"]').check();
+    await expect(tint).toBeDisabled();
+    await expect(tint).not.toBeChecked();
+    await expect(page.locator('#branch-tint-row')).toHaveCSS('opacity', '0.5');
+    await group.locator('input[value="corner"]').check();
+    await expect(page.locator('body')).toHaveAttribute('data-branch-marker', 'corner');
+    await expect(tint).toBeEnabled();
+    await expect(tint).toBeChecked();
+    // Kept over a reload.
+    await page.reload();
+    await expect(card(page, 'Johan')).toBeVisible();
+    await expect(page.locator('body')).toHaveAttribute('data-branch-marker', 'corner');
+    await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+    await expect(page.locator('#branch-marker-setting input[value="corner"]')).toBeChecked();
+    await expect(page.locator('#branch-tint-toggle')).toBeChecked();
+});
+
+/** The legend's lineage part (spec 112 §3): the signs in the chosen shape and the "no marker" line. */
+test('the legend draws the lines\' signs in the chosen shape (spec 112)', async ({ page }) => {
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(card(page, 'Johan')).toBeVisible();
+    await page.evaluate(() => window.Strom.UI.toggleBranchLegend(true));
+    const legend = page.locator('#branch-legend');
+    await expect(legend).toBeVisible();
+    await expect(legend.locator('.branch-legend-label')).toHaveText(['Paternal', 'Maternal', 'Descendants']);
+    await expect(legend.locator('.branch-legend-none')).toHaveText('No marker: focused person, partners, siblings, cousins');
+    const shapes = () => legend.locator('.branch-swatch').evaluateAll(els => els.map(e => (e as HTMLElement).dataset.shape));
+    expect(await shapes()).toEqual(['arc', 'arc', 'arc']);
+    await page.evaluate(() => window.Strom.UI.setBranchMarker('tag'));
+    expect(await shapes()).toEqual(['tag', 'tag', 'tag']);
+    // The tag's letters as on the cards.
+    expect(await legend.locator('.branch-swatch > i').evaluateAll(els => els.map(e => getComputedStyle(e, '::before').content)))
+        .toEqual(['"P"', '"M"', '"D"']);
+    // The tint: 4px of the line's tint around the sign.
+    await page.evaluate(() => window.Strom.UI.setBranchTint(true));
+    await expect(legend.locator('.branch-swatch').first()).toHaveCSS('padding-top', '4px');
+    // Nothing of the legend overflows its panel.
+    const fits = await page.locator('#tree-legend').evaluate(el => el.scrollWidth <= el.clientWidth + 1);
+    expect(fits).toBe(true);
 });
 
 test('the legend can be hidden separately while stripes stay on', async ({ page }) => {

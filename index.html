@@ -1589,30 +1589,31 @@
            (body[data-branch-marker], absent = off) drawn as a layer of the
            card (::before / ::after), so the card box never changes. A card
            can carry two lines (R4: paternal and maternal). The Settings'
-           previews (.bm-preview[data-shape]) draw the same shapes at the
-           compact size. Colours: P2 tokens in :root (light, dark, print). */
-        .person-card:is(.branch-paternal, .branch-maternal, .branch-descendant) {
+           previews (.bm-preview[data-shape] .bm-card, no .person-card: the
+           app counts and marks those) draw the same shapes at the compact
+           size. Colours: P2 tokens in :root (light, dark, print). */
+        :is(.person-card, .bm-card):is(.branch-paternal, .branch-maternal, .branch-descendant) {
             --bm-mat-pattern: repeating-linear-gradient(to bottom, var(--branch-maternal) 0 6px, transparent 6px 10px);
             --bm-des-pattern: repeating-linear-gradient(to bottom, var(--branch-descendant) 0 3px, transparent 3px 6px);
             --bm-mat-hatch: repeating-linear-gradient(45deg, var(--branch-maternal) 0 2px, transparent 2px 4px);
         }
         /* Far out the patterns double, so they still read at the small scale. */
-        #tree-canvas.zoom-far .person-card:is(.branch-paternal, .branch-maternal, .branch-descendant) {
+        #tree-canvas.zoom-far :is(.person-card, .bm-card):is(.branch-paternal, .branch-maternal, .branch-descendant) {
             --bm-mat-pattern: repeating-linear-gradient(to bottom, var(--branch-maternal) 0 12px, transparent 12px 20px);
             --bm-des-pattern: repeating-linear-gradient(to bottom, var(--branch-descendant) 0 6px, transparent 6px 12px);
             --bm-mat-hatch: repeating-linear-gradient(45deg, var(--branch-maternal) 0 4px, transparent 4px 8px);
         }
-        .person-card.branch-paternal {
+        :is(.person-card, .bm-card).branch-paternal {
             --branch-stripe: var(--branch-paternal); --branch-ink: var(--branch-paternal-ink);
             --branch-tint: var(--branch-paternal-tint); --branch-letter: var(--branch-letter-paternal);
             --branch-pattern: var(--branch-paternal); --branch-corner: var(--branch-paternal);
         }
-        .person-card.branch-maternal {
+        :is(.person-card, .bm-card).branch-maternal {
             --branch-stripe: var(--branch-maternal); --branch-ink: var(--branch-maternal-ink);
             --branch-tint: var(--branch-maternal-tint); --branch-letter: var(--branch-letter-maternal);
             --branch-pattern: var(--bm-mat-pattern); --branch-corner: var(--bm-mat-hatch);
         }
-        .person-card.branch-descendant {
+        :is(.person-card, .bm-card).branch-descendant {
             --branch-stripe: var(--branch-descendant); --branch-ink: var(--branch-descendant-ink);
             --branch-tint: var(--branch-descendant-tint); --branch-letter: var(--branch-letter-descendant);
             --branch-pattern: var(--bm-des-pattern); --branch-corner: var(--branch-descendant);
@@ -1623,7 +1624,7 @@
         /* Arc (the default): the layer covers the whole card with the card's
            own rounding and paints only its left 4px, so the stripe runs into
            the rounded corners like a border. Unchanged when zoomed out. */
-        :is(body[data-branch-marker="arc"] #tree-canvas, .bm-preview[data-shape="arc"]) .person-card:is(.branch-paternal, .branch-maternal, .branch-descendant)::before {
+        :is(body[data-branch-marker="arc"] #tree-canvas, .bm-preview[data-shape="arc"]) :is(.person-card, .bm-card):is(.branch-paternal, .branch-maternal, .branch-descendant)::before {
             content: '';
             position: absolute;
             /* The border box: the stripe starts at the card's outer edge. */
@@ -1634,16 +1635,16 @@
             -webkit-print-color-adjust: exact; print-color-adjust: exact;
         }
         /* The focused card's border is 2px wide. */
-        :is(body[data-branch-marker="arc"] #tree-canvas, .bm-preview[data-shape="arc"]) .person-card.focused:is(.branch-paternal, .branch-maternal, .branch-descendant)::before { inset: -2px; }
+        :is(body[data-branch-marker="arc"] #tree-canvas, .bm-preview[data-shape="arc"]) :is(.person-card, .bm-card).focused:is(.branch-paternal, .branch-maternal, .branch-descendant)::before { inset: -2px; }
         /* R4: the upper half paternal, the lower maternal — still the left 4px. */
-        :is(body[data-branch-marker="arc"] #tree-canvas, .bm-preview[data-shape="arc"]) .person-card.branch-paternal.branch-maternal::before {
+        :is(body[data-branch-marker="arc"] #tree-canvas, .bm-preview[data-shape="arc"]) :is(.person-card, .bm-card).branch-paternal.branch-maternal::before {
             background: linear-gradient(to bottom, var(--branch-paternal) 50%, var(--branch-maternal) 50%) left / 4px 100% no-repeat;
         }
 
         /* Letter tag: a small tag over the card's left edge (it reaches 8px
            into the gap between cards; the left edge carries nothing else). */
-        :is(body[data-branch-marker="tag"] #tree-canvas, .bm-preview[data-shape="tag"]) .person-card:is(.branch-paternal, .branch-maternal, .branch-descendant)::after,
-        :is(body[data-branch-marker="tag"] #tree-canvas, .bm-preview[data-shape="tag"]) .person-card.branch-paternal.branch-maternal::before {
+        :is(body[data-branch-marker="tag"] #tree-canvas, .bm-preview[data-shape="tag"]) :is(.person-card, .bm-card):is(.branch-paternal, .branch-maternal, .branch-descendant)::after,
+        :is(body[data-branch-marker="tag"] #tree-canvas, .bm-preview[data-shape="tag"]) :is(.person-card, .bm-card).branch-paternal.branch-maternal::before {
             content: var(--branch-letter);
             position: absolute;
             left: -8px; top: 50%;
@@ -1661,39 +1662,39 @@
             -webkit-print-color-adjust: exact; print-color-adjust: exact;
         }
         /* R4: two tags, one above the other — paternal (::after) up, maternal (::before) down. */
-        :is(body[data-branch-marker="tag"] #tree-canvas, .bm-preview[data-shape="tag"]) .person-card.branch-paternal.branch-maternal::after {
+        :is(body[data-branch-marker="tag"] #tree-canvas, .bm-preview[data-shape="tag"]) :is(.person-card, .bm-card).branch-paternal.branch-maternal::after {
             content: var(--branch-letter-paternal);
             background: var(--branch-paternal); color: var(--branch-paternal-ink);
             top: calc(50% - 22px); transform: none;
         }
-        :is(body[data-branch-marker="tag"] #tree-canvas, .bm-preview[data-shape="tag"]) .person-card.branch-paternal.branch-maternal::before {
+        :is(body[data-branch-marker="tag"] #tree-canvas, .bm-preview[data-shape="tag"]) :is(.person-card, .bm-card).branch-paternal.branch-maternal::before {
             content: var(--branch-letter-maternal);
             background: var(--branch-maternal); color: var(--branch-maternal-ink);
             top: calc(50% + 2px); transform: none;
         }
-        :is(body[data-card-density="compact"][data-branch-marker="tag"] #tree-canvas, .bm-preview[data-shape="tag"]) .person-card:is(.branch-paternal, .branch-maternal, .branch-descendant)::after,
-        :is(body[data-card-density="compact"][data-branch-marker="tag"] #tree-canvas, .bm-preview[data-shape="tag"]) .person-card.branch-paternal.branch-maternal::before {
+        :is(body[data-card-density="compact"][data-branch-marker="tag"] #tree-canvas, .bm-preview[data-shape="tag"]) :is(.person-card, .bm-card):is(.branch-paternal, .branch-maternal, .branch-descendant)::after,
+        :is(body[data-card-density="compact"][data-branch-marker="tag"] #tree-canvas, .bm-preview[data-shape="tag"]) :is(.person-card, .bm-card).branch-paternal.branch-maternal::before {
             left: -6px; width: 12px; height: 16px; font-size: 9px; line-height: 16px;
         }
-        :is(body[data-card-density="compact"][data-branch-marker="tag"] #tree-canvas, .bm-preview[data-shape="tag"]) .person-card.branch-paternal.branch-maternal::after { top: calc(50% - 17px); }
-        :is(body[data-card-density="compact"][data-branch-marker="tag"] #tree-canvas, .bm-preview[data-shape="tag"]) .person-card.branch-paternal.branch-maternal::before { top: calc(50% + 1px); }
+        :is(body[data-card-density="compact"][data-branch-marker="tag"] #tree-canvas, .bm-preview[data-shape="tag"]) :is(.person-card, .bm-card).branch-paternal.branch-maternal::after { top: calc(50% - 17px); }
+        :is(body[data-card-density="compact"][data-branch-marker="tag"] #tree-canvas, .bm-preview[data-shape="tag"]) :is(.person-card, .bm-card).branch-paternal.branch-maternal::before { top: calc(50% + 1px); }
         /* Zoomed out below 55 %: the tag grows, the letter stays readable (26px × 0.45 ≈ 12px). */
-        body[data-branch-marker="tag"] #tree-canvas.zoom-far .person-card:is(.branch-paternal, .branch-maternal, .branch-descendant)::after,
-        body[data-branch-marker="tag"] #tree-canvas.zoom-far .person-card.branch-paternal.branch-maternal::before {
+        body[data-branch-marker="tag"] #tree-canvas.zoom-far :is(.person-card, .bm-card):is(.branch-paternal, .branch-maternal, .branch-descendant)::after,
+        body[data-branch-marker="tag"] #tree-canvas.zoom-far :is(.person-card, .bm-card).branch-paternal.branch-maternal::before {
             left: -13px; width: 26px; height: 32px; font-size: 20px; line-height: 32px;
         }
-        body[data-branch-marker="tag"] #tree-canvas.zoom-far .person-card.branch-paternal.branch-maternal::after,
-        body[data-branch-marker="tag"] #tree-canvas.zoom-far .person-card.branch-paternal.branch-maternal::before {
+        body[data-branch-marker="tag"] #tree-canvas.zoom-far :is(.person-card, .bm-card).branch-paternal.branch-maternal::after,
+        body[data-branch-marker="tag"] #tree-canvas.zoom-far :is(.person-card, .bm-card).branch-paternal.branch-maternal::before {
             height: 26px; font-size: 17px; line-height: 26px;
         }
-        body[data-branch-marker="tag"] #tree-canvas.zoom-far .person-card.branch-paternal.branch-maternal::after { top: calc(50% - 29px); }
-        body[data-branch-marker="tag"] #tree-canvas.zoom-far .person-card.branch-paternal.branch-maternal::before { top: calc(50% + 1px); }
+        body[data-branch-marker="tag"] #tree-canvas.zoom-far :is(.person-card, .bm-card).branch-paternal.branch-maternal::after { top: calc(50% - 29px); }
+        body[data-branch-marker="tag"] #tree-canvas.zoom-far :is(.person-card, .bm-card).branch-paternal.branch-maternal::before { top: calc(50% + 1px); }
         /* Below 30 %: only the coloured block. */
-        body[data-branch-marker="tag"] #tree-canvas.zoom-tiny .person-card:is(.branch-paternal, .branch-maternal, .branch-descendant)::after,
-        body[data-branch-marker="tag"] #tree-canvas.zoom-tiny .person-card.branch-paternal.branch-maternal::before { content: ''; }
+        body[data-branch-marker="tag"] #tree-canvas.zoom-tiny :is(.person-card, .bm-card):is(.branch-paternal, .branch-maternal, .branch-descendant)::after,
+        body[data-branch-marker="tag"] #tree-canvas.zoom-tiny :is(.person-card, .bm-card).branch-paternal.branch-maternal::before { content: ''; }
 
         /* Stripe: a bar inside the left edge; paternal solid, maternal dashed, descendants dotted. */
-        :is(body[data-branch-marker="stripe"] #tree-canvas, .bm-preview[data-shape="stripe"]) .person-card:is(.branch-paternal, .branch-maternal, .branch-descendant)::before {
+        :is(body[data-branch-marker="stripe"] #tree-canvas, .bm-preview[data-shape="stripe"]) :is(.person-card, .bm-card):is(.branch-paternal, .branch-maternal, .branch-descendant)::before {
             content: '';
             position: absolute;
             left: 2px; top: 10px; bottom: 10px; width: 4px;
@@ -1702,22 +1703,22 @@
             -webkit-print-color-adjust: exact; print-color-adjust: exact;
         }
         /* R4: the upper half solid paternal, the lower dashed maternal. */
-        :is(body[data-branch-marker="stripe"] #tree-canvas, .bm-preview[data-shape="stripe"]) .person-card.branch-paternal.branch-maternal::before {
+        :is(body[data-branch-marker="stripe"] #tree-canvas, .bm-preview[data-shape="stripe"]) :is(.person-card, .bm-card).branch-paternal.branch-maternal::before {
             background:
                 linear-gradient(var(--branch-paternal), var(--branch-paternal)) top / 100% calc(50% - 1px) no-repeat,
                 var(--bm-mat-pattern) bottom / 100% calc(50% - 1px) no-repeat;
         }
-        :is(body[data-card-density="compact"][data-branch-marker="stripe"] #tree-canvas, .bm-preview[data-shape="stripe"]) .person-card:is(.branch-paternal, .branch-maternal, .branch-descendant)::before {
+        :is(body[data-card-density="compact"][data-branch-marker="stripe"] #tree-canvas, .bm-preview[data-shape="stripe"]) :is(.person-card, .bm-card):is(.branch-paternal, .branch-maternal, .branch-descendant)::before {
             top: 6px; bottom: 6px; width: 3px;
         }
-        body[data-branch-marker="stripe"] #tree-canvas.zoom-far .person-card:is(.branch-paternal, .branch-maternal, .branch-descendant)::before {
+        body[data-branch-marker="stripe"] #tree-canvas.zoom-far :is(.person-card, .bm-card):is(.branch-paternal, .branch-maternal, .branch-descendant)::before {
             left: 1px; top: 4px; bottom: 4px; width: 10px;
         }
 
         /* Corner: a triangle in the top-left corner; paternal solid, maternal
            hatched, descendants an outline (a hole inside). 16px keeps it clear
            of the top edge's tab (.edge-top-left at left 12px). */
-        :is(body[data-branch-marker="corner"] #tree-canvas, .bm-preview[data-shape="corner"]) .person-card:is(.branch-paternal, .branch-maternal, .branch-descendant)::before {
+        :is(body[data-branch-marker="corner"] #tree-canvas, .bm-preview[data-shape="corner"]) :is(.person-card, .bm-card):is(.branch-paternal, .branch-maternal, .branch-descendant)::before {
             content: '';
             position: absolute;
             left: -1px; top: -1px; width: 16px; height: 16px;
@@ -1727,39 +1728,39 @@
             pointer-events: none;
             -webkit-print-color-adjust: exact; print-color-adjust: exact;
         }
-        :is(body[data-branch-marker="corner"] #tree-canvas, .bm-preview[data-shape="corner"]) .person-card.focused:is(.branch-paternal, .branch-maternal, .branch-descendant)::before { left: -2px; top: -2px; }
-        :is(body[data-branch-marker="corner"] #tree-canvas, .bm-preview[data-shape="corner"]) .person-card.branch-descendant::before {
+        :is(body[data-branch-marker="corner"] #tree-canvas, .bm-preview[data-shape="corner"]) :is(.person-card, .bm-card).focused:is(.branch-paternal, .branch-maternal, .branch-descendant)::before { left: -2px; top: -2px; }
+        :is(body[data-branch-marker="corner"] #tree-canvas, .bm-preview[data-shape="corner"]) :is(.person-card, .bm-card).branch-descendant::before {
             clip-path: path(evenodd, 'M0 0H16L0 16Z M4 4H9L4 9Z');
         }
         /* R4: the lower-left half solid paternal, the upper hatched maternal (split by the diagonal). */
-        :is(body[data-branch-marker="corner"] #tree-canvas, .bm-preview[data-shape="corner"]) .person-card.branch-paternal.branch-maternal::before {
+        :is(body[data-branch-marker="corner"] #tree-canvas, .bm-preview[data-shape="corner"]) :is(.person-card, .bm-card).branch-paternal.branch-maternal::before {
             clip-path: polygon(0 0, 100% 0, 0 100%);
             background:
                 linear-gradient(to bottom left, transparent 50%, var(--branch-paternal) 50%),
                 var(--bm-mat-hatch);
         }
-        :is(body[data-card-density="compact"][data-branch-marker="corner"] #tree-canvas, .bm-preview[data-shape="corner"]) .person-card:is(.branch-paternal, .branch-maternal, .branch-descendant)::before {
+        :is(body[data-card-density="compact"][data-branch-marker="corner"] #tree-canvas, .bm-preview[data-shape="corner"]) :is(.person-card, .bm-card):is(.branch-paternal, .branch-maternal, .branch-descendant)::before {
             width: 12px; height: 12px;
         }
-        :is(body[data-card-density="compact"][data-branch-marker="corner"] #tree-canvas, .bm-preview[data-shape="corner"]) .person-card.branch-descendant:not(.branch-paternal, .branch-maternal)::before {
+        :is(body[data-card-density="compact"][data-branch-marker="corner"] #tree-canvas, .bm-preview[data-shape="corner"]) :is(.person-card, .bm-card).branch-descendant:not(.branch-paternal, .branch-maternal)::before {
             clip-path: path(evenodd, 'M0 0H12L0 12Z M3 3H6L3 6Z');
         }
-        body[data-branch-marker="corner"] #tree-canvas.zoom-far .person-card:is(.branch-paternal, .branch-maternal, .branch-descendant)::before {
+        body[data-branch-marker="corner"] #tree-canvas.zoom-far :is(.person-card, .bm-card):is(.branch-paternal, .branch-maternal, .branch-descendant)::before {
             width: 36px; height: 36px;
         }
-        body[data-branch-marker="corner"] #tree-canvas.zoom-far .person-card.branch-descendant:not(.branch-paternal, .branch-maternal)::before {
+        body[data-branch-marker="corner"] #tree-canvas.zoom-far :is(.person-card, .bm-card).branch-descendant:not(.branch-paternal, .branch-maternal)::before {
             clip-path: path(evenodd, 'M0 0H36L0 36Z M8 8H20L8 20Z');
         }
 
         /* Tint: the marked card's ground in its lineage colour, with any shape.
            The states with a ground of their own (ghost, evidence, "shown here", research island)
            keep theirs; the print never tints (the print sets a white ground). */
-        body[data-branch-tint] #tree-canvas .person-card:is(.branch-paternal, .branch-maternal, .branch-descendant):not(.view-ghost, .evl-full, .evl-none, .shown-here, .research-island),
-        body[data-branch-tint] .bm-preview .person-card:is(.branch-paternal, .branch-maternal, .branch-descendant) {
+        body[data-branch-tint] #tree-canvas :is(.person-card, .bm-card):is(.branch-paternal, .branch-maternal, .branch-descendant):not(.view-ghost, .evl-full, .evl-none, .shown-here, .research-island),
+        body[data-branch-tint] .bm-preview :is(.person-card, .bm-card):is(.branch-paternal, .branch-maternal, .branch-descendant) {
             background: var(--branch-tint);
         }
-        body[data-branch-tint] #tree-canvas .person-card.branch-paternal.branch-maternal:not(.view-ghost, .evl-full, .evl-none, .shown-here, .research-island),
-        body[data-branch-tint] .bm-preview .person-card.branch-paternal.branch-maternal {
+        body[data-branch-tint] #tree-canvas :is(.person-card, .bm-card).branch-paternal.branch-maternal:not(.view-ghost, .evl-full, .evl-none, .shown-here, .research-island),
+        body[data-branch-tint] .bm-preview :is(.person-card, .bm-card).branch-paternal.branch-maternal {
             background: linear-gradient(to bottom, var(--branch-paternal-tint) 50%, var(--branch-maternal-tint) 50%);
         }
 
@@ -1792,16 +1793,60 @@
         .legend-ring-male { border: 2px solid var(--male); }
         .legend-ring-female { border: 2px solid var(--female); }
         .legend-ring-unknown { border: 2px solid var(--unknown); }
-        /* Branch swatches: an inline sub-group, shown only with branch colours. */
-        .branch-legend-group { display: none; align-items: center; gap: 14px; }
-        .branch-legend-item { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
-        .branch-swatch { width: 12px; height: 12px; border-radius: var(--r-sm); flex-shrink: 0; }
-        .swatch-paternal { background: var(--branch-paternal); }
-        .swatch-maternal { background: var(--branch-maternal); }
-        .swatch-descendant { background: var(--branch-descendant); }
+        /* Lineage in the legend (spec 112 §3): a row of three signs drawn in
+           the shape the cards carry (.branch-swatch[data-shape][data-line]),
+           then the "no marker" line. With it the pill wraps into a panel. */
+        .tree-legend.has-branch { flex-wrap: wrap; row-gap: 6px; max-width: min(340px, calc(100vw - 48px)); }
+        .branch-legend-group {
+            display: none; flex: 1 0 100%; flex-wrap: wrap; align-items: center; gap: 6px 14px; min-width: 0;
+            padding-top: 6px; border-top: 1px solid var(--border);
+        }
+        .branch-legend-item { display: flex; align-items: center; gap: 6px; min-width: 0; }
+        .branch-legend-none { flex: 1 0 100%; color: var(--text-faint); line-height: 1.35; text-wrap: pretty; }
+        /* A sign: the shape of the chosen marker at legend size (arc 10 x 18,
+           tag 13 x 16 with the letter, stripe 4 x 18 with its pattern, corner
+           a 15px triangle); with the tint, 4px of the tint around it. */
+        .branch-swatch {
+            display: inline-flex; flex: none; align-items: center; justify-content: center;
+            min-width: 15px; min-height: 18px; box-sizing: content-box; border-radius: var(--r-sm);
+        }
+        .branch-swatch > i { display: block; font-style: normal; }
+        .branch-swatch[data-line="paternal"] {
+            --sw: var(--branch-paternal); --sw-ink: var(--branch-paternal-ink); --sw-tint: var(--branch-paternal-tint);
+            --sw-pattern: var(--branch-paternal); --sw-corner: var(--branch-paternal); --sw-letter: var(--branch-letter-paternal);
+        }
+        .branch-swatch[data-line="maternal"] {
+            --sw: var(--branch-maternal); --sw-ink: var(--branch-maternal-ink); --sw-tint: var(--branch-maternal-tint);
+            --sw-pattern: repeating-linear-gradient(to bottom, var(--branch-maternal) 0 6px, transparent 6px 10px);
+            --sw-corner: repeating-linear-gradient(45deg, var(--branch-maternal) 0 2px, transparent 2px 4px);
+            --sw-letter: var(--branch-letter-maternal);
+        }
+        .branch-swatch[data-line="descendant"] {
+            --sw: var(--branch-descendant); --sw-ink: var(--branch-descendant-ink); --sw-tint: var(--branch-descendant-tint);
+            --sw-pattern: repeating-linear-gradient(to bottom, var(--branch-descendant) 0 3px, transparent 3px 6px);
+            --sw-corner: var(--branch-descendant); --sw-letter: var(--branch-letter-descendant);
+        }
+        /* R5: two same-gender parents — the tag's letters are the parents' numbers. */
+        .branch-swatch.is-numbered[data-line="paternal"] { --sw-letter: "1"; }
+        .branch-swatch.is-numbered[data-line="maternal"] { --sw-letter: "2"; }
+        .branch-swatch[data-shape="arc"] > i {
+            width: 10px; height: 18px; border-radius: var(--r-lg) 0 0 var(--r-lg);
+            background: linear-gradient(to right, var(--sw) 4px, transparent 4px);
+        }
+        .branch-swatch[data-shape="tag"] > i {
+            width: 13px; height: 16px; border-radius: var(--r-tag); background: var(--sw); color: var(--sw-ink);
+            font: 700 10px/16px var(--font-sans); text-align: center;
+        }
+        .branch-swatch[data-shape="tag"] > i::before { content: var(--sw-letter); }
+        .branch-swatch[data-shape="stripe"] > i { width: 4px; height: 18px; background: var(--sw-pattern); }
+        .branch-swatch[data-shape="corner"] > i {
+            width: 15px; height: 15px; clip-path: polygon(0 0, 100% 0, 0 100%); background: var(--sw-corner);
+        }
+        .branch-swatch[data-shape="corner"][data-line="descendant"] > i { clip-path: path(evenodd, 'M0 0H15L0 15Z M3.5 3.5H8.5L3.5 8.5Z'); }
+        body[data-branch-tint] .branch-swatch { padding: 4px; background: var(--sw-tint); }
         @media (max-width: 640px) {
             .tree-legend { left: 12px; bottom: 12px; font-size: 11px; padding: 6px 10px; gap: 10px; }
-            .branch-legend-group { gap: 10px; }
+            .branch-legend-group { gap: 6px 10px; }
         }
         /* The card marks the tree shows (spec 066 P4 §5): the pill turns into a panel. */
         .tree-legend.has-marks {
@@ -1915,6 +1960,10 @@
             font-size: 14px; color: var(--text-light);
         }
         .tree-legend-sheet-keys { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+        /* The lines one under another, each a 44px row; the "no marker" line under them. */
+        .tree-legend-sheet-keys .branch-legend-item { flex: 1 0 100%; min-height: 44px; gap: 10px; color: var(--text); }
+        .tree-legend-sheet-keys .legend-item + .branch-legend-item { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--divider); }
+        .tree-legend-sheet-keys .branch-legend-none { min-height: 0; font-size: 13px; color: var(--text-faint); }
         .tree-legend-sheet-body .legend-marks { flex: none; gap: 10px; padding-top: 10px; }
         .tree-legend-sheet-body .legend-mark-row { grid-template-columns: 28px minmax(0, 1fr); gap: 8px; }
         .tree-legend-sheet-body .legend-marks-help { font-size: 14px; min-height: 44px; }
@@ -2729,6 +2778,65 @@
             color: var(--text-light);
             margin-top: 10px;
             line-height: 1.4;
+        }
+        /* Lineage markers (Settings > Tree view, spec 112 R1): the five shapes
+           as a list of .sel-opt rows (src/ui/sel-css.ts, "Linka": the chosen
+           row filled, a 2px line under it), each with a compact card at 0.7 as
+           its preview, drawn by the cards' own rules (.bm-preview[data-shape]
+           .bm-card). On a phone the three lines' signs stand at the right
+           instead of the card. The tint below is disabled (and unchecked)
+           while the markers are off; its choice comes back with a shape. */
+        fieldset.branch-marker-group { margin: 0; border: 0; min-width: 0; }
+        /* A floated legend is laid out as a block, so the row's divider stays above it (not through it). */
+        .branch-marker-group > legend.settings-text { display: flex; float: left; width: 100%; padding: 0; margin: 0; }
+        .branch-marker-group > legend + .bm-options { clear: both; }
+        .bm-options {
+            display: flex; flex-direction: column; margin-top: 10px; min-width: 0;
+            border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden;
+        }
+        .modal label.branch-marker-opt {
+            display: flex; align-items: center; gap: 12px; min-width: 0; min-height: 44px;
+            margin: 0; padding: 6px 12px; box-sizing: border-box; font-size: 14px; cursor: pointer;
+        }
+        .bm-options > .branch-marker-opt.sel-opt:last-child { border-bottom: 0; }
+        .branch-marker-opt input[type="radio"] { flex: none; width: 18px; height: 18px; margin: 0; accent-color: var(--text); }
+        .branch-marker-opt:has(> input:focus-visible) { outline: 2px solid var(--primary); outline-offset: -2px; }
+        .branch-marker-opt input[type="radio"]:focus-visible { outline: none; }
+        /* The compact card (150 x 44) at 0.7, room left for the tag over its edge. */
+        .bm-preview { flex: none; position: relative; width: 105px; height: 31px; margin-left: 5px; }
+        .bm-scale { position: absolute; left: 0; top: 0; width: 150px; height: 44px; transform: scale(0.7); transform-origin: 0 0; }
+        .bm-card {
+            position: relative; display: flex; align-items: center; justify-content: center;
+            width: 150px; height: 44px; box-sizing: border-box; padding: 0 10px;
+            background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg);
+            box-shadow: var(--shadow-sm); pointer-events: none;
+        }
+        /* The name (given name and surname) as two quiet bars: a compact card shows names only. */
+        .bm-lines { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+        .bm-lines > i { display: block; height: 6px; border-radius: var(--r-sm); background: var(--text-faint); opacity: 0.55; }
+        .bm-lines > i:first-child { width: 78px; }
+        .bm-lines > i:last-child { width: 52px; }
+        .bm-name { flex: 1; min-width: 0; color: var(--text); overflow-wrap: anywhere; line-height: 1.3; }
+        .bm-default {
+            flex: none; padding: 1px 6px; border: 1px solid var(--primary); border-radius: var(--r-tag);
+            font-size: 11px; font-weight: 600; line-height: 1.4; color: var(--primary); white-space: nowrap;
+        }
+        .bm-signs { display: none; flex: none; align-items: center; gap: 8px; }
+        #branch-tint-row.is-disabled { opacity: 0.5; cursor: default; }
+        #branch-tint-row.is-disabled input[type="checkbox"]:disabled { opacity: 1; }
+        @media (pointer: coarse) {
+            .modal label.branch-marker-opt { min-height: 48px; }
+        }
+        /* A phone (and a phone held sideways): the rows 52px, the three signs at the right. */
+        @media (max-width: 640px) {
+            .modal label.branch-marker-opt { min-height: 52px; padding: 4px 12px; }
+            .bm-preview { display: none; }
+            .bm-signs { display: inline-flex; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .modal label.branch-marker-opt { min-height: 52px; padding: 4px 12px; }
+            .bm-preview { display: none; }
+            .bm-signs { display: inline-flex; }
         }
         /* Spacing (Settings > Person card, spec 069 §1): a segment of two
            options, each with a small picture of the density (two rows of
@@ -32553,10 +32661,12 @@
         <span class="legend-item"><span class="legend-ring legend-ring-male"></span><span data-i18n="gender.male"></span></span>
         <span class="legend-item"><span class="legend-ring legend-ring-female"></span><span data-i18n="gender.female"></span></span>
         <span class="legend-item" id="legend-unknown" style="display:none;"><span class="legend-ring legend-ring-unknown"></span><span data-i18n="gender.unknown"></span></span>
+        <!-- Lineage signs in the cards' shape and their names (src/ui/branch-marker-ui.ts) -->
         <span id="branch-legend" class="branch-legend-group" style="display:none;">
-            <span class="branch-legend-item"><span class="branch-swatch swatch-paternal"></span><span data-i18n="branchColors.legendPaternal"></span></span>
-            <span class="branch-legend-item"><span class="branch-swatch swatch-maternal"></span><span data-i18n="branchColors.legendMaternal"></span></span>
-            <span class="branch-legend-item"><span class="branch-swatch swatch-descendant"></span><span data-i18n="branchColors.legendDescendant"></span></span>
+            <span class="branch-legend-item"><span class="branch-swatch" data-line="paternal" data-shape="arc" aria-hidden="true"><i></i></span><span class="branch-legend-label" data-i18n="branchColors.legendPaternal"></span></span>
+            <span class="branch-legend-item"><span class="branch-swatch" data-line="maternal" data-shape="arc" aria-hidden="true"><i></i></span><span class="branch-legend-label" data-i18n="branchColors.legendMaternal"></span></span>
+            <span class="branch-legend-item"><span class="branch-swatch" data-line="descendant" data-shape="arc" aria-hidden="true"><i></i></span><span class="branch-legend-label" data-i18n="branchColors.legendDescendant"></span></span>
+            <span class="branch-legend-item branch-legend-none" data-i18n="branchColors.legendNone"></span>
         </span>
     </div>
 
@@ -33484,11 +33594,51 @@
                             <span class="settings-desc" data-i18n="genLabels.settingHint"></span>
                         </span>
                     </label>
-                    <label class="settings-checkbox settings-row">
-                        <input type="checkbox" id="branch-colors-toggle" onchange="window.Strom.UI.toggleBranchColors(this.checked)">
-                        <span class="settings-text">
+                    <!-- Lineage markers (spec 112, R1): the shape, each with a compact card as its preview (on a phone
+                         the three lines' signs instead); the tint below (src/ui/branch-marker-ui.ts) -->
+                    <fieldset class="settings-row branch-marker-group" id="branch-marker-setting">
+                        <legend class="settings-text">
                             <span class="settings-name" data-i18n="branchColors.settingLabel"></span>
                             <span class="settings-desc" data-i18n="branchColors.settingHint"></span>
+                        </legend>
+                        <div class="bm-options">
+                            <label class="sel-opt branch-marker-opt" data-sel-form="row">
+                                <input type="radio" name="branch-marker" value="arc" onchange="window.Strom.UI.setBranchMarker(this.value)">
+                                <span class="bm-preview" data-shape="arc" aria-hidden="true"><span class="bm-scale"><span class="bm-card branch-paternal"><span class="bm-lines"><i></i><i></i></span></span></span></span>
+                                <span class="bm-name" data-i18n="branchColors.markerArc"></span>
+                                <span class="bm-default" data-i18n="branchColors.defaultTag"></span>
+                                <span class="bm-signs" aria-hidden="true"><span class="branch-swatch" data-line="paternal" data-shape="arc"><i></i></span><span class="branch-swatch" data-line="maternal" data-shape="arc"><i></i></span><span class="branch-swatch" data-line="descendant" data-shape="arc"><i></i></span></span>
+                            </label>
+                            <label class="sel-opt branch-marker-opt" data-sel-form="row">
+                                <input type="radio" name="branch-marker" value="tag" onchange="window.Strom.UI.setBranchMarker(this.value)">
+                                <span class="bm-preview" data-shape="tag" aria-hidden="true"><span class="bm-scale"><span class="bm-card branch-paternal"><span class="bm-lines"><i></i><i></i></span></span></span></span>
+                                <span class="bm-name" data-i18n="branchColors.markerTag"></span>
+                                <span class="bm-signs" aria-hidden="true"><span class="branch-swatch" data-line="paternal" data-shape="tag"><i></i></span><span class="branch-swatch" data-line="maternal" data-shape="tag"><i></i></span><span class="branch-swatch" data-line="descendant" data-shape="tag"><i></i></span></span>
+                            </label>
+                            <label class="sel-opt branch-marker-opt" data-sel-form="row">
+                                <input type="radio" name="branch-marker" value="stripe" onchange="window.Strom.UI.setBranchMarker(this.value)">
+                                <span class="bm-preview" data-shape="stripe" aria-hidden="true"><span class="bm-scale"><span class="bm-card branch-paternal"><span class="bm-lines"><i></i><i></i></span></span></span></span>
+                                <span class="bm-name" data-i18n="branchColors.markerStripe"></span>
+                                <span class="bm-signs" aria-hidden="true"><span class="branch-swatch" data-line="paternal" data-shape="stripe"><i></i></span><span class="branch-swatch" data-line="maternal" data-shape="stripe"><i></i></span><span class="branch-swatch" data-line="descendant" data-shape="stripe"><i></i></span></span>
+                            </label>
+                            <label class="sel-opt branch-marker-opt" data-sel-form="row">
+                                <input type="radio" name="branch-marker" value="corner" onchange="window.Strom.UI.setBranchMarker(this.value)">
+                                <span class="bm-preview" data-shape="corner" aria-hidden="true"><span class="bm-scale"><span class="bm-card branch-paternal"><span class="bm-lines"><i></i><i></i></span></span></span></span>
+                                <span class="bm-name" data-i18n="branchColors.markerCorner"></span>
+                                <span class="bm-signs" aria-hidden="true"><span class="branch-swatch" data-line="paternal" data-shape="corner"><i></i></span><span class="branch-swatch" data-line="maternal" data-shape="corner"><i></i></span><span class="branch-swatch" data-line="descendant" data-shape="corner"><i></i></span></span>
+                            </label>
+                            <label class="sel-opt branch-marker-opt" data-sel-form="row">
+                                <input type="radio" name="branch-marker" value="off" onchange="window.Strom.UI.setBranchMarker(this.value)">
+                                <span class="bm-preview" aria-hidden="true"><span class="bm-scale"><span class="bm-card"><span class="bm-lines"><i></i><i></i></span></span></span></span>
+                                <span class="bm-name" data-i18n="branchColors.markerOff"></span>
+                            </label>
+                        </div>
+                    </fieldset>
+                    <label class="settings-checkbox settings-row" id="branch-tint-row">
+                        <input type="checkbox" id="branch-tint-toggle" onchange="window.Strom.UI.setBranchTint(this.checked)">
+                        <span class="settings-text">
+                            <span class="settings-name" data-i18n="branchColors.tintLabel"></span>
+                            <span class="settings-desc" data-i18n="branchColors.tintHint"></span>
                         </span>
                     </label>
                     <label class="settings-checkbox settings-row">
