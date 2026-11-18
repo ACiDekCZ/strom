@@ -565,6 +565,18 @@ export const materialSortMethods = uiModule({
         };
         const kindText = (k: string) => k ? materialKindLabel({ kind: k as MaterialKind }) : s.fNoKind;
 
+        // Each row's preview is made once and kept across redraws: drawn anew it showed the extension's letters until its image came again.
+        const thumbs = new Map<string, HTMLElement>();
+        const thumb = (row: SortRow): HTMLElement => {
+            const key = `${row.id}|${row.item?.file?.sha ?? row.item?.name ?? ''}`;
+            let el = thumbs.get(key);
+            if (!el) {
+                el = previewEl(mc.treeId, row.item, 'msp-thumb');
+                thumbs.set(key, el);
+            }
+            return el;
+        };
+
         const rowEl = (row: SortRow): HTMLElement => {
             const item = row.item;
             const p = row.proposal;
@@ -585,7 +597,7 @@ export const materialSortMethods = uiModule({
                 cb.addEventListener('change', () => { if (cb.checked) selected.add(row.id); else selected.delete(row.id); drawFoot(); });
                 el.appendChild(cb);
             }
-            el.appendChild(previewEl(mc.treeId, item, 'msp-thumb'));
+            el.appendChild(thumb(row));
             const main = h('div', 'msp-main');
             if (editing === row.id && tab === 'proposals') {
                 main.appendChild(editForm(row));
@@ -771,6 +783,7 @@ export const materialSortMethods = uiModule({
             children.push(...shown.map(rowEl));
             if (!shown.length) children.push(h('p', 'msp-empty', s.empty));
             list.replaceChildren(...children);
+            drawnKey = shownKey();
             drawFoot();
             if (editing) return;
             const f = list.querySelector<HTMLElement>(`.msp-row[data-id="${CSS.escape(focusId ?? '')}"]`);
@@ -1004,10 +1017,15 @@ export const materialSortMethods = uiModule({
         });
 
         // A file hidden or restored meanwhile (Restore here, the toast's Undo): the rows say it as it is now.
+        // Only then: the Materials window is redrawn with every poll of the research, the proposal stays as it is.
+        const shownKey = () => JSON.stringify([hideCan(), materialsWindowOpen(),
+            unassigned.map(x => [x.id, x.item?.hidden ? x.item.hidden.reason ?? 'none' : ''])]);
+        let drawnKey = '';
         const redraw = () => {
             if (editing) return;
             const fresh = this.materialSortItemMap(mc.treeId);
             for (const row of unassigned) row.item = fresh.get(row.id) ?? row.item;
+            if (shownKey() === drawnKey) return;
             draw();
         };
         proposalRedraw = redraw;

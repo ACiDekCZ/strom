@@ -435,6 +435,49 @@ test.describe('Sort with the agent', () => {
     });
 });
 
+test.describe('Sort with the agent: the open proposal', () => {
+    test.use({ viewport: DESKTOP });
+
+    test('the open proposal stays still while the research is asked: no preview drawn anew', async ({ page }) => {
+        await page.clock.install({ time: new Date('2026-11-18T20:00:00Z') });
+        await setup(page, {
+            bridge: b => {
+                for (const id of ['I0001', 'I0002', 'I0003']) b.mediaFiles.set(materialSha(id), { type: 'image/png', body: readFileSync('e2e/fixtures/avatar.png') });
+            },
+        });
+        await openWindow(page);
+        await strip(page).locator('[data-sort="sort"]').click();
+        await sortDialog(page).locator('.mdlg-sort-go').click();
+        await strip(page).locator('[data-sort="open"]').click();
+        await expect(proposal(page).locator('.msp-row')).toHaveCount(2);
+        await expect(proposal(page).locator('.msp-thumb img').first()).toBeVisible();
+
+        // Every preview and image as drawn now; any of them taken out or replaced is counted.
+        await page.evaluate(() => {
+            const w = window as unknown as { __mspSwaps: number; __mspThumbs: Element[] };
+            w.__mspSwaps = 0;
+            w.__mspThumbs = [...document.querySelectorAll('#material-sort-proposal .msp-thumb')];
+            new MutationObserver(records => {
+                for (const r of records) {
+                    for (const n of r.removedNodes) {
+                        if (n instanceof Element && (n.matches('img, .msp-thumb') || n.querySelector('img, .msp-thumb'))) w.__mspSwaps++;
+                    }
+                }
+            }).observe(document.querySelector('#material-sort-proposal')!, { childList: true, subtree: true });
+        });
+        // 30 s without a click: the research asked again and again (its polls redraw the Materials window).
+        for (let i = 0; i < 6; i++) {
+            await poll(page);
+            await page.clock.runFor(5_000);
+        }
+        const after = await page.evaluate(() => {
+            const w = window as unknown as { __mspSwaps: number; __mspThumbs: Element[] };
+            return { swaps: w.__mspSwaps, same: w.__mspThumbs.every(el => el.isConnected) };
+        });
+        expect(after).toEqual({ swaps: 0, same: true });
+    });
+});
+
 test.describe('Sort with the agent over everything (the whole view)', () => {
     test.use({ viewport: DESKTOP });
     const top = (page: Page) => win(page).locator('.mw-sort--top');
