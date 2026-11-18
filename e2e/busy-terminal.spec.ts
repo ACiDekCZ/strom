@@ -117,6 +117,46 @@ test.describe('a link into the research\'s terminal', () => {
         await expect(page.locator('.toast', { hasText: 'Did the terminal not open?' })).toHaveCount(0);
     });
 
+    test('in a dialog\'s footer the sentence stands above the footer, not under the dialog\'s last line', async ({ page }) => {
+        await setup(page);
+        await page.evaluate((url) => {
+            const UI = window.Strom.UI as unknown as { showConfirm: (m: string, t: string) => Promise<boolean>; launchResearchLink: (u: string, k: string, el: HTMLElement) => void };
+            void UI.showConfirm('The research opens.', 'Research');
+            UI.launchResearchLink(url, 'terminal', document.getElementById('confirm-ok-btn')!);
+        }, OPEN);
+        await expect(page.locator('#confirm-ok-btn')).toHaveAttribute('aria-busy', 'true');
+        await runSeconds(page, 11);
+        const msg = page.locator('#confirmation-modal .busy-msg');
+        await expect(msg).toContainText('Did the terminal not open?');
+        expect(await page.evaluate(() => document.getElementById('confirm-buttons')!.previousElementSibling?.classList.contains('busy-msg'))).toBe(true);
+    });
+
+    test('a list drawn anew keeps the sentence under its new button; a list gone takes it away', async ({ page }) => {
+        await setup(page);
+        const LIST = '<div data-id="T0001"><span>Write to the parish</span><div class="acts"><button type="button" class="btn" data-action="chat">Chat</button></div></div>';
+        await page.evaluate(({ url, html }) => {
+            const list = document.createElement('div');
+            list.id = 'test-list';
+            list.style.cssText = 'position:fixed;top:160px;left:16px;z-index:120;background:var(--surface);padding:8px;width:320px';
+            list.innerHTML = html;
+            document.body.appendChild(list);
+            const b = list.querySelector<HTMLElement>('[data-action="chat"]')!;
+            b.onclick = () => (window.Strom.UI as unknown as { launchResearchLink: (u: string, k: string, el: HTMLElement) => void }).launchResearchLink(url, 'terminal', b);
+        }, { url: `strom-research://task?tree=${UUID}&task=T0001&do=chat`, html: LIST });
+        await page.locator('#test-list [data-action="chat"]').click();
+        await runSeconds(page, 11);
+        const msg = page.locator('#test-list [data-id="T0001"] .busy-msg');
+        await expect(msg).toContainText('Did the terminal not open?');
+        // The list drawn anew (a new status): the sentence stands under the new button.
+        await page.evaluate((html) => { document.getElementById('test-list')!.innerHTML = html; }, LIST);
+        await runSeconds(page, 1);
+        await expect(msg).toContainText('Did the terminal not open?');
+        // The list gone for good: the sentence goes with it.
+        await page.evaluate(() => document.getElementById('test-list')!.remove());
+        await runSeconds(page, 1);
+        await expect(page.locator('.busy-msg')).toHaveCount(0);
+    });
+
     test('reduced motion: the spinner stands still as three dots', async ({ page }) => {
         await page.emulateMedia({ reducedMotion: 'reduce' });
         await setup(page);

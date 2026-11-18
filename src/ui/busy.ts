@@ -379,11 +379,55 @@ function placeMessage(el: HTMLElement, msg: HTMLElement, opts: BusyOpts): void {
     const host = el.closest('.busy-host');
     if (host) { host.appendChild(msg); return; }
     const parent = el.parentElement;
+    // A dialog's footer: the sentence above it (the footer stays the dialog's last line, §10.1 a).
+    if (parent?.matches('.modal .buttons, .modal-footer, .mdlg-foot, .book-dlg-foot, .fp-foot')) { parent.before(msg); return; }
     // A group of actions or a line of text: the sentence under the whole group; a big container: right after the element.
     const big = !parent || parent === document.body || parent.matches('form, section, dialog, .modal, .modal-body, .modal-content')
         || parent.childElementCount > 8;
     if (!big && parent?.parentElement) parent.after(msg);
     else el.after(msg);
+}
+
+/**
+ * The element's identity over a redraw (a list drawn anew puts a new button in its place): its id, or its
+ * `data-action` within the nearest row that has a `data-id` or an id (under the nearest container with an id).
+ * Null: the element cannot be told again after a redraw.
+ */
+function identOf(el: HTMLElement): string | null {
+    if (el.id) return `#${CSS.escape(el.id)}`;
+    const act = el.dataset.action;
+    if (!act) return null;
+    const row = el.parentElement?.closest<HTMLElement>('[data-id], [id]');
+    if (!row) return null;
+    if (row.id) return `#${CSS.escape(row.id)} [data-action="${CSS.escape(act)}"]`;
+    const top = row.parentElement?.closest<HTMLElement>('[id]');
+    return `${top ? `#${CSS.escape(top.id)} ` : ''}[data-id="${CSS.escape(row.dataset.id ?? '')}"] [data-action="${CSS.escape(act)}"]`;
+}
+
+/** Sentences whose element may be drawn anew: the sentence follows to the new element (§10.1 a, 3c). */
+const following = new Map<HTMLElement, { msg: HTMLElement; ident: string; opts: BusyOpts }>();
+let followTimer: ReturnType<typeof setInterval> | null = null;
+
+function followMessages(): void {
+    for (const [el, f] of following) {
+        if (f.msg.dataset.closed || !messages.has(el) || messages.get(el) !== f.msg) { following.delete(el); continue; }
+        if (f.msg.isConnected) continue;
+        // Taken away on purpose while its element stays: it goes.
+        if (el.isConnected) { following.delete(el); continue; }
+        const next = Array.from(document.querySelectorAll<HTMLElement>(f.ident)).find(seen);
+        // The element gone for good (a dialog closed): the sentence goes with it.
+        if (!next) { following.delete(el); continue; }
+        placeMessage(next, f.msg, f.opts);
+    }
+    if (!following.size && followTimer) { clearInterval(followTimer); followTimer = null; }
+}
+
+function follow(el: HTMLElement, msg: HTMLElement, opts: BusyOpts): void {
+    if (opts.msgIn) return;
+    const ident = identOf(el);
+    if (!ident) return;
+    following.set(el, { msg, ident, opts });
+    followTimer ??= setInterval(followMessages, 400);
 }
 
 /** The end of `el` as a sentence under it (`role=alert`, neutral ones `role=status`) with "Try again". */
@@ -402,7 +446,7 @@ export function showBusyMessage(el: HTMLElement, end: Extract<BusyEnd, { ok: fal
         b.className = `link ${cls}`;
         if (mark?.research) setResearchOpenLabel(b, label, { ai: !!mark.ai });
         else b.textContent = label;
-        b.addEventListener('click', () => { msg.remove(); run(); });
+        b.addEventListener('click', () => { msg.dataset.closed = '1'; msg.remove(); run(); });
         msg.appendChild(b);
     };
     if (end.retry) act(strings.busy.retry, end.retry, 'busy-msg__retry');
@@ -415,12 +459,16 @@ export function showBusyMessage(el: HTMLElement, end: Extract<BusyEnd, { ok: fal
     }
     placeMessage(el, msg, opts);
     messages.set(el, msg);
+    follow(el, msg, opts);
     return msg;
 }
 
 /** The sentence (or toast) of `el`'s last end goes (another try, the data changed). */
 export function clearBusyMessage(el: HTMLElement): void {
-    messages.get(el)?.remove();
+    const msg = messages.get(el);
+    if (msg) msg.dataset.closed = '1';
+    msg?.remove();
+    following.delete(el);
     messages.delete(el);
     endToasts.get(el)?.close();
     endToasts.delete(el);
