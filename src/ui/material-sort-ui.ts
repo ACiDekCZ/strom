@@ -24,7 +24,7 @@ import {
 } from '../materials.js';
 import { overviewItems, nameWithoutYears } from '../materials-overview.js';
 import {
-    sortCandidates, sortNeeds, sortRows, sortRowProposes, sortWrite, sortTreeIndex, sortChip, parseSortRevert,
+    sortCandidates, sortNeeds, sortNeedy, sortRows, sortRowProposes, sortWrite, sortTreeIndex, sortChip, parseSortRevert,
     type SortRow, type SortChoice, type SortChip, type SortRevert, type SortWrite,
 } from '../material-sort.js';
 import { researchPersonRef } from '../research-link.js';
@@ -56,6 +56,8 @@ export interface SortTarget {
     filter?: boolean;
     /** Every file without a title or a person (the window's whole view), closed with its ×. */
     whole?: boolean;
+    /** The files selected by hand: sent as selected, finished ones too. */
+    selection?: boolean;
 }
 
 /** Where the strips stand in the Materials window: under batch headers (by group key) and over the list. */
@@ -191,7 +193,7 @@ export const materialSortMethods = uiModule({
         const mc = this.materialsContext();
         if (!mc || this.materialSortGate() !== 'on' || this.materialSortBusy()) return;
         const s = strings.materials.agentSort;
-        const { send, over } = sortCandidates(target.items);
+        const { send, over } = sortCandidates(target.items, !!target.selection);
         if (!send.length) return;
         const n = send.length;
         const dialog = materialDialog({ title: s.title(n), sub: s.what(n, target.batch), modifier: 'sort' });
@@ -410,7 +412,8 @@ export const materialSortMethods = uiModule({
         const s = strings.materials.agentSort;
         const gate = this.materialSortGate();
         if (!target || !gate) return '';
-        const needs = sortNeeds(target.items.filter(i => !!i.file && !i.hidden));
+        // The count said is the count sent: only the files without a title or a person.
+        const needs = sortNeeds(sortNeedy(target.items));
         if (!needs.n || (!needs.t && !needs.p)) return '';
         // An older research is said beside a batch only (spec 102 §13: elsewhere nothing).
         if (gate === 'older') return target.filter || target.whole ? '' : `<span class="mw-sort-text">${esc(s.older)}</span>`;

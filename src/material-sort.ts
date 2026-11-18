@@ -13,9 +13,14 @@ import { SORT_MAX_FILES, type SortJob, type SortLink, type SortProposal } from '
 import type { MaterialKind, MediaBy, MediaPlace, PartnershipId, PersonId, StromData } from './types.js';
 import { researchPersonRef } from './research-link.js';
 
-/** The files a sorting can take: the research's files (I…), not hidden, at most SORT_MAX_FILES. */
-export function sortCandidates(items: readonly MaterialItem[]): { send: MaterialItem[]; over: number } {
-    const all = items.filter(i => !!i.file && !i.hidden);
+/**
+ * The files a sorting takes: the research's files (I…), not hidden, at most
+ * SORT_MAX_FILES. A batch, a review filter and the whole view send only the
+ * files without a title or a person (`sortNeedy`): what a person finished is
+ * not given to the agent. A selection sends exactly what is selected.
+ */
+export function sortCandidates(items: readonly MaterialItem[], selection = false): { send: MaterialItem[]; over: number } {
+    const all = selection ? items.filter(i => !!i.file && !i.hidden) : sortNeedy(items);
     return { send: all.slice(0, SORT_MAX_FILES), over: Math.max(0, all.length - SORT_MAX_FILES) };
 }
 

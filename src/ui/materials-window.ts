@@ -1502,7 +1502,7 @@ export const materialsWindowMethods = uiModule({
         const end = () => { if (alive(w.gen)) this.clearMaterialsSelection(); };
         switch (id) {
             case 'sel-review': this.mwReview(items); return;
-            case 'sel-sort': this.openSortDialog({ items, batch: null }); return;
+            case 'sel-sort': this.openSortDialog({ items, batch: null, selection: true }); return;
             case 'sel-attach': this.mwRun('attach', items, { selection: true }); return;
             case 'sel-title': this.openBulkEditDialog('title', items, { done: end, refused: r => this.mwShowRefused(r) }); return;
             case 'sel-kind': this.openBulkEditDialog('kind', items, { done: end, refused: r => this.mwShowRefused(r) }); return;

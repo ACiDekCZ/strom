@@ -76,6 +76,24 @@ describe('the files a sorting takes', () => {
             .toEqual({ n: 3, t: 2, p: 1 });
     });
 
+    it('a batch, a filter or the whole view sends only the files without a title or a person; a selection sends what is selected', () => {
+        const done = item('I0001', { titled: true, persons: ['P0001'] });
+        const viaBatch = item('I0002', { titled: true, viaBatch: ['P0002'] });
+        const noTitle = item('I0003', { persons: ['P0001'] });
+        const noPerson = item('I0004', { titled: true });
+        const hidden = item('I0005', { hidden: {} });
+        const files = [done, viaBatch, noTitle, noPerson, hidden];
+        expect(sortCandidates(files).send.map(i => i.file!.id)).toEqual(['I0003', 'I0004']);
+        expect(sortCandidates(files, true).send.map(i => i.file!.id)).toEqual(['I0001', 'I0002', 'I0003', 'I0004']);
+        // The limit counts the files that go: finished ones neither fill it nor make it over.
+        const many = [...Array.from({ length: 30 }, (_, i) => item(`I${i + 100}`, { titled: true, persons: ['P0001'] })), ...Array.from({ length: 52 }, (_, i) => item(`I${i + 200}`))];
+        const batch = sortCandidates(many);
+        expect(batch.send).toHaveLength(50);
+        expect(batch.over).toBe(2);
+        expect(batch.send[0].file!.id).toBe('I200');
+        expect(sortCandidates(many, true).over).toBe(32);
+    });
+
     it('over everything: only the files without a title or a person (a person through the batch counts), never hidden or the tree\'s own', () => {
         const done = item('I0001', { titled: true, persons: ['P0001'] });
         const viaBatch = item('I0002', { titled: true, viaBatch: ['P0002'] });

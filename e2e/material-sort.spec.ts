@@ -239,6 +239,28 @@ test.describe('Sort with the agent', () => {
         await page.keyboard.press('Escape');
     });
 
+    test('a batch sends only its files without a title or a person; a selection sends every file selected', async ({ page }) => {
+        // I0004 in the batch has its title and a person: the strip and its dialog leave it out.
+        const material = await setup(page, { files: [materialFile(4, { batch: BATCH.id, title: 'Letter from Talvany', persons: ['P0001'] })] });
+        await openWindow(page);
+        await expect(strip(page)).toContainText('3 new files · 2 without title · 3 without person');
+        await strip(page).locator('[data-sort="sort"]').click();
+        await expect(sortDialog(page).locator('.mdlg-title')).toHaveText('Sort with the agent · 3 files');
+        await expect(sortDialog(page)).toContainText('3 files from the batch Krabice od babičky');
+        await page.keyboard.press('Escape');
+        // Selected by hand: all four, the finished one too.
+        await strip(page).locator('[data-sort="sort"]').focus();
+        await page.keyboard.press('ControlOrMeta+a');
+        await win(page).locator('.mw-selbar [data-mw="sel-sort"]').click();
+        await expect(sortDialog(page).locator('.mdlg-title')).toHaveText('Sort with the agent · 4 files');
+        await page.keyboard.press('Escape');
+        await win(page).locator('.mw-selbar [data-mw="select"], [data-mw="select"]').first().click();
+        await strip(page).locator('[data-sort="sort"]').click();
+        await sortDialog(page).locator('.mdlg-sort-go').click();
+        await expect.poll(() => material.sorts?.length ?? 0).toBe(1);
+        expect([...(material.sorts![0].ids as string[])].sort()).toEqual(['I0001', 'I0002', 'I0003']);
+    });
+
     test('Cancel with proposals made asks: keep them (the proposal stays) or discard them', async ({ page }) => {
         const material = await setup(page);
         material.sortDoneAt = 99;
