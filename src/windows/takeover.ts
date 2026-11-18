@@ -9,9 +9,14 @@
  * - The order: the windows following the agent (attached or paused) first,
  *   then the detached ones, each group as the main window listed them (the
  *   oldest first); a window without a following of its own (the research
- *   overview's window) never takes over. The window waits `rank × 400 ms`,
- *   then takes the lock (`ifAvailable`): one window wins, it tells the
- *   others (`taking-over`) and starts again as the main window.
+ *   overview's window) never takes over. The turns are counted from the main
+ *   window's last status, which every window heard at the same moment (not
+ *   from when each one noticed the silence: their checks run 500 ms apart at
+ *   most, more than one turn): the first window's turn comes once every
+ *   window has noticed, each next one `rank × 400 ms` later (at least
+ *   `rank × 400 ms` after this window noticed). The window then takes the
+ *   lock (`ifAvailable`): one window wins, it tells the others
+ *   (`taking-over`) and starts again as the main window.
  * - Without a stored address of the research's bridge the window cannot
  *   follow it as the main window: it does not become one, and says so
  *   (`failed`, the manual way of spec 079 stays).
@@ -20,7 +25,7 @@
  */
 
 import type { AgentFollow } from './agent-follow-state.js';
-import type { SatelliteConnection } from './satellite.js';
+import { MAIN_CHECK_MS, MAIN_SILENCE_MS, type SatelliteConnection } from './satellite.js';
 import type { WindowStatus } from './window-bus.js';
 
 /** The wait of each place in the order (the first window starts at once). */
@@ -59,6 +64,8 @@ export interface TakeoverClient {
     readonly connection: SatelliteConnection;
     readonly status: WindowStatus | null;
     readonly treeId: string | null;
+    /** When the main window's status was last heard (the same broadcast reached every window). */
+    readonly lastHeardAt: number;
     on(event: 'connection', cb: (c: SatelliteConnection) => void): () => void;
     on(event: 'taking-over', cb: (e: { windowId: string }) => void): () => void;
     /** Tell the other windows this one takes over. */
@@ -85,6 +92,20 @@ export interface TakeoverDeps {
     /** Tests: the timer. */
     setTimer?: (cb: () => void, ms: number) => unknown;
     clearTimer?: (handle: unknown) => void;
+    /** Tests: the clock. */
+    now?: () => number;
+}
+
+/**
+ * How long a window of `rank` waits for its turn once it noticed the main
+ * window closed (`now`), the main window's last status heard at `heardAt`:
+ * until every window has noticed (the silence plus one check) and `rank`
+ * turns more, counted from that status; never less than `rank` turns from now
+ * (a status heard long ago keeps the order too).
+ */
+export function takeoverWait(rank: number, heardAt: number, now: number): number {
+    const turn = heardAt + MAIN_SILENCE_MS + MAIN_CHECK_MS + rank * TAKEOVER_STEP_MS;
+    return Math.max(rank * TAKEOVER_STEP_MS, turn - now);
 }
 
 export class Takeover {
@@ -95,10 +116,12 @@ export class Takeover {
     private readonly off: (() => void)[] = [];
     private readonly setTimer: (cb: () => void, ms: number) => unknown;
     private readonly clearTimer: (handle: unknown) => void;
+    private readonly now: () => number;
 
     constructor(private readonly client: TakeoverClient, private readonly deps: TakeoverDeps) {
         this.setTimer = deps.setTimer ?? ((cb, ms) => setTimeout(cb, ms));
         this.clearTimer = deps.clearTimer ?? ((h) => clearTimeout(h as ReturnType<typeof setTimeout>));
+        this.now = deps.now ?? (() => Date.now());
     }
 
     get phase(): TakeoverPhase { return this._phase; }
@@ -140,7 +163,8 @@ export class Takeover {
             const rank = takeoverRank(this.client.windowId, status);
             if (rank < 0) return;
             this.set('waiting');
-            this.timer = this.setTimer(() => { this.timer = null; void this.turn(); }, rank * TAKEOVER_STEP_MS);
+            const wait = takeoverWait(rank, this.client.lastHeardAt, this.now());
+            this.timer = this.setTimer(() => { this.timer = null; void this.turn(); }, wait);
             return;
         }
         if (c !== 'connected') return;

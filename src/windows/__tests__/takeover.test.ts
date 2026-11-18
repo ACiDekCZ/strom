@@ -1,7 +1,8 @@
 /**
  * Taking over after the main window closed (spec 097 §7, K2.6): the order
  * (following windows first, then the detached ones, the main window's order
- * within each), one winner by the lock after `rank × 400 ms`, the others told
+ * within each), one winner by the lock after `rank × 400 ms` counted from the
+ * main window's last status, the others told
  * and saying so once the new main window is here; nothing without a live
  * session, without a stored bridge address (failed in every window) or when
  * the main window comes back within 3 s (its F5).
@@ -11,7 +12,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { WindowBus, createMemoryHub, type WindowStatus } from '../window-bus.js';
 import { SatelliteClient, MAIN_SILENCE_MS, MAIN_CHECK_MS, type SatelliteDataTarget } from '../satellite.js';
 import { tryBecomeMain, type LocksLike } from '../window-role.js';
-import { Takeover, takeoverOrder, takeoverRank, TAKEOVER_STEP_MS, type TakeoverLive } from '../takeover.js';
+import { Takeover, takeoverOrder, takeoverRank, takeoverWait, TAKEOVER_STEP_MS, type TakeoverLive } from '../takeover.js';
 import type { TreeId } from '../../types.js';
 
 const TREE = 'tree-1' as TreeId;
@@ -178,6 +179,40 @@ describe('taking over after the main window closed', () => {
         expect(a.takeover.phase).toBe('running');
         await settle(TAKEOVER_STEP_MS * 3);
         expect(b.become).not.toHaveBeenCalled();
+    });
+
+    it('the turns count from the main window\'s last status: the first in the order wins though the second noticed the silence 450 ms earlier', async () => {
+        // A (detached, second) checks the silence 450 ms before B (following, first) does: their checks run 500 ms apart.
+        const a = win(A);
+        await vi.advanceTimersByTimeAsync(450);
+        const b = win(B);
+        await vi.advanceTimersByTimeAsync(550);
+        main.post({ type: 'status', ...status() });
+        await settle();
+        locks.release();
+        // A notices at its check 3 s after the status, B 450 ms later; A's turn is not before B's.
+        await vi.advanceTimersByTimeAsync(MAIN_SILENCE_MS);
+        await hub.flush();
+        expect(a.client.connection).toBe('main-closed');
+        expect(b.client.connection).toBe('connected');
+        await vi.advanceTimersByTimeAsync(MAIN_CHECK_MS);
+        await hub.flush();
+        expect(b.client.connection).toBe('main-closed');
+        await settle(TAKEOVER_STEP_MS * 3);
+        expect(b.become).toHaveBeenCalledTimes(1);
+        expect(b.takeover.phase).toBe('running');
+        expect(a.become).not.toHaveBeenCalled();
+        expect(a.takeover.phase).toBeNull();
+    });
+
+    it('the wait of a turn: from the last status heard, never less than its place in the order from now', () => {
+        const heard = 1_000;
+        // Noticed at the first check after the silence: the first window once every one has noticed, the next 400 ms later.
+        expect(takeoverWait(0, heard, heard + MAIN_SILENCE_MS)).toBe(MAIN_CHECK_MS);
+        expect(takeoverWait(1, heard, heard + MAIN_SILENCE_MS + 450)).toBe(MAIN_CHECK_MS + TAKEOVER_STEP_MS - 450);
+        // A status heard long ago (a quiet main window held its lock): the order from now.
+        expect(takeoverWait(0, heard, heard + 60_000)).toBe(0);
+        expect(takeoverWait(2, heard, heard + 60_000)).toBe(2 * TAKEOVER_STEP_MS);
     });
 
     it('without a stored bridge address no window becomes the main one: every one says it cannot be restored', async () => {
