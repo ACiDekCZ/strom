@@ -19583,8 +19583,11 @@
             .batch-row { grid-template-columns: minmax(0, 1fr) 70px; }
             .batch-row .batch-type, .batch-row-head span:nth-child(2), .batch-row-head span:nth-child(4) { display: none; }
             .batch-row .batch-reason { grid-column: 1 / -1; padding-bottom: 6px; }
-            .batch-footer { flex-wrap: wrap; }
-            .batch-foot-note { flex-basis: 100%; }
+            /* The dialog's buttons stack (.modal .buttons, column-reverse): one column, the note a line of its own
+               (a wrap with the note's 100 % basis sent Hide and Pause into a second column off the screen). */
+            .batch-footer { flex-wrap: nowrap; }
+            .batch-foot-note { flex-basis: auto; }
+            .batch-foot-note:empty { display: none; }
         }
         /* ===== "Read a document" (spec 013): menu item, dialog, drop zones, panel strip ===== */
         .research-item--two { align-items: flex-start; }

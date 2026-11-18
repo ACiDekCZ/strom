@@ -127,6 +127,27 @@ test.describe('Add materials', () => {
         await expect(dialog.locator('[data-act="pick-files"]')).toHaveCount(0);
     });
 
+    test('a phone: while it runs, Cancel, Hide and Pause stack in one column inside the screen', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        const b = await fakeBridge(page, { accepts: BATCH_ACCEPTS });
+        await openResearch(page, { media: true });
+        await poll(page);
+        await page.evaluate(() => (window.Strom.UI as any).showBatchDialog());
+        await addFiles(page, ['Krabice/a.jpg', 'Krabice/b.jpg']);
+        const dialog = page.locator('#batch-modal');
+        await dialog.locator('[data-act="next"]').click();
+        b.down = true;
+        await dialog.getByRole('button', { name: 'Send 2 files' }).click();
+        await expect(dialog.locator('.batch-progress-title')).toHaveText('Paused');
+        const footer = dialog.locator('.batch-footer');
+        expect(await footer.evaluate(f => f.scrollWidth - f.clientWidth)).toBeLessThanOrEqual(0);
+        for (const act of ['cancel-run', 'hide', 'resume']) {
+            const box = (await footer.locator(`[data-act="${act}"]`).boundingBox())!;
+            expect(box.x, act).toBeGreaterThanOrEqual(0);
+            expect(box.x + box.width, act).toBeLessThanOrEqual(390);
+        }
+    });
+
     test('files dropped onto the window open the review', async ({ page }) => {
         await fakeBridge(page, { accepts: BATCH_ACCEPTS });
         await openResearch(page, { media: true });
