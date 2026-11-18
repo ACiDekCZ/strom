@@ -789,11 +789,16 @@ test.describe('Read a source again from its original', () => {
         // The bridge lists it: still its progress, and the viewer shows it running.
         const now = new Date().toISOString();
         b.read!.reads = [{ id: RUNNING_ID, state: 'reading', version: 1, at: now, since: now, files: 1, pages: 1, readers: 1, done: 0, entries: 0, name: 'S0001', person: '', from: 'research', source: 'S0001' }];
-        await poll(page);
+        // A poll joins the app's own ask after the 409 while that one is under way, with its answer from before
+        // the list: asked until the viewer under the dialog has the reading.
+        const live = viewer(page).locator('#source-viewer-read-again-live');
+        await expect(async () => {
+            await poll(page);
+            await expect(live).toHaveCount(1, { timeout: 1000 });
+        }).toPass();
         await expect(d.locator('#read-title')).toHaveText('Reading again');
         await d.locator('[data-act="close"]').last().click();
         await expect(d).toHaveCount(0);
-        const live = viewer(page).locator('#source-viewer-read-again-live');
         await expect(live).toContainText('Reading again');
         await expect(again(page)).toHaveCount(0);
         await expect(excerptAgain(page)).toHaveCount(0);
