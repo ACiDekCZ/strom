@@ -93,6 +93,65 @@ test('the branch stripe follows the card\'s rounded corners, also on the focused
     for (const s of shapes) expect(s, s.focused ? 'focused card' : 'card').toMatchObject({ radius: true, left: true, width: true, height: true });
 });
 
+/** Lineage markers (spec 112): the chosen shape on <body>, the tag's letter, the tint, the words for a screen reader. */
+test('the marker shape, the tint and the lineage words follow the setting (spec 112)', async ({ page }) => {
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(card(page, 'Johan')).toBeVisible();
+    const marked = page.locator('#tree-canvas .person-card.branch-descendant').first();
+    await expect(marked).toBeVisible();
+    // Default: the arc, no tint.
+    await expect(page.locator('body')).toHaveAttribute('data-branch-marker', 'arc');
+    await expect(page.locator('body')).not.toHaveAttribute('data-branch-tint', /.*/);
+
+    // The letter tag: the descendants' letter from the strings, over the left edge.
+    await page.evaluate(() => window.Strom.UI.setBranchMarker('tag'));
+    await expect(page.locator('body')).toHaveAttribute('data-branch-marker', 'tag');
+    const tag = await marked.evaluate(el => {
+        const st = getComputedStyle(el, '::after');
+        return { content: st.content, left: st.left };
+    });
+    expect(tag).toEqual({ content: '"D"', left: '-8px' });
+
+    // The stripe: a 4px bar inside the left edge; the corner: an outline triangle for descendants.
+    await page.evaluate(() => window.Strom.UI.setBranchMarker('stripe'));
+    expect(await marked.evaluate(el => {
+        const st = getComputedStyle(el, '::before');
+        return { width: st.width, left: st.left, top: st.top };
+    })).toEqual({ width: '4px', left: '2px', top: '10px' });
+    await page.evaluate(() => window.Strom.UI.setBranchMarker('corner'));
+    expect(await marked.evaluate(el => {
+        const st = getComputedStyle(el, '::before');
+        return { width: st.width, hole: st.clipPath.startsWith('path(evenodd') };
+    })).toEqual({ width: '16px', hole: true });
+    await page.evaluate(() => window.Strom.UI.setBranchMarker('tag'));
+
+    // The tint: the card's ground in the lineage's tint token.
+    await page.evaluate(() => window.Strom.UI.setBranchTint(true));
+    await expect(page.locator('body')).toHaveAttribute('data-branch-tint', '');
+    const bg = await marked.evaluate(el => {
+        const probe = document.createElement('div');
+        probe.style.background = 'var(--branch-descendant-tint)';
+        document.body.appendChild(probe);
+        const want = getComputedStyle(probe).backgroundColor;
+        probe.remove();
+        return { got: getComputedStyle(el).backgroundColor, want };
+    });
+    expect(bg.got).toBe(bg.want);
+
+    // The lineage in words (pseudo-elements are not read): a hidden text the card is described by.
+    const words = await marked.evaluate(el => document.getElementById(el.getAttribute('aria-describedby') ?? '')?.textContent);
+    expect(words).toBe('descendant');
+
+    // Off: no shape, no tint (the tint stays chosen for later), no marked cards.
+    await page.evaluate(() => window.Strom.UI.setBranchMarker('off'));
+    await expect(page.locator('body')).not.toHaveAttribute('data-branch-marker', /.*/);
+    await expect(page.locator('body')).not.toHaveAttribute('data-branch-tint', /.*/);
+    await expect.poll(() => page.locator('#tree-canvas .person-card.branch-descendant').count()).toBe(0);
+    await page.evaluate(() => window.Strom.UI.setBranchMarker('corner'));
+    await expect(page.locator('body')).toHaveAttribute('data-branch-tint', '');
+});
+
 /**
  * The legend pill and back / forward share the bottom-left corner: on every width the pill stays where it
  * was and the buttons stand above it (on a phone since spec 082 K1.2, T44; on a desktop and a tablet since

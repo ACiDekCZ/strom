@@ -4,7 +4,7 @@
  */
 
 import { personMediaCount } from './media.js';
-import { AppSettings, ThemeMode, SurnameDisplay, SURNAME_DISPLAYS, LanguageSetting, CardDensity, TreeSpacing, SETTINGS_KEY, StromData, personSourceIds, CARD_SIZE, CardPhotoSize, CardPhotoShape, NORMAL_PHOTO_BOX } from './types.js';
+import { AppSettings, BranchMarker, BRANCH_MARKERS, ThemeMode, SurnameDisplay, SURNAME_DISPLAYS, LanguageSetting, CardDensity, TreeSpacing, SETTINGS_KEY, StromData, personSourceIds, CARD_SIZE, CardPhotoSize, CardPhotoShape, NORMAL_PHOTO_BOX } from './types.js';
 import { CardFieldSettings, normalizeCardFields, customCardSize, normalizeCardDensity, effectiveCardFields, normalizeCardPhoto } from './card-fields.js';
 import { initLanguage, Language } from './strings.js';
 import { MapKind, MAP_KINDS, isMapKind, readPlacesSort, type PlacesSort } from './places.js';
@@ -151,6 +151,11 @@ class SettingsManagerClass {
 
     private save(): void {
         if (this.readOnly) return;
+        // Lineage markers (spec 112, R1): the first write stores the migrated choice instead of the old flag.
+        if (this.settings.branchMarker === undefined || 'branchColors' in this.settings) {
+            this.settings.branchMarker = this.getBranchMarker();
+            delete this.settings.branchColors;
+        }
         localStorage.setItem(SETTINGS_KEY, JSON.stringify(this.settings));
     }
 
@@ -524,13 +529,39 @@ class SettingsManagerClass {
         this.save();
     }
 
-    /** Branch colour coding default ON (undefined = enabled). */
-    isBranchColorsEnabled(): boolean {
-        return this.settings.branchColors !== false;
+    /**
+     * Shape of the lineage marker (spec 112, R1), default the arc. Settings
+     * from before it keep their choice: branch colours off → 'off', on → 'arc'.
+     */
+    getBranchMarker(): BranchMarker {
+        const m = this.settings.branchMarker;
+        if (m && (BRANCH_MARKERS as readonly string[]).includes(m)) return m;
+        return this.settings.branchColors === false ? 'off' : 'arc';
     }
 
-    setBranchColors(enabled: boolean): void {
-        this.settings.branchColors = enabled;
+    setBranchMarker(marker: BranchMarker): void {
+        this.settings.branchMarker = marker;
+        delete this.settings.branchColors;
+        this.save();
+    }
+
+    /** Any lineage marker drawn (not 'off'). */
+    isBranchMarkerOn(): boolean {
+        return this.getBranchMarker() !== 'off';
+    }
+
+    /** Cards tinted in the lineage colour: only while a marker is on; the choice itself is kept under 'off'. */
+    isBranchTintOn(): boolean {
+        return this.settings.branchTint === true && this.isBranchMarkerOn();
+    }
+
+    /** The tint as chosen, regardless of the marker (the checkbox shows it while disabled). */
+    isBranchTintChosen(): boolean {
+        return this.settings.branchTint === true;
+    }
+
+    setBranchTint(on: boolean): void {
+        this.settings.branchTint = on;
         this.save();
     }
 

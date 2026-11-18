@@ -388,7 +388,7 @@ export const miscMethods = uiModule({
         this.syncSurnameDisplaySetting();
         this.syncTreeSpacingSetting();
         const branchColorsToggle = document.getElementById('branch-colors-toggle') as HTMLInputElement | null;
-        if (branchColorsToggle) branchColorsToggle.checked = SettingsManager.isBranchColorsEnabled();
+        if (branchColorsToggle) branchColorsToggle.checked = SettingsManager.isBranchMarkerOn();
         const descFamiliesToggle = document.getElementById('descendants-families-default-toggle') as HTMLInputElement | null;
         if (descFamiliesToggle) descFamiliesToggle.checked = SettingsManager.isDescendantsFullFamiliesDefault();
 
@@ -628,7 +628,7 @@ export const miscMethods = uiModule({
         }
         const legend = document.getElementById('branch-legend');
         if (legend) {
-            legend.style.display = (cardsShown && SettingsManager.isBranchColorsEnabled()
+            legend.style.display = (cardsShown && SettingsManager.isBranchMarkerOn()
                 && SettingsManager.isBranchLegendEnabled()) ? 'flex' : 'none';
         }
         if (treeLegend) {

@@ -63,7 +63,8 @@ import { computeTimelineModel } from './timeline.js';
 import { buildTimelineSvg } from './timeline-chart.js';
 import { HISTORY_CHANGED_EVENT } from './ui/history-ui.js';
 import { sortLifeEvents } from './events.js';
-import { classifyBranches, Branch } from './branch-colors.js';
+import { classifyBranches, BranchSet } from './branch-colors.js';
+import { applyBranchMarkerAttrs, branchAriaId } from './branch-marker-attrs.js';
 import { presumedDeceasedSet } from './privacy.js';
 import { placeList } from './places.js';
 import { SettingsManager } from './settings.js';
@@ -861,6 +862,8 @@ class TreeRendererClass {
             ...(density === 'normal' && this.normalHeights ? { personHeights: this.normalHeights } : {}),
         };
         document.body.dataset.cardDensity = density;
+        // Lineage markers (spec 112): the shape, the tint and the tag's letters on <body>.
+        applyBranchMarkerAttrs(SettingsManager.getBranchMarker(), SettingsManager.isBranchTintOn());
         // The cards of details share one look (index.html body[data-card-fields]).
         if (fieldCards) document.body.dataset.cardFields = '';
         else delete document.body.dataset.cardFields;
@@ -4919,13 +4922,15 @@ class TreeRendererClass {
     private renderCards(canvas: HTMLElement, allTrees: Map<TreeId, { name: string; data: StromData }> | null, live: LiveRender | null): void {
         const currentTreeId = DataManager.getCurrentTreeId();
 
-        // Optional branch colouring: classify once per render (never in timeline).
+        // Optional lineage markers: classify once per render (never in timeline).
         // A link "linked in the view only" stands as if real: the family it shows takes its branch.
         const layoutData = this.viewLayer?.data ?? DataManager.getData();
-        const branchMap: Map<PersonId, Branch> | null =
-            (SettingsManager.isBranchColorsEnabled() && this.viewMode !== 'timeline' && this.focusPersonId)
-                ? classifyBranches(layoutData, this.focusPersonId)
-                : null;
+        const branches = (SettingsManager.isBranchMarkerOn() && this.viewMode !== 'timeline' && this.focusPersonId)
+            ? classifyBranches(layoutData, this.focusPersonId)
+            : null;
+        const branchMap: Map<PersonId, BranchSet> | null = branches?.map ?? null;
+        // R5: two same-gender parents → the lines are numbered (tag letters 1 / 2).
+        canvas.classList.toggle('branch-numbered', !!branches?.numbered);
 
         // Descendants / family views de-emphasize context-only people (step-
         // relatives, or in-laws shown only for context). The membership rule is
@@ -5023,11 +5028,11 @@ class TreeRendererClass {
             if (this.evidenceIds) classes += ` ${this.evidenceClass(id)}`;
             const evl = this.evidenceLevelMap?.get(id);
             if (evl) classes += ` evl-${evl}`;
-            // Optional branch colour stripe (focus and placeholders never tagged).
-            if (branchMap && !person.isPlaceholder) {
-                const b = branchMap.get(id);
-                if (b) classes += ` branch-${b}`;
-            }
+            // Optional lineage marker (focus and placeholders never tagged); R4: both lines at once.
+            const branchSet = branchMap && !person.isPlaceholder ? branchMap.get(id) : undefined;
+            if (branchSet?.paternal) classes += ' branch-paternal';
+            if (branchSet?.maternal) classes += ' branch-maternal';
+            if (branchSet?.descendant) classes += ' branch-descendant';
             // Descendants/family view: de-emphasize context-only relatives.
             if (indirectIds?.has(id)) {
                 classes += ' indirect';
@@ -5053,6 +5058,10 @@ class TreeRendererClass {
                 if (this.config.personHeights.has(id)) card.style.height = `${this.cardHeightOf(id)}px`;
             } else if (this.config.personHeights) card.style.setProperty('--card-custom-h', `${this.cardHeightOf(id)}px`);
             card.dataset.id = id;
+            // The lineage in words for screen readers (the marker itself is a pseudo-element, never read).
+            const branchAria = branchAriaId(branchSet, !!branches?.numbered);
+            if (branchAria) card.setAttribute('aria-describedby', branchAria);
+            else card.removeAttribute('aria-describedby');
             if (ghostOf) {
                 card.dataset.viewGhost = '';
                 card.dataset.viewHypo = ghostOf.hypo;

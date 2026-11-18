@@ -740,7 +740,7 @@ test.describe('card signals', () => {
         await expect(own.locator('#reliability-card-toggle')).toHaveCount(1);
         // In the app, no marks of a new window.
         const branch = settings.locator('.card-signals-branch-link');
-        await expect(branch).toHaveText('Branch colours: Tree settings ›');
+        await expect(branch).toHaveText('Lineage markers: Tree settings ›');
         await branch.click();
         await expect(page.locator('#branch-colors-toggle')).toBeFocused();
         await expect(page.locator('#branch-colors-toggle')).toBeInViewport();

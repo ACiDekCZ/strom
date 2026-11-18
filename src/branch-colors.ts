@@ -1,22 +1,33 @@
 /**
- * Branch classification for optional colour coding relative to the focus person:
- * paternal ancestry, maternal ancestry, descendants, or other (partners /
- * in-laws). Pure over StromData — the renderer only adds a CSS class per card.
+ * Branch classification for optional lineage markers relative to the focus
+ * person: paternal ancestry, maternal ancestry, descendants, or other
+ * (partners / in-laws / siblings / cousins). Pure over StromData — the renderer
+ * only adds CSS classes per card.
  *
- * Ties (a person reachable from both sides via pedigree collapse) resolve to the
- * FIRST side that claims them: paternal is computed before maternal, and neither
- * overwrites the other. The focus person itself is never tagged.
+ * A person reachable from both sides (pedigree collapse, e.g. a marriage of
+ * cousins) belongs to BOTH lines and carries both markers (R4). The focus
+ * person itself is never tagged.
  */
 
 import { StromData, PersonId, Person, parentSlots } from './types.js';
 
 export type Branch = 'paternal' | 'maternal' | 'descendant';
 
+/** The lines one person belongs to (R4: paternal and maternal may both be set). */
+export interface BranchSet { paternal?: true; maternal?: true; descendant?: true; }
+
 /**
- * Split the focus person's parents into the two colour slots. Gender picks the
- * slot when it disambiguates (a parent of unknown sex the slot the other one
- * leaves free); with two same-gender parents the second parent still gets the
- * remaining slot (both sides deserve a colour).
+ * Classification result. `numbered` is true when the focus person's two known
+ * parents share a gender (R5): the two lines are then named "first parent's
+ * line" / "second parent's line" instead of paternal / maternal.
+ */
+export interface BranchResult { map: Map<PersonId, BranchSet>; numbered: boolean; }
+
+/**
+ * Split the focus person's parents into the two slots. Gender picks the slot
+ * when it disambiguates (a parent of unknown sex the slot the other one leaves
+ * free); with two same-gender parents the second parent still gets the
+ * remaining slot (both sides deserve a marker).
  */
 function identifyParents(focus: Person, data: StromData): [PersonId | null, PersonId | null] {
     const parents = focus.parentIds.map(id => data.persons[id]).filter(Boolean) as Person[];
@@ -24,12 +35,19 @@ function identifyParents(focus: Person, data: StromData): [PersonId | null, Pers
     return [father?.id ?? null, mother?.id ?? null];
 }
 
+/** R5: both parents known and of the same (known) gender. */
+function sameGenderParents(focus: Person, data: StromData): boolean {
+    const parents = focus.parentIds.map(id => data.persons[id]).filter(Boolean) as Person[];
+    if (parents.length < 2) return false;
+    const [a, b] = parents;
+    return (a.gender === 'male' || a.gender === 'female') && a.gender === b.gender;
+}
+
 /**
- * Tag one ancestral side: the root parent, all of its ancestors, and the
- * siblings at every level (aunts/uncles, great-aunts/uncles). Never overwrites
- * an already-tagged person.
+ * Collect one ancestral side: the root parent, all of its ancestors, and the
+ * siblings at every level (aunts/uncles, great-aunts/uncles).
  */
-function tagAncestorSide(data: StromData, rootId: PersonId, out: Map<PersonId, Branch>, branch: Branch): void {
+function collectAncestorSide(data: StromData, rootId: PersonId): Set<PersonId> {
     // Walk strictly upward to collect the ancestor chain (incl. the root).
     const ancestors = new Set<PersonId>();
     const stack: PersonId[] = [rootId];
@@ -50,12 +68,19 @@ function tagAncestorSide(data: StromData, rootId: PersonId, out: Map<PersonId, B
             if (parent) for (const sib of parent.childIds) side.add(sib);
         }
     }
-    for (const id of side) if (!out.has(id)) out.set(id, branch);
+    return side;
 }
 
-/** Tag every descendant of the focus (via childIds), excluding the focus itself. */
-function tagDescendants(data: StromData, focusId: PersonId, out: Map<PersonId, Branch>): void {
+function mark(out: Map<PersonId, BranchSet>, id: PersonId, branch: Branch): void {
+    const set = out.get(id) ?? {};
+    set[branch] = true;
+    out.set(id, set);
+}
+
+/** Every descendant of the focus (via childIds), excluding the focus itself. */
+function collectDescendants(data: StromData, focusId: PersonId): Set<PersonId> {
     const seen = new Set<PersonId>([focusId]);
+    const result = new Set<PersonId>();
     const stack: PersonId[] = [focusId];
     while (stack.length) {
         const id = stack.pop()!;
@@ -64,26 +89,42 @@ function tagDescendants(data: StromData, focusId: PersonId, out: Map<PersonId, B
         for (const childId of p.childIds) {
             if (seen.has(childId)) continue;
             seen.add(childId);
-            if (!out.has(childId)) out.set(childId, 'descendant');
+            result.add(childId);
             stack.push(childId);
         }
     }
+    return result;
 }
 
 /**
  * Classify every person relative to `focusId`. People not in the map (and the
- * focus itself) are "other" — no stripe.
+ * focus itself) are "other" — no marker. Paternal and maternal add up (R4);
+ * a descendant marker is given only to people on neither ancestral side.
  */
-export function classifyBranches(data: StromData, focusId: PersonId): Map<PersonId, Branch> {
-    const out = new Map<PersonId, Branch>();
+export function classifyBranches(data: StromData, focusId: PersonId): BranchResult {
+    const map = new Map<PersonId, BranchSet>();
     const focus = data.persons[focusId];
-    if (!focus) return out;
+    if (!focus) return { map, numbered: false };
 
     const [fatherId, motherId] = identifyParents(focus, data);
-    if (fatherId) tagAncestorSide(data, fatherId, out, 'paternal');   // paternal wins ties
-    if (motherId) tagAncestorSide(data, motherId, out, 'maternal');
-    tagDescendants(data, focusId, out);
+    for (const [rootId, branch] of [[fatherId, 'paternal'], [motherId, 'maternal']] as const) {
+        if (rootId) for (const id of collectAncestorSide(data, rootId)) mark(map, id, branch);
+    }
+    // Already on an ancestral side (only through a cycle in the data) → no descendant marker.
+    for (const id of collectDescendants(data, focusId)) {
+        if (!map.has(id)) mark(map, id, 'descendant');
+    }
 
-    out.delete(focusId);   // the focus never gets a stripe
+    map.delete(focusId);   // the focus never gets a marker
+    return { map, numbered: sameGenderParents(focus, data) };
+}
+
+/** The lines of a set, in the fixed order paternal → maternal → descendant. */
+export function branchesOf(set: BranchSet | undefined): Branch[] {
+    if (!set) return [];
+    const out: Branch[] = [];
+    if (set.paternal) out.push('paternal');
+    if (set.maternal) out.push('maternal');
+    if (set.descendant) out.push('descendant');
     return out;
 }

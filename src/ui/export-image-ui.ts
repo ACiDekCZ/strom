@@ -18,7 +18,7 @@ import { uiModule } from './module.js';
 import { runBusy, activatedElement, nextPaint } from './busy.js';
 import { LayoutConfig, StromData, TreeSpacing, ViewMode, layoutConfigFor, personCardHeight } from '../types.js';
 import { applyLivingPrivacy, PrivacyMode, presumedDeceasedSet } from '../privacy.js';
-import { classifyBranches } from '../branch-colors.js';
+import { classifyBranches, branchesOf } from '../branch-colors.js';
 import { computeIndirectIds } from '../indirect.js';
 import { SettingsManager } from '../settings.js';
 import { safeFileName } from '../filenames.js';
@@ -131,8 +131,11 @@ export function treeCardDrawing(data: StromData, layout: ReturnType<typeof TreeR
 } {
     const mode = TreeRenderer.getViewMode();
     const focusId = TreeRenderer.getFocusPersonId();
-    const branchMap = (SettingsManager.isBranchColorsEnabled() && focusId)
-        ? classifyBranches(data, focusId) as unknown as Map<string, string>
+    // The image still draws one stripe per card: the first of its lines (paternal → maternal → descendant).
+    const branchMap = (SettingsManager.isBranchMarkerOn() && focusId)
+        ? new Map<string, string>([...classifyBranches(data, focusId).map]
+            .map(([id, set]) => [id as string, branchesOf(set)[0]] as [string, string])
+            .filter(([, b]) => !!b))
         : null;
     // Draw parity: the descendants / family views dim context-only people on
     // screen (opacity 0.5). Reuse the SAME membership rule so the image dims

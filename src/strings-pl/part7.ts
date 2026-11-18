@@ -13,7 +13,7 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         cardStatusSub: 'Znacznik w prawym dolnym rogu: jak udokumentowana jest osoba i kto stoi za danymi.',
         cardCrossTreeSub: 'Pigułka ⇄ N przy osobie, która jest też w innym drzewie na tym urządzeniu.',
         cardAlways: 'Zawsze: kłódka, kolejność rodzeństwa, zakładki gałęzi.',
-        cardBranchLink: 'Kolory gałęzi: ustawienia Drzewo ›',
+        cardBranchLink: 'Oznaczenie linii: ustawienia Drzewo ›',
         cardStory: 'Opowieść',
         cardWaiting: 'Czeka na załatwienie',
         cardConflict: 'Sprzeczności w źródłach',

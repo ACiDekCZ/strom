@@ -19,8 +19,10 @@ import {
     StromData,
     TreeId,
     LAST_FOCUSED,
-    LastFocusedMarker
+    LastFocusedMarker,
+    BranchMarker
 } from '../types.js';
+import { applyBranchMarkerAttrs } from '../branch-marker-attrs.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
 import {
@@ -788,10 +790,30 @@ export const appModeMethods = uiModule({
         TreeRenderer.render();
     },
 
+    /** The old on/off switch of the lineage markers (until the Settings show the shapes): on = the arc. */
     toggleBranchColors(enabled: boolean): void {
-        SettingsManager.setBranchColors(enabled);
-        TreeRenderer.render();   // re-render to add/remove the stripes
+        this.setBranchMarker(enabled ? 'arc' : 'off');
+    },
+
+    /** Lineage marker shape (spec 112, R1): the cards are drawn again with it. */
+    setBranchMarker(marker: BranchMarker): void {
+        SettingsManager.setBranchMarker(marker);
+        this.applyBranchMarkerAttrs();
+        TreeRenderer.render();   // re-render to add/remove the markers
         this.updateViewModeUI(); // owns the legend visibility
+    },
+
+    /** Tint the marked cards in their lineage colour (kept while the markers are off, drawn only with them). */
+    setBranchTint(on: boolean): void {
+        SettingsManager.setBranchTint(on);
+        this.applyBranchMarkerAttrs();
+        TreeRenderer.render();
+        this.updateViewModeUI();
+    },
+
+    /** The marker's state on <body> (shape, tint, tag letters, the screen reader's texts) from the settings. */
+    applyBranchMarkerAttrs(): void {
+        applyBranchMarkerAttrs(SettingsManager.getBranchMarker(), SettingsManager.isBranchTintOn());
     },
 
     /** Badge toggle in the descendants view: flip ad hoc and re-render. */

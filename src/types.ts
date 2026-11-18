@@ -77,6 +77,10 @@ export function generateAttachmentId(): string {
  */
 export type Gender = 'male' | 'female' | 'unknown';
 
+/** Shape of the lineage marker on cards (spec 112, R1); 'off' draws none. */
+export type BranchMarker = 'arc' | 'tag' | 'stripe' | 'corner' | 'off';
+export const BRANCH_MARKERS: readonly BranchMarker[] = ['arc', 'tag', 'stripe', 'corner', 'off'];
+
 /** Every value of Gender, in the order the person dialog offers them. */
 export const GENDERS: readonly Gender[] = ['male', 'female', 'unknown'];
 
@@ -2589,7 +2593,10 @@ export interface AppSettings {
     genLabels?: boolean;  // default: true - sticky generation labels over the canvas
     zoomControls?: boolean;  // default: true - floating zoom buttons over the tree
     onThisDay?: boolean;  // default: true - daily "on this day" reminder
-    branchColors?: boolean;  // default: true - colour cards by branch vs focus
+    /** @deprecated Before lineage markers (spec 112): read only to migrate to `branchMarker` (true → 'arc', false → 'off'). */
+    branchColors?: boolean;
+    branchMarker?: BranchMarker;  // default: 'arc' - shape of the lineage marker on cards ('off' = none)
+    branchTint?: boolean;  // default: false - tint cards in the lineage colour (only while a marker is on)
     branchLegend?: boolean;  // default: false - show the branch-colour legend box
     deathAnniversaries?: boolean;  // default: false - include yearly death anniversaries
     onThisDayAllTrees?: boolean;   // default: false - "on this day" also from the other visible trees
