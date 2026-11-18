@@ -29709,6 +29709,9 @@
         .mw-pop-section { padding: 6px 4px; display: flex; flex-direction: column; gap: 2px; }
         .mw-pop-section + .mw-pop-section { border-top: 1px solid var(--divider); }
         .mw-pop-toggles { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+        /* Sort in the filters sheet (≤ 1024; the toolbar's Sort ▾ on a computer): the order's chips, then its direction. */
+        .mw-pop-sort { display: flex; flex-wrap: wrap; gap: 6px; }
+        .mw-pop-sortdir { align-self: flex-start; margin-top: 8px; }
         .mw-pop-title { font-size: 12px; font-weight: 600; color: var(--text-light); margin-bottom: 4px; }
         .mw-check-row { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 4px; font-size: 14px; cursor: pointer; border-radius: var(--r-sm); }
         .mw-check-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
@@ -29743,6 +29746,7 @@
             .materials-window .mw-filters-btn { display: inline-flex; }
             .mw-chips > :not(.is-active) { display: none; }
             .mw-seg-group.sel-seg { display: none; }
+            .materials-window .mw-sort-btn { display: none; }
             #materials-modal .mw-search { flex: 1; width: auto; min-width: 120px; }
             .mw-tools { flex: 0 1 auto; flex-wrap: nowrap; }
             .mw-tools .mw-gap { display: none; }

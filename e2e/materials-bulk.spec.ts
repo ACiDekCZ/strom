@@ -299,3 +299,133 @@ test.describe('Going through many files beside an archive', () => {
         expect(back).toEqual([{ ids: ['I0001', 'I0002'], kind: '' }, { ids: ['I0003'], kind: 'photo' }]);
     });
 });
+
+test.describe('The window\'s sort: the grid too, one with the list, remembered', () => {
+    /** Titles and dates: Wedding at Quellbach 1924, Letter to Kasimir 1931, Christening of Zephyrin without a date. */
+    async function dated(page: Page): Promise<void> {
+        await appTree(page);
+        await page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            const set: Record<string, { title?: string; date: string }> = {
+                'svatba.png': { date: '1924' },
+                'dopis.png': { title: 'Letter to Kasimir', date: '1931' },
+                'matrika.png': { title: 'Christening of Zephyrin', date: '' },
+            };
+            for (const p of Object.values(dm.getData().persons) as { id: string }[]) {
+                for (const a of dm.personMedia(p.id as never)) dm.setMediaDetails(a.id, set[a.name]);
+            }
+        });
+    }
+    const gridTitles = (page: Page) => tiles(page).locator('.mw-tile-title').allTextContents();
+    const listTitles = (page: Page) => win(page).locator('.mw-canvas .mw-li .mw-li-title').allTextContents();
+    const sortBtn = (page: Page) => win(page).locator('[data-mw="sort-menu"]');
+    const menu = (page: Page) => page.locator('.tv-menu.mw-sort-menu');
+    const W = 'Wedding at Quellbach', L = 'Letter to Kasimir', C = 'Christening of Zephyrin';
+
+    test.describe('on a computer', () => {
+        test.use({ viewport: DESKTOP });
+
+        test('Sort ▾ orders the grid by Date and Title both ways; the list keeps it; Go through goes in the window\'s order; remembered', async ({ page }) => {
+            await dated(page);
+            await openWindow(page);
+            await expect(tiles(page)).toHaveCount(3);
+            await expect(sortBtn(page)).toHaveText('Sort ▾');
+            await sortBtn(page).click();
+            await expect(menu(page)).toBeVisible();
+            await expect(menu(page).locator('[role="menuitemradio"] .tv-menu-label')).toHaveText(['Default order', 'Title', 'Kind', 'Date', 'People', 'Source', 'Used', 'Ascending', 'Descending']);
+            await expect(menu(page).getByRole('menuitemradio', { name: 'Default order' })).toHaveAttribute('aria-checked', 'true');
+            await expect(menu(page).getByRole('menuitemradio', { name: 'Descending' })).toHaveAttribute('aria-disabled', 'true');
+            await menu(page).getByRole('menuitemradio', { name: 'Date' }).click();
+            await expect(menu(page)).toHaveCount(0);
+            await expect(sortBtn(page)).toHaveText('Sort: Date ↑ ▾');
+            await expect(sortBtn(page)).toBeFocused();
+            // Without a date last both ways.
+            await expect.poll(() => gridTitles(page)).toEqual([W, L, C]);
+            // The keyboard: Enter opens it on the chosen one, ↓ to Descending, Enter.
+            await sortBtn(page).press('Enter');
+            await expect(menu(page).getByRole('menuitemradio', { name: 'Date' })).toBeFocused();
+            for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowDown');
+            await expect(menu(page).getByRole('menuitemradio', { name: 'Descending' })).toBeFocused();
+            await page.keyboard.press('Enter');
+            await expect(sortBtn(page)).toHaveText('Sort: Date ↓ ▾');
+            await expect.poll(() => gridTitles(page)).toEqual([L, W, C]);
+            // Esc closes the menu alone, the window stays.
+            await sortBtn(page).press('Enter');
+            await page.keyboard.press('Escape');
+            await expect(menu(page)).toHaveCount(0);
+            await expect(win(page)).toBeVisible();
+            await expect(sortBtn(page)).toBeFocused();
+            // A column keeps the direction.
+            await sortBtn(page).click();
+            await menu(page).getByRole('menuitemradio', { name: 'Title' }).click();
+            await expect(sortBtn(page)).toHaveText('Sort: Title ↓ ▾');
+            await expect.poll(() => gridTitles(page)).toEqual([W, L, C]);
+            await sortBtn(page).click();
+            await menu(page).getByRole('menuitemradio', { name: 'Ascending' }).click();
+            await expect.poll(() => gridTitles(page)).toEqual([C, L, W]);
+            // The list: the same order, its header shows it; a header click changes Sort ▾ too.
+            await win(page).locator('[data-mw="view-list"]').click();
+            expect(await listTitles(page)).toEqual([C, L, W]);
+            const head = win(page).locator('.mw-lhead');
+            await expect(head.locator('.mw-lh-title')).toHaveAttribute('aria-sort', 'ascending');
+            await expect(head.locator('.mw-lh-title .mw-lh-arrow')).toHaveText('▲');
+            await expect(sortBtn(page)).toHaveText('Sort: Title ↑ ▾');
+            await head.locator('.mw-lh-date button').click();
+            await expect(sortBtn(page)).toHaveText('Sort: Date ↑ ▾');
+            await head.locator('.mw-lh-date button').click();
+            await expect(sortBtn(page)).toHaveText('Sort: Date ↓ ▾');
+            await win(page).locator('[data-mw="view-grid"]').click();
+            await expect.poll(() => gridTitles(page)).toEqual([L, W, C]);
+            // Go through: the files in the window's order.
+            await win(page).locator('[data-mw="select"]').click();
+            await tiles(page).first().focus();
+            await page.keyboard.press('ControlOrMeta+a');
+            await bar(page).locator('[data-mw="sel-review"]').click();
+            await expect(page.locator('#image-viewer-pos')).toContainText('1 of 3');
+            await expect(panel(page).locator('.mat-edit-title')).toHaveValue(L);
+            await panel(page).locator('[data-action="skip"]').click();
+            await expect(page.locator('#image-viewer-pos')).toContainText('2 of 3');
+            await expect(panel(page).locator('.mat-edit-title')).toHaveValue(W);
+            await panel(page).locator('[data-action="skip"]').click();
+            await expect(page.locator('#image-viewer-pos')).toContainText('3 of 3');
+            await expect(panel(page).locator('.mat-edit-title')).toHaveValue(C);
+            await page.keyboard.press('Escape');
+            await expect(viewer(page)).not.toHaveClass(/active/);
+            // Remembered: the window opened again shows the grid in the same order.
+            expect(JSON.parse(await page.evaluate(() => localStorage.getItem('strom.materials.view') ?? '{}')).sort).toEqual({ col: 'date', dir: -1 });
+            await page.evaluate(() => (window.Strom.UI as unknown as { closeMaterials(): void }).closeMaterials());
+            await expect(win(page)).toBeHidden();
+            await openWindow(page);
+            await expect(sortBtn(page)).toHaveText('Sort: Date ↓ ▾');
+            await expect.poll(() => gridTitles(page)).toEqual([L, W, C]);
+            // The default order again: the direction cannot be chosen without a column.
+            await sortBtn(page).click();
+            await menu(page).getByRole('menuitemradio', { name: 'Default order' }).click();
+            await expect(sortBtn(page)).toHaveText('Sort ▾');
+            expect(JSON.parse(await page.evaluate(() => localStorage.getItem('strom.materials.view') ?? '{}')).sort).toBeNull();
+        });
+    });
+
+    test.describe('on a phone', () => {
+        test.use({ viewport: { width: 390, height: 844 } });
+
+        test('the filters sheet holds Sort: a column, then its direction', async ({ page }) => {
+            await dated(page);
+            await openWindow(page);
+            await expect(sortBtn(page)).toBeHidden();
+            await win(page).locator('[data-mw="sheet"]').click();
+            const sheet = page.locator('.mw-pop-sheet');
+            await expect(sheet.locator('.mw-pop-sort [data-pop="sort-col-none"]')).toHaveAttribute('aria-pressed', 'true');
+            await expect(sheet.locator('[data-pop="sort-dir--1"]')).toBeDisabled();
+            await sheet.locator('[data-pop="sort-col-date"]').click();
+            await expect(sheet.locator('[data-pop="sort-col-date"]')).toHaveAttribute('aria-pressed', 'true');
+            await expect(sheet.locator('[data-pop="sort-dir-1"]')).toHaveAttribute('aria-pressed', 'true');
+            await expect.poll(() => gridTitles(page)).toEqual([W, L, C]);
+            await sheet.locator('[data-pop="sort-dir--1"]').click();
+            await expect.poll(() => gridTitles(page)).toEqual([L, W, C]);
+            await sheet.locator('[data-pop="done"]').click();
+            await expect(sheet).toHaveCount(0);
+            expect(JSON.parse(await page.evaluate(() => localStorage.getItem('strom.materials.view') ?? '{}')).sort).toEqual({ col: 'date', dir: -1 });
+        });
+    });
+});

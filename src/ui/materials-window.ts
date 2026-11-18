@@ -41,7 +41,7 @@ import {
     emptyFilters, activeFilterCount, narrowing, overviewItems, overviewSummary, overviewGroups, overviewRows,
     rowsInView, stickyGroupAt, gridColumns, rangeKeys, personsShort, nameWithoutYears, parseViewPrefs,
     itemWithoutPerson, OverviewSummary, inMaterialFolder, firstFolderLine, ViewPrefs,
-    ListSort, ListColumn, sortOverviewGroups, storedFilters, itemInTree,
+    ListSort, ListColumn, SortChoice, sortOverviewGroups, chooseSort, storedFilters, itemInTree,
 } from '../materials-overview.js';
 import { materialThumbs, ThumbSnapshot } from '../material-thumbs.js';
 import {
@@ -51,6 +51,7 @@ import { uiModule } from './module.js';
 import type { SortPlan, SortTarget } from './material-sort-ui.js';
 import { researchBridgeActionLabel } from './research-open-mark.js';
 import { barHtml } from './prog-bar.js';
+import { closeHeadMenu, openHeadMenu, SEP, type MenuEntry } from './table-view/table-headmenu.js';
 
 const MODAL_ID = 'materials-modal';
 const VIEW_KEY = 'strom.materials.view';
@@ -381,6 +382,7 @@ export const materialsWindowMethods = uiModule({
         const w = win;
         if (!w) return;
         this.mwClosePop();
+        closeHeadMenu();
         w.io?.disconnect();
         w.ro?.disconnect();
         w.unsubThumbs?.();
@@ -607,7 +609,8 @@ export const materialsWindowMethods = uiModule({
             batchLoaded: id => !!rec?.full || w.loadedBatches.has(id),
             personName: key => w.names.get(key) ?? null,
         });
-        if (w.view === 'list') sortOverviewGroups(w.groups, w.sort, { personName: key => w.names.get(key) ?? null, kindLabel: materialKindLabel });
+        // One sort for the grid and the list (the viewer and Go through follow the groups' order).
+        sortOverviewGroups(w.groups, w.sort, { personName: key => w.names.get(key) ?? null, kindLabel: materialKindLabel });
         w.drawnCaps = capsKey(ctx.caps, ctx.base);
         w.metrics = this.mwMetrics();
         w.sortPlan = this.mwSortPlan();
@@ -684,6 +687,7 @@ export const materialsWindowMethods = uiModule({
             ${this.mwReviewChips(toggle)}
             <button type="button" class="mw-chip sel-opt mw-filters-btn${count ? ' is-active' : ''}" data-mw="sheet" aria-haspopup="dialog">${esc(count ? m.filters(count) : m.filtersTitle)}</button>
             <span class="mw-gap"></span>
+            ${this.mwSortChipHtml()}
             ${seg('mw-seg-group', m.groupBy, w.model === 'app' ? [
                 { act: 'group-added', label: m.groupAdded, on: w.group === 'added' },
                 { act: 'group-person', label: m.groupPerson, on: w.group === 'person' },
@@ -1126,17 +1130,62 @@ export const materialsWindowMethods = uiModule({
         if (!el) return;
         el.hidden = w.view !== 'list';
         if (el.hidden) { el.innerHTML = ''; return; }
-        const m = strings.materials;
-        const cols: [ListColumn, string][] = [
-            ['title', m.colTitle], ['kind', m.colKind], ['date', m.colDate], ['persons', m.colPersons], ['source', m.colSource],
-            ...(w.model === 'archive' ? [['intree', m.colInTree] as [ListColumn, string]] : []), ['used', m.colUsed],
-        ];
+        const cols = this.mwSortColumns();
         const cell = ([col, label]: [ListColumn, string]) => {
             const on = w.sort?.col === col ? w.sort.dir : 0;
             const sort = on === 1 ? 'ascending' : on === -1 ? 'descending' : 'none';
             return `<span class="mw-lh-cell mw-lh-${col}" role="columnheader" aria-sort="${sort}"><button type="button" class="mw-lh-btn" data-mw="sort" data-col="${col}">${esc(label)}<span class="mw-lh-arrow" aria-hidden="true">${on === 1 ? '▲' : on === -1 ? '▼' : ''}</span></button></span>`;
         };
         el.innerHTML = `<div class="mw-lh" role="row"><span class="mw-li-check" aria-hidden="true"></span><span class="mw-lh-thumb" aria-hidden="true"></span>${cols.map(cell).join('')}</div>`;
+    },
+
+    /** The columns the window sorts by (the list's headers, the Sort menu). */
+    mwSortColumns(): [ListColumn, string][] {
+        const m = strings.materials;
+        return [
+            ['title', m.colTitle], ['kind', m.colKind], ['date', m.colDate], ['persons', m.colPersons], ['source', m.colSource],
+            ...(win?.model === 'archive' ? [['intree', m.colInTree] as [ListColumn, string]] : []), ['used', m.colUsed],
+        ];
+    },
+
+    /** The toolbar's Sort ▾ (the grid and the list; ≤ 1024 it is in the filters sheet). */
+    mwSortChipHtml(): string {
+        const w = win!;
+        const m = strings.materials;
+        const s = w.sort;
+        const col = s ? this.mwSortColumns().find(c => c[0] === s.col)?.[1] ?? s.col : '';
+        const text = s ? m.sortChip(col, s.dir === 1 ? '↑' : '↓') : m.sortBy;
+        const aria = s ? `${m.sortBy}: ${col}, ${s.dir === 1 ? m.sortAscending : m.sortDescending}` : `${m.sortBy}: ${m.sortDefault}`;
+        return `<button type="button" class="mw-chip sel-opt mw-sort-btn" data-mw="sort-menu" aria-haspopup="menu" aria-label="${esc(aria)}">${esc(text)} <span aria-hidden="true">▾</span></button>`;
+    },
+
+    /** Sort ▾'s menu: the default order, the columns, the direction (the table's menu: ↑ ↓ Enter Esc). */
+    mwSortMenu(anchor: HTMLElement): void {
+        const w = win;
+        if (!w) return;
+        this.mwClosePop();
+        const m = strings.materials;
+        const s = w.sort;
+        const pick = (choice: SortChoice) => () => this.mwSetSort(chooseSort(win?.sort ?? null, choice));
+        const entries: MenuEntry[] = [
+            { id: 'default', label: m.sortDefault, icon: '', checked: !s, run: pick(null) },
+            SEP,
+            ...this.mwSortColumns().map(([col, label]) => ({ id: col, label, icon: '', checked: s?.col === col, run: pick({ col }) })),
+            SEP,
+            { id: 'asc', label: m.sortAscending, icon: '↑', checked: s?.dir === 1, disabled: !s, run: pick({ dir: 1 }) },
+            { id: 'desc', label: m.sortDescending, icon: '↓', checked: s?.dir === -1, disabled: !s, run: pick({ dir: -1 }) },
+        ];
+        openHeadMenu(anchor, m.sortBy, '', entries).classList.add('mw-sort-menu');
+    },
+
+    /** The window's sort from Sort ▾ or the filters sheet: both views, remembered with the view. */
+    mwSetSort(sort: ListSort | null): void {
+        const w = win;
+        if (!w) return;
+        w.sort = sort;
+        writeListPrefs(w.sort, w.filters);
+        w.scroller.scrollTop = 0;
+        this.mwRebuild();
     },
 
     /** Sort the list by a column (ascending, descending, none); remembered with the view. */
@@ -1647,7 +1696,8 @@ export const materialsWindowMethods = uiModule({
         };
         w.popOutside = (e: MouseEvent) => {
             const t = e.target as Node;
-            if (pop.contains(t) || anchor.contains(t) || (t as HTMLElement).closest?.('.person-picker-dropdown')) return;
+            // The sheet drawn anew (mwRefillSheet) is another element: the current one counts.
+            if ((w.pop ?? pop).contains(t) || anchor.contains(t) || (t as HTMLElement).closest?.('.person-picker-dropdown')) return;
             this.mwClosePop();
         };
         document.addEventListener('keydown', w.popKey, true);
@@ -1790,6 +1840,19 @@ export const materialsWindowMethods = uiModule({
                         `<button type="button" class="sel-opt" data-sel-form="seg" data-pop="group-${g}" aria-pressed="${w.group === g}">${esc(label)}</button>`).join('')}
                 </div>
             </div>`);
+            // Sort (the toolbar's Sort ▾ on a computer): the default order or a column, then its direction.
+            const s = w.sort;
+            parts.push(`<div class="mw-pop-section">
+                <div class="mw-pop-title">${esc(m.sortBy)}</div>
+                <div class="mw-pop-sort" role="group" aria-label="${esc(m.sortBy)}">
+                    ${toggle('sort-col-none', m.sortDefault, !s)}
+                    ${this.mwSortColumns().map(([col, label]) => toggle(`sort-col-${col}`, label, s?.col === col)).join('')}
+                </div>
+                <div class="mw-seg sel-seg mw-pop-sortdir" role="group" aria-label="${esc(m.sortBy)}">
+                    ${([[1, '↑', m.sortAscending], [-1, '↓', m.sortDescending]] as const).map(([dir, arrow, label]) =>
+                        `<button type="button" class="sel-opt" data-sel-form="seg" data-pop="sort-dir-${dir}" aria-pressed="${s?.dir === dir}"${s ? '' : ' disabled'}><span aria-hidden="true">${arrow}</span> ${esc(label)}</button>`).join('')}
+                </div>
+            </div>`);
             parts.push(`<div class="mw-pop-foot">
                 <button type="button" class="link-button" data-pop="clear">${esc(m.clearFilters)}</button>
                 <button type="button" class="primary btn-sm" data-pop="done">${esc(m.done)}</button>
@@ -1824,6 +1887,14 @@ export const materialsWindowMethods = uiModule({
         pop.addEventListener('click', (e) => {
             const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-pop]');
             if (!btn || btn.tagName === 'INPUT') return;
+            const sortPick = btn.dataset.pop?.match(/^sort-(col|dir)-(.+)$/);
+            if (sortPick) {
+                const [, what, value] = sortPick;
+                w.sort = chooseSort(w.sort, what === 'dir' ? { dir: value === '1' ? 1 : -1 } : value === 'none' ? null : { col: value as ListColumn });
+                this.mwFiltersChanged();
+                this.mwRefillSheet();
+                return;
+            }
             switch (btn.dataset.pop) {
                 case 'clear-person': w.filters.person = null; break;
                 case 'noperson': w.filters.noPerson = !w.filters.noPerson; break;
@@ -1968,6 +2039,7 @@ export const materialsWindowMethods = uiModule({
             case 'kind': this.mwOpenPop('kind', btn); return;
             case 'batch': this.mwOpenPop('batch', btn); return;
             case 'sheet': this.mwOpenPop('sheet', btn); return;
+            case 'sort-menu': this.mwSortMenu(btn); return;
             case 'where': this.mwOpenPop('where', btn); return;
             case 'clear-person': f.person = null; break;
             case 'clear-kind': f.kinds = []; break;

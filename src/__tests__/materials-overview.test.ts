@@ -12,7 +12,7 @@ import { MaterialFile, MaterialList, MaterialResult, ThumbSize, researchMakesThu
 import {
     overviewItems, overviewGroups, overviewRows, overviewSummary, emptyFilters, passesFilters, activeFilterCount,
     rowsInView, stickyGroupAt, gridColumns, rangeKeys, nameWithoutYears, personsShort, parseViewPrefs, localDay,
-    parseFilters, storedFilters, sortOverviewGroups, itemInTree,
+    parseFilters, storedFilters, sortOverviewGroups, chooseSort, itemInTree,
     fromKey, OverviewFilters, RowMetrics, firstFolderLine, inMaterialFolder, TreeRecord, itemWithoutPerson,
 } from '../materials-overview.js';
 import { MaterialThumbQueue, ThumbDeps, thumbSource } from '../material-thumbs.js';
@@ -590,6 +590,40 @@ describe('review filters, counts and the list sort (spec 102 §8)', () => {
         expect(order({ col: 'source', dir: 1 })).toEqual(['a:d', 'a:b', 'a:a', 'a:c']);
         expect(order({ col: 'source', dir: -1 })).toEqual(['a:b', 'a:d', 'a:a', 'a:c']);
         expect(order(null)).toEqual(flat);
+    });
+});
+
+describe('the window\u2019s sort for the grid too', () => {
+    it('Sort ▾: a column keeps the direction, a direction keeps the column, the default order is none', () => {
+        expect(chooseSort(null, { col: 'date' })).toEqual({ col: 'date', dir: 1 });
+        expect(chooseSort({ col: 'date', dir: -1 }, { col: 'title' })).toEqual({ col: 'title', dir: -1 });
+        expect(chooseSort({ col: 'title', dir: 1 }, { dir: -1 })).toEqual({ col: 'title', dir: -1 });
+        expect(chooseSort(null, { dir: -1 })).toBeNull();
+        expect(chooseSort({ col: 'used', dir: 1 }, null)).toBeNull();
+    });
+
+    it('the grid\u2019s tiles in a batch follow the sort (its root and each folder), the batches keep their order', () => {
+        const l = list([
+            file(1, { batch: 'b-box', path: 'b.jpg', title: 'Brisknoll' }),
+            file(2, { batch: 'b-box', path: 'a.jpg', title: 'Amberlight' }),
+            file(3, { batch: 'b-box', path: 'Letters/z.jpg', title: 'Zephyrin' }),
+            file(4, { batch: 'b-box', path: 'Letters/y.jpg', title: 'Celestýn' }),
+            file(5, { batch: 'b-old', path: 'x.jpg', title: 'Xylofaun' }),
+            file(6, { batch: 'b-old', path: 'w.jpg', title: 'Aprikosenhof' }),
+        ], { batches: [OLD, BOX] });
+        const grid = (sort: { col: 'title'; dir: 1 | -1 } | null) => {
+            const g = overviewGroups({ items: overviewItems(l, []), list: l, filters: filters(), mode: 'batch', batchLoaded: () => true });
+            sortOverviewGroups(g, sort, { personName: () => null, kindLabel: () => '' });
+            const layout = overviewRows(g, () => true, METRICS);
+            return { groups: g.map(x => x.key), tiles: layout.order.map(i => i.title) };
+        };
+        const none = grid(null);
+        const asc = grid({ col: 'title', dir: 1 });
+        const desc = grid({ col: 'title', dir: -1 });
+        expect(asc.groups).toEqual(none.groups);
+        expect(desc.groups).toEqual(none.groups);
+        expect(asc.tiles).toEqual(['Amberlight', 'Brisknoll', 'Celestýn', 'Zephyrin', 'Aprikosenhof', 'Xylofaun']);
+        expect(desc.tiles).toEqual(['Brisknoll', 'Amberlight', 'Zephyrin', 'Celestýn', 'Xylofaun', 'Aprikosenhof']);
     });
 });
 

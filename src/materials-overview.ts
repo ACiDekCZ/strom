@@ -774,6 +774,20 @@ export function sortOverviewGroups(groups: OverviewGroup[], sort: ListSort | nul
     return groups;
 }
 
+/** A choice of the window's Sort: a column, a direction, or the default order (null). */
+export type SortChoice = { col: ListColumn } | { dir: 1 | -1 } | null;
+
+/**
+ * The sort after a choice: a column keeps the direction (ascending at
+ * first), a direction keeps the column (none without one), null is the
+ * groups' own order.
+ */
+export function chooseSort(sort: ListSort | null, choice: SortChoice): ListSort | null {
+    if (!choice) return null;
+    if ('col' in choice) return { col: choice.col, dir: sort?.dir ?? 1 };
+    return sort ? { col: sort.col, dir: choice.dir } : null;
+}
+
 export interface ViewPrefs {
     /** With an archive. */
     group: ArchiveGroupMode;
