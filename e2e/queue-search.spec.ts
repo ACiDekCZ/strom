@@ -267,6 +267,30 @@ test.describe('the queue searched through the bridge (queue.search)', () => {
         await expect(result(page)).toHaveCount(0);
     });
 
+    test('an empty field shows no indicator and is not busy: at opening, once its text is cleared, after closing and opening again', async ({ page }) => {
+        await follow(page);
+        await openOverview(page);
+        await unfoldQueue(page);
+        const spin = overview(page).locator('.research-overview__queue-search-spin');
+        const idle = async (): Promise<void> => {
+            await expect(field(page)).toHaveValue('');
+            await expect(field(page)).not.toHaveAttribute('aria-busy', 'true');
+            await expect(spin).toBeHidden();
+            await expect(overview(page).locator('#ov-sec-queue')).not.toHaveClass(/research-queue--pending/);
+        };
+        await idle();
+        await search(page, 'Smrkov');
+        await expect(spin).toBeHidden();
+        // Emptied by hand: the queue at once, the indicator gone.
+        await field(page).fill('');
+        await idle();
+        await search(page, 'Fíška');
+        await overview(page).locator('.research-overview__close').click();
+        await openOverview(page);
+        await unfoldQueue(page);
+        await idle();
+    });
+
     test('"Search the queue…" in the small panel: the Queue unfolded at the top, the caret in its field, its choice kept', async ({ page }) => {
         await follow(page);
         const link = page.locator('#live-panel .live-queue-search-link');

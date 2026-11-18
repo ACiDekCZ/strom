@@ -87,6 +87,9 @@ test.describe('the queue in the overview\'s own window (queue-list through the m
         await unfoldQueue(popup);
         await expect(queueHead(popup)).toContainText('Queue · 120');
         await expect(popup.locator('[role="search"] .research-overview__queue-search-input')).toHaveAttribute('aria-label', 'Search the queue');
+        // The empty field: no indicator, not busy.
+        await expect(field(popup)).not.toHaveAttribute('aria-busy', 'true');
+        await expect(popup.locator('.research-overview__queue-search-spin')).toBeHidden();
 
         await search(popup, 'T0815');
         await expect(result(popup)).toHaveText('1 task found');

@@ -18961,6 +18961,8 @@
             border: 2px solid color-mix(in srgb, currentColor 28%, transparent); border-top-color: currentColor;
             animation: busy-spin .8s linear infinite; vertical-align: -2px;
         }
+        /* A spinner kept in place while nothing is worked on (the Queue's search field): hidden stays hidden. */
+        .busy-spin[hidden] { display: none; }
         .busy-spin.s12 { width: 12px; height: 12px; border-width: 1.75px; }
         .busy-spin.s16 { width: 16px; height: 16px; }
         @keyframes busy-spin { to { transform: rotate(360deg); } }
