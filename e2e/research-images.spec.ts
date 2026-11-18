@@ -193,6 +193,11 @@ test.describe('source images from the research', () => {
         expect(await prog.locator('.bar').evaluate(el => getComputedStyle(el).height)).toBe('4px');
         await expect(prog.locator('.prog-acts #sources-bulk-pause')).toBeVisible();
         await expect(prog.locator('.prog-acts #sources-bulk-stop')).toBeVisible();
+        // An action keeps its word whole on a narrow screen (the line's overflow-wrap broke "Pausieren" in two).
+        expect(await prog.locator('#sources-bulk-pause').evaluate(el => {
+            const cs = getComputedStyle(el);
+            return `${cs.whiteSpace} ${cs.overflowWrap}`;
+        })).toBe('nowrap normal');
         release();
         ex.hold = undefined;
         await expect(modal.locator('.sources-bulk-panel')).toContainText('Loaded 2 sources');

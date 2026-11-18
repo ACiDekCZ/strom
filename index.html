@@ -18858,7 +18858,9 @@
         .prog-line > * { min-width: 0; overflow-wrap: anywhere; }
         .prog-t { color: var(--text); font-weight: 600; }
         .prog-k { flex: none; margin-left: auto; }
-        .prog-acts { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; margin-left: auto; }
+        .prog-acts { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; margin-left: auto; overflow-wrap: normal; }
+        /* An action keeps its word whole (a narrow line wraps the actions, never "Pausiere|n"). */
+        .prog-acts > button { white-space: nowrap; }
         /* A computation in parts inside its dialog (§8, 8b, src/ui/busy-prog.ts): above the footer, the step with
            "k/n" and a bar; its end the quiet sentence in the same place. */
         .busy-prog { display: flex; flex-direction: column; gap: 4px; margin: 10px 0 0; font-size: 13px; color: var(--text-light); }
