@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { openApp, createFirstPerson, addRelation, card, openTreeStructure } from './helpers.js';
+import { syntheticTree } from '../src/__tests__/helpers/synthetic-tree';
 
 /**
  * Splitting a tree into the families it holds (N3). Only families that nothing
@@ -166,4 +167,29 @@ test('Split off works at once: the button says it is creating, a double click cr
     const trees = await page.evaluate(() => window.Strom.TreeManager.getTrees().map((t: { name: string }) => t.name));
     expect(trees.length).toBe(before + 1);
     expect(trees.filter((n: string) => n === 'Svoboda family')).toHaveLength(1);
+});
+
+test('splitting a tree from its menu finds the parts under the canvas overlay, "Finding the parts…" (B208, waiting buttons §8)', async ({ page }) => {
+    test.setTimeout(90_000);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openApp(page);
+    const { data, rootId } = syntheticTree({ persons: 3200, seed: 5 });
+    await page.evaluate(async ({ data, rootId }) => {
+        const S = window.Strom;
+        await S.DataManager.importAsNewTree(data, 'Synthetic');
+        S.TreeRenderer.setFocus(rootId);
+        await S.TreeRenderer.renderAsync();
+    }, { data, rootId });
+    await page.evaluate(() => {
+        const w = window as unknown as { __said: string[] };
+        w.__said = [];
+        new MutationObserver(() => {
+            const o = document.querySelector('#tree-container > .canvas-busy');
+            if (o && !document.getElementById('split-modal')) w.__said.push(o.textContent ?? '');
+        }).observe(document.getElementById('tree-container')!, { childList: true, subtree: true, characterData: true });
+    });
+    await page.evaluate(() => window.Strom.UI.showSplitDialog());
+    await expect(page.locator('#split-modal')).toBeVisible({ timeout: 60_000 });
+    const said = await page.evaluate(() => (window as unknown as { __said: string[] }).__said);
+    expect(said.some(t => t.includes('Finding the parts…'))).toBe(true);
 });

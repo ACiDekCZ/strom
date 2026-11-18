@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { openApp, card, openTreeStructure } from './helpers.js';
+import { syntheticTree } from '../src/__tests__/helpers/synthetic-tree';
 
 /**
  * "Split into families" (N4): break one tree into the families it contains,
@@ -68,12 +69,12 @@ async function partition(page: import('@playwright/test').Page): Promise<string[
 test('the split is the same whoever the focus is — only the order changes', async ({ page }) => {
     await loadTree(page);
 
-    await page.evaluate(() => { window.Strom.TreeRenderer.setFocus('me', false); window.Strom.UI.showSplitFamiliesDialog(); });
+    await page.evaluate(async () => { window.Strom.TreeRenderer.setFocus('me', false); await window.Strom.UI.showSplitFamiliesDialog(); });
     const fromMe = await partition(page);
     const firstFromMe = await page.evaluate(() => window.Strom.UI.splitFamiliesComponents[0].personIds.includes('me'));
     await page.keyboard.press('Escape');
 
-    await page.evaluate(() => { window.Strom.TreeRenderer.setFocus('wdad', false); window.Strom.UI.showSplitFamiliesDialog(); });
+    await page.evaluate(async () => { window.Strom.TreeRenderer.setFocus('wdad', false); await window.Strom.UI.showSplitFamiliesDialog(); });
     const fromWdad = await partition(page);
     const firstFromWdad = await page.evaluate(() => window.Strom.UI.splitFamiliesComponents[0].personIds.includes('wdad'));
 
@@ -376,4 +377,52 @@ test('Create N trees works at once: the button says Creating…, each tree its s
     const trees = await page.evaluate(() => window.Strom.TreeManager.getTrees().map((t: { name: string }) => t.name));
     expect(trees.length).toBe(before + 2);
     expect(trees.filter((n: string) => n === 'Old Novák (*1900) family')).toHaveLength(1);
+});
+
+test.describe('finding the families of a large tree (B210/B211, waiting buttons §8)', () => {
+    test('from the menu under the canvas overlay; another cut under its button\'s "Finding the families…"', async ({ page }) => {
+        test.setTimeout(120_000);
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await openApp(page);
+        const { data, rootId } = syntheticTree({ persons: 3200, seed: 5 });
+        await page.evaluate(async ({ data, rootId }) => {
+            const S = window.Strom;
+            await S.DataManager.importAsNewTree(data, 'Synthetic');
+            S.TreeRenderer.setFocus(rootId);
+            await S.TreeRenderer.renderAsync();
+        }, { data, rootId });
+        // The menu closed on the choice: the canvas overlay is there before the dialog (watched, the work blocks).
+        await page.evaluate(() => {
+            const w = window as unknown as { __overlay: boolean; __said: string[] };
+            w.__overlay = false;
+            w.__said = [];
+            new MutationObserver(() => {
+                const o = document.querySelector('#tree-container > .canvas-busy');
+                if (o && !document.getElementById('split-families-modal')) {
+                    w.__overlay = true;
+                    w.__said.push(o.textContent ?? '');
+                }
+            }).observe(document.getElementById('tree-container')!, { childList: true, subtree: true, characterData: true });
+        });
+        await page.evaluate(() => window.Strom.UI.showSplitFamiliesDialog());
+        const modal = page.locator('#split-families-modal');
+        await expect(modal).toBeVisible({ timeout: 60_000 });
+        const seen = await page.evaluate(() => { const w = window as unknown as { __overlay: boolean; __said: string[] }; return { __overlay: w.__overlay, __said: w.__said }; });
+        expect(seen.__overlay).toBe(true);
+        expect(seen.__said.some(t => t.includes('Finding the families…'))).toBe(true);
+
+        // Another cut: its button says it works before the families are computed again.
+        const other = modal.locator('.splitfam-mode-btn:not(.active)').first();
+        await other.evaluate((b) => {
+            const w = window as unknown as { __said: string[] };
+            w.__said = [];
+            new MutationObserver(() => {
+                if (b.getAttribute('aria-busy') === 'true') w.__said.push(b.textContent ?? '');
+            }).observe(b, { attributes: true, childList: true, subtree: true, characterData: true });
+        });
+        await other.click();
+        await expect(modal.locator('.splitfam-mode-btn.active')).toBeVisible({ timeout: 60_000 });
+        const said = await page.evaluate(() => (window as unknown as { __said: string[] }).__said);
+        expect(said.some(t => t.includes('Finding the families…'))).toBe(true);
+    });
 });

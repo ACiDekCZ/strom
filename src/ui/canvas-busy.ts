@@ -11,7 +11,7 @@
  */
 
 import { strings } from '../strings.js';
-import { BUSY_MIN_MS, BUSY_SHOW_MS, nextPaint, spinEl } from './busy.js';
+import { BUSY_MIN_MS, BUSY_SHOW_MS, nextPaint, spinEl, runHeavy } from './busy.js';
 
 export const CANVAS_BUSY_CLASS = 'canvas-busy';
 
@@ -140,4 +140,14 @@ function end(o: Overlay): void {
 export function resetCanvasBusy(): void {
     if (current) remove(current);
     lastWorkMs = 0;
+}
+
+/**
+ * A computation over a tree before its dialog (§8): under the working state of the element that asked for it
+ * (`runHeavy`: painted first, its words at once with `atOnce`), or, when that element is gone (its menu closed on
+ * the choice), under the canvas overlay. Resolves with the work's result (undefined when the element was busy).
+ */
+export function computeUnder<T>(el: HTMLElement | null, work: () => T | Promise<T>, opts: { label: string; atOnce: boolean }): Promise<T | undefined> {
+    if (el?.isConnected) return runHeavy(el, work, opts);
+    return canvasBusy(async ready => { await ready(); return work(); }, { stateFirst: true, label: opts.label });
 }

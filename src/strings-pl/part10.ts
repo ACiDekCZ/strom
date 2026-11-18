@@ -32,6 +32,8 @@ export const plPart10: Pick<StringsType, 'busy'> = {
         liveSilent: (s: number) => `Badanie nie odezwało się w ciągu ${s} s. Trzeba uruchomić Strom Research.`,
         layout: 'Obliczanie układu…',
         mapCalc: 'Obliczanie mapy…',
+        findingParts: 'Wyszukiwanie części…',
+        findingFamilies: 'Wyszukiwanie rodzin…',
         adoptTitle: 'Przekazywanie drzewa badaniu…',
         adoptBackup: 'Zapisywanie kopii zapasowej',
         adoptGedcom: 'Tworzenie GEDCOM',

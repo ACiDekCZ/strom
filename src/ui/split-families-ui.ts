@@ -27,7 +27,9 @@ import { PersonPicker } from '../person-picker.js';
 import * as CrossTree from '../cross-tree.js';
 import { uiModule } from './module.js';
 import { shownName } from '../person-name.js';
-import { runBusy, nextPaint, type BusyCtl } from './busy.js';
+import { runBusy, runHeavy, activatedElement, nextPaint, type BusyCtl } from './busy.js';
+import { computeUnder } from './canvas-busy.js';
+import { SPLIT_SHOWN_AT_ONCE } from './split-ui.js';
 import { busyProg } from './busy-prog.js';
 
 /** Everything the shared split-families dialog needs, whatever opened it. */
@@ -40,6 +42,11 @@ interface SplitFamiliesRun {
     focusPersonId: PersonId;
     /** Dialog to reopen on close (e.g. the tree manager). */
     parentDialogId?: string;
+}
+
+/** The run's tree is large: its families' computation says its state at once (§8). */
+function splitRunLong(run: SplitFamiliesRun): boolean {
+    return Object.keys(run.data.persons).length >= SPLIT_SHOWN_AT_ONCE;
 }
 
 export const splitFamiliesMethods = uiModule({
@@ -67,21 +74,23 @@ export const splitFamiliesMethods = uiModule({
      * is the person on screen — it only decides which family is listed first; the
      * partition is the same whatever it is.
      */
-    showSplitFamiliesDialog(): void {
-        if (DataManager.isReadOnly()) return;
+    showSplitFamiliesDialog(): Promise<void> {
+        if (DataManager.isReadOnly()) return Promise.resolve();
         const treeId = DataManager.getCurrentTreeId();
         const data = DataManager.getData();
         const focus = TreeRenderer.getFocusPersonId();
         const realCount = Object.values(data.persons).filter(p => !p.isPlaceholder).length;
         if (!treeId || !focus || realCount < 2) {
             this.showToast(strings.splitFamilies.tooSmall);
-            return;
+            return Promise.resolve();
         }
-        this.openSplitFamiliesDialog({
+        // §8: the families found (and their previews drawn) under the working state of the choice, or the canvas
+        // overlay when its menu closed; at once for a large tree.
+        return computeUnder(activatedElement(), () => this.openSplitFamiliesDialog({
             treeId,
             data,
             focusPersonId: focus,
-        });
+        }), { label: strings.busy.findingFamilies, atOnce: realCount >= SPLIT_SHOWN_AT_ONCE }).then(() => undefined);
     },
 
     /**
@@ -91,6 +100,13 @@ export const splitFamiliesMethods = uiModule({
      */
     async showSplitFamiliesPickerDialog(treeId: string, parentDialogId?: string): Promise<void> {
         const id = treeId as TreeId;
+        const people = TreeManager.getTreeMetadata(id)?.personCount ?? 0;
+        await computeUnder(activatedElement(), () => this.openSplitFamiliesFor(id, parentDialogId),
+            { label: strings.busy.findingFamilies, atOnce: people >= SPLIT_SHOWN_AT_ONCE });
+    },
+
+    /** The tree read and its families proposed (`showSplitFamiliesPickerDialog`). */
+    async openSplitFamiliesFor(id: TreeId, parentDialogId?: string): Promise<void> {
         const data = id === DataManager.getCurrentTreeId()
             ? DataManager.getData()
             : await TreeManager.getTreeData(id);
@@ -214,12 +230,15 @@ export const splitFamiliesMethods = uiModule({
             (btn as HTMLButtonElement).onclick = () => {
                 const m = btn.getAttribute('data-mode') as SplitMode;
                 if (m === this.splitFamiliesMode) return;
-                if (decomposeIntoFamilies(run.data, run.focusPersonId, m, persp).length < 2) {
-                    this.showToast(strings.splitFamilies.oneFamilyInMode);
-                    return;
-                }
-                this.splitFamiliesMode = m;
-                this.openSplitFamiliesDialog(run);
+                // §8: the other cut computed and the dialog drawn again under the button's working state.
+                void runHeavy(btn as HTMLElement, () => {
+                    if (decomposeIntoFamilies(run.data, run.focusPersonId, m, persp).length < 2) {
+                        this.showToast(strings.splitFamilies.oneFamilyInMode);
+                        return;
+                    }
+                    this.splitFamiliesMode = m;
+                    this.openSplitFamiliesDialog(run);
+                }, { label: strings.busy.findingFamilies, atOnce: splitRunLong(run) });
             };
         });
         if (this.splitFamiliesMode === 'perspective') this.bindSplitFamiliesPerspective(overlay, run);
@@ -306,7 +325,7 @@ export const splitFamiliesMethods = uiModule({
             (btn as HTMLButtonElement).onclick = () => {
                 const id = btn.getAttribute('data-id') as PersonId;
                 persp.baseIds = persp.baseIds.filter(b => b !== id);
-                reopen();
+                void runHeavy(btn as HTMLElement, reopen, { label: strings.busy.findingFamilies, atOnce: splitRunLong(run) });
             };
         });
         const addBtn = overlay.querySelector('#splitfam-persp-add') as HTMLButtonElement | null;

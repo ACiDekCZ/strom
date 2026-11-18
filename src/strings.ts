@@ -10249,6 +10249,9 @@ const stringsEN = {
         layout: 'Calculating the layout…',
         /** The map's places computed anew over the whole map (§8). */
         mapCalc: 'Calculating the map…',
+        /** Split a tree (§8): its parts and its families found before the dialog. */
+        findingParts: 'Finding the parts…',
+        findingFamilies: 'Finding the families…',
         adoptTitle: 'Handing the tree to the research…',
         adoptBackup: 'Saving a backup',
         adoptGedcom: 'Creating GEDCOM',
@@ -20179,6 +20182,8 @@ const stringsCZ: StringsType = {
         liveSilent: (s: number) => `Výzkum se do ${s} s neozval. Je potřeba spustit Strom Research.`,
         layout: 'Počítá se rozvržení…',
         mapCalc: 'Počítá se mapa…',
+        findingParts: 'Hledají se části…',
+        findingFamilies: 'Hledají se rodiny…',
         adoptTitle: 'Předává se strom výzkumu…',
         adoptBackup: 'Ukládá se záloha',
         adoptGedcom: 'Vytváří se GEDCOM',
@@ -30020,6 +30025,8 @@ const stringsDE: StringsType = {
         liveSilent: (s: number) => `Die Forschung hat sich in ${s} s nicht gemeldet. Strom Research muss gestartet werden.`,
         layout: 'Layout wird berechnet…',
         mapCalc: 'Karte wird berechnet…',
+        findingParts: 'Teile werden gesucht…',
+        findingFamilies: 'Familien werden gesucht…',
         adoptTitle: 'Stammbaum wird an die Forschung übergeben…',
         adoptBackup: 'Sicherung wird gespeichert',
         adoptGedcom: 'GEDCOM wird erstellt',

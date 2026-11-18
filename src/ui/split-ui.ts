@@ -18,9 +18,13 @@ import { PersonId, TreeId, StromData } from '../types.js';
 import { findComponents, componentName, TreeComponent } from '../components.js';
 import { extractSubtree } from '../subtree.js';
 import { uiModule } from './module.js';
-import { runBusy, nextPaint, type BusyCtl } from './busy.js';
+import { runBusy, nextPaint, activatedElement, type BusyCtl } from './busy.js';
+import { computeUnder } from './canvas-busy.js';
 import { busyProg } from './busy-prog.js';
 
+
+/** From this many people splitting a tree says its state at once (finding its parts takes longer than 120 ms). */
+export const SPLIT_SHOWN_AT_ONCE = 3000;
 export const splitMethods = uiModule({
     /** The active tree is in memory; any other has to be read from storage. */
     async splitDataFor(id: TreeId): Promise<StromData | null> {
@@ -36,11 +40,17 @@ export const splitMethods = uiModule({
     async showSplitDialog(treeId?: string, parentDialogId?: string): Promise<void> {
         const id = (treeId as TreeId) || DataManager.getCurrentTreeId();
         if (!id) return;
-        const data = await this.splitDataFor(id);
-        if (!data) return;
+        // §8: the tree read and its parts found under the working state of the choice (the canvas overlay
+        // when its menu closed), at once for a large tree.
+        const people = TreeManager.getTreeMetadata(id)?.personCount ?? 0;
+        const found = await computeUnder(activatedElement(), async () => {
+            const data = await this.splitDataFor(id);
+            return data ? findComponents(data) : null;
+        }, { label: strings.busy.findingParts, atOnce: people >= SPLIT_SHOWN_AT_ONCE });
+        if (!found) return;
 
         this.splitTreeId = id;
-        this.splitComponents = findComponents(data);
+        this.splitComponents = found;
         this.splitParentDialog = parentDialogId ?? null;
 
         document.getElementById('split-modal')?.remove();
