@@ -359,6 +359,11 @@ test('back and forward stand over the bottom bar, never half under it (fan, fami
     for (const [mode, width, height] of [['fan', 390, 844], ['family', 390, 844], ['family', 800, 1100]] as const) {
         await page.setViewportSize({ width, height });
         await page.evaluate((m) => window.Strom.UI.setDisplayViewMode(m), mode);
+        // The view is drawn a frame after the switch (its canvas overlay painted first): until then the
+        // buttons stand where the last view had them, over the fan's legend chip on the way in or out.
+        await expect(page.locator('body')).toHaveAttribute('data-view-mode', mode);
+        if (mode === 'fan') await expect(page.locator('#fan-container')).toBeVisible();
+        else await expect(page.locator('#fan-container')).toBeHidden();
         const b = (await back.boundingBox())!;
         const bar = (await page.locator('#bottom-bar').boundingBox())!;
         expect(b.y + b.height, `${mode} ${width}px`).toBeLessThanOrEqual(bar.y);
