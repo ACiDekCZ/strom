@@ -14,9 +14,22 @@ test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => { (globalThis as { __STROM_TOUR?: boolean }).__STROM_TOUR = true; });
 });
 
-test('tour is offered, walks through steps, and Escape ends it', async ({ page }) => {
+/**
+ * The sample tree loaded from the welcome screen, its tour offer up. The offer steps aside while the
+ * sample's hint stands (3 s): that time runs on Playwright's clock (installed before the app opens; it
+ * ticks as ever otherwise).
+ */
+async function sampleWithOffer(page: import('@playwright/test').Page): Promise<void> {
+    await page.clock.install();
     await openApp(page, { tourOffer: true });
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(page.locator('body > .toast.show')).toBeVisible();
+    await page.clock.runFor(3500);
+    await expect(page.locator('.tour-offer')).toBeVisible();
+}
+
+test('tour is offered, walks through steps, and Escape ends it', async ({ page }) => {
+    await sampleWithOffer(page);
     await expect(card(page, 'Johan')).toBeVisible();
 
     // The non-blocking offer appears; start the tour from it.
@@ -62,8 +75,7 @@ test('tour is offered, walks through steps, and Escape ends it', async ({ page }
 
 test('mobile: the offer clears the bottom bar, the tour bubble fits within the viewport', async ({ page }) => {
     await page.setViewportSize({ width: 400, height: 780 });
-    await openApp(page, { tourOffer: true });
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await sampleWithOffer(page);
     await expect(page.locator('.tour-offer')).toBeVisible();
     // The offer stays up for 15 s: it must sit above the bottom bar, not over
     // its tabs (it used to block them for exactly that long).
@@ -83,8 +95,7 @@ test('mobile: the offer clears the bottom bar, the tour bubble fits within the v
 });
 
 test('tour reveals the hover-only card buttons during the card-buttons step', async ({ page }) => {
-    await openApp(page, { tourOffer: true });
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await sampleWithOffer(page);
     await page.locator('.tour-offer .tour-offer-btn').click();
     await expect(page.locator('#tour-overlay')).toHaveClass(/active/);
 
@@ -136,8 +147,7 @@ const LAST_TARGET: Record<number, string> = { 1440: '.actions-menu-btn', 390: '#
 for (const [w, h] of [[1440, 900], [1024, 768], [550, 900], [390, 844]] as const) {
     test(`every step at ${w}px spotlights a real target and the bubble never covers it; the last one points at anniversaries, export and settings`, async ({ page }) => {
         await page.setViewportSize({ width: w, height: h });
-        await openApp(page, { tourOffer: true });
-        await page.getByRole('button', { name: 'Try a sample tree' }).click();
+        await sampleWithOffer(page);
         await page.locator('.tour-offer .tour-offer-btn').click();
         const overlay = page.locator('#tour-overlay');
         await expect(overlay).toHaveClass(/active/);
@@ -179,8 +189,7 @@ for (const [w, h] of [[1440, 900], [1024, 768], [550, 900], [390, 844]] as const
 
 test('the spotlight follows its card when the canvas is panned or zoomed', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 850 });
-    await openApp(page, { tourOffer: true });
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await sampleWithOffer(page);
     await page.locator('.tour-offer .tour-offer-btn').click();
     await expect(page.locator('#tour-overlay')).toHaveClass(/active/);
 
