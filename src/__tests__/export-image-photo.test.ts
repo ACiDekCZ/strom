@@ -62,7 +62,7 @@ function normalHeights(): Map<PersonId, number> {
 function normalSvg(extra: Partial<PosterOptions> = {}, config: LayoutConfig = { ...DEFAULT_LAYOUT_CONFIG, personHeights: normalHeights() }): string {
     return buildTreeSvg(makeData(...normalPeople), layout(normalPositions), {
         config, cardDensity: 'normal', measureCardTexts: measure,
-        deceasedSet: new Set(['a', 'd']), branchMap: new Map([['a', 'paternal']]),
+        deceasedSet: new Set(['a', 'd']), branchMap: new Map([['a', { paternal: true as const }]]),
         cardMarks: new Map([['f', { status: 'cs-p2' }]]),
         ...extra,
     });
@@ -91,8 +91,12 @@ describe('the default photo (small + circle): the image as before', () => {
     // (Normal: since 1118 a name fits one line as the screen does, 15 → 14 → 13px measured, then two rows).
     const BEFORE = { normal: '9bbf28d0e1812189', custom: 'f365ec70c3ea607a', customYears: '1c3abca8a9313cd9' };
 
+    // The lineage stripe got the P2 colour and names its line (spec 112): taken back to the old form, the rest is unchanged.
+    const oldStripe = (svg: string) => svg.replace('<path class="branch-stripe" data-branch="paternal" ', '<path class="branch-stripe" ')
+        .replace('fill="#234e8c"', 'fill="#d08a5a"');
+
     it('Normal cards', () => {
-        expect(sha(normalSvg())).toBe(BEFORE.normal);
+        expect(sha(oldStripe(normalSvg()))).toBe(BEFORE.normal);
     });
 
     it('cards of details, with and without the years', () => {

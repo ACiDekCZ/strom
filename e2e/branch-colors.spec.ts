@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
 import { openApp, card } from './helpers.js';
 
@@ -224,6 +225,45 @@ test('the marker shape, the tint and the lineage words follow the setting (spec 
     await expect.poll(() => page.locator('#tree-canvas .person-card.branch-descendant').count()).toBe(0);
     await page.evaluate(() => window.Strom.UI.setBranchMarker('corner'));
     await expect(page.locator('body')).toHaveAttribute('data-branch-tint', '');
+});
+
+/** The poster draws the chosen marker and tint (spec 112 §3); the print has one grey frame and the print colours (R6). */
+test('the poster and the print carry the lineage markers (spec 112)', async ({ page }) => {
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(card(page, 'Johan')).toBeVisible();
+    await page.evaluate(() => { window.Strom.UI.setBranchMarker('tag'); window.Strom.UI.setBranchTint(true); });
+
+    // The poster's SVG: the letter tags in the P2 colours, the tinted ground.
+    await page.evaluate(() => window.Strom.UI.showPosterDialog());
+    const poster = page.locator('#poster-modal');
+    await expect(poster).toBeVisible();
+    const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        poster.locator('.menu-option', { hasText: 'SVG' }).click(),
+    ]);
+    const svg = readFileSync(await download.path(), 'utf-8');
+    expect(svg).toMatch(/<g class="branch-mark" data-shape="tag" data-branch="descendant"><rect [^>]*fill="#8a6400"[^>]*\/><text [^>]*>D<\/text>/);
+    expect(svg).toContain('fill="#f3eedf"');
+    expect(svg).not.toContain('class="branch-stripe"');
+    await page.keyboard.press('Escape');
+    await expect(poster).toBeHidden();
+
+    // The print: one grey 2px frame whatever the sex, no tint, the markers in the print colours.
+    await page.emulateMedia({ media: 'print' });
+    const frame = (el: Element) => { const st = getComputedStyle(el); return `${st.borderTopWidth} ${st.borderTopColor}`; };
+    const male = page.locator('#tree-canvas .person-card.male:not(.placeholder)').first();
+    const female = page.locator('#tree-canvas .person-card.female:not(.placeholder)').first();
+    expect(await male.evaluate(frame)).toBe('2px rgb(153, 153, 153)');
+    expect(await female.evaluate(frame)).toBe('2px rgb(153, 153, 153)');
+    const marked = page.locator('#tree-canvas .person-card.branch-descendant').first();
+    expect(await marked.evaluate(el => getComputedStyle(el).backgroundColor)).toBe('rgb(255, 255, 255)');
+    expect(await marked.evaluate(el => getComputedStyle(el, '::after').backgroundColor)).toBe('rgb(110, 79, 0)');
+    // The arc starts at the 2px frame's outer edge.
+    await page.evaluate(() => window.Strom.UI.setBranchMarker('arc'));
+    expect(await marked.evaluate(el => getComputedStyle(el, '::before').top)).toBe('-2px');
+    await page.emulateMedia({ media: 'screen' });
+    expect(await marked.evaluate(el => getComputedStyle(el, '::before').top)).toBe('-1px');
 });
 
 /**

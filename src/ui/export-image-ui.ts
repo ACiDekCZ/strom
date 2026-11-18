@@ -18,7 +18,7 @@ import { uiModule } from './module.js';
 import { runBusy, activatedElement, nextPaint } from './busy.js';
 import { LayoutConfig, StromData, TreeSpacing, ViewMode, layoutConfigFor, personCardHeight } from '../types.js';
 import { applyLivingPrivacy, PrivacyMode, presumedDeceasedSet } from '../privacy.js';
-import { classifyBranches, branchesOf } from '../branch-colors.js';
+import { classifyBranches, BranchSet } from '../branch-colors.js';
 import { computeIndirectIds } from '../indirect.js';
 import { SettingsManager } from '../settings.js';
 import { safeFileName } from '../filenames.js';
@@ -131,12 +131,10 @@ export function treeCardDrawing(data: StromData, layout: ReturnType<typeof TreeR
 } {
     const mode = TreeRenderer.getViewMode();
     const focusId = TreeRenderer.getFocusPersonId();
-    // The image still draws one stripe per card: the first of its lines (paternal → maternal → descendant).
-    const branchMap = (SettingsManager.isBranchMarkerOn() && focusId)
-        ? new Map<string, string>([...classifyBranches(data, focusId).map]
-            .map(([id, set]) => [id as string, branchesOf(set)[0]] as [string, string])
-            .filter(([, b]) => !!b))
-        : null;
+    // The lineage markers as on screen (spec 112): the chosen shape and tint, both lines (R4), 1 and 2 (R5).
+    const branchMarker = SettingsManager.getBranchMarker();
+    const branches = (branchMarker !== 'off' && focusId) ? classifyBranches(data, focusId) : null;
+    const branchMap = branches ? new Map<string, BranchSet>([...branches.map].map(([id, set]) => [id as string, set])) : null;
     // Draw parity: the descendants / family views dim context-only people on
     // screen (opacity 0.5). Reuse the SAME membership rule so the image dims
     // exactly that set instead of printing everyone at full strength.
@@ -177,6 +175,7 @@ export function treeCardDrawing(data: StromData, layout: ReturnType<typeof TreeR
         // the Compact card shortens it with "…" where the screen does (1110).
         ...(density === 'normal' || density === 'compact' ? { measureCardTexts } : {}),
         branchMap,
+        ...(branches ? { branchMarker, branchTint: SettingsManager.isBranchTintOn(), branchNumbered: branches.numbered } : {}),
         deceasedSet,
         ...(dimmedIds ? { dimmedIds } : {}),
         // The photo on the card as the screen draws it (spec 096 P2): its size, shape and who was laid out with one.
@@ -188,7 +187,8 @@ export function treeCardDrawing(data: StromData, layout: ReturnType<typeof TreeR
         // The faces the cards are drawn in: the serif always, the lines' sans for the custom card.
         // A view with marriage-order pills brings their sans (600) too.
         fontFaceCss: appFontFaceCss(custom ? [...POSTER_SERIF_FACES, ...POSTER_LINE_FACES]
-            : unionOrderBadges(data, layout).size > 0 ? [...POSTER_SERIF_FACES, PILL_FACE] : POSTER_SERIF_FACES),
+            // The letter tag of the lineage markers (spec 112) is in the sans too.
+            : unionOrderBadges(data, layout).size > 0 || (branches && branchMarker === 'tag') ? [...POSTER_SERIF_FACES, PILL_FACE] : POSTER_SERIF_FACES),
         ...(custom ? {
             cardLines: cardLinesMap,
             cardDateColumn: TreeRenderer.getPosterCardMetrics(spacing)?.dateColumn ?? 0,

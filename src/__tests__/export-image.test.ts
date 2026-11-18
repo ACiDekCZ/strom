@@ -3,7 +3,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { buildTreeSvg, computeBounds, PosterLayout, fitCompactName, COMPACT_NAME_MIN_SQUEEZE } from '../export-image.js';
+import { buildTreeSvg, computeBounds, PosterLayout, PosterOptions, fitCompactName, COMPACT_NAME_MIN_SQUEEZE } from '../export-image.js';
+import type { BranchSet } from '../branch-colors.js';
 import { StromData, Person, PersonId, PartnershipId, Position, DEFAULT_LAYOUT_CONFIG } from '../types.js';
 import { MeasureTexts, normalCardHeights, cardNameMaxRows } from '../card-width.js';
 import type { CardValueLines } from '../card-fields.js';
@@ -115,12 +116,12 @@ describe('buildTreeSvg', () => {
         const l = layout({ a: { x: 0, y: 0 }, b: { x: 200, y: 300 } });
         const svg = buildTreeSvg(data, l, {
             deceasedSet: new Set(['a']),
-            branchMap: new Map([['a', 'paternal']]),
+            branchMap: new Map([['a', { paternal: true as const }]]),
         });
         const connBlock = svg.split('class="connections"')[1].split('</g>')[0];
         expect(connBlock).toContain('stroke-dasharray="6,4"');   // adoptive drop
         expect(svg).toContain('†');                               // deceased marker
-        expect(svg).toContain('#d08a5a');                         // paternal stripe
+        expect(svg).toContain('#234e8c');                         // paternal stripe (P2)
     });
 
     it('an only adopted child gets a fully dashed line; with a biological sibling only its drop is dashed (T03)', () => {
@@ -230,8 +231,8 @@ describe('connection continuity (the printed lines must not break)', () => {
 describe('branch stripe (T06)', () => {
     it('runs into the card\'s rounded corners instead of being an inset bar', () => {
         const data = makeData(person('a'));
-        const svg = buildTreeSvg(data, layout({ a: { x: 0, y: 0 } }), { branchMap: new Map([['a', 'paternal']]) });
-        const stripe = /<path class="branch-stripe" d="([^"]+)" fill="#d08a5a"\/>/.exec(svg);
+        const svg = buildTreeSvg(data, layout({ a: { x: 0, y: 0 } }), { branchMap: new Map([['a', { paternal: true as const }]]) });
+        const stripe = /<path class="branch-stripe" data-branch="paternal" d="([^"]+)" fill="#234e8c"\/>/.exec(svg);
         expect(stripe).not.toBeNull();
         const d = stripe![1];
         // Two corner arcs on the card's own radius (8, +0.5 for the outer edge of the border)...
@@ -240,6 +241,96 @@ describe('branch stripe (T06)', () => {
         const ys = [...d.matchAll(/(-?\d+\.\d+) (-?\d+\.\d+)/g)].map(m => Number(m[2]));
         expect(Math.min(...ys)).toBeLessThan(1);
         expect(Math.max(...ys)).toBeGreaterThan(63);
+    });
+});
+
+describe('lineage markers (spec 112): the shape from Settings, both lines (R4), 1 and 2 (R5), the tint', () => {
+    const P2 = { paternal: '#234e8c', maternal: '#d0679a', descendant: '#8a6400' };
+    const data = makeData(person('a'), person('b', { gender: 'female' }), person('c'), person('d', { gender: 'female' }), person('e'));
+    // a paternal, b maternal, c descendant, d on both sides (pedigree collapse), e none.
+    const branchMap = new Map<string, BranchSet>([
+        ['a', { paternal: true }], ['b', { maternal: true }], ['c', { descendant: true }], ['d', { paternal: true, maternal: true }],
+    ]);
+    const l = () => layout({ a: { x: 0, y: 0 }, b: { x: 200, y: 0 }, c: { x: 400, y: 0 }, d: { x: 600, y: 0 }, e: { x: 800, y: 0 } });
+    const svgOf = (extra: Partial<PosterOptions> = {}) => buildTreeSvg(data, l(), { branchMap, ...extra });
+    /** The markers of one line: elements with data-branch="…". */
+    const marks = (svg: string, branch: string) => [...svg.matchAll(new RegExp(`<[a-z]+ [^>]*data-branch="${branch}"[^>]*>`, 'g'))].map(m => m[0]);
+
+    it('arc (the default): one stripe per line in the P2 colour, both halves clipped for both lines', () => {
+        const svg = svgOf();
+        expect(marks(svg, 'paternal').filter(m => m.includes('branch-stripe')).map(m => /fill="([^"]+)"/.exec(m)![1]))
+            .toEqual([P2.paternal, P2.paternal]);
+        expect(marks(svg, 'descendant')[0]).toContain(`fill="${P2.descendant}"`);
+        // d: the same arc twice, the upper half paternal, the lower maternal.
+        const d = [...svg.matchAll(/<path class="branch-stripe" data-branch="(\w+)" d="([^"]+)" fill="[^"]+" clip-path="url\(#(\w+)\)"/g)];
+        expect(d.map(m => m[1])).toEqual(['paternal', 'maternal']);
+        expect(d[0][2]).toBe(d[1][2]);
+        const clipY = (id: string) => Number(new RegExp(`<clipPath id="${id}"><rect x="[^"]+" y="([^"]+)"`).exec(svg)![1]);
+        expect(clipY(d[0][3])).toBe(-1);
+        expect(clipY(d[1][3])).toBe(32);
+        expect(svg).not.toMatch(/#d08a5a|#5a8fc0|#57a869/);
+    });
+
+    it('tag: a letter tag over the left edge, two for both lines, the letters 1 and 2 for two same-gender parents', () => {
+        const tags = (svg: string) => [...svg.matchAll(/<g class="branch-mark" data-shape="tag" data-branch="(\w+)"><rect x="([^"]+)" y="([^"]+)" width="16" height="20" rx="3" fill="([^"]+)"[^>]*\/><text [^>]*fill="([^"]+)">([^<]*)<\/text><\/g>/g)]
+            .map(m => ({ branch: m[1], x: Number(m[2]), y: Number(m[3]), fill: m[4], ink: m[5], letter: m[6] }));
+        const t = tags(svgOf({ branchMarker: 'tag' }));
+        expect(t.map(x => [x.branch, x.letter])).toEqual([['paternal', 'P'], ['maternal', 'M'], ['descendant', 'D'], ['paternal', 'P'], ['maternal', 'M']]);
+        expect(t[0]).toMatchObject({ x: -8, y: 22, fill: P2.paternal, ink: '#ffffff' });
+        expect(t[1]).toMatchObject({ fill: P2.maternal, ink: '#1c1a16' });
+        // d (x 600): paternal 22px above the middle, maternal 2px below it.
+        expect(t.slice(3).map(x => [x.x, x.y])).toEqual([[592, 10], [592, 34]]);
+        expect(svgOf({ branchMarker: 'tag' })).not.toContain('class="branch-stripe"');
+        // R5: the parents' numbers; the descendants keep their letter.
+        expect(tags(svgOf({ branchMarker: 'tag', branchNumbered: true })).map(x => x.letter)).toEqual(['1', '2', 'D', '1', '2']);
+    });
+
+    it('stripe: paternal solid, maternal dashed, descendants dotted; both lines a solid upper and a dashed lower half', () => {
+        const lines = [...svgOf({ branchMarker: 'stripe' }).matchAll(/<line class="branch-mark" data-shape="stripe" data-branch="(\w+)" x1="([^"]+)" y1="([^"]+)" x2="[^"]+" y2="([^"]+)" stroke="([^"]+)" stroke-width="4"( stroke-dasharray="([^"]+)")?\/>/g)]
+            .map(m => ({ branch: m[1], x: Number(m[2]), y1: Number(m[3]), y2: Number(m[4]), stroke: m[5], dash: m[7] ?? '' }));
+        expect(lines.map(x => [x.branch, x.dash])).toEqual([['paternal', ''], ['maternal', '6 4'], ['descendant', '3 3'], ['paternal', ''], ['maternal', '6 4']]);
+        expect(lines[0]).toMatchObject({ x: 5, y1: 10, y2: 54, stroke: P2.paternal });
+        expect(lines.slice(3).map(x => [x.y1, x.y2])).toEqual([[10, 31], [33, 54]]);
+    });
+
+    it('corner: a triangle in the top-left corner, maternal hatched, descendants an outline, both lines split by the diagonal', () => {
+        const svg = svgOf({ branchMarker: 'corner' });
+        expect(svg).toContain(`<pattern id="branch-hatch"`);
+        expect(svg).toMatch(new RegExp(`<pattern id="branch-hatch"[^>]*><rect [^>]*fill="${P2.maternal}"`));
+        const corners = [...svg.matchAll(/<g class="branch-mark" data-shape="corner" clip-path="url\(#\w+\)">(.*?)<\/g>/g)].map(m => m[1]);
+        expect(corners).toHaveLength(4);
+        expect(corners[0]).toBe(`<path data-branch="paternal" d="M-0.5 -0.5H15.5L-0.5 15.5Z" fill="${P2.paternal}"/>`);
+        expect(corners[1]).toContain('fill="url(#branch-hatch)"');
+        expect(corners[2]).toMatch(/d="M399\.5 -0\.5H415\.5L399\.5 15\.5ZM403\.5 3\.5H408\.5L403\.5 8\.5Z" fill="#8a6400" fill-rule="evenodd"/);
+        expect(corners[3]).toBe(`<path data-branch="paternal" d="M599.5 -0.5L607.5 7.5L599.5 15.5Z" fill="${P2.paternal}"/>`
+            + `<path data-branch="maternal" d="M599.5 -0.5H615.5L607.5 7.5Z" fill="url(#branch-hatch)"/>`);
+    });
+
+    it('the compact card takes the smaller tag, stripe and corner of the screen', () => {
+        const cfg = { config: { ...DEFAULT_LAYOUT_CONFIG, cardWidth: 150, cardHeight: 44 }, cardDensity: 'compact' as const };
+        expect(svgOf({ ...cfg, branchMarker: 'tag' })).toMatch(/<rect x="-6" y="14" width="12" height="16" rx="3"/);
+        expect(svgOf({ ...cfg, branchMarker: 'stripe' })).toMatch(/data-branch="paternal" x1="4\.5" y1="6" x2="4\.5" y2="38" stroke="#234e8c" stroke-width="3"/);
+        expect(svgOf({ ...cfg, branchMarker: 'corner' })).toContain('d="M-0.5 -0.5H11.5L-0.5 11.5Z"');
+    });
+
+    it('tint: the marked card\'s ground in its line\'s tint, both halves for both lines; never without a marker', () => {
+        const ground = (svg: string) => [...svg.matchAll(/<rect x="(-?[\d.]+)" y="[^"]+" width="188" height="64" rx="8" fill="([^"]+)"/g)].map(m => m[2]);
+        const svg = svgOf({ branchMarker: 'stripe', branchTint: true });
+        expect(ground(svg)).toEqual(['#e9eced', '#faeeef', '#f3eedf', 'url(#branch-tint-pm)', '#fffdf8']);
+        expect(svg).toMatch(/<linearGradient id="branch-tint-pm" x1="0" y1="0" x2="0" y2="1"><stop offset="0.5" stop-color="#e9eced"\/><stop offset="0.5" stop-color="#faeeef"\/>/);
+        expect(ground(svgOf({ branchMarker: 'off', branchTint: true }))).toEqual(Array(5).fill('#fffdf8'));
+        expect(ground(svgOf())).toEqual(Array(5).fill('#fffdf8'));
+    });
+
+    it('off, no map or a placeholder: no marker at all', () => {
+        for (const svg of [svgOf({ branchMarker: 'off' }), buildTreeSvg(data, l())]) {
+            expect(svg).not.toMatch(/branch-stripe|branch-mark|branch-hatch|branch-tint/);
+        }
+        const ph = makeData(person('a', { isPlaceholder: true }));
+        for (const branchMarker of ['arc', 'tag', 'stripe', 'corner'] as const) {
+            expect(buildTreeSvg(ph, layout({ a: { x: 0, y: 0 } }), { branchMap, branchMarker, branchTint: true }))
+                .not.toMatch(/branch-stripe|branch-mark|fill="#e9eced"/);
+        }
     });
 });
 
@@ -259,12 +350,12 @@ describe('cards by content (U02 V3)', () => {
     it('every card rect and its branch stripe are as tall as that person\'s card', () => {
         const data = makeData(person('a'), person('b', { gender: 'female' }), person('c'));
         const svg = buildTreeSvg(data, layout({ a: { x: 0, y: 0 }, b: { x: 300, y: 300 }, c: { x: 600, y: 300 } }), {
-            config, branchMap: new Map([['a', 'paternal'], ['b', 'maternal'], ['c', 'paternal']]),
+            config, branchMap: new Map([['a', { paternal: true }], ['b', { maternal: true }], ['c', { paternal: true }]]),
         });
         const rects = [...svg.matchAll(/<rect x="(-?[\d.]+)" y="(-?[\d.]+)" width="(\d+)" height="(\d+)" rx="8"/g)]
             .map(m => [Number(m[1]), Number(m[4])]);
         expect(rects).toEqual([[0, 140], [300, 73], [600, 100]]);
-        const stripes = [...svg.matchAll(/<path class="branch-stripe" d="([^"]+)"/g)].map(m => {
+        const stripes = [...svg.matchAll(/<path class="branch-stripe" data-branch="\w+" d="([^"]+)"/g)].map(m => {
             // The path's points: after M, L and each arc's flags.
             const ys = [...m[1].matchAll(/(?:M|L|0 0 0 )(-?[\d.]+) (-?[\d.]+)/g)].map(p => Number(p[2]));
             return Math.max(...ys) - Math.min(...ys);

@@ -31123,28 +31123,26 @@
                 --branch-descendant-ink: #ffffff;
             }
 
+            /* R6 (spec 112): one grey frame for every card; the sex is the
+               avatar's ring, the line its marker. The white ground also
+               leaves the lineage tint out of the print. */
             .person-card {
                 box-shadow: none !important;
                 background: white !important;
                 border: 2px solid #999 !important;
+                color: #333 !important;
             }
             /* The 2px border takes 1px of padding a side, as on the focused
                card: the text column keeps the width its name rows were
                measured for (src/card-width.ts), nothing is clipped. */
             body[data-card-density="normal"] .person-card { padding-left: 8px; padding-right: 8px; }
             body[data-card-fields] .person-card { padding-left: 11px; padding-right: 11px; }
-            .person-card.male {
-                border-color: #5b9bd5 !important;
-                color: #333 !important;
-            }
-            .person-card.female {
-                border-color: #e06088 !important;
-                color: #333 !important;
-            }
-            .person-card.unknown {
-                border-color: #8c8c8c !important;
-                color: #333 !important;
-            }
+            /* The markers start at the 2px frame's outer edge (the arc follows
+               its rounding, the corner sits in it); the tag stands out of white paper. */
+            body[data-branch-marker="arc"] #tree-canvas .person-card:is(.branch-paternal, .branch-maternal, .branch-descendant)::before { inset: -2px; }
+            body[data-branch-marker="corner"] #tree-canvas .person-card:is(.branch-paternal, .branch-maternal, .branch-descendant)::before { left: -2px; top: -2px; }
+            body[data-branch-marker="tag"] #tree-canvas .person-card:is(.branch-paternal, .branch-maternal, .branch-descendant)::after,
+            body[data-branch-marker="tag"] #tree-canvas .person-card.branch-paternal.branch-maternal::before { outline-color: #ffffff; }
             .person-card.placeholder {
                 border: 2px dashed #999 !important;
             }

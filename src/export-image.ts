@@ -26,6 +26,9 @@ import {
 import { shownName, shownNameParts, birthNoteText } from './person-name.js';
 import { strings } from './strings.js';
 import { unionOrderGlyphLift } from './union-order-measure.js';
+import type { BranchSet } from './branch-colors.js';
+import type { BranchMarker } from './types.js';
+import { branchMarkerSvg, branchMarkerDefs, branchTintFill, branchLetters } from './branch-marker-svg.js';
 import { isClusterBoundary } from './ged-exporter.js';
 import {
     unionOrderBadges, UnionOrderBadge, PillMetrics, estimatePillMetrics, estimateShortPillMetrics, placeUnionOrderPill, viewLineSegments,
@@ -77,23 +80,8 @@ export const POSTER_PADDING = PADDING;
 export const POSTER_FONT = FONT;
 export const POSTER_BG = COLORS.background;
 
-/** Branch stripe colours (match the on-screen --branch-* variables). */
-const BRANCH_COLORS: Record<string, string> = {
-    paternal: '#d08a5a', maternal: '#5a8fc0', descendant: '#57a869',
-};
-
-/**
- * The branch stripe: the left `w` px of the card's rounded rectangle (corner
- * radius r), so it runs into the rounded corners like the on-screen stripe
- * instead of being a separate bar. Exported for tests.
- */
-export function branchStripePath(x: number, y: number, h: number, r: number, w: number): string {
-    const f = (n: number) => n.toFixed(2);
-    // Where the corner arc meets the stripe's inner edge (x + w).
-    const dy = w < r ? r - Math.sqrt(r * r - (r - w) * (r - w)) : 0;
-    return `M${f(x + w)} ${f(y + dy)}A${r} ${r} 0 0 0 ${f(x)} ${f(y + r)}`
-        + `L${f(x)} ${f(y + h - r)}A${r} ${r} 0 0 0 ${f(x + w)} ${f(y + h - dy)}Z`;
-}
+// The lineage markers (spec 112) are drawn by src/branch-marker-svg.ts, shared with other posters.
+export { branchStripePath, BRANCH_COLORS, BRANCH_INK, BRANCH_TINT } from './branch-marker-svg.js';
 
 /** The status mark's place (index.html .card-status-mark): 4px above the bottom, 15px in beside a fold, 5px without. */
 const STATUS_MARK_H = 12;
@@ -333,8 +321,18 @@ export interface PosterOptions extends PosterFooterMeta {
      * Register, Custom) are drawn from `cardLines`.
      */
     cardDensity?: 'compact' | 'normal';
-    /** Branch classification (person id -> paternal|maternal|descendant). */
-    branchMap?: Map<string, string> | null;
+    /**
+     * The lineage of each marked person (src/branch-colors.ts classifyBranches;
+     * both ancestral lines at once for pedigree collapse, R4). Absent or null:
+     * no markers.
+     */
+    branchMap?: Map<string, BranchSet> | null;
+    /** The marker's shape from Settings (spec 112 R1); default arc. 'off' draws nothing. */
+    branchMarker?: BranchMarker;
+    /** The marked cards' ground in their line's tint (Settings, R1). */
+    branchTint?: boolean;
+    /** Two same-gender parents (R5): the tag's letters are 1 and 2. */
+    branchNumbered?: boolean;
     /** Persons drawn with the † marker. */
     deceasedSet?: Set<string>;
     /**
@@ -931,6 +929,17 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
     // --- Cards (id order for deterministic output) ---
     out.push('<g class="cards">');
     let clipCounter = 0;
+    // Lineage markers (spec 112): the shape chosen in Settings, the tint, R4 and R5.
+    const branchMarker: BranchMarker = options.branchMap ? (options.branchMarker ?? 'arc') : 'off';
+    const branchTint = !!options.branchTint && branchMarker !== 'off';
+    const branchDraw = {
+        marker: branchMarker,
+        compact: !options.cardLines && options.cardDensity === 'compact',
+        letters: branchLetters(!!options.branchNumbered),
+        nextId: () => `bm${clipCounter++}`,
+    };
+    const branchDefs = options.branchMap ? branchMarkerDefs(options.branchMap.values(), branchMarker, branchTint) : '';
+    if (branchDefs) out.push(branchDefs);
     // The photo on the card (spec 096): a card laid out with a medium or large avatar is drawn
     // with it, a photo or the initials (spec 103 K2.1).
     const photoView = options.cardPhoto?.size ?? 'small';
@@ -960,15 +969,14 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
         // Custom cards are made to be printed: a firmer border on paper.
         const borderDash = isPlaceholder ? ' stroke-dasharray="4,3"' : '';
         const border = options.cardLines ? COLORS.printBorder : COLORS.cardBorder;
-        out.push(`<rect x="${pos.x.toFixed(1)}" y="${pos.y.toFixed(1)}" width="${cw}" height="${ch}" rx="8" fill="${COLORS.cardBg}" stroke="${border}" stroke-width="1"${borderDash}/>`);
+        // The lineage (a placeholder carries none, as on screen).
+        const branchSet = isPlaceholder || branchMarker === 'off' ? undefined : options.branchMap?.get(personId);
+        const cardFill = (branchTint && branchTintFill(branchSet)) || COLORS.cardBg;
+        out.push(`<rect x="${pos.x.toFixed(1)}" y="${pos.y.toFixed(1)}" width="${cw}" height="${ch}" rx="8" fill="${cardFill}" stroke="${border}" stroke-width="1"${borderDash}/>`);
 
-        // Branch colour stripe (matches the on-screen ::before stripe): from the
-        // outer edge of the 1px border, following the card's rounded corners.
-        const branch = options.branchMap?.get(personId);
-        const stripeColor = branch ? BRANCH_COLORS[branch] : undefined;
-        if (stripeColor) {
-            out.push(`<path class="branch-stripe" d="${branchStripePath(pos.x - 0.5, pos.y - 0.5, ch + 1, 8.5, 4.5)}" fill="${stripeColor}"/>`);
-        }
+        // The lineage marker as on screen: the arc, stripe and corner on the card, the tag over its content.
+        const branchMarks = branchMarkerSvg(branchSet, { x: pos.x, y: pos.y, w: cw, h: ch }, branchDraw);
+        out.push(...branchMarks.under);
 
         if (person && options.cardLines) {
             out.push(customCardSvg(person, pos, cw, options.cardLines.get(personId) ?? [], ring, `av${clipCounter++}`,
@@ -1082,6 +1090,7 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
 
         if (marks?.story) out.push(storyFoldSvg(marks.story, pos.x + cw + 0.5, pos.y + ch + 0.5));
         if (markCls) out.push(statusMarkSvg(markCls, pos.x + cw + 0.5, pos.y + ch + 0.5, !!marks?.story));
+        out.push(...branchMarks.over);
 
         if (dimmed) out.push('</g>');
     }
