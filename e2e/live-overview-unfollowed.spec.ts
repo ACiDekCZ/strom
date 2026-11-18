@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { BRIDGE, FakeBridge, HEAD, UUID, fakeBridge, openResearch, poll, researchGed } from './research-bridge.js';
+import { seedSetting } from './helpers.js';
 
 /**
  * The Research overview without following (spec 057 §7, K1.8–K1.11): opened
@@ -225,6 +226,27 @@ test.describe('the Research overview without following', () => {
         await expect.poll(() => following(page), { timeout: 10000 }).toBe(true);
         expect(bridge.treeGets).toBe(gets + 1);
         await expect(strip(page)).toHaveCount(0);
+    });
+
+    test('"Follow live" working in German at 1024: the note keeps a readable width, the button goes under it', async ({ page }) => {
+        await seedSetting(page, 'language', 'de');
+        const bridge = await researchTree(page, { size: { width: 1024, height: 900 } });
+        // A tablet: the Research menu sits under More; opened as its button would.
+        await page.evaluate(() => window.Strom.UI.openResearchMenu());
+        await page.locator('#research-item-overview').click();
+        await expect(ov(page)).toBeVisible();
+        bridge.statusGate = new Promise<void>(() => { /* the research does not answer while it is measured */ });
+        const note = strip(page).locator('.research-overview__follow-note');
+        const btn = strip(page).locator('.research-overview__follow-live');
+        await btn.click();
+        await expect(btn).toHaveAttribute('aria-busy', 'true');
+        await expect(btn).toContainText('Verbindung zur Forschung wird hergestellt…');
+        const n = (await note.boundingBox())!;
+        const b = (await btn.boundingBox())!;
+        // Its working words three times its idle width did squeeze the note into a column broken mid-word.
+        expect(n.width).toBeGreaterThanOrEqual(170);
+        expect(b.y >= n.y + n.height - 1 || b.x >= n.x + n.width - 1).toBe(true);
+        expect(await strip(page).evaluate(s => s.scrollWidth - s.clientWidth)).toBeLessThanOrEqual(0);
     });
 
     test('"Follow live" that cannot connect: the state ends and the dialog says why', async ({ page }) => {

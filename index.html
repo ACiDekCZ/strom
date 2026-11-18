@@ -22049,11 +22049,14 @@
         .research-overview__summary--n1 .research-overview__cell-sub { margin-top: 0; }
         .research-overview__summary--n1 .research-overview__cell-sub { display: inline; min-width: 0; }
         /* The overview without following (spec 057 §7): the bridge's strip "Follow live" under the head. */
+        /* Wraps: the button's working words (German: "Verbindung zur Forschung wird hergestellt…") are three
+           times its idle width; the note keeps a readable width and the button goes under it instead of
+           squeezing the note into a column broken mid-word. */
         .research-overview__follow {
-            display: flex; align-items: center; gap: 8px 12px; padding: 8px 12px 8px 16px; box-sizing: border-box;
+            display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 12px 8px 16px; box-sizing: border-box;
             background: var(--surface-2); border-bottom: 1px solid var(--border);
         }
-        .research-overview__follow-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+        .research-overview__follow-text { flex: 1 1 180px; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
         .research-overview__follow-note { margin: 0; font-size: 12.5px; color: var(--text-light); overflow-wrap: anywhere; }
         .research-overview__agent-started { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600; color: var(--text); }
         .research-overview__agent-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--primary); }
