@@ -30346,6 +30346,13 @@
         .mw-sort--whole .mw-sort-close:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
         @media (hover: hover) { .mw-sort--whole .mw-sort-close:hover { background: var(--surface-2); color: var(--text); } }
         @media (pointer: coarse) { .mw-sort--whole .mw-sort-btn, .mw-sort--whole .mw-sort-close { height: 44px; } .mw-sort--whole .mw-sort-close { width: 44px; } }
+        /* A phone: the text whole (wrapped if need be) beside ×, the button on the line below. */
+        @media (max-width: 640px) {
+            .mw-sort--whole { flex-wrap: wrap; }
+            .mw-sort--whole .mw-sort-text { flex: 1 1 calc(100% - 56px); white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+            .mw-sort--whole .mw-sort-close { order: 1; }
+            .mw-sort--whole .mw-sort-btn { order: 2; }
+        }
         /* Selecting has its own Sort with the agent in the selection bar. */
         #materials-modal.is-selecting .mw-sort--whole { display: none; }
         .batch-sort { margin: 0 0 14px; padding: 12px 14px; background: var(--surface-2); border-radius: var(--r-md); display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }

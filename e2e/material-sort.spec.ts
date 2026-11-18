@@ -533,6 +533,29 @@ test.describe('Sort with the agent over everything (the whole view)', () => {
             await expect(top(page).locator('[data-sort="close-whole"]')).toBeVisible();
         });
     });
+
+    test.describe('on a phone (390 px)', () => {
+        test.use({ viewport: { width: 390, height: 844 } });
+
+        test('the German text stays whole (wrapped, never cut short) beside ×, the button below it', async ({ page }) => {
+            await setup(page, spread());
+            await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
+            await openWindow(page);
+            const text = top(page).locator('.mw-sort-text');
+            await expect(text).toHaveText('5 Dateien ohne Titel oder Person');
+            const fit = await text.evaluate((el) => ({ sw: el.scrollWidth, cw: el.clientWidth, sh: el.scrollHeight, ch: el.clientHeight }));
+            expect(fit.sw).toBeLessThanOrEqual(fit.cw);
+            expect(fit.sh).toBeLessThanOrEqual(fit.ch);
+            const strip = await top(page).evaluate((el) => ({ sw: el.scrollWidth, cw: el.clientWidth }));
+            expect(strip.sw).toBeLessThanOrEqual(strip.cw);
+            const t = (await text.boundingBox())!;
+            const btn = (await top(page).locator('[data-sort="sort"]').boundingBox())!;
+            const close = (await top(page).locator('[data-sort="close-whole"]').boundingBox())!;
+            expect(btn.y).toBeGreaterThanOrEqual(t.y + t.height - 1);
+            expect(close.x).toBeGreaterThanOrEqual(t.x + t.width - 1);
+            expect(close.y).toBeLessThan(t.y + t.height);
+        });
+    });
 });
 
 /**
