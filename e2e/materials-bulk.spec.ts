@@ -110,6 +110,16 @@ test.describe('Going through many files (a tree without a research)', () => {
     });
 
     test('Title… numbers the selected untitled files in the window\'s order, one undo step; Kind… and Date…', async ({ page }) => {
+        // Each message waits behind the previous step's undo pill (3 s to be read): that time passes on
+        // Playwright's clock (it ticks as ever) until the message shows.
+        await page.clock.install();
+        const said = async (text: string): Promise<void> => {
+            await expect.poll(async () => {
+                if (await toast(page).filter({ hasText: text }).isVisible()) return true;
+                await page.clock.runFor(250);
+                return false;
+            }, { timeout: 10_000, intervals: [20] }).toBe(true);
+        };
         await appTree(page);
         await openWindow(page);
         await win(page).locator('[data-mw="select"]').click();
@@ -123,6 +133,7 @@ test.describe('Going through many files (a tree without a research)', () => {
         await expect(dialog(page).locator('.mdlg-bulk-row').first()).toContainText('Pfefferkorn album 1');
         await expect(dialog(page).getByRole('button', { name: 'Apply to 2 files' })).toBeVisible();
         await dialog(page).getByRole('button', { name: 'Apply to 2 files' }).click();
+        await said('2 of 3 files updated.');
         await expect(toast(page)).toContainText('2 of 3 files updated.');
         const after = await titles(page);
         expect(after['svatba.png']).toBe('Wedding at Quellbach');
@@ -141,6 +152,7 @@ test.describe('Going through many files (a tree without a research)', () => {
         await expect(dialog(page).locator('.mdlg-title')).toHaveText('Kind for 2 files');
         await dialog(page).locator('input[name="mdlg-bulk-kind"][value="document"]').check();
         await dialog(page).getByRole('button', { name: 'Apply to 2 files' }).click();
+        await said('2 of 2 files updated.');
         await expect(toast(page)).toContainText('2 of 2 files updated.');
         await win(page).locator('[data-mw="select"]').click();
         await tiles(page).first().focus();
@@ -148,6 +160,7 @@ test.describe('Going through many files (a tree without a research)', () => {
         await bar(page).locator('[data-mw="sel-date"]').click();
         await dialog(page).locator('input[name="mdlg-bulk-date"]').fill('1924');
         await dialog(page).getByRole('button', { name: 'Apply to 3 files' }).click();
+        await said('3 of 3 files updated.');
         await expect(toast(page)).toContainText('3 of 3 files updated.');
         expect(await details(page)).toEqual({
             'svatba.png': [null, '1924'], 'dopis.png': ['document', '1924'], 'matrika.png': ['document', '1924'],
