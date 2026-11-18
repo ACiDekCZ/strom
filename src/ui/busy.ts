@@ -119,6 +119,10 @@ interface BusyState {
     released: boolean;
     /** The last step said (the progress toast starts with it). */
     lastStep: { step: string; k?: number; n?: number; size?: string } | null;
+    /** The element that carries the state now (a list drawn anew puts a new one in place of the first). */
+    el: HTMLElement;
+    /** How the element is found again after a redraw (null: it cannot be). */
+    ident: string | null;
 }
 
 const states = new WeakMap<HTMLElement, BusyState>();
@@ -380,7 +384,15 @@ function placeMessage(el: HTMLElement, msg: HTMLElement, opts: BusyOpts): void {
     if (host) { host.appendChild(msg); return; }
     const parent = el.parentElement;
     // A dialog's footer: the sentence above it (the footer stays the dialog's last line, §10.1 a).
-    if (parent?.matches('.modal .buttons, .modal-footer, .mdlg-foot, .book-dlg-foot, .fp-foot')) { parent.before(msg); return; }
+    if (parent?.matches('.modal .buttons, .modal-footer, .mdlg-foot, .book-dlg-foot, .fp-foot')) {
+        // Its sides in line with the footer's own (each dialog and width has its own padding).
+        const cs = getComputedStyle(parent);
+        msg.classList.add('busy-msg--foot');
+        msg.style.setProperty('--foot-pad-l', cs.paddingLeft);
+        msg.style.setProperty('--foot-pad-r', cs.paddingRight);
+        parent.before(msg);
+        return;
+    }
     // A group of actions or a line of text: the sentence under the whole group; a big container: right after the element.
     const big = !parent || parent === document.body || parent.matches('form, section, dialog, .modal, .modal-body, .modal-content')
         || parent.childElementCount > 8;
@@ -407,6 +419,7 @@ function identOf(el: HTMLElement): string | null {
 /** Sentences whose element may be drawn anew: the sentence follows to the new element (§10.1 a, 3c). */
 const following = new Map<HTMLElement, { msg: HTMLElement; ident: string; opts: BusyOpts }>();
 let followTimer: ReturnType<typeof setInterval> | null = null;
+let followObserver: MutationObserver | null = null;
 
 function followMessages(): void {
     for (const [el, f] of following) {
@@ -419,7 +432,11 @@ function followMessages(): void {
         if (!next) { following.delete(el); continue; }
         placeMessage(next, f.msg, f.opts);
     }
-    if (!following.size && followTimer) { clearInterval(followTimer); followTimer = null; }
+    if (!following.size) {
+        if (followTimer) { clearInterval(followTimer); followTimer = null; }
+        followObserver?.disconnect();
+        followObserver = null;
+    }
 }
 
 function follow(el: HTMLElement, msg: HTMLElement, opts: BusyOpts): void {
@@ -427,6 +444,11 @@ function follow(el: HTMLElement, msg: HTMLElement, opts: BusyOpts): void {
     const ident = identOf(el);
     if (!ident) return;
     following.set(el, { msg, ident, opts });
+    // At once when the page changes (a redraw), and a slow check besides (an observer may be missing).
+    if (!followObserver && typeof MutationObserver === 'function' && document.body) {
+        followObserver = new MutationObserver(followMessages);
+        followObserver.observe(document.body, { childList: true, subtree: true });
+    }
     followTimer ??= setInterval(followMessages, 400);
 }
 
@@ -522,6 +544,7 @@ function lock(el: HTMLElement, opts: BusyOpts): BusyState {
         drawnOn: null, toast: null,
         prevDisabled: el.getAttribute('aria-disabled'), prevBusy: el.getAttribute('aria-busy'),
         guard, undraw: null, drawDone: null, released: false, lastStep: null,
+        el, ident: opts.msgIn ? null : identOf(el),
     };
     const prev = states.get(el);
     if (prev?.doneTimer) { clearTimeout(prev.doneTimer); prev.undraw?.(); }
@@ -548,8 +571,39 @@ function toToast(el: HTMLElement, st: BusyState): void {
     void el;
 }
 
+/**
+ * The element drawn anew (a list redrawn while the state lasts): the state moves to the new element (locked,
+ * drawn there), so the look and the end stay where the person looks (§10.1 a). False: there is none.
+ */
+function moveToRedrawn(st: BusyState): boolean {
+    if (!st.ident || st.toast) return false;
+    const next = Array.from(document.querySelectorAll<HTMLElement>(st.ident)).find(e => e !== st.el && seen(e));
+    if (!next || states.has(next) && isBusy(next)) return false;
+    const old = st.el;
+    old.removeEventListener('click', st.guard, true);
+    old.removeEventListener('keydown', st.guard, true);
+    st.prevDisabled = next.getAttribute('aria-disabled');
+    st.prevBusy = next.getAttribute('aria-busy');
+    st.el = next;
+    states.set(next, st);
+    next.setAttribute('aria-disabled', 'true');
+    next.addEventListener('click', st.guard, true);
+    next.addEventListener('keydown', st.guard, true);
+    if (st.phase === 'busy') {
+        const d = draw(next, st.label, st.opts.done);
+        st.drawnOn = next;
+        st.undraw = d.undraw;
+        st.drawDone = d.drawDone;
+        next.dataset.busy = 'busy';
+        next.setAttribute('aria-busy', 'true');
+    } else next.dataset.busy = 'lock';
+    return true;
+}
+
 /** After 120 ms: the working look, on the element, its row or a toast. */
-function show(el: HTMLElement, st: BusyState): void {
+function show(first: HTMLElement, st: BusyState): void {
+    if (!seen(st.el)) moveToRedrawn(st);
+    const el = seen(st.el) ? st.el : first;
     st.showTimer = null;
     if (st.phase !== 'lock') return;
     st.phase = 'busy';
@@ -573,7 +627,8 @@ function show(el: HTMLElement, st: BusyState): void {
     st.watch = setInterval(() => {
         if (st.phase !== 'busy') return;
         if (seen(st.drawnOn)) return;
-        if (st.drawnOn === el && seen(row)) {
+        if ((st.drawnOn === st.el || !st.drawnOn) && moveToRedrawn(st)) return;
+        if (st.drawnOn === st.el && seen(row)) {
             const d = drawOnRow(row);
             st.drawnOn = row;
             st.undraw = d.undraw;
@@ -614,12 +669,16 @@ function toRest(el: HTMLElement, st: BusyState): void {
 }
 
 /** End the state of `el` with `end` (after the 300 ms minimum of a state shown). */
-async function finish(el: HTMLElement, st: BusyState, end: BusyEnd): Promise<void> {
+async function finish(first: HTMLElement, st: BusyState, end: BusyEnd): Promise<void> {
     if (st.showTimer) { clearTimeout(st.showTimer); st.showTimer = null; }
     if (st.phase === 'busy') {
         const wait = st.shownAt + BUSY_MIN_MS - Date.now();
         if (wait > 0) await new Promise(r => setTimeout(r, wait));
     }
+    // Drawn anew meanwhile: the end goes on the element in its place.
+    if (!seen(st.el)) moveToRedrawn(st);
+    const el = st.el;
+    if (el !== first && states.get(first) === st) states.delete(first);
     release(el, st);
     const where = seen(st.drawnOn) ? st.drawnOn : null;
     if (end.ok) {
@@ -650,8 +709,11 @@ async function finish(el: HTMLElement, st: BusyState, end: BusyEnd): Promise<voi
         return;
     }
     const anchor = st.opts.endToast ? null : seen(el) ? el : st.opts.rowOf instanceof HTMLElement && seen(st.opts.rowOf) ? st.opts.rowOf : null;
-    if (anchor) showBusyMessage(seen(el) ? el : anchor, end, st.opts);
-    else endToast(el, end);
+    if (anchor) {
+        const msg = showBusyMessage(seen(el) ? el : anchor, end, st.opts);
+        // The caller knows the first element: clearing its sentence clears this one.
+        if (el !== first) messages.set(first, msg);
+    } else endToast(el, end);
 }
 
 /**
@@ -668,8 +730,8 @@ export async function runBusy<T>(el: HTMLElement, fn: (ctl: BusyCtl) => Promise<
         step(text, k, n, size) {
             st.lastStep = { step: text, ...(k !== undefined ? { k } : {}), ...(n !== undefined ? { n } : {}), ...(size !== undefined ? { size } : {}) };
             if (st.toast) st.toast.update({ step: text, k, n, size });
-            else if (st.drawnOn === el && !opts.stepsInToast) {
-                const busy = el.querySelector<HTMLElement>(':scope > .bl > .b-busy');
+            else if (st.drawnOn === st.el && !opts.stepsInToast) {
+                const busy = st.el.querySelector<HTMLElement>(':scope > .bl > .b-busy');
                 if (busy) busy.replaceChildren(busy.querySelector('.busy-spin') ?? spinEl(), document.createTextNode(text));
             }
         },

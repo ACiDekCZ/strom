@@ -18786,6 +18786,8 @@
             overflow-wrap: anywhere;
         }
         .busy-msg.is-err { color: var(--error-text); }
+        /* Above a dialog's footer: the footer's own sides (set from its padding), a gap to the footer. */
+        .busy-msg.busy-msg--foot { margin: 8px 0 10px; padding: 0 var(--foot-pad-r, 24px) 0 var(--foot-pad-l, 24px); }
         .busy-msg .hint { flex-basis: 100%; color: var(--text-light); }
         .busy-msg button.link {
             background: none; border: 0; padding: 0; margin: 0; font: inherit; font-weight: 600;

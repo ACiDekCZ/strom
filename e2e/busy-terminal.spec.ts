@@ -129,6 +129,15 @@ test.describe('a link into the research\'s terminal', () => {
         const msg = page.locator('#confirmation-modal .busy-msg');
         await expect(msg).toContainText('Did the terminal not open?');
         expect(await page.evaluate(() => document.getElementById('confirm-buttons')!.previousElementSibling?.classList.contains('busy-msg'))).toBe(true);
+        // Its text in line with the footer's buttons' side, not at the dialog's edge.
+        const sides = await page.evaluate(() => {
+            const m = document.querySelector<HTMLElement>('#confirmation-modal .busy-msg')!.getBoundingClientRect();
+            const f = document.getElementById('confirm-buttons')!;
+            const pad = parseFloat(getComputedStyle(f).paddingLeft);
+            const text = document.querySelector<HTMLElement>('#confirmation-modal .busy-msg__text, #confirmation-modal .busy-msg > span')!.getBoundingClientRect();
+            return { textLeft: text.left - f.getBoundingClientRect().left, pad, width: m.width };
+        });
+        expect(Math.abs(sides.textLeft - sides.pad)).toBeLessThan(2);
     });
 
     test('a list drawn anew keeps the sentence under its new button; a list gone takes it away', async ({ page }) => {
@@ -144,13 +153,24 @@ test.describe('a link into the research\'s terminal', () => {
             b.onclick = () => (window.Strom.UI as unknown as { launchResearchLink: (u: string, k: string, el: HTMLElement) => void }).launchResearchLink(url, 'terminal', b);
         }, { url: `strom-research://task?tree=${UUID}&task=T0001&do=chat`, html: LIST });
         await page.locator('#test-list [data-action="chat"]').click();
-        await runSeconds(page, 11);
-        const msg = page.locator('#test-list [data-id="T0001"] .busy-msg');
-        await expect(msg).toContainText('Did the terminal not open?');
-        // The list drawn anew (a new status): the sentence stands under the new button.
+        await runSeconds(page, 1);
+        // Drawn anew while the link waits: the new button carries the working state and takes no second click.
         await page.evaluate((html) => { document.getElementById('test-list')!.innerHTML = html; }, LIST);
         await runSeconds(page, 1);
+        const again = page.locator('#test-list [data-action="chat"]');
+        await expect(again).toHaveAttribute('aria-busy', 'true');
+        await expect(again).toHaveAttribute('aria-disabled', 'true');
+        await expect(page.locator('.toast--progress')).toHaveCount(0);
+        await runSeconds(page, 10);
+        await expect(again).not.toHaveAttribute('aria-busy', 'true');
+        const msg = page.locator('#test-list [data-id="T0001"] .busy-msg');
         await expect(msg).toContainText('Did the terminal not open?');
+        // The list drawn anew (a new status): the sentence stands under the new button at once.
+        expect(await page.evaluate(async (html) => {
+            document.getElementById('test-list')!.innerHTML = html;
+            await new Promise(r => queueMicrotask(() => r(null)));
+            return !!document.querySelector('#test-list [data-id="T0001"] .busy-msg');
+        }, LIST)).toBe(true);
         // The list gone for good: the sentence goes with it.
         await page.evaluate(() => document.getElementById('test-list')!.remove());
         await runSeconds(page, 1);
