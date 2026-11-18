@@ -163,7 +163,9 @@ test.describe('a large set of pages: the dialog (1102 §7)', () => {
 
     test('the set of files of a large tree: the index of people by letters, each letter a page, a letter to the next', async ({ page, browser }) => {
         test.setTimeout(180_000);
-        await setup(page, synthetic(1200), 'Smyslenov');
+        // 640 people: over 500 rows in the index of people (split by letters) and over 15 MB (the set of
+        // files offered), about a third of the build of 1200 people (the build grows faster than the tree).
+        await setup(page, synthetic(640), 'Smyslenov');
         const dialog = await openDialog(page);
         const offer = dialog.locator('.fp-big [data-offer="zip"]');
         if (await offer.isVisible()) await offer.click();
