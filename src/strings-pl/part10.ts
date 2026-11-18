@@ -74,6 +74,7 @@ export const plPart10: Pick<StringsType, 'busy'> = {
         fileUnreadable: 'Nie można odczytać pliku: to nie jest GEDCOM ani kopia zapasowa Strom.',
         pickOther: 'Wybrać inny plik',
         filePeople: (n: number, shown: string) => `${shown} ${plPl(n, 'osoba', 'osoby', 'osób')}`,
+        checkingPeople: (n: number, shown: string) => `Sprawdzanie: ${shown} ${plPl(n, 'osoba', 'osoby', 'osób')}…`,
         filePhotos: (n: number, shown: string) => `${shown} ${plPl(n, 'zdjęcie', 'zdjęcia', 'zdjęć')}`,
         savingBackup: 'Zapisywanie kopii zapasowej…',
         savingFile: 'Zapisywanie pliku…',

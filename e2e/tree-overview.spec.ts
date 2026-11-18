@@ -1246,3 +1246,44 @@ test.describe('Research › to the Research overview (spec 057 §7.5)', () => {
         await expect(page.locator('#research-overview')).toBeVisible();
     });
 });
+
+test.describe('the tree check of a large tree (C102, waiting buttons §8)', () => {
+    test('Validation details says "Checking 5,154 people…" at the button before the check, then opens the dialog', async ({ page }) => {
+        test.setTimeout(90_000);
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await openApp(page);
+        const { data, rootId } = syntheticTree({ persons: 5200, seed: 11 });
+        const treeId = await page.evaluate(async ({ data, rootId }) => {
+            const S = window.Strom;
+            const id = await S.DataManager.importAsNewTree(data, 'Synthetic');
+            S.TreeRenderer.setFocus(rootId);
+            await S.TreeRenderer.renderAsync();
+            return id as string;
+        }, { data, rootId });
+        const dialog = await openOverview(page, treeId);
+        const quality = dialog.locator('.tov-sec[data-section="quality"]');
+        const head = quality.locator('.tov-sec-head');
+        if (await head.getAttribute('aria-expanded') !== 'true') await head.click();
+        const button = quality.locator('.tov-sec-body').getByRole('button', { name: 'Validation details', exact: true });
+        await expect(button).toBeVisible();
+        // What the button says before the dialog opens (the check blocks the page: watched, not polled).
+        await button.evaluate((b) => {
+            const w = window as unknown as { __said: string[] };
+            w.__said = [];
+            const modal = document.getElementById('tree-validation-modal')!;
+            new MutationObserver(() => {
+                if (b.getAttribute('aria-busy') === 'true' && !modal.classList.contains('active')) w.__said.push(b.textContent ?? '');
+            }).observe(b, { attributes: true, childList: true, subtree: true, characterData: true });
+        });
+        await button.click();
+        await expect(page.locator('#tree-validation-modal')).toBeVisible();
+        const said = await page.evaluate(() => (window as unknown as { __said: string[] }).__said);
+        // The real people of the tree (its placeholders not counted), written as the language writes a count.
+        expect(said.some(t => /Checking 5,\d{3} people…/.test(t))).toBe(true);
+        // Back in the overview, the button is itself again.
+        await page.keyboard.press('Escape');
+        await expect(dialog).toBeVisible();
+        await expect(button).not.toHaveAttribute('aria-busy', 'true');
+        await expect(button).not.toHaveAttribute('aria-disabled', 'true');
+    });
+});

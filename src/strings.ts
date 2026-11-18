@@ -10294,6 +10294,8 @@ const stringsEN = {
         pickOther: 'Choose another file',
         /** A file read and saved (§9, 2g, 9a–9c). */
         filePeople: (n: number, shown: string) => `${shown} ${plural('en', n, 'person', 'people')}`,
+        /** The tree check before its dialog (§8): "Checking 2,400 people…". */
+        checkingPeople: (n: number, shown: string) => `Checking ${shown} ${plural('en', n, 'person', 'people')}…`,
         filePhotos: (n: number, shown: string) => `${shown} ${plural('en', n, 'photo', 'photos')}`,
         savingBackup: 'Saving the backup…',
         savingFile: 'Saving the file…',
@@ -20217,6 +20219,7 @@ const stringsCZ: StringsType = {
         pickOther: 'Vybrat jiný soubor',
         /** Soubor čtený a ukládaný (§9, 2g, 9a–9c). */
         filePeople: (n: number, shown: string) => `${shown} ${plural('cs', n, 'osoba', 'osoby', 'osob')}`,
+        checkingPeople: (n: number, shown: string) => `Kontroluje se ${shown} ${plural('cs', n, 'osoba', 'osoby', 'osob')}…`,
         filePhotos: (n: number, shown: string) => `${shown} ${plural('cs', n, 'fotka', 'fotky', 'fotek')}`,
         savingBackup: 'Ukládá se záloha…',
         savingFile: 'Ukládá se soubor…',
@@ -30056,6 +30059,7 @@ const stringsDE: StringsType = {
         pickOther: 'Andere Datei wählen',
         /** Eine Datei gelesen und gespeichert (§9, 2g, 9a–9c). */
         filePeople: (n: number, shown: string) => `${shown} ${plural('de', n, 'Person', 'Personen')}`,
+        checkingPeople: (n: number, shown: string) => `${shown} ${plural('de', n, 'Person wird', 'Personen werden')} geprüft…`,
         filePhotos: (n: number, shown: string) => `${shown} ${plural('de', n, 'Foto', 'Fotos')}`,
         savingBackup: 'Die Sicherung wird gespeichert…',
         savingFile: 'Die Datei wird gespeichert…',
