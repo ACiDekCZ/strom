@@ -42,7 +42,7 @@ import { researchSendMode } from './research-sync-ui.js';
 import { AdoptProgress, type AdoptPhase, type AdoptStep } from './adopt-progress.js';
 import { TreeEditLock } from './tree-edit-lock.js';
 import { holdLeave } from './busy-leave.js';
-import { BUSY_TIMEOUTS } from './busy.js';
+import { BUSY_TIMEOUTS, busyToast } from './busy.js';
 import { downloadStep, type TreeDownloadWatch } from './tree-load-progress.js';
 import { safeFileName } from '../filenames.js';
 import type { ProgressToastHandle } from './toast.js';
@@ -459,7 +459,7 @@ export const researchAdoptMethods = uiModule({
             // An older research (1.12.0) takes no tree from Safari or a phone, where such a tree usually is:
             // told it is not handed over (it stops waiting at once instead of asking for another copy for
             // half an hour), and said here with the way to update it. A later line takes its empty research.
-            const oldResearch = !!offer && !offer.transfer && !await researchMovesTrees(bridge.base);
+            const oldResearch = !!offer && !offer.transfer && !await busyToast(strings.busy.connectingResearch, () => researchMovesTrees(bridge.base));
             postCancel(cancelUrl, oldResearch ? 'cancelled' : 'no-tree');
             // Another browser or profile has it: the address to open there (the research keeps waiting).
             if (offer) this.showResearchElsewhere(raw, offer.until, oldResearch);
@@ -478,14 +478,18 @@ export const researchAdoptMethods = uiModule({
         }
         // The tree going over is the one on screen behind the dialog.
         if (DataManager.getCurrentTreeId() !== tree.id) await this.switchToTree(tree.id, { follow: false });
+        // The research's status asked before the dialog (each ask up to 4 s): a progress toast says it (§2.1).
+        const empty = !Object.values(data.persons).some(p => !p.isPlaceholder);
+        const status = await busyToast(strings.busy.connectingResearch, async () =>
+            empty && !await researchTakesEmpty(bridge.base) ? null : await researchAdoptStatusAt(bridge.base));
         // Nobody in it yet (installed from the welcome screen, a tree from Safari's): an older research
         // refuses it (400 tree.empty) — not offered, the research told, and said how it starts (C1).
-        if (!Object.values(data.persons).some(p => !p.isPlaceholder) && !await researchTakesEmpty(bridge.base)) {
+        if (!status) {
             postCancel(cancelUrl, 'cancelled');
             await this.endEmptyHandOver(tree.id, fromInstall ? offer.token : null);
             return;
         }
-        const { agentless, takesImages } = await researchAdoptStatusAt(bridge.base);
+        const { agentless, takesImages } = status;
         const choice = await this.askResearchAdopt(tree, offer, data, { install: ownInstall || !!moved, ...(moved ? { movedFrom: moved.from } : {}), agentless, takesImages });
         if (choice === null) {
             postCancel(cancelUrl, 'cancelled');

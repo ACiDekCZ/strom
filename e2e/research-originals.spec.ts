@@ -337,6 +337,37 @@ test.describe('originals: the full UI (beta.10)', () => {
         expect(b.mediaPuts).toEqual([]);
     });
 
+    test('Send now while another tab holds the sending: the button says Sending… until that tab is done and the original went from here (B103)', async ({ page }) => {
+        const b = await fakeBridge(page, { accepts: MEDIA_ACCEPTS });
+        await openResearch(page, { media: true });
+        b.down = true;
+        const modal = await attachToJan(page);
+        await expect(modal.locator('.media-state.is-queued')).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(modal).toBeHidden();
+        // Another tab sending: the Web Lock held.
+        await page.evaluate(() => new Promise<void>(taken => {
+            void navigator.locks.request('strom-originals', () => new Promise<void>(r => {
+                (window as unknown as { __releaseOriginals: () => void }).__releaseOriginals = r;
+                taken();
+            }));
+        }));
+        b.down = false;
+        await poll(page);
+        await openResearchMenu(page);
+        await page.locator('#research-sync-block .research-sync-line2').getByRole('menuitem', { name: 'Show…' }).click();
+        const send = page.locator('#media-queue-row .media-queue-send');
+        await expect(send).toHaveText('Send now');
+        await send.click();
+        await expect(send).toHaveAttribute('data-busy', 'busy');
+        await page.waitForTimeout(500);
+        await expect(send).toHaveAttribute('data-busy', 'busy');
+        expect(b.mediaPuts).toEqual([]);
+        await page.evaluate(() => (window as unknown as { __releaseOriginals: () => void }).__releaseOriginals());
+        await expect.poll(() => b.mediaPuts.length).toBe(1);
+        await expect.poll(() => queued(page)).toEqual([]);
+    });
+
     test('originals waiting 3 days: the amber pill "Originals waiting" in the toolbar, its label opens the queue', async ({ page }) => {
         const b = await fakeBridge(page, { accepts: MEDIA_ACCEPTS });
         await openResearch(page, { media: true, auto: true });

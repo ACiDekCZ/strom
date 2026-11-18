@@ -37,7 +37,7 @@ import { uiModule } from './module.js';
 import { undoInToast } from './toast.js';
 import { historyOriginPendKey } from './history-kinds-ui.js';
 import { endPend, isPend, pendAttrs, pendRefusalHtml, pendStatusHtml, startPend, type PendRefusal } from './switch-pend.js';
-import { busySpinHtml, runBusy } from './busy.js';
+import { busyButtonHtml, busySpinHtml, runBusy } from './busy.js';
 
 /**
  * A row's link in text ("Search again", "Map automatically", §5, 5b): its 12 px slot drawn from the start, so
@@ -48,6 +48,19 @@ function rowLinkHtml(hm: string, key: string, label: string, busy: boolean): str
     const state = busy ? ' aria-disabled="true" aria-busy="true" data-busy="busy"' : '';
     return ` <button type="button" class="link hm-row-link" data-hm="${hm}" data-key="${esc(key)}"${state}>${esc(label)}`
         + `<span class="busy-slot is-later" aria-hidden="true">${busy ? busySpinHtml(12) : ''}</span></button>`;
+}
+
+/**
+ * A row's "⋯" (or its button) while its write is on its way (B201, B204): locked but keeping its focus, its
+ * working look drawn with it (the spinner in the icon's place, or beside the words), so a redraw keeps it.
+ */
+export function rowBusyAttrs(busy: boolean): string {
+    return busy ? ' aria-disabled="true" aria-busy="true" data-busy="busy"' : '';
+}
+
+/** The "⋯" of a row: its spinner in the dots' place while the row's write is on its way. */
+export function rowDotsInner(busy: boolean): string {
+    return busy ? busyButtonHtml('⋯', '') : '⋯';
 }
 
 /** Rows drawn at once per group; "Show n more rows" adds as many again. */
@@ -481,7 +494,7 @@ export const historyManageMethods = uiModule({
             + `<div class="hm-r-count"><span class="hm-r-events">${r.events === null ? '–' : r.events}</span>`
             + (r.hidden ? `<span class="hm-r-hidden">${esc(h.regionHidden(r.hidden))}</span>` : '') + '</div>'
             + `<div class="hm-r-act">${actions.length
-                ? `<button type="button" class="hm-dots" data-hm="menu" data-kind="region" data-key="${esc(r.key)}" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(h.more)}"${busy ? ' disabled' : ''}>⋯</button>` : ''}`
+                ? `<button type="button" class="hm-dots" data-hm="menu" data-kind="region" data-key="${esc(r.key)}" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(h.more)}"${rowBusyAttrs(busy)}>${rowDotsInner(busy)}</button>` : ''}`
             + `<span class="hm-chev" aria-hidden="true">${r.open ? '›' : ''}</span></div>`
             + '</div>'
             + (note ? this.historyManageNote(r.key, note) : '');
@@ -519,7 +532,7 @@ export const historyManageMethods = uiModule({
             + (r.events !== null && group === 'all' ? `<span class="hm-p-count">${r.events}</span>` : '')
             + (assign ? `<button type="button" class="hm-assign" data-hm="assign" data-key="${esc(r.key)}">${esc(h.assign)}</button>` : '')
             + (find ? `<button type="button" class="link hm-row-link" data-hm="find" data-key="${esc(r.key)}">${esc(h.placeFind)}</button>` : '')
-            + (actions.length ? `<button type="button" class="hm-dots" data-hm="menu" data-kind="place" data-key="${esc(r.key)}" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(h.more)}"${busy ? ' disabled' : ''}>⋯</button>` : '')
+            + (actions.length ? `<button type="button" class="hm-dots" data-hm="menu" data-kind="place" data-key="${esc(r.key)}" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(h.more)}"${rowBusyAttrs(busy)}>${rowDotsInner(busy)}</button>` : '')
             + '</div>'
             + (note ? this.historyManageNote(`place:${r.key}`, note) : '');
     },
@@ -562,7 +575,8 @@ export const historyManageMethods = uiModule({
         return `<div class="hm-row hm-align-kind" data-kind="${k.kind}">`
             + `<span class="hm-ak-mark" aria-hidden="true">${historyKindSvg(k.kind, 15)}</span>`
             + `<span class="hm-h-main"><span class="hm-h-text">${esc(shown)} · ${k.n}</span><span class="hm-h-meta">${esc(h.hiddenAlignMeta(k.general, k.local))}</span></span>`
-            + (canShow ? `<button type="button" class="hm-ak-act" data-hm="showAgainKind" data-key="${k.kind}"${view.busy.has(`kind:${k.kind}`) ? ' disabled' : ''}>${esc(h.showAgain)}</button>` : '')
+            + (canShow ? `<button type="button" class="hm-ak-act" data-hm="showAgainKind" data-key="${k.kind}"${rowBusyAttrs(view.busy.has(`kind:${k.kind}`))}>`
+                + `${busyButtonHtml(esc(h.showAgain), strings.busy.saving)}</button>` : '')
             + '</div>';
     },
 
@@ -577,7 +591,8 @@ export const historyManageMethods = uiModule({
         return `<div class="hm-row hm-hidden hm-deleted" data-event="${esc(r.event)}">`
             + `<span class="hm-h-year">${esc(r.year)}</span>`
             + `<span class="hm-h-main"><span class="hm-h-text"${langAttr(r.textLang)}>${esc(r.text)}</span><span class="hm-h-meta">${esc(r.meta)}</span></span>`
-            + (canRestore ? `<button type="button" class="link hm-h-act" data-hm="restoreDeleted" data-key="${esc(r.event)}"${view.busy.has(`deleted:${r.event}`) ? ' disabled' : ''}>${esc(h.restoreDeleted)}</button>` : '')
+            + (canRestore ? `<button type="button" class="link hm-h-act" data-hm="restoreDeleted" data-key="${esc(r.event)}"${rowBusyAttrs(view.busy.has(`deleted:${r.event}`))}>${esc(h.restoreDeleted)}`
+                + `<span class="busy-slot is-later" aria-hidden="true">${view.busy.has(`deleted:${r.event}`) ? busySpinHtml(12) : ''}</span></button>` : '')
             + '</div>'
             + (note ? this.historyManageNote(`deleted:${r.event}`, note) : '');
     },
@@ -616,7 +631,7 @@ export const historyManageMethods = uiModule({
                 : '<span class="hm-mark is-region" aria-hidden="true"></span>';
         const dots = row?.actions.length
             ? `<button type="button" class="hm-dots hm-detail-dots" data-hm="menu" data-kind="region" data-key="${esc(key)}" aria-haspopup="menu" aria-expanded="false"`
-                + ` aria-label="${esc(strings.history.more)}" data-hfocus="dots"${view.busy.has(key) ? ' disabled' : ''}>⋯</button>` : '';
+                + ` aria-label="${esc(strings.history.more)}" data-hfocus="dots"${rowBusyAttrs(view.busy.has(key))}>${rowDotsInner(view.busy.has(key))}</button>` : '';
         // §6a.6: a place done — "Search again in the research" opens the research's terminal (nothing starts here).
         const placeKeyOf = owner === 'place' ? key.slice('place:'.length) : '';
         const again = placeKeyOf && this.historyPlaceSearchAgainShown(placeKeyOf)
@@ -767,6 +782,8 @@ export const historyManageMethods = uiModule({
         const t = e.target as HTMLElement;
         const el = t.closest<HTMLElement>('[data-hm]');
         if (!el || !(e.currentTarget as HTMLElement).contains(el)) return;
+        // A row's write on its way: its button and "⋯" wait (drawn locked, focus kept).
+        if (el.getAttribute('aria-busy') === 'true') return;
         const act = el.dataset.hm;
         const key = el.dataset.key ?? '';
         switch (act) {

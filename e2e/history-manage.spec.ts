@@ -392,6 +392,39 @@ test.describe('History of places: the manager', () => {
         await expect(tab(page, 'deleted').locator('.hm-tab-count')).toHaveText('1');
     });
 
+    test('a row\'s write on its way: Restore and the row\'s ⋯ say it (spinner, locked, focus kept), a second click sends nothing', async ({ page }) => {
+        const { history } = await setup(page);
+        let release!: () => void;
+        let held = new Promise<void>(r => { release = r; });
+        await page.route(url => /\/history\/(delete|first)$/.test(url.pathname), async route => {
+            if (route.request().method() === 'POST') await held;
+            await route.fallback();
+        });
+        await openManager(page, { tab: 'deleted' });
+        const restore = modal(page).locator('.hm-deleted').nth(0).locator('[data-hm="restoreDeleted"]');
+        await restore.click();
+        await expect(restore).toHaveAttribute('data-busy', 'busy');
+        await expect(restore).toHaveAttribute('aria-disabled', 'true');
+        await expect(restore.locator('.busy-slot .busy-spin')).toHaveCount(1);
+        await restore.click({ force: true });
+        release();
+        await expect(toast(page, 'The event is restored.')).toBeVisible();
+        expect(history.writes.delete).toEqual([{ event: 'E9', do: 'restore' }]);
+
+        held = new Promise<void>(r => { release = r; });
+        await tab(page, 'regions').click();
+        expect(await rowMenu(page, 'at-lower-austria')).toEqual(['first', 'hideAll', 'skip']);
+        await page.locator('.hm-menu [data-scope="first"]').click();
+        const dots = region(page, 'at-lower-austria').locator('.hm-dots');
+        await expect(dots).toHaveAttribute('data-busy', 'busy');
+        await expect(dots).toHaveAttribute('aria-busy', 'true');
+        await dots.click({ force: true });
+        await expect(page.locator('.hm-menu')).toHaveCount(0);
+        release();
+        await expect(dots).not.toHaveAttribute('data-busy', 'busy');
+        expect(history.writes.first).toEqual([{ region: 'at-lower-austria' }]);
+    });
+
     test('Find first: the research\'s queue, the sentence under the row with the pace', async ({ page }) => {
         const { history } = await setup(page, { history: fakeHistoryR1({ pace: 'rare' }) });
         await openManager(page);

@@ -41,6 +41,7 @@ import { drawTiles, dotsHtml, mapSize, type SmallMapView } from './places-find-u
 import { fetchStatus, liveSession } from './research-ui.js';
 import { normalizeModal } from './modal-skeleton.js';
 import { uiModule } from './module.js';
+import { runBusy } from './busy.js';
 import { helpMark } from './help-mark.js';
 import type { ToastWorkEnd } from './toast.js';
 
@@ -58,6 +59,8 @@ const MAP_H = 260;
 const STATUS_TIMEOUT_MS = 4000;
 /** "Keep all" names the places up to this many. */
 const KEEP_NAMES = 3;
+/** The identity (`data-action`) of the button whose write runs: its state follows it through a redraw. */
+const WORKING = 'waiting-place-working';
 
 interface Preview {
     kind: 'accept' | 'keep';
@@ -76,6 +79,8 @@ const view = {
     answered: new Map<string, number>(),
     /** A write runs (one at a time). */
     busy: false,
+    /** The button whose write runs (its question, its `data-wait-act`): it says the work, the rest wait locked (B30, B31). */
+    busyOn: null as { place: string; act: string } | null,
     /** Questions whose map is shown (a phone held sideways). */
     mapOpen: new Set<string>(),
     /** The question the window was opened at (its card stays marked through redraws). */
@@ -317,7 +322,8 @@ export const waitingPlacesMethods = uiModule({
             <strong class="waiting-places-preview-title">${esc(title)}</strong>
             <ul>${lines.map(l => `<li>${esc(l)}</li>`).join('')}</ul>
             <div class="waiting-places-preview-buttons">
-                <button type="button" class="primary waiting-places-go" data-wait-act="bulk-go"${view.busy || (p.kind === 'accept' && p.dry === null) ? ' disabled' : ''}>${esc(go)}</button>
+                <button type="button" class="primary waiting-places-go" data-wait-act="bulk-go"${view.busy && view.busyOn?.act === 'bulk-go' ? ` data-action="${WORKING}"`
+                    : view.busy || (p.kind === 'accept' && p.dry === null) ? ' disabled' : ''}>${esc(go)}</button>
                 <button type="button" class="secondary waiting-places-cancel" data-wait-act="bulk-cancel">${esc(W.cancel)}</button>
             </div>
         </div>`;
@@ -404,10 +410,10 @@ export const waitingPlacesMethods = uiModule({
             });
         });
         card.querySelectorAll<HTMLButtonElement>('.waiting-place-pick').forEach(btn => {
-            btn.onclick = () => void this.answerWaitingPlace(w, btn.dataset.cand as PlaceAnswerTake);
+            btn.onclick = () => void this.answerWaitingPlace(w, btn.dataset.cand as PlaceAnswerTake, btn.dataset.waitAct ?? '');
         });
         card.querySelectorAll<HTMLButtonElement>('.waiting-place-choice').forEach(btn => {
-            btn.onclick = () => void this.answerWaitingPlace(w, btn.dataset.take as PlaceAnswerTake);
+            btn.onclick = () => void this.answerWaitingPlace(w, btn.dataset.take as PlaceAnswerTake, btn.dataset.waitAct ?? '');
         });
         const toggle = card.querySelector<HTMLButtonElement>('.waiting-place-maptoggle');
         if (toggle) toggle.onclick = () => {
@@ -415,7 +421,11 @@ export const waitingPlacesMethods = uiModule({
             else view.mapOpen.add(w.place);
             this.renderWaitingPlaces();
         };
-        if (view.busy) card.querySelectorAll<HTMLButtonElement>('.waiting-place-pick, .waiting-place-choice').forEach(b => { b.disabled = true; });
+        if (view.busy) card.querySelectorAll<HTMLButtonElement>('.waiting-place-pick, .waiting-place-choice').forEach(b => {
+            // The one working keeps its state through a redraw (its identity), the others are locked.
+            if (view.busyOn?.place === w.place && view.busyOn.act === b.dataset.waitAct) b.dataset.action = WORKING;
+            else b.disabled = true;
+        });
         return card;
     },
 
@@ -597,13 +607,12 @@ export const waitingPlacesMethods = uiModule({
      * Refused: why, and nothing changes (a question changed meanwhile:
      * "Awaiting action" is read again).
      */
-    async answerWaitingPlace(w: PlaceQuestion, take: PlaceAnswerTake): Promise<void> {
+    async answerWaitingPlace(w: PlaceQuestion, take: PlaceAnswerTake, act = ''): Promise<void> {
         const access = this.waitingPlacesAccess();
         if (view.busy || !access.canAnswer || !access.base || !take) return;
-        view.busy = true;
-        this.renderWaitingPlaces();
-        const res = await postPlacesAnswer(access.base, { place: w.place, take }, access.features);
-        view.busy = false;
+        const base = access.base;
+        const res = await this.waitingPlacesWrite({ place: w.place, act }, () => postPlacesAnswer(base, { place: w.place, take }, access.features));
+        if (!res) { this.renderWaitingPlaces(); return; }
         if (!res.ok) {
             this.showWaitingPlacesRefusal(res);
             this.renderWaitingPlaces();
@@ -621,6 +630,23 @@ export const waitingPlacesMethods = uiModule({
         } : {});
         this.renderWaitingPlaces();
         await this.waitingPlacesWritten();
+    },
+
+    /**
+     * One write of the questions (one at a time): the others locked, the clicked button says "Sending…" from the
+     * click until the research answers (B30, B31). Undefined: it failed on its way (said at the button).
+     */
+    async waitingPlacesWrite<T>(on: { place: string; act: string }, write: () => Promise<T>): Promise<T | undefined> {
+        view.busy = true;
+        view.busyOn = on;
+        this.renderWaitingPlaces();
+        const el = document.querySelector<HTMLElement>(`#${MODAL_ID} [data-action="${WORKING}"]`);
+        try {
+            return el ? await runBusy(el, write, { label: strings.busy.sending, kind: 'local' }) : await write();
+        } finally {
+            view.busy = false;
+            view.busyOn = null;
+        }
     },
 
     /** What a toast says after an answer. */
@@ -647,10 +673,10 @@ export const waitingPlacesMethods = uiModule({
         const access = this.waitingPlacesAccess();
         if (!p || view.busy || !access.canAnswer || !access.base) return;
         const W = strings.places.waiting;
-        view.busy = true;
-        this.renderWaitingPlaces();
-        const res = await postPlacesAnswer(access.base, { places: p.places, take: p.kind === 'accept' ? 'first' : 'keep' }, access.features);
-        view.busy = false;
+        const base = access.base;
+        const res = await this.waitingPlacesWrite({ place: '', act: 'bulk-go' },
+            () => postPlacesAnswer(base, { places: p.places, take: p.kind === 'accept' ? 'first' : 'keep' }, access.features));
+        if (!res) { this.renderWaitingPlaces(); return; }
         if (!res.ok || res.kind !== 'bulk') {
             if (!res.ok) this.showWaitingPlacesRefusal(res);
             this.renderWaitingPlaces();

@@ -238,6 +238,29 @@ test.describe('Kinds of history: Settings', () => {
         await expect(kindSwitch(page, 'law')).toHaveAttribute('data-state', 'on');
     });
 
+    test('§2: Continue in the research says Sending… on its button through the write, a second click sends nothing', async ({ page }) => {
+        const { history } = await setup(page, { kinds: FAKE_KINDS.filter(k => k !== 'law' && k !== 'economy'), own: true });
+        let release!: () => void;
+        const held = new Promise<void>(r => { release = r; });
+        await page.route(url => url.pathname.endsWith('/history/kinds'), async route => {
+            if (route.request().method() === 'POST') await held;
+            await route.fallback();
+        });
+        await openSettings(page);
+        await openKinds(page);
+        await kindSwitch(page, 'law').click();
+        const pend = page.locator('#history-kinds-pend');
+        const go = pend.locator('[data-hk-action="go"]');
+        await go.click();
+        await expect(go).toHaveAttribute('data-busy', 'busy');
+        await expect(go).toContainText('Sending…');
+        await go.click({ force: true });
+        release();
+        await expect(pend).toHaveClass(/is-waiting/);
+        expect(history.kindsWrites).toEqual([{ kinds: FAKE_KINDS.filter(k => k !== 'economy'), scope: 'tree' }]);
+        expect((await links(page)).filter(l => l.startsWith('strom-research://history-kinds'))).toHaveLength(1);
+    });
+
     test('§2: the confirmation of a switch-off without a preview says it without a number', async ({ page }) => {
         const { history } = await setup(page, { features: KINDS_FEATURES.filter(f => f !== 'history.align') });
         await openSettings(page);

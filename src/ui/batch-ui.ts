@@ -88,6 +88,10 @@ interface Run {
     hidden: boolean;
     result: DoneReply | null;
     resume: (() => void) | null;
+    /** Pause asked: it comes once the file on its way is in, and only then is "Paused" said (B108). */
+    pauseAsked: boolean;
+    /** Who waits for the loop to reach a pause or its end (the states of Pause and Cancel). */
+    waits: (() => void)[];
 }
 
 let st: {
@@ -106,6 +110,21 @@ let run: Run | null = null;
 /** A batch id safe inside the line's inline handler (the bridge's ids are UUIDs or `b-…`). */
 const BATCH_LINK_ID = /^[A-Za-z0-9_.-]{1,120}$/;
 let downTimer: ReturnType<typeof setInterval> | null = null;
+
+/** The loop reached a pause or its end: whoever waits for it looks again. */
+function wakeRun(r: Run): void {
+    const waits = r.waits;
+    r.waits = [];
+    for (const w of waits) w();
+}
+
+/** Until the loop has reached what `done` says (a pause, the end). */
+function runReached(r: Run, done: () => boolean): Promise<void> {
+    return new Promise(resolve => {
+        const check = (): void => { if (done()) resolve(); else r.waits.push(check); };
+        check();
+    });
+}
 
 function esc(text: string): string {
     return text
@@ -504,10 +523,10 @@ export const batchMethods = uiModule({
                     <p class="batch-keep-tab">${esc(b.keepTabHide)}</p>
                 </div>
                 <div class="buttons batch-footer">
-                    <button type="button" class="secondary is-danger-text" data-act="cancel-run">${esc(b.cancel)}</button>
+                    <button type="button" class="secondary is-danger-text" data-act="cancel-run" data-action="batch-cancel">${esc(b.cancel)}</button>
                     <span class="batch-foot-note"></span>
                     <button type="button" class="secondary" data-act="hide">${esc(b.hide)}</button>
-                    <button type="button" class="primary" data-act="${r.paused ? 'resume' : 'pause'}">${esc(r.paused ? b.resumeBtn : b.pause)}</button>
+                    <button type="button" class="primary" data-act="${r.paused ? 'resume' : 'pause'}" data-action="${r.paused ? 'batch-resume' : 'batch-pause'}">${esc(r.paused ? b.resumeBtn : b.pause)}</button>
                 </div>`;
     },
 
@@ -610,7 +629,14 @@ export const batchMethods = uiModule({
                 case 'next': if (s && s.step === 'check') { s.step = 'send'; this.renderBatchDialog(); } break;
                 case 'expand-all': if (s) { batchFolderPaths(s.items).forEach(p => s.full.add(p)); s.full.add(''); s.collapsed.clear(); this.renderBatchDialog(); } break;
                 case 'go': void this.startBatchRun(); break;
-                case 'pause': if (run) { run.paused = true; this.renderBatchDialog(); } break;
+                case 'pause': {
+                    // The file on its way goes on (up to a minute): "Pausing…" on the button until it is in (B108).
+                    const r = run;
+                    if (!r || r.paused || r.pauseAsked) break;
+                    r.pauseAsked = true;
+                    void runBusy(el, () => runReached(r, () => r.paused || r.finished), { label: strings.busy.pausing, kind: 'local' });
+                    break;
+                }
                 case 'resume': this.resumeBatchRun(); break;
                 case 'seal': this.researchSyncAction('sealTakeOver'); break;
                 case 'hide': this.hideBatchDialog(); break;
@@ -759,6 +785,7 @@ export const batchMethods = uiModule({
             person, personId: s.personId, note: s.note.trim(), queue, index: 0, total: queue.length,
             totalBytes: queue.reduce((sum, i) => sum + i.size, 0), doneBytes: 0, received: 0, skipped: 0, skippedAsked: 0, refused: [],
             current: '', paused: false, lost: false, held: '', heldSeal: false, cancelled: false, finished: false, hidden: false, result: null, resume: null,
+            pauseAsked: false, waits: [],
         };
         s.step = 'progress';
         window.addEventListener('beforeunload', onLeave);
@@ -785,8 +812,13 @@ export const batchMethods = uiModule({
             if (force || Date.now() - lastDraw > 250) { lastDraw = Date.now(); this.renderBatchDialog(); }
         };
         while (r.index < r.queue.length && !r.cancelled) {
+            if (r.pauseAsked) {
+                r.pauseAsked = false;
+                r.paused = true;
+            }
             if (r.paused) {
                 draw(true);
+                wakeRun(r);
                 await new Promise<void>(resolve => { r.resume = resolve; });
                 r.resume = null;
                 continue;
@@ -811,6 +843,7 @@ export const batchMethods = uiModule({
             r.paused = true;
             r.lost = closed === 'down';
             draw(true);
+            wakeRun(r);
             await new Promise<void>(resolve => { r.resume = resolve; });
             r.resume = null;
         }
@@ -827,6 +860,7 @@ export const batchMethods = uiModule({
         } else {
             draw(true);
         }
+        wakeRun(r);
         this.refreshResearchSyncUi();
     },
 
@@ -982,6 +1016,7 @@ export const batchMethods = uiModule({
         const bridge = parseLiveBridge(storedResearchBridge(run.researchId)?.base);
         if (bridge) run.base = bridge.base;
         run.paused = false;
+        run.pauseAsked = false;
         run.lost = false;
         run.held = '';
         run.heldSeal = false;
@@ -996,7 +1031,11 @@ export const batchMethods = uiModule({
         if (!ok) return;
         r.cancelled = true;
         r.paused = false;
+        r.pauseAsked = false;
         r.resume?.();
+        // The file on its way goes on and the batch is closed with what came: "Cancelling…" until then (B109).
+        const el = document.querySelector<HTMLElement>(`#${DIALOG_ID} [data-action="batch-cancel"]`);
+        if (el && !r.finished) await runBusy(el, () => runReached(r, () => r.finished), { label: strings.busy.cancelling, kind: 'local' });
     },
 
     /** Hide the window while it sends: the block in ⋯ → Research says how far it is, with "Show". */

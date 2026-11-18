@@ -281,6 +281,38 @@ test.describe('questions about places in Awaiting action', () => {
         await expect(win(page).locator('.waiting-places-accept')).toHaveText('Accept all suggested (3)');
     });
 
+    test('It is A and Accept n say Sending… on the button clicked until the research answers; the others stay locked, a second click sends nothing', async ({ page }) => {
+        const b = await research(page);
+        await openWin(page);
+        let release!: () => void;
+        let held = new Promise<void>(r => { release = r; });
+        await page.route(url => url.pathname.endsWith('/places/answer'), async route => {
+            const body = route.request().postDataJSON() as { dry?: boolean } | null;
+            if (route.request().method() === 'POST' && !body?.dry) await held;
+            await route.fallback();
+        });
+        const pick = cardOf(page, 'L0012').locator('.waiting-place-pick').first();
+        await pick.click();
+        await expect(pick).toHaveAttribute('data-busy', 'busy');
+        await expect(pick).toContainText('Sending…');
+        await expect(cardOf(page, 'L0013').locator('.waiting-place-pick').first()).toBeDisabled();
+        await pick.click({ force: true });
+        release();
+        await expect.poll(() => cards(page)).toEqual(['L0013', 'L0020', 'L0021', 'L0030']);
+        expect(b.places!.answers.filter(a => !(a as { dry?: boolean }).dry)).toHaveLength(1);
+
+        held = new Promise<void>(r => { release = r; });
+        await win(page).locator('.waiting-places-keep').click();
+        const go = win(page).locator('.waiting-places-go');
+        await go.click();
+        await expect(go).toHaveAttribute('data-busy', 'busy');
+        await expect(go).toContainText('Sending…');
+        await go.click({ force: true });
+        release();
+        await expect(win(page).locator('.waiting-places-preview')).toHaveCount(0);
+        expect(b.places!.answers.filter(a => !(a as { dry?: boolean }).dry)).toHaveLength(2);
+    });
+
     test('By area: the chip previews only its area\'s suggestions and accepts only them; Escape closes the preview first', async ({ page }) => {
         const b = await research(page);
         await openWin(page);

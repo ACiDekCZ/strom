@@ -27,7 +27,7 @@ import type { StromData, PersonId } from '../types.js';
 import { HISTORY_MANAGE_DIALOG_ID } from './history-ui.js';
 import { historyEventDescHtml } from './history-card-ui.js';
 import { historyKindSvg } from '../history-symbols.js';
-import type { Drawn } from './history-manage-ui.js';
+import { rowBusyAttrs, rowDotsInner, type Drawn } from './history-manage-ui.js';
 import { uiModule } from './module.js';
 import type { ToastWorkEnd } from './toast.js';
 
@@ -302,7 +302,7 @@ export const historyDetailMethods = uiModule({
             + `<span class="hd-mark hd-kind" title="${esc(h.kinds[ev.kind] ?? h.kinds.other)}">${historyKindSvg(ev.kind, 14)}</span>`
             + `<span class="pm-lifeline-desc">${desc}</span>`
             + (menu ? `<button type="button" class="pm-lifeline-hmore" data-hd="menu" data-ev="${id}" aria-haspopup="menu" aria-expanded="false"`
-                + ` aria-label="${esc(h.more)}" data-hfocus="more:${id}"${mem.busy.has(ev.id) ? ' disabled' : ''}>⋯</button>` : '')
+                + ` aria-label="${esc(h.more)}" data-hfocus="more:${id}"${rowBusyAttrs(mem.busy.has(ev.id))}>${rowDotsInner(mem.busy.has(ev.id))}</button>` : '')
             + '</div>';
     },
 
@@ -332,6 +332,8 @@ export const historyDetailMethods = uiModule({
         const t = e.target as HTMLElement;
         const btn = t.closest<HTMLElement>('[data-hd]');
         if (!btn || !el.contains(btn) || btn.tagName === 'INPUT' || btn.tagName === 'SELECT') return;
+        // An event's write on its way (B206): its "⋯" waits (drawn locked with its spinner, focus kept).
+        if (btn.getAttribute('aria-busy') === 'true') return;
         const key = el.dataset.key ?? '';
         const f = filterOf(key);
         const evId = btn.dataset.ev ?? '';

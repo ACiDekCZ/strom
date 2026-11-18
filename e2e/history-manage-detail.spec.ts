@@ -430,6 +430,28 @@ test.describe('History of places: a detail', () => {
         await expect(ev(page, 'E2').locator('[data-hd="unhide"]')).toHaveCount(0);
     });
 
+    test('an event\'s write on its way: its ⋯ says it (spinner, locked, focus kept) and opens no menu until the research answers', async ({ page }) => {
+        const { history } = await setup(page);
+        let release!: () => void;
+        const held = new Promise<void>(r => { release = r; });
+        await page.route(url => url.pathname.endsWith('/history/delete'), async route => {
+            if (route.request().method() === 'POST') await held;
+            await route.fallback();
+        });
+        await openDetail(page, 'cz-bohemia');
+        await eventMenu(page, 'E13');
+        await page.locator('.hd-menu [data-scope="delete"]').click();
+        await confirmModal(page).getByRole('button', { name: 'Delete', exact: true }).click();
+        const more = ev(page, 'E13').locator('[data-hd="menu"]');
+        await expect(more).toHaveAttribute('data-busy', 'busy');
+        await expect(more).toHaveAttribute('aria-busy', 'true');
+        await more.click({ force: true });
+        await expect(page.locator('.hd-menu')).toHaveCount(0);
+        release();
+        await expect(ev(page, 'E13')).toHaveCount(0);
+        expect(history.writes.delete).toEqual([{ event: 'E13' }]);
+    });
+
     test('delete (variant A): confirmed with Cancel first; Only hide; Delete moves it to Deleted, Undo restores it', async ({ page }) => {
         const { history } = await setup(page);
         await openDetail(page, 'cz-bohemia');

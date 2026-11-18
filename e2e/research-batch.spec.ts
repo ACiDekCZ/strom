@@ -148,6 +148,47 @@ test.describe('Add materials', () => {
         }
     });
 
+    test('Pause says Pausing… until the file on its way is in, then Paused; Cancel batch says Cancelling… until the batch is closed', async ({ page }) => {
+        const b = await fakeBridge(page, { accepts: BATCH_ACCEPTS });
+        await openResearch(page, { media: true });
+        await poll(page);
+        let release!: () => void;
+        let held = new Promise<void>(r => { release = r; });
+        await page.route(url => url.pathname.includes('/media/'), async route => {
+            if (route.request().method() === 'PUT') await held;
+            await route.fallback();
+        });
+        await page.evaluate(() => (window.Strom.UI as any).showBatchDialog());
+        await addFiles(page, ['Krabice/a.jpg', 'Krabice/b.jpg', 'Krabice/c.jpg']);
+        const dialog = page.locator('#batch-modal');
+        await dialog.locator('[data-act="next"]').click();
+        await dialog.getByRole('button', { name: 'Send 3 files' }).click();
+        await expect(dialog.locator('.batch-now')).toBeVisible();
+        const pause = dialog.locator('[data-act="pause"]');
+        await pause.click();
+        // The file on its way still goes: not "Paused" yet, the button says it is pausing (through the redraws).
+        await expect(pause).toHaveAttribute('data-busy', 'busy');
+        await expect(pause).toContainText('Pausing…');
+        await page.waitForTimeout(600);
+        await expect(dialog.locator('.batch-progress-title')).toHaveText('Sending to the research');
+        await expect(dialog.locator('[data-act="pause"]')).toHaveAttribute('data-busy', 'busy');
+        release();
+        await expect(dialog.locator('.batch-progress-title')).toHaveText('Paused');
+        expect(b.mediaPuts).toHaveLength(1);
+
+        held = new Promise<void>(r => { release = r; });
+        await dialog.locator('[data-act="resume"]').click();
+        await expect(dialog.locator('.batch-progress-title')).toHaveText('Sending to the research');
+        await dialog.locator('[data-act="cancel-run"]').click();
+        await page.locator('#confirm-ok-btn').click();
+        const cancel = dialog.locator('[data-act="cancel-run"]');
+        await expect(cancel).toHaveAttribute('data-busy', 'busy');
+        await expect(cancel).toContainText('Cancelling…');
+        release();
+        await expect(dialog.locator('.batch-confirm-title')).toContainText('is in the research');
+        expect(b.batchDone).toHaveLength(1);
+    });
+
     test('files dropped onto the window open the review', async ({ page }) => {
         await fakeBridge(page, { accepts: BATCH_ACCEPTS });
         await openResearch(page, { media: true });

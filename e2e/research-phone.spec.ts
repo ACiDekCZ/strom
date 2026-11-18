@@ -345,6 +345,58 @@ test.describe('Connect phone', () => {
         expect(b.phone!.qrAsks).toHaveLength(1);
     });
 
+    test('Turn connection off and Unpair say their work on the button until the research answers; a second click sends nothing', async ({ page }) => {
+        const b = await setup(page, fakePhone({
+            state: 'on', since: new Date().toISOString(),
+            phones: [entry('ph_iphone001', 'iPhone (Safari)'), entry('ph_pixel0002', 'Pixel 8 (Chrome)')],
+        }));
+        const ph = b.phone!;
+        let release!: () => void;
+        let held = new Promise<void>(r => { release = r; });
+        await page.route(url => /\/phone\/(off|remove\/[^/]+)$/.test(url.pathname), async route => {
+            await held;
+            await route.fallback();
+        });
+        const dialog = await openDialog(page);
+        const unpair = dialog.getByRole('button', { name: 'Unpair iPhone (Safari)' });
+        await unpair.click();
+        await expect(unpair).toHaveAttribute('data-busy', 'busy');
+        await expect(unpair).toContainText('Removing…');
+        await unpair.click({ force: true });
+        release();
+        await expect(dialog.locator('.phone-row.is-removed')).toHaveCount(1);
+        expect(ph.posts).toEqual(['remove/ph_iphone001']);
+
+        held = new Promise<void>(r => { release = r; });
+        const off = dialog.getByRole('button', { name: 'Turn connection off' });
+        await off.click();
+        await expect(off).toHaveAttribute('data-busy', 'busy');
+        await expect(off).toContainText('Turning off…');
+        await off.click({ force: true });
+        release();
+        await expect(dialog.locator('.phone-bar.is-off')).toContainText('Connection off');
+        expect(ph.posts).toEqual(['remove/ph_iphone001', 'off']);
+    });
+
+    test('another network\'s code: its link says Loading… until the code comes', async ({ page }) => {
+        const b = await setup(page, fakePhone({
+            state: 'on', since: new Date().toISOString(),
+            addresses: [{ url: 'http://192.168.1.23:47800', iface: 'Wi-Fi', kind: 'wifi' }, { url: 'http://10.0.0.5:47800', iface: 'Ethernet', kind: 'ethernet' }],
+        }));
+        const dialog = await openDialog(page);
+        await expect(dialog.locator('.phone-url')).toHaveText('http://192.168.1.23:47800');
+        let release!: () => void;
+        const held = new Promise<void>(r => { release = r; });
+        await page.route(url => url.pathname.endsWith('/phone/qr.svg'), async route => { await held; await route.fallback(); });
+        const other = dialog.getByRole('button', { name: 'Show the code for 10.0.0.5' });
+        await other.click();
+        await expect(other).toHaveAttribute('data-busy', 'busy');
+        await other.click({ force: true });
+        release();
+        await expect(dialog.locator('.phone-url')).toHaveText('http://10.0.0.5:47800');
+        expect(b.phone!.qrAsks).toHaveLength(2);
+    });
+
     test('two networks: the code for the other one on request', async ({ page }) => {
         const b = await setup(page, fakePhone({
             state: 'on', since: new Date().toISOString(),

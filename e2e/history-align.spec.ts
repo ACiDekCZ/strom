@@ -378,6 +378,25 @@ test.describe('Kinds of history: the manager', () => {
         await expect(hand.locator('.hm-row.hm-hidden')).toHaveCount(1);
     });
 
+    test('Hidden: Show again says Saving… on its button until the research answers; a second click sends nothing', async ({ page }) => {
+        const { history } = await setup(page);
+        let release!: () => void;
+        const held = new Promise<void>(r => { release = r; });
+        await page.route(url => url.pathname.endsWith('/history/align/undo'), async route => {
+            if (route.request().method() === 'POST') await held;
+            await route.fallback();
+        });
+        await openManager(page, { tab: 'hidden' });
+        const act = manager(page).locator('.hm-align-kind[data-kind="war"] [data-hm="showAgainKind"]');
+        await act.click();
+        await expect(act).toHaveAttribute('data-busy', 'busy');
+        await expect(act).toContainText('Saving…');
+        await act.click({ force: true });
+        release();
+        await expect(toast(page, 'Events of the kind war are visible again in this tree.')).toBeVisible();
+        expect(history.align!.undos).toEqual([{ undo: EARLIER }]);
+    });
+
     test('Hidden: Show again without one alignment shows each event; Undo hides them again', async ({ page }) => {
         const { history } = await setup(page, { earlier: false });
         history.payload.hidden.push(

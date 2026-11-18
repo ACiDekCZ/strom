@@ -108,6 +108,26 @@ test.describe('History of places: a place\'s own history on request (§6a)', () 
         await expect(toast(page, 'Opening the agent…')).toBeVisible();
     });
 
+    test('Continue says Sending… on its button until the research answers; a second click sends nothing', async ({ page }) => {
+        const { history } = await setup(page);
+        let release!: () => void;
+        const held = new Promise<void>(r => { release = r; });
+        await page.route(url => url.pathname.endsWith('/history/place'), async route => {
+            if (route.request().method() === 'POST') await held;
+            await route.fallback();
+        });
+        await openCard(page);
+        await offerLink(page).click();
+        const go = dialog(page).locator('[data-hpf="go"]');
+        await go.click();
+        await expect(go).toHaveAttribute('data-busy', 'busy');
+        await expect(go).toContainText('Sending…');
+        await go.click({ force: true });
+        release();
+        await expect(dialog(page)).toHaveCount(0);
+        expect(history.writes.place).toEqual([{ place: 'L0001' }]);
+    });
+
     test('the estimate: minutes, minutes with USD; the research\'s surroundings; Enter and Escape cancel', async ({ page }) => {
         const history = fakeHistoryR1({ placeEstimate: { minutes: [20, 40] } });
         history.payload.places['Čapkov'].area = { cs: 'Čapkovsko', en: 'the Čapkov district' };

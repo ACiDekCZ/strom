@@ -30,9 +30,13 @@ import { historyKindSvg } from '../history-symbols.js';
 import { researchActionLabel } from './research-open-mark.js';
 import { activeResearchId, bridgeBase } from './history-ui.js';
 import { uiModule } from './module.js';
+import { activatedElement, runBusy } from './busy.js';
 import {
     startPend, endPend, dropPend, isPend, anyPend, pendAttrs, pendStatusHtml, pendRefusalHtml, clearPendRefusals, type PendRefusal,
 } from './switch-pend.js';
+
+/** The identity (`data-action`) of "Continue in the research" and its "Open again": a working state follows it. */
+const PEND_GO = 'hk-pend-go';
 
 /** What changes of the kinds searched wait on this page (never in storage). */
 export interface HistoryKindsDraft {
@@ -410,12 +414,12 @@ export const historyKindsMethods = uiModule({
             if (p.waiting) {
                 html += `<p class="history-kinds-pend-title">${esc(h.waitTitle)}</p><div class="history-kinds-chips">${chips}</div>`
                     + `<p>${esc(h.waitBody)}</p><div class="history-kinds-actions">`
-                    + `<button type="button" class="primary" data-hk-action="again" onclick="window.Strom.UI.historyKindsPendAction('again')">${researchActionLabel(h.openAgain, researchLinkMark('history-kinds'))}</button>`;
+                    + `<button type="button" class="primary" data-hk-action="again" data-action="${PEND_GO}" onclick="window.Strom.UI.historyKindsPendAction('again')">${researchActionLabel(h.openAgain, researchLinkMark('history-kinds'))}</button>`;
             } else {
                 html += `<p class="history-kinds-pend-title">${esc(h.pendTitle(pend.length))}</p><div class="history-kinds-chips">${chips}</div>`
                     + `<p class="history-kinds-cost">${esc(this.historyKindsCostText(rid, searched.kinds, p))}</p>`
                     + `<p>${esc(h.pendTerminal)}</p><div class="history-kinds-actions">`
-                    + `<button type="button" class="primary" data-hk-action="go"${p.busy ? ' aria-disabled="true"' : ''} onclick="window.Strom.UI.historyKindsPendAction('go')">${researchActionLabel(h.placeGoTerminal, researchLinkMark('history-kinds'))}</button>`;
+                    + `<button type="button" class="primary" data-hk-action="go" data-action="${PEND_GO}"${p.busy ? ' aria-disabled="true"' : ''} onclick="window.Strom.UI.historyKindsPendAction('go')">${researchActionLabel(h.placeGoTerminal, researchLinkMark('history-kinds'))}</button>`;
             }
             html += `<button type="button" class="secondary" data-hk-action="cancel" onclick="window.Strom.UI.historyKindsPendAction('cancel')">${esc(strings.buttons.cancel)}</button></div></div>`;
         }
@@ -729,15 +733,30 @@ export const historyKindsMethods = uiModule({
             if (!searched || !base || !status || p.busy || !p.pend.size) return;
             const body: HistoryKindsBody = p.inherit ? { scope: 'tree', inherit: true }
                 : { kinds: ordered([...searched.kinds, ...p.pend]), scope: searched.own === false ? 'default' : 'tree' };
-            p.busy = true;
-            this.renderHistorySettingsIfOpen();
-            const scheme = announcedResearchScheme();
-            const r = await postHistoryKinds(base, body, status.features, { tree: rid, ...(scheme ? { scheme } : {}) });
-            p.busy = false;
+            // The button says "Sending…" through the write, then "Opening the research…" until the terminal takes the
+            // link (B179); its identity keeps the state through the redraws (then on "Open again").
+            const el = activatedElement()?.closest<HTMLElement>(`[data-action="${PEND_GO}"]`) ?? null;
+            const box = el?.closest<HTMLElement>('[id]')?.id;
+            const write = async () => {
+                p.busy = true;
+                this.renderHistorySettingsIfOpen();
+                const scheme = announcedResearchScheme();
+                try {
+                    return await postHistoryKinds(base, body, status.features, { tree: rid, ...(scheme ? { scheme } : {}) });
+                } finally {
+                    p.busy = false;
+                }
+            };
+            const r = el ? await runBusy(el, write, { label: strings.busy.sending, kind: 'write', timeoutMs: HISTORY_WRITE_TIMEOUT_MS + 5000 }) : await write();
+            if (!r) {
+                this.renderHistorySettingsIfOpen();
+                return;
+            }
             if (!r.ok && r.code === 'link' && r.link) {
                 p.link = r.link;
                 p.waiting = true;
-                this.launchResearchLink(r.link, 'terminal');
+                const now = el?.isConnected ? el : box ? document.getElementById(box)?.querySelector<HTMLElement>(`[data-action="${PEND_GO}"]`) : null;
+                void this.launchResearchLink(r.link, 'terminal', now ?? null);
             } else if (r.ok) {
                 // Nothing to add after all (the research has them already).
                 if (r.state) p.written = { kinds: r.state.kinds, own: r.state.kindsOwn, at: Date.now() };

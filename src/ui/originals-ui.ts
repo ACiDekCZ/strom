@@ -109,6 +109,8 @@ let sending = false;
 /** The kick under way (callers wait for it) and whether another pass is wanted after it. */
 let kickRun: Promise<void> | null = null;
 let kickAgain = false;
+/** The next pass waits for another tab's sending to end instead of leaving it to that tab (Send now, B103). */
+let kickWait = false;
 
 /** The research's id for each hash it confirmed, per research (this browser). */
 function sentMap(researchId: string): Record<string, string> {
@@ -224,13 +226,14 @@ async function allQueued(): Promise<QueuedOriginal[]> {
 
 /**
  * Run `fn` as the only sender across tabs (Web Lock); without locks, as the
- * only one in this tab. False when another tab is sending right now.
+ * only one in this tab. False when another tab is sending right now (`wait`:
+ * after that tab's sending ends, then it runs).
  */
-async function asOnlySender(fn: () => Promise<void>): Promise<boolean> {
+async function asOnlySender(fn: () => Promise<void>, wait = false): Promise<boolean> {
     const locks = (navigator as Navigator & { locks?: LockManager }).locks;
     if (locks?.request) {
         let ran = false;
-        await locks.request('strom-originals', { ifAvailable: true }, async (lock) => {
+        await locks.request('strom-originals', wait ? {} : { ifAvailable: true }, async (lock) => {
             if (!lock) return;
             ran = true;
             await fn();
@@ -639,7 +642,7 @@ export const originalsMethods = uiModule({
             const btn = e.currentTarget as HTMLElement;
             // B103: the button's working state until the bridge took the originals (a second click does nothing).
             if (btn.dataset.up) {
-                void runBusy(btn, () => this.researchOriginalsKick(), { label: strings.busy.sending, kind: 'write', rowOf: row })
+                void runBusy(btn, () => this.researchOriginalsKick(true), { label: strings.busy.sending, kind: 'write', rowOf: row })
                     .then(() => this.renderOriginalsQueueRow());
             }
             else this.researchSyncAction('startResearch');
@@ -775,13 +778,17 @@ export const originalsMethods = uiModule({
      * the bridge answers. Called when a file is queued and after each answer
      * of the bridge.
      */
-    researchOriginalsKick(): Promise<void> {
+    researchOriginalsKick(wait = false): Promise<void> {
+        // `wait` (Send now): another tab's sending is waited for, then what is left goes from here.
+        if (wait) kickWait = true;
         // A pass under way: one more after it for what was queued meanwhile; the caller waits for both.
         if (kickRun) { kickAgain = true; return kickRun; }
         kickRun = (async () => {
             do {
                 kickAgain = false;
-                await this.researchOriginalsKickOnce();
+                const w = kickWait;
+                kickWait = false;
+                await this.researchOriginalsKickOnce(w);
             } while (kickAgain);
         })().finally(() => { kickRun = null; });
         return kickRun;
@@ -804,7 +811,7 @@ export const originalsMethods = uiModule({
         return null;
     },
 
-    async researchOriginalsKickOnce(): Promise<void> {
+    async researchOriginalsKickOnce(wait = false): Promise<void> {
         if (sending) return;
         const link = this.researchOriginalsLink();
         if (!link || !this.researchMediaAccepts(link.researchId)) return;
@@ -873,7 +880,7 @@ export const originalsMethods = uiModule({
                     if (sendRun) { sendRun.done++; sendRun.bytes += rec.bytes; }
                     changed = true;
                 }
-            });
+            }, wait);
         } catch (err) {
             console.warn('Sending originals failed', err);
         } finally {

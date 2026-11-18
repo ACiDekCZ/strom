@@ -100,6 +100,28 @@ const dialog = (page: Page) => page.locator('#research-adopt-modal');
 const steps = (page: Page) => dialog(page).locator('ul.steps > li');
 
 test.describe('Hand over: the dialog shows its steps', () => {
+    test('the research\'s status asked before the dialog: a progress toast says it until the dialog comes', async ({ page }) => {
+        await treeToHand(page);
+        let release!: () => void;
+        const held = new Promise<void>(r => { release = r; });
+        let asked = 0;
+        await page.route(url => url.pathname.endsWith('/status'), async route => {
+            asked++;
+            await held;
+            await route.fallback();
+        });
+        void page.evaluate((base) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: base })), BRIDGE);
+        await expect.poll(() => asked).toBeGreaterThan(0);
+        const toast = page.locator('.toast', { hasText: 'Connecting to the research…' });
+        await expect(toast).toBeVisible();
+        await page.waitForTimeout(300);
+        await expect(toast).toBeVisible();
+        await expect(page.locator('#research-adopt-confirm')).toHaveCount(0);
+        release();
+        await expect(page.locator('#research-adopt-confirm')).toBeVisible();
+        await expect(toast).toHaveCount(0);
+    });
+
     test('asked twice it posts once; the steps end with ✓, then Close · Open the research', async ({ page }) => {
         const { bridge } = await treeToHand(page);
         await comeBack(page);

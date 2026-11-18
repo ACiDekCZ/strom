@@ -17,6 +17,7 @@ import {
 } from '../phone.js';
 import { onComputer, fetchWithTimeout, bridgeFailure } from './research-ui.js';
 import { uiModule } from './module.js';
+import { runBusy } from './busy.js';
 import { tallyBridgeAsk } from '../bridge-ask.js';
 
 const DIALOG_ID = 'phone-modal';
@@ -627,7 +628,7 @@ export const phoneMethods = uiModule({
                         <span class="phone-dot is-on" aria-hidden="true"></span>
                         <div class="phone-bar-text"><strong>${esc(p.statusOn(ip))}</strong>${Number.isFinite(since)
                             ? `<span>${esc(p.statusSince(formatLiveClock(since, Date.now(), getCurrentLanguage())))}</span>` : ''}</div>
-                        <button type="button" class="secondary btn-sm" data-act="disable"${d.lost ? ' disabled' : ''}>${esc(p.disable)}</button>
+                        <button type="button" class="secondary btn-sm" data-act="disable" data-action="phone-disable"${d.lost ? ' disabled' : ''}>${esc(p.disable)}</button>
                     </div>
                     <p class="phone-keep">${esc(p.statusKeep)}</p>`;
     },
@@ -657,7 +658,7 @@ export const phoneMethods = uiModule({
                     <div class="phone-bar sel-opt is-error" data-sel-form="chip" role="status">
                         <span class="phone-dot is-error" aria-hidden="true"></span>
                         <div class="phone-bar-text"><strong>${esc(title)}</strong><span>${esc(sub)}</span></div>
-                        <button type="button" class="secondary btn-sm" data-act="disable"${d.lost ? ' disabled' : ''}>${esc(p.disable)}</button>
+                        <button type="button" class="secondary btn-sm" data-act="disable" data-action="phone-disable"${d.lost ? ' disabled' : ''}>${esc(p.disable)}</button>
                     </div>`;
     },
 
@@ -673,7 +674,7 @@ export const phoneMethods = uiModule({
         const nets = s.addresses.length >= 2 && picked
             ? `<div class="phone-nets">${[`<span>${esc(p.qrNet(phoneIp(picked.url), picked.kind))}</span>`,
                 ...s.addresses.filter(a => a.url !== picked.url).map(a =>
-                    `<button type="button" class="phone-link" data-act="address" data-id="${esc(a.url)}" aria-label="${esc(p.qrOtherSr(phoneIp(a.url)))}"${d.lost ? ' disabled' : ''}>${esc(p.qrOther(phoneIp(a.url), a.kind))}</button>`)].join('')}</div>`
+                    `<button type="button" class="phone-link" data-act="address" data-id="${esc(a.url)}" data-action="${esc(`phone-address:${a.url}`)}" aria-label="${esc(p.qrOtherSr(phoneIp(a.url)))}"${d.lost ? ' disabled' : ''}>${esc(p.qrOther(phoneIp(a.url), a.kind))}</button>`)].join('')}</div>`
             : '';
         const image = qr
             ? `<img class="phone-qr-img" src="${esc(qr.blobUrl)}" alt="${esc(p.qrAlt)}" width="216" height="216">`
@@ -681,7 +682,7 @@ export const phoneMethods = uiModule({
         const silent = qr && !expired && phoneSilent(s.lanSeenAt, qr.shownAt, now) ? this.phoneChecklistHtml() : '';
         const validity = expired
             ? `<div class="phone-expired" role="status"><strong>${esc(p.qrExpired)}</strong><span>${esc(p.qrExpiredHint)}</span>
-                <button type="button" class="primary btn-sm" data-act="new-code"${d.lost ? ' disabled' : ''}>${esc(p.qrNew)}</button></div>`
+                <button type="button" class="primary btn-sm" data-act="new-code" data-action="phone-new-code"${d.lost ? ' disabled' : ''}>${esc(p.qrNew)}</button></div>`
             : qr && Number.isFinite(qr.expiresAt) ? '<p class="phone-valid" data-countdown></p>' : '';
         return `
                     <div class="phone-qr">
@@ -724,12 +725,12 @@ export const phoneMethods = uiModule({
             .filter((x): x is PhoneEntry => !!x);
         // One row per older entry; a removed row goes (no Undo, the entry is dead), an empty box goes too.
         const rows = old.filter(o => !d.replacedDone.has(o.id)).map(o => `
-                            <div class="phone-replaces-row">
+                            <div class="phone-replaces-row" data-id="${esc(o.id)}">
                                 <div class="phone-replaces-text">
                                     <span>${esc(p.replacesRow(o.name || p.unnamed, phoneDate(o.pairedAt, getCurrentLanguage())))}</span>
                                     ${o.stale ? `<small>${esc(p.replacesStale)}</small>` : ''}
                                 </div>
-                                <button type="button" class="secondary btn-sm" data-act="replace" data-id="${esc(o.id)}"${d.lost ? ' disabled' : ''}>${esc(p.replacesBtn)}</button>
+                                <button type="button" class="secondary btn-sm" data-act="replace" data-action="phone-replace" data-id="${esc(o.id)}"${d.lost ? ' disabled' : ''}>${esc(p.replacesBtn)}</button>
                             </div>`).join('');
         const replaces = rows ? `
                         <div class="phone-replaces">${rows}
@@ -755,20 +756,20 @@ export const phoneMethods = uiModule({
             const name = entry.name || p.unnamed;
             if (removed) {
                 return `
-                        <li class="phone-row is-removed">
+                        <li class="phone-row is-removed" data-id="${esc(entry.id)}">
                             <div class="phone-row-text"><s class="phone-row-name">${esc(name)}</s><span class="phone-row-sub">${esc(p.rowUnpaired)}</span></div>
-                            <button type="button" class="phone-link" data-act="undo" data-id="${esc(entry.id)}"${d.lost ? ' disabled' : ''}>${esc(p.rowUndo)}</button>
+                            <button type="button" class="phone-link" data-act="undo" data-action="phone-undo" data-id="${esc(entry.id)}"${d.lost ? ' disabled' : ''}>${esc(p.rowUndo)}</button>
                         </li>`;
             }
             const paired = phoneDate(entry.pairedAt, lang);
             return `
-                        <li class="phone-row">
+                        <li class="phone-row" data-id="${esc(entry.id)}">
                             <div class="phone-row-text">
                                 <span class="phone-row-name">${esc(name)}</span>
                                 <span class="phone-row-sub">${paired ? `${esc(p.rowPaired(paired))} · ` : ''}<span data-seen="${esc(entry.lastSeenAt)}"></span></span>
                                 ${entry.stale ? `<span class="phone-row-stale">${esc(p.rowStale)}</span>` : ''}
                             </div>
-                            <button type="button" class="secondary btn-sm" data-act="unpair" data-id="${esc(entry.id)}" aria-label="${esc(p.rowUnpairSr(name))}"${d.lost ? ' disabled' : ''}>${esc(p.rowUnpair)}</button>
+                            <button type="button" class="secondary btn-sm" data-act="unpair" data-action="phone-unpair" data-id="${esc(entry.id)}" aria-label="${esc(p.rowUnpairSr(name))}"${d.lost ? ' disabled' : ''}>${esc(p.rowUnpair)}</button>
                         </li>`;
         }).join('');
         return `
@@ -790,7 +791,9 @@ export const phoneMethods = uiModule({
             case 'close': this.closePhoneDialog(); break;
             case 'start': this.phoneStartResearch(); break;
             case 'enable': void this.phoneEnable(); break;
-            case 'disable': void this.phoneDisable(); break;
+            // Through the bridge: each button says its work from the click until the dialog shows the outcome (C107);
+            // `data-action` keeps the state on the button through the dialog's redraws.
+            case 'disable': void runBusy(el, () => this.phoneDisable(), { label: strings.busy.turningOff, kind: 'bridge' }); break;
             case 'explain': d.explain = !d.explain; this.renderPhoneDialog(); break;
             case 'how': d.how = true; this.renderPhoneDialog(); break;
             case 'back':
@@ -806,12 +809,13 @@ export const phoneMethods = uiModule({
                 this.renderPhoneDialog();
                 void this.loadPhoneQr();
                 break;
-            case 'new-code': void this.loadPhoneQr(d.qr?.address ?? ''); break;
-            case 'address': void this.loadPhoneQr(id); break;
+            // The old code stays until the new one comes: the button says it is loading.
+            case 'new-code': void runBusy(el, () => this.loadPhoneQr(d.qr?.address ?? ''), { kind: 'bridge' }); break;
+            case 'address': void runBusy(el, () => this.loadPhoneQr(id), { kind: 'bridge' }); break;
             case 'paired-done': d.paired = null; d.wantQr = false; this.renderPhoneDialog(); break;
-            case 'unpair': void this.phoneUnpair(id); break;
-            case 'undo': void this.phoneRestore(id); break;
-            case 'replace': void this.phoneUnpair(id, true); break;
+            case 'unpair': void runBusy(el, () => this.phoneUnpair(id), { label: strings.busy.removing, kind: 'bridge' }); break;
+            case 'undo': void runBusy(el, () => this.phoneRestore(id), { label: strings.busy.reverting, kind: 'bridge' }); break;
+            case 'replace': void runBusy(el, () => this.phoneUnpair(id, true), { label: strings.busy.removing, kind: 'bridge' }); break;
         }
     },
 
@@ -862,7 +866,8 @@ export const phoneMethods = uiModule({
         } catch {
             if (ph === d) d.lost = true;
         }
-        void this.askPhone();
+        // Its button works until the dialog shows the connection off.
+        await this.askPhone();
     },
 
     /** `POST phone/remove/<id>`: at once; the row stays struck through with "Undo" for a while. */
@@ -887,7 +892,7 @@ export const phoneMethods = uiModule({
         } catch {
             if (ph === d) d.lost = true;
         }
-        void this.askPhone();
+        await this.askPhone();
     },
 
     /** `POST phone/restore/<id>` (the research keeps it a short while; after that 404 phone.gone). */
@@ -904,7 +909,7 @@ export const phoneMethods = uiModule({
         } catch {
             if (ph === d) d.lost = true;
         }
-        void this.askPhone();
+        await this.askPhone();
     },
 
     /** A `{ phones }` reply: the list now, the rest of the state as it was (asked again right after). */
