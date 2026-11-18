@@ -7,7 +7,8 @@
  * computer whose research announced them.
  */
 
-import { nextPaint, runBusy } from './busy.js';
+import { nextPaint } from './busy.js';
+import { canvasBusy } from './canvas-busy.js';
 import { endPend, isPend, pendAttrs, pendStatusHtml, startPend, type PendRefusal } from './switch-pend.js';
 import { researchActionLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
@@ -884,11 +885,9 @@ export const personResearchMethods = uiModule({
                 const treeId = DataManager.getCurrentTreeId();
                 const link = treeId ? loadViewLinks(treeId).find(l => l.hypo === hypo) : null;
                 if (!link) return;
-                // A123: the button's working state painted before the layout is computed.
-                void runBusy(find, async () => {
-                    this.closePersonResearchDialog();
-                    await this.viewLinkFind(link);
-                }, { heavy: 'now', label: strings.busy.layout });
+                // A123, 8a: the dialog closes, the tree is laid out anew under the canvas overlay (painted first).
+                this.closePersonResearchDialog();
+                void canvasBusy(() => this.viewLinkFind(link));
                 return;
             }
             const sw = target.closest<HTMLButtonElement>('.view-link-switch');

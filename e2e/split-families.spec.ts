@@ -151,6 +151,10 @@ test('creating the checked families copies them and leaves the original untouche
     await expect(modal).toBeVisible();
     await expect(page.getByRole('button', { name: 'Create 2 trees' })).toBeEnabled();
     await page.getByRole('button', { name: 'Create 2 trees' }).click();
+    // 8b: the dialog stays with the sentence; Create locked, Cancel is Close.
+    await expect(modal.locator('.busy-prog-done')).toHaveText('2 trees created.');
+    await expect(modal.locator('#splitfam-go')).toBeDisabled();
+    await modal.locator('#splitfam-cancel', { hasText: 'Close' }).click();
     await expect(modal).toBeHidden();
 
     const trees = await page.evaluate(() => window.Strom.TreeManager.getTrees()
@@ -222,6 +226,8 @@ test('the connector person appears in both created trees and links them', async 
     await expect(svoboda.locator('.splitfam-crossref')).toContainText('connected through Eva Nováková (*1962)');
 
     await page.getByRole('button', { name: 'Create 2 trees' }).click();
+    await expect(modal.locator('.busy-prog-done')).toHaveText('2 trees created.');
+    await modal.locator('#splitfam-cancel').click();
     await expect(modal).toBeHidden();
 
     await page.evaluate(async () => { await window.Strom.TreeRenderer.renderAsync?.(); });
@@ -329,7 +335,7 @@ test('tree manager row: split opens the proposals directly; a tree not open offe
     await expect(page.locator('#split-fam-picker-modal')).toHaveCount(0);
 });
 
-test('Create N trees works at once: each tree its step on the button, a double click creates them once', async ({ page }) => {
+test('Create N trees works at once: the button says Creating…, each tree its step with k/n above the footer, a double click creates them once (8b)', async ({ page }) => {
     await loadTree(page);
     await page.evaluate(() => window.Strom.UI.showSplitFamiliesDialog());
     const modal = page.locator('#split-families-modal');
@@ -340,17 +346,32 @@ test('Create N trees works at once: each tree its step on the button, a double c
     // The words the button says while it works, every change of them kept.
     const seen = await go.evaluate(async (b: HTMLButtonElement) => {
         const words: string[] = [];
-        const look = () => { const w = b.querySelector('.b-busy')?.textContent ?? ''; if (w && words.at(-1) !== w) words.push(w); };
-        new MutationObserver(look).observe(b, { subtree: true, childList: true, characterData: true, attributes: true });
+        const steps: string[] = [];
+        const dlg = b.closest('.splitfam-modal') as HTMLElement;
+        const look = () => {
+            const w = b.querySelector('.b-busy')?.textContent ?? '';
+            if (w && words.at(-1) !== w) words.push(w);
+            const p = dlg.querySelector('.busy-prog');
+            const st = p ? `${p.querySelector('.busy-prog__text')?.textContent}|${p.querySelector('.busy-prog__k')?.textContent}` : '';
+            if (st && steps.at(-1) !== st) steps.push(st);
+        };
+        new MutationObserver(look).observe(dlg, { subtree: true, childList: true, characterData: true, attributes: true });
         b.click();
         const at = b.getAttribute('aria-busy');
         b.click();
         await new Promise(r => setTimeout(r, 1500));
-        return { at, words };
+        const prog = dlg.querySelector('.busy-prog-done, .busy-prog');
+        const footer = dlg.querySelector('.splitfam-footer');
+        return { at, words, steps, aboveFooter: !!prog && prog.nextElementSibling === footer };
     });
     expect(seen.at).toBe('true');
-    expect(seen.words.some(w => /^Creating tree 1 of 2: .+…$/.test(w))).toBe(true);
-    expect(seen.words.some(w => /^Creating tree 2 of 2: .+…$/.test(w))).toBe(true);
+    expect(seen.words.every(w => !/Creating tree/.test(w))).toBe(true);
+    expect(seen.steps.some(w => /^Creating tree 1 of 2: .+…\|1\/2$/.test(w))).toBe(true);
+    expect(seen.steps.some(w => /^Creating tree 2 of 2: .+…\|2\/2$/.test(w))).toBe(true);
+    expect(seen.aboveFooter).toBe(true);
+    await expect(modal.locator('.busy-prog-done')).toHaveText('2 trees created.');
+    await expect(go).toBeDisabled();
+    await modal.locator('#splitfam-cancel').click();
     await expect(modal).toBeHidden();
     const trees = await page.evaluate(() => window.Strom.TreeManager.getTrees().map((t: { name: string }) => t.name));
     expect(trees.length).toBe(before + 2);

@@ -7,11 +7,10 @@
  * matches the tree's tie (another path moved the base) is not used.
  */
 
-import { runBusy } from './busy.js';
+import { canvasBusy } from './canvas-busy.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
-import { ZoomPan } from '../zoom.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { Person, PersonId, StromData, TreeId } from '../types.js';
 import { formatLiveClock } from '../live-time.js';
@@ -1020,12 +1019,9 @@ export const researchChangesMethods = uiModule({
             if (d.person || d.couple) {
                 // A person or a couple: the tree centred on it (a couple on its first partner), the panel closed.
                 const id = (d.person ?? d.couple) as PersonId;
-                // The row's working state painted before the layout is computed (waiting buttons §2.1, A63).
-                void runBusy(btn, async () => {
-                    this.closeResearchChanges();
-                    TreeRenderer.setFocus(id);
-                    ZoomPan.centerOnPerson(id);
-                }, { heavy: 'now', label: strings.busy.layout });
+                // A63, 8a: the panel closes, the tree is laid out anew under the canvas overlay (painted first).
+                this.closeResearchChanges();
+                void canvasBusy(() => TreeRenderer.setFocus(id));
             } else if (d.source) {
                 // A source: its viewer over the panel, which stays; focus back on the row once the viewer closes.
                 this.showSourceViewer(d.source, null);

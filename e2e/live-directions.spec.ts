@@ -214,6 +214,44 @@ test.describe('research directions', () => {
         await expect(card(page, 'Marie')).toBeVisible();
     });
 
+    test('Show in tree with a long layout: the canvas overlay is on before the layout, seen and held (8a)', async ({ page }) => {
+        await follow(page, DIRECTIONS, undefined, [AGENT, { ...OUTSIDE, research: 'G0099' }]);
+        await openOverview(page);
+        await expect(card(page, 'Marie')).toHaveCount(0);
+        // The layout made long (300 ms in one go), and what the tree's area says around it.
+        await page.evaluate(() => {
+            const w = window as unknown as { __cb: { atLayout: string[]; added: number; removed: number; shown: boolean; layoutEnd: number } };
+            w.__cb = { atLayout: [], added: 0, removed: 0, shown: false, layoutEnd: 0 };
+            const R = window.Strom.TreeRenderer as { setFocus: (...a: unknown[]) => unknown };
+            const orig = R.setFocus.bind(R);
+            R.setFocus = (...a: unknown[]) => {
+                w.__cb.atLayout.push(document.querySelector('#tree-container > .canvas-busy')?.textContent ?? '');
+                const end = performance.now() + 300;
+                while (performance.now() < end) { /* the layout of a large tree */ }
+                const r = orig(...a);
+                w.__cb.layoutEnd = performance.now();
+                return r;
+            };
+            new MutationObserver(recs => {
+                for (const r of recs) {
+                    for (const n of r.addedNodes) if ((n as Element).classList?.contains('canvas-busy')) w.__cb.added = performance.now();
+                    for (const n of r.removedNodes) if ((n as Element).classList?.contains('canvas-busy')) w.__cb.removed = performance.now();
+                    if (r.type === 'attributes' && (r.target as Element).classList?.contains('canvas-busy')) w.__cb.shown = true;
+                }
+            }).observe(document.getElementById('tree-container')!, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-shown'] });
+        });
+        const now = ov(page).locator('.research-overview__now-row', { hasText: 'agent-scitani' });
+        await now.locator('.link-button', { hasText: 'Show in tree' }).click();
+        await expect(card(page, 'Marie')).toBeVisible();
+        await expect(page.locator('#tree-container > .canvas-busy')).toHaveCount(0);
+        const cb = await page.evaluate(() => (window as unknown as { __cb: { atLayout: string[]; added: number; removed: number; shown: boolean; layoutEnd: number } }).__cb);
+        expect(cb.atLayout).toEqual(['Calculating the layout…']);
+        expect(cb.shown).toBe(true);
+        // Seen past 120 ms of a 300 ms layout, so it stays until 420 ms after it was painted.
+        expect(cb.removed - cb.added).toBeGreaterThanOrEqual(400);
+        expect(cb.removed).toBeGreaterThan(cb.layoutEnd);
+    });
+
     test('one direction and work outside it: the section with both rows', async ({ page }) => {
         await follow(page, [DIRECTIONS[2]], undefined, [OUTSIDE]);
         await openOverview(page);

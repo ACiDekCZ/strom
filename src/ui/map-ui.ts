@@ -14,6 +14,7 @@
  * pattern.
  */
 
+import { canvasBusy } from './canvas-busy.js';
 import { stampedGeo } from '../place-find.js';
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
@@ -208,7 +209,7 @@ export const mapMethods = uiModule({
                             aria-label="${strings.map.zoomIn}" title="${strings.map.zoomIn}">+</button>
                     <button type="button" class="map-zoom-out" onclick="window.Strom.UI.zoomMap(-1)"
                             aria-label="${strings.map.zoomOut}" title="${strings.map.zoomOut}">−</button>
-                    <button type="button" class="map-fit" onclick="window.Strom.UI.fitMapToPlaces(true)"
+                    <button type="button" class="map-fit" onclick="window.Strom.UI.fitMapByUser()"
                             aria-label="${strings.map.fit}" title="${strings.map.fit}">⤢</button>
                     <button type="button" class="map-time-toggle sel-opt" onclick="window.Strom.UI.toggleMapTime()"
                             aria-pressed="false" aria-label="${strings.map.timeMode}" title="${strings.map.timeMode}"><span class="map-time-toggle-icon" aria-hidden="true">${iconSvg('timer')}</span><span class="map-time-toggle-text" aria-hidden="true">${strings.map.timeModeShort}</span></button>
@@ -1736,7 +1737,15 @@ export const mapMethods = uiModule({
         this.mapScope = scope;
         this.closeMapPopup();
         this.mapCenter = null;  // reframe for the new set of places
-        TreeRenderer.render();
+        // B166, §8: the choice at once, the places computed anew under the canvas overlay ("Calculating the map…").
+        document.getElementById('map-scope-view')?.classList.toggle('active', scope !== 'tree');
+        document.getElementById('map-scope-tree')?.classList.toggle('active', scope === 'tree');
+        void canvasBusy(() => TreeRenderer.renderAsync(), { label: strings.busy.mapCalc });
+    },
+
+    /** B165, §8: the Fit button: every place framed under the canvas overlay ("Calculating the map…", past 120 ms). */
+    fitMapByUser(): void {
+        void canvasBusy(() => this.fitMapToPlaces(true), { label: strings.busy.mapCalc });
     },
 
     /** Frame every place; `byUser`: the Fit button (following there then stops panning the map). */

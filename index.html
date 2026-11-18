@@ -18829,6 +18829,46 @@
             flex: 0 1 auto; min-width: 0; white-space: normal; font-size: 12px; letter-spacing: 0; text-transform: none;
         }
         @media (prefers-reduced-motion: reduce) { .busy-list-dim { transition: none; } }
+        /* A computation over the whole canvas (§8, 8a, src/ui/canvas-busy.ts): the cards dimmed as one area (.45),
+           the words in the middle. Seen past 120 ms only: the delayed opacity runs on the compositor while the page
+           computes the layout in one go; a work that yields marks it seen by its timer (data-shown). No fade. */
+        .canvas-busy {
+            position: absolute; inset: 0; z-index: 70; display: flex; align-items: center; justify-content: center;
+            padding: 16px; box-sizing: border-box; cursor: progress;
+            background: color-mix(in srgb, var(--bg) 55%, transparent);
+            opacity: 0; will-change: opacity; animation: canvas-busy-in 1ms linear 120ms forwards;
+        }
+        .canvas-busy[data-shown] { opacity: 1; animation: none; }
+        /* Its 300 ms after the work: the tree under it takes clicks again. */
+        .canvas-busy[data-hold] { pointer-events: none; }
+        @keyframes canvas-busy-in { from { opacity: 0; } to { opacity: 1; } }
+        .canvas-busy .ovl {
+            display: inline-flex; align-items: center; gap: 8px; max-width: 100%; box-sizing: border-box;
+            padding: 8px 14px; background: var(--surface); color: var(--text); border: 1px solid var(--border);
+            border-radius: var(--r-md); box-shadow: var(--shadow-lg); font-size: 13.5px; line-height: 1.35;
+        }
+        .canvas-busy .ovl > span { min-width: 0; overflow-wrap: anywhere; }
+        /* A computation in parts inside its dialog (§8, 8b, src/ui/busy-prog.ts): above the footer, the step with
+           "k/n" and a bar; its end the quiet sentence in the same place. */
+        .busy-prog { display: flex; flex-direction: column; gap: 4px; margin: 10px 0 0; font-size: 13px; color: var(--text-light); }
+        .busy-prog__line { display: flex; justify-content: space-between; gap: 10px; font-variant-numeric: tabular-nums; }
+        .busy-prog__text { color: var(--text); min-width: 0; overflow-wrap: anywhere; }
+        .busy-prog__k { flex: none; }
+        .busy-prog .bar {
+            display: block; position: relative; overflow: hidden; height: 4px; border-radius: 2px;
+            background: color-mix(in srgb, currentColor 22%, transparent);
+        }
+        .busy-prog .bar[hidden] { display: none; }
+        .busy-prog .bar > i { position: absolute; inset: 0 auto 0 0; background: var(--primary); border-radius: 2px; transition: width .3s ease; }
+        @media (prefers-reduced-motion: reduce) { .busy-prog .bar > i { transition: none; } }
+        .busy-prog-done { margin: 10px 0 0; }
+        /* Between a dialog's scrolling body and its footer: the body's inset, so it never scrolls away. */
+        .modal:has(> .modal-content) > .busy-prog,
+        .modal:has(> .modal-content) > .busy-prog-done { margin: 0; padding: 10px 24px 0; }
+        @media (max-width: 640px) {
+            .modal:has(> .modal-content) > .busy-prog,
+            .modal:has(> .modal-content) > .busy-prog-done { padding: 10px 16px 0; }
+        }
         .busy-msg {
             font-size: 12.5px; line-height: 1.45; margin-top: 6px; color: var(--text-light);
             display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; flex-basis: 100%;
@@ -24688,7 +24728,7 @@
         .tov-sum { flex: 1; min-width: 0; text-align: right; font-size: 13px; color: var(--text-light); }
         .tov-sec-body { padding: 0 22px 18px 44px; display: flex; flex-direction: column; gap: 16px; }
         .tov-sec-body[hidden] { display: none; }
-        .tov-busy { display: flex; flex-direction: column; gap: 8px; opacity: 0; animation: tov-busy-in 0s linear 0.15s forwards; }
+        .tov-busy { display: flex; flex-direction: column; gap: 8px; opacity: 0; animation: tov-busy-in 0s linear 120ms forwards; }
         .tov-busy-text { font-size: 13px; color: var(--text-light); }
         .tov-busy-bar { display: block; height: 12px; border-radius: 4px; background: var(--surface-2); animation: tov-pulse 1.2s ease-in-out infinite; }
         .tov-busy-bar:nth-child(3) { width: 80%; animation-delay: 0.15s; }

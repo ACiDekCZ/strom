@@ -17,6 +17,7 @@
  * The switch is remembered per device; ending the live following keeps it.
  */
 
+import { canvasBusy } from './canvas-busy.js';
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
@@ -468,7 +469,8 @@ export const liveFollowMethods = uiModule({
         this.refreshFollowMarks(new Set());
         // Off drops the pin: the fan's "Centre: … · Release" label goes with it.
         if (!on) TreeRenderer.getFanView()?.refreshPill();
-        if (on) this.followJump(true);
+        // A44, §8: the jump of the click laid out under the canvas overlay (the agent's own jumps glide as before).
+        if (on) this.followJump(true, true);
     },
 
     /** The view following runs in now (null: not following). */
@@ -713,7 +715,7 @@ export const liveFollowMethods = uiModule({
     },
 
     /** Jump to the target now if nothing stands in the way; else later. `now`: skip the 8 s brake. */
-    followJump(now: boolean): void {
+    followJump(now: boolean, byUser = false): void {
         if (jumpTimer) clearTimeout(jumpTimer);
         jumpTimer = null;
         if (!followActive() || pausedByUser) return;
@@ -741,7 +743,8 @@ export const liveFollowMethods = uiModule({
         const glide = (id: PersonId): void => { ZoomPan.glideToPerson(id, scale); };
         if (TreeRenderer.getViewMode() !== 'family') TreeRenderer.presetViewMode('family');
         seenMode = 'family';
-        TreeRenderer.setFocus(target, false, glide, { agent: true });
+        if (byUser) void canvasBusy(() => TreeRenderer.setFocus(target, false, glide, { agent: true }));
+        else void TreeRenderer.setFocus(target, false, glide, { agent: true });
     },
 
     /**

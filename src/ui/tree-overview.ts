@@ -8,7 +8,7 @@
  *   and any other section remembered open are computed when the dialog
  *   opens; the rest on idle callbacks (family lines → life → time → quality →
  *   highlights, one per callback) or at once when expanded first.
- * - A section still calculating shows "Calculating…" after 150 ms and keeps
+ * - A section still calculating shows "Calculating…" after 120 ms and keeps
  *   it at least 300 ms once shown (aria-busy on its body).
  * - Results are cached by section + tree + chosen person + revision; the
  *   revision moves on every data change (edits and undo included) and tree
@@ -26,6 +26,7 @@
  *   evidence pill with "Back to overview", which reopens it where it was).
  */
 
+import { BUSY_SHOW_MS, BUSY_MIN_MS as BUSY_HOLD_MS } from './busy.js';
 import { treeMedia } from '../media.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
@@ -116,10 +117,10 @@ const REFRESH_DELAY_MS = 120;
 const rootKey = (treeId: string): string => `overview.root.${treeId}`;
 const recentKey = (treeId: string): string => `overview.recent.${treeId}`;
 const MAX_RECENT = 3;
-/** "Calculating…" appears after this long … */
-const BUSY_DELAY_MS = 150;
-/** … and, once shown, stays at least this long. */
-const BUSY_MIN_MS = 300;
+/** "Calculating…" appears after this long (the app's one threshold, waiting buttons §8: 120 ms) … */
+const BUSY_DELAY_MS = BUSY_SHOW_MS;
+/** … and, once shown, stays at least this long (300 ms). */
+const BUSY_MIN_MS = BUSY_HOLD_MS;
 /** Ancestor rows shown at least (empty generations padded). */
 const MIN_ANCESTOR_ROWS = 3;
 /** A touch screen: no tooltips to read. */
@@ -871,7 +872,7 @@ export const treeOverviewMethods = uiModule({
     },
 
     /**
-     * Fill one section: "Calculating…" (visible after 150 ms) while the
+     * Fill one section: "Calculating…" (visible after 120 ms) while the
      * result is computed after the next frame, then the content and summary.
      * `now` (the idle callbacks): compute right away, without the indicator.
      */

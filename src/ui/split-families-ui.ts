@@ -28,6 +28,7 @@ import * as CrossTree from '../cross-tree.js';
 import { uiModule } from './module.js';
 import { shownName } from '../person-name.js';
 import { runBusy, nextPaint, type BusyCtl } from './busy.js';
+import { busyProg } from './busy-prog.js';
 
 /** Everything the shared split-families dialog needs, whatever opened it. */
 interface SplitFamiliesRun {
@@ -203,7 +204,10 @@ export const splitFamiliesMethods = uiModule({
         (overlay.querySelector('#splitfam-close-x') as HTMLButtonElement).onclick = close;
         const go = overlay.querySelector('#splitfam-go') as HTMLButtonElement;
         // One working state from the click (§8): painted first, each tree's step said; a second click makes nothing more.
-        go.onclick = () => void runBusy(go, ctl => this.performSplitFamilies(ctl), { label: strings.busy.creating, heavy: 'now' });
+        // 8b: the button says "Creating…", the step with "k/n" and a bar above the footer; the end ✓ "Created" and the
+        // sentence in the dialog, the button then locked (the trees are made once).
+        go.onclick = () => void runBusy(go, ctl => this.performSplitFamilies(ctl),
+            { label: strings.busy.creating, heavy: 'now', stepsInToast: true, done: strings.busy.done.created });
         // Switching what counts as one family recomputes and redraws the whole
         // dialog in place (same run) — unless the other cut cannot split at all.
         overlay.querySelectorAll('.splitfam-mode-btn').forEach(btn => {
@@ -456,12 +460,19 @@ export const splitFamiliesMethods = uiModule({
         // splitting a non-active tree from the manager must not switch context.
         const activeBefore = TreeManager.getActiveTreeId();
         let createdPersons = 0;
+        // 8b: the progress above the footer (its own line, not the button's words).
+        const modal = document.querySelector<HTMLElement>('#split-families-modal .splitfam-modal');
+        const footer = modal?.querySelector('.splitfam-footer') ?? null;
+        modal?.querySelector('.busy-prog, .busy-prog-done')?.remove();
+        const prog = ctl && modal ? busyProg(modal, footer) : null;
 
         for (const [k, index] of chosen.entries()) {
             const component = this.splitFamiliesComponents[index];
             // "Creating tree 2 of 5: …", painted before that tree's work (B214).
             if (ctl) {
-                ctl.step(strings.busy.creatingTreeK(k + 1, chosen.length, this.readSplitFamilyName(index)));
+                const words = strings.busy.creatingTreeK(k + 1, chosen.length, this.readSplitFamilyName(index));
+                ctl.step(words, k + 1, chosen.length);
+                prog?.set(words, k + 1, chosen.length);
                 await nextPaint();
             }
             // The exact tree previewed (structuredClone so tree creation cannot
@@ -482,10 +493,21 @@ export const splitFamiliesMethods = uiModule({
         // New trees mean new cross-tree matches (the shared connector cards).
         CrossTree.invalidateCache();
 
-        this.closeSplitFamiliesDialog();
         this.updateTreeSwitcher();
         void this.updateTreeManagerList();
         TreeRenderer.render();
+        if (prog && modal?.isConnected) {
+            // 8b: the dialog stays with "3 trees created."; Create is locked, Cancel becomes Close.
+            prog.done(`${strings.splitFamilies.done(chosen.length)}.`);
+            const go = modal.querySelector<HTMLButtonElement>('#splitfam-go');
+            if (go) go.disabled = true;
+            modal.querySelectorAll<HTMLElement>('.splitfam-row input, .splitfam-mode-btn, .splitfam-persp input, .splitfam-persp select, .splitfam-persp button')
+                .forEach(x => { (x as HTMLInputElement).disabled = true; });
+            const cancel = modal.querySelector<HTMLButtonElement>('#splitfam-cancel');
+            if (cancel) cancel.textContent = strings.buttons.close;
+            return;
+        }
+        this.closeSplitFamiliesDialog();
         this.showToast(strings.splitFamilies.done(chosen.length));
     },
 

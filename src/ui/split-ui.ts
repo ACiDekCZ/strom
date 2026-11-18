@@ -19,6 +19,7 @@ import { findComponents, componentName, TreeComponent } from '../components.js';
 import { extractSubtree } from '../subtree.js';
 import { uiModule } from './module.js';
 import { runBusy, nextPaint, type BusyCtl } from './busy.js';
+import { busyProg } from './busy-prog.js';
 
 export const splitMethods = uiModule({
     /** The active tree is in memory; any other has to be read from storage. */
@@ -76,8 +77,9 @@ export const splitMethods = uiModule({
         });
         const go = overlay.querySelector<HTMLButtonElement>('#split-go');
         // One working state from the click (§8): a second click splits nothing more.
+        // 8b: the steps above the footer, the end ✓ "Created" and the sentence in the dialog.
         go?.addEventListener('click', () => void runBusy(go, ctl => this.performSplit(ctl),
-            { label: strings.busy.creating, heavy: 'now' }));
+            { label: strings.busy.creating, heavy: 'now', stepsInToast: true, done: strings.busy.done.created }));
 
         this.clearDialogStack();
         if (this.splitParentDialog) {
@@ -135,22 +137,38 @@ export const splitMethods = uiModule({
         const data = await this.splitDataFor(this.splitTreeId);
         if (!data) return;
 
+        const modal = document.querySelector<HTMLElement>('#split-modal .split-modal');
+        const footer = modal?.querySelector('.buttons') ?? null;
+        modal?.querySelector('.busy-prog, .busy-prog-done')?.remove();
+        const prog = ctl && modal ? busyProg(modal, footer) : null;
         for (const [k, index] of chosen.entries()) {
             const component = this.splitComponents[index];
             const name = componentName(component, strings.split.familyName, strings.split.noSurname);
-            // Several trees: each one's step painted before its work (§8).
+            // Several trees: each one's step painted before its work (§8), above the footer (8b).
             if (ctl && chosen.length > 1) {
-                ctl.step(strings.busy.creatingTreeK(k + 1, chosen.length, name));
+                const words = strings.busy.creatingTreeK(k + 1, chosen.length, name);
+                ctl.step(words, k + 1, chosen.length);
+                prog?.set(words, k + 1, chosen.length);
                 await nextPaint();
             }
             const subtree = extractSubtree(data, new Set<PersonId>(component.personIds));
             TreeManager.createTreeFromImport(subtree, name, false);
         }
 
-        this.closeSplitDialog();
         this.updateTreeSwitcher();
         this.updateTreeManagerList();
         TreeRenderer.render();
+        if (prog && modal?.isConnected) {
+            // 8b: the dialog stays with the sentence; Split off locked, Cancel becomes Close.
+            prog.done(strings.split.done(chosen.length));
+            const go = modal.querySelector<HTMLButtonElement>('#split-go');
+            if (go) go.disabled = true;
+            modal.querySelectorAll<HTMLInputElement>('.split-check').forEach(x => { x.disabled = true; });
+            const cancel = modal.querySelector<HTMLButtonElement>('#split-close');
+            if (cancel) cancel.textContent = strings.buttons.close;
+            return;
+        }
+        this.closeSplitDialog();
         this.showToast(strings.split.done(chosen.length));
     },
 

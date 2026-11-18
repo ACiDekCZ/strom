@@ -184,7 +184,35 @@ const FONT_NOTICE = 'Strom Serif: a modified (subsetted) version of Source Serif
     + 'Licensed under the SIL Open Font License, Version 1.1 (https://openfontlicense.org).';
 
 /** Generate the complete family-book HTML for `data`. */
+/** A step of the book being built: chapter `k` of `n` is next (waiting buttons §8, 8c). */
+export interface BookStep { k: number; n: number }
+
+/** The book in one go (the same document as `buildFamilyBookSteps` run to its end). */
 export function buildFamilyBook(data: StromData, options: BookBuildOptions, env: BookBuildEnv = {}): string {
+    const steps = buildFamilyBookSteps(data, options, env);
+    for (;;) {
+        const r = steps.next();
+        if (r.done) return r.value;
+    }
+}
+
+/**
+ * The book chapter by chapter: yields before each family chapter ("chapter 4 of 12") so a caller can let the
+ * page paint and say the step between them; returns the document.
+ */
+export async function buildFamilyBookAsync(
+    data: StromData, options: BookBuildOptions, env: BookBuildEnv,
+    onStep: (step: BookStep) => Promise<void> | void,
+): Promise<string> {
+    const steps = buildFamilyBookSteps(data, options, env);
+    for (;;) {
+        const r = steps.next();
+        if (r.done) return r.value;
+        await onStep(r.value);
+    }
+}
+
+export function* buildFamilyBookSteps(data: StromData, options: BookBuildOptions, env: BookBuildEnv = {}): Generator<BookStep, string, void> {
     const opts = resolveBookOptions(options);
     const lang = opts.lang;
     const S = getStringsForLang(lang);
@@ -268,18 +296,30 @@ export function buildFamilyBook(data: StromData, options: BookBuildOptions, env:
     // ── The body: lineages (or the families of a book of ancestors / descendants) ──
     const body: string[] = [];
     const heads: string[] = [];
+    // The chapters one by one, a step before each (8c: "chapter 4 of 12").
+    const total = model.groups.length
+        ? model.groups.reduce((sum, g) => sum + g.chapters.length, 0) : model.chapters.length;
+    let done = 0;
     if (model.groups.length) {
-        model.groups.forEach((g, i) => {
-            if (!g.chapters.length) return;
+        for (const [i, g] of model.groups.entries()) {
+            if (!g.chapters.length) continue;
             const n = i + 1;
             heads[i] = B.rodName(rodLabelOf(ctx, g.rod.id));
             const lineage = parts.tree ? rodLineageHtml(g.rod, ctx, { breakBefore: rodHasMaleLine(g.rod, ctx), id: `rod-${n}-tree` }) : '';
-            const chapters = g.chapters.map(ch => familyChapterHtml(ch, ctx)).join('');
-            body.push(`<section class="book-sheet book-rod rod-${n}" id="rod-${n}">${rodOverviewHtml(g.rod, ctx)}${lineage}${chapters}</section>`);
-        });
+            const chapters: string[] = [];
+            for (const ch of g.chapters) {
+                yield { k: ++done, n: total };
+                chapters.push(familyChapterHtml(ch, ctx));
+            }
+            body.push(`<section class="book-sheet book-rod rod-${n}" id="rod-${n}">${rodOverviewHtml(g.rod, ctx)}${lineage}${chapters.join('')}</section>`);
+        }
     } else if (model.chapters.length) {
-        const chapters = model.chapters.map(ch => familyChapterHtml(ch, ctx)).join('');
-        body.push(`<section class="book-sheet book-families"><h2>${esc(B.families)}</h2>${chapters}</section>`);
+        const chapters: string[] = [];
+        for (const ch of model.chapters) {
+            yield { k: ++done, n: total };
+            chapters.push(familyChapterHtml(ch, ctx));
+        }
+        body.push(`<section class="book-sheet book-families"><h2>${esc(B.families)}</h2>${chapters.join('')}</section>`);
     }
     // Named pages need a name for every index, even of a group without chapters.
     const rodCss = rodPagesCss(model.groups.map((g, i) => heads[i] ?? B.rodName(g.label)));

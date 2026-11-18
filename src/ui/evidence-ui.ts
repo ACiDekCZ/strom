@@ -20,6 +20,7 @@
  * its × (and Escape) shows the whole tree again, its label opens the choice.
  */
 
+import { canvasBusy } from './canvas-busy.js';
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
@@ -228,8 +229,8 @@ export const evidenceUiMethods = uiModule({
         if (document.querySelector(`.person-card[data-id="${CSS.escape(id)}"]`)) {
             ZoomPan.centerOnPerson(id);
         } else {
-            TreeRenderer.setFocus(id);
-            void TreeRenderer.renderAsync().then(() => ZoomPan.centerOnPerson(id));
+            // B139, 8a: the tree laid out anew round the next person under the canvas overlay (painted first).
+            void canvasBusy(() => TreeRenderer.setFocus(id));
         }
     },
 

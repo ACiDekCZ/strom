@@ -21,6 +21,7 @@
  * against its own bubble of the person.
  */
 
+import { canvasBusy } from '../canvas-busy.js';
 import { DataManager } from '../../data.js';
 import { TreeRenderer } from '../../renderer.js';
 import { ZoomPan } from '../../zoom.js';
@@ -180,6 +181,11 @@ export const tableResearchMethods = uiModule({
      * branch) lit, named by the line.
      */
     showTableResearchLine(env: ResearchTableEnv, a: ResearchBubbleAction): void {
+        // A130, 8a: the line's people found and the Family view laid out under the canvas overlay (painted first).
+        void canvasBusy(() => this.showTableResearchLineNow(env, a));
+    },
+
+    showTableResearchLineNow(env: ResearchTableEnv, a: ResearchBubbleAction): Promise<void> | undefined {
         const ids: PersonId[] = [];
         let label = '';
         if (a.branchId) {
@@ -197,10 +203,11 @@ export const tableResearchMethods = uiModule({
                 if (role?.kind === 'line' && role.line.id === a.lineId) ids.push(q.id);
             }
         }
-        if (!DataManager.getPerson(a.personId)) return;
+        if (!DataManager.getPerson(a.personId)) return undefined;
         TreeRenderer.presetViewMode('family');
-        TreeRenderer.setFocus(a.personId);
+        const drawn = TreeRenderer.setFocus(a.personId);
         ZoomPan.centerOnPerson(a.personId);
         this.startPersonHighlight('direction', label, ids, null);
+        return drawn;
     },
 });

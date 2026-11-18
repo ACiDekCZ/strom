@@ -17,6 +17,36 @@ function esc(text: string): string {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+/**
+ * The book's window while the book is prepared (waiting buttons §8, 8c, 3f): written at once in the click,
+ * centred: the 16 px spinner, "Preparing the book…", a bar and "chapter 4 of 12" (`.bp-k`, set by the app
+ * between the chapters). Always light, as the book; no motion when motion is reduced.
+ */
+export function bookPreparingHtml(lang: BookLang): string {
+    const S = getStringsForLang(lang);
+    return `<!DOCTYPE html>
+<html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(S.busy.preparingBook)}</title>
+<style>
+html, body { margin: 0; height: 100%; background: #fbfaf7; color: #2b2622; font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.bp { box-sizing: border-box; min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.bp-box { display: flex; flex-direction: column; align-items: center; gap: 10px; width: min(320px, 100%); text-align: center; }
+.bp-st { display: inline-flex; align-items: center; gap: 8px; overflow-wrap: anywhere; }
+.bp-spin { flex: none; width: 16px; height: 16px; box-sizing: border-box; border-radius: 50%; border: 2px solid rgba(43, 38, 34, .2); border-top-color: currentColor; animation: bp-spin .9s linear infinite; }
+@keyframes bp-spin { to { transform: rotate(360deg); } }
+.bp-bar { position: relative; overflow: hidden; width: 100%; height: 4px; border-radius: 2px; background: rgba(43, 38, 34, .14); }
+.bp-bar > i { position: absolute; inset: 0 auto 0 0; width: 0; background: #2b2622; border-radius: 2px; transition: width .3s ease; }
+.bp-k { font-size: 12.5px; opacity: .75; font-variant-numeric: tabular-nums; min-height: 1.4em; }
+@media (prefers-reduced-motion: reduce) { .bp-spin { animation: none; border-color: currentColor; opacity: .55; } .bp-bar > i { transition: none; } }
+</style></head><body>
+<div class="bp"><div class="bp-box" role="status" aria-busy="true">
+<span class="bp-st"><span class="bp-spin" aria-hidden="true"></span><span>${esc(S.busy.preparingBook)}</span></span>
+<span class="bp-bar" aria-hidden="true"><i></i></span>
+<span class="bp-k"></span>
+</div></div>
+</body></html>`;
+}
+
 /** The saved book's file name: "{title}.html", characters no file system takes replaced. */
 export function bookFileName(title: string): string {
     // eslint-disable-next-line no-control-regex

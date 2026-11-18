@@ -31,6 +31,7 @@ export const plPart10: Pick<StringsType, 'busy'> = {
         notChanged: (why: string) => `Bez zmian: ${why}`,
         liveSilent: (s: number) => `Badanie nie odezwało się w ciągu ${s} s. Trzeba uruchomić Strom Research.`,
         layout: 'Obliczanie układu…',
+        mapCalc: 'Obliczanie mapy…',
         adoptTitle: 'Przekazywanie drzewa badaniu…',
         adoptBackup: 'Zapisywanie kopii zapasowej',
         adoptGedcom: 'Tworzenie GEDCOM',

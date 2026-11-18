@@ -20,12 +20,12 @@
  * keeps every old path unchanged.
  */
 
+import { canvasBusy } from './canvas-busy.js';
 import { researchActionLabel, researchMarkFlags, researchLinkFlags } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { researchCitationsOut, setCitationFeaturesLookup } from '../citation-gates.js';
 import { TreeRenderer } from '../renderer.js';
-import { ZoomPan } from '../zoom.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { TreeId, PersonId, ResearchLink, ResearchSend, ResearchSendMode, StromData, TreeMetadata, ResearchConflict, ResearchHypothesis } from '../types.js';
 import { HypothesisPick, hypothesisPickable } from '../research-hypothesis-pick.js';
@@ -2605,7 +2605,8 @@ export const researchSyncMethods = uiModule({
         if (before) TreeManager.patchResearchLink(treeId, { syncedAt: before.syncedAt, sent: before.sent });
         patchResearchAutoState(treeId, { loadBackup: undefined, held: undefined });
         fpCache = null;
-        await TreeRenderer.renderAsync();
+        // A75, A92, 8a: the tree as it was drawn anew under the canvas overlay (painted first).
+        await canvasBusy(() => TreeRenderer.renderAsync());
         this.refreshSearch();
         this.refreshResearchSyncUi();
         const undo = { label: strings.undo.undo, run: () => this.performUndo() };
@@ -2764,9 +2765,8 @@ export const researchSyncMethods = uiModule({
         const live = persons.filter(id => DataManager.getPerson(id));
         if (live.length === 1) {
             const id = live[0];
-            TreeRenderer.setFocus(id);
-            ZoomPan.centerOnPerson(id);
-            this.showPersonResearchDialog(id);
+            // A77, 8a: the tree laid out round the person under the canvas overlay, then the person's dialog.
+            void canvasBusy(() => TreeRenderer.setFocus(id)).then(() => this.showPersonResearchDialog(id));
             return;
         }
         this.showResearchWaiting();
@@ -2929,9 +2929,9 @@ export const researchSyncMethods = uiModule({
         }
         this.closeResearchSyncNote();
         this.closeActionsMenu();
-        TreeRenderer.setFocus(target.personId);
-        ZoomPan.centerOnPerson(target.personId);
-        this.showPersonResearchDialog(target.personId, { conflict: target.conflictId });
+        // A77, 8a: the tree laid out round the person under the canvas overlay, then the dialog at the conflict.
+        void canvasBusy(() => TreeRenderer.setFocus(target.personId))
+            .then(() => this.showPersonResearchDialog(target.personId, { conflict: target.conflictId }));
     },
 
     /** What a delete adds in an archive the research already wrote to: it is set aside there, not lost. */

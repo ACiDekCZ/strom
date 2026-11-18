@@ -14,7 +14,8 @@
  */
 
 import { noteQueueStartStatus, QUEUE_START_MS, type QueueStartView } from './queue-start.js';
-import { runBusy, activatedElement, isBusy, busySpinHtml, busyStatusEl } from './busy.js';
+import { busySpinHtml, busyStatusEl } from './busy.js';
+import { canvasBusy } from './canvas-busy.js';
 import type { RowRefusal } from './waiting-row-notes.js';
 import { researchOpenSrText, setResearchActionLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
@@ -3093,27 +3094,19 @@ export const researchOverviewMethods = uiModule({
         return btn;
     },
 
-    /** A person from the overview: centred in the tree (the sheet closes first). */
+    /**
+     * A person from the overview: centred in the tree (the sheet closes first). B14, 8a: a person not drawn lays
+     * the tree out anew under the canvas overlay ("Calculating the layout…", seen past 120 ms), painted first.
+     */
     overviewShowPerson(id: PersonId, mode: Mode): void {
         if (!DataManager.getPerson(id)) return;
-        // B14: the clicked element's working state painted before the layout is computed (waiting buttons §2.1).
-        const el = activatedElement();
-        if (el && !isBusy(el)) {
-            void runBusy(el, async () => { this.overviewShowPersonNow(id, mode); }, { heavy: 'now', label: strings.busy.layout });
-            return;
-        }
-        this.overviewShowPersonNow(id, mode);
-    },
-
-    overviewShowPersonNow(id: PersonId, mode: Mode): void {
         // Looking at someone else: the user has the tree.
         this.pauseLiveFollow();
         if (mode === 'sheet') this.closeResearchOverview();
         if (document.querySelector(`.person-card[data-id="${CSS.escape(id)}"]`)) {
             ZoomPan.centerOnPerson(id);
         } else {
-            TreeRenderer.setFocus(id);
-            void TreeRenderer.renderAsync().then(() => ZoomPan.centerOnPerson(id));
+            void canvasBusy(() => TreeRenderer.setFocus(id));
         }
     },
 });

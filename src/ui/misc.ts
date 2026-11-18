@@ -3,6 +3,7 @@
  * see src/ui/module.ts for the composition pattern.
  */
 
+import { canvasBusy } from './canvas-busy.js';
 import { refreshWindowControls } from '../windows/window-open.js';
 import { initDialogFocus } from './dialog-focus.js';
 import { initClosedPopups } from './closed-popups.js';
@@ -500,8 +501,21 @@ export const miscMethods = uiModule({
 
     setDisplayViewMode(mode: ViewMode): void {
         // The Research overview open without following closes with a switch, as by its ⤡.
-        if (mode !== TreeRenderer.getViewMode()) this.researchOverviewViewSwitched();
-        TreeRenderer.setViewMode(mode); // re-renders + calls updateViewModeUI
+        const from = TreeRenderer.getViewMode();
+        if (mode === from) return;
+        this.researchOverviewViewSwitched();
+        // C5, §8: the view laid out anew under the canvas overlay ("Calculating the layout…" past 120 ms).
+        // The mode is the new one at once; the overlay painted before the layout.
+        void canvasBusy(ready => TreeRenderer.setViewMode(mode, ready), {
+            stateFirst: true, label: mode === 'map' ? strings.busy.mapCalc : strings.busy.layout,
+        }); // re-renders + calls updateViewModeUI
+        // The bars, the classes of the view and what is fitted to them in the first frame, before the layout (1101).
+        this.updateViewModeUI();
+        if (from === 'fan' || from === 'table') {
+            // The chrome of the view now; the followed research's card placed again for it (1101).
+            document.body.dataset.viewMode = mode;
+            this.placeLivePanel?.();
+        }
     },
 
     exitDescendantsView(): void {

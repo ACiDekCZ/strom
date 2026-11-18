@@ -44,6 +44,8 @@ async function openBook(page: Page, context: BrowserContext): Promise<Page> {
         page.locator('#book-modal #book-open').click(),
     ]);
     await book.waitForLoadState('domcontentloaded');
+    // 8c: "Preparing the book…" first, the book itself after its chapters.
+    await book.locator('.book-toolbar').waitFor();
     return book;
 }
 
@@ -702,3 +704,45 @@ test.describe('family book: a long surname without spaces', () => {
         });
     }
 });
+
+// Waiting buttons §8, 8c / 3f: the book's window opens in the click with "Preparing the book…", the chapters
+// are built one by one ("chapter k of n"), then the book replaces it.
+test.describe('family book: prepared in parts (8c)', () => {
+    test.use({ viewport: { width: 1440, height: 900 } });
+
+    test('the window says Preparing the book… at once, each chapter\'s step, then the book', async ({ page, context }) => {
+        await setup(page);
+        const dialog = await openDialog(page);
+        // What the book's window says before the book: every text of its step line, in order.
+        await page.evaluate(() => {
+            const w = window as unknown as { __bookSeen: { first: string; steps: string[] }; open: typeof window.open };
+            w.__bookSeen = { first: '', steps: [] };
+            const open = window.open.bind(window);
+            window.open = ((...args: Parameters<typeof window.open>) => {
+                const win = open(...args);
+                if (win) queueMicrotask(() => {
+                    w.__bookSeen.first = win.document.querySelector('.bp-st')?.textContent ?? '';
+                    const k = win.document.querySelector('.bp-k');
+                    // The first chapter's step is there before the page paints (the work waits for the window).
+                    if (k?.textContent) w.__bookSeen.steps.push(k.textContent);
+                    if (k) new MutationObserver(recs => {
+                        for (const r of recs) for (const n of r.addedNodes) w.__bookSeen.steps.push(n.textContent ?? '');
+                    }).observe(k, { childList: true });
+                });
+                return win;
+            }) as typeof window.open;
+        });
+        const book = await openBook(page, context);
+        await expect(dialog).not.toHaveClass(/active/);
+        await expect(book.locator('.book-title-page h1')).toBeVisible();
+        await expect(book.locator('.bp')).toHaveCount(0);
+        const seen = await page.evaluate(() => (window as unknown as { __bookSeen: { first: string; steps: string[] } }).__bookSeen);
+        expect(seen.first).toBe('Preparing the book…');
+        expect(seen.steps.length).toBeGreaterThan(1);
+        const n = Number(seen.steps[0].match(/^chapter 1 of (\d+)$/)?.[1]);
+        expect(n).toBeGreaterThan(1);
+        expect(seen.steps).toEqual(Array.from({ length: n }, (_, i) => `chapter ${i + 1} of ${n}`));
+        await expect(book.locator('.book-family-head')).toHaveCount(n);
+    });
+});
+

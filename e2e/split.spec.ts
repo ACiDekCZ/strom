@@ -41,6 +41,10 @@ test('a tree with two unrelated families can be split into two trees, the origin
 
     await rows.nth(1).locator('.split-check').check();
     await page.getByRole('button', { name: 'Split off 1' }).click();
+    // 8b: the dialog says what was made; Close takes it away.
+    await expect(page.locator('#split-modal .busy-prog-done')).toHaveText('1 tree created. The original is untouched.');
+    await expect(page.locator('#split-go')).toBeDisabled();
+    await page.locator('#split-close', { hasText: 'Close' }).click();
     await expect(page.locator('#split-modal')).toHaveCount(0);
 
     // The split copies, it does not move: the open tree still shows everyone.
@@ -156,6 +160,8 @@ test('Split off works at once: the button says it is creating, a double click cr
         return at;
     });
     expect(busy).toBe('true');
+    await expect(page.locator('#split-modal .busy-prog-done')).toBeVisible();
+    await page.locator('#split-close').click();
     await expect(page.locator('#split-modal')).toHaveCount(0);
     const trees = await page.evaluate(() => window.Strom.TreeManager.getTrees().map((t: { name: string }) => t.name));
     expect(trees.length).toBe(before + 1);

@@ -1347,6 +1347,12 @@ class TreeRendererClass {
      * bridge's answer) counts the same.
      */
     async refreshViewLinks(change: () => void): Promise<void> {
+        this.applyViewLinks(change);
+        await this.renderInternal();
+    }
+
+    /** The view links changed now (the depths kept as they were); the redraw is the caller's (§8: under the overlay). */
+    applyViewLinks(change: () => void): void {
         const focus = this.focusPersonId;
         const before = focus ? maxGenerationsWithSiblings(this.viewData(this.viewLayer?.links ?? []), focus) : null;
         change();
@@ -1355,7 +1361,6 @@ class TreeRendererClass {
             this.focusDepthUp = this.focusDepthUp >= before.up ? after.up : Math.min(this.focusDepthUp, after.up);
             this.focusDepthDown = this.focusDepthDown >= before.down ? after.down : Math.min(this.focusDepthDown, after.down);
         }
-        await this.renderInternal();
     }
 
     /** The live bridge the tree follows (its /status features), for whether the view links show at all. */
@@ -4071,7 +4076,11 @@ class TreeRendererClass {
     }
 
     /** Switch the display view mode and re-render. Persisted per tree. */
-    setViewMode(mode: ViewMode): void {
+    /**
+     * Resolves when the view is drawn (the canvas overlay waits for it, §8 C5). The mode is the new one at once;
+     * `beforeLayout` (the overlay painted) is awaited before the layout.
+     */
+    async setViewMode(mode: ViewMode, beforeLayout?: () => Promise<void>): Promise<void> {
         if (this.viewMode === mode) return;
         // The Table view and the others share the person in focus (spec 073 U9):
         // the table's active row's person goes along, and the table opens at the focus.
@@ -4087,20 +4096,22 @@ class TreeRendererClass {
         const centre = mode === 'fan' ? UI.liveFollowFanCenter?.() ?? null : null;
         if (centre && centre !== this.focusPersonId && DataManager.getPerson(centre)) {
             this.fanView?.deactivate();
+            await beforeLayout?.();
             // Following's own centre, not a choice of a person (spec 097 §4).
-            void this.setFocus(centre, false, undefined, { agent: true });
-            return;
+            return this.setFocus(centre, false, undefined, { agent: true });
         }
         if (fromTable && fromTable !== this.focusPersonId && DataManager.getPerson(fromTable)) {
-            void this.setFocus(fromTable, true, () => this.centerForViewMode());
-            return;
+            await beforeLayout?.();
+            return this.setFocus(fromTable, true, () => this.centerForViewMode());
         }
         // The modes lay the tree out in different coordinate frames — the
         // pan/zoom state from the previous mode can leave every card outside
         // the viewport (reported on a live tree: switching to descendants
         // showed an empty canvas). Center AFTER the async render finishes so
         // the new cards are measurable. Timeline has its own scroll container.
-        void this.renderInternal().then(() => this.centerForViewMode());
+        await beforeLayout?.();
+        await this.renderInternal();
+        this.centerForViewMode();
     }
 
     /** Re-center the viewport for the current view mode (after a render). */

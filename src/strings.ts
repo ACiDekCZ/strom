@@ -10245,6 +10245,8 @@ const stringsEN = {
         /** "Research on" waited for the research in vain (6b). */
         liveSilent: (s: number) => `The research did not respond within ${s} s. Strom Research needs to be started.`,
         layout: 'Calculating the layout…',
+        /** The map's places computed anew over the whole map (§8). */
+        mapCalc: 'Calculating the map…',
         adoptTitle: 'Handing the tree to the research…',
         adoptBackup: 'Saving a backup',
         adoptGedcom: 'Creating GEDCOM',
@@ -20171,6 +20173,7 @@ const stringsCZ: StringsType = {
         notChanged: (why: string) => `Nezměněno: ${why}`,
         liveSilent: (s: number) => `Výzkum se do ${s} s neozval. Je potřeba spustit Strom Research.`,
         layout: 'Počítá se rozvržení…',
+        mapCalc: 'Počítá se mapa…',
         adoptTitle: 'Předává se strom výzkumu…',
         adoptBackup: 'Ukládá se záloha',
         adoptGedcom: 'Vytváří se GEDCOM',
@@ -30009,6 +30012,7 @@ const stringsDE: StringsType = {
         notChanged: (why: string) => `Unverändert: ${why}`,
         liveSilent: (s: number) => `Die Forschung hat sich in ${s} s nicht gemeldet. Strom Research muss gestartet werden.`,
         layout: 'Layout wird berechnet…',
+        mapCalc: 'Karte wird berechnet…',
         adoptTitle: 'Stammbaum wird an die Forschung übergeben…',
         adoptBackup: 'Sicherung wird gespeichert',
         adoptGedcom: 'GEDCOM wird erstellt',
