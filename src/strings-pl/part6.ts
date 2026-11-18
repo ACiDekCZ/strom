@@ -846,7 +846,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
             auditHead: 'Zadanie nie jest zapisane tak, jak trzeba',
             auditMarkPanel: 'Zadanie nie jest zapisane tak, jak trzeba – otwiera się w przeglądzie',
             auditKindText: 'Skany zapisane tylko tekstem, bez księgi – zapisane skany nie wznowią zadania.',
-            auditKindBooks: 'Czeka na skany z dwóch ksiąg',
+            auditKindBooks: 'Czeka na skany z kilku ksiąg',
             auditKindBooksUnknown: '; jednej z nich badanie nie zna.',
             auditKindUnknown: 'Badanie nie zna księgi – zadanie nie ma folderu na skany.',
             auditKindFolder: 'Brakuje folderu na skany – poprawka go utworzy.',

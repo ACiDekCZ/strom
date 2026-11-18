@@ -150,7 +150,7 @@ const launched = (page: Page) => page.evaluate(() => (window as unknown as { __l
 
 const HEAD = 'Task not recorded as needed';
 const EXPLAIN_412 = 'Images are only described in text, with no book – saved images do not bring the task back. '
-    + 'Waits for images from two books; the research does not know one of them.';
+    + 'Waits for images from several books; the research does not know one of them.';
 const CHAT = 'Discuss with the agent, AI, opens in the researchAI';
 
 /** T0412's finding row as the design draws it, wherever the item stands. */

@@ -64,11 +64,17 @@ describe('what the finding means (§1.3, D1, D2)', () => {
 
     it('T0412: images as text, then two books one of which the research does not know', () => {
         expect(auditExplain(T0412.kinds, 'part', true, cs)).toBe(
-            'Snímky jsou zapsané jen textem, bez knihy – uložené snímky úkol neprobudí. Čeká na snímky dvou knih; jednu z nich výzkum nezná.');
+            'Snímky jsou zapsané jen textem, bez knihy – uložené snímky úkol neprobudí. Čeká na snímky z více knih; jednu z nich výzkum nezná.');
     });
 
     it('several books all known: the sentence ends with a full stop', () => {
-        expect(auditExplain(['several-books'], 'whole', true, en)).toBe('Waits for images from two books.');
+        expect(auditExplain(['several-books'], 'whole', true, en)).toBe('Waits for images from several books.');
+    });
+
+    it('several books names no number (the status says none; three books or more are no "two")', () => {
+        const said = (['cs', 'en', 'de', 'pl'] as const).map(l => getStringsForLang(l).live.waitingAudit.auditKindBooks);
+        expect(said).toEqual(['Čeká na snímky z více knih', 'Waits for images from several books', 'Wartet auf Scans aus mehreren Büchern', 'Czeka na skany z kilku ksiąg']);
+        for (const text of said) expect(text).not.toMatch(/dvou|two|zwei|dwóch|\d/);
     });
 
     it('T0377 (whole): the images-as-text sentence alone', () => {
