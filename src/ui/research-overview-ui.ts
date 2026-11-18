@@ -3005,7 +3005,8 @@ export const researchOverviewMethods = uiModule({
     /** Foot: where evidence is missing (the tree overview's Data quality), Open the research (research). */
     appendOverviewFoot(root: HTMLElement, s: LiveSession, mode: Mode): void {
         const L = strings.live;
-        const foot = el('div', 'research-overview__foot');
+        // A busy host: the sentence of Open the research stays a line of the foot.
+        const foot = el('div', 'research-overview__foot busy-host');
         const missing = computeEvidenceGaps(DataManager.getData()).noSource.length;
         if (missing > 0) {
             const link = el('button', 'link-button', L.missingLink(missing));
@@ -3021,7 +3022,9 @@ export const researchOverviewMethods = uiModule({
         if (open) {
             const btn = setResearchActionLabel(el('button', 'link-button research-overview__open'), strings.research.openResearch, researchLinkMark('open'));
             btn.type = 'button';
-            btn.onclick = () => this.launchResearchLink(open);
+            // Found again when the overview is drawn anew while it waits: the state and its sentence follow (§3.1).
+            btn.dataset.action = 'open-research';
+            btn.onclick = () => { void this.launchResearchLink(open, 'terminal', btn); };
             foot.appendChild(btn);
         }
         if (foot.childElementCount > 0) root.appendChild(foot);

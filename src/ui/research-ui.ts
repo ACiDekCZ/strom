@@ -5846,7 +5846,7 @@ export const researchUiMethods = uiModule({
         const upHere = !off && !!researchId && answer?.result === 'up' && !!answer.status && !this.activeResearchAgentless()
             && !panel.querySelector('.live-agent-started');
         if (open || upHere) {
-            const foot = el('div', 'live-panel-foot');
+            const foot = el('div', 'live-panel-foot busy-host');
             if (upHere && researchId) {
                 const follow = el('button', 'live-panel-follow', r.followLive);
                 follow.type = 'button';
@@ -5856,7 +5856,9 @@ export const researchUiMethods = uiModule({
             if (open) {
                 const btn = setResearchActionLabel(el('button', 'primary live-panel-open'), r.openResearch, researchLinkMark('open'));
                 btn.type = 'button';
-                btn.onclick = () => this.launchResearchLink(open);
+                // Found again when the panel is drawn anew while it waits: the state and its sentence follow (§3.1).
+                btn.dataset.action = 'open-research';
+                btn.onclick = () => { void this.launchResearchLink(open, 'terminal', btn); };
                 foot.appendChild(btn);
             }
             panel.appendChild(foot);

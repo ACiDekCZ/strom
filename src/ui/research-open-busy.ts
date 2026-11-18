@@ -108,9 +108,17 @@ function newHandoff(deps: OpenBusyDeps): string {
     return `${hex(8)}-${hex(4)}-4${hex(3)}-${'89ab'[Math.floor(Math.random() * 4)]}${hex(3)}-${hex(12)}`;
 }
 
-/** Who works now, as a set of keys: a new one is a new session (the proof of an older research). */
-function workerKeys(st: LiveStatus | null): Set<string> {
-    return new Set((st?.working ?? []).map(w => `${w.who}|${w.since}|${w.session ?? ''}`));
+/**
+ * How far a worker's `since` may move between two answers and still be the same session: a bridge (a demo's, a
+ * stand-in's) that says it relative to now moves it a little with every answer; a new session starts later.
+ */
+const SAME_SESSION_MS = 60_000;
+
+/** Whether `w` is a session `before` did not have (another agent, another session id, or one started later). */
+function newWorker(w: { who: string; since: string; session?: string }, before: Array<{ who: string; since: string; session?: string }>): boolean {
+    const at = Date.parse(w.since);
+    return !before.some(b => b.who === w.who && (b.session ?? '') === (w.session ?? '')
+        && (b.since === w.since || Number.isFinite(at) && Math.abs(at - Date.parse(b.since)) <= SAME_SESSION_MS));
 }
 
 /** Whether `st` proves the link with `handoff` was taken (against `base`, the status before the hand-over). */
@@ -119,8 +127,8 @@ export function handoffProven(st: LiveStatus, handoff: string | null, base: Live
     // An older research: a new session, or more of them.
     if (!base) return false;
     if ((st.busy?.sessions ?? 0) > (base.busy?.sessions ?? 0)) return true;
-    const before = workerKeys(base);
-    return [...workerKeys(st)].some(k => !before.has(k));
+    const before = base.working ?? [];
+    return (st.working ?? []).some(w => newWorker(w, before));
 }
 
 function sleep(ms: number, signal: AbortSignal): Promise<void> {

@@ -23225,6 +23225,9 @@
         }
         .research-overview__foot .link-button { padding: 0; font-size: 13px; }
         .research-overview__open { margin-left: auto; }
+        /* "Did the terminal not open?" of Open the research: a line of the foot under its links (§3.1). */
+        .research-overview__foot, .live-panel-foot { flex-wrap: wrap; }
+        .research-overview__foot > .busy-msg, .live-panel-foot > .busy-msg { margin-top: 0; }
         @media (max-width: 640px) {
             .research-overview__summary--n3 { grid-template-columns: repeat(2, 1fr); }
         }

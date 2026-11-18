@@ -2726,3 +2726,35 @@ test.describe('Awaiting action written through the bridge', () => {
         expect(await launched(page)).toEqual([]);
     });
 });
+
+test.describe('Open the research in the overview\'s foot (waiting buttons §3.1)', () => {
+    test('the overview drawn anew keeps "Opening the research…" on its button; no proof in 10 s: the sentence under it', async ({ page }) => {
+        await page.clock.install();
+        // An older research (no handoffs) whose stand-in says the session's start relative to its own clock.
+        await follow(page);
+        await openOverview(page);
+        const open = page.locator('#research-overview [data-action="open-research"]');
+        await open.click();
+        await expect(open).toHaveAttribute('aria-busy', 'true');
+        await expect(open).toContainText('Opening the research…');
+        // A new status draws the overview anew: the new button carries the state, no toast takes it.
+        await page.evaluate(() => (window.Strom.UI as unknown as { renderResearchOverview: () => void }).renderResearchOverview());
+        await expect(open).toHaveAttribute('aria-busy', 'true');
+        await expect(open).toHaveAttribute('aria-disabled', 'true');
+        await expect(page.locator('.toast--progress')).toHaveCount(0);
+        expect(await launched(page)).toHaveLength(1);
+        for (let i = 0; i < 11; i++) {
+            await page.clock.fastForward(1000);
+            await page.waitForTimeout(30);
+        }
+        // A line of the foot under its links (not a column of the overview that pushes its sections away).
+        const msg = page.locator('#research-overview .research-overview__foot > .busy-msg');
+        await expect(msg).toContainText('Did the terminal not open?');
+        await expect(msg.getByRole('button', { name: 'Try again' })).toBeVisible();
+        expect((await msg.boundingBox())!.height).toBeLessThan(80);
+        await expect(open).not.toHaveAttribute('aria-busy', 'true');
+        // Drawn anew once more: the sentence stays under the button.
+        await page.evaluate(() => (window.Strom.UI as unknown as { renderResearchOverview: () => void }).renderResearchOverview());
+        await expect(msg).toContainText('Did the terminal not open?');
+    });
+});

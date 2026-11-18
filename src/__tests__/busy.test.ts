@@ -20,7 +20,7 @@ vi.mock('../ui/toast.js', () => ({
     },
 }));
 
-const { runBusy, setBusy, isBusy, prepareBusy, busyButtonHtml, BUSY_SHOW_MS, BUSY_MIN_MS, BUSY_DONE_MS } = await import('../ui/busy.js');
+const { runBusy, setBusy, isBusy, prepareBusy, busyButtonHtml, clearBusyMessage, BUSY_SHOW_MS, BUSY_MIN_MS, BUSY_DONE_MS } = await import('../ui/busy.js');
 const { strings } = await import('../strings.js');
 const { openResearchBusy, resetOpenResearchBusy, OPEN_LATE_WATCH_MS, OPEN_REPEAT_MS } = await import('../ui/research-open-busy.js');
 type LiveStatus = import('../research-link.js').LiveStatus;
@@ -444,6 +444,25 @@ describe('openResearchBusy: a link into the research', () => {
         await vi.advanceTimersByTimeAsync(1_000 + BUSY_MIN_MS);
         expect(await run).toBe('opened');
         expect(message()).toBeNull();
+    });
+
+    it('an older research whose bridge says the same session\'s start a little later each time: no proof, the sentence at the limit', async () => {
+        // A stand-in bridge that says `since` relative to its own clock: the same session, not a new one.
+        const at = (s: number) => new Date(Date.UTC(2026, 10, 18, 9, 44, s)).toISOString();
+        const b = bridge({ before: status({ features: null, sessions: 1, working: [{ who: 'agent', since: at(0) }] }) });
+        b.answer(status({ features: null, sessions: 1, working: [{ who: 'agent', since: at(3) }] }));
+        const run = openResearchBusy(btn, LINK, {}, b.deps);
+        await vi.advanceTimersByTimeAsync(10_500);
+        expect(await run).toBe('limit');
+        expect(message()?.textContent).toContain(strings.busy.notOpened);
+        // a session started later (another one of the same agent) still proves it
+        resetOpenResearchBusy();
+        clearBusyMessage(btn);
+        const again = openResearchBusy(btn, LINK, {}, b.deps);
+        await vi.advanceTimersByTimeAsync(1_500);
+        b.answer(status({ features: null, sessions: 1, working: [{ who: 'agent', since: at(3) }, { who: 'agent', since: new Date(Date.UTC(2026, 10, 18, 10, 0, 0)).toISOString() }] }));
+        await vi.advanceTimersByTimeAsync(1_000 + BUSY_MIN_MS);
+        expect(await again).toBe('opened');
     });
 
     it('no proof in 10 s: the element at rest, a neutral sentence with Try again and the hint under it', async () => {
