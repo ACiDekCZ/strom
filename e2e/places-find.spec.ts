@@ -443,7 +443,7 @@ test('the small map\'s tiles do not come over the network: its corner says so on
     await expect(r.locator('.place-result')).toHaveCount(2, SEARCH);
 
     const mini = r.locator('.place-mini-map');
-    const note = mini.locator('.map-tiles-failed');
+    const note = r.locator('.place-mini-map + .map-tiles-failed');
     await expect(note).toBeVisible();
     await expect(note).toHaveCount(1);
     await expect(note).toHaveAttribute('role', 'alert');

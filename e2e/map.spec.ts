@@ -592,6 +592,9 @@ test('tiles that do not come over the network: one sentence in the map\'s corner
     await expect(page.locator('#map-container .map-topleft > .map-tiles-failed')).toHaveCount(1);
     await expect(page.locator('.map-marker')).toHaveCount(2);
     await expect(page.locator('.map-tiles-blocked')).toHaveCount(0);
+    // The tiles that did not come draw no broken-image frames: the one sentence says it.
+    expect(await page.locator('.map-tiles .map-tile[data-tile-state="failed"]').evaluateAll(els =>
+        els.length > 0 && els.every(el => getComputedStyle(el).visibility === 'hidden'))).toBe(true);
 
     down = false;
     await note.getByRole('button', { name: 'Try again' }).click();

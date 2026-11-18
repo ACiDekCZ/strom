@@ -104,16 +104,17 @@ export function drawTiles(layer: HTMLElement, view: SmallMapView, width: number,
 }
 
 /**
- * Tiles of a small map did not come (§10.3): the main map's sentence with Try again in its bottom left corner,
- * over its points; it goes once none is left failed.
+ * Tiles of a small map did not come (§10.3): the main map's sentence with Try again right under it (a small map
+ * has no free corner: its letters may stand anywhere); it goes once none is left failed.
  */
 function renderTilesFailedNote(layer: HTMLElement): void {
     const map = layer.parentElement;
     if (!map) return;
-    const note = map.querySelector(':scope > .map-tiles-failed');
+    const next = map.nextElementSibling;
+    const note = next?.classList.contains('map-tiles-failed') ? next : null;
     if (!mapTilesFailedIn(layer)) { note?.remove(); return; }
     if (note) return;
-    map.appendChild(tilesFailedNote(() => retryMapTiles(layer)));
+    map.after(tilesFailedNote(() => retryMapTiles(layer)));
 }
 
 /** The small maps listen once for the tile server's refusal (its note). */
