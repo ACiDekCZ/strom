@@ -34,6 +34,7 @@ import { researchBridgeActionLabel } from './research-open-mark.js';
 import { lastBridgeStatus } from './research-sync-ui.js';
 import { researchFactLabel } from './person-research-ui.js';
 import { uiModule } from './module.js';
+import type { ToastWorkEnd } from './toast.js';
 
 const esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const lowerFirst = (t: string): string => (t ? t.charAt(0).toLocaleLowerCase() + t.slice(1) : t);
@@ -547,8 +548,8 @@ export const verifyUiMethods = uiModule({
      * research when the fact is its (by its id), else the app's own
      * confirmation. Undone: a toast with "Redo".
      */
-    async verifyConfirm(v: FactView, confirm: boolean): Promise<void> {
-        const tip = document.querySelector('#status-tip');
+    async verifyConfirm(v: FactView, confirm: boolean, opts: { inToast?: boolean } = {}): Promise<ToastWorkEnd | undefined> {
+        const tip = opts.inToast ? null : document.querySelector('#status-tip');
         const viaBridge = confirm ? v.offer.scanViaBridge : v.offer.undoViaBridge;
         // Undone: "Redo" confirms it again the same way.
         const done = (): void => {
@@ -560,7 +561,9 @@ export const verifyUiMethods = uiModule({
                 : document.querySelector('#relationships-modal.active') ? '#relationships-modal.active .buttons' : undefined;
             this.showToast(strings.verify.undone, 5000, {
                 kind: 'verify-confirm', ...(clearOf ? { clearOf } : {}),
-                action: { label: strings.undo.redo, run: () => { void this.verifyConfirm(again, true); } },
+                // Redo works in the toast (B116): its words while written, then the confirmation or why not.
+                action: { label: strings.undo.redo, run: () => this.verifyConfirm(again, true, { inToast: true }),
+                    work: { label: strings.busy.saving, failed: strings.busy.errRefused } },
             });
         };
         if (!viaBridge) {
@@ -569,11 +572,12 @@ export const verifyUiMethods = uiModule({
             const ok = confirm ? DataManager.confirmFact(target, v.fact) : DataManager.unconfirmFact(target, v.fact);
             if (tipState?.key === v.key) tipState = null;
             this.verifyRedraw(confirm ? 'undo' : 'scan');
+            if (opts.inToast) return ok ? { ok: true, text: strings.verify.confirmedAt(dayText(localIsoDay())) } : { ok: false, text: strings.busy.failed };
             if (ok) done();
-            return;
+            return undefined;
         }
         const eid = v.offer.eid;
-        if (!eid) return;
+        if (!eid) return undefined;
         // "Redo" from the toast comes with the tip closed: the request goes all the same.
         if (tip) {
             tipState = { tip, key: v.key, busy: confirm ? 'scan' : 'undo' };
@@ -592,17 +596,19 @@ export const verifyUiMethods = uiModule({
             // to it, the reason in a toast. A value changed here (not sent) only says why.
             if (result?.code === 'confirm.changed' && result.status !== 0) {
                 if (tip && document.querySelector('#status-tip') === tip) closeStatusTip();
-                this.showToast(why, 8000, { alert: true, kind: 'verify-confirm' });
                 void this.researchLoadNewer();
-                return;
+                if (opts.inToast) return { ok: false, text: why, retry: false };
+                this.showToast(why, 8000, { alert: true, kind: 'verify-confirm' });
+                return undefined;
             }
+            if (opts.inToast) return { ok: false, text: why };
             if (tip && document.querySelector('#status-tip') === tip) {
                 tipState = { tip, key: v.key, error: why };
                 this.verifyTipRedrawn(confirm ? 'scan' : 'undo');
             } else {
                 this.showToast(why, 5000, { alert: true, kind: 'verify-confirm' });
             }
-            return;
+            return undefined;
         }
         const holder = holderOf(v.target);
         // A confirmation closes the fact's waiting (the research drops it from its task).
@@ -613,7 +619,9 @@ export const verifyUiMethods = uiModule({
             });
         }
         this.verifyRedraw(confirm ? 'undo' : 'scan');
+        if (opts.inToast) return { ok: true, text: strings.verify.confirmedAt(dayText(result.confirmed ?? localIsoDay())) };
         done();
+        return undefined;
     },
 
     /** The tip drawn again (its own state changed), the focus kept on its action. */

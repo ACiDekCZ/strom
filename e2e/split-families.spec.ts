@@ -328,3 +328,31 @@ test('tree manager row: split opens the proposals directly; a tree not open offe
     await expect(modal.locator('.splitfam-row')).toHaveCount(2);
     await expect(page.locator('#split-fam-picker-modal')).toHaveCount(0);
 });
+
+test('Create N trees works at once: each tree its step on the button, a double click creates them once', async ({ page }) => {
+    await loadTree(page);
+    await page.evaluate(() => window.Strom.UI.showSplitFamiliesDialog());
+    const modal = page.locator('#split-families-modal');
+    await expect(modal).toBeVisible();
+    const before = await page.evaluate(() => window.Strom.TreeManager.getTrees().length);
+    const go = page.getByRole('button', { name: 'Create 2 trees' });
+    await expect(go).toBeEnabled();
+    // The words the button says while it works, every change of them kept.
+    const seen = await go.evaluate(async (b: HTMLButtonElement) => {
+        const words: string[] = [];
+        const look = () => { const w = b.querySelector('.b-busy')?.textContent ?? ''; if (w && words.at(-1) !== w) words.push(w); };
+        new MutationObserver(look).observe(b, { subtree: true, childList: true, characterData: true, attributes: true });
+        b.click();
+        const at = b.getAttribute('aria-busy');
+        b.click();
+        await new Promise(r => setTimeout(r, 1500));
+        return { at, words };
+    });
+    expect(seen.at).toBe('true');
+    expect(seen.words.some(w => /^Creating tree 1 of 2: .+…$/.test(w))).toBe(true);
+    expect(seen.words.some(w => /^Creating tree 2 of 2: .+…$/.test(w))).toBe(true);
+    await expect(modal).toBeHidden();
+    const trees = await page.evaluate(() => window.Strom.TreeManager.getTrees().map((t: { name: string }) => t.name));
+    expect(trees.length).toBe(before + 2);
+    expect(trees.filter((n: string) => n === 'Old Novák (*1900) family')).toHaveLength(1);
+});

@@ -27,8 +27,12 @@ import { uiModule } from './module.js';
 import { el, LiveSession, researchSession } from './research-ui.js';
 import { normalizeModal } from './modal-skeleton.js';
 import { TreeManager } from '../tree-manager.js';
+import type { ToastWorkEnd } from './toast.js';
+import { runBusy } from './busy.js';
 
 const NOTE_ID = 'waiting-note-modal';
+/** "All queries' text": how long its reading may take (§1.5, §10.3). */
+const WAITING_NOTE_MS = 30_000;
 
 interface WriteState {
     /** The research's own list, as its last status had it. */
@@ -197,19 +201,24 @@ export const researchWaitingWriteMethods = uiModule({
         if (ok && phase === 'sent') {
             this.showToast(W.sentToast(waitingSentDay(now, getCurrentLanguage())), 6000, {
                 kind: 'waiting-sent',
-                action: { label: W.undo, run: () => { void this.markWaitingUnsent(s, w.id); } },
+                // Undo works in the toast (4d): "Undoing…" and its end there.
+                action: { label: W.undo, run: () => this.markWaitingUnsent(s, w.id, { inToast: true }),
+                    work: { label: strings.busy.reverting, ...(w.what ? { sub: w.what } : {}) } },
             });
         } else if (!result.ok && result.code !== 'none') {
             this.showWaitingRefused(result);
         }
     },
 
-    /** Back to To do ("Undo" after Sent, or at a sent item). */
-    async markWaitingUnsent(s: LiveSession, id: string): Promise<void> {
+    /**
+     * Back to To do ("Undo" after Sent, or at a sent item). `inToast`: the toast's Undo (4d), its end given back
+     * to the toast instead of a toast of its own.
+     */
+    async markWaitingUnsent(s: LiveSession, id: string, opts: { inToast?: boolean } = {}): Promise<ToastWorkEnd | undefined> {
         const task = researchTaskRef(id);
-        if (!task || !this.liveWaitingWrites(s).sent) return;
+        if (!task || !this.liveWaitingWrites(s).sent) return undefined;
         const st = writeState(s);
-        if (st.pending.get(id)?.until === Infinity) return;
+        if (st.pending.get(id)?.until === Infinity) return undefined;
         const back = new Map([[id, st.pending.get(id)]]);
         st.pending.set(id, { phase: 'todo', until: Infinity });
         this.reshowLiveWaiting(s);
@@ -219,9 +228,15 @@ export const researchWaitingWriteMethods = uiModule({
         const phase = waitingWrittenPhase(result, task, 'todo');
         if (phase !== 'todo') st.pending.set(id, { phase, until: Infinity });
         const ok = this.settleWaitingWrite(s, [id], phase, result, back);
-        if (!stillFollowing(s)) return;
-        if (ok && phase === 'todo') this.showToast(strings.live.waitingWrite.unsentToast, 3000, { kind: 'waiting-unsent' });
-        else if (!result.ok && result.code !== 'none') this.showWaitingRefused(result);
+        if (!stillFollowing(s)) return undefined;
+        if (ok && phase === 'todo') {
+            if (opts.inToast) return { ok: true, text: strings.live.waitingWrite.unsentToast };
+            this.showToast(strings.live.waitingWrite.unsentToast, 3000, { kind: 'waiting-unsent' });
+        } else if (!result.ok && result.code !== 'none') {
+            if (opts.inToast) return { ok: false, text: refusedText(result), whole: true };
+            this.showWaitingRefused(result);
+        }
+        return undefined;
     },
 
     /** "Sent" for a whole place: its items to do that offer it move at once; the research writes the place. */
@@ -254,7 +269,8 @@ export const researchWaitingWriteMethods = uiModule({
             const marked = [...result.sent];
             this.showToast(W.groupSentToast(n, waitingSentDay(now, getCurrentLanguage())), 6000, {
                 kind: 'waiting-sent',
-                ...(marked.length > 0 ? { action: { label: W.undo, run: () => { void this.markWaitingGroupUnsent(s, key, marked); } } } : {}),
+                ...(marked.length > 0 ? { action: { label: W.undo, run: () => this.markWaitingGroupUnsent(s, key, marked),
+                    work: { label: strings.busy.reverting, ...(items[0]?.group?.name ? { sub: items[0].group.name } : {}) } } } : {}),
             });
         } else if (!result.ok && result.code !== 'none') {
             this.showWaitingRefused(result);
@@ -264,14 +280,14 @@ export const researchWaitingWriteMethods = uiModule({
     /**
      * "Undo" after a place's Sent: exactly the tasks that Sent marked (its
      * answer's list) go back to do through the bridge; their rows move at
-     * once, and the answer's `unsent` says which really went back.
+     * once, and the answer's `unsent` says which really went back. Its end is the toast's (4d).
      */
-    async markWaitingGroupUnsent(s: LiveSession, key: string, marked: readonly string[]): Promise<void> {
-        if (!this.liveWaitingWrites(s).sent) return;
+    async markWaitingGroupUnsent(s: LiveSession, key: string, marked: readonly string[]): Promise<ToastWorkEnd | undefined> {
+        if (!this.liveWaitingWrites(s).sent) return undefined;
         const st = writeState(s);
-        if (st.groups.has(key)) return;
+        if (st.groups.has(key)) return undefined;
         const tasks = waitingTaskIds(marked);
-        if (tasks.length === 0) return;
+        if (tasks.length === 0) return undefined;
         const ids = tasks.filter(id => st.pending.get(id)?.until !== Infinity
             && s.waiting.some(w => w.id === id && waitingPhase(w) === 'sent'));
         const back = new Map(ids.map(id => [id, st.pending.get(id)]));
@@ -287,25 +303,43 @@ export const researchWaitingWriteMethods = uiModule({
             st.groups.delete(key);
         }
         const ok = this.settleWaitingWrite(s, ids, 'todo', result, back, 'exact');
-        if (!stillFollowing(s)) return;
-        if (ok) this.showToast(strings.live.waitingWrite.unsentToast, 3000, { kind: 'waiting-unsent' });
-        else if (!result.ok && result.code !== 'none') this.showWaitingRefused(result);
+        if (!stillFollowing(s)) return undefined;
+        if (ok) return { ok: true, text: strings.live.waitingWrite.unsentToast };
+        if (!result.ok && result.code !== 'none') return { ok: false, text: refusedText(result), whole: true };
+        return undefined;
     },
 
-    /** "All queries' text" of a place: read from the bridge, shown in a small window with Copy. */
-    async showWaitingGroupNote(s: LiveSession, key: string, name: string): Promise<void> {
+    /**
+     * "All queries' text" of a place: read from the bridge, shown in a small window with Copy. `btn`: the
+     * button it came from, in the working state meanwhile ("Loading…", 30 s at most; a second click asks
+     * nothing more), its failure said under it (§1.5); without it a failure is a toast.
+     */
+    async showWaitingGroupNote(s: LiveSession, key: string, name: string, btn?: HTMLElement): Promise<void> {
         if (!this.liveWaitingWrites(s).note) return;
-        const result = await getGroupNote(s.bridge.base, key);
-        if (!stillFollowing(s)) return;
-        const W = strings.live.waitingWrite;
-        if (result.ok) {
-            this.showWaitingNoteDialog(name, result);
-        } else if (result.code === 'none' && result.status !== 200) {
-            // The place (or its tasks) is gone meanwhile: nothing to show; the status says what is left.
-            this.researchStatusAfterWrite(s);
-        } else {
-            this.showToast(result.code === 'none' ? W.noteNone : W.noteFailed, 6000, { kind: 'waiting-failed' });
+        const read = async (): Promise<string | null> => {
+            const result = await getGroupNote(s.bridge.base, key, { timeoutMs: WAITING_NOTE_MS });
+            if (!stillFollowing(s)) return null;
+            const W = strings.live.waitingWrite;
+            if (result.ok) {
+                this.showWaitingNoteDialog(name, result);
+                return null;
+            }
+            if (result.code === 'none' && result.status !== 200) {
+                // The place (or its tasks) is gone meanwhile: nothing to show; the status says what is left.
+                this.researchStatusAfterWrite(s);
+                return null;
+            }
+            return result.code === 'none' ? W.noteNone : W.noteFailed;
+        };
+        if (!btn) {
+            const failed = await read();
+            if (failed) this.showToast(failed, 6000, { kind: 'waiting-failed' });
+            return;
         }
+        await runBusy(btn, async ctl => {
+            const failed = await read();
+            if (failed) ctl.end({ ok: false, kind: 'error', text: failed, retry: () => { void this.showWaitingGroupNote(s, key, name, btn); } });
+        }, { label: strings.busy.generic, timeoutMs: WAITING_NOTE_MS, kind: 'bridge' });
     },
 
     /** The queries' text, read-only and selectable, with Copy and ×. */

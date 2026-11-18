@@ -13,6 +13,8 @@ import { placeStateBadge, placeStateText, PLACE_STATE_GLYPHS, placeGlyphClass, t
 import { placeMenu, placeMenuBadge, type PlaceMenuAction } from '../place-actions.js';
 import { MQ_MOBILE } from '../breakpoints.js';
 import { uiModule } from './module.js';
+import { PLACES_STEP_MS, PLACES_UNQUEUE_MS } from './places-identify-ui.js';
+import { runBusy, type BusyCtl } from './busy.js';
 
 /** A place of the open card's timeline: the map point it is drawn as, its location, its state. */
 interface LifePlace {
@@ -103,7 +105,7 @@ export const placeMenuMethods = uiModule({
             + `${esc(labels[it.action])}</button>`).join('');
         const note = menu.note ? `<p class="place-menu-note">${esc(s.menu.note)}</p>` : '';
         const label = s.menu.label(place);
-        const run = (action: PlaceMenuAction): void => this.runPlaceMenu(action, info.key, id);
+        const run = (action: PlaceMenuAction, item?: HTMLElement): void => this.runPlaceMenu(action, info.key, id, item, anchor);
 
         if (window.matchMedia(MQ_MOBILE).matches) {
             const sheet = this.showLifelineHistorySheet('place-menu place-menu-sheet', 'menu', label,
@@ -112,7 +114,7 @@ export const placeMenuMethods = uiModule({
                 const row = (e.target as HTMLElement).closest<HTMLElement>('[data-action]');
                 if (!row) return;
                 this.hideBottomSheet();
-                run(row.dataset.action as PlaceMenuAction);
+                run(row.dataset.action as PlaceMenuAction, row);
             });
             sheet.addEventListener('keydown', (e) => placeMenuKeys(e, sheet));
             sheet.querySelector<HTMLElement>('[data-action]')?.focus({ preventScroll: true });
@@ -129,14 +131,22 @@ export const placeMenuMethods = uiModule({
             if (!row) return;
             e.stopPropagation();
             this.closeLifelineHistoryPopups();
-            run(row.dataset.action as PlaceMenuAction);
+            run(row.dataset.action as PlaceMenuAction, row);
         });
         this.openLifelineHistoryPopup(el, anchor, (e) => placeMenuKeys(e, el));
         el.querySelector<HTMLElement>('[data-action]')?.focus();
     },
 
     /** One step of the place menu. */
-    runPlaceMenu(action: PlaceMenuAction, key: string, id: PlaceIdentity): void {
+    /**
+     * `item`: the menu's item (the menu closes); `anchor`: the place it opened from, which takes the step's
+     * working state and a refusal's sentence (§4, B158).
+     */
+    runPlaceMenu(action: PlaceMenuAction, key: string, id: PlaceIdentity, item?: HTMLElement, anchor?: HTMLElement): void {
+        const step = (fn: (ctl?: BusyCtl) => Promise<unknown>, timeoutMs: number): void => {
+            if (!item) { void fn(); return; }
+            void runBusy(item, async ctl => { await fn(ctl); }, { label: strings.busy.sending, timeoutMs, ...(anchor ? { rowOf: anchor } : {}) });
+        };
         switch (action) {
             case 'answer':
                 this.leavePersonModalThen(() => this.openWaitingPlaces(id.waitingId));
@@ -149,10 +159,10 @@ export const placeMenuMethods = uiModule({
                 return;
             case 'look':
             case 'lookAgain':
-                void this.queuePlaces([key], false);
+                step(ctl => this.queuePlaces([key], false, ctl), PLACES_STEP_MS);
                 return;
             case 'unqueue':
-                void this.unqueuePlace(key);
+                step(ctl => this.unqueuePlace(key, ctl), PLACES_UNQUEUE_MS);
                 return;
         }
     },

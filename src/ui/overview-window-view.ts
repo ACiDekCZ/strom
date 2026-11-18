@@ -296,7 +296,7 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
             return (typeof r === 'string' ? r : 'fail') as WaitingAnswerOutcome;
         },
         async markWaitingSent(_s: LiveSession, w: LiveWaiting): Promise<void> { run('waiting-sent', { itemId: w.id }); },
-        async markWaitingUnsent(_s: LiveSession, id: string): Promise<void> { run('waiting-unsent', { itemId: id }); },
+        async markWaitingUnsent(_s: LiveSession, id: string): Promise<undefined> { run('waiting-unsent', { itemId: id }); return undefined; },
         async markWaitingGroupSent(_s: LiveSession, key: string): Promise<void> { run('waiting-group-sent', { group: key }); },
         // Leave as is at a finding (spec 109 §4): written by the main window (its toast with Undo); the row goes here at once.
         async keepWaitingAudit(this: UIClass, s: LiveSession, w: LiveWaiting): Promise<void> {

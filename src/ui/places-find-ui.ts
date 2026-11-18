@@ -36,7 +36,8 @@ import {
 import { SettingsManager } from '../settings.js';
 import { loadMapTile, mapTilesBlocked, onMapTilesChange, releaseMapTile } from './map-tiles.js';
 import { managerKnownStreets, managerPlaceUsage, managerResearchActions } from './places-manager-ui.js';
-import { placesView } from './places-identify-ui.js';
+import { placesView, PLACES_STEP_MS } from './places-identify-ui.js';
+import { runBusy } from './busy.js';
 import { uiModule } from './module.js';
 
 /** The small map beside the results (CSS px; on a phone it takes the panel's width). */
@@ -430,7 +431,9 @@ export const placesFindMethods = uiModule({
         input.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); run(); } };
         (results.querySelector('.place-pin-open') as HTMLButtonElement).onclick = () => this.openPlaceByHand(key, row);
         const look = results.querySelector<HTMLButtonElement>('.place-empty-look');
-        if (look) look.onclick = () => void this.queuePlaces([key], false);
+        // "Look up in the research" (B148): working until the bridge answers, a refusal said under it.
+        if (look) look.onclick = () => void runBusy(look, async ctl => { await this.queuePlaces([key], false, ctl); },
+            { label: strings.busy.sending, timeoutMs: PLACES_STEP_MS });
         const more = results.querySelector<HTMLButtonElement>('.place-empty-more');
         if (more) more.onclick = () => { this.closePlacesManager(); this.showResearchInfoDialog(); };
     },

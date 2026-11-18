@@ -2693,7 +2693,9 @@ export const researchUiMethods = uiModule({
         const persons = Object.values(stored.persons).filter(p => !p.isPlaceholder).length;
         const families = countFamilies(stored);
         const restore = backupId
-            ? { action: { label: strings.sync.restoreBeforeLoad, run: () => { void this.researchRestoreBeforeLoad(treeId); } } } : {};
+            // It works in the toast (A185): "Undoing…", then the state restored with its Undo, or why not.
+            ? { action: { label: strings.sync.restoreBeforeLoad, run: () => this.researchRestoreBeforeLoad(treeId, { inToast: true }),
+                work: { label: strings.busy.reverting, timeoutMs: Infinity } } } : {};
         // Loaded over the tree: "Research version loaded · Restore the state before loading" (10 s).
         if (opts.noDialog) {
             // Said by the research panel's line (which tree is followed now), never a toast.

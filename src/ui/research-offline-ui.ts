@@ -30,6 +30,7 @@ import {
 import { bridgeBase } from './history-ui.js';
 import { QueueList, moveQueueItemFirst, placeQueueItem, placeQueueItemInLists, requestQueueList, retryQueueList } from '../research-queue-pages.js';
 import { activeDirections, directionRefusedText, holdForBridge, setQueueDirectionFilter } from './research-directions-ui.js';
+import { undoInToast, type ToastWorkEnd } from './toast.js';
 
 type Mode = 'docked' | 'overlay' | 'sheet' | 'window';
 
@@ -1073,7 +1074,7 @@ export const researchOffLineMethods = uiModule({
             const back = branchBack(before);
             this.showToast(message, 6000, {
                 kind: 'direction',
-                action: { label: L.dirUndo, run: () => void this.changeBranchMode(next, back, { undo: true }) },
+                action: { label: L.dirUndo, run: () => this.undoBranchMode(next, back), work: { label: strings.busy.reverting } },
             });
         }
         this.researchStatusAfterWrite(s);
@@ -1198,8 +1199,13 @@ export const researchOffLineMethods = uiModule({
             this.showToast(L.dirToastSaved, 6000, {
                 kind: 'direction',
                 action: {
-                    label: L.dirUndo,
-                    run: () => void (was ? this.restoreTaskPlace(task, was) : this.changeTaskOrder(task, back, { undo: true })),
+                    label: L.dirUndo, work: { label: strings.busy.reverting, sub: task },
+                    run: () => was ? this.restoreTaskPlace(task, was, { inToast: true })
+                        : undoInToast(async said => {
+                            const ok = await this.changeTaskOrder(task, back, { undo: true });
+                            if (!ok && taskProblems.get(task)) said(taskProblems.get(task)!);
+                            return ok;
+                        }),
                 },
             });
         }
@@ -1267,8 +1273,11 @@ export const researchOffLineMethods = uiModule({
         return { ok: true, was: r.was, task: r.task?.id === task ? r.task : null };
     },
 
-    /** "Do next" from a task's ⋯: the task on top, lit and focused, a toast with Undo (6 s). */
-    async doTaskNext(task: string): Promise<void> {
+    /**
+     * "Do next" from a task's ⋯: the task on top, lit and focused, a toast with Undo (6 s). `inToast`: "Try
+     * again" in a toast (A35), its end given back to that toast.
+     */
+    async doTaskNext(task: string, opts: { inToast?: boolean } = {}): Promise<ToastWorkEnd | undefined> {
         this.closeLiveTaskMenu();
         const L = strings.live;
         const out = await this.writeTaskOrder(task, { do: 'next' });
@@ -1277,27 +1286,54 @@ export const researchOffLineMethods = uiModule({
             this.renderLivePanel();
             focusQueueMoved();
             const was = out.was;
-            this.showToast(L.queueMoved(task), 6000, {
-                kind: 'queue-next',
-                ...(was ? { action: { label: L.queueUndo, run: () => void this.restoreTaskPlace(task, was) } } : {}),
-            });
-            return;
+            // Undo works in the toast (A34): "Undoing…", then its end there.
+            const undo = was ? { label: L.queueUndo, run: () => this.restoreTaskPlace(task, was, { inToast: true }),
+                work: { label: strings.busy.reverting, sub: task } } : undefined;
+            if (opts.inToast) return { ok: true, text: L.queueMoved(task), ...(undo ? { action: undo } : {}) };
+            this.showToast(L.queueMoved(task), 6000, { kind: 'queue-next', ...(undo ? { action: undo } : {}) });
+            return undefined;
         }
-        this.taskOrderRefusedToast(out.why, () => void this.doTaskNext(task));
+        if (opts.inToast) return this.taskOrderRefusedEnd(task, out.why);
+        this.taskOrderRefusedToast(out.why, () => this.doTaskNext(task, { inToast: true }), strings.busy.saving);
+        return undefined;
     },
 
     /** Undo of "Do next" (and of a place set with `queue.next`): the task exactly where it was. */
-    async restoreTaskPlace(task: string, was: TaskOrderWas): Promise<void> {
+    async restoreTaskPlace(task: string, was: TaskOrderWas, opts: { inToast?: boolean } = {}): Promise<ToastWorkEnd | undefined> {
         if (queueMoved?.id === task) queueMoved = null;
         const out = await this.writeTaskOrder(task, { do: 'restore', was });
-        if (!out.ok) this.taskOrderRefusedToast(out.why, () => void this.restoreTaskPlace(task, was));
+        if (opts.inToast) return out.ok ? { ok: true, text: strings.busy.undone } : this.taskOrderRefusedEnd(task, out.why);
+        if (!out.ok) this.taskOrderRefusedToast(out.why, () => this.restoreTaskPlace(task, was, { inToast: true }), strings.busy.reverting);
+        return undefined;
     },
 
-    /** A refused place: the agent at work on it (no Undo), or a silent bridge with Try again; others are said at the task. */
-    taskOrderRefusedToast(why: 'taken' | 'bridge' | 'refused', retry: () => void): void {
+    /**
+     * A refused place: the agent at work on it (no Undo), or a silent bridge with Try again (working in the
+     * toast, A35, `busy` its words); others are said at the task.
+     */
+    taskOrderRefusedToast(why: 'taken' | 'bridge' | 'refused', retry: () => Promise<ToastWorkEnd | undefined>, busy: string): void {
         const L = strings.live;
         if (why === 'taken') this.showToast(L.taskDoing, 6000, { kind: 'queue-next' });
-        else if (why === 'bridge') this.showToast(L.queueBridgeErr, 6000, { kind: 'queue-next', action: { label: L.dirRetry, run: retry } });
+        else if (why === 'bridge') {
+            this.showToast(L.queueBridgeErr, 6000, { kind: 'queue-next', action: { label: L.dirRetry, run: retry, work: { label: busy, failed: strings.busy.errRefused } } });
+        }
+    },
+
+    /** A refused place as the end of a toast's work: the agent at work on it (no Try again), a silent bridge, or the task's reason. */
+    taskOrderRefusedEnd(task: string, why: 'taken' | 'bridge' | 'refused'): ToastWorkEnd {
+        const L = strings.live;
+        if (why === 'taken') return { ok: false, text: L.taskDoing, whole: true, retry: false };
+        if (why === 'bridge') return { ok: false, text: L.queueBridgeErr, whole: true };
+        return { ok: false, text: taskProblems.get(task) || strings.busy.failed };
+    },
+
+    /** Undo of a branch's choice in its toast (§4): its end there, the branch's reason when it was refused. */
+    async undoBranchMode(next: OffLineBranch, back: BranchModeWrite): Promise<ToastWorkEnd> {
+        return undoInToast(async said => {
+            const ok = await this.changeBranchMode(next, back, { undo: true });
+            if (!ok && branchProblems.get(next.id)) said(branchProblems.get(next.id)!.text);
+            return ok;
+        });
     },
 
     // ==================== A GROWING BRANCH IN AWAITING ACTION ====================
@@ -1401,9 +1437,9 @@ export const researchOffLineMethods = uiModule({
         this.renderLivePanel();
         const message = what === 'line' ? L.dirToastAdded : what === 'never' ? L.dirToastBranchOff : L.dirToastSaved;
         // Undo puts the branch's choice back (the question itself comes again only when the branch grows further).
-        const undo = before && what !== 'keep' ? { label: L.dirUndo, run: () => void this.changeBranchMode(
+        const undo = before && what !== 'keep' ? { label: L.dirUndo, work: { label: strings.busy.reverting }, run: () => this.undoBranchMode(
             { ...before, mode: what === 'line' ? 'line' : 'never', line: what === 'line' ? line ?? before.nearest : undefined, own: true },
-            branchBack(before), { undo: true }) } : undefined;
+            branchBack(before)) } : undefined;
         this.showToast(message, 6000, { kind: 'direction', ...(undo ? { action: undo } : {}) });
         this.researchStatusAfterWrite(s);
         return true;

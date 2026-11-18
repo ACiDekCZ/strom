@@ -182,7 +182,8 @@ test.describe('directions managed through the bridge', () => {
         b.replies.push({ status: 409, body: { error: 'directions.state', text: 'Linie má rozdělaný zápis.' } });
         await page.locator('.toast[data-kind="direction"] .toast-action').click();
         const toast = page.locator('.toast[data-kind="direction"]');
-        await expect(toast).toHaveText('Undo failed, the change stays. · “Linie má rozdělaný zápis.”');
+        // Said in the same toast (it stays), the research's sentence after the mark.
+        await expect(toast).toContainText('Undo failed, the change stays. · “Linie má rozdělaný zápis.”');
         await expect(toast).toHaveAttribute('role', 'alert');
         await expect(toast.locator('.toast-action')).toHaveCount(0);
         await expect(directionRow(page, 'G0002').locator('.research-direction__chip')).toHaveText(/^paused/);

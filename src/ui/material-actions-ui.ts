@@ -27,6 +27,7 @@ import { MultiPersonPicker } from '../person-picker.js';
 import { nameWithoutYears } from '../materials-overview.js';
 import { MaterialActionCtx, MaterialsContext, appendBreakable } from './materials-ui.js';
 import { uiModule } from './module.js';
+import { undoInToast } from './toast.js';
 
 const TOAST_MS = 8000;
 const PICKER_ID = 'mdlg-assign-picker';
@@ -586,9 +587,10 @@ export const materialActionsMethods = uiModule({
             await mergeIntoCache(mc.treeId, res.value.files, res.value.people);
             this.showToast((mc.agent ? m.hiddenToastResearch : m.hiddenToast)(files.length), TOAST_MS, {
                 closable: true, kind: 'materials',
+                // Undo works in the toast (B85): "Undoing…", then its end there.
                 action: {
-                    label: strings.undo.undo,
-                    run: () => void this.writeHidden(mc, ids, false, undefined),
+                    label: strings.undo.undo, work: { label: strings.busy.reverting },
+                    run: () => undoInToast(said => this.writeHidden(mc, ids, false, undefined, said)),
                 },
             });
             this.materialActionDone(ctx);
@@ -596,12 +598,15 @@ export const materialActionsMethods = uiModule({
     },
 
     /** Hide or restore files quietly (an undo); a refusal says so in a toast. */
-    async writeHidden(mc: MaterialsContext, ids: string[], hidden: boolean, reason: HiddenReason | undefined): Promise<boolean> {
+    /** `said`: a refusal's words go there (a toast's Undo working in it) instead of a toast of their own. */
+    async writeHidden(mc: MaterialsContext, ids: string[], hidden: boolean, reason: HiddenReason | undefined,
+        said?: (text: string) => void): Promise<boolean> {
         const res = await writeOnce(`hidden:${hidden}:${reason ?? ''}:${ids.join(',')}`,
             () => this.writeHide(mc, { files: ids, hidden, ...(reason ? { reason } : {}) }));
         if (!res) return false;
         if (!res.ok) {
-            this.materialErrorToast(mc, res.error, () => void this.writeHidden(mc, ids, hidden, reason));
+            if (said) said(materialErrorText(res.error, mc.agent));
+            else this.materialErrorToast(mc, res.error, () => void this.writeHidden(mc, ids, hidden, reason));
             return false;
         }
         await mergeIntoCache(mc.treeId, res.value.files, res.value.people);
@@ -629,12 +634,13 @@ export const materialActionsMethods = uiModule({
         this.showToast(m.restoredToast(files.length), TOAST_MS, {
             closable: true, kind: 'materials',
             action: {
-                label: strings.undo.undo,
-                run: () => void (async () => {
+                label: strings.undo.undo, work: { label: strings.busy.reverting },
+                run: () => undoInToast(async said => {
                     for (const [reason, group] of byReason) {
-                        if (!await this.writeHidden(mc, group, true, (reason || undefined) as HiddenReason | undefined)) return;
+                        if (!await this.writeHidden(mc, group, true, (reason || undefined) as HiddenReason | undefined, said)) return false;
                     }
-                })(),
+                    return true;
+                }),
             },
         });
         this.materialActionDone(ctx);

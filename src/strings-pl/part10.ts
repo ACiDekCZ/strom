@@ -50,6 +50,8 @@ export const plPart10: Pick<StringsType, 'busy'> = {
         show: 'Pokazać',
         retry: 'Spróbować ponownie',
         failed: 'Nie udało się.',
+        undone: 'Cofnięto.',
+        notUndone: (why: string) => `Nie cofnięto: ${why}`,
         errOffline: 'Badanie nie działa. Trzeba uruchomić Strom Research.',
         errBusy: 'Badanie zapisuje teraz inne zadanie. Ponowna próba będzie możliwa za chwilę.',
         errTimeout: (s: number) => `Badanie nie odpowiedziało w ciągu ${s} s.`,

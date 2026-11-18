@@ -19,6 +19,7 @@ import {
     postBridgeMap, historyMapNote, HISTORY_MAP_NOTE_MAX, type HistoryMapBody, type HistoryWriteRefusal,
 } from '../history-bridge.js';
 import { uiModule } from './module.js';
+import { undoInToast } from './toast.js';
 
 export const HISTORY_MAP_DIALOG_ID = 'history-map-modal';
 
@@ -377,7 +378,8 @@ export const historyMapMethods = uiModule({
         this.historyManageWritten(d.rid, before, r);
         this.showToast(h.toastMapped(place, names), 8000, {
             kind: 'history-map',
-            action: { label: h.undo, run: () => { void this.historyMapWrite(undo); } },
+            // Undo works in the toast (B195): "Undoing…", then its end there.
+            action: { label: h.undo, run: () => undoInToast(said => this.historyMapWrite(undo, said)), work: { label: strings.busy.reverting, sub: place } },
         });
     },
 
@@ -405,14 +407,15 @@ export const historyMapMethods = uiModule({
         this.showToast(strings.history.toastRedo(place), 5000, { kind: 'history-map' });
     },
 
-    /** A write of R5 outside the picker (Undo of a toast): refusals as a toast. */
-    async historyMapWrite(body: HistoryMapBody): Promise<boolean> {
+    /** A write of R5 outside the picker (Undo of a toast): refusals as a toast, or to `said` (the toast's own words). */
+    async historyMapWrite(body: HistoryMapBody, said?: (text: string) => void): Promise<boolean> {
         const d = this.historyManageDrawn();
         if (!d?.base) return false;
         const before = this.researchHeadNow(d.rid);
         const r = await postBridgeMap(d.base, body, d.features);
         if (!r.ok) {
-            this.showToast(this.historyMapRefusedText(r), 5000);
+            if (said) said(this.historyMapRefusedText(r));
+            else this.showToast(this.historyMapRefusedText(r), 5000);
             return false;
         }
         this.historyManageWritten(d.rid, before, r);

@@ -280,6 +280,7 @@ describe('the marks of research actions come from the one map', () => {
         // Each draws the flags its callers derived with researchMarkFlags / researchLinkFlags / researchLinkMark.
         const RENDERERS: Record<string, number> = {
             'ui/toast.ts': 1, // a toast's action ({ research, ai })
+            'ui/busy.ts': 1, // an end's further action under its element ({ research, ai })
             'ui/dialogs.ts': 2, // a choice's button and the dialog's link ({ research })
             'ui/bottom-sheet.ts': 2, // a sheet row ({ ext, ai }) and the sheet's state action ({ research, ai })
             'ui/material-viewer-ui.ts': 2, // the viewer's card buttons and its actions ({ research })
@@ -336,7 +337,7 @@ describe('the marks of research actions come from the one map', () => {
         const MARKED = /\b(?:research|ext|external|ai|mark): |\bresearch(?:Mark|Link)Flags\(/;
         const ALLOWED: Record<string, number> = {
             // "Send again" / "Retry" after the bridge refused or lost a send: the bridge sends again (no terminal).
-            'ui/research-sync-ui.ts': 6,
+            'ui/research-sync-ui.ts': 5,
         };
         const unmarked: Record<string, number> = {};
         for (const f of UI) {

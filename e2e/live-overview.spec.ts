@@ -2275,11 +2275,23 @@ test.describe('Awaiting action written through the bridge', () => {
         // The menu counts what is left to do.
         await expect(page.locator('#research-menu-signal')).toHaveText('29');
 
-        // Undo: back to do.
-        await toast.locator('.toast-action', { hasText: 'Undo' }).click();
+        // Undo works in the toast (4d): it stays, "Undoing…" with the item while the bridge writes, then ✓ "Back in To do".
+        let letGo!: () => void;
+        const gate = new Promise<void>(r => { letGo = r; });
+        const undoRoute = (u: URL) => u.pathname.endsWith('/waiting/T0018');
+        await page.route(undoRoute, async route => { await gate; await route.fallback(); });
+        await toast.locator('.toast-action', { hasText: 'Undo' }).evaluate((b: HTMLButtonElement) => { b.click(); b.click(); });
+        await expect(toast.locator('.toast-title')).toHaveText('Undoing…');
+        await expect(toast.locator('.busy-spin.s16')).toBeVisible();
+        await expect(toast.locator('.t-sub')).toHaveText('Napsat matrice o zápis 1');
+        await expect(toast).toHaveAttribute('aria-busy', 'true');
+        letGo();
         await expect(todoHead(page)).toHaveText(/To do · 30/);
-        await expect(page.locator('.toast[data-kind="waiting-unsent"]')).toHaveText('Back in To do');
+        await expect(toast).toHaveText('✓Back in To do');
+        await expect(toast).not.toHaveAttribute('aria-busy', 'true');
+        await expect(page.locator('.toast[data-kind="waiting-unsent"]')).toHaveCount(0);
         expect(bridge.writes.map(w => [w.path, w.body])).toEqual([['waiting/T0018', '{"do":"sent"}'], ['waiting/T0018', '{"do":"unsent"}']]);
+        await page.unroute(undoRoute);
 
         // A sent item offers Back to To do (and is not marked sent again).
         await sentHead(page).click();
@@ -2313,8 +2325,17 @@ test.describe('Awaiting action written through the bridge', () => {
             Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (t: string) => { copied.push(t); } } });
         });
 
-        // The queries' text: a small window over the overview, the text as text with its lines.
-        await office.locator('.research-overview__waiting-groupnote').click();
+        // The queries' text: the button says "Loading…" while the bridge reads it, a double click reads once;
+        // then a small window over the overview, the text as text with its lines.
+        let letGo!: () => void;
+        const gate = new Promise<void>(r => { letGo = r; });
+        const noteRoute = (u: URL) => u.pathname.endsWith('/note');
+        await page.route(noteRoute, async route => { await gate; await route.fallback(); });
+        const noteBtn = office.locator('.research-overview__waiting-groupnote');
+        await noteBtn.evaluate((b: HTMLButtonElement) => { b.click(); b.click(); });
+        await expect(noteBtn).toHaveAttribute('aria-busy', 'true');
+        await expect(noteBtn).toContainText('Loading…');
+        letGo();
         const dialog = page.locator('#waiting-note-modal');
         await expect(dialog).toBeVisible();
         await expect(dialog.locator('#waiting-note-title')).toHaveText('All queries\' text');
@@ -2327,6 +2348,7 @@ test.describe('Awaiting action written through the bridge', () => {
         expect(await page.evaluate(() => (window as unknown as { __copied: string[] }).__copied)).toEqual([bridge.note!.text]);
         await expect(page.locator('.toast[data-kind="waiting-copied"]')).toHaveText('Copied');
         expect(bridge.writes.map(w => [w.method, w.path])).toEqual([['GET', `group/${encodeURIComponent('to:MěÚ Vzorov')}/note`]]);
+        await page.unroute(noteRoute);
         // Escape closes the window alone.
         await page.keyboard.press('Escape');
         await expect(dialog).toHaveCount(0);
@@ -2356,7 +2378,8 @@ test.describe('Awaiting action written through the bridge', () => {
         await toast.locator('.toast-action', { hasText: 'Undo' }).evaluate((b: HTMLButtonElement) => { b.click(); b.click(); });
         await expect(todoHead(page)).toHaveText(/To do · 30/);
         await expect(sentHead(page)).toHaveText(/Awaiting a reply · 5/);
-        await expect(page.locator('.toast[data-kind="waiting-unsent"]')).toHaveText('Back in To do');
+        // It works in its toast: ✓ "Back in To do" there.
+        await expect(toast).toHaveText('✓Back in To do');
         const key = encodeURIComponent('to:MěÚ Vzorov');
         expect(bridge.writes.map(w => [w.method, w.path, w.body])).toEqual([
             ['POST', `group/${key}`, '{"do":"sent"}'],
@@ -2401,7 +2424,11 @@ test.describe('Awaiting action written through the bridge', () => {
         await expect.poll(() => bridge.writes.length).toBe(1);
         bridge.refuse = { status: 400, code: 'waiting.bad-body' };
         await page.locator('.toast[data-kind="waiting-sent"] .toast-action').click();
-        await expect(page.locator('.toast[data-kind="waiting-failed"]')).toHaveText('Not recorded: the research did not take the request.');
+        // Said in the same toast, which stays (no auto-close) with Try again.
+        const toast = page.locator('.toast[data-kind="waiting-sent"]');
+        await expect(toast).toContainText('Not recorded: the research did not take the request.');
+        await expect(toast.locator('.toast-action')).toHaveText('Try again');
+        await expect(page.locator('.toast[data-kind="waiting-failed"]')).toHaveCount(0);
         await expect(todoHead(page)).toHaveText(/To do · 24/);
         await expect(sentHead(page)).toHaveText(/Awaiting a reply · 11/);
         expect(bridge.writes.at(-1)).toMatchObject({ method: 'POST', body: expect.stringContaining('"do":"unsent"') });

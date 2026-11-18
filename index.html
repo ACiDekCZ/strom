@@ -18833,6 +18833,9 @@
         }
         .toast--progress .toast-actions[hidden], .toast--progress [hidden] { display: none; }
         .toast--progress > .ok { margin-right: 8px; }
+        /* A toast's Undo worked in the toast (§4, 4d): its end's mark (✓, !) before the words. */
+        .toast--marked > .ok, .toast-line > .ok { margin-right: 8px; font-weight: 700; flex: none; }
+        .toast-line { display: flex; align-items: baseline; min-width: 0; }
         /* A phone held sideways: the toast stays narrow enough to leave the tree seen. */
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .toast--progress { max-width: min(560px, calc(100vw - 32px)); }

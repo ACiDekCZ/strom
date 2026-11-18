@@ -27,6 +27,7 @@ import { PersonPicker } from '../person-picker.js';
 import * as CrossTree from '../cross-tree.js';
 import { uiModule } from './module.js';
 import { shownName } from '../person-name.js';
+import { runBusy, nextPaint, type BusyCtl } from './busy.js';
 
 /** Everything the shared split-families dialog needs, whatever opened it. */
 interface SplitFamiliesRun {
@@ -200,7 +201,9 @@ export const splitFamiliesMethods = uiModule({
         const close = (): void => this.closeSplitFamiliesDialog();
         (overlay.querySelector('#splitfam-cancel') as HTMLButtonElement).onclick = close;
         (overlay.querySelector('#splitfam-close-x') as HTMLButtonElement).onclick = close;
-        (overlay.querySelector('#splitfam-go') as HTMLButtonElement).onclick = () => void this.performSplitFamilies();
+        const go = overlay.querySelector('#splitfam-go') as HTMLButtonElement;
+        // One working state from the click (§8): painted first, each tree's step said; a second click makes nothing more.
+        go.onclick = () => void runBusy(go, ctl => this.performSplitFamilies(ctl), { label: strings.busy.creating, heavy: 'now' });
         // Switching what counts as one family recomputes and redraws the whole
         // dialog in place (same run) — unless the other cut cannot split at all.
         overlay.querySelectorAll('.splitfam-mode-btn').forEach(btn => {
@@ -441,7 +444,7 @@ export const splitFamiliesMethods = uiModule({
      * so the cross-tree badge links the families. The original is left as it was;
      * one audit entry records the split. Unticked families are simply not made.
      */
-    async performSplitFamilies(): Promise<void> {
+    async performSplitFamilies(ctl?: BusyCtl): Promise<void> {
         const chosen = this.selectedSplitFamiliesIndexes();
         if (chosen.length === 0) return;
 
@@ -454,8 +457,13 @@ export const splitFamiliesMethods = uiModule({
         const activeBefore = TreeManager.getActiveTreeId();
         let createdPersons = 0;
 
-        for (const index of chosen) {
+        for (const [k, index] of chosen.entries()) {
             const component = this.splitFamiliesComponents[index];
+            // "Creating tree 2 of 5: …", painted before that tree's work (B214).
+            if (ctl) {
+                ctl.step(strings.busy.creatingTreeK(k + 1, chosen.length, this.readSplitFamilyName(index)));
+                await nextPaint();
+            }
             // The exact tree previewed (structuredClone so tree creation cannot
             // mutate the cache), opened on the family's default person.
             const src = this.splitFamiliesShown[index]?.data ?? extractSubtree(data, seedIdsFor(component));

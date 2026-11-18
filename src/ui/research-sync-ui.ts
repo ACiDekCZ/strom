@@ -70,6 +70,7 @@ import { ConflictDecideMode, conflictDecideMode, DecideKind, DecideBody, DecideR
 import { postBridgeRevert, researchShowsOrigin, RevertRequest, RevertResult } from '../research-revert.js';
 import { researchConflictTitle } from './person-research-ui.js';
 import { uiModule } from './module.js';
+import type { ToastWorkEnd } from './toast.js';
 import { runBusy, activatedElement, type BusyCtl, type BusyEnd } from './busy.js';
 import { holdLeave, takeLeftPending } from './busy-leave.js';
 import { startTreeLoad, currentTreeLoad } from './tree-load-progress.js';
@@ -2489,7 +2490,9 @@ export const researchSyncMethods = uiModule({
         const s = strings.sync;
         this.showToast(s.noIdsToast, Infinity, {
             closable: true,
-            action: { label: s.loadVersion, run: () => { void this.researchLoadIds(treeId); } },
+            // It works in the toast (A189): the research's version loading, then its end there.
+            action: { label: s.loadVersion, run: () => this.researchLoadIds(treeId, { inToast: true }),
+                work: { label: strings.busy.loadingTree, timeoutMs: Infinity } },
         });
     },
 
@@ -2499,27 +2502,40 @@ export const researchSyncMethods = uiModule({
      * is taking that version (over this tree, a backup kept, or as a new tree):
      * asked, never done by itself.
      */
-    async researchLoadIds(treeId: TreeId): Promise<void> {
-        if (DataManager.getCurrentTreeId() !== treeId || !await this.ensureLocalUnlocked()) return;
+    async researchLoadIds(treeId: TreeId, opts: { inToast?: boolean } = {}): Promise<ToastWorkEnd | undefined> {
+        if (DataManager.getCurrentTreeId() !== treeId || !await this.ensureLocalUnlocked()) return undefined;
         const s = strings.sync;
         const got = await this.researchReadIds(treeId);
         if (!got.ok) {
             if (got.why === 'unmatched' && got.research && got.header) {
-                if (!await this.showConfirm(s.noIdsUnmatched, s.noIdsUnmatchedTitle, { confirmLabel: s.loadVersion })) return;
-                await this.applyResearch(got.research, got.header, { plainAsk: true });
-                this.refreshResearchSyncUi();
-                return;
+                const { research, header } = got;
+                const ask = async (): Promise<void> => {
+                    if (!await this.showConfirm(s.noIdsUnmatched, s.noIdsUnmatchedTitle, { confirmLabel: s.loadVersion })) return;
+                    await this.applyResearch(research, header, { plainAsk: true });
+                    this.refreshResearchSyncUi();
+                };
+                // The toast goes; the question is asked on its own.
+                if (opts.inToast) void ask(); else await ask();
+                return undefined;
             }
-            this.showToast(got.why === 'other-tree' ? s.noIdsOtherTree : s.noIdsFailed, 6000);
-            return;
+            const text = got.why === 'other-tree' ? s.noIdsOtherTree : s.noIdsFailed;
+            if (opts.inToast) return { ok: false, text, whole: true, retry: got.why === 'unreachable' };
+            this.showToast(text, 6000);
+            return undefined;
         }
         patchResearchAutoState(treeId, { toldRefused: (researchAutoState(treeId).toldRefused ?? []).filter(r => r !== NO_IDS) });
         this.refreshResearchSyncUi();
         const link = TreeManager.getTreeMetadata(treeId)?.research;
         if (link && !this.researchSyncFingerprints(treeId, link).matchesBase) {
+            if (opts.inToast) {
+                // Said in the toast (its work ended first); the send then shows its own progress.
+                setTimeout(() => void this.postResearchSend(treeId, { auto: false }), 0);
+                return { ok: true, text: s.noIdsLoaded };
+            }
             this.showToast(s.noIdsLoaded, 4000);
             await this.postResearchSend(treeId, { auto: false });
         }
+        return undefined;
     },
 
     /** Sending by itself stopped on a held write: said once per kind, with the research's sentence (and the seal's way). */
@@ -2570,17 +2586,21 @@ export const researchSyncMethods = uiModule({
         return this.researchSyncFingerprints(treeId, link).current === lb.fingerprint ? lb : null;
     },
 
-    /** Back to the tree as it was before the research's version was loaded (Ctrl+Z brings the load back). */
-    async researchRestoreBeforeLoad(treeId: TreeId): Promise<void> {
+    /**
+     * Back to the tree as it was before the research's version was loaded (Ctrl+Z brings the load back).
+     * `inToast`: the load toast's action (A185), its end given back to that toast.
+     */
+    async researchRestoreBeforeLoad(treeId: TreeId, opts: { inToast?: boolean } = {}): Promise<ToastWorkEnd | undefined> {
         const lb = researchAutoState(treeId).loadBackup;
-        if (!lb || DataManager.getCurrentTreeId() !== treeId || DataManager.isReadOnly()) return;
+        if (!lb || DataManager.getCurrentTreeId() !== treeId || DataManager.isReadOnly()) return undefined;
         // The tree as it was, built on the tie it had then: the next send names that head (and the copy since),
         // the research's version is "newer" again, to load when asked (V-B).
         const before = lb.before;
         const restored = await DataManager.restoreSnapshot(lb.id, before ? { head: before.head, fingerprint: before.fingerprint } : null).catch(() => null);
         if (!restored) {
+            if (opts.inToast) return { ok: false, text: strings.storageSafety.snapshotFailed, whole: true, retry: false };
             this.showToast(strings.storageSafety.snapshotFailed, 5000);
-            return;
+            return undefined;
         }
         if (before) TreeManager.patchResearchLink(treeId, { syncedAt: before.syncedAt, sent: before.sent });
         patchResearchAutoState(treeId, { loadBackup: undefined, held: undefined });
@@ -2588,7 +2608,10 @@ export const researchSyncMethods = uiModule({
         await TreeRenderer.renderAsync();
         this.refreshSearch();
         this.refreshResearchSyncUi();
-        this.showToast(strings.sync.restoredBeforeLoad, 8000, { action: { label: strings.undo.undo, run: () => this.performUndo() } });
+        const undo = { label: strings.undo.undo, run: () => this.performUndo() };
+        if (opts.inToast) return { ok: true, text: strings.sync.restoredBeforeLoad, action: undo };
+        this.showToast(strings.sync.restoredBeforeLoad, 8000, { action: undo });
+        return undefined;
     },
 
     /** "Only load from the research" and the user asked to send: said, with the way to change it. */

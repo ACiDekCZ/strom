@@ -29,6 +29,7 @@ import { historyEventDescHtml } from './history-card-ui.js';
 import { historyKindSvg } from '../history-symbols.js';
 import type { Drawn } from './history-manage-ui.js';
 import { uiModule } from './module.js';
+import type { ToastWorkEnd } from './toast.js';
 
 /** Persons shown in "who sees it" before "n more ›". */
 const WHO_FIRST = 6;
@@ -752,9 +753,9 @@ export const historyDetailMethods = uiModule({
     },
 
     /** `POST /history/delete` (or its restore); errors by §3.7. */
-    async historyDetailWriteDelete(evId: string, local: boolean, restore: boolean): Promise<void> {
+    async historyDetailWriteDelete(evId: string, local: boolean, restore: boolean, opts: { inToast?: boolean } = {}): Promise<ToastWorkEnd | undefined> {
         const d = this.historyManageDrawn();
-        if (!d?.base || mem.busy.has(evId)) return;
+        if (!d?.base || mem.busy.has(evId)) return undefined;
         const h = strings.history;
         mem.busy.add(evId);
         mem.notes.delete(evId);
@@ -763,18 +764,39 @@ export const historyDetailMethods = uiModule({
         const r = await postBridgeDelete(d.base, restore ? { event: evId, do: 'restore' } : { event: evId }, d.features);
         mem.busy.delete(evId);
         if (!r.ok) {
+            if (opts.inToast) {
+                const text = this.historyDetailRefusedText(r);
+                if (r.code === 'gone') void this.readBridgeHistory(d.rid);
+                this.renderHistoryManage();
+                return { ok: false, text, whole: true, retry: r.code !== 'gone' };
+            }
             this.historyDetailRefused(d.rid, evId, r);
-            return;
+            return undefined;
         }
         if (restore) mem.gone.delete(evId); else mem.gone.add(evId);
         this.historyManageWritten(d.rid, before, r);
+        if (restore && opts.inToast) {
+            this.renderHistoryManage();
+            return { ok: true, text: h.toastRestored };
+        }
         if (restore) this.showToast(h.toastRestored, 4000);
         else {
             this.showToast(local ? h.toastDeletedLocal : h.toastDeleted, 6000, {
-                action: { label: h.undo, run: () => { void this.historyDetailWriteDelete(evId, local, true); } },
+                // Undo works in the toast (B207): "Undoing…", then its end there.
+                action: { label: h.undo, run: () => this.historyDetailWriteDelete(evId, local, true, { inToast: true }), work: { label: strings.busy.reverting } },
             });
         }
         this.renderHistoryManage();
+        return undefined;
+    },
+
+    /** A refusal's words in a toast's Undo (its row is gone: nothing under it). */
+    historyDetailRefusedText(r: HistoryWriteRefusal): string {
+        const h = strings.history;
+        if (r.code === 'busy') return h.errBusy;
+        if (r.code === 'retracted') return h.errRetracted;
+        if (r.code === 'gone') return h.errGone;
+        return r.reason || (r.held ? this.researchWriteHeldText(r.held, false).toast : strings.live.waitingWrite.writeFailed);
     },
 
     /** A refused delete (§3.7): busy and retracted under the row, gone a toast and a fresh read, the rest the bridge's sentence. */

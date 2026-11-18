@@ -18,6 +18,7 @@ import { PersonId, TreeId, StromData } from '../types.js';
 import { findComponents, componentName, TreeComponent } from '../components.js';
 import { extractSubtree } from '../subtree.js';
 import { uiModule } from './module.js';
+import { runBusy, nextPaint, type BusyCtl } from './busy.js';
 
 export const splitMethods = uiModule({
     /** The active tree is in memory; any other has to be read from storage. */
@@ -73,8 +74,10 @@ export const splitMethods = uiModule({
         overlay.querySelectorAll('.split-check').forEach(box => {
             (box as HTMLInputElement).onchange = () => this.updateSplitButton();
         });
-        (overlay.querySelector('#split-go') as HTMLButtonElement | null)?.addEventListener(
-            'click', () => void this.performSplit());
+        const go = overlay.querySelector<HTMLButtonElement>('#split-go');
+        // One working state from the click (§8): a second click splits nothing more.
+        go?.addEventListener('click', () => void runBusy(go, ctl => this.performSplit(ctl),
+            { label: strings.busy.creating, heavy: 'now' }));
 
         this.clearDialogStack();
         if (this.splitParentDialog) {
@@ -125,17 +128,22 @@ export const splitMethods = uiModule({
      * touched — no data is moved, only duplicated, so a wrong pick costs a
      * delete rather than a family.
      */
-    async performSplit(): Promise<void> {
+    async performSplit(ctl?: BusyCtl): Promise<void> {
         const chosen = this.selectedSplitIndexes();
         if (chosen.length === 0 || !this.splitTreeId) return;
 
         const data = await this.splitDataFor(this.splitTreeId);
         if (!data) return;
 
-        for (const index of chosen) {
+        for (const [k, index] of chosen.entries()) {
             const component = this.splitComponents[index];
-            const subtree = extractSubtree(data, new Set<PersonId>(component.personIds));
             const name = componentName(component, strings.split.familyName, strings.split.noSurname);
+            // Several trees: each one's step painted before its work (§8).
+            if (ctl && chosen.length > 1) {
+                ctl.step(strings.busy.creatingTreeK(k + 1, chosen.length, name));
+                await nextPaint();
+            }
+            const subtree = extractSubtree(data, new Set<PersonId>(component.personIds));
             TreeManager.createTreeFromImport(subtree, name, false);
         }
 

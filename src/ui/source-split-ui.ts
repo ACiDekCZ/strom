@@ -30,6 +30,7 @@ import { getBridgeSplit, postBridgeSplit, postBridgeSplitUndo, type BridgeSplitR
 import { researchBridgeActionLabel } from './research-open-mark.js';
 import { bridgeBase } from './history-ui.js';
 import { uiModule } from './module.js';
+import type { ToastWorkEnd } from './toast.js';
 import { clipWithEllipsis } from '../text-clip.js';
 
 export const SOURCE_SPLIT_DIALOG_ID = 'source-split-modal';
@@ -470,7 +471,9 @@ export const sourceSplitMethods = uiModule({
             this.sourceSplitLinesAgain();
             this.showToast(t.toast(r.count), TOAST_MS, {
                 kind: 'source-split',
-                ...(undo ? { action: { label: t.undo, run: () => { void this.sourceSplitUndoFromToast(provider, undo); } } } : {}),
+                // Undo works in the toast (B126): "Undoing…", then its end there.
+                ...(undo ? { action: { label: t.undo, run: () => this.sourceSplitUndoFromToast(provider, undo),
+                    work: { label: strings.busy.reverting } } } : {}),
             });
             return;
         }
@@ -512,14 +515,14 @@ export const sourceSplitMethods = uiModule({
         this.renderSourceSplit();
     },
 
-    /** The toast's "Undo". */
-    async sourceSplitUndoFromToast(provider: SplitProvider, undo: SplitUndoInfo): Promise<void> {
+    /** The toast's "Undo": its end given back to the toast. */
+    async sourceSplitUndoFromToast(provider: SplitProvider, undo: SplitUndoInfo): Promise<ToastWorkEnd> {
         const r = await provider.undo(undo);
         if (r.ok) {
             this.sourceSplitLinesAgain();
-            return;
+            return { ok: true, text: strings.busy.undone };
         }
-        this.showToast(this.sourceSplitUndoError(r), 8000, { kind: 'source-split', closable: true });
+        return { ok: false, text: this.sourceSplitUndoError(r), retry: r.error !== 'changed' };
     },
 
     sourceSplitUndoError(r: { ok: false; error: 'changed'; count: number; titles: string[] } | { ok: false; error: 'busy' | 'failed'; reason?: string }): string {

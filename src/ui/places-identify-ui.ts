@@ -31,9 +31,15 @@ import { researchLinkMark, type ResearchActionMark } from '../research-link.js';
 import { researchActionLabel, researchLinkFlags } from './research-open-mark.js';
 import { uiModule } from './module.js';
 import { helpMark } from './help-mark.js';
+import { runBusy, type BusyCtl, type BusyEnd } from './busy.js';
+import type { ToastWorkEnd } from './toast.js';
 
 /** How long the toasts of the research's steps stand. */
 const TOAST_MS = 6000;
+/** A queueing step's working state at most (the bridge's own limit is 15 s, §10.3). */
+export const PLACES_STEP_MS = 20_000;
+/** Taking out of the queue: the step and the read of the places after it (15 s + 20 s). */
+export const PLACES_UNQUEUE_MS = 40_000;
 /** How long the offer after an import or a link stands (it stays while the keyboard or pointer is on it). */
 const OFFER_MS = 15000;
 /** The offer is being counted (one at a time). */
@@ -440,7 +446,8 @@ export const placesIdentifyMethods = uiModule({
             }
         };
         const go = top.querySelector<HTMLButtonElement>('.places-bulk-go');
-        if (go) go.onclick = () => void this.runPlacesBulk();
+        // "Queue N places": one working state from the click (B149), a second click queues nothing more.
+        if (go) go.onclick = () => void runBusy(go, ctl => this.runPlacesBulk(ctl), { label: strings.busy.sending, timeoutMs: PLACES_STEP_MS });
         const cancel = top.querySelector<HTMLButtonElement>('.places-bulk-cancel');
         if (cancel) cancel.onclick = () => { placesView.bulk = null; this.refreshPlacesTop(); };
     },
@@ -461,7 +468,7 @@ export const placesIdentifyMethods = uiModule({
     },
 
     /** "Queue N places" in the preview: everything off the map, or every location to check. */
-    async runPlacesBulk(): Promise<void> {
+    async runPlacesBulk(ctl?: BusyCtl): Promise<void> {
         const kind = placesView.bulk;
         if (!kind) return;
         const ids = placesView.ids;
@@ -472,7 +479,7 @@ export const placesIdentifyMethods = uiModule({
         const body: PlacesIdentifyBody = kind === 'look'
             ? { do: 'queue', all: 'offmap' }
             : { do: 'queue', all: 'placed', check: true, ...this.placeCheckFlags(keys) };
-        const ok = await this.sendPlacesIdentify(body, keys, kind === 'check');
+        const ok = await this.sendPlacesIdentify(body, keys, kind === 'check', ctl);
         if (ok) placesView.bulk = null;
         this.refreshPlacesTop();
     },
@@ -489,8 +496,8 @@ export const placesIdentifyMethods = uiModule({
         return Object.keys(flags).length ? { flags } : {};
     },
 
-    /** Look up / Check for these places (a row, or the selection). */
-    async queuePlaces(keys: readonly string[], check: boolean): Promise<boolean> {
+    /** Look up / Check for these places (a row, or the selection); `ctl`: a refusal is said at its element. */
+    async queuePlaces(keys: readonly string[], check: boolean, ctl?: BusyCtl): Promise<boolean> {
         if (!document.getElementById('places-modal')) this.preparePlacesOutside(keys);
         const take = keys.filter(k => { const id = placesView.ids.get(k); return !!id && (check ? canCheck(id) : canLookUp(id)); });
         const forms = formsOf(take);
@@ -498,7 +505,7 @@ export const placesIdentifyMethods = uiModule({
         const body: PlacesIdentifyBody = check
             ? { do: 'queue', forms, check: true, ...this.placeCheckFlags(take) }
             : { do: 'queue', forms };
-        return this.sendPlacesIdentify(body, take, check);
+        return this.sendPlacesIdentify(body, take, check, ctl);
     },
 
     /**
@@ -512,9 +519,9 @@ export const placesIdentifyMethods = uiModule({
     },
 
     /** "Remove from the queue" from outside the dialog: every text of the place. */
-    async unqueuePlace(key: string): Promise<void> {
+    async unqueuePlace(key: string, ctl?: BusyCtl): Promise<void> {
         const forms = [...(collectPlaces(DataManager.getData()).get(key)?.variants.keys() ?? [])];
-        await this.unqueuePlaceForms(forms, [key]);
+        await this.unqueuePlaceForms(forms, [key], { ctl });
     },
 
     /**
@@ -522,12 +529,13 @@ export const placesIdentifyMethods = uiModule({
      * the queue what this step put there) and a second line with what was
      * skipped. A refusal says why; nothing changes then and a selection stays.
      */
-    async sendPlacesIdentify(body: PlacesIdentifyBody, keys: readonly string[], check: boolean): Promise<boolean> {
+    async sendPlacesIdentify(body: PlacesIdentifyBody, keys: readonly string[], check: boolean, ctl?: BusyCtl): Promise<boolean> {
         const ctx = this.placesResearchContext();
         if (!ctx.canResearch || !ctx.base) return false;
         const res = await postPlacesIdentify(ctx.base, body, ctx.features, ctx.linkCheck ?? undefined);
         if (!res.ok) {
-            this.showPlacesRefusal(res);
+            if (ctl) ctl.end(this.placesRefusalEnd(res, () => void this.sendPlacesIdentify(body, keys, check)));
+            else this.showPlacesRefusal(res);
             return false;
         }
         const skippedForms = new Set(res.skipped.map(s => s.form));
@@ -543,7 +551,9 @@ export const placesIdentifyMethods = uiModule({
         if (main) {
             this.showToast(sub || main, TOAST_MS, {
                 ...(sub ? { title: main } : {}),
-                ...(undoForms.length ? { action: { label: r.undo, run: () => void this.unqueuePlaceForms(undoForms, queuedKeys) } } : {}),
+                // Undo works in the toast (B152): "Undoing…", then its end there.
+                ...(undoForms.length ? { action: { label: r.undo, run: () => this.unqueuePlaceForms(undoForms, queuedKeys, { inToast: true }),
+                    work: { label: strings.busy.reverting, timeoutMs: PLACES_UNQUEUE_MS } } } : {}),
             });
         } else if (sub) {
             this.showToast(sub, TOAST_MS);
@@ -570,6 +580,27 @@ export const placesIdentifyMethods = uiModule({
     /** Why a step did not go, as a toast; a place changed meanwhile reads the places again. */
     showPlacesRefusal(res: PlacesWriteRefusal): void {
         const r = strings.places.research;
+        const text = this.placesRefusalText(res);
+        const link = res.code === 'link' ? res.link : undefined;
+        this.showToast(text, TOAST_MS, link ? { action: { label: r.runNow, run: () => this.launchResearchLink(link), ...researchLinkFlags(link) } } : {});
+    },
+
+    /** Why a step did not go, as the end of its element's working state (§4): the sentence, Try again where it helps. */
+    placesRefusalEnd(res: PlacesWriteRefusal, retry: () => void): Extract<BusyEnd, { ok: false }> {
+        const r = strings.places.research;
+        const text = this.placesRefusalText(res);
+        const link = res.code === 'link' ? res.link : undefined;
+        const again = res.code === 'busy' || res.code === 'network' || res.code === 'locked' || res.code === 'unknown';
+        return {
+            ok: false, kind: res.code === 'busy' ? 'busy' : res.code === 'network' ? 'offline' : 'error', text,
+            ...(again ? { retry } : {}),
+            ...(link ? { alt: { label: r.runNow, run: () => this.launchResearchLink(link), ...researchLinkFlags(link) } } : {}),
+        };
+    },
+
+    /** The words of a refused step (a place changed meanwhile reads the places again). */
+    placesRefusalText(res: PlacesWriteRefusal): string {
+        const r = strings.places.research;
         let text: string;
         switch (res.code) {
             case 'busy': text = r.errBusy; break;
@@ -580,24 +611,35 @@ export const placesIdentifyMethods = uiModule({
             case 'changed': text = r.errChanged; void this.refreshPlacesLive(0, true); break;
             default: text = res.reason || r.errFailed;
         }
-        const link = res.code === 'link' ? res.link : undefined;
-        this.showToast(text, TOAST_MS, link ? { action: { label: r.runNow, run: () => this.launchResearchLink(link), ...researchLinkFlags(link) } } : {});
+        return text;
     },
 
-    /** Take these forms out of the research's queue (a step's Undo, or "Remove from the queue"). */
-    async unqueuePlaceForms(forms: readonly string[], keys: readonly string[]): Promise<void> {
+    /**
+     * Take these forms out of the research's queue (a step's Undo, or "Remove from the queue"). `ctl`: its
+     * element's working state takes a refusal (§4); `inToast`: the toast's Undo (B152), its end given back to it.
+     */
+    async unqueuePlaceForms(forms: readonly string[], keys: readonly string[],
+        opts: { ctl?: BusyCtl; inToast?: boolean } = {}): Promise<ToastWorkEnd | undefined> {
         const ctx = this.placesResearchContext();
-        if (!ctx.canResearch || !ctx.base || !forms.length) return;
+        if (!ctx.canResearch || !ctx.base || !forms.length) return undefined;
         const res = await postPlacesIdentify(ctx.base, { do: 'cancel', forms }, ctx.features, ctx.linkCheck ?? undefined);
         if (!res.ok) {
-            this.showPlacesRefusal(res);
-            return;
+            if (opts.inToast) return { ok: false, text: this.placesRefusalText(res), retry: res.code !== 'link' && res.code !== 'archive' };
+            if (opts.ctl) opts.ctl.end(this.placesRefusalEnd(res, () => void this.unqueuePlaceForms(forms, keys)));
+            else this.showPlacesRefusal(res);
+            return undefined;
         }
         for (const k of keys) placesView.queuedLocal.delete(k);
+        if (opts.inToast) {
+            // The toast says its end at once; the places are read again after it.
+            void this.refreshPlacesLive(0, true).then(() => { this.redrawPlacesKeepingSearch(); this.placesLiveChanged(); });
+            return { ok: true, text: strings.places.research.unqueued };
+        }
         this.showToast(strings.places.research.unqueued, TOAST_MS);
         await this.refreshPlacesLive(0, true);
         this.redrawPlacesKeepingSearch();
         this.placesLiveChanged();
+        return undefined;
     },
 
     /** "Keep" on a check mark: the location stays and the mark goes until the location changes (undoable). */

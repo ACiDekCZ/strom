@@ -136,3 +136,28 @@ test('a tree with one family and a few strays is not offered a split', async ({ 
     await expect(page.locator('#confirmation-modal')).not.toHaveClass(/active/);
     await expect(page.getByText(/families that nothing connects/i)).toHaveCount(0);
 });
+
+test('Split off works at once: the button says it is creating, a double click creates the tree once', async ({ page }) => {
+    await openApp(page);
+    await twoUnrelatedFamilies(page);
+    await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+    await page.locator('.tree-row-menu-btn').first().click();
+    const structure = await openTreeStructure(page, page.locator('.tree-row-menu.open'));
+    await structure.locator('.tree-row-menu-item', { hasText: 'Separate disconnected parts' }).click();
+    const rows = page.locator('.split-row');
+    await expect(rows).toHaveCount(2);
+    const before = await page.evaluate(() => window.Strom.TreeManager.getTrees().length);
+    await rows.nth(1).locator('.split-check').check();
+    // Heavy work: its state is seen at once (no 120 ms grace), and the second click does nothing.
+    const busy = await page.locator('#split-go').evaluate((b: HTMLButtonElement) => {
+        b.click();
+        const at = b.getAttribute('aria-busy');
+        b.click();
+        return at;
+    });
+    expect(busy).toBe('true');
+    await expect(page.locator('#split-modal')).toHaveCount(0);
+    const trees = await page.evaluate(() => window.Strom.TreeManager.getTrees().map((t: { name: string }) => t.name));
+    expect(trees.length).toBe(before + 1);
+    expect(trees.filter((n: string) => n === 'Svoboda family')).toHaveLength(1);
+});

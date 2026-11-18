@@ -1862,7 +1862,7 @@ export const researchOverviewMethods = uiModule({
             btn.setAttribute('aria-label', `${W.groupNote} · ${name}`);
             btn.onclick = (e) => {
                 e.stopPropagation();
-                void this.showWaitingGroupNote(s, key, name);
+                void this.showWaitingGroupNote(s, key, name, btn);
             };
             box.appendChild(btn);
         }

@@ -18,6 +18,7 @@ import { regionName } from '../history-manage.js';
 import { researchActionLabel } from './research-open-mark.js';
 import { activeResearchId, bridgeBase } from './history-ui.js';
 import { uiModule } from './module.js';
+import type { ToastWorkEnd } from './toast.js';
 
 export const HISTORY_ALIGN_DIALOG_ID = 'history-align-modal';
 
@@ -298,7 +299,9 @@ export const historyAlignMethods = uiModule({
             const undo = r.undo;
             this.showToast(h.tAlignDone(r.done.hidden, r.done.shown, !!r.backfill), UNDO_MS, {
                 kind: 'history-align',
-                ...(undo ? { action: { label: h.undo, run: () => { void this.historyAlignUndo(rid, undo); } } } : {}),
+                // Undo works in the toast (B185): "Undoing…", then its end there.
+                ...(undo ? { action: { label: h.undo, run: () => this.historyAlignUndo(rid, undo),
+                    work: { label: strings.busy.reverting } } } : {}),
             });
             if (r.backfill) this.launchResearchLink(r.backfill.link, 'terminal');
             this.renderHistorySettingsIfOpen();
@@ -347,25 +350,24 @@ export const historyAlignMethods = uiModule({
     },
 
     /** The toast's Undo: the alignment taken back; undone or gone already — said shortly; the history read again. */
-    async historyAlignUndo(rid: string, undo: string): Promise<void> {
+    async historyAlignUndo(rid: string, undo: string): Promise<ToastWorkEnd> {
         const base = bridgeBase(rid);
         const h = strings.history;
-        if (!base) {
-            this.showToast(h.storiesBridgeDown, 5000);
-            return;
-        }
+        if (!base) return { ok: false, text: h.storiesBridgeDown, whole: true };
         const features = this.historyKindsStatusOf(rid)?.features ?? [];
         const before = this.researchHeadNow(rid);
         const r = await postHistoryAlignUndo(base, undo, features);
+        let end: ToastWorkEnd;
         if (r.ok) {
             this.historyManageWritten(rid, before, r);
-            this.showToast(h.tAlignUndone, 5000, { kind: 'history-align' });
+            end = { ok: true, text: h.tAlignUndone };
         } else {
-            this.showToast(r.code === 'undone' ? h.tAlignUndone : r.code === 'busy' ? h.errBusy
-                : r.reason || strings.live.waitingWrite.writeFailed, 5000, { kind: 'history-align' });
+            end = r.code === 'undone' ? { ok: true, text: h.tAlignUndone }
+                : { ok: false, text: r.code === 'busy' ? h.errBusy : r.reason || strings.live.waitingWrite.writeFailed, whole: true };
             void this.readBridgeHistory(rid);
         }
         this.historyAlignNotePreview(rid, null);
         this.renderHistorySettingsIfOpen();
+        return end;
     },
 });

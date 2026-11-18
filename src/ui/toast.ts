@@ -27,8 +27,12 @@ export interface ToastOptions {
     spinner?: boolean;
     closable?: boolean;
     kind?: string;
-    /** `research`: the action opens the research's terminal (its mark); `ai`: an agent works there too. */
-    action?: { label: string; run: () => void; research?: boolean; ai?: boolean };
+    /**
+     * `research`: the action opens the research's terminal (its mark); `ai`: an agent works there too.
+     * `work` (§4, "Undo" and its kin): the toast stays, says the work (the one spinner and `work.label`) and its
+     * end (✓ for 4 s, or the error with "Try again" and ✕, not closing by itself); `run` gives that end.
+     */
+    action?: ToastAction;
     /** A second action beside `action` (e.g. "Export GEDCOM" beside "Try again"). */
     more?: { label: string; run: () => void };
     hold?: boolean;
@@ -40,6 +44,40 @@ export interface ToastOptions {
      *  dialog, the toast must not cover the dialog's action buttons. */
     clearOf?: string;
 }
+
+/** A toast's action (see ToastOptions.action). */
+export interface ToastAction {
+    label: string;
+    /** With `work`: its end (nothing: the toast just goes, the action said its end itself). */
+    run: () => unknown;
+    research?: boolean;
+    ai?: boolean;
+    work?: ToastWork;
+}
+
+/** A toast's action that works in the toast itself (waiting buttons §4, 4d). */
+export interface ToastWork {
+    /** The working title ("Undoing…"). */
+    label: string;
+    /** A quiet line under it: what is worked on. */
+    sub?: string;
+    /** Its time limit (default 30 s, a write to the research, §10.3; Infinity: local work, none). */
+    timeoutMs?: number;
+    /** The failure's words from its reason (default "Not undone: {why}"). */
+    failed?: (why: string) => string;
+}
+
+/**
+ * The end of a toast's work: `ok` ✓ and its words (4 s; with an `action`, e.g. "Undo" again, 8 s), or the
+ * reason it did not happen (said with ToastWork.failed; `whole`: the text is the whole sentence; `retry: false`:
+ * no "Try again").
+ */
+export type ToastWorkEnd =
+    | { ok: true; text: string; action?: ToastAction }
+    | { ok: false; text: string; retry?: boolean; whole?: boolean };
+
+/** A write's usual limit (BUSY_TIMEOUTS.write). */
+export const TOAST_WORK_MS = 30_000;
 
 /** A toast shown (or waiting for its turn): changed in place or closed. */
 export interface ToastHandle {
@@ -90,13 +128,15 @@ function fillToast(toast: HTMLElement, message: string, opts: ToastOptions, onAc
         // In the group of actions: an "Undo" or "↩ Back" riding along joins it, the group wraps whole
         const actions = document.createElement('span');
         actions.className = 'toast-actions';
-        for (const { label, run, research, ai } of acts) {
+        for (const a of acts) {
+            const { label, run, research, ai } = a;
             const act = document.createElement('button');
             act.type = 'button';
             act.className = 'toast-action';
             if (research) setResearchOpenLabel(act, label, { ai });
             else act.textContent = label;
-            act.onclick = () => {
+            const work = 'work' in a ? (a as ToastAction).work : undefined;
+            act.onclick = work ? () => { void workInToast(toast, a as ToastAction, work, opts); } : () => {
                 fadeOut(toast);
                 onAction?.();
                 run();
@@ -115,6 +155,123 @@ function fillToast(toast: HTMLElement, message: string, opts: ToastOptions, onAc
         toast.classList.add('toast--closable');
         toast.appendChild(close);
     }
+}
+
+// ==================== WORK IN THE TOAST (§4) ====================
+
+/** "Not undone: the research did not answer…": the reason's first word small unless it is a name. */
+export function workFailedText(prefix: (why: string) => string, why: string): string {
+    const text = why.trim().replace(/[.。]$/, '');
+    const first = text.split(/\s/)[0] ?? '';
+    const small = first.length > 1 && first.slice(1) === first.slice(1).toLowerCase() && first !== 'Strom'
+        ? text.charAt(0).toLowerCase() + text.slice(1) : text;
+    return `${prefix(small)}.`;
+}
+
+/**
+ * Run a toast's working action in the toast (4d): the toast stays and says the work (the spinner, its words, its
+ * line; a second click goes nowhere, its time stands), then its end: ✓ and the words for 4 s, or the error with
+ * "Try again" (the same work again) and ✕, without closing by itself.
+ */
+async function workInToast(toast: HTMLElement, action: ToastAction, work: ToastWork, opts: ToastOptions): Promise<void> {
+    if (toast.dataset.working !== undefined) return;
+    toast.dataset.working = '';
+    const hadFocus = toast.contains(document.activeElement);
+    const old = hideTimers.get(toast);
+    if (old) clearTimeout(old);
+    hideTimers.delete(toast);
+    delete toast.dataset.timed;
+    delete toast.dataset.ended;
+    // The working look: the progress toast's (a running one is never replaced by a newer message).
+    toast.replaceChildren();
+    toast.className = 'toast toast--rich toast--progress toast--work show';
+    toast.setAttribute('role', 'status');
+    toast.setAttribute('aria-busy', 'true');
+    const lead = document.createElement('span');
+    lead.className = 'toast-lead';
+    const spin = document.createElement('i');
+    spin.className = 'busy-spin s16';
+    spin.setAttribute('aria-hidden', 'true');
+    lead.appendChild(spin);
+    const body = document.createElement('span');
+    body.className = 'toast-body';
+    const head = document.createElement('strong');
+    head.className = 'toast-title';
+    head.textContent = work.label;
+    body.appendChild(head);
+    if (work.sub) {
+        const sub = document.createElement('span');
+        sub.className = 't-sub';
+        sub.textContent = work.sub;
+        body.appendChild(sub);
+    }
+    toast.append(lead, body);
+    if (hadFocus) {
+        toast.tabIndex = -1;
+        toast.focus({ preventScroll: true });
+    }
+    const limit = work.timeoutMs ?? TOAST_WORK_MS;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    // Local work (Infinity) has no limit.
+    const timedOut = new Promise<'timeout'>(resolve => { if (Number.isFinite(limit)) timer = setTimeout(() => resolve('timeout'), limit); });
+    let end: ToastWorkEnd | 'timeout' | void;
+    try {
+        end = await Promise.race([Promise.resolve().then(() => action.run() as Promise<ToastWorkEnd | void> | ToastWorkEnd | void), timedOut]);
+    } catch {
+        end = { ok: false, text: strings.busy.failed };
+    } finally {
+        if (timer) clearTimeout(timer);
+    }
+    delete toast.dataset.working;
+    toast.removeAttribute('aria-busy');
+    toast.dataset.ended = '';
+    if (!toast.isConnected) return;
+    if (!end) { fadeOut(toast); return; }
+    const failed = work.failed ?? strings.busy.notUndone;
+    if (end === 'timeout') end = { ok: false, text: strings.busy.errTimeout(Math.round(limit / 1000)) };
+    toast.classList.remove('toast--progress', 'toast--work');
+    if (end.ok) {
+        fillToast(toast, end.text, { ...(opts.kind ? { kind: opts.kind } : {}), ...(end.action ? { action: end.action } : {}) });
+        markToast(toast, '✓');
+        setHide(toast, end.action ? 8000 : SUMMARY_MS, { hold: true });
+        return;
+    }
+    const retry = end.retry !== false ? { label: strings.busy.retry, run: action.run, work } : undefined;
+    fillToast(toast, end.whole ? end.text : workFailedText(failed, end.text), { alert: true, closable: true, ...(opts.kind ? { kind: opts.kind } : {}), ...(retry ? { action: retry } : {}) });
+    markToast(toast, '!');
+    setHide(toast, Infinity, {});
+}
+
+/**
+ * A write that tells its failure through `said` (a whole sentence; nothing: it did not run) as the end of a
+ * toast's Undo working in the toast: ✓ `done` ("Undone."), or that sentence with "Try again" (`final`: a
+ * refusal in the research's own words, which another try does not change: none).
+ */
+export async function undoInToast(write: (said: (text: string, final?: boolean) => void) => Promise<boolean>, done?: string): Promise<ToastWorkEnd> {
+    let text = '';
+    let last = false;
+    const ok = await write((t, final) => { text = t; last = !!final; });
+    if (ok) return { ok: true, text: done ?? strings.busy.undone };
+    return text ? { ok: false, text, whole: true, ...(last ? { retry: false } : {}) } : { ok: false, text: strings.busy.failed };
+}
+
+/** The end's mark before a toast's words (✓, !). */
+function markToast(toast: HTMLElement, mark: string): void {
+    const ok = document.createElement('span');
+    ok.className = 'ok';
+    ok.setAttribute('aria-hidden', 'true');
+    ok.textContent = mark;
+    // A plain message: the mark and its words one line (one cell of a narrow toast's grid).
+    const first = toast.firstChild;
+    if (first && first.nodeType === Node.TEXT_NODE) {
+        const line = document.createElement('span');
+        line.className = 'toast-line';
+        toast.insertBefore(line, first);
+        line.append(ok, first);
+    } else {
+        toast.prepend(ok);
+    }
+    toast.classList.add('toast--marked');
 }
 
 /** Its auto-hide (Infinity: none); a toast with a button stays while the keyboard (`hold`: the pointer) is on it. */

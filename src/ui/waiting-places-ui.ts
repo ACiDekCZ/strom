@@ -42,10 +42,13 @@ import { fetchStatus, liveSession } from './research-ui.js';
 import { normalizeModal } from './modal-skeleton.js';
 import { uiModule } from './module.js';
 import { helpMark } from './help-mark.js';
+import type { ToastWorkEnd } from './toast.js';
 
 const MODAL_ID = 'waiting-places-modal';
 /** How long the toasts with Undo stand. */
 const TOAST_MS = 8000;
+/** An answer's Undo working in its toast: the bridge's 15 s and a little more. */
+const PLACES_UNDO_MS = 20_000;
 /** An answered question stays hidden this long while the research's status still lists it. */
 const ANSWERED_HIDE_MS = 30_000;
 /** The small map beside the candidates (CSS px; on a phone it takes the card's width). */
@@ -613,7 +616,8 @@ export const waitingPlacesMethods = uiModule({
         if (view.preview) view.preview.places = view.preview.places.filter(p => p !== w.place);
         const undo = res.kind === 'one' && res.undo && access.canUndo ? res.undo : '';
         this.showToast(this.waitingAnswerText(w, take), TOAST_MS, undo ? {
-            action: { label: strings.places.waiting.undo, run: () => void this.undoWaitingPlaces(undo, [w.place]) },
+            action: { label: strings.places.waiting.undo, run: () => this.undoWaitingPlaces(undo, [w.place]),
+                work: { label: strings.busy.reverting, sub: w.place, timeoutMs: PLACES_UNDO_MS } },
         } : {});
         this.renderWaitingPlaces();
         await this.waitingPlacesWritten();
@@ -660,25 +664,23 @@ export const waitingPlacesMethods = uiModule({
         const undo = res.undo && access.canUndo && res.done.length ? res.undo : '';
         this.showToast(sub || main, TOAST_MS, {
             ...(sub ? { title: main } : {}),
-            ...(undo ? { action: { label: W.undo, run: () => void this.undoWaitingPlaces(undo, res.done) } } : {}),
+            ...(undo ? { action: { label: W.undo, run: () => this.undoWaitingPlaces(undo, res.done),
+                work: { label: strings.busy.reverting, timeoutMs: PLACES_UNDO_MS } } } : {}),
         });
         this.renderWaitingPlaces();
         await this.waitingPlacesWritten();
     },
 
-    /** Undo an answer step (one question or a bulk step) at the research. */
-    async undoWaitingPlaces(undo: string, places: readonly string[]): Promise<void> {
+    /** Undo an answer step (one question or a bulk step) at the research: it works in its toast (B32), its end said there. */
+    async undoWaitingPlaces(undo: string, places: readonly string[]): Promise<ToastWorkEnd | undefined> {
         const access = this.waitingPlacesAccess();
-        if (!access.canUndo || !access.base) return;
+        if (!access.canUndo || !access.base) return undefined;
         const res = await postPlacesUndo(access.base, { undo }, access.features);
-        if (!res.ok) {
-            this.showWaitingPlacesRefusal(res);
-            return;
-        }
+        if (!res.ok) return { ok: false, text: this.waitingPlacesRefusalText(res), retry: res.code !== 'later' && res.code !== 'archive' };
         for (const id of places) view.answered.delete(id);
-        this.showToast(strings.places.waiting.undone, 4000);
         this.renderWaitingPlaces();
-        await this.waitingPlacesWritten();
+        void this.waitingPlacesWritten();
+        return { ok: true, text: strings.places.waiting.undone };
     },
 
     /** After a write: the research's status (its waiting list) and its places are read again. */
@@ -716,6 +718,11 @@ export const waitingPlacesMethods = uiModule({
 
     /** A refused answer or undo, said; a question changed meanwhile reads "Awaiting action" again. */
     showWaitingPlacesRefusal(res: PlacesWriteRefusal): void {
+        this.showToast(this.waitingPlacesRefusalText(res), 6000, { kind: 'waiting-failed' });
+    },
+
+    /** The words of a refused answer or undo (a question changed meanwhile reads "Awaiting action" again). */
+    waitingPlacesRefusalText(res: PlacesWriteRefusal): string {
         const W = strings.places.waiting;
         const r = strings.places.research;
         let text: string;
@@ -728,6 +735,6 @@ export const waitingPlacesMethods = uiModule({
             case 'archive': text = res.reason || r.errArchive; break;
             default: text = res.reason || W.errFailed;
         }
-        this.showToast(text, 6000, { kind: 'waiting-failed' });
+        return text;
     },
 });

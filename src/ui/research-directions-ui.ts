@@ -26,6 +26,7 @@ import {
     foundParts, directionUnstarted, calendarDaysAgo,
 } from '../research-directions.js';
 import { DirectionStateDo, DirectionWriteRefused, directionRetryHelps, setDirectionState, writeDirectionOrder } from '../research-directions-write.js';
+import { undoInToast } from './toast.js';
 
 type Mode = 'docked' | 'overlay' | 'sheet' | 'window';
 
@@ -1246,7 +1247,8 @@ export const researchDirectionsMethods = uiModule({
      * bridge again), a busy research tried once more after 3 s, a refusal
      * said at the row. The research's new version is the tree's own.
      */
-    async changeDirectionState(d: LiveDirection, what: DirectionStateDo, opts: { reason?: string; undo?: boolean } = {}): Promise<boolean> {
+    async changeDirectionState(d: LiveDirection, what: DirectionStateDo,
+        opts: { reason?: string; undo?: boolean; undoFailed?: (said: string, final?: boolean) => void } = {}): Promise<boolean> {
         this.closeDirectionMenu();
         const s = researchSession();
         if (!s || s.ended || !this.directionsView(s).canWrite || rowsBusy.has(d.id)) return false;
@@ -1265,7 +1267,9 @@ export const researchDirectionsMethods = uiModule({
                 // Undo lives in a toast: its failure is said in one too (the change stays).
                 const said = r.code === 'held' ? r.held?.said || r.reason : r.reason;
                 this.redrawDirections();
-                this.showToast(said ? L.dirUndoFailedSaid(said) : L.dirUndoFailed, 8000, { kind: 'direction', alert: true });
+                // The toast's Undo working in it (§4): its end is said there.
+                if (opts.undoFailed) opts.undoFailed(said ? L.dirUndoFailedSaid(said) : L.dirUndoFailed, !!said);
+                else this.showToast(said ? L.dirUndoFailedSaid(said) : L.dirUndoFailed, 8000, { kind: 'direction', alert: true });
                 return false;
             }
             rowProblems.set(d.id, {
@@ -1288,7 +1292,11 @@ export const researchDirectionsMethods = uiModule({
             const backTo = stateBack(before.state);
             this.showToast(message, 6000, {
                 kind: 'direction',
-                action: { label: L.dirUndo, run: () => void this.changeDirectionState(next, backTo, { undo: true, ...(before.reason ? { reason: before.reason } : {}) }) },
+                action: {
+                    label: L.dirUndo, work: { label: strings.busy.reverting, sub: next.name },
+                    run: () => undoInToast(said => this.changeDirectionState(next, backTo,
+                        { undo: true, undoFailed: said, ...(before.reason ? { reason: before.reason } : {}) })),
+                },
             });
         }
         this.researchStatusAfterWrite(s);

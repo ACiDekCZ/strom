@@ -16,6 +16,7 @@
 
 import { strings } from '../strings.js';
 import { showToast, showProgressToast, type LongOpts, type ProgressToastHandle, type ToastHandle } from './toast.js';
+import { setResearchOpenLabel } from './research-open-mark.js';
 
 export type { LongOpts } from './toast.js';
 
@@ -30,7 +31,10 @@ export type BusyEnd =
      * `hint`: a line under it; `retry` draws "Try again", `alt` one more action.
      */
     /** `title`: a toast's heading over the text (the end in a toast). */
-    | { ok: false; kind: BusyErrKind; text: string; retry?: () => void; alt?: { label: string; run: () => void }; hint?: string; neutral?: boolean; title?: string };
+    | { ok: false; kind: BusyErrKind; text: string; retry?: () => void; alt?: BusyAlt; hint?: string; neutral?: boolean; title?: string };
+
+/** One more action of an end; `research`/`ai`: it opens the research (its mark drawn, as in a toast). */
+export interface BusyAlt { label: string; run: () => void; research?: boolean; ai?: boolean }
 
 /** What an action waits for, and so how long at most (§10.3). */
 export type BusyKind = 'bridge' | 'write' | 'tree' | 'terminal' | 'queueWork' | 'local' | 'satellite' | 'network';
@@ -392,16 +396,17 @@ export function showBusyMessage(el: HTMLElement, end: Extract<BusyEnd, { ok: fal
     text.className = 'busy-msg__text';
     text.textContent = end.text;
     msg.appendChild(text);
-    const act = (label: string, run: () => void, cls: string): void => {
+    const act = (label: string, run: () => void, cls: string, mark?: { research?: boolean; ai?: boolean }): void => {
         const b = document.createElement('button');
         b.type = 'button';
         b.className = `link ${cls}`;
-        b.textContent = label;
+        if (mark?.research) setResearchOpenLabel(b, label, { ai: !!mark.ai });
+        else b.textContent = label;
         b.addEventListener('click', () => { msg.remove(); run(); });
         msg.appendChild(b);
     };
     if (end.retry) act(strings.busy.retry, end.retry, 'busy-msg__retry');
-    if (end.alt) act(end.alt.label, end.alt.run, 'busy-msg__alt');
+    if (end.alt) act(end.alt.label, end.alt.run, 'busy-msg__alt', end.alt);
     if (end.hint) {
         const hint = document.createElement('span');
         hint.className = 'hint';

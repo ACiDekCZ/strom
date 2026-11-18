@@ -46,7 +46,8 @@ import {
 import {
     placeAliasMap, placeSearchNames, placeVariantGroups, type PlaceMemberTag, type PlaceVariantGroup, type PlaceVariantMember,
 } from '../place-groups.js';
-import { placesView, resetPlacesView } from './places-identify-ui.js';
+import { placesView, resetPlacesView, PLACES_STEP_MS, PLACES_UNQUEUE_MS } from './places-identify-ui.js';
+import { runBusy, type BusyCtl } from './busy.js';
 import { uiModule } from './module.js';
 import { normalizeModal } from './modal-skeleton.js';
 import type { MapScope } from './map-ui.js';
@@ -794,9 +795,15 @@ export const placesManagerMethods = uiModule({
             query.select();
         };
         for (const b of own<HTMLButtonElement>('.place-remove')) b.onclick = () => this.removePlacePin(key);
-        for (const b of own<HTMLButtonElement>('.place-look')) b.onclick = () => void this.queuePlaces([key], false);
-        for (const b of own<HTMLButtonElement>('.place-check')) b.onclick = () => void this.queuePlaces([key], true);
-        for (const b of own<HTMLButtonElement>('.place-unqueue')) b.onclick = () => void this.unqueuePlaceForms([...(managerPlaces.get(key)?.variants.keys() ?? [])], [key]);
+        // A research step from the row (B147): its button works until the bridge answers, a refusal said under the row.
+        const step = (b: HTMLButtonElement, fn: (ctl: BusyCtl) => Promise<unknown>, timeoutMs = PLACES_STEP_MS): void => {
+            b.onclick = () => void runBusy(b, async ctl => { await fn(ctl); }, { label: strings.busy.sending, timeoutMs, rowOf: row });
+        };
+        for (const b of own<HTMLButtonElement>('.place-look')) step(b, ctl => this.queuePlaces([key], false, ctl));
+        for (const b of own<HTMLButtonElement>('.place-check')) step(b, ctl => this.queuePlaces([key], true, ctl));
+        for (const b of own<HTMLButtonElement>('.place-unqueue')) {
+            step(b, ctl => this.unqueuePlaceForms([...(managerPlaces.get(key)?.variants.keys() ?? [])], [key], { ctl }), PLACES_UNQUEUE_MS);
+        }
         for (const b of own<HTMLButtonElement>('.place-answer')) b.onclick = () => {
             const waiting = placesView.ids.get(key)?.waitingId;
             this.closePlacesManager();

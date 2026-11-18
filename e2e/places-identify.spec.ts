@@ -279,25 +279,36 @@ test.describe('place identification in the Places dialog', () => {
             'Skipped: 1 already in the research.',
         ]);
         await expect(preview.locator('.places-bulk-note')).toContainText('Nothing runs or costs anything now.');
-        // Nothing is sent before Queue.
+        // Nothing is sent before Queue; Queue says "Sending…" while the bridge answers, a double click queues once.
         expect(b.places!.identify).toEqual([]);
-        await preview.locator('.places-bulk-go').click();
+        const go = preview.locator('.places-bulk-go');
+        await go.evaluate((el: HTMLButtonElement) => { el.click(); el.click(); });
         await expect.poll(() => b.places!.identify).toEqual([{ do: 'queue', all: 'offmap' }]);
         await expect(toast(page)).toContainText('5 places queued for the research.');
         await expect(modal(page).locator('.places-bulk')).toHaveCount(0);
         await expect(row(page, 'Horní Lhota')).toHaveAttribute('data-state', 'queued');
     });
 
-    test('the bridge refuses (503 busy): a toast says why, the place stays as it was', async ({ page }) => {
+    test('the bridge refuses (503 busy): the sentence under the row says why with Try again, the place stays as it was', async ({ page }) => {
         const b = await research(page);
         b.places!.identifyReply = () => ({ status: 503, body: { error: 'The research is busy.', code: 'research.busy' } });
         await openLive(page, b);
         const r = row(page, 'Horní Lhota');
-        await r.locator('.place-look').click();
+        // A double click asks once.
+        await r.locator('.place-look').evaluate((el: HTMLButtonElement) => { el.click(); el.click(); });
         await expect.poll(() => b.places!.identify).toHaveLength(1);
-        await expect(toast(page)).toContainText('Cannot queue now: the research is busy.');
+        const msg = modal(page).locator('.busy-msg.is-err');
+        await expect(msg).toContainText('Cannot queue now: the research is busy.');
+        await expect(msg.locator('.busy-msg__retry')).toHaveText('Try again');
         await expect(r).toHaveAttribute('data-state', 'none');
         await expect(r.locator('.place-look')).toBeVisible();
+        expect(b.places!.identify).toHaveLength(1);
+        // Try again asks again (the bridge answers now).
+        b.places!.identifyReply = undefined;
+        await msg.locator('.busy-msg__retry').click();
+        await expect.poll(() => b.places!.identify).toHaveLength(2);
+        expect(b.places!.identify[1]).toEqual(b.places!.identify[0]);
+        await expect(msg).toHaveCount(0);
     });
 
     test('Why here: today, earlier, who, why and the source of a place the research identified', async ({ page }) => {

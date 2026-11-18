@@ -31,6 +31,7 @@ import { readRecent } from './tree-overview.js';
 import { normalizeModal } from './modal-skeleton.js';
 import { researchLinkFlags } from './research-open-mark.js';
 import { uiModule } from './module.js';
+import type { ToastWorkEnd } from './toast.js';
 
 const DIALOG_ID = 'direction-form-modal';
 /** Most people the search lists. */
@@ -987,13 +988,15 @@ export const directionFormMethods = uiModule({
                 kind: 'direction',
                 ...(Object.keys(back).length > 0 ? {
                     action: {
-                        label: L.dirUndo,
-                        run: () => void this.writeDirectionEdit(next, back, true).then(res => {
-                            // The undo has no form: a refusal is said in its own toast (the change stays).
-                            if (res && res !== true) {
-                                this.showToast(res.said ? L.dirUndoFailedSaid(res.said) : L.dirUndoFailed, 8000, { kind: 'direction', alert: true });
-                            }
-                        }),
+                        label: L.dirUndo, work: { label: strings.busy.reverting, sub: next.name },
+                        // The undo has no form: it works in its toast, a refusal said there (the change stays).
+                        run: async (): Promise<ToastWorkEnd | undefined> => {
+                            const res = await this.writeDirectionEdit(next, back, true);
+                            if (res === true) return { ok: true, text: strings.busy.undone };
+                            if (!res) return undefined;
+                            // The research's own words: another try does not change them (no Try again).
+                            return { ok: false, text: res.said ? L.dirUndoFailedSaid(res.said) : L.dirUndoFailed, whole: true, ...(res.said ? { retry: false } : {}) };
+                        },
                     },
                 } : {}),
             });
