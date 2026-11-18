@@ -307,6 +307,38 @@ test.describe('Going through many files beside an archive', () => {
             .sort((a, b) => String(a.kind).localeCompare(String(b.kind)));
         expect(back).toEqual([{ ids: ['I0001', 'I0002'], kind: '' }, { ids: ['I0003'], kind: 'photo' }]);
     });
+
+    test('Go through: an answer of the research with the same list while the title is typed keeps the text, the focus and the caret', async ({ page }) => {
+        const material = await research(page);
+        await openWindow(page);
+        await win(page).locator('.mw-chips-review [data-mw="notitle"]').click();
+        await win(page).locator('[data-mw="select"]').click();
+        await tiles(page).first().focus();
+        await page.keyboard.press('ControlOrMeta+a');
+        await bar(page).locator('[data-mw="sel-review"]').click();
+        const title = panel(page).locator('.mat-edit-title');
+        await expect(title).toBeFocused();
+        await page.keyboard.type('Letter from Ca');
+        await panel(page).locator('.mat-edit-kind-opt[data-kind="document"]').click();
+        await title.focus();
+        await title.evaluate(el => { const i = el as HTMLInputElement; i.setSelectionRange(i.value.length, i.value.length); (el as unknown as { drawnBefore: boolean }).drawnBefore = true; });
+        // The research answers with the list as it was (any person's files asked again): the panel is drawn anew.
+        const answered = page.waitForResponse(r => /\/material$/.test(new URL(r.url()).pathname) && r.request().method() === 'GET');
+        await page.evaluate(() => {
+            const p = Object.values(window.Strom.DataManager.getData().persons).find(x => (x as { refn?: string }).refn === 'P0001') as { id: string };
+            void (window.Strom.UI as unknown as { refreshPersonMaterials(id: string): Promise<void> }).refreshPersonMaterials(p.id);
+        });
+        await answered;
+        await expect.poll(() => title.evaluate(el => !(el as unknown as { drawnBefore?: boolean }).drawnBefore)).toBe(true);
+        await expect(title).toHaveValue('Letter from Ca');
+        await expect(title).toBeFocused();
+        await expect(panel(page).locator('.mat-edit-kind-opt[data-kind="document"]')).toHaveAttribute('aria-pressed', 'true');
+        await page.keyboard.type('pkov');
+        await expect(title).toHaveValue('Letter from Capkov');
+        await title.press('Enter');
+        await expect.poll(() => JSON.stringify(material.edits ?? [])).toContain('Letter from Capkov');
+        expect(JSON.stringify(material.edits)).toContain('document');
+    });
 });
 
 test.describe('The window\'s sort: the grid too, one with the list, remembered', () => {

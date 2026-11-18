@@ -75,6 +75,78 @@ function inTextField(el: EventTarget | null): boolean {
 
 let viewer: ViewerState | null = null;
 
+/** The edit fields' selectors whose typed text a redraw keeps. */
+const DRAFT_FIELDS = ['.mat-edit-title', '.mat-edit-date', '.mat-edit-note'];
+
+/** What was typed or chosen in the panel's edit fields (only what differs from what they were drawn with), and the focus. */
+interface EditDraft {
+    key: string;
+    values: [string, string][];
+    kind?: string;
+    focus?: { sel: string; start: number | null; end: number | null; dir: 'forward' | 'backward' | 'none' | null };
+}
+
+function viewerEditForm(): HTMLElement | null {
+    return document.querySelector<HTMLElement>('#image-viewer-panel .mv-edit-form');
+}
+
+function pressedKind(form: HTMLElement): string {
+    return form.querySelector<HTMLElement>('.mat-edit-kind-opt[aria-pressed="true"]')?.dataset.kind ?? '';
+}
+
+function takeEditDraft(st: ViewerState): EditDraft | null {
+    const form = st.editing ? viewerEditForm() : null;
+    if (!form || !st.editing) return null;
+    const values: [string, string][] = [];
+    for (const sel of DRAFT_FIELDS) {
+        const el = form.querySelector<HTMLInputElement | HTMLTextAreaElement>(sel);
+        if (el && el.value !== el.defaultValue) values.push([sel, el.value]);
+    }
+    const seg = form.querySelector<HTMLElement>('.mat-edit-kind');
+    const kind = seg && pressedKind(form) !== (seg.dataset.drawnKind ?? '') ? pressedKind(form) : undefined;
+    const active = document.activeElement;
+    let focus: EditDraft['focus'];
+    if (active instanceof HTMLElement && form.contains(active)) {
+        const sel = DRAFT_FIELDS.find(f => active.matches(f))
+            ?? (active.matches('.mat-edit-kind-opt') && active.dataset.kind ? `.mat-edit-kind-opt[data-kind="${active.dataset.kind}"]` : undefined);
+        const text = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement ? active : null;
+        if (sel) focus = { sel, start: text?.selectionStart ?? null, end: text?.selectionEnd ?? null, dir: text?.selectionDirection ?? null };
+    }
+    return values.length || kind !== undefined || focus ? { key: st.editing, values, ...(kind !== undefined ? { kind } : {}), ...(focus ? { focus } : {}) } : null;
+}
+
+function putEditDraft(st: ViewerState, draft: EditDraft | null): void {
+    const form = draft && st.editing === draft.key ? viewerEditForm() : null;
+    if (!form || !draft) return;
+    for (const [sel, value] of draft.values) {
+        const el = form.querySelector<HTMLInputElement | HTMLTextAreaElement>(sel);
+        if (!el) continue;
+        el.value = value;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    if (draft.kind !== undefined && pressedKind(form) !== draft.kind) {
+        form.querySelector<HTMLButtonElement>(draft.kind ? `.mat-edit-kind-opt[data-kind="${draft.kind}"]` : '.mat-edit-kind-opt[aria-pressed="true"]')?.click();
+    }
+    const f = draft.focus;
+    const el = f ? form.querySelector<HTMLElement>(f.sel) : null;
+    if (!f || !el) return;
+    el.focus({ preventScroll: true });
+    if ((el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) && f.start !== null && f.end !== null) {
+        el.setSelectionRange(f.start, f.end, f.dir ?? undefined);
+    }
+}
+
+/**
+ * The details drawn anew (the list or the tree changed: an answer of the
+ * research, a commit): what is being typed in the edit fields stays, with the
+ * focus and the caret (an answer while going through replaced the title under the hand).
+ */
+function redrawKeepingDraft(st: ViewerState): void {
+    const draft = takeEditDraft(st);
+    redrawViewerList();
+    putEditDraft(st, draft);
+}
+
 function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] {
     const el = document.createElement(tag);
     if (cls) el.className = cls;
@@ -285,7 +357,7 @@ export const materialViewerMethods = uiModule({
 
     /** The remembered list changed: the shown item's details again (its image stays). */
     materialViewerListChanged(): void {
-        if (viewer && viewerListOpen()) redrawViewerList();
+        if (viewer && viewerListOpen()) redrawKeepingDraft(viewer);
     },
 
     /** A commit or an undo: the details again when the tree's attachments changed. */
@@ -294,7 +366,7 @@ export const materialViewerMethods = uiModule({
         const key = treeAttachmentsKey();
         if (key === viewer.drawnAttachments) return;
         viewer.drawnAttachments = key;
-        redrawViewerList();
+        redrawKeepingDraft(viewer);
     },
 
     /** The item as it is now (the remembered list changed after an action; an attachment may be gone). */

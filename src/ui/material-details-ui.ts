@@ -98,6 +98,8 @@ export function materialDetailsFields(init: MaterialDetails, opts: { hint?: bool
     title.placeholder = m.titlePh;
     title.autocomplete = 'off';
     title.value = init.title;
+    // What the field was drawn with: a redraw keeps only what differs from it (typed meanwhile).
+    title.defaultValue = init.title;
     titleRow.append(titleLabel, title);
     if (opts.hint) {
         const hint = h('div', 'mat-edit-hint', m.titleHint);
@@ -112,6 +114,7 @@ export function materialDetailsFields(init: MaterialDetails, opts: { hint?: bool
     const seg = h('div', 'mat-edit-kind sel-seg');
     seg.setAttribute('role', 'group');
     seg.setAttribute('aria-labelledby', kindLabel.id);
+    seg.dataset.drawnKind = init.kind ?? '';
     let kind: MaterialKind | null = init.kind;
     const opts2 = KINDS.map(k => {
         const b = h('button', 'mat-edit-kind-opt sel-opt', m.kind[k]);
@@ -151,6 +154,7 @@ export function materialDetailsFields(init: MaterialDetails, opts: { hint?: bool
     date.placeholder = m.datePh;
     date.autocomplete = 'off';
     date.value = materialDateForInput(init.date);
+    date.defaultValue = date.value;
     const mark = (bad: boolean) => {
         date.classList.toggle('invalid', bad);
         if (bad) date.setAttribute('aria-invalid', 'true'); else date.removeAttribute('aria-invalid');
@@ -170,6 +174,7 @@ export function materialDetailsFields(init: MaterialDetails, opts: { hint?: bool
         note.rows = 3;
         note.placeholder = strings.attachments.notePlaceholder;
         note.value = init.note;
+        note.defaultValue = init.note;
         noteRow.append(noteLabel, note);
         root.appendChild(noteRow);
     }
