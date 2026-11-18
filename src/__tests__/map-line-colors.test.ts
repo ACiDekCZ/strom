@@ -12,8 +12,8 @@ import {
 import { contrastRatio } from '../fan-colors.js';
 
 const TABLE = {
-    light: { q0: '#a94700', q1: '#977e0d', q2: '#0e899f', q3: '#7f2c91', e1: '#743100', e3: '#6f5c00', e5: '#006071', e7: '#581666' },
-    dark: { q0: '#ee8545', q1: '#eed059', q2: '#5cd0ea', q3: '#c97adb', e1: '#c36c36', e3: '#bca341', e5: '#3fa8bf', e7: '#ab68ba' },
+    light: { q0: '#264f8b', q1: '#358ab2', q2: '#a93f75', q3: '#c5617c', e1: '#123b75', e3: '#166687', e5: '#7e2754', e7: '#99415a' },
+    dark: { q0: '#9ec0f2', q1: '#3e9dca', q2: '#f7a9cb', q3: '#e8809a', e1: '#6b94cf', e3: '#73bbe1', e5: '#d77ea6', e7: '#f0a6b6' },
 } as const;
 
 describe('line colours', () => {

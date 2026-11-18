@@ -94,8 +94,15 @@ export function contrastRatio(a: string, b: string): number {
 
 // ---------------------------------------------------------------- modes
 
-/** Hues of the four grandparent lines: father's father, father's mother, mother's father, mother's mother. */
-export const LINE_HUE = [50, 95, 215, 320] as const;
+/**
+ * Hues of the four grandparent lines: father's father (blue), father's mother
+ * (blue-green), mother's father (pink), mother's mother (raspberry) — the P2
+ * lineage palette of the cards (spec 112 §3), shared with the map.
+ */
+export const LINE_HUE = [258, 232, 352, 5] as const;
+/** P2 hues of the parents' lines and of the descendants (spec 112 §3): paternal blue, maternal pink, descendants ochre. */
+export const PARENT_LINE_HUE = { father: 258, mother: 352 } as const;
+export const DESCENDANT_LINE_HUE = 82;
 /** Hues of the ten largest family lines, in order of size. */
 const ROD_HUE = [55, 145, 245, 320, 92, 195, 15, 275, 120, 345];
 
@@ -112,17 +119,19 @@ export function fanLineColor(line: number, generation: number, theme: FanTheme):
 }
 
 /**
- * Line mode: the father (ring 1, left) and the mother. Light L .78 instead of
- * the drafted .76, which leaves the text at 6.8:1, under the required 7:1.
+ * Line mode: the father (ring 1, left) and the mother, in the P2 hues of the
+ * paternal and maternal lines. Light L .78 instead of the drafted .76, which
+ * leaves the text at 6.8:1, under the required 7:1.
  */
-function parentLineColor(father: boolean, theme: FanTheme): string {
-    return oklchToHex(isDark(theme) ? 0.50 : 0.78, 0.04, father ? 70 : 250);
+export function parentLineColor(father: boolean, theme: FanTheme): string {
+    return oklchToHex(isDark(theme) ? 0.50 : 0.78, 0.04, father ? PARENT_LINE_HUE.father : PARENT_LINE_HUE.mother);
 }
 
-/** Line mode: descendants and their partners (two-way shape). */
-function descLineColor(partner: boolean, theme: FanTheme): string {
-    if (partner) return isDark(theme) ? oklchToHex(0.36, 0.03, 150) : oklchToHex(0.93, 0.03, 150);
-    return isDark(theme) ? oklchToHex(0.42, 0.04, 150) : oklchToHex(0.88, 0.045, 150);
+/** Line mode: descendants and their partners (two-way shape), in the P2 hue of the descendants. */
+export function descLineColor(partner: boolean, theme: FanTheme): string {
+    const h = DESCENDANT_LINE_HUE;
+    if (partner) return isDark(theme) ? oklchToHex(0.36, 0.03, h) : oklchToHex(0.93, 0.03, h);
+    return isDark(theme) ? oklchToHex(0.42, 0.04, h) : oklchToHex(0.88, 0.045, h);
 }
 
 /** The fill of a family line among the ten largest (`rank` 0…9); grey otherwise. */

@@ -40,6 +40,12 @@ export function branchAriaKind(set: BranchSet | undefined, numbered: boolean): B
     return null;
 }
 
+/** A person's lineage in words ("paternal line", R5 "first parent's line"); '' without a line. */
+export function branchLineText(set: BranchSet | undefined, numbered: boolean): string {
+    const kind = branchAriaKind(set, numbered);
+    return kind ? ariaText(kind) : '';
+}
+
 /** The id a card's `aria-describedby` points to for its lineage. */
 export function branchAriaId(set: BranchSet | undefined, numbered: boolean): string | null {
     const kind = branchAriaKind(set, numbered);

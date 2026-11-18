@@ -1750,6 +1750,9 @@ const stringsEN = {
         ariaSlot2: 'second parent\'s line',
         ariaSlotBoth: 'first and second parent\'s line',
         tableColumn: 'Lineage',
+        tableBoth: 'Paternal and maternal',
+        tableDescendant: 'Descendant',
+        tableSlotBoth: 'First and second parent\'s line',
     },
 
     // Interactive tour
@@ -9873,7 +9876,7 @@ const stringsEN = {
         col: {
             num: '#', done: 'Done', added: 'Added',
             name: 'Full name', firstName: 'First name', surname: 'Surname', birthSurname: 'Birth surname', marriedSurname: 'Married surname', titles: 'Titles',
-            gender: 'Sex', living: 'Living', researchId: 'Research ID', refn: 'Ref. number', gen: 'Generation', kin: 'Relationship to home person', rod: 'Family line',
+            gender: 'Sex', living: 'Living', researchId: 'Research ID', refn: 'Ref. number', gen: 'Generation', kin: 'Relationship to home person', rod: 'Family line', lineage: 'Lineage',
             bDate: 'Birth date', bPlace: 'Birthplace', bAddr: 'Birth address', bapDate: 'Baptism date', bapPlace: 'Baptism place',
             fAge: 'Father’s age at birth', mAge: 'Mother’s age at birth', bComp: 'Birth completeness',
             father: 'Father', mother: 'Mother', sibs: 'Siblings', sibOrder: 'Birth order',
@@ -9940,7 +9943,7 @@ const stringsEN = {
         from: {
             evAge: 'the birth date and the date of the event',
             srcPersons: 'the citations at the people, their events and unions', srcFacts: 'the citations at the people, their events and unions',
-            living: 'birth and death dates', gen: 'parent and child links', kin: 'links to the home person',
+            living: 'birth and death dates', gen: 'parent and child links', kin: 'links to the home person', lineage: 'parent and child links to the home person',
             rod: 'surnames and parent links', fAge: 'the father’s birth date and the birth date',
             mAge: 'the mother’s birth date and the birth date', sibs: 'the parents’ children', sibOrder: 'the siblings’ birth dates',
             uCount: 'the person’s unions', wAge: 'the birth date and the wedding date',
@@ -11913,6 +11916,9 @@ const stringsCZ: StringsType = {
         ariaSlot2: 'linie 2. rodiče',
         ariaSlotBoth: 'linie 1. i 2. rodiče',
         tableColumn: 'Linie',
+        tableBoth: 'Otcovská i mateřská',
+        tableDescendant: 'Potomek',
+        tableSlotBoth: 'Linie 1. i 2. rodiče',
     },
 
     // Interactive tour
@@ -19906,7 +19912,7 @@ const stringsCZ: StringsType = {
         col: {
             num: '#', done: 'Hotovo', added: 'Přidáno',
             name: 'Celé jméno', firstName: 'Křestní jméno', surname: 'Příjmení', birthSurname: 'Rodné příjmení', marriedSurname: 'Příjmení po sňatku', titles: 'Tituly',
-            gender: 'Pohlaví', living: 'Žijící', researchId: 'ID výzkumu', refn: 'Ref. číslo', gen: 'Generace', kin: 'Vztah k hlavní osobě', rod: 'Rod',
+            gender: 'Pohlaví', living: 'Žijící', researchId: 'ID výzkumu', refn: 'Ref. číslo', gen: 'Generace', kin: 'Vztah k hlavní osobě', rod: 'Rod', lineage: 'Linie',
             bDate: 'Datum narození', bPlace: 'Místo narození', bAddr: 'Adresa narození', bapDate: 'Datum křtu', bapPlace: 'Místo křtu',
             fAge: 'Věk otce při narození', mAge: 'Věk matky při narození', bComp: 'Úplnost narození',
             father: 'Otec', mother: 'Matka', sibs: 'Počet sourozenců', sibOrder: 'Pořadí mezi sourozenci',
@@ -19973,7 +19979,7 @@ const stringsCZ: StringsType = {
         from: {
             evAge: 'data narození a události',
             srcPersons: 'citací u osob, jejich událostí a svazků', srcFacts: 'citací u osob, jejich událostí a svazků',
-            living: 'data narození a úmrtí', gen: 'vazby rodičů a dětí', kin: 'vazby k hlavní osobě',
+            living: 'data narození a úmrtí', gen: 'vazby rodičů a dětí', kin: 'vazby k hlavní osobě', lineage: 'vazby rodičů a dětí k hlavní osobě',
             rod: 'příjmení a vazby rodičů', fAge: 'datum narození otce a datum narození',
             mAge: 'datum narození matky a datum narození', sibs: 'děti rodičů', sibOrder: 'data narození sourozenců',
             uCount: 'svazky osoby', wAge: 'datum narození a datum sňatku',
@@ -21907,6 +21913,9 @@ const stringsDE: StringsType = {
         ariaSlot2: 'Linie des 2. Elternteils',
         ariaSlotBoth: 'Linie des 1. und 2. Elternteils',
         tableColumn: 'Linie',
+        tableBoth: 'Väterlich und mütterlich',
+        tableDescendant: 'Nachkomme',
+        tableSlotBoth: 'Linie des 1. und 2. Elternteils',
     },
 
     // Interactive tour
@@ -29833,7 +29842,7 @@ const stringsDE: StringsType = {
         col: {
             num: '#', done: 'Erledigt', added: 'Hinzugefügt',
             name: 'Vollständiger Name', firstName: 'Vorname', surname: 'Nachname', birthSurname: 'Geburtsname', marriedSurname: 'Ehename', titles: 'Titel',
-            gender: 'Geschlecht', living: 'Lebend', researchId: 'Forschungs-ID', refn: 'Ref.-Nummer', gen: 'Generation', kin: 'Beziehung zur Hauptperson', rod: 'Stamm',
+            gender: 'Geschlecht', living: 'Lebend', researchId: 'Forschungs-ID', refn: 'Ref.-Nummer', gen: 'Generation', kin: 'Beziehung zur Hauptperson', rod: 'Stamm', lineage: 'Linie',
             bDate: 'Geburtsdatum', bPlace: 'Geburtsort', bAddr: 'Geburtsadresse', bapDate: 'Taufdatum', bapPlace: 'Taufort',
             fAge: 'Alter des Vaters bei der Geburt', mAge: 'Alter der Mutter bei der Geburt', bComp: 'Vollständigkeit Geburt',
             father: 'Vater', mother: 'Mutter', sibs: 'Zahl der Geschwister', sibOrder: 'Geburtsrang',
@@ -29900,7 +29909,7 @@ const stringsDE: StringsType = {
         from: {
             evAge: 'Geburtsdatum und Datum des Ereignisses',
             srcPersons: 'den Zitaten bei den Personen, ihren Ereignissen und Verbindungen', srcFacts: 'den Zitaten bei den Personen, ihren Ereignissen und Verbindungen',
-            living: 'Geburts- und Sterbedatum', gen: 'Eltern-Kind-Beziehungen', kin: 'Beziehungen zur Hauptperson',
+            living: 'Geburts- und Sterbedatum', gen: 'Eltern-Kind-Beziehungen', kin: 'Beziehungen zur Hauptperson', lineage: 'Eltern-Kind-Beziehungen zur Hauptperson',
             rod: 'Nachnamen und Elternbeziehungen', fAge: 'Geburtsdatum des Vaters und Geburtsdatum',
             mAge: 'Geburtsdatum der Mutter und Geburtsdatum', sibs: 'Kinder der Eltern', sibOrder: 'Geburtsdaten der Geschwister',
             uCount: 'Verbindungen der Person', wAge: 'Geburtsdatum und Heiratsdatum',

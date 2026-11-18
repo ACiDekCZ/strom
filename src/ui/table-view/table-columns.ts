@@ -15,6 +15,7 @@ import { recordedAgeGap } from '../../recorded-age.js';
 import { shownNameOrEmpty } from '../../person-name.js';
 import { findRelationship } from '../../kinship.js';
 import { rodOf, siblingsOf, sortByBirth } from '../../lineage.js';
+import { branchesOf } from '../../branch-colors.js';
 import { sortLifeEvents, eventValueIsOnTag, coupleEventLabel } from '../../events.js';
 import { lifeEventLabel } from '../../person-sources.js';
 import { CARD_STATUS_CLASSES, cardStatus, factReliability, type ReliabilityStepName } from '../../reliability.js';
@@ -441,6 +442,29 @@ function crossTreeCell(ctx: TableContext, p: Person): CellValue {
     return { ...EMPTY, text: names.join(', '), sortKey: names.length, empty: false };
 }
 
+/**
+ * The Lineage cell (spec 112 §3): the person's line relative to the home
+ * (focused) person in words — paternal, maternal, both (R4), descendant; the
+ * first / second parent's line for two same-gender parents (R5) — with the
+ * lines for the grid's sign. Sorted paternal → both → maternal → descendant,
+ * the people without a line last.
+ */
+export function lineageCell(ctx: TableContext, id: PersonId): CellValue {
+    const res = ctx.branches();
+    const set = res?.map.get(id);
+    if (!res || !set) return emptyCell(true);
+    const s = strings.branchColors;
+    const n = res.numbered;
+    let text: string;
+    let key: number;
+    if (set.paternal && set.maternal) { text = n ? s.tableSlotBoth : s.tableBoth; key = 1; }
+    else if (set.paternal) { text = n ? s.legendSlot1 : s.legendPaternal; key = 0; }
+    else if (set.maternal) { text = n ? s.legendSlot2 : s.legendMaternal; key = 2; }
+    else if (set.descendant) { text = s.tableDescendant; key = 3; }
+    else return emptyCell(true);
+    return { ...textCell(text, true), sortKey: key, lineage: branchesOf(set), ...(n ? { lineageNumbered: true } : {}) };
+}
+
 /** Person status (§16.0): the card's one mark of sources and reliability in words; sorted strongest first. */
 function personStatusCell(ctx: TableContext, p: Person): CellValue {
     const st = cardStatus(ctx.data, p, { ...ctx.reliability, treeHasSources: ctx.hasSources(), unions: ctx.unionsOf() });
@@ -516,6 +540,8 @@ export const PERSON_COLUMNS: readonly ColumnDef[] = cols('persons', [
             return textCell(rod ? labels.get(rod) : '', true);
         },
     },
+    // The lineage relative to the home person (spec 112 §3); offered, not shown by default.
+    { id: 'lineage', group: 'person', label: 'lineage', width: 130, computed: true, get: (c, r) => lineageCell(c, r.id as PersonId) },
     // When the person came into the tree (spec 084 §8); offered, not shown by default.
     { id: 'added', group: 'person', label: 'added', width: 130, kind: 'date', get: (c, r) => addedCell(c, asPerson(r).addedAt) },
     // Birth and baptism

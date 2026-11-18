@@ -268,7 +268,8 @@ describe('lineage markers (spec 112): the shape from Settings, both lines (R4), 
         const clipY = (id: string) => Number(new RegExp(`<clipPath id="${id}"><rect x="[^"]+" y="([^"]+)"`).exec(svg)![1]);
         expect(clipY(d[0][3])).toBe(-1);
         expect(clipY(d[1][3])).toBe(32);
-        expect(svg).not.toMatch(/#d08a5a|#5a8fc0|#57a869/);
+        // None of the retired lineage hexes (spec 112 replaced them with P2).
+        for (const retired of [['d08a', '5a'], ['5a8f', 'c0'], ['57a8', '69']]) expect(svg).not.toContain('#' + retired.join(''));
     });
 
     it('tag: a letter tag over the left edge, two for both lines, the letters 1 and 2 for two same-gender parents', () => {

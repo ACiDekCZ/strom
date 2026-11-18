@@ -27,14 +27,14 @@ export const LINE_TOKENS: readonly LineToken[] = ['q0', 'q1', 'q2', 'q3', 'e1', 
 
 /** OKLCH lightness and chroma per token and theme (hue from LINE_HUE by the token's quarter). */
 const LC: Record<LineToken, Record<LineTheme, [number, number]>> = {
-    q0: { light: [0.52, 0.15], dark: [0.72, 0.15] },
-    q1: { light: [0.60, 0.12], dark: [0.86, 0.14] },
-    q2: { light: [0.58, 0.10], dark: [0.80, 0.11] },
-    q3: { light: [0.46, 0.17], dark: [0.70, 0.16] },
-    e1: { light: [0.40, 0.11], dark: [0.62, 0.13] },
-    e3: { light: [0.48, 0.10], dark: [0.72, 0.12] },
-    e5: { light: [0.45, 0.08], dark: [0.68, 0.10] },
-    e7: { light: [0.35, 0.14], dark: [0.62, 0.14] },
+    q0: { light: [0.43, 0.11], dark: [0.80, 0.08] },
+    q1: { light: [0.60, 0.10], dark: [0.66, 0.11] },
+    q2: { light: [0.53, 0.15], dark: [0.82, 0.10] },
+    q3: { light: [0.62, 0.13], dark: [0.72, 0.13] },
+    e1: { light: [0.36, 0.11], dark: [0.66, 0.10] },
+    e3: { light: [0.48, 0.09], dark: [0.76, 0.09] },
+    e5: { light: [0.42, 0.13], dark: [0.70, 0.12] },
+    e7: { light: [0.50, 0.12], dark: [0.80, 0.09] },
 };
 
 /** The quarter (0…3) a token belongs to. */

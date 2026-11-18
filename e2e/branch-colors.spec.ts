@@ -227,6 +227,47 @@ test('the marker shape, the tint and the lineage words follow the setting (spec 
     await expect(page.locator('body')).toHaveAttribute('data-branch-tint', '');
 });
 
+/** The Timeline's sign before the name and the Table's Lineage column follow the marker setting (spec 112 §3). */
+test('the Timeline and the Table show the lineage sign in the chosen shape (spec 112)', async ({ page }) => {
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(card(page, 'Johan')).toBeVisible();
+
+    // Timeline: the legend's sign before the names of the marked people; the focus has an empty slot.
+    await page.locator('#view-mode-timeline').click();
+    await expect(page.locator('.timeline-bar').first()).toBeVisible();
+    const signs = page.locator('#timeline-container .tl-name .branch-sign');
+    await expect.poll(() => signs.count()).toBeGreaterThan(0);
+    await expect(signs.first()).toHaveAttribute('data-shape', 'arc');
+    const focusSlot = page.locator('#timeline-container .timeline-bar.focused .branch-sign-slot');
+    await expect(focusSlot).toHaveCount(1);
+    await expect(focusSlot.locator('.branch-sign')).toHaveCount(0);
+    // The tint never reaches the sign; the life bar keeps the sex's colour.
+    await page.evaluate(() => { window.Strom.UI.setBranchMarker('tag'); window.Strom.UI.setBranchTint(true); });
+    await expect(signs.first()).toHaveAttribute('data-shape', 'tag');
+    expect(await signs.first().evaluate(el => getComputedStyle(el).backgroundColor)).toBe('rgba(0, 0, 0, 0)');
+    const fills = await page.locator('.tl-bar-rect').evaluateAll(els => [...new Set(els.map(el => el.getAttribute('fill')))]);
+    expect(fills.every(f => /^var\(--(male|female|unknown)\)$/.test(f ?? ''))).toBe(true);
+    await page.evaluate(() => window.Strom.UI.setBranchMarker('off'));
+    await expect(page.locator('#timeline-container .branch-sign-slot')).toHaveCount(0);
+
+    // Table: the Lineage column is hidden by default and offered in the Columns panel.
+    await page.evaluate(() => window.Strom.UI.setBranchMarker('stripe'));
+    await page.locator('#view-mode-table').click();
+    await expect(page.locator('#table-container .tv-grid[role="treegrid"]')).toBeVisible();
+    await expect(page.locator('#table-container .tv-headrow [data-col="lineage"]')).toHaveCount(0);
+    await page.locator('#table-container .tv-cols-btn').click();
+    const panel = page.getByRole('dialog', { name: 'Columns' });
+    await page.locator('.tv-cp-q').fill('Lineage');
+    await panel.getByRole('checkbox', { name: 'Lineage', exact: true }).check();
+    await expect(page.locator('#table-container .tv-headrow [data-col="lineage"]')).toHaveCount(1);
+    await panel.getByRole('button', { name: 'Done' }).click();
+    const cells = page.locator('#table-container .tv-body .tv-lineage');
+    await expect.poll(() => cells.count()).toBeGreaterThan(0);
+    await expect(cells.first().locator('.branch-sign')).toHaveAttribute('data-shape', 'stripe');
+    await expect(cells.first().locator('.tv-cell-text')).toHaveText(/^(Paternal|Maternal|Paternal and maternal|Descendant)$/);
+});
+
 /** The poster draws the chosen marker and tint (spec 112 §3); the print has one grey frame and the print colours (R6). */
 test('the poster and the print carry the lineage markers (spec 112)', async ({ page }) => {
     await openApp(page);

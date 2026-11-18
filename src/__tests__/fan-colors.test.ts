@@ -7,6 +7,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
     FAN_PALETTES, FanTheme, oklchToHex, contrastRatio, fanLineColor, fanRodColor, fanFill, fanLegend, fanRodColors, fanHasRepeats,
+    LINE_HUE, parentLineColor, descLineColor,
 } from '../fan-colors.js';
 import { buildFanModel, buildFanSvg } from '../fan-chart.js';
 import { buildLineages } from '../lineage.js';
@@ -65,6 +66,36 @@ describe('contrast (spec 029 §6.2)', () => {
             const lum = (h: string) => contrastRatio(h, '#000000');
             if (theme === 'light') expect(lum(fanLineColor(0, 10, theme))).toBeGreaterThan(lum(fanLineColor(0, 2, theme)));
             else expect(lum(fanLineColor(0, 10, theme))).toBeLessThan(lum(fanLineColor(0, 2, theme)));
+        }
+    });
+});
+
+describe('line mode in the P2 lineage hues (spec 112 §3)', () => {
+    it('takes the hues of the cards: paternal blue, maternal pink, descendants ochre, grandparents 258/232/352/5', () => {
+        expect([...LINE_HUE]).toEqual([258, 232, 352, 5]);
+        expect(parentLineColor(true, 'light')).toBe('#a8b9d1');
+        expect(parentLineColor(false, 'light')).toBe(oklchToHex(0.78, 0.04, 352));
+        expect(parentLineColor(true, 'dark')).toBe('#55647a');
+        expect(descLineColor(false, 'light')).toBe('#e7d5b7');
+        expect(descLineColor(true, 'light')).toBe(oklchToHex(0.93, 0.03, 82));
+        expect(fanLineColor(0, 2, 'light')).toBe('#aabfde');
+        expect(fanLineColor(1, 2, 'light')).toBe('#9ec4d9');
+        expect(fanLineColor(2, 2, 'light')).toBe('#d8b1c1');
+        expect(fanLineColor(0, 2, 'dark')).toBe('#495c77');
+    });
+
+    it('keeps the text at least 7:1 on the parents\', the descendants\' and the grandparents\' fills in the light theme and print', () => {
+        for (const theme of ['light', 'print'] as const) {
+            const text = FAN_PALETTES[theme].text;
+            const fills = [
+                parentLineColor(true, theme), parentLineColor(false, theme), descLineColor(false, theme), descLineColor(true, theme),
+                ...[0, 1, 2, 3].flatMap(l => [2, 6, 10].map(g => fanLineColor(l, g, theme))),
+            ];
+            for (const fill of fills) expect(contrastRatio(text, fill), `${theme} ${fill}`).toBeGreaterThanOrEqual(7);
+        }
+        const dark = FAN_PALETTES.dark.text;
+        for (const fill of [parentLineColor(true, 'dark'), parentLineColor(false, 'dark'), descLineColor(false, 'dark'), descLineColor(true, 'dark')]) {
+            expect(contrastRatio(dark, fill), `dark ${fill}`).toBeGreaterThanOrEqual(4.6);
         }
     });
 });

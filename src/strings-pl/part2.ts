@@ -231,6 +231,9 @@ export const plPart2: Pick<StringsType, 'crop' | 'portrait' | 'importImages' | '
         ariaSlot2: 'linia 2. rodzica',
         ariaSlotBoth: 'linia 1. i 2. rodzica',
         tableColumn: 'Linia',
+        tableBoth: 'Ojcowska i matczyna',
+        tableDescendant: 'Potomek',
+        tableSlotBoth: 'Linia 1. i 2. rodzica',
     },
 
     // Interactive tour

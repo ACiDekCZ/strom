@@ -50,6 +50,8 @@ import { AGENT_SPIN_MS, sharedPhaseDelay } from '../../card-signals.js';
 import { PERSON_FINDINGS_COLUMNS } from './table-checks.js';
 import { sharedEventMarkSvg } from '../../icons.js';
 import { pinSvg } from './table-pins.js';
+import { branchSignsHtml } from '../../branch-sign.js';
+import { BRANCH_MARKERS, type BranchMarker } from '../../types.js';
 
 export interface GridInput {
     model: TableModel;
@@ -515,6 +517,7 @@ function cellValueCore(value: CellValue, col: ColumnDef, hit = '', links = false
     }
     if (value.link && !value.na) return html + linkHtml(value.link, hit);
     if (value.dots && !value.na) return html + readersHtml(value, hit);
+    if (value.lineage?.length && !value.na) return html + lineageHtml(value, hit);
     return html + `<span class="tv-cell-text">${hit && !value.na ? highlightHtml(cellText(value), hit) : esc(cellText(value))}</span>`;
 }
 
@@ -538,6 +541,23 @@ export function linkHtml(link: { href: string; label: string }, hit = ''): strin
     const label = hit ? highlightHtml(link.label, hit) : esc(link.label);
     return `<span class="tv-cell-text"><a class="tv-link" href="${esc(link.href)}" target="_blank" rel="noopener noreferrer" tabindex="-1">${label}`
         + `<span class="tv-link-out" aria-hidden="true"> ↗</span></a></span>`;
+}
+
+/** The marker shape the page shows (body[data-branch-marker], spec 112), or 'off'. */
+function pageBranchMarker(): BranchMarker {
+    const m = typeof document !== 'undefined' ? document.body?.dataset.branchMarker : undefined;
+    return m && (BRANCH_MARKERS as readonly string[]).includes(m) ? m as BranchMarker : 'off';
+}
+
+/**
+ * The Lineage cell (spec 112 §3): the legend's sign in the chosen marker
+ * shape before the words (both signs for a person on both sides); the words
+ * alone while the markers are off.
+ */
+export function lineageHtml(value: CellValue, hit = '', marker: BranchMarker = pageBranchMarker()): string {
+    const text = `<span class="tv-cell-text">${hit ? highlightHtml(value.text, hit) : esc(value.text)}</span>`;
+    const signs = branchSignsHtml(value.lineage ?? [], marker, !!value.lineageNumbered);
+    return signs ? `<span class="tv-lineage"><span class="tv-lineage-signs">${signs}</span>${text}</span>` : text;
 }
 
 /** The readers of a source (§14.2): the reliability pill's dots (spec 066) and the count, inert. */

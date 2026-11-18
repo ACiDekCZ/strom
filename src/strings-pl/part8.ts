@@ -1321,7 +1321,7 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         col: {
             num: '#', done: 'Gotowe', added: 'Dodano',
             name: 'Imię i nazwisko', firstName: 'Imię', surname: 'Nazwisko', birthSurname: 'Nazwisko rodowe', marriedSurname: 'Nazwisko po ślubie', titles: 'Tytuły',
-            gender: 'Płeć', living: 'Żyjący', researchId: 'ID badania', refn: 'Nr ref.', gen: 'Pokolenie', kin: 'Pokrewieństwo z osobą główną', rod: 'Ród',
+            gender: 'Płeć', living: 'Żyjący', researchId: 'ID badania', refn: 'Nr ref.', gen: 'Pokolenie', kin: 'Pokrewieństwo z osobą główną', rod: 'Ród', lineage: 'Linia',
             bDate: 'Data urodzenia', bPlace: 'Miejsce urodzenia', bAddr: 'Adres urodzenia', bapDate: 'Data chrztu', bapPlace: 'Miejsce chrztu',
             fAge: 'Wiek ojca przy urodzeniu', mAge: 'Wiek matki przy urodzeniu', bComp: 'Kompletność urodzenia',
             father: 'Ojciec', mother: 'Matka', sibs: 'Liczba rodzeństwa', sibOrder: 'Kolejność wśród rodzeństwa',
@@ -1388,7 +1388,7 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         from: {
             evAge: 'daty urodzenia i daty wydarzenia',
             srcPersons: 'cytowań przy osobach, ich wydarzeniach i związkach', srcFacts: 'cytowań przy osobach, ich wydarzeniach i związkach',
-            living: 'daty urodzenia i zgonu', gen: 'powiązania rodziców i dzieci', kin: 'powiązania z osobą główną',
+            living: 'daty urodzenia i zgonu', gen: 'powiązania rodziców i dzieci', kin: 'powiązania z osobą główną', lineage: 'powiązania rodziców i dzieci z osobą główną',
             rod: 'nazwiska i powiązania rodziców', fAge: 'data urodzenia ojca i data urodzenia',
             mAge: 'data urodzenia matki i data urodzenia', sibs: 'dzieci rodziców', sibOrder: 'daty urodzenia rodzeństwa',
             uCount: 'związki osoby', wAge: 'data urodzenia i data ślubu',

@@ -171,7 +171,7 @@ export function shownColumnItems(type: RowType, filter: TableFilter): ColumnFilt
 export type FilterKind = 'text' | 'range' | 'values' | 'presence';
 
 /** Enumerations filtered by their values (§8.2: union status, level), besides the pills. */
-const VALUE_COLUMNS = new Set(['uStatus', 'topSev', 'gender', 'living', 'div', 'evid', 'certainty', 'rod', 'srcRead', 'srcTranscript']);
+const VALUE_COLUMNS = new Set(['uStatus', 'topSev', 'gender', 'living', 'div', 'evid', 'certainty', 'rod', 'lineage', 'srcRead', 'srcTranscript']);
 
 export function filterKindOf(col: ColumnDef): FilterKind {
     // A picture (spec 107 §8): with or without one only.

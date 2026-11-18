@@ -361,15 +361,15 @@
             --fan-female: #ead8d4;
             --fan-unknown: #e2ddd2;
             --fan-hatch: #2b2822;
-            /* map: the ancestors' path, one colour + pattern per grandparent line (q), odd great-grandparent lines (e) a shade of it (src/map-line-colors.ts) */
-            --line-q0: #a94700;
-            --line-q1: #977e0d;
-            --line-q2: #0e899f;
-            --line-q3: #7f2c91;
-            --line-e1: #743100;
-            --line-e3: #6f5c00;
-            --line-e5: #006071;
-            --line-e7: #581666;
+            /* map: the ancestors' path, one colour + pattern per grandparent line (q), odd great-grandparent lines (e) a shade of it, in the P2 lineage hues (src/map-line-colors.ts) */
+            --line-q0: #264f8b;
+            --line-q1: #358ab2;
+            --line-q2: #a93f75;
+            --line-q3: #c5617c;
+            --line-e1: #123b75;
+            --line-e3: #166687;
+            --line-e5: #7e2754;
+            --line-e7: #99415a;
             --line-casing: rgba(255,253,248,.95);
             --avatar-bg: #f0e9da;
 
@@ -562,14 +562,14 @@
             --fan-female: #56443f;
             --fan-unknown: #3f3b33;
             --fan-hatch: #ece6d8;
-            --line-q0: #ee8545;
-            --line-q1: #eed059;
-            --line-q2: #5cd0ea;
-            --line-q3: #c97adb;
-            --line-e1: #c36c36;
-            --line-e3: #bca341;
-            --line-e5: #3fa8bf;
-            --line-e7: #ab68ba;
+            --line-q0: #9ec0f2;
+            --line-q1: #3e9dca;
+            --line-q2: #f7a9cb;
+            --line-q3: #e8809a;
+            --line-e1: #6b94cf;
+            --line-e3: #73bbe1;
+            --line-e5: #d77ea6;
+            --line-e7: #f0a6b6;
             --line-casing: rgba(22,20,16,.92);
             --avatar-bg: #3a362c;
             /* lineage markers: P2, decision R2 — no palette choice; tint 8 % over --surface */
@@ -1844,6 +1844,9 @@
         }
         .branch-swatch[data-shape="corner"][data-line="descendant"] > i { clip-path: path(evenodd, 'M0 0H15L0 15Z M3.5 3.5H8.5L3.5 8.5Z'); }
         body[data-branch-tint] .branch-swatch { padding: 4px; background: var(--sw-tint); }
+        /* A sign before a name (the Timeline, the Table's Lineage column): just the shape, never the tint. */
+        .branch-swatch.branch-sign { min-width: 0; min-height: 0; }
+        body[data-branch-tint] .branch-swatch.branch-sign { padding: 0; background: none; }
         @media (max-width: 640px) {
             .tree-legend { left: 12px; bottom: 12px; font-size: 11px; padding: 6px 10px; gap: 10px; }
             .branch-legend-group { gap: 6px 10px; }
@@ -10568,6 +10571,13 @@
         }
         .tl-nm { overflow: hidden; text-overflow: ellipsis; }
         .tl-yr { color: var(--text-light, #999); font-size: 11px; flex-shrink: 0; }
+        /* The lineage sign before the name (spec 112 §3): the legend's sign in the chosen shape
+           (.branch-swatch[data-shape]); a slot on every row while the markers are on, so the names
+           stay aligned; two signs side by side for a person on both sides (R4). */
+        .tl-name .branch-sign-slot {
+            flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 3px;
+            min-width: 18px; margin-right: 2px;
+        }
         .timeline-bar { cursor: pointer; }
         @media (hover: hover) { .timeline-bar:hover .tl-bar-rect { filter: brightness(0.92); } }
         .timeline-bar.focused .tl-bar-rect { stroke: var(--primary); stroke-width: 2.5; }
@@ -10981,6 +10991,9 @@
         .tv-bub-cite-meta { font-size: 12px; color: var(--text-light); overflow-wrap: anywhere; }
         .tv-bub-cite:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         /* Spec 085 §4 (4a): a shared event's Persons cell (the badge, then the given names) and its own ages with their bubble. */
+        /* The Table's Lineage column (spec 112 §3): the sign in the chosen shape before the words. */
+        .tv-lineage { display: flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; }
+        .tv-lineage-signs { flex: none; display: inline-flex; align-items: center; gap: 3px; }
         .tv-shared { display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
         .tv-shared > .tv-cell-text { flex: 0 1 auto; }
         .tv-shared-pill {

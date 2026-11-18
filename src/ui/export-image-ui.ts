@@ -337,12 +337,17 @@ function buildCurrentPoster(): PosterBuild | null {
         // Poster rasterises to PNG without a CSS context, so var(--male/--female)
         // cannot resolve — read the concrete token values now (light fallback).
         const rootStyle = getComputedStyle(document.documentElement);
+        // The lineage signs before the names as on screen (spec 112 §3), in the light theme's P2 hex.
+        const marker = SettingsManager.getBranchMarker();
+        const timelineFocus = TreeRenderer.getFocusPersonId();
+        const signs = marker !== 'off' && timelineFocus ? classifyBranches(data, timelineFocus) : null;
         const svg = buildTimelinePosterSvg(model, {
             esc: escapeXml,
             focusId: TreeRenderer.getFocusPersonId(),
             maleColor: rootStyle.getPropertyValue('--male').trim() || '#5b7f9e',
             femaleColor: rootStyle.getPropertyValue('--female').trim() || '#a1706e',
             unknownColor: rootStyle.getPropertyValue('--unknown').trim() || '#857d6c',
+            branches: signs ? { marker, numbered: signs.numbered, lines: signs.map as ReadonlyMap<string, BranchSet> } : null,
         }, meta);
         const geom = timelinePosterGeometry(model, meta);
         return { svg, widthPx: geom.width, heightPx: geom.height, hasContent: geom.hasContent };

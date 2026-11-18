@@ -60,7 +60,7 @@ import { renderDebugOverlay, clearDebugOverlay } from './debug-overlay.js';
 import { debugPanel } from './debug-panel.js';
 import { yearOf, displayYear, formatFlexDate, shortYearRanges } from './dates.js';
 import { computeTimelineModel } from './timeline.js';
-import { buildTimelineSvg } from './timeline-chart.js';
+import { buildTimelineSvg, TimelineBranchSigns } from './timeline-chart.js';
 import { HISTORY_CHANGED_EVENT } from './ui/history-ui.js';
 import { sortLifeEvents } from './events.js';
 import { classifyBranches, BranchSet } from './branch-colors.js';
@@ -4922,7 +4922,7 @@ class TreeRendererClass {
     private renderCards(canvas: HTMLElement, allTrees: Map<TreeId, { name: string; data: StromData }> | null, live: LiveRender | null): void {
         const currentTreeId = DataManager.getCurrentTreeId();
 
-        // Optional lineage markers: classify once per render (never in timeline).
+        // Optional lineage markers: classify once per render (the Timeline draws no cards; its signs: timelineBranchSigns).
         // A link "linked in the view only" stands as if real: the family it shows takes its branch.
         const layoutData = this.viewLayer?.data ?? DataManager.getData();
         const branches = (SettingsManager.isBranchMarkerOn() && this.viewMode !== 'timeline' && this.focusPersonId)
@@ -7156,6 +7156,20 @@ class TreeRendererClass {
         return (text) => Math.ceil(ctx.measureText(text).width) + 1;
     }
 
+    /**
+     * The Timeline's lineage signs (spec 112 §3): the marker chosen in the
+     * settings and each person's lines relative to the focused person, as the
+     * cards would carry them; null while the markers are off.
+     */
+    private timelineBranchSigns(): TimelineBranchSigns | null {
+        const marker = SettingsManager.getBranchMarker();
+        if (marker === 'off' || !this.focusPersonId) return null;
+        const data = this.viewLayer?.data ?? DataManager.getData();
+        if (!data.persons[this.focusPersonId]) return null;
+        const { map, numbered } = classifyBranches(data, this.focusPersonId);
+        return { marker, numbered, lines: map as ReadonlyMap<string, BranchSet> };
+    }
+
     private renderTimeline(container: HTMLElement): void {
         // Delegate bar clicks once (safe against odd person ids in JSON imports).
         if (!container.dataset.wired) {
@@ -7221,6 +7235,7 @@ class TreeRendererClass {
             unknownColor: 'var(--unknown)',
             narrow: isMobile,
             measureLabel: this.timelineLabelMeasure(container),
+            branches: this.timelineBranchSigns(),
         });
 
         // Nothing changed (a status that brought nothing new for the row): the DOM stays.

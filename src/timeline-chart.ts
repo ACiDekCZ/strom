@@ -23,6 +23,26 @@ import { graphemes } from './text-clip.js';
 import {
     posterFooterSvg, posterFooterHeight, PosterFooterMeta, POSTER_PADDING, POSTER_FONT, POSTER_BG,
 } from './export-image.js';
+import type { BranchSet } from './branch-colors.js';
+import type { BranchMarker } from './types.js';
+import { branchSignLines, branchSignWidth, branchSignsHtml, branchSignsSvg } from './branch-sign.js';
+import { branchLetters, branchMarkerDefs } from './branch-marker-svg.js';
+import { branchLineText } from './branch-marker-attrs.js';
+
+/**
+ * The lineage signs before the names (spec 112 §3): the marker chosen in the
+ * settings and each person's lines relative to the focused person
+ * (classifyBranches). The life bar keeps the sex's colour.
+ */
+export interface TimelineBranchSigns {
+    marker: BranchMarker;
+    /** R5: two same-gender parents — the tag's letters are 1 and 2, the words "first / second parent's line". */
+    numbered: boolean;
+    lines: ReadonlyMap<string, BranchSet>;
+}
+
+/** The gap between the signs' slot and the name (px). */
+const SIGN_NAME_GAP = 6;
 
 /** Axis-label band above the rows, and the right-hand plot padding. */
 const TOP = 40;
@@ -81,6 +101,13 @@ export interface TimelineSvgOptions {
     narrow?: boolean;
     /** A shared mark's label width in px as drawn (screen: measured in the page's font); default an estimate. */
     measureLabel?: (text: string) => number;
+    /** Lineage signs before the names (spec 112); absent or the marker off: none. */
+    branches?: TimelineBranchSigns | null;
+}
+
+/** Whether the rows carry a lineage sign slot (the markers on). */
+function signsOn(opts: TimelineSvgOptions): opts is TimelineSvgOptions & { branches: TimelineBranchSigns } {
+    return !!opts.branches && opts.branches.marker !== 'off';
 }
 
 /** The history row's height (DEV symboly-dejin §9): 28 px, a phone 26 px. */
@@ -349,20 +376,30 @@ function rowSvg(
     // Name label: HTML in <foreignObject> on screen (ellipsis, flex); a plain
     // <text> in the poster so the SVG needs no external CSS and rasterises to
     // PNG (foreignObject is dropped/tainting on canvas).
+    // The lineage sign before the name (spec 112 §3): a slot on every row while the markers are on, so the names stay aligned.
+    const signs = signsOn(opts) ? opts.branches : null;
+    const set = signs?.lines.get(r.personId);
+    const lines = signs ? branchSignLines(set, signs.marker) : [];
     let label: string;
     if (mode === 'poster') {
         const ty = (y + rowH / 2).toFixed(1);
-        const avail = labelW - 8;
+        const slot = signs ? branchSignWidth(lines, signs.marker) + SIGN_NAME_GAP : 0;
+        const avail = labelW - 8 - slot;
         const yearsW = yearsStr.length * 11 * 0.55;
         const nameChars = Math.max(3, Math.floor((avail - yearsW - 6) / (12 * 0.55)));
         const nameFit = esc(truncate(r.name, nameChars));
-        label = `<text x="4" y="${ty}" dominant-baseline="middle">`
+        const signSvg = signs ? branchSignsSvg(lines, signs.marker, 4, y + rowH / 2, branchLetters(signs.numbered)) : '';
+        label = signSvg + `<text x="${4 + slot}" y="${ty}" dominant-baseline="middle">`
             + `<tspan class="tl-name-txt">${nameFit}</tspan>`
             + ` <tspan class="tl-yr-txt">${yearsEsc}</tspan></text>`;
     } else {
+        const lineText = signs ? branchLineText(set, signs.numbered) : '';
+        const slot = signs
+            ? `<span class="branch-sign-slot"${lineText ? ` title="${esc(lineText)}"` : ''}>${branchSignsHtml(lines, signs.marker, signs.numbered)}</span>`
+            : '';
         label = `<foreignObject x="2" y="${y}" width="${labelW - 6}" height="${rowH}">`
             + `<div xmlns="http://www.w3.org/1999/xhtml" class="tl-name" title="${r.fullName ? esc(r.fullName) : nameEsc}">`
-            + `<span class="tl-nm">${nameEsc}</span> <span class="tl-yr">${yearsEsc}</span></div></foreignObject>`;
+            + `${slot}<span class="tl-nm">${nameEsc}</span> <span class="tl-yr">${yearsEsc}</span></div></foreignObject>`;
     }
 
     return `<g class="timeline-bar${focused}${highlight}" data-person-id="${esc(r.personId)}">`
@@ -421,7 +458,11 @@ export function buildTimelineSvg(model: TimelineModel, opts: TimelineSvgOptions)
     const fadeStops = (color: string) =>
         `<stop offset="0" stop-color="${color}" stop-opacity="0.85"/>`
         + `<stop offset="1" stop-color="${color}" stop-opacity="0"/>`;
-    const defs = `<defs>`
+    // The poster's maternal corner sign is hatched (the tree image's pattern).
+    const signDefs = mode === 'poster' && signsOn(opts)
+        ? branchMarkerDefs(model.rows.map(r => opts.branches!.lines.get(r.personId)).filter((x): x is BranchSet => !!x), opts.branches.marker, false)
+        : '';
+    const defs = signDefs + `<defs>`
         + `<linearGradient id="tl-fade-male" x1="0" y1="0" x2="1" y2="0">${fadeStops(maleColor)}</linearGradient>`
         + `<linearGradient id="tl-fade-female" x1="0" y1="0" x2="1" y2="0">${fadeStops(femaleColor)}</linearGradient>`
         + `<linearGradient id="tl-fade-unknown" x1="0" y1="0" x2="1" y2="0">${fadeStops(unknownColor)}</linearGradient>`
@@ -489,7 +530,7 @@ export function timelinePosterGeometry(model: TimelineModel, meta: PosterFooterM
  */
 export function buildTimelinePosterSvg(
     model: TimelineModel,
-    opts: Pick<TimelineSvgOptions, 'esc' | 'focusId' | 'maleColor' | 'femaleColor' | 'unknownColor'>,
+    opts: Pick<TimelineSvgOptions, 'esc' | 'focusId' | 'maleColor' | 'femaleColor' | 'unknownColor' | 'branches'>,
     meta: PosterFooterMeta
 ): string {
     const g = timelinePosterGeometry(model, meta);
@@ -508,6 +549,7 @@ export function buildTimelinePosterSvg(
         maleColor: opts.maleColor,
         femaleColor: opts.femaleColor,
         unknownColor: opts.unknownColor,
+        branches: opts.branches ?? null,
     });
     // Embed the timeline as a nested SVG offset by the padding. buildTimelineSvg
     // already emits width="innerW" height="innerH" (== g.innerW/g.innerH), so we

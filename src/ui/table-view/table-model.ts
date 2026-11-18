@@ -14,6 +14,7 @@ import { marriagesInOrder } from '../../marriage-order.js';
 import { assignGenerations } from '../../generations.js';
 import { inferBirthUpperBounds, isLivingPerson } from '../../privacy.js';
 import { buildLineages, rodLabels, type LineageIndex, type RodId } from '../../lineage.js';
+import { classifyBranches, type Branch, type BranchResult } from '../../branch-colors.js';
 import type { ReliabilityOptions } from '../../reliability.js';
 import type { Language } from '../../strings.js';
 import type { CheckIndex } from './table-checks.js';
@@ -127,6 +128,13 @@ export interface CellValue {
     shared?: { count: number; more: number };
     /** A shared event's ages, each person's own (4a): the cell opens their bubble. */
     sharedAges?: boolean;
+    /**
+     * The Lineage column's lines (spec 112 §3): the grid draws their signs
+     * before the text in the marker shape chosen in the settings (none while
+     * the markers are off); `lineageNumbered` = R5, the tag's letters 1 and 2.
+     */
+    lineage?: Branch[];
+    lineageNumbered?: boolean;
 }
 
 /** The research signal a cell starts with, drawn as its mark (§16.3). */
@@ -262,6 +270,8 @@ export interface TableContext {
     readonly reliability: ReliabilityOptions;
     generations(): Map<string, number>;
     lineage(): { index: LineageIndex; labels: Map<RodId, string> };
+    /** Each person's lineage relative to the home (focused) person (spec 112, classifyBranches); null without one. */
+    branches(): BranchResult | null;
     birthBounds(): Map<string, number>;
     living(p: Person): boolean;
     /** Blood relatives of the home person (ancestors and all their descendants). */
@@ -359,6 +369,7 @@ function bloodOf(data: StromData, homeId: PersonId | null): Set<string> {
 function makeContext(data: StromData, opts: BuildOptions): TableContext {
     let gens: Map<string, number> | null = null;
     let lin: { index: LineageIndex; labels: Map<RodId, string> } | null = null;
+    let branches: BranchResult | null | undefined;
     let bounds: Map<string, number> | null = null;
     let blood: Set<string> | null = null;
     const livingCache = new Map<string, boolean>();
@@ -372,6 +383,10 @@ function makeContext(data: StromData, opts: BuildOptions): TableContext {
         lineage: () => {
             if (!lin) { const index = buildLineages(data); lin = { index, labels: rodLabels(index) }; }
             return lin;
+        },
+        branches: () => {
+            if (branches === undefined) branches = opts.homeId && data.persons[opts.homeId] ? classifyBranches(data, opts.homeId) : null;
+            return branches;
         },
         birthBounds: () => bounds ??= inferBirthUpperBounds(data),
         living(p) {

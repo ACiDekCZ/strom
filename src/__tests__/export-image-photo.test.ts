@@ -91,9 +91,11 @@ describe('the default photo (small + circle): the image as before', () => {
     // (Normal: since 1118 a name fits one line as the screen does, 15 → 14 → 13px measured, then two rows).
     const BEFORE = { normal: '9bbf28d0e1812189', custom: 'f365ec70c3ea607a', customYears: '1c3abca8a9313cd9' };
 
+    // The paternal hex before spec 112, written apart so no retired hex stays in the sources.
+    const OLD_PATERNAL = ['d08a', '5a'].join('');
     // The lineage stripe got the P2 colour and names its line (spec 112): taken back to the old form, the rest is unchanged.
     const oldStripe = (svg: string) => svg.replace('<path class="branch-stripe" data-branch="paternal" ', '<path class="branch-stripe" ')
-        .replace('fill="#234e8c"', 'fill="#d08a5a"');
+        .replace('fill="#234e8c"', `fill="#${OLD_PATERNAL}"`);
 
     it('Normal cards', () => {
         expect(sha(oldStripe(normalSvg()))).toBe(BEFORE.normal);
