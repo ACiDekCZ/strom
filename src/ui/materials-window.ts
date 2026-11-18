@@ -1159,7 +1159,7 @@ export const materialsWindowMethods = uiModule({
         const col = s ? this.mwSortColumns().find(c => c[0] === s.col)?.[1] ?? s.col : '';
         const text = s ? m.sortChip(col, s.dir === 1 ? '↑' : '↓') : m.sortBy;
         const aria = s ? `${m.sortBy}: ${col}, ${s.dir === 1 ? m.sortAscending : m.sortDescending}` : `${m.sortBy}: ${m.sortDefault}`;
-        return `<button type="button" class="mw-chip sel-opt mw-sort-btn" data-mw="sort-menu" aria-haspopup="menu" aria-label="${esc(aria)}">${esc(text)} <span aria-hidden="true">▾</span></button>`;
+        return `<button type="button" class="mw-chip sel-opt mw-sortby" data-mw="sort-menu" aria-haspopup="menu" aria-label="${esc(aria)}">${esc(text)} <span aria-hidden="true">▾</span></button>`;
     },
 
     /** Sort ▾'s menu: the default order, the columns, the direction (the table's menu: ↑ ↓ Enter Esc). */
