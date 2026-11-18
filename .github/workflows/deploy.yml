@@ -16,7 +16,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: npm
 
       - name: Install dependencies
@@ -24,9 +24,6 @@ jobs:
 
       - name: Build
         run: npm run build
-
-      - name: Unit tests
-        run: npx vitest run
 
       - name: Get version info
         id: version
@@ -46,6 +43,36 @@ jobs:
             strom.html
             pwa/icons/*-muted.png
 
+  # The unit tests need no build: a job of their own beside the build and the
+  # browser suite, so the shards start as soon as strom.html is built.
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The modules vitest transformed (fsModuleCache, keyed inside by each
+      # module's content) from the last run: after npm ci, which empties
+      # node_modules. A change in the sources restores the closest older
+      # cache, whose unchanged modules still hit.
+      - name: Cache transformed modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules/.experimental-vitest-cache
+          key: vitest-${{ runner.os }}-node24-${{ hashFiles('package-lock.json', 'vitest.config.ts') }}-${{ hashFiles('src/**') }}
+          restore-keys: |
+            vitest-${{ runner.os }}-node24-${{ hashFiles('package-lock.json', 'vitest.config.ts') }}-
+
+      - name: Unit tests
+        run: npx vitest run
+
   # Type errors esbuild lets through; alongside the browser suite.
   typecheck:
     runs-on: ubuntu-latest
@@ -54,7 +81,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: npm
 
       - name: Install dependencies
@@ -74,7 +101,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: npm
 
       - name: Install dependencies
@@ -104,7 +131,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: npm
 
       - name: Install dependencies
@@ -174,7 +201,7 @@ jobs:
           retention-days: 7
 
   deploy-pwa:
-    needs: [build, e2e, typecheck]
+    needs: [build, unit, e2e, typecheck]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     steps:
@@ -219,7 +246,7 @@ jobs:
   # public app (/run/ on main), the `latest` pre-release and the tagged
   # releases are untouched.
   deploy-beta:
-    needs: [build, e2e, typecheck]
+    needs: [build, unit, e2e, typecheck]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/beta'
     steps:
@@ -257,7 +284,7 @@ jobs:
           git push origin beta
 
   release-latest:
-    needs: [build, e2e, typecheck]
+    needs: [build, unit, e2e, typecheck]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     permissions:
@@ -284,7 +311,7 @@ jobs:
           make_latest: false
 
   release-tagged:
-    needs: build
+    needs: [build, unit]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
