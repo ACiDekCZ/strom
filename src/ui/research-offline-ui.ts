@@ -32,6 +32,7 @@ import { bridgeBase } from './history-ui.js';
 import { QueueList, moveQueueItemFirst, placeQueueItem, placeQueueItemInLists, requestQueueList, retryQueueList } from '../research-queue-pages.js';
 import { activeDirections, directionRefusedText, holdForBridge, setQueueDirectionFilter } from './research-directions-ui.js';
 import { undoInToast, type ToastWorkEnd } from './toast.js';
+import { startPend, endPend, dropPend, applyPend, pendStatusEl } from './switch-pend.js';
 
 type Mode = 'docked' | 'overlay' | 'sheet' | 'window';
 
@@ -476,7 +477,13 @@ const offSet: {
 
 const SETTINGS_HOST = '#research-tree-settings-modal #research-offline-host';
 
+/** The write state of a setting's item (6.1): `off:<item>`. */
+function offPendKey(at: string): string {
+    return `off:${at}`;
+}
+
 function forgetOffLineSettings(rid: string): void {
+    if (offSet.busy) dropPend(offPendKey(offSet.busy));
     offSet.rid = rid;
     delete offSet.mode;
     delete offSet.suggest;
@@ -1529,11 +1536,16 @@ export const researchOffLineMethods = uiModule({
             input.dataset.key = `mode:${m}`;
             if (m === mode) input.setAttribute('checked', '');
             if (!can) input.disabled = true;
+            // While an item writes (6.1): it dashed with its words, every choice locked (visibly, focus kept).
+            if (offSet.busy) input.setAttribute('aria-disabled', 'true');
+            if (offSet.busy === `mode:${m}`) applyPend(card, offPendKey(`mode:${m}`));
             input.addEventListener('change', () => { if (input.checked) void this.setOffLineSettingsMode(m); });
             const text = el('span', 'research-transcripts-text');
             const title = el('span', 'research-transcripts-title', L.offModeCap[m]);
             if (m === 'occasional') title.append(' ', el('span', 'research-transcripts-default', strings.treeSettings.default));
             text.append(title, el('span', 'research-transcripts-desc', desc[m]));
+            const words = offSet.busy === `mode:${m}` ? pendStatusEl(offPendKey(`mode:${m}`)) : null;
+            if (words) text.appendChild(words);
             card.append(input, text);
             group.appendChild(card);
             if (p?.at === `mode:${m}`) group.appendChild(problemBox(p));
@@ -1560,9 +1572,13 @@ export const researchOffLineMethods = uiModule({
         box.dataset.key = 'suggest';
         if (suggest && !never) box.setAttribute('checked', '');
         if (!can || never) box.disabled = true;
+        if (offSet.busy) box.setAttribute('aria-disabled', 'true');
+        if (offSet.busy === 'suggest') applyPend(row, offPendKey('suggest'));
         box.addEventListener('change', () => void this.setOffLineSettingsSuggest(box.checked));
         const boxText = el('span', 'settings-text');
         boxText.append(el('span', 'settings-name', L.setSuggest), el('span', 'settings-desc', never ? L.setSuggestNever : L.setSuggestDesc));
+        const suggestWords = offSet.busy === 'suggest' ? pendStatusEl(offPendKey('suggest')) : null;
+        if (suggestWords) boxText.appendChild(suggestWords);
         row.append(box, boxText);
         group.appendChild(row);
         if (p?.at === 'suggest') group.appendChild(problemBox(p));
@@ -1587,7 +1603,11 @@ export const researchOffLineMethods = uiModule({
                     reset.dataset.do = added ? 'remove-branch' : 'reset-branch';
                     reset.dataset.key = `branch:${b.id}`;
                     reset.addEventListener('click', () => void this.resetOffLineSettingsBranch(b.id));
+                    if (offSet.busy) reset.setAttribute('aria-disabled', 'true');
+                    if (offSet.busy === `branch:${b.id}`) applyPend(reset, offPendKey(`branch:${b.id}`));
                     line.appendChild(reset);
+                    const words = offSet.busy === `branch:${b.id}` ? pendStatusEl(offPendKey(`branch:${b.id}`)) : null;
+                    if (words) line.appendChild(words);
                 }
                 list.appendChild(line);
                 if (p?.at === `branch:${b.id}`) list.appendChild(problemBox(p));
@@ -1602,7 +1622,11 @@ export const researchOffLineMethods = uiModule({
                     reset.dataset.do = 'reset-tasks';
                     reset.dataset.key = 'tasks';
                     reset.addEventListener('click', () => void this.resetOffLineSettingsTasks());
+                    if (offSet.busy) reset.setAttribute('aria-disabled', 'true');
+                    if (offSet.busy === 'tasks') applyPend(reset, offPendKey('tasks'));
                     line.appendChild(reset);
+                    const words = offSet.busy === 'tasks' ? pendStatusEl(offPendKey('tasks')) : null;
+                    if (words) line.appendChild(words);
                 }
                 list.appendChild(line);
                 if (p?.at === 'tasks') list.appendChild(problemBox(p));
@@ -1646,13 +1670,15 @@ export const researchOffLineMethods = uiModule({
         if (!src?.base || !src.up) { this.renderOffLineSettings(); return; }
         const base = src.base;
         offSet.busy = at;
+        startPend(offPendKey(at), { redraw: () => this.renderOffLineSettings() });
         offSet.problem = null;
         if (body.mode) offSet.mode = body.mode;
         if (body.suggest !== undefined) offSet.suggest = body.suggest;
         this.renderOffLineSettings();
         const head = await this.researchHeadBeforeWrite(rid, { ask: true, base });
         const r = await withBusyRetry(() => setOffLineTree(base, body));
-        if (offSet.rid !== rid) return;
+        if (offSet.rid !== rid) { dropPend(offPendKey(at)); return; }
+        await endPend(offPendKey(at));
         offSet.busy = null;
         if (!r.ok) {
             if (body.mode) delete offSet.mode;
@@ -1689,11 +1715,13 @@ export const researchOffLineMethods = uiModule({
         const base = src.base;
         const at = `branch:${id}`;
         offSet.busy = at;
+        startPend(offPendKey(at), { redraw: () => this.renderOffLineSettings() });
         offSet.problem = null;
         this.renderOffLineSettings();
         const head = await this.researchHeadBeforeWrite(rid, { ask: true, base });
         const r = await withBusyRetry(() => setBranchMode(base, id, 'default'));
-        if (offSet.rid !== rid) return;
+        if (offSet.rid !== rid) { dropPend(offPendKey(at)); return; }
+        await endPend(offPendKey(at));
         offSet.busy = null;
         // Gone meanwhile (done, or in a direction): nothing to reset.
         const gone = !r.ok && r.code === 'none' && r.errorCode !== 'directions.none';
@@ -1732,6 +1760,7 @@ export const researchOffLineMethods = uiModule({
         const ids = src.queue.filter(q => q.own && !offSet.tasks?.ids.has(q.id)).map(q => q.id);
         if (ids.length === 0) return;
         offSet.busy = 'tasks';
+        startPend(offPendKey('tasks'), { redraw: () => this.renderOffLineSettings() });
         offSet.problem = null;
         offSet.tasks ??= { ids: new Set(), at: src.off.ownTasks };
         const done = offSet.tasks;
@@ -1740,7 +1769,7 @@ export const researchOffLineMethods = uiModule({
         let doing = false;
         for (const id of ids) {
             const r = await withBusyRetry(() => setTaskOrder(base, id, 'default'));
-            if (offSet.rid !== rid) return;
+            if (offSet.rid !== rid) { dropPend(offPendKey('tasks')); return; }
             if (!r.ok && r.errorCode === 'queue.doing') { doing = true; continue; }
             if (!r.ok && r.code !== 'none') {
                 offSet.problem = settingsProblem('tasks', r, () => void this.resetOffLineSettingsTasks());
@@ -1752,6 +1781,7 @@ export const researchOffLineMethods = uiModule({
                 head = r.head;
             }
         }
+        await endPend(offPendKey('tasks'));
         offSet.busy = null;
         if (doing && !offSet.problem) offSet.problem = { at: 'tasks', text: strings.live.taskDoing, tone: 'warn' };
         const live = src.live && liveSession() === src.live && !src.live.ended ? src.live : null;

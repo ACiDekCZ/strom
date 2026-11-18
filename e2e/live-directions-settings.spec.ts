@@ -133,6 +133,30 @@ test.describe('work outside the directions in Research for this tree', () => {
         await expect(group(page).locator('.research-offline-settings__tasks')).toHaveCount(0);
     });
 
+    test('6.1: a card picked is dashed with "Saving…" until the research answers; the other choices locked meanwhile', async ({ page }) => {
+        const bridge = await follow(page);
+        await openSettings(page);
+        let release: () => void = () => {};
+        const gate = new Promise<void>(r => { release = r; });
+        await page.route(/\/offline(\?|$)/, async route => { await gate; await route.fallback(); });
+        await card(page, 'normal').click();
+        await expect(radio(page, 'normal')).toBeChecked();
+        await expect(card(page, 'normal')).toHaveAttribute('data-pend', '1');
+        await expect(card(page, 'normal').locator('.busy-st')).toHaveText('Saving…');
+        await expect(radio(page, 'last')).toHaveAttribute('aria-disabled', 'true');
+        await expect(suggest(page)).toHaveAttribute('aria-disabled', 'true');
+        await expect(group(page)).toHaveAttribute('aria-busy', 'true');
+        // A click on another card meanwhile changes nothing.
+        await card(page, 'last').click({ force: true });
+        await expect(radio(page, 'normal')).toBeChecked();
+        release();
+        await expect(card(page, 'normal')).not.toHaveAttribute('data-pend', '1');
+        await expect(card(page, 'normal').locator('.busy-st')).toHaveCount(0);
+        await expect(radio(page, 'last')).not.toHaveAttribute('aria-disabled', 'true');
+        await expect(radio(page, 'normal')).toBeChecked();
+        expect(offWrites(bridge).map(w => w.body)).toEqual([{ mode: 'normal' }]);
+    });
+
     test('a refusal under the chosen card with Try again, the choice back to what the research says', async ({ page }) => {
         const bridge = await follow(page);
         await openSettings(page);

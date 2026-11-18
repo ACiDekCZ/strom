@@ -28490,6 +28490,9 @@
         }
         .research-offline-settings__row-text { min-width: 0; overflow-wrap: anywhere; }
         .research-offline-settings__reset { font-size: 13px; padding: 0; white-space: nowrap; }
+        /* An item writing (6.1): the others locked visibly (focus kept), its words after 120 ms. */
+        .research-offline-settings[aria-busy="true"] :is(input, button)[aria-disabled="true"] { cursor: progress; }
+        .research-offline-settings__row > .pend-st { margin-top: 0; align-self: center; }
         @media (pointer: coarse), (max-width: 640px) {
             .research-offline-settings__reset, .research-offline-settings .research-direction__retry { min-height: 44px; }
         }
