@@ -148,8 +148,11 @@ interface DialogState {
     phase: Phase;
     est: PagesEstimate | null;
     estTimer: number | null;
-    /** The book's estimate for its options (a large tree's is counted after a painted frame, §8). */
-    bookEst?: { key: string; est: BookEstimate | null };
+    /**
+     * The book's estimates by their options (a large tree's is counted after a painted frame, §8): the
+     * last few kept, so a choice and back shows the one counted before at once.
+     */
+    bookEsts?: Map<string, BookEstimate | null>;
     bookEstPending?: string | null;
     job: PagesJob | null;
     prog: { done: number; total: number; text: string };
@@ -829,23 +832,35 @@ export const BOOK_ESTIMATE_DEFERRED_AT = 5000;
  */
 function bookEstimateOf(s: DialogState, opts: BookOptions, env: BookEnv): BookEstimate | null | 'pending' {
     const key = JSON.stringify(opts);
-    if (s.bookEst?.key === key) return s.bookEst.est;
-    const count = (): BookEstimate | null => { try { return estimateBook(s.data, opts, env); } catch { return null; } };
-    if (Object.keys(s.data.persons).length < BOOK_ESTIMATE_DEFERRED_AT) {
-        s.bookEst = { key, est: count() };
-        return s.bookEst.est;
+    const kept = s.bookEsts ??= new Map();
+    if (kept.has(key)) {
+        const est = kept.get(key)!;
+        // The newest last: the oldest goes first.
+        kept.delete(key);
+        kept.set(key, est);
+        return est;
     }
+    const keep = (est: BookEstimate | null): BookEstimate | null => {
+        kept.set(key, est);
+        while (kept.size > BOOK_ESTIMATES_KEPT) kept.delete(kept.keys().next().value!);
+        return est;
+    };
+    const count = (): BookEstimate | null => { try { return estimateBook(s.data, opts, env); } catch { return null; } };
+    if (Object.keys(s.data.persons).length < BOOK_ESTIMATE_DEFERRED_AT) return keep(count());
     if (s.bookEstPending !== key) {
         s.bookEstPending = key;
         void nextPaint().then(() => {
             if (st !== s || s.bookEstPending !== key) return;
             s.bookEstPending = null;
-            s.bookEst = { key, est: count() };
+            keep(count());
             sync(s);
         });
     }
     return 'pending';
 }
+
+/** How many of the book's estimates a dialog keeps (each a few kB: its outline). */
+const BOOK_ESTIMATES_KEPT = 8;
 
 /** Recompute the pages' estimate 150 ms after the last change (at once when asked). */
 function scheduleEstimate(s: DialogState, now = false): void {

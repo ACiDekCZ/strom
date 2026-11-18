@@ -778,10 +778,18 @@ test.describe('the estimate of a large tree\'s book (C14, waiting buttons §8)',
         await expect(dialog.locator('#book-open')).toBeEnabled();
         const said = await page.evaluate(() => (window as unknown as { __said: string[] }).__said);
         expect(said).toContain('Counting the pages…|true');
-        // A switch: counted again; the switch back: the kept estimate at once, no new count.
-        await dialog.locator('[data-switch="notes"]').click();
+        // A switch: counted again; the switch back: the kept estimate at once, no new count (a count read
+        // too soon after the click passed while it was still running, and failed on a slow machine).
+        const notes = dialog.locator('[data-switch="notes"]');
+        const saidSince = () => page.evaluate(() => (window as unknown as { __said: string[] }).__said.splice(0));
+        await saidSince();
+        await notes.click();
+        await expect(notes).toHaveAttribute('aria-checked', 'true');
         await expect(dialog.locator('.book-estimate')).toHaveText(/^about \d+ pages/);
-        await dialog.locator('[data-switch="notes"]').click();
+        expect(await saidSince()).toContain('Counting the pages…|true');
+        await notes.click();
+        await expect(notes).toHaveAttribute('aria-checked', 'false');
         expect(await dialog.locator('.book-estimate').textContent()).toMatch(/^about \d+ pages/);
+        expect((await saidSince()).filter(x => x.startsWith('Counting'))).toEqual([]);
     });
 });
