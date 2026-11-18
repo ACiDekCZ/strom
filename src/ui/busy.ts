@@ -141,6 +141,16 @@ export function isBusy(el: HTMLElement): boolean {
     return !!st && (st.phase === 'lock' || st.phase === 'busy');
 }
 
+/**
+ * One heavy computation under the working state of `el` (§8): painted before it, and with `atOnce` (a large tree:
+ * the computation runs longer than 120 ms and the page cannot paint meanwhile) its words shown at once. Without an
+ * element the work runs at once. Resolves with the work's result (undefined when `el` was busy already).
+ */
+export async function runHeavy<T>(el: HTMLElement | null, work: () => T | Promise<T>, opts: { label: string; atOnce: boolean }): Promise<T | undefined> {
+    if (!el) return work();
+    return runBusy(el, async () => { await nextPaint(); return work(); }, { heavy: opts.atOnce ? 'now' : true, label: opts.label });
+}
+
 /** Two frames: the state is painted before a heavy computation (§8). */
 export function nextPaint(): Promise<void> {
     return new Promise(resolve => {

@@ -454,3 +454,31 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 800 
         }
     });
 }
+
+test('GEDCOM › Merge with existing: a large file says "Analyzing people…" at the choice before the matching (C57, waiting buttons §8)', async ({ page }, testInfo) => {
+    test.setTimeout(90_000);
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1950' });
+    await waitForPersist(page, 'Jan');
+    const lines = ['0 HEAD', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8'];
+    for (let i = 1; i <= 1100; i++) lines.push(`0 @I${i}@ INDI`, `1 NAME Osk${i} /Brenvald/`, `1 SEX ${i % 2 ? 'M' : 'F'}`, '1 BIRT', `2 DATE ${1800 + (i % 200)}`);
+    lines.push('0 TRLR', '');
+    const file = testInfo.outputPath('large.ged');
+    writeFileSync(file, lines.join('\n'));
+    await page.locator('#gedcom-input').setInputFiles(file);
+    const result = page.locator('#gedcom-result-modal');
+    await expect(result).toBeVisible();
+    const btn = result.locator('#gedcom-merge-btn');
+    await btn.evaluate((b) => {
+        const w = window as unknown as { __said: string[] };
+        w.__said = [];
+        new MutationObserver(() => {
+            if (b.getAttribute('aria-busy') === 'true') w.__said.push(b.textContent ?? '');
+        }).observe(b, { attributes: true, childList: true, subtree: true, characterData: true });
+    });
+    await btn.click();
+    await expect(page.locator('#merge-modal')).toBeVisible({ timeout: 60_000 });
+    await expect(result).toBeHidden();
+    const said = await page.evaluate(() => (window as unknown as { __said: string[] }).__said);
+    expect(said.some(t => t.includes('Analyzing people…'))).toBe(true);
+});

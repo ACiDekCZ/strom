@@ -11,6 +11,7 @@ import { ZoomPan } from '../zoom.js';
 import { TreePreview, TreeCompare } from '../tree-preview.js';
 import { PersonId, PartnershipId, Person, StromData, TreeId, PartnershipStatus, isGender } from '../types.js';
 import { strings } from '../strings.js';
+import { runHeavy, activatedElement } from '../ui/busy.js';
 import {
     MergeState,
     PersonMatch,
@@ -65,6 +66,15 @@ function conflictMark(count: number): string {
 /**
  * MergerUI class - handles merge modal UI
  */
+
+/** From this many people in both trees the matching says its state at once (it runs longer than 120 ms). */
+export const MERGE_ANALYSIS_LONG_AT = 1000;
+
+/** The matching of `a` and `b` runs long (§8: its words at once). */
+export function mergeAnalysisLong(a: StromData, b: StromData): boolean {
+    return Object.keys(a.persons).length + Object.keys(b.persons).length >= MERGE_ANALYSIS_LONG_AT;
+}
+
 class MergerUIClass {
     private mergeState: MergeState | null = null;
     private currentFilter: MatchFilter = 'all';
@@ -1404,11 +1414,15 @@ class MergerUIClass {
     /**
      * Re-analyze matches after user changes
      */
-    reanalyze(): void {
-        if (!this.mergeState) return;
-
-        reanalyzeMatches(this.mergeState);
-        this.renderModalContent();
+    reanalyze(): Promise<void> {
+        const state = this.mergeState;
+        if (!state) return Promise.resolve();
+        // §8: the matching runs again over both trees, under the working state of the button.
+        return runHeavy(activatedElement(), () => {
+            if (this.mergeState !== state) return;
+            reanalyzeMatches(state);
+            this.renderModalContent();
+        }, { label: strings.merge.analyzing, atOnce: mergeAnalysisLong(state.existingData, state.incomingData) }).then(() => undefined);
     }
 
     /**

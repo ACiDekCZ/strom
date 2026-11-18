@@ -26,7 +26,7 @@ import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-pars
 import {
     validateJsonImport,
     ValidationResult,
-    MergerUI,
+    MergerUI, MERGE_ANALYSIS_LONG_AT,
     getCurrentMergeInfo,
     listMergeSessionsInfo,
     deleteMergeSession,
@@ -42,6 +42,7 @@ import { validateTreeData, ValidationResult as TreeValidationResult, ValidationI
 import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
+import { runHeavy, activatedElement } from './busy.js';
 import { shownNameOrEmpty, fitNameHtml } from '../person-name.js';
 import { personMergeShares, type PersonMergeShareRow } from '../shared-events.js';
 import { lifeEventLabel } from '../person-sources.js';
@@ -834,15 +835,27 @@ export const mergeUiMethods = uiModule({
             return;
         }
 
+        // §8: switching to the target and matching both trees run under the working state of Start merge,
+        // its words at once for large trees (the matching blocks the page).
+        const el = activatedElement();
+        const targetId = this.mergeTargetTreeId;
+        const sourceId = this.mergeSourceTreeId;
+        const long = (TreeManager.getTreeMetadata(targetId)?.personCount ?? 0)
+            + (viewSource ? Object.keys(viewSource.persons).length : TreeManager.getTreeMetadata(sourceId!)?.personCount ?? 0) >= MERGE_ANALYSIS_LONG_AT;
+        await runHeavy(el, () => this.runTreeMerge(viewSource, targetId, sourceId), { label: strings.merge.analyzing, atOnce: long });
+    },
+
+    /** The merge of `startTreeMerge`: the source read, the target opened and backed up, the matching, the wizard. */
+    async runTreeMerge(viewSource: StromData | null, targetId: TreeId, sourceId: TreeId | null): Promise<void> {
         // Resolve the source data (either the extracted view, or a loaded tree).
-        const sourceData = viewSource ?? await TreeManager.getTreeData(this.mergeSourceTreeId!);
+        const sourceData = viewSource ?? await TreeManager.getTreeData(sourceId!);
         if (!sourceData) return;
-        const sourceLabelOrId = viewSource ? this.mergeViewSourceLabel : this.mergeSourceTreeId!;
+        const sourceLabelOrId = viewSource ? this.mergeViewSourceLabel : sourceId!;
 
         // Switch to target tree first
-        await DataManager.switchTree(this.mergeTargetTreeId);
+        await DataManager.switchTree(targetId);
         // Update URL to reflect target tree
-        this.updateUrlTreeParam(this.mergeTargetTreeId);
+        this.updateUrlTreeParam(targetId);
 
         // Back up the target tree before merging into it.
         await DataManager.snapshotNow('pre-merge');

@@ -4,7 +4,7 @@
  */
 
 import { runTreeSwitch } from './tree-switch-busy.js';
-import { activatedElement, busyLocal, busyStep, busyToast, clearBusyMessage, isBusy, runBusy, showBusyMessage } from './busy.js';
+import { activatedElement, busyLocal, busyStep, busyToast, clearBusyMessage, isBusy, runBusy, runHeavy, showBusyMessage } from './busy.js';
 import { runInParts } from './in-parts.js';
 import { canvasBusy } from './canvas-busy.js';
 import { holdLeave } from './busy-leave.js';
@@ -65,7 +65,7 @@ export interface AfterImportOptions {
 import {
     validateJsonImport,
     ValidationResult,
-    MergerUI,
+    MergerUI, mergeAnalysisLong,
     getCurrentMergeInfo,
     listMergeSessionsInfo,
     deleteMergeSession,
@@ -1050,14 +1050,18 @@ export const importExportMethods = uiModule({
     /**
      * Merge GEDCOM data with existing tree
      */
-    mergeGedcomWithExisting(): void {
-        if (!this.gedcomResult) return;
-
-        // Start merge process
-        MergerUI.startMerge(this.gedcomDataForImport(), undefined, false,
-            { gedcom: true, ...(this.gedcomResult.importId ? { importId: this.gedcomResult.importId } : {}) });
-        this.gedcomResult = null;
-        this.closeGedcomResultDialog();
+    async mergeGedcomWithExisting(): Promise<void> {
+        const result = this.gedcomResult;
+        if (!result) return;
+        const incoming = this.gedcomDataForImport();
+        // §8: the matching runs under the working state of the choice, its words at once for large trees.
+        await runHeavy(activatedElement(), () => {
+            if (this.gedcomResult !== result) return;
+            MergerUI.startMerge(incoming, undefined, false,
+                { gedcom: true, ...(result.importId ? { importId: result.importId } : {}) });
+            this.gedcomResult = null;
+            this.closeGedcomResultDialog();
+        }, { label: strings.merge.analyzing, atOnce: mergeAnalysisLong(DataManager.getData(), incoming) });
     },
 
     // ---- JSON IMPORT WITH VALIDATION ----

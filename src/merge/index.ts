@@ -74,4 +74,4 @@ export {
 } from './persistence.js';
 
 // UI
-export { MergerUI } from './ui.js';
+export { MergerUI, mergeAnalysisLong, MERGE_ANALYSIS_LONG_AT } from './ui.js';

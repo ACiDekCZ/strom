@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { openApp, createFirstPerson, card, cardAction, addRelation, openTreeActions, openTreeStructure } from './helpers.js';
+import { syntheticTree } from '../src/__tests__/helpers/synthetic-tree';
 
 function personCount(page: Page): Promise<number> {
     return page.evaluate(() => Object.keys(window.Strom.DataManager.getData().persons).length);
@@ -221,4 +222,47 @@ test('merge wizard warns up-front when an input tree has validation errors', asy
     await expect(banner.locator('svg.merge-warning-mark')).toBeVisible();
     expect(await banner.textContent()).not.toMatch(/[\u26A0\uFE0F]/);
     await expect(wizard.locator('.merge-actions .primary')).toBeEnabled();
+});
+
+test.describe('the matching of large trees (C23/C86, waiting buttons §8)', () => {
+    test('Start merge and Re-analyze say "Analyzing people…" at their button before the matching', async ({ page }) => {
+        test.setTimeout(120_000);
+        await openApp(page);
+        const a = syntheticTree({ persons: 700, seed: 3 }).data;
+        const b = syntheticTree({ persons: 700, seed: 3 }).data;
+        const ids = await page.evaluate(async ({ a, b }) => {
+            const S = window.Strom;
+            const targetId = await S.DataManager.importAsNewTree(a, 'Target');
+            const sourceId = await S.DataManager.importAsNewTree(b, 'Source');
+            return { targetId, sourceId };
+        }, { a, b });
+        // What a button says before the wizard (re)draws (the matching blocks the page: watched, not polled).
+        const watch = (sel: string) => page.evaluate((sel) => {
+            const w = window as unknown as { __said: string[] };
+            w.__said = [];
+            const btn = document.querySelector<HTMLElement>(sel)!;
+            new MutationObserver(() => {
+                if (btn.getAttribute('aria-busy') === 'true') w.__said.push(btn.textContent ?? '');
+            }).observe(btn, { attributes: true, childList: true, subtree: true, characterData: true });
+        }, sel);
+        const said = () => page.evaluate(() => (window as unknown as { __said: string[] }).__said);
+
+        await page.evaluate((id) => window.Strom.UI.showMergeTreesDialog(id), ids.sourceId);
+        const pick = page.locator('#merge-trees-modal');
+        await expect(pick).toBeVisible();
+        await page.evaluate((id) => window.Strom.UI.selectMergeTarget(id), ids.targetId);
+        await watch('#merge-trees-btn');
+        await pick.locator('#merge-trees-btn').click();
+        const wizard = page.locator('#merge-modal');
+        await expect(wizard).toBeVisible({ timeout: 60_000 });
+        expect((await said()).some(t => t.includes('Analyzing people…'))).toBe(true);
+
+        const again = wizard.getByRole('button', { name: 'Re-analyze' });
+        await expect(again).toBeVisible();
+        await again.evaluate((b) => { b.id ||= 'merge-reanalyze-probe'; });
+        await watch('#merge-reanalyze-probe');
+        await again.click();
+        await expect(again).not.toHaveAttribute('aria-busy', 'true', { timeout: 60_000 });
+        expect((await said()).some(t => t.includes('Analyzing people…'))).toBe(true);
+    });
 });
