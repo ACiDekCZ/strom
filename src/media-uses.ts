@@ -1,8 +1,9 @@
 /**
  * Where a file of the tree is used (spec 102 §3 "Where used"): its places
  * (a person, a person's fact or event, a couple or a couple's event, a
- * source), the portraits cut from it, the couple photos taken from its
- * original and the source excerpts cut from it.
+ * source), the portraits cut from it (or from a couple photo taken from
+ * it), the couple photos taken from its original and the source excerpts cut
+ * from it.
  *
  * Pure: `mediaUsesIndex` reads the whole tree once (the materials window's
  * counts); `mediaUses` gives one file's uses (the viewer, the Attachment
@@ -76,9 +77,13 @@ export function mediaUsesIndex(data: Pick<StromData, 'media' | 'persons' | 'part
         if (only && !only.has(att.id)) continue;
         for (const place of att.places) add(att.id, placeUse(place));
     }
+    // Portraits cut from a union's photo ("Make portraits…"): theirs is the file that union's photo came from.
+    const cutFromCouple = new Map<PartnershipId, PersonId[]>();
     for (const person of Object.values(data.persons ?? {})) {
         const id = person?.photoSource?.attachmentId;
         if (id && data.media?.[id]) add(id, { kind: 'portrait', personId: person.id });
+        const union = person?.photoSource?.partnershipId;
+        if (!id && union) cutFromCouple.set(union, [...(cutFromCouple.get(union) ?? []), person.id]);
     }
     for (const p of Object.values(data.partnerships ?? {})) {
         const sha = p?.photo ? p.photoOriginal?.sha256?.toLowerCase() : undefined;
@@ -88,6 +93,7 @@ export function mediaUsesIndex(data: Pick<StromData, 'media' | 'persons' | 'part
             const own = list?.find(u => u.kind === 'couple' && u.partnershipId === p.id);
             if (own) own.couplePhoto = true;
             else add(id, { kind: 'couple', partnershipId: p.id, couplePhoto: true });
+            for (const personId of cutFromCouple.get(p.id) ?? []) add(id, { kind: 'portrait', personId });
         }
     }
     for (const source of Object.values(data.sources ?? {})) {

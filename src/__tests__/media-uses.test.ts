@@ -80,6 +80,19 @@ describe('mediaUses', () => {
         expect(couple).toEqual([{ kind: 'couple', place: { partnershipId: 'u1' }, partnershipId: 'u1', couplePhoto: true }]);
     });
 
+    it('portraits made from the couple photo ("Make portraits…") are the portraits of the file the photo came from', () => {
+        const data = tree();
+        data.persons[pid('p2')].photoSource = { partnershipId: uid('u1'), region: { x: 0, y: 0, w: 0.5, h: 1 } };
+        delete data.persons[pid('p1')].photoSource;
+        data.persons[pid('p1')].photoSource = { partnershipId: uid('u1'), region: { x: 0.5, y: 0, w: 0.5, h: 1 } };
+        const portraits = mediaUses(data, 'm1').filter(u => u.kind === 'portrait');
+        expect(portraits).toEqual([{ kind: 'portrait', personId: 'p1' }, { kind: 'portrait', personId: 'p2' }]);
+        // A union whose photo came from no file of the tree: its portraits are no file's.
+        delete data.partnerships[uid('u1')].photoOriginal;
+        expect(mediaUses(data, 'm1').filter(u => u.kind === 'portrait')).toEqual([]);
+        expect(mediaUses(data, 'm2').filter(u => u.kind === 'portrait')).toEqual([]);
+    });
+
     it('a file taken out of the tree is used nowhere; an unknown id neither', () => {
         expect(mediaUses(tree(), 'm3')).toEqual([]);
         expect(mediaUses(tree(), 'nope')).toEqual([]);
