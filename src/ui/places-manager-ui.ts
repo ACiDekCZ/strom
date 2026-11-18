@@ -47,11 +47,14 @@ import {
     placeAliasMap, placeSearchNames, placeVariantGroups, type PlaceMemberTag, type PlaceVariantGroup, type PlaceVariantMember,
 } from '../place-groups.js';
 import { placesView, resetPlacesView, PLACES_STEP_MS, PLACES_UNQUEUE_MS } from './places-identify-ui.js';
-import { runBusy, type BusyCtl } from './busy.js';
+import { runBusy, runHeavy, type BusyCtl } from './busy.js';
 import { uiModule } from './module.js';
 import { normalizeModal } from './modal-skeleton.js';
 import type { MapScope } from './map-ui.js';
 import { helpMark } from './help-mark.js';
+
+/** From this many persons the cleanup's working state shows at once (its save runs past 120 ms, B43). */
+const CLEAN_AT_ONCE_PERSONS = 5000;
 
 /** A row of the dialog: a place with its location, when it has one. */
 interface ManagerPlace {
@@ -1229,13 +1232,18 @@ export const placesManagerMethods = uiModule({
 
     /** Sweep coordinate entries nothing in the tree points at any more. Confirms
      *  with the count, then deletes via the normal mutation path (undo + audit
-     *  + Undo toast) and redraws the manager. */
+     *  + Undo toast) under the working state of the button that asked (B43: the
+     *  undo step copies the whole tree and saves it, long for a large one) and
+     *  redraws the manager. */
     async cleanOrphanPlaces(): Promise<void> {
         const count = orphanedPlaceKeys(DataManager.getData()).length;
         if (count === 0) return;
         if (!await this.showConfirm(strings.map.cleanOrphansConfirm(count), strings.danger.cleanPlacesTitle(count),
             { confirmLabel: strings.danger.cleanPlaces, variant: 'danger' })) return;
-        const removed = DataManager.clearOrphanPlaces();
+        const btn = document.getElementById('places-clean-orphans');
+        const atOnce = Object.keys(DataManager.getData().persons).length >= CLEAN_AT_ONCE_PERSONS;
+        const removed = await runHeavy(btn?.isConnected ? btn : null, () => DataManager.clearOrphanPlaces(),
+            { label: strings.map.cleaningOrphans, atOnce }) ?? 0;
         if (removed > 0) this.showToast(strings.map.cleanOrphansDone(removed));
         this.refreshPlacesManager();
     },

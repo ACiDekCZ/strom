@@ -4279,6 +4279,7 @@ const stringsEN = {
         cleanOrphansConfirm: (count: number) =>
             `Remove saved coordinates for ${count} ${count === 1 ? 'place' : 'places'} nobody in this tree uses any more? Nothing written in the tree is touched — only the leftover map pins go. This can be undone.`,
         cleanOrphansDone: (count: number) => `Removed ${count} orphaned ${count === 1 ? 'place' : 'places'}.`,
+        cleaningOrphans: 'Removing places…',
         wrongSpot: 'Wrong spot? Fix this place',
         usedBy: (count: number) => nEn(count, 'person', 'people'),
         search: 'Search',
@@ -14319,6 +14320,7 @@ const stringsCZ: StringsType = {
         cleanOrphansConfirm: (count: number) =>
             `Odebrat uložené souřadnice ${count} ${plural('cs', count, 'místa', 'míst', 'míst')}, která už nikdo ve stromu nepoužívá? Nic z toho, co je ve stromu zapsané, se nemění — zmizí jen zbylé špendlíky na mapě. Lze vrátit zpět.`,
         cleanOrphansDone: (count: number) => `Odebráno ${count} ${plural('cs', count, 'osiřelé místo', 'osiřelá místa', 'osiřelých míst')}.`,
+        cleaningOrphans: 'Odebírají se místa…',
         wrongSpot: 'Špatné místo? Opravit',
         usedBy: (count: number) => nCs(count, 'osoba', 'osoby', 'osob'),
         search: 'Hledat',
@@ -24218,6 +24220,7 @@ const stringsDE: StringsType = {
         cleanOrphansConfirm: (count: number) =>
             `Gespeicherte Koordinaten für ${count} ${count === 1 ? 'Ort' : 'Orte'} entfernen, die niemand in diesem Stammbaum mehr verwendet? Nichts, was die Familie geschrieben hat, wird angetastet — nur die übrig gebliebenen Kartenmarkierungen verschwinden. Das lässt sich rückgängig machen.`,
         cleanOrphansDone: (count: number) => `${count} verwaiste ${count === 1 ? 'Ort' : 'Orte'} entfernt.`,
+        cleaningOrphans: 'Orte werden entfernt…',
         wrongSpot: 'Falsche Stelle? Diesen Ort korrigieren',
         usedBy: (count: number) => nDe(count, 'Person', 'Personen'),
         search: 'Suchen',

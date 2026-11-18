@@ -84,8 +84,21 @@ test('the places manager cleans up orphaned coordinates (undoable)', async ({ pa
     await expect(cleanBtn).toBeEnabled();
     await expect(cleanBtn).toContainText('(1)');
 
+    // B43: the sweep (its undo step copies and saves the whole tree) runs under the button's working state,
+    // painted before it: the state as the sweep starts is kept.
+    await page.evaluate(() => {
+        const dm = window.Strom.DataManager as unknown as { clearOrphanPlaces(): number; __seen?: string | null };
+        const real = dm.clearOrphanPlaces.bind(dm);
+        dm.clearOrphanPlaces = () => {
+            const b = document.getElementById('places-clean-orphans');
+            dm.__seen = `${b?.dataset.busy ?? ''}|${b?.getAttribute('aria-disabled') ?? ''}`;
+            return real();
+        };
+    });
     await cleanBtn.click();
     await page.locator('#confirmation-modal #confirm-ok-btn').click();
+    await expect.poll(() => page.evaluate(() => (window.Strom.DataManager as unknown as { __seen?: string }).__seen)).toBe('lock|true');
+    await expect(page.locator('.toast', { hasText: 'Removed 1 orphaned place.' })).toBeVisible();
 
     // Only the orphan is gone; the live pin stays.
     await expect.poll(() => page.evaluate(() =>

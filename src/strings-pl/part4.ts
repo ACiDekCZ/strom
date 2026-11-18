@@ -519,6 +519,7 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
         cleanOrphansConfirm: (count: number) =>
             `Usunąć zapisane współrzędne ${count} ${plPl(count, 'miejsca', 'miejsc', 'miejsc')}, ${plPl(count, 'którego', 'których', 'których')} nikt w drzewie już nie używa? Nic z tego, co jest zapisane w drzewie, się nie zmienia – znikną tylko pozostałe pinezki na mapie. Można to cofnąć.`,
         cleanOrphansDone: (count: number) => `Usunięto ${count} ${plPl(count, 'osierocone miejsce', 'osierocone miejsca', 'osieroconych miejsc')}.`,
+        cleaningOrphans: 'Usuwanie miejsc…',
         wrongSpot: 'Złe miejsce? Popraw',
         usedBy: (count: number) => nPl(count, 'osoba', 'osoby', 'osób'),
         search: 'Szukaj',
