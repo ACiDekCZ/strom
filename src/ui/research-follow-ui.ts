@@ -21,6 +21,7 @@ import { storedResearchBridge } from '../research-device.js';
 import { parseLiveBridge } from '../research-link.js';
 import { answerFresh, followOnOpen } from '../research-follow.js';
 import { liveSession } from './research-ui.js';
+import type { SendBeforeLeave } from './research-sync-ui.js';
 import { uiModule } from './module.js';
 import { DeepLink, findDeepLinkPerson } from '../deep-link.js';
 import { TreeRenderer } from '../renderer.js';
@@ -28,7 +29,7 @@ import { ZoomPan } from '../zoom.js';
 import { strings } from '../strings.js';
 
 /** The switch waits at most this long for the open tree's changes to go (they stay in the tree either way). */
-const SEND_BEFORE_SWITCH_MS = 15_000;
+export const SEND_BEFORE_SWITCH_MS = 15_000;
 /** Opening a tree asks its bridge (when what it said is not recent) this long, as the research's own quick ask. */
 const ASK_MS = 1500;
 /** The opened tree's own changes may go first: following waits that long for them. */
@@ -41,22 +42,29 @@ export interface FollowSwitchFrom {
     panelShown: boolean;
 }
 
+/** The page before a switch and how waiting for the open tree's changes ended ('timeout', 'cancelled': no switch). */
+export interface BeforeSwitch extends FollowSwitchFrom {
+    sent: SendBeforeLeave;
+}
+
 export const researchFollowMethods = uiModule({
     /**
      * Before the open tree is left for `target` (null: a tree made now, e.g.
      * the sample tree): what the page shows now, and the tree's changes sent
-     * (when they go by themselves) — the switch waits.
+     * (when they go by themselves) — the switch waits, at most 15 s
+     * (`onWait`: it really waits; `signal`: stop waiting, the send goes on).
      */
-    async researchFollowBeforeSwitch(target: TreeId | null): Promise<FollowSwitchFrom> {
+    async researchFollowBeforeSwitch(target: TreeId | null, opts: { signal?: AbortSignal; onWait?: () => void } = {}): Promise<BeforeSwitch> {
         const s = liveSession();
         const open = DataManager.getCurrentTreeId();
         const panel = document.getElementById('live-panel');
-        const from: FollowSwitchFrom = {
+        const from: BeforeSwitch = {
             followed: s && !s.ended ? s.treeId : null,
             open,
             panelShown: (!!panel && !panel.hidden) || this.isResearchOverviewOpen(),
+            sent: 'none',
         };
-        if (open && open !== target && !DataManager.isViewMode()) await this.researchSendOpenTreeNow(SEND_BEFORE_SWITCH_MS);
+        if (open && open !== target && !DataManager.isViewMode()) from.sent = await this.researchSendOpenTreeNow(SEND_BEFORE_SWITCH_MS, opts);
         return from;
     },
 

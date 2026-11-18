@@ -89,6 +89,9 @@ function withoutSettled(list: ResearchConflict[], settled: Set<string> | null): 
 const NO_IDS = 'no-ids';
 
 /** A button of the research state block: the action researchSyncAction runs, its label, a link look. */
+/** How waiting for the open tree's changes before it is left ended (researchSendOpenTreeNow). */
+export type SendBeforeLeave = 'none' | 'sent' | 'timeout' | 'cancelled';
+
 export interface ResearchSyncBlockAction { action: string; label: string; asLink?: boolean }
 
 /** The state block's actions that open the research, by the link each launches in `researchSyncAction` (their mark). */
@@ -1563,9 +1566,9 @@ export const researchSyncMethods = uiModule({
     },
 
     /** A send on its way (any tree): resolves once it is answered, or after `maxMs` (true: none on its way any more). */
-    async researchSendSettled(maxMs: number): Promise<boolean> {
+    async researchSendSettled(maxMs: number, signal?: AbortSignal): Promise<boolean> {
         const until = Date.now() + maxMs;
-        while (sendingTree && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 100));
+        while (sendingTree && Date.now() < until && !signal?.aborted) await new Promise(resolve => setTimeout(resolve, 100));
         return !sendingTree;
     },
 
@@ -1573,22 +1576,40 @@ export const researchSyncMethods = uiModule({
      * Before the open tree is left (spec 011): what it has that the research
      * lacks goes now, if it goes by itself, and the switch waits for the
      * answer (at most `maxMs`). A bridge known not to answer is not waited
-     * for: those changes wait for it, kept in the tree.
+     * for: those changes wait for it, kept in the tree. `onWait` is told when
+     * it really waits (a send on its way, or one started now); `signal` stops
+     * the waiting (the send goes on). The outcome: 'none' nothing waited for,
+     * 'sent' answered (or failed: the changes stay in the tree), 'timeout'
+     * not answered within `maxMs`, 'cancelled' the waiting stopped.
      */
-    async researchSendOpenTreeNow(maxMs: number): Promise<void> {
+    async researchSendOpenTreeNow(maxMs: number, opts: { signal?: AbortSignal; onWait?: () => void } = {}): Promise<SendBeforeLeave> {
         const treeId = DataManager.getCurrentTreeId();
         const link = treeId ? TreeManager.getTreeMetadata(treeId)?.research : undefined;
-        if (!treeId || !link || !this.researchAutoOn(link) || link.refused || this.researchBridgeKnownDown(link.id)) return;
+        if (!treeId || !link || !this.researchAutoOn(link) || link.refused || this.researchBridgeKnownDown(link.id)) return 'none';
+        const { signal } = opts;
         const until = Date.now() + maxMs;
-        await this.researchSendSettled(maxMs);
-        if (DataManager.getCurrentTreeId() !== treeId) return;
+        let waited = false;
+        if (sendingTree) {
+            waited = true;
+            opts.onWait?.();
+            const settled = await this.researchSendSettled(maxMs, signal);
+            if (signal?.aborted) return 'cancelled';
+            if (!settled) return 'timeout';
+        }
+        if (DataManager.getCurrentTreeId() !== treeId) return waited ? 'sent' : 'none';
         const fps = this.researchSyncFingerprints(treeId, link);
-        if (fps.matchesBase || fps.current === link.sent?.fingerprint) return;
+        if (fps.matchesBase || fps.current === link.sent?.fingerprint) return waited ? 'sent' : 'none';
         if (autoTimerTree === treeId) this.clearResearchAutoTimer();
-        await Promise.race([
-            this.researchAutoSend(treeId, 'switch'),
-            new Promise(resolve => setTimeout(resolve, Math.max(0, until - Date.now()))),
-        ]);
+        if (!waited) opts.onWait?.();
+        const left = Math.max(0, until - Date.now());
+        let timer: ReturnType<typeof setTimeout> | null = null;
+        const stop = new Promise<'timeout' | 'cancelled'>(resolve => {
+            timer = setTimeout(() => resolve('timeout'), left);
+            signal?.addEventListener('abort', () => resolve('cancelled'), { once: true });
+        });
+        const first = await Promise.race([this.researchAutoSend(treeId, 'switch').then(() => 'sent' as const, () => 'sent' as const), stop]);
+        if (timer) clearTimeout(timer);
+        return first;
     },
 
     /** The open tree changed: the one left goes now (its quiet time would never end), the new one is watched. */

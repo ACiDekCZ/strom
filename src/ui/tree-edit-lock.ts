@@ -31,7 +31,7 @@ let toldAt = 0;
 
 function textOf(h: Hold): string {
     if (h.text) return h.text;
-    return h.reason === 'adopt' ? strings.busy.editsWaitAdopt : strings.busy.editsWaitLoad;
+    return h.reason === 'adopt' ? strings.busy.editsWaitAdopt : h.reason === 'switch' ? strings.busy.editsWaitSwitch : strings.busy.editsWaitLoad;
 }
 
 export const TreeEditLock = {

@@ -98,6 +98,7 @@ export const overviewWindowMethods = uiModule({
             // The tree's "Verifying" as the docked overview draws it (its Stop and bulk verification are run here).
             extras.verify = this.treeVerifyNow();
             extras.offLineSettings = this.offLineSettingsOffered(treeId);
+            extras.queueStart = this.queueStartNow();
         }
         // What the evidence pill lights up in the tree here (the window's rows say it).
         extras.highlight = this.evidenceHighlightNow();
@@ -302,7 +303,9 @@ export const overviewWindowMethods = uiModule({
                 // Built here for the open tree from the action and its parameters (never an address the window sends).
                 const url = this.activeResearchLink(a.args.link, (a.args.params ?? {}) as Omit<ResearchLinkParams, 'tree'>);
                 if (!url) return false;
-                this.launchResearchLink(url, a.args.kind ?? 'terminal');
+                // "Work on the queue…" starts here, its state in Now of both windows (3a).
+                if (a.args.link === 'work') this.beginQueueWork(url);
+                else this.launchResearchLink(url, a.args.kind ?? 'terminal');
                 return true;
             }
             case 'queue-order': {

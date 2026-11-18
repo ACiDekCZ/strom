@@ -90,6 +90,8 @@ export interface OverviewExtras {
     highlight?: OverviewHighlight | null;
     /** Research for this tree has its group "Work outside the directions" (offLineSettingsOffered); absent: not. */
     offLineSettings?: boolean;
+    /** "Work on the queue…" starting (waiting buttons 3a, 3b) as the main window has it; absent or null: none. */
+    queueStart?: { phase: 'starting' | 'silent'; startedAt: number } | null;
 }
 
 /** The tree's verification as the overview's "Verifying" block draws it. */

@@ -39,6 +39,9 @@ import {
 import { el, onComputer } from './research-ui.js';
 import { onBridgeStatus } from './research-sync-ui.js';
 import { uiModule } from './module.js';
+import { noteQueueStartStatus, queueStartOf, retryQueueStart, startQueueWork, QUEUE_START_MS, type QueueStartView } from './queue-start.js';
+import { researchWorking } from './queue-work-dialog.js';
+import { overviewChanged, overviewInWindow } from '../windows/overview-window.js';
 import type { TreeId } from '../types.js';
 
 /** How often a switch asks its bridge while it waits for it to go or come (ms), and for how long at most. */
@@ -115,12 +118,53 @@ export const researchLiveMethods = uiModule({
     /** Keep what a bridge says for its switch while it is off, and redraw the switches (once, at start). */
     initResearchLive(): void {
         onBridgeStatus((researchId: string, status: LiveStatus) => {
+            // A session or a run at work ends the start of the queue's work (its row takes the place).
+            noteQueueStartStatus(researchId, status);
             // With its version and a newer research out: the remembered features are its word only while nothing newer is known.
             noteLiveStatus(researchId, status);
             const p = pending.get(key(researchId));
             if (p?.kind === 'starting') pending.delete(key(researchId));
             this.refreshResearchLiveSwitches();
         });
+    },
+
+    // ==================== STARTING THE QUEUE'S WORK (waiting buttons §3.2) ====================
+
+    /**
+     * "Open terminal" of "Work on the queue": the link handed over quietly (Now says the state, queue-start.ts),
+     * its proof the link's handoff or a session or a run at work, at most 30 s.
+     */
+    beginQueueWork(url: string): void {
+        const rid = this.activeResearchId();
+        if (!rid) return;
+        // Someone works there already: no session can prove this start, the link's own state says it (a toast).
+        const at = this.queueWorkMenuState()?.state as { working?: readonly unknown[] } | undefined;
+        if ((at?.working?.length ?? 0) > 0) {
+            void this.launchResearchLink(url, 'agent', document.createElement('span'), { timeoutMs: QUEUE_START_MS });
+            return;
+        }
+        // Now says the state where the overview is seen (here or in its own window); without it a toast does.
+        const shown = overviewInWindow() || (document.getElementById('research-overview')?.getClientRects().length ?? 0) > 0;
+        startQueueWork(rid, {
+            launch: ({ limitMs, onLateProof }) => this.launchResearchLink(url, 'agent', document.createElement('span'), {
+                timeoutMs: limitMs, quiet: shown, onLateProof, proof: (st) => researchWorking(st),
+            }),
+            changed: () => {
+                this.renderLivePanel();
+                overviewChanged();
+            },
+        });
+    },
+
+    /** The start of the open tree's queue work as Now draws it (null: none). */
+    queueStartNow(): QueueStartView | null {
+        return queueStartOf(this.activeResearchId());
+    },
+
+    /** Try again after "Did the queue work not start?". */
+    retryQueueWork(): void {
+        const rid = this.activeResearchId();
+        if (rid) retryQueueStart(rid);
     },
 
     /** The bridge's `end` event (followed): how it ended, kept for the switch's text. */

@@ -99,7 +99,7 @@ import {
     storedResearchBridge,
 } from '../research-device.js';
 import { rememberBridgeStatus, researchSendMode, researchStatusNow, researchMediaFirstAgain, researchBridgeDownNow } from './research-sync-ui.js';
-import { openResearchBusy, withHandoff, type OpenBusyResult } from './research-open-busy.js';
+import { openResearchBusy, withHandoff, type OpenBusyResult, type OpenBusyOpts } from './research-open-busy.js';
 import { endResearchAdoptWait } from './research-adopt-ui.js';
 import { countGedcomPersons, readBodyWithProgress, type TreeDownloadWatch, type TreeLoadRun } from './tree-load-progress.js';
 import type { ProgressToastHandle } from './toast.js';
@@ -2915,7 +2915,7 @@ export const researchUiMethods = uiModule({
      * (waiting buttons §3.1, src/ui/research-open-busy.ts). A new version from the research waits as before.
      */
     launchResearchLink(url: string, kind: ResearchLinkKind = 'terminal', el?: HTMLElement | null,
-        opts: { timeoutMs?: number; rowOf?: Element; quietLimit?: boolean; signal?: AbortSignal } = {}): Promise<OpenBusyResult> {
+        opts: Omit<OpenBusyOpts, 'agent' | 'relayed'> = {}): Promise<OpenBusyResult> {
         if (kind === 'version') {
             this.handOverResearchLink(url);
             this.awaitResearchVersion();

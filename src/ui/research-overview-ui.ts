@@ -13,7 +13,8 @@
  * missing. Bridge text is set as text, never HTML. Only while following.
  */
 
-import { runBusy, activatedElement, isBusy } from './busy.js';
+import { noteQueueStartStatus, QUEUE_START_MS, type QueueStartView } from './queue-start.js';
+import { runBusy, activatedElement, isBusy, busySpinHtml } from './busy.js';
 import { researchOpenSrText, setResearchActionLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
@@ -2456,10 +2457,16 @@ export const researchOverviewMethods = uiModule({
         const multi = workingLineCount(all) >= 2;
         const groups = multi ? all : [];
         const lines = workingLineCount(groups);
+        // "Work on the queue…" started from here (3a, 3b): its row stands until the session's own row comes.
+        const start = this.queueStartNow();
+        if (start && s.working.length > 0) queueMicrotask(() => noteQueueStartStatus(s.researchId, { working: s.working }));
+        const starting = s.working.length === 0 ? start : null;
         const host = liveSection(body, {
             ...fold, title: lines >= 2 ? strings.otherResearch.nowLines(lines) : L.now,
             summary: multi ? undefined
-                : w0 ? [w0.who, w0.paused ? L.statePaused : Number.isFinite(since0) ? liveDuration(since0) : ''].filter(Boolean).join(' · ') : L.nobody,
+                : w0 ? [w0.who, w0.paused ? L.statePaused : Number.isFinite(since0) ? liveDuration(since0) : ''].filter(Boolean).join(' · ')
+                : starting?.phase === 'starting' ? strings.busy.queueStarting
+                : starting?.phase === 'silent' ? strings.busy.queueNotStarted : L.nobody,
             help: nowHelpTopic(s),
         });
         // First in Now: the other trees where an agent works or something waits (spec 011).
@@ -2472,7 +2479,8 @@ export const researchOverviewMethods = uiModule({
             this.appendOverviewNowWork(host, s);
             return;
         }
-        if (s.working.length === 0) list.appendChild(el('li', 'live-empty', L.nobody));
+        if (starting) list.appendChild(this.overviewQueueStartRow(starting));
+        else if (s.working.length === 0) list.appendChild(el('li', 'live-empty', L.nobody));
         for (const w of s.working) {
             const li = el('li', 'research-overview__now-row');
             const text = el('div', 'research-overview__now-text');
@@ -2507,8 +2515,41 @@ export const researchOverviewMethods = uiModule({
         btn.type = 'button';
         btn.setAttribute('aria-haspopup', 'dialog');
         btn.onclick = () => this.showQueueWorkDialog(s, btn);
+        this.drawQueueWorkStarting(btn);
         row.appendChild(btn);
         host.appendChild(row);
+    },
+
+    /**
+     * Now's row while the queue's work starts (3a): the spinner, "Starting work on the queue…" and that the
+     * agent starts in the research's terminal; after 30 s without a proof (3b) the question, the sentence with
+     * Try again and the hint.
+     */
+    overviewQueueStartRow(start: QueueStartView): HTMLElement {
+        const b = strings.busy;
+        const li = el('li', `live-now-starting${start.phase === 'silent' ? ' is-silent' : ''}`);
+        const title = el('span', 'live-now-starting__title');
+        if (start.phase === 'starting') {
+            li.setAttribute('aria-busy', 'true');
+            title.setAttribute('role', 'status');
+            title.insertAdjacentHTML('afterbegin', busySpinHtml(14));
+            title.appendChild(el('span', undefined, b.queueStarting));
+            li.appendChild(title);
+            li.appendChild(el('span', 'live-now-starting__sub', b.queueStartingSub));
+            return li;
+        }
+        title.textContent = b.queueNotStarted;
+        li.appendChild(title);
+        const msg = el('div', 'busy-msg is-err');
+        msg.setAttribute('role', 'alert');
+        msg.appendChild(el('span', 'busy-msg__text', b.terminalSilent(Math.round(QUEUE_START_MS / 1000))));
+        const retry = el('button', 'link busy-msg__retry', b.retry);
+        retry.type = 'button';
+        retry.onclick = () => this.retryQueueWork();
+        msg.appendChild(retry);
+        msg.appendChild(el('span', 'hint', b.notOpenedHint));
+        li.appendChild(msg);
+        return li;
     },
 
     /**

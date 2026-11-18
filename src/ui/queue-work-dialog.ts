@@ -18,6 +18,7 @@ import {
     type LiveBusy, type LiveQueueCounts, type LiveQueueItem, type LiveWork, type ResearchLinkParams,
 } from '../research-link.js';
 import { uiModule } from './module.js';
+import { runBusy, prepareBusy, BUSY_SHOW_MS, BUSY_MIN_MS } from './busy.js';
 import { el, liveSession, queueKindText, type LiveSession } from './research-ui.js';
 import { overviewMode } from './research-overview-ui.js';
 import { normalizeModal } from './modal-skeleton.js';
@@ -194,7 +195,21 @@ export const queueWorkMethods = uiModule({
         btn.type = 'button';
         btn.setAttribute('aria-haspopup', 'dialog');
         btn.onclick = () => this.showQueueWorkDialog(s, btn);
+        this.drawQueueWorkStarting(btn);
         return btn;
+    },
+
+    /**
+     * A "Work on the queue…" button while its work starts (3a): "Starting…" with the spinner, `aria-busy`,
+     * nothing on a click; at rest again after the proof or the limit (the overview is drawn anew).
+     */
+    drawQueueWorkStarting(btn: HTMLElement): void {
+        if (this.queueStartNow()?.phase !== 'starting') return;
+        prepareBusy(btn, strings.busy.starting);
+        btn.dataset.busy = 'busy';
+        btn.setAttribute('aria-busy', 'true');
+        btn.setAttribute('aria-disabled', 'true');
+        btn.onclick = null;
     },
 
     /** The state the Research menu reads for the active tree: its followed session, else its bridge's last status. */
@@ -342,12 +357,17 @@ export const queueWorkMethods = uiModule({
         }
         overlay.querySelector<HTMLButtonElement>('#queue-work-close-x')!.onclick = close;
         overlay.querySelector<HTMLButtonElement>('#queue-work-cancel')!.onclick = close;
+        // "Opening the agent…" on the button while it is seen (≥ 300 ms), then Now takes the state (3a).
         open.onclick = () => {
             const params = queueWorkParams(mode(), count?.value);
             const url = params ? this.activeResearchLink('work', params) : null;
             if (!url) return;
-            close();
-            this.launchResearchLink(url, 'agent');
+            void runBusy(open, async () => {
+                this.beginQueueWork(url);
+                await new Promise(resolve => setTimeout(resolve, BUSY_SHOW_MS + BUSY_MIN_MS));
+            }, { label: strings.busy.openingAgent, kind: 'queueWork', toastWhenGone: false }).then(() => {
+                if (document.getElementById(DIALOG_ID) === overlay) close();
+            });
         };
         sync();
         // Focus after the skeleton has wrapped the body (moving a node drops focus).

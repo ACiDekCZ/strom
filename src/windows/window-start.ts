@@ -67,7 +67,7 @@ const appLinkOpener: LinkOpenerDeps = {
         const tree = TreeManager.getTreeFromUrl(params);
         return tree ? { id: tree.id, researchId: tree.research?.id ?? null } : null;
     },
-    switchTree: (treeId) => UI.switchToTree(treeId),
+    switchTree: async (treeId) => { await UI.switchToTree(treeId); },
     externalRequest: (params) => UI.openExternalRequest(params),
     search: (query) => UI.handleSearchResults(DataManager.searchPersons(query), query),
     deepLink: (link, matches) => UI.openDeepLink(link, matches),

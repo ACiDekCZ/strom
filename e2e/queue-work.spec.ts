@@ -329,6 +329,10 @@ test.describe('Work on the queue in Now', () => {
         await expect(d).toBeVisible();
         await d.locator('#queue-work-open').click();
         await expect.poll(() => launchedLinks(page)).toEqual([expect.stringMatching(/^strom-research:\/\/work\?tree=[0-9a-f-]+&do=loop$/)]);
+        // The window's Now says the work starts (the main window's state), its button says Starting…; no toast.
+        await expect(ov.locator('#ov-sec-now li.live-now-starting')).toContainText('Starting work on the queue…');
+        await expect(btn).toHaveAttribute('aria-busy', 'true');
+        await expect(page.locator('.toast').filter({ hasText: 'Opening the agent' })).toHaveCount(0);
         // The agent starts: Now shows its session and Finish and stop, no longer the offer.
         b.working = [MANAGED_AGENT];
         b.busy = { sessions: 1, runs: 0 };
@@ -492,5 +496,78 @@ test.describe('More under First up', () => {
         expect(await modal.evaluate(m => m.scrollWidth <= m.clientWidth)).toBe(true);
         await expect(d.locator('#queue-work-open')).toBeInViewport();
         await popup.close();
+    });
+});
+
+/**
+ * "Open terminal" starts the work (waiting buttons 3a, 3b, 3b-d): "Opening the agent…" on it, then the dialog
+ * closes and Now says "Starting work on the queue…" while both "Work on the queue…" say "Starting…" and do
+ * nothing; the session's row takes the place once an agent works there. Without it within 30 s Now asks
+ * whether it started, with Try again, and the buttons are free again.
+ */
+test.describe('Work on the queue starting', () => {
+    const startRow = (page: Page) => overview(page).locator('#ov-sec-now li.live-now-starting');
+
+    async function start(page: Page) {
+        const b = await followManaged(page, { ...IDLE, fastReconnect: true });
+        await openOverview(page);
+        await unfoldNow(page);
+        await unfoldQueue(page);
+        await workBtn(page).click();
+        const open = dialog(page).locator('#queue-work-open');
+        await open.click();
+        await expect(open).toHaveAttribute('aria-busy', 'true');
+        await expect(open).toContainText('Opening the agent…');
+        await expect(page.locator('#queue-work-modal')).toHaveCount(0);
+        return b;
+    }
+
+    test('Now says it starts, both buttons say Starting… and do nothing; the session\'s row replaces it', async ({ page }) => {
+        const b = await start(page);
+        expect(await launchedLinks(page)).toEqual([expect.stringMatching(/^strom-research:\/\/work\?tree=[0-9a-f-]+&do=loop$/)]);
+        const row = startRow(page);
+        await expect(row).toBeVisible();
+        await expect(row.locator('.live-now-starting__title')).toHaveText('Starting work on the queue…');
+        await expect(row.locator('.live-now-starting__title .busy-spin')).toHaveCount(1);
+        await expect(row.locator('.live-now-starting__sub')).toHaveText('The agent starts in the research terminal.');
+        // The state stands in Now: no toast of its own.
+        await expect(page.locator('.toast').filter({ hasText: 'Opening the agent' })).toHaveCount(0);
+        for (const btn of [workBtn(page), nowWork(page)]) {
+            await expect(btn).toHaveAttribute('aria-busy', 'true');
+            await expect(btn).toContainText('Starting…');
+            await btn.click({ force: true });
+        }
+        await expect(page.locator('#queue-work-modal')).toHaveCount(0);
+        expect(await launchedLinks(page)).toHaveLength(1);
+        // Kept through a redraw of the overview.
+        await page.evaluate(() => window.Strom.UI.renderLivePanel());
+        await expect(startRow(page)).toBeVisible();
+        // The agent starts: its session's row, Finish and stop.
+        b.working = [MANAGED_AGENT];
+        b.busy = { sessions: 1, runs: 0 };
+        await expect(nowFinish(page)).toBeVisible({ timeout: 15000 });
+        await expect(startRow(page)).toHaveCount(0);
+        await expect(overview(page).locator('#ov-sec-now .research-overview__now-row')).toHaveCount(1);
+    });
+
+    test('no session within 30 s: the question with Try again and the hint, the buttons free again', async ({ page }) => {
+        await page.clock.install({ time: new Date('2026-11-18T10:00:00Z') });
+        await start(page);
+        await expect(startRow(page)).toBeVisible();
+        await page.clock.runFor(31_000);
+        const row = startRow(page);
+        await expect(row).toHaveClass(/is-silent/);
+        await expect(row.locator('.live-now-starting__title')).toHaveText('Did the queue work not start?');
+        const msg = row.locator('.busy-msg[role="alert"]');
+        await expect(msg).toContainText('The terminal did not respond within 30 s.');
+        await expect(msg.locator('.hint')).toHaveText('If nothing opened, Strom Research needs to be started.');
+        for (const btn of [workBtn(page), nowWork(page)]) {
+            await expect(btn).not.toHaveAttribute('aria-busy', 'true');
+            await expect(btn).toContainText('Work on the queue…');
+        }
+        await msg.getByRole('button', { name: 'Try again' }).click();
+        await expect(startRow(page)).not.toHaveClass(/is-silent/);
+        await expect(startRow(page).locator('.live-now-starting__title')).toHaveText('Starting work on the queue…');
+        expect(await launchedLinks(page)).toHaveLength(2);
     });
 });

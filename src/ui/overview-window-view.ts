@@ -355,6 +355,19 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
             // "Work on the queue…" starts the agent there: the main window says so as for its own link.
             port.send('research-link', { link: l.link, params: l.params, ...(l.link === 'work' ? { kind: 'agent' } : {}) });
         },
+        /** "Work on the queue…" started from here: the main window hands it over and keeps its state (3a). */
+        beginQueueWork(this: UIClass, url: string): void {
+            lastWorkUrl = url;
+            this.handOverResearchLink(url);
+        },
+        /** The start of the queue's work as the main window has it. */
+        queueStartNow(): { phase: 'starting' | 'silent'; startedAt: number } | null {
+            return extras().queueStart ?? null;
+        },
+        /** Try again: the same link once more through the main window. */
+        retryQueueWork(this: UIClass): void {
+            if (lastWorkUrl) this.handOverResearchLink(lastWorkUrl);
+        },
         /** A link from here: the element's state a moment; the main window hands it over and waits for its proof. */
         launchResearchLink(this: UIClass, url: string, kind: ResearchLinkKind = 'terminal', el?: HTMLElement | null): Promise<OpenBusyResult> {
             if (kind === 'version') { this.handOverResearchLink(url); return Promise.resolve('opened'); }
@@ -367,6 +380,9 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
         },
     };
 }
+
+/** The last "Work on the queue…" link started from this window (its Try again). */
+let lastWorkUrl: string | null = null;
 
 /** The drawn sessions now (the overrides read the session of the last snapshot). */
 let drawnNow: OverviewWindowDrawn | null = null;

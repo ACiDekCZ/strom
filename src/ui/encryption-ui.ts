@@ -3,6 +3,7 @@
  * see src/ui/module.ts for the composition pattern.
  */
 
+import { runBusy, isBusy } from './busy.js';
 import { allMedia, hasTreeMedia, mediaSourceIds } from '../media.js';
 import { DataManager, auditPersonName, storedTreeForExport } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
@@ -361,6 +362,15 @@ export const encryptionUiMethods = uiModule({
      * Submit password from prompt dialog
      */
     async submitPasswordPrompt(): Promise<void> {
+        // The one working state on OK (C10): "Unlocking…" while the key is derived and the data read;
+        // a second OK or Enter meanwhile does nothing.
+        const ok = document.querySelector<HTMLElement>('#password-prompt-form button[type="submit"]');
+        if (!ok) { await this.submitPasswordPromptNow(); return; }
+        if (isBusy(ok)) return;
+        await runBusy(ok, () => this.submitPasswordPromptNow(), { label: strings.busy.unlocking });
+    },
+
+    async submitPasswordPromptNow(): Promise<void> {
         const input = document.getElementById('password-prompt-input') as HTMLInputElement;
         const error = document.getElementById('password-prompt-error');
 

@@ -5,6 +5,9 @@
 
 import { researchOpenMark, researchOpenSrHtml } from './research-open-mark.js';
 import { DataManager, auditPersonName } from '../data.js';
+import { runTreeSwitch, type TreeSwitchPlace, type TreeSwitchResult } from './tree-switch-busy.js';
+import { activatedElement } from './busy.js';
+import type { FollowSwitchFrom } from './research-follow-ui.js';
 import { countFamilies } from '../ged-exporter.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
@@ -791,16 +794,34 @@ export const treeManagementMethods = uiModule({
     /**
      * Switch to a different tree. `follow` (default): a switch the user
      * makes — the open tree's changes go first (when they go by themselves)
-     * and the switch waits; following of the tree left ends quietly; the tree
-     * opened is followed live when an agent works there (spec 011).
+     * and the switch waits, at most 15 s, in the one working state (waiting
+     * buttons 2f, tree-switch-busy.ts: "Switching…" on `el` or the element of
+     * the click, Cancel while the changes go, no switch after 15 s); following
+     * of the tree left ends quietly; the tree opened is followed live when an
+     * agent works there (spec 011). One such switch at a time.
      * `follow: false`: a switch inside a research step (it follows or asks
      * itself).
      */
-    async switchToTree(treeId: string, opts: { follow?: boolean } = {}): Promise<void> {
+    async switchToTree(treeId: string, opts: { follow?: boolean; el?: HTMLElement | null; place?: TreeSwitchPlace; retry?: () => void } = {}): Promise<TreeSwitchResult> {
         const dropdown = document.getElementById('tree-switcher-dropdown');
+        const el = opts.el !== undefined ? opts.el : activatedElement();
         dropdown?.classList.remove('active');
-        const from = opts.follow !== false ? await this.researchFollowBeforeSwitch(treeId as TreeId) : null;
+        if (opts.follow === false) {
+            await this.switchToTreeNow(treeId, null);
+            return 'switched';
+        }
+        // A row of the closed switcher: its button carries the state.
+        const trigger = document.querySelector<HTMLElement>('.tree-switcher-btn');
+        const place: TreeSwitchPlace = opts.place ?? (el?.closest('#tree-switcher-dropdown') && trigger ? { rowOf: trigger } : {});
+        return runTreeSwitch(el, treeId, {
+            before: (o) => this.researchFollowBeforeSwitch(treeId as TreeId, o),
+            go: (from) => this.switchToTreeNow(treeId, from),
+            retry: opts.retry ?? (() => { void this.switchToTree(treeId, { el: el?.isConnected ? el : null }); }),
+        }, place);
+    },
 
+    /** The switch itself (after the open tree's changes went): the tree opened, drawn, its research followed. */
+    async switchToTreeNow(treeId: string, from: FollowSwitchFrom | null): Promise<void> {
         if (await DataManager.switchTree(treeId as TreeId)) {
             // One following at a time: the tree left is editable again (quietly).
             if (from) this.researchFollowLeft(from.open);
@@ -964,7 +985,7 @@ export const treeManagementMethods = uiModule({
                 (tree.isHidden ? `<span class="tree-badge">${s.hiddenBadge}</span>` : '');
 
             html += `
-                <div class="tree-manager-item sel-opt ${isActive ? 'active' : ''} ${tree.isHidden ? 'hidden-tree' : ''}" data-sel-form="row">
+                <div class="tree-manager-item sel-opt ${isActive ? 'active' : ''} ${tree.isHidden ? 'hidden-tree' : ''}" data-sel-form="row" data-tree-id="${tree.id}">
                     <div class="tree-manager-item-header">
                         <span class="tree-manager-item-name clickable" onclick="window.Strom.UI.openTreeFromManager('${tree.id}')">${this.escapeHtml(tree.name)}</span>
                         ${badges}
@@ -976,7 +997,7 @@ export const treeManagementMethods = uiModule({
                     </div>
                     ${tree.research?.id && !tree.research.copy ? this.researchLiveSlotHtml(tree.id) : ''}
                     <div class="tree-manager-item-actions">
-                        <button class="tree-open-btn" onclick="window.Strom.UI.openTreeFromManager('${tree.id}')">${s.open}</button>
+                        <button class="tree-open-btn" data-tree-id="${tree.id}" onclick="window.Strom.UI.openTreeFromManager('${tree.id}')">${s.open}</button>
                         ${isActive ? `<span class="tree-opened-label">${s.opened}</span>` : ''}
                         <div class="tree-row-menu-wrap">
                             <button class="tree-row-menu-btn" data-tree-id="${tree.id}" data-tip="${s.moreActions}" aria-label="${s.moreActions}" aria-haspopup="menu">⋯</button>
@@ -1265,12 +1286,32 @@ export const treeManagementMethods = uiModule({
 
     /** Switch to a tree from the manager and close the dialog to show it. */
     async openTreeFromManager(treeId: string): Promise<void> {
-        this.closeTreeManagerDialog();
         // The active tree is already open — its Open button simply shows it.
         // (Every row has the button; a missing one on the active row read as
         // an inconsistency, not as information.)
-        if (treeId === TreeManager.getActiveTreeId()) return;
-        await this.switchToTree(treeId);
+        if (treeId === TreeManager.getActiveTreeId()) {
+            this.closeTreeManagerDialog();
+            return;
+        }
+        // The dialog stays while the switch works (2f): "Switching…" on the row's Open, the open tree's
+        // row says when its changes go first (Cancel beside Open), a switch that did not happen is said
+        // in the row; it closes once the tree is open.
+        const modal = document.getElementById('tree-manager-modal');
+        const row = modal?.querySelector<HTMLElement>(`.tree-manager-item[data-tree-id="${CSS.escape(treeId)}"]`) ?? null;
+        const btn = row?.querySelector<HTMLElement>('.tree-open-btn') ?? null;
+        const openRow = modal?.querySelector<HTMLElement>('.tree-manager-item.active') ?? null;
+        if (!modal?.classList.contains('active') || !row || !btn) {
+            this.closeTreeManagerDialog();
+            await this.switchToTree(treeId);
+            return;
+        }
+        const place: TreeSwitchPlace = {
+            sentenceIn: openRow?.querySelector<HTMLElement>('.tree-manager-item-stats-row') ? openRow : null,
+            cancelAfter: btn,
+            msgIn: row,
+        };
+        const r = await this.switchToTree(treeId, { el: btn, place, retry: () => { void this.openTreeFromManager(treeId); } });
+        if (r === 'switched') this.closeTreeManagerDialog();
     },
 
     // ---- NEW TREE MENU ----

@@ -18795,6 +18795,20 @@
         @media (pointer: coarse) {
             .busy-msg button.link { min-height: 44px; padding: 0 4px; }
         }
+        /* Switching trees (2f): the sentences take the row's whole width, Cancel is a link beside Open. */
+        .tree-manager-item > .busy-msg { grid-column: 1 / -1; }
+        .tree-manager-item-actions button.tree-switch-cancel {
+            border: 0; background: none; padding: 6px 4px; font-weight: 600;
+            color: var(--primary, currentColor); text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+        }
+        @media (pointer: coarse) {
+            .tree-manager-item-actions button.tree-switch-cancel { min-height: 44px; }
+        }
+        /* Now while the queue's work starts (3a, 3b): the spinner beside the words, the agent's line under them. */
+        .live-panel-list .live-now-starting { display: flex; flex-direction: column; gap: 2px; padding: 6px 0; }
+        .live-now-starting__title { display: inline-flex; gap: 8px; align-items: center; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+        .live-now-starting__sub { font-size: 12.5px; color: var(--text-light); overflow-wrap: anywhere; }
+        .live-now-starting .busy-msg { margin-top: 2px; }
         #busy-announce {
             position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
             clip: rect(0 0 0 0); white-space: nowrap; border: 0;
@@ -26004,6 +26018,8 @@
             }
             .tree-manager-item:not(.pending-merge) > .tree-manager-item-header { grid-column: 1 / -1; margin-bottom: 2px; }
             .tree-manager-item:not(.pending-merge) > .tree-manager-item-actions { margin-top: 0; flex-wrap: nowrap; align-items: center; }
+            /* Switching (2f): Open, Cancel and ⋯ under the row's counts, so the counts keep their width. */
+            .tree-manager-item:not(.pending-merge):has(.tree-switch-cancel) > .tree-manager-item-actions { grid-column: 1 / -1; margin-top: 6px; }
             .tree-manager-item .tree-manager-item-actions button.tree-open-btn { height: 40px; }
             .tree-manager-item.active .tree-open-btn { display: none !important; }
             .tree-manager-item.active .tree-opened-label {

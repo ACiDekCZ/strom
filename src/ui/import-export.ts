@@ -3,6 +3,9 @@
  * see src/ui/module.ts for the composition pattern.
  */
 
+import { runTreeSwitch } from './tree-switch-busy.js';
+import { activatedElement } from './busy.js';
+import type { FollowSwitchFrom } from './research-follow-ui.js';
 import { allMedia } from '../media.js';
 import type { PrivacyMode, ContentOptions } from '../privacy.js';
 import { noteExportAll } from '../research-device.js';
@@ -1597,17 +1600,27 @@ export const importExportMethods = uiModule({
     async loadDemoTree(): Promise<void> {
         // Read-only viewers (and locked data) must not create trees
         if (DataManager.isReadOnly()) return;
+        const el = activatedElement();
         this.closeMobileMenu();
         this.closeNewTreeMenu();
+        // Leaving the open tree as a switch does (waiting buttons 2f): its changes sent (when they go by
+        // themselves) first, Cancel meanwhile, no sample after 15 s; the following of its research ended
+        // once the sample is open. A second click meanwhile makes no second sample.
+        await runTreeSwitch(el, 'demo', {
+            before: (o) => this.researchFollowBeforeSwitch(null, o),
+            go: (from) => this.openDemoTree(from),
+            retry: () => { void this.loadDemoTree(); },
+        });
+    },
+
+    /** The sample tree made and opened (after the open tree's changes went). */
+    async openDemoTree(from: FollowSwitchFrom): Promise<void> {
         const data = getDemoTree(demoImageMaker());
         const focusId = DEMO_FOCUS;
         // The Register card shows what the sample holds (each event with its date and
         // place) — unless the user already chose a card type; the Custom fields stay as they are.
         if (!SettingsManager.hasCardDensity()) SettingsManager.setCardDensity('register');
 
-        // Leaving the open tree as a switch does: its changes sent (when they go by themselves) first,
-        // the following of its research ended once the sample is open.
-        const from = await this.researchFollowBeforeSwitch(null);
         const newTreeId = await DataManager.importAsNewTree(data, strings.demo.treeName);
         // The sample is never sent to a research nor tied to one.
         TreeManager.markDemoTree(newTreeId);

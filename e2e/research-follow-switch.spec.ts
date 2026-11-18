@@ -405,3 +405,91 @@ test.describe('switching trees follows the research where an agent works', () =>
         expect(await page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === 'Karel') as any)?.birthPlace)).toBe('Brno');
     });
 });
+
+/**
+ * The switch in the one working state (waiting buttons 2f): the tree manager stays open with "Switching…" on
+ * the row's Open; the open tree's row says when its edits go first, Cancel beside Open (no switch, the send
+ * goes on); edits not sent within 15 s: no switch, a sentence in the row with Try again; one switch at a time.
+ */
+test.describe('switching trees while the edits go first', () => {
+    test.beforeEach(async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+    });
+
+    const managerRow = (page: Page, tree: string) => page.locator(`#tree-manager-modal .tree-manager-item[data-tree-id="${tree}"]`);
+
+    async function editKarel(page: Page): Promise<void> {
+        await page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            const karel = Object.values(dm.getData().persons).find((p: any) => p.firstName === 'Karel') as any;
+            dm.updatePerson(karel.id, { birthPlace: 'Brno' });
+        });
+    }
+
+    async function countSwitches(page: Page): Promise<void> {
+        await page.evaluate(() => {
+            const dm = window.Strom.DataManager as unknown as { switchTree: (...a: unknown[]) => unknown; __switches?: number };
+            const orig = dm.switchTree.bind(dm);
+            dm.__switches = 0;
+            dm.switchTree = (...a: unknown[]) => { dm.__switches!++; return orig(...a); };
+        });
+    }
+    const switches = (page: Page) => page.evaluate(() => (window.Strom.DataManager as unknown as { __switches: number }).__switches);
+
+    test('asked twice it switches once: one send, one switch', async ({ page }) => {
+        const { ids, dvorak } = await twoTrees(page, { auto: true, dvorak: { accepts: AUTO, sendMs: 700 } });
+        await editKarel(page);
+        await countSwitches(page);
+        await page.evaluate((id) => Promise.all([window.Strom.UI.switchToTree(id), window.Strom.UI.switchToTree(id)]), ids[N_TREE]);
+        expect(await switches(page)).toBe(1);
+        expect(dvorak.posts).toHaveLength(1);
+        expect(await openTree(page)).toBe(ids[N_TREE]);
+        // A double click on the manager's Open: the same, the dialog closed once the tree is open.
+        await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+        await managerRow(page, ids[D_TREE]).locator('.tree-open-btn').dblclick();
+        await expect(page.locator('#tree-manager-modal')).not.toHaveClass(/active/);
+        expect(await openTree(page)).toBe(ids[D_TREE]);
+        expect(await switches(page)).toBe(2);
+    });
+
+    test('the manager stays open while the edits go; Cancel: no switch, the send goes on', async ({ page }) => {
+        const { ids, dvorak } = await twoTrees(page, { auto: true, dvorak: { accepts: AUTO, sendMs: 4000 } });
+        await editKarel(page);
+        await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+        const open = managerRow(page, ids[N_TREE]).locator('.tree-open-btn');
+        await open.click();
+        await expect(open).toHaveAttribute('aria-busy', 'true');
+        await expect(open).toContainText('Switching…');
+        const wait = managerRow(page, ids[D_TREE]).locator('.tree-switch-wait');
+        await expect(wait).toHaveText('Sending edits to the research before switching…');
+        await expect(wait).toHaveAttribute('role', 'status');
+        const cancel = managerRow(page, ids[N_TREE]).locator('.tree-switch-cancel');
+        await expect(cancel).toHaveText('Cancel');
+        await cancel.click();
+        await expect(wait).toHaveCount(0);
+        await expect(cancel).toHaveCount(0);
+        await expect(open).not.toHaveAttribute('aria-busy', 'true');
+        await expect(page.locator('#tree-manager-modal')).toHaveClass(/active/);
+        expect(await openTree(page)).toBe(ids[D_TREE]);
+        // The send went on and was answered.
+        await expect.poll(() => dvorak.replied, { timeout: 8000 }).toBe(1);
+        expect(await openTree(page)).toBe(ids[D_TREE]);
+    });
+
+    test('edits not sent within 15 s: no switch, the sentence in the row with Try again', async ({ page }) => {
+        const { ids } = await twoTrees(page, { auto: true, dvorak: { accepts: AUTO, sendMs: 30_000 } });
+        await page.clock.install();
+        await editKarel(page);
+        await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+        const row = managerRow(page, ids[N_TREE]);
+        await row.locator('.tree-open-btn').click();
+        await expect(managerRow(page, ids[D_TREE]).locator('.tree-switch-wait')).toBeVisible();
+        await page.clock.runFor(15_500);
+        const msg = row.locator('.busy-msg[role="alert"]');
+        await expect(msg).toContainText('The switch did not happen: the edits were not sent within 15 s. The tree stayed open.');
+        await expect(msg.getByRole('button', { name: 'Try again' })).toBeVisible();
+        await expect(managerRow(page, ids[D_TREE]).locator('.tree-switch-wait')).toHaveCount(0);
+        expect(await openTree(page)).toBe(ids[D_TREE]);
+        await expect(page.locator('#tree-manager-modal')).toHaveClass(/active/);
+    });
+});

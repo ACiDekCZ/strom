@@ -49,6 +49,13 @@ export interface OpenBusyOpts {
     quietLimit?: boolean;
     /** The wait ends quietly now (the research came back meanwhile). */
     signal?: AbortSignal;
+    /**
+     * The caller shows the state itself (the queue's start in the overview's Now): no toast when the element
+     * goes, no sentence at the limit or for a research known down; the result says how it ended.
+     */
+    quiet?: boolean;
+    /** A proof after the limit (the late watch): told to a quiet caller. */
+    onLateProof?: () => void;
 }
 
 /** How long a relayed link's element shows its state. */
@@ -188,6 +195,7 @@ export async function openResearchBusy(el: HTMLElement | null, link: string, opt
             }
             if (down) {
                 result = 'down';
+                if (opts.quiet) return;
                 ctl.end({ ok: false, kind: 'offline', neutral: true, text: sentence.text, hint: sentence.hint, retry });
                 return;
             }
@@ -200,9 +208,9 @@ export async function openResearchBusy(el: HTMLElement | null, link: string, opt
             }
             if (!canProve) await sleep(Math.max(0, until - Date.now()), signal);
             // Stopped by the caller, or a quiet limit: no sentence (the caller says what follows).
-            if (opts.signal?.aborted || opts.quietLimit && !canProve) return;
+            if (opts.signal?.aborted || opts.quietLimit && !canProve || opts.quiet) return;
             ctl.end({ ok: false, kind: 'timeout', neutral: true, text: sentence.text, hint: sentence.hint, retry });
-        }, { label, kind: 'terminal', timeoutMs: limit + 5000, rowOf: opts.rowOf, toastWhenGone: true });
+        }, { label, kind: 'terminal', timeoutMs: limit + 5000, rowOf: opts.rowOf, toastWhenGone: !opts.quiet });
     } finally {
         if (inFlight.get(key) === mine) inFlight.delete(key);
     }
@@ -220,6 +228,7 @@ export async function openResearchBusy(el: HTMLElement | null, link: string, opt
             if (proven(await deps.ask(researchId!))) {
                 if (ac.signal.aborted) break;
                 clearBusyMessage(target);
+                opts.onLateProof?.();
                 break;
             }
         }
