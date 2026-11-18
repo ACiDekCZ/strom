@@ -39,8 +39,10 @@ import {
 } from '../history.js';
 import { manageSummaries } from '../history-manage.js';
 import {
-    fetchBridgeHistory, hideRequestBody, postBridgeHide, postBridgeExperimentsOff, experimentOfSwitch, type ExperimentSwitch,
+    fetchBridgeHistory, hideRequestBody, postBridgeHide, postBridgeExperimentsOff, experimentOfSwitch, HISTORY_READ_TIMEOUT_MS,
+    type ExperimentSwitch,
 } from '../history-bridge.js';
+import { busySpinHtml } from './busy.js';
 import { loadHistoryCache, saveHistoryCache, loadHideQueue, saveHideQueue } from '../history-store.js';
 import { onBridgeStatus } from './research-sync-ui.js';
 import { uiModule } from './module.js';
@@ -88,6 +90,8 @@ const reading = new Set<string>();
 const readAgain = new Map<string, string | undefined>();
 /** The last read of a research failed (no answer within its limit, or the bridge not reached); a read that works clears it. */
 const readFailed = new Map<string, 'timeout' | 'network'>();
+/** Try again in Settings' status row: its read runs ("Loading…" in the row until it ends). */
+const readRetrying = new Set<string>();
 /** Sending the queue now. */
 const flushing = new Set<string>();
 /** The search was switched off from here (until the status agrees or says otherwise): when. */
@@ -305,6 +309,7 @@ export const historyMethods = uiModule({
                 readFailed.set(rid, r.code);
                 // §10.3: the manager waiting for its first read says so instead of "Loading…" for ever.
                 if (document.getElementById(HISTORY_MANAGE_DIALOG_ID)?.classList.contains('active')) this.renderHistoryManage();
+                this.renderHistorySettingsIfOpen();
             } else readFailed.delete(rid);
             if (r.ok) {
                 await this.ensureHistoryCache(rid);
@@ -737,9 +742,28 @@ export const historyMethods = uiModule({
             formatDate,
             formatTime,
         }, lang());
-        if (!said) {
+        // §10.3: the research's read did not come back (no answer in 15 s, or not reached): the row says so with
+        // Try again; with nothing read yet the status alone would guess ("done"), so the sentence stands alone.
+        const failure = rid && layerOn && status ? this.historyReadFailure(rid) : undefined;
+        const retrying = !!rid && layerOn && readRetrying.has(rid);
+        const end = retrying
+            ? `<span class="busy-st history-read-busy">${busySpinHtml(12)}${esc(strings.busy.generic)}</span>`
+            : failure
+                ? `<div class="busy-msg is-err history-read-failed" role="alert"><span class="busy-msg__text">${esc(failure === 'timeout'
+                    ? strings.busy.errTimeout(Math.round(HISTORY_READ_TIMEOUT_MS / 1000)) : strings.busy.errOffline)}</span>`
+                    + `<button type="button" class="link busy-msg__retry" data-history-action="readAgain" onclick="window.Strom.UI.historySettingsReadAgain()">${esc(strings.busy.retry)}</button></div>`
+                : '';
+        if (end && !payload) {
+            // Drawn again only when it changed: a status poll does not say the alert again.
+            if (row.dataset.drawn !== end) {
+                row.innerHTML = end;
+                row.dataset.drawn = end;
+            }
+            row.hidden = false;
+        } else if (!said) {
             row.hidden = true;
             row.innerHTML = '';
+            delete row.dataset.drawn;
         } else {
             const h = strings.history;
             // Switching the search on asks in the research's terminal (its mark); off goes through the bridge, or
@@ -754,7 +778,11 @@ export const historyMethods = uiModule({
             if (said.action === 'linkOn') html += `${button('linkOn', h.enableSearch)} ${esc(h.enableSearchAlso)}`;
             else if (said.action) html += button(said.action, h.disableSearch);
             else if (err?.link) html += button('errLink', h.disableSearch);
-            row.innerHTML = html;
+            html += end;
+            if (row.dataset.drawn !== html) {
+                row.innerHTML = html;
+                row.dataset.drawn = html;
+            }
             row.hidden = false;
         }
         this.renderHistoryKinds();
@@ -818,6 +846,25 @@ export const historyMethods = uiModule({
     },
 
     /** A link or button of the status row. */
+    /** Try again under Settings' status row after a failed read: "Loading…" there until the read ends. */
+    historySettingsReadAgain(): void {
+        const rid = activeResearchId();
+        if (!rid || readRetrying.has(rid)) return;
+        readRetrying.add(rid);
+        const row = document.getElementById('history-setting-status');
+        const hadFocus = !!row && !!document.activeElement && row.contains(document.activeElement);
+        this.renderHistorySettingsIfOpen();
+        // The focus stays in the row (its button goes with the sentence).
+        if (row && hadFocus) {
+            row.tabIndex = -1;
+            row.focus({ preventScroll: true });
+        }
+        void this.historyReadRetry(rid).finally(() => {
+            readRetrying.delete(rid);
+            this.renderHistorySettingsIfOpen();
+        });
+    },
+
     historySettingsAction(action: HistorySettingsAction | 'errLink'): void {
         if (action === 'linkOn') this.historyEnableSearch();
         else if (action === 'off') void this.historyDisableSearch();

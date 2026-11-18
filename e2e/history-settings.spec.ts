@@ -97,6 +97,33 @@ test.describe('History in the life timeline: Settings', () => {
         await expect(toggle(page)).toBeChecked();
     });
 
+    test('a read without an answer in 15 s: the status row says so with Try again, then the research not running, then the status (§10.3)', async ({ page }) => {
+        await page.clock.install({ time: new Date('2026-11-18T10:00:00Z') });
+        const isRead = (url: URL) => url.pathname.endsWith('/history');
+        const ged = historyGed();
+        await fakeBridge(page, { features: HISTORY_FEATURES, history: fakeHistory(), treeGed: ged, links: LINKS });
+        // The research's bridge answers its status but not the read (a route added later is asked first).
+        await page.route(isRead, () => { /* never answers */ });
+        await openResearch(page, { ged });
+        await poll(page);
+        await openSettings(page);
+        await page.clock.runFor(16_000);
+        const msg = status(page).locator('.busy-msg.is-err[role="alert"]');
+        await expect(msg).toHaveText(/The research did not answer within 15 s\./);
+        // Nothing read yet: the sentence alone, no guessed status beside it.
+        await expect(status(page)).not.toContainText('The research looks for events.');
+        await page.unroute(isRead);
+        // Not reached at all: the research is not running.
+        await page.route(isRead, route => route.abort());
+        await msg.getByRole('button', { name: 'Try again' }).click();
+        await expect(msg).toContainText('The research is not running. Strom Research needs to be started.');
+        await page.unroute(isRead);
+        await msg.getByRole('button', { name: 'Try again' }).click();
+        await expect(msg).toHaveCount(0);
+        await expect(status(page)).toContainText('The research looks for events.');
+        await expect(status(page).locator('.busy-st')).toHaveCount(0);
+    });
+
     test('on for a tree without a research: says so', async ({ page }) => {
         await openApp(page);
         await openSettings(page);
