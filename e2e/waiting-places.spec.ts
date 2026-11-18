@@ -204,6 +204,8 @@ test.describe('questions about places in Awaiting action', () => {
     });
 
     test('a conflict: Keep; a written place: Yes; a suggestion: Don\'t know — each with its toast', async ({ page }) => {
+        // The 3 s each toast with its Undo stands to be read run on Playwright's clock (it ticks as ever).
+        await page.clock.install();
         const b = await research(page);
         await openWin(page);
 
@@ -229,10 +231,12 @@ test.describe('questions about places in Awaiting action', () => {
         await expect(f.locator('.waiting-place-choice')).toHaveText(['Yes', 'No', 'Don’t know']);
         await f.getByRole('button', { name: 'Yes' }).click();
         await expect.poll(() => b.places!.answers.at(-1)).toEqual({ place: 'L0030', take: 'yes' });
+        await page.clock.runFor(3000);   // the toast before it stands its 3 s
         await expect(toast(page)).toContainText('Entry changed to “Lhota, house 16” (1 fact).');
 
         await cardOf(page, 'L0013').getByRole('button', { name: 'Don’t know' }).click();
         await expect.poll(() => b.places!.answers.at(-1)).toEqual({ place: 'L0013', take: 'unknown' });
+        await page.clock.runFor(3000);
         await expect(toast(page)).toContainText('Noted: not known. The place stays off the map.');
         await expect.poll(() => cards(page)).toEqual(['L0012', 'L0020']);
         expect(b.places!.answers).toHaveLength(3);
