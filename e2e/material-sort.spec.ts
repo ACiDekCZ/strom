@@ -212,9 +212,11 @@ test.describe('Sort with the agent', () => {
         const material = await setup(page, { batches: [other], files: [materialFile(7, { batch: other.id }), materialFile(8, { batch: other.id })] });
         material.sortDoneAt = 99;
         await openWindow(page);
-        // Only the newest batch is open; a closed batch shows no strip until it is opened.
-        await expect(strip(page)).toHaveCount(1);
-        await win(page).locator('.mw-group-toggle', { hasText: BATCH.name }).click();
+        // The whole view has one strip over both batches; a filter that narrows the window shows the batches' own.
+        await expect(win(page).locator('.mw-sort--top')).toContainText('5 files without title or person');
+        await expect(strip(page)).toHaveCount(0);
+        // A narrowing filter opens every batch it finds files in: each batch has its strip.
+        await win(page).locator('[data-mw="nosource"]').click();
         await expect(strip(page)).toHaveCount(2);
         await expect(win(page).locator('.mw-sort--top')).toBeHidden();
         await strip(page).filter({ hasText: '3 new files' }).locator('[data-sort="sort"]').click();
@@ -223,6 +225,15 @@ test.describe('Sort with the agent', () => {
         await expect(strip(page)).toHaveCount(1);
         await expect(strip(page)).toContainText('of 3');
         expect(material.sorts).toHaveLength(1);
+        // Back in the whole view the sorting at work has priority: still in its batch, no strip over everything.
+        await win(page).locator('[data-mw="nosource"]').click();
+        await expect(win(page).locator('.mw-sort--top')).toBeHidden();
+        // Only the newest batch is open there; a closed batch shows no strip until it is opened.
+        await expect(strip(page)).toHaveCount(0);
+        await win(page).locator('.mw-group-toggle', { hasText: BATCH.name }).click();
+        await expect(strip(page)).toHaveCount(1);
+        await expect(strip(page)).toContainText('of 3');
+        await expect(win(page).locator('.mw-sort--top')).toBeHidden();
         await openResearchMenu(page, { expandMore: true });
         await expect(page.locator('#research-item-materials .research-item-dot')).toHaveCount(1);
         await page.keyboard.press('Escape');
@@ -399,5 +410,105 @@ test.describe('Sort with the agent', () => {
         await proposal(page).locator('.msp-row[data-id="I0002"] .msp-undo').click();
         await expect.poll(async () => (await tree()).sources.map(src => src.title)).not.toContain('Marriage record');
         expect(material.sorts).toHaveLength(1);
+    });
+});
+
+test.describe('Sort with the agent over everything (the whole view)', () => {
+    test.use({ viewport: DESKTOP });
+    const top = (page: Page) => win(page).locator('.mw-sort--top');
+    const other = { id: 'b-87654321', name: 'Dopisy z Talvan', at: '2026-11-12T09:00:00Z' };
+    /** Two batches and a loose file: I0007 has its title and a person, the other five lack one of them. */
+    const spread = () => ({
+        batches: [other],
+        files: [
+            materialFile(7, { batch: other.id, title: 'Letter from Talvany', persons: ['P0001'] }),
+            materialFile(8, { batch: other.id }),
+            materialFile(9, { title: 'Grandpa’s passport' }),
+        ],
+    });
+
+    test('one strip counts only the files without a title or a person; its dialog says the count and the cost; × closes it for the window; nothing is sent by itself', async ({ page }) => {
+        const material = await setup(page, spread());
+        await openWindow(page);
+        await expect(top(page)).toHaveClass(/mw-sort--whole/);
+        await expect(top(page).locator('.mw-sort-text')).toHaveText('5 files without title or person');
+        await expect(strip(page)).toHaveCount(0);
+        const btn = top(page).locator('[data-sort="sort"]');
+        await expect(btn.locator('.research-ai-badge')).toHaveCount(1);
+        await expect(btn.locator('.research-open-mark')).toHaveCount(0);
+
+        // The dialog: the count of the files that need it and what it costs; Esc sends nothing.
+        await btn.click();
+        await expect(sortDialog(page).locator('.mdlg-title')).toHaveText('Sort with the agent · 5 files');
+        await expect(sortDialog(page)).toContainText('Uses the subscription or credit.');
+        await page.keyboard.press('Escape');
+        await expect(sortDialog(page)).toHaveCount(0);
+
+        // Selecting has its own Sort with the agent: the strip steps aside meanwhile.
+        await win(page).locator('[data-mw="select"]').click();
+        await expect(top(page)).toBeHidden();
+        await win(page).locator('[data-mw="select"]').click();
+        await expect(top(page)).toBeVisible();
+
+        // × closes it while the window is open; the batches' strips do not take its place.
+        await top(page).locator('[data-sort="close-whole"]').click();
+        await expect(top(page)).toBeHidden();
+        await expect(strip(page)).toHaveCount(0);
+        await expect(page.locator('#materials-modal :focus')).toHaveCount(1);
+        await page.waitForTimeout(2500);
+        await expect(top(page)).toBeHidden();
+        expect(material.sorts ?? []).toHaveLength(0);
+        // The window opened again offers it again.
+        await page.evaluate(() => (window.Strom.UI as unknown as { closeMaterials(): void }).closeMaterials());
+        await openWindow(page);
+        await expect(top(page).locator('.mw-sort-text')).toHaveText('5 files without title or person');
+
+        // Sent only by the dialog's button: the five files, never the one with its title and person.
+        await top(page).locator('[data-sort="sort"]').click();
+        await sortDialog(page).locator('.mdlg-sort-go').click();
+        await expect(sortDialog(page)).toHaveCount(0);
+        expect(material.sorts).toHaveLength(1);
+        expect([...(material.sorts![0].ids as string[])].sort()).toEqual(['I0001', 'I0002', 'I0003', 'I0008', 'I0009']);
+        // The sorting's own strip stands there now.
+        await expect(top(page)).not.toHaveClass(/mw-sort--whole/);
+        await expect(top(page)).toContainText('The agent’s proposal is ready');
+    });
+
+    test('one batch\'s strip already offers every file that needs it: no strip over everything; a review filter keeps its own strip', async ({ page }) => {
+        const older = { ...other, at: '2026-11-01T09:00:00Z' };
+        await setup(page, { batches: [older], files: [materialFile(7, { batch: older.id, title: 'Letter from Talvany', persons: ['P0001'] })] });
+        await openWindow(page);
+        await expect(strip(page)).toContainText('3 new files');
+        await expect(top(page)).toBeHidden();
+        await win(page).locator('[data-mw="notitle"]').click();
+        await expect(top(page)).toContainText('2 files in the filter');
+        await expect(top(page)).not.toHaveClass(/mw-sort--whole/);
+    });
+
+    test('everything with a title and a person: nothing is offered', async ({ page }) => {
+        const material = fakeMaterial({
+            files: [materialFile(1, { batch: BATCH.id, title: 'Wedding 1924', persons: ['P0001'] }), materialFile(9, { title: 'Passport', persons: ['P0002'] })],
+            batches: [BATCH], people: PEOPLE,
+        });
+        await fakeBridge(page, { accepts: MEDIA_ACCEPTS, features: SORT_FEATURES, material, treeGed: researchGed() });
+        await openResearch(page, { media: true, ged: researchGed() });
+        await page.evaluate(({ uuid, base, accepts }) => {
+            localStorage.setItem(`strom-research-bridge:${uuid}`, JSON.stringify({ base, accepts }));
+        }, { uuid: UUID, base: BRIDGE, accepts: MEDIA_ACCEPTS });
+        await poll(page);
+        await openWindow(page);
+        await expect(win(page).locator('.mw-sort:visible')).toHaveCount(0);
+    });
+
+    test.describe('beside a 1024 px window', () => {
+        test.use({ viewport: { width: 1024, height: 800 } });
+
+        test('the strip keeps its button (the toolbar\'s Sort ▾ hidden there is another one)', async ({ page }) => {
+            await setup(page, spread());
+            await openWindow(page);
+            await expect(win(page).locator('[data-mw="sort-menu"]')).toBeHidden();
+            await expect(top(page).locator('[data-sort="sort"]')).toBeVisible();
+            await expect(top(page).locator('[data-sort="close-whole"]')).toBeVisible();
+        });
     });
 });

@@ -520,6 +520,8 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
             go: 'Uporządkuj agentem',
             strip: (n: number, t: number, p: number) => [nPl(n, 'nowy plik', 'nowe pliki', 'nowych plików'), t ? `${numPl(t)} bez tytułu` : '', p ? `${numPl(p)} bez osoby` : ''].filter(Boolean).join(' · '),
             stripFilter: (n: number) => `${nPl(n, 'plik', 'pliki', 'plików')} w filtrze`,
+            stripWhole: (n: number) => `${nPl(n, 'plik', 'pliki', 'plików')} bez tytułu lub osoby`,
+            closeWhole: 'Zamknij propozycję',
             doneSortTitle: (t: number, p: number) => [t ? `${nPl(t, 'plik', 'pliki', 'plików')} bez tytułu` : '', p ? `${numPl(p)} bez osoby` : ''].filter(Boolean).join(' · '),
             doneSortText: 'Agent może zaproponować tytuły, daty i osoby. Nic się nie zapisze bez przyjęcia propozycji.',
             title: (n: number) => `Uporządkuj agentem · ${nPl(n, 'plik', 'pliki', 'plików')}`,

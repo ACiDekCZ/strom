@@ -49,6 +49,7 @@ import {
 } from './materials-ui.js';
 import { uiModule } from './module.js';
 import type { SortPlan, SortTarget } from './material-sort-ui.js';
+import { sortNeedy, sortWholeOffered } from '../material-sort.js';
 import { researchBridgeActionLabel } from './research-open-mark.js';
 import { barHtml } from './prog-bar.js';
 import { closeHeadMenu, openHeadMenu, SEP, type MenuEntry } from './table-view/table-headmenu.js';
@@ -200,6 +201,8 @@ interface Win {
     drawnAttachments: string;
     /** Sort with the agent (spec 102 §13b/13e): the strips under batch headers, by group key, and the one over the list. */
     sortPlan: SortPlan;
+    /** The strip over everything was closed (×): it stays away while the window is open. */
+    sortWholeClosed: boolean;
 }
 
 interface SelAction {
@@ -347,6 +350,7 @@ export const materialsWindowMethods = uiModule({
             drawnCaps: '',
             drawnAttachments: '',
             sortPlan: { rows: new Map(), top: null },
+            sortWholeClosed: false,
         };
         win = w;
         const thumbs = materialThumbs();
@@ -769,7 +773,9 @@ export const materialsWindowMethods = uiModule({
      * list; else a strip under each batch header with files without a title or
      * a person. The sorting at work or its proposal ready stands in its batch
      * (over the list when that batch is not shown) and the other batches offer
-     * nothing while it works.
+     * nothing while it works. The whole view (no filter, no search) has one
+     * strip over every file without a title or a person instead, unless one
+     * batch strip offers them all.
      */
     mwSortPlan(): SortPlan {
         const w = win!;
@@ -781,6 +787,19 @@ export const materialsWindowMethods = uiModule({
             return plan;
         }
         const batches = w.groups.filter(g => g.kind === 'batch' && !g.pending);
+        // The whole view (no filter, no search): one strip over every file that needs it instead of one under each batch.
+        if (!r) {
+            const gate = this.materialSortGate();
+            const needy = sortNeedy(w.items);
+            const whole = sortWholeOffered({
+                narrowed: narrowing(w.filters), remembered: false, offered: gate === 'on' || gate === 'offRun', needy: needy.length,
+                batches: batches.map(g => sortNeedy(g.items).length).filter(n => n > 0),
+            });
+            if (whole) {
+                if (!w.sortWholeClosed) plan.top = { target: { items: needy, batch: null, whole: true }, state: false };
+                return plan;
+            }
+        }
         const home = r ? batches.find(g => !!r.batch && g.batch?.name === r.batch) : undefined;
         if (r && !home) plan.top = { target: null, state: true };
         const busy = this.materialSortBusy();
@@ -829,12 +848,27 @@ export const materialsWindowMethods = uiModule({
         const top = w.sortPlan.top;
         const html = !top ? '' : top.state && this.materialSortRemembered() ? this.materialSortStateHtml() : this.materialSortOfferHtml(top.target);
         el.hidden = !html;
+        el.classList.toggle('mw-sort--whole', !!html && !top?.state && !!top?.target?.whole);
         setStripHtml(el, html);
-        el.onclick = (e) => this.materialSortStripClick(e, top?.target ?? null);
+        el.onclick = (e) => {
+            if ((e.target as HTMLElement).closest('[data-sort="close-whole"]')) { this.mwSortWholeClose(); return; }
+            this.materialSortStripClick(e, top?.target ?? null);
+        };
         if (html || w.sortPlan.rows.size) this.materialSortWatch();
     },
 
-    /** Nothing to show: loading (skeleton), not running without memory, no files at all (the tree's own), or no match. */
+    /** The whole view's strip closed (×): away while the window is open; the focus goes on to the files. */
+    mwSortWholeClose(): void {
+        const w = win;
+        if (!w) return;
+        w.sortWholeClosed = true;
+        w.sortPlan = this.mwSortPlan();
+        this.mwSortStrip();
+        const next = w.canvas.querySelector<HTMLElement>('[tabindex="0"]') ?? w.overlay.querySelector<HTMLElement>('.mw-search');
+        next?.focus();
+    },
+
+        /** Nothing to show: loading (skeleton), not running without memory, no files at all (the tree's own), or no match. */
     mwEmpty(): 'skeleton' | 'nocache' | 'none' | 'nomatch' | null {
         const w = win!;
         const ctx = this.materialsWindowContext();

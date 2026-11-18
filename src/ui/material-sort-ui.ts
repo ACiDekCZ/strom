@@ -54,6 +54,8 @@ export interface SortTarget {
     batch: string | null;
     /** The files of a review filter (Without title / Without person), not of a batch. */
     filter?: boolean;
+    /** Every file without a title or a person (the window's whole view), closed with its ×. */
+    whole?: boolean;
 }
 
 /** Where the strips stand in the Materials window: under batch headers (by group key) and over the list. */
@@ -411,11 +413,14 @@ export const materialSortMethods = uiModule({
         const needs = sortNeeds(target.items.filter(i => !!i.file && !i.hidden));
         if (!needs.n || (!needs.t && !needs.p)) return '';
         // An older research is said beside a batch only (spec 102 §13: elsewhere nothing).
-        if (gate === 'older') return target.filter ? '' : `<span class="mw-sort-text">${esc(s.older)}</span>`;
-        const what = target.filter ? s.stripFilter(needs.n) : s.strip(needs.n, needs.t, needs.p);
+        if (gate === 'older') return target.filter || target.whole ? '' : `<span class="mw-sort-text">${esc(s.older)}</span>`;
+        const what = target.whole ? s.stripWhole(needs.n) : target.filter ? s.stripFilter(needs.n) : s.strip(needs.n, needs.t, needs.p);
         const off = gate === 'offRun' ? ` aria-disabled="true" title="${esc(s.offRun)}"` : '';
-        return `<span class="mw-sort-text">${esc(what)}${gate === 'offRun' ? ` · ${esc(s.offRun)}` : ''}</span>
-            <button type="button" class="secondary mw-sort-btn" data-sort="sort"${off}>${researchBridgeActionLabel(s.sort, 'material-sort')}</button>`;
+        const text = `${what}${gate === 'offRun' ? ` · ${s.offRun}` : ''}`;
+        // The whole view's strip is one line: its text shortened with an ellipsis (whole in its title), closed with ×.
+        return `<span class="mw-sort-text"${target.whole ? ` title="${esc(text)}"` : ''}>${esc(text)}</span>
+            <button type="button" class="secondary mw-sort-btn" data-sort="sort"${off}>${researchBridgeActionLabel(s.sort, 'material-sort')}</button>${target.whole
+                ? `<button type="button" class="mw-sort-close" data-sort="close-whole" aria-label="${esc(s.closeWhole)}" title="${esc(s.closeWhole)}">×</button>` : ''}`;
     },
 
     /** A click in the strip. */

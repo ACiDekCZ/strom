@@ -29,6 +29,35 @@ export function sortNeeds(items: readonly MaterialItem[]): { n: number; t: numbe
     return { n: items.length, t, p };
 }
 
+/** The files a sorting over the whole window takes: the research's files, not hidden, without a title of their own or a person. */
+export function sortNeedy(items: readonly MaterialItem[]): MaterialItem[] {
+    return items.filter(i => !!i.file && !i.hidden && (!i.titled || (!i.persons.length && !i.viaBatch.length)));
+}
+
+/**
+ * Whether the strip over everything (the window's whole view: no filter, no
+ * search) offers sorting. It is one strip instead of one under each batch
+ * (closed with its ×, neither comes back while the window is open); a more
+ * specific one has priority: a review filter's, a narrowed view's batch, a
+ * sorting remembered (at work, its proposal, its end), and the one batch
+ * strip that already offers every file which needs it.
+ */
+export function sortWholeOffered(input: {
+    /** A filter or a search narrows the window. */
+    narrowed: boolean;
+    /** A sorting is remembered for the tree. */
+    remembered: boolean;
+    /** Sorting is on, or offered but off while the research does not run (an older research says nothing here). */
+    offered: boolean;
+    /** The files that need it (sortNeedy) over everything known. */
+    needy: number;
+    /** What the batch strips would offer: how many files that need it, per batch. */
+    batches: readonly number[];
+}): boolean {
+    if (input.narrowed || input.remembered || !input.offered || !input.needy) return false;
+    return !(input.batches.length === 1 && input.batches[0] === input.needy);
+}
+
 /** One field of a proposal against what the file has. */
 export interface SortField<T> {
     /** What the agent proposes. */

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { parseSortJob, startMaterialSort, type MaterialItem, type SortLink } from '../materials.js';
-import { sortCandidates, sortNeeds, sortRows, sortRowProposes, sortWrite, sortChip, parseSortRevert, type SortChip, type SortRow, type SortTreeIndex } from '../material-sort.js';
+import { sortCandidates, sortNeeds, sortNeedy, sortWholeOffered, sortRows, sortRowProposes, sortWrite, sortChip, parseSortRevert, type SortChip, type SortRow, type SortTreeIndex } from '../material-sort.js';
 import type { PartnershipId } from '../types.js';
 import type { Attachment, PersonId } from '../types.js';
 
@@ -74,6 +74,35 @@ describe('the files a sorting takes', () => {
         expect(over).toBe(5);
         expect(sortNeeds([item('I0001'), item('I0002', { titled: true, persons: ['P0001'] }), item('I0003', { viaBatch: ['P0002'] })]))
             .toEqual({ n: 3, t: 2, p: 1 });
+    });
+
+    it('over everything: only the files without a title or a person (a person through the batch counts), never hidden or the tree\'s own', () => {
+        const done = item('I0001', { titled: true, persons: ['P0001'] });
+        const viaBatch = item('I0002', { titled: true, viaBatch: ['P0002'] });
+        const noTitle = item('I0003', { persons: ['P0001'] });
+        const noPerson = item('I0004', { titled: true });
+        const hidden = item('I0005', { hidden: {} });
+        const tree = item('I0006', { file: undefined, origin: 'tree' });
+        expect(sortNeedy([done, viaBatch, noTitle, noPerson, hidden, tree]).map(i => i.file!.id)).toEqual(['I0003', 'I0004']);
+    });
+});
+
+describe('the strip over everything and the more specific ones', () => {
+    const base = { narrowed: false, remembered: false, offered: true, needy: 5, batches: [3, 2] };
+    it('offered in the whole view when files need it and more than one batch strip would say it', () => {
+        expect(sortWholeOffered(base)).toBe(true);
+        // Loose files outside any batch: no batch strip offers them.
+        expect(sortWholeOffered({ ...base, needy: 4, batches: [3] })).toBe(true);
+        expect(sortWholeOffered({ ...base, needy: 2, batches: [] })).toBe(true);
+    });
+    it('the more specific strip wins: one batch with all of them, a narrowed view, a sorting at work or remembered', () => {
+        expect(sortWholeOffered({ ...base, needy: 3, batches: [3] })).toBe(false);
+        expect(sortWholeOffered({ ...base, narrowed: true })).toBe(false);
+        expect(sortWholeOffered({ ...base, remembered: true })).toBe(false);
+    });
+    it('nothing missing, or a research that cannot sort: no strip', () => {
+        expect(sortWholeOffered({ ...base, needy: 0, batches: [] })).toBe(false);
+        expect(sortWholeOffered({ ...base, offered: false })).toBe(false);
     });
 });
 

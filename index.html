@@ -30335,6 +30335,19 @@
         .mw-sort--row .mw-sort-run { color: var(--text); }
         .mw-sort--row .mw-sort-btn { flex: none; height: 30px; }
         @media (pointer: coarse) { .mw-sort--row .mw-sort-btn { height: 44px; } }
+        /* The whole view's strip (no filter, no search): one line, its text shortened, closed with ×. */
+        .mw-sort--whole { flex-wrap: nowrap; gap: 8px 12px; }
+        .mw-sort--whole .mw-sort-text { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .mw-sort--whole .mw-sort-btn { flex: none; display: inline-flex; align-items: center; height: 30px; padding: 0 14px; font-size: 13px; }
+        .mw-sort--whole .mw-sort-close {
+            flex: none; width: 30px; height: 30px; padding: 0; border: none; border-radius: var(--r-pill);
+            background: none; color: var(--text-light); font: inherit; font-size: 18px; line-height: 1; cursor: pointer;
+        }
+        .mw-sort--whole .mw-sort-close:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
+        @media (hover: hover) { .mw-sort--whole .mw-sort-close:hover { background: var(--surface-2); color: var(--text); } }
+        @media (pointer: coarse) { .mw-sort--whole .mw-sort-btn, .mw-sort--whole .mw-sort-close { height: 44px; } .mw-sort--whole .mw-sort-close { width: 44px; } }
+        /* Selecting has its own Sort with the agent in the selection bar. */
+        #materials-modal.is-selecting .mw-sort--whole { display: none; }
         .batch-sort { margin: 0 0 14px; padding: 12px 14px; background: var(--surface-2); border-radius: var(--r-md); display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
         .batch-sort-title { font-size: 14px; font-weight: 600; color: var(--text); }
         .batch-sort-text, .batch-sort-older { margin: 0; font-size: 13px; color: var(--text-light); }
