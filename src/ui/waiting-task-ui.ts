@@ -21,8 +21,12 @@ import { el, liveSession, LiveSession, researchSession } from './research-ui.js'
 import { UploadNumbers, UploadOutcome, WaitingImagesUpload } from './waiting-images-upload.js';
 import { WaitingAnswerForm, waitingAnswerChangedNote } from './waiting-answer-form.js';
 import { bindImagesDrop, imagesShortEl, itemKey } from './waiting-images-ui.js';
-import { auditExplain, type WaitingAudit } from '../research-audit.js';
-import { postWaitingAudit, type WaitingAuditResult } from '../research-waiting-write.js';
+import {
+    auditChangeLines, auditExplain, auditFixError, auditLeftLines, type AuditFixError, type AuditPreview, type WaitingAudit,
+} from '../research-audit.js';
+import {
+    getWaitingAuditPreview, postWaitingAudit, type WaitingAuditPreviewResult, type WaitingAuditResult, type WaitingWriteRefused,
+} from '../research-waiting-write.js';
 
 const DIALOG_ID = 'waiting-dialog';
 const SHEET_ID = 'waiting-answer-sheet';
@@ -84,12 +88,27 @@ function onEscape(run: () => void): () => void {
  * `openWaitingAuditFix` (its preview replaces the row's actions).
  */
 export interface AuditUiState {
-    phase: 'keeping' | 'kept';
-    /** The finding's stamp the state belongs to (another one: the state is dropped). */
+    /**
+     * `keeping`/`kept`: Leave as is written / done; `loading`: the fix's
+     * preview read; `preview`: shown (its footer's Fix asks for the write);
+     * `busy`: the fix written; `fixed`/`gone`: written, or the finding gone —
+     * the row hidden until the status no longer carries that stamp; `idle`:
+     * the row's actions again, with why the preview was not read.
+     */
+    phase: 'keeping' | 'kept' | 'loading' | 'preview' | 'busy' | 'fixed' | 'gone' | 'idle';
+    /** The finding's stamp the state belongs to (another one: the state is dropped, an open preview says it changed). */
     stamp: string;
+    /** The research's preview (preview, busy). */
+    preview?: AuditPreview;
+    /** Why the last read or write was refused (said in the preview, or under the row's actions). */
+    error?: AuditFixError;
+    /** The preview read again (Reload after the task changed). */
+    reloading?: boolean;
 }
 
 const auditStates = new Map<string, AuditUiState>();
+/** Where each item's finding row was drawn last (a phone's sheet: the preview is a sheet of its own). */
+const auditDrawnIn = new Map<string, AuditMode>();
 
 /** Where the overview is drawn (its docked column, over the tree, the phone's sheet, its own window). */
 export type AuditMode = 'docked' | 'overlay' | 'sheet' | 'window';
@@ -114,11 +133,98 @@ export function waitingAuditShown(s: { treeId: string } | null, w: LiveWaiting):
     const key = s ? itemKey(s, w.id) : null;
     const st = key ? auditStates.get(key) : undefined;
     if (st && st.stamp !== w.audit?.stamp) {
+        // An open preview of a task that changed meanwhile stays, saying so (Reload reads it again).
+        if (w.audit && st.preview && (st.phase === 'preview' || st.phase === 'busy')) {
+            st.stamp = w.audit.stamp;
+            if (st.phase === 'preview') st.error = 'changed';
+            return w.audit;
+        }
         auditStates.delete(key!);
         return w.audit ?? null;
     }
-    if (!w.audit || st?.phase === 'kept') return null;
+    if (!w.audit || st?.phase === 'kept' || st?.phase === 'fixed' || st?.phase === 'gone') return null;
     return w.audit;
+}
+
+/** The item just fixed (tree|id): its title focused and scrolled into view once drawn, again when the new status moves it. */
+let fixedFocus: string | null = null;
+
+/**
+ * The item just fixed, drawn (spec 109 §2.4): its row (the title) in view
+ * and focused, unless the focus went elsewhere meanwhile. Its key goes once
+ * the status no longer carries the finding (the item stands where it now
+ * belongs).
+ */
+export function auditFixedRowDrawn(key: string, row: HTMLElement): void {
+    if (fixedFocus !== key) return;
+    if (!auditStates.has(key)) fixedFocus = null;
+    row.dataset.focusKey = `audit-fixed|${key}`;
+    queueMicrotask(() => {
+        if (!row.isConnected) return;
+        const a = document.activeElement;
+        if (a && a !== document.body && a !== row && a.isConnected && !a.closest('.waiting-audit')) return;
+        row.scrollIntoView?.({ block: 'nearest' });
+        row.focus({ preventScroll: true });
+    });
+}
+
+/** Why the fix's preview or write was refused, said in the footer (or under the row's actions); '' for none or a change. */
+function auditErrorText(error: AuditFixError | undefined): string {
+    const A = strings.live.waitingAudit;
+    switch (error) {
+        case 'busy': return A.auditErr503;
+        case 'locked': return A.auditErrLocked;
+        case 'disk': return A.auditErrDisk;
+        case 'other': return strings.live.waitingWrite.failed;
+        default: return '';
+    }
+}
+
+/** The phone's preview sheet (spec 109 §2.3): its item and how it is let go. */
+const AUDIT_SHEET_ID = 'waiting-audit-sheet';
+let auditSheetFor: string | null = null;
+let auditSheetCleanup: (() => void) | null = null;
+
+/** The folder's small icon before its line. */
+function folderIcon(): SVGSVGElement {
+    const svgNs = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNs, 'svg');
+    svg.setAttribute('width', '14');
+    svg.setAttribute('height', '12');
+    svg.setAttribute('viewBox', '0 0 14 12');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('focusable', 'false');
+    const path = document.createElementNS(svgNs, 'path');
+    path.setAttribute('d', 'M1 2.2c0-.6.4-1 1-1h3.2l1.3 1.4H12c.6 0 1 .4 1 1V10c0 .6-.4 1-1 1H2c-.6 0-1-.4-1-1z');
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', 'currentColor');
+    path.setAttribute('stroke-width', '1.1');
+    svg.appendChild(path);
+    return svg;
+}
+
+/** A small spinner (still with reduced motion). */
+function spinner(): HTMLElement {
+    const spin = el('span', 'waiting-audit__spin');
+    spin.setAttribute('aria-hidden', 'true');
+    return spin;
+}
+
+/** The overview's item of a task (its own window's too). */
+function overviewItemEl(id: string): HTMLElement | null {
+    return document.querySelector<HTMLElement>(`#research-overview .research-overview__waiting-item[data-id="${CSS.escape(id)}"]`);
+}
+
+/** A refusal of the overview window's main window, typed again (untrusted: only its code, status and held kind). */
+export function auditRefusalOf(v: unknown): WaitingWriteRefused {
+    const r = v && typeof v === 'object' ? v as Record<string, unknown> : {};
+    const code = typeof r.code === 'string' && /^[a-z-]{1,30}$/.test(r.code) ? r.code as WaitingWriteRefused['code'] : 'network';
+    const held = r.held && typeof r.held === 'object' ? r.held as Record<string, unknown> : null;
+    const kind = held && (held.kind === 'disk' || held.kind === 'seal' || held.kind === 'cloud') ? held.kind : null;
+    return {
+        ok: false, code, status: typeof r.status === 'number' ? r.status : 0, retryAfter: null, reason: '',
+        ...(kind ? { held: { kind, said: typeof held!.said === 'string' ? held!.said.slice(0, 400) : '' } } : {}),
+    };
 }
 
 /** The finding's mark: a small warning triangle (its title and label: what it means; `decorative`: the text beside says it). */
@@ -731,11 +837,12 @@ export const waitingTaskMethods = uiModule({
             const fix = el('button', 'waiting-audit__btn', A.auditFix);
             fix.type = 'button';
             fix.dataset.action = 'audit-fix';
+            fix.dataset.focusKey = `audit-fix|${w.id}`;
             fix.disabled = unavailable || keeping;
             if (unavailable) fix.title = A.auditUnavailable;
             fix.onclick = (e) => {
                 e.stopPropagation();
-                this.openWaitingAuditFix(s, w, mode);
+                void this.openWaitingAuditFix(s, w, mode);
             };
             actions.appendChild(fix);
         }
@@ -765,22 +872,457 @@ export const waitingTaskMethods = uiModule({
         };
         actions.appendChild(keep);
         box.appendChild(actions);
-        if (unavailable) box.appendChild(el('p', 'waiting-audit__msg', A.auditUnavailable));
+        if (unavailable) {
+            box.appendChild(el('p', 'waiting-audit__msg', A.auditUnavailable));
+        } else {
+            // The preview could not be read (spec 109 §2.6): why, under the actions (Fix tries again).
+            const st = waitingAuditState(itemKey(s, w.id));
+            const why = st?.phase === 'idle' ? auditErrorText(st.error) : '';
+            if (why) {
+                const msg = el('p', 'waiting-audit__msg waiting-audit__msg--err', why);
+                msg.setAttribute('role', 'alert');
+                box.appendChild(msg);
+            }
+        }
         return box;
     },
 
     /**
-     * Fix at a finding (spec 109 §2, K1.5): the research's preview of the fix
-     * opens in place of the row's actions (a phone: its sheet). The preview,
-     * the write and its Undo are the next part's; until then nothing opens.
+     * Fix at a finding (spec 109 §2.2, K1.5): the research's preview of the
+     * fix read (`GET <base>/waiting/<T…>/fix`), its loading in place of the
+     * row's actions; then the preview there (a phone: its sheet, only with
+     * the data). One preview open at a time: another item's closes.
      */
-    openWaitingAuditFix(_s: LiveSession, _w: LiveWaiting, _mode: AuditMode): void {
-        // The fix's preview (GET <base>/waiting/<T…>/fix) comes with spec 109 §2.
+    async openWaitingAuditFix(s: LiveSession, w: LiveWaiting, _mode: AuditMode): Promise<void> {
+        const task = researchTaskRef(w.id);
+        const audit = w.audit;
+        const key = itemKey(s, w.id);
+        const cur = auditStates.get(key);
+        if (!task || !audit || auditResearchUnavailable(s)) return;
+        if (cur && cur.phase !== 'idle' && cur.phase !== 'preview') return;
+        for (const [k, st] of auditStates) {
+            if (k !== key && (st.phase === 'loading' || st.phase === 'preview' || st.phase === 'idle')) auditStates.delete(k);
+        }
+        if (auditSheetFor && auditSheetFor !== key) this.closeWaitingAuditSheet();
+        fixedFocus = null;
+        auditStates.set(key, { phase: 'loading', stamp: audit.stamp });
+        this.renderLivePanel();
+        const result = await this.readWaitingAuditPreview(s, w);
+        const st = auditStates.get(key);
+        // Cancelled, or another item's preview opened meanwhile.
+        if (!st || st.phase !== 'loading') return;
+        this.takeWaitingAuditPreview(s, w, result);
     },
 
-    /** The fix's loading, preview or outcome at an item, in place of the finding row's actions (null: none open). */
-    waitingAuditFixArea(_s: LiveSession, _w: LiveWaiting, _mode: AuditMode): HTMLElement | null {
-        return null;
+    /** The preview read (or Reload): shown and focused; empty or gone: the row goes; refused: said. */
+    takeWaitingAuditPreview(s: LiveSession, w: LiveWaiting, result: WaitingAuditPreviewResult): void {
+        const key = itemKey(s, w.id);
+        const st = auditStates.get(key);
+        if (!st) return;
+        const now = s.waiting.find(x => x.id === w.id)?.audit;
+        const stamp = now?.stamp ?? st.stamp;
+        if (result.ok && result.preview.changes.length === 0 || !result.ok && auditFixError(result) === 'gone') {
+            this.waitingAuditGone(s, w.id, stamp);
+            return;
+        }
+        if (result.ok) {
+            auditStates.set(key, { phase: 'preview', stamp, preview: result.preview });
+        } else if (st.preview) {
+            // Reload refused: the preview it had stays, saying why.
+            auditStates.set(key, { phase: 'preview', stamp, preview: st.preview, error: auditFixError(result) });
+        } else {
+            auditStates.set(key, { phase: 'idle', stamp, error: auditFixError(result) });
+        }
+        this.renderLivePanel();
+        this.syncWaitingAuditSheet(s, w);
+        const sheet = auditSheetFor === key ? document.getElementById(AUDIT_SHEET_ID) : null;
+        const root = sheet ?? overviewItemEl(w.id);
+        const target = auditStates.get(key)?.phase === 'idle'
+            ? root?.querySelector<HTMLElement>('[data-action="audit-fix"]')
+            : root?.querySelector<HTMLElement>('.waiting-audit__preview-title');
+        target?.focus({ preventScroll: !sheet });
+        if (!sheet) target?.scrollIntoView?.({ block: 'nearest' });
+    },
+
+    /** The finding is gone (spec 109 §2.6, 2l): the row goes, the item as it is now, said by a toast. */
+    waitingAuditGone(s: LiveSession, id: string, stamp: string): void {
+        const key = itemKey(s, id);
+        auditStates.set(key, { phase: 'gone', stamp });
+        if (auditSheetFor === key) this.closeWaitingAuditSheet();
+        this.renderLivePanel();
+        this.researchStatusAfterWrite(s);
+        this.showToast(strings.live.waitingAudit.auditGone, 6000, { kind: 'waiting-audit-gone' });
+        overviewItemEl(id)?.querySelector<HTMLElement>('.research-overview__waiting-row')?.focus({ preventScroll: true });
+    },
+
+    /** The fix's preview from the research (its own window asks its main window). */
+    readWaitingAuditPreview(s: LiveSession, w: LiveWaiting): Promise<WaitingAuditPreviewResult> {
+        const task = researchTaskRef(w.id);
+        if (!task) return Promise.resolve(auditRefusalOf({ code: 'invalid' }));
+        return getWaitingAuditPreview(s.bridge.base, task);
+    },
+
+    /**
+     * The fix written (spec 109 §2.4): `{do: 'fix', expect}` with the
+     * preview's stamp. Written: the research's new version taken, its status
+     * read again (the app moves nothing itself) and a toast with Undo (8 s);
+     * "the images are saved already" when the fix woke the task.
+     */
+    async writeWaitingAuditFix(s: LiveSession, w: LiveWaiting, expect: string): Promise<WaitingAuditResult> {
+        const task = researchTaskRef(w.id);
+        if (!task) return auditRefusalOf({ code: 'invalid' });
+        const before = await this.waitingHeadBeforeWrite(s);
+        const result = await postWaitingAudit(s.bridge.base, task, 'fix', { expect });
+        if (result.ok) {
+            this.takeWaitingWriteHead(s, before, result);
+            const A = strings.live.waitingAudit;
+            this.showToast(result.woke.includes(task) ? A.auditFixedWoke : A.auditFixed, 8000, {
+                kind: 'waiting-audit-fixed',
+                action: { label: strings.live.waitingWrite.undo, run: () => { void this.undoWaitingAuditFix(s, w.id); } },
+            });
+        }
+        if (result.ok || auditFixError(result) === 'gone' || auditFixError(result) === 'changed') this.researchStatusAfterWrite(s);
+        return result;
+    },
+
+    /** Fix in the preview's footer: written once (a second click while it is written does nothing). */
+    async confirmWaitingAuditFix(s: LiveSession, w: LiveWaiting): Promise<void> {
+        const key = itemKey(s, w.id);
+        const st = auditStates.get(key);
+        if (!st?.preview || st.phase !== 'preview' || st.reloading || auditResearchUnavailable(s)
+            || st.error === 'changed' || st.error === 'locked' || st.error === 'disk') return;
+        const preview = st.preview;
+        auditStates.set(key, { phase: 'busy', stamp: st.stamp, preview });
+        this.redrawWaitingAudit(s, w);
+        const result = await this.writeWaitingAuditFix(s, w, preview.stamp);
+        const now = auditStates.get(key);
+        if (result.ok) {
+            auditStates.set(key, { phase: 'fixed', stamp: now?.stamp ?? st.stamp });
+            fixedFocus = key;
+            if (auditSheetFor === key) this.closeWaitingAuditSheet();
+            this.renderLivePanel();
+            return;
+        }
+        const error = auditFixError(result);
+        if (error === 'gone') {
+            this.waitingAuditGone(s, w.id, now?.stamp ?? st.stamp);
+            return;
+        }
+        auditStates.set(key, { phase: 'preview', stamp: now?.stamp ?? st.stamp, preview, error });
+        this.redrawWaitingAudit(s, w);
+        // The focus where the refusal leaves something to do: Reload, Fix again, else Cancel.
+        const root = auditSheetFor === key ? document.getElementById(AUDIT_SHEET_ID) : overviewItemEl(w.id);
+        const next = error === 'changed' ? '[data-action="audit-reload"]'
+            : error === 'locked' || error === 'disk' ? '[data-action="audit-cancel"]' : '[data-action="audit-confirm"]';
+        root?.querySelector<HTMLElement>(next)?.focus({ preventScroll: true });
+    },
+
+    /** Reload (the task changed meanwhile): the preview read again, the one shown stays until it comes. */
+    async reloadWaitingAuditFix(s: LiveSession, w: LiveWaiting): Promise<void> {
+        const key = itemKey(s, w.id);
+        const st = auditStates.get(key);
+        if (!st || st.phase !== 'preview' || st.reloading) return;
+        st.reloading = true;
+        this.redrawWaitingAudit(s, w);
+        const result = await this.readWaitingAuditPreview(s, w);
+        const now = auditStates.get(key);
+        if (now !== st) return;
+        st.reloading = false;
+        this.takeWaitingAuditPreview(s, w, result);
+    },
+
+    /** Cancel (or Escape): the preview closes, the focus back on the row's Fix. */
+    cancelWaitingAuditFix(s: LiveSession, id: string): void {
+        const key = itemKey(s, id);
+        const st = auditStates.get(key);
+        if (!st || st.phase === 'busy') return;
+        if (st.phase === 'loading' || st.phase === 'preview' || st.phase === 'idle') auditStates.delete(key);
+        if (auditSheetFor === key) this.closeWaitingAuditSheet();
+        this.renderLivePanel();
+        overviewItemEl(id)?.querySelector<HTMLElement>('[data-action="audit-fix"]')?.focus({ preventScroll: true });
+    },
+
+    /** Undo in the toast (spec 109 §2.4, 2g): `{do: 'unfix'}`, no preview; changed since: it cannot be undone here. */
+    async undoWaitingAuditFix(s: LiveSession, id: string): Promise<void> {
+        const task = researchTaskRef(id);
+        if (!task) return;
+        const before = await this.waitingHeadBeforeWrite(s);
+        const result = await postWaitingAudit(s.bridge.base, task, 'unfix');
+        const A = strings.live.waitingAudit;
+        if (result.ok) {
+            this.takeWaitingWriteHead(s, before, result);
+            const key = itemKey(s, id);
+            if (auditStates.get(key)?.phase === 'fixed') auditStates.delete(key);
+            if (fixedFocus === key) fixedFocus = null;
+            this.renderLivePanel();
+            this.showToast(A.auditUndone, 5000, { kind: 'waiting-audit-undone' });
+        } else if (result.code === 'audit-changed' || result.code === 'changed') {
+            this.showToast(A.auditUndoFailed, 6000, { kind: 'waiting-failed' });
+        } else {
+            this.showWaitingAuditRefused(result);
+        }
+        this.researchStatusAfterWrite(s);
+    },
+
+    /** The row drawn again, and the phone's sheet with it. */
+    redrawWaitingAudit(s: LiveSession, w: LiveWaiting): void {
+        this.renderLivePanel();
+        this.syncWaitingAuditSheet(s, w);
+    },
+
+    /**
+     * The fix's loading or preview at an item, in place of the finding row's
+     * actions (null: none open, or on a phone the preview is its sheet). An
+     * open preview on a phone opens its sheet; one turned to a wider window
+     * comes back into the item.
+     */
+    waitingAuditFixArea(s: LiveSession, w: LiveWaiting, mode: AuditMode): HTMLElement | null {
+        const key = itemKey(s, w.id);
+        auditDrawnIn.set(key, mode);
+        const st = auditStates.get(key);
+        if (!st) return null;
+        const A = strings.live.waitingAudit;
+        if (st.phase === 'loading') {
+            const box = el('div', 'waiting-audit__loading');
+            box.setAttribute('role', 'status');
+            box.append(spinner(), el('span', undefined, A.auditLoading));
+            return box;
+        }
+        if ((st.phase !== 'preview' && st.phase !== 'busy') || !st.preview) return null;
+        if (mode === 'sheet') {
+            queueMicrotask(() => this.syncWaitingAuditSheet(s, w));
+            return null;
+        }
+        if (auditSheetFor === key) queueMicrotask(() => this.closeWaitingAuditSheet());
+        const section = el('section', 'waiting-audit__preview');
+        section.setAttribute('aria-labelledby', `waiting-audit-chg-${w.id}-${mode}`);
+        const parts = this.waitingAuditPreviewParts(s, w, st, st.preview, mode, `${w.id}-${mode}`);
+        if (parts.alert) section.appendChild(parts.alert);
+        section.append(parts.title, ...parts.body);
+        const foot = el('footer', 'waiting-audit__foot');
+        const btns = el('div', 'waiting-audit__foot-btns');
+        btns.append(parts.cancel, parts.fix);
+        foot.append(parts.note, btns);
+        section.appendChild(foot);
+        // Escape is Cancel (not the overview's); a click elsewhere leaves it open.
+        section.addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape' || e.isComposing) return;
+            e.preventDefault();
+            e.stopPropagation();
+            this.cancelWaitingAuditFix(s, w.id);
+        });
+        section.addEventListener('click', (e) => e.stopPropagation());
+        return section;
+    },
+
+    /**
+     * The preview's parts (§2.3, §2.6): "What changes" (its title focused once
+     * read), the changes and what remains (with Discuss with the agent where
+     * the item offers it), the note or why it was refused, Cancel and Fix.
+     */
+    waitingAuditPreviewParts(s: LiveSession, w: LiveWaiting, st: AuditUiState, preview: AuditPreview, mode: AuditMode, idBase: string): {
+        alert: HTMLElement | null; title: HTMLElement; body: HTMLElement[]; note: HTMLElement; cancel: HTMLButtonElement; fix: HTMLButtonElement;
+    } {
+        const A = strings.live.waitingAudit;
+        const busy = st.phase === 'busy';
+        const unavailable = auditResearchUnavailable(s);
+        const hasAgent = !!w.actions?.includes('chat');
+        const phone = mode === 'sheet';
+        const title = el(phone ? 'h3' : 'h4', 'waiting-audit__preview-title waiting-audit__sec', A.auditChanges);
+        title.id = `waiting-audit-chg-${idBase}`;
+        title.tabIndex = -1;
+        title.dataset.focusKey = `audit-preview|${w.id}`;
+        let alert: HTMLElement | null = null;
+        if (st.error === 'changed') {
+            alert = el('div', 'waiting-audit__err waiting-audit__err--top');
+            alert.setAttribute('role', 'alert');
+            const reload = el('button', 'waiting-audit__reload', A.auditReload);
+            reload.type = 'button';
+            reload.dataset.action = 'audit-reload';
+            reload.dataset.focusKey = `audit-reload|${w.id}`;
+            reload.disabled = !!st.reloading || unavailable;
+            if (st.reloading) reload.prepend(spinner());
+            reload.onclick = (e) => {
+                e.stopPropagation();
+                void this.reloadWaitingAuditFix(s, w);
+            };
+            alert.append(el('b', undefined, A.auditErr409), document.createTextNode(` ${A.auditErr409Detail} `), reload);
+        }
+        const body: HTMLElement[] = [];
+        const list = el('ul', 'waiting-audit__chg-list');
+        const titleOf = (task: string): string | null => s.waiting.find(x => researchTaskRef(x.id) === task)?.what ?? null;
+        for (const line of auditChangeLines(preview, titleOf, A)) {
+            const li = el('li', `waiting-audit__chg waiting-audit__chg--${line.kind}`);
+            const glyph = el('span', 'waiting-audit__glyph', line.kind === 'new' ? '+' : '→');
+            glyph.setAttribute('aria-hidden', 'true');
+            const what = el('div', 'waiting-audit__chg-body');
+            const main = el('div', 'waiting-audit__chg-text');
+            main.append(line.kind === 'new' ? el('span', 'waiting-audit__tag', line.lead) : el('b', undefined, line.lead), document.createTextNode(` ${line.text}`));
+            what.appendChild(main);
+            if (line.sub) {
+                const sub = el('div', 'waiting-audit__sub');
+                if (line.sub.folder) sub.appendChild(folderIcon());
+                sub.appendChild(document.createTextNode(line.sub.text));
+                what.appendChild(sub);
+            }
+            li.append(glyph, what);
+            list.appendChild(li);
+        }
+        body.push(list);
+        const left = auditLeftLines(preview, hasAgent, A);
+        if (left.length > 0) {
+            body.push(el(phone ? 'h4' : 'h5', 'waiting-audit__remains-title waiting-audit__sec', A.auditRemains));
+            const rest = el('ul', 'waiting-audit__chg-list waiting-audit__remains');
+            const task = researchTaskRef(w.id);
+            const chatUrl = task && hasAgent && mode !== 'sheet' && this.researchLinkAvailable('task')
+                ? this.activeResearchLink('task', { task, taskDo: 'chat' }) : null;
+            left.forEach((text, i) => {
+                const li = el('li', 'waiting-audit__chg waiting-audit__chg--left');
+                const glyph = el('span', 'waiting-audit__glyph', '–');
+                glyph.setAttribute('aria-hidden', 'true');
+                const what = el('div', 'waiting-audit__chg-body');
+                what.appendChild(el('div', 'waiting-audit__chg-text', text));
+                // Discuss with the agent once, at the first book the agent adds (AI + terminal, as ever).
+                if (chatUrl && i === 0) {
+                    const act = el('div', 'waiting-audit__chg-act');
+                    const chat = setResearchActionLabel(el('button', 'waiting-audit__chat'), strings.live.waitingTask.discuss, researchLinkMark('task', { taskDo: 'chat' }));
+                    chat.type = 'button';
+                    chat.dataset.action = 'chat';
+                    chat.title = A.auditChatTitle;
+                    chat.onclick = (e) => {
+                        e.stopPropagation();
+                        this.launchResearchLink(chatUrl);
+                    };
+                    act.appendChild(chat);
+                    what.appendChild(act);
+                }
+                li.append(glyph, what);
+                rest.appendChild(li);
+            });
+            body.push(rest);
+        }
+        // The footer's line: why it was refused (no alarm colour), the research unavailable, else what the fix does.
+        const errText = auditErrorText(st.error);
+        let note: HTMLElement;
+        if (unavailable) {
+            note = el('p', 'waiting-audit__note waiting-audit__note--msg', A.auditUnavailable);
+        } else if (errText) {
+            note = el('p', 'waiting-audit__err', errText);
+            note.setAttribute('role', 'alert');
+        } else {
+            note = el('p', 'waiting-audit__note', A.auditFixNote);
+        }
+        const cancel = el('button', 'waiting-audit__cancel', strings.live.waitingTask.cancel);
+        cancel.type = 'button';
+        cancel.dataset.action = 'audit-cancel';
+        cancel.dataset.focusKey = `audit-cancel|${w.id}`;
+        cancel.disabled = busy;
+        cancel.onclick = (e) => {
+            e.stopPropagation();
+            this.cancelWaitingAuditFix(s, w.id);
+        };
+        const fix = el('button', 'waiting-audit__confirm');
+        fix.type = 'button';
+        fix.dataset.action = 'audit-confirm';
+        fix.dataset.focusKey = `audit-confirm|${w.id}`;
+        if (busy) fix.append(spinner(), document.createTextNode(A.auditBusy));
+        else fix.textContent = A.auditFix;
+        fix.disabled = busy || unavailable || !!st.reloading || st.error === 'changed' || st.error === 'locked' || st.error === 'disk';
+        if (busy) fix.setAttribute('aria-busy', 'true');
+        fix.onclick = (e) => {
+            e.stopPropagation();
+            void this.confirmWaitingAuditFix(s, w);
+        };
+        return { alert, title, body, note, cancel, fix };
+    },
+
+    /**
+     * The phone's preview (§2.3, 2n, 2o): the app's bottom sheet — handle,
+     * "What changes" over the task's title, the changes scrolling, Cancel ·
+     * Fix fixed at its foot (each half, 44 px). Dragged down, the backdrop
+     * tapped or Escape: Cancel. Opened only with the data; drawn again as the
+     * state changes (the focus kept by its control).
+     */
+    syncWaitingAuditSheet(s: LiveSession, w: LiveWaiting): void {
+        const key = itemKey(s, w.id);
+        const st = auditStates.get(key);
+        const open = !!st?.preview && (st.phase === 'preview' || st.phase === 'busy') && auditDrawnIn.get(key) === 'sheet';
+        if (!open) {
+            if (auditSheetFor === key) this.closeWaitingAuditSheet();
+            return;
+        }
+        const now = s.waiting.find(x => x.id === w.id) ?? w;
+        const parts = this.waitingAuditPreviewParts(s, now, st!, st!.preview!, 'sheet', `${w.id}-sheet`);
+        const sign = JSON.stringify([st!.phase, st!.error ?? '', !!st!.reloading, auditResearchUnavailable(s), st!.preview!.stamp]);
+        let overlay = document.getElementById(AUDIT_SHEET_ID);
+        if (overlay && auditSheetFor === key && overlay.dataset.sign === sign) return;
+        const focusKey = (document.activeElement as HTMLElement | null)?.closest(`#${AUDIT_SHEET_ID}`) ? (document.activeElement as HTMLElement).dataset.focusKey : undefined;
+        const fresh = !overlay || auditSheetFor !== key;
+        if (fresh) {
+            this.closeWaitingAuditSheet();
+            overlay = el('div', 'bottom-sheet-overlay waiting-audit-sheet-overlay');
+            overlay.id = AUDIT_SHEET_ID;
+            auditSheetFor = key;
+            const sheet = el('div', 'bottom-sheet waiting-audit-sheet');
+            sheet.setAttribute('role', 'dialog');
+            sheet.setAttribute('aria-modal', 'true');
+            overlay.appendChild(sheet);
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) this.cancelWaitingAuditFix(s, w.id);
+            });
+            // Dragged down far enough: Cancel (as the app's other sheets).
+            let startY = 0;
+            let dragging = false;
+            sheet.addEventListener('touchstart', (e) => {
+                const body = sheet.querySelector('.waiting-audit-sheet__body');
+                dragging = !(body && body.contains(e.target as Node) && body.scrollTop > 0);
+                startY = e.touches[0].clientY;
+                sheet.style.transition = 'none';
+            }, { passive: true });
+            sheet.addEventListener('touchmove', (e) => {
+                if (!dragging) return;
+                const dy = e.touches[0].clientY - startY;
+                if (dy > 0) sheet.style.transform = `translateY(${dy}px)`;
+            }, { passive: true });
+            sheet.addEventListener('touchend', (e) => {
+                const was = dragging;
+                dragging = false;
+                sheet.style.transition = '';
+                const dy = e.changedTouches[0].clientY - startY;
+                if (was && dy > 80) this.cancelWaitingAuditFix(s, w.id);
+                else sheet.style.transform = '';
+            });
+            document.body.appendChild(overlay);
+            const off = onEscape(() => this.cancelWaitingAuditFix(s, w.id));
+            auditSheetCleanup = off;
+            requestAnimationFrame(() => overlay?.classList.add('active'));
+        }
+        overlay!.dataset.sign = sign;
+        const sheet = overlay!.querySelector<HTMLElement>('.waiting-audit-sheet')!;
+        const handle = el('div', 'bottom-sheet-handle');
+        handle.setAttribute('aria-hidden', 'true');
+        const head = el('div', 'waiting-audit-sheet__head');
+        head.append(parts.title, el('p', 'waiting-audit-sheet__task', now.what));
+        sheet.setAttribute('aria-labelledby', parts.title.id);
+        const body = el('div', 'waiting-audit-sheet__body');
+        if (parts.alert) body.appendChild(parts.alert);
+        body.append(...parts.body, parts.note);
+        const foot = el('div', 'waiting-audit-sheet__foot');
+        foot.append(parts.cancel, parts.fix);
+        const scroll = sheet.querySelector('.waiting-audit-sheet__body')?.scrollTop ?? 0;
+        sheet.replaceChildren(handle, head, body, foot);
+        body.scrollTop = scroll;
+        const target = focusKey ? sheet.querySelector<HTMLElement>(`[data-focus-key="${CSS.escape(focusKey)}"]`) : fresh ? parts.title : null;
+        if (target && !(target as HTMLButtonElement).disabled) target.focus({ preventScroll: true });
+        else if (focusKey) parts.cancel.disabled ? parts.title.focus({ preventScroll: true }) : parts.cancel.focus({ preventScroll: true });
+    },
+
+    /** The phone's preview sheet goes (the state is the caller's). */
+    closeWaitingAuditSheet(): void {
+        auditSheetCleanup?.();
+        auditSheetCleanup = null;
+        auditSheetFor = null;
+        document.getElementById(AUDIT_SHEET_ID)?.remove();
     },
 
     /**

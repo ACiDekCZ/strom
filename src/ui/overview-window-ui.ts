@@ -256,12 +256,23 @@ export const overviewWindowMethods = uiModule({
                 void this.markWaitingGroupSent(s, a.args.group);
                 return true;
             case 'waiting-audit': {
+                const args = a.args;
+                if (args.do === 'preview' || args.do === 'fix') {
+                    // Read or written through this window's bridge, the outcome to the window (it shows the preview and its refusals).
+                    const w = item(args.itemId);
+                    if (!s || !w?.audit) return { ok: false, code: 'audit-none', status: 0 };
+                    return args.do === 'fix' ? this.writeWaitingAuditFix(s, w, args.expect) : this.readWaitingAuditPreview(s, w);
+                }
                 if (!s) return false;
-                if (a.args.do === 'unkeep') {
-                    void this.unkeepWaitingAudit(s, a.args.itemId);
+                if (args.do === 'unkeep') {
+                    void this.unkeepWaitingAudit(s, args.itemId);
                     return true;
                 }
-                const w = item(a.args.itemId);
+                if (args.do === 'unfix') {
+                    void this.undoWaitingAuditFix(s, args.itemId);
+                    return true;
+                }
+                const w = item(args.itemId);
                 if (!w?.audit) return false;
                 void this.keepWaitingAudit(s, w);
                 return true;

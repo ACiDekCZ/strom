@@ -10,8 +10,11 @@
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { sanitizeLiveStatus, type LiveWaiting } from '../research-link.js';
-import { TASKS_AUDIT_FEATURE, auditExplain, knownAuditKinds, sanitizeWaitingAudit } from '../research-audit.js';
-import { postWaitingAudit, waitingAuditReply } from '../research-waiting-write.js';
+import {
+    TASKS_AUDIT_FEATURE, asAuditPreview, auditChangeLines, auditExplain, auditFixError, auditImagesSeveral, auditLeftLines,
+    knownAuditKinds, sanitizeAuditPreview, sanitizeWaitingAudit,
+} from '../research-audit.js';
+import { getWaitingAuditPreview, postWaitingAudit, waitingAuditPreviewReply, waitingAuditReply } from '../research-waiting-write.js';
 import { setWaitingAuditState, waitingAuditShown } from '../ui/waiting-task-ui.js';
 import { getStringsForLang } from '../strings.js';
 
@@ -131,5 +134,91 @@ describe('the row stays until the finding is left as it is (§3, §4)', () => {
 
     it('no finding: nothing shown (Discuss stays in the item\'s actions)', () => {
         expect(waitingAuditShown(s, w(undefined))).toBeNull();
+    });
+});
+
+describe('the fix\'s preview (§2.2, §2.3, D3–D5)', () => {
+    const en = getStringsForLang('en').live.waitingAudit;
+    const BOOK = 'Smyšlenka 3, N 1784–1820';
+    const OTHER = 'Vymyšlov 9, O 1801–1850';
+    const body = (changes: unknown[], left: unknown[] = [], unknown: unknown[] = []) => ({
+        task: 'T0412', at: '2026-11-18T10:00:00Z',
+        findings: [{ kind: 'images-as-text' }, { kind: 'book-unknown', unknown }],
+        fix: { can: 'part', stamp: 'T0412@2026-11-12T09:14:03Z', changes, left },
+        kept: null, fixed: null,
+    });
+    const lines = (changes: unknown[], titleOf: (t: string) => string | null = () => null) =>
+        auditChangeLines(sanitizeAuditPreview(body(changes))!, titleOf, en).map(l => [l.kind, l.lead, l.text, l.sub?.text ?? null, l.sub?.folder ?? null]);
+
+    it('read with its stamp; bad changes and codes dropped, a hyphen between numbers an en dash', () => {
+        const p = sanitizeAuditPreview(body([
+            { op: 'wait-images', task: 'T0412', book: 'B0003', title: BOOK, images: '57-58', folder: 'Smyšlenka 3 N' },
+            { op: 'delete', task: 'T0412' },
+            { op: 'split', task: null, from: 'T0412', title: OTHER, images: '14', waits: 'text' },
+        ], ['book-unknown', 'Bad Code', 'book-unknown'], [OTHER, OTHER]));
+        expect(p).toMatchObject({ task: 'T0412', can: 'part', stamp: 'T0412@2026-11-12T09:14:03Z', left: ['book-unknown'], unknown: [OTHER] });
+        expect(p!.changes.map(c => c.op)).toEqual(['wait-images', 'split']);
+        expect(p!.changes[0]).toMatchObject({ images: '57–58' });
+        expect(sanitizeAuditPreview({ task: 'T0412', fix: { stamp: 'has space' } })).toBeNull();
+        expect(sanitizeAuditPreview({ task: 'nope', fix: { stamp: 'x' } })).toBeNull();
+    });
+
+    it('several images from a range or a list, one image alone', () => {
+        expect([auditImagesSeveral('57–58'), auditImagesSeveral('1–3, 7'), auditImagesSeveral('3,7'), auditImagesSeveral('14')]).toEqual([true, true, true, false]);
+    });
+
+    it('the lines: this task or another\'s title, images or a book, the folder, a split known or not (D1–D4)', () => {
+        expect(lines([
+            { op: 'wait-images', task: 'T0412', book: 'B0003', title: BOOK, images: '57–58', folder: 'Smyšlenka 3 N' },
+            { op: 'wait-images', task: 'T0413', book: 'B0003', title: '', images: '14', folder: '' },
+            { op: 'wait-book', task: 'T0499', book: 'B0003', title: BOOK, folder: 'Smyšlenka 3 N' },
+            { op: 'folder', task: 'T0412', book: 'B0003', folder: 'Smyšlenka 3 N' },
+            { op: 'split', task: null, from: 'T0412', book: 'B0007', title: OTHER, images: '1–3, 7', folder: 'Vymyšlov 9 O', waits: 'images' },
+            { op: 'split', task: null, from: 'T0412', title: OTHER, images: '14', waits: 'text' },
+            { op: 'split', task: null, from: 'T0412', book: 'B0007', title: OTHER, waits: 'book', folder: 'Vymyšlov 9 O' },
+        ], t => (t === 'T0413' ? 'Sňatek ve Vymyšlově, 1820' : null))).toEqual([
+            ['change', 'This task', `will wait for images 57–58 of the book ${BOOK}`, 'Folder Smyšlenka 3 N', true],
+            ['change', 'Sňatek ve Vymyšlově, 1820', 'will wait for image 14 of the book B0003', null, null],
+            ['change', 'T0499', `will wait for images of the book ${BOOK}; image numbers are not known`, 'Folder Smyšlenka 3 N', true],
+            ['change', 'This task', 'the folder Smyšlenka 3 N will be created', null, null],
+            ['new', 'New task', `for images 1–3, 7 of the book ${OTHER}`, 'Folder Vymyšlov 9 O', true],
+            ['new', 'New task', `for image 14 of the book ${OTHER}`, 'the book is not in the research, the new task keeps waiting as text', false],
+            ['new', 'New task', `for the book ${OTHER}`, 'Folder Vymyšlov 9 O', true],
+        ]);
+    });
+
+    it('what remains: each unknown book, with or without the agent', () => {
+        const p = sanitizeAuditPreview(body([{ op: 'folder', task: 'T0412', book: 'B0003', folder: 'x' }], ['book-unknown'], [OTHER]))!;
+        expect(auditLeftLines(p, true, en)).toEqual([`The book ${OTHER} is missing from the research – the agent adds it.`]);
+        expect(auditLeftLines(p, false, en)).toEqual([`The book ${OTHER} is missing from the research.`]);
+        expect(auditLeftLines({ ...p, left: [] }, true, en)).toEqual([]);
+    });
+
+    it('a preview handed over by the main window is read again as the research\'s', () => {
+        const p = sanitizeAuditPreview(body([{ op: 'wait-images', task: 'T0412', book: 'B0003', title: BOOK, images: '57–58', folder: 'x' }], ['book-unknown'], [OTHER]))!;
+        expect(asAuditPreview(JSON.parse(JSON.stringify(p)))).toEqual(p);
+        expect(asAuditPreview({ ...p, stamp: '' })).toBeNull();
+        expect(asAuditPreview('nope')).toBeNull();
+    });
+
+    it('GET <base>/waiting/<T…>/fix; refusals mapped to what the preview says', async () => {
+        const urls: string[] = [];
+        vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
+            urls.push(`${init.method} ${url}`);
+            return { status: 200, json: async () => body([{ op: 'folder', task: 'T0412', book: 'B0003', folder: 'x' }]), headers: { get: () => null } } as unknown as Response;
+        }));
+        const r = await getWaitingAuditPreview('http://127.0.0.1:9/tok', 'T0412');
+        expect(r).toMatchObject({ ok: true, preview: { task: 'T0412', changes: [{ op: 'folder' }] } });
+        expect(urls[0]).toMatch(/^GET http:\/\/127\.0\.0\.1:9\/tok\/waiting\/T0412\/fix/);
+        expect(waitingAuditPreviewReply(200, { nope: 1 })).toMatchObject({ ok: false, code: 'invalid' });
+        const err = (status: number, b: unknown) => {
+            const x = waitingAuditPreviewReply(status, b);
+            return x.ok ? 'ok' : auditFixError(x);
+        };
+        expect([
+            err(404, { code: 'waiting.none' }), err(409, { code: 'audit.none' }), err(409, { code: 'waiting.changed' }),
+            err(409, { code: 'audit.changed', changed: ['T0412'] }), err(503, { code: 'research.busy' }), err(423, { code: 'locked' }),
+            err(507, { code: 'disk.full', error: 'Disk full' }), err(500, {}),
+        ]).toEqual(['gone', 'gone', 'changed', 'changed', 'busy', 'locked', 'disk', 'other']);
     });
 });

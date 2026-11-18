@@ -31,7 +31,7 @@ import {
 } from '../research-waiting.js';
 import { WaitingAnswerForm, waitingAnswerChangedNote } from './waiting-answer-form.js';
 import { appendImagesDetail, bindImagesDrop, clearImagesSeen, forgetImagesArrived, imagesShortEl, itemKey, noteImagesArrived } from './waiting-images-ui.js';
-import { clearOverviewImages, foldOverviewImages, overviewImagesResult, waitingAuditMarkEl, waitingAuditShown } from './waiting-task-ui.js';
+import { clearOverviewImages, foldOverviewImages, overviewImagesResult, auditFixedRowDrawn, waitingAuditMarkEl, waitingAuditShown } from './waiting-task-ui.js';
 import { formatLiveClock } from '../live-time.js';
 import { MQ_PHONE_BAR, isPhoneBar } from '../breakpoints.js';
 import { openHeadMenu } from './table-view/table-headmenu.js';
@@ -1946,6 +1946,8 @@ export const researchOverviewMethods = uiModule({
             this.renderResearchOverview();
         };
         li.appendChild(row);
+        // Just fixed (spec 109 §2.4): its title in view and focused once drawn where it now belongs.
+        auditFixedRowDrawn(itemKey(s, w.id), row);
         // One person's items the card's ! led to: lit, with why they cannot be answered here.
         markWaitingFocus(li, w);
         const why = waitingWhyEl(w);

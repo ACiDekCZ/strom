@@ -28,7 +28,9 @@ import type { UIClass } from './index.js';
 import { el, setOverviewWindowDrawn, type LiveSession, type OverviewViewing } from './research-ui.js';
 import { applyDirectionsWindowState, setQueueDirectionFilter } from './research-directions-ui.js';
 import { setOverviewOwnWindow } from './research-overview-ui.js';
-import { auditResearchUnavailable, setWaitingAuditState } from './waiting-task-ui.js';
+import { auditRefusalOf, auditResearchUnavailable, setWaitingAuditState } from './waiting-task-ui.js';
+import { asAuditPreview } from '../research-audit.js';
+import type { WaitingAuditPreviewResult, WaitingAuditResult } from '../research-waiting-write.js';
 import { itemKey } from './waiting-images-ui.js';
 import { SECTION_PREFS_EVENT, sectionPrefs, watchSectionPrefsStorage } from './live-section-prefs.js';
 import {
@@ -305,6 +307,26 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
             setWaitingAuditState(itemKey(s, id), null);
             run('waiting-audit', { itemId: id, do: 'unkeep' });
             this.renderResearchOverview();
+        },
+        // The fix (spec 109 §2): its preview read and the fix written by the main window (its toast with Undo there);
+        // the preview, its refusals and the focus are this window's.
+        async readWaitingAuditPreview(_s: LiveSession, w: LiveWaiting): Promise<WaitingAuditPreviewResult> {
+            const r = await port.ask('waiting-audit', { itemId: w.id, do: 'preview' }, OVERVIEW_ANSWER_WAIT_MS);
+            const o = r && typeof r === 'object' ? r as Record<string, unknown> : null;
+            const preview = o?.ok === true ? asAuditPreview(o.preview) : null;
+            return preview ? { ok: true, preview } : auditRefusalOf(o?.ok === false ? o : { code: 'network' });
+        },
+        async writeWaitingAuditFix(_s: LiveSession, w: LiveWaiting, expect: string): Promise<WaitingAuditResult> {
+            const r = await port.ask('waiting-audit', { itemId: w.id, do: 'fix', expect }, OVERVIEW_ANSWER_WAIT_MS);
+            const o = r && typeof r === 'object' ? r as Record<string, unknown> : null;
+            if (o?.ok === true) {
+                const ids = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof researchTaskRef(x) === 'string') : []);
+                return { ok: true, task: researchTaskRef(o.task) ?? '', tasks: ids(o.tasks), woke: ids(o.woke), head: '' };
+            }
+            return auditRefusalOf(o?.ok === false ? o : { code: 'network' });
+        },
+        async undoWaitingAuditFix(this: UIClass, _s: LiveSession, id: string): Promise<void> {
+            run('waiting-audit', { itemId: id, do: 'unfix' });
         },
         async sendWaitingFile(s: LiveSession, task: string, file: File): Promise<void> {
             const w = s.waiting.find(x => researchTaskRef(x.id) === task);

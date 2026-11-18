@@ -333,8 +333,12 @@ export type OverviewAction =
     | { action: 'waiting-unsent'; args: { itemId: string } }
     /** Mark a whole place's items sent. */
     | { action: 'waiting-group-sent'; args: { group: string } }
-    /** A task's finding (spec 109 §4): Leave as is, or its Undo (the main window writes it and says it with Undo). */
-    | { action: 'waiting-audit'; args: { itemId: string; do: 'keep' | 'unkeep' } }
+    /**
+     * A task's finding (spec 109 §2, §4): Leave as is, or its Undo (the main window writes it and says it with
+     * Undo); the fix's preview read (answered: WaitingAuditPreviewResult); the fix written with the preview's
+     * stamp (answered: WaitingAuditResult; the main window says it with Undo), or undone.
+     */
+    | { action: 'waiting-audit'; args: { itemId: string; do: 'keep' | 'unkeep' | 'preview' | 'unfix' } | { itemId: string; do: 'fix'; expect: string } }
     /** A file picked in the window for a task. */
     | { action: 'waiting-file'; args: { itemId: string; file: File } }
     /** Ask the research (its terminal) to decide a hypothesis of "Awaiting action". */
@@ -484,7 +488,9 @@ export function readOverviewAction(action: unknown, args: unknown): OverviewActi
         case 'waiting-group-sent':
             return str(a.group) ? { action, args: { group: a.group } } : null;
         case 'waiting-audit':
-            return str(a.itemId) && (a.do === 'keep' || a.do === 'unkeep') ? { action, args: { itemId: a.itemId, do: a.do } } : null;
+            if (!str(a.itemId)) return null;
+            if (a.do === 'fix') return str(a.expect) && a.expect.length <= 120 ? { action, args: { itemId: a.itemId, do: 'fix', expect: a.expect } } : null;
+            return a.do === 'keep' || a.do === 'unkeep' || a.do === 'preview' || a.do === 'unfix' ? { action, args: { itemId: a.itemId, do: a.do } } : null;
         case 'waiting-file':
             return str(a.itemId) && isFile(a.file) ? { action, args: { itemId: a.itemId, file: a.file } } : null;
         case 'hypothesis-ask': {

@@ -232,6 +232,37 @@ describe('the overview\'s controls ask the main window', () => {
         expect(sent).toHaveLength(2);
     });
 
+    it('Fix at a finding (spec 109 §2): the preview and the write asked of the main window, its answers read again; Undo too', async () => {
+        const { o, sent, port } = overrides();
+        const w = { id: 'T0377', what: 'x', on: 'user', at: '' } as LiveWaiting;
+        const s = { treeId: 'tree-w', ended: false, lostSince: null } as unknown as LiveSession;
+        const preview = {
+            task: 'T0377', can: 'whole', stamp: 'T0377@2026-11-12T09:00:00Z', left: [], unknown: [],
+            changes: [{ op: 'folder', task: 'T0377', book: 'B0003', folder: 'Smyšlenka 3 N' }, { op: 'delete', task: 'T0377' }],
+        };
+        port.ask.mockResolvedValueOnce({ ok: true, preview });
+        const read = await o.readWaitingAuditPreview(s, w);
+        expect(port.ask).toHaveBeenLastCalledWith('waiting-audit', { itemId: 'T0377', do: 'preview' }, 30_000);
+        expect(read).toEqual({ ok: true, preview: { ...preview, changes: [preview.changes[0]] } });
+        // A preview that is not one, a refusal, no answer.
+        port.ask.mockResolvedValueOnce({ ok: true, preview: { ...preview, stamp: 'has space' } });
+        expect(await o.readWaitingAuditPreview(s, w)).toMatchObject({ ok: false, code: 'network' });
+        port.ask.mockResolvedValueOnce({ ok: false, code: 'audit-changed', status: 409 });
+        expect(await o.readWaitingAuditPreview(s, w)).toMatchObject({ ok: false, code: 'audit-changed' });
+        port.ask.mockResolvedValueOnce(null);
+        expect(await o.readWaitingAuditPreview(s, w)).toMatchObject({ ok: false, code: 'network' });
+
+        port.ask.mockResolvedValueOnce({ ok: true, task: 'T0377', tasks: ['T0377', 'bad'], woke: ['T0377'] });
+        expect(await o.writeWaitingAuditFix(s, w, preview.stamp)).toEqual({ ok: true, task: 'T0377', tasks: ['T0377'], woke: ['T0377'], head: '' });
+        expect(port.ask).toHaveBeenLastCalledWith('waiting-audit', { itemId: 'T0377', do: 'fix', expect: preview.stamp }, 30_000);
+        port.ask.mockResolvedValueOnce({ ok: false, code: 'locked', status: 423 });
+        expect(await o.writeWaitingAuditFix(s, w, preview.stamp)).toMatchObject({ ok: false, code: 'locked' });
+
+        await o.undoWaitingAuditFix(s, 'T0377');
+        expect(sent).toEqual([{ action: 'waiting-audit', args: { itemId: 'T0377', do: 'unfix' } }]);
+        expect(port.focusMain).not.toHaveBeenCalled();
+    });
+
     it('an answer waits for the main window\'s outcome (no answer: failed)', async () => {
         const { o, port } = overrides();
         await expect(o.sendWaitingAnswer(null, W1, 'Kutná Hora')).resolves.toBe('saved');

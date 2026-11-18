@@ -77,7 +77,14 @@ describe('the actions an overview window may ask for', () => {
         expect(readOverviewAction('show-person', { personId: 'P1', extra: 1 })).toEqual({ action: 'show-person', args: { personId: 'P1' } });
         expect(readOverviewAction('line-move', { directionId: 'D1', move: { drop: 2 } })).toEqual({ action: 'line-move', args: { directionId: 'D1', move: { drop: 2 } } });
         expect(readOverviewAction('waiting-audit', { itemId: 'T0412', do: 'keep' })).toEqual({ action: 'waiting-audit', args: { itemId: 'T0412', do: 'keep' } });
+        // Fix only with the preview's stamp (spec 109 §2); its preview read and Undo with the item alone.
         expect(readOverviewAction('waiting-audit', { itemId: 'T0412', do: 'fix' })).toBeNull();
+        expect(readOverviewAction('waiting-audit', { itemId: 'T0412', do: 'fix', expect: 'T0412@2026-11-12T09:14:03Z' }))
+            .toEqual({ action: 'waiting-audit', args: { itemId: 'T0412', do: 'fix', expect: 'T0412@2026-11-12T09:14:03Z' } });
+        expect(readOverviewAction('waiting-audit', { itemId: 'T0412', do: 'preview', expect: 'x' })).toEqual({ action: 'waiting-audit', args: { itemId: 'T0412', do: 'preview' } });
+        expect(readOverviewAction('waiting-audit', { itemId: 'T0412', do: 'unfix' })).toEqual({ action: 'waiting-audit', args: { itemId: 'T0412', do: 'unfix' } });
+        expect(readOverviewAction('waiting-audit', { itemId: 'T0412', do: 'fix', expect: 'x'.repeat(121) })).toBeNull();
+        expect(readOverviewAction('waiting-audit', { itemId: 'T0412', do: 'delete' })).toBeNull();
         expect(readOverviewAction('hover-person', { personId: null })).toEqual({ action: 'hover-person', args: { personId: null } });
         expect(readOverviewAction('turn-on', undefined)).toEqual({ action: 'turn-on' });
         expect(readOverviewAction('direction-found', { directionId: 'D1' })).toEqual({ action: 'direction-found', args: { directionId: 'D1' } });

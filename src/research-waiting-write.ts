@@ -22,6 +22,7 @@ import { waitingPhase, waitingTaskActions, WaitingPhase, fileExt } from './resea
 import { uploadHeaders, mediaReplyId, DEFAULT_MEDIA_MAX_BYTES } from './originals.js';
 import { sha256OfBlob } from './sha256.js';
 import { ResearchWriteHeld, writeHeldOfCode } from './research-write-held.js';
+import { sanitizeAuditPreview, type AuditPreview } from './research-audit.js';
 
 /** The bridge takes "sent" / "unsent" for an item and for a place. */
 export const WAITING_SENT_FEATURE = 'waiting.sent';
@@ -612,6 +613,30 @@ export function postWaitingAudit(base: string, task: string, what: WaitingAuditD
     const body = JSON.stringify({ do: what, ...(expect ? { expect } : {}) });
     return bridgeRequest(`${base}|POST|waiting/${ref}|${body}`, `${base}/waiting/${encodeURIComponent(ref)}`,
         { method: 'POST', headers: JSON_TEXT, body }, waitingAuditReply, opts.timeoutMs ?? WAITING_WRITE_TIMEOUT_MS);
+}
+
+/** The research's preview of a task's fix, or why it was not read (404 `waiting.none`, 409 `audit.none`: gone). */
+export type WaitingAuditPreviewResult = { ok: true; preview: AuditPreview } | WaitingWriteRefused;
+
+/** The bridge's answer to the fix's preview, typed (an answer that is not a preview: `invalid`). */
+export function waitingAuditPreviewReply(status: number, body: unknown, retryAfter?: string | null): WaitingAuditPreviewResult {
+    if (status >= 200 && status < 300) {
+        const preview = sanitizeAuditPreview(body);
+        return preview ? { ok: true, preview } : { ok: false, code: 'invalid', status, retryAfter: null, reason: '' };
+    }
+    return refusal(status, body, retryAfter);
+}
+
+/**
+ * Read what the fix of a task's finding would change (`GET
+ * <base>/waiting/<T…>/fix`, spec 109 §2.2): computed by the research now,
+ * nothing written.
+ */
+export function getWaitingAuditPreview(base: string, task: string, opts: { timeoutMs?: number } = {}): Promise<WaitingAuditPreviewResult> {
+    const ref = researchTaskRef(task);
+    if (!ref || ref !== task) return Promise.resolve(notSent());
+    return bridgeRequest(`${base}|GET|waiting/${ref}/fix`, `${base}/waiting/${encodeURIComponent(ref)}/fix`,
+        { method: 'GET' }, waitingAuditPreviewReply, opts.timeoutMs ?? WAITING_WRITE_TIMEOUT_MS);
 }
 
 /** A file's type as it goes: the browser's, else by its extension (a TIFF or HEIC often has none). */
