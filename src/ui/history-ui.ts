@@ -86,6 +86,8 @@ const readHere = new Set<string>();
 /** A read running; the rev asked meanwhile waits for it. */
 const reading = new Set<string>();
 const readAgain = new Map<string, string | undefined>();
+/** The last read of a research failed (no answer within its limit, or the bridge not reached); a read that works clears it. */
+const readFailed = new Map<string, 'timeout' | 'network'>();
 /** Sending the queue now. */
 const flushing = new Set<string>();
 /** The search was switched off from here (until the status agrees or says otherwise): when. */
@@ -275,6 +277,18 @@ export const historyMethods = uiModule({
         void this.readBridgeHistory(rid, rev);
     },
 
+    /** Whether the last read of the research failed: `timeout` (no answer in 15 s) or `network` (not reached). */
+    historyReadFailure(researchId: string): 'timeout' | 'network' | undefined {
+        // Kept while the status's own reads try again (each lasts up to the limit), until one comes back.
+        return readFailed.get(researchId.toLowerCase());
+    },
+
+    /** Try again after a failed read: "Loading…" again until this read ends. */
+    historyReadRetry(researchId: string): Promise<void> {
+        readFailed.delete(researchId.toLowerCase());
+        return this.readBridgeHistory(researchId);
+    },
+
     /** `GET /history`: the new payload in use and on the device; a refused or too big one leaves the old. */
     async readBridgeHistory(researchId: string, rev?: string): Promise<void> {
         const rid = researchId.toLowerCase();
@@ -287,6 +301,11 @@ export const historyMethods = uiModule({
         reading.add(rid);
         try {
             const r = await fetchBridgeHistory(base, rev ? { rev } : {});
+            if (!r.ok && (r.code === 'timeout' || r.code === 'network')) {
+                readFailed.set(rid, r.code);
+                // §10.3: the manager waiting for its first read says so instead of "Loading…" for ever.
+                if (document.getElementById(HISTORY_MANAGE_DIALOG_ID)?.classList.contains('active')) this.renderHistoryManage();
+            } else readFailed.delete(rid);
             if (r.ok) {
                 await this.ensureHistoryCache(rid);
                 cache.set(rid, r.payload);

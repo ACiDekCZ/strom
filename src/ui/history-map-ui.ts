@@ -16,10 +16,14 @@ import {
     type RegionPicker, type PickerChoice,
 } from '../history-manage.js';
 import {
-    postBridgeMap, historyMapNote, HISTORY_MAP_NOTE_MAX, type HistoryMapBody, type HistoryWriteRefusal,
+    postBridgeMap, historyMapNote, HISTORY_MAP_NOTE_MAX, HISTORY_WRITE_TIMEOUT_MS, type HistoryMapBody, type HistoryWriteRefusal,
 } from '../history-bridge.js';
 import { uiModule } from './module.js';
 import { undoInToast } from './toast.js';
+import { busyButtonHtml, runBusy, type BusyCtl } from './busy.js';
+
+/** The picker's writes wait for the bridge's own limit, and a little over it (its end says "did not answer"). */
+const MAP_WRITE_BUSY_MS = HISTORY_WRITE_TIMEOUT_MS + 2000;
 
 export const HISTORY_MAP_DIALOG_ID = 'history-map-modal';
 
@@ -140,7 +144,7 @@ export const historyMapMethods = uiModule({
                 + '</div>'
                 + '<div class="buttons hmp-foot">'
                 + `<button type="button" class="secondary" data-hmp="back"${st.busy ? ' disabled' : ''}>${esc(h.redoBack)}</button>`
-                + `<button type="button" class="primary" data-hmp="redoGo"${st.busy ? ' disabled' : ''}>${esc(h.redoConfirm)}</button>`
+                + `<button type="button" class="primary" data-hmp="redoGo">${busyButtonHtml(esc(h.redoConfirm), strings.busy.saving)}</button>`
                 + '</div>';
             return;
         }
@@ -160,7 +164,7 @@ export const historyMapMethods = uiModule({
             + '<div class="buttons hmp-foot">'
             + `<button type="button" class="link hmp-redo-link" data-hmp="redo"${st.busy ? ' disabled' : ''}>${esc(h.mapRedoLink)}</button>`
             + `<button type="button" class="secondary" data-hmp="cancel" data-dismiss>${esc(strings.buttons.cancel)}</button>`
-            + `<button type="button" class="primary" data-hmp="assign">${esc(h.mapConfirm)}</button>`
+            + `<button type="button" class="primary" data-hmp="assign">${busyButtonHtml(esc(h.mapConfirm), strings.busy.saving)}</button>`
             + '</div>';
         this.historyMapValidate();
     },
@@ -254,7 +258,8 @@ export const historyMapMethods = uiModule({
         const result = root.querySelector<HTMLElement>('.hmp-result');
         if (result) result.textContent = d?.payload && st.chosen.length ? mapResultText(d.payload, st.chosen.map(c => c.id), d.env.lang) : '';
         const assign = root.querySelector<HTMLButtonElement>('[data-hmp="assign"]');
-        if (assign) assign.disabled = !check.ok || st.busy;
+        // While it writes, its working state guards it (B193): disabled would hide the state.
+        if (assign && !st.busy) assign.disabled = !check.ok;
         const title = root.querySelector<HTMLElement>('#hmp-title');
         if (title) title.textContent = st.chosen.length > 1 ? h.mapTitleMany(st.picker.place) : h.mapTitle(st.picker.place);
     },
@@ -290,8 +295,8 @@ export const historyMapMethods = uiModule({
             case 'back':
                 this.historyMapEscape();
                 return;
-            case 'assign': void this.historyMapAssign(); return;
-            case 'redoGo': void this.historyMapRedo(); return;
+            case 'assign': void runBusy(el, ctl => this.historyMapAssign(ctl), { kind: 'bridge', label: strings.busy.saving, timeoutMs: MAP_WRITE_BUSY_MS }); return;
+            case 'redoGo': void runBusy(el, ctl => this.historyMapRedo(ctl), { kind: 'bridge', label: strings.busy.saving, timeoutMs: MAP_WRITE_BUSY_MS }); return;
             default: return;
         }
     },
@@ -342,6 +347,9 @@ export const historyMapMethods = uiModule({
     historyMapRefusedText(r: HistoryWriteRefusal): string {
         const h = strings.history;
         if (r.code === 'busy') return h.errBusy;
+        // No answer within the limit: the write may have gone through (§10.3), so no "not written".
+        if (r.code === 'timeout') return strings.busy.errTimeout(Math.round(HISTORY_WRITE_TIMEOUT_MS / 1000));
+        if (r.code === 'network') return strings.busy.errOffline;
         if (r.code === 'gone') {
             const ctx = this.historyManageContext();
             if (ctx) void this.readBridgeHistory(ctx.researchId);
@@ -351,8 +359,11 @@ export const historyMapMethods = uiModule({
         return r.reason || strings.live.waitingWrite.writeFailed;
     },
 
-    /** "Assign" (§4.1): `POST /history/map {place, regions}`, a toast with Undo (the place's state before). */
-    async historyMapAssign(): Promise<void> {
+    /**
+     * "Assign" (§4.1): `POST /history/map {place, regions}`, a toast with Undo (the place's state before). Under
+     * its button's working state (B193, "Saving…"); a refusal or no answer said above the footer with Try again.
+     */
+    async historyMapAssign(ctl?: BusyCtl): Promise<void> {
         const st = state;
         const d = this.historyManageDrawn();
         if (!st || st.busy || !d?.base || !d.payload) return;
@@ -361,16 +372,13 @@ export const historyMapMethods = uiModule({
         const regions = pickerBody(st.chosen);
         const undo = mapUndoBody(st.key, d.payload.places[st.key]);
         const names = joinAnd(d.env.lang, [...new Set(regions.map(r => r.id))].map(id => regionName(d.payload!.regions?.[id] ?? { id }, d.env.lang)));
-        st.busy = true;
-        st.error = '';
-        this.historyMapValidate();
+        this.historyMapBusy(st, true);
         const before = this.researchHeadNow(d.rid);
         const r = await postBridgeMap(d.base, { place: st.key, regions }, d.features);
         if (state !== st) return;
-        st.busy = false;
+        this.historyMapBusy(st, false);
         if (!r.ok) {
-            st.error = this.historyMapRefusedText(r);
-            this.renderHistoryRegionPicker();
+            this.historyMapRefused(st, r, ctl, 'assign');
             return;
         }
         const place = st.picker.place;
@@ -383,28 +391,49 @@ export const historyMapMethods = uiModule({
         });
     },
 
-    /** "Decide again" (§4.2): `{place, redo: true, note}`; no Undo (the research keeps no earlier choice). */
-    async historyMapRedo(): Promise<void> {
+    /** "Decide again" (§4.2): `{place, redo: true, note}`; no Undo (the research keeps no earlier choice). B194 as B193. */
+    async historyMapRedo(ctl?: BusyCtl): Promise<void> {
         const st = state;
         const d = this.historyManageDrawn();
         if (!st || st.busy || !d?.base) return;
         const note = historyMapNote(st.note);
-        st.busy = true;
-        st.error = '';
-        this.renderHistoryRegionPicker();
+        this.historyMapBusy(st, true);
         const before = this.researchHeadNow(d.rid);
         const r = await postBridgeMap(d.base, { place: st.key, redo: true, ...(note ? { note } : {}) }, d.features);
         if (state !== st) return;
-        st.busy = false;
+        this.historyMapBusy(st, false);
         if (!r.ok) {
-            st.error = this.historyMapRefusedText(r);
-            this.renderHistoryRegionPicker();
+            this.historyMapRefused(st, r, ctl, 'redoGo');
             return;
         }
         const place = st.picker.place;
         this.closeHistoryRegionPicker();
         this.historyManageWritten(d.rid, before, r);
         this.showToast(strings.history.toastRedo(place), 5000, { kind: 'history-map' });
+    },
+
+    /** The picker writes: its other footer buttons wait (the working button guards itself), the old sentence goes. */
+    historyMapBusy(st: PickerState, on: boolean): void {
+        st.busy = on;
+        if (on) st.error = '';
+        const root = document.getElementById(HISTORY_MAP_DIALOG_ID);
+        if (on) root?.querySelector<HTMLElement>('.hmp-error')?.setAttribute('hidden', '');
+        for (const b of root?.querySelectorAll<HTMLButtonElement>('[data-hmp="redo"], [data-hmp="back"]') ?? []) b.disabled = on;
+    },
+
+    /** A refused write in the picker: at its button with Try again (its working state), else the picker's line. */
+    historyMapRefused(st: PickerState, r: HistoryWriteRefusal, ctl: BusyCtl | undefined, which: 'assign' | 'redoGo'): void {
+        const text = this.historyMapRefusedText(r);
+        if (!ctl) {
+            st.error = text;
+            this.renderHistoryRegionPicker();
+            return;
+        }
+        const again = (): void => {
+            const btn = document.querySelector<HTMLElement>(`#${HISTORY_MAP_DIALOG_ID} [data-hmp="${which}"]`);
+            if (btn && state === st) btn.click();
+        };
+        ctl.end({ ok: false, kind: r.code === 'timeout' ? 'timeout' : r.code === 'busy' ? 'busy' : r.code === 'network' ? 'offline' : 'error', text, retry: again });
     },
 
     /** A write of R5 outside the picker (Undo of a toast): refusals as a toast, or to `said` (the toast's own words). */

@@ -558,7 +558,9 @@ test.describe('Work on the queue starting', () => {
         const row = startRow(page);
         await expect(row).toHaveClass(/is-silent/);
         await expect(row.locator('.live-now-starting__title')).toHaveText('Did the queue work not start?');
-        const msg = row.locator('.busy-msg[role="alert"]');
+        // Neutral, as the terminal's own limit: not an error (the terminal may only be asking).
+        const msg = row.locator('.busy-msg[role="status"]');
+        await expect(msg).not.toHaveClass(/is-err/);
         await expect(msg).toContainText('The terminal did not respond within 30 s.');
         await expect(msg.locator('.hint')).toHaveText('If nothing opened, Strom Research needs to be started.');
         for (const btn of [workBtn(page), nowWork(page)]) {

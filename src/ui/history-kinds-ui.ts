@@ -25,7 +25,7 @@ import { announcedResearchScheme } from '../research-device.js';
 import {
     HISTORY_KINDS, alignBackfillCounts, alignHideCount, alignHideCountOfKind, type HistoryAlignPreview, type HistoryKind,
 } from '../history.js';
-import { getHistoryAlign, postHistoryKinds, type HistoryKindsBody, type HistoryKindsRefusal } from '../history-bridge.js';
+import { getHistoryAlign, postHistoryKinds, HISTORY_WRITE_TIMEOUT_MS, type HistoryKindsBody, type HistoryKindsRefusal } from '../history-bridge.js';
 import { historyKindSvg } from '../history-symbols.js';
 import { researchActionLabel } from './research-open-mark.js';
 import { activeResearchId, bridgeBase } from './history-ui.js';
@@ -692,6 +692,8 @@ export const historyKindsMethods = uiModule({
     historyKindsRefusalText(r: HistoryKindsRefusal): string {
         const h = strings.history;
         if (r.code === 'busy') return h.errBusy;
+        // No answer within the limit: the write may have gone through, so not "nothing changed" (§10.3).
+        if (r.code === 'timeout') return strings.busy.errTimeout(Math.round(HISTORY_WRITE_TIMEOUT_MS / 1000));
         if (r.code === 'held' && r.held) return this.researchWriteHeldText(r.held, false).toast;
         if (r.code === 'failed') return h.kindsFailed;
         return r.reason || h.kindsFailed;

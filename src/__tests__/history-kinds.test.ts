@@ -129,6 +129,21 @@ describe('POST /history/kinds', () => {
         expect(historyKindsReply(418, {}, [], sent, check)).toMatchObject({ code: 'unknown' });
     });
 
+    it('a write without an answer in 15 s is a timeout (the result unknown), not a failure', async () => {
+        vi.useFakeTimers();
+        vi.stubGlobal('fetch', (_url: string, init: RequestInit) => new Promise((_res, rej) => {
+            init.signal?.addEventListener('abort', () => rej(new DOMException('aborted', 'AbortError')));
+        }));
+        try {
+            const write = postHistoryKinds('http://127.0.0.1:1/t', { kinds: ['war'], scope: 'tree' }, [], check);
+            await vi.advanceTimersByTimeAsync(15_000);
+            expect(await write).toMatchObject({ ok: false, code: 'timeout' });
+        } finally {
+            vi.unstubAllGlobals();
+            vi.useRealTimers();
+        }
+    });
+
     it('sends the kinds in kind order, or inherit', async () => {
         const bodies: unknown[] = [];
         vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {

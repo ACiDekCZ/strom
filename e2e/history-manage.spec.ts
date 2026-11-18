@@ -112,6 +112,34 @@ test.describe('History of places: the manager', () => {
         await expect(page.locator('#settings-modal')).toBeVisible();
     });
 
+    test('a first read without an answer in 15 s: the sentence with Try again instead of "Loading…" for ever (§10.3)', async ({ page }) => {
+        await page.clock.install({ time: new Date('2026-11-18T10:00:00Z') });
+        const history = fakeHistoryR1();
+        const ged = historyGed();
+        await fakeBridge(page, { features: HISTORY_R1_FEATURES, history, treeGed: ged, links: LINKS });
+        const isRead = (url: URL) => url.pathname.endsWith('/history');
+        // The research's bridge answers its status but not the read.
+        await page.route(isRead, () => { /* never answers */ });
+        await openResearch(page, { ged });
+        await poll(page);
+        await page.evaluate(() => (window.Strom.UI as unknown as { openHistoryManage(o: object): void }).openHistoryManage({}));
+        await expect(modal(page)).toBeVisible();
+        await expect(stateText(page)).toHaveText('Loading history…');
+        await page.clock.runFor(16_000);
+        const msg = modal(page).locator('#history-manage-state .busy-msg.is-err[role="alert"]');
+        await expect(msg).toContainText('The research did not answer within 15 s.');
+        await page.unroute(isRead);
+        // Not reached at all: the research is not running.
+        await page.route(isRead, route => route.abort());
+        await msg.getByRole('button', { name: 'Try again' }).click();
+        await expect(msg).toContainText('The research is not running. Strom Research needs to be started.');
+        await page.unroute(isRead);
+        await msg.getByRole('button', { name: 'Try again' }).click();
+        await expect(msg).toHaveCount(0);
+        await expect(stateText(page)).not.toHaveText('Loading history…');
+        await expect(modal(page).locator('.hm-region').first()).toBeVisible();
+    });
+
     test('the header follows the research: next in the queue, all done, matching places, pace', async ({ page }) => {
         const history = fakeHistoryR1({ pace: 'rare' });
         const { bridge } = await setup(page, { history });

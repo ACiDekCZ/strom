@@ -2589,8 +2589,9 @@ export const researchOverviewMethods = uiModule({
         }
         title.textContent = b.queueNotStarted;
         li.appendChild(title);
-        const msg = el('div', 'busy-msg is-err');
-        msg.setAttribute('role', 'alert');
+        // Neutral, as the terminal's own limit (§3.1): a terminal that did not answer may only be asking.
+        const msg = el('div', 'busy-msg');
+        msg.setAttribute('role', 'status');
         msg.appendChild(el('span', 'busy-msg__text', b.terminalSilent(Math.round(QUEUE_START_MS / 1000))));
         const retry = el('button', 'link busy-msg__retry', b.retry);
         retry.type = 'button';

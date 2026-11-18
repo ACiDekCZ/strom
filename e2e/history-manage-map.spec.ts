@@ -166,20 +166,32 @@ test.describe('History of places: a place\'s region by hand', () => {
         await expect(place(page, 'Lhotka').locator('[data-hm="mapAuto"]')).toHaveCount(0);
     });
 
-    test('refusals: busy says so in the picker and keeps it; gone closes nothing and reads again', async ({ page }) => {
+    test('refusals: busy says so above the footer with Try again and keeps the picker; gone closes nothing and reads again', async ({ page }) => {
         const { history } = await setup(page);
         await openPlaces(page);
         await place(page, 'Lhotka', 'unassigned').locator('[data-hm="assign"]').click();
         await option(page, 'cz-bohemia').locator('input').check();
         history.writeReply = { map: { status: 503, body: { error: 'busy', code: 'research.busy' } } };
+        let release!: () => void;
+        const held = new Promise<void>(r => { release = r; });
+        // B193: the write held, Assign shows its working state ("Saving…"), the other footer buttons wait.
+        await page.route('**/history/map*', async route => { await held; await route.fallback(); });
         await assignBtn(page).click();
-        await expect(picker(page).locator('.hmp-error')).toHaveText('The research is busy. It will work again shortly.');
+        await expect(assignBtn(page)).toHaveAttribute('data-busy', 'busy');
+        await expect(assignBtn(page).locator('.b-busy')).toContainText('Saving…');
+        await expect(picker(page).locator('[data-hmp="redo"]')).toBeDisabled();
+        release();
+        const msg = picker(page).locator('.busy-msg.is-err[role="alert"]');
+        await expect(msg).toContainText('The research is busy. It will work again shortly.');
+        await expect(picker(page).locator('.hmp-error')).toBeHidden();
         await expect(chosen(page, 'cz-bohemia')).toBeVisible();
         await expect(assignBtn(page)).toBeEnabled();
+        await expect(picker(page).locator('[data-hmp="redo"]')).toBeEnabled();
+        await page.unroute('**/history/map*');
         const reads = history.reads;
         history.writeReply = { map: { status: 404, body: { error: 'No such place in the facts of this tree.', code: 'history.place' } } };
-        await assignBtn(page).click();
-        await expect(picker(page).locator('.hmp-error')).toHaveText('No such place in the facts of this tree.');
+        await msg.getByRole('button', { name: 'Try again' }).click();
+        await expect(msg).toContainText('No such place in the facts of this tree.');
         await expect.poll(() => history.reads).toBeGreaterThan(reads);
         history.writeReply = undefined;
         await assignBtn(page).click();

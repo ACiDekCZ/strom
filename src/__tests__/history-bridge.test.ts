@@ -3,6 +3,7 @@ import {
     experimentsOffReply, hideReply, hideRequestBody, historyReadReply, deleteReply, firstReply, skipReply, mapReply,
     storiesReply, placeReply, historyWriteRefusal, historyMapNote, HISTORY_MAP_NOTE_MAX,
     postBridgeFirst, postBridgePlace, postBridgeDelete, postBridgeMap, postBridgeExperimentsOff,
+    fetchBridgeHistory, HISTORY_READ_TIMEOUT_MS, HISTORY_WRITE_TIMEOUT_MS,
 } from '../history-bridge.js';
 import { researchSchemeUrl } from '../research-link.js';
 
@@ -147,5 +148,52 @@ describe('the history of regions and of places apart (experiments.split, 1029)',
         expect(placeReply(409, { code: 'history.off' }, [], { tree: TREE, place: 'L0042', experiment: 'placeHistory' })).toMatchObject({ link: places });
         expect(firstReply(409, { code: 'history.off', link: 'evil://x' }, [], { tree: TREE, experiment: 'regions' })).toMatchObject({ link: regions });
         expect(firstReply(409, { code: 'history.off' }, [], { tree: TREE })).toMatchObject({ link: link('history', 'on') });
+    });
+});
+
+describe('history bridge limits (§10.3)', () => {
+    /** A bridge that never answers: the request ends only when its signal aborts. */
+    const silent = () => vi.stubGlobal('fetch', (_url: string, init: RequestInit) => new Promise((_res, rej) => {
+        init.signal?.addEventListener('abort', () => rej(new DOMException('aborted', 'AbortError')));
+    }));
+    const unreachable = () => vi.stubGlobal('fetch', async () => { throw new TypeError('Failed to fetch'); });
+
+    it('a read without an answer in 15 s ends as timeout, not as a bridge not reached', async () => {
+        vi.useFakeTimers();
+        silent();
+        try {
+            const read = fetchBridgeHistory('http://127.0.0.1:1/t');
+            await vi.advanceTimersByTimeAsync(HISTORY_READ_TIMEOUT_MS - 1);
+            let done = false;
+            void read.then(() => { done = true; });
+            await Promise.resolve();
+            expect(done).toBe(false);
+            await vi.advanceTimersByTimeAsync(1);
+            expect(await read).toMatchObject({ ok: false, code: 'timeout' });
+            expect(HISTORY_READ_TIMEOUT_MS).toBe(15_000);
+        } finally {
+            vi.unstubAllGlobals();
+            vi.useRealTimers();
+        }
+    });
+
+    it('a region write without an answer in 15 s ends as timeout; a bridge not reached stays network', async () => {
+        vi.useFakeTimers();
+        silent();
+        try {
+            const write = postBridgeMap('http://127.0.0.1:1/t', { place: 'Lhota', regions: [{ id: 'cz-bohemia' }] }, []);
+            await vi.advanceTimersByTimeAsync(HISTORY_WRITE_TIMEOUT_MS);
+            expect(await write).toMatchObject({ ok: false, code: 'timeout' });
+        } finally {
+            vi.unstubAllGlobals();
+            vi.useRealTimers();
+        }
+        unreachable();
+        try {
+            expect(await postBridgeMap('http://127.0.0.1:1/t', { place: 'Lhota', regions: [{ id: 'cz-bohemia' }] }, [])).toMatchObject({ ok: false, code: 'network' });
+            expect(await fetchBridgeHistory('http://127.0.0.1:1/t')).toMatchObject({ ok: false, code: 'network' });
+        } finally {
+            vi.unstubAllGlobals();
+        }
     });
 });

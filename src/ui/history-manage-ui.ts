@@ -26,7 +26,8 @@ import {
     type HiddenRow, type HiddenAlignKind, type DeletedRow, type PlaceSort,
 } from '../history-manage.js';
 import {
-    postBridgeFirst, postBridgeSkip, postBridgeDelete, postBridgeMap, postHistoryAlignUndo, type HistoryWriteRefusal, type HistorySkipBody,
+    postBridgeFirst, postBridgeSkip, postBridgeDelete, postBridgeMap, postHistoryAlignUndo, HISTORY_READ_TIMEOUT_MS,
+    type HistoryWriteRefusal, type HistorySkipBody,
 } from '../history-bridge.js';
 import { HISTORY_ALIGN_FEATURE, researchLinkMark } from '../research-link.js';
 import { historyKindSvg } from '../history-symbols.js';
@@ -256,7 +257,14 @@ export const historyManageMethods = uiModule({
         const back = modal.querySelector<HTMLElement>('.hm-back');
         if (back) back.hidden = !view.detail;
         if (!d || !d.payload) {
-            stateEl.innerHTML = `<p class="hm-state-text">${esc(d && d.payload === null && !d.env.bridgeUp ? h.manageNoBridge : h.manageLoading)}</p>`;
+            const noBridge = !!d && d.payload === null && !d.env.bridgeUp;
+            const failed = d && !noBridge ? this.historyReadFailure(d.rid) : undefined;
+            // §10.3: a read that did not come back within its limit says so, with Try again (not "Loading…" for ever).
+            stateEl.innerHTML = failed
+                ? `<div class="busy-msg is-err hm-read-failed" role="alert"><span class="busy-msg__text">${esc(failed === 'timeout'
+                    ? strings.busy.errTimeout(Math.round(HISTORY_READ_TIMEOUT_MS / 1000)) : strings.busy.errOffline)}</span>`
+                    + `<button type="button" class="link busy-msg__retry" data-hm="readAgain">${esc(strings.busy.retry)}</button></div>`
+                : `<p class="hm-state-text">${esc(noBridge ? h.manageNoBridge : h.manageLoading)}</p>`;
             this.renderHistoryManageTabs(null);
             body.innerHTML = '';
             return;
@@ -767,6 +775,15 @@ export const historyManageMethods = uiModule({
                 return;
             case 'back': this.closeHistoryManageDetail(); return;
             case 'enable': this.historyEnableSearch(); return;
+            case 'readAgain': {
+                const d = this.historyManageDrawn();
+                if (!d) return;
+                // The read starts at once (its failure is cleared while it runs): "Loading…" again until it ends.
+                const read = this.historyReadRetry(d.rid);
+                this.renderHistoryManage();
+                void read;
+                return;
+            }
             case 'switchOff': if (key === 'regions' || key === 'places') void this.historyManageSwitchOff(key); return;
             case 'switchOn': if (key === 'regions' || key === 'places') this.historyLaunchExperiment('on', key); return;
             case 'state':
