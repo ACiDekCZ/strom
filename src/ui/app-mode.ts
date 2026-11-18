@@ -52,6 +52,7 @@ import { validateTreeData, ValidationResult as TreeValidationResult, ValidationI
 import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
+import { activatedElement, busyLocal, busyToast } from './busy.js';
 import { safeFileName } from '../filenames.js';
 import { forgetCardTypeCopy } from './card-fields-ui.js';
 
@@ -166,9 +167,12 @@ export const appModeMethods = uiModule({
         this.closeExistingExportDialog();
         // The stored tree may be encrypted: unlock the LOCAL data first.
         if (!await this.ensureLocalUnlocked()) return;
-        await DataManager.switchToStoredVersion();
-        this.hideViewModeBanner();
-        await TreeRenderer.renderAsync();
+        // The dialog is gone with the choice: the reading as a progress toast past 120 ms (§1).
+        await busyToast(strings.busy.generic, async () => {
+            await DataManager.switchToStoredVersion();
+            this.hideViewModeBanner();
+            await TreeRenderer.renderAsync();
+        });
         ZoomPan.centerOnFocusWithContext();
     },
 
@@ -193,7 +197,7 @@ export const appModeMethods = uiModule({
             strings.viewMode.storedNewerConfirm(formatDateTime(newer.changedAt), formatDateTime(newer.exportedAt)),
             strings.viewMode.storedNewerTitle, { confirmLabel: strings.viewMode.updateStored, variant: 'danger' })) return;
         if (!await this.ensureLocalUnlocked()) return;
-        await DataManager.importFromViewMode('update');
+        await busyToast(strings.busy.saving, () => DataManager.importFromViewMode('update'));
         this.hideViewModeBanner();
         this.showToast(strings.viewMode.updateSuccess);
         await TreeRenderer.renderAsync();
@@ -246,8 +250,8 @@ export const appModeMethods = uiModule({
         // local session must be unlocked (the file's own password never is).
         if (!await this.ensureLocalUnlocked()) return;
 
-        // Import all embedded trees (works for single tree too)
-        const result = await DataManager.importAllEmbeddedTrees();
+        // Import all embedded trees (works for single tree too); the dialog is gone: a progress toast past 120 ms (§1).
+        const result = await busyToast(strings.busy.importing, () => DataManager.importAllEmbeddedTrees());
         this.hideViewModeBanner();
 
         if (result.imported > 1) {
@@ -267,7 +271,7 @@ export const appModeMethods = uiModule({
     async importAsCopy(): Promise<void> {
         this.closeImportViewModeDialog();
         if (!await this.ensureLocalUnlocked()) return;
-        await DataManager.importFromViewMode('copy');
+        await busyToast(strings.busy.importing, () => DataManager.importFromViewMode('copy'));
         this.hideViewModeBanner();
         this.showToast(strings.viewMode.importSuccess);
         this.updateTreeSwitcher();
@@ -945,8 +949,10 @@ export const appModeMethods = uiModule({
         const treeId = modal?.dataset.treeId as TreeId;
         if (!treeId) return;
 
-        const log = await AuditLogManager.load(treeId);
-        if (log.entries.length === 0) return;
+        // The dialog's button carries the reading of the history (§1).
+        const log = await busyLocal(activatedElement(), strings.busy.saving, () => AuditLogManager.load(treeId),
+            () => ({ ok: false, kind: 'error', text: strings.busy.fileSaveFailed, retry: () => { void this.exportAuditLogTxt(); } }));
+        if (!log || log.entries.length === 0) return;
 
         const treeMeta = TreeManager.getTreeMetadata(treeId);
         const treeName = treeMeta?.name || 'tree';

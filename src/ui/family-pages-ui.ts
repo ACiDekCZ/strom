@@ -32,6 +32,9 @@ import { RodId, buildLineages, rodOfPersonForCrumbs, rods as allRods } from '../
 import { appFontFaceCss, POSTER_LINE_FACES, POSTER_SERIF_FACES } from '../poster-fonts.js';
 import { shrinkImage } from './person-page-ui.js';
 import { uiModule } from './module.js';
+import { runBusy } from './busy.js';
+import { holdLeave } from './busy-leave.js';
+import { isPicking, whilePicking } from './file-pick.js';
 import { wireRodPicker, wireTreePages } from './rod-picker-ui.js';
 import { wireRodTimelines } from '../rod-timeline-wire.js';
 import type { HistoryPayload, PersonHistoryEnv } from '../history.js';
@@ -408,15 +411,36 @@ type SavePicker = (o: { suggestedName: string; types?: { description: string; ac
  * files goes to the file the save picker chooses as a stream where the
  * browser has one (§7.5), so the archive is not copied once more in memory.
  */
-export async function savePagesFile(file: PagesFile): Promise<boolean> {
+export async function savePagesFile(file: PagesFile, el: HTMLElement | null = null): Promise<boolean> {
     const picker = (window as Window & { showSaveFilePicker?: SavePicker }).showSaveFilePicker;
     if (file.data instanceof Blob && file.bytes > PAGE_SET_SPLIT_BYTES && typeof picker === 'function') {
+        const blob = file.data;
+        // The system's "Save as" first with nothing shown (§9), the writing after it as `el`'s working state.
+        let handle: Awaited<ReturnType<SavePicker>> | undefined;
         try {
-            const handle = await picker({ suggestedName: file.name, types: [{ description: file.name, accept: { 'application/zip': ['.zip'] } }] });
-            await file.data.stream().pipeTo(await handle.createWritable());
-            return true;
+            handle = await whilePicking(el, () => picker({ suggestedName: file.name, types: [{ description: file.name, accept: { 'application/zip': ['.zip'] } }] }));
         } catch (e) {
             if ((e as Error)?.name === 'AbortError') return false;
+        }
+        if (handle) {
+            const chosen = handle;
+            let wrote = false;
+            const write = async (): Promise<void> => {
+                const release = holdLeave('export');
+                try {
+                    await blob.stream().pipeTo(await chosen.createWritable());
+                    wrote = true;
+                } catch (e) {
+                    console.error('Saving the pages failed:', e);
+                } finally {
+                    release();
+                }
+            };
+            if (el && el.isConnected) await runBusy(el, write, { label: strings.busy.saving, kind: 'local' });
+            else await write();
+            if (wrote) return true;
+        } else if (handle === undefined && el && isPicking(el)) {
+            return false;
         }
     }
     downloadPagesFile(file);

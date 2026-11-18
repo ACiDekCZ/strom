@@ -149,8 +149,11 @@ test('invalid JSON import shows a readable error and keeps existing data', async
     await createFirstPerson(page, 'Jan', 'Novak');
 
     await page.locator('#file-input').setInputFiles('e2e/fixtures/broken.json');
-    const validation = page.locator('#validation-modal');
-    await expect(validation).toBeVisible();
+    // A file handed in without its row: the sentence in a toast with "Choose another file" (9a), no alert.
+    const toast = page.locator('.toast:not(.toast--progress)');
+    await expect(toast).toContainText('The file cannot be read: it is neither GEDCOM nor a Strom backup.');
+    await expect(toast.getByRole('button', { name: 'Choose another file' })).toBeVisible();
+    await expect(page.locator('#validation-modal')).toBeHidden();
     // The app did not crash and the original person is still present.
     await expect(card(page, 'Jan')).toBeVisible();
     expect(await personCount(page)).toBe(1);
@@ -161,12 +164,10 @@ test('garbage GEDCOM import does not crash the app', async ({ page }) => {
     await createFirstPerson(page, 'Jan', 'Novak');
 
     await page.locator('#gedcom-input').setInputFiles('e2e/fixtures/broken.ged');
-    // A lenient parser yields an empty result dialog (0 persons) rather than an
-    // error; either way the app stays alive and the existing tree is untouched.
-    const result = page.locator('#gedcom-result-modal');
-    await expect(result).toBeVisible();
-    await expect(page.locator('#gedcom-stat-persons')).toHaveText('0');
-    await page.evaluate(() => window.Strom.UI.closeGedcomResultDialog());
+    // Not a GEDCOM at all: said by a toast (no element carried it), never an
+    // empty tree made of it; the app stays alive and the tree is untouched.
+    await expect(page.locator('.toast:not(.toast--progress)')).toContainText('The file cannot be read');
+    await expect(page.locator('#gedcom-result-modal')).toBeHidden();
     await expect(card(page, 'Jan')).toBeVisible();
     expect(await personCount(page)).toBe(1);
 });

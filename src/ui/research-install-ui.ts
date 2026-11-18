@@ -35,6 +35,7 @@ import { SettingsManager } from '../settings.js';
 import { STROM_DATA_VERSION, StromData } from '../types.js';
 import { TreeRenderer } from '../renderer.js';
 import { uiModule } from './module.js';
+import { activatedElement, busyLocal } from './busy.js';
 
 /** The dialog keeps the info dialog's id: one research dialog at a time, closed by the shared Escape handling. */
 export const INSTALL_DIALOG_ID = 'research-info-modal';
@@ -421,9 +422,14 @@ export const researchInstallMethods = uiModule({
     async downloadResearchTransfer(): Promise<void> {
         const record = this.ensureInstallRecord();
         const treeId = record.treeId;
-        let data: StromData | null;
+        // The button carries the reading of another tree (§1: IndexedDB, decrypted).
+        const origin = activatedElement();
+        let data: StromData | null | undefined;
         if (!treeId) data = { version: STROM_DATA_VERSION, persons: {}, partnerships: {} };
-        else data = DataManager.getCurrentTreeId() === treeId ? DataManager.getData() : await TreeManager.getTreeData(treeId);
+        else if (DataManager.getCurrentTreeId() === treeId) data = DataManager.getData();
+        else data = await busyLocal(origin, strings.busy.generic, () => TreeManager.getTreeData(treeId),
+            () => ({ ok: false, kind: 'error', text: strings.busy.failed, retry: () => { void this.downloadResearchTransfer(); } }));
+        if (data === undefined) return;
         if (!data) {
             await this.showAlert(strings.storageSafety.treeLocked, 'warning');
             return;

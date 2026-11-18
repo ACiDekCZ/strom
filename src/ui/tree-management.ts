@@ -6,7 +6,7 @@
 import { researchOpenMark, researchOpenSrHtml } from './research-open-mark.js';
 import { DataManager, auditPersonName } from '../data.js';
 import { runTreeSwitch, type TreeSwitchPlace, type TreeSwitchResult } from './tree-switch-busy.js';
-import { activatedElement } from './busy.js';
+import { activatedElement, busyLocal } from './busy.js';
 import type { FollowSwitchFrom } from './research-follow-ui.js';
 import { countFamilies } from '../ged-exporter.js';
 import { TreeManager } from '../tree-manager.js';
@@ -1645,7 +1645,14 @@ export const treeManagementMethods = uiModule({
             return;
         }
 
-        await TreeManager.duplicateTree(this.duplicateTreeId, newName);
+        // The dialog's button carries the copying (§1: the tree read and written anew); Enter in the name has it too.
+        const btn = activatedElement() ?? document.querySelector<HTMLElement>('#duplicate-tree-modal .buttons .primary');
+        const sourceId = this.duplicateTreeId;
+        const copied = await busyLocal(btn, strings.busy.saving, async () => {
+            await TreeManager.duplicateTree(sourceId, newName);
+            return true;
+        }, () => ({ ok: false, kind: 'error', text: strings.busy.failed, retry: () => { void this.confirmDuplicateTree(); } }));
+        if (!copied) return;
         this.closeDuplicateTreeDialog();
         this.updateTreeManagerList();
         this.updateTreeSwitcher();

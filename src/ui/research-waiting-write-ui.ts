@@ -28,7 +28,9 @@ import { el, LiveSession, researchSession } from './research-ui.js';
 import { normalizeModal } from './modal-skeleton.js';
 import { TreeManager } from '../tree-manager.js';
 import type { ToastWorkEnd } from './toast.js';
-import { activatedElement, announceBusy, holdAfterShift, monoNow, runBusy, shiftHeld } from './busy.js';
+import { activatedElement, announceBusy, busyStep, holdAfterShift, monoNow, runBusy, shiftHeld, showBusyMessage } from './busy.js';
+import { isPicking, openFilePicker, takePickOrigin } from './file-pick.js';
+import { formatBytes } from './attachments-ui.js';
 import { RowNote, RowRefusal, WAITING_ROWS_SCOPE, WaitingRowNotes } from './waiting-row-notes.js';
 import { overviewInWindow } from '../windows/overview-window.js';
 
@@ -662,10 +664,16 @@ export const researchWaitingWriteMethods = uiModule({
         return `✓ ${now ? `${imagesSentence(now)} ` : ''}${strings.live.waitingTask.stillWaits}${notes ? ` ${notes}` : ''}`;
     },
 
-    /** "Add a file" at a task: an image or PDF picked here goes to the research with the task's id. */
-    pickWaitingFile(s: LiveSession, w: LiveWaiting): void {
+    /**
+     * "Add a file" at a task: an image or PDF picked here goes to the research
+     * with the task's id. The system's dialog with nothing shown, the button
+     * only guarded against a second dialog; a choice called off gives it back
+     * at once (9c).
+     */
+    pickWaitingFile(s: LiveSession, w: LiveWaiting, origin: HTMLElement | null = activatedElement()): void {
         const task = researchTaskRef(w.id);
         if (!task || !this.liveWaitingWrites(s).file || !waitingFileWritable(w)) return;
+        if (isPicking(origin)) return;
         document.querySelector('input.waiting-file-input')?.remove();
         const input = document.createElement('input');
         input.type = 'file';
@@ -676,38 +684,84 @@ export const researchWaitingWriteMethods = uiModule({
         input.addEventListener('cancel', () => input.remove());
         input.addEventListener('change', () => {
             const file = input.files?.[0];
+            const from = takePickOrigin(input);
             input.remove();
-            if (file) void this.sendWaitingFile(s, task, file);
+            if (file) void this.sendWaitingFile(s, task, file, from, () => this.pickWaitingFile(s, w, from));
         });
         document.body.appendChild(input);
-        input.click();
+        openFilePicker(input, origin);
     },
 
-    async sendWaitingFile(s: LiveSession, task: string, file: File): Promise<void> {
+    /**
+     * The file sent as the button's working state (9c): "Sending…", above it
+     * the line "Sending <name> to the research… 1.2 MB"; a refusal is a
+     * sentence at the button with "Choose another file" (a file the research
+     * does not take) or "Try again". Without the button, toasts as before.
+     */
+    async sendWaitingFile(s: LiveSession, task: string, file: File, origin: HTMLElement | null = null,
+        again?: () => void): Promise<void> {
         const W = strings.live.waitingWrite;
+        const shown = !!origin && origin.isConnected;
+        const other = again ? { label: strings.busy.pickOther, run: again } : undefined;
         if (!waitingFileTaken(file)) {
-            this.showToast(W.fileType, 6000, { kind: 'waiting-failed' });
-            return;
-        }
-        this.showToast(W.fileSending(file.name), Infinity, { spinner: true, kind: 'waiting-file' });
-        const before = await this.waitingHeadBeforeWrite(s);
-        const result = await putWaitingFile(s.bridge.base, task, file, { maxBytes: s.accepts?.mediaMaxBytes });
-        this.takeWaitingWriteHead(s, before, result);
-        if (result.ok) {
-            this.showToast(W.fileSent, 4000, { kind: 'waiting-file-sent' });
-            if (stillFollowing(s)) this.researchStatusAfterWrite(s);
+            if (shown && origin) {
+                showBusyMessage(origin, { ok: false, kind: 'error', text: W.fileType, ...(other ? { alt: other } : {}) });
+            } else {
+                this.showToast(W.fileType, 6000, { kind: 'waiting-failed' });
+            }
             return;
         }
         const why: Partial<Record<WaitingWriteRefused['code'], string>> = {
             'too-large': W.fileTooLarge, type: W.fileType, full: W.fileFull, none: W.fileGone, 'no-file': W.fileNotTaken,
             failed: W.writeFailed, 'bad-body': W.badBody, locked: W.locked, busy: W.busy, 'app-only': W.appOnly,
         };
-        const text = why[result.code] ?? W.fileFailed;
-        this.showToast(text, 6000, { kind: 'waiting-failed' });
+        const send = async (): Promise<WaitingFileResult> => {
+            const before = await this.waitingHeadBeforeWrite(s);
+            const result = await putWaitingFile(s.bridge.base, task, file, { maxBytes: s.accepts?.mediaMaxBytes });
+            this.takeWaitingWriteHead(s, before, result);
+            return result;
+        };
+        if (!shown || !origin) {
+            this.showToast(W.fileSending(file.name), Infinity, { spinner: true, kind: 'waiting-file' });
+            const result = await send();
+            if (result.ok) {
+                this.showToast(W.fileSent, 4000, { kind: 'waiting-file-sent' });
+                if (stillFollowing(s)) this.researchStatusAfterWrite(s);
+                return;
+            }
+            this.showToast(why[result.code] ?? W.fileFailed, 6000, { kind: 'waiting-failed' });
+            return;
+        }
+        const line = busyStep(origin, `${W.fileSending(file.name)} ${formatBytes(file.size)}`);
+        let sent = false;
+        await runBusy(origin, async ctl => {
+            try {
+                const result = await send();
+                if (result.ok) {
+                    sent = true;
+                    // The row stays as it was: the toast says the file went.
+                    this.showToast(W.fileSent, 4000, { kind: 'waiting-file-sent' });
+                    return;
+                }
+                const text = why[result.code] ?? W.fileFailed;
+                // A file the research does not take: another one; a research busy or a failed write: once more.
+                const pick = result.code === 'too-large' || result.code === 'type' || result.code === 'no-file';
+                const retry = result.code === 'busy' || result.code === 'locked' || result.code === 'failed';
+                ctl.end({
+                    ok: false, kind: 'error', text,
+                    ...(pick && other ? { alt: other } : {}),
+                    ...(retry ? { retry: () => { void this.sendWaitingFile(s, task, file, origin, again); } } : {}),
+                });
+            } finally {
+                line.clear();
+            }
+        }, { label: strings.busy.sending, kind: 'local' });
+        if (sent && stillFollowing(s)) this.researchStatusAfterWrite(s);
     },
 
     /** A write button (no research mark: it stays here); one click only. */
-    waitingWriteButton(label: string, action: string, run: () => void, cls = 'research-overview__waiting-action'): HTMLButtonElement {
+    waitingWriteButton(label: string, action: string, run: () => void, cls = 'research-overview__waiting-action',
+        oneClick = true): HTMLButtonElement {
         const btn = el('button', `live-waiting-answer ${cls} research-overview__waiting-write`, label);
         btn.type = 'button';
         btn.dataset.action = action;
@@ -716,7 +770,8 @@ export const researchWaitingWriteMethods = uiModule({
             e.stopPropagation();
             // Rows moved under the pointer a moment ago: the click was meant for the row before (drobnost 109 U4).
             if (btn.disabled || shiftHeld(WAITING_ROWS_SCOPE, e)) return;
-            btn.disabled = true;
+            // "Add a file" keeps the button: its dialog guards it, a choice called off gives it back (9c).
+            if (oneClick) btn.disabled = true;
             run();
         };
         return btn;

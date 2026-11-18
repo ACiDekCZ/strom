@@ -2465,7 +2465,7 @@ export const researchOverviewMethods = uiModule({
                     continue;
                 }
                 if (action === 'file' && writes.file && waitingFileWritable(w)) {
-                    host.appendChild(this.waitingWriteButton(W.file, 'file', () => this.pickWaitingFile(s, w)));
+                    host.appendChild(this.waitingWriteButton(W.file, 'file', () => this.pickWaitingFile(s, w), undefined, false));
                     continue;
                 }
                 if (!links) continue;

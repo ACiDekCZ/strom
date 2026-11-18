@@ -2484,6 +2484,23 @@ test.describe('Awaiting action written through the bridge', () => {
         expect(await launched(page)).toEqual([]);
     });
 
+    test('Add a file called off: nothing shown while the dialog is open, the button back at once, a second press opens it again (9c)', async ({ page }) => {
+        await follow(page, { width: 1440, height: 900 }, writable([], { media: { task: true } }));
+        await openOverview(page);
+        const letter = await openLetter(page);
+        const add = letter.locator('.research-overview__waiting-action[data-action="file"]');
+        let chooser = page.waitForEvent('filechooser');
+        await add.click();
+        await chooser;
+        await expect(add).not.toHaveAttribute('aria-busy', 'true');
+        await page.locator('input.waiting-file-input').dispatchEvent('cancel');
+        // At once, not after the next redraw of the list.
+        await expect(add).toBeEnabled({ timeout: 300 });
+        chooser = page.waitForEvent('filechooser', { timeout: 3000 });
+        await add.click();
+        await chooser;
+    });
+
     test('Sent at an item the research already has sent (sent: [], phase sent): it stays in Awaiting a reply, no error', async ({ page }) => {
         await fastReconnect(page);
         const bridge = await follow(page, { width: 1440, height: 900 }, writable(['waiting.sent']));

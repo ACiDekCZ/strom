@@ -19,6 +19,8 @@ import { strings } from '../strings.js';
 import { PrivacyMode } from '../privacy.js';
 import { EmbeddedDataEnvelope, StromData, TreeId } from '../types.js';
 import { uiModule } from './module.js';
+import { activatedElement, busyLocal, busyToast } from './busy.js';
+import { holdLeave } from './busy-leave.js';
 import { autoGrowAll } from './autogrow.js';
 import { safeFileName } from '../filenames.js';
 
@@ -119,23 +121,31 @@ export const shareUiMethods = uiModule({
             ...(this.shareReplyToExportId ? { replyToExportId: this.shareReplyToExportId } : {}),
         };
 
-        this.closeShareDialog();
-
-        if (scope === 'changes') {
-            await this.exportChangePacket(treeId, senderName, senderMessage);
-            return;
-        }
-
-        if (scope === 'branch') {
-            const focusedData = TreeRenderer.getFocusedData();
-            const treeName = TreeManager.getActiveTreeMetadata()?.name || 'Family Tree';
-            if (!focusedData) return;
-            const safe = treeName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-            await AppExporter.exportFocusAsApp(focusedData, `${safe || 'strom'}-share.html`, password, privacyMode, false,
-                { ...share, treeName, trackTreeId: treeId });
-        } else {
-            await AppExporter.exportApp(treeId, password, privacyMode, false, share);
-        }
+        // The dialog stays while the file is made (§1: its button "Saving…", leaving asks); it goes once the
+        // file is handed to the browser, a failure stays at the button with "Try again".
+        const btn = activatedElement() ?? document.querySelector<HTMLElement>('#share-modal .buttons .primary');
+        const made = await busyLocal(btn, strings.busy.saving, async () => {
+            const release = holdLeave('export');
+            try {
+                if (scope === 'changes') {
+                    await this.exportChangePacket(treeId, senderName, senderMessage);
+                } else if (scope === 'branch') {
+                    const focusedData = TreeRenderer.getFocusedData();
+                    const treeName = TreeManager.getActiveTreeMetadata()?.name || 'Family Tree';
+                    if (focusedData) {
+                        const safe = treeName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+                        await AppExporter.exportFocusAsApp(focusedData, `${safe || 'strom'}-share.html`, password, privacyMode, false,
+                            { ...share, treeName, trackTreeId: treeId });
+                    }
+                } else {
+                    await AppExporter.exportApp(treeId, password, privacyMode, false, share);
+                }
+                return true;
+            } finally {
+                release();
+            }
+        }, () => ({ ok: false, kind: 'error', text: strings.busy.fileSaveFailed, retry: () => { void this.submitShareDialog(); } }));
+        if (made) this.closeShareDialog();
     },
 
     // ==================== RECIPIENT: WELCOME + COLLABORATION BAR ====================
@@ -461,14 +471,17 @@ export const shareUiMethods = uiModule({
 
         this.closeShareReplyDialog();
         this.pendingReplyEnvelope = null;
-        if (imported) {
-            if (DataManager.getCurrentTreeId() !== targetTreeId) {
-                await DataManager.switchTree(targetTreeId);
+        // The dialog is gone with the choice: the tree read as a progress toast past 120 ms (§1).
+        await busyToast(strings.busy.generic, async () => {
+            if (imported) {
+                if (DataManager.getCurrentTreeId() !== targetTreeId) {
+                    await DataManager.switchTree(targetTreeId);
+                }
+            } else {
+                await DataManager.leaveViewModeToTree(targetTreeId);
+                this.hideViewModeBanner();
             }
-        } else {
-            await DataManager.leaveViewModeToTree(targetTreeId);
-            this.hideViewModeBanner();
-        }
+        });
         this.updateTreeSwitcher();
         await TreeRenderer.renderAsync();
         MergerUI.startMerge(incoming, sender);
@@ -480,7 +493,8 @@ export const shareUiMethods = uiModule({
         this.closeShareReplyDialog();
         this.pendingReplyEnvelope = null;
         if (imported) {
-            await DataManager.importAsNewTree(structuredClone(imported.data as StromData), imported.treeName);
+            await busyToast(strings.busy.importing,
+                () => DataManager.importAsNewTree(structuredClone(imported.data as StromData), imported.treeName));
             this.updateTreeSwitcher();
             await TreeRenderer.renderAsync();
             return;

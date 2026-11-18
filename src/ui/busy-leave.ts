@@ -1,7 +1,7 @@
 /**
  * Leaving the page while work goes on (waiting buttons §2.7): the browser asks
  * first (`beforeunload`) while something is written to the research or the
- * tree is being loaded from it. A write also leaves a note in sessionStorage
+ * tree is being loaded from it, and while a file is saved or read. A write also leaves a note in sessionStorage
  * (`strom.busy.pending`), taken away at its end: a note still there when the
  * page loads again means its result is not known, said by a toast with
  * "Find out".
@@ -9,8 +9,8 @@
 
 import { strings } from '../strings.js';
 
-/** What was going on. */
-export type BusyLeaveKind = 'send' | 'adopt' | 'load';
+/** What was going on (`export` / `import`: a file being saved or read, §2.7 – only asked, no note). */
+export type BusyLeaveKind = 'send' | 'adopt' | 'load' | 'export' | 'import';
 
 export const BUSY_PENDING_KEY = 'strom.busy.pending';
 

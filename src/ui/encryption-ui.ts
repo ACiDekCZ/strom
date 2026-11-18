@@ -3,7 +3,8 @@
  * see src/ui/module.ts for the composition pattern.
  */
 
-import { runBusy, isBusy } from './busy.js';
+import { runBusy, isBusy, busyStep } from './busy.js';
+import { holdLeave } from './busy-leave.js';
 import { allMedia, hasTreeMedia, mediaSourceIds } from '../media.js';
 import { DataManager, auditPersonName, storedTreeForExport } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
@@ -23,7 +24,7 @@ import {
     LAST_FOCUSED,
     LastFocusedMarker
 } from '../types.js';
-import { strings } from '../strings.js';
+import { strings, getCurrentLanguage } from '../strings.js';
 import { PrivacyMode, ContentOptions, ContentPreset, CONTENT_PRESETS, matchContentPreset, applyContentOptions, applyLivingPrivacy } from '../privacy.js';
 import { totalPhotoBytes } from '../photo.js';
 import { totalAttachmentBytes, totalExcerptBytes } from '../attachments.js';
@@ -163,11 +164,14 @@ export const encryptionUiMethods = uiModule({
             }
         }
 
-        // Close dialog first: from here on failures are not a password issue.
-        document.getElementById('password-prompt-modal')?.classList.remove('active');
+        // From here on failures are not a password issue. The dialog stays while the trees are
+        // decrypted (§1: its OK working, above the footer which tree of how many), then goes.
         this.passwordPromptCallback = null;
         this.passwordPromptCallbackManagesDialog = false;
         this.passwordPromptOnCancel = null;
+        const ok = document.querySelector<HTMLElement>('#password-prompt-form button[type="submit"]');
+        const line = ok && isBusy(ok) ? busyStep(ok, strings.busy.decrypting) : null;
+        const release = holdLeave('export');
 
         try {
             // Disable encryption setting FIRST (so saves will be unencrypted)
@@ -175,7 +179,9 @@ export const encryptionUiMethods = uiModule({
 
             // Re-save all trees to decrypt them
             const trees = TreeManager.getTrees();
+            let k = 0;
             for (const tree of trees) {
+                line?.set(strings.busy.decryptingK(++k, trees.length));
                 const data = await TreeManager.getTreeData(tree.id as TreeId);
                 if (data) {
                     TreeManager.saveTreeData(tree.id as TreeId, data, { asStored: true });
@@ -195,6 +201,9 @@ export const encryptionUiMethods = uiModule({
             this.updateEncryptionStatus();
             this.showToast(strings.errors.saveFailed, 6000);
         } finally {
+            line?.clear();
+            release();
+            document.getElementById('password-prompt-modal')?.classList.remove('active');
             // Now lock the session
             CryptoSession.lock();
         }
@@ -293,6 +302,17 @@ export const encryptionUiMethods = uiModule({
             return;
         }
 
+        // The dialog's Save carries the encrypting (§1): "Encrypting…", above the footer which tree of how many.
+        const btn = document.querySelector<HTMLElement>('#password-setup-form button[type="submit"]');
+        if (btn && isBusy(btn)) return;
+        if (!btn) { await this.encryptAllTrees(password, error, null); return; }
+        await runBusy(btn, () => this.encryptAllTrees(password, error, btn), { label: strings.busy.encrypting, kind: 'local' });
+    },
+
+    /** The trees encrypted with a new password (see confirmPasswordSetup); `btn`: the line of k of n above its footer. */
+    async encryptAllTrees(password: string, error: HTMLElement | null, btn: HTMLElement | null): Promise<void> {
+        const line = btn ? busyStep(btn, strings.busy.encrypting) : null;
+        const release = holdLeave('export');
         try {
             // Unlock session with new password
             await CryptoSession.unlock(password);
@@ -302,7 +322,9 @@ export const encryptionUiMethods = uiModule({
 
             // Re-save all trees to encrypt them immediately
             const trees = TreeManager.getTrees();
+            let k = 0;
             for (const tree of trees) {
+                line?.set(strings.busy.encryptingK(++k, trees.length));
                 const data = await TreeManager.getTreeData(tree.id as TreeId);
                 if (data) {
                     TreeManager.saveTreeData(tree.id as TreeId, data, { asStored: true });
@@ -325,6 +347,9 @@ export const encryptionUiMethods = uiModule({
                 error.textContent = cryptoErrorText(err, 'encrypt');
                 error.style.display = 'block';
             }
+        } finally {
+            line?.clear();
+            release();
         }
     },
 
@@ -1156,28 +1181,30 @@ export const encryptionUiMethods = uiModule({
         document.getElementById('export-content-edit')?.setAttribute('aria-expanded', 'true');
     },
 
-    /** The dialog's one button: encrypted when ticked, else a plain file. */
+    /**
+     * The dialog's one button: encrypted when ticked, else a plain file. The
+     * dialog stays while the file is made (2g): the button "Saving…", a line
+     * above the footer with what goes into it, leaving the page asks; it goes
+     * once the file is handed to the browser (its download / "Save as" shows
+     * it, a toast names the file). A failure stays in the dialog with "Try again".
+     */
     async confirmExport(): Promise<void> {
         // "All from the research": the rest loads first (the footer shows it); stopped, the dialog stays.
         if (!(await this.loadImagesBeforeExport())) return;
         const encrypt = (document.getElementById('export-encrypt-toggle') as HTMLInputElement | null)?.checked;
-        if (encrypt) this.confirmExportPassword();
-        else this.exportWithoutPassword();
+        if (encrypt) await this.confirmExportPassword();
+        else await this.exportWithoutPassword();
     },
 
-    exportWithoutPassword(): void {
+    async exportWithoutPassword(): Promise<void> {
         if (!this.exportPasswordCallback) return;
-
-        document.getElementById('export-password-modal')?.classList.remove('active');
-        this.clearDialogStack();
-        this.exportPasswordCallback(null);
-        this.exportPasswordCallback = null;
+        await this.runExportSave(null);
     },
 
     /**
      * Confirm export password and proceed with encrypted export
      */
-    confirmExportPassword(): void {
+    async confirmExportPassword(): Promise<void> {
         const input = document.getElementById('export-password-input') as HTMLInputElement;
         const confirm = document.getElementById('export-password-confirm') as HTMLInputElement;
         const error = document.getElementById('export-password-error');
@@ -1207,11 +1234,77 @@ export const encryptionUiMethods = uiModule({
             return;
         }
 
-        // Close dialog and call callback with password
-        document.getElementById('export-password-modal')?.classList.remove('active');
-        this.clearDialogStack();
-        this.exportPasswordCallback(password);
-        this.exportPasswordCallback = null;
+        await this.runExportSave(password);
+    },
+
+    /** What the file being made carries, for the line above the footer (2g): "Saving the backup… 2,400 people, 18 photos". */
+    exportSaveStep(): string {
+        const b = strings.busy;
+        const backup = exportFormat === 'json' || exportFormat === 'all' || exportQuick;
+        const lead = backup ? b.savingBackup : b.savingFile;
+        const fmt = (n: number): string => {
+            try { return new Intl.NumberFormat(getCurrentLanguage()).format(n); } catch { return String(n); }
+        };
+        const parts: string[] = [];
+        if (exportAllTrees) {
+            const people = TreeManager.getTrees().reduce((n, t) => n + (t.personCount || 0), 0);
+            if (people > 0) parts.push(b.filePeople(people, fmt(people)));
+        } else {
+            const data = this.exportMeasuredData();
+            const people = data ? Object.keys(data.persons ?? {}).length : 0;
+            if (people > 0) parts.push(b.filePeople(people, fmt(people)));
+            const photos = data && exportFormat !== 'csv' && this.readExportContentOptions().photos !== false
+                ? Object.values(data.persons ?? {}).filter(p => p.photo).length : 0;
+            if (photos > 0) parts.push(b.filePhotos(photos, fmt(photos)));
+        }
+        return parts.length ? `${lead} ${parts.join(', ')}` : lead;
+    },
+
+    /** The export's file made while the dialog stays (see confirmExport). */
+    async runExportSave(password: string | null): Promise<void> {
+        const callback = this.exportPasswordCallback;
+        if (!callback) return;
+        const btn = document.getElementById('export-submit-btn') as HTMLElement | null;
+        const backup = exportFormat === 'json' || exportFormat === 'all' || exportQuick;
+        const close = (): void => {
+            document.getElementById('export-password-modal')?.classList.remove('active');
+            this.clearDialogStack();
+            if (this.exportPasswordCallback === callback) this.exportPasswordCallback = null;
+        };
+        const work = async (): Promise<string | null> => {
+            const release = holdLeave('export');
+            try {
+                const file = await callback(password);
+                return typeof file === 'string' ? file : null;
+            } finally {
+                release();
+            }
+        };
+        const saved = (file: string | null): void => {
+            close();
+            if (file) this.showToast(backup ? strings.busy.backupSaved(file) : strings.busy.fileSaved(file), 4000);
+        };
+        if (!btn || isBusy(btn)) {
+            if (btn && isBusy(btn)) return;
+            saved(await work());
+            return;
+        }
+        const line = busyStep(btn, this.exportSaveStep());
+        await runBusy(btn, async ctl => {
+            try {
+                saved(await work());
+            } catch (err) {
+                console.error('Export failed:', err);
+                const full = err instanceof DOMException && err.name === 'QuotaExceededError';
+                ctl.end({
+                    ok: false, kind: 'error',
+                    text: full ? strings.busy.noSpace : backup ? strings.busy.backupFailed : strings.busy.fileSaveFailed,
+                    retry: () => { void this.runExportSave(password); },
+                });
+            } finally {
+                line.clear();
+            }
+        }, { label: strings.busy.saving, kind: 'local' });
     },
 
     /**

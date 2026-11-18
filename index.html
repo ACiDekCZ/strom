@@ -18841,6 +18841,12 @@
         /* Above a dialog's footer: the footer's own sides (set from its padding), a gap to the footer. */
         .busy-msg.busy-msg--foot { margin: 8px 0 10px; padding: 0 var(--foot-pad-r, 24px) 0 var(--foot-pad-l, 24px); }
         .busy-msg .hint { flex-basis: 100%; color: var(--text-light); }
+        /* A menu dialog's row (2g, 9a): its working words on a line under its description, its end right under it. */
+        .menu-option .option-busy {
+            display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; line-height: 1.35;
+            color: var(--text-light); overflow-wrap: anywhere; margin-top: 2px;
+        }
+        .menu-option + .busy-msg { margin: 0 12px 8px; }
         .busy-msg button.link {
             background: none; border: 0; padding: 0; margin: 0; font: inherit; font-weight: 600;
             color: var(--primary, currentColor); text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
@@ -33404,9 +33410,9 @@
             <div class="buttons">
                 <button type="button" class="link-button storage-status-encrypt" id="storage-status-encrypt" hidden onclick="window.Strom.UI.closeStorageStatusDialog(); if (this.dataset.target === 'all') window.Strom.UI.saveAllTreesCopyEncrypted(); else window.Strom.UI.saveTreeCopyEncrypted()" data-i18n="fileCopy.encryptLink"></button>
                 <button class="secondary" id="storage-status-install" hidden onclick="window.Strom.UI.installApp()" data-i18n="fileCopy.install"></button>
-                <button class="secondary" id="storage-status-save-all" hidden onclick="window.Strom.UI.closeStorageStatusDialog(); window.Strom.UI.saveAllTreesCopy()" data-i18n="fileCopy.saveAll"></button>
+                <button class="secondary" id="storage-status-save-all" hidden onclick="window.Strom.UI.saveAllTreesCopy()" data-i18n="fileCopy.saveAll"></button>
                 <button class="secondary" data-dismiss onclick="window.Strom.UI.closeStorageStatusDialog()" data-i18n="buttons.close"></button>
-                <button class="primary" id="storage-status-save" onclick="window.Strom.UI.closeStorageStatusDialog(); window.Strom.UI.saveTreeCopy()" data-i18n="fileCopy.save"></button>
+                <button class="primary" id="storage-status-save" onclick="window.Strom.UI.saveTreeCopy()" data-i18n="fileCopy.save"></button>
             </div>
         </div>
     </div>
@@ -33749,19 +33755,19 @@
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeImportDialog()">&times;</button>
             </div>
             <div class="menu-options">
-                <button class="menu-option" onclick="document.getElementById('file-input').click(); window.Strom.UI.closeImportDialog()">
+                <button class="menu-option" onclick="window.Strom.UI.pickImportFile('file-input')">
                     <span class="option-text">
                         <span class="option-title" data-i18n="menu.importJson"></span>
                         <span class="option-desc" data-i18n="menu.importJsonDesc"></span>
                     </span>
                 </button>
-                <button class="menu-option fsa-only" onclick="window.Strom.UI.closeImportDialog(); window.Strom.UI.openFromFile()">
+                <button class="menu-option fsa-only" onclick="window.Strom.UI.openFromFile()">
                     <span class="option-text">
                         <span class="option-title" data-i18n="fileAccess.openFromFile"></span>
                         <span class="option-desc" data-i18n="fileAccess.openFromFileDesc"></span>
                     </span>
                 </button>
-                <button class="menu-option" onclick="window.Strom.UI.startGedcomImportPlain(); window.Strom.UI.closeImportDialog()">
+                <button class="menu-option" onclick="window.Strom.UI.startGedcomImportPlain()">
                     <span class="option-text">
                         <span class="option-title" data-i18n="menu.importGedcom"></span>
                         <span class="option-desc" data-i18n="menu.importGedcomDesc"></span>
@@ -33848,7 +33854,7 @@
             <div id="gedcom-media-row" class="gedcom-media-row" style="display:none;">
                 <span id="gedcom-media-text"></span>
                 <button type="button" id="gedcom-media-download" onclick="window.Strom.UI.downloadGedcomMedia()" data-i18n="gedcom.downloadMedia" style="display:none;"></button>
-                <button type="button" class="secondary" onclick="document.getElementById('gedcom-media-input').click()" data-i18n="gedcom.attachMedia"></button>
+                <button type="button" class="secondary" onclick="window.Strom.UI.pickGedcomMedia()" data-i18n="gedcom.attachMedia"></button>
                 <input type="file" id="gedcom-media-input" multiple accept="image/*,.pdf" style="display:none;"
                     onchange="window.Strom.UI.attachGedcomMedia(this.files)">
             </div>

@@ -52,6 +52,7 @@ import { displayYear } from '../dates.js';
 import { openPersonPopover } from './person-popover.js';
 import { readRecent } from './tree-overview.js';
 import { uiModule } from './module.js';
+import { activatedElement } from './busy.js';
 import type { HistoryPayload, PersonHistoryEnv } from '../history.js';
 
 type Kind = 'tree' | 'rods' | 'ancestors' | 'descendants' | 'persons';
@@ -1439,7 +1440,8 @@ export const bookUiMethods = uiModule({
     savePagesResult(): void {
         const file = st?.file;
         if (!file) return;
-        savePagesFile(file).then((saved) => {
+        // The button carries the writing after the system's "Save as" (§9).
+        savePagesFile(file, activatedElement()).then((saved) => {
             if (saved) this.showToast(strings.familyPages.saved(file.name));
         }, () => {
             this.showAlert(strings.familyPages.saveFailed, 'warning');

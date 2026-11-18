@@ -285,6 +285,16 @@ function wrap(el: HTMLElement, busyLabel: string, done?: string): () => void {
     };
 }
 
+/** A menu dialog's row (`.menu-option` with its title and description): its text part. */
+function optionText(el: HTMLElement): HTMLElement | null {
+    return el.matches('.menu-option') ? el.querySelector<HTMLElement>(':scope > .option-text') : null;
+}
+
+/** Where the working words of `el` stand now (its `.bl` part or its row's line), for a step or new words. */
+function workingWords(el: HTMLElement): HTMLElement | null {
+    return el.querySelector<HTMLElement>(':scope > .bl > .b-busy') ?? el.querySelector<HTMLElement>(':scope > .option-text > .option-busy');
+}
+
 /** Draw the working look on `el`; gives back how to undo it and how to show ✓. */
 function draw(el: HTMLElement, label: string, done: string | undefined): { undraw: () => void; drawDone: (text: string) => void } {
     const own = el.querySelector<HTMLElement>(':scope > .bl');
@@ -310,6 +320,25 @@ function draw(el: HTMLElement, label: string, done: string | undefined): { undra
                 ok.className = 'ok';
                 ok.textContent = '✓';
                 slot.replaceChildren(ok);
+                el.dataset.busy = 'done';
+            },
+        };
+    }
+    const option = optionText(el);
+    if (option) {
+        // A row of a menu dialog (its title and description are the button): the words go on a line of their own
+        // under them (2g, 9a), the row's text stays.
+        const line = document.createElement('span');
+        line.className = 'option-busy';
+        line.append(spinEl(12), document.createTextNode(label));
+        option.appendChild(line);
+        return {
+            undraw: () => { line.remove(); delete el.dataset.busy; },
+            drawDone: (text) => {
+                const ok = document.createElement('span');
+                ok.className = 'ok';
+                ok.textContent = '✓';
+                line.replaceChildren(ok, document.createTextNode(text));
                 el.dataset.busy = 'done';
             },
         };
@@ -417,6 +446,8 @@ function placeMessage(el: HTMLElement, msg: HTMLElement, opts: BusyOpts): void {
     if (opts.msgIn) { opts.msgIn.appendChild(msg); return; }
     const host = el.closest('.busy-host');
     if (host) { host.appendChild(msg); return; }
+    // A menu dialog's row: right under it (the row is a button, the sentence and its action cannot be in it).
+    if (el.matches('.menu-option')) { el.after(msg); return; }
     const parent = el.parentElement;
     // A dialog's footer: the sentence above it (the footer stays the dialog's last line, §10.1 a).
     if (parent?.matches('.modal .buttons, .modal-footer, .mdlg-foot, .book-dlg-foot, .fp-foot')) {
@@ -529,6 +560,78 @@ export function clearBusyMessage(el: HTMLElement): void {
     messages.delete(el);
     endToasts.get(el)?.close();
     endToasts.delete(el);
+}
+
+/**
+ * A wait whose element is gone already (its dialog closed on the choice, §1): a progress toast with `label` once it
+ * lasts past 120 ms, gone at the end (the result says its own toast). Errors go through.
+ */
+export async function busyToast<T>(label: string, work: () => Promise<T>): Promise<T> {
+    let toast: ProgressToastHandle | null = null;
+    const shown = setTimeout(() => { toast = showProgressToast({ title: label }); }, BUSY_SHOW_MS);
+    try {
+        return await work();
+    } finally {
+        clearTimeout(shown);
+        (toast as ProgressToastHandle | null)?.close();
+    }
+}
+
+/**
+ * A short wait of the app itself (IDB, a file made, §1) as `el`'s working state when `el` is on the screen; a
+ * failure is `failed(err)`'s sentence at it. Should `el` go meanwhile (its dialog closed), the state goes on as a
+ * progress toast. Without `el` the work runs plainly and the failure is a toast.
+ */
+export async function busyLocal<T>(el: HTMLElement | null, label: string, work: () => Promise<T>,
+    failed: (err: unknown) => Extract<BusyEnd, { ok: false }>, opts: BusyOpts = {}): Promise<T | undefined> {
+    if (!seen(el)) {
+        try {
+            return await work();
+        } catch (err) {
+            console.error(err);
+            const end = failed(err);
+            showToast(end.text, 6000, { closable: true, ...(end.retry ? { action: { label: strings.busy.retry, run: end.retry } } : {}) });
+            return undefined;
+        }
+    }
+    return runBusy(el, async ctl => {
+        try {
+            return await work();
+        } catch (err) {
+            console.error(err);
+            ctl.end(failed(err));
+            return undefined;
+        }
+    }, { kind: 'local', toastWhenGone: true, ...opts, label });
+}
+
+/**
+ * §2.3, 9a–9c: the step of a working element as a quiet line where its end's sentence will stand (under its row,
+ * above a dialog's footer), seen after 120 ms like the state (a quick action does not blink). `role=status`.
+ * The element's next end (its sentence) takes its place; `clear` takes it away.
+ */
+export function busyStep(el: HTMLElement, text: string, opts: BusyOpts = {}): { set(text: string): void; clear(): void } {
+    let words = text;
+    let msg: HTMLElement | null = null;
+    let gone = false;
+    const timer = setTimeout(() => {
+        if (gone) return;
+        msg = showBusyMessage(el, { ok: false, kind: 'error', neutral: true, text: words }, opts);
+        msg.classList.add('busy-step');
+    }, BUSY_SHOW_MS);
+    return {
+        set(next) {
+            words = next;
+            const span = msg?.querySelector('.busy-msg__text');
+            if (span) span.textContent = next;
+        },
+        clear() {
+            gone = true;
+            clearTimeout(timer);
+            if (msg && messages.get(el) === msg) clearBusyMessage(el);
+            else msg?.remove();
+        },
+    };
 }
 
 /** The end of an element gone as a toast: an error with ✕ and its action, never closing by itself (§10.1 b). */
@@ -645,7 +748,8 @@ function show(first: HTMLElement, st: BusyState): void {
     st.shownAt = Date.now();
     const row = st.opts.rowOf instanceof HTMLElement ? st.opts.rowOf : null;
     if (seen(el)) {
-        const d = draw(el, st.label, st.opts.done);
+        // A menu dialog's row shows the last step said before it was drawn (its line is the step's place).
+        const d = draw(el, optionText(el) && st.lastStep && !st.opts.stepsInToast ? st.lastStep.step : st.label, st.opts.done);
         st.drawnOn = el;
         st.undraw = d.undraw;
         st.drawDone = d.drawDone;
@@ -766,7 +870,7 @@ export async function runBusy<T>(el: HTMLElement, fn: (ctl: BusyCtl) => Promise<
             st.lastStep = { step: text, ...(k !== undefined ? { k } : {}), ...(n !== undefined ? { n } : {}), ...(size !== undefined ? { size } : {}) };
             if (st.toast) st.toast.update({ step: text, k, n, size });
             else if (st.drawnOn === st.el && !opts.stepsInToast) {
-                const busy = st.el.querySelector<HTMLElement>(':scope > .bl > .b-busy');
+                const busy = workingWords(st.el);
                 if (busy) busy.replaceChildren(busy.querySelector('.busy-spin') ?? spinEl(), document.createTextNode(text));
             }
         },
@@ -818,7 +922,7 @@ export function setBusyLabel(el: HTMLElement, label: string): void {
     const st = states.get(el);
     if (!st) return;
     st.label = label;
-    const busy = el.querySelector<HTMLElement>(':scope > .bl > .b-busy');
+    const busy = workingWords(el);
     if (busy && st.drawnOn === el) busy.replaceChildren(busy.querySelector('.busy-spin') ?? spinEl(), document.createTextNode(label));
     st.toast?.update({ title: label });
 }

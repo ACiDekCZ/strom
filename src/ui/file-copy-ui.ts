@@ -24,6 +24,9 @@ import { appBrowserName, currentAppBrowser, needsTransfer } from '../research-tr
 import { isPromoAvailable } from '../research-promo.js';
 import { onComputer } from './research-ui.js';
 import { uiModule } from './module.js';
+import { activatedElement, runBusy } from './busy.js';
+import { holdLeave } from './busy-leave.js';
+import { whilePicking } from './file-pick.js';
 import { iconSvg } from '../icons.js';
 
 /** Last known storage state (refreshed on every check; best-effort until known). */
@@ -352,12 +355,48 @@ export const fileCopyMethods = uiModule({
         const treeId = DataManager.getCurrentTreeId();
         if (!treeId || DataManager.isViewMode()) return;
         if (SettingsManager.isEncryptionEnabled()) {
+            this.closeStorageStatusDialog();
             this.saveTreeCopyEncrypted();
             return;
         }
-        void DataManager.exportTreeJSON(treeId, null, 'full', ALL_CONTENT).then(file => {
-            if (file) this.announceQuickSave(file);
-        });
+        this.runQuickSave(activatedElement(), () => DataManager.exportTreeJSON(treeId, null, 'full', ALL_CONTENT),
+            () => this.saveTreeCopy());
+    },
+
+    /**
+     * A one-click copy made as its button's working state ("Saving…", §1)
+     * while the dialog it is in stays; it goes once the file is handed to the
+     * browser and the toast names it. A failure stays at the button with
+     * "Try again". The shortcut (no button) says only the toast.
+     */
+    runQuickSave(origin: HTMLElement | null, make: () => Promise<string | null>, again: () => void): void {
+        const save = async (): Promise<void> => {
+            const release = holdLeave('export');
+            try {
+                const file = await make();
+                if (!file) return;
+                if (origin?.closest('#storage-status-modal')) this.closeStorageStatusDialog();
+                this.announceQuickSave(file);
+            } finally {
+                release();
+            }
+        };
+        if (!origin || !origin.isConnected) {
+            void save().catch(err => {
+                console.error('Save failed:', err);
+                this.showToast(strings.busy.backupFailed, 6000);
+            });
+            return;
+        }
+        void runBusy(origin, async ctl => {
+            try {
+                await save();
+            } catch (err) {
+                console.error('Save failed:', err);
+                const full = err instanceof DOMException && err.name === 'QuotaExceededError';
+                ctl.end({ ok: false, kind: 'error', text: full ? strings.busy.noSpace : strings.busy.backupFailed, retry: again });
+            }
+        }, { label: strings.busy.saving, kind: 'local' });
     },
 
     /** The narrowed dialog for the open tree, "Encrypt with a password" on. */
@@ -371,10 +410,12 @@ export const fileCopyMethods = uiModule({
     /** Every tree into one complete JSON file, one click (see saveTreeCopy). */
     saveAllTreesCopy(): void {
         if (SettingsManager.isEncryptionEnabled()) {
+            this.closeStorageStatusDialog();
             this.saveAllTreesCopyEncrypted();
             return;
         }
-        void this.downloadAllTreesJson(null, false, 'full', ALL_CONTENT).then(file => this.announceQuickSave(file));
+        this.runQuickSave(activatedElement(), () => this.downloadAllTreesJson(null, false, 'full', ALL_CONTENT),
+            () => this.saveAllTreesCopy());
     },
 
     saveAllTreesCopyEncrypted(): void {
@@ -388,7 +429,8 @@ export const fileCopyMethods = uiModule({
     },
 
     async installApp(): Promise<void> {
-        if (await promptInstall()) this.showToast(strings.fileCopy.installing);
+        // The system's install question is its own state (A177): nothing shown, only no second question.
+        if (await whilePicking(activatedElement(), () => promptInstall())) this.showToast(strings.fileCopy.installing);
         void this.refreshStorageStatusDialog();
     },
 

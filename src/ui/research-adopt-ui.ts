@@ -35,6 +35,7 @@ import { onComputer, fetchWithTimeout, fetchStatus, readResearchTreeFile, postSy
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { normalizeModal } from './modal-skeleton.js';
 import { canPromptInstall, promptInstall } from '../pwa.js';
+import { whilePicking } from './file-pick.js';
 import { setPendingAdopt, clearPendingAdopt } from './pending-adopt.js';
 import { researchSendModeCardsHtml, researchSendPrinciplesHtml, researchSendModeChecked, researchTrialTagHtml } from './research-tree-settings-ui.js';
 import { researchSendMode } from './research-sync-ui.js';
@@ -822,7 +823,8 @@ export const researchAdoptMethods = uiModule({
                 // (a browser offers once: a click with no offer left takes the row away).
                 const row = el.closest('.install-ready-app');
                 if (!canPromptInstall()) { row?.remove(); return; }
-                void promptInstall().then(ok => {
+                // The system's install question is its own state (A177): nothing shown, only no second question.
+                void whilePicking(el, () => promptInstall()).then(ok => {
                     if (!ok) return;
                     row?.remove();
                     this.showToast(strings.research.transferInstalling, 6000);

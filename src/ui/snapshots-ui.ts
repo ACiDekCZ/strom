@@ -12,6 +12,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { TreeId } from '../types.js';
 import { listSnapshots, totalSnapshotBytes, getSnapshotJson, deleteSnapshotsForTree, SnapshotMeta, SnapshotTrim, MAX_SNAPSHOTS_PER_TREE, snapshotCosts, snapshotBudgetBytes, treeImageIds } from '../snapshots.js';
 import { uiModule } from './module.js';
+import { activatedElement, busyLocal } from './busy.js';
 import { safeFileName } from '../filenames.js';
 import { formatRelativeDateTime, formatFileSize } from '../format.js';
 import { emptyStateHtml } from './empty-state.js';
@@ -277,6 +278,8 @@ export const snapshotsUiMethods = uiModule({
      * because "delete" in a list of your family's history reads alarming.
      */
     async deleteSnapshotFromUI(snapshotId: string): Promise<void> {
+        // The row's button carries the deleting (§1); the list is drawn anew after it.
+        const origin = activatedElement();
         // Which backup: they are told apart by when they were taken.
         const snaps = await listSnapshots(this.snapshotsTreeId!);
         const snap = snaps.find(s => s.id === snapshotId);
@@ -284,36 +287,36 @@ export const snapshotsUiMethods = uiModule({
         const d = strings.danger;
         if (!await this.showConfirm(d.deleteBackupMessage(snap.personCount), d.deleteBackupTitle(snapshotWhen(snap.createdAt)),
             { confirmLabel: d.deleteBackup, variant: 'danger' })) return;
-        try {
+        const done = await busyLocal(origin, strings.busy.deleting, async () => {
             const { deleteSnapshot } = await import('../snapshots.js');
             await deleteSnapshot(snapshotId);
-            this.showToast(strings.snapshots.deleted);
-            await this.renderSnapshotsList();
-        } catch (err) {
-            console.error('Deleting backup failed', err);
-            this.showToast(snapshotErrorMessage(err), 5000);
-        }
+            return true;
+        }, err => ({ ok: false, kind: 'error', text: snapshotErrorMessage(err),
+            retry: () => { void this.deleteSnapshotFromUI(snapshotId); } }));
+        if (!done) return;
+        this.showToast(strings.snapshots.deleted);
+        await this.renderSnapshotsList();
     },
 
     async createManualSnapshot(): Promise<void> {
         const treeId = this.snapshotsTreeId;
         if (!treeId) return;
-        try {
+        const done = await busyLocal(activatedElement(), strings.busy.saving, async () => {
             if (treeId !== DataManager.getCurrentTreeId()) {
                 await DataManager.switchTree(treeId);
             }
             await DataManager.snapshotNow('manual');
-            this.showToast(strings.snapshots.created);
-            await this.renderSnapshotsList();
-        } catch (err) {
-            console.error('Creating backup failed', err);
-            this.showToast(snapshotErrorMessage(err), 5000);
-        }
+            return true;
+        }, err => ({ ok: false, kind: 'error', text: snapshotErrorMessage(err), retry: () => { void this.createManualSnapshot(); } }));
+        if (!done) return;
+        this.showToast(strings.snapshots.created);
+        await this.renderSnapshotsList();
     },
 
     async restoreSnapshotFromUI(snapshotId: string): Promise<void> {
         const treeId = this.snapshotsTreeId;
         if (!treeId) return;
+        const origin = activatedElement();
         // Restoring overwrites the whole tree — say WHICH backup, the same way
         // deleting does: they are told apart by when they were taken.
         const snaps = await listSnapshots(treeId);
@@ -323,35 +326,29 @@ export const snapshotsUiMethods = uiModule({
             snap ? strings.danger.restoreBackupTitle(snapshotWhen(snap.createdAt)) : strings.snapshots.restore,
             { confirmLabel: strings.danger.restoreBackup });
         if (!confirmed) return;
-        try {
+        // The row's button carries the restoring (§1): the tree read back, then drawn.
+        const restored = await busyLocal(origin, strings.busy.restoring, async () => {
             if (treeId !== DataManager.getCurrentTreeId()) {
                 await DataManager.switchTree(treeId);
             }
-            const restored = await DataManager.restoreSnapshot(snapshotId);
-            if (restored) {
-                this.closeSnapshotsDialog();
-                TreeRenderer.render();
-                this.showToast(restored.missingImages
-                    ? strings.snapshots.restoredMissingImages(restored.missingImages)
-                    : strings.snapshots.restored, restored.missingImages ? 8000 : undefined);
-            } else {
-                this.showToast(strings.storageSafety.snapshotFailed, 5000);
-            }
-        } catch (err) {
-            console.error('Restoring backup failed', err);
-            this.showToast(snapshotErrorMessage(err), 5000);
-        }
+            const got = await DataManager.restoreSnapshot(snapshotId);
+            if (!got) throw new Error('snapshot-failed');
+            return got;
+        }, err => ({ ok: false, kind: 'error',
+            text: err instanceof Error && err.message === 'snapshot-failed' ? strings.storageSafety.snapshotFailed : snapshotErrorMessage(err),
+            retry: () => { void this.restoreSnapshotFromUI(snapshotId); } }));
+        if (!restored) return;
+        this.closeSnapshotsDialog();
+        TreeRenderer.render();
+        this.showToast(restored.missingImages
+            ? strings.snapshots.restoredMissingImages(restored.missingImages)
+            : strings.snapshots.restored, restored.missingImages ? 8000 : undefined);
     },
 
     async downloadSnapshot(snapshotId: string): Promise<void> {
-        let json: string | null;
-        try {
-            json = await getSnapshotJson(snapshotId);
-        } catch (err) {
-            console.error('Reading backup failed', err);
-            this.showToast(snapshotErrorMessage(err), 5000);
-            return;
-        }
+        // The row's button carries the reading (§1); the browser's download shows the file.
+        const json = await busyLocal(activatedElement(), strings.busy.saving, () => getSnapshotJson(snapshotId),
+            err => ({ ok: false, kind: 'error', text: snapshotErrorMessage(err), retry: () => { void this.downloadSnapshot(snapshotId); } }));
         if (!json) return;
         // Name it after the tree whose backups the dialog shows, not the
         // active tree (the dialog can be opened for any tree).
