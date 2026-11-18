@@ -22892,7 +22892,7 @@ const stringsDE: StringsType = {
         whereApp: 'Die Dateien liegen nur in diesem Browser. Sicherung: Alles exportieren.',
         whereEncrypted: 'Der Stammbaum ist verschlüsselt, das Strom-Archiv auf der Festplatte nicht.',
         whereEncryptedResearch: 'Der Stammbaum ist verschlüsselt, die Forschung auf der Festplatte nicht.',
-        groupAdded: 'Nach Datum des Hinzufügens',
+        groupAdded: 'Nach Hinzufügen',
         groupPerson: 'Nach Person',
         addedWith: (names: string[]) => `hinzugefügt bei ${names.join(', ')}`,
         inTreeTag: 'Im Stammbaum',

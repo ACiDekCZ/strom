@@ -684,10 +684,13 @@ export const materialsWindowMethods = uiModule({
                 ${ctx.caps.assign ? toggle('hidden', m.showHidden, f.showHidden) : ''}
                 ${count ? `<button type="button" class="link-button mw-clear" data-mw="clear">${esc(m.clearFilters)}</button>` : ''}
             </div>
-            ${this.mwReviewChips(toggle)}
+            <div class="mw-tools-row2">
+                ${this.mwReviewChips(toggle)}
+                <span class="mw-gap"></span>
+                ${this.mwSortChipHtml()}
+            </div>
             <button type="button" class="mw-chip sel-opt mw-filters-btn${count ? ' is-active' : ''}" data-mw="sheet" aria-haspopup="dialog">${esc(count ? m.filters(count) : m.filtersTitle)}</button>
             <span class="mw-gap"></span>
-            ${this.mwSortChipHtml()}
             ${seg('mw-seg-group', m.groupBy, w.model === 'app' ? [
                 { act: 'group-added', label: m.groupAdded, on: w.group === 'added' },
                 { act: 'group-person', label: m.groupPerson, on: w.group === 'person' },

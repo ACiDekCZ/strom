@@ -29655,7 +29655,9 @@
         .materials-window .mw-lh-btn:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
         .mw-lh-arrow { font-size: 9px; }
         /* Review filters (spec 102 §8a): a second row of chips on the computer. */
-        .mw-chips-review { flex-basis: 100%; order: 5; }
+        /* The second row: the review filters, and Sort ▾ at its end under the grouping (one line each in every language at 1440). */
+        .mw-tools-row2 { flex-basis: 100%; order: 5; display: flex; align-items: center; gap: 6px; min-width: 0; }
+        .mw-tools-row2 .mw-sort-btn { flex-shrink: 0; }
         .mw-chips-sep { width: 1px; height: 18px; background: var(--divider); margin: 0 4px; }
         .mw-pop-review .mw-chips-sep { display: none; }
         /* A large change's progress (§8h). */
@@ -29757,6 +29759,7 @@
             .mw-li-persons, .mw-lh-persons { grid-column: 5; }
             .mw-li-source, .mw-lh-source { grid-column: 6; }
             .mw-chips-review > :not(.is-active), .mw-chips-review .mw-chips-sep { display: none; }
+            .mw-tools-row2:not(:has(.mw-chips-review > .is-active)) { display: none; }
         }
         @media (max-width: 1024px) {
             .modal.modal--lg.materials-window { width: 100vw; max-width: 100vw; min-width: 0; height: 100vh; height: 100dvh; max-height: none; border-radius: 0; }
@@ -29813,7 +29816,7 @@
             .mw-titles { flex: 0 0 auto; }
             .mw-summary { display: none; }
             .mw-toolbar { order: 0; flex: 1; flex-basis: auto; flex-wrap: nowrap; }
-            .mw-chips { display: none; }
+            .mw-chips, .mw-tools-row2 { display: none; }
             .mw-lhead { display: none; }
             #materials-modal .mw-search { flex-basis: auto; min-width: 100px; }
             .mw-tools { flex-wrap: nowrap; }
