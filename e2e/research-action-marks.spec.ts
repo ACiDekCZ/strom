@@ -85,11 +85,12 @@ test.describe('marks of the research actions in Places', () => {
         expect(await links(page)).toEqual([RUN]);
     });
 
-    test('a step the bridge leaves to the terminal: the toast\'s Run now with AI and the terminal mark', async ({ page }) => {
+    test('a step the bridge leaves to the terminal: Run now with AI and the terminal mark in the sentence under the place', async ({ page }) => {
         const b = await research(page, true);
         await openPlaces(page, b);
         await row(page, 'horni lhota').locator('.place-look').click();
-        const act = page.locator('.toast .toast-action');
+        // The refusal ends the element's working state: one sentence under the place's row, its action there (no toast).
+        const act = page.locator('.busy-msg .busy-msg__alt');
         await expect(act).toBeVisible();
         await expect(act.locator('.research-ai-badge')).toHaveText('AI');
         await expect(act.locator('.research-open-mark')).toHaveCount(1);
