@@ -370,6 +370,9 @@ test.describe('the shortcut H (and ⌘1 / Ctrl+1)', () => {
         await expect(page.locator('#settings-modal')).toHaveClass(/active/);
         await page.keyboard.press('h');
         await page.waitForTimeout(150);
+        expect(await focusOf(page)).toBe(OTHER);
+        await expect(toast(page)).toHaveCount(0);
+        await expect(page.locator('#settings-modal')).toHaveClass(/active/);
         await page.evaluate(() => window.Strom.UI.closeSettingsDialog());
 
         // The person menu.
