@@ -108,11 +108,90 @@ test.describe('Kinds of history: Settings', () => {
         // The status agrees: still off.
         await poll(page);
         await expect(kindSwitch(page, 'economy')).toHaveAttribute('data-state', 'off');
-        // A refusal takes it back with a toast.
+        // A refusal takes it back with its sentence at the switch (6.1), no toast.
         history.kindsReply = { status: 503, body: { error: 'busy', code: 'research.busy', text: 'busy' } };
         await switchOff(page, 'war');
-        await expect(page.locator('.toast').last()).toBeVisible();
         await expect(kindSwitch(page, 'war')).toHaveAttribute('data-state', 'on');
+        await expect(page.locator('#history-kinds-search .pend-msg')).toBeVisible();
+        await expect(page.locator('.toast', { hasText: 'busy' })).toHaveCount(0);
+    });
+
+    test('6a: a kind switched off says Saving… dashed until the research answers; refused, it is back with Unchanged and Try again', async ({ page }) => {
+        const { history } = await setup(page);
+        await openSettings(page);
+        await openKinds(page);
+        // The preview and the write each wait for a gate (the research answers when the test says).
+        let openPreview: () => void = () => {};
+        let preview = new Promise<void>(r => { openPreview = r; });
+        await page.route(/\/history\/align/, async (route) => { await preview; await route.fallback(); });
+        let openWrite: () => void = () => {};
+        let write = new Promise<void>(r => { openWrite = r; });
+        await page.route(/\/history\/kinds/, async (route) => { await write; await route.fallback(); });
+        const sw = kindSwitch(page, 'economy');
+        const row = page.locator('.history-kind-search-row', { has: sw });
+        await sw.click();
+        // Before the dialog: the switch waits for the preview, dashed with its spinner.
+        await expect(sw).toHaveAttribute('data-pend', '1');
+        await expect(row.locator('.busy-st .busy-spin')).toBeVisible();
+        await expect(confirmDialog(page)).toHaveCount(0);
+        openPreview();
+        await expect(confirmDialog(page)).toBeVisible();
+        await expect(sw).not.toHaveAttribute('data-pend', '1');
+        await page.locator('#confirm-ok-btn').click();
+        // Saving: off at once, dashed, locked, its words after 120 ms; another click goes nowhere.
+        await expect(sw).toHaveAttribute('data-state', 'off');
+        await expect(sw).toHaveAttribute('data-pend', '1');
+        await expect(sw).toHaveAttribute('aria-busy', 'true');
+        await expect(sw).toHaveAttribute('aria-disabled', 'true');
+        await expect(row.locator('.busy-st')).toHaveText('Saving…');
+        await sw.click({ force: true });
+        await expect(confirmDialog(page)).toHaveCount(0);
+        // Confirmed: at rest, off, no words.
+        openWrite();
+        await expect(sw).not.toHaveAttribute('data-pend', '1');
+        await expect(sw).toHaveAttribute('data-state', 'off');
+        await expect(row.locator('.busy-st')).toHaveCount(0);
+        expect(history.kindsWrites).toHaveLength(1);
+        // Refused: back on, the research's reason at the switch with Try again, no toast.
+        write = new Promise<void>(r => { openWrite = r; });
+        preview = Promise.resolve();
+        history.kindsReply = { status: 409, body: { error: 'refused', code: 'history.kinds.refused', text: 'a history read is running' } };
+        const war = kindSwitch(page, 'war');
+        const warRow = page.locator('.history-kind-search-row', { has: war });
+        await switchOff(page, 'war');
+        await expect(warRow.locator('.busy-st')).toHaveText('Saving…');
+        openWrite();
+        await expect(war).toHaveAttribute('data-state', 'on');
+        const msg = page.locator('#history-kinds-search .pend-msg');
+        await expect(msg).toHaveText(/Unchanged: a history read is running/);
+        await expect(msg).toHaveAttribute('role', 'alert');
+        await expect(page.locator('.toast', { hasText: 'history read' })).toHaveCount(0);
+        // Try again writes again (without asking again), and goes through now.
+        delete history.kindsReply;
+        await msg.getByRole('button', { name: 'Try again' }).click();
+        await expect(confirmDialog(page)).toHaveCount(0);
+        await expect(war).toHaveAttribute('data-state', 'off');
+        await expect(page.locator('#history-kinds-search .pend-msg')).toHaveCount(0);
+        await expect.poll(() => history.kindsWrites!.length).toBe(3);
+    });
+
+    test('6a: a search of origin switched off is dashed until the research answers; refused, back on with its sentence', async ({ page }) => {
+        const { history } = await setup(page);
+        await openSettings(page);
+        let open: () => void = () => {};
+        const gate = new Promise<void>(r => { open = r; });
+        await page.route(/\/experiments/, async (route) => { await gate; await route.fallback(); });
+        history.offReply = { status: 409, body: { error: 'refused', code: 'experiments.refused', text: 'a history read is running' } };
+        const places = page.locator('#history-search-places');
+        await places.click();
+        await expect(places).toHaveAttribute('data-state', 'off');
+        await expect(places).toHaveAttribute('data-pend', '1');
+        await expect(page.locator('#history-origin-note .busy-st')).toHaveText('Saving…');
+        open();
+        await expect(places).toHaveAttribute('data-state', 'on');
+        await expect(places).not.toHaveAttribute('data-pend', '1');
+        await expect(page.locator('#history-origin-note .pend-msg')).toContainText('Unchanged: a history read is running');
+        await expect(page.locator('.toast', { hasText: 'history read' })).toHaveCount(0);
     });
 
     test('§2: a kind switched on waits with the estimate, continues in the terminal and comes back by the status', async ({ page }) => {

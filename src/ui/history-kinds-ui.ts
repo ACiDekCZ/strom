@@ -30,6 +30,9 @@ import { historyKindSvg } from '../history-symbols.js';
 import { researchActionLabel } from './research-open-mark.js';
 import { activeResearchId, bridgeBase } from './history-ui.js';
 import { uiModule } from './module.js';
+import {
+    startPend, endPend, dropPend, isPend, anyPend, pendAttrs, pendStatusHtml, pendRefusalHtml, clearPendRefusals, type PendRefusal,
+} from './switch-pend.js';
 
 /** What changes of the kinds searched wait on this page (never in storage). */
 export interface HistoryKindsDraft {
@@ -59,6 +62,8 @@ interface KindsPage extends HistoryKindsDraft {
     /** Searches of origin switched off from here (their sentence), and those waiting for the terminal. */
     originOff: Set<Origin>;
     originWait: Set<Origin>;
+    /** Searches of origin being switched off through the bridge now (shown off, dashed, until the answer, 6.1). */
+    originWriting?: Set<Origin>;
 }
 
 const pages = new Map<string, KindsPage>();
@@ -126,10 +131,30 @@ function writeOpen(open: boolean): void {
     } catch { /* no storage: it stays as it is on this page */ }
 }
 
-/** A Search switch (role switch): on, off or waiting for the research's terminal (`pend`). */
-function switchHtml(attrs: string, state: 'on' | 'off' | 'pend', label: string, disabled: boolean): string {
+/**
+ * A Search switch (role switch): on, off or waiting for the research's terminal (`pend`); `key`: its write
+ * through the bridge (6.1: the new state dashed and locked until the research answers).
+ */
+function switchHtml(attrs: string, state: 'on' | 'off' | 'pend', label: string, disabled: boolean, key?: string): string {
+    const writing = !!key && isPend(key);
     return `<button type="button" role="switch" class="history-search-switch" data-state="${state}" aria-checked="${state === 'on'}"`
-        + ` aria-label="${esc(label)}"${disabled ? ' aria-disabled="true"' : ''} ${attrs}><span class="history-search-knob"></span></button>`;
+        + ` aria-label="${esc(label)}"${disabled && !writing ? ' aria-disabled="true"' : ''}${key ? pendAttrs(key) : ''} ${attrs}><span class="history-search-knob"></span></button>`;
+}
+
+/** The key of a switch's write (6.1) in a research's Search column: a kind, a search of origin, or whose choice. */
+function pendKey(rid: string, what: string): string {
+    return `hk:${rid.toLowerCase()}:${what}`;
+}
+
+/** A kind's row: its name with the write's words under it, the refusal's sentence after the row (6a). */
+function kindRowHtml(rid: string, k: HistoryKind, state: 'on' | 'off' | 'pend', locked: boolean, size: number, cls: string): string {
+    const name = kindName(k);
+    const shown = name.charAt(0).toLocaleUpperCase() + name.slice(1);
+    const key = pendKey(rid, `kind:${k}`);
+    return `<label class="history-kind-search-row${cls}" data-state="${state}"><span class="history-kind-search-mark">${historyKindSvg(k, size)}</span>`
+        + `<span class="history-kind-search-name">${esc(shown)}${pendStatusHtml(key)}</span>`
+        + switchHtml(`data-search-kind="${k}" onclick="window.Strom.UI.historyKindSearchClick('${k}')"`, state, `${strings.history.colSearch}: ${shown}`, locked, key)
+        + '</label>' + pendRefusalHtml(key);
 }
 
 export const historyKindsMethods = uiModule({
@@ -206,6 +231,7 @@ export const historyKindsMethods = uiModule({
             p.originOff.clear();
         }
         previews.clear();
+        clearPendRefusals('hk:');
     },
 
     /** Test hook: forget the page's state (a new page). */
@@ -266,10 +292,11 @@ export const historyKindsMethods = uiModule({
         const split = features.includes(EXPERIMENTS_SPLIT_FEATURE) && status.experiments?.regions !== undefined && status.experiments?.places !== undefined
             ? (up ? this.historySplitNow(rid) : { regions: !!status.experiments?.regions, places: !!status.experiments?.places })
             : null;
-        const originState = (o: Origin): 'on' | 'off' | 'pend' => (p.originWait.has(o) ? 'pend' : split?.[o] ? 'on' : 'off');
+        const originState = (o: Origin): 'on' | 'off' | 'pend' => (p.originWait.has(o) ? 'pend'
+            : p.originWriting?.has(o) ? 'off' : split?.[o] ? 'on' : 'off');
         const originSwitch = (o: Origin): string => switchHtml(
             `id="history-search-${o}" onclick="window.Strom.UI.historyOriginSearchClick('${o}')"`,
-            originState(o), `${h.colSearch}: ${o === 'regions' ? h.kindRegion : h.localPair}`, disabled);
+            originState(o), `${h.colSearch}: ${o === 'regions' ? h.kindRegion : h.localPair}`, disabled, pendKey(rid, `origin:${o}`));
         add(`<span class="history-search-cell is-region ${ADDED}">${split ? originSwitch('regions') : ''}</span>`, region);
         add(`<span class="history-search-pair ${ADDED}">${split ? `${originSwitch('places')}<span class="history-search-pair-label">${esc(h.localPair)}</span>` : ''}</span>`, local);
 
@@ -279,6 +306,9 @@ export const historyKindsMethods = uiModule({
         const originNotes: string[] = [];
         for (const o of ['regions', 'places'] as const) {
             const name = o === 'regions' ? h.switchRegions : h.switchPlaces;
+            // Its write through the bridge (6.1): the words while it waits, the refusal with Try again.
+            const said = pendStatusHtml(pendKey(rid, `origin:${o}`)) + pendRefusalHtml(pendKey(rid, `origin:${o}`));
+            if (said) originNotes.push(`<div class="history-origin-pend"><span class="history-origin-pend-name">${esc(name)}</span>${said}</div>`);
             if (p.originWait.has(o)) originNotes.push(`<p>${esc(h.originWait(name))}</p>`);
             else if (p.originOff.has(o) && split && !split[o]) {
                 originNotes.push(`<p>${esc(h.originOff(name))} <button type="button" class="link" data-hk-action="on-${o}"`
@@ -309,30 +339,29 @@ export const historyKindsMethods = uiModule({
         const h = strings.history;
         const status = this.historyKindsStatusOf(rid);
         const features = status?.features ?? [];
-        const locked = !up || p.busy || p.waiting;
+        const locked = !up || p.busy || p.waiting || !!p.asking;
         let html = `<div class="history-kinds-search ${ADDED}" id="history-kinds-search">`;
         html += `<p class="history-kinds-only">${esc(h.kindsOnlySearch)}</p>`;
         if (searched.own !== undefined) {
             const seg = (scope: 'default' | 'tree', label: string): string => {
                 const pressed = (scope === 'tree') === searched.own;
-                return `<button type="button" data-scope="${scope}" aria-pressed="${pressed}"${locked ? ' aria-disabled="true"' : ''}`
+                // Its write (6.1): the choice pressed at once, dashed until the research answers.
+                const writing = pressed && isPend(pendKey(rid, 'scope'));
+                return `<button type="button" data-scope="${scope}" aria-pressed="${pressed}"${locked && !writing ? ' aria-disabled="true"' : ''}`
+                    + `${writing ? pendAttrs(pendKey(rid, 'scope')) : ''}`
                     + ` onclick="window.Strom.UI.historyKindsScopeClick('${scope}')">${esc(label)}</button>`;
             };
             const treeId = DataManager.getCurrentTreeId();
             const tree = (treeId ? TreeManager.getTreeMetadata(treeId)?.name : '') ?? '';
             html += `<div class="history-kinds-scope"><span class="history-kinds-scope-label" id="history-kinds-scope-label">${esc(h.scopeLabel)}</span>`
-                + `<span class="history-kinds-seg" role="group" aria-labelledby="history-kinds-scope-label">${seg('default', h.scopeDefault)}${seg('tree', h.scopeTree)}</span></div>`
+                + `<span class="history-kinds-seg" role="group" aria-labelledby="history-kinds-scope-label">${seg('default', h.scopeDefault)}${seg('tree', h.scopeTree)}</span>`
+                + `${pendStatusHtml(pendKey(rid, 'scope'))}</div>${pendRefusalHtml(pendKey(rid, 'scope'))}`
                 + `<p class="history-kinds-scope-note">${esc(searched.own ? h.scopeTreeNote(tree) : h.scopeDefaultNote)}</p>`;
         }
         html += '<div class="history-kinds-list">';
         for (const k of HISTORY_KINDS) {
             const state = p.pend.has(k) ? 'pend' : searched.kinds.includes(k) ? 'on' : 'off';
-            const name = kindName(k);
-            const shown = name.charAt(0).toLocaleUpperCase() + name.slice(1);
-            html += `<label class="history-kind-search-row" data-state="${state}"><span class="history-kind-search-mark">${historyKindSvg(k, 16)}</span>`
-                + `<span class="history-kind-search-name">${esc(shown)}</span>`
-                + switchHtml(`data-search-kind="${k}" onclick="window.Strom.UI.historyKindSearchClick('${k}')"`, state, `${h.colSearch}: ${shown}`, locked)
-                + '</label>';
+            html += kindRowHtml(rid, k, state, locked, 16, '');
         }
         html += '</div>';
         html += `<div class="history-kinds-search-note" id="history-kinds-search-note" aria-live="polite">${up ? this.historyKindsNotesHtml(rid, searched, p) : ''}</div>`;
@@ -477,16 +506,11 @@ export const historyKindsMethods = uiModule({
                 + (n ? ` <span class="history-align-badge">${esc(h.alignBadge(n))}</span>` : '') + '</button>' : '')
             + '</div>';
         if (manageOpen) {
-            const locked = p.busy || p.waiting;
+            const locked = p.busy || p.waiting || !!p.asking;
             html += `<div class="hm-kinds-body" id="hm-kinds-body"><p class="hm-kinds-note">${esc(h.manageKindsNote)}</p><div class="hm-kinds-grid">`;
             for (const k of HISTORY_KINDS) {
                 const state = p.pend.has(k) ? 'pend' : on.includes(k) ? 'on' : 'off';
-                const name = kindName(k);
-                const shown = name.charAt(0).toLocaleUpperCase() + name.slice(1);
-                html += `<label class="history-kind-search-row hm-kind-row" data-state="${state}"><span class="history-kind-search-mark">${historyKindSvg(k, 15)}</span>`
-                    + `<span class="history-kind-search-name">${esc(shown)}</span>`
-                    + switchHtml(`data-search-kind="${k}" onclick="window.Strom.UI.historyKindSearchClick('${k}')"`, state, `${h.colSearch}: ${shown}`, locked)
-                    + '</label>';
+                html += kindRowHtml(rid, k, state, locked, 15, ' hm-kind-row');
             }
             html += `</div><div class="history-kinds-search-note hm-kinds-notes" aria-live="polite">${this.historyKindsNotesHtml(rid, searched, p, false)}</div></div>`;
         }
@@ -517,22 +541,40 @@ export const historyKindsMethods = uiModule({
         if (!rid || !(HISTORY_KINDS as readonly string[]).includes(kind)) return;
         const searched = this.historyKindsSearched(rid);
         const p = page(rid);
-        if (!searched || !this.researchBridgeUp(rid) || p.busy || p.waiting || p.asking) return;
+        // A switch whose write waits takes no click (6.1: locked, visibly).
+        if (!searched || !this.researchBridgeUp(rid) || p.busy || p.waiting || p.asking || anyPend(pendKey(rid, 'kind:'))) return;
         if (p.pend.has(kind)) {
             p.pend.delete(kind);
             if (!p.pend.size) delete p.inherit;
         } else if (!searched.kinds.includes(kind)) {
             p.pend.add(kind);
         } else {
+            // The confirmation's preview first (up to 4 s): the switch waits, dashed with its spinner; the dialog comes with the answer.
+            const key = pendKey(rid, `kind:${kind}`);
             p.asking = true;
+            startPend(key, { label: strings.busy.generic, waitMs: Infinity, redraw: () => this.historyKindsRedraw() });
+            this.historyKindsRedraw();
             let ok = false;
-            try { ok = await this.historyKindOffConfirm(rid, kind, searched.kinds); } finally { p.asking = false; }
+            try {
+                ok = await this.historyKindOffConfirm(rid, kind, searched.kinds, () => { dropPend(key); this.historyKindsRedraw(); });
+            } finally {
+                p.asking = false;
+                dropPend(key);
+            }
             // The kinds may have changed while the dialog was open: switch off what is searched now.
             const now = this.historyKindsSearched(rid);
-            if (!ok || !now || !now.kinds.includes(kind) || !this.researchBridgeUp(rid) || p.busy || p.waiting) return;
+            if (!ok || !now || !now.kinds.includes(kind) || !this.researchBridgeUp(rid) || p.busy || p.waiting) {
+                this.historyKindsRedraw();
+                return;
+            }
             await this.historyKindsWrite(rid, { kinds: now.kinds.filter(k => k !== kind), scope: now.own === false ? 'default' : 'tree' }, kind);
             return;
         }
+        this.historyKindsRedraw();
+    },
+
+    /** Settings' Search column and the history manager's kinds drawn again (where open). */
+    historyKindsRedraw(): void {
         this.renderHistorySettingsIfOpen();
         this.renderHistoryManageIfOpen();
     },
@@ -543,7 +585,7 @@ export const historyKindsMethods = uiModule({
      * preview the dialog says it without a number), that nothing disappears
      * before it and that turning it back on does not search places gone through.
      */
-    async historyKindOffConfirm(rid: string, kind: HistoryKind, kinds: readonly HistoryKind[]): Promise<boolean> {
+    async historyKindOffConfirm(rid: string, kind: HistoryKind, kinds: readonly HistoryKind[], beforeAsk?: () => void): Promise<boolean> {
         const h = strings.history;
         const base = bridgeBase(rid);
         const features = this.historyKindsStatusOf(rid)?.features ?? [];
@@ -553,6 +595,7 @@ export const historyKindsMethods = uiModule({
             if (r.ok) n = alignHideCountOfKind(r.preview, kind);
         }
         const hide = n === null ? h.offAskHideUnknown : n ? h.offAskHide(n) : h.offAskHideNone;
+        beforeAsk?.();
         return this.showConfirm(`${hide} ${h.offAskKeep}\n\n${h.offAskAgain}`, h.offAskTitle(kindName(kind)), { confirmLabel: h.offAskGo });
     },
 
@@ -563,16 +606,24 @@ export const historyKindsMethods = uiModule({
 
     /**
      * A write of the kinds (taking away, or the choice's owner). Shown at once,
-     * taken back with a toast when the research refuses; a refusal that adds a
+     * dashed and locked until the research answers (6.1, `what`: the switch,
+     * by default the kind taken away); taken back with the sentence and Try
+     * again at the switch when the research refuses; a refusal that adds a
      * kind (the default had more than the tree) waits like a switch-on.
      */
-    async historyKindsWrite(rid: string, body: HistoryKindsBody, offKind?: HistoryKind): Promise<void> {
+    async historyKindsWrite(rid: string, body: HistoryKindsBody, offKind?: HistoryKind, what?: string): Promise<void> {
+        const key = what ? pendKey(rid, what) : offKind ? pendKey(rid, `kind:${offKind}`) : null;
+        // Locked at once (a click while an earlier write runs waits in its chain, already dashed).
+        if (key) startPend(key, { redraw: () => this.historyKindsRedraw() });
         const run = async (): Promise<void> => {
             const base = bridgeBase(rid);
             const status = this.historyKindsStatusOf(rid);
-            if (!base || !status) return;
+            if (!base || !status) {
+                if (key) dropPend(key);
+                this.historyKindsRedraw();
+                return;
+            }
             const p = page(rid);
-            const h = strings.history;
             const before = p.written;
             const own = this.historyKindsSearched(rid)?.own;
             if ('kinds' in body) p.written = { kinds: ordered(body.kinds), ...(own !== undefined ? { own: body.scope === 'tree' } : {}), at: Date.now() };
@@ -584,12 +635,16 @@ export const historyKindsMethods = uiModule({
             const r = await postHistoryKinds(base, body, status.features, { tree: rid, ...(scheme ? { scheme } : {}) });
             p.busy = false;
             if (r.ok) {
+                if (key) await endPend(key);
                 if (r.state) p.written = { kinds: r.state.kinds, own: r.state.kindsOwn, at: Date.now() };
                 else if ('inherit' in body) delete p.written;
                 if (r.alignSuggested) p.alignSuggested = true;
                 if (r.head) this.researchTakeOwnWriteHead(rid, head, r.head, r.parent);
                 previews.delete(rid);
             } else {
+                // Back as it was, with its sentence at the switch (6.1); a refusal that asks for the terminal waits instead.
+                const said = r.code === 'link' && 'inherit' in body ? undefined : this.historyKindsRefusal(rid, r, body, offKind, what);
+                if (key) await endPend(key, said);
                 if (before) p.written = before;
                 else delete p.written;
                 if (offKind) p.off = p.off.filter(k => k !== offKind);
@@ -600,16 +655,32 @@ export const historyKindsMethods = uiModule({
                     for (const k of added) p.pend.add(k);
                     p.inherit = true;
                     if (r.link) p.link = r.link;
-                } else {
+                } else if (!key) {
                     this.showToast(this.historyKindsRefusalText(r), 6000);
                 }
             }
-            this.renderHistorySettingsIfOpen();
-            this.renderHistoryManageIfOpen();
+            this.historyKindsRedraw();
         };
         const next = (chains.get(rid) ?? Promise.resolve()).then(run, run);
         chains.set(rid, next);
         await next;
+    },
+
+    /** A refused write's sentence at its switch (6.1): the research's reason as "Unchanged: …", and Try again. */
+    historyKindsRefusal(rid: string, r: HistoryKindsRefusal, body: HistoryKindsBody, offKind?: HistoryKind, what?: string): PendRefusal {
+        const text = r.code === 'busy' || r.code === 'held' || r.code === 'failed' || !r.reason
+            ? this.historyKindsRefusalText(r) : strings.busy.notChanged(r.reason);
+        const retry = (): void => {
+            if (offKind) {
+                // What is searched now, without the kind (it was confirmed already).
+                const now = this.historyKindsSearched(rid);
+                if (!now?.kinds.includes(offKind)) { this.historyKindsRedraw(); return; }
+                void this.historyKindsWrite(rid, { kinds: now.kinds.filter(k => k !== offKind), scope: now.own === false ? 'default' : 'tree' }, offKind);
+            } else {
+                void this.historyKindsWrite(rid, body, undefined, what);
+            }
+        };
+        return { text, retry };
     },
 
     /** The sentence of a refused write of the kinds. */
@@ -628,8 +699,8 @@ export const historyKindsMethods = uiModule({
         const searched = this.historyKindsSearched(rid);
         const p = page(rid);
         if (!searched || searched.own === undefined || !this.researchBridgeUp(rid) || p.busy || p.waiting) return;
-        if ((scope === 'tree') === searched.own) return;
-        void this.historyKindsWrite(rid, scope === 'tree' ? { kinds: searched.kinds, scope: 'tree' } : { scope: 'tree', inherit: true });
+        if ((scope === 'tree') === searched.own || isPend(pendKey(rid, 'scope'))) return;
+        void this.historyKindsWrite(rid, scope === 'tree' ? { kinds: searched.kinds, scope: 'tree' } : { scope: 'tree', inherit: true }, undefined, 'scope');
     },
 
     /** The waiting kinds' buttons: continue in the research's terminal, open it again, or cancel. */
@@ -688,10 +759,23 @@ export const historyKindsMethods = uiModule({
         if (p.originWait.has(which)) {
             p.originWait.delete(which);
         } else if (split[which]) {
+            // Off through the bridge (6.1): shown off at once, dashed and locked until the research answers.
+            const key = pendKey(rid, `origin:${which}`);
+            if (isPend(key)) return;
             p.busy = true;
+            (p.originWriting ??= new Set()).add(which);
+            startPend(key, { redraw: () => this.renderHistorySettingsIfOpen() });
             this.renderHistorySettingsIfOpen();
-            const ok = await this.historyDisableSearch(which, { quiet: true });
+            let refused: PendRefusal | undefined;
+            const ok = await this.historyDisableSearch(which, {
+                quiet: true,
+                onRefused: (text, alt) => {
+                    refused = { text, retry: () => void this.historyOriginSearchClick(which), ...(alt ? { alt } : {}) };
+                },
+            });
+            await endPend(key, ok ? undefined : refused);
             p.busy = false;
+            p.originWriting.delete(which);
             if (ok) p.originOff.add(which);
         } else {
             p.originOff.delete(which);

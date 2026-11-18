@@ -2791,6 +2791,15 @@
         .history-kind-search-mark { flex: none; display: inline-flex; color: var(--text-light); }
         .history-kind-search-row[data-state="off"] .history-kind-search-mark { color: var(--text-faint); }
         .history-kind-search-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+        /* A switch's write (6.1): its words under the kind's name, the refusal under the row. */
+        .history-kind-search-name > .pend-st { margin-top: 2px; }
+        .history-kinds-list > .pend-msg, .hm-kinds-grid > .pend-msg { margin: 0 0 6px 24px; }
+        .hm-kinds-grid > .pend-msg { grid-column: 1 / -1; }
+        .history-kinds-scope > .pend-st { margin-top: 0; }
+        .history-kinds-scope + .pend-msg { margin: 0 0 6px; }
+        .history-origin-pend { margin: 0 0 4px; }
+        .history-origin-pend-name { color: var(--text); }
+        .history-origin-pend > .pend-msg { margin-top: 2px; }
         /* Centred under the Search column (the generic switch rule resets the margin). */
         .modal #history-kinds .history-kind-search-row .history-search-switch { margin-right: 6px; }
         .history-kinds-search-note:empty { display: none; }
@@ -18789,6 +18798,18 @@
             color: var(--text-light); white-space: nowrap; font-weight: 400;
         }
         .busy-row-end { margin-left: auto; padding-left: 8px; }
+        /* A switch or choice that writes (6.1): its new state at once, dashed and locked until the research answers.
+           A switch with its label inside draws the dash round its track only. */
+        [data-pend] { outline: 1.5px dashed var(--text-faint); outline-offset: 2px; cursor: progress !important; }
+        .view-link-switch[data-pend] { outline: none; }
+        .view-link-switch[data-pend] .view-link-switch__track { outline: 1.5px dashed var(--text-faint); outline-offset: 2px; opacity: 1 !important; }
+        [data-pend]:focus-visible { outline: 2px solid var(--primary); }
+        .view-link-switch[data-pend]:focus-visible .view-link-switch__track { outline: 2px solid var(--primary); }
+        /* Its words under the label (the label's own line stays as it is). */
+        .pend-st { display: flex; width: fit-content; margin-top: 3px; white-space: normal; }
+        /* The one dimming allowed (6.3): a list being read for a filter, never an element. */
+        .busy-list-dim { opacity: .55; transition: opacity .12s; }
+        @media (prefers-reduced-motion: reduce) { .busy-list-dim { transition: none; } }
         .busy-msg {
             font-size: 12.5px; line-height: 1.45; margin-top: 6px; color: var(--text-light);
             display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; flex-basis: 100%;

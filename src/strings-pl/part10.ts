@@ -27,6 +27,8 @@ export const plPart10: Pick<StringsType, 'busy'> = {
         terminalSilent: (s: number) => `Terminal nie odezwał się w ciągu ${s} s.`,
         savingRow: 'zapisywanie',
         waitingResearch: 'Czeka na badanie',
+        notChanged: (why: string) => `Bez zmian: ${why}`,
+        liveSilent: (s: number) => `Badanie nie odezwało się w ciągu ${s} s. Trzeba uruchomić Strom Research.`,
         layout: 'Obliczanie układu…',
         adoptTitle: 'Przekazywanie drzewa badaniu…',
         adoptBackup: 'Zapisywanie kopii zapasowej',

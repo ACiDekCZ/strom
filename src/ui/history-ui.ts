@@ -823,9 +823,13 @@ export const historyMethods = uiModule({
      * `experiments.split` the history of regions or of places alone): through
      * the bridge at once when it says `experiments.off`, else its link. A
      * refusal of one switch (the manager) is a toast; of both, Settings' row.
-     * `quiet`: no toast when it went (Settings' Search column says it in its own sentence).
+     * `quiet`: no toast when it went (Settings' Search column says it in its own sentence); `onRefused`: a
+     * refusal of one switch said at that switch instead of a toast (6.1), with the terminal's way where it has one.
      */
-    async historyDisableSearch(which: ExperimentSwitch = 'history', opts: { quiet?: boolean } = {}): Promise<boolean> {
+    async historyDisableSearch(which: ExperimentSwitch = 'history', opts: {
+        quiet?: boolean;
+        onRefused?: (text: string, alt?: { label: string; run: () => void; mark: ResearchActionMark }) => void;
+    } = {}): Promise<boolean> {
         const rid = activeResearchId();
         if (!rid) return false;
         const status = this.researchBridgeUp(rid) ? this.researchStatusOf(rid) : null;
@@ -854,7 +858,11 @@ export const historyMethods = uiModule({
         } else {
             const text = r.reason || (r.held ? this.researchWriteHeldText(r.held, false).toast : strings.live.waitingWrite.writeFailed);
             if (which === 'history') offError = { researchId: rid, text, ...(r.link ? { link: r.link } : {}) };
-            else {
+            else if (opts.onRefused) {
+                const link = r.link;
+                opts.onRefused(r.reason ? strings.busy.notChanged(r.reason) : text, link
+                    ? { label: h.switchOff, run: () => this.launchResearchLink(link, 'terminal'), mark: researchUrlMark(link) ?? 'terminal' } : undefined);
+            } else {
                 const link = r.link;
                 this.showToast(text, 6000, link ? { action: { label: h.switchOff, run: () => this.launchResearchLink(link, 'terminal'), ...researchLinkFlags(link) } } : {});
             }

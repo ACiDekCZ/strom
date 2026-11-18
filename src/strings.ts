@@ -10240,6 +10240,10 @@ const stringsEN = {
         terminalSilent: (s: number) => `The terminal did not respond within ${s} s.`,
         savingRow: 'saving',
         waitingResearch: 'Waiting for the research',
+        /** A switch's write refused (6.1): the switch is back, the research's reason. */
+        notChanged: (why: string) => `Unchanged: ${why}`,
+        /** "Research on" waited for the research in vain (6b). */
+        liveSilent: (s: number) => `The research did not respond within ${s} s. Strom Research needs to be started.`,
         layout: 'Calculating the layout…',
         adoptTitle: 'Handing the tree to the research…',
         adoptBackup: 'Saving a backup',
@@ -20147,6 +20151,8 @@ const stringsCZ: StringsType = {
         terminalSilent: (s: number) => `Terminál se do ${s} s neozval.`,
         savingRow: 'ukládá se',
         waitingResearch: 'Čeká na výzkum',
+        notChanged: (why: string) => `Nezměněno: ${why}`,
+        liveSilent: (s: number) => `Výzkum se do ${s} s neozval. Je potřeba spustit Strom Research.`,
         layout: 'Počítá se rozvržení…',
         adoptTitle: 'Předává se strom výzkumu…',
         adoptBackup: 'Ukládá se záloha',
@@ -29966,6 +29972,8 @@ const stringsDE: StringsType = {
         terminalSilent: (s: number) => `Das Terminal hat sich in ${s} s nicht gemeldet.`,
         savingRow: 'wird gespeichert',
         waitingResearch: 'Wartet auf die Forschung',
+        notChanged: (why: string) => `Unverändert: ${why}`,
+        liveSilent: (s: number) => `Die Forschung hat sich in ${s} s nicht gemeldet. Strom Research muss gestartet werden.`,
         layout: 'Layout wird berechnet…',
         adoptTitle: 'Stammbaum wird an die Forschung übergeben…',
         adoptBackup: 'Sicherung wird gespeichert',
