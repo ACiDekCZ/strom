@@ -161,7 +161,10 @@ test.describe('phone (390)', () => {
         const sheet = page.locator('.tv-fsheet');
         await expect(sheet).toBeVisible();
         await expect(sheet.locator('.tv-cp-title')).toHaveText('Filters');
-        const rowH = await sheet.locator('label.tv-fs-row').first().evaluate(el => el.getBoundingClientRect().height);
+        // Measured from the sheet, which outlives its redraws: a row found first and drawn anew before it
+        // is measured (the table's update after the sheet opens) is out of the page, 0 px high.
+        await expect(sheet.locator('label.tv-fs-row').first()).toBeVisible();
+        const rowH = await sheet.evaluate(el => el.querySelector('label.tv-fs-row')!.getBoundingClientRect().height);
         expect(rowH).toBeGreaterThanOrEqual(48);
         await sheet.locator('input[data-chip="deceased"]').check();
         await expect(status(page)).toHaveText('5 of 7 people');
