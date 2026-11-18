@@ -195,6 +195,7 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         estimate: (pages: number, persons: number, chapters: number) =>
             `ok. ${nPl(pages, 'strona', 'strony', 'stron')} · ${nPl(persons, 'osoba', 'osoby', 'osób')} · ${nPl(chapters, 'rozdział', 'rozdziały', 'rozdziałów')}`,
         noRodSelected: 'Nie wybrano żadnego rodu.',
+        estimating: 'Liczenie stron…',
         contents: 'Spis treści',
         rodKicker: 'Ród',
         rodName: (label: string) => `Ród ${label}`,

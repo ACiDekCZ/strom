@@ -12,6 +12,7 @@ import { test, expect, Page, Locator, BrowserContext } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { openApp } from './helpers.js';
 import { rodsTree } from './rods-fixture.js';
+import { syntheticTree } from '../src/__tests__/helpers/synthetic-tree';
 
 async function setup(page: Page): Promise<string> {
     await openApp(page);
@@ -746,3 +747,41 @@ test.describe('family book: prepared in parts (8c)', () => {
     });
 });
 
+
+test.describe('the estimate of a large tree\'s book (C14, waiting buttons §8)', () => {
+    test('the dialog opens first with "Counting the pages…" and Open waiting, then the estimate; a choice back counts nothing again', async ({ page }) => {
+        test.setTimeout(90_000);
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await openApp(page);
+        const { data, rootId } = syntheticTree({ persons: 5200, seed: 11 });
+        await page.evaluate(async ({ data, rootId }) => {
+            const S = window.Strom;
+            await S.DataManager.importAsNewTree(data, 'Synthetic');
+            S.TreeRenderer.setFocus(rootId);
+            await S.TreeRenderer.renderAsync();
+        }, { data, rootId });
+        // What the estimate line says while the dialog is open (watched, the count blocks the page).
+        await page.evaluate(() => {
+            const w = window as unknown as { __said: string[] };
+            w.__said = [];
+            const modal = document.getElementById('book-modal')!;
+            new MutationObserver(() => {
+                const est = modal.querySelector('.book-estimate');
+                const open = modal.querySelector<HTMLButtonElement>('#book-open');
+                if (modal.classList.contains('active') && est) w.__said.push(`${est.textContent}|${open?.disabled}`);
+            }).observe(modal, { attributes: true, childList: true, subtree: true, characterData: true });
+        });
+        await page.evaluate(() => window.Strom.UI.showBookDialog('book'));
+        const dialog = page.locator('#book-modal');
+        await expect(dialog).toHaveClass(/active/);
+        await expect(dialog.locator('.book-estimate')).toHaveText(/^about \d+ pages · \d+ people · \d+ chapters$/);
+        await expect(dialog.locator('#book-open')).toBeEnabled();
+        const said = await page.evaluate(() => (window as unknown as { __said: string[] }).__said);
+        expect(said).toContain('Counting the pages…|true');
+        // A switch: counted again; the switch back: the kept estimate at once, no new count.
+        await dialog.locator('[data-switch="notes"]').click();
+        await expect(dialog.locator('.book-estimate')).toHaveText(/^about \d+ pages/);
+        await dialog.locator('[data-switch="notes"]').click();
+        expect(await dialog.locator('.book-estimate').textContent()).toMatch(/^about \d+ pages/);
+    });
+});

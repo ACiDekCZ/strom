@@ -26,7 +26,7 @@ import { PersonId, StromData } from '../types.js';
 import { buildFamilyBook, buildFamilyBookAsync, type BookBuildEnv } from '../book.js';
 import { bookFileName, bookPreparingHtml } from '../book-window.js';
 import {
-    BOOK_PART_KEYS, BookDetail, BookLang, BookOptions, BookPartKey, BookSelectionSpec,
+    BOOK_PART_KEYS, BookDetail, BookEnv, BookEstimate, BookLang, BookOptions, BookPartKey, BookSelectionSpec,
     autoBookTitle, bookPartAvailability, bookPeriod, bookRodCounts, estimateBook,
 } from '../book-options.js';
 import {
@@ -52,7 +52,7 @@ import { displayYear } from '../dates.js';
 import { openPersonPopover } from './person-popover.js';
 import { readRecent } from './tree-overview.js';
 import { uiModule } from './module.js';
-import { activatedElement, BUSY_MIN_MS, BUSY_SHOW_MS } from './busy.js';
+import { activatedElement, BUSY_MIN_MS, BUSY_SHOW_MS, busySpinHtml, nextPaint } from './busy.js';
 import { showProgressToast, type ProgressToastHandle } from './toast.js';
 import type { HistoryPayload, PersonHistoryEnv } from '../history.js';
 
@@ -148,6 +148,9 @@ interface DialogState {
     phase: Phase;
     est: PagesEstimate | null;
     estTimer: number | null;
+    /** The book's estimate for its options (a large tree's is counted after a painted frame, §8). */
+    bookEst?: { key: string; est: BookEstimate | null };
+    bookEstPending?: string | null;
     job: PagesJob | null;
     prog: { done: number; total: number; text: string };
     file: PagesFile | null;
@@ -530,10 +533,14 @@ function syncBook(s: DialogState, modal: HTMLElement): string {
         : esc(D.titleAuto(period));
 
     // The estimate, the outline and the title page
-    const est = ready ? estimateBook(s.data, opts, env) : null;
+    const counted = ready ? bookEstimateOf(s, opts, env) : null;
+    const pending = counted === 'pending';
+    const est = pending ? null : counted;
     const estEl = modal.querySelector<HTMLElement>('.book-estimate')!;
-    estEl.textContent = est ? T.estimate(est.pages, est.persons, est.chapters) : s.kind === 'rods' ? T.noRodSelected : D.noPerson;
+    if (pending) estEl.innerHTML = `${busySpinHtml()}${esc(T.estimating)}`;
+    else estEl.textContent = est ? T.estimate(est.pages, est.persons, est.chapters) : s.kind === 'rods' ? T.noRodSelected : D.noPerson;
     estEl.classList.toggle('is-empty', !est);
+    if (pending) estEl.setAttribute('aria-busy', 'true'); else estEl.removeAttribute('aria-busy');
     const open = modal.querySelector<HTMLButtonElement>('#book-open');
     if (open) open.disabled = !est;
     const outline = modal.querySelector<HTMLElement>('.book-outline')!;
@@ -811,6 +818,33 @@ function computeEstimate(s: DialogState): PagesEstimate | null {
         name: pageSetFileName(set),
         minimal, minimalShown, minimalSave: set.minimalIds.size, phone,
     };
+}
+
+/** From this many people the book's estimate is counted after the dialog is painted (it takes longer than 120 ms). */
+export const BOOK_ESTIMATE_DEFERRED_AT = 5000;
+
+/**
+ * The book's estimate for `opts`, kept while they stay the same. A large tree's is counted after a painted frame
+ * (§8): 'pending' meanwhile (the line says "Counting the pages…", Open waits), then the dialog is synced again.
+ */
+function bookEstimateOf(s: DialogState, opts: BookOptions, env: BookEnv): BookEstimate | null | 'pending' {
+    const key = JSON.stringify(opts);
+    if (s.bookEst?.key === key) return s.bookEst.est;
+    const count = (): BookEstimate | null => { try { return estimateBook(s.data, opts, env); } catch { return null; } };
+    if (Object.keys(s.data.persons).length < BOOK_ESTIMATE_DEFERRED_AT) {
+        s.bookEst = { key, est: count() };
+        return s.bookEst.est;
+    }
+    if (s.bookEstPending !== key) {
+        s.bookEstPending = key;
+        void nextPaint().then(() => {
+            if (st !== s || s.bookEstPending !== key) return;
+            s.bookEstPending = null;
+            s.bookEst = { key, est: count() };
+            sync(s);
+        });
+    }
+    return 'pending';
 }
 
 /** Recompute the pages' estimate 150 ms after the last change (at once when asked). */

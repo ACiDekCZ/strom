@@ -429,6 +429,8 @@ const stringsEN = {
         estimate: (pages: number, persons: number, chapters: number) =>
             `about ${nEn(pages, 'page', 'pages')} · ${nEn(persons, 'person', 'people')} · ${nEn(chapters, 'chapter', 'chapters')}`,
         noRodSelected: 'No family line is selected.',
+        /** The estimate of a large tree's book while it is counted (§8). */
+        estimating: 'Counting the pages…',
         contents: 'Contents',
         rodKicker: 'Family line',
         rodName: (label: string) => `${label} family line`,
@@ -10536,6 +10538,7 @@ const stringsCZ: StringsType = {
         estimate: (pages: number, persons: number, chapters: number) =>
             `asi ${nCs(pages, 'strana', 'strany', 'stran')} · ${nCs(persons, 'osoba', 'osoby', 'osob')} · ${nCs(chapters, 'kapitola', 'kapitoly', 'kapitol')}`,
         noRodSelected: 'Není vybraný žádný rod.',
+        estimating: 'Počítají se strany…',
         contents: 'Obsah',
         rodKicker: 'Rod',
         rodName: (label: string) => `Rod ${label}`,
@@ -20452,6 +20455,7 @@ const stringsDE: StringsType = {
         estimate: (pages: number, persons: number, chapters: number) =>
             `etwa ${pages} ${plural('de', pages, 'Seite', 'Seiten')} · ${persons} ${plural('de', persons, 'Person', 'Personen')} · ${chapters} ${plural('de', chapters, 'Kapitel', 'Kapitel')}`,
         noRodSelected: 'Keine Stammlinie ausgewählt.',
+        estimating: 'Seiten werden gezählt…',
         contents: 'Inhalt',
         rodKicker: 'Stammlinie',
         rodName: (label: string) => `Stammlinie ${label}`,
