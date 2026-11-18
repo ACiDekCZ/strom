@@ -98,7 +98,8 @@ import {
     noteResearchBridge, noteResearchBridgeStatus, researchTreeOfStatus, patchResearchAutoState, researchAutoState, researchIdAtBridge, ResearchLinkBefore,
     storedResearchBridge,
 } from '../research-device.js';
-import { rememberBridgeStatus, researchSendMode, researchStatusNow, researchMediaFirstAgain } from './research-sync-ui.js';
+import { rememberBridgeStatus, researchSendMode, researchStatusNow, researchMediaFirstAgain, researchBridgeDownNow } from './research-sync-ui.js';
+import { openResearchBusy, withHandoff } from './research-open-busy.js';
 import { sourceReadings, researchSendVouches, conflictTakeovers, heldConflicts } from '../research-sync.js';
 import { currentAppBrowser, appBrowserName } from '../research-transfer.js';
 import { localNetworkStatus } from '../local-network.js';
@@ -334,6 +335,8 @@ export interface LiveSession {
 const AUTO_CONNECT_MS = 3000;
 /** Its bridge asked once more after following could not start (as the research's own quick ask). */
 const AUTO_ASK_MS = 1500;
+/** One ask of the bridge while a link waits for its proof (asked about once a second). */
+const OPEN_ASK_TIMEOUT_MS = 1500;
 /**
  * Wait before reconnecting to the bridge's events / between status polls
  * (also the step of the backoff while the bridge is silent). A test may
@@ -2854,9 +2857,9 @@ export const researchUiMethods = uiModule({
     },
 
     /** Hand a strom-research:// link to the system (the browser asks first). */
-    handOverResearchLink(url: string): void {
+    handOverResearchLink(url: string, handoff?: string | null): void {
         const a = document.createElement('a');
-        a.href = url;
+        a.href = handoff ? withHandoff(url, handoff) : url;
         a.rel = 'noopener';
         a.style.display = 'none';
         document.body.appendChild(a);
@@ -2864,15 +2867,23 @@ export const researchUiMethods = uiModule({
         a.remove();
     },
 
-    /** Open a strom-research:// link and say what to expect (the page cannot tell whether it opened). */
-    launchResearchLink(url: string, kind: ResearchLinkKind = 'terminal'): void {
-        this.handOverResearchLink(url);
-        const r = strings.research;
-        if (kind === 'version') this.awaitResearchVersion();
-        else if (kind === 'agent') this.showToast(r.openingAgentHint, 8000, { title: r.openingAgent });
-        // A link the research takes without its terminal (no mark): no word of a terminal window.
-        else if (researchUrlMark(url) === 'none') this.showToast(r.openingQuietHint, 8000, { title: r.opening });
-        else this.showToast(r.openingHint, 8000, { title: r.opening });
+    /**
+     * Open a strom-research:// link: the element that started it (`el`, else the one of the click) says
+     * "Opening the research…" until the research proves it took the link, or a sentence after the limit
+     * (waiting buttons §3.1, src/ui/research-open-busy.ts). A new version from the research waits as before.
+     */
+    launchResearchLink(url: string, kind: ResearchLinkKind = 'terminal', el?: HTMLElement | null, opts: { timeoutMs?: number; rowOf?: Element } = {}): void {
+        if (kind === 'version') {
+            this.handOverResearchLink(url);
+            this.awaitResearchVersion();
+            return;
+        }
+        void openResearchBusy(el ?? null, url, { agent: kind === 'agent', ...opts }, {
+            handOver: (link, handoff) => this.handOverResearchLink(link, handoff),
+            ask: (id) => this.askResearchBridge(id, OPEN_ASK_TIMEOUT_MS),
+            statusNow: (id) => researchStatusNow(id),
+            bridgeDown: (id) => researchBridgeDownNow(id),
+        });
     },
 
     /** Listen for a version that reached another tab; announce one that reached this tab. */

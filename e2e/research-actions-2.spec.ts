@@ -180,7 +180,8 @@ test.describe('Follow live from the app', () => {
         await expect(item.locator('.research-open-mark')).toHaveCount(0);
         await item.click();
         expect(await launched(page)).toEqual([`strom-research://live?tree=${UUID}`]);
-        await expect(page.locator('.toast')).toContainText('Opening the research');
+        // A link without a terminal: "Loading…" until the research says it took the link.
+        await expect(page.locator('.toast--progress').last()).toContainText('Loading…');
     });
 
     test('not announced by the research: no item', async ({ page }) => {
@@ -440,7 +441,8 @@ test.describe('What the research knows', () => {
 
         await dialog.locator('[data-do="decide"]').first().click();
         await dialog.locator('[data-do="agent"]').first().click();
-        await expect(page.locator('.toast')).toContainText('Opening the agent…');
+        // The dialog stays: the button itself says it (waiting buttons §3.1).
+        await expect(dialog.locator('[data-do="agent"]').first()).toContainText('Opening the agent…');
         expect(await launched(page)).toEqual([
             `strom-research://conflict?tree=${UUID}&id=X0007&do=decide`,
             `strom-research://conflict?tree=${UUID}&id=X0007&do=agent`,

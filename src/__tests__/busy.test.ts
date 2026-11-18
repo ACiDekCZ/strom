@@ -22,6 +22,8 @@ vi.mock('../ui/toast.js', () => ({
 
 const { runBusy, setBusy, isBusy, prepareBusy, busyButtonHtml, BUSY_SHOW_MS, BUSY_MIN_MS, BUSY_DONE_MS } = await import('../ui/busy.js');
 const { strings } = await import('../strings.js');
+const { openResearchBusy, resetOpenResearchBusy, OPEN_LATE_WATCH_MS, OPEN_REPEAT_MS } = await import('../ui/research-open-busy.js');
+type LiveStatus = import('../research-link.js').LiveStatus;
 
 let dom: ReturnType<typeof installMiniDom>;
 let row: MiniElement;
@@ -54,6 +56,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    resetOpenResearchBusy();
     vi.useRealTimers();
     dom.uninstall();
 });
@@ -301,5 +304,182 @@ describe('the structure', () => {
         expect(rm![1]).toContain('animation: none');
         expect(rm![1]).toContain('radial-gradient');
         expect(css).toMatch(/\[data-busy="busy"\],[\s\S]{0,400}opacity: 1 !important/);
+    });
+});
+
+// ==================== A LINK INTO THE RESEARCH (§3.1) ====================
+
+const ID = '0f8fad5b-d9cb-469f-a165-70867728950e';
+const LINK = 'strom-research://open?tree=R1';
+
+/** A bridge's status with just what the proof reads. */
+function status(p: { features?: string[] | null; handoffs?: string[]; sessions?: number; working?: Array<{ who: string; since: string }> } = {}): LiveStatus {
+    return {
+        treeId: 'R1', features: p.features === undefined ? ['handoffs'] : p.features,
+        ...(p.handoffs ? { handoffs: p.handoffs } : {}),
+        ...(p.sessions !== undefined ? { busy: { sessions: p.sessions, runs: 0 } } : {}),
+        working: (p.working ?? []).map(w => ({ ...w, task: '' })),
+    } as unknown as LiveStatus;
+}
+
+/** The bridge of a test: its answers set by the test, the links handed over recorded. */
+function bridge(opts: { down?: boolean; before?: LiveStatus | null } = {}) {
+    let answer: LiveStatus | null = status({ handoffs: [] });
+    const handed: Array<{ url: string; handoff: string | null }> = [];
+    const asks = { n: 0 };
+    const deps = {
+        handOver: (url: string, handoff: string | null) => { handed.push({ url, handoff }); },
+        ask: async () => { asks.n++; return answer; },
+        statusNow: () => opts.before ?? null,
+        bridgeDown: () => !!opts.down,
+        newId: () => ID,
+    };
+    return { deps, handed, asks, answer: (st: LiveStatus | null) => { answer = st; } };
+}
+
+const message = (): MiniElement | null => dom.document.querySelector('.busy-msg');
+
+describe('openResearchBusy: a link into the research', () => {
+    it('"Opening the research…" on the element until the research says the link\'s handoff', async () => {
+        const b = bridge();
+        const run = openResearchBusy(btn, LINK, {}, b.deps);
+        expect(b.handed).toEqual([{ url: LINK, handoff: ID }]);
+        await vi.advanceTimersByTimeAsync(BUSY_SHOW_MS + 1);
+        expect(btn.querySelector('.b-busy')?.textContent).toBe(strings.busy.openingResearch);
+        await vi.advanceTimersByTimeAsync(2_000);
+        expect(isBusy(btn)).toBe(true);
+        b.answer(status({ handoffs: ['11111111-2222-4333-8444-555555555555', ID] }));
+        await vi.advanceTimersByTimeAsync(1_000 + BUSY_MIN_MS);
+        expect(await run).toBe('opened');
+        expect(isBusy(btn)).toBe(false);
+        expect(message()).toBeNull();
+        expect(btn.textContent).toBe('Send');
+    });
+
+    it('a second click while it waits hands nothing over again', async () => {
+        const b = bridge();
+        void openResearchBusy(btn, LINK, {}, b.deps);
+        expect(await openResearchBusy(btn, LINK, {}, b.deps)).toBe('busy');
+        // another element drawn for the same link (a list drawn again) neither
+        const other = dom.document.createElement('button') as unknown as HTMLElement;
+        expect(await openResearchBusy(other, LINK, {}, b.deps)).toBe('busy');
+        expect(b.handed).toHaveLength(1);
+        // seconds later another element starting it again is a new start (the card's ! clicked once more)
+        await vi.advanceTimersByTimeAsync(OPEN_REPEAT_MS + 1);
+        expect(await openResearchBusy(btn, LINK, {}, b.deps)).toBe('busy');
+        void openResearchBusy(other, LINK, {}, b.deps);
+        expect(b.handed).toHaveLength(2);
+    });
+
+    it('an older research (no handoffs): a new session is the proof', async () => {
+        const b = bridge({ before: status({ features: null, sessions: 0 }) });
+        b.answer(status({ features: null, sessions: 0 }));
+        const run = openResearchBusy(btn, LINK, {}, b.deps);
+        await vi.advanceTimersByTimeAsync(3_000);
+        expect(isBusy(btn)).toBe(true);
+        b.answer(status({ features: null, sessions: 1 }));
+        await vi.advanceTimersByTimeAsync(1_000 + BUSY_MIN_MS);
+        expect(await run).toBe('opened');
+        expect(message()).toBeNull();
+    });
+
+    it('no proof in 10 s: the element at rest, a neutral sentence with Try again and the hint under it', async () => {
+        const b = bridge();
+        const run = openResearchBusy(btn, LINK, {}, b.deps);
+        await vi.advanceTimersByTimeAsync(9_500);
+        expect(isBusy(btn)).toBe(true);
+        expect(message()).toBeNull();
+        await vi.advanceTimersByTimeAsync(1_000);
+        expect(await run).toBe('limit');
+        expect(isBusy(btn)).toBe(false);
+        const msg = message();
+        expect(msg?.getAttribute('role')).toBe('status');
+        expect(msg?.classList.contains('is-err')).toBe(false);
+        expect(msg?.textContent).toContain(strings.busy.notOpened);
+        expect(msg?.textContent).toContain(strings.busy.notOpenedHint);
+        expect(b.asks.n).toBeGreaterThanOrEqual(8);
+        // Try again hands the link over once more
+        msg!.querySelector('button.link')!.dispatchEvent(new Event('click'));
+        expect(b.handed).toHaveLength(2);
+    });
+
+    it('a proof coming after the limit takes the sentence away by itself', async () => {
+        const b = bridge();
+        const run = openResearchBusy(btn, LINK, {}, b.deps);
+        await vi.advanceTimersByTimeAsync(10_500);
+        await run;
+        expect(message()?.textContent).toContain(strings.busy.notOpened);
+        await vi.advanceTimersByTimeAsync(20_000);
+        expect(message()).not.toBeNull();
+        b.answer(status({ handoffs: [ID] }));
+        await vi.advanceTimersByTimeAsync(2_500);
+        expect(message()).toBeNull();
+    });
+
+    it('the late watch ends after a minute', async () => {
+        const b = bridge();
+        const run = openResearchBusy(btn, LINK, {}, b.deps);
+        await vi.advanceTimersByTimeAsync(10_500);
+        await run;
+        await vi.advanceTimersByTimeAsync(OPEN_LATE_WATCH_MS + 5_000);
+        const asked = b.asks.n;
+        b.answer(status({ handoffs: [ID] }));
+        await vi.advanceTimersByTimeAsync(10_000);
+        expect(b.asks.n).toBe(asked);
+        expect(message()).not.toBeNull();
+    });
+
+    it('a bridge known down: the link handed over and the sentence at once', async () => {
+        const b = bridge({ down: true });
+        const run = openResearchBusy(btn, LINK, {}, b.deps);
+        await vi.advanceTimersByTimeAsync(10);
+        expect(await run).toBe('down');
+        expect(b.handed).toHaveLength(1);
+        expect(btn.dataset.busy).toBeUndefined();
+        expect(message()?.textContent).toContain(strings.busy.notOpened);
+    });
+
+    it('the agent\'s work says "Opening the agent…"; a link without a terminal "Loading…" and no word of a terminal', async () => {
+        const b = bridge();
+        void openResearchBusy(btn, 'strom-research://chat?tree=R1', {}, b.deps);
+        await vi.advanceTimersByTimeAsync(BUSY_SHOW_MS + 1);
+        expect(btn.querySelector('.b-busy')?.textContent).toBe(strings.busy.openingAgent);
+        b.answer(status({ handoffs: [ID] }));
+        await vi.advanceTimersByTimeAsync(1_500);
+        expect(isBusy(btn)).toBe(false);
+        b.answer(status({ handoffs: [] }));
+        const quiet = dom.document.createElement('button');
+        quiet.textContent = 'Excerpt';
+        row.appendChild(quiet);
+        const run = openResearchBusy(quiet as unknown as HTMLElement, 'strom-research://excerpt?tree=R1&source=S1', {}, b.deps);
+        await vi.advanceTimersByTimeAsync(BUSY_SHOW_MS + 1);
+        expect(quiet.querySelector('.b-busy')?.textContent).toBe(strings.busy.generic);
+        await vi.advanceTimersByTimeAsync(10_500);
+        await run;
+        const texts = dom.document.querySelectorAll('.busy-msg').map(m => m.textContent);
+        expect(texts.some(t => t.includes(strings.research.openingQuietHint))).toBe(true);
+        expect(texts.some(t => t.includes(strings.busy.notOpened))).toBe(false);
+    });
+
+    it('a new research from the app\'s tree is never reported: no handoff, no asks, only the limit', async () => {
+        const b = bridge();
+        const run = openResearchBusy(btn, 'strom-research://new?app=1', {}, b.deps);
+        expect(b.handed[0].handoff).toBeNull();
+        await vi.advanceTimersByTimeAsync(10_500);
+        expect(await run).toBe('limit');
+        expect(b.asks.n).toBe(0);
+        expect(message()?.textContent).toContain(strings.busy.notOpened);
+    });
+
+    it('without an element: the state in a toast, the sentence in a toast', async () => {
+        const b = bridge();
+        const run = openResearchBusy(null, LINK, {}, b.deps);
+        await vi.advanceTimersByTimeAsync(BUSY_SHOW_MS + 1);
+        expect(progressCalls).toHaveLength(1);
+        expect(progressCalls[0].title).toBe(strings.busy.openingResearch);
+        await vi.advanceTimersByTimeAsync(10_500);
+        await run;
+        expect(toastCalls[toastCalls.length - 1]?.message).toContain(strings.busy.notOpened);
+        expect(toastCalls[toastCalls.length - 1]?.opts.alert).toBe(false);
     });
 });

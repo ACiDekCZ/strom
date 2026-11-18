@@ -101,7 +101,9 @@ test.describe('the card\'s ! answers (1109)', () => {
         await expectJanLit(page);
         expect(await launched(page)).toHaveLength(1);
 
-        // With the panel open, Eva's ! still answers.
+        // With the panel open, Eva's ! still answers (a second after the first: a start of the same link within
+        // a second is a double activation, nothing handed over again).
+        await page.waitForTimeout(1100);
         await card(page, 'Eva').locator('.card-signal').click();
         await expect.poll(async () => (await launched(page)).length).toBe(2);
         expect((await launched(page))[1]).toMatch(/task=T0007/);

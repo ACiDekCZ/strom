@@ -2622,6 +2622,11 @@ export interface LiveStatus {
     sourceProposals?: Record<string, ReadSourceProposal>;
     /** `busy` (with `status.busy` in `features`): sessions and runs working now; absent: not said (an archive, an older research). */
     busy?: LiveBusy;
+    /**
+     * `handoffs` (with `handoffs` in `features`, Strom Research 1.35): the ids of the links (`&handoff=<uuid>`) the
+     * research took in the last 60 s, lowercase, newest first; absent: not said (an older research).
+     */
+    handoffs?: string[];
     /** `work` (with `work.link` in `features`, spec 052 §5): the gate and a session's length; absent: not said (an archive, an older research). */
     work?: LiveWork;
     /** `caps`: what the bridge does with the directions; absent: an older research, an archive, a research waiting for its agent. */
@@ -4120,6 +4125,20 @@ export function recentAddsCount(recent: LiveRecent | null, adds: readonly LiveCo
 export const MAX_STATUS_FEATURES = 200;
 
 /** The bridge status. Untrusted input: every field is checked. */
+/** `/status.features` (Strom Research 1.35): the bridge says the links it took (`handoffs`), the proof that a link opened. */
+export const HANDOFFS_FEATURE = 'handoffs';
+
+/** The research's `handoffs`: UUIDs only (lowercase), at most 64. */
+export function sanitizeHandoffs(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    const out: string[] = [];
+    for (const v of value) {
+        if (out.length >= 64) break;
+        if (typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)) out.push(v.toLowerCase());
+    }
+    return out;
+}
+
 export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
     const r = asRecord(value);
     if (!r) return null;
@@ -4160,6 +4179,7 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         ...(features?.includes(READ_FEATURE) && sanitizeReads(r.reads) ? { reads: sanitizeReads(r.reads)! } : {}),
         ...treeSaid(tree, features),
         ...(features?.includes(SEAL_FOREIGN_FEATURE) && (r.seal === 'here' || r.seal === 'elsewhere') ? { seal: r.seal } : {}),
+        ...(features?.includes(HANDOFFS_FEATURE) ? { handoffs: sanitizeHandoffs(r.handoffs) } : {}),
         ...(features?.includes(NOT_DOWNLOADED_FEATURE) && asCount(r.notDownloaded) !== null ? { notDownloaded: asCount(r.notDownloaded)! } : {}),
         ...experimentsSaid(r, features),
         ...hypothesesSaid(r, features),

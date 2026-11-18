@@ -115,11 +115,11 @@ test.describe('the Research menu', () => {
         await expect(page.locator('#research-item-open')).toHaveAttribute('aria-description', /^Continues in the research on this computer/);
 
         await page.locator('#research-item-open').click();
-        await expect(page.locator('.toast')).toContainText('Opening the research…');
-        await expect(page.locator('.toast')).toContainText('Continue in the terminal window.');
+        // The menu closed: the state of the link in a toast until the research says it took the link.
+        await expect(page.locator('.toast--progress').last()).toContainText('Opening the research…');
         await openResearchMenu(page);
         await page.locator('#research-item-chat').click();
-        await expect(page.locator('.toast')).toContainText('Opening the agent…');
+        await expect(page.locator('.toast--progress').last()).toContainText('Opening the agent…');
         await openResearchMenu(page);
         await page.locator('#research-item-send').click();
         expect(await launched(page)).toEqual([
@@ -344,7 +344,7 @@ test.describe('person menu: Research ›', () => {
         await personMenu(page, 'Jan');
         await openPersonSubmenu(page, 'research');
         await page.locator('.context-submenu [data-action="research-ask"]').click();
-        await expect(page.locator('.toast')).toContainText('Opening the agent…');
+        await expect(page.locator('.toast--progress').last()).toContainText('Opening the agent…');
         expect(await launched(page)).toEqual([
             `strom-research://research?tree=${UUID}&person=P0012&direction=ancestors`,
             `strom-research://chat?tree=${UUID}&person=P0012`,
@@ -370,7 +370,7 @@ test.describe('person menu: Research ›', () => {
         await dialog.getByText('With family').click();
         await dialog.getByRole('button', { name: 'Add in the research, opens in the research' }).click();
         await expect(dialog).toHaveCount(0);
-        await expect(page.locator('.toast')).toContainText('Opening the research…');
+        await expect(page.locator('.toast--progress').last()).toContainText('Opening the research…');
 
         await personMenu(page, 'Jan');
         await openPersonSubmenu(page, 'research');

@@ -95,6 +95,11 @@ export interface FakeBridge {
     /** More fields of `/status` (e.g. `channel`, `linkScheme`). */
     statusExtra?: Record<string, unknown>;
     /**
+     * The links the research took in the last minute (`/status.handoffs`, with `handoffs` in `features`; Strom
+     * Research 1.35): a test puts a handed-over link's id here (`handedOff(page)`) to confirm it.
+     */
+    handoffs?: string[];
+    /**
      * The books of the tasks (spec 105, `books` in `features`): `/status.books` (`books`; the part `books` of the light
      * status), every `POST /books` body (`posts`), written into `books.settings` and said back; `reply` answers instead.
      */
@@ -2072,6 +2077,7 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
                 ...(b.quality ? { quality: { rev: b.quality.rev } } : {}),
                 ...(b.hypotheses?.decide !== undefined ? { hypotheses: { decide: b.hypotheses.decide } } : {}),
                 ...(b.live ? { live: { idleMinutes: b.live.idleMinutes, idleChoices: b.live.idleChoices ?? [0, 120] } } : {}),
+                ...(b.handoffs ? { handoffs: b.handoffs } : {}),
                 ...(b.statusExtra ?? {}),
             });
         }
@@ -2198,9 +2204,11 @@ export async function openResearch(page: Page, opts: { edit?: boolean; bridge?: 
     await openApp(page);
     await page.evaluate(() => {
         // Opening links in the system is not testable: record them instead.
-        const ui = window.Strom.UI as unknown as { handOverResearchLink: (u: string) => void; __links: string[] };
+        const ui = window.Strom.UI as unknown as { handOverResearchLink: (u: string, h?: string | null) => void; __links: string[]; __handoffs: string[] };
         ui.__links = [];
-        ui.handOverResearchLink = (u: string) => { ui.__links.push(u); };
+        ui.__handoffs = [];
+        // The link's handoff id (waiting buttons §3.1) apart: the links compare as they are built.
+        ui.handOverResearchLink = (u: string, h?: string | null) => { ui.__links.push(u); if (h) ui.__handoffs.push(h); };
     });
     await dropFile(page, 'tree-strom.ged', opts.ged ?? researchGed());
     await expect(card(page, 'Jan')).toBeVisible();
@@ -2222,6 +2230,11 @@ export async function openResearch(page: Page, opts: { edit?: boolean; bridge?: 
             modeAsked: true, skipPreview: true, ...(placesOffer ? {} : { placesOffer: 'done' }) }));
     }, { auto: !!opts.auto, placesOffer: !!opts.placesOffer });
     if (opts.edit) await editJan(page);
+}
+
+/** The handoff ids of the links handed over so far (`openResearch` records them). */
+export async function handedOff(page: Page): Promise<string[]> {
+    return page.evaluate(() => (window.Strom.UI as unknown as { __handoffs?: string[] }).__handoffs ?? []);
 }
 
 export async function editJan(page: Page, place = 'Praha'): Promise<void> {

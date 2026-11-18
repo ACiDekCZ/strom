@@ -392,6 +392,19 @@ export function researchStatusNow(researchId: string): LiveStatus | null {
     return runtime.get(researchId)?.status ?? null;
 }
 
+/** How fresh a failed ask must be to call the bridge down (waiting buttons §3.1). */
+const BRIDGE_DOWN_FRESH_MS = 30_000;
+
+/**
+ * The research's bridge is down for sure: its last ask, less than 30 s ago, got no answer (not a slow or stuck
+ * bridge, not one answering busy, not a browser refusing the address).
+ */
+export function researchBridgeDownNow(researchId: string, now = Date.now()): boolean {
+    const rt = runtime.get(researchId);
+    if (!rt || rt.up || now - rt.checkedAt >= BRIDGE_DOWN_FRESH_MS) return false;
+    return rt.why !== 'hung' && rt.why !== 'denied' && !(rt.busyUntil && rt.busyUntil > now);
+}
+
 // The citation gates (main citation, removal, order) read the features from here.
 setCitationFeaturesLookup(id => (researchStatusNow(id) ?? lastBridgeStatus(id))?.features ?? null);
 

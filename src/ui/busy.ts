@@ -303,6 +303,12 @@ function drawOnRow(row: HTMLElement): { undraw: () => void; drawDone: (text: str
     };
 }
 
+/** On the screen: in the page and drawn (a menu hidden by its class, `display: none`, is gone too). */
+function seen(el: Element | null | undefined): el is HTMLElement {
+    if (!el || !el.isConnected) return false;
+    return typeof el.getClientRects !== 'function' || el.getClientRects().length > 0;
+}
+
 // ==================== THE ELEMENT OF THE CLICK ====================
 
 let activated: HTMLElement | null = null;
@@ -318,6 +324,8 @@ export function trackActivations(): void {
     if (tracking || typeof document === 'undefined') return;
     tracking = true;
     const note = (e: Event): void => {
+        // The app's own clicks (a hidden link handed to the system) are not a person's.
+        if (!e.isTrusted) return;
         if (e instanceof KeyboardEvent && e.key !== 'Enter' && e.key !== ' ') return;
         const t = e.target instanceof Element ? e.target.closest<HTMLElement>(ACTIVATABLE) : null;
         activated = t;
@@ -484,14 +492,14 @@ function show(el: HTMLElement, st: BusyState): void {
     st.phase = 'busy';
     st.shownAt = Date.now();
     const row = st.opts.rowOf instanceof HTMLElement ? st.opts.rowOf : null;
-    if (el.isConnected) {
+    if (seen(el)) {
         const d = draw(el, st.label, st.opts.done);
         st.drawnOn = el;
         st.undraw = d.undraw;
         st.drawDone = d.drawDone;
         el.dataset.busy = 'busy';
         el.setAttribute('aria-busy', 'true');
-    } else if (row?.isConnected) {
+    } else if (seen(row)) {
         const d = drawOnRow(row);
         st.drawnOn = row;
         st.undraw = d.undraw;
@@ -501,8 +509,8 @@ function show(el: HTMLElement, st: BusyState): void {
     // The element may go while the state lasts (a list drawn again): the state goes on in a toast.
     st.watch = setInterval(() => {
         if (st.phase !== 'busy') return;
-        if (st.drawnOn && st.drawnOn.isConnected) return;
-        if (st.drawnOn === el && row?.isConnected) {
+        if (seen(st.drawnOn)) return;
+        if (st.drawnOn === el && seen(row)) {
             const d = drawOnRow(row);
             st.drawnOn = row;
             st.undraw = d.undraw;
@@ -550,7 +558,7 @@ async function finish(el: HTMLElement, st: BusyState, end: BusyEnd): Promise<voi
         if (wait > 0) await new Promise(r => setTimeout(r, wait));
     }
     release(el, st);
-    const where = st.drawnOn && st.drawnOn.isConnected ? st.drawnOn : null;
+    const where = seen(st.drawnOn) ? st.drawnOn : null;
     if (end.ok) {
         const said = end.announce ?? end.done;
         if (st.toast) {
@@ -566,14 +574,19 @@ async function finish(el: HTMLElement, st: BusyState, end: BusyEnd): Promise<voi
         return;
     }
     toRest(el, st);
+    // A neutral end (a question, not an error) leaves its progress toast for a toast of its own (role=status).
+    if (st.toast && end.neutral) {
+        st.toast.close();
+        st.toast = null;
+    }
     if (st.toast) {
         const action = end.retry ? { label: strings.busy.retry, run: end.retry } : end.alt;
         st.toast.fail(end.hint ? `${end.text} ${end.hint}` : end.text, action);
         st.toast = null;
         return;
     }
-    const anchor = el.isConnected ? el : st.opts.rowOf instanceof HTMLElement && st.opts.rowOf.isConnected ? st.opts.rowOf : null;
-    if (anchor) showBusyMessage(el.isConnected ? el : anchor, end, st.opts);
+    const anchor = seen(el) ? el : st.opts.rowOf instanceof HTMLElement && seen(st.opts.rowOf) ? st.opts.rowOf : null;
+    if (anchor) showBusyMessage(seen(el) ? el : anchor, end, st.opts);
     else endToast(el, end);
 }
 

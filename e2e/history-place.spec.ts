@@ -104,7 +104,8 @@ test.describe('History of places: a place\'s own history on request (§6a)', () 
         await expect.poll(() => history.writes.place).toEqual([{ place: 'L0001' }]);
         await expect(dialog(page)).toHaveCount(0);
         await expect.poll(async () => (await links(page)).at(-1)).toMatch(LINK_L0001);
-        await expect(toast(page, 'Opening the research…')).toBeVisible();
+        // The agent's work in the terminal (B21: no longer "Opening the research…").
+        await expect(toast(page, 'Opening the agent…')).toBeVisible();
     });
 
     test('the estimate: minutes, minutes with USD; the research\'s surroundings; Enter and Escape cancel', async ({ page }) => {

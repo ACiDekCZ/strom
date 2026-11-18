@@ -279,7 +279,7 @@ describe('the marks of research actions come from the one map', () => {
     it('leaves the low-level drawers to the generic renderers', () => {
         // Each draws the flags its callers derived with researchMarkFlags / researchLinkFlags / researchLinkMark.
         const RENDERERS: Record<string, number> = {
-            'ui/misc.ts': 1, // a toast's action ({ research, ai })
+            'ui/toast.ts': 1, // a toast's action ({ research, ai })
             'ui/dialogs.ts': 2, // a choice's button and the dialog's link ({ research })
             'ui/bottom-sheet.ts': 2, // a sheet row ({ ext, ai }) and the sheet's state action ({ research, ai })
             'ui/material-viewer-ui.ts': 2, // the viewer's card buttons and its actions ({ research })
