@@ -80,6 +80,8 @@ async function seed(page: Page, opts: { refusedTiles?: boolean; branch?: boolean
     } else {
         await stubTiles(page);
     }
+    // The geocoder's interval between the forms of a search runs on Playwright's clock (`answered`).
+    await page.clock.install();
     await openApp(page);
     await seedTree(page, {
         a: { firstName: 'Zorbin', lastName: 'Lhoták', birthDate: '1820', birthPlace: 'Lhota' },
@@ -122,11 +124,33 @@ const toast = (page: Page, text: string | RegExp): Locator => page.locator('.toa
 /** Every form takes the geocoder's interval: a search of three forms takes a few seconds. */
 const SEARCH = { timeout: 15000 };
 
+/**
+ * The forms of a search go out REQUEST_INTERVAL_MS (1.1 s) apart, as the geocoder asks: that wait is
+ * pushed on the page's clock (installed by `seed`) until the search has ended.
+ */
+async function answered(page: Page): Promise<void> {
+    await expect.poll(async () => {
+        if (!await page.evaluate(() => (window.Strom.UI as unknown as { placeSearchBusy: boolean }).placeSearchBusy)) return true;
+        await page.clock.runFor(250);
+        return false;
+    }, { ...SEARCH, intervals: [20] }).toBe(true);
+}
+
+/** A message waiting its turn behind the undo pill (3 s to be read): that time on the page's clock until it shows. */
+async function shown(page: Page, message: Locator): Promise<void> {
+    await expect.poll(async () => {
+        if (await message.isVisible()) return true;
+        await page.clock.runFor(250);
+        return false;
+    }, { timeout: 10_000, intervals: [20] }).toBe(true);
+}
+
 async function search(page: Page, name: string): Promise<Locator> {
     await openOn(page, name);
     const r = row(page, name);
     await expect(r.locator('.place-search')).toBeVisible();
     await r.locator('.place-search-go').click();
+    await answered(page);
     return r;
 }
 
@@ -176,7 +200,7 @@ test.describe('Find on the map', () => {
 
         // Picked knowingly: by hand, the warning answered, no Check mark.
         await b.click();
-        await expect(toast(page, 'Matched to Horní Lhota, okres Jinov, Česko')).toBeVisible();
+        await shown(page, toast(page, 'Matched to Horní Lhota, okres Jinov, Česko'));
         const geo = await geoOf(page, 'H. Lhota');
         expect(geo).toMatchObject({ lat: 50.68, origin: 'hand' });
         expect(geo?.keptAt).toBeTruthy();
@@ -264,7 +288,7 @@ test.describe('Find on the map', () => {
         // A click on the small map's point picks too.
         await r.locator('.place-mini-pin').click();
         const t = toast(page, 'Matched to Horní Lhota, okres Lhotov, Česko');
-        await expect(t).toBeVisible();
+        await shown(page, t);
         const geo = await geoOf(page, 'H. Lhota');
         expect(geo).toMatchObject({ lat: 49.612, lon: 15.215, origin: 'hand' });
         expect(geo?.keptAt).toBeUndefined();
@@ -311,11 +335,13 @@ test.describe('Find on the map', () => {
         await openOn(page, 'Lhotínek');
         const r = row(page, 'Lhotínek');
         await r.locator('.place-search-go').click();
+        await answered(page);
         const failed = r.locator('.place-results .busy-msg.is-err[role="alert"]');
         await expect(failed.locator('.busy-msg__text')).toHaveText('The service is not available (network error).', SEARCH);
         await expect(r.locator('.place-empty')).toHaveCount(0);
         down = false;
         await failed.getByRole('button', { name: 'Try again' }).click();
+        await answered(page);
         await expect(r.locator('.place-empty-head')).toHaveText('The map found nothing under Lhotínek (also searched as Lhotinek).', SEARCH);
         await expect(r.locator('.place-search-other')).toHaveText('Search differently');
     });
@@ -352,7 +378,7 @@ test.describe('Find on the map', () => {
 
         await r.locator('.place-hand-here').click();
         const t = toast(page, 'Placed by hand: Lhotínek.');
-        await expect(t).toBeVisible();
+        await shown(page, t);
         await expect(row(page, 'Lhotínek').locator('.place-pin-state')).toContainText('Placed by hand');
         const geo = await geoOf(page, 'Lhotínek');
         expect(geo).toMatchObject({ origin: 'hand' });
@@ -424,7 +450,7 @@ test('the tile server refuses the background: the small map says so once, no emp
     // The letters are drawn over the note and still pick.
     await expect(r.locator('.place-mini-pin')).toHaveText(['A', 'B']);
     await r.locator('.place-mini-pin').first().click();
-    await expect(toast(page, 'Matched to Horní Lhota, okres Lhotov, Česko')).toBeVisible();
+    await shown(page, toast(page, 'Matched to Horní Lhota, okres Lhotov, Česko'));
 });
 
 test('the small map\'s tiles do not come over the network: its corner says so once, Try again draws them', async ({ page }) => {
