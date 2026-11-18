@@ -391,11 +391,13 @@ describe('the image export shows the name as the cards do', () => {
         const jan = person('a', 'Jan', 'Novák', { titleBefore: 'Ing.', titleAfter: 'ml.' });
         const data: StromData = { persons: { [jan.id]: jan }, partnerships: {} };
         const layout = { positions: new Map([[jan.id, { x: 0, y: 0 }]]), connections: [], spouseLines: [] };
-        const svg = buildTreeSvg(data, layout);
+        // The screen's widths (6px a character): the whole name fits one line, as on the card.
+        const measureCardTexts = (_kind: string, texts: Iterable<string>) => new Map([...texts].map(t => [t, t.length * 6]));
+        const svg = buildTreeSvg(data, layout, { measureCardTexts });
         expect(svg).toContain('Ing. Jan Novák ml.');
         expect(svg).toContain('>JN<');
         const off = vi.spyOn(SettingsManager, 'isShowTitles').mockReturnValue(false);
-        const bare = buildTreeSvg(data, layout);
+        const bare = buildTreeSvg(data, layout, { measureCardTexts });
         off.mockRestore();
         expect(bare).not.toContain('Ing.');
         expect(bare).toContain('Jan Novák');

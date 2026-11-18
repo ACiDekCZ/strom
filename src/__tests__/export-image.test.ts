@@ -162,12 +162,12 @@ describe('buildTreeSvg', () => {
         expect(plain).not.toContain('<g opacity="0.5">');
     });
 
-    it('long names shrink and clamp instead of overflowing the card', () => {
-        // Each part fits a row of its own, the whole is too long for one line: shrunk and clamped (two rows at most).
+    it('a name too long for one line at 13px goes on two rows as on the screen instead of overflowing the card', () => {
+        // Each part fits a row of its own, the whole is too long for one line.
         const data = makeData(person('a', { firstName: 'Maximilian', lastName: 'Wolfensteiner' } as never));
         const svg = buildTreeSvg(data, layout({ a: { x: 0, y: 0 } }));
-        expect(svg).toContain('lengthAdjust="spacingAndGlyphs"');
-        expect(svg).not.toContain('font-size="15" font-weight="600" fill="#2b2822">Maximilian Wolfensteiner');
+        expect([...svg.matchAll(/<text class="card-name-row"[^>]*>([^<]*)</g)].map(m => m[1])).toEqual(['Maximilian', 'Wolfensteiner']);
+        expect(svg).not.toContain('>Maximilian Wolfensteiner<');
     });
 
     it('a name too long for two rows goes on more rows, never squeezed past reading (T40)', () => {
@@ -408,6 +408,25 @@ describe('a long name on the card is never shortened in the image (T40)', () => 
         expect(r.length).toBe(3);
         expect(r.slice(1).join('')).toBe('Wolfensteinerhohenbrandtovský');
         expect(svg).not.toContain('…');
+    });
+
+    it('normal: a name fits one line as the screen fits it, 15 → 14 → 13px measured, then two rows; never below 13px (1118)', () => {
+        const one = (first: string, last: string) => {
+            const svg = buildTreeSvg(makeData(person('a', { firstName: first, lastName: last })), layout({ a: { x: 0, y: 0 } }), { cardDensity: 'normal', measureCardTexts: measure });
+            return { svg, line: /<text x="[\d.]+" y="28.0"[^>]*font-size="([\d.]+)"[^>]*>([^<]*)</.exec(svg) };
+        };
+        // 18 characters = 126px at 15px, 117.6 at 14 (the column is 125).
+        expect(one('Kasimir', 'Pfefferkor').line?.slice(1)).toEqual(['14', 'Kasimir Pfefferkor']);
+        // 20 characters: 140px at 15, 130.7 at 14, 121.3 at 13.
+        const k = one('Kasimira', 'Pfefferkorn');
+        expect(k.line?.slice(1)).toEqual(['13', 'Kasimira Pfefferkorn']);
+        // Drawn at its measured width at 13px.
+        expect(k.svg).toContain('textLength="121.3"');
+        // 21 characters: too wide at 13px, so the given name and the surname on rows, as on the screen.
+        const f = one('Florimund', 'Pfefferkorn');
+        expect(f.line).toBeNull();
+        expect(rows(f.svg)).toEqual(['Florimund', 'Pfefferkorn']);
+        for (const svg of [k.svg, f.svg]) for (const m of svg.matchAll(/font-size="([\d.]+)" font-weight="600" fill="#2b2822"/g)) expect(Number(m[1])).toBeGreaterThanOrEqual(12.5);
     });
 
     it('normal: a short name stays the one-line 64px card', () => {

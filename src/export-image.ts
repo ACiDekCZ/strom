@@ -1037,14 +1037,19 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
                 ...(photoView === 'small' ? {} : { textWidth: normalCardTextWidth(photoView, true) }) }], measure)[0];
             const nameRows = [...split.given, ...split.surname];
             const wrapped = nameRows.length > 2;
-            // With the birth surname's row the name stays on one line 15 → 14 → 13px, else goes on rows.
-            const oneLine = wrapped || !birthText ? undefined : [15, 14, 13].find(fs => estWidth(fullName, fs, true) <= contentW);
-            if (!wrapped && !birthText) {
-                out.push(fittedText(fullName, cx, pos.y + 28, contentW, [15, 13, 11], true, COLORS.text));
+            // One line as the screen fits it (renderer.ts fitCardNamesNow): 15 → 14 → 13px, measured in the
+            // screen's font; still too wide, the rows (step 2) — never smaller than the screen's 13px floor.
+            const nameAt15 = measure('name', [fullName]).get(fullName) ?? 0;
+            const oneLine = wrapped ? undefined : [15, 14, 13].find(fs => nameAt15 * fs / 15 <= contentW);
+            if (!wrapped && !birthText && oneLine) {
+                // Measured by the screen: drawn at that width (inside the column in any font).
+                const nameW = nameAt15 * oneLine / 15;
+                const clamp = options.measureCardTexts && nameW > 0 ? ` textLength="${nameW.toFixed(1)}" lengthAdjust="spacingAndGlyphs"` : '';
+                out.push(`<text x="${cx.toFixed(1)}" y="${(pos.y + 28).toFixed(1)}" text-anchor="middle" font-size="${oneLine}" font-weight="600" fill="${COLORS.text}"${clamp}>${escapeXml(fullName)}</text>`);
                 if (meta) {
                     out.push(fittedText(meta, cx - markRoom / 2, pos.y + 45, contentW - markRoom, [11, 10, 9], false, COLORS.textLight));
                 }
-            } else if (oneLine) {
+            } else if (oneLine && birthText) {
                 out.push(`<text x="${cx.toFixed(1)}" y="${(pos.y + 24).toFixed(1)}" text-anchor="middle" font-size="${oneLine}" font-weight="600" fill="${COLORS.text}">${escapeXml(fullName)}</text>`);
                 out.push(`<text class="card-birth" x="${cx.toFixed(1)}" y="${(pos.y + 38.5).toFixed(1)}" text-anchor="middle" font-size="11" fill="${COLORS.textFaint}">${escapeXml(birthText)}</text>`);
                 if (meta) out.push(fittedText(meta, cx - markRoom / 2, pos.y + 52.5, contentW - markRoom, [11, 10, 9], false, COLORS.textLight));
