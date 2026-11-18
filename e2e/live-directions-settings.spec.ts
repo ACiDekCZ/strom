@@ -146,8 +146,13 @@ test.describe('work outside the directions in Research for this tree', () => {
         await expect(radio(page, 'last')).toHaveAttribute('aria-disabled', 'true');
         await expect(suggest(page)).toHaveAttribute('aria-disabled', 'true');
         await expect(group(page)).toHaveAttribute('aria-busy', 'true');
+        const suggestBefore = await suggest(page).isChecked();
         // A click on another card meanwhile changes nothing.
         await card(page, 'last').click({ force: true });
+        // Read at once: a later render must not be what puts the choice back.
+        expect(await radio(page, 'last').isChecked()).toBe(false);
+        await suggest(page).click({ force: true });
+        expect(await suggest(page).isChecked()).toBe(suggestBefore);
         await expect(radio(page, 'normal')).toBeChecked();
         release();
         await expect(card(page, 'normal')).not.toHaveAttribute('data-pend', '1');

@@ -1596,6 +1596,9 @@ export const researchOffLineMethods = uiModule({
             // While an item writes (6.1): it dashed with its words, every choice locked (visibly, focus kept).
             if (offSet.busy) input.setAttribute('aria-disabled', 'true');
             if (offSet.busy === `mode:${m}`) applyPend(card, offPendKey(`mode:${m}`));
+            // Locked only visibly (aria-disabled keeps the focus), so a click or an arrow key would still check
+            // another card natively while one writes, and the render after it (the same state) changes nothing.
+            input.addEventListener('click', e => { if (offSet.busy) e.preventDefault(); });
             input.addEventListener('change', () => { if (input.checked) void this.setOffLineSettingsMode(m); });
             const text = el('span', 'research-transcripts-text');
             const title = el('span', 'research-transcripts-title', L.offModeCap[m]);
@@ -1631,6 +1634,7 @@ export const researchOffLineMethods = uiModule({
         if (!can || never) box.disabled = true;
         if (offSet.busy) box.setAttribute('aria-disabled', 'true');
         if (offSet.busy === 'suggest') applyPend(row, offPendKey('suggest'));
+        box.addEventListener('click', e => { if (offSet.busy) e.preventDefault(); });
         box.addEventListener('change', () => void this.setOffLineSettingsSuggest(box.checked));
         const boxText = el('span', 'settings-text');
         boxText.append(el('span', 'settings-name', L.setSuggest), el('span', 'settings-desc', never ? L.setSuggestNever : L.setSuggestDesc));
