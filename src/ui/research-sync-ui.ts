@@ -70,6 +70,7 @@ import { ConflictDecideMode, conflictDecideMode, DecideKind, DecideBody, DecideR
 import { postBridgeRevert, researchShowsOrigin, RevertRequest, RevertResult } from '../research-revert.js';
 import { researchConflictTitle } from './person-research-ui.js';
 import { uiModule } from './module.js';
+import { computeUnder } from './canvas-busy.js';
 import type { ToastWorkEnd } from './toast.js';
 import { runBusy, activatedElement, type BusyCtl, type BusyEnd } from './busy.js';
 import { holdLeave, takeLeftPending } from './busy-leave.js';
@@ -467,6 +468,16 @@ export function researchSendMode(link: ResearchLink | undefined): ResearchSendMo
     return link?.sendMode === 'manual' || link?.sendMode === 'off' ? link.sendMode : 'auto';
 }
 
+
+/** From this many people the list of changes says its state at once (comparing takes longer than 120 ms). */
+export const CHANGES_SHOWN_AT_ONCE = 5000;
+
+/** The list of changes computed under `el` (a button that stays) or the canvas overlay (a menu's item, §8). */
+function changesUnder(el: HTMLElement | null | undefined, work: () => void): Promise<void | undefined> {
+    const stays = el && !el.closest('[role="menu"], [role="menuitem"], .actions-menu, .bottom-sheet') ? el : null;
+    const n = Object.keys(DataManager.getData().persons).length;
+    return computeUnder(stays, work, { label: strings.busy.findingChanges, atOnce: n >= CHANGES_SHOWN_AT_ONCE });
+}
 export const researchSyncMethods = uiModule({
     /**
      * A send's answer about the sources sent as entries of a reading
@@ -2791,10 +2802,12 @@ export const researchSyncMethods = uiModule({
                 break;
             }
             case 'sendThenLoad': void this.researchSendNow({ thenLoad: true }, el); break;
-            case 'showChanges': this.showResearchChanges('send'); break;
-            case 'showChangesFirst': this.showResearchChanges('send', { confirm: true }); break;
+            // §8: the changes against the research's version are one computation over the tree: under the
+            // button's working state, or the canvas overlay when a menu closes on the choice.
+            case 'showChanges': void changesUnder(el, () => this.showResearchChanges('send')); break;
+            case 'showChangesFirst': void changesUnder(el, () => this.showResearchChanges('send', { confirm: true })); break;
             case 'showOriginals': this.showOriginalsQueue(); break;
-            case 'showWritten': this.showResearchChanges('written'); break;
+            case 'showWritten': void changesUnder(el, () => this.showResearchChanges('written')); break;
             case 'loadNewer': void this.researchLoadNewer({}, el); break;
             case 'reload': window.location.reload(); break;
             case 'cancelLoad': this.researchCancelThenLoad(); break;

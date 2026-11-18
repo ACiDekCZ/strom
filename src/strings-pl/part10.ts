@@ -34,6 +34,7 @@ export const plPart10: Pick<StringsType, 'busy'> = {
         mapCalc: 'Obliczanie mapy…',
         findingParts: 'Wyszukiwanie części…',
         findingFamilies: 'Wyszukiwanie rodzin…',
+        findingChanges: 'Wyszukiwanie zmian…',
         adoptTitle: 'Przekazywanie drzewa badaniu…',
         adoptBackup: 'Zapisywanie kopii zapasowej',
         adoptGedcom: 'Tworzenie GEDCOM',

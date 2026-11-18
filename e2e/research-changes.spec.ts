@@ -38,8 +38,18 @@ test.describe('changes per person', () => {
         // The block in ⋯ → Research: how many people; the same panel from "Other actions" (Send sends at once here).
         await openResearchMenu(page, { expandMore: true });
         await expect(block(page)).toContainText('1 person changed');
+        // The menu closes on the choice: the list is computed under the canvas overlay (A93, waiting buttons §8).
+        await page.evaluate(() => {
+            const w = window as unknown as { __said: string[] };
+            w.__said = [];
+            new MutationObserver(() => {
+                const o = document.querySelector('#tree-container > .canvas-busy');
+                if (o && !document.getElementById('research-changes-panel')) w.__said.push(o.textContent ?? '');
+            }).observe(document.getElementById('tree-container')!, { childList: true, subtree: true, characterData: true });
+        });
         await page.locator('#research-item-changes').click();
         await expect(panel).toBeVisible();
+        expect(await page.evaluate(() => (window as unknown as { __said: string[] }).__said)).toContain('Finding the changes…');
         // A name selects the person and closes the panel.
         await panel.locator('.research-changes-name').click();
         await expect(panel).toHaveCount(0);

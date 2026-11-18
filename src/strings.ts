@@ -10252,6 +10252,8 @@ const stringsEN = {
         /** Split a tree (§8): its parts and its families found before the dialog. */
         findingParts: 'Finding the parts…',
         findingFamilies: 'Finding the families…',
+        /** What will be sent / was written: the tree compared with the research's version (§8). */
+        findingChanges: 'Finding the changes…',
         adoptTitle: 'Handing the tree to the research…',
         adoptBackup: 'Saving a backup',
         adoptGedcom: 'Creating GEDCOM',
@@ -20184,6 +20186,7 @@ const stringsCZ: StringsType = {
         mapCalc: 'Počítá se mapa…',
         findingParts: 'Hledají se části…',
         findingFamilies: 'Hledají se rodiny…',
+        findingChanges: 'Hledají se změny…',
         adoptTitle: 'Předává se strom výzkumu…',
         adoptBackup: 'Ukládá se záloha',
         adoptGedcom: 'Vytváří se GEDCOM',
@@ -30027,6 +30030,7 @@ const stringsDE: StringsType = {
         mapCalc: 'Karte wird berechnet…',
         findingParts: 'Teile werden gesucht…',
         findingFamilies: 'Familien werden gesucht…',
+        findingChanges: 'Änderungen werden gesucht…',
         adoptTitle: 'Stammbaum wird an die Forschung übergeben…',
         adoptBackup: 'Sicherung wird gespeichert',
         adoptGedcom: 'GEDCOM wird erstellt',
