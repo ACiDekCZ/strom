@@ -1,5 +1,5 @@
 import { test, expect, Page, BrowserContext } from '@playwright/test';
-import { card, openApp, setFollowMode } from './helpers.js';
+import { card, openApp, setFollowMode, followModeOf } from './helpers.js';
 
 /**
  * "Focus" sent from another window (spec 110): a Table window whose choices
@@ -7,7 +7,9 @@ import { card, openApp, setFollowMode } from './helpers.js';
  * also one the main window's chart did not draw; running down the rows with
  * the arrow keys changes the centre once, to the last row; one Back returns
  * to the centre before the run. "Mark" keeps the centre, "off" sends
- * nothing.
+ * nothing. The window's header chooses it in "Selection" (spec 110 §1):
+ * This window / Main window, the main window's group greyed while off or
+ * without the main window, none in a chart's view.
  */
 
 const NOW = new Date('2026-06-15T10:00:00Z');
@@ -147,5 +149,102 @@ test('mark keeps the main window\'s centre (the card ringed); off sends nothing'
     await page.waitForTimeout(400);
     expect((await selects(page)).length).toBe(n);
     expect(await focusOf(page)).toBe(away);
+    expect(errors).toEqual([]);
+});
+
+const control = (p: Page) => p.locator('.sat-follow');
+const menu = (p: Page) => p.locator('.sat-follow-menu');
+
+test('"Selection" in a Table window: mark only by default, Focus chosen in the menu makes the main window\'s centre; off greys the main window\'s group and sends nothing; the choice is kept; a Family view has no such group; without the main window it is greyed', async ({ page, context }) => {
+    test.setTimeout(60_000);
+    const errors: string[] = [];
+    const treeId = await openMain(page, context);
+    const sat = await openTable(context, treeId, 'sf04aa', 'mark', errors);
+
+    // Mark only by default; at 1200 px both directions in words, no "Selection:".
+    await expect(control(sat)).toHaveAttribute('data-send', 'mark');
+    await expect(control(sat)).toHaveAttribute('aria-label', 'Person selection between windows. From other windows: mark only. To the main window: mark only.');
+    await expect(control(sat)).toHaveAttribute('aria-haspopup', 'menu');
+    await expect(sat.locator('.sat-follow-label')).toBeHidden();
+    await expect(sat.locator('.sat-follow-state')).toHaveText('mark only');
+    await expect(sat.locator('.sat-follow-send-state')).toHaveText('mark only');
+
+    // The menu: two groups, Focus named as the card's Focus.
+    await control(sat).click();
+    await expect(control(sat)).toHaveAttribute('aria-expanded', 'true');
+    await expect(menu(sat).locator('[role="group"]')).toHaveCount(2);
+    await expect(menu(sat).locator('[role="group"]').nth(0)).toHaveAttribute('aria-label', 'This window');
+    await expect(menu(sat).locator('[role="group"]').nth(1)).toHaveAttribute('aria-label', 'Main window');
+    await expect(menu(sat).locator('[data-send="mark"]')).toHaveAttribute('aria-checked', 'true');
+    await expect(menu(sat).locator('[data-send="focus"] .view-window-item-label')).toHaveText('focus');
+    await menu(sat).locator('[data-send="focus"]').click();
+    await expect(menu(sat)).toHaveCount(0);
+    await expect(control(sat)).toHaveAttribute('data-send', 'focus');
+    await expect(sat.locator('.sat-follow-send-state')).toHaveText('focus');
+    expect(await sat.evaluate(() => sessionStorage.getItem('strom.win.send.sf04aa'))).toBe('focus');
+
+    // A row chosen now makes the main window's centre.
+    const target = await undrawn(page);
+    const r = row(sat, target!);
+    await r.scrollIntoViewIfNeeded();
+    await r.click();
+    await expect.poll(() => focusOf(page)).toBe(target);
+    expect((await selects(page)).at(-1)).toBe(`focus:${target}`);
+
+    // Off: the main window's group stays, greyed, Focus still checked, with its note; a click there does nothing; nothing sent.
+    await setFollowMode(sat, 'off');
+    await expect(control(sat)).toHaveAttribute('aria-label', 'Person selection between windows: off.');
+    await expect(sat.locator('.sat-follow-send')).toBeHidden();
+    await control(sat).click();
+    const main = menu(sat).locator('[role="group"]').nth(1);
+    await expect(main).toHaveAttribute('aria-disabled', 'true');
+    await expect(main.locator('[data-send="focus"]')).toHaveAttribute('aria-checked', 'true');
+    await expect(main.locator('[data-send="focus"]')).toHaveAttribute('aria-disabled', 'true');
+    await expect(main.locator('.sat-follow-note')).toHaveText('Unavailable – selection sharing is off in this window.');
+    await main.locator('[data-send="mark"]').click({ force: true });
+    await expect(menu(sat)).toBeVisible();
+    await sat.keyboard.press('Escape');
+    await expect(menu(sat)).toHaveCount(0);
+    expect(await sat.evaluate(() => sessionStorage.getItem('strom.win.send.sf04aa'))).toBe('focus');
+    const n = (await selects(page)).length;
+    const other = await sat.locator('#table-container .tv-body .tv-row[data-key^="p:"]').evaluateAll((els, t) => els
+        .map(e => (e.getAttribute('data-key') ?? '').slice(2)).find(k => k !== t)!, target);
+    await row(sat, other).click();
+    await page.waitForTimeout(400);
+    expect((await selects(page)).length).toBe(n);
+
+    // Kept over a reload; on again, Focus applies again. The arrows go through both groups, Enter chooses.
+    await sat.reload();
+    await expect(sat.locator('html')).not.toHaveClass(/app-loading/);
+    expect(await followModeOf(sat)).toBe('off');
+    await setFollowMode(sat, 'mark');
+    await expect(control(sat)).toHaveAttribute('data-send', 'focus');
+    await control(sat).focus();
+    await sat.keyboard.press('ArrowDown');
+    await expect(menu(sat).locator('[data-mode="mark"]')).toBeFocused();
+    await sat.keyboard.press('ArrowDown');
+    await sat.keyboard.press('ArrowDown');
+    await expect(menu(sat).locator('[data-send="mark"]')).toBeFocused();
+    await sat.keyboard.press('Enter');
+    await expect(menu(sat)).toHaveCount(0);
+    await expect(control(sat)).toHaveAttribute('data-send', 'mark');
+    await expect(control(sat)).toBeFocused();
+
+    // A Family view: the window's own direction alone, no main window's group.
+    await sat.locator('.sat-view-segment [data-view="family"]').click();
+    await expect(control(sat)).not.toHaveAttribute('data-send', /./);
+    await control(sat).click();
+    await expect(menu(sat).locator('[role="group"]')).toHaveCount(1);
+    await expect(menu(sat).locator('[data-send]')).toHaveCount(0);
+    await sat.keyboard.press('Escape');
+    await sat.locator('.sat-view-segment [data-view="table"]').click();
+    await expect(control(sat)).toHaveAttribute('data-send', 'mark');
+
+    // Without the main window: the group greyed with its note, the choice kept.
+    await page.close();
+    await expect(sat.locator('.sat-follow-send')).toHaveClass(/is-muted/, { timeout: 4500 });
+    await control(sat).click();
+    await expect(menu(sat).locator('[role="group"]').nth(1)).toHaveAttribute('aria-disabled', 'true');
+    await expect(menu(sat).locator('.sat-follow-note')).toHaveText('The main window is not open.');
     expect(errors).toEqual([]);
 });

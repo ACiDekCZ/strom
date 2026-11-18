@@ -249,6 +249,30 @@ test.describe('desktop', () => {
         await expect.poll(() => focusRefn(sat)).toBe('P0013');
     });
 
+    test('a Table window set to Focus: while the main window follows the agent the value says "(agent)" and the menu says it is only marked there; paused, it goes', async ({ page, context }) => {
+        await routeBridge(context);
+        const treeId = await follow(page);
+        const sat = await context.newPage();
+        await sat.setViewportSize({ width: 1200, height: 800 });
+        await sat.addInitScript(() => { sessionStorage.setItem('strom.win.send.af7a2b3c', 'focus'); });
+        await sat.goto(`/strom.html?okno=table&tree=${encodeURIComponent(treeId)}&w=af7a2b3c`);
+        const ctl = sat.locator('.sat-follow');
+        await expect(ctl).toHaveAttribute('data-send', 'focus');
+        await expect(sat.locator('.sat-follow-agent')).toHaveText('(agent)');
+        await expect(sat.locator('.sat-follow-send')).toHaveClass(/is-muted/);
+        await expect(ctl).toHaveAttribute('aria-label', /To the main window: focus \(agent\)\.$/);
+        await ctl.click();
+        await expect(sat.locator('.sat-follow-menu [data-send="focus"]')).toHaveAttribute('aria-checked', 'true');
+        await expect(sat.locator('.sat-follow-menu .sat-follow-note[data-note="agent"]')).toHaveText('The main window is following the agent – the selection is only marked there.');
+        await sat.keyboard.press('Escape');
+        // Paused in the main window: "(agent)" goes, the choice stays Focus.
+        await page.evaluate(() => window.Strom.UI.pauseLiveFollow());
+        await expect(sat.locator('.sat-follow-agent')).toBeHidden();
+        await expect(ctl).toHaveAttribute('aria-label', /To the main window: focus\.$/);
+        await expect(ctl).toHaveAttribute('data-send', 'focus');
+        await sat.close();
+    });
+
     test('the bridge lost: the amber strip with the window\'s own button', async ({ page, context }) => {
         const bridge = await routeBridge(context);
         const treeId = await follow(page);

@@ -89,7 +89,7 @@ test.describe('desktop (1440)', () => {
         // The Table only marks another window's choice (K2.1).
         await expect(sat.locator('.sat-follow')).toHaveAttribute('aria-haspopup', 'menu');
         await expect(sat.locator('.sat-follow')).toHaveAttribute('data-mode', 'mark');
-        await expect(sat.locator('.sat-follow')).toHaveAttribute('aria-label', 'Follow selection: mark only');
+        await expect(sat.locator('.sat-follow')).toHaveAttribute('aria-label', 'Person selection between windows. From other windows: mark only. To the main window: mark only.');
         // Not mounted at all (not only hidden).
         for (const sel of ['.toolbar', '#bottom-bar', '.tree-switcher', '#research-menu-row', '#actions-settings-row', '#research-sync-pill']) {
             await expect(sat.locator(sel), sel).toHaveCount(0);

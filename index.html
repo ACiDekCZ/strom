@@ -7942,35 +7942,55 @@
             background: var(--toolbar-bg); color: var(--text);
             border-bottom: 1px solid var(--border);
         }
+        /* The tree's name is the one part that gives way (spec 110 §1): 96–240 px, the whole name its tooltip. */
         .sat-header-title {
-            flex: 0 1 auto; min-width: 0;
+            flex: 0 1 auto; min-width: 96px; max-width: 240px;
             font-size: 14px; font-weight: 600; line-height: 1.2;
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
         .sat-header-spacer { flex: 1 1 auto; min-width: 2px; }
-        /* "Follow selection: {mode} ▾" (K2.1) with a menu of its modes; the mark says the mode:
-           filled = switch (the centre moves), ring = mark only, dashed grey = off. */
+        /* "Selection: ⤓ {here} · ⤴ {main window} ▾" (spec 110 §1, A+C): which parts show follows the
+           header's width (src/windows/sat-header.ts followControlParts); ⤓ in, ⤴ out, ⊘ off. */
         .sat-follow {
             flex: none; display: inline-flex; align-items: center; gap: 6px;
-            height: 30px; padding: 0 8px; margin: 0; box-sizing: border-box;
-            border: 1px solid transparent; border-radius: 8px; background: transparent;
+            height: 30px; padding: 0 8px 0 10px; margin: 0; box-sizing: border-box;
+            border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface);
             color: var(--text); font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer;
         }
-        .sat-follow.is-open { background: var(--hover-bg); }
-        .sat-follow-mark {
-            flex: none; box-sizing: border-box; width: 12px; height: 12px; border-radius: 50%;
-            border: 2px solid var(--primary); background: transparent;
+        .sat-follow.is-open { border-color: var(--sel-line); }
+        .sat-follow.is-icons { padding: 0 6px; }
+        .sat-follow [hidden] { display: none !important; }
+        .sat-follow-ico {
+            flex: none; width: 16px; height: 16px; display: block;
+            fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round;
         }
-        .sat-follow-mark[data-mode="switch"] { background: var(--primary); }
-        .sat-follow-mark[data-mode="off"] { border-color: var(--text-faint); border-style: dashed; }
-        .sat-follow-label { flex: none; color: var(--text-light); }
-        .sat-follow-state { flex: none; font-weight: 500; }
-        /* "Follow selection:" stays beside the view tabs too (960–1199 px): the mode's verb alone ("switch ▾") says nothing; the tree's name gives way (de at 960 px keeps about 120 px of it). */
-        .sat-follow-menu .sat-follow-item { height: auto; min-height: 44px; padding: 6px 12px; align-items: flex-start; gap: 10px; }
-        .sat-follow-menu .sat-follow-item .sat-follow-mark { margin-top: 3px; }
-        .sat-follow-item-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-        .sat-follow-item-note { font-size: 12px; line-height: 1.35; color: var(--text-light); white-space: normal; }
-        .sat-follow-menu .sat-follow-item[aria-checked="true"] .view-window-item-label { font-weight: 600; }
+        .sat-follow-recv, .sat-follow-send, .sat-follow-recv-ico { flex: none; display: inline-flex; align-items: center; gap: 6px; }
+        .sat-follow-label { flex: none; color: var(--text-muted); }
+        .sat-follow-dot, .sat-follow-caret { flex: none; color: var(--text-muted); }
+        /* The main window follows the agent (§4) or is not open (§7): what is sent shows muted. */
+        .sat-follow-send.is-muted { color: var(--text-muted); }
+        .sat-follow-menu { padding: 6px; }
+        .sat-follow-group { display: flex; flex-direction: column; }
+        .sat-follow-group-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; padding: 8px 10px 4px; font-size: 13px; line-height: 1.3; }
+        .sat-follow-group-head b { font-weight: 600; }
+        .sat-follow-group-head span { font-size: 12px; color: var(--text-muted); }
+        .sat-follow-group.is-disabled .sat-follow-group-head b { color: var(--text-muted); }
+        .sat-follow-menu .sat-follow-item {
+            position: relative; display: block; height: auto; min-height: 44px; padding: 7px 10px 7px 34px;
+            border-radius: var(--r-sm); white-space: normal;
+        }
+        .sat-follow-menu .sat-follow-item .view-window-item-label { display: block; white-space: normal; overflow: visible; }
+        .sat-follow-check { position: absolute; left: 10px; top: 8px; visibility: hidden; }
+        .sat-follow-item-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .sat-follow-item-note { font-size: 12px; line-height: 1.35; color: var(--text-muted); white-space: normal; }
+        /* The chosen value: the "Line" selection (--sel-fill and a 2 px line on the left) and ✓; greyed: the line muted. */
+        .sat-follow-menu .sat-follow-item[aria-checked="true"] { background: var(--sel-fill); box-shadow: inset 2px 0 0 var(--sel-line); }
+        .sat-follow-menu .sat-follow-item[aria-checked="true"] .sat-follow-check { visibility: visible; }
+        .sat-follow-menu .sat-follow-item[aria-disabled="true"] { color: var(--text-muted); cursor: default; }
+        .sat-follow-menu .sat-follow-item[aria-disabled="true"][aria-checked="true"] { background: transparent; box-shadow: inset 2px 0 0 var(--border); }
+        .sat-follow-sep { flex: none; height: 1px; margin: 6px 4px; background: var(--border); }
+        .sat-follow-note { display: flex; align-items: flex-start; gap: 8px; padding: 6px 10px; font-size: 12px; line-height: 1.35; color: var(--text-muted); }
+        .sat-follow-note .sat-follow-ico { margin-top: 0; }
         .sat-header-divider { flex: none; width: 1px; height: 20px; background: var(--border); }
         .sat-icon-btn {
             flex: none; display: inline-flex; align-items: center; justify-content: center;
@@ -8011,17 +8031,18 @@
             .sat-follow:hover,
             .sat-view-btn:hover,
             .sat-icon-btn:not(:disabled):hover { background: var(--hover-bg); }
+            .sat-follow-menu .sat-follow-item[aria-disabled="true"]:hover { background: transparent; color: var(--text-muted); }
+            .sat-follow-menu .sat-follow-item[aria-checked="true"]:not([aria-disabled="true"]):hover { background: var(--sel-fill); }
             .sat-another:not(:disabled):hover { color: var(--text); border-color: var(--primary); }
         }
         /* Tablet: the same header (it has room from 641 px). */
         @media (min-width: 641px) and (max-width: 1024px) {
             .sat-header { gap: 8px; }
         }
-        /* Phone: the mode's mark and caret alone (the whole name stays its aria-label), 44 px targets for touch. */
+        /* Phone: "Selection" is its icon and caret alone (the words stay its aria-label; sat-header.ts), 44 px targets for touch; the name may give way below 96 px. */
         @media (max-width: 640px) {
             .sat-header { gap: 6px; padding: 0 6px 0 12px; }
-            .sat-follow { padding: 0 6px; }
-            .sat-follow-label, .sat-follow-state { display: none; }
+            .sat-header-title { min-width: 0; }
         }
         @media (pointer: coarse) {
             .sat-follow { min-width: 44px; height: 40px; justify-content: center; }
