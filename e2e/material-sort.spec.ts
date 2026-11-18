@@ -282,7 +282,8 @@ test.describe('Sort with the agent', () => {
         await page.keyboard.press('ControlOrMeta+a');
         await win(page).locator('.mw-selbar [data-mw="sel-sort"]').click();
         await sortDialog(page).locator('.mdlg-sort-go').click();
-        expect(material.sorts).toHaveLength(2);
+        // The click ends before its request reaches the research: counted once it has.
+        await expect.poll(() => material.sorts?.length).toBe(2);
         await page.keyboard.press('Escape');
         // A selection's sorting has no batch: it stands over the list and the batch offers nothing meanwhile.
         const top = win(page).locator('.mw-sort--top');
