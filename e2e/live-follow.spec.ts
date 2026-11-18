@@ -875,7 +875,10 @@ test.describe('following: the person menu says why it does not edit (063 U3 A5)'
         test.use({ hasTouch: true });
 
         test('the sheet: Edit greyed with why, a tap keeps the sheet; Stop following ends following', async ({ page }) => {
+            await page.clock.install();
             await follow(page, { size: { width: 390, height: 844 }, idle: 60_000 });
+            // The research's opening message (6 s) lies over the card at 390: its time passes on Playwright's clock.
+            await page.clock.runFor(6500);
             await (await cardOf(page, 'P0013')).tap();
             const sheet = page.locator('.bottom-sheet-overlay');
             const edit = sheet.locator('.bottom-sheet-item.is-disabled');
@@ -1321,6 +1324,8 @@ test.describe('follow the agent in the fan (spec 043)', () => {
     });
 
     test('the overview: the line about the switch has the same gap above and below; once it goes the summary closes up to "Follow in" (1105)', async ({ page }) => {
+        // The line's FOLLOW_NOTICE_MS (6 s) run on Playwright's clock (it ticks as ever).
+        await page.clock.install();
         await follow(page, { idle: 60_000, on: true });
         await expect.poll(() => focusRefn(page)).toBe('P0012');
         await page.evaluate(() => window.Strom.UI.openResearchOverview());
@@ -1348,7 +1353,8 @@ test.describe('follow the agent in the fan (spec 043)', () => {
         expect(shown.above!).toBeGreaterThan(4);
         expect(Math.abs(shown.above! - shown.below!)).toBeLessThanOrEqual(1);
         // The line goes by itself (FOLLOW_NOTICE_MS): the gap is the one of an overview drawn without it.
-        await expect(note).toHaveCount(0, { timeout: 10_000 });
+        await page.clock.runFor(6000);
+        await expect(note).toHaveCount(0);
         const after = await gaps();
         await page.evaluate(() => (window.Strom.UI as unknown as { renderResearchOverview(): void }).renderResearchOverview());
         const plain = await gaps();
