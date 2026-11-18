@@ -144,6 +144,31 @@ test.describe('Read a document: the history', () => {
         expect(b.read!.agains).toEqual([]);
     });
 
+    test('a row says its work from the click while the result loads; the dialog opens with it, never empty', async ({ page }) => {
+        await setup(page);
+        const l = await openList(page);
+        let release = (): void => undefined;
+        const held = new Promise<void>(r => { release = r; });
+        let gets = 0;
+        await page.route(u => /\/read\/D[^/]+$/.test(u.pathname), async (route) => {
+            if (route.request().method() === 'GET') { gets++; await held; }
+            await route.fallback();
+        });
+        const r = l.locator('.read-history-row').nth(1);
+        await r.click();
+        await expect(r).toHaveAttribute('data-busy', 'busy');
+        await expect(r).toContainText('Loading…');
+        // The list stays, no empty dialog meanwhile; a second click asks nothing more.
+        await expect(dialog(page)).toHaveCount(0);
+        await r.click({ force: true });
+        expect(gets).toBe(1);
+        release();
+        const d = dialog(page);
+        await expect(d.locator('#read-transcript')).toContainText('Maria filia legitima');
+        await expect(r).not.toHaveAttribute('data-busy', 'busy');
+        expect(gets).toBe(1);
+    });
+
     test('an older research without the history: no row; an archive (404 read.none): no row', async ({ page }) => {
         const b = await setup(page, { history: false });
         await openSettings(page);

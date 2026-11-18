@@ -221,6 +221,22 @@ describe('the window\'s actions run today\'s functions', () => {
         expect(ui.launchResearchLink).toHaveBeenCalledWith('strom-research://chat?tree=R1', 'agent');
     });
 
+    it('"Add file" of the window: the write\'s outcome goes back, the snapshot says the write runs meanwhile (§11.2)', async () => {
+        fake.live = liveOf({ waiting: [{ id: 'T7', kind: 'question', actions: ['file'] }] } as unknown as Partial<LiveSession>);
+        let finish!: (v: unknown) => void;
+        const writeWaitingFile = vi.fn(() => new Promise((res) => { finish = res; }));
+        const ui = stateUi({ liveWaitingWrites: () => ({ file: true }), writeWaitingFile, sendWaitingFile: vi.fn() });
+        const file = { name: 'a.jpg' } as unknown as File;
+        const asked = run(ui, { action: 'waiting-file', args: { itemId: 'T7', file } }) as Promise<unknown>;
+        expect(writeWaitingFile).toHaveBeenCalledWith(fake.live, 'T7', file);
+        expect(ui.sendWaitingFile).not.toHaveBeenCalled();
+        expect(overviewWindowMethods.overviewWindowState.call(ui as never)?.extras.fileSending).toEqual(['T7']);
+        const done = { ok: true, sha: 'abc' };
+        finish(done);
+        await expect(asked).resolves.toEqual(done);
+        expect(overviewWindowMethods.overviewWindowState.call(ui as never)?.extras.fileSending).toBeUndefined();
+    });
+
     it('D: the bulk verification opens here, Stop is written here, each only when the research offers it', () => {
         const showVerifyBulkDialog = vi.fn();
         const verifyStop = vi.fn(async () => {});

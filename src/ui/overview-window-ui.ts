@@ -25,6 +25,9 @@ import {
     type OverviewAction, type OverviewExtras, type OverviewResearchState, type OverviewSource, type OverviewViewingData,
 } from '../windows/overview-window.js';
 
+/** Rows whose file the main window writes for the overview window now (its snapshot says so). */
+const filesSending = new Set<string>();
+
 /** What the overview window draws: the followed research of the open tree, else its research viewed without following. */
 function windowSession(): { s: LiveSession; source: OverviewSource } | null {
     const treeId = DataManager.getCurrentTreeId();
@@ -100,6 +103,7 @@ export const overviewWindowMethods = uiModule({
             extras.offLineSettings = this.offLineSettingsOffered(treeId);
             extras.queueStart = this.queueStartNow();
             extras.followStart = followStartOf(researchId);
+            if (filesSending.size) extras.fileSending = [...filesSending];
         }
         // What the evidence pill lights up in the tree here (the window's rows say it).
         extras.highlight = this.evidenceHighlightNow();
@@ -286,7 +290,15 @@ export const overviewWindowMethods = uiModule({
                 const w = item(a.args.itemId);
                 const task = w ? researchTaskRef(w.id) : null;
                 if (!s || !w || !task || !this.liveWaitingWrites(s).file || !waitingFileWritable(w)) return false;
-                return this.sendWaitingFile(s, task, a.args.file).then(() => true);
+                // The write's outcome goes back; the window says it on its button, its snapshot says the write runs
+                // (it heard the ask, §11.2).
+                const id = w.id;
+                filesSending.add(id);
+                overviewChanged();
+                return this.writeWaitingFile(s, task, a.args.file).finally(() => {
+                    filesSending.delete(id);
+                    overviewChanged();
+                });
             }
             case 'hypothesis-ask': {
                 const h = researchHypotheses(DataManager.getData()).get(a.args.hypothesisId);

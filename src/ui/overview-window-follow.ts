@@ -35,6 +35,27 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
 }
 
 /**
+ * An action asked of the main window from this window while the element's state lasts (§11.2): its answer within
+ * `waitMs`, the snapshot looked at meanwhile (`working`: the main window says the work runs, it heard the ask).
+ * `silent`: nothing heard of the main window — neither its answer nor a snapshot of the work within 10 s, or no
+ * answer at all (the main window closed). `aborted`: the state ended meanwhile.
+ */
+export async function askMainWindow(o: { ask(waitMs: number): Promise<unknown>; waitMs: number; working(): boolean; signal: AbortSignal }):
+    Promise<{ answer: unknown; silent: boolean; aborted: boolean }> {
+    let answered = false;
+    let answer: unknown = null;
+    const asked = o.ask(o.waitMs).then((v) => { answered = true; answer = v; });
+    const silentAt = Date.now() + BUSY_TIMEOUTS.satellite;
+    let heard = false;
+    while (!answered && !o.signal.aborted) {
+        if (o.working()) heard = true;
+        else if (!heard && Date.now() >= silentAt) break;
+        await Promise.race([asked, sleep(WINDOW_FOLLOW_LOOK_MS, o.signal)]);
+    }
+    return { answer, silent: !heard && (!answered || answer === null), aborted: o.signal.aborted };
+}
+
+/**
  * "Follow live" clicked in the overview's own window: the state on `el` (a stand-in's progress toast without
  * it) until the main window's answer. Gives that answer ('busy': a start runs already; null: none).
  */
@@ -45,21 +66,18 @@ export async function followLiveFromWindow(el: HTMLElement | null, deps: WindowF
     let outcome: unknown = null;
     try {
         await runBusy(target, async (ctl) => {
-            let answered = false;
-            const answer = deps.ask(BUSY_TIMEOUTS.tree).then((v) => { answered = true; outcome = v; });
-            const silentAt = Date.now() + BUSY_TIMEOUTS.satellite;
-            let heard = false;
-            while (!answered && !ctl.signal.aborted) {
-                const step = deps.followStart();
-                if (step) {
-                    heard = true;
+            const got = await askMainWindow({
+                ask: deps.ask, waitMs: BUSY_TIMEOUTS.tree, signal: ctl.signal,
+                working: () => {
+                    const step = deps.followStart();
                     if (step === 'tree') ctl.step(strings.busy.loadingTree);
-                } else if (!heard && Date.now() >= silentAt) break;
-                await Promise.race([answer, sleep(WINDOW_FOLLOW_LOOK_MS, ctl.signal)]);
-            }
-            if (ctl.signal.aborted) return;
+                    return step !== null;
+                },
+            });
+            outcome = got.answer;
+            if (got.aborted) return;
             // Nothing heard of the main window: neither its answer nor a snapshot of the start (§11.2).
-            if (!heard && (!answered || outcome === null)) {
+            if (got.silent) {
                 ctl.end({
                     ok: false, kind: 'timeout', text: strings.busy.mainWindowSilent,
                     retry: () => { void followLiveFromWindow(target.isConnected ? target : null, deps); },

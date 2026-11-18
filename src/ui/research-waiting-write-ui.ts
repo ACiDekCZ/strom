@@ -716,30 +716,32 @@ export const researchWaitingWriteMethods = uiModule({
             'too-large': W.fileTooLarge, type: W.fileType, full: W.fileFull, none: W.fileGone, 'no-file': W.fileNotTaken,
             failed: W.writeFailed, 'bad-body': W.badBody, locked: W.locked, busy: W.busy, 'app-only': W.appOnly,
         };
-        const send = async (): Promise<WaitingFileResult> => {
-            const before = await this.waitingHeadBeforeWrite(s);
-            const result = await putWaitingFile(s.bridge.base, task, file, { maxBytes: s.accepts?.mediaMaxBytes });
-            this.takeWaitingWriteHead(s, before, result);
-            return result;
-        };
+        const send = (): Promise<WaitingFileResult | null> => this.writeWaitingFile(s, task, file);
+        const silent = strings.busy.mainWindowSilent;
         if (!shown || !origin) {
             this.showToast(W.fileSending(file.name), Infinity, { spinner: true, kind: 'waiting-file' });
             const result = await send();
+            if (!result) {
+                this.showToast(silent, 6000, { kind: 'waiting-failed' });
+                return;
+            }
             if (result.ok) {
                 this.showToast(W.fileSent, 4000, { kind: 'waiting-file-sent' });
-                if (stillFollowing(s)) this.researchStatusAfterWrite(s);
                 return;
             }
             this.showToast(why[result.code] ?? W.fileFailed, 6000, { kind: 'waiting-failed' });
             return;
         }
         const line = busyStep(origin, `${W.fileSending(file.name)} ${formatBytes(file.size)}`);
-        let sent = false;
         await runBusy(origin, async ctl => {
             try {
                 const result = await send();
+                // The overview's own window: its main window did not answer (§11.2).
+                if (!result) {
+                    ctl.end({ ok: false, kind: 'timeout', text: silent, retry: () => { void this.sendWaitingFile(s, task, file, origin, again); } });
+                    return;
+                }
                 if (result.ok) {
-                    sent = true;
                     // The row stays as it was: the toast says the file went.
                     this.showToast(W.fileSent, 4000, { kind: 'waiting-file-sent' });
                     return;
@@ -757,7 +759,18 @@ export const researchWaitingWriteMethods = uiModule({
                 line.clear();
             }
         }, { label: strings.busy.sending, kind: 'local' });
-        if (sent && stillFollowing(s)) this.researchStatusAfterWrite(s);
+    },
+
+    /**
+     * A file written to a task through the bridge (`PUT media/<sha>` with the task), the research's version taken
+     * in. The overview's own window asks its main window instead (null there: the main window did not answer).
+     */
+    async writeWaitingFile(s: LiveSession, task: string, file: File): Promise<WaitingFileResult | null> {
+        const before = await this.waitingHeadBeforeWrite(s);
+        const result = await putWaitingFile(s.bridge.base, task, file, { maxBytes: s.accepts?.mediaMaxBytes });
+        this.takeWaitingWriteHead(s, before, result);
+        if (result.ok && stillFollowing(s)) this.researchStatusAfterWrite(s);
+        return result;
     },
 
     /** A write button (no research mark: it stays here); one click only. */

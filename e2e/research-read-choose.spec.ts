@@ -457,6 +457,26 @@ test.describe('Read a document: the readers\' agent, model and effort', () => {
         expect(b.read!.agains[0].body.with).toEqual([{ agent: 'claude', model: '', effort: 'high' }, { agent: 'claude', model: 'opus', effort: 'medium' }]);
     });
 
+    test('Read again says its start on its button until the research answers (no click without a sign)', async ({ page }) => {
+        const b = await setup(page);
+        const d = await openWithPage(page);
+        await d.locator('[data-act="read"]').click();
+        await expect.poll(() => b.read!.posts.length).toBe(1);
+        await d.locator('.read-cancel').click();
+        await d.locator('[data-act="again"]').click();
+        await expect(d.locator('#read-title')).toHaveText('Read again');
+        let release = (): void => undefined;
+        const held = new Promise<void>(r => { release = r; });
+        await page.route(u => /\/read\/[^/]+\/again$/.test(u.pathname), async (route) => { await held; await route.fallback(); });
+        const read = d.locator('[data-act="read"]');
+        await read.click();
+        await expect(read).toHaveAttribute('data-busy', 'busy');
+        await expect(read).toContainText('Starting…');
+        release();
+        await expect.poll(() => b.read!.agains.length).toBe(1);
+        await expect(d.locator('[data-act="read"][data-busy="busy"]')).toHaveCount(0);
+    });
+
     test('without read.choices.now: the models as before, even when the offer carries what they run on', async ({ page }) => {
         await setup(page, { offer: choicesNow() });
         const d = await openWithPage(page);

@@ -72,7 +72,7 @@ import { researchConflictTitle } from './person-research-ui.js';
 import { uiModule } from './module.js';
 import { computeUnder } from './canvas-busy.js';
 import type { ToastWorkEnd } from './toast.js';
-import { runBusy, activatedElement, type BusyCtl, type BusyEnd } from './busy.js';
+import { runBusy, activatedElement, busyToast, type BusyCtl, type BusyEnd } from './busy.js';
 import { holdLeave, takeLeftPending } from './busy-leave.js';
 import { startTreeLoad, currentTreeLoad } from './tree-load-progress.js';
 import { researchWrittenList } from './research-changes-ui.js';
@@ -2671,14 +2671,16 @@ export const researchSyncMethods = uiModule({
         if (!ctx || loadAsking || currentTreeLoad()) return;
         const { treeId, link } = ctx;
         const bridge = parseLiveBridge(storedResearchBridge(link.id)?.base);
-        loadAsking = true;
-        let ready = false;
-        try {
-            ready = !!bridge && await this.researchBridgeReady(link.id);
-        } finally {
-            loadAsking = false;
-        }
-        if (bridge && ready) {
+        const shown = el?.isConnected ? el : null;
+        const ping = async (): Promise<boolean> => {
+            loadAsking = true;
+            try {
+                return await this.researchBridgeReady(link.id);
+            } finally {
+                loadAsking = false;
+            }
+        };
+        const load = async (ged: string): Promise<void> => {
             if (!opts.afterSend && this.researchAutoOn(link) && !this.researchReviewOn(link.id) && !link.refused) {
                 const fps = this.researchSyncFingerprints(treeId, link);
                 if (!fps.matchesBase && fps.current !== link.sent?.fingerprint) {
@@ -2689,9 +2691,29 @@ export const researchSyncMethods = uiModule({
             // (Changes the last send left unwritten would go: the load dialog says so, V-J.)
             // (The very same tree under a new head — a write of the family's material — is only taken.)
             if (currentTreeLoad()) return;
-            const load = startTreeLoad({ el: el ?? null, treeId, retry: () => { void this.researchLoadNewer(opts); } });
-            await this.importResearchFromUrl(`${bridge.base}/tree.ged`, { ...(opts.afterSend ? { afterSend: treeId } : { takeSame: true }), load });
-            return;
+            const run = startTreeLoad({ el: null, treeId, retry: () => { void this.researchLoadNewer(opts); } });
+            await this.importResearchFromUrl(ged, { ...(opts.afterSend ? { afterSend: treeId } : { takeSame: true }), load: run });
+        };
+        if (bridge) {
+            // Through the bridge: its answer, a send of what it lacks and the load under the element's state from the
+            // click on (network work, shown at once; A3); without the element the ping under a progress toast (the
+            // load's own toast follows).
+            let ran = false;
+            let ready = false;
+            const ged = `${bridge.base}/tree.ged`;
+            if (shown) {
+                await runBusy(shown, async () => {
+                    ran = true;
+                    ready = await ping();
+                    if (ready) await load(ged);
+                }, { label: strings.busy.generic, atOnce: true, kind: 'local' });
+                // Working already (a second click): nothing more.
+                if (!ran) return;
+            } else {
+                ready = await busyToast(strings.busy.loadingTree, ping);
+                if (ready) await load(ged);
+            }
+            if (ready) return;
         }
         const url = this.activeResearchLink('app');
         if (url) this.launchResearchLink(url, 'version', el ?? undefined);

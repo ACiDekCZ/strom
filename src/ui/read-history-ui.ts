@@ -124,7 +124,7 @@ export const readHistoryMethods = uiModule({
             if (el?.closest('[data-history-close]')) { this.closeReadHistoryDialog(); return; }
             const row = el?.closest<HTMLElement>('.read-history-row');
             const item = row ? items.find(i => i.id === row.dataset.read) : undefined;
-            if (item) this.showReadDocumentDialog({ readId: item.id, read: item });
+            if (item && row) this.showReadDocumentDialog({ readId: item.id, read: item, el: row });
         });
         normalizeModal(overlay.querySelector('.modal') as HTMLElement);
         overlay.querySelector<HTMLElement>('.read-history-row, .buttons .primary')?.focus();

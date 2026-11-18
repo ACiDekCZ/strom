@@ -96,6 +96,8 @@ export interface OverviewExtras {
     queueStart?: { phase: 'starting' | 'silent'; startedAt: number } | null;
     /** "Follow live" starting in the main window (waiting buttons §11.2): its step; absent or null: none. */
     followStart?: 'connect' | 'tree' | null;
+    /** Rows of "Awaiting action" whose file the main window writes for this window now (§11.2); absent: none. */
+    fileSending?: string[];
     /** Rows of "Awaiting action" whose own write is confirmed now ("saving") or was refused (§7); absent: none. */
     waitingWrite?: { saving: string[]; refused: { id: string; text: string; tint: boolean; retry: boolean }[] } | null;
 }

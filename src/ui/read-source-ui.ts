@@ -394,7 +394,7 @@ export const readSourceMethods = uiModule({
         // Redrawn in place: the result link wired here (the viewer's own wiring went with the old row).
         if (results) {
             root.querySelectorAll<HTMLElement>('[data-read-again-open]').forEach(el => {
-                el.addEventListener('click', () => this.showReadDocumentDialog({ readId: el.dataset.readAgainOpen }));
+                el.addEventListener('click', () => this.showReadDocumentDialog({ readId: el.dataset.readAgainOpen, el }));
             });
         }
     },
@@ -439,7 +439,7 @@ export const readSourceMethods = uiModule({
             el.addEventListener('click', () => this.showReadSourceAgain(src.id, this.readSourceExcerptClip(src, excerpts, Number(el.dataset.readAgainClip))));
         });
         body.querySelectorAll<HTMLElement>('[data-read-again-open]').forEach(el => {
-            el.addEventListener('click', () => this.showReadDocumentDialog({ readId: el.dataset.readAgainOpen }));
+            el.addEventListener('click', () => this.showReadDocumentDialog({ readId: el.dataset.readAgainOpen, el }));
         });
         body.querySelectorAll<HTMLElement>('#source-viewer-read-state, #source-viewer-proposal').forEach(el => this.wireReadSourceState(el, src, false));
     },

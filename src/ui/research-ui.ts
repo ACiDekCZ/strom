@@ -4364,16 +4364,27 @@ export const researchUiMethods = uiModule({
         mediaTold.add(treeId);
         this.showToast(strings.sync.mediaMissed, Infinity, {
             closable: true, notice: true, kind: MEDIA_MISSED_TOAST,
-            action: { label: strings.sync.retry, run: () => { void this.researchRetryMediaNow(treeId); } },
+            // The toast stays and says the work (§4) until the files are in, or says again that they are not.
+            action: {
+                label: strings.sync.retry,
+                run: async () => (await this.researchRetryMediaNow(treeId, true) === 'failed'
+                    ? { ok: false, text: strings.sync.mediaMissed, whole: true } : undefined),
+                work: { label: strings.busy.loadingTree, timeoutMs: BUSY_TIMEOUTS.tree },
+            },
         });
     },
 
-    /** "Try again" of that notice: the file with the tree's own files asked once more, loading it may ask as any load. */
-    async researchRetryMediaNow(treeId: TreeId): Promise<void> {
-        if (mediaRetrying.has(treeId)) return;
+    /**
+     * "Try again" of that notice: the file with the tree's own files asked once more, loading it may ask as any
+     * load. `inToast`: the notice's toast says a failure itself (its Try again again), none new.
+     */
+    async researchRetryMediaNow(treeId: TreeId, inToast = false): Promise<'loaded' | 'failed' | 'asks' | 'gone' | 'busy'> {
+        if (mediaRetrying.has(treeId)) return 'busy';
         mediaRetrying.add(treeId);
         try {
-            if (await this.researchRetryMedia(treeId, false) === 'failed') this.tellResearchMediaMissed(treeId, true);
+            const got = await this.researchRetryMedia(treeId, false);
+            if (got === 'failed' && !inToast) this.tellResearchMediaMissed(treeId, true);
+            return got;
         } finally {
             mediaRetrying.delete(treeId);
         }

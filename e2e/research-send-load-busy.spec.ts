@@ -112,6 +112,59 @@ test.describe('loading the research\'s version', () => {
         expect((bridge.treeGets ?? 0) - before).toBe(1);
     });
 
+    test('the element clicked says the work from the click: the bridge asked first, then the download (A3)', async ({ page }) => {
+        const bridge = await newer(page);
+        const before = bridge.treeGets ?? 0;
+        let release = (): void => undefined;
+        const held = new Promise<void>(r => { release = r; });
+        let asked = 0;
+        await page.route(u => u.pathname.endsWith('/status'), async (route) => { asked++; await held; await route.fallback(); });
+        await page.evaluate(() => {
+            const UI = window.Strom.UI as any;
+            // The bridge last heard a while ago: it is asked before the load.
+            UI.researchBridgeFresh = () => false;
+            const b = document.createElement('button');
+            b.id = 'load-here';
+            b.textContent = 'Load';
+            document.body.appendChild(b);
+            void UI.researchLoadNewer({}, b);
+        });
+        const btn = page.locator('#load-here');
+        await expect(btn).toHaveAttribute('data-busy', 'busy');
+        await expect(btn).toContainText('Loading…');
+        await expect.poll(() => asked).toBeGreaterThan(0);
+        expect((bridge.treeGets ?? 0) - before).toBe(0);
+        release();
+        await expect.poll(() => head(page), { timeout: 10_000 }).toBe(NEW_HEAD);
+        await expect(btn).not.toHaveAttribute('data-busy', 'busy');
+        expect((bridge.treeGets ?? 0) - before).toBe(1);
+    });
+
+    test('changes the research lacks go first: the element says the work through the send and the load (A3)', async ({ page }) => {
+        await openResearch(page);
+        const bridge = await fakeBridge(page, { accepts: HAND });
+        writesAtOnce(bridge);
+        bridge.syncDelayMs = 1500;
+        await poll(page);
+        await editJan(page);
+        const sent = page.waitForRequest(r => r.method() === 'POST' && new URL(r.url()).pathname.endsWith('/sync'));
+        await page.evaluate(() => {
+            // A research the changes go to by themselves (asked here, not waited for).
+            (window.Strom.UI as any).researchAutoOn = () => true;
+            const b = document.createElement('button');
+            b.id = 'load-here';
+            b.textContent = 'Load';
+            document.body.appendChild(b);
+            void (window.Strom.UI as any).researchLoadNewer({}, b);
+        });
+        const btn = page.locator('#load-here');
+        // The send's request out, its answer held 1.5 s: the element still says the work.
+        await sent;
+        await expect(btn).toHaveAttribute('data-busy', 'busy');
+        await expect(btn).not.toHaveAttribute('data-busy', 'busy', { timeout: 10_000 });
+        expect(bridge.posts.length).toBe(1);
+    });
+
     test('Cancel while it downloads: the tree stays as it was, nothing asked', async ({ page }) => {
         const bridge = await newer(page);
         bridge.treeDelayMs = 3000;

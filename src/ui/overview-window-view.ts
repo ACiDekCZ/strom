@@ -29,12 +29,12 @@ import { el, setOverviewWindowDrawn, type LiveSession, type OverviewViewing } fr
 import { applyDirectionsWindowState, setQueueDirectionFilter } from './research-directions-ui.js';
 import { setOverviewOwnWindow } from './research-overview-ui.js';
 import { openResearchBusy, type OpenBusyResult } from './research-open-busy.js';
-import { followLiveFromWindow } from './overview-window-follow.js';
+import { askMainWindow, followLiveFromWindow } from './overview-window-follow.js';
 import { activatedElement } from './busy.js';
 import type { ResearchLinkKind } from './research-ui.js';
 import { auditRefusalOf, auditResearchUnavailable, setWaitingAuditState } from './waiting-task-ui.js';
 import { asAuditPreview } from '../research-audit.js';
-import type { WaitingAuditPreviewResult, WaitingAuditResult } from '../research-waiting-write.js';
+import type { WaitingAuditPreviewResult, WaitingAuditResult, WaitingFileResult } from '../research-waiting-write.js';
 import { itemKey } from './waiting-images-ui.js';
 import { SECTION_PREFS_EVENT, sectionPrefs, watchSectionPrefsStorage } from './live-section-prefs.js';
 import {
@@ -52,6 +52,9 @@ import {
 } from '../windows/overview-window.js';
 
 /** How the window reaches the main window (the satellite client, or a test's double). */
+/** Longest a file written by the main window is waited for (at least; a big file longer, as its write). */
+const FILE_RELAY_MIN_MS = 60_000;
+
 export interface OverviewWindowPort {
     /** Ask the main window for an action. */
     send(action: OverviewActionId, args?: unknown): void;
@@ -367,9 +370,24 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
         async undoWaitingAuditFix(this: UIClass, _s: LiveSession, id: string): Promise<void> {
             run('waiting-audit', { itemId: id, do: 'unfix' });
         },
-        async sendWaitingFile(s: LiveSession, task: string, file: File): Promise<void> {
+        /**
+         * The file written by the main window (its write, its version): the button here says the work until its
+         * outcome; nothing heard of the main window for 10 s, null ("The main Strom window does not respond.").
+         */
+        async writeWaitingFile(s: LiveSession, task: string, file: File): Promise<WaitingFileResult | null> {
             const w = s.waiting.find(x => researchTaskRef(x.id) === task);
-            if (w) run('waiting-file', { itemId: w.id, file });
+            if (!w) return { ok: false, code: 'none', status: 0, retryAfter: null, reason: '' };
+            const got = await askMainWindow({
+                ask: (waitMs) => port.ask('waiting-file', { itemId: w.id, file }, waitMs),
+                waitMs: Math.max(FILE_RELAY_MIN_MS, file.size / 2000) + BRIDGE_ANSWER_MS,
+                working: () => extras().fileSending?.includes(w.id) ?? false,
+                signal: new AbortController().signal,
+            });
+            const answer = got.answer;
+            if (answer && typeof answer === 'object' && 'ok' in answer) return answer as WaitingFileResult;
+            // The main window cannot write it (the row gone, writes off there): as a row gone.
+            if (answer === false) return { ok: false, code: 'none', status: 0, retryAfter: null, reason: '' };
+            return null;
         },
         askWaitingHypothesis(h: ResearchHypothesis, what: 'decide' | 'abandon' | 'keep-open', variant?: string): void {
             if (!h.id) return;

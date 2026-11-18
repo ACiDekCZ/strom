@@ -123,3 +123,42 @@ describe('"Follow live" in the overview\'s own window', () => {
         expect(port.ask).toHaveBeenCalledTimes(1);
     });
 });
+
+describe('"Add file" in the overview\'s own window', () => {
+    const session = { waiting: [{ id: 'T7' }] } as unknown as import('../ui/research-ui.js').LiveSession;
+    const file = { name: 'a.jpg', size: 1000, type: 'image/jpeg' } as unknown as File;
+    const stateWith = (fileSending?: string[]): OverviewResearchState => ({
+        v: OVERVIEW_STATE_VERSION, at: 1000, treeId: null, treeName: '', researchId: 'R1', researchName: '', source: 'bridge',
+        bridgeUp: true, session: null, viewing: null, extras: { ...emptyOverviewExtras(), ...(fileSending ? { fileSending } : {}) },
+    });
+
+    it('asks the main window for the write\'s outcome and gives it (not a message without an answer)', async () => {
+        const { researchTaskRef } = await import('../research-link.js');
+        const answer = deferred<unknown>();
+        let state = stateWith();
+        const port = { send: vi.fn(), ask: vi.fn(() => answer.promise), focusMain: vi.fn() };
+        const o = overviewWindowOverrides(port, () => state) as Record<string, (...a: unknown[]) => unknown>;
+        const run = o.writeWaitingFile(session, researchTaskRef('T7'), file) as Promise<unknown>;
+        expect(port.ask).toHaveBeenCalledWith('waiting-file', { itemId: 'T7', file }, expect.any(Number));
+        expect(port.send).not.toHaveBeenCalled();
+        // The main window writes (its snapshot): longer than 10 s is no silence.
+        state = stateWith(['T7']);
+        await vi.advanceTimersByTimeAsync(15_000);
+        const done = { ok: true, sha: 'abc' };
+        answer.resolve(done);
+        await vi.advanceTimersByTimeAsync(400);
+        expect(await run).toEqual(done);
+    });
+
+    it('the main window silent for 10 s: null (the button says "The main Strom window does not respond.")', async () => {
+        const { researchTaskRef } = await import('../research-link.js');
+        const port = { send: vi.fn(), ask: vi.fn(() => new Promise<unknown>(() => { /* never answers */ })), focusMain: vi.fn() };
+        const o = overviewWindowOverrides(port, () => stateWith()) as Record<string, (...a: unknown[]) => unknown>;
+        let got: unknown = 'pending';
+        void (o.writeWaitingFile(session, researchTaskRef('T7'), file) as Promise<unknown>).then((v) => { got = v; });
+        await vi.advanceTimersByTimeAsync(9_800);
+        expect(got).toBe('pending');
+        await vi.advanceTimersByTimeAsync(600);
+        expect(got).toBeNull();
+    });
+});

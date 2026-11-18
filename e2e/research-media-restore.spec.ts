@@ -233,6 +233,31 @@ test.describe('the tree\'s own files restored from a research that keeps them (m
         expect(await missed()).toBeNull();
     });
 
+    test('Try again of that notice says its work in the toast until the end, then says once more what failed (no second toast)', async ({ page }) => {
+        const imgs = await makeImages(page);
+        const bridge = await follow(page, imgs, ['ged.stale', 'ged.etag', 'ged.imagesByHash', 'media.app'], { failImages: true });
+        const notice = page.locator('.toast[data-kind="research-media-missed"]');
+        await page.clock.fastForward(5_000);
+        await page.clock.fastForward(30_000);
+        await expect(notice).toContainText('The photos from the research could not be loaded.');
+        // The images' answer held: the toast works meanwhile.
+        let release = (): void => undefined;
+        const held = new Promise<void>(r => { release = r; });
+        await page.route(`${BRIDGE}/**/images`, async (route) => { await held; await route.fallback(); });
+        const asked = bridge.asked.length;
+        await notice.getByRole('button', { name: 'Try again' }).click();
+        await expect(notice).toHaveAttribute('aria-busy', 'true');
+        await expect(notice.locator('.toast-title')).toHaveText('Loading the tree from the research…');
+        await expect(notice.locator('.busy-spin')).toBeVisible();
+        release();
+        // Still not had: the same toast says it with Try again, no second one.
+        await expect(notice).not.toHaveAttribute('aria-busy', 'true');
+        await expect(notice).toContainText('The photos from the research could not be loaded.');
+        await expect(notice.getByRole('button', { name: 'Try again' })).toBeVisible();
+        await expect(notice).toHaveCount(1);
+        expect(bridge.asked.length).toBeGreaterThan(asked);
+    });
+
     test('a file at a person and the couple by its hash: both places come in, and the next write keeps the couple\'s', async ({ page }) => {
         const imgs = await makeImages(page);
         const letter = imgs[3];
