@@ -261,10 +261,12 @@ test.describe('Materials on a tablet and sideways', () => {
         await expect(win(page).locator('.mw-lhead')).toBeHidden();
     });
 
-    test('sideways in German: the bar\'s count, actions and Clear selection fit on one row without an ellipsis', async ({ page }) => {
+    // Also in Verdana, as wide as the fonts CI's Linux falls back to: there the count and Clear selection take two lines.
+    for (const font of ['', 'Verdana']) test(`sideways in German${font ? ` (${font})` : ''}: the bar\'s count, actions and Clear selection fit on one row without an ellipsis`, async ({ page }) => {
         await page.setViewportSize(SIDEWAYS);
         await tree(page);
         await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
+        if (font) await page.addStyleTag({ content: `* { font-family: "${font}" !important; }` });
         await openWindow(page);
         await win(page).locator('[data-mw="select"]').click();
         await tiles(page).first().click();
