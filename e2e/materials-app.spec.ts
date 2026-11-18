@@ -106,6 +106,26 @@ test.describe('Materials window without a research', () => {
         await expect(win(page).locator('[data-mw="group-person"]')).toHaveAttribute('aria-pressed', 'true');
     });
 
+    test('a person the records do not name ("?") reads "Unknown person" by person and in Where used', async ({ page }) => {
+        await openApp(page);
+        await seedTree(page, {
+            p1: { firstName: '?', lastName: '', isPlaceholder: true },
+            p3: { firstName: 'Kasimir', lastName: 'Pfefferkorn', parents: ['p1'] },
+        }, 'Pfefferkorn', 'p3');
+        await page.evaluate(({ px }) => {
+            const dm = window.Strom.DataManager;
+            const photo = dm.addAttachment('p1' as never, { name: 'portret.png', mimeType: 'image/png', dataUrl: px, sizeBytes: 70 })!;
+            dm.addMediaPlace(photo.id, { personId: 'p3' as never });
+        }, { px: PX });
+        await page.evaluate(() => window.Strom.UI.openMaterials());
+        await win(page).locator('[data-mw="group-person"]').click();
+        await expect(groups(page).locator('.mw-group-name')).toHaveText(['Kasimir Pfefferkorn', 'Unknown person']);
+        await win(page).locator('.mw-canvas .mw-tile').first().click();
+        const uses = page.locator('#image-viewer-panel .mv-uses');
+        await expect(uses).toBeVisible();
+        await expect(uses.locator('.mv-use-link')).toHaveText(['Unknown person', 'Kasimir Pfefferkorn']);
+    });
+
     test('ⓘ says where the files are; Esc and a click outside close it', async ({ page }) => {
         await tree(page);
         await files(page);

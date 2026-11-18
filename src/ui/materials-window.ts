@@ -18,7 +18,7 @@
  */
 
 import { allMedia, treeMedia, mediaPersonIds } from '../media.js';
-import { mediaUsesIndex } from '../media-uses.js';
+import { materialPersonLabel, mediaUsesIndex } from '../media-uses.js';
 import type { PersonId } from '../types.js';
 import { researchActionLabel } from './research-open-mark.js';
 import type { UIClass } from './index.js';
@@ -239,13 +239,15 @@ export function treeRecords(byRefn: boolean): TreeRecord[] {
 function namesOf(list: MaterialList | null, model: WindowModel): Map<string, string> {
     const names = new Map<string, string>();
     if (model === 'app') {
-        for (const p of DataManager.getAllPersons()) names.set(p.id, `${p.firstName} ${p.lastName}`.trim() || p.id);
+        for (const p of DataManager.getAllPersons()) names.set(p.id, materialPersonLabel(`${p.firstName} ${p.lastName}`));
         return names;
     }
-    for (const [refn, name] of Object.entries(list?.people ?? {})) names.set(refn, name);
+    for (const [refn, name] of Object.entries(list?.people ?? {})) names.set(refn, materialPersonLabel(name));
     for (const p of DataManager.getAllPersons()) {
         const refn = researchPersonRef(p.refn);
-        if (refn) names.set(refn, `${p.firstName} ${p.lastName}`.trim() || names.get(refn) || refn);
+        if (!refn) continue;
+        const own = `${p.firstName} ${p.lastName}`.trim();
+        names.set(refn, own && own !== '?' ? own : names.get(refn) ?? materialPersonLabel(own));
     }
     return names;
 }

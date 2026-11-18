@@ -25,6 +25,7 @@ import {
 } from '../materials.js';
 import { MultiPersonPicker } from '../person-picker.js';
 import { nameWithoutYears } from '../materials-overview.js';
+import { materialPersonLabel } from '../media-uses.js';
 import { MaterialActionCtx, MaterialsContext, appendBreakable } from './materials-ui.js';
 import { uiModule } from './module.js';
 import { undoInToast } from './toast.js';
@@ -241,11 +242,11 @@ export const materialActionsMethods = uiModule({
     /** A person's name for the texts: the tree's name, else the research's (without years), else the REFN. */
     materialPersonName(refn: string): string {
         for (const p of DataManager.getAllPersons()) {
-            if (researchPersonRef(p.refn) === refn) return fullName(p) || refn;
+            if (researchPersonRef(p.refn) === refn) return materialPersonLabel(fullName(p));
         }
         const ctx = this.materialsContext();
         const known = ctx ? cachedMaterialList(ctx.treeId)?.people?.[refn] : undefined;
-        return known ? nameWithoutYears(known) : refn;
+        return known ? materialPersonLabel(nameWithoutYears(known)) : refn;
     },
 
     /** After a write went through: the selection ends, the window redraws. */

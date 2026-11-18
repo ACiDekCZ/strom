@@ -4,7 +4,7 @@
  * block's order, and how each is worded. Invented data.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { mediaUses, mediaUsesIndex, mediaUseLabel } from '../media-uses.js';
+import { mediaUses, mediaUsesIndex, mediaUseLabel, materialPersonLabel } from '../media-uses.js';
 import { setLanguage, strings } from '../strings.js';
 import type { Attachment, PartnershipId, PersonId, StromData } from '../types.js';
 
@@ -130,6 +130,20 @@ describe('mediaUseLabel', () => {
         expect(first.type).toBe('Osoba');
         expect(couple.text).toBe('Ivar Pellström a Hedda Vossberg');
         expect(couple.sub).toBe('fotka svazku');
+        setLanguage('en');
+    });
+
+    it('a person the records do not name ("?") reads "Unknown person", also in a couple; the years stay', () => {
+        const data = tree();
+        Object.assign(data.persons['p2' as PersonId], { firstName: '?', lastName: '', isPlaceholder: true });
+        const labels = mediaUses(data, 'm1').map(u => mediaUseLabel(data, u));
+        expect(labels.find(l => l.type === strings.materials.usedType.person && l.text !== 'Ivar Pellström')?.text).toBe('Unknown person');
+        expect(labels.find(l => l.type === strings.materials.usedType.couple)?.text).toBe('Ivar Pellström and Unknown person');
+        expect(materialPersonLabel('? (1850–1902)')).toBe('Unknown person (1850–1902)');
+        expect(materialPersonLabel('')).toBe('Unknown person');
+        expect(materialPersonLabel('? Novák')).toBe('? Novák');
+        setLanguage('cs');
+        expect(materialPersonLabel('?')).toBe('Neznámá osoba');
         setLanguage('en');
     });
 });

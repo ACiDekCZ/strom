@@ -14,7 +14,7 @@ import { DataManager } from '../data.js';
 import { PersonId } from '../types.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { MaterialItem, cachedMaterialList } from '../materials.js';
-import { MediaUse, mediaUseLabel, mediaUses } from '../media-uses.js';
+import { MediaUse, materialPersonLabel, mediaUseLabel, mediaUses } from '../media-uses.js';
 import { placePersonId } from '../media.js';
 import { researchPersonRef } from '../research-link.js';
 import { closeImageViewer } from './image-viewer.js';
@@ -158,7 +158,8 @@ export const materialUsesMethods = uiModule({
         const up = ctx.caps.bridgeUp && !!ctx.base;
         for (const refn of item.persons) {
             const person = byRefn.get(refn);
-            const name = person?.name || known[refn] || refn;
+            const own = person?.name && person.name !== '?' ? person.name : '';
+            const name = own || (known[refn] ? materialPersonLabel(known[refn]) : person ? materialPersonLabel(person.name) : refn);
             const chip = h('span', 'mv-chip');
             if (person) {
                 const link = h('button', 'mv-chip-link', name);

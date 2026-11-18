@@ -15,6 +15,7 @@ import { lifeEventLabel, coupleEventLabelIn } from './person-sources.js';
 import { shownName } from './person-name.js';
 import { yearOf } from './dates.js';
 import { strings as appStrings } from './strings.js';
+import { nameWithoutYears } from './materials-overview.js';
 
 type Strings = typeof appStrings;
 
@@ -119,9 +120,21 @@ export interface MediaUseLabel {
     person?: boolean;
 }
 
+/**
+ * A person's name as the materials show it: none, or only the app's "?"
+ * stand-in (a name the records do not give), reads "Unknown person"; the
+ * years after it stay ("? (1850–1902)" → "Unknown person (1850–1902)").
+ */
+export function materialPersonLabel(name: string, S: Strings = appStrings): string {
+    const full = name.trim();
+    const bare = nameWithoutYears(full);
+    if (bare && bare !== '?') return full;
+    return `${S.materials.unknownPerson}${full.slice(bare.length)}`;
+}
+
 function personName(data: Pick<StromData, 'persons'>, id: PersonId | undefined, S: Strings): string {
     const p = id ? data.persons[id] : undefined;
-    return p ? shownName(p, S.materials.unknownPerson) : S.materials.unknownPerson;
+    return p ? materialPersonLabel(shownName(p, S.materials.unknownPerson), S) : S.materials.unknownPerson;
 }
 
 function coupleName(data: Pick<StromData, 'persons' | 'partnerships'>, id: PartnershipId | undefined, S: Strings): string {
