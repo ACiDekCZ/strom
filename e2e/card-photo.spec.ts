@@ -221,7 +221,7 @@ test('the Detailed card with a large photo: 72px in the header, the lines from 8
     await tree(page);
     await page.evaluate(() => {
         window.Strom.SettingsManager.setCardPhoto({ size: 'large', shape: 'circle' });
-        window.Strom.UI.setCardDensity('detailed');
+        return window.Strom.UI.setCardDensity('detailed');
     });
     await expect(page.locator('body')).toHaveAttribute('data-card-photo', 'large');
     await expect.poll(() => cardBoxesMatchLayout(page)).toBe(true);
@@ -261,7 +261,7 @@ test('Custom, one row a detail, height "equal": every card 98 + 17n with a large
         const s = window.Strom.SettingsManager;
         s.setCardFields({ ...s.getCardFields(), lines: 1, height: 'view', years: true, on: ['birth', 'death'] });
         s.setCardPhoto({ size: 'large', shape: 'rounded' });
-        window.Strom.UI.setCardDensity('custom');
+        return window.Strom.UI.setCardDensity('custom');
     });
     await expect.poll(() => cardBoxesMatchLayout(page)).toBe(true);
     const n = 2;
@@ -442,9 +442,9 @@ for (const width of [390, 1024, 1440]) {
         await wideTree(page);
         for (const density of ['normal', 'detailed', 'register', 'custom'] as const) {
             for (const [size, shape] of [['medium', 'circle'], ['large', 'rounded']] as const) {
-                await page.evaluate(({ density, size, shape }) => {
+                await page.evaluate(async ({ density, size, shape }) => {
                     window.Strom.SettingsManager.setCardPhoto({ size, shape });
-                    window.Strom.UI.setCardDensity(density);
+                    await window.Strom.UI.setCardDensity(density);
                     window.Strom.TreeRenderer.render();
                 }, { density, size, shape });
                 const label = `${density} ${size}`;

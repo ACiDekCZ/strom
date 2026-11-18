@@ -55,6 +55,17 @@ import { uiModule } from './module.js';
 import { activatedElement, busyLocal, busyToast } from './busy.js';
 import { safeFileName } from '../filenames.js';
 import { forgetCardTypeCopy } from './card-fields-ui.js';
+import { canvasBusy } from './canvas-busy.js';
+
+/**
+ * C80, §8: an appearance choice that lays the tree out anew (card type, spacing, titles, surnames, full
+ * families). The choice is written at once; the view is drawn again under the canvas overlay ("Calculating the
+ * layout…" past 120 ms, painted first), as a switched view is (C5). Resolves when the view is drawn.
+ */
+export function redrawUnderOverlay(draw: () => Promise<void>): Promise<void> {
+    const label = TreeRenderer.getViewMode() === 'map' ? strings.busy.mapCalc : strings.busy.layout;
+    return canvasBusy(async ready => { await ready(); await draw(); }, { stateFirst: true, label });
+}
 
 export const appModeMethods = uiModule({
     // ---- EMBEDDED MODE INFO ----
@@ -724,21 +735,22 @@ export const appModeMethods = uiModule({
     },
 
     /** Card type: the cards change their size, the view keeps its anchor card in place (spec 069 D3). */
-    setCardDensity(density: string): void {
+    setCardDensity(density: string): Promise<void> {
         SettingsManager.setCardDensity(normalizeCardDensity(density));
         forgetCardTypeCopy();
-        void TreeRenderer.renderKeepingView();
+        const drawn = redrawUnderOverlay(() => TreeRenderer.renderKeepingView());
         this.renderCardSignalSettings();
+        return drawn;
     },
 
     /**
      * Settings > Person card > Spacing (spec 069 §1): the tree behind the
      * open dialog is drawn again at once, its anchor card kept in place (D3).
      */
-    setTreeSpacing(spacing: string): void {
+    setTreeSpacing(spacing: string): Promise<void> {
         SettingsManager.setTreeSpacing(spacing === 'dense' ? 'dense' : 'normal');
         this.syncTreeSpacingSetting();
-        void TreeRenderer.renderKeepingView();
+        return redrawUnderOverlay(() => TreeRenderer.renderKeepingView());
     },
 
     toggleFanKekule(enabled: boolean): void {
@@ -747,9 +759,9 @@ export const appModeMethods = uiModule({
     },
 
     /** Titles of the name on cards and in lists: the view is drawn again (card names, their widths). */
-    toggleShowTitles(enabled: boolean): void {
+    toggleShowTitles(enabled: boolean): Promise<void> {
         SettingsManager.setShowTitles(enabled);
-        TreeRenderer.render();
+        return redrawUnderOverlay(() => TreeRenderer.renderAsync());
     },
 
     /** The reliability marks on the person card (spec 066 §2f): an open card is marked again. */
@@ -759,12 +771,13 @@ export const appModeMethods = uiModule({
     },
 
     /** Settings > Surname display: redraw everything that shows names. */
-    setSurnameDisplay(display: SurnameDisplay): void {
+    setSurnameDisplay(display: SurnameDisplay): Promise<void> {
         SettingsManager.setSurnameDisplay(display);
         this.syncSurnameDisplaySetting();
-        TreeRenderer.render();
+        const drawn = redrawUnderOverlay(() => TreeRenderer.renderAsync());
         this.refreshSearch();
         if (this.relationshipsPanelPersonId) this.refreshRelationshipsPanel();
+        return drawn;
     },
 
     /** The ⇄ N pill (Settings → Show on card → Links): the switch there follows, the view is drawn again. */
@@ -782,12 +795,13 @@ export const appModeMethods = uiModule({
     },
 
     /** Badge toggle in the descendants view: flip ad hoc and re-render. */
-    toggleDescendantsFullFamilies(): void {
+    toggleDescendantsFullFamilies(): Promise<void> {
         TreeRenderer.setDescendantsFullFamilies(!TreeRenderer.isDescendantsFullFamilies());
         // The chart width changes markedly when step-families appear/vanish, so
         // re-frame once the new cards are in the DOM (keeps the focus visible).
-        void TreeRenderer.renderAsync().then(() => TreeRenderer.centerForViewMode());
-        this.updateViewModeUI(); // badge count + toggle state
+        const drawn = redrawUnderOverlay(() => TreeRenderer.renderAsync().then(() => TreeRenderer.centerForViewMode()));
+        this.updateViewModeUI(); // toggle state at once; the badge count again from the drawn view
+        return drawn.then(() => this.updateViewModeUI());
     },
 
     /** Settings default: also applies immediately as the current choice. */
@@ -795,7 +809,7 @@ export const appModeMethods = uiModule({
         SettingsManager.setDescendantsFullFamiliesDefault(enabled);
         TreeRenderer.setDescendantsFullFamilies(enabled);
         if (TreeRenderer.getViewMode() === 'descendants') {
-            TreeRenderer.render();
+            void redrawUnderOverlay(() => TreeRenderer.renderAsync()).then(() => this.updateViewModeUI());
             this.updateViewModeUI();
         }
     },

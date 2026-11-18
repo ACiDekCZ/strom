@@ -87,6 +87,8 @@ for (const width of [360, 600]) {
         await page.evaluate(() => window.Strom.UI.setDisplayViewMode('descendants'));
         const badge = page.locator('#descendants-badge');
         await expect(badge).toBeVisible();
+        // The view is laid out under the canvas overlay (§8 C5): the badge is drawn again when it ends.
+        await expect(page.locator('#tree-container > .canvas-busy')).toHaveCount(0);
         await expect(badge.locator('.depth-stepper')).toBeVisible();
         await expect(page.locator('#descendants-depth-down')).toBeHidden();
 

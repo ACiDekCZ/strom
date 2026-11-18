@@ -36,7 +36,7 @@ test('the detailed card shows the trade someone ended up with', async ({ page })
         const id = dm.getAllPersons()[0].id;
         dm.addLifeEvent(id, { type: 'occupation', note: 'učeň', date: '1895' });
         dm.addLifeEvent(id, { type: 'occupation', note: 'kovář', date: '1910' });
-        window.Strom.UI.setCardDensity('detailed');
+        return window.Strom.UI.setCardDensity('detailed');
     });
 
     // A trade changes over a life; the summary shows the last one, not the first.

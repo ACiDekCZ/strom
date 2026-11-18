@@ -215,3 +215,60 @@ test.describe('the spacing segment\'s pictures', () => {
         });
     }
 });
+
+test.describe('a choice that lays the tree out anew (C80, waiting buttons §8)', () => {
+    type Watch = { atLayout: string[]; chosenAtLayout: string[]; shown: boolean; added: number; removed: number; layoutEnd: number };
+    /** The layout of the view made `ms` long (in one go), and what the tree's area says around it. */
+    const watch = (page: Page, ms: number) => page.evaluate((ms) => {
+        const w = window as unknown as { __cb: Watch };
+        w.__cb = { atLayout: [], chosenAtLayout: [], shown: false, added: 0, removed: 0, layoutEnd: 0 };
+        const R = window.Strom.TreeRenderer as unknown as { renderKeepingView: () => Promise<void> };
+        const orig = R.renderKeepingView.bind(R);
+        R.renderKeepingView = () => {
+            w.__cb.atLayout.push(document.querySelector('#tree-container > .canvas-busy')?.textContent ?? '');
+            w.__cb.chosenAtLayout.push(window.Strom.SettingsManager.getTreeSpacing());
+            const end = performance.now() + ms;
+            while (performance.now() < end) { /* the layout of a large tree */ }
+            const r = orig();
+            w.__cb.layoutEnd = performance.now();
+            return r;
+        };
+        new MutationObserver(recs => {
+            for (const r of recs) {
+                for (const n of r.addedNodes) if ((n as Element).classList?.contains('canvas-busy')) w.__cb.added = performance.now();
+                for (const n of r.removedNodes) if ((n as Element).classList?.contains('canvas-busy')) w.__cb.removed = performance.now();
+                if (r.type === 'attributes' && (r.target as Element).classList?.contains('canvas-busy')) w.__cb.shown = true;
+            }
+        }).observe(document.getElementById('tree-container')!, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-shown'] });
+    }, ms);
+    const watched = (page: Page) => page.evaluate(() => (window as unknown as { __cb: Watch }).__cb);
+
+    test('Spacing with a long layout: the choice is on at once, the overlay painted before the layout, seen and held', async ({ page }) => {
+        await sampleTree(page);
+        await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+        await watch(page, 300);
+        await page.locator('#tree-spacing-setting input[value="dense"]').check();
+        await expect(page.locator('#tree-spacing-setting input[value="dense"]')).toBeChecked();
+        await expect.poll(() => gaps(page).then(g => g.config[0])).toBe(20);
+        await expect(page.locator('#tree-container > .canvas-busy')).toHaveCount(0);
+        const cb = await watched(page);
+        expect(cb.atLayout).toEqual(['Calculating the layout…']);
+        expect(cb.chosenAtLayout).toEqual(['dense']);
+        expect(cb.shown).toBe(true);
+        // Seen past 120 ms of a 300 ms layout: it stays until 420 ms after it was painted, gone after the layout.
+        expect(cb.removed - cb.added).toBeGreaterThanOrEqual(400);
+        expect(cb.removed).toBeGreaterThan(cb.layoutEnd);
+        await expect(page.locator('#settings-modal')).toBeVisible();
+    });
+
+    test('a quick layout never shows the overlay', async ({ page }) => {
+        await sampleTree(page);
+        await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+        await watch(page, 0);
+        await page.evaluate(() => window.Strom.UI.setTreeSpacing('dense'));
+        await expect(page.locator('#tree-container > .canvas-busy')).toHaveCount(0);
+        const cb = await watched(page);
+        expect(cb.atLayout).toEqual(['Calculating the layout…']);
+        expect(cb.shown).toBe(false);
+    });
+});

@@ -57,7 +57,7 @@ async function choose(page: Page, density: string, size: Size, shape: Shape, spa
         const S = window.Strom;
         S.SettingsManager.setCardPhoto({ size, shape });
         S.SettingsManager.setPosterSpacing(spacing);
-        S.UI.setCardDensity(density as never);
+        await S.UI.setCardDensity(density as never);
         await S.TreeRenderer.renderAsync();
     }, { density, size, shape, spacing });
     await expect(page.locator('body')).toHaveAttribute('data-card-photo', size);
