@@ -24,6 +24,7 @@ import {
 } from '../attachments.js';
 import { uiModule } from './module.js';
 import { openImageViewer, ViewerOriginal } from './image-viewer.js';
+import { runBusy, activatedElement, BUSY_TIMEOUTS } from './busy.js';
 import { emptyStateHtml } from './empty-state.js';
 
 import { iconSvg } from '../icons.js';
@@ -380,11 +381,30 @@ export const attachmentsMethods = uiModule({
         }
         if (mode !== 'app') return;
         if (mimeType === 'application/pdf') {
-            const ctl = new AbortController();
-            void this.fetchOriginal(sha, () => { /* a tab opens when it is here */ }, ctl.signal).then(({ url }) => {
-                window.open(url, '_blank');
-                setTimeout(() => URL.revokeObjectURL(url), 60_000);
-            }, () => this.showToast(strings.media.loadFailed, 6000));
+            // C94: the link says the download from the click (a toast when it is gone), and the tab opens now, on
+            // the click (one opened after the download may be blocked), saying the load until the file is in it.
+            const el = activatedElement();
+            const m = strings.media;
+            const tab = window.open('', '_blank');
+            try {
+                if (tab) {
+                    tab.document.title = m.loadingOriginal;
+                    tab.document.body.textContent = `${m.loadingOriginal}…`;
+                }
+            } catch { /* not this page's tab to write */ }
+            const host = el ?? document.createElement('button');
+            void runBusy(host, async (ctl) => {
+                try {
+                    const { url } = await this.fetchOriginal(sha, () => { /* the tab shows it when it is here */ }, ctl.signal);
+                    if (tab && !tab.closed) tab.location.href = url;
+                    else window.open(url, '_blank');
+                    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+                } catch {
+                    tab?.close();
+                    ctl.end({ ok: false, kind: 'error', text: this.originalGone(sha) ? m.gone : m.loadFailed });
+                    if (this.originalGone(sha)) this.renderAttachmentsList();
+                }
+            }, { label: el ? strings.busy.generic : m.loadingOriginal, kind: 'bridge', timeoutMs: BUSY_TIMEOUTS.write, atOnce: true, toastWhenGone: true });
             return;
         }
         openImageViewer(previewUrl ?? '', undefined, { ...this.viewerOriginal(sha), autoLoad: true });

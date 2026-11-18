@@ -123,6 +123,31 @@ test.describe('Sort with the agent', () => {
         expect(material.sorts ?? []).toHaveLength(0);
     });
 
+    test('a batch\'s end: Sort with the agent says in a toast that its files are asked for until its dialog opens', async ({ page }) => {
+        await setup(page);
+        await page.evaluate(() => (window.Strom.UI as unknown as { showBatchDialog(): void }).showBatchDialog());
+        await page.evaluate(() => {
+            const list = ['Krabice/a.jpg', 'Krabice/b.jpg'].map(path => ({ path, file: new File([`obsah ${path}`], path.split('/').pop()!, { type: 'image/jpeg' }) }));
+            (window.Strom.UI as unknown as { addBatchFiles(f: unknown): void }).addBatchFiles(list);
+        });
+        const batch = page.locator('#batch-modal');
+        await batch.locator('[data-act="next"]').click();
+        await batch.getByRole('button', { name: 'Send 2 files' }).click();
+        await expect(batch.locator('.batch-sort [data-act="sort-agent"]')).toBeVisible();
+        let release = (): void => undefined;
+        const held = new Promise<void>(r => { release = r; });
+        await page.route(u => /\/material$/.test(u.pathname) && u.searchParams.has('batch'), async (route) => { await held; await route.fallback(); });
+        await batch.locator('.batch-sort [data-act="sort-agent"]').click();
+        await expect(batch).toHaveCount(0);
+        const toast = page.locator('.toast.toast--progress');
+        await expect(toast).toBeVisible();
+        await expect(sortDialog(page)).toHaveCount(0);
+        const answered = page.waitForResponse(r => /\/material$/.test(new URL(r.url()).pathname) && new URL(r.url()).searchParams.has('batch'));
+        release();
+        await answered;
+        await expect(toast).toHaveCount(0);
+    });
+
     test('the click sends the files and the text once; the proposal is accepted, a person\'s title stays', async ({ page }) => {
         const material = await setup(page);
         await openWindow(page);

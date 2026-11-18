@@ -1724,11 +1724,11 @@ export const mapMethods = uiModule({
             if (act.classList.contains('map-popup-keep')) this.keepPlaceOnMap(key);
             else if (act.classList.contains('map-popup-change')) this.showPlacesManager(key);
             else if (act.classList.contains('map-popup-whymore')) this.showPlacesManager(key, undefined, undefined, { focus: 'why' });
-            else if (act.classList.contains('map-popup-checkres')) void this.queuePlaces([key], true);
+            else if (act.classList.contains('map-popup-checkres')) void this.queuePlacesFrom(act, [key], true);
             else {
                 let keys: string[] = [];
                 try { keys = JSON.parse(act.dataset.keys ?? '[]') as string[]; } catch { /* none */ }
-                void this.queuePlaces(keys, false);
+                void this.queuePlacesFrom(act, keys, false);
             }
         });
         // A click on the map itself (not a drag) closes the bubble.

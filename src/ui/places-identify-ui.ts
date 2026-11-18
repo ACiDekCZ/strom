@@ -509,6 +509,16 @@ export const placesIdentifyMethods = uiModule({
     },
 
     /**
+     * Look up / Check from a button that has no state of its own yet (the selection bar, the map's bubble, a
+     * notice on the map): working from the click until the bridge answers, a refusal said under it, a second
+     * click queues nothing more (B150).
+     */
+    async queuePlacesFrom(el: HTMLElement | null, keys: readonly string[], check: boolean): Promise<void> {
+        if (!el) { await this.queuePlaces(keys, check); return; }
+        await runBusy(el, async ctl => { await this.queuePlaces(keys, check, ctl); }, { label: strings.busy.sending, timeoutMs: PLACES_STEP_MS });
+    },
+
+    /**
      * A step of the research from the map or the person card: the places' texts and states
      * from the whole tree, as the dialog would have them.
      */
@@ -775,8 +785,10 @@ export const placesIdentifyMethods = uiModule({
         }
         const bar = modal.querySelector<HTMLElement>('.places-selbar');
         if (!bar) return;
-        (bar.querySelector('.places-selbar-look') as HTMLButtonElement).onclick = () => void this.queuePlaces([...placesView.selected], false);
-        (bar.querySelector('.places-selbar-check') as HTMLButtonElement).onclick = () => void this.queuePlaces([...placesView.selected], true);
+        const look = bar.querySelector<HTMLButtonElement>('.places-selbar-look')!;
+        const check = bar.querySelector<HTMLButtonElement>('.places-selbar-check')!;
+        look.onclick = () => void this.queuePlacesFrom(look, [...placesView.selected], false);
+        check.onclick = () => void this.queuePlacesFrom(check, [...placesView.selected], true);
         (bar.querySelector('.places-selbar-clear') as HTMLButtonElement).onclick = () => this.setPlacesSelecting(false);
         this.setPlacesSelecting(placesView.selecting);
     },

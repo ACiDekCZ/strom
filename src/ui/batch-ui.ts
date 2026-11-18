@@ -26,6 +26,7 @@ import { formatBytesShort } from './originals-ui.js';
 import { barHtml } from './prog-bar.js';
 import { onComputer, fetchWithTimeout, bridgeFailure } from './research-ui.js';
 import { uiModule } from './module.js';
+import { runBusy } from './busy.js';
 import { BRIDGE_ANSWER_MS } from '../bridge-ask.js';
 import { statusAskUrl } from '../status-parts.js';
 
@@ -621,7 +622,9 @@ export const batchMethods = uiModule({
                     const name = run?.name ?? '';
                     this.closeBatchDialog();
                     this.openMaterials(id ? { batch: id } : {});
-                    if (id) void this.openSortForBatch(id, name);
+                    // The batch's files asked from the research before the dialog: the button gone with its
+                    // dialog, a progress toast says it (§2.1).
+                    if (id) void runBusy(el, () => this.openSortForBatch(id, name), { kind: 'bridge', toastWhenGone: true });
                     break;
                 }
                 case 'open-materials': {

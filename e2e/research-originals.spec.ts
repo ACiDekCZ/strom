@@ -437,6 +437,38 @@ test.describe('originals: the full UI (beta.10)', () => {
         await expect(viewer).not.toHaveClass(/active/);
     });
 
+    test('Full quality of a PDF: the link says the download from the click, the tab opens at once and gets the file (C94)', async ({ page }) => {
+        const b = await fakeBridge(page, { accepts: MEDIA_ACCEPTS });
+        const pdf = Buffer.from('%PDF-1.4\n1 0 obj << >> endobj\ntrailer << >>\n%%EOF\n');
+        const sha = createHash('sha256').update(pdf).digest('hex');
+        b.mediaFiles.set(sha, { type: 'application/pdf', body: pdf });
+        await openResearch(page, { media: true });
+        await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));
+        await cardAction(page, 'Jan', 'edit');
+        const modal = personModal(page);
+        await modal.locator('#input-attachment').setInputFiles({ name: 'zapis.pdf', mimeType: 'application/pdf', buffer: pdf });
+        await expect(modal.locator('#attachments-list .attachment-row')).toHaveCount(1);
+        await expect.poll(() => b.mediaPuts.length).toBe(1);
+        await poll(page);
+        await page.evaluate(() => window.Strom.UI.renderAttachmentsList());
+        let release = (): void => undefined;
+        const held = new Promise<void>(r => { release = r; });
+        await page.route(u => u.pathname.includes('/media/') && u.searchParams.get('file') === '1', async (route) => { await held; await route.fallback(); });
+        const link = modal.locator('.media-full-quality');
+        const popup = page.waitForEvent('popup');
+        await link.click();
+        // The tab is there before the file.
+        const tab = await popup;
+        await expect(link).toHaveAttribute('data-busy', 'busy');
+        await expect(link).toContainText('Loading…');
+        // The file goes to that tab (headless Chromium saves a PDF rather than showing it).
+        const got = tab.waitForEvent('download', { timeout: 10_000 });
+        release();
+        await expect(link).not.toHaveAttribute('data-busy', 'busy', { timeout: 10_000 });
+        await expect(page.locator('.busy-msg')).toHaveCount(0);
+        expect((await got).url()).toMatch(/^blob:/);
+    });
+
     test('Full quality of an original the research no longer has: said so, the link goes', async ({ page }) => {
         const b = await fakeBridge(page, { accepts: MEDIA_ACCEPTS });
         await openResearch(page, { media: true });

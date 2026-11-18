@@ -165,6 +165,78 @@ test.describe('loading the research\'s version', () => {
         expect(bridge.posts.length).toBe(1);
     });
 
+    test('asked from a menu that closed, the changes the research lacks going first: a progress toast says the send through to the load (A3)', async ({ page }) => {
+        await openResearch(page);
+        const bridge = await fakeBridge(page, { accepts: HAND });
+        writesAtOnce(bridge);
+        bridge.syncDelayMs = 1500;
+        await poll(page);
+        await editJan(page);
+        await page.evaluate(() => document.querySelectorAll('.toast').forEach(t => t.remove()));
+        const sent = page.waitForRequest(r => r.method() === 'POST' && new URL(r.url()).pathname.endsWith('/sync'));
+        await page.evaluate(() => {
+            (window.Strom.UI as any).researchAutoOn = () => true;
+            // The menu's row, gone with its menu before the work starts.
+            void (window.Strom.UI as any).researchLoadNewer({}, document.createElement('button'));
+        });
+        await sent;
+        // The send's answer held 1.5 s: the toast says it goes.
+        const toast = page.locator('.toast.toast--progress').filter({ hasText: 'Sending to the research…' });
+        await expect(toast).toBeVisible();
+        await expect(toast).toHaveCount(0, { timeout: 10_000 });
+        expect(bridge.posts.length).toBe(1);
+    });
+
+    test('Load the research\'s version after a send taken back: the element clicked says the work through the bridge\'s answer (A67)', async ({ page }) => {
+        const bridge = await newer(page);
+        const before = bridge.treeGets ?? 0;
+        let release = (): void => undefined;
+        const held = new Promise<void>(r => { release = r; });
+        let asked = 0;
+        await page.route(u => u.pathname.endsWith('/status'), async (route) => { asked++; await held; await route.fallback(); });
+        await page.evaluate(() => {
+            const UI = window.Strom.UI as any;
+            UI.researchBridgeFresh = () => false;
+            const b = document.createElement('button');
+            b.id = 'accept-here';
+            b.textContent = 'Load';
+            document.body.appendChild(b);
+            void UI.researchAcceptUndo(b);
+            // A second click meanwhile asks nothing more.
+            void UI.researchAcceptUndo(b);
+        });
+        const btn = page.locator('#accept-here');
+        await expect(btn).toHaveAttribute('data-busy', 'busy');
+        await expect(btn).toContainText('Loading…');
+        await expect.poll(() => asked).toBe(1);
+        expect((bridge.treeGets ?? 0) - before).toBe(0);
+        release();
+        await expect.poll(() => bridge.treeGets ?? 0, { timeout: 10_000 }).toBe(before + 1);
+    });
+
+    test('Load the research\'s version in the toast of a send taken back works in the toast until the load\'s toast (A67)', async ({ page }) => {
+        const bridge = await newer(page);
+        const before = bridge.treeGets ?? 0;
+        let release = (): void => undefined;
+        const held = new Promise<void>(r => { release = r; });
+        await page.route(u => u.pathname.endsWith('/status'), async (route) => { await held; await route.fallback(); });
+        await page.evaluate(() => {
+            const UI = window.Strom.UI as any;
+            UI.researchBridgeFresh = () => false;
+            document.querySelectorAll('.toast').forEach(t => t.remove());
+            UI.tellResearchUndoneChoice('The research took the send back.');
+        });
+        const toast = page.locator('.toast').filter({ hasText: 'The research took the send back.' });
+        await toast.getByRole('button', { name: 'Load the research\'s version' }).click();
+        const working = page.locator('.toast.toast--work');
+        await expect(working).toBeVisible();
+        await expect(working).toContainText('Loading…');
+        expect((bridge.treeGets ?? 0) - before).toBe(0);
+        release();
+        await expect.poll(() => bridge.treeGets ?? 0, { timeout: 10_000 }).toBe(before + 1);
+        await expect(working).toHaveCount(0);
+    });
+
     test('Cancel while it downloads: the tree stays as it was, nothing asked', async ({ page }) => {
         const bridge = await newer(page);
         bridge.treeDelayMs = 3000;

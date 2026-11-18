@@ -264,6 +264,25 @@ test.describe('places on the map with the research here', () => {
         expect(geo?.keptAt).toBeTruthy();
     });
 
+    test('Check in the research in a bubble works from the click until the bridge answers (map bubble)', async ({ page }) => {
+        await stubMap(page);
+        await research(page);
+        await mapOn(page, 'Jinov');
+        const checkres = popup(page).locator('.map-popup-check .map-popup-checkres');
+        await expect(checkres).toBeVisible();
+        let release = (): void => undefined;
+        const held = new Promise<void>(r => { release = r; });
+        let asked = 0;
+        await page.route(u => u.pathname.endsWith('/places/identify'), async (route) => { asked++; await held; await route.fallback(); });
+        await checkres.click();
+        await expect(checkres).toHaveAttribute('data-busy', 'busy');
+        await checkres.click({ force: true });
+        await expect.poll(() => asked).toBe(1);
+        release();
+        await expect(page.locator('.toast')).toContainText('1 location queued for a check.');
+        expect(asked).toBe(1);
+    });
+
     test('a place the research identified: its origin, today\'s name, one line of why; Why here › opens Places on it', async ({ page }) => {
         await stubMap(page);
         const b = await research(page);

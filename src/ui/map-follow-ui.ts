@@ -279,7 +279,7 @@ export const mapFollowMethods = uiModule({
             container.appendChild(host);
             host.addEventListener('click', (e) => {
                 const look = (e.target as HTMLElement).closest('.map-follow-research') as HTMLElement | null;
-                if (look?.dataset.key) { this.lookUpFollowPlace(look.dataset.key); return; }
+                if (look?.dataset.key) { this.lookUpFollowPlace(look.dataset.key, look); return; }
                 const b = (e.target as HTMLElement).closest('.map-follow-locate') as HTMLElement | null;
                 if (b?.dataset.key) this.showPlacesManager(b.dataset.key, undefined, 'tree');
             });
@@ -317,11 +317,12 @@ export const mapFollowMethods = uiModule({
      * Look up in the research from a notice: the place queued as from its menu on the person card
      * (nothing runs yet, Undo in the toast); where the research's steps do not go here, where they go.
      */
-    lookUpFollowPlace(key: string): void {
+    lookUpFollowPlace(key: string, el: HTMLElement | null = null): void {
         const note = this.placesResearchNote(this.placesResearchContext().access);
         if (note) { this.showToast(note, 8000); return; }
-        // Queued: the notice draws again without the step (not offered twice).
-        void this.queuePlaces([key], false).then(() => this.applyMapFollowMarks());
+        // Working from the click until the bridge answers (B169); queued: the notice draws again without the step
+        // (not offered twice).
+        void this.queuePlacesFrom(el, [key], false).then(() => this.applyMapFollowMarks());
     },
 
     /** Place the map's pause pill and notices again (the pill came or went). */

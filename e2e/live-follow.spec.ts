@@ -1579,6 +1579,32 @@ test.describe('follow the agent on the map (spec 043 §5, §6)', () => {
         await expect(notice.locator('.map-follow-locate')).toBeVisible();
     });
 
+    test('Look up in the research on a notice works from the click until the bridge answers (B169)', async ({ page }) => {
+        await stubTiles(page);
+        const bridge = await follow(page, { idle: 60_000, on: true, quick: true });
+        bridge.features = ['working.place', 'places.identify'];
+        bridge.person = 'P0013';
+        const places = await queueingPlaces(page);
+        await expect.poll(() => focusRefn(page)).toBe('P0013');
+        await seedMapPlaces(page);
+        await nextStatus(bridge);
+        await page.evaluate(() => window.Strom.UI.setLiveFollowView('map'));
+        const notice = page.locator('#map-container .map-follow-notice');
+        const look = notice.locator('.map-follow-research');
+        await expect(look).toBeVisible();
+        let release = (): void => undefined;
+        const held = new Promise<void>(r => { release = r; });
+        await page.route(u => u.pathname.endsWith('/places/identify') || u.pathname.endsWith('/places'), async (route) => {
+            if (route.request().method() === 'POST') await held;
+            await route.fallback();
+        });
+        await look.click();
+        await expect(look).toHaveAttribute('data-busy', 'busy');
+        release();
+        await expect.poll(() => places.posted.length).toBe(1);
+        await expect(page.locator('.toast')).toContainText('1 place queued for the research.');
+    });
+
     test('Look up in the research: a read of the research\'s places answered before the step does not offer it again (spec 058)', async ({ page }) => {
         await stubTiles(page);
         const bridge = await follow(page, { idle: 60_000, on: true, quick: true });

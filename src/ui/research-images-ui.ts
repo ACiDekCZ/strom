@@ -655,7 +655,10 @@ export const researchImagesMethods = uiModule({
         this.closeTreeManagerDialog();
         this.sourcesFilter = 'imageHeld';
         this.showSourcesDialog();
-        await this.openBulkImageWarning();
+        // A153: the list of what is missing comes from the research (15 s at most): the window's own link waits
+        // meanwhile, as when clicked there (A202); a progress toast without it.
+        const open = document.querySelector<HTMLElement>('#sources-bulk-open') ?? document.createElement('button');
+        await runBusy(open, ctl => this.openBulkImageWarning(ctl.signal), { kind: 'bridge', toastWhenGone: true });
     },
 
     // ==================== RESEARCH TREE SETTINGS ====================

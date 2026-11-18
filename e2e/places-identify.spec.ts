@@ -252,6 +252,27 @@ test.describe('place identification in the Places dialog', () => {
         await expect(row(page, 'Lhoták čp. 5')).toHaveAttribute('data-state', 'queued');
     });
 
+    test('Look up selected works from the click until the bridge answers; a second click queues nothing more (B150)', async ({ page }) => {
+        const b = await research(page);
+        await openLive(page, b);
+        await modal(page).locator('.places-select-btn').click();
+        const bar = modal(page).locator('.places-selbar');
+        await row(page, 'Łotów').locator('.place-select').click();
+        let release = (): void => undefined;
+        const held = new Promise<void>(r => { release = r; });
+        let asked = 0;
+        await page.route(u => u.pathname.endsWith('/places/identify'), async (route) => { asked++; await held; await route.fallback(); });
+        const look = bar.locator('.places-selbar-look');
+        await look.click();
+        await expect(look).toHaveAttribute('data-busy', 'busy');
+        await expect(look).toContainText('Sending…');
+        await look.click({ force: true });
+        await expect.poll(() => asked).toBe(1);
+        release();
+        await expect(toast(page)).toContainText('1 place queued for the research.');
+        expect(b.places!.identify).toHaveLength(1);
+    });
+
     test('⋯ Look up all not on the map: the preview first, then Queue', async ({ page }) => {
         const b = await research(page);
         await openLive(page, b);

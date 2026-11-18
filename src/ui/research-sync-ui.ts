@@ -71,8 +71,8 @@ import { postBridgeRevert, researchShowsOrigin, RevertRequest, RevertResult } fr
 import { researchConflictTitle } from './person-research-ui.js';
 import { uiModule } from './module.js';
 import { computeUnder } from './canvas-busy.js';
-import type { ToastWorkEnd } from './toast.js';
-import { runBusy, activatedElement, busyToast, type BusyCtl, type BusyEnd } from './busy.js';
+import { showProgressToast, type ProgressToastHandle, type ToastAction, type ToastWorkEnd } from './toast.js';
+import { runBusy, activatedElement, busyToast, BUSY_SHOW_MS, BUSY_TIMEOUTS, type BusyCtl, type BusyEnd } from './busy.js';
 import { holdLeave, takeLeftPending } from './busy-leave.js';
 import { startTreeLoad, currentTreeLoad } from './tree-load-progress.js';
 import { researchWrittenList } from './research-changes-ui.js';
@@ -241,6 +241,32 @@ let sendingTree: TreeId | null = null;
  */
 /** A load of the research's version asked, before its toast (the bridge is asked first): a second click does nothing. */
 let loadAsking = false;
+/**
+ * A load of the research's version from its click to the load's own toast (A3): the bridge asked and a send of what
+ * the research lacks said on the element clicked, or a progress toast when that element went with its menu or panel.
+ * `sending`: the send goes; its own load after it (asked again from inside the send) runs under this state.
+ */
+interface LoadAsk { sending: boolean; saySend(): void; handOver(): void }
+let loadAsk: LoadAsk | null = null;
+/** "Load the research's version" after a send taken back, asked and not yet loading: a second click does nothing. */
+let acceptAsking = false;
+
+/** The progress toast of a load asked without its element: seen after 120 ms, the send said in it, gone when the load's toast comes. */
+function loadAskToast(title: string): LoadAsk {
+    let words = title;
+    let toast: ProgressToastHandle | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = setTimeout(() => { timer = null; toast = showProgressToast({ title: words }); }, BUSY_SHOW_MS);
+    return {
+        sending: false,
+        saySend() { words = strings.busy.sendTitle; toast?.update({ title: words }); },
+        handOver() {
+            if (timer) clearTimeout(timer);
+            timer = null;
+            toast?.close();
+            toast = null;
+        },
+    };
+}
 let pillRedrawTimer: ReturnType<typeof setTimeout> | null = null;
 let handSend: { ctl: BusyCtl; treeId: TreeId; failed: Extract<BusyEnd, { ok: false }> | null; settle: () => void } | null = null;
 
@@ -1480,7 +1506,7 @@ export const researchSyncMethods = uiModule({
         this.showToast(s.undoneToast(when(lw.at)), Infinity, {
             closable: true,
             action: foreign
-                ? { label: s.loadVersion, run: () => { void this.researchAcceptUndo(); } }
+                ? this.researchAcceptUndoAction()
                 : { label: s.sendAgain, run: () => { void this.researchSendTree(treeId, { undoAgain: true }); } },
         });
     },
@@ -2667,8 +2693,9 @@ export const researchSyncMethods = uiModule({
      */
     async researchLoadNewer(opts: { afterSend?: boolean } = {}, el?: HTMLElement | null): Promise<void> {
         const ctx = this.researchSyncLink();
-        // One load at a time (waiting buttons §2.3): a second click while one goes does nothing.
-        if (!ctx || loadAsking || currentTreeLoad()) return;
+        // One load at a time (waiting buttons §2.3): a second click while one goes does nothing (the send of a load
+        // asked loads after itself through here).
+        if (!ctx || loadAsking || currentTreeLoad() || loadAsk && !loadAsk.sending) return;
         const { treeId, link } = ctx;
         const bridge = parseLiveBridge(storedResearchBridge(link.id)?.base);
         const shown = el?.isConnected ? el : null;
@@ -2684,34 +2711,60 @@ export const researchSyncMethods = uiModule({
             if (!opts.afterSend && this.researchAutoOn(link) && !this.researchReviewOn(link.id) && !link.refused) {
                 const fps = this.researchSyncFingerprints(treeId, link);
                 if (!fps.matchesBase && fps.current !== link.sent?.fingerprint) {
-                    await this.postResearchSend(treeId, { auto: true, thenLoad: true });
+                    // The send said first (on the element, or its toast), the load after it under the same state.
+                    const ask = loadAsk;
+                    if (ask) { ask.sending = true; ask.saySend(); }
+                    try {
+                        await this.postResearchSend(treeId, { auto: true, thenLoad: true });
+                    } finally {
+                        if (ask) ask.sending = false;
+                    }
                     return;
                 }
             }
             // (Changes the last send left unwritten would go: the load dialog says so, V-J.)
             // (The very same tree under a new head — a write of the family's material — is only taken.)
             if (currentTreeLoad()) return;
+            // The load's own progress toast takes over from the toast of the ask.
+            loadAsk?.handOver();
             const run = startTreeLoad({ el: null, treeId, retry: () => { void this.researchLoadNewer(opts); } });
             await this.importResearchFromUrl(ged, { ...(opts.afterSend ? { afterSend: treeId } : { takeSame: true }), load: run });
         };
         if (bridge) {
             // Through the bridge: its answer, a send of what it lacks and the load under the element's state from the
-            // click on (network work, shown at once; A3); without the element the ping under a progress toast (the
-            // load's own toast follows).
+            // click on (network work, shown at once; A3); without the element (its menu or panel closed) the same
+            // under a progress toast until the load's own toast.
             let ran = false;
             let ready = false;
             const ged = `${bridge.base}/tree.ged`;
-            if (shown) {
-                await runBusy(shown, async () => {
+            if (loadAsk) {
+                // Asked again by the send of a load asked: under that load's state.
+                ready = await ping();
+                if (ready) await load(ged);
+            } else if (shown) {
+                await runBusy(shown, async (ctl) => {
                     ran = true;
-                    ready = await ping();
-                    if (ready) await load(ged);
+                    const ask: LoadAsk = { sending: false, saySend: () => ctl.step(strings.busy.sending), handOver: () => undefined };
+                    loadAsk = ask;
+                    try {
+                        ready = await ping();
+                        if (ready) await load(ged);
+                    } finally {
+                        if (loadAsk === ask) loadAsk = null;
+                    }
                 }, { label: strings.busy.generic, atOnce: true, kind: 'local' });
                 // Working already (a second click): nothing more.
                 if (!ran) return;
             } else {
-                ready = await busyToast(strings.busy.loadingTree, ping);
-                if (ready) await load(ged);
+                const ask = loadAskToast(strings.busy.loadingTree);
+                loadAsk = ask;
+                try {
+                    ready = await ping();
+                    if (ready) await load(ged);
+                } finally {
+                    if (loadAsk === ask) loadAsk = null;
+                    ask.handOver();
+                }
             }
             if (ready) return;
         }
@@ -2723,26 +2776,69 @@ export const researchSyncMethods = uiModule({
     tellResearchUndoneChoice(message: string): void {
         this.showToast(message, Infinity, {
             closable: true,
-            action: { label: strings.sync.loadVersion, run: () => { void this.researchAcceptUndo(); } },
+            action: this.researchAcceptUndoAction(),
         });
+    },
+
+    /** "Load the research's version" in a toast: the bridge asked in the toast itself, then the load's own toast (A67). */
+    researchAcceptUndoAction(): ToastAction {
+        return {
+            label: strings.sync.loadVersion,
+            run: () => this.researchAcceptUndo(null, { inToast: true }),
+            work: { label: strings.busy.generic, timeoutMs: BUSY_TIMEOUTS.bridge },
+        };
     },
 
     /**
      * Keep what the research took back: its version over this tree, asked
      * plainly (replace it, a backup kept, or open as a copy) — never "send
-     * first", which would only send it again.
+     * first", which would only send it again. `el`: the element clicked, its state from the click through the
+     * bridge's answer and the load (a progress toast when it went with its menu, A67); `inToast`: a toast's action
+     * working in it, which ends when the load's own toast comes (a failure is the toast's end).
      */
-    async researchAcceptUndo(): Promise<void> {
+    async researchAcceptUndo(el?: HTMLElement | null, opts: { inToast?: boolean } = {}): Promise<ToastWorkEnd | void> {
         const ctx = this.researchSyncLink();
         const bridge = ctx ? parseLiveBridge(storedResearchBridge(ctx.link.id)?.base) : null;
-        if (!ctx || !bridge || !await this.researchBridgeReady(ctx.link.id)) {
+        const failed = (): ToastWorkEnd | void => {
+            if (opts.inToast) return { ok: false, text: strings.sync.noIdsFailed, whole: true };
             this.showToast(strings.sync.noIdsFailed, 6000);
+        };
+        if (!ctx || !bridge) return failed();
+        // Asked already (a second click), or a load goes: nothing more.
+        if (acceptAsking || currentTreeLoad()) return;
+        const ask = async (): Promise<boolean> => {
+            acceptAsking = true;
+            try {
+                return await this.researchBridgeReady(ctx.link.id);
+            } finally {
+                acceptAsking = false;
+            }
+        };
+        const go = async (): Promise<void> => {
+            if (currentTreeLoad()) return;
+            const load = startTreeLoad({ treeId: ctx.treeId, retry: () => { void this.researchAcceptUndo(); } });
+            await this.importResearchFromUrl(`${bridge.base}/tree.ged`, { plainAsk: true, load });
+            this.refreshResearchSyncUi();
+        };
+        if (opts.inToast) {
+            if (!await ask()) return failed();
+            void go();
             return;
         }
-        if (currentTreeLoad()) return;
-        const load = startTreeLoad({ treeId: ctx.treeId, retry: () => { void this.researchAcceptUndo(); } });
-        await this.importResearchFromUrl(`${bridge.base}/tree.ged`, { plainAsk: true, load });
-        this.refreshResearchSyncUi();
+        const shown = el?.isConnected ? el : null;
+        if (shown) {
+            let ran = false;
+            let ready = false;
+            await runBusy(shown, async () => {
+                ran = true;
+                ready = await ask();
+                if (ready) await go();
+            }, { label: strings.busy.generic, atOnce: true, kind: 'local' });
+            if (ran && !ready) failed();
+            return;
+        }
+        if (!await busyToast(strings.busy.loadingTree, ask)) return failed();
+        await go();
     },
 
     /** "Cancel loading": the send stays, the new version is not loaded by itself. */
@@ -2817,7 +2913,7 @@ export const researchSyncMethods = uiModule({
             case 'send': case 'retry': void this.researchSendNow({}, el); break;
             // "Send again" on a send taken back writes that send again (`/again`); on a discarded one, the changes go again.
             case 'sendAgain': void this.researchSendNow({ undoAgain: ctx.link.sent?.state === 'undone' }, el); break;
-            case 'acceptUndo': void this.researchAcceptUndo(); break;
+            case 'acceptUndo': void this.researchAcceptUndo(el); break;
             case 'sealTakeOver': {
                 const url = this.activeResearchLink('seal');
                 if (url) this.launchResearchLink(url);

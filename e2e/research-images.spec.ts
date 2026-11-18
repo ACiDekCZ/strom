@@ -340,6 +340,22 @@ test.describe('the Research menu: Images only in the research', () => {
         await expect(modal.locator('#sources-bulk-go')).toBeVisible();
     });
 
+    test('A153: Settings › "Load all…" opens Sources with the link waiting while the research lists what is missing', async ({ page }) => {
+        await setup(page, { auto: false });
+        let answer: () => void = () => {};
+        const gate = new Promise<void>(r => { answer = r; });
+        await page.route(/\/excerpts\?missing=1/, async (route) => { await gate; await route.fallback(); });
+        await page.evaluate(() => window.Strom.UI.showResearchTreeSettings(window.Strom.TreeManager.getActiveTreeId()!));
+        await page.locator('.research-images #research-images-load-all').click();
+        const modal = page.locator('#sources-modal');
+        const open = modal.locator('#sources-bulk-open');
+        await expect(open).toHaveAttribute('data-busy', 'busy');
+        await expect(open).toHaveAttribute('aria-busy', 'true');
+        await expect(modal.locator('#sources-bulk-go')).toHaveCount(0);
+        answer();
+        await expect(modal.locator('#sources-bulk-go')).toBeVisible();
+    });
+
     test('no row while the research is not running; back once it runs', async ({ page }) => {
         const { b } = await setup(page, { auto: false });
         b.down = true;
