@@ -196,6 +196,53 @@ test.describe('Research on: the switch', () => {
         await panel.getByRole('switch', { name: 'Research on' }).click();
         await expect(panel.locator('.research-live-note')).toContainText('The research is writing something else right now.');
         await expect(panel.getByRole('switch', { name: 'Research on' })).toHaveAttribute('aria-checked', 'true');
+        // At the switch with Try again (6.1); Try again writes again.
+        delete b.live!.reply;
+        await panel.locator('.research-live-note').getByRole('button', { name: 'Try again' }).click();
+        await expect.poll(() => liveWrites(b)).toEqual([{ do: 'stop' }, { do: 'stop' }]);
+    });
+
+    test('6b: switched on, on at once, dashed and locked; "Switching on…", "Waiting for the research" after 5 s; no answer in 30 s: back off with its sentence and Try again', async ({ page }) => {
+        await page.clock.install({ time: new Date('2026-11-18T09:30:00Z') });
+        const b = await setup(page);
+        b.down = true;
+        await poll(page);
+        await remember(page, { features: ALL, version: '1.29.0' });
+        await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+        const row = page.locator('#tree-manager-list .tree-manager-item').first();
+        const sw = row.getByRole('switch', { name: 'Research on' });
+        await expect(sw).toHaveAttribute('aria-checked', 'false');
+        await sw.click();
+        expect(await links(page)).toEqual([`strom-research://live?tree=${UUID}&do=start`]);
+        // At once: on, dashed, locked; the words only after 120 ms.
+        await expect(sw).toHaveAttribute('aria-checked', 'true');
+        await expect(sw).toHaveAttribute('data-pend', '1');
+        await expect(sw).toHaveAttribute('aria-busy', 'true');
+        await expect(sw).toHaveAttribute('aria-disabled', 'true');
+        await expect(row.locator('.busy-st')).toHaveCount(0);
+        await page.clock.runFor(150);
+        await expect(row.locator('.busy-st')).toHaveText('Switching on…');
+        await expect(row.locator('.busy-st .busy-spin')).toHaveCount(1);
+        // A click meanwhile is ignored (nothing handed over again).
+        await sw.click({ force: true });
+        expect(await links(page)).toHaveLength(1);
+        await page.clock.runFor(5000);
+        await expect(row.locator('.busy-st')).toHaveText('Waiting for the research');
+        // 30 s without the research: back off, the sentence at the switch (an alert) with Try again, no toast.
+        await page.clock.runFor(25_000);
+        await expect(sw).toHaveAttribute('aria-checked', 'false');
+        await expect(sw).not.toHaveAttribute('data-pend', '1');
+        await expect(row.locator('.busy-st')).toHaveCount(0);
+        const note = row.locator('.research-live-note');
+        await expect(note).toHaveAttribute('role', 'alert');
+        await expect(note.locator('.research-live-said')).toHaveText('The research did not respond within 30 s. Strom Research needs to be started.');
+        await expect(note.locator('code')).toHaveText('strom live start');
+        await expect(page.locator('.toast')).toHaveCount(0);
+        // Try again hands the link over again: on its way once more.
+        await note.getByRole('button', { name: 'Try again' }).click();
+        await expect.poll(() => links(page)).toHaveLength(2);
+        await expect(sw).toHaveAttribute('data-pend', '1');
+        await expect(row.locator('.research-live-said')).toHaveCount(0);
     });
 
     test('the tree manager: a row with research has the switch, switched off there', async ({ page }) => {

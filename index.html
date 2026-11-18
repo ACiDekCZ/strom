@@ -15386,6 +15386,15 @@
         /* The switch's name stays on a phone too (the view links' switches drop theirs there). */
         .research-live .view-link-switch__label { display: inline; }
         .research-live-busy { font-size: 12px; color: var(--text-light); }
+        .research-live-row > .pend-st { margin-top: 0; }
+        /* A refusal or a passed limit (6.1): the sentence in the error colour, "Try again" a link after it. */
+        .research-live-note.is-err .research-live-said { color: var(--error-text); }
+        .research-live-note button.research-live-retry {
+            background: none; border: 0; padding: 0; margin: 0; min-height: 0; min-width: 0; width: auto; font: inherit; font-weight: 600;
+            color: var(--primary, currentColor); text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+        }
+        .research-live-note button.research-live-retry:focus-visible { outline: 2px solid var(--primary, currentColor); outline-offset: 2px; border-radius: 2px; }
+        @media (pointer: coarse) { .research-live-note button.research-live-retry { min-height: 44px; padding: 0 4px; } }
         .research-live-note {
             margin: 2px 0 0; font-size: 12px; line-height: 1.45; color: var(--text-light);
             overflow-wrap: anywhere;

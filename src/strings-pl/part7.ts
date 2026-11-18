@@ -477,7 +477,6 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         startButton: 'Włącz',
         startIfNothing: 'Jeśli nic się nie stanie, w terminalu, w folderze drzewa:',
         stopHow: 'Ta wersja badania wyłącza się w terminalu, w folderze drzewa:',
-        startFailed: 'Badanie się nie włączyło. Można je włączyć także w terminalu, w folderze drzewa:',
         stopFailed: (reason: string) => `Nie udało się wyłączyć badania${reason ? ` (${reason})` : ''}.`,
         busy: 'Badanie zapisuje teraz coś innego. Za chwilę można spróbować ponownie.',
         noAnswer: 'Badanie nie odpowiedziało.',

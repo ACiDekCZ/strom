@@ -37,6 +37,8 @@ import {
     storedLiveState, type LiveWriteRefusal,
 } from '../research-live.js';
 import { el, onComputer } from './research-ui.js';
+import { startPend, dropPend, pendOf, applyPend, pendStatusEl } from './switch-pend.js';
+import { busySpinHtml } from './busy.js';
 import { onBridgeStatus } from './research-sync-ui.js';
 import { uiModule } from './module.js';
 import { noteQueueStartStatus, queueStartOf, retryQueueStart, startQueueWork, QUEUE_START_MS, type QueueStartView } from './queue-start.js';
@@ -62,10 +64,32 @@ interface SwitchNote {
     command?: string;
     /** The state it was said in (on or off): a change of the state takes it away. */
     on: boolean;
+    /** A refusal or a limit passed (6.1): said as an alert when first drawn, with "Try again". */
+    retry?: boolean;
 }
 
 const pending = new Map<string, Pending>();
 const notes = new Map<string, SwitchNote>();
+/** The refusals already said (an alert once: a redraw does not say it again). */
+const noteSaid = new WeakSet<SwitchNote>();
+
+/** The key of a switch's write state (6.1, switch-pend). */
+function pendKey(researchId: string): string {
+    return `live:${key(researchId)}`;
+}
+
+/** A switch on its way: on (or off) at once, dashed and locked, its words after 120 ms, "Waiting for the research" after 5 s. */
+function setPending(researchId: string, kind: Pending['kind'], ms: number, redraw: () => void, onLimit: () => void): void {
+    pending.set(key(researchId), { kind, until: Date.now() + ms });
+    const L = strings.researchLive;
+    startPend(pendKey(researchId), { label: kind === 'stopping' ? L.stopping : L.starting, limitMs: ms, onLimit, redraw });
+}
+
+/** The switch at rest again (its answer came, or its time passed). */
+function clearPending(researchId: string): void {
+    pending.delete(key(researchId));
+    dropPend(pendKey(researchId));
+}
 /** Settings' choice being written (radios off until the bridge answers). */
 let idleWriting = false;
 let idleNote = '';
@@ -78,6 +102,8 @@ const idleCommand = (minutes: number): string => `strom config set live.idleMinu
 interface SwitchState {
     on: boolean;
     pending: Pending['kind'] | null;
+    /** The words of a switch on its way (empty before 120 ms). */
+    pendWords: string;
     canStop: boolean;
     canStart: boolean;
     ended: 'stopped' | 'idle' | null;
@@ -123,7 +149,7 @@ export const researchLiveMethods = uiModule({
             // With its version and a newer research out: the remembered features are its word only while nothing newer is known.
             noteLiveStatus(researchId, status);
             const p = pending.get(key(researchId));
-            if (p?.kind === 'starting') pending.delete(key(researchId));
+            if (p?.kind === 'starting') clearPending(researchId);
             this.refreshResearchLiveSwitches();
         });
     },
@@ -172,7 +198,7 @@ export const researchLiveMethods = uiModule({
         const kind = liveEndKind(reason);
         if (!kind) return;
         noteLiveEnded(researchId, kind, by);
-        if (pending.get(key(researchId))?.kind === 'stopping') pending.delete(key(researchId));
+        if (pending.get(key(researchId))?.kind === 'stopping') clearPending(researchId);
         this.refreshResearchLiveSwitches();
     },
 
@@ -184,7 +210,7 @@ export const researchLiveMethods = uiModule({
         const rid = link.id;
         const answer = this.researchAnswerOf(rid);
         const p = pending.get(key(rid)) ?? null;
-        if (p && p.until < Date.now()) pending.delete(key(rid));
+        if (p && p.until < Date.now()) clearPending(rid);
         const live = pending.get(key(rid)) ?? null;
         if (!answer || answer.result === 'denied') {
             // Not known yet: a switch on its way still shows (its answer comes).
@@ -202,6 +228,7 @@ export const researchLiveMethods = uiModule({
         return {
             on,
             pending: live?.kind ?? null,
+            pendWords: live ? (pendOf(pendKey(rid))?.phase === 'lock' ? '' : pendOf(pendKey(rid))?.label ?? '') : '',
             canStop,
             canStart,
             ended: on ? null : stored?.ended?.kind ?? null,
@@ -243,8 +270,9 @@ export const researchLiveMethods = uiModule({
         slot.classList.toggle('is-on', !!state?.on);
         if (!state) return;
         const L = strings.researchLive;
+        const rid = TreeManager.getTreeMetadata(treeId as TreeId)?.research?.id ?? '';
         if (slot.dataset.variant === 'start' && (!state.on || state.pending === 'starting')) {
-            this.fillResearchLiveStart(slot, treeId, state);
+            this.fillResearchLiveStart(slot, treeId, rid, state);
             if (hadFocus) slot.querySelector<HTMLElement>('.research-live-start, .research-live-copy')?.focus({ preventScroll: true });
             return;
         }
@@ -256,7 +284,7 @@ export const researchLiveMethods = uiModule({
         sw.setAttribute('role', 'switch');
         sw.setAttribute('aria-checked', String(checked));
         if (!canAct) sw.setAttribute('aria-disabled', 'true');
-        if (state.pending) sw.setAttribute('aria-busy', 'true');
+        if (state.pending) applyPend(sw, pendKey(rid));
         sw.appendChild(el('span', 'view-link-switch__label', L.switchLabel));
         const track = sw.appendChild(el('span', 'view-link-switch__track'));
         track.setAttribute('aria-hidden', 'true');
@@ -265,10 +293,9 @@ export const researchLiveMethods = uiModule({
             void this.toggleResearchLive(treeId);
         };
         row.appendChild(sw);
-        if (state.pending) {
-            const busy = row.appendChild(el('span', 'research-live-busy', state.pending === 'stopping' ? L.stopping : L.starting));
-            busy.setAttribute('role', 'status');
-        }
+        // Its words after 120 ms (said once in the shared busy region), "Waiting for the research" after 5 s.
+        const words = state.pending ? pendStatusEl(pendKey(rid)) : null;
+        if (words) row.appendChild(words).classList.add('research-live-busy');
         // Off: how it ended, and how it comes back where the switch cannot do it.
         const note = el('p', 'research-live-note');
         if (!state.on && !state.pending) {
@@ -278,6 +305,7 @@ export const researchLiveMethods = uiModule({
         if (state.note) {
             if (note.childNodes.length) note.appendChild(document.createTextNode(' '));
             note.appendChild(el('span', 'research-live-said', state.note.text));
+            this.researchLiveRetry(note, treeId, rid);
             if (state.note.command) note.append(' ', commandLine(state.note.command, c => this.copyResearchLiveCommand(c)));
         } else if (!state.on && !state.pending && !state.canStart) {
             if (note.childNodes.length) note.appendChild(document.createTextNode(' '));
@@ -291,15 +319,17 @@ export const researchLiveMethods = uiModule({
      * The idle panel while the research is off: "Switch on" (the quiet link) where the research
      * can take it, and under it one command for the terminal (the failure's own word when it said one).
      */
-    fillResearchLiveStart(slot: HTMLElement, treeId: string, state: SwitchState): void {
+    fillResearchLiveStart(slot: HTMLElement, treeId: string, rid: string, state: SwitchState): void {
         const L = strings.researchLive;
         if (state.canStart || state.pending) {
             const row = slot.appendChild(el('div', 'research-live-row'));
-            const btn = el('button', 'live-panel-action research-live-start', state.pending ? L.starting : L.startButton);
+            const btn = el('button', 'live-panel-action research-live-start', state.pending ? (state.pendWords || L.starting) : L.startButton);
             btn.type = 'button';
             if (state.pending) {
-                btn.disabled = true;
+                // Locked, keeping its focus (aria-disabled); the spinner after 120 ms, "Waiting for the research" after 5 s.
+                btn.setAttribute('aria-disabled', 'true');
                 btn.setAttribute('aria-busy', 'true');
+                if (state.pendWords) btn.insertAdjacentHTML('afterbegin', busySpinHtml(14));
             }
             btn.onclick = (e) => {
                 e.stopPropagation();
@@ -314,8 +344,27 @@ export const researchLiveMethods = uiModule({
         }
         const said = state.note && !state.note.on ? state.note : null;
         const text = said?.text ?? (state.canStart || state.pending ? L.startIfNothing : L.startHow);
-        note.append(el('span', said ? 'research-live-said' : undefined, text), ' ',
-            commandLine(said?.command ?? COMMAND_START, c => this.copyResearchLiveCommand(c)));
+        note.append(el('span', said ? 'research-live-said' : undefined, text));
+        if (said) this.researchLiveRetry(note, treeId, rid);
+        note.append(' ', commandLine(said?.command ?? COMMAND_START, c => this.copyResearchLiveCommand(c)));
+    },
+
+    /** A refusal's or a passed limit's sentence (6.1): an alert when first drawn, with "Try again" after it. */
+    researchLiveRetry(note: HTMLElement, treeId: string, rid: string): void {
+        const said = notes.get(key(rid));
+        if (!said?.retry) return;
+        if (!noteSaid.has(said)) {
+            noteSaid.add(said);
+            note.setAttribute('role', 'alert');
+        }
+        note.classList.add('is-err');
+        const retry = el('button', 'link busy-msg__retry research-live-retry', strings.busy.retry);
+        retry.type = 'button';
+        retry.onclick = (e) => {
+            e.stopPropagation();
+            void this.toggleResearchLive(treeId);
+        };
+        note.append(' ', retry);
     },
 
     /** The command that switches a research on, as a line with its "Copy" (where no switch can show). */
@@ -345,12 +394,12 @@ export const researchLiveMethods = uiModule({
                 this.refreshResearchLiveSwitches();
                 return;
             }
-            pending.set(key(rid), { kind: 'stopping', until: Date.now() + STOP_CONFIRM_MS });
+            setPending(rid, 'stopping', STOP_CONFIRM_MS, () => this.refreshResearchLiveSwitches(), () => this.researchLiveTimedOut(rid, 'stopping'));
             this.refreshResearchLiveSwitches();
             const res = await postLiveStop(base);
             if (!res.ok) {
-                pending.delete(key(rid));
-                notes.set(key(rid), { text: res.code === 'busy' ? L.busy : L.stopFailed(refusalText(res)), on: true });
+                clearPending(rid);
+                notes.set(key(rid), { text: res.code === 'busy' ? L.busy : L.stopFailed(refusalText(res)), on: true, retry: true });
                 this.refreshResearchLiveSwitches();
                 return;
             }
@@ -366,7 +415,7 @@ export const researchLiveMethods = uiModule({
         const scheme = storedLiveState(rid)?.scheme ?? announcedResearchScheme();
         const url = researchSchemeUrl('live', { tree: rid, liveDo: 'start' }, scheme);
         if (!url) return;
-        pending.set(key(rid), { kind: 'starting', until: Date.now() + START_CONFIRM_MS });
+        setPending(rid, 'starting', START_CONFIRM_MS, () => this.refreshResearchLiveSwitches(), () => this.researchLiveTimedOut(rid, 'starting'));
         this.refreshResearchLiveSwitches();
         this.handOverResearchLink(url);
         void this.confirmResearchLive(rid, 'starting');
@@ -374,7 +423,6 @@ export const researchLiveMethods = uiModule({
 
     /** Ask the bridge until it went (off) or came (on), at most the pending's time; then say so. */
     async confirmResearchLive(researchId: string, kind: Pending['kind']): Promise<void> {
-        const L = strings.researchLive;
         for (;;) {
             const p = pending.get(key(researchId));
             if (!p || p.kind !== kind) break;
@@ -382,20 +430,30 @@ export const researchLiveMethods = uiModule({
             const status = await this.askResearchBridge(researchId, ASK_TIMEOUT_MS);
             const up = !!status;
             if ((kind === 'stopping' && !up) || (kind === 'starting' && up)) {
-                pending.delete(key(researchId));
+                clearPending(researchId);
                 break;
             }
             if (Date.now() > p.until) {
-                pending.delete(key(researchId));
-                notes.set(key(researchId), kind === 'starting'
-                    ? { text: L.startFailed, command: COMMAND_START, on: false }
-                    : { text: L.stopFailed(''), command: COMMAND_STOP, on: true });
+                this.researchLiveTimedOut(researchId, kind, false);
                 break;
             }
         }
         // Every round's answer: the marks and the switches.
         this.refreshResearchMarks();
         this.refreshResearchLiveSwitches();
+    },
+
+    /**
+     * Its time passed without the research's answer (switched on: 30 s): the switch back
+     * as it was, the sentence at it with "Try again" and the command for the terminal.
+     */
+    researchLiveTimedOut(researchId: string, kind: Pending['kind'], redraw = true): void {
+        if (pending.get(key(researchId))?.kind !== kind) return;
+        clearPending(researchId);
+        notes.set(key(researchId), kind === 'starting'
+            ? { text: strings.busy.liveSilent(Math.round(START_CONFIRM_MS / 1000)), command: COMMAND_START, on: false, retry: true }
+            : { text: strings.researchLive.stopFailed(''), command: COMMAND_STOP, on: true, retry: true });
+        if (redraw) this.refreshResearchLiveSwitches();
     },
 
     copyResearchLiveCommand(command: string): void {
