@@ -71,9 +71,11 @@ case "${1:-}" in
         ;;
     --quick)
         shift
-        acquire "quick suite"
         start=$(date +%s)
+        # The typecheck is light (one core) and stays out of the lock: a type
+        # error ends the run before it waits, and the lock is held shorter.
         npm run typecheck
+        acquire "quick suite"
         npx vitest run
         npm run build
         npx playwright test --grep @smoke
