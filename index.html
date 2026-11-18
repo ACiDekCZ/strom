@@ -22509,7 +22509,9 @@
             font-size: 13px; line-height: 1.45; color: var(--text); overflow-wrap: anywhere;
             background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-sm);
         }
-        .waiting-audit__err--top { margin: 8px 10px 2px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+        /* At the preview's top (a column): its own height; the sentence wraps, Reload after it. */
+        .waiting-audit__err--top { flex: none; margin: 8px 10px 2px; }
+        .waiting-audit__err--top .waiting-audit__reload { margin: 4px 0 0; vertical-align: middle; }
         .waiting-audit__msg--err { color: var(--text); }
         .waiting-audit__cancel, .waiting-audit__confirm, .waiting-audit__reload, .waiting-audit__chat {
             display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; max-width: 100%; box-sizing: border-box;
