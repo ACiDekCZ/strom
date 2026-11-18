@@ -534,3 +534,105 @@ test.describe('Sort with the agent over everything (the whole view)', () => {
         });
     });
 });
+
+/**
+ * Not about the family (spec 110, point 4): a file the agent says has nothing to
+ * do with the family is marked under Unassigned with its reason; Hide as Not about
+ * the family (all of them, or one row) asks first in Hide… with that reason
+ * chosen, only hides (Undo and Restore bring it back). Nothing hides by itself;
+ * a research that does not say it leaves Unassigned as it was.
+ */
+test.describe('Sort with the agent: not about the family', () => {
+    test.use({ viewport: DESKTOP });
+
+    const UNRELATED = [
+        { id: 'I0001', unrelated: true, why: 'A shop receipt from 2019', sure: 'high' },
+        { id: 'I0002', title: 'Agent’s other title', links: [], why: 'A well', sure: 'low' },
+        { id: 'I0003', unrelated: true, why: 'A screenshot of a phone', sure: 'medium' },
+    ];
+    const hideDialog = (page: Page) => page.locator('.mdlg-overlay .mdlg:not(#material-sort-proposal)');
+    const unassignedTab = (page: Page) => proposal(page).locator('.msp-tab[data-tab="unassigned"]');
+    const row = (page: Page, id: string) => proposal(page).locator(`.msp-row[data-id="${id}"]`);
+
+    async function openProposal(page: Page): Promise<void> {
+        await openWindow(page);
+        await strip(page).locator('[data-sort="sort"]').click();
+        await sortDialog(page).locator('.mdlg-sort-go').click();
+        await expect(strip(page).locator('[data-sort="open"]')).toBeVisible();
+        await strip(page).locator('[data-sort="open"]').click();
+        await expect(proposal(page)).toBeVisible();
+        await unassignedTab(page).click();
+    }
+
+    test('marked under Unassigned with the reason; Hide as Not about the family asks, hides with the reason, Undo and Restore bring them back', async ({ page }) => {
+        const material = await setup(page, { proposals: UNRELATED, files: [materialFile(4, { batch: BATCH.id })] });
+        await openProposal(page);
+        await expect(unassignedTab(page)).toContainText('3');
+        // The marked ones first, each with its reason; the file without the flag stays as before.
+        await expect(proposal(page).locator('.msp-row')).toHaveCount(3);
+        await expect(proposal(page).locator('.msp-row').first()).toHaveAttribute('data-id', 'I0001');
+        await expect(row(page, 'I0001').locator('.msp-flag.is-unrelated')).toHaveText('Not about the family');
+        await expect(row(page, 'I0001').locator('.msp-why')).toHaveText('Why not: A shop receipt from 2019');
+        await expect(row(page, 'I0003').locator('.msp-flag')).toHaveText('Not about the family');
+        await expect(row(page, 'I0004').locator('.msp-flag')).toHaveCount(0);
+        await expect(row(page, 'I0004').locator('.msp-hide')).toHaveCount(0);
+        // Nothing is hidden by itself.
+        expect(material.hides).toHaveLength(0);
+
+        // One row: its own Hide…, Cancel hides nothing and the proposal comes back on Unassigned.
+        await row(page, 'I0003').locator('.msp-hide').click();
+        await expect(hideDialog(page).locator('.mdlg-title')).toHaveText('Hide the file?');
+        await hideDialog(page).getByRole('button', { name: 'Cancel' }).click();
+        await expect(proposal(page)).toBeVisible();
+        await expect(unassignedTab(page)).toHaveAttribute('aria-selected', 'true');
+        expect(material.hides).toHaveLength(0);
+
+        // Over the group: one confirmation with Not about the family chosen.
+        const all = proposal(page).locator('.msp-hide-unrelated');
+        await expect(all).toHaveText('Hide as Not about the family (2)');
+        await all.click();
+        await expect(proposal(page)).toHaveCount(0);
+        await expect(hideDialog(page).locator('.mdlg-title')).toHaveText('Hide 2 files?');
+        await expect(hideDialog(page).locator('input[value="unrelated"]')).toBeChecked();
+        await hideDialog(page).getByRole('button', { name: 'Hide', exact: true }).click();
+        await expect.poll(() => material.hides.length).toBe(1);
+        expect({ ...material.hides[0], files: [...(material.hides[0].files as string[])].sort() })
+            .toEqual({ files: ['I0001', 'I0003'], hidden: true, reason: 'unrelated' });
+        // Back on Unassigned: hidden, nothing deleted, Restore beside each.
+        await expect(proposal(page)).toBeVisible();
+        await expect(unassignedTab(page)).toHaveAttribute('aria-selected', 'true');
+        await expect(row(page, 'I0001').locator('.msp-state.is-hidden')).toHaveText('Hidden · not about the family');
+        await expect(row(page, 'I0003').locator('.msp-state.is-hidden')).toHaveText('Hidden · not about the family');
+        await expect(all).toHaveCount(0);
+        await expect(proposal(page).locator('.msp-review')).toHaveText('Go through by hand (1)');
+
+        // The toast's Undo shows them again; the rows say so.
+        await page.locator('.toast[data-kind="materials"] .toast-action').click();
+        await expect.poll(() => material.hides.length).toBe(2);
+        expect(material.hides[1].hidden).toBe(false);
+        await expect(row(page, 'I0001').locator('.msp-hide')).toBeVisible();
+        await expect(all).toHaveText('Hide as Not about the family (2)');
+
+        // One row hidden, then Restore on its row.
+        await row(page, 'I0001').locator('.msp-hide').click();
+        await expect(hideDialog(page).locator('input[value="unrelated"]')).toBeChecked();
+        await hideDialog(page).getByRole('button', { name: 'Hide', exact: true }).click();
+        await expect.poll(() => material.hides.length).toBe(3);
+        expect(material.hides[2]).toEqual({ files: ['I0001'], hidden: true, reason: 'unrelated' });
+        await expect(all).toHaveText('Hide as Not about the family (1)');
+        await row(page, 'I0001').locator('.msp-restore').click();
+        await expect.poll(() => material.hides.length).toBe(4);
+        expect(material.hides[3]).toEqual({ files: ['I0001'], hidden: false });
+        await expect(row(page, 'I0001').locator('.msp-hide')).toBeVisible();
+        expect(material.files.every(f => !f.hidden)).toBe(true);
+    });
+
+    test('a research that does not say it: Unassigned as before, nothing offered to hide', async ({ page }) => {
+        await setup(page);
+        await openProposal(page);
+        await expect(proposal(page).locator('.msp-row')).toHaveCount(1);
+        await expect(proposal(page).locator('.msp-flag')).toHaveCount(0);
+        await expect(proposal(page).locator('.msp-hide, .msp-hide-unrelated, .msp-restore')).toHaveCount(0);
+        await expect(proposal(page).locator('.msp-review')).toHaveText('Go through by hand (1)');
+    });
+});

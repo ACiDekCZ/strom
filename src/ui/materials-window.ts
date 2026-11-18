@@ -424,6 +424,8 @@ export const materialsWindowMethods = uiModule({
 
     /** The remembered list or the bridge changed: redraw (quietly), ask again once the bridge runs. */
     refreshMaterialsWindow(): void {
+        // The agent's proposal open over it shows the files as they are now (hidden, restored).
+        this.materialSortProposalRefresh();
         const w = win;
         if (!w || !document.getElementById(MODAL_ID)) return;
         const ctx = this.materialsWindowContext();

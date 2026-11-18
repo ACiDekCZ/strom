@@ -30359,6 +30359,8 @@
         .msp-tabs .mdlg-btn.msp-tab.is-active { border-bottom-color: var(--primary); color: var(--text); font-weight: 600; }
         .msp-list { display: flex; flex-direction: column; }
         .msp-row { display: grid; grid-template-columns: auto 64px minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 12px 8px; border-bottom: 1px solid var(--divider); border-radius: var(--r-sm); }
+        /* Unassigned and Done have no checkbox: the preview takes the first column. */
+        .msp-row.is-nocheck { grid-template-columns: 64px minmax(0, 1fr) auto; }
         .msp-row:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
         .msp-row .msp-thumb { width: 64px; height: 64px; }
         .msp-check { width: 18px; height: 18px; margin: 4px 0 0; accent-color: var(--primary); }
@@ -30378,6 +30380,9 @@
         .msp-acts { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
         .msp-state { font-size: 12.5px; font-weight: 600; padding: 2px 8px; border-radius: var(--r-tag); background: var(--surface-2); }
         .msp-state.is-accepted { background: var(--primary-soft); }
+        .msp-state.is-hidden { font-weight: 500; color: var(--text-light); }
+        /* The agent says the file is not about the family (Unassigned): Hide as Not about the family stands over them. */
+        .msp-flag { display: inline-block; padding: 0 6px; border-radius: var(--r-tag); background: var(--warning-soft); color: var(--warning-text); font-weight: 600; }
         .msp-edit-form { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: flex-end; }
         .msp-field { display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; color: var(--text-faint); }
         .msp-field input, .msp-field select {
@@ -30387,6 +30392,8 @@
         .msp-edit-title { width: 320px; max-width: 100%; }
         .msp-unassigned-head { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 10px 8px; }
         .msp-unassigned-head .mdlg-note { flex: 1; min-width: 200px; }
+        .msp-unassigned-acts { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; max-width: 100%; }
+        .msp-unassigned-acts .mdlg-btn { max-width: 100%; padding-top: 6px; padding-bottom: 6px; text-align: start; }
         .msp-empty { padding: 24px 8px; color: var(--text-faint); font-size: 14px; }
         .msp-write { flex: 1 1 100%; }
         @media (hover: hover) {
@@ -30399,6 +30406,7 @@
         @media (max-width: 640px) {
             .mw-sort--top { padding: 8px 16px; }
             .msp-row { grid-template-columns: auto 48px minmax(0, 1fr); }
+            .msp-row.is-nocheck { grid-template-columns: 48px minmax(0, 1fr); }
             .msp-row .msp-thumb { width: 48px; height: 48px; }
             .msp-acts { grid-column: 1 / -1; justify-content: flex-start; }
         }
@@ -30407,7 +30415,7 @@
             .msp-row { padding: 8px; }
         }
         @media (pointer: coarse) {
-            .msp-acts .mdlg-btn, .msp-tabs .mdlg-btn.msp-tab { min-height: 44px; }
+            .msp-acts .mdlg-btn, .msp-tabs .mdlg-btn.msp-tab, .msp-unassigned-acts .mdlg-btn { min-height: 44px; }
         }
         .mdlg-note[hidden] { display: none; }
         .mdlg-attach-off { color: var(--warning-text); }

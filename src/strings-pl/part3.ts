@@ -582,6 +582,7 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
             unassignedNote: 'Agent nie przypisał tych plików. Zostają bez tytułu i osoby; można je przejrzeć ręcznie.',
             reviewByHand: (n: number) => `Przejrzyj ręcznie (${numPl(n)})`,
             unassignedWhy: 'Dlaczego nie',
+            hideUnrelated: (n: number) => `Ukryj jako Nie dotyczy rodziny (${numPl(n)})`,
             empty: 'Nic tu nie ma.',
             write: 'Przyjęte się zapiszą: tytuły i połączenia plików w drzewie razem z drzewem, materiał spoza drzewa do archiwum. Odrzucone pozostaną bez zmian.',
             done: (a: number, r: number, u: number) => `Przyjęto ${nPl(a, 'propozycję', 'propozycje', 'propozycji')} · ${numPl(r)} odrzucono · ${numPl(u)} nieprzypisanych.`,

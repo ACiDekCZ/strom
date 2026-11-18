@@ -24,7 +24,7 @@ import {
 } from '../materials.js';
 import { overviewItems, nameWithoutYears } from '../materials-overview.js';
 import {
-    sortCandidates, sortNeeds, sortNeedy, sortRows, sortRowProposes, sortWrite, sortTreeIndex, sortChip, parseSortRevert,
+    sortCandidates, sortNeeds, sortNeedy, sortRows, sortRowProposes, sortWrite, sortTreeIndex, sortChip, parseSortRevert, sortUnrelatedHideable,
     type SortRow, type SortChoice, type SortChip, type SortRevert, type SortWrite,
 } from '../material-sort.js';
 import { researchPersonRef } from '../research-link.js';
@@ -65,6 +65,9 @@ export interface SortPlan {
     rows: Map<string, { target: SortTarget; state: boolean }>;
     top: { target: SortTarget | null; state: boolean } | null;
 }
+
+/** The open proposal's redraw with the files as remembered now (a file hidden or restored meanwhile). */
+let proposalRedraw: (() => void) | null = null;
 
 /** The sorting asked about now (one per page: the active tree's). */
 let watch: { treeId: string; id: string; timer: ReturnType<typeof setTimeout> | null; job: SortJob | null; busy: boolean } | null = null;
@@ -462,7 +465,13 @@ export const materialSortMethods = uiModule({
         if (job) this.materialSortProposalWindow(mc, r, job);
     },
 
-    materialSortProposalWindow(mc: MaterialsContext, r: ResearchSortRemembered, job: SortJob): void {
+    /** The open proposal shows its files as remembered now (called with every redraw of the Materials window). */
+    materialSortProposalRefresh(): void {
+        proposalRedraw?.();
+    },
+
+    /** `opts.tab`: the tab it opens on (back from Hide… of Unassigned). */
+    materialSortProposalWindow(mc: MaterialsContext, r: ResearchSortRemembered, job: SortJob, opts: { tab?: 'unassigned' } = {}): void {
         const s = strings.materials.agentSort;
         const byId = this.materialSortItemMap(mc.treeId);
         const tree = sortTreeIndex(DataManager.getData(), personName);
@@ -480,12 +489,14 @@ export const materialSortMethods = uiModule({
         const reverts: Record<string, unknown> = { ...(r.reverts ?? {}) };
         const choices = new Map<string, SortChoice>();
         const selected = new Set<string>();
-        let tab: 'proposals' | 'unassigned' | 'done' = 'proposals';
+        let tab: 'proposals' | 'unassigned' | 'done' = opts.tab ?? 'proposals';
         let editing: string | null = null;
         let focusId: string | null = null;
 
         const assigned = rows.filter(sortRowProposes);
-        const unassigned = rows.filter(x => !sortRowProposes(x));
+        // The files the agent says are not about the family first: Hide as Not about the family stands over them.
+        const unassignedAll = rows.filter(x => !sortRowProposes(x));
+        const unassigned = [...unassignedAll.filter(x => x.unrelated), ...unassignedAll.filter(x => !x.unrelated)];
         const open = () => assigned.filter(x => !decided[x.id]);
         const done = () => assigned.filter(x => decided[x.id]);
         const remember = () => {
@@ -506,9 +517,27 @@ export const materialSortMethods = uiModule({
                 draw();
                 return true;
             },
-            onClose: () => this.refreshMaterialsWindow(),
+            onClose: () => {
+                if (proposalRedraw === redraw) proposalRedraw = null;
+                this.refreshMaterialsWindow();
+            },
         });
         dialog.box.id = 'material-sort-proposal';
+        // Hide… has a dialog of its own: this one comes back on Unassigned when it ends (hidden or not).
+        const reopen = () => {
+            const now = this.materialsContext();
+            const rNow = this.materialSortRemembered();
+            if (now && rNow?.id === r.id) this.materialSortProposalWindow(now, rNow, job, { tab: 'unassigned' });
+        };
+        const hide = (items: MaterialItem[]) => {
+            if (items.length) this.materialAction('hide', items, { where: 'window', back: reopen });
+        };
+        /** Hide… and Restore here: the research's write on material, while it runs. */
+        const hideCan = (): 'yes' | 'off' | null => {
+            const now = this.materialsContext();
+            if (!now?.caps.assign) return null;
+            return now.caps.bridgeUp && now.base ? 'yes' : 'off';
+        };
         if (r.text) dialog.box.querySelector('.mdlg-head')?.appendChild(h('p', 'mdlg-sub msp-know', s.propKnow(r.text)));
 
         const tabs = h('div', 'msp-tabs');
@@ -539,7 +568,7 @@ export const materialSortMethods = uiModule({
         const rowEl = (row: SortRow): HTMLElement => {
             const item = row.item;
             const p = row.proposal;
-            const el = h('div', 'msp-row');
+            const el = h('div', `msp-row${tab === 'proposals' ? '' : ' is-nocheck'}`);
             el.setAttribute('role', 'listitem');
             el.dataset.id = row.id;
             el.tabIndex = focusId === row.id ? 0 : -1;
@@ -568,6 +597,10 @@ export const materialSortMethods = uiModule({
                 const kind = row.kind && (row.kind.human === undefined || use.kind) ? row.kind.proposed : row.kind?.human;
                 const bits = [date ?? '', kind ? kindText(kind) : ''].filter(Boolean);
                 if (bits.length) meta.appendChild(document.createTextNode(`${bits.join(' · ')} · `));
+                if (row.unrelated) {
+                    meta.appendChild(h('span', 'msp-flag is-unrelated', strings.materials.reason.unrelated));
+                    meta.appendChild(document.createTextNode(' · '));
+                }
                 if (p) {
                     const conf = h('span', `msp-conf is-${p.sure}`, s.conf[p.sure === 'medium' ? 'medium' : p.sure]);
                     meta.appendChild(conf);
@@ -589,6 +622,20 @@ export const materialSortMethods = uiModule({
                     button(s.edit, 'msp-edit', () => { editing = row.id; focusId = row.id; draw(); }),
                     button(s.reject, 'msp-reject', () => { decided[row.id] = 'rejected'; selected.delete(row.id); remember(); draw(); }),
                 );
+            } else if (tab === 'unassigned' && row.unrelated && item) {
+                const can = hideCan();
+                if (item.hidden) {
+                    acts.appendChild(h('span', 'msp-state is-hidden', strings.materials.hiddenLabel[item.hidden.reason ?? 'none'] ?? strings.materials.hiddenLabel.none));
+                    if (can) {
+                        const back = button(strings.materials.restore, 'msp-restore', () => { this.materialAction('restore', [item], { where: 'window' }); });
+                        back.disabled = can === 'off';
+                        acts.appendChild(back);
+                    }
+                } else if (can && sortUnrelatedHideable([row]).length) {
+                    const one = button(strings.materials.hide, 'msp-hide', () => hide([item]));
+                    one.disabled = can === 'off';
+                    acts.appendChild(one);
+                }
             } else if (tab === 'done' && state) {
                 acts.appendChild(h('span', `msp-state is-${state}`, state === 'accepted' ? s.accepted : s.rejected));
                 // A rejected row comes back to the proposals; an accepted one is written back as it was, then comes back too.
@@ -706,10 +753,19 @@ export const materialSortMethods = uiModule({
             if (tab === 'unassigned' && unassigned.length) {
                 const head = h('div', 'msp-unassigned-head');
                 head.appendChild(h('p', 'mdlg-note', s.unassignedNote));
-                const items = unassigned.map(x => x.item).filter((i): i is MaterialItem => !!i);
-                if (items.length && materialsWindowOpen()) {
-                    head.appendChild(button(s.reviewByHand(items.length), 'msp-review', () => { dialog.close(); this.mwReview(items); }));
+                const items = unassigned.map(x => x.item).filter((i): i is MaterialItem => !!i && !i.hidden);
+                const acts = h('div', 'msp-unassigned-acts');
+                const unrelated = sortUnrelatedHideable(unassigned);
+                const can = hideCan();
+                if (unrelated.length && can) {
+                    const all = button(s.hideUnrelated(unrelated.length), 'msp-hide-unrelated', () => hide(unrelated));
+                    all.disabled = can === 'off';
+                    acts.appendChild(all);
                 }
+                if (items.length && materialsWindowOpen()) {
+                    acts.appendChild(button(s.reviewByHand(items.length), 'msp-review', () => { dialog.close(); this.mwReview(items); }));
+                }
+                if (acts.childElementCount) head.appendChild(acts);
                 children.push(head);
             }
             children.push(...shown.map(rowEl));
@@ -946,6 +1002,15 @@ export const materialSortMethods = uiModule({
                 void accept([...selected]);
             }
         });
+
+        // A file hidden or restored meanwhile (Restore here, the toast's Undo): the rows say it as it is now.
+        const redraw = () => {
+            if (editing) return;
+            const fresh = this.materialSortItemMap(mc.treeId);
+            for (const row of unassigned) row.item = fresh.get(row.id) ?? row.item;
+            draw();
+        };
+        proposalRedraw = redraw;
 
         draw();
         list.querySelector<HTMLElement>('.msp-row')?.focus();

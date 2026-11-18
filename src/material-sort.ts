@@ -93,6 +93,8 @@ export interface SortRow {
     date?: SortField<string>;
     kind?: SortField<MaterialKind>;
     chips: SortChip[];
+    /** The agent says the file is not about the family: unassigned, nothing of its proposal is offered. */
+    unrelated?: true;
 }
 
 /** Names the planner needs from the tree (pure: the caller passes the data). */
@@ -192,6 +194,8 @@ export function sortRows(job: Pick<SortJob, 'files' | 'proposals'>, itemOf: (id:
         const item = itemOf(id);
         const row: SortRow = { id, item, proposal, chips: [] };
         if (!proposal) return row;
+        // Not about the family: a title or a link for it would only be accepted by mistake.
+        if (proposal.unrelated) return { ...row, unrelated: true };
         const field = <T>(name: 'title' | 'date' | 'kind', proposed: T | undefined): SortField<T> | undefined => {
             if (proposed === undefined || proposed === '') return undefined;
             const human = humanValue<T>(item, name);
@@ -221,6 +225,17 @@ export function sortRows(job: Pick<SortJob, 'files' | 'proposals'>, itemOf: (id:
 /** The row proposes something (else it is unassigned: nothing to accept). */
 export function sortRowProposes(row: SortRow): boolean {
     return !!(row.title || row.date || row.kind || row.chips.length);
+}
+
+/**
+ * The files the agent said are not about the family that Hide… takes now
+ * (one confirmation, reason "Not about the family"): the research's files,
+ * not hidden yet, not placed in the tree (a file in the tree is removed from
+ * it instead). Nothing is hidden by itself.
+ */
+export function sortUnrelatedHideable(rows: readonly SortRow[]): MaterialItem[] {
+    return rows.filter(r => r.unrelated).map(r => r.item)
+        .filter((i): i is MaterialItem => !!i && i.origin !== 'tree' && !!i.file && !i.hidden && !i.attachment?.places?.length);
 }
 
 /** What the row writes when accepted; `use` takes a field over a person's value on purpose; `edit` replaces the proposal. */

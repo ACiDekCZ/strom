@@ -1194,6 +1194,12 @@ export interface SortProposal {
     links: SortLink[];
     why: string;
     sure: SortSure;
+    /**
+     * The agent says the file is not about the family at all (a screenshot, a
+     * receipt, a stranger's photo, sent by mistake); `why` says what it saw.
+     * Optional: a research that does not say it leaves the file unassigned.
+     */
+    unrelated?: true;
 }
 
 /** A sorting as the research tells it (`GET /material/sort/<id>`). */
@@ -1245,6 +1251,7 @@ export function parseSortProposal(raw: unknown): SortProposal | null {
     return {
         id, links, sure, why: cleanText(o.why, 500) ?? '',
         ...(title ? { title } : {}), ...(date ? { date } : {}), ...(kind ? { kind } : {}),
+        ...(o.unrelated === true ? { unrelated: true as const } : {}),
     };
 }
 

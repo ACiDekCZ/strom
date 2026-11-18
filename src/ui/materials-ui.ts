@@ -80,6 +80,11 @@ export interface MaterialActionCtx {
     /** Called once a write started without a dialog has its answer (the element that asked for it stops waiting). */
     settled?: () => void;
     /**
+     * Hide… asked from another dialog (the agent's proposal): called once its own dialog ended — written (after the
+     * write), cancelled or closed — so the dialog it came from comes back.
+     */
+    back?: () => void;
+    /**
      * A refused write said at the element that asked for it (§5: the sentence under the viewer's chip) instead of a
      * toast: the text, "Try again" when it may help, one more way (Reload, the research's own way).
      */

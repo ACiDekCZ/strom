@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { parseSortJob, startMaterialSort, type MaterialItem, type SortLink } from '../materials.js';
-import { sortCandidates, sortNeeds, sortNeedy, sortWholeOffered, sortRows, sortRowProposes, sortWrite, sortChip, parseSortRevert, type SortChip, type SortRow, type SortTreeIndex } from '../material-sort.js';
+import { sortCandidates, sortNeeds, sortNeedy, sortWholeOffered, sortRows, sortRowProposes, sortWrite, sortChip, parseSortRevert, sortUnrelatedHideable, type SortChip, type SortRow, type SortTreeIndex } from '../material-sort.js';
 import type { PartnershipId } from '../types.js';
 import type { Attachment, PersonId } from '../types.js';
 
@@ -174,6 +174,54 @@ describe('the proposal against what a person set', () => {
     it('a person the file already has is no proposal', () => {
         const rows = sortRows(job, id => (id === 'I0001' ? item('I0001', { persons: ['P0001'] }) : null), chip);
         expect(rows[0].chips).toEqual([]);
+    });
+});
+
+describe('a file the agent says is not about the family (spec 110, point 4)', () => {
+    const job = parseSortJob({
+        id: 'sort-20261118120000-ab12', state: 'done', files: ['I0001', 'I0002', 'I0003', 'I0004', 'I0005'], at: '2026-11-18T12:00:00Z',
+        proposals: [
+            { id: 'I0001', unrelated: true, title: 'Receipt from a shop', kind: 'other', links: [{ type: 'person', ref: 'P0001' }], why: 'A shop receipt from 2019', sure: 'high' },
+            { id: 'I0002', unrelated: true, why: 'A screenshot of a phone', sure: 'medium' },
+            { id: 'I0003', unrelated: 'yes', title: 'Wedding 1924', links: [], why: 'A veil', sure: 'high' },
+            { id: 'I0004', unrelated: true, why: 'A stranger’s holiday photo', sure: 'low' },
+            { id: 'I0005', unrelated: true, why: 'A ticket', sure: 'low' },
+        ],
+    })!;
+
+    it('read only as `unrelated: true`; without it a proposal is read as before', () => {
+        expect(job.proposals.map(p => p.unrelated ?? null)).toEqual([true, true, null, true, true]);
+        expect(job.proposals[1]).toEqual({ id: 'I0002', links: [], sure: 'medium', why: 'A screenshot of a phone', unrelated: true });
+        expect(job.proposals[2]).toEqual({ id: 'I0003', links: [], sure: 'high', why: 'A veil', title: 'Wedding 1924' });
+    });
+
+    it('unassigned with its reason, nothing of it offered; without the flag the row is as before', () => {
+        const rows = sortRows(job, id => item(id), chip);
+        expect(rows[0].unrelated).toBe(true);
+        expect(rows[0].title).toBeUndefined();
+        expect(rows[0].kind).toBeUndefined();
+        expect(rows[0].chips).toEqual([]);
+        expect(rows[0].proposal?.why).toBe('A shop receipt from 2019');
+        expect(sortRowProposes(rows[0])).toBe(false);
+        expect(sortWrite(rows[0])).toBeNull();
+        expect(rows[2].unrelated).toBeUndefined();
+        expect(rows[2].title).toEqual({ proposed: 'Wedding 1924' });
+        expect(sortRowProposes(rows[2])).toBe(true);
+    });
+
+    it('Hide as Not about the family takes the research\'s files not hidden yet and not placed in the tree', () => {
+        const items = new Map<string, MaterialItem>([
+            ['I0001', item('I0001')],
+            ['I0002', item('I0002', { hidden: { reason: 'unrelated' } })],
+            ['I0003', item('I0003')],
+            ['I0004', treeItem('I0004', { places: [{ personId: 'p1' as PersonId }] })],
+            ['I0005', item('I0005', { origin: 'both' })],
+        ]);
+        const rows = sortRows(job, id => items.get(id) ?? null, chip);
+        expect(sortUnrelatedHideable(rows).map(i => i.file?.id)).toEqual(['I0001', 'I0005']);
+        // Without the flag nothing is offered to hide.
+        const plain = sortRows({ files: job.files, proposals: job.proposals.map(({ unrelated: _u, ...p }) => p) }, id => items.get(id) ?? null, chip);
+        expect(sortUnrelatedHideable(plain)).toEqual([]);
     });
 });
 

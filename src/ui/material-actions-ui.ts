@@ -595,7 +595,9 @@ export const materialActionsMethods = uiModule({
         // Hide… is for material outside the tree; a file in the tree is removed from it instead (spec 102 §9).
         files = files.filter(i => !i.attachment?.places?.length);
         if (!files.length) return;
-        const dialog = materialDialog({ title: m.hideTitle(files.length) });
+        // Asked from another dialog: it comes back when this one ends without a write (after one, below).
+        let wrote = false;
+        const dialog = materialDialog({ title: m.hideTitle(files.length), onClose: () => { if (!wrote) ctx.back?.(); } });
         // One file: the sentence names it; several: the general sentence.
         const one = files.length === 1 ? files[0] : null;
         const textEl = h('p', 'mdlg-text', one ? undefined : (mc.agent ? m.hideTextResearch : m.hideText));
@@ -636,6 +638,7 @@ export const materialActionsMethods = uiModule({
                 this.materialErrorInDialog(dialog, mc, res.error, () => void run());
                 return;
             }
+            wrote = true;
             dialog.close();
             await mergeIntoCache(mc.treeId, res.value.files, res.value.people);
             this.showToast((mc.agent ? m.hiddenToastResearch : m.hiddenToast)(files.length), TOAST_MS, {
@@ -647,6 +650,7 @@ export const materialActionsMethods = uiModule({
                 },
             });
             this.materialActionDone(ctx);
+            ctx.back?.();
         };
     },
 
