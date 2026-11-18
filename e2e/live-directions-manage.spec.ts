@@ -238,12 +238,16 @@ test.describe('directions managed through the bridge', () => {
     });
 
     test('a busy research: tried once more after 3 s, then a box with Try again at the row', async ({ page }) => {
+        // The 3 s before the second try run on Playwright's clock.
+        await page.clock.install();
         const b = await followManaged(page);
         await openOverview(page);
         b.replies.push(BUSY, BUSY);
         await directionRow(page, 'G0002').locator('.research-direction__head').click();
         await directionRow(page, 'G0002').locator('[data-do="pause"]').click();
-        await expect.poll(() => directionWrites(b).length, { timeout: 8000 }).toBe(2);
+        await expect.poll(() => directionWrites(b).length).toBe(1);
+        await page.clock.runFor(3000);
+        await expect.poll(() => directionWrites(b).length).toBe(2);
         const box = directionRow(page, 'G0002').locator('.research-direction__problem');
         await expect(box).toContainText('Not saved, the research is busy.');
         await expect(box).toHaveAttribute('role', 'alert');
