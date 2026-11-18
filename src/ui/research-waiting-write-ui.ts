@@ -74,6 +74,7 @@ function rowSeen(id: string): boolean {
 
 /** The focus is in an item's row (its detail, or its ⋯ menu), or the click now started there (its button may have blurred, disabled). */
 function focusInRow(id: string): boolean {
+    if (typeof document === 'undefined') return false;
     const act = activatedElement();
     if (act && (overviewRowEl(id)?.contains(act) || act.closest(`#waiting-more-menu[data-id="${CSS.escape(id)}"]`))) return true;
     const a = document.activeElement;
