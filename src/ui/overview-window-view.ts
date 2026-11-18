@@ -42,6 +42,7 @@ import {
 import type { DirectionFormOptions } from './direction-form-ui.js';
 import type { WaitingAnswerOutcome } from './waiting-answer-form.js';
 import type { RowNote } from './waiting-row-notes.js';
+import type { RowBusyView } from './row-busy.js';
 import { taskOrderOutcomeOf, type TaskOrderOutcome, type TaskOrderWrite } from './research-offline-ui.js';
 import {
     OVERVIEW_ACTIONS_TO_MAIN, emptyOverviewExtras, overviewSessionFromData, readOverviewState,
@@ -291,6 +292,14 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
             return out;
         },
         taskOrderBusy(id: string): boolean { return extras().taskOrder.busy.includes(id); },
+        // The row's state as the main window has it (§4: the spinner past 120 ms there).
+        taskOrderView(id: string): RowBusyView | null {
+            const t = extras().taskOrder;
+            if (!t.busy.includes(id)) return null;
+            const m = t.shown?.find(x => x.id === id);
+            return { shown: m?.shown ?? false, label: m?.label ?? '' };
+        },
+        taskOrderRetry(): (() => void) | null { return null; },
         taskOrderProblem(id: string): string { return extras().taskOrder.problems[id] ?? ''; },
         async sendWaitingAnswer(_s: LiveSession, w: LiveWaiting, text: string): Promise<WaitingAnswerOutcome> {
             const r = await port.ask('waiting-answer', { itemId: w.id, text }, OVERVIEW_ANSWER_WAIT_MS);

@@ -61,6 +61,8 @@ export interface OverviewLinesState {
     orderSaving: boolean;
     /** Lines whose state write is on its way. */
     busy: string[];
+    /** Their look (past 120 ms: the spinner and the words), as the main window draws them. */
+    shown?: { id: string; label: string; shown: boolean }[];
     problems: OverviewLineProblem[];
     /** The bridge said its research is an archive: the lines are read-only. */
     archive: boolean;
@@ -80,7 +82,7 @@ export interface OverviewExtras {
     /** Hypotheses asked of the research and waiting for its answer, and the list of proposals accepted at once. */
     hypotheses: { pending: Record<string, unknown>; batch: unknown | null };
     /** Tasks whose own place in the queue is being written, and what a refused one says (by task). */
-    taskOrder: { busy: string[]; problems: Record<string, string> };
+    taskOrder: { busy: string[]; problems: Record<string, string>; shown?: { id: string; label: string; shown: boolean }[] };
     /**
      * The tree's "Verifying" (spec 065 §10k) as the main window has it: facts waiting, Stop and the bulk
      * verification offered (null: the research does not verify, or its bridge does not answer).

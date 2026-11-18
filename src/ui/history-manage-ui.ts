@@ -35,6 +35,18 @@ import { mapUndoBody } from './history-map-ui.js';
 import { uiModule } from './module.js';
 import { historyOriginPendKey } from './history-kinds-ui.js';
 import { endPend, isPend, pendAttrs, pendRefusalHtml, pendStatusHtml, startPend, type PendRefusal } from './switch-pend.js';
+import { busySpinHtml } from './busy.js';
+
+/**
+ * A row's link in text ("Search again", "Map automatically", §5, 5b): its 12 px slot drawn from the start, so
+ * the line does not move; its write on its way, the spinner in the slot after the text (seen past 120 ms, CSS),
+ * the link locked but keeping its focus (`aria-disabled`, not `disabled`).
+ */
+function rowLinkHtml(hm: string, key: string, label: string, busy: boolean): string {
+    const state = busy ? ' aria-disabled="true" aria-busy="true" data-busy="busy"' : '';
+    return ` <button type="button" class="link hm-row-link" data-hm="${hm}" data-key="${esc(key)}"${state}>${esc(label)}`
+        + `<span class="busy-slot is-later" aria-hidden="true">${busy ? busySpinHtml(12) : ''}</span></button>`;
+}
 
 /** Rows drawn at once per group; "Show n more rows" adds as many again. */
 const PAGE = 200;
@@ -288,8 +300,12 @@ export const historyManageMethods = uiModule({
             return;
         }
         const scrollTop = body.scrollTop;
+        // A row's link keeps its focus across the redraw (its write on its way, §5).
+        const linkFocus = activeEl && body.contains(activeEl) && activeEl.matches('.hm-row-link[data-hm][data-key]')
+            ? `.hm-row-link[data-hm="${CSS.escape(activeEl.dataset.hm!)}"][data-key="${CSS.escape(activeEl.dataset.key!)}"]` : '';
         body.innerHTML = this.historyManageList(d, rows);
         body.scrollTop = scrollTop;
+        if (linkFocus) body.querySelector<HTMLElement>(linkFocus)?.focus({ preventScroll: true });
         if (view.focusPlace && view.tab === 'places') {
             const row = body.querySelector<HTMLElement>(`[data-place="${CSS.escape(view.focusPlace)}"]`);
             row?.classList.add('is-focus');
@@ -438,7 +454,7 @@ export const historyManageMethods = uiModule({
             : r.kind === 'place' ? '<span class="hm-mark is-place" aria-hidden="true">▲</span>' : '';
         const busy = view.busy.has(r.key);
         const link = r.link
-            ? ` <button type="button" class="link hm-row-link" data-hm="${r.link}" data-key="${esc(r.key)}"${busy ? ' disabled' : ''}>${esc(r.link === 'searchAgain' ? h.searchAgain : h.showAgain)}</button>` : '';
+            ? rowLinkHtml(r.link, r.key, r.link === 'searchAgain' ? h.searchAgain : h.showAgain, busy) : '';
         const state = r.state
             ? `<span class="hm-r-state-line"><span class="hm-glyph" aria-hidden="true">${esc(r.glyph)}</span><span>${esc(r.state)}</span></span>`
                 + (r.why ? `<span class="hm-r-why">${esc(r.why)}</span>` : '') + link
@@ -489,7 +505,7 @@ export const historyManageMethods = uiModule({
             + (r.why ? `<span class="hm-p-why">${esc(r.why)}</span>` : '')
             + kindsFillHtml(r.fill, 'hm-p-fill') + '</div>'
             + (r.state || r.link ? `<span class="hm-p-state tone-${r.tone}">${esc(r.state)}`
-                + (r.link ? ` <button type="button" class="link hm-row-link" data-hm="${r.link === 'auto' ? 'mapAuto' : 'searchAgainPlace'}" data-key="${esc(r.key)}"${busy ? ' disabled' : ''}>${esc(r.link === 'auto' ? h.mapAuto : h.searchAgain)}</button>` : '')
+                + (r.link ? rowLinkHtml(r.link === 'auto' ? 'mapAuto' : 'searchAgainPlace', r.key, r.link === 'auto' ? h.mapAuto : h.searchAgain, busy) : '')
                 + '</span>' : '')
             + (r.events !== null && group === 'all' ? `<span class="hm-p-count">${r.events}</span>` : '')
             + (assign ? `<button type="button" class="hm-assign" data-hm="assign" data-key="${esc(r.key)}">${esc(h.assign)}</button>` : '')

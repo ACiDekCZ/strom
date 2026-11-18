@@ -14,6 +14,7 @@
 import { DataManager } from '../data.js';
 import { strings } from '../strings.js';
 import { runBusy } from './busy.js';
+import { RowBusy, drawRowMoreBusy, rowBusyStatusEl, type RowBusyMirror, type RowBusyView } from './row-busy.js';
 import { Person } from '../types.js';
 import {
     LiveDirection, LiveOffLine, LiveQueueItem, LiveWaiting, LiveWorker, OFF_LINE_BRANCHES_FEATURE, OFF_LINE_MODES, OffLineBranch, OffLineMode, QUEUE_NEXT_FEATURE,
@@ -25,7 +26,7 @@ import { shownName, fitNameHtml } from '../person-name.js';
 import { bookYears } from '../book-blocks.js';
 import { withBusyRetry } from '../research-directions.js';
 import {
-    BranchModeWrite, BranchWaitingDo, DirectionWriteRefused, TaskOrderDo, TaskOrderWas, answerBranchWaiting, directionPeopleKept, restoreTaskOrder,
+    BranchModeWrite, BranchWaitingDo, DirectionWriteRefused, TaskOrderDo, TaskOrderWas, answerBranchWaiting, directionPeopleKept, directionRetryHelps, restoreTaskOrder,
     sanitizeTaskOrderWas, setBranchMode, setOffLineTree, setTaskOrder,
 } from '../research-directions-write.js';
 import { bridgeBase } from './history-ui.js';
@@ -45,8 +46,6 @@ let branchOpen: string | null = null;
 /** What a refused write says at its branch (branch id → the box). */
 interface Problem { text: string; tone: 'warn' | 'danger'; retry?: () => void }
 const branchProblems = new Map<string, Problem>();
-/** Branches with a write on its way. */
-const branchBusy = new Set<string>();
 /** Growing branches of Awaiting action whose answer is on its way, and which (A32). */
 const branchAnswering = new Map<string, BranchWaitingDo>();
 /** The queue shows one branch's tasks (the bridge it was chosen at). */
@@ -59,12 +58,27 @@ let chipFrom: { branch: string; where: 'section' | 'detail' } | null = null;
 const BRANCH_TASKS_SHOWN = 3;
 /** What a refused own place says at its task (task id → the text). */
 const taskProblems = new Map<string, string>();
-/** Tasks with a write of their place on its way. */
-const taskBusy = new Set<string>();
+/** "Try again" of a refused place, where another try may help (a busy or silent research). */
+const taskRetries = new Map<string, () => void>();
+/** Tasks with a write of their place on its way (§4, 4a: the row carries the state, the ⋯ its spinner). */
+const taskRows = new RowBusy();
+/** Branches with a write on its way (§4: the branch's row carries it, "Saving…" and the ⋯'s spinner). */
+const branchRows = new RowBusy();
 
 /** The tasks' places being written and what a refused one says, as the overview's own window draws them (spec 079 K3). */
-export function taskOrderWindowState(): { busy: string[]; problems: Record<string, string> } {
-    return { busy: [...taskBusy], problems: Object.fromEntries(taskProblems) };
+export function taskOrderWindowState(): { busy: string[]; shown: RowBusyMirror[]; problems: Record<string, string> } {
+    return { busy: taskRows.ids(), shown: taskRows.snapshot(), problems: Object.fromEntries(taskProblems) };
+}
+
+/** The task rows' states as the main window has them (the overview's own window). */
+export function mirrorTaskRows(list: readonly (RowBusyMirror | string)[]): void {
+    taskRows.mirror(list);
+}
+
+/** Test hook: every task and branch row at rest. */
+export function resetOffLineRows(): void {
+    taskRows.clear();
+    branchRows.clear();
 }
 /** Growing branches answered here: hidden until the next status (item id). */
 const answered = new Set<string>();
@@ -404,6 +418,23 @@ function branchBack(b: OffLineBranch): BranchModeWrite {
     return b.own ? b.mode as OffLineMode : 'default';
 }
 
+/**
+ * A task's refused place in its row (§4, 4a): the sentence in the task's box (`role=alert`), "Try again" in it
+ * where another try may help.
+ */
+export function taskProblemBox(text: string, retry: (() => void) | null): HTMLElement {
+    const box = el('span', 'live-queue-problem', text);
+    box.setAttribute('role', 'alert');
+    if (retry) {
+        const b = el('button', 'link-button live-queue-problem__retry', strings.live.dirRetry);
+        b.type = 'button';
+        b.dataset.do = 'retry';
+        b.onclick = (e) => { e.stopPropagation(); retry(); };
+        box.append(' ', b);
+    }
+    return box;
+}
+
 function problemBox(p: Problem): HTMLElement {
     const box = el('div', `research-direction__problem is-${p.tone}`);
     box.setAttribute('role', 'alert');
@@ -674,6 +705,9 @@ export const researchOffLineMethods = uiModule({
         const near = s.researches.find(d => d.id === b.nearest);
         if (near) meta.appendChild(el('span', undefined, `${L.dirNear(near.name)}${near.state === 'paused' ? ` ${L.dirNearPaused}` : ''}`));
         meta.appendChild(el('span', 'research-offline__count', !never && upNext === 0 ? L.branchNoTasks : L.dirTasks(b.tasks)));
+        // Its choice on its way (§4): "Saving…" in its line, also folded (A29, A30).
+        const busyWords = rowBusyStatusEl(branchRows.view(b.id));
+        if (busyWords) meta.appendChild(busyWords);
         top.appendChild(meta);
         if (b.samples.length > 0 && !open && !never) {
             const samples = el('div', 'research-offline__samples', b.samples.map(x => x.text).join(' · '));
@@ -692,7 +726,8 @@ export const researchOffLineMethods = uiModule({
             const reset = el('button', 'link-button research-offline__reset', L.branchReset);
             reset.type = 'button';
             reset.dataset.do = 'default';
-            if (!branchBusy.has(b.id)) reset.onclick = () => void this.changeBranchMode(b, 'default');
+            if (branchRows.has(b.id)) reset.setAttribute('aria-disabled', 'true');
+            else reset.onclick = () => void this.changeBranchMode(b, 'default');
             main.appendChild(reset);
         }
         row.appendChild(main);
@@ -702,10 +737,13 @@ export const researchOffLineMethods = uiModule({
             more.dataset.branch = b.id;
             more.setAttribute('aria-label', `${L.branchMenu}: ${branchName(b.id, b.person)}`);
             more.setAttribute('aria-haspopup', 'menu');
-            more.onclick = (e) => {
-                e.stopPropagation();
-                this.openBranchMenu(more, b);
-            };
+            // Its choice on its way: the spinner in the ⋯'s place, no menu meanwhile.
+            if (!drawRowMoreBusy(more, branchRows.view(b.id))) {
+                more.onclick = (e) => {
+                    e.stopPropagation();
+                    this.openBranchMenu(more, b);
+                };
+            }
             row.appendChild(more);
         }
         return row;
@@ -720,7 +758,7 @@ export const researchOffLineMethods = uiModule({
         const seg = el('div', 'research-offline__segment sel-seg');
         seg.setAttribute('role', 'radiogroup');
         seg.setAttribute('aria-label', L.branchTakenAria);
-        const busy = branchBusy.has(b.id);
+        const busy = branchRows.has(b.id);
         const radios: HTMLButtonElement[] = [];
         for (const m of OWN_MODES) {
             const on = b.mode === m;
@@ -819,11 +857,7 @@ export const researchOffLineMethods = uiModule({
             if (q.own) text.appendChild(el('span', 'research-offline__task-why', q.own === 'next' ? L.qWhyManualNext : L.qWhyManualLast));
             if (doing) text.appendChild(el('span', 'research-offline__task-why', L.taskDoing));
             const problem = this.taskOrderProblem(q.id);
-            if (problem) {
-                const p = el('span', 'live-queue-problem', problem);
-                p.setAttribute('role', 'alert');
-                text.appendChild(p);
-            }
+            if (problem) text.appendChild(taskProblemBox(problem, this.taskOrderRetry(q.id)));
             if (this.taskOrderBusy(q.id)) li.setAttribute('aria-busy', 'true');
             li.appendChild(text);
             if (menu) {
@@ -832,10 +866,13 @@ export const researchOffLineMethods = uiModule({
                 more.setAttribute('aria-label', strings.research.taskMenu);
                 more.setAttribute('aria-haspopup', 'menu');
                 more.dataset.task = q.id;
-                more.onclick = (e) => {
-                    e.stopPropagation();
-                    this.openLiveTaskMenu(more, q.id);
-                };
+                // Its place on its way (§4): the spinner in the ⋯'s place, no menu meanwhile.
+                if (!drawRowMoreBusy(more, this.taskOrderView(q.id))) {
+                    more.onclick = (e) => {
+                        e.stopPropagation();
+                        this.openLiveTaskMenu(more, q.id);
+                    };
+                }
                 li.appendChild(more);
             }
             list.appendChild(li);
@@ -1043,16 +1080,16 @@ export const researchOffLineMethods = uiModule({
     async changeBranchMode(b: OffLineBranch, to: BranchModeWrite, opts: { undo?: boolean } = {}): Promise<boolean> {
         this.closeBranchPopups();
         const s = liveSession();
-        if (!s || s.ended || !s.offLine || branchBusy.has(b.id) || !this.directionsView(s).canWrite) return false;
+        if (!s || s.ended || !s.offLine || branchRows.has(b.id) || !this.directionsView(s).canWrite) return false;
         const L = strings.live;
         const before = s.offLine.branches.find(x => x.id === b.id) ?? b;
-        branchBusy.add(b.id);
+        branchRows.start(b.id, strings.busy.saving, () => { this.redrawDirections(); refocusBranch(b.id); });
         branchProblems.delete(b.id);
         this.redrawDirections();
         refocusBranch(b.id);
         const head = await this.waitingHeadBeforeWrite(s);
         const r = await withBusyRetry(() => setBranchMode(s.bridge.base, b.id, to));
-        branchBusy.delete(b.id);
+        await branchRows.end(b.id);
         if (liveSession() !== s || s.ended || !s.offLine) return false;
         if (!r.ok) {
             branchProblems.set(b.id, {
@@ -1131,8 +1168,12 @@ export const researchOffLineMethods = uiModule({
                 const remove = el('button', 'link-button research-offline__remove', L.dirBranchRemove);
                 remove.type = 'button';
                 remove.dataset.do = 'remove-branch';
-                if (!branchBusy.has(b.id)) remove.onclick = () => void this.changeBranchMode(b, 'default');
+                if (branchRows.has(b.id)) remove.setAttribute('aria-disabled', 'true');
+                else remove.onclick = () => void this.changeBranchMode(b, 'default');
                 line.appendChild(part(remove));
+                // Its removal on its way (A31): "Saving…" after it.
+                const words = rowBusyStatusEl(branchRows.view(b.id));
+                if (words) line.appendChild(part(words));
             }
             const problem = branchProblems.get(b.id);
             if (problem) line.appendChild(problemBox(problem));
@@ -1168,7 +1209,17 @@ export const researchOffLineMethods = uiModule({
 
     /** A task's place in the queue is being written. */
     taskOrderBusy(id: string): boolean {
-        return taskBusy.has(id);
+        return taskRows.has(id);
+    },
+
+    /** The task row's state while its place is written (§4, 4a; null: at rest). */
+    taskOrderView(id: string): RowBusyView | null {
+        return taskRows.view(id);
+    },
+
+    /** "Try again" of a refused place at its task (null: another try would not help). */
+    taskOrderRetry(id: string): (() => void) | null {
+        return taskRetries.get(id) ?? null;
     },
 
     /**
@@ -1179,18 +1230,23 @@ export const researchOffLineMethods = uiModule({
         this.closeLiveTaskMenu();
         // Followed, or viewed through its bridge without following (spec 057 §7): the tree stays as it is.
         const s = researchSession();
-        if (!s || !(taskOrderOffered(s) || (what === 'next' && queueNextOffered(s))) || taskBusy.has(task)) return false;
+        if (!s || !(taskOrderOffered(s) || (what === 'next' && queueNextOffered(s))) || taskRows.has(task)) return false;
         const L = strings.live;
         const before = liveQueueItem(s, task);
-        taskBusy.add(task);
+        taskRows.start(task, strings.busy.saving, () => this.renderLivePanel());
         taskProblems.delete(task);
+        taskRetries.delete(task);
         this.renderLivePanel();
         const head = await this.waitingHeadBeforeWrite(s);
         const r = await withBusyRetry(() => setTaskOrder(s.bridge.base, task, what));
-        taskBusy.delete(task);
+        await taskRows.end(task);
         if (researchSession() !== s || s.ended) return false;
         if (!r.ok) {
             taskProblems.set(task, taskRefusedText(r));
+            // A busy or silent research: another try may help (not the agent at work on it, not an Undo in a toast).
+            if (!opts.undo && r.errorCode !== 'queue.doing' && directionRetryHelps(r)) {
+                taskRetries.set(task, () => void this.changeTaskOrder(task, what));
+            }
             this.renderLivePanel();
             return false;
         }
@@ -1232,13 +1288,14 @@ export const researchOffLineMethods = uiModule({
     async writeTaskOrder(task: string, body: TaskOrderWrite): Promise<TaskOrderOutcome> {
         // Followed, or viewed through its bridge without following (spec 057 §7): the tree stays as it is.
         const s = researchSession();
-        if (!s || !queueNextOffered(s) || taskBusy.has(task)) return { ok: false, why: 'refused' };
-        taskBusy.add(task);
+        if (!s || !queueNextOffered(s) || taskRows.has(task)) return { ok: false, why: 'refused' };
+        taskRows.start(task, strings.busy.saving, () => this.renderLivePanel());
         taskProblems.delete(task);
+        taskRetries.delete(task);
         this.renderLivePanel();
         const head = await this.waitingHeadBeforeWrite(s);
         const r = await withBusyRetry(() => (body.do === 'next' ? setTaskOrder(s.bridge.base, task, 'next') : restoreTaskOrder(s.bridge.base, task, body.was)));
-        taskBusy.delete(task);
+        await taskRows.end(task);
         if (researchSession() !== s || s.ended) return { ok: false, why: 'refused' };
         if (!r.ok) {
             const taken = r.errorCode === 'queue.doing';

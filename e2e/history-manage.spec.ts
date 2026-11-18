@@ -453,6 +453,32 @@ test.describe('History of places: the manager', () => {
         await expect(modal(page).locator('.hm-row-note[data-note="de-prussia"]')).toHaveCount(0);
     });
 
+    test('Search again on its way (§5, 5b): the link keeps its text and focus, its 12 px spinner after the text in its slot, the line does not move', async ({ page }) => {
+        await setup(page);
+        await openManager(page);
+        const link = region(page, 'de-prussia').locator('[data-hm="searchAgain"]');
+        const slot = link.locator('.busy-slot');
+        await expect(slot).toHaveCount(1);
+        const before = await link.boundingBox();
+        let letGo!: () => void;
+        const gate = new Promise<void>(r => { letGo = r; });
+        const write = (u: URL) => u.pathname.endsWith('/history/skip');
+        await page.route(write, async route => { await gate; await route.fallback(); });
+        await link.focus();
+        await page.keyboard.press('Enter');
+        await expect(link).toHaveAttribute('aria-busy', 'true');
+        await expect(link).toHaveAttribute('aria-disabled', 'true');
+        await expect(link).not.toHaveAttribute('disabled');
+        await expect(link).toBeFocused();
+        await expect(link).toHaveText('Search again');
+        await expect(slot.locator('.busy-spin.s12')).toBeVisible();
+        const during = await link.boundingBox();
+        expect(Math.round(during!.width)).toBe(Math.round(before!.width));
+        letGo();
+        await expect(toast(page, 'Prussia is searched again for this tree.')).toBeVisible();
+        await page.unroute(write);
+    });
+
     test('a region\'s detail opens on its row: title focused, state with the gaps, the events by centuries; back to the row', async ({ page }) => {
         await setup(page);
         await openManager(page);

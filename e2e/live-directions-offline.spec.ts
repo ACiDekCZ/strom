@@ -222,6 +222,70 @@ test.describe('work outside the directions through the bridge', () => {
         await expect(toast(page)).toHaveCount(0);
     });
 
+    test('the branch ⋯ on its way (§4): the menu closed, "Saving…" in the folded row, the ⋯ its spinner; its open choices wait at .55', async ({ page }) => {
+        const b = await follow(page);
+        await openOverview(page);
+        await outToggle(page).click();
+        let letGo!: () => void;
+        const gate = new Promise<void>(r => { letGo = r; });
+        const write = (u: URL) => u.pathname.endsWith('/offline/B-P0040');
+        await page.route(write, async route => { await gate; await route.fallback(); });
+        const r = branchRow(page, 'B-P0040');
+        await r.locator('.research-offline__more').click();
+        await page.locator('#research-offline-menu [data-do="never"]').click();
+        await expect(page.locator('#research-offline-menu')).toHaveCount(0);
+        await expect(r.locator('.research-offline__meta .busy-st')).toHaveText('Saving…');
+        const more = r.locator('.research-offline__more');
+        await expect(more).toHaveAttribute('data-busy', 'busy');
+        await expect(more.locator('.b-busy .busy-spin')).toBeVisible();
+        await more.click({ force: true });
+        await expect(page.locator('#research-offline-menu')).toHaveCount(0);
+        letGo();
+        await expect(toast(page)).toContainText('Branch not researched');
+        expect(offWrites(b).map(w => [w.path, w.body])).toEqual([['offline/B-P0040', { mode: 'never' }]]);
+        await page.unroute(write);
+
+        // An open branch's segment: the others wait seen as unavailable (.55, as A32).
+        const gate2 = new Promise<void>(r2 => { letGo = r2; });
+        const write2 = (u: URL) => u.pathname.endsWith('/offline/B-P0031');
+        await page.route(write2, async route => { await gate2; await route.fallback(); });
+        const alois = branchRow(page, 'B-P0031');
+        await alois.locator('.research-offline__expand').click();
+        await alois.locator('[data-mode="last"]').click();
+        await expect(alois.locator('.research-offline__meta .busy-st')).toHaveText('Saving…');
+        await expect(alois.locator('[data-mode="normal"]')).toHaveAttribute('aria-disabled', 'true');
+        await expect(alois.locator('[data-mode="normal"]')).toHaveCSS('opacity', '0.55');
+        letGo();
+        await expect(alois.locator('.research-offline__tag')).toHaveText('at the end');
+        await expect(alois.locator('.busy-st')).toHaveCount(0);
+        await page.unroute(write2);
+    });
+
+    test('a task\'s refused place: the sentence at the task with Try again where another try may help; Try again writes it', async ({ page }) => {
+        const b = await follow(page);
+        await openOverview(page);
+        const queue = overview(page).locator('.live-queue');
+        await overview(page).locator('.live-queue-toggle').click();
+        // A bridge that does not answer (no reply at all).
+        const write = (u: URL) => u.pathname.endsWith('/queue/T0420');
+        await page.route(write, route => route.abort(), { times: 1 });
+        await queue.locator('.live-queue-more[data-task="T0420"]').click();
+        await page.locator('#live-task-menu [data-order="next"]').click();
+        const box = queue.locator('.live-queue-row[data-task="T0420"] .live-queue-problem');
+        await expect(box).toHaveAttribute('role', 'alert');
+        const again = box.locator('[data-do="retry"]');
+        await expect(again).toHaveText('Try again');
+        await again.click();
+        await expect.poll(() => offWrites(b).map(w => [w.path, w.body])).toEqual([['queue/T0420', { do: 'next' }]]);
+        await expect(queue.locator('.live-queue-problem')).toHaveCount(0);
+        // The agent at work on it: no Try again.
+        b.replies.push({ status: 409, body: { error: 'queue.doing' } });
+        await queue.locator('.live-queue-more[data-task="T0101"]').click();
+        await page.locator('#live-task-menu [data-order="last"]').click();
+        await expect(queue.locator('.live-queue-problem')).toHaveText('The agent is working on this task now; its place cannot change.');
+        await expect(queue.locator('.live-queue-problem [data-do="retry"]')).toHaveCount(0);
+    });
+
     test('a branch\'s relation by the person\'s sex (neutral without it), the related person\'s name as it is', async ({ page }) => {
         const branches = [
             { ...BRANCHES[0] },

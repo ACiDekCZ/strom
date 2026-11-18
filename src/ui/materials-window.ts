@@ -17,6 +17,7 @@
  * See src/ui/module.ts for the composition pattern.
  */
 
+import { MENU_LOAD_LIMIT_MS, startMenuLoad, type MenuLoad } from './menu-load.js';
 import { allMedia, treeMedia, mediaPersonIds } from '../media.js';
 import { materialPersonLabel, mediaUsesIndex } from '../media-uses.js';
 import type { PersonId } from '../types.js';
@@ -134,6 +135,9 @@ type WindowModel = 'archive' | 'app';
 
 type PopKind = 'person' | 'kind' | 'batch' | 'sheet' | 'batchMenu' | 'folderMenu' | 'selMenu' | 'where';
 
+/** A batch's reading: done, stopped (its menu closed, the window gone) or refused with the research's error. */
+type BatchLoad = { ok: true } | { ok: false; stopped: true } | { ok: false; error: MaterialError; stopped?: undefined };
+
 interface Win {
     gen: number;
     model: WindowModel;
@@ -158,7 +162,8 @@ interface Win {
     lastPick: { group: string; folder?: string } | null;
     focusKey: string | null;
     loadedBatches: Set<string>;
-    loadingBatches: Set<string>;
+    /** Batches being read, each with its reading (a second ask waits for it). */
+    loadingBatches: Map<string, Promise<BatchLoad>>;
     loading: boolean;
     loadError: MaterialError | null;
     /** The list the items were made from (a new answer is a new object). */
@@ -181,6 +186,8 @@ interface Win {
     popAnchor: HTMLElement | null;
     popKey: ((e: KeyboardEvent) => void) | null;
     popOutside: ((e: MouseEvent) => void) | null;
+    /** The menu item reading its batch's files before its action (B88). */
+    popLoad: MenuLoad | null;
     pressTimer: ReturnType<typeof setTimeout> | null;
     suppressClick: boolean;
     width: number;
@@ -308,7 +315,7 @@ export const materialsWindowMethods = uiModule({
             lastPick: null,
             focusKey: null,
             loadedBatches: new Set(),
-            loadingBatches: new Set(),
+            loadingBatches: new Map(),
             loading: false,
             loadError: null,
             list: null,
@@ -330,6 +337,7 @@ export const materialsWindowMethods = uiModule({
             popAnchor: null,
             popKey: null,
             popOutside: null,
+            popLoad: null,
             pressTimer: null,
             suppressClick: false,
             width: 0,
@@ -471,24 +479,45 @@ export const materialsWindowMethods = uiModule({
         }
     },
 
-    /** One batch's files (`?batch=`), unless the whole list is known. */
-    async mwLoadBatch(id: string): Promise<void> {
+    /** The batch's files are known (the whole list, or the batch read). */
+    mwBatchKnown(id: string): boolean {
+        const w = win;
+        return !w || !!cachedMaterials(w.treeId)?.full || w.loadedBatches.has(id);
+    },
+
+    /**
+     * One batch's files (`?batch=`), unless the whole list is known. A reading already under way is waited for
+     * (B88: a menu's action does not go on with half the batch); `signal` stops the waiting (its menu closed).
+     */
+    async mwLoadBatch(id: string, opts: { signal?: AbortSignal; timeoutMs?: number } = {}): Promise<BatchLoad> {
         const w = win;
         const ctx = this.materialsWindowContext();
-        if (!w || !ctx?.caps.bridgeUp || !ctx.base) return;
-        if (cachedMaterials(w.treeId)?.full || w.loadedBatches.has(id) || w.loadingBatches.has(id)) return;
+        if (!w || !ctx?.caps.bridgeUp || !ctx.base) return { ok: true };
+        if (this.mwBatchKnown(id)) return { ok: true };
         const gen = w.gen;
-        w.loadingBatches.add(id);
-        try {
-            const answer = await fetchMaterial(ctx.base, { batch: id });
-            if (!alive(gen)) return;
-            if (answer.ok) {
-                w.loadedBatches.add(id);
-                await saveMaterialList(w.treeId, answer.value, { kind: 'batch', batch: id });
-            }
-        } finally {
-            alive(gen)?.loadingBatches.delete(id);
+        const base = ctx.base;
+        let reading = w.loadingBatches.get(id);
+        if (!reading) {
+            reading = (async (): Promise<BatchLoad> => {
+                try {
+                    const answer = await fetchMaterial(base, { batch: id }, { signal: opts.signal, timeoutMs: opts.timeoutMs });
+                    if (!alive(gen)) return { ok: false, stopped: true };
+                    if (!answer.ok) return opts.signal?.aborted ? { ok: false, stopped: true } : { ok: false, error: answer.error };
+                    w.loadedBatches.add(id);
+                    await saveMaterialList(w.treeId, answer.value, { kind: 'batch', batch: id });
+                    return { ok: true };
+                } finally {
+                    alive(gen)?.loadingBatches.delete(id);
+                }
+            })();
+            w.loadingBatches.set(id, reading);
         }
+        const signal = opts.signal;
+        if (!signal) return reading;
+        if (signal.aborted) return { ok: false, stopped: true };
+        return Promise.race([reading, new Promise<BatchLoad>(resolve => {
+            signal.addEventListener('abort', () => resolve({ ok: false, stopped: true }), { once: true });
+        })]);
     },
 
     /** Open batches whose files are not known yet. */
@@ -1561,6 +1590,9 @@ export const materialsWindowMethods = uiModule({
     mwClosePop(): void {
         const w = win;
         if (!w) return;
+        // A batch's files being read for its action: closing the menu cancels it (B88).
+        w.popLoad?.cancel();
+        w.popLoad = null;
         w.picker?.destroy();
         w.picker = null;
         w.pop?.remove();
@@ -1655,12 +1687,44 @@ export const materialsWindowMethods = uiModule({
         }).join('');
         pop.querySelectorAll<HTMLButtonElement>('[data-action]').forEach(btn => btn.addEventListener('click', (e) => {
             e.stopPropagation();
-            if (btn.getAttribute('aria-disabled') === 'true') return;
+            if (btn.getAttribute('aria-disabled') === 'true' || btn.getAttribute('aria-busy') === 'true') return;
+            const action = btn.dataset.action ?? '';
+            const batch = group.batch;
+            // Its files not known yet (B88, §4 4c): the menu stays while they are read, closing it cancels.
+            if (action !== 'research' && batch && ctx.caps.bridgeUp && !this.mwBatchKnown(batch.id)) {
+                void this.mwBatchActionAfterLoad(pop, btn, action, group, folder);
+                return;
+            }
             const back = w.popAnchor;
             this.mwClosePop();
             back?.focus();
-            void this.mwBatchAction(btn.dataset.action ?? '', group, folder);
+            void this.mwBatchAction(action, group, folder);
         }));
+    },
+
+    /** A batch's action whose files are read first, the menu held meanwhile (B88). */
+    async mwBatchActionAfterLoad(pop: HTMLElement, btn: HTMLElement, action: string, group: OverviewGroup, folder: OverviewFolder | undefined): Promise<void> {
+        const w = win;
+        const batch = group.batch;
+        if (!w || !batch) return;
+        const load = startMenuLoad(pop, btn);
+        w.popLoad = load;
+        const r = await this.mwLoadBatch(batch.id, { signal: load.signal, timeoutMs: MENU_LOAD_LIMIT_MS });
+        const now = win;
+        if (!now || now.popLoad !== load) return;
+        if (load.stopped()) { now.popLoad = null; return; }
+        if (!r.ok) {
+            now.popLoad = null;
+            if ('error' in r && r.error) load.fail(materialErrorText(r.error, !!this.materialsWindowContext()?.agent));
+            else load.cancel();
+            return;
+        }
+        load.done();
+        now.popLoad = null;
+        const back = now.popAnchor;
+        this.mwClosePop();
+        back?.focus();
+        await this.mwBatchAction(action, group, folder);
     },
 
     /** ⓘ "Where the files are": one sentence by the model, a second one for an encrypted tree (1c, 1d). */

@@ -337,6 +337,51 @@ test.describe('Materials window: selecting', () => {
         await expect(win(page).locator('.mw-selbar .mw-selcount')).toHaveText('3 files selected');
     });
 
+    test('B88: a batch\'s ⋯ whose files are not read yet holds while they are read (the item busy, the others waiting); Escape cancels; then it acts', async ({ page }) => {
+        const two = [...files, ...[8, 9].map(n => materialFile(n, { batch: 'b-old', name: `stara-${n}.jpg`, path: `stara-${n}.jpg`, at: '2026-08-01T10:00:00.000Z' }))];
+        const both = [...batches, { id: 'b-old', name: 'Stará obálka', at: '2026-08-01T10:00:00.000Z' }];
+        let letGo!: () => void;
+        let gate = new Promise<void>(r => { letGo = r; });
+        await setup(page, {
+            files: two, batches: both,
+            before: async p => {
+                await holdFullList(p);
+                await p.route(u => u.href.startsWith(`${BRIDGE}/material`) && /[?&]batch=b-old/.test(u.search), async route => { await gate; await route.fallback(); });
+            },
+        });
+        await openWindow(page);
+        const old = groupHead(page, 'Stará obálka');
+        await expect(old).toBeVisible();
+        const more = old.locator('[data-mw="batch-menu"]');
+        await more.click();
+        const menu = page.locator('.mw-pop-batchMenu');
+        const select = menu.locator('[data-action="select"]');
+        await select.click();
+        await expect(menu).toBeVisible();
+        await expect(select).toHaveAttribute('aria-busy', 'true');
+        await expect(select.locator('.busy-slot .busy-spin.s12')).toBeVisible();
+        await expect(select).toHaveText(/^Select whole batch/);
+        await expect(menu.locator('[data-action="hide"]')).toHaveAttribute('aria-disabled', 'true');
+        await menu.locator('[data-action="hide"]').click({ force: true });
+        await expect(menu).toBeVisible();
+        // Escape: the menu closes, the reading is cancelled, the ⋯ focused; nothing selected.
+        await page.keyboard.press('Escape');
+        await expect(menu).toHaveCount(0);
+        await expect(more).toBeFocused();
+        letGo();
+        await page.waitForTimeout(300);
+        await expect(win(page).locator('.mw-selbar')).toBeHidden();
+
+        // Again, answered: the menu closes and the whole batch is selected.
+        gate = new Promise<void>(r => { letGo = r; });
+        await more.click();
+        await menu.locator('[data-action="select"]').click();
+        await expect(menu.locator('[data-action="select"]')).toHaveAttribute('aria-busy', 'true');
+        letGo();
+        await expect(menu).toHaveCount(0);
+        await expect(win(page).locator('.mw-selbar .mw-selcount')).toHaveText('2 files selected');
+    });
+
     test('an older research (no assigning): no "Show hidden"; selecting without Assign or Hide (spec 102 §8)', async ({ page }) => {
         await setup(page, { files, batches, features: ['material.list'] });
         await openWindow(page);

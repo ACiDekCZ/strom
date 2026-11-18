@@ -14,6 +14,7 @@ import { uiModule } from './module.js';
 import { el } from './research-ui.js';
 import { onBridgeStatus } from './research-sync-ui.js';
 import { setResearchActionLabel, researchOpenSrText } from './research-open-mark.js';
+import { reserveBusySlot } from './busy.js';
 
 /** How long a changed row stays lit. */
 const CHANGED_MS = 4000;
@@ -136,9 +137,11 @@ export const researchBrowserMethods = uiModule({
         btn.type = 'button';
         btn.dataset.host = host;
         btn.setAttribute('aria-label', `${label} ${name}${researchOpenSrText()}`);
+        // §5: a link in text opening the terminal: only the spinner after its words while it opens.
+        reserveBusySlot(btn);
         btn.onclick = (e) => {
             e.stopPropagation();
-            this.launchResearchLink(url);
+            this.launchResearchLink(url, 'terminal', btn);
         };
         return btn;
     },

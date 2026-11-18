@@ -27,7 +27,8 @@ import {
 } from '../research-directions.js';
 import { DirectionStateDo, DirectionWriteRefused, directionRetryHelps, setDirectionState, writeDirectionOrder } from '../research-directions-write.js';
 import { undoInToast } from './toast.js';
-import { announceBusy, busyStatusEl } from './busy.js';
+import { announceBusy, busyStatusEl, prepareBusy } from './busy.js';
+import { RowBusy, drawRowLinkBusy, drawRowMoreBusy, rowBusyStatusEl } from './row-busy.js';
 
 type Mode = 'docked' | 'overlay' | 'sheet' | 'window';
 
@@ -264,8 +265,8 @@ let orderSaving = false;
 /** What a refused write says at its row (direction id → the box). */
 interface RowProblem { text: string; tone: 'warn' | 'danger'; retry?: () => void }
 const rowProblems = new Map<string, RowProblem>();
-/** Rows with a write on its way (their state button waits). */
-const rowsBusy = new Set<string>();
+/** Rows with a write on its way (§4, 4b: the row says it, also folded; its ⋯ and its state button wait). */
+const rowsBusy = new RowBusy();
 /** The bridge answered that its research is an archive (409 `directions.archive`): read-only from then on. */
 let archiveSaid: string | null = null;
 /** A row dragged now (its id): the overview is not redrawn under the drag. */
@@ -286,7 +287,8 @@ export function directionsWindowState(s: LiveSession | null): OverviewLinesState
         selected: queueDirectionFilter(s),
         pendingOrder: pendingOrder && base && pendingOrder.base === base ? [...pendingOrder.order] : null,
         orderSaving,
-        busy: [...rowsBusy],
+        busy: rowsBusy.ids(),
+        shown: rowsBusy.snapshot(),
         problems: [...rowProblems].map(([id, p]) => ({ id, text: p.text, tone: p.tone, retry: !!p.retry })),
         archive: !!base && archiveSaid === base,
     };
@@ -304,8 +306,7 @@ export function applyDirectionsWindowState(st: OverviewLinesState, s: LiveSessio
     const base = s?.bridge.base ?? '';
     pendingOrder = st.pendingOrder ? { base, order: [...st.pendingOrder], moved: pendingOrder?.moved ?? '' } : null;
     orderSaving = st.orderSaving;
-    rowsBusy.clear();
-    for (const id of st.busy) rowsBusy.add(id);
+    rowsBusy.mirror(st.busy.map(id => st.shown?.find(x => x.id === id) ?? { id, label: '', shown: false }));
     rowProblems.clear();
     for (const p of st.problems) {
         rowProblems.set(p.id, { text: p.text, tone: p.tone, ...(p.retry ? { retry: () => retry(p.id) } : {}) });
@@ -860,6 +861,9 @@ export const researchDirectionsMethods = uiModule({
         }
         main.appendChild(head);
         const meta = this.managedDirectionMeta(s, d, mode, nowShown);
+        // Its state on its way (§4, 4b): "Pausing…" in its line, also folded.
+        const busyWords = rowBusyStatusEl(rowsBusy.view(d.id));
+        if (busyWords) meta.appendChild(busyWords);
         if (meta.childElementCount > 0) main.appendChild(meta);
         const problem = rowProblems.get(d.id);
         if (problem) main.appendChild(directionProblemBox(problem));
@@ -902,7 +906,8 @@ export const researchDirectionsMethods = uiModule({
         more.setAttribute('aria-label', L.dirMenu);
         more.setAttribute('aria-haspopup', 'menu');
         if (view.down) holdForBridge(more);
-        else {
+        // Its state on its way: the spinner in the ⋯'s place, no menu meanwhile.
+        else if (!drawRowMoreBusy(more, rowsBusy.view(d.id))) {
             more.onclick = (e) => {
                 e.stopPropagation();
                 this.openManagedDirectionMenu(more, s, d);
@@ -999,8 +1004,12 @@ export const researchDirectionsMethods = uiModule({
             state.dataset.do = what;
             if (view.down) holdForBridge(state);
             else if (rowsBusy.has(d.id)) {
+                // The row's state on its way: its words in the button past 120 ms (the width kept, §1.2).
+                const v = rowsBusy.view(d.id)!;
                 state.setAttribute('aria-disabled', 'true');
-                state.setAttribute('aria-busy', 'true');
+                prepareBusy(state, v.label || strings.busy.saving);
+                state.dataset.busy = v.shown ? 'busy' : 'lock';
+                if (v.shown) state.setAttribute('aria-busy', 'true');
             } else state.onclick = () => void this.changeDirectionState(d, what);
             actions.appendChild(state);
         }
@@ -1087,7 +1096,8 @@ export const researchDirectionsMethods = uiModule({
             again.type = 'button';
             again.dataset.do = 'resume';
             if (view.down) holdForBridge(again);
-            else if (!rowsBusy.has(d.id)) again.onclick = () => void this.changeDirectionState(d, 'resume');
+            // Its restart on its way (§5): the spinner after the link's text.
+            else if (!drawRowLinkBusy(again, rowsBusy.view(d.id))) again.onclick = () => void this.changeDirectionState(d, 'resume');
             row.appendChild(again);
         }
         return row;
@@ -1252,12 +1262,13 @@ export const researchDirectionsMethods = uiModule({
         if (!s || s.ended || !this.directionsView(s).canWrite || rowsBusy.has(d.id)) return false;
         const L = strings.live;
         const before = s.researches.find(x => x.id === d.id) ?? d;
-        rowsBusy.add(d.id);
+        const words = what === 'pause' ? strings.busy.pausing : what === 'resume' ? strings.busy.resuming : strings.busy.saving;
+        rowsBusy.start(d.id, words, () => this.redrawDirections());
         rowProblems.delete(d.id);
         this.redrawDirections();
         const head = await this.waitingHeadBeforeWrite(s);
         const r = await withBusyRetry(() => setDirectionState(s.bridge.base, d.id, what, opts.reason));
-        rowsBusy.delete(d.id);
+        await rowsBusy.end(d.id);
         if (researchSession() !== s || s.ended) return false;
         if (!r.ok) {
             if (r.code === 'archive') archiveSaid = s.bridge.base;

@@ -158,7 +158,8 @@ export function busySpinHtml(size: 12 | 14 | 16 = 14): string {
     return `<i class="busy-spin${size === 14 ? '' : ` s${size}`}" aria-hidden="true"></i>`;
 }
 
-function spinEl(size: 12 | 14 | 16 = 14): HTMLElement {
+/** The spinner as an element. */
+export function spinEl(size: 12 | 14 | 16 = 14): HTMLElement {
     const i = document.createElement('i');
     i.className = size === 14 ? 'busy-spin' : `busy-spin s${size}`;
     i.setAttribute('aria-hidden', 'true');
@@ -175,12 +176,43 @@ export function busyButtonHtml(labelHtml: string, busyLabel: string, done?: stri
         + `<span class="b-done" aria-hidden="true"><span class="ok">✓</span>${esc(done ?? '')}</span></span>`;
 }
 
+/**
+ * §5: the empty place of a link's spinner, drawn with the link (12 px after its text from the start, so the line
+ * does not move when the spinner comes).
+ */
+export function busySlotHtml(): string {
+    return '<span class="busy-slot" aria-hidden="true"></span>';
+}
+
+/** The same as an element (appended to a link built as DOM). */
+export function busySlotEl(): HTMLElement {
+    const slot = document.createElement('span');
+    slot.className = 'busy-slot';
+    slot.setAttribute('aria-hidden', 'true');
+    return slot;
+}
+
+/**
+ * Gives a link in text its 12 px slot (§5) right after its words, before the research's mark (the mark stays
+ * last): the spinner then comes in it after the text and nothing moves. Idempotent.
+ */
+export function reserveBusySlot(link: HTMLElement): HTMLElement {
+    const kept = link.querySelector<HTMLElement>(':scope > .busy-slot');
+    if (kept) return link;
+    const slot = busySlotEl();
+    const mark = Array.from(link.children).find(c => c.matches(MARK_SELECTOR));
+    if (mark) link.insertBefore(slot, mark); else link.appendChild(slot);
+    return link;
+}
+
 /** The research's marks in an element: they stay outside `.bl`, last on the screen. */
 const MARK_SELECTOR = '.research-ai-badge, .research-open-mark';
 
 /** An element whose text stays and gets the spinner after it (a link in text, a menu item, a toast's action). */
 function trailsSpinner(el: HTMLElement): boolean {
-    return el.matches('a, .link, button.link, .btn-link, [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"]');
+    // A link in text drawn with its slot (§5, `busySlotHtml`) trails it too; other link-styled buttons keep their words.
+    return el.matches('a, .link, button.link, .btn-link, [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"]')
+        || el.querySelector(':scope > .busy-slot') !== null;
 }
 
 /** A button of an icon alone (⋯, ✕, an SVG): the spinner takes the icon's place, no words. */
@@ -264,13 +296,15 @@ function draw(el: HTMLElement, label: string, done: string | undefined): { undra
         };
     }
     if (trailsSpinner(el)) {
-        const slot = document.createElement('span');
+        // §5: a link drawn with its slot (12 px kept from the start, the line does not move) fills it.
+        const kept = el.querySelector<HTMLElement>(':scope > .busy-slot');
+        const slot = kept ?? document.createElement('span');
         slot.className = 'busy-slot';
         slot.setAttribute('aria-hidden', 'true');
-        slot.appendChild(spinEl(12));
-        el.appendChild(slot);
+        slot.replaceChildren(spinEl(12));
+        if (!kept) el.appendChild(slot);
         return {
-            undraw: () => { slot.remove(); delete el.dataset.busy; },
+            undraw: () => { if (kept) kept.replaceChildren(); else slot.remove(); delete el.dataset.busy; },
             drawDone: () => {
                 const ok = document.createElement('span');
                 ok.className = 'ok';

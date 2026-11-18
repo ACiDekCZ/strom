@@ -17,6 +17,7 @@ export const plPart10: Pick<StringsType, 'busy'> = {
         turningOn: 'Włączanie…',
         turningOff: 'Wyłączanie…',
         pausing: 'Wstrzymywanie…',
+        resuming: 'Ponowne uruchamianie…',
         openingResearch: 'Otwieranie badania…',
         openingAgent: 'Otwieranie agenta…',
         notOpened: 'Terminal się nie otworzył?',

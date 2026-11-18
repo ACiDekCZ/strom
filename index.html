@@ -18800,6 +18800,10 @@
         }
         a[data-busy="busy"], .link[data-busy="busy"], button.link[data-busy="busy"] { text-decoration: none; }
         .busy-slot { display: inline-block; width: 12px; margin-left: 4px; vertical-align: -1px; line-height: 1; }
+        /* A slot drawn with its spinner by a redraw (§5): seen past 120 ms, so a quick answer never blinks. */
+        .busy-slot.is-later > .busy-spin { visibility: hidden; animation: busy-spin .8s linear infinite, busy-later 0s linear 120ms forwards; }
+        @keyframes busy-later { to { visibility: visible; } }
+        @media (prefers-reduced-motion: reduce) { .busy-slot.is-later > .busy-spin { animation: busy-later 0s linear 120ms forwards; } }
         /* A row's own state while its optimistic write is confirmed (§7, 6.1): the 12 px spinner and quiet words.
            --text-light, not --text-faint: it stays 4.5:1 on a tinted (open or refused) row in both themes. */
         .busy-st {
@@ -23865,7 +23869,9 @@
             height: 28px; min-height: 0; margin: 0; padding: 0 10px;
             font-family: inherit; font-size: 12.5px; white-space: nowrap; cursor: pointer;
         }
-        .research-offline__seg[aria-disabled="true"], .research-offline__add[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
+        /* A branch's choice on its way (§4): its other choices wait, seen as unavailable (as A32, A138). */
+        .research-offline__seg[aria-disabled="true"], .research-offline__add[aria-disabled="true"] { opacity: .55; cursor: progress; }
+        .research-offline__reset[aria-disabled="true"], .research-offline__remove[aria-disabled="true"] { cursor: progress; }
         .research-offline__seg:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; position: relative; }
         .research-offline__acts { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; }
         .research-offline__add {
@@ -23889,7 +23895,9 @@
             display: block; margin-top: 4px; padding: 4px 8px; border-radius: 6px; font-size: 12px; line-height: 1.4;
             background: var(--dir-warn-bg); color: var(--dir-warn-text); border: 1px solid var(--dir-warn-line);
         }
-        .live-panel-list li.live-queue-row[aria-busy="true"] { opacity: .6; }
+        /* A task's place on its way (§4, 4a): the row is not dimmed, its ⋯ shows the spinner; a refusal's Try again in its box. */
+        .live-queue-problem .live-queue-problem__retry { padding: 0; min-height: 0; font-size: 12px; font-weight: 600; color: inherit; text-decoration: underline; }
+        @media (pointer: coarse) { .live-queue-problem .live-queue-problem__retry { min-height: 44px; } }
         /* A growing branch in Awaiting action: the main answer, three more, the hint. */
         .research-offline__wait-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
         .research-offline__wait-hint { margin: 6px 0 0; font-size: 12px; color: var(--text-light); }
@@ -29244,6 +29252,8 @@
         .materials-item-menu-row.is-danger { color: var(--danger); }
         .materials-item-menu-row[aria-disabled="true"] { color: var(--text-faint); cursor: default; }
         .materials-item-menu-divider { height: 1px; margin: 4px 6px; background: var(--divider); }
+        /* A menu item reading before its action (§4, 4c): its sentence under it when it did not read. */
+        .menu-load-msg { margin: 2px 10px 6px; font-size: 12.5px; line-height: 1.4; max-width: 320px; overflow-wrap: anywhere; }
         .materials-window { width: 1200px; max-width: calc(100vw - 32px); height: 88vh; display: flex; flex-direction: column; }
         .materials-window-body { flex: 1; min-height: 0; overflow: auto; }
         /* The materials window (spec 017 §3, materials-window.ts): header with the toolbar, a virtual list

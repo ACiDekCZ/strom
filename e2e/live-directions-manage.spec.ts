@@ -91,6 +91,33 @@ test.describe('directions managed through the bridge', () => {
         await expect(directionRow(page, 'G0001').locator('.research-direction__chip')).toHaveCount(0);
     });
 
+    test('⋯ Pause on a folded row (§4, 4b): the menu closes, the row says "Pausing…" and its ⋯ the spinner; then paused', async ({ page }) => {
+        const b = await followManaged(page);
+        await openOverview(page);
+        const r = directionRow(page, 'G0002');
+        await expect(r).not.toHaveClass(/is-open/);
+        let letGo!: () => void;
+        const gate = new Promise<void>(res => { letGo = res; });
+        const write = (u: URL) => u.pathname.endsWith('/directions/G0002/state');
+        await page.route(write, async route => { await gate; await route.fallback(); });
+        await r.locator('.research-direction__more').click();
+        await page.locator('#live-direction-menu [data-do="pause"]').click();
+        await expect(page.locator('#live-direction-menu')).toHaveCount(0);
+        await expect(r).not.toHaveClass(/is-open/);
+        await expect(r.locator('.research-direction__meta .busy-st')).toHaveText('Pausing…');
+        await expect(r.locator('.research-direction__meta .busy-st .busy-spin')).toBeVisible();
+        const more = r.locator('.research-direction__more');
+        await expect(more).toHaveAttribute('data-busy', 'busy');
+        await expect(more.locator('.b-busy .busy-spin')).toBeVisible();
+        await more.click({ force: true });
+        await expect(page.locator('#live-direction-menu')).toHaveCount(0);
+        letGo();
+        await expect(r.locator('.research-direction__chip')).toHaveText(/^paused/);
+        await expect(r.locator('.busy-st')).toHaveCount(0);
+        expect(directionWrites(b).map(w => [w.path, w.body])).toEqual([['directions/G0002/state', { do: 'pause' }]]);
+        await page.unroute(write);
+    });
+
     test('end: the ⋯ asks first (Esc cancels, focus back), the reason goes with it', async ({ page }) => {
         const b = await followManaged(page);
         await openOverview(page);

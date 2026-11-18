@@ -24,6 +24,7 @@ import { uiModule } from './module.js';
 import { shownName } from '../person-name.js';
 import { liveSession } from './research-ui.js';
 import { directionProblemText } from './research-directions-ui.js';
+import { reserveBusySlot } from './busy.js';
 
 const BUBBLE_ID = 'research-edge-bubble';
 /** The view links' chain confirmation (src/ui/view-links-ui.ts): a pinned bubble lets it have the keyboard. */
@@ -353,9 +354,11 @@ export const researchEdgeUiMethods = uiModule({
                 setPendingHypothesis(rid, hypo, newPendingHypothesis(h, 'decide', url, this.researchSyncLink()?.link.head ?? '', Date.now(), variant));
                 return;
             }
-            if (t.closest('.reb-wait-again')) {
+            const again = t.closest<HTMLElement>('.reb-wait-again');
+            if (again) {
                 const url = rid ? pendingHypothesis(rid, hypo)?.url : undefined;
-                if (url) this.launchResearchLink(url, 'terminal');
+                // §5: the spinner after its words in its slot while the terminal opens.
+                if (url) this.launchResearchLink(url, 'terminal', reserveBusySlot(again));
                 return;
             }
             if (t.closest('.reb-wait-stop')) {

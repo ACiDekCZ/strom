@@ -28,6 +28,7 @@ import {
 } from '../research-read-task.js';
 import { postReadTask, postReadProposal } from '../research-read.js';
 import { readOneReader } from '../read-result.js';
+import { reserveBusySlot } from './busy.js';
 import {
     sourceRowHtml, sourceRowKind, sourceRowChoices, proposalHtml, proposalActions, readIdDate, readStateShortDate, readStateLongDate,
     type SourceRowAct, type ProposalAct,
@@ -373,10 +374,14 @@ export const readSourceMethods = uiModule({
         root.querySelectorAll<HTMLElement>('[data-read-how]').forEach(el => el.addEventListener('click', () => {
             void this.readSourceStateChoose(src, el.dataset.readHow as ReadTaskHow, el.dataset.readUnsure === 'true');
         }));
-        root.querySelectorAll<HTMLElement>('[data-read-state="task"], [data-proposal-act="task"]').forEach(el => el.addEventListener('click', () => {
-            const url = el.dataset.task ? this.activeResearchLink('task', { task: el.dataset.task }) : null;
-            if (url) this.launchResearchLink(url);
-        }));
+        root.querySelectorAll<HTMLElement>('[data-read-state="task"], [data-proposal-act="task"]').forEach(el => {
+            // "Open task 12" in text (§5): its slot from the start, only the spinner in it while the terminal opens.
+            if (el.classList.contains('link-button')) reserveBusySlot(el);
+            el.addEventListener('click', () => {
+                const url = el.dataset.task ? this.activeResearchLink('task', { task: el.dataset.task }) : null;
+                if (url) this.launchResearchLink(url, 'terminal', el);
+            });
+        });
         root.querySelectorAll<HTMLElement>('[data-proposal-act="whole"]').forEach(el => el.addEventListener('click', () => {
             const k = key();
             if (!k) return;

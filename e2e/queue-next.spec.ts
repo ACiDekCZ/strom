@@ -239,6 +239,35 @@ test.describe('Do next with queue.next', () => {
         expect(orderWrites(b)).toEqual([['queue/T0104', { do: 'next' }], ['queue/T0104', { do: 'next' }]]);
     });
 
+    test('its write on its way (§4, 4a): the menu closed, the ⋯ locked at once and its spinner in the ⋯\'s place after 120 ms, the row not dimmed', async ({ page }) => {
+        const b = await followManaged(page, { features: NEXT, queue: QUEUE });
+        await openOverview(page);
+        await unfoldQueue(page);
+        let letGo!: () => void;
+        const gate = new Promise<void>(r => { letGo = r; });
+        const write = (u: URL) => u.pathname.endsWith('/queue/T0103');
+        await page.route(write, async route => { await gate; await route.fallback(); });
+        await doNext(page, 'T0103');
+        const more = row(page, 'T0103').locator('.live-queue-more');
+        await expect(more).toHaveAttribute('aria-disabled', 'true');
+        await expect(more).toHaveAttribute('data-busy', 'busy');
+        await expect(more).toHaveAttribute('aria-busy', 'true');
+        await expect(more.locator('.b-busy .busy-spin')).toBeVisible();
+        await expect(more.locator('.b-idle')).toHaveText('⋯');
+        const box = await more.boundingBox();
+        expect(Math.round(box!.width)).toBe(26);
+        await expect(row(page, 'T0103')).toHaveCSS('opacity', '1');
+        // No menu while it waits.
+        await more.click({ force: true });
+        await expect(menu(page)).toHaveCount(0);
+        letGo();
+        await expect.poll(() => order(page)).toEqual(['T0103', 'T0101', 'T0102', 'T0104']);
+        await expect(row(page, 'T0103').locator('.live-queue-more')).not.toHaveAttribute('data-busy');
+        await expect(row(page, 'T0103').locator('.live-queue-more')).toHaveText('⋯');
+        expect(orderWrites(b)).toEqual([['queue/T0103', { do: 'next' }]]);
+        await page.unroute(write);
+    });
+
     test('in the search\'s results: the row stays, on top with its tag, the search not cancelled', async ({ page }) => {
         const queue = Array.from({ length: 30 }, (_, i) => {
             const id = `T${String(701 + i).padStart(4, '0')}`;

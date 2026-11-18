@@ -67,8 +67,9 @@ import {
 import { iconSvg } from '../icons.js';
 import {
     branchName, focusQueueMoved, personByRefn, queueBranchFilter, queueNextFor, queueNextOffered, queueRowFlash, queueWhyText, setQueueBranchFilter, taskMenuOrders, taskOrderOffered,
-    waitBranchText, workingWhyText,
+    taskProblemBox, waitBranchText, workingWhyText,
 } from './research-offline-ui.js';
+import { drawRowMoreBusy } from './row-busy.js';
 import { directionPlacesKept, type TaskOrderDo, type DirectionPlaces } from '../research-directions-write.js';
 import { agentMirror } from '../windows/agent-mirror.js';
 import { FLAT_GROUP, OTHER_GROUP, listedBook, panelWaiting, panelWaitingGroups, textWithLinks, todoWaiting, waitingSection, waitingTodoCount, type WaitingGroupOpts } from '../research-waiting.js';
@@ -5236,11 +5237,7 @@ export const researchUiMethods = uiModule({
             if (dir) text.appendChild(el('span', 'research-overview__dir', ` · ${dir}`));
             appendQueueNote(text, q, s);
             const problem = this.taskOrderProblem(q.id);
-            if (problem) {
-                const box = el('span', 'live-queue-problem', problem);
-                box.setAttribute('role', 'alert');
-                text.appendChild(box);
-            }
+            if (problem) text.appendChild(taskProblemBox(problem, this.taskOrderRetry(q.id)));
             if (this.taskOrderBusy(q.id)) li.setAttribute('aria-busy', 'true');
             li.appendChild(text);
             if (queueRowMenu(s, q, canTask, canOrder)) {
@@ -5249,10 +5246,13 @@ export const researchUiMethods = uiModule({
                 more.setAttribute('aria-label', r.taskMenu);
                 more.setAttribute('aria-haspopup', 'menu');
                 more.dataset.task = q.id;
-                more.onclick = (e) => {
-                    e.stopPropagation();
-                    this.openLiveTaskMenu(more, q.id);
-                };
+                // Its place on its way (§4, 4a): the spinner in the ⋯'s place, no menu meanwhile.
+                if (!drawRowMoreBusy(more, this.taskOrderView(q.id))) {
+                    more.onclick = (e) => {
+                        e.stopPropagation();
+                        this.openLiveTaskMenu(more, q.id);
+                    };
+                }
                 li.appendChild(more);
             }
             ul.appendChild(li);
@@ -5503,11 +5503,7 @@ export const researchUiMethods = uiModule({
             if (parked) meta.appendChild(el('span', 'research-queue__deferred', L.queueTagDeferred));
             text.appendChild(meta);
             const problem = this.taskOrderProblem(q.id);
-            if (problem) {
-                const box = el('span', 'live-queue-problem', problem);
-                box.setAttribute('role', 'alert');
-                text.appendChild(box);
-            }
+            if (problem) text.appendChild(taskProblemBox(problem, this.taskOrderRetry(q.id)));
             if (this.taskOrderBusy(q.id)) li.setAttribute('aria-busy', 'true');
             li.appendChild(text);
             if (!parked && queueRowMenu(s, q, canTask, canOrder)) {
@@ -5516,10 +5512,13 @@ export const researchUiMethods = uiModule({
                 more.setAttribute('aria-label', r.taskMenu);
                 more.setAttribute('aria-haspopup', 'menu');
                 more.dataset.task = q.id;
-                more.onclick = (e) => {
-                    e.stopPropagation();
-                    this.openLiveTaskMenu(more, q.id);
-                };
+                // Its place on its way (§4, 4a): the spinner in the ⋯'s place, no menu meanwhile.
+                if (!drawRowMoreBusy(more, this.taskOrderView(q.id))) {
+                    more.onclick = (e) => {
+                        e.stopPropagation();
+                        this.openLiveTaskMenu(more, q.id);
+                    };
+                }
                 li.appendChild(more);
             } else if (parked && canTask) {
                 const wake = setResearchActionLabel(el('button', 'link-button live-queue-wake'), r.wake, researchLinkMark('task', { taskDo: 'wake' }));
