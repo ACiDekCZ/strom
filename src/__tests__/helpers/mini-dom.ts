@@ -5,7 +5,17 @@
  * `window`, `Element`, `HTMLElement` and `KeyboardEvent` on globalThis; the returned function takes them away.
  */
 
-class MiniNode extends EventTarget {
+/**
+ * Node's EventTarget, with `removeEventListener(type, fn, true)` taken as `{ capture: true }`: Node 20 ignores a
+ * boolean there, so a capture listener added with `true` was never taken off (browsers and later Node remove it).
+ */
+class MiniTarget extends EventTarget {
+    override removeEventListener(type: string, fn: EventListenerOrEventListenerObject | null, opts?: boolean | EventListenerOptions): void {
+        super.removeEventListener(type, fn, typeof opts === 'boolean' ? { capture: opts } : opts);
+    }
+}
+
+class MiniNode extends MiniTarget {
     parentNode: MiniElement | MiniDocument | null = null;
     get parentElement(): MiniElement | null { return this.parentNode instanceof MiniElement ? this.parentNode : null; }
     get nextSibling(): MiniNode | null {
@@ -136,7 +146,7 @@ class MiniElement extends MiniNode {
     querySelector(sel: string): MiniElement | null { return this.querySelectorAll(sel)[0] ?? null; }
 }
 
-class MiniDocument extends EventTarget {
+class MiniDocument extends MiniTarget {
     childNodes: MiniNode[] = [];
     readonly documentElement: MiniElement;
     readonly body: MiniElement;
