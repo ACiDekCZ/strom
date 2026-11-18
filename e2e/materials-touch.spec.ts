@@ -119,9 +119,11 @@ test.describe('Materials on a phone', () => {
         await expect(acts).toHaveText(['Verknüpfen mit…', 'Titel…', 'Durchgehen', '⋯']);
         for (const width of [PHONE.width, 360]) {
             await page.setViewportSize({ width, height: PHONE.height });
-            const cut = await acts.evaluateAll(els => els.filter(b => b.scrollWidth > b.clientWidth || b.scrollHeight > b.clientHeight).map(b => b.textContent));
-            expect(cut, `${width} px`).toEqual([]);
-            for (const b of await acts.all()) expect((await b.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+            // Measured until the new width's layout holds (the bar lays out again after the resize).
+            await expect.poll(() => acts.evaluateAll(els => els.filter(b => b.scrollWidth > b.clientWidth || b.scrollHeight > b.clientHeight).map(b => b.textContent)),
+                { message: `${width} px` }).toEqual([]);
+            await expect.poll(() => acts.evaluateAll(els => Math.min(...els.map(b => b.getBoundingClientRect().height))),
+                { message: `${width} px` }).toBeGreaterThanOrEqual(44);
         }
     });
 

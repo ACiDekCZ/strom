@@ -1692,8 +1692,11 @@ test.describe('Research overview', () => {
         await item.locator('.research-overview__waiting-row').click();
         const whole = item.locator('.research-overview__waiting-on-box .research-overview__waiting-on');
         await expect(whole).toHaveText(INSTRUCTION);
-        await whole.scrollIntoViewIfNeeded();
-        await expect(whole).toBeInViewport();
+        // The overview may still move (it opens, it is drawn anew with a status): scrolled to without waiting for a still box, until it stays in view.
+        await expect(async () => {
+            await whole.evaluate((n) => n.scrollIntoView({ block: 'nearest' }));
+            await expect(whole).toBeInViewport({ timeout: 1000 });
+        }).toPass({ timeout: 10000 });
         const wide = await item.evaluate((n) => [...n.querySelectorAll<HTMLElement>('*')]
             .filter(e => e.scrollWidth > e.clientWidth + 1 && getComputedStyle(e).overflowX !== 'visible').map(e => e.className));
         expect(wide).toEqual([]);

@@ -183,7 +183,8 @@ test('the map offers to look up places after consent, plots them, never scrolls 
     const geo = page.locator('#map-status .map-geo-prog');
     await expect(geo.locator('.prog-t')).toHaveText('Looking up places…');
     await expect(geo.locator('.prog-k')).toHaveText(/^[01] of 2$/);
-    expect(await geo.locator('.bar').evaluate(el => getComputedStyle(el).height)).toBe('4px');
+    // The bar is drawn anew with each step: read on the bar as it is now, not on a copy just replaced.
+    await expect(geo.locator('.bar')).toHaveCSS('height', '4px');
     await expect(geo.locator('.prog-acts').getByRole('button', { name: 'Cancel' })).toBeVisible();
     release();
     // Markers appear for both places.
