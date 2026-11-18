@@ -401,11 +401,16 @@ export const materialSortMethods = uiModule({
                 <button type="button" class="link-button mw-sort-open" data-sort="open">${esc(s.open)}</button>`;
         }
         const total = job?.files.length || r.files.length;
-        const k = Math.min(total, job?.proposals.length ?? 0);
-        const pct = total ? Math.round((k / total) * 100) : 0;
-        const label = job && job.state !== 'queued' ? s.run(k, total) : s.queued;
+        const working = !!job && job.state !== 'queued';
+        // A number only when the research says how many files its readers have judged; else a progress without one.
+        const counted = working && typeof job.filesDone === 'number' && total > 0;
+        const k = counted ? Math.min(total, job.filesDone ?? 0) : 0;
+        const label = !working ? s.queued : counted ? s.run(k, total) : s.runFiles(total);
+        const bar = counted
+            ? `<span class="mw-sort-bar" role="progressbar" aria-label="${esc(label)}" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${k}"><span style="width: ${Math.round((k / total) * 100)}%"></span></span>`
+            : `<span class="mw-sort-bar is-indeterminate" role="progressbar" aria-label="${esc(label)}"><span></span></span>`;
         return `<span class="mw-sort-text"><span class="mw-sort-run">${esc(label)}</span>
-                <span class="mw-sort-bar" role="progressbar" aria-label="${esc(label)}" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${k}"><span style="width: ${pct}%"></span></span>
+                ${bar}
                 <span class="mw-sort-note">${esc(s.runNote)}</span></span>
                 <button type="button" class="link-button" data-sort="cancel">${esc(strings.buttons.cancel)}</button>`;
     },

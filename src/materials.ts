@@ -1211,6 +1211,11 @@ export interface SortJob {
     at: string;
     proposals: SortProposal[];
     reason?: string;
+    /**
+     * While working: how many of the files the research's readers have already
+     * judged (optional; a research that does not say it leaves the progress without a number).
+     */
+    filesDone?: number;
 }
 
 const SORT_ID = /^sort-[0-9A-Za-z-]{1,60}$/;
@@ -1265,9 +1270,11 @@ export function parseSortJob(raw: unknown): SortJob | null {
     const proposals = (Array.isArray(o.proposals) ? o.proposals : []).map(parseSortProposal)
         .filter((p): p is SortProposal => !!p && !seen.has(p.id) && !!seen.add(p.id));
     const reason = cleanText(o.reason, 300);
+    const filesDone = typeof o.filesDone === 'number' && Number.isFinite(o.filesDone) && o.filesDone >= 0 ? Math.floor(o.filesDone) : undefined;
     return {
         id: o.id, state: o.state as SortState, files, at: typeof o.at === 'string' ? o.at : '', proposals,
         ...(reason ? { reason } : {}),
+        ...(filesDone !== undefined ? { filesDone } : {}),
     };
 }
 

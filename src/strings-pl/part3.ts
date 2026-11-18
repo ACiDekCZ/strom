@@ -537,6 +537,7 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
             cost: 'Zużywa subskrypcję lub kredyt.',
             queued: 'Oczekiwanie na agenta…',
             run: (k: number, n: number) => `Agent porządkuje · ${numPl(k)} z ${numPl(n)}`,
+            runFiles: (n: number) => `Agent porządkuje · ${nPl(n, 'plik', 'pliki', 'plików')}`,
             runNote: 'Okno można zamknąć, propozycja poczeka w Materiałach.',
             discardAsk: 'Odrzucić gotowe propozycje?',
             discardKeep: 'Zachowaj',

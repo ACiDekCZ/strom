@@ -47,6 +47,16 @@ describe('reading a sorting', () => {
         expect(parseSortJob({ id: 'sort-1', state: 'thinking' })).toBeNull();
     });
 
+    it('takes the files judged so far (filesDone) only as a whole count; anything else leaves the progress without a number', () => {
+        const base = { id: 'sort-20261117120000-ab12', state: 'working', files: ['I0001', 'I0002'], at: '2026-11-17T12:00:00Z', proposals: [] };
+        expect(parseSortJob({ ...base, filesDone: 1 })!.filesDone).toBe(1);
+        expect(parseSortJob({ ...base, filesDone: 0 })!.filesDone).toBe(0);
+        expect(parseSortJob({ ...base, filesDone: 1.7 })!.filesDone).toBe(1);
+        for (const off of [undefined, -1, '1', null, Number.NaN, Number.POSITIVE_INFINITY]) {
+            expect(parseSortJob({ ...base, filesDone: off })!).not.toHaveProperty('filesDone');
+        }
+    });
+
     it('sends a sorting once, never more than 50 files, without a quiet retry', async () => {
         const calls: { url: string; body: unknown }[] = [];
         const fetchImpl = async (url: string, init?: RequestInit) => {

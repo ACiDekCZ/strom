@@ -223,7 +223,7 @@ test.describe('Sort with the agent', () => {
         await sortDialog(page).locator('.mdlg-sort-go').click();
         // While it works, only its batch says so; the other batch offers nothing.
         await expect(strip(page)).toHaveCount(1);
-        await expect(strip(page)).toContainText('of 3');
+        await expect(strip(page)).toContainText('The agent is sorting · 3 files');
         expect(material.sorts).toHaveLength(1);
         // Back in the whole view the sorting at work has priority: still in its batch, no strip over everything.
         await win(page).locator('[data-mw="nosource"]').click();
@@ -232,7 +232,7 @@ test.describe('Sort with the agent', () => {
         await expect(strip(page)).toHaveCount(0);
         await win(page).locator('.mw-group-toggle', { hasText: BATCH.name }).click();
         await expect(strip(page)).toHaveCount(1);
-        await expect(strip(page)).toContainText('of 3');
+        await expect(strip(page)).toContainText('The agent is sorting · 3 files');
         await expect(win(page).locator('.mw-sort--top')).toBeHidden();
         await openResearchMenu(page, { expandMore: true });
         await expect(page.locator('#research-item-materials .research-item-dot')).toHaveCount(1);
@@ -265,6 +265,7 @@ test.describe('Sort with the agent', () => {
         const material = await setup(page);
         material.sortDoneAt = 99;
         material.sortWorkingProposals = 1;
+        material.sortFilesDone = 1;
         await openWindow(page);
         await strip(page).locator('[data-sort="sort"]').click();
         await sortDialog(page).locator('.mdlg-sort-go').click();
@@ -298,6 +299,7 @@ test.describe('Sort with the agent', () => {
         const material = await setup(page);
         material.sortDoneAt = 99;
         material.sortWorkingProposals = 1;
+        material.sortFilesDone = 1;
         await openWindow(page);
         let release!: () => void;
         let held = new Promise<void>(r => { release = r; });
@@ -435,8 +437,50 @@ test.describe('Sort with the agent', () => {
     });
 });
 
-test.describe('Sort with the agent: the open proposal', () => {
+test.describe('Sort with the agent: the progress and the open proposal', () => {
     test.use({ viewport: DESKTOP });
+
+    const bar = (page: Page) => strip(page).locator('.mw-sort-bar');
+
+    test('a research that does not say how far it is: the file count and a progress without a number, still under reduced motion', async ({ page }) => {
+        const material = await setup(page);
+        material.sortDoneAt = 99;
+        await openWindow(page);
+        await strip(page).locator('[data-sort="sort"]').click();
+        await sortDialog(page).locator('.mdlg-sort-go').click();
+        await expect(strip(page).locator('.mw-sort-run')).toHaveText('The agent is sorting · 3 files');
+        await expect(strip(page)).not.toContainText(' of ');
+        await expect(bar(page)).toHaveAttribute('role', 'progressbar');
+        await expect(bar(page)).not.toHaveAttribute('aria-valuenow', /.*/);
+        await expect(bar(page)).toHaveAttribute('aria-label', 'The agent is sorting · 3 files');
+        // The suite runs with reduced motion: the bar stands still there, it moves only without it.
+        const animation = () => bar(page).locator('span').evaluate(el => getComputedStyle(el).animationName);
+        expect(await animation()).toBe('none');
+        await page.emulateMedia({ reducedMotion: 'no-preference' });
+        expect(await animation()).toBe('mw-sort-sweep');
+
+        // A phone: the strip with its bar stays within the window.
+        await page.setViewportSize({ width: 390, height: 844 });
+        await expect(bar(page)).toBeVisible();
+        const over = await win(page).locator('.mw-sort').evaluateAll(els => els.filter(el => el.scrollWidth > el.clientWidth + 1).length);
+        expect(over).toBe(0);
+    });
+
+    test('a research that says the files judged: k of n and the bar\'s value', async ({ page }) => {
+        const material = await setup(page);
+        material.sortDoneAt = 99;
+        material.sortFilesDone = 2;
+        await openWindow(page);
+        await strip(page).locator('[data-sort="sort"]').click();
+        await sortDialog(page).locator('.mdlg-sort-go').click();
+        await expect(strip(page).locator('.mw-sort-run')).toHaveText('The agent is sorting · 2 of 3');
+        await expect(bar(page)).toHaveAttribute('aria-valuenow', '2');
+        await expect(bar(page)).toHaveAttribute('aria-valuemax', '3');
+        await expect(bar(page)).not.toHaveClass(/is-indeterminate/);
+        // More than sent is never said.
+        material.sortFilesDone = 7;
+        await expect(bar(page)).toHaveAttribute('aria-valuenow', '3');
+    });
 
     test('the open proposal stays still while the research is asked: no preview drawn anew', async ({ page }) => {
         await page.clock.install({ time: new Date('2026-11-18T20:00:00Z') });

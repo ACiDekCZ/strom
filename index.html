@@ -30320,8 +30320,18 @@
         .mw-sort-text { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
         .mw-sort-run { font-weight: 600; }
         .mw-sort-note { color: var(--text-light); }
-        .mw-sort-bar { display: inline-block; width: 120px; height: 6px; border-radius: var(--r-pill); background: var(--surface-2); overflow: hidden; }
+        .mw-sort-bar { display: inline-block; flex: none; width: 120px; max-width: 100%; height: 6px; border-radius: var(--r-pill); background: var(--surface-2); overflow: hidden; }
         .mw-sort-bar > span { display: block; height: 100%; background: var(--primary); }
+        /* Without a number (the research does not say how far it is): a segment moving across, still under reduced motion. */
+        .mw-sort-bar.is-indeterminate > span { width: 40%; animation: mw-sort-sweep 1.6s ease-in-out infinite; }
+        @keyframes mw-sort-sweep { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+        @media (prefers-reduced-motion: reduce) { .mw-sort-bar.is-indeterminate > span { width: 100%; opacity: 0.4; animation: none; } }
+        /* A phone: the sorting at work in its batch (one line of the list) keeps its words whole, the bar gives way, the note stays out. */
+        @media (max-width: 640px) {
+            .mw-sort-bar { width: 96px; flex: 0 1 96px; min-width: 32px; }
+            .mw-sort--row .mw-sort-text > .mw-sort-run { flex: none; }
+            .mw-sort--row .mw-sort-note { display: none; }
+        }
         .materials-window .mw-sort .link-button { font-size: 13px; padding: 2px 0; }
         .mw-sort-btn[aria-disabled="true"], .batch-sort-btn[aria-disabled="true"] { opacity: 0.55; cursor: default; }
         /* The strip under a batch's header (13b/13e): one line in its row of the list. */

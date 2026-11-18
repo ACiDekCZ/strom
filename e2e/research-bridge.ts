@@ -1414,13 +1414,15 @@ export interface FakeMaterial {
     /** Every sorting cancelled (`POST /material/sort/<id>/cancel`). */
     cancels?: string[];
     /** The sortings, by id; a new one starts `working` (or `done` with `sortDoneAt` 0). */
-    sortJobs?: Map<string, { id: string; state: string; files: string[]; at: string; polls: number; proposals?: unknown[]; reason?: string }>;
+    sortJobs?: Map<string, { id: string; state: string; files: string[]; at: string; polls: number; proposals?: unknown[]; reason?: string; filesDone?: number }>;
     /** What the agent proposes for each sorting (by default none: every file unassigned). */
     sortProposals?: Record<string, unknown>[];
     /** The sorting is done after this many GETs (default 1). */
     sortDoneAt?: number;
     /** While working, the sorting shows this many of its proposals already (a cancel then asks Keep / Discard). */
     sortWorkingProposals?: number;
+    /** While working, the sorting says this many files judged already (`filesDone`); unset: it does not say it. */
+    sortFilesDone?: number;
     /** `POST /material/sort` refuses with this code (`sort.limit`, `sort.queue`, `sort.not-ready`). */
     sortRefuse?: string;
 }
@@ -1604,6 +1606,7 @@ function serveMaterial(b: FakeBridge, method: string, url: URL, postData: string
         job.polls++;
         if ((job.state === 'queued' || job.state === 'working') && job.polls >= (m.sortDoneAt ?? 1)) job.state = 'done';
         else if (job.state === 'queued') job.state = 'working';
+        if (job.state === 'working' && m.sortFilesDone !== undefined) job.filesDone = m.sortFilesDone;
         if (job.state === 'working' && m.sortWorkingProposals) {
             job.proposals = (m.sortProposals ?? []).filter(p => job.files.includes(String(p.id))).slice(0, m.sortWorkingProposals);
         }
