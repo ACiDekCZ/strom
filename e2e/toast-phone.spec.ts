@@ -14,7 +14,9 @@ const LONG = 'Not sent. This copy of the tree does not have the research numbers
 type Box = { x: number; y: number; width: number; height: number };
 const overlaps = (a: Box, b: Box) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 
+/** The sample tree focused on a person (a way back); the page on Playwright's clock (it ticks as ever). */
 async function sampleWithBack(page: Page): Promise<void> {
+    await page.clock.install();
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
     await expect(page.locator('#toolbar-focus-name')).not.toHaveText('');
@@ -176,8 +178,11 @@ test.describe('desktop', () => {
 async function offerAndToast(page: Page): Promise<void> {
     // The tour is hidden in the app for now; turned on here to keep the offer's place tested.
     await page.addInitScript(() => { (globalThis as { __STROM_TOUR?: boolean }).__STROM_TOUR = true; });
+    // The sample tree's hint (3 s, the offer stepped aside under it) runs on Playwright's clock.
+    await page.clock.install();
     await openApp(page, { tourOffer: true });
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.clock.runFor(3500);
     const offer = page.locator('.tour-offer');
     await expect(offer).toBeVisible();
     const toast = await longToast(page);
@@ -227,7 +232,10 @@ test.describe('tour offer and a toast, desktop', () => {
  */
 const DE_LONG = 'Gespeichert: die Änderungen gehen mit der nächsten Kopie hinaus';
 
-/** The pill, then (its 3 s over) a message with an action at its place carrying its "Undo". */
+/**
+ * The pill, then (its 3 s over) a message with an action at its place carrying its "Undo". The 3 s
+ * run on Playwright's clock (installed by `sampleWithBack`).
+ */
 async function pillThenMessage(page: Page, text: string, action: string): Promise<{ pill: Box; msg: Locator }> {
     // The sample tree's message put away: the pill at its own place, low in the row of ↩ and ⛶
     await page.evaluate(() => document.querySelectorAll('body > .toast').forEach(t => t.remove()));
@@ -239,6 +247,7 @@ async function pillThenMessage(page: Page, text: string, action: string): Promis
     await expect.poll(() => pillEl.evaluate(e => e.getAnimations().length)).toBe(0);
     const pill = (await pillEl.boundingBox())!;
     await page.evaluate(([t, a]) => window.Strom.UI.showToast(t, 10000, { action: { label: a, run: () => undefined } }), [text, action] as const);
+    await page.clock.runFor(3000);
     const msg = page.locator('body > .toast.show');
     await expect(msg).toBeVisible({ timeout: 5000 });
     await expect(msg.locator('.undo-toast-btn')).toBeVisible();
