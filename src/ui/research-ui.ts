@@ -87,6 +87,7 @@ import {
 import {
     QueueSearch, activeQueueSearch, clearQueueSearch, markQueueSearchPending, queueSearchFor, queueSearchOffered, sayQueueSearch,
 } from './queue-search-ui.js';
+import { parseDeepLink } from '../deep-link.js';
 import { followNotice, researchNameBeside, FOLLOW_NOTICE_MS, FOLLOW_HIGHLIGHT_MS, FollowTreeRef } from '../research-follow.js';
 import { SettingsManager } from '../settings.js';
 import { countImages, stripMedia } from '../attachments.js';
@@ -1957,11 +1958,14 @@ export const researchUiMethods = uiModule({
 
     /**
      * After the first render: read (and drop) ?import-url= / ?live= / ?open=,
-     * start the file handler. Runs once; never throws.
+     * start the file handler. Runs once; never throws. Returns the opening
+     * it started, settled once its tree is in (null: none), so a link to a
+     * person on the same address waits for that tree.
      */
-    initExternalOpen(): void {
-        if (externalReady) return;
+    initExternalOpen(): Promise<void> | null {
+        if (externalReady) return null;
         externalReady = true;
+        let opening: Promise<void> | null = null;
         try {
             const startSearch = window.location.search;
             const params = new URLSearchParams(startSearch);
@@ -1996,12 +2000,12 @@ export const researchUiMethods = uiModule({
             // Something else was asked for in this tab: the old bridge is over.
             if (explicit) forgetLiveBridge();
             const resume = explicit ? null : rememberedLiveBridge();
-            if (sendUrl !== null) { reveal(); void this.sendChangesToResearch(sendUrl); }
-            else if (adoptUrl !== null) { reveal(); void this.adoptFromResearch(adoptUrl); }
-            else if (liveUrl !== null) void this.startLiveFollow(liveUrl).finally(reveal);
-            else if (importUrl !== null) void this.importResearchFromUrl(importUrl).finally(reveal);
+            if (sendUrl !== null) { reveal(); opening = this.sendChangesToResearch(sendUrl); }
+            else if (adoptUrl !== null) { reveal(); opening = this.adoptFromResearch(adoptUrl); }
+            else if (liveUrl !== null) opening = this.startLiveFollow(liveUrl).finally(reveal);
+            else if (importUrl !== null) opening = this.importResearchFromUrl(importUrl).finally(reveal);
             // A reload while following: follow the same bridge again, quietly.
-            else if (resume !== null) void this.startLiveFollow(resume, { resume: true }).finally(reveal);
+            else if (resume !== null) opening = this.startLiveFollow(resume, { resume: true }).finally(reveal);
             else reveal();
             // The link sent from a phone (?research=install): the install dialog, once.
             if (params.get('research') === 'install') {
@@ -2016,6 +2020,7 @@ export const researchUiMethods = uiModule({
             document.documentElement.classList.remove('external-opening');
             console.warn('External open unavailable', err);
         }
+        return opening ? opening.catch(() => undefined) : null;
     },
 
     /**
@@ -2040,7 +2045,13 @@ export const researchUiMethods = uiModule({
                     try { search = new URL(params.targetURL).search; } catch { /* not a URL */ }
                     const isStartup = !startupLaunchSeen && search === startSearch;
                     startupLaunchSeen = true;
-                    if (!isStartup) this.openExternalRequest(new URLSearchParams(search));
+                    if (!isStartup) {
+                        const launch = new URLSearchParams(search);
+                        const opening = this.openExternalRequest(launch);
+                        // `strom app --person P…` into the open window: the person once the research's tree is in.
+                        const link = opening ? parseDeepLink(launch) : null;
+                        if (opening && link) void opening.then(() => this.openDeepLinkFor(link, launch));
+                    }
                 }
                 const files = params?.files ? Array.from(params.files) : [];
                 for (const handle of files) {
@@ -2059,22 +2070,23 @@ export const researchUiMethods = uiModule({
     /**
      * A request from Strom Research reaching the window that is already open
      * (a later launch of the installed app): the same handling as at startup.
-     * Returns whether there was one.
+     * Returns the request's handling, settled once it is done (its tree in),
+     * or null when there was none.
      */
-    openExternalRequest(params: URLSearchParams): boolean {
+    openExternalRequest(params: URLSearchParams): Promise<void> | null {
         const sendUrl = params.get('send');
         const liveUrl = params.get('live');
         const importUrl = params.get('import-url');
         const adoptUrl = params.get('adopt');
-        if (sendUrl === null && liveUrl === null && importUrl === null && adoptUrl === null) return false;
+        if (sendUrl === null && liveUrl === null && importUrl === null && adoptUrl === null) return null;
         // Something else was asked for: the old bridge is over.
         forgetLiveBridge();
         this.settleResearchVersion();
-        if (sendUrl !== null) void this.sendChangesToResearch(sendUrl);
-        else if (adoptUrl !== null) void this.adoptFromResearch(adoptUrl);
-        else if (liveUrl !== null) void this.startLiveFollow(liveUrl);
-        else if (importUrl !== null) void this.importResearchFromUrl(importUrl);
-        return true;
+        const run = sendUrl !== null ? this.sendChangesToResearch(sendUrl)
+            : adoptUrl !== null ? this.adoptFromResearch(adoptUrl)
+                : liveUrl !== null ? this.startLiveFollow(liveUrl)
+                    : this.importResearchFromUrl(importUrl!);
+        return run.catch(() => undefined);
     },
 
     /** C. A file dropped anywhere onto the window. No-op without drag and drop. */

@@ -59,9 +59,17 @@ function recordingDeps(): LinkOpenerDeps & { calls: string[] } {
         switchTree: async (id) => { calls.push(`switch ${id}`); current = { id, researchId: null }; },
         externalRequest: (params) => {
             const keys = ['send', 'live', 'import-url', 'adopt'].filter(k => params.has(k));
-            if (!keys.length) return false;
+            if (!keys.length) return null;
             calls.push(`external ${keys.map(k => `${k}=${params.get(k)}`).join(' ')}`);
-            return true;
+            // The research's tree comes in a while later (a tree new in this browser).
+            return new Promise<void>((resolve) => setTimeout(() => {
+                const research = params.get('research');
+                if (research) {
+                    current = { id: 'tree-research', researchId: research };
+                    calls.push('opened tree-research');
+                }
+                resolve();
+            }, 500));
         },
         search: (q) => { calls.push(`search ${q}`); },
         deepLink: async (link, matches) => { calls.push(`deep ${link.kind}${link.kind === 'person' ? ` ${link.ref}` : ''} ${matches}`); },
@@ -147,6 +155,19 @@ describe('a link in the second tab', () => {
             await settle(1000);
             await settle(2000);
             expect(deps.calls).toEqual([call]);
+            t.stop();
+        }
+    });
+
+    it('a person with ?live= / ?import-url= (strom app --person, 081): once the research\'s tree is in, checked against it', async () => {
+        startMain();
+        const research = '5c8e2a41-9d3b-4f6e-a1c7-2b9d0e4f6a13';
+        for (const via of ['live', 'import-url']) {
+            deps.calls.length = 0;
+            const t = tab(`?${via}=http%3A%2F%2F127.0.0.1%3A5996&tree=lhotakovi&research=${research}&person=P0012`);
+            await settle(1000);
+            await settle(2000);
+            expect(deps.calls).toEqual([`external ${via}=http://127.0.0.1:5996`, 'opened tree-research', 'deep person P0012 true']);
             t.stop();
         }
     });

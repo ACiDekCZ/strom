@@ -127,6 +127,43 @@ test.describe('a link to a person', () => {
         await expect.poll(() => params(page)).toEqual(['tree']);
     });
 
+    // `strom app --person P…` (081): the person rides on the address that brings the research's tree in,
+    // so the link waits until that tree is open instead of being checked against the tree there before.
+    for (const via of ['import-url', 'live'] as const) {
+        test(`with ?${via}=: the research's tree comes in first (not in the browser yet), then the person opens`, async ({ page }) => {
+            await page.addInitScript(() => { localStorage.setItem('strom-research-auto-intro-seen', '1'); });
+            await serve(page, { working: [], waiting: [] });
+            await page.setViewportSize({ width: 1440, height: 900 });
+            const open = via === 'live' ? BRIDGE : `${BRIDGE}/tree.ged`;
+            await page.goto(`/strom.html?${via}=${encodeURIComponent(open)}&tree=lhotakovi-ze-lhoty&research=${UUID}&person=P0012`);
+            await expect(personPage(page)).toBeVisible({ timeout: 15_000 });
+            await expect(personPage(page).locator('.pp-sub')).toContainText('Božetěch Lhoták');
+            expect(await focusName(page)).toBe('Božetěch');
+            await expect(notice(page, 'The linked tree is not in this browser.')).toHaveCount(0);
+            await expect.poll(() => params(page)).toEqual(['tree']);
+        });
+    }
+
+    test('the installed app already open (a later launch): ?import-url= with the person, the person once the tree is in', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem('strom-research-auto-intro-seen', '1');
+            // Chrome's own window.launchQueue is a read-only accessor: redefine it; the test launches later.
+            Object.defineProperty(window, 'launchQueue', {
+                configurable: true,
+                value: { setConsumer(consumer: unknown) { (window as unknown as { __launch: unknown }).__launch = consumer; } },
+            });
+        });
+        await serve(page, { working: [], waiting: [] });
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await openApp(page);
+        await expect.poll(() => page.evaluate(() => typeof (window as unknown as { __launch?: unknown }).__launch)).toBe('function');
+        const target = `${new URL(page.url()).origin}/strom.html?import-url=${encodeURIComponent(`${BRIDGE}/tree.ged`)}&tree=lhotakovi-ze-lhoty&research=${UUID}&person=P0012`;
+        await page.evaluate((url) => (window as unknown as { __launch: (p: unknown) => void }).__launch({ targetURL: url }), target);
+        await expect(personPage(page)).toBeVisible({ timeout: 15_000 });
+        await expect(personPage(page).locator('.pp-sub')).toContainText('Božetěch Lhoták');
+        await expect(notice(page, 'The linked tree is not in this browser.')).toHaveCount(0);
+    });
+
     test('a research that is not here: never a person of another tree', async ({ page }) => {
         await researchTree(page);
         await page.goto(`/strom.html?research=${OTHER}&person=P0012`);

@@ -23,7 +23,7 @@ import { answerFresh, followOnOpen } from '../research-follow.js';
 import { liveSession } from './research-ui.js';
 import type { SendBeforeLeave } from './research-sync-ui.js';
 import { uiModule } from './module.js';
-import { DeepLink, findDeepLinkPerson } from '../deep-link.js';
+import { DeepLink, deepLinkTreeMatches, findDeepLinkPerson } from '../deep-link.js';
 import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
 import { strings } from '../strings.js';
@@ -109,6 +109,22 @@ export const researchFollowMethods = uiModule({
             auto: { researchId: link.id, treeId },
             from: { followed: from.followed, open: from.open },
         });
+    },
+
+    /**
+     * A link into the app from outside checked against the tree on screen now
+     * (deepLinkTreeMatches with the address's `tree` / `research`): at the
+     * start, or once a research's tree the same address brought in is open.
+     */
+    async openDeepLinkFor(link: DeepLink, params: URLSearchParams): Promise<void> {
+        const currentId = DataManager.getCurrentTreeId();
+        const current = currentId ? TreeManager.getTreeMetadata(currentId) : null;
+        const matches = deepLinkTreeMatches(
+            params,
+            current ? { id: current.id, researchId: current.research?.id ?? null } : null,
+            TreeManager.getTreeFromUrl(params),
+        );
+        await this.openDeepLink(link, matches);
     },
 
     /**

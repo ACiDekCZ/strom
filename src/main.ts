@@ -31,7 +31,7 @@ import { FILE_COPY_EVENT, RESEARCH_BASE_EVENT } from './tree-manager.js';
 import { SNAPSHOTS_TRIMMED_EVENT, SNAPSHOT_CREATED_EVENT, SnapshotTrim } from './snapshots.js';
 import { collectPoolGarbage } from './media-pool.js';
 import { keepLifelineChipsFor } from './lifeline-view.js';
-import { parseDeepLink, deepLinkTreeMatches, stripDeepLinkParams } from './deep-link.js';
+import { parseDeepLink, stripDeepLinkParams } from './deep-link.js';
 import { shouldRegisterServiceWorker, registerServiceWorker, linkManifest, isBetaBuild, appModeFor, captureInstallPrompt, INSTALL_AVAILABILITY_EVENT, isSafariOnComputer, safariAppName } from './pwa.js';
 import { decideWindowRole, getWindowRole, setWindowRole, satelliteViewMode, tryBecomeMain, type SatelliteKind, type SatelliteParams } from './windows/window-role.js';
 import { startMainWindow, startSatelliteClient, startSatelliteSelection, forwardSatelliteLaunches, showSecondTab, openLinksFromOtherWindows, makeSatelliteMain, takeOverAsMain, openMainWindow, wireSatelliteViewStart, keptSatelliteState, keepSatelliteState } from './windows/window-start.js';
@@ -905,7 +905,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Opening from outside: ?import-url= / ?live= (Strom Research on this
         // computer) and the installed app's file handler (launchQueue). Reads
         // its parameters before handleUrlImportParam may clear the address.
-        UI.initExternalOpen();
+        const externalOpen = UI.initExternalOpen();
         // Where a research tree stands with its research (a research that says so).
         UI.initResearchSync();
         // The other research trees' state (switcher marks, "Elsewhere" in the panel).
@@ -927,16 +927,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Sync URL with current tree slug (for refresh persistence and bookmarking)
         syncUrlTreeParam();
 
-        // A link to a person or to "Waiting for you" (the macOS widget, spec 019 U4).
+        // A link to a person or to "Waiting for you" (the macOS widget, spec 019 U4). With ?import-url= / ?live=
+        // (`strom app --person`) once that research's tree is in: it may not be in this browser yet (081).
         if (startDeepLink && !hasEmbeddedData) {
-            const currentId = DataManager.getCurrentTreeId();
-            const current = currentId ? TreeManager.getTreeMetadata(currentId) : null;
-            const matches = deepLinkTreeMatches(
-                startParams,
-                current ? { id: current.id, researchId: current.research?.id ?? null } : null,
-                TreeManager.getTreeFromUrl(startParams),
-            );
-            void UI.openDeepLink(startDeepLink, matches);
+            const link = startDeepLink;
+            if (externalOpen) void externalOpen.then(() => UI.openDeepLinkFor(link, startParams));
+            else void UI.openDeepLinkFor(link, startParams);
         }
         // Links other windows passed on (a second tab's ?person=, a satellite's launch): from now on, as this window's own.
         openLinksFromOtherWindows();

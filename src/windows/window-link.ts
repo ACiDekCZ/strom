@@ -58,8 +58,11 @@ export interface LinkOpenerDeps {
     pickTree(params: URLSearchParams): LinkTree | null;
     /** Open another tree, as the tree switcher does. */
     switchTree(treeId: string): Promise<void>;
-    /** `?send=` / `?live=` / `?import-url=` / `?adopt=`: whether the request was one (UI.openExternalRequest). */
-    externalRequest(params: URLSearchParams): boolean;
+    /**
+     * `?send=` / `?live=` / `?import-url=` / `?adopt=` (UI.openExternalRequest): its handling, settled once done
+     * (the research's tree in); null when the address has none.
+     */
+    externalRequest(params: URLSearchParams): Promise<void> | null;
     /** `?search=` (as handleUrlSearchParam at start). */
     search(query: string): void;
     /** `?person=` / `?show=waiting` (UI.openDeepLink). */
@@ -86,7 +89,12 @@ export async function openForwardedLink(link: ForwardedLink, deps: LinkOpenerDep
         const query = params.get('search');
         if (query) deps.search(query);
         const deepLink = parseDeepLink(params);
-        if (deepLink && !external) {
+        if (deepLink) {
+            // With the research's request (`strom app --person`): once its tree is in, checked against that tree (081).
+            if (external) {
+                await external;
+                picked = deps.pickTree(params);
+            }
             await deps.deepLink(deepLink, deepLinkTreeMatches(params, deps.currentTree(), picked));
         }
     }
