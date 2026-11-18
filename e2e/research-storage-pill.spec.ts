@@ -145,6 +145,9 @@ test.describe('the storage pill on a research tree', () => {
                 const S = window.Strom as any;
                 await S.TreeManager.flush();
                 delete S.TreeManager.index.trees.find((t: any) => t.id === rid).mediaFp;
+                // Another read of the same tree meanwhile (the cards' badges read every visible tree) learns it
+                // first: still counted, so the caller paints again.
+                void S.TreeManager.getTreeData(rid);
                 const n = await S.TreeManager.learnMediaFingerprints();
                 S.UI.refreshUnsavedForResearch();
                 return { n, fp: S.TreeManager.getTreeMetadata(rid)?.mediaFp };

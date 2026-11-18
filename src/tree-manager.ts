@@ -665,7 +665,8 @@ class TreeManagerClass {
      * open yet by what it has. Only reads: no migration, no save of the tree.
      * The open tree is left out (its fingerprint comes from memory), and so is
      * one that cannot be read now (locked): it stays unknown until it opens.
-     * Returns how many trees learnt one.
+     * Returns how many trees learnt one while it read them (by this read or
+     * another one of the same tree).
      */
     async learnMediaFingerprints(): Promise<number> {
         const unknown = this.index.trees.filter(t => t.research && t.mediaFp === undefined && t.id !== this.index.activeTreeId);
@@ -678,8 +679,9 @@ class TreeManagerClass {
                 if (!wasUnreadable) this.unreadableTrees.delete(tree.id);
                 continue;
             }
-            if (tree.mediaFp !== undefined) continue;
-            tree.mediaFp = browserMediaFingerprint(result.data);
+            // Another read of the tree meanwhile (the cards' badges, the tree list) may have learnt it first:
+            // it is known now either way, and the caller paints again.
+            if (tree.mediaFp === undefined) tree.mediaFp = browserMediaFingerprint(result.data);
             learnt++;
         }
         if (learnt > 0) this.saveIndex();
