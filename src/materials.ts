@@ -1216,6 +1216,34 @@ export interface SortJob {
      * judged (optional; a research that does not say it leaves the progress without a number).
      */
     filesDone?: number;
+    /**
+     * Once done: the files with no proposal, each with why (optional; a research
+     * that does not say it leaves them without a reason).
+     */
+    unproposed?: SortUnproposed[];
+}
+
+/** Why a file of a sorting has no proposal, as the research says it. */
+export type SortUnproposedWhy = 'nothing-said' | 'nothing-new' | 'dropped' | 'left-out' | 'reader-failed';
+export const SORT_UNPROPOSED_WHYS: readonly SortUnproposedWhy[] = ['nothing-said', 'nothing-new', 'dropped', 'left-out', 'reader-failed'];
+
+/** A file of a sorting with no proposal: `said` = what its reader wrote of it, `outcome` = how a failed reader ended. */
+export interface SortUnproposed {
+    id: string;
+    why: SortUnproposedWhy;
+    said?: string;
+    outcome?: string;
+}
+
+/** One file without a proposal (anything off, or a reason this app does not know: null, shown without a reason). */
+export function parseSortUnproposed(raw: unknown): SortUnproposed | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const o = raw as Record<string, unknown>;
+    if (typeof o.id !== 'string' || !FILE_ID.test(o.id)) return null;
+    if (!SORT_UNPROPOSED_WHYS.includes(o.why as SortUnproposedWhy)) return null;
+    const said = cleanText(o.said, 1000);
+    const outcome = cleanText(o.outcome, 60);
+    return { id: o.id, why: o.why as SortUnproposedWhy, ...(said ? { said } : {}), ...(outcome ? { outcome } : {}) };
 }
 
 const SORT_ID = /^sort-[0-9A-Za-z-]{1,60}$/;
@@ -1271,10 +1299,14 @@ export function parseSortJob(raw: unknown): SortJob | null {
         .filter((p): p is SortProposal => !!p && !seen.has(p.id) && !!seen.add(p.id));
     const reason = cleanText(o.reason, 300);
     const filesDone = typeof o.filesDone === 'number' && Number.isFinite(o.filesDone) && o.filesDone >= 0 ? Math.floor(o.filesDone) : undefined;
+    const known = new Set<string>();
+    const unproposed = (Array.isArray(o.unproposed) ? o.unproposed : []).map(parseSortUnproposed)
+        .filter((u): u is SortUnproposed => !!u && !known.has(u.id) && !!known.add(u.id));
     return {
         id: o.id, state: o.state as SortState, files, at: typeof o.at === 'string' ? o.at : '', proposals,
         ...(reason ? { reason } : {}),
         ...(filesDone !== undefined ? { filesDone } : {}),
+        ...(unproposed.length ? { unproposed } : {}),
     };
 }
 

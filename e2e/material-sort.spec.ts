@@ -738,10 +738,46 @@ test.describe('Sort with the agent: not about the family', () => {
         expect(material.files.every(f => !f.hidden)).toBe(true);
     });
 
+    test('why a file has no proposal: one quiet line, what the reader said cut to one line with the whole in its tooltip; an unknown reason says nothing', async ({ page }) => {
+        const said = 'Only a blank page with a coffee stain in its corner and a fold across the middle: no names, no dates, no place, '
+            + 'no stamp and no handwriting anywhere on it, front or back, nothing to tell whose it was, when it was kept or why it lay in the box';
+        const material = await setup(page, {
+            proposals: [PROPOSALS[0]],
+            files: [materialFile(4, { batch: BATCH.id }), materialFile(5, { batch: BATCH.id })],
+        });
+        material.sortUnproposed = [
+            { id: 'I0002', why: 'nothing-said', said },
+            { id: 'I0003', why: 'reader-failed', outcome: 'timeout' },
+            { id: 'I0004', why: 'something-new-one-day' },
+        ];
+        await openProposal(page);
+        await expect(unassignedTab(page)).toContainText('4');
+        await expect(row(page, 'I0002').locator('.msp-unproposed')).toHaveText('The reader said nothing about the file');
+        const saidLine = row(page, 'I0002').locator('.msp-said');
+        await expect(saidLine).toHaveText(said);
+        await expect(saidLine).toHaveAttribute('title', said);
+        // One line, cut with an ellipsis, inside its row.
+        const fit = await saidLine.evaluate(el => {
+            const r = el.getBoundingClientRect();
+            const row = el.closest('.msp-row')!.getBoundingClientRect();
+            return { cut: el.scrollWidth > el.clientWidth, oneLine: r.height < 24, inside: r.right <= row.right + 0.5 };
+        });
+        expect(fit).toEqual({ cut: true, oneLine: true, inside: true });
+        await expect(row(page, 'I0003').locator('.msp-unproposed')).toHaveText('The file could not be read');
+        await expect(row(page, 'I0003').locator('.msp-said')).toHaveCount(0);
+        // A reason this app does not know, and a file the research says nothing of: no line, nothing broken.
+        await expect(row(page, 'I0004').locator('.msp-unproposed, .msp-said')).toHaveCount(0);
+        await expect(row(page, 'I0005').locator('.msp-unproposed, .msp-said')).toHaveCount(0);
+        // The proposals' tab carries no reason line.
+        await proposal(page).locator('.msp-tab[data-tab="proposals"]').click();
+        await expect(proposal(page).locator('.msp-unproposed')).toHaveCount(0);
+    });
+
     test('a research that does not say it: Unassigned as before, nothing offered to hide', async ({ page }) => {
         await setup(page);
         await openProposal(page);
         await expect(proposal(page).locator('.msp-row')).toHaveCount(1);
+        await expect(proposal(page).locator('.msp-unproposed, .msp-said')).toHaveCount(0);
         await expect(proposal(page).locator('.msp-flag')).toHaveCount(0);
         await expect(proposal(page).locator('.msp-hide, .msp-hide-unrelated, .msp-restore')).toHaveCount(0);
         await expect(proposal(page).locator('.msp-review')).toHaveText('Go through by hand (1)');

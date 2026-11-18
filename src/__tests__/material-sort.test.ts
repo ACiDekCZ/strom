@@ -57,7 +57,29 @@ describe('reading a sorting', () => {
         }
     });
 
-    it('sends a sorting once, never more than 50 files, without a quiet retry', async () => {
+    it('takes why a file has no proposal (unproposed); an unknown reason or a broken entry is left out, an older research says nothing', () => {
+        const base = { id: 'sort-20261117120000-ab12', state: 'done', files: ['I0001', 'I0002', 'I0003'], at: '2026-11-17T12:00:00Z', proposals: [] };
+        const job = parseSortJob({ ...base, unproposed: [
+            { id: 'I0001', why: 'nothing-said', said: '  A blank page,\n nothing on it  ' },
+            { id: 'I0002', why: 'reader-failed', outcome: 'timeout' },
+            { id: 'I0002', why: 'left-out' },
+            { id: 'I0003', why: 'bored' },
+            { id: 'nope', why: 'left-out' },
+            'I0003', null,
+            { id: 'I0003', why: 'nothing-new', said: 42 },
+        ] })!;
+        expect(job.unproposed).toEqual([
+            { id: 'I0001', why: 'nothing-said', said: 'A blank page, nothing on it' },
+            { id: 'I0002', why: 'reader-failed', outcome: 'timeout' },
+            { id: 'I0003', why: 'nothing-new' },
+        ]);
+        expect(parseSortJob(base)!).not.toHaveProperty('unproposed');
+        expect(parseSortJob({ ...base, unproposed: 'all of them' })!).not.toHaveProperty('unproposed');
+        expect(parseSortJob({ ...base, unproposed: [{ id: 'I0001', why: 'bored' }] })!).not.toHaveProperty('unproposed');
+        expect(parseSortJob({ ...base, unproposed: [{ id: 'I0001', why: 'dropped', said: 'x'.repeat(5000) }] })!.unproposed![0].said!.length).toBeLessThanOrEqual(1000);
+    });
+
+        it('sends a sorting once, never more than 50 files, without a quiet retry', async () => {
         const calls: { url: string; body: unknown }[] = [];
         const fetchImpl = async (url: string, init?: RequestInit) => {
             calls.push({ url, body: JSON.parse(String(init?.body)) });

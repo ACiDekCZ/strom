@@ -489,6 +489,8 @@ export const materialSortMethods = uiModule({
         };
         const chipOf = (link: SortLink, title?: string) => sortChip(link, tree, names, title);
         const rows = sortRows(job, id => byId.get(id) ?? null, chipOf);
+        // Why a file has no proposal, as the research says it (an older research says nothing: no reason shown).
+        const unproposed = new Map((job.unproposed ?? []).map(u => [u.id, u]));
         const decided: Record<string, 'accepted' | 'rejected'> = { ...r.decided };
         // What undoes each accepted row (Undo under Done): kept with the sorting, so it outlives a reload.
         const reverts: Record<string, unknown> = { ...(r.reverts ?? {}) };
@@ -630,6 +632,15 @@ export const materialSortMethods = uiModule({
                     main.appendChild(chips);
                 }
                 if (p?.why) main.appendChild(h('div', 'msp-why', tab === 'unassigned' ? `${s.unassignedWhy}: ${p.why}` : p.why));
+                const un = tab === 'unassigned' && !p ? unproposed.get(row.id) : undefined;
+                if (un) {
+                    main.appendChild(h('div', 'msp-why msp-unproposed', s.unproposed[un.why]));
+                    if (un.said) {
+                        const said = h('div', 'msp-why msp-said', un.said);
+                        said.title = un.said;
+                        main.appendChild(said);
+                    }
+                }
             }
             el.appendChild(main);
             const acts = h('div', 'msp-acts');

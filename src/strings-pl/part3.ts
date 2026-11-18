@@ -583,6 +583,13 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
             unassignedNote: 'Agent nie przypisał tych plików. Zostają bez tytułu i osoby; można je przejrzeć ręcznie.',
             reviewByHand: (n: number) => `Przejrzyj ręcznie (${numPl(n)})`,
             unassignedWhy: 'Dlaczego nie',
+            unproposed: {
+                'nothing-said': 'Czytelnik nic nie powiedział o pliku',
+                'nothing-new': 'Plik ma już wszystko, co zaproponowano',
+                dropped: 'Propozycji nie dało się użyć',
+                'left-out': 'Agent pominął plik',
+                'reader-failed': 'Nie udało się odczytać pliku',
+            },
             hideUnrelated: (n: number) => `Ukryj jako Nie dotyczy rodziny (${numPl(n)})`,
             empty: 'Nic tu nie ma.',
             write: 'Przyjęte się zapiszą: tytuły i połączenia plików w drzewie razem z drzewem, materiał spoza drzewa do archiwum. Odrzucone pozostaną bez zmian.',
