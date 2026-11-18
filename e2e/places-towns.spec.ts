@@ -44,6 +44,9 @@ const VILLAGE: Hit = { lat: '49.61', lon: '15.42', display_name: 'Bělokamen, Ok
  */
 async function seedTowns(page: Page): Promise<void> {
     await seedSetting(page, 'geocoding', true);
+    // The page on Playwright's clock (it ticks as ever): the geocoder's interval, the undo pill's 3 s and the
+    // sentences' time pushed on where a test waits for them (`shown`).
+    await page.clock.install();
     await openApp(page);
     const people: Record<string, Record<string, unknown>> = {
         p0: { firstName: 'Zorbin', lastName: 'Tesk', birthPlace: TOWN, deathPlace: 'Hlinsko' },
@@ -72,6 +75,18 @@ const open = (page: Page, focusKey?: string): Promise<void> =>
 const geos = (page: Page): Promise<Record<string, { byTown?: string }>> =>
     page.evaluate(() => JSON.parse(JSON.stringify(window.Strom.DataManager.getData().places ?? {})));
 const toast = (page: Page, text: string | RegExp): Locator => page.locator('.toast', { hasText: text });
+
+/**
+ * What comes after a wait of the app's: the geocoder's 1.1 s between requests, a message behind the undo
+ * pill's 3 s. That time is pushed on the page's clock until it shows.
+ */
+async function shown(page: Page, what: Locator): Promise<void> {
+    await expect.poll(async () => {
+        if (await what.isVisible()) return true;
+        await page.clock.runFor(250);
+        return false;
+    }, { timeout: 15_000, intervals: [20] }).toBe(true);
+}
 const visibleSubKeys = (page: Page): Promise<string[]> => group(page).locator('.place-row-sub:visible')
     .evaluateAll(rows => rows.map(r => (r as HTMLElement).dataset.key ?? ''));
 
@@ -117,7 +132,7 @@ test.describe('the Places dialog with towns and houses', () => {
         await input.fill('Hlinsko u Bělokamene');
         await go.click();
         const t = toast(page, 'Renamed: 3 entries.');
-        await expect(t).toBeVisible();
+        await shown(page, t);
         const places = () => page.evaluate(() => window.Strom.DataManager.getAllPersons()
             .filter(p => p.firstName === 'Yarek' || p.firstName === 'Zorbin').map(p => [p.birthPlace, p.deathPlace]));
         expect(await places()).toEqual(expect.arrayContaining([['Hlinsko u Bělokamene', 'Hlinsko u Bělokamene'], [TOWN, 'Hlinsko u Bělokamene']]));
@@ -141,6 +156,7 @@ test.describe('the Places dialog with towns and houses', () => {
         await r.locator('.place-search-go').click();
 
         // Nothing under the whole name: the town is asked for and attached by the town.
+        await shown(page, r.locator('.place-bytown'));
         await expect(r.locator('.place-bytown')).toHaveText(`⌖ Located by the town of ${TOWN}`);
         // Every form of the name first (here: without diacritics), then the town.
         expect(asked).toEqual([`${TOWN} čp. 4`, 'Belokamen cp. 4', TOWN]);
@@ -156,7 +172,7 @@ test.describe('the Places dialog with towns and houses', () => {
 
         await offer.locator('.place-offer-go').click();
         const t = toast(page, `Location attached to 9 more places in ${TOWN}, by town.`);
-        await expect(t).toBeVisible();
+        await shown(page, t);
         const byTown = async () => Object.entries(await geos(page)).filter(([, g]) => g.byTown === TOWN).map(([k]) => k).sort();
         expect(await byTown()).toEqual(HOUSES.map(h => key(`${TOWN} ${h}`)).sort());
         await expect(group(page).locator('.place-unplaced-tag')).toHaveCount(0);
@@ -168,8 +184,7 @@ test.describe('the Places dialog with towns and houses', () => {
     });
 
     test('a hand search lists kind and region; a town for a single house place says so and the card goes by itself', async ({ page }) => {
-        // The sentence's time runs on Playwright's clock (it ticks as ever).
-        await page.clock.install();
+        // The sentence's time runs on Playwright's clock (installed by `seedTowns`).
         await stubGeocoder(page, {
             'Kopřivná': [
                 { lat: '49.3', lon: '16.2', display_name: 'Kopřivná, Okres Testov, Kraj Testov, Česko', addresstype: 'village' },
@@ -285,7 +300,7 @@ test.describe('the Places dialog with towns and houses', () => {
         await preview.getByRole('button', { name: 'Split 10 entries' }).click();
 
         const t = toast(page, `Split 10 entries in ${TOWN} into town and house.`);
-        await expect(t).toBeVisible();
+        await shown(page, t);
         const ilvar = () => page.evaluate(() => window.Strom.DataManager.getAllPersons()
             .filter(p => p.firstName.startsWith('Ilvar')).map(p => [p.birthPlace, p.birthAddress ?? '']).sort());
         const split = await ilvar();
@@ -308,7 +323,7 @@ test.describe('the Places dialog with towns and houses', () => {
         const preview = r.locator('.place-split-preview');
         await expect(preview.locator('.place-split-examples')).toContainText('Kopřivná · 7');
         await preview.getByRole('button', { name: 'Split 1 entry' }).click();
-        await expect(toast(page, 'Split 1 entry in Kopřivná into town and house.')).toBeVisible();
+        await shown(page, toast(page, 'Split 1 entry in Kopřivná into town and house.'));
         expect(await page.evaluate(() => {
             const q = window.Strom.DataManager.getAllPersons().find(p => p.firstName === 'Quilla')!;
             return [q.birthPlace, q.birthAddress];
@@ -323,6 +338,7 @@ test.describe('the Places dialog with towns and houses', () => {
         await seedSetting(page, 'mapTiles', true);
         await stubGeocoder(page, { [TOWN]: [VILLAGE] });
         await seedSetting(page, 'geocoding', true);
+        await page.clock.install();
         await openApp(page);
         await seedTree(page, {
             a: { firstName: 'Zorbin', lastName: 'Tesk', birthPlace: `${TOWN} čp. 4` },
@@ -340,7 +356,7 @@ test.describe('the Places dialog with towns and houses', () => {
         await page.getByRole('button', { name: 'Look up 2 places', exact: true }).click();
 
         const t = toast(page, 'Found 1 place, 1 of them by town. 1 place not found.');
-        await expect(t).toBeVisible({ timeout: 15000 });
+        await shown(page, t);
         expect((await geos(page))[key(`${TOWN} čp. 4`)]?.byTown).toBe(TOWN);
         await t.getByRole('button', { name: 'Places' }).click();
         await expect(modal(page)).toBeVisible();
