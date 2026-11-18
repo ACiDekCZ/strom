@@ -1938,9 +1938,12 @@ test.describe('Awaiting action from a research with waiting.groups', () => {
                 await page.evaluate((l) => window.Strom.UI.setLanguage(l as never), lang);
                 const bar = ov.locator('.research-overview__waiting-filters');
                 await expect(bar.locator('.research-overview__filter')).toHaveCount(6);
-                const m = await bar.evaluate(row => {
+                // Read from the overview, which outlives its redraws: the bar found first may be drawn anew
+                // (an answer of the bridge) before it is read, and out of the page then.
+                const m = await ov.evaluate(root => {
+                    const row = root.querySelector('.research-overview__waiting-filters')!;
                     const r = row.getBoundingClientRect();
-                    const panel = row.closest('#research-overview')!.getBoundingClientRect();
+                    const panel = root.getBoundingClientRect();
                     const chips = [...row.querySelectorAll('.research-overview__filter')].map(c => c.getBoundingClientRect());
                     return {
                         overflow: row.scrollWidth - row.clientWidth,
