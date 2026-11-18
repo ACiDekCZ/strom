@@ -175,7 +175,7 @@ describe('quick chips, search and sorting (§14.2)', () => {
     it('the default columns and the phone\'s pinned title', () => {
         const st = defaultTypeState('sources');
         expect(st.columns).toEqual(['srcTitle', 'srcRepo', 'srcSig', 'srcFolio', 'srcImageNo', 'srcRef', 'srcUrl', 'srcPersons', 'srcFacts']);
-        // Read by the research and the transcript only in the Columns panel.
+        // Read and the transcript only in the Columns panel.
         expect(columnsOf('sources').map(c => c.id)).toEqual(expect.arrayContaining(['srcRead', 'srcTranscript']));
         expect(st.pinned).toBe(1);
         expect(shownColumns('sources', st, true).widths[0]).toBe(156);
@@ -190,7 +190,7 @@ describe('the Sources table around the rows', () => {
         const columns = ['srcTitle', 'srcUrl', 'srcPersons', 'srcFacts', 'srcRead'].map(col);
         const out = buildTableCsv({ model: m, type: 'sources', rows, columns });
         const lines = out.csv.replace(/^﻿/, '').trim().split('\r\n');
-        expect(lines[0]).toBe('Title;Online;People;Facts;Read by the research');
+        expect(lines[0]).toBe('Title;Online;People;Facts;Read');
         expect(lines[1]).toBe('Domovská kniha;http://example.org/domov;2;1;1 reader');
         expect(lines[2]).toBe('Kniha narozených Mlýnecká Lhotka;https://example.org/kniha/12;1;2;2 readers');
         expect(out.items).toBe(2);

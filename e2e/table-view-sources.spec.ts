@@ -82,8 +82,8 @@ test.describe('desktop (1440)', () => {
         // The readers' pill, its column shown from the panel.
         await page.locator('#table-container .tv-cols-btn').click();
         const panel = page.getByRole('dialog', { name: 'Columns' });
-        await panel.locator('.tv-cp-q').fill('Read by');
-        await panel.getByRole('checkbox', { name: 'Read by the research', exact: true }).check();
+        await panel.locator('.tv-cp-q').fill('Read');
+        await panel.getByRole('checkbox', { name: 'Read', exact: true }).check();
         await page.keyboard.press('Escape');
         await expect((await cellIn(page, 's:s1', 'srcRead')).locator('.fact-status .fs-dots i.on')).toHaveCount(2);
         await expect(await cellIn(page, 's:s1', 'srcRead')).toContainText('2 readers');

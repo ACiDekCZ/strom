@@ -962,7 +962,8 @@ export const EVENT_COLUMNS: readonly ColumnDef[] = cols('events', [
     { id: 'evAge', group: 'event', label: 'evAge', width: 110, kind: 'age', computed: true, get: (c, r) => eventAgeCell(c, r) },
     { id: 'evValue', group: 'event', label: 'evValue', width: 180, get: (_c, r) => eventValueCell(r) },
     { id: 'godparents', group: 'participants', label: 'godparents', width: 250, get: (c, r) => participantsCell(c, r, 'godparent') },
-    { id: 'witnesses', group: 'participants', label: 'witnesses', width: 200, get: (c, r) => participantsCell(c, r, 'witness') },
+    // Witnesses of any event (a baptism's, a burial's), not only a wedding's: the label says so (de Zeugen, not Trauzeugen).
+    { id: 'witnesses', group: 'participants', label: 'evWitnesses', width: 200, get: (c, r) => participantsCell(c, r, 'witness') },
     { id: 'officiants', group: 'participants', label: 'officiants', width: 170, get: (c, r) => participantsCell(c, r, 'officiant') },
     { id: 'others', group: 'participants', label: 'others', width: 200, get: (c, r) => participantsCell(c, r, 'other') },
     { id: 'evSource', group: 'source', label: 'evSource', width: 300, get: (c, r) => eventSourceCell(c, r) },
