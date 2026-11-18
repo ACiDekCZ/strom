@@ -2,6 +2,7 @@ import { test, expect, Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { openApp, seedTree, type SeedPerson } from './helpers.js';
 import { readXlsx } from '../src/__tests__/helpers/xlsx-read.js';
+import { syntheticTree } from '../src/__tests__/helpers/synthetic-tree';
 
 /**
  * The Table view's Export with a filter or a search (1110): the panel says
@@ -144,5 +145,47 @@ test.describe('phone (390)', () => {
             xs.locator('.tv-fs-apply', { hasText: 'Download CSV' }).tap(),
         ]);
         expect(csvRows(await download.path())).toHaveLength(7);
+    });
+});
+
+test.describe('the export of a large table (C99, waiting buttons §8)', () => {
+    test.use({ viewport: { width: 1440, height: 900 } });
+
+    test('Download: the toolbar\'s Export says "Saving the file…" before the file is built, then the file and Export again', async ({ page }) => {
+        test.setTimeout(90_000);
+        await page.clock.setFixedTime(new Date('2026-06-15T10:00:00Z'));
+        await openApp(page);
+        const { data, rootId } = syntheticTree({ persons: 5200, seed: 11 });
+        await page.evaluate(async ({ data, rootId }) => {
+            const S = window.Strom;
+            await S.DataManager.importAsNewTree(data, 'Synthetic');
+            S.TreeRenderer.setFocus(rootId);
+            await S.TreeRenderer.renderAsync();
+        }, { data, rootId });
+        await page.locator('#view-mode-table').click();
+        await expect(page.locator('#table-container .tv-grid')).toBeVisible();
+        const btn = page.locator('#table-container .tv-export-btn');
+        await btn.click();
+        // What Export says before the file is handed over (the build blocks the page: watched, not polled).
+        await btn.evaluate((b) => {
+            const w = window as unknown as { __said: string[]; __handed: boolean };
+            w.__said = [];
+            w.__handed = false;
+            const click = HTMLAnchorElement.prototype.click;
+            HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) { if (this.download) w.__handed = true; return click.call(this); };
+            new MutationObserver(() => {
+                if (b.getAttribute('aria-busy') === 'true' && !w.__handed) w.__said.push(b.textContent ?? '');
+            }).observe(b, { attributes: true, childList: true, subtree: true, characterData: true });
+        });
+        const panel = page.locator('.tv-fpanel.tv-xpanel');
+        const [download] = await Promise.all([
+            page.waitForEvent('download'),
+            panel.locator('.tv-fpanel-apply', { hasText: 'Download CSV' }).click(),
+        ]);
+        expect(download.suggestedFilename()).toMatch(/\.csv$/);
+        const said = await page.evaluate(() => (window as unknown as { __said: string[] }).__said);
+        expect(said.some(t => t.includes('Saving the file…'))).toBe(true);
+        await expect(btn).not.toHaveAttribute('aria-busy', 'true');
+        await expect(btn).not.toHaveAttribute('aria-disabled', 'true');
     });
 });

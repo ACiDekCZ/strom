@@ -23,6 +23,7 @@
 import { auditPersonName, DataManager } from '../../data.js';
 import { TreeManager } from '../../tree-manager.js';
 import { TreeRenderer } from '../../renderer.js';
+import { runBusy, nextPaint } from '../busy.js';
 import { isPhoneBar, isTabletOrMobile } from '../../breakpoints.js';
 import { strings, getCurrentLanguage, type Language } from '../../strings.js';
 import { uiModule } from '../module.js';
@@ -376,6 +377,9 @@ const pins = new TablePins();
 let flashNext: { tree: string; keys: readonly string[] } | null = null;
 const BRIDGE_TOAST_MS = 8000;
 let mounted: Mounted | null = null;
+
+/** From this many cells the export says its state at once (building it takes longer than 120 ms). */
+export const TABLE_EXPORT_SHOWN_AT_ONCE = 30_000;
 /** The coverage row's cells (§6.1) for the rows last drawn; computed when a column is first drawn. */
 let coverage: { rows: readonly TableRow[]; cells: Map<string, CoverageCell> } | null = null;
 
@@ -3172,15 +3176,29 @@ export const tableMethods = uiModule({
             const btn = form.closest('.tv-fpanel, .tv-fsheet')?.querySelector('.tv-fpanel-apply, .tv-fs-apply');
             if (btn) btn.textContent = exportDownloadLabel(f);
         }, (rows) => { exportUnfiltered = rows; });
-        this.showTableFilterForm(mounted.exportBtn, '', form, () => this.downloadTableExport(), {
+        this.showTableFilterForm(mounted.exportBtn, '', form, () => { void this.downloadTableExport(); }, {
             applyLabel: exportDownloadLabel(exportFormat), ariaLabel: t.export, cls: 'tv-xpanel', noCancel: true,
         });
     },
 
-    /** Download the CSV (§11.2) or the XLSX (§11.3) and say what went in (11b). */
-    downloadTableExport(format: ExportFormat = exportFormat, unfiltered: boolean = exportUnfiltered): void {
+    /**
+     * Download the CSV (§11.2) or the XLSX (§11.3) and say what went in (11b). The file is one computation over the
+     * rows (§8): the panel closed by Download, the toolbar's Export says "Saving the file…" first (at once for a large
+     * table: the page cannot paint while it builds), then the toast; resolves when the file is handed over.
+     */
+    async downloadTableExport(format: ExportFormat = exportFormat, unfiltered: boolean = exportUnfiltered): Promise<void> {
         const now = this.tableExportNow(unfiltered);
         if (!now) return;
+        const btn = mounted?.exportBtn;
+        const make = (): void => this.saveTableExport(now, format);
+        if (!btn?.isConnected) { make(); return; }
+        const cells = now.input.rows.length * Math.max(1, now.input.columns.length);
+        await runBusy(btn, async () => { await nextPaint(); make(); },
+            { heavy: cells >= TABLE_EXPORT_SHOWN_AT_ONCE ? 'now' : true, label: strings.busy.savingFile });
+    },
+
+    /** The export built and handed to the browser, and its toast. */
+    saveTableExport(now: TableExportNow, format: ExportFormat): void {
         let blob: Blob;
         let made: { items: number; lines: number; columns: number };
         if (format === 'xlsx') {
