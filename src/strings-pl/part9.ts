@@ -20,8 +20,8 @@ export const plPart9: Pick<StringsType, 'lists'> = {
         rule: {
             key: 'Według',
             origin: 'Utworzona z',
-            anc: (n: string, g?: number) => `Przodkowie osoby ${n}, ${g ? `do ${g} ${plPl(g, 'pokolenia', 'pokoleń', 'pokoleń')}` : 'wszystkie pokolenia'}`,
-            des: (n: string, g?: number) => `Potomkowie osoby ${n}, ${g ? `do ${g} ${plPl(g, 'pokolenia', 'pokoleń', 'pokoleń')}` : 'wszystkie pokolenia'}`,
+            anc: (n: string, g?: number) => `Przodkowie: ${n}, ${g ? `do ${g} ${plPl(g, 'pokolenia', 'pokoleń', 'pokoleń')}` : 'wszystkie pokolenia'}`,
+            des: (n: string, g?: number) => `Potomkowie: ${n}, ${g ? `do ${g} ${plPl(g, 'pokolenia', 'pokoleń', 'pokoleń')}` : 'wszystkie pokolenia'}`,
             rod: (r: string) => `Ród ${r}`,
             line: (l: string) => `Linia badania: ${l}`,
             added: (d: number) => d === 1 ? 'Dodane w ostatnim dniu' : `Dodane w ostatnich ${d} dniach`,

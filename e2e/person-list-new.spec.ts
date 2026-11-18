@@ -100,7 +100,7 @@ test.describe('New list: a computer', () => {
         const d = lists(page);
         await expect(d.locator('.pl-row[aria-selected="true"] .pl-row-name')).toHaveText('letters TO write (2)');
         await expect(d.locator('.pl-badge')).toHaveText('Fixed list');
-        await expect(d.locator('.pl-rule')).toContainText('Created from Ancestors of Tamsel Varnholm, up to 1 generation');
+        await expect(d.locator('.pl-rule')).toContainText('Created from Ancestors: Tamsel Varnholm, up to 1 generation');
         await expect(people(page)).toHaveText(['Tamsel Varnholm', 'Corvin Varnholm', 'Yselda Fennick']);
     });
 
@@ -141,7 +141,7 @@ test.describe('New list: a computer', () => {
         await expect(tile(page, 'descendants').locator('.pln-count')).toHaveText('2 people');
         await f.locator('[data-act="create"]').click();
         await expect(form(page)).toHaveCount(0);
-        await expect(d.locator('.pl-rule')).toContainText('Based on Descendants of Corvin Varnholm, up to 1 generation');
+        await expect(d.locator('.pl-rule')).toContainText('Based on Descendants: Corvin Varnholm, up to 1 generation');
         await expect(people(page)).toHaveText(['Corvin Varnholm', 'Tamsel Varnholm']);
 
         // Escape: the person choice first, then the dialog; Lists of people stays.

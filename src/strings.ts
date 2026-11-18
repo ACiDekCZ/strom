@@ -9547,8 +9547,8 @@ const stringsEN = {
         rule: {
             key: 'Based on',
             origin: 'Created from',
-            anc: (n: string, g?: number) => `Ancestors of ${n}, ${g ? `up to ${nEn(g, 'generation', 'generations')}` : 'all generations'}`,
-            des: (n: string, g?: number) => `Descendants of ${n}, ${g ? `up to ${nEn(g, 'generation', 'generations')}` : 'all generations'}`,
+            anc: (n: string, g?: number) => `Ancestors: ${n}, ${g ? `up to ${nEn(g, 'generation', 'generations')}` : 'all generations'}`,
+            des: (n: string, g?: number) => `Descendants: ${n}, ${g ? `up to ${nEn(g, 'generation', 'generations')}` : 'all generations'}`,
             rod: (r: string) => `${r} family line`,
             line: (l: string) => `Research line: ${l}`,
             added: (d: number) => d === 1 ? 'Added in the last day' : `Added in the last ${d} days`,
@@ -19503,8 +19503,8 @@ const stringsCZ: StringsType = {
         rule: {
             key: 'Podle',
             origin: 'Vznikl z',
-            anc: (n: string, g?: number) => `Předci osoby ${n}, ${g ? `do ${nCs(g, 'generace', 'generací', 'generací')}` : 'všechny generace'}`,
-            des: (n: string, g?: number) => `Potomci osoby ${n}, ${g ? `do ${nCs(g, 'generace', 'generací', 'generací')}` : 'všechny generace'}`,
+            anc: (n: string, g?: number) => `Předci: ${n}, ${g ? `do ${nCs(g, 'generace', 'generací', 'generací')}` : 'všechny generace'}`,
+            des: (n: string, g?: number) => `Potomci: ${n}, ${g ? `do ${nCs(g, 'generace', 'generací', 'generací')}` : 'všechny generace'}`,
             rod: (r: string) => `Rod ${r}`,
             line: (l: string) => `Linie výzkumu: ${l}`,
             added: (d: number) => d === 1 ? 'Přidáno za poslední den' : d < 5 ? `Přidáno za poslední ${d} dny` : `Přidáno za posledních ${d} dní`,
@@ -29354,8 +29354,8 @@ const stringsDE: StringsType = {
         rule: {
             key: 'Nach',
             origin: 'Entstanden aus',
-            anc: (n: string, g?: number) => `Vorfahren von ${n}, ${g ? `bis ${nDe(g, 'Generation', 'Generationen')}` : 'alle Generationen'}`,
-            des: (n: string, g?: number) => `Nachkommen von ${n}, ${g ? `bis ${nDe(g, 'Generation', 'Generationen')}` : 'alle Generationen'}`,
+            anc: (n: string, g?: number) => `Vorfahren: ${n}, ${g ? `bis ${nDe(g, 'Generation', 'Generationen')}` : 'alle Generationen'}`,
+            des: (n: string, g?: number) => `Nachkommen: ${n}, ${g ? `bis ${nDe(g, 'Generation', 'Generationen')}` : 'alle Generationen'}`,
             rod: (r: string) => `Stamm ${r}`,
             line: (l: string) => `Forschungslinie: ${l}`,
             added: (d: number) => d === 1 ? 'Am letzten Tag hinzugefügt' : `In den letzten ${d} Tagen hinzugefügt`,

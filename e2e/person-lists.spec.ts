@@ -53,7 +53,7 @@ test.describe('Lists of people: a computer', () => {
         await expect(d.locator('.pl-new')).toBeVisible();
         // By name: the ready-made list is there too (not stored, nothing added since 3.30 here).
         await expect(rowNames(page)).toHaveText(['Added in the last 30 days', 'Ancestors – Quillon', 'Letters to write']);
-        await expect(d.locator('.pl-row').nth(1).locator('.pl-row-meta')).toHaveText('automatic · Ancestors of Quillon Varnholm, all generations');
+        await expect(d.locator('.pl-row').nth(1).locator('.pl-row-meta')).toHaveText('automatic · Ancestors: Quillon Varnholm, all generations');
         await expect(d.locator('.pl-row').nth(1).locator('.pl-row-count')).toHaveText('5');
 
         // The first one is chosen: its empty state.
@@ -63,7 +63,7 @@ test.describe('Lists of people: a computer', () => {
         // An automatic list: the rule, the note, generations as the people's meta, no ×.
         await d.locator('.pl-row', { hasText: 'Ancestors – Quillon' }).click();
         await expect(d.locator('.pl-badge')).toHaveText('Automatic list');
-        await expect(d.locator('.pl-rule')).toContainText('Based on Ancestors of Quillon Varnholm, all generations');
+        await expect(d.locator('.pl-rule')).toContainText('Based on Ancestors: Quillon Varnholm, all generations');
         await expect(d.locator('.pl-note')).toHaveText('The rule decides the content – nothing is added or removed by hand.');
         await expect(d.locator('.pl-person .pl-meta')).toHaveText(['person of the rule', 'parents', 'parents', 'grandparents', 'grandparents']);
         await expect(d.locator('.pl-x')).toHaveCount(0);
@@ -256,7 +256,7 @@ test.describe('Lists of people: a computer', () => {
         await expect(d.locator('.pl-menu .pl-menu-item')).toHaveText(['Open in Table', 'Rename', 'Duplicate', 'FreezeBecomes fixed with the people it has now', 'Export›', 'Delete']);
         await d.locator('.pl-menu [data-run="freeze"]').click();
         await expect(d.locator('.pl-badge')).toHaveText('Fixed list');
-        await expect(d.locator('.pl-rule')).toContainText('Created from Ancestors of Quillon Varnholm, all generations');
+        await expect(d.locator('.pl-rule')).toContainText('Created from Ancestors: Quillon Varnholm, all generations');
         await expect(d.locator('.pl-note')).toHaveCount(0);
         await expect(people(page)).toHaveCount(5);
         await expect(d.locator('.pl-x')).toHaveCount(5);
@@ -488,5 +488,26 @@ test.describe('Lists of people: a phone', () => {
         expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
         const seg = (await d.locator('.pl-filter').boundingBox())!;
         expect(seg.x + seg.width).toBeLessThanOrEqual(390);
+    });
+});
+
+
+test.describe('Lists of people: the tiles of a checklist', () => {
+    test.use({ viewport: { width: 1440, height: 900 } });
+
+    test('six tiles side by side cut no label ("s vyprávěním" whole, on a second line if need be)', async ({ page }) => {
+        await family(page);
+        await page.evaluate(() => {
+            window.Strom.DataManager.createPersonList({ name: 'Letters to send', dynamic: false, personIds: ['t', 'c', 'y'] as never[], checklist: true });
+            window.Strom.UI.setLanguage('cs' as never);
+        });
+        await openFromMenu(page);
+        const d = dialog(page);
+        await d.locator('.pl-row', { hasText: 'Letters to send' }).click();
+        await expect(d.locator('.pl-tiles--6 .pl-tile')).toHaveCount(6);
+        await expect(d.locator('.pl-tile-k').last()).toHaveText('s vyprávěním');
+        const cut = await d.locator('.pl-tile-k, .pl-tile-v').evaluateAll(els => els
+            .filter(e => e.scrollWidth > e.clientWidth + 1).map(e => e.textContent));
+        expect(cut).toEqual([]);
     });
 });

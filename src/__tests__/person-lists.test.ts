@@ -240,7 +240,7 @@ describe('who is in a list', () => {
         const rule = { kind: 'ancestors' as const, personId: id('gone'), personName: 'Ilsa Quellmayer' };
         expect(listPersonIds(ix, { ...fixed(), dynamic: true, sort: 'gen', rule })).toEqual([]);
         expect(ruleBroken(ix, rule)).toEqual({ kind: 'person', name: 'Ilsa Quellmayer' });
-        expect(ruleLabel(rule, ix)).toBe('Ancestors of Ilsa Quellmayer, all generations');
+        expect(ruleLabel(rule, ix)).toBe('Ancestors: Ilsa Quellmayer, all generations');
     });
 });
 
@@ -595,11 +595,15 @@ describe('the texts', () => {
         expect(strings.lists.toast.addedN(3, 'X')).toBe('Do seznamu „X“ přidány 3 osoby.');
         expect(strings.lists.toast.addedN(5, 'X')).toBe('Do seznamu „X“ přidáno 5 osob.');
         expect(strings.table.act.toListN(2)).toBe('Přidat 2 osoby do seznamu');
-        expect(strings.lists.rule.anc('Ada', 4)).toBe('Předci osoby Ada, do 4 generací');
+        // The name stays in its basic form (no case after "osoby"): "Předci: Jana Malá".
+        expect(strings.lists.rule.anc('Jana Malá', 4)).toBe('Předci: Jana Malá, do 4 generací');
+        expect(strings.lists.rule.des('Jana Malá')).toBe('Potomci: Jana Malá, všechny generace');
         setLanguage('pl');
         expect(strings.lists.toast.filled(5)).toBe('Dodano 5 osób według reguły.');
+        expect(strings.lists.rule.anc('Jana Malá')).toBe('Przodkowie: Jana Malá, wszystkie pokolenia');
         setLanguage('de');
         expect(strings.lists.save.count(1)).toBe('Es wird 1 Person in der Reihenfolge der Tabelle gespeichert.');
+        expect(strings.lists.rule.des('Jana Malá', 2)).toBe('Nachkommen: Jana Malá, bis 2 Generationen');
     });
 
     it('the empty overview names only what a list is for today: the Table and export, no fly-through yet', () => {

@@ -31370,6 +31370,9 @@
         .pl-tile:has(.pl-tile-link) { flex-grow: 1.6; }
         .pl-tile-v { font-size: 17px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .pl-tiles--6 .pl-tile-v { font-size: 15px; }
+        /* Six tiles side by side: a label too long for its tile goes onto a second line instead of being cut ("s vyprávěním"). */
+        .pl-tiles--6 .pl-tile { padding: 8px; }
+        .pl-tiles--6 .pl-tile-k { white-space: normal; text-overflow: clip; overflow-wrap: break-word; hyphens: auto; line-height: 1.25; }
         .pl-tile-k { font-size: 11.5px; color: var(--text-light); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .modal .pl-tile-link { align-self: flex-start; padding: 0; border: 0; background: none; color: var(--warning-text); font-size: 11.5px; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; text-align: left; }
         .pl-people-head { display: flex; align-items: center; gap: 8px; margin-top: 16px; padding-bottom: 6px; border-bottom: 1px solid var(--divider); flex: none; }
