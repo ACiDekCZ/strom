@@ -516,6 +516,42 @@ const following = new Map<HTMLElement, { msg: HTMLElement; ident: string; opts: 
 let followTimer: ReturnType<typeof setInterval> | null = null;
 let followObserver: MutationObserver | null = null;
 
+/**
+ * The states whose element may be drawn anew (locked or working, with an identity): when the page changes, the
+ * state moves to the new element at once, before the page is painted or takes a click (§1.2: no moment at rest
+ * between two redraws, no second start in it). The 400 ms watch of each state stays besides.
+ */
+const moving = new Set<BusyState>();
+
+function followStates(): void {
+    for (const st of moving) {
+        if (st.phase !== 'lock' && st.phase !== 'busy' || st.released) { moving.delete(st); continue; }
+        // Drawn on its row or in a toast: the watch decides (the element is not what shows it).
+        if (st.phase === 'busy' && st.drawnOn !== st.el && st.drawnOn !== null) continue;
+        // Still in the page (a redraw takes it out): nothing to do, and no layout read on every change.
+        if (st.el.isConnected) continue;
+        moveToRedrawn(st);
+    }
+}
+
+function onPageChange(): void {
+    followStates();
+    followMessages();
+}
+
+/** The one observer of the page while a state or a sentence may follow its element. */
+function observePage(): void {
+    if (followObserver || typeof MutationObserver !== 'function' || !document.body) return;
+    followObserver = new MutationObserver(onPageChange);
+    followObserver.observe(document.body, { childList: true, subtree: true });
+}
+
+function stopObservingIfIdle(): void {
+    if (following.size || moving.size) return;
+    followObserver?.disconnect();
+    followObserver = null;
+}
+
 function followMessages(): void {
     for (const [el, f] of following) {
         if (f.msg.dataset.closed || !messages.has(el) || messages.get(el) !== f.msg) { following.delete(el); continue; }
@@ -529,8 +565,7 @@ function followMessages(): void {
     }
     if (!following.size) {
         if (followTimer) { clearInterval(followTimer); followTimer = null; }
-        followObserver?.disconnect();
-        followObserver = null;
+        stopObservingIfIdle();
     }
 }
 
@@ -540,10 +575,7 @@ function follow(el: HTMLElement, msg: HTMLElement, opts: BusyOpts): void {
     if (!ident) return;
     following.set(el, { msg, ident, opts });
     // At once when the page changes (a redraw), and a slow check besides (an observer may be missing).
-    if (!followObserver && typeof MutationObserver === 'function' && document.body) {
-        followObserver = new MutationObserver(followMessages);
-        followObserver.observe(document.body, { childList: true, subtree: true });
-    }
+    observePage();
     followTimer ??= setInterval(followMessages, 400);
 }
 
@@ -726,6 +758,10 @@ function lock(el: HTMLElement, opts: BusyOpts): BusyState {
     el.dataset.busy = 'lock';
     el.addEventListener('click', guard, true);
     el.addEventListener('keydown', guard, true);
+    if (st.ident) {
+        moving.add(st);
+        observePage();
+    }
     if (opts.heavy === 'now') show(el, st);
     else st.showTimer = setTimeout(() => show(el, st), BUSY_SHOW_MS);
     if (opts.long) st.longTimer = setTimeout(() => toToast(el, st), BUSY_LONG_TOAST_MS);
@@ -867,6 +903,7 @@ function drawWordsIn(st: BusyState): void {
 function release(el: HTMLElement, st: BusyState): void {
     if (st.released) return;
     st.released = true;
+    if (moving.delete(st)) stopObservingIfIdle();
     if (st.showTimer) clearTimeout(st.showTimer);
     if (st.watch) clearInterval(st.watch);
     if (st.longTimer) clearTimeout(st.longTimer);

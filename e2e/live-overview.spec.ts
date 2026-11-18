@@ -2760,4 +2760,49 @@ test.describe('Open the research in the overview\'s foot (waiting buttons §3.1)
         await page.evaluate(() => (window.Strom.UI as unknown as { renderResearchOverview: () => void }).renderResearchOverview());
         await expect(msg).toContainText('Did the terminal not open?');
     });
+
+    test('the bridge\'s answers draw the overview anew again and again: its button never at rest between them, no second start', async ({ page }) => {
+        await page.clock.install();
+        await follow(page);
+        await openOverview(page);
+        const sel = '#research-overview [data-action="open-research"]';
+        const open = page.locator(sel);
+        await open.click();
+        await page.clock.fastForward(200);
+        await expect(open).toHaveAttribute('aria-busy', 'true');
+        // Every change of the page seen as it comes (before the page is painted or takes a click): the button in
+        // the overview's foot, a new one after each redraw, is locked and working each time.
+        await page.evaluate((s) => {
+            const w = window as unknown as { __redraws: number; __gaps: string[]; __stop?: boolean };
+            w.__redraws = 0;
+            w.__gaps = [];
+            let last = document.querySelector(s);
+            new MutationObserver(() => {
+                const b = document.querySelector(s);
+                if (!b || w.__stop) return;
+                if (b !== last) { w.__redraws++; last = b; }
+                if (b.getAttribute('aria-busy') !== 'true' || b.getAttribute('aria-disabled') !== 'true') {
+                    w.__gaps.push(`${b.getAttribute('aria-busy')}/${b.getAttribute('aria-disabled')} ${b.textContent}`);
+                }
+            }).observe(document.body, { childList: true, subtree: true, attributes: true });
+        }, sel);
+        // Within the 10 s limit: the bridge asked each second, the overview drawn anew with its answers.
+        for (let i = 0; i < 8; i++) {
+            await page.clock.fastForward(1000);
+            await page.waitForTimeout(40);
+            await expect(open).toHaveAttribute('aria-busy', 'true');
+        }
+        const seen = await page.evaluate(() => {
+            const w = window as unknown as { __redraws: number; __gaps: string[]; __stop?: boolean };
+            w.__stop = true;
+            return { redraws: w.__redraws, gaps: w.__gaps };
+        });
+        expect(seen.redraws).toBeGreaterThanOrEqual(3);
+        expect(seen.gaps).toEqual([]);
+        await expect(open).toContainText('Opening the research…');
+        // A click on the new button meanwhile starts nothing.
+        await open.click({ force: true });
+        expect(await launched(page)).toHaveLength(1);
+        await expect(page.locator('.toast--progress')).toHaveCount(0);
+    });
 });
