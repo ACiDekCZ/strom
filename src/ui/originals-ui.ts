@@ -25,6 +25,7 @@ import { writeHeldOfCode } from '../research-write-held.js';
 import { storedResearchBridge, researchLinksEnabled, announcedResearchScheme } from '../research-device.js';
 import { parseLiveBridge, withAppVersion, researchSchemeUrl } from '../research-link.js';
 import { strings, getCurrentLanguage } from '../strings.js';
+import { runBusy } from './busy.js';
 import { sha256OfBlob, normalizeSha256 } from '../sha256.js';
 import {
     QueuedOriginal, Region, queueKey, fitsBudget, exifOrientation, originalTargets, uploadHeaders, mediaReplyId,
@@ -635,7 +636,12 @@ export const originalsMethods = uiModule({
         row.querySelector('.media-queue-discard-all')?.addEventListener('click', () => { void this.discardAllOriginals(); });
         row.querySelector('.media-queue-undo-btn')?.addEventListener('click', () => { void this.undoDiscardOriginal(); });
         row.querySelector<HTMLButtonElement>('.media-queue-send')?.addEventListener('click', (e) => {
-            if ((e.currentTarget as HTMLElement).dataset.up) void this.researchOriginalsKick().then(() => this.renderOriginalsQueueRow());
+            const btn = e.currentTarget as HTMLElement;
+            // B103: the button's working state until the bridge took the originals (a second click does nothing).
+            if (btn.dataset.up) {
+                void runBusy(btn, () => this.researchOriginalsKick(), { label: strings.busy.sending, kind: 'write', rowOf: row })
+                    .then(() => this.renderOriginalsQueueRow());
+            }
             else this.researchSyncAction('startResearch');
         });
     },

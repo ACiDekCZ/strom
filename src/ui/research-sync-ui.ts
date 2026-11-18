@@ -70,6 +70,9 @@ import { ConflictDecideMode, conflictDecideMode, DecideKind, DecideBody, DecideR
 import { postBridgeRevert, researchShowsOrigin, RevertRequest, RevertResult } from '../research-revert.js';
 import { researchConflictTitle } from './person-research-ui.js';
 import { uiModule } from './module.js';
+import { runBusy, activatedElement, type BusyCtl, type BusyEnd } from './busy.js';
+import { holdLeave, takeLeftPending } from './busy-leave.js';
+import { startTreeLoad, currentTreeLoad } from './tree-load-progress.js';
 import { researchWrittenList } from './research-changes-ui.js';
 import {
     fetchWithTimeout, readStatusPart, readResearchTreeFile, postSync, onComputer, readTree, researchGedcom, researchGedcomExport,
@@ -227,6 +230,26 @@ let polling = false;
 let started = false;
 /** The tree a send is on its way for (one at a time). */
 let sendingTree: TreeId | null = null;
+/**
+ * A send asked by hand, from the click to its end (waiting buttons §1.5): its working state (steps in the
+ * progress toast, the bar's button kept as it is), how it ended. A second start meanwhile does nothing.
+ */
+/** A load of the research's version asked, before its toast (the bridge is asked first): a second click does nothing. */
+let loadAsking = false;
+let pillRedrawTimer: ReturnType<typeof setTimeout> | null = null;
+let handSend: { ctl: BusyCtl; treeId: TreeId; failed: Extract<BusyEnd, { ok: false }> | null; settle: () => void } | null = null;
+
+/** The research answered a send asked by hand and a question follows (a refusal…): its working state ends here. */
+function settleHandSend(treeId: TreeId): void {
+    if (handSend?.treeId === treeId) handSend.settle();
+}
+
+/** The element a send asked by hand shows its state on: the bar's Send when seen, else the click's, else a toast. */
+function sendBusyTarget(el?: HTMLElement | null): HTMLElement {
+    const bar = document.getElementById('research-sync-send');
+    if (bar && bar.isConnected && bar.getClientRects().length > 0) return bar;
+    return el ?? document.createElement('span');
+}
 /** The quiet-time timer of the open tree. */
 let autoTimer: ReturnType<typeof setTimeout> | null = null;
 let autoTimerTree: TreeId | null = null;
@@ -469,6 +492,14 @@ export const researchSyncMethods = uiModule({
         });
         started = true;
         lastActiveTree = DataManager.getCurrentTreeId();
+        // The page was closed while something was written to the research: its result is not known (§2.7).
+        const left = takeLeftPending();
+        if (left) {
+            this.showToast(strings.busy.unknownAfterLeave, Infinity, {
+                closable: true, kind: 'busy-left',
+                action: { label: strings.busy.findOut, run: () => { void this.researchFindOutAfterLeave(); } },
+            });
+        }
         const changed = (): void => {
             fpCache = null;
             mediaFpCache = null;
@@ -1770,7 +1801,41 @@ export const researchSyncMethods = uiModule({
      * it runs (no dialog), else the old way through the terminal. `thenLoad`:
      * load the research's new version once the send is written there.
      */
-    async researchSendNow(opts: { thenLoad?: boolean; treeId?: TreeId; undoAgain?: boolean; previewed?: boolean } = {}): Promise<void> {
+    async researchSendNow(opts: { thenLoad?: boolean; treeId?: TreeId; undoAgain?: boolean; previewed?: boolean } = {}, el?: HTMLElement | null): Promise<void> {
+        const ctx = this.researchSyncLink();
+        if (!ctx || sendingTree || handSend) return;
+        if (opts.treeId && ctx.treeId !== opts.treeId) return;
+        const treeId = ctx.treeId;
+        const before = ctx.link.sent?.at ?? null;
+        const b = strings.busy;
+        // The click's element is taken before anything waits (a menu closes, focus moves).
+        const target = sendBusyTarget(el ?? activatedElement());
+        await runBusy(target, async (ctl) => {
+            let settle = (): void => undefined;
+            const settled = new Promise<void>(resolve => { settle = resolve; });
+            const st: NonNullable<typeof handSend> = { ctl, treeId, failed: null, settle };
+            handSend = st;
+            const run = this.researchSendNowRun(opts);
+            try {
+                // A question after the answer (a refusal, people removed) is the send's end: the
+                // state goes, and that question's own Try again may send again.
+                await Promise.race([run, settled]);
+            } finally {
+                if (handSend === st) handSend = null;
+                run.catch(err => console.warn('Sending to the research failed', err));
+            }
+            if (st.failed) {
+                ctl.end(st.failed);
+                return;
+            }
+            const sent = TreeManager.getTreeMetadata(treeId)?.research?.sent;
+            const written = !!sent && sent.state === 'written' && sent.at !== before;
+            // The result's own toast tells the rest: the progress toast just goes.
+            ctl.end(written ? { ok: true, done: b.done.written, summary: null } : { ok: true, summary: null });
+        }, { label: b.sending, kind: 'tree', timeoutMs: SEND_TIMEOUT_MS + 15_000, long: { title: b.sendTitle }, endToast: true, stepsInToast: true, toastWhenGone: true });
+    },
+
+    async researchSendNowRun(opts: { thenLoad?: boolean; treeId?: TreeId; undoAgain?: boolean; previewed?: boolean } = {}): Promise<void> {
         const ctx = this.researchSyncLink();
         if (!ctx || sendingTree) return;
         // Asked for one tree: never send another (the open tree changed meanwhile).
@@ -1832,7 +1897,7 @@ export const researchSyncMethods = uiModule({
         if (!after || after.refused) return;
         const fps = this.researchSyncFingerprints(treeId, after);
         if (fps.matchesBase || fps.current === after.sent?.fingerprint) return;
-        await this.researchSendNow({ treeId });
+        await this.researchSendNowRun({ treeId });
     },
 
     /**
@@ -1931,6 +1996,8 @@ export const researchSyncMethods = uiModule({
         // Its version as it is now: one the poll has not seen yet (a person added there just before)
         // would read as this tree's own after the write, and never be offered to load (R3 of beta.56).
         const polledHead = runtime.get(link.id)?.status?.head ?? '';
+        const hand = !opts.auto && handSend?.treeId === treeId ? handSend : null;
+        hand?.ctl.step(strings.busy.sendCheck);
         const head = (opts.keepalive ? null : await this.askResearchBridge(link.id, PING_TIMEOUT_MS))?.head || polledHead;
         // Another send started while it was asked: one at a time.
         if (sendingTree) return;
@@ -2005,6 +2072,13 @@ export const researchSyncMethods = uiModule({
             patchResearchAutoState(treeId, { leftSend: { fingerprint: sentFp, at: new Date().toISOString(), head,
                 ...(ownBase ? { ownBase: true as const } : {}), ...(carriesTitles ? { titles: true as const } : {}), ...(version ? { version } : {}) } });
         }
+        if (hand) {
+            const n = this.researchChangesCount();
+            const k = n ? n.persons + n.other : 0;
+            hand.ctl.step(k > 0 ? strings.busy.sendWriting(k) : strings.busy.sendTitle);
+        }
+        // Leaving the page while it is written asks first, and a note says its result is not known (§2.7).
+        const releaseLeave = opts.auto ? null : holdLeave('send', treeId);
         let res: Response;
         try {
             res = await postSync(again ? `${bridge.base}/sync/${encodeURIComponent(again.intake!)}/again` : researchSyncUrl(bridge.base, declaresMedia),
@@ -2023,14 +2097,22 @@ export const researchSyncMethods = uiModule({
                 this.refreshResearchSyncUi();
             } else {
                 // The research answered before, so it takes sends straight: not the old way through its
-                // terminal, but said what happened, with the way to try again (B6 of the rc.22 round).
+                // terminal, but said what happened, with the way to try again and the file to take (1e).
                 this.refreshResearchSyncUi();
-                this.showToast(err instanceof DOMException && err.name === 'AbortError' ? s.sendNoAnswer : s.sendUnreachable, Infinity, {
-                    closable: true,
-                    action: { label: s.retry, run: () => { void this.researchSendTree(treeId, { undoAgain: !!again }); } },
-                });
+                const text = err instanceof DOMException && err.name === 'AbortError' ? s.sendNoAnswer : s.sendUnreachable;
+                const retry = () => { void this.researchSendTree(treeId, { undoAgain: !!again }); };
+                const alt = { label: strings.research.sendExportGedcom, run: () => { void this.downloadResearchGedcom(treeId); } };
+                if (hand) hand.failed = { ok: false, kind: err instanceof DOMException && err.name === 'AbortError' ? 'timeout' : 'network', text, title: strings.busy.sendFailed, retry, alt };
+                else {
+                    this.showToast(text, Infinity, {
+                        closable: true, title: strings.busy.sendFailed,
+                        action: { label: s.retry, run: retry }, more: alt,
+                    });
+                }
             }
             return;
+        } finally {
+            releaseLeave?.();
         }
         // What it did not write keeps its codes only from a research that says it sends them.
         const replyFeatures = this.researchStatusOf(link.id)?.features;
@@ -2079,7 +2161,10 @@ export const researchSyncMethods = uiModule({
             TreeManager.patchResearchLink(treeId, { refused: { reason: held.said, at: new Date().toISOString(), held } });
             this.refreshResearchSyncUi();
             if (opts.auto) this.tellResearchWriteHeld(treeId, held);
-            else await this.showResearchWriteHeld(held);
+            else {
+                settleHandSend(treeId);
+                await this.showResearchWriteHeld(held);
+            }
             return;
         }
         if (!res.ok || !reply.ok) {
@@ -2090,7 +2175,10 @@ export const researchSyncMethods = uiModule({
             TreeManager.patchResearchLink(treeId, { refused: { reason: '', at: new Date().toISOString() } });
             this.refreshResearchSyncUi();
             if (opts.auto) this.tellResearchAutoStopped(treeId, why);
-            else await this.showResearchRefused(why, { ...opts, details: reply.reason });
+            else {
+                settleHandSend(treeId);
+                await this.showResearchRefused(why, { ...opts, details: reply.reason });
+            }
             return;
         }
         // Written again: what the research held back of the files may go too.
@@ -2211,6 +2299,7 @@ export const researchSyncMethods = uiModule({
             // This send itself was written: remembered and its conflicts told like any write (nothing loads —
             // the copy and the research differ by the send taken back).
             if (written && reply.changes !== 0) await this.researchAfterWrite(treeId, sent, known);
+            settleHandSend(treeId);
             await this.tellResearchRemovedAsks(treeId, !!opts.auto);
             return;
         }
@@ -2241,6 +2330,7 @@ export const researchSyncMethods = uiModule({
             } else {
                 await this.researchAfterWrite(treeId, sent, known);
             }
+            settleHandSend(treeId);
             await this.tellResearchRemovedAsks(treeId, !!opts.auto);
         } else if (writing) {
             if (!opts.auto) this.showToast(strings.sync.markWriting, 4000);
@@ -2519,12 +2609,20 @@ export const researchSyncMethods = uiModule({
      * writes at once: changes it lacks go first and the version loads after
      * (no question — the write cannot lose them).
      */
-    async researchLoadNewer(opts: { afterSend?: boolean } = {}): Promise<void> {
+    async researchLoadNewer(opts: { afterSend?: boolean } = {}, el?: HTMLElement | null): Promise<void> {
         const ctx = this.researchSyncLink();
-        if (!ctx) return;
+        // One load at a time (waiting buttons §2.3): a second click while one goes does nothing.
+        if (!ctx || loadAsking || currentTreeLoad()) return;
         const { treeId, link } = ctx;
         const bridge = parseLiveBridge(storedResearchBridge(link.id)?.base);
-        if (bridge && await this.researchBridgeReady(link.id)) {
+        loadAsking = true;
+        let ready = false;
+        try {
+            ready = !!bridge && await this.researchBridgeReady(link.id);
+        } finally {
+            loadAsking = false;
+        }
+        if (bridge && ready) {
             if (!opts.afterSend && this.researchAutoOn(link) && !this.researchReviewOn(link.id) && !link.refused) {
                 const fps = this.researchSyncFingerprints(treeId, link);
                 if (!fps.matchesBase && fps.current !== link.sent?.fingerprint) {
@@ -2534,11 +2632,13 @@ export const researchSyncMethods = uiModule({
             }
             // (Changes the last send left unwritten would go: the load dialog says so, V-J.)
             // (The very same tree under a new head — a write of the family's material — is only taken.)
-            await this.importResearchFromUrl(`${bridge.base}/tree.ged`, opts.afterSend ? { afterSend: treeId } : { takeSame: true });
+            if (currentTreeLoad()) return;
+            const load = startTreeLoad({ el: el ?? null, treeId, retry: () => { void this.researchLoadNewer(opts); } });
+            await this.importResearchFromUrl(`${bridge.base}/tree.ged`, { ...(opts.afterSend ? { afterSend: treeId } : { takeSame: true }), load });
             return;
         }
         const url = this.activeResearchLink('app');
-        if (url) this.launchResearchLink(url, 'version');
+        if (url) this.launchResearchLink(url, 'version', el ?? undefined);
     },
 
     /** A send taken back that cannot go again as it is: why, and "Load the research's version" (the undo kept). */
@@ -2561,7 +2661,9 @@ export const researchSyncMethods = uiModule({
             this.showToast(strings.sync.noIdsFailed, 6000);
             return;
         }
-        await this.importResearchFromUrl(`${bridge.base}/tree.ged`, { plainAsk: true });
+        if (currentTreeLoad()) return;
+        const load = startTreeLoad({ treeId: ctx.treeId, retry: () => { void this.researchAcceptUndo(); } });
+        await this.importResearchFromUrl(`${bridge.base}/tree.ged`, { plainAsk: true, load });
         this.refreshResearchSyncUi();
     },
 
@@ -2631,23 +2733,25 @@ export const researchSyncMethods = uiModule({
         const ctx = this.researchSyncLink();
         if (!ctx) return;
         const keepMenu = action === 'cancelLoad';
+        // The element of the click, before the menu closes (its working state, or a toast for it).
+        const el = activatedElement();
         if (!keepMenu) this.closeActionsMenu();
         switch (action) {
-            case 'send': case 'retry': void this.researchSendNow(); break;
+            case 'send': case 'retry': void this.researchSendNow({}, el); break;
             // "Send again" on a send taken back writes that send again (`/again`); on a discarded one, the changes go again.
-            case 'sendAgain': void this.researchSendNow({ undoAgain: ctx.link.sent?.state === 'undone' }); break;
+            case 'sendAgain': void this.researchSendNow({ undoAgain: ctx.link.sent?.state === 'undone' }, el); break;
             case 'acceptUndo': void this.researchAcceptUndo(); break;
             case 'sealTakeOver': {
                 const url = this.activeResearchLink('seal');
                 if (url) this.launchResearchLink(url);
                 break;
             }
-            case 'sendThenLoad': void this.researchSendNow({ thenLoad: true }); break;
+            case 'sendThenLoad': void this.researchSendNow({ thenLoad: true }, el); break;
             case 'showChanges': this.showResearchChanges('send'); break;
             case 'showChangesFirst': this.showResearchChanges('send', { confirm: true }); break;
             case 'showOriginals': this.showOriginalsQueue(); break;
             case 'showWritten': this.showResearchChanges('written'); break;
-            case 'loadNewer': void this.researchLoadNewer(); break;
+            case 'loadNewer': void this.researchLoadNewer({}, el); break;
             case 'reload': window.location.reload(); break;
             case 'cancelLoad': this.researchCancelThenLoad(); break;
             case 'startResearch': {
@@ -3527,12 +3631,17 @@ export const researchSyncMethods = uiModule({
         };
         if (kind === 'none' || !ctx) { hide(); return; }
         const set = (cls: string, html: string, title = ''): void => {
+            const full = html + (note ? `<div class="research-sync-note" role="status">${note.html}</div>` : '');
+            // A button of the bar in its working state or its ✓: redrawn after it (waiting buttons §1.5).
+            if (pill.dataset.html !== full && pill.querySelector('[data-busy="lock"], [data-busy="busy"], [data-busy="done"]')) {
+                if (!pillRedrawTimer) pillRedrawTimer = setTimeout(() => { pillRedrawTimer = null; this.renderResearchSyncPill(); }, 300);
+                return;
+            }
             pill.onclick = null;
             pill.style.display = '';
             pill.className = `storage-pill research-sync-pill ${cls}`;
             if (title) pill.title = title;
             else pill.removeAttribute('title');
-            const full = html + (note ? `<div class="research-sync-note" role="status">${note.html}</div>` : '');
             if (pill.dataset.html !== full) {
                 pill.innerHTML = full;
                 pill.dataset.html = full;
@@ -3641,7 +3750,8 @@ export const researchSyncMethods = uiModule({
                     + this.researchSendMoreHtml(true));
                 return;
             }
-            const busy = sendingTree === ctx.treeId;
+            // A send asked by hand keeps the button as it is: its working state is on it (runBusy).
+            const busy = sendingTree === ctx.treeId && !handSend;
             // Split: "Send to research | 3 ⌄", the second part shows who changed (A2).
             const more = this.researchSendMoreHtml(busy);
             set(`is-send${more.startsWith('<button') ? ' is-split' : ''}`, `<button type="button" class="research-sync-send" id="research-sync-send"${busy ? ' disabled aria-busy="true"' : ''}`
@@ -3699,6 +3809,13 @@ export const researchSyncMethods = uiModule({
     },
 
     /** The pill (its state, the mark): the research menu, focus back here when it closes. */
+    /** "Find out" after a page closed mid-write: the bridge asked now, its state shown in the research menu. */
+    async researchFindOutAfterLeave(): Promise<void> {
+        await this.pollResearchBridge({ reschedule: false });
+        this.refreshResearchSyncUi();
+        if (this.researchSyncLink()) this.openResearchSyncMenu();
+    },
+
     openResearchSyncMenu(): void {
         this.closeResearchSyncNote();
         if (this.isResearchMenuOpen()) {

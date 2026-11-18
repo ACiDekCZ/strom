@@ -13,6 +13,7 @@
  * missing. Bridge text is set as text, never HTML. Only while following.
  */
 
+import { runBusy, activatedElement, isBusy } from './busy.js';
 import { researchOpenSrText, setResearchActionLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
@@ -3006,6 +3007,16 @@ export const researchOverviewMethods = uiModule({
     /** A person from the overview: centred in the tree (the sheet closes first). */
     overviewShowPerson(id: PersonId, mode: Mode): void {
         if (!DataManager.getPerson(id)) return;
+        // B14: the clicked element's working state painted before the layout is computed (waiting buttons §2.1).
+        const el = activatedElement();
+        if (el && !isBusy(el)) {
+            void runBusy(el, async () => { this.overviewShowPersonNow(id, mode); }, { heavy: 'now', label: strings.busy.layout });
+            return;
+        }
+        this.overviewShowPersonNow(id, mode);
+    },
+
+    overviewShowPersonNow(id: PersonId, mode: Mode): void {
         // Looking at someone else: the user has the tree.
         this.pauseLiveFollow();
         if (mode === 'sheet') this.closeResearchOverview();

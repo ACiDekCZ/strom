@@ -23,12 +23,14 @@ export type BusyErrKind = 'error' | 'busy' | 'offline' | 'timeout' | 'notfound' 
 
 export type BusyEnd =
     /** `done`: the ✓ words (2 s), only where the result is not seen otherwise; `announce`: said to the screen reader. */
-    | { ok: true; done?: string; announce?: string }
+    /** `summary`: the progress toast's summary instead of `done` (null: it just goes, another toast tells the result). */
+    | { ok: true; done?: string; announce?: string; summary?: string | null }
     /**
      * `neutral`: not an error (a question such as "Did the terminal not open?", `role=status`, no error colour);
      * `hint`: a line under it; `retry` draws "Try again", `alt` one more action.
      */
-    | { ok: false; kind: BusyErrKind; text: string; retry?: () => void; alt?: { label: string; run: () => void }; hint?: string; neutral?: boolean };
+    /** `title`: a toast's heading over the text (the end in a toast). */
+    | { ok: false; kind: BusyErrKind; text: string; retry?: () => void; alt?: { label: string; run: () => void }; hint?: string; neutral?: boolean; title?: string };
 
 /** What an action waits for, and so how long at most (§10.3). */
 export type BusyKind = 'bridge' | 'write' | 'tree' | 'terminal' | 'queueWork' | 'local' | 'satellite' | 'network';
@@ -53,6 +55,10 @@ export interface BusyOpts {
     heavy?: boolean | 'now';
     /** The state goes to a toast when the element and its row are gone (default: true for a long action or a terminal). */
     toastWhenGone?: boolean;
+    /** A failed end goes to a toast even with the element seen (a toolbar has no room for a sentence, 1e). */
+    endToast?: boolean;
+    /** The steps only in the progress toast: the element keeps its words (a toolbar button, 2d). */
+    stepsInToast?: boolean;
 }
 
 export interface BusyCtl {
@@ -107,6 +113,8 @@ interface BusyState {
     /** The ✓ look (a structure made for this run gets its ✓ part). */
     drawDone: ((text: string) => void) | null;
     released: boolean;
+    /** The last step said (the progress toast starts with it). */
+    lastStep: { step: string; k?: number; n?: number; size?: string } | null;
 }
 
 const states = new WeakMap<HTMLElement, BusyState>();
@@ -416,8 +424,10 @@ export function clearBusyMessage(el: HTMLElement): void {
 /** The end of an element gone as a toast: an error with ✕ and its action, never closing by itself (§10.1 b). */
 function endToast(el: HTMLElement, end: Extract<BusyEnd, { ok: false }>): void {
     const action = end.retry ? { label: strings.busy.retry, run: end.retry } : end.alt;
+    const more = end.retry ? end.alt : undefined;
     const text = end.hint ? `${end.text} ${end.hint}` : end.text;
-    const t = showToast(text, Infinity, { alert: !end.neutral, closable: true, kind: 'busy-end', ...(action ? { action } : {}) });
+    const t = showToast(text, Infinity, { alert: !end.neutral, closable: true, kind: 'busy-end', ...(action ? { action } : {}),
+        ...(more ? { more } : {}), ...(end.title ? { title: end.title } : {}) });
     endToasts.set(el, t);
 }
 
@@ -458,7 +468,7 @@ function lock(el: HTMLElement, opts: BusyOpts): BusyState {
         showTimer: null, watch: null, longTimer: null, doneTimer: null,
         drawnOn: null, toast: null,
         prevDisabled: el.getAttribute('aria-disabled'), prevBusy: el.getAttribute('aria-busy'),
-        guard, undraw: null, drawDone: null, released: false,
+        guard, undraw: null, drawDone: null, released: false, lastStep: null,
     };
     const prev = states.get(el);
     if (prev?.doneTimer) { clearTimeout(prev.doneTimer); prev.undraw?.(); }
@@ -481,7 +491,7 @@ function goneToToast(st: BusyState): boolean {
 function toToast(el: HTMLElement, st: BusyState): void {
     if (st.toast || st.phase !== 'busy' && st.phase !== 'lock') return;
     const long = st.opts.long ?? { title: st.label };
-    st.toast = showProgressToast(long);
+    st.toast = showProgressToast(long, st.lastStep ?? undefined);
     void el;
 }
 
@@ -562,7 +572,7 @@ async function finish(el: HTMLElement, st: BusyState, end: BusyEnd): Promise<voi
     if (end.ok) {
         const said = end.announce ?? end.done;
         if (st.toast) {
-            st.toast.done(end.done ?? end.announce);
+            st.toast.done(end.summary !== undefined ? end.summary ?? undefined : end.done ?? end.announce);
             st.toast = null;
             toRest(el, st);
         } else if (end.done && where && st.drawDone) {
@@ -581,11 +591,12 @@ async function finish(el: HTMLElement, st: BusyState, end: BusyEnd): Promise<voi
     }
     if (st.toast) {
         const action = end.retry ? { label: strings.busy.retry, run: end.retry } : end.alt;
-        st.toast.fail(end.hint ? `${end.text} ${end.hint}` : end.text, action);
+        const more = end.retry ? end.alt : undefined;
+        st.toast.fail(end.hint ? `${end.text} ${end.hint}` : end.text, action, { ...(end.title ? { title: end.title } : {}), ...(more ? { more } : {}) });
         st.toast = null;
         return;
     }
-    const anchor = seen(el) ? el : st.opts.rowOf instanceof HTMLElement && seen(st.opts.rowOf) ? st.opts.rowOf : null;
+    const anchor = st.opts.endToast ? null : seen(el) ? el : st.opts.rowOf instanceof HTMLElement && seen(st.opts.rowOf) ? st.opts.rowOf : null;
     if (anchor) showBusyMessage(seen(el) ? el : anchor, end, st.opts);
     else endToast(el, end);
 }
@@ -602,8 +613,9 @@ export async function runBusy<T>(el: HTMLElement, fn: (ctl: BusyCtl) => Promise<
     const ctl: BusyCtl = {
         signal: ac.signal,
         step(text, k, n, size) {
+            st.lastStep = { step: text, ...(k !== undefined ? { k } : {}), ...(n !== undefined ? { n } : {}), ...(size !== undefined ? { size } : {}) };
             if (st.toast) st.toast.update({ step: text, k, n, size });
-            else if (st.drawnOn === el) {
+            else if (st.drawnOn === el && !opts.stepsInToast) {
                 const busy = el.querySelector<HTMLElement>(':scope > .bl > .b-busy');
                 if (busy) busy.replaceChildren(busy.querySelector('.busy-spin') ?? spinEl(), document.createTextNode(text));
             }

@@ -27,6 +27,8 @@ export interface ToastOptions {
     kind?: string;
     /** `research`: the action opens the research's terminal (its mark); `ai`: an agent works there too. */
     action?: { label: string; run: () => void; research?: boolean; ai?: boolean };
+    /** A second action beside `action` (e.g. "Export GEDCOM" beside "Try again"). */
+    more?: { label: string; run: () => void };
     hold?: boolean;
     /** A notice to be read: it stands 3 s at least before a newer toast takes its place (round 7 §53). */
     notice?: boolean;
@@ -81,22 +83,24 @@ function fillToast(toast: HTMLElement, message: string, opts: ToastOptions, onAc
     } else {
         toast.appendChild(document.createTextNode(message));
     }
-    if (opts.action) {
-        const { label, run, research, ai } = opts.action;
-        const act = document.createElement('button');
-        act.type = 'button';
-        act.className = 'toast-action';
-        if (research) setResearchOpenLabel(act, label, { ai });
-        else act.textContent = label;
-        act.onclick = () => {
-            fadeOut(toast);
-            onAction?.();
-            run();
-        };
+    const acts = [opts.action, opts.more].filter((a): a is NonNullable<ToastOptions['action']> => !!a);
+    if (acts.length) {
         // In the group of actions: an "Undo" or "↩ Back" riding along joins it, the group wraps whole
         const actions = document.createElement('span');
         actions.className = 'toast-actions';
-        actions.appendChild(act);
+        for (const { label, run, research, ai } of acts) {
+            const act = document.createElement('button');
+            act.type = 'button';
+            act.className = 'toast-action';
+            if (research) setResearchOpenLabel(act, label, { ai });
+            else act.textContent = label;
+            act.onclick = () => {
+                fadeOut(toast);
+                onAction?.();
+                run();
+            };
+            actions.appendChild(act);
+        }
         toast.appendChild(actions);
     }
     if (opts.closable) {
@@ -217,6 +221,8 @@ export interface ProgressStep {
     size?: string;
     /** 0–100: a bar with that share; null: a bar of unknown share; absent: the spinner. */
     percent?: number | null;
+    /** false: Cancel goes (it works only in a part of the action, e.g. while a file downloads). */
+    cancel?: boolean;
 }
 
 export interface ProgressToastHandle {
@@ -225,8 +231,8 @@ export interface ProgressToastHandle {
     update(step: ProgressStep & { title?: string }): void;
     /** Done: a summary with ✓ for 4 s (`role=status`); without a summary it just goes. */
     done(summary?: string): void;
-    /** It failed: the words as an alert, ✕ and the action; it does not go by itself. */
-    fail(text: string, action?: { label: string; run: () => void }): void;
+    /** It failed: the words as an alert (a title over them), ✕ and the actions; it does not go by itself. */
+    fail(text: string, action?: { label: string; run: () => void }, extra?: { title?: string; more?: { label: string; run: () => void } }): void;
     /** It goes now. */
     close(): void;
 }
@@ -290,14 +296,20 @@ export function showProgressToast(opts: LongOpts, first: ProgressStep = {}): Pro
         b.onclick = run;
         return b;
     };
-    if (opts.cancel) actions.appendChild(button(strings.buttons.cancel, () => opts.cancel?.()));
+    const cancelBtn = opts.cancel ? button(strings.buttons.cancel, () => opts.cancel?.()) : null;
+    if (cancelBtn) {
+        cancelBtn.dataset.act = 'cancel';
+        actions.appendChild(cancelBtn);
+    }
     if (opts.show) actions.appendChild(button(strings.busy.show, () => opts.show?.()));
 
     const draw = (): void => {
         if (ended) return;
         head.textContent = title;
         const elapsed = Date.now() - started;
-        sub.textContent = progressSubLine(step, elapsed);
+        const line = progressSubLine(step, elapsed);
+        // §2.6: the lock on edits said with the step ("1.4 MB of 3.2 MB · edits wait for the load").
+        sub.textContent = opts.lockEdits ? [line, opts.lockEdits].filter(Boolean).join(' · ') : line;
         sub.hidden = sub.textContent === '';
         const longAfter = Math.max(2 * (opts.usualMs ?? 0), TAKING_LONG_MIN_MS);
         long.textContent = elapsed >= longAfter ? strings.busy.takingLong : '';
@@ -314,7 +326,8 @@ export function showProgressToast(opts: LongOpts, first: ProgressStep = {}): Pro
             spin.setAttribute('aria-hidden', 'true');
             lead.replaceChildren(spin);
         }
-        actions.hidden = actions.childElementCount === 0;
+        if (cancelBtn) cancelBtn.hidden = step.cancel === false;
+        actions.hidden = ![...actions.children].some(c => !(c as HTMLElement).hidden);
     };
     draw();
     const ticker = setInterval(draw, 1000);
@@ -347,10 +360,11 @@ export function showProgressToast(opts: LongOpts, first: ProgressStep = {}): Pro
             toast.setAttribute('role', 'status');
             setHide(toast, SUMMARY_MS, {});
         },
-        fail(text, action) {
+        fail(text, action, extra) {
             if (ended && !toast.isConnected) return;
             finish();
-            fillToast(toast, text, { alert: true, closable: true, kind: 'progress', ...(action ? { action } : {}) });
+            fillToast(toast, text, { alert: true, closable: true, kind: 'progress', ...(action ? { action } : {}),
+                ...(extra?.title ? { title: extra.title } : {}), ...(extra?.more ? { more: extra.more } : {}) });
         },
         close() {
             finish();

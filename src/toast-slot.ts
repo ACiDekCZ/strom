@@ -295,6 +295,8 @@ function keyOf(t: HTMLElement): HTMLElement {
 function toBeRead(t: HTMLElement): boolean {
     if (t.classList.contains('undo-toast')) return true;
     if (!t.classList.contains('toast')) return lenders.some(l => l.kind === 'focus' && l.el === t);
+    // A progress toast still running is never replaced (a message shows beside it): nothing to wait for.
+    if (t.classList.contains('toast--progress') && t.dataset.ended === undefined) return false;
     return t.dataset.notice !== undefined || t.querySelector(':scope > .toast-actions > .toast-action') !== null;
 }
 

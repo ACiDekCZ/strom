@@ -10279,6 +10279,17 @@ const stringsEN = {
         tilesFailed: 'The map tiles did not load.',
         fileUnreadable: 'The file cannot be read: it is neither GEDCOM nor a Strom backup.',
         pickOther: 'Choose another file',
+        /** A long send's progress toast (2d). */
+        sendTitle: 'Sending to the research…',
+        sendCheck: 'Checking the version',
+        sendWriting: (n: number) => n === 1 ? 'Writing 1 change' : `Writing ${n} changes`,
+        sendFailed: 'Writing to the research did not work.',
+        /** Loading the research's version (2e). */
+        loadFailed: 'The research version could not be loaded.',
+        treeUnchanged: 'The tree stays unchanged.',
+        editsWaitShort: 'edits wait for the load',
+        mb: (x: string) => `${x} MB`,
+        sizeOf: (a: string, b: string) => `${a} of ${b}`,
     },
 };
 
@@ -20150,6 +20161,15 @@ const stringsCZ: StringsType = {
         tilesFailed: 'Mapové podklady se nenačetly.',
         fileUnreadable: 'Soubor nejde přečíst: není to GEDCOM ani záloha Stromu.',
         pickOther: 'Vybrat jiný soubor',
+        sendTitle: 'Posílá se do výzkumu…',
+        sendCheck: 'Kontroluje se verze',
+        sendWriting: (n: number) => n === 1 ? 'Zapisuje se 1 změna' : n >= 2 && n <= 4 ? `Zapisují se ${n} změny` : `Zapisuje se ${n} změn`,
+        sendFailed: 'Do výzkumu se nepodařilo zapsat.',
+        loadFailed: 'Verzi výzkumu se nepodařilo načíst.',
+        treeUnchanged: 'Strom zůstal beze změny.',
+        editsWaitShort: 'úpravy počkají na načtení',
+        mb: (x: string) => `${x} MB`,
+        sizeOf: (a: string, b: string) => `${a} z ${b}`,
     },
 };
 
@@ -29941,6 +29961,15 @@ const stringsDE: StringsType = {
         tilesFailed: 'Die Kartenkacheln wurden nicht geladen.',
         fileUnreadable: 'Die Datei lässt sich nicht lesen: weder GEDCOM noch eine Strom-Sicherung.',
         pickOther: 'Andere Datei wählen',
+        sendTitle: 'Wird an die Forschung gesendet…',
+        sendCheck: 'Version wird geprüft',
+        sendWriting: (n: number) => n === 1 ? '1 Änderung wird geschrieben' : `${n} Änderungen werden geschrieben`,
+        sendFailed: 'Das Schreiben in die Forschung ist fehlgeschlagen.',
+        loadFailed: 'Die Version der Forschung konnte nicht geladen werden.',
+        treeUnchanged: 'Der Stammbaum bleibt unverändert.',
+        editsWaitShort: 'Änderungen warten auf das Laden',
+        mb: (x: string) => `${x} MB`,
+        sizeOf: (a: string, b: string) => `${a} von ${b}`,
     },
 };
 

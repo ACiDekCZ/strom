@@ -73,6 +73,7 @@ import { interleaveHistory } from '../history.js';
 import { storyWithDraft } from './story-compare-ui.js';
 import { offeredDetails, resetDetailGroup, renderAgeCheck, ageBirthDate, eventDetailLine } from './event-details-ui.js';
 import { bindDeceasedAutoTick } from './deceased-autotick.js';
+import { TreeEditLock } from './tree-edit-lock.js';
 
 /**
  * Delete person sits in the footer, except on a phone (T24): there the footer
@@ -1811,6 +1812,8 @@ export const personModalMethods = uiModule({
     },
 
     savePerson(): void {
+        // The tree is being replaced (a load of the research's version): the edit waits, the dialog stays (§2.6).
+        if (TreeEditLock.refuse()) return;
         const firstNameInput = document.getElementById('input-firstname') as HTMLInputElement;
         const lastNameInput = document.getElementById('input-lastname') as HTMLInputElement;
         const genderSelect = document.getElementById('input-gender') as HTMLSelectElement;

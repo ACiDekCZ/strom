@@ -7,6 +7,7 @@
  * matches the tree's tie (another path moved the base) is not used.
  */
 
+import { runBusy } from './busy.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
@@ -1019,9 +1020,12 @@ export const researchChangesMethods = uiModule({
             if (d.person || d.couple) {
                 // A person or a couple: the tree centred on it (a couple on its first partner), the panel closed.
                 const id = (d.person ?? d.couple) as PersonId;
-                this.closeResearchChanges();
-                TreeRenderer.setFocus(id);
-                ZoomPan.centerOnPerson(id);
+                // The row's working state painted before the layout is computed (waiting buttons §2.1, A63).
+                void runBusy(btn, async () => {
+                    this.closeResearchChanges();
+                    TreeRenderer.setFocus(id);
+                    ZoomPan.centerOnPerson(id);
+                }, { heavy: 'now', label: strings.busy.layout });
             } else if (d.source) {
                 // A source: its viewer over the panel, which stays; focus back on the row once the viewer closes.
                 this.showSourceViewer(d.source, null);
@@ -1061,18 +1065,10 @@ export const researchChangesMethods = uiModule({
         panel.querySelector<HTMLButtonElement>('[data-act="send"]')?.addEventListener('click', (e) => {
             const btn = e.currentTarget as HTMLButtonElement;
             if (panel.querySelector<HTMLInputElement>('#research-changes-skip')?.checked) noteResearchSendPreviewSkipped(ctx.treeId, true);
-            // Seen what goes: Send here sends ("Sending…" until the research answers, then the toast tells).
-            if (btn.classList.contains('primary')) {
-                btn.disabled = true;
-                btn.textContent = s.sending;
-                panel.querySelectorAll<HTMLInputElement>('input, [data-act="close"]').forEach(el => { el.disabled = true; });
-                void this.researchSendNow({ previewed: true }).finally(() => {
-                    if (document.getElementById(PANEL_ID) === panel) this.closeResearchChanges();
-                });
-                return;
-            }
+            // Seen what goes: Send here sends; the panel goes and the bar's Send (or a toast) carries the
+            // working state until the research answers (waiting buttons §1.5, A60).
             this.closeResearchChanges();
-            void this.researchSendNow({ previewed: true });
+            void this.researchSendNow({ previewed: true }, btn);
         });
         panel.querySelector('[data-act="loadNewer"]')?.addEventListener('click', () => {
             this.closeResearchChanges();

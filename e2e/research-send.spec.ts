@@ -91,8 +91,9 @@ test.describe('send changes back to the research', () => {
         await expect(dialog(page)).toContainText('Send the changes of the tree “Fíškovi” to the research “Fíškovi”?');
         expect(posts).toHaveLength(0);   // nothing goes before the confirmation
         await dialog(page).getByRole('button', { name: 'Send' }).click();
-        await expect(dialog(page)).toContainText('Sent. Confirm the changes in the research');
-        await dialog(page).getByRole('button', { name: 'OK' }).click();
+        // The result in the send's progress toast, no dialog to dismiss (waiting buttons §2.3).
+        await expect(page.locator('.toast--progress')).toContainText('Sent. Confirm the changes in the research');
+        await expect(dialog(page)).not.toHaveClass(/active/);
         await done;
 
         expect(posts).toHaveLength(1);
@@ -146,7 +147,7 @@ test.describe('send changes back to the research', () => {
         // The tree being sent is the one on screen behind the dialog.
         await expect(page.locator('.tree-switcher-btn .tree-name')).toHaveText('Fíškovi – pokus');
         await dialog(page).getByRole('button', { name: 'Send' }).click();
-        await dialog(page).getByRole('button', { name: 'OK' }).click();
+        await expect(page.locator('.toast--progress')).toContainText('Sent.');
         await done;
         expect(posts).toHaveLength(1);
     });
@@ -165,8 +166,8 @@ test.describe('send changes back to the research', () => {
         await bridge(page, { status: 409, body: { error: 'Výzkum mezitím změnil jiný agent' } });
         const refused = send(page);
         await dialog(page).getByRole('button', { name: 'Send' }).click();
-        await expect(dialog(page)).toContainText('The research did not accept the changes: Výzkum mezitím změnil jiný agent');
-        await dialog(page).getByRole('button', { name: 'OK' }).click();
+        await expect(page.locator('.toast--progress')).toContainText('The research did not accept the changes: Výzkum mezitím změnil jiný agent');
+        await expect(page.locator('.toast--progress').getByRole('button', { name: 'Export GEDCOM' })).toBeVisible();
         await refused;
 
         let requested = false;
@@ -183,7 +184,7 @@ test.describe('send changes back to the research', () => {
         await expect(dialog(page)).toContainText('Send the changes of the tree “Fíškovi”');
         expect(page.url()).not.toContain('send=');
         await dialog(page).getByRole('button', { name: 'Send' }).click();
-        await expect(dialog(page)).toContainText('Sent.');
+        await expect(page.locator('.toast--progress')).toContainText('Sent.');
         expect(posts).toHaveLength(1);
     });
 
@@ -208,7 +209,7 @@ test.describe('send changes back to the research', () => {
             .__launch({ targetURL: `${location.origin}/strom.html?send=${encodeURIComponent(b)}`, files: [] }), BRIDGE);
         await expect(dialog(page)).toContainText('Send the changes of the tree “Fíškovi”');
         await dialog(page).getByRole('button', { name: 'Send' }).click();
-        await expect(dialog(page)).toContainText('Sent.');
+        await expect(page.locator('.toast--progress')).toContainText('Sent.');
         expect(posts).toHaveLength(1);
     });
 

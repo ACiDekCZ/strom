@@ -111,6 +111,7 @@ import { tableEmptyState, type TableEmptyState } from './table-empty.js';
 import { sourcePlaceLine } from '../../source-location.js';
 import { shareDivergence } from '../../shared-events.js';
 import { divergenceSentence, divergentPersons } from '../../shared-divergence.js';
+import { TreeEditLock } from '../tree-edit-lock.js';
 
 interface Mounted {
     container: HTMLElement;
@@ -2830,6 +2831,8 @@ export const tableMethods = uiModule({
      * place, "Saved: {name}"). Null: saved or unchanged; else the error said under the field.
      */
     tableSaveCell(t: EditTarget, text: string): string | null {
+        // The tree is being replaced: the cell keeps its text, said under it and by a toast (§2.6).
+        if (TreeEditLock.refuse()) return TreeEditLock.text();
         const data = DataManager.getData();
         const res = editChangeOf(data, t, text);
         if (!res.ok) return res.error === 'date' ? strings.table.cell.badDate : strings.table.cell.nameNeeded;

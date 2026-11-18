@@ -8,6 +8,7 @@
  * asks the user there before it writes or spends anything.
  */
 
+import { activatedElement } from './busy.js';
 import { DataManager } from '../data.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { formatLiveClock } from '../live-time.js';
@@ -933,10 +934,11 @@ export const researchActionsMethods = uiModule({
     },
 
     researchActionLoadVersion(): void {
+        const el = activatedElement();
         this.closeActionsMenu();
         const researchId = this.activeResearchId();
         if (researchId && this.researchSyncCapable(researchId)) {
-            void this.researchLoadNewer();
+            void this.researchLoadNewer({}, el);
             return;
         }
         const url = this.activeResearchLink('app');

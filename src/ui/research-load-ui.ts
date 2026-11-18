@@ -17,6 +17,7 @@ import { formatFlexDate } from '../dates.js';
 import { diffLines } from '../line-diff.js';
 import { uiModule } from './module.js';
 import { normalizeModal } from './modal-skeleton.js';
+import { currentTreeLoad } from './tree-load-progress.js';
 
 const LOAD_ID = 'research-load-modal';
 /** Rows shown before "and N more". */
@@ -100,6 +101,8 @@ export const researchLoadMethods = uiModule({
             decided?: { intro: string; later: string; rows: (row: ValueChange) => boolean };
             hypotheses?: ReadonlyArray<{ personName: string; text: string; inApp: boolean }> } = {}): Promise<{ choice: 'load' | 'copy'; images: boolean } | null> {
         document.querySelectorAll(`#${LOAD_ID}`).forEach(el => el.remove());
+        // The load's progress toast goes while it is asked, and comes back after Load (waiting buttons §2.3).
+        currentTreeLoad()?.pause();
         const s = strings.sync;
         const diff = diffValues(here, there);
         const decided = opts.decided;
@@ -183,6 +186,7 @@ export const researchLoadMethods = uiModule({
             const finish = (choice: 'load' | 'copy' | null): void => {
                 const images = overlay.querySelector<HTMLInputElement>('#research-load-images')?.checked ?? false;
                 this.closeResearchLoad();
+                if (choice) currentTreeLoad()?.resume();
                 resolve(choice ? { choice, images } : null);
             };
             this.researchLoadResolve = () => finish(null);

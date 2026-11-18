@@ -100,6 +100,10 @@ import {
 } from '../research-device.js';
 import { rememberBridgeStatus, researchSendMode, researchStatusNow, researchMediaFirstAgain, researchBridgeDownNow } from './research-sync-ui.js';
 import { openResearchBusy, withHandoff } from './research-open-busy.js';
+import { countGedcomPersons, readBodyWithProgress, type TreeDownloadWatch, type TreeLoadRun } from './tree-load-progress.js';
+import type { ProgressToastHandle } from './toast.js';
+import { holdLeave } from './busy-leave.js';
+import { TreeEditLock } from './tree-edit-lock.js';
 import { sourceReadings, researchSendVouches, conflictTakeovers, heldConflicts } from '../research-sync.js';
 import { currentAppBrowser, appBrowserName } from '../research-transfer.js';
 import { localNetworkStatus } from '../local-network.js';
@@ -1132,6 +1136,8 @@ function syncResearchCardInfo(): void {
 /** How long "Load new version" waits for the research to send it. */
 const VERSION_WAIT_MS = 20_000;
 let versionWait: ReturnType<typeof setTimeout> | null = null;
+/** The progress toast of that wait (waiting buttons §2.3). */
+let versionWaitToast: ProgressToastHandle | null = null;
 /**
  * A new version the research sent to another tab (the app open in a browser,
  * not installed: the address opens a new tab) also ends this tab's wait.
@@ -1172,10 +1178,15 @@ function enqueueOpen<T>(job: () => Promise<T>): Promise<T | undefined> {
  * a bridge that sends its headers and then nothing more must not leave the
  * caller waiting for ever (a stuck read stopped all asking in that page).
  */
-export async function fetchWithTimeout(url: string, ms: number, headers?: Record<string, string>): Promise<Response> {
+export async function fetchWithTimeout(url: string, ms: number, headers?: Record<string, string>, signal?: AbortSignal): Promise<Response> {
     if (typeof fetch !== 'function') throw new Error('fetch unavailable');
     const ctl = typeof AbortController === 'function' ? new AbortController() : null;
     const timer = ctl ? setTimeout(() => ctl.abort(), ms) : null;
+    // Cancelled by the person (a load's Cancel, §2.4): the same as the limit for the request.
+    if (ctl && signal) {
+        if (signal.aborted) ctl.abort();
+        else signal.addEventListener('abort', () => ctl.abort(), { once: true });
+    }
     try {
         return await fetch(withAppVersion(url), {
             method: 'GET',
@@ -1270,19 +1281,19 @@ const imageDeps: ImageResolveDeps = {
  * files (`media=app`, spec 108 §5) — the answer says so (`media`); the file
  * with the images in it it falls back to never has them.
  */
-export async function fetchResearchTree(url: string, opts: { stale?: boolean; etag?: string | null; byHash?: boolean; images?: boolean; media?: boolean } = {}): Promise<FetchedTree> {
+export async function fetchResearchTree(url: string, opts: { stale?: boolean; etag?: string | null; byHash?: boolean; images?: boolean; media?: boolean; watch?: TreeDownloadWatch } = {}): Promise<FetchedTree> {
     if (opts.byHash) {
         const got = await fetchRefTree(url, opts);
         if (got) return got;
         // The images could not all be had: this load takes the file with them in it.
-        return fetchResearchTree(url, { stale: opts.stale });
+        return fetchResearchTree(url, { stale: opts.stale, ...(opts.watch ? { watch: opts.watch } : {}) });
     }
     const res = await fetchWithTimeout(opts.stale ? staleTreeUrl(url) : url, TREE_GED_TIMEOUT_MS,
-        opts.etag ? { 'If-None-Match': opts.etag } : undefined);
+        opts.etag ? { 'If-None-Match': opts.etag } : undefined, opts.watch?.signal);
     const get = (name: string): string | null => res.headers?.get(name) ?? null;
     if (opts.etag && res.status === 304) return { text: '', notModified: true, variant: 'data', etag: treeReplyEtag(get) ?? opts.etag, ...treeReplyHeads(get) };
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const text = decodeGedcomFile(await res.arrayBuffer());
+    const text = decodeGedcomFile(await readBodyWithProgress(res, opts.watch));
     noteFamilyPartners(url, researchFamilyPartners(text));
     // Its images are in it: those held for the last file would only be a second copy.
     forgetHeldImages();
@@ -1294,9 +1305,9 @@ export async function fetchResearchTree(url: string, opts: { stale?: boolean; et
  * null when they could not all be had (the caller then takes the file with
  * them in it). A bridge that cannot be reached throws, as for the whole file.
  */
-async function fetchRefTree(url: string, opts: { stale?: boolean; etag?: string | null; images?: boolean; media?: boolean }): Promise<FetchedTree | null> {
+async function fetchRefTree(url: string, opts: { stale?: boolean; etag?: string | null; images?: boolean; media?: boolean; watch?: TreeDownloadWatch }): Promise<FetchedTree | null> {
     const res = await fetchWithTimeout(refTreeUrl(opts.stale ? staleTreeUrl(url) : url, !!opts.media), TREE_GED_TIMEOUT_MS,
-        opts.etag ? { 'If-None-Match': opts.etag } : undefined);
+        opts.etag ? { 'If-None-Match': opts.etag } : undefined, opts.watch?.signal);
     const get = (name: string): string | null => res.headers?.get(name) ?? null;
     const media = opts.media ? { media: true as const } : {};
     if (opts.etag && res.status === 304) return { text: '', notModified: true, variant: 'ref', etag: treeReplyEtag(get) ?? opts.etag, ...treeReplyHeads(get), ...media };
@@ -1304,7 +1315,7 @@ async function fetchRefTree(url: string, opts: { stale?: boolean; etag?: string 
         console.warn('The tree with its images by hash was refused, loading the whole file', res.status);
         return null;
     }
-    const text = decodeGedcomFile(await res.arrayBuffer());
+    const text = decodeGedcomFile(await readBodyWithProgress(res, opts.watch));
     const said = treeReplyImages(get);
     const base = { text, etag: treeReplyEtag(get), ...treeReplyHeads(get), ...media };
     noteFamilyPartners(url, researchFamilyPartners(text));
@@ -1336,8 +1347,8 @@ export async function fetchResearchTreeWithMedia(url: string): Promise<FetchedTr
     return fetchRefTree(url, { media: true });
 }
 
-export async function fetchGedcomText(url: string): Promise<string> {
-    return (await fetchResearchTree(url)).text;
+export async function fetchGedcomText(url: string, watch?: TreeDownloadWatch): Promise<string> {
+    return (await fetchResearchTree(url, watch ? { watch } : {})).text;
 }
 
 /**
@@ -1347,8 +1358,8 @@ export async function fetchGedcomText(url: string): Promise<string> {
  * the research keeps them and the tree takes images (treeAsksAppMedia;
  * `media`: they came).
  */
-export async function readResearchTreeFile(url: string, features: readonly string[] | null | undefined): Promise<{ text: string; images?: ReadonlyMap<string, string>; media?: true }> {
-    const got = await fetchResearchTree(url, { byHash: bridgeGivesImagesByHash(features), media: treeAsksAppMedia(features, SettingsManager.isImportImages()) });
+export async function readResearchTreeFile(url: string, features: readonly string[] | null | undefined, watch?: TreeDownloadWatch): Promise<{ text: string; images?: ReadonlyMap<string, string>; media?: true }> {
+    const got = await fetchResearchTree(url, { byHash: bridgeGivesImagesByHash(features), media: treeAsksAppMedia(features, SettingsManager.isImportImages()), ...(watch ? { watch } : {}) });
     return { text: got.text, ...(got.images ? { images: got.images } : {}), ...(got.media ? { media: true as const } : {}) };
 }
 
@@ -2091,6 +2102,8 @@ export const researchUiMethods = uiModule({
                 e.preventDefault();
                 if (modalOpen()) return;
                 if (dropCancelled) { dropCancelled = false; return; }
+                // The tree is being replaced: a file dropped now waits for the load (§2.6).
+                if (TreeEditLock.refuse()) return;
                 const files = Array.from(e.dataTransfer?.files ?? []);
                 // "Read now": the dialog with the files in it (reading starts from there).
                 if (readZones && zoneAt(e) === 'read') {
@@ -2142,7 +2155,20 @@ export const researchUiMethods = uiModule({
     },
 
     /** B. ?import-url=: a file offered by Strom Research on this computer. */
-    async importResearchFromUrl(raw: string, opts: { afterSend?: TreeId; plainAsk?: boolean; takeSame?: boolean } = {}): Promise<void> {
+    /**
+     * `load`: a load of the research's version the person asked for (startTreeLoad): its progress, Cancel while
+     * the file downloads, its failure said in its toast (never the manual way), its end at the end.
+     */
+    async importResearchFromUrl(raw: string, opts: { afterSend?: TreeId; plainAsk?: boolean; takeSame?: boolean; load?: TreeLoadRun } = {}): Promise<void> {
+        const { load, ...rest } = opts;
+        try {
+            await this.importResearchFromUrlNow(raw, rest, load);
+        } finally {
+            load?.done();
+        }
+    },
+
+    async importResearchFromUrlNow(raw: string, opts: { afterSend?: TreeId; plainAsk?: boolean; takeSame?: boolean }, load?: TreeLoadRun): Promise<void> {
         // "Load new version" asked for this: its spinner is done.
         this.settleResearchVersion();
         const url = parseLoopbackUrl(raw);
@@ -2163,13 +2189,21 @@ export const researchUiMethods = uiModule({
             const at = /\/tree\.ged$/.test(url.pathname) ? researchIdAtBridge(`${url.origin}${url.pathname.replace(/\/tree\.ged$/, '')}`) : null;
             const features = at ? this.researchStatusOf(at)?.features : null;
             try {
-                if (treeAsksAppMedia(features, SettingsManager.isImportImages())) ({ text, images, media } = await readResearchTreeFile(url.href, features));
-                else text = await fetchGedcomText(url.href);
+                if (treeAsksAppMedia(features, SettingsManager.isImportImages())) ({ text, images, media } = await readResearchTreeFile(url.href, features, load?.watch));
+                else text = await fetchGedcomText(url.href, load?.watch);
             } catch (err) {
+                // Cancelled: nothing changed, nothing to say.
+                if (load?.cancelled) return;
                 console.warn('Fetching the research failed', err);
+                // Asked from the app (its bridge known): said in the load's toast, with Try again.
+                if (load) {
+                    load.fail(err);
+                    return;
+                }
                 await this.offerManualImport(strings.research.fetchFailed);
                 return;
             }
+            if (load?.cancelled) return;
             // Served from 127.0.0.1: the research is on this computer.
             const header = readResearchHeader(text);
             if (header.isStromResearch) noteResearchLinks(header.links, header.scheme);
@@ -2179,6 +2213,7 @@ export const researchUiMethods = uiModule({
                 const base = `${url.origin}${url.pathname.replace(/\/tree\.ged$/, '')}`;
                 void fetchStatus(`${base}/status`).then(() => this.refreshResearchSyncUi()).catch(() => undefined);
             }
+            if (load) await load.processing(countGedcomPersons(text));
             await this.openGedcomText(text, { ...opts, ...(images ? { images } : {}), ...(media ? { appMedia: true } : {}) });
         });
     },
@@ -2809,26 +2844,32 @@ export const researchUiMethods = uiModule({
         const ok = await this.showConfirm(r.sendConfirm(tree.name, researchName), r.sendConfirmTitle, { confirmLabel: r.sendButton });
         if (!ok) { cancel('cancelled'); return; }
 
-        this.showToast(r.sending, 60000);
+        // One progress toast from the send to its end (waiting buttons §2.3, A161–A162): the result in it, no alert.
+        const b = strings.busy;
+        const toast = this.showProgressToast({ title: b.sendTitle }, {});
+        const exportGedcom = { label: r.sendExportGedcom, run: () => { void this.downloadResearchGedcom(tree.id); } };
+        const releaseLeave = holdLeave('send', tree.id);
         let res: Response;
         try {
             res = await postSync(bridge.sync, researchGedcom(data, tree.name, { id: link.id, head: link.head, appTree: tree.id, transcripts: this.researchTranscriptsLink(link).transcripts }, researchGedcomTitles(status), researchSendsReadings(status), researchSendsSourceFields(status), researchCitationsOut(status)), 120000);
         } catch (err) {
+            releaseLeave();
             console.warn('Sending to the research failed', err);
-            document.querySelector('.toast')?.remove();
-            await this.offerResearchGedcom(r.sendUnreachable, tree.id);
+            const timedOut = err instanceof DOMException && err.name === 'AbortError';
+            toast.fail(timedOut ? b.errTimeout(120) : r.sendUnreachable, { label: b.retry, run: () => { void this.sendChangesToResearch(raw); } },
+                { title: b.sendFailed, more: exportGedcom });
             return;
         }
+        releaseLeave();
         let reply = sanitizeSyncReply(null);
         try {
             reply = sanitizeSyncReply(await res.json());
         } catch { /* not JSON: a refusal without a reason */ }
-        document.querySelector('.toast')?.remove();
         if (res.ok && reply.ok) {
             // What the research now has of the user's transcripts (Research for this tree).
             TreeManager.patchResearchLink(tree.id, { sentSources: sourceReadings(data) });
-            await this.showAlert(r.sent, 'info');
-        } else await this.showAlert(r.sendRefused(reply.error), 'error');
+            toast.done(r.sent);
+        } else toast.fail(r.sendRefused(reply.error), undefined, { more: exportGedcom });
     },
 
     /** Explain the way back to the research; offer the faithful GEDCOM of the tree. */
@@ -2904,10 +2945,16 @@ export const researchUiMethods = uiModule({
     awaitResearchVersion(): void {
         const r = strings.research;
         if (versionWait) clearTimeout(versionWait);
-        this.showToast(r.awaitingVersion, VERSION_WAIT_MS + 500, { spinner: true });
+        versionWaitToast?.close();
+        const toast = this.showProgressToast({ title: r.awaitingVersion }, {});
+        versionWaitToast = toast;
         versionWait = setTimeout(() => {
             versionWait = null;
-            this.showToast(r.noAnswer, 6000);
+            if (versionWaitToast === toast) versionWaitToast = null;
+            toast.fail(r.noAnswer, { label: strings.busy.retry, run: () => {
+                const url = this.activeResearchLink('app');
+                if (url) this.launchResearchLink(url, 'version');
+            } });
         }, VERSION_WAIT_MS);
     },
 
@@ -2916,7 +2963,8 @@ export const researchUiMethods = uiModule({
         if (!versionWait) return;
         clearTimeout(versionWait);
         versionWait = null;
-        document.querySelector('.toast')?.remove();
+        versionWaitToast?.close();
+        versionWaitToast = null;
     },
 
     /** The active tree's research id, when it is a research tree (the app's own trees: null). */

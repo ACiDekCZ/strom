@@ -7,6 +7,7 @@
  * computer whose research announced them.
  */
 
+import { runBusy } from './busy.js';
 import { researchActionLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
@@ -847,8 +848,9 @@ export const personResearchMethods = uiModule({
                 if (url) this.launchResearchLink(url, 'terminal');
                 return;
             }
-            if (target.closest('.prh-decided-load')) {
-                void this.researchLoadNewer();
+            const loadBtn = target.closest<HTMLElement>('.prh-decided-load');
+            if (loadBtn) {
+                void this.researchLoadNewer({}, loadBtn);
                 return;
             }
             if (target.closest('.prv-wait-stop')) {
@@ -867,8 +869,11 @@ export const personResearchMethods = uiModule({
                 const treeId = DataManager.getCurrentTreeId();
                 const link = treeId ? loadViewLinks(treeId).find(l => l.hypo === hypo) : null;
                 if (!link) return;
-                this.closePersonResearchDialog();
-                void this.viewLinkFind(link);
+                // A123: the button's working state painted before the layout is computed.
+                void runBusy(find, async () => {
+                    this.closePersonResearchDialog();
+                    await this.viewLinkFind(link);
+                }, { heavy: 'now', label: strings.busy.layout });
                 return;
             }
             const sw = target.closest<HTMLButtonElement>('.view-link-switch');

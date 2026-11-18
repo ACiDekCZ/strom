@@ -1,0 +1,149 @@
+import { test, expect, Page } from '@playwright/test';
+import {
+    HEAD, NEW_HEAD, block, editJan, fakeBridge, openResearch, openResearchMenu, poll, researchGed, FakeBridge,
+} from './research-bridge.js';
+
+/**
+ * Waiting buttons, part 2: Send from the click to its end (one POST however often it is asked, the bar's
+ * button in its working state and ✓ "Written", a failure in a toast with Try again and Export GEDCOM), and
+ * loading the research's version (one download, its progress toast with a bar, Cancel while it downloads
+ * leaves the tree, edits wait meanwhile).
+ */
+
+const WRITE = { status: 200, body: { ok: true, inbox: false, changes: 6, applied: 6, input: 'I0042' } };
+const HAND = { mode: 'research', sync: { auto: 'write' }, sources: true, verified: true, media: null };
+
+function writesAtOnce(bridge: FakeBridge): void {
+    let n = 0;
+    bridge.syncReply = WRITE;
+    bridge.onWrite = () => {
+        n++;
+        const head = `ab${n}0cd${n}0ef${n}0`;
+        return { head, ged: researchGed(head, ['1 BIRT', '2 PLAC Praha']) };
+    };
+}
+
+const head = (page: Page) => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head);
+const sendButton = (page: Page) => page.locator('#research-sync-send');
+
+test.describe('Send by hand', () => {
+    test.beforeEach(async ({ page }) => {
+        await page.setViewportSize({ width: 1600, height: 900 });
+    });
+
+    test('a double click sends once; the bar\'s button works, then says Written', async ({ page }) => {
+        await openResearch(page);
+        const bridge = await fakeBridge(page, { accepts: HAND });
+        writesAtOnce(bridge);
+        bridge.syncDelayMs = 700;
+        await poll(page);
+        await editJan(page);
+        const send = sendButton(page);
+        await expect(send).toBeVisible();
+        await send.dblclick();
+        await expect(send).toHaveAttribute('aria-disabled', 'true');
+        await expect(send).toHaveAttribute('data-busy', 'busy');
+        await expect(send).toContainText('Sending…');
+        await expect(send).toHaveAttribute('data-busy', 'done');
+        await expect(send).toContainText('Written');
+        await expect(page.locator('.toast')).toContainText('Written to the research, 6 changes.');
+        expect(bridge.posts.length).toBe(1);
+        // After the ✓ the bar shows the state anew: nothing left to send.
+        await expect(send).toHaveCount(0);
+    });
+
+    test('Send from the research menu: the bar\'s button carries the state; asked twice, one POST', async ({ page }) => {
+        await openResearch(page);
+        const bridge = await fakeBridge(page, { accepts: HAND });
+        writesAtOnce(bridge);
+        bridge.syncDelayMs = 700;
+        await poll(page);
+        await editJan(page);
+        await expect(sendButton(page)).toBeVisible();
+        await openResearchMenu(page);
+        await block(page).locator('[data-action="send"]').click();
+        await page.evaluate(() => window.Strom.UI.researchSyncAction('send'));
+        await expect(sendButton(page)).toHaveAttribute('data-busy', 'busy');
+        await expect(sendButton(page)).toHaveAttribute('data-busy', 'done');
+        expect(bridge.posts.length).toBe(1);
+    });
+
+    test('the bridge gone mid-send: a toast with its heading, Try again and Export GEDCOM; nothing under the toolbar', async ({ page }) => {
+        await openResearch(page);
+        const bridge = await fakeBridge(page, { accepts: HAND });
+        await poll(page);
+        await editJan(page);
+        await expect(sendButton(page)).toBeVisible();
+        bridge.syncAbort = true;
+        await sendButton(page).click();
+        const toast = page.locator('.toast').filter({ hasText: 'Writing to the research did not work.' });
+        await expect(toast).toBeVisible();
+        await expect(toast.getByRole('button', { name: 'Try again' })).toBeVisible();
+        await expect(toast.getByRole('button', { name: 'Export GEDCOM' })).toBeVisible();
+        // No sentence under the toolbar's button: the toast says it.
+        await expect(page.locator('#research-sync-pill .busy-msg')).toHaveCount(0);
+    });
+});
+
+test.describe('loading the research\'s version', () => {
+    async function newer(page: Page): Promise<FakeBridge> {
+        await openResearch(page);
+        const bridge = await fakeBridge(page, { head: NEW_HEAD, treeGed: researchGed(NEW_HEAD) });
+        await poll(page);
+        return bridge;
+    }
+    const loadToast = (page: Page) => page.locator('.toast[data-kind="tree-load"]');
+
+    test('asked twice: one download, its toast with a bar and the edits waiting; then the version', async ({ page }) => {
+        const bridge = await newer(page);
+        bridge.treeDelayMs = 1200;
+        const before = bridge.treeGets ?? 0;
+        await page.evaluate(() => {
+            window.Strom.UI.researchSyncAction('loadNewer');
+            window.Strom.UI.researchSyncAction('loadNewer');
+        });
+        await expect(loadToast(page)).toBeVisible();
+        await expect(loadToast(page).locator('.toast-title')).toHaveText('Loading the tree from the research…');
+        await expect(loadToast(page)).toContainText('edits wait for the load');
+        await expect(loadToast(page).locator('.bar')).toBeVisible();
+        await expect(loadToast(page).getByRole('button', { name: 'Cancel' })).toBeVisible();
+        await expect.poll(() => head(page), { timeout: 10_000 }).toBe(NEW_HEAD);
+        await expect(loadToast(page)).toHaveCount(0);
+        expect((bridge.treeGets ?? 0) - before).toBe(1);
+    });
+
+    test('Cancel while it downloads: the tree stays as it was, nothing asked', async ({ page }) => {
+        const bridge = await newer(page);
+        bridge.treeDelayMs = 3000;
+        await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+        await expect(loadToast(page)).toBeVisible();
+        await loadToast(page).getByRole('button', { name: 'Cancel' }).click();
+        await expect(loadToast(page)).toHaveCount(0);
+        await page.waitForTimeout(3500);
+        expect(await head(page)).toBe(HEAD);
+        await expect(page.locator('#research-load-modal')).toHaveCount(0);
+        await expect(page.locator('#confirmation-modal.active')).toHaveCount(0);
+    });
+
+    test('an edit saved while it loads makes no change, a toast says why', async ({ page }) => {
+        const bridge = await newer(page);
+        bridge.treeDelayMs = 3000;
+        await page.evaluate(() => {
+            const jan = window.Strom.DataManager.getAllPersons().find(p => p.firstName === 'Jan')!;
+            window.Strom.UI.runPersonMenuAction(jan.id, 'edit');
+        });
+        const modal = page.locator('#person-modal');
+        await expect(modal).toBeVisible();
+        // The opening's own message off the screen (a message to be read holds the next one for 3 s).
+        await page.evaluate(() => document.querySelectorAll('.toast').forEach(t => t.remove()));
+        await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+        await expect(loadToast(page)).toBeVisible();
+        await modal.locator('#input-firstname').fill('Honza');
+        await modal.getByRole('button', { name: 'Save' }).click();
+        await expect(page.locator('.toast[data-kind="edit-lock"]')).toHaveText('The tree is loading from the research – edits are possible after loading.');
+        await expect(modal).toBeVisible();
+        expect(await page.evaluate(() => window.Strom.DataManager.getAllPersons().some(p => p.firstName === 'Honza'))).toBe(false);
+        // After the load, edits go again.
+        await expect(loadToast(page)).toHaveCount(0, { timeout: 10_000 });
+    });
+});

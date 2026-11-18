@@ -58,6 +58,10 @@ export interface FakeBridge {
     postQueries?: URLSearchParams[];
     /** The bridge takes this long to answer a send (ms). */
     syncDelayMs?: number;
+    /** The bridge takes this long to give `tree.ged` (ms). */
+    treeDelayMs?: number;
+    /** Every `GET …/tree.ged` asked. */
+    treeGets?: number;
     /** A write at once (the research's reply has `inbox: false` and no `pending`): the version it makes. */
     onWrite?: (posted: string) => { head: string; ged: string };
     /** The sends asked to be written again (`POST /sync/<R…>/again`), by their marks. */
@@ -2124,6 +2128,8 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
             return json(b.syncReply.status, b.syncReply.status < 300 ? { ...(b.syncReply.body as object), intake } : b.syncReply.body);
         }
         if (url.pathname.endsWith('/tree.ged')) {
+            b.treeGets = (b.treeGets ?? 0) + 1;
+            if (b.treeDelayMs) await new Promise(r => setTimeout(r, b.treeDelayMs));
             return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/plain; charset=utf-8' }, body: b.treeGed });
         }
         if (url.pathname.endsWith('/cancel')) return json(200, { ok: true });
