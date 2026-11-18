@@ -104,6 +104,8 @@ test('no left-fade veil: the focus card at the left edge keeps full opacity', as
     });
     await page.locator('#bb-view-descendants').click();
     await expect(page.locator('#descendants-badge')).toBeVisible();
+    // The descendants chart is laid out under the canvas overlay, which rightly takes the point meanwhile.
+    await expect(page.locator('#tree-container > .canvas-busy')).toHaveCount(0);
 
     const focus = page.locator('.person-card.focused');
     await expect(focus).toBeVisible();

@@ -152,6 +152,8 @@ test.describe('tree overview: family lines', () => {
             for (const mode of ['family', 'descendants', 'fan']) {
                 await page.evaluate((m) => window.Strom.UI.setDisplayViewMode(m as 'family'), mode);
                 await expect(page.locator('body')).toHaveAttribute('data-view-mode', mode);
+                // The mode is set at once, the view is drawn under the canvas overlay (the old view's bars until then).
+                await expect(page.locator('#tree-container > .canvas-busy')).toHaveCount(0);
                 expect(await apart(chrome), `${w}×${h} ${mode}`).toEqual([]);
             }
         }
