@@ -26,7 +26,7 @@
  *   evidence pill with "Back to overview", which reopens it where it was).
  */
 
-import { BUSY_SHOW_MS, BUSY_MIN_MS as BUSY_HOLD_MS } from './busy.js';
+import { BUSY_SHOW_MS, BUSY_MIN_MS as BUSY_HOLD_MS, busyButtonHtml } from './busy.js';
 import { treeMedia } from '../media.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
@@ -151,6 +151,15 @@ let closePopover: (() => void) | null = null;
 let titlebarObserver: ResizeObserver | null = null;
 
 /** The head's height as --tov-bar-h on the dialog (CSS: the sticky person row's top on a phone). */
+/**
+ * The inside of a button that opens the tree check (C102): its short working words drawn with it, so the button
+ * keeps its width while the check runs (the sentence with the count would widen it by half).
+ */
+function checkBtn(label: string): string {
+    const esc = (t: string): string => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    return busyButtonHtml(esc(label), strings.busy.checking, undefined, { own: true });
+}
+
 function watchTitlebarHeight(overlay: HTMLElement): void {
     titlebarObserver?.disconnect();
     titlebarObserver = null;
@@ -997,7 +1006,7 @@ export const treeOverviewMethods = uiModule({
                     text = t.cardValidation(card.count, topErrorType ? typeInSentence(topErrorType) : '');
                     // Outside the open tree nothing can be fixed, but the details only read:
                     // "Validation details" instead of a disabled "Fix".
-                    button = `<button type="button" class="tov-btn tov-btn--danger" data-tov="validation">${esc(st.active ? t.actFix : t.actValidation)}</button>`;
+                    button = `<button type="button" class="tov-btn tov-btn--danger" data-tov="validation" data-busy="idle">${checkBtn(st.active ? t.actFix : t.actValidation)}</button>`;
                     break;
                 case 'ancestorGap':
                     text = t.cardGap(capitalize(ancestorGenerationLabel(card.n, lang)), card.known, card.expected);
@@ -2024,7 +2033,7 @@ export const treeOverviewMethods = uiModule({
             ? `<button type="button" class="tov-btn is-disabled" disabled>${esc(t.actCleanPlaces(0))}</button>`
             : this.treeOverviewActionHtml('clean-places', t.actCleanPlaces(q.orphanPlaces), 'tov-btn');
         const actions = block('actions', t.quickActions, `<div class="tov-actions">
-            <button type="button" class="tov-btn" data-tov="validation">${esc(t.actValidation)}</button>
+            <button type="button" class="tov-btn" data-tov="validation" data-busy="idle">${checkBtn(t.actValidation)}</button>
             ${clean}
             ${this.treeOverviewActionHtml('split-families', t.actSplitFamilies, 'tov-btn')}
         </div>`);

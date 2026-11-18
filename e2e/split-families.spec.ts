@@ -411,13 +411,15 @@ test.describe('finding the families of a large tree (B210/B211, waiting buttons 
         expect(seen.__overlay).toBe(true);
         expect(seen.__said.some(t => t.includes('Finding the families…'))).toBe(true);
 
-        // Another cut: its button says it works before the families are computed again.
+        // Another cut: its segment shows the spinner and the hint under the segments says what happens, before
+        // the families are computed again.
         const other = modal.locator('.splitfam-mode-btn:not(.active)').first();
         await other.evaluate((b) => {
             const w = window as unknown as { __said: string[] };
             w.__said = [];
+            const hint = document.querySelector('#split-families-modal .splitfam-mode-hint')!;
             new MutationObserver(() => {
-                if (b.getAttribute('aria-busy') === 'true') w.__said.push(b.textContent ?? '');
+                if (b.getAttribute('aria-busy') === 'true') w.__said.push(hint.textContent ?? '');
             }).observe(b, { attributes: true, childList: true, subtree: true, characterData: true });
         });
         await other.click();

@@ -4,6 +4,7 @@
  */
 
 import { canvasBusy } from './canvas-busy.js';
+import { busyButtonHtml } from './busy.js';
 import { refreshWindowControls } from '../windows/window-open.js';
 import { initDialogFocus } from './dialog-focus.js';
 import { initClosedPopups } from './closed-popups.js';
@@ -1679,6 +1680,12 @@ export const miscMethods = uiModule({
                 el.textContent = getString(key);
                 // A tab's label holds the width of its bold cut (src/ui/sel-css.ts).
                 if (el.classList.contains('sel-l')) el.setAttribute('data-label', el.textContent);
+                // A button whose working words are drawn with it (§1.2: its width the same at rest and working).
+                const busyKey = el.getAttribute('data-i18n-busy');
+                if (busyKey && el instanceof HTMLElement) {
+                    el.innerHTML = busyButtonHtml(this.escapeHtml(getString(key)), getString(busyKey), undefined, { own: true });
+                    if (!el.dataset.busy) el.dataset.busy = 'idle';
+                }
             }
         });
 

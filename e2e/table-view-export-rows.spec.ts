@@ -151,7 +151,7 @@ test.describe('phone (390)', () => {
 test.describe('the export of a large table (C99, waiting buttons §8)', () => {
     test.use({ viewport: { width: 1440, height: 900 } });
 
-    test('Download: the toolbar\'s Export says "Saving the file…" before the file is built, then the file and Export again', async ({ page }) => {
+    test('Download: the toolbar\'s Export shows its spinner before the file is built, then the file and Export again', async ({ page }) => {
         test.setTimeout(90_000);
         await page.clock.setFixedTime(new Date('2026-06-15T10:00:00Z'));
         await openApp(page);
@@ -174,7 +174,7 @@ test.describe('the export of a large table (C99, waiting buttons §8)', () => {
             const click = HTMLAnchorElement.prototype.click;
             HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) { if (this.download) w.__handed = true; return click.call(this); };
             new MutationObserver(() => {
-                if (b.getAttribute('aria-busy') === 'true' && !w.__handed) w.__said.push(b.textContent ?? '');
+                if (b.getAttribute('aria-busy') === 'true' && !w.__handed) w.__said.push(b.querySelector('.b-busy')?.textContent ?? '');
             }).observe(b, { attributes: true, childList: true, subtree: true, characterData: true });
         });
         const panel = page.locator('.tv-fpanel.tv-xpanel');
@@ -184,7 +184,8 @@ test.describe('the export of a large table (C99, waiting buttons §8)', () => {
         ]);
         expect(download.suggestedFilename()).toMatch(/\.csv$/);
         const said = await page.evaluate(() => (window as unknown as { __said: string[] }).__said);
-        expect(said.some(t => t.includes('Saving the file…'))).toBe(true);
+        // The toolbar has no room for the sentence: Export keeps its word, the spinner in front (§1.2, 1e).
+        expect(said.some(t => t === 'Export')).toBe(true);
         await expect(btn).not.toHaveAttribute('aria-busy', 'true');
         await expect(btn).not.toHaveAttribute('aria-disabled', 'true');
     });

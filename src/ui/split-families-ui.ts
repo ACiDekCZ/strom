@@ -27,7 +27,7 @@ import { PersonPicker } from '../person-picker.js';
 import * as CrossTree from '../cross-tree.js';
 import { uiModule } from './module.js';
 import { shownName } from '../person-name.js';
-import { runBusy, runHeavy, activatedElement, nextPaint, type BusyCtl } from './busy.js';
+import { runBusy, runHeavy, activatedElement, nextPaint, busyButtonHtml, type BusyCtl } from './busy.js';
 import { computeUnder } from './canvas-busy.js';
 import { SPLIT_SHOWN_AT_ONCE } from './split-ui.js';
 import { busyProg } from './busy-prog.js';
@@ -197,7 +197,7 @@ export const splitFamiliesMethods = uiModule({
                 <div class="splitfam-mode sel-seg" role="radiogroup" aria-label="${s.modeLabel}">
                     ${([['surname', s.modeSurname], ['lineage', s.modeLineage], ['perspective', s.modePerspective]] as [SplitMode, string][])
                         .map(([m, label]) => `<button type="button" class="splitfam-mode-btn sel-opt${this.splitFamiliesMode === m ? ' active' : ''}" data-sel-form="seg"
-                            data-mode="${m}" aria-pressed="${this.splitFamiliesMode === m}">${label}</button>`).join('')}
+                            data-mode="${m}" aria-pressed="${this.splitFamiliesMode === m}" data-busy="idle">${busyButtonHtml(label, '', undefined, { own: true })}</button>`).join('')}
                 </div>
                 <p class="splitfam-mode-hint">${{
                     surname: s.modeSurnameHint, lineage: s.modeLineageHint, perspective: s.modePerspectiveHint,
@@ -230,15 +230,18 @@ export const splitFamiliesMethods = uiModule({
             (btn as HTMLButtonElement).onclick = () => {
                 const m = btn.getAttribute('data-mode') as SplitMode;
                 if (m === this.splitFamiliesMode) return;
-                // §8: the other cut computed and the dialog drawn again under the button's working state.
-                void runHeavy(btn as HTMLElement, () => {
+                // §8: the other cut computed and the dialog drawn again under the segment's working state: the
+                // spinner in the segment (its width kept), the words in the hint line under the segments.
+                const hint = overlay.querySelector<HTMLElement>('.splitfam-mode-hint') ?? undefined;
+                void runBusy(btn as HTMLElement, async () => {
+                    await nextPaint();
                     if (decomposeIntoFamilies(run.data, run.focusPersonId, m, persp).length < 2) {
                         this.showToast(strings.splitFamilies.oneFamilyInMode);
                         return;
                     }
                     this.splitFamiliesMode = m;
                     this.openSplitFamiliesDialog(run);
-                }, { label: strings.busy.findingFamilies, atOnce: splitRunLong(run) });
+                }, { label: strings.busy.findingFamilies, heavy: splitRunLong(run) ? 'now' : true, ...(hint ? { wordsIn: hint } : {}) });
             };
         });
         if (this.splitFamiliesMode === 'perspective') this.bindSplitFamiliesPerspective(overlay, run);

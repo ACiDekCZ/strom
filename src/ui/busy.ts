@@ -63,6 +63,11 @@ export interface BusyOpts {
     endToast?: boolean;
     /** The steps only in the progress toast: the element keeps its words (a toolbar button, 2d). */
     stepsInToast?: boolean;
+    /**
+     * The working words stand in this line (the hint under a segment) instead of in the element, which keeps its
+     * own (the spinner alone, drawn with it: `busyButtonHtml(…, '', …, { own: true })`); its words are back after.
+     */
+    wordsIn?: HTMLElement;
 }
 
 export interface BusyCtl {
@@ -123,6 +128,8 @@ interface BusyState {
     el: HTMLElement;
     /** How the element is found again after a redraw (null: it cannot be). */
     ident: string | null;
+    /** The working words in `opts.wordsIn` while they are seen there. */
+    wordsLine?: HTMLElement | null;
 }
 
 const states = new WeakMap<HTMLElement, BusyState>();
@@ -146,9 +153,12 @@ export function isBusy(el: HTMLElement): boolean {
  * the computation runs longer than 120 ms and the page cannot paint meanwhile) its words shown at once. Without an
  * element the work runs at once. Resolves with the work's result (undefined when `el` was busy already).
  */
-export async function runHeavy<T>(el: HTMLElement | null, work: () => T | Promise<T>, opts: { label: string; atOnce: boolean }): Promise<T | undefined> {
+export async function runHeavy<T>(el: HTMLElement | null, work: () => T | Promise<T>,
+    opts: { label: string; atOnce: boolean; toastWhenGone?: boolean }): Promise<T | undefined> {
     if (!el) return work();
-    return runBusy(el, async () => { await nextPaint(); return work(); }, { heavy: opts.atOnce ? 'now' : true, label: opts.label });
+    return runBusy(el, async () => { await nextPaint(); return work(); }, {
+        heavy: opts.atOnce ? 'now' : true, label: opts.label, ...(opts.toastWhenGone ? { toastWhenGone: true } : {}),
+    });
 }
 
 /** Two frames: the state is painted before a heavy computation (§8). */
@@ -177,11 +187,18 @@ export function spinEl(size: 12 | 14 | 16 = 14): HTMLElement {
 }
 
 /**
+ * How a prepared element keeps its words: `own` — the working and ✓ words drawn with it stay whatever words the
+ * action brings (a short "Analyzing…" where the action's sentence would widen the button; the sentence still
+ * titles its progress toast when the element is gone).
+ */
+export interface PrepareOpts { own?: boolean }
+
+/**
  * A button's inside for the working state (§1.2), drawn once with the button: the idle words, the working words
  * with the spinner and the ✓ words in one cell (the width of the longest from the start). `label` is HTML.
  */
-export function busyButtonHtml(labelHtml: string, busyLabel: string, done?: string): string {
-    return `<span class="bl"><span class="b-idle">${labelHtml}</span>`
+export function busyButtonHtml(labelHtml: string, busyLabel: string, done?: string, opts: PrepareOpts = {}): string {
+    return `<span class="bl"${opts.own ? ' data-words="own"' : ''}><span class="b-idle">${labelHtml}</span>`
         + `<span class="b-busy" aria-hidden="true">${busySpinHtml()}${esc(busyLabel)}</span>`
         + `<span class="b-done" aria-hidden="true"><span class="ok">✓</span>${esc(done ?? '')}</span></span>`;
 }
@@ -235,18 +252,18 @@ function iconOnly(el: HTMLElement): boolean {
  * Wrap an existing button's inside into the working structure (§1.2): its content becomes the idle part, the
  * research's marks stay after it. Kept (an element prepared once stays prepared); `busyLabel` and `done` renew it.
  */
-export function prepareBusy(el: HTMLElement, busyLabel: string, done?: string): void {
-    const bl = el.querySelector<HTMLElement>(':scope > .bl');
-    if (bl) {
-        setBusyWords(bl, busyLabel, done);
-        if (!el.dataset.busy) el.dataset.busy = 'idle';
-        return;
-    }
-    wrap(el, busyLabel, done);
-    el.dataset.busy = 'idle';
+export function prepareBusy(el: HTMLElement, busyLabel: string, done?: string, opts: PrepareOpts = {}): void {
+    const kept = el.querySelector<HTMLElement>(':scope > .bl');
+    const bl = kept ?? (wrap(el, busyLabel, done), el.querySelector<HTMLElement>(':scope > .bl')!);
+    if (opts.own) bl.dataset.words = 'own';
+    else delete bl.dataset.words;
+    if (kept) setBusyWords(bl, busyLabel, done, true);
+    if (!kept || !el.dataset.busy) el.dataset.busy = 'idle';
 }
 
-function setBusyWords(bl: HTMLElement, busyLabel: string, done?: string): void {
+/** The words of a prepared `.bl` anew; its own words (`PrepareOpts.own`) stay unless `renew`. */
+function setBusyWords(bl: HTMLElement, busyLabel: string, done?: string, renew = false): void {
+    if (bl.dataset.words === 'own' && !renew) return;
     const busy = bl.querySelector<HTMLElement>(':scope > .b-busy');
     if (busy) {
         const spin = busy.querySelector('.busy-spin') ?? spinEl();
@@ -302,7 +319,9 @@ function optionText(el: HTMLElement): HTMLElement | null {
 
 /** Where the working words of `el` stand now (its `.bl` part or its row's line), for a step or new words. */
 function workingWords(el: HTMLElement): HTMLElement | null {
-    return el.querySelector<HTMLElement>(':scope > .bl > .b-busy') ?? el.querySelector<HTMLElement>(':scope > .option-text > .option-busy');
+    const cell = el.querySelector<HTMLElement>(':scope > .bl > .b-busy');
+    if (cell) return cell.parentElement?.dataset.words === 'own' ? null : cell;
+    return el.querySelector<HTMLElement>(':scope > .option-text > .option-busy');
 }
 
 /** Draw the working look on `el`; gives back how to undo it and how to show ✓. */
@@ -744,6 +763,7 @@ function moveToRedrawn(st: BusyState): boolean {
         st.drawDone = d.drawDone;
         next.dataset.busy = 'busy';
         next.setAttribute('aria-busy', 'true');
+        keepName(st, next);
     } else next.dataset.busy = 'lock';
     return true;
 }
@@ -765,6 +785,8 @@ function show(first: HTMLElement, st: BusyState): void {
         st.drawDone = d.drawDone;
         el.dataset.busy = 'busy';
         el.setAttribute('aria-busy', 'true');
+        keepName(st, el);
+        drawWordsIn(st);
     } else if (seen(row)) {
         const d = drawOnRow(row);
         st.drawnOn = row;
@@ -787,6 +809,52 @@ function show(first: HTMLElement, st: BusyState): void {
         st.drawnOn = null;
         if (!st.toast && goneToToast(st)) toToast(el, st);
     }, 400);
+}
+
+/**
+ * §1.2: the element's name stays its idle words while it works. Hidden (`visibility`), they would leave the
+ * accessibility tree with the working words `aria-hidden`: a button without a name. Held as `aria-label` until rest.
+ */
+function keepName(st: BusyState, el: HTMLElement): void {
+    if (el.hasAttribute('aria-label') || el.hasAttribute('aria-labelledby')) return;
+    if (!el.querySelector(':scope > .bl > .b-idle')) return;
+    // The name at rest: the idle words and what stands beside the cell (a research mark's hidden words), without
+    // the working and done words and what is hidden from it anyway.
+    const words = (n: Node): string => {
+        if (!(n instanceof HTMLElement)) return n.nodeType === 8 ? '' : n.textContent ?? '';
+        if (n.classList.contains('b-busy') || n.classList.contains('b-done') || n.getAttribute('aria-hidden') === 'true') return '';
+        return Array.from(n.childNodes, words).join('');
+    };
+    const name = words(el).replace(/\s+/g, ' ').trim();
+    if (!name) return;
+    el.setAttribute('aria-label', name);
+    const undraw = st.undraw;
+    st.undraw = () => {
+        undraw?.();
+        if (el.getAttribute('aria-label') === name) el.removeAttribute('aria-label');
+    };
+}
+
+/** `opts.wordsIn`: the working words there (the 12 px spinner and the words), its own words back at rest. */
+function drawWordsIn(st: BusyState): void {
+    const host = st.opts.wordsIn;
+    if (!(host instanceof HTMLElement) || !seen(host)) return;
+    const kept = [...host.childNodes];
+    // The line keeps its height (a hint of two lines does not let what is under it jump up).
+    const minHeight = host.style.minHeight;
+    if (typeof host.getBoundingClientRect === 'function') host.style.minHeight = `${host.getBoundingClientRect().height}px`;
+    const line = busyStatusEl(st.lastStep && !st.opts.stepsInToast ? st.lastStep.step : st.label);
+    host.replaceChildren(line);
+    st.wordsLine = line;
+    const undraw = st.undraw;
+    st.undraw = () => {
+        undraw?.();
+        if (line.parentNode === host) {
+            host.replaceChildren(...kept);
+            host.style.minHeight = minHeight;
+        }
+        st.wordsLine = null;
+    };
 }
 
 /** The element's look back to rest, its lock off. */
@@ -879,6 +947,7 @@ export async function runBusy<T>(el: HTMLElement, fn: (ctl: BusyCtl) => Promise<
         step(text, k, n, size) {
             st.lastStep = { step: text, ...(k !== undefined ? { k } : {}), ...(n !== undefined ? { n } : {}), ...(size !== undefined ? { size } : {}) };
             if (st.toast) st.toast.update({ step: text, k, n, size });
+            else if (st.wordsLine && !opts.stepsInToast) st.wordsLine.replaceChildren(spinEl(12), document.createTextNode(text));
             else if (st.drawnOn === st.el && !opts.stepsInToast) {
                 const busy = workingWords(st.el);
                 if (busy) busy.replaceChildren(busy.querySelector('.busy-spin') ?? spinEl(), document.createTextNode(text));
@@ -934,6 +1003,7 @@ export function setBusyLabel(el: HTMLElement, label: string): void {
     st.label = label;
     const busy = workingWords(el);
     if (busy && st.drawnOn === el) busy.replaceChildren(busy.querySelector('.busy-spin') ?? spinEl(), document.createTextNode(label));
+    st.wordsLine?.replaceChildren(spinEl(12), document.createTextNode(label));
     st.toast?.update({ title: label });
 }
 

@@ -259,12 +259,15 @@ describe('the structure', () => {
         text.textContent = 'Open the research';
         const mark = dom.document.createElement('span');
         mark.className = 'research-open-mark';
+        mark.textContent = ', opens in the research';
         text.appendChild(mark);
         btn.appendChild(text as unknown as Node);
         const job = deferred();
         const run = runBusy(btn, () => job.promise, { label: 'Opening…' });
         await vi.advanceTimersByTimeAsync(BUSY_SHOW_MS + 1);
         expect(btn.lastElementChild).toBe(mark);
+        // Its name at work keeps the mark's words (§1.2: the name stays the one at rest).
+        expect(btn.getAttribute('aria-label')).toBe('Open the research, opens in the research');
         expect(btn.querySelector('.bl .research-open-mark')).toBeNull();
         job.resolve();
         await vi.advanceTimersByTimeAsync(BUSY_MIN_MS);
@@ -279,6 +282,49 @@ describe('the structure', () => {
         const html = busyButtonHtml('Send', 'Sending…', 'Sent');
         expect(html).toContain('<span class="b-idle">Send</span>');
         expect(html).toContain('class="b-busy" aria-hidden="true"');
+    });
+
+    it('a cell prepared with its own words keeps them over the action\'s sentence (§1.2: its width set at rest)', async () => {
+        btn.textContent = 'Validation details';
+        prepareBusy(btn, 'Checking…', undefined, { own: true });
+        const job = deferred();
+        const run = runBusy(btn, () => job.promise, { label: 'Checking 5,154 people…' });
+        await vi.advanceTimersByTimeAsync(BUSY_SHOW_MS + 1);
+        expect(btn.dataset.busy).toBe('busy');
+        expect(btn.querySelector(':scope > .bl > .b-busy')?.textContent).toBe('Checking…');
+        job.resolve();
+        await vi.advanceTimersByTimeAsync(BUSY_MIN_MS);
+        await run;
+        expect(btn.querySelector(':scope > .bl > .b-busy')?.textContent).toBe('Checking…');
+    });
+
+    it('a working element keeps its name: its idle words held as aria-label until rest', async () => {
+        const job = deferred();
+        const run = runBusy(btn, () => job.promise, { label: 'Sending…' });
+        await vi.advanceTimersByTimeAsync(BUSY_SHOW_MS + 1);
+        expect(btn.getAttribute('aria-label')).toBe('Send');
+        job.resolve();
+        await vi.advanceTimersByTimeAsync(BUSY_MIN_MS);
+        await run;
+        expect(btn.getAttribute('aria-label')).toBeNull();
+    });
+
+    it('wordsIn: the words stand in that line, the element shows its spinner alone, the line back at rest', async () => {
+        btn.textContent = 'Couples';
+        prepareBusy(btn, '', undefined, { own: true });
+        const hint = dom.document.createElement('p');
+        hint.textContent = 'Each couple a tree.';
+        row.appendChild(hint);
+        const job = deferred();
+        const run = runBusy(btn, () => job.promise, { label: 'Finding families…', wordsIn: hint as unknown as HTMLElement });
+        await vi.advanceTimersByTimeAsync(BUSY_SHOW_MS + 1);
+        expect(btn.querySelector(':scope > .bl > .b-busy')?.textContent).toBe('');
+        expect(btn.querySelector('.b-busy > .busy-spin')).not.toBeNull();
+        expect(hint.textContent).toBe('Finding families…');
+        job.resolve();
+        await vi.advanceTimersByTimeAsync(BUSY_MIN_MS);
+        await run;
+        expect(hint.textContent).toBe('Each couple a tree.');
     });
 
     it('a link keeps its text, the spinner after it', async () => {
@@ -303,7 +349,8 @@ describe('the structure', () => {
         expect(rm).not.toBeNull();
         expect(rm![1]).toContain('animation: none');
         expect(rm![1]).toContain('radial-gradient');
-        expect(css).toMatch(/\[data-busy="busy"\],[\s\S]{0,400}opacity: 1 !important/);
+        // The rule over the dimming: every working kind of element, its working attributes, never faded.
+        expect(css).toMatch(/\)\[data-busy="busy"\],[^{]*\[aria-busy="true"\] \{\s*opacity: 1 !important/);
     });
 });
 

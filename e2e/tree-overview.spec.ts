@@ -282,8 +282,10 @@ test.describe('tree overview', () => {
         await expect(section(page.locator('#tree-overview-modal'), 'quality')).toHaveAttribute('data-ready', 'true');
         // Structure: one family; the quick actions (nothing to clean up: disabled).
         await expect(quality.locator('[data-block="structure"] .tov-struct-line')).toHaveText('4 unions. All people are connected into one family.');
-        await expect(quality.locator('[data-block="actions"] .tov-btn')).toHaveText(
-            ['Validation details', 'Clean up orphaned places (0)', 'Split into families']);
+        // Their names (Validation details carries its working words, hidden, from the start: §1.2).
+        await expect.poll(() => quality.locator('[data-block="actions"] .tov-btn').evaluateAll(bs =>
+            bs.map(b => ((b.querySelector('.b-idle') ?? b).textContent ?? '').trim())))
+            .toEqual(['Validation details', 'Clean up orphaned places (0)', 'Split into families']);
         await expect(quality.getByRole('button', { name: 'Clean up orphaned places (0)' })).toBeDisabled();
         // People without a source: the highlight with Cite.
         await evidence.locator('[data-kind="noSource"]').click();
@@ -1248,7 +1250,7 @@ test.describe('Research › to the Research overview (spec 057 §7.5)', () => {
 });
 
 test.describe('the tree check of a large tree (C102, waiting buttons §8)', () => {
-    test('Validation details says "Checking 5,154 people…" at the button before the check, then opens the dialog', async ({ page }) => {
+    test('Validation details says "Checking…" at the button before the check, its width kept, then opens the dialog', async ({ page }) => {
         test.setTimeout(90_000);
         await page.setViewportSize({ width: 1440, height: 900 });
         await openApp(page);
@@ -1272,14 +1274,18 @@ test.describe('the tree check of a large tree (C102, waiting buttons §8)', () =
             w.__said = [];
             const modal = document.getElementById('tree-validation-modal')!;
             new MutationObserver(() => {
-                if (b.getAttribute('aria-busy') === 'true' && !modal.classList.contains('active')) w.__said.push(b.textContent ?? '');
+                if (b.getAttribute('aria-busy') === 'true' && !modal.classList.contains('active')) {
+                    w.__said.push(`${b.querySelector('.b-busy')?.textContent ?? ''}|${Math.round(b.getBoundingClientRect().width)}`);
+                }
             }).observe(b, { attributes: true, childList: true, subtree: true, characterData: true });
         });
+        const rest = Math.round((await button.boundingBox())!.width);
         await button.click();
         await expect(page.locator('#tree-validation-modal')).toBeVisible();
         const said = await page.evaluate(() => (window as unknown as { __said: string[] }).__said);
-        // The real people of the tree (its placeholders not counted), written as the language writes a count.
-        expect(said.some(t => /Checking 5,\d{3} people…/.test(t))).toBe(true);
+        // The button's own short words (drawn with it: the count would widen it by half in German, §1.2).
+        expect(said.some(t => t.startsWith('Checking…|'))).toBe(true);
+        for (const t of said) expect(Math.abs(Number(t.split('|')[1]) - rest)).toBeLessThanOrEqual(1);
         // Back in the overview, the button is itself again.
         await page.keyboard.press('Escape');
         await expect(dialog).toBeVisible();

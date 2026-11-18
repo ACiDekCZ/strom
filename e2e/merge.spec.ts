@@ -225,7 +225,7 @@ test('merge wizard warns up-front when an input tree has validation errors', asy
 });
 
 test.describe('the matching of large trees (C23/C86, waiting buttons §8)', () => {
-    test('Start merge and Re-analyze say "Analyzing people…" at their button before the matching', async ({ page }) => {
+    test('Start merge and Re-analyze say "Analyzing…" at their button before the matching', async ({ page }) => {
         test.setTimeout(120_000);
         await openApp(page);
         const a = syntheticTree({ persons: 700, seed: 3 }).data;
@@ -242,7 +242,7 @@ test.describe('the matching of large trees (C23/C86, waiting buttons §8)', () =
             w.__said = [];
             const btn = document.querySelector<HTMLElement>(sel)!;
             new MutationObserver(() => {
-                if (btn.getAttribute('aria-busy') === 'true') w.__said.push(btn.textContent ?? '');
+                if (btn.getAttribute('aria-busy') === 'true') w.__said.push(btn.querySelector('.b-busy')?.textContent ?? '');
             }).observe(btn, { attributes: true, childList: true, subtree: true, characterData: true });
         }, sel);
         const said = () => page.evaluate(() => (window as unknown as { __said: string[] }).__said);
@@ -255,7 +255,7 @@ test.describe('the matching of large trees (C23/C86, waiting buttons §8)', () =
         await pick.locator('#merge-trees-btn').click();
         const wizard = page.locator('#merge-modal');
         await expect(wizard).toBeVisible({ timeout: 60_000 });
-        expect((await said()).some(t => t.includes('Analyzing people…'))).toBe(true);
+        expect((await said()).some(t => t === 'Analyzing…')).toBe(true);
 
         const again = wizard.getByRole('button', { name: 'Re-analyze' });
         await expect(again).toBeVisible();
@@ -263,6 +263,6 @@ test.describe('the matching of large trees (C23/C86, waiting buttons §8)', () =
         await watch('#merge-reanalyze-probe');
         await again.click();
         await expect(again).not.toHaveAttribute('aria-busy', 'true', { timeout: 60_000 });
-        expect((await said()).some(t => t.includes('Analyzing people…'))).toBe(true);
+        expect((await said()).some(t => t === 'Analyzing…')).toBe(true);
     });
 });

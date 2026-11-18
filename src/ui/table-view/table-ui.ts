@@ -23,7 +23,7 @@
 import { auditPersonName, DataManager } from '../../data.js';
 import { TreeManager } from '../../tree-manager.js';
 import { TreeRenderer } from '../../renderer.js';
-import { runBusy, nextPaint } from '../busy.js';
+import { runBusy, nextPaint, busyButtonHtml } from '../busy.js';
 import { isPhoneBar, isTabletOrMobile } from '../../breakpoints.js';
 import { strings, getCurrentLanguage, type Language } from '../../strings.js';
 import { uiModule } from '../module.js';
@@ -1098,7 +1098,11 @@ export const tableMethods = uiModule({
             exportBtn.type = 'button';
             exportBtn.className = 'tv-export-btn';
             exportBtn.setAttribute('aria-haspopup', 'dialog');
-            exportBtn.innerHTML = `${strings.table.export}<span class="tv-export-caret" aria-hidden="true">▾</span>`;
+            // §1.2: the working state drawn with it; the toolbar has no room for the sentence, so the button keeps
+            // its own word with the spinner in front (its width the same), the sentence goes to a toast when hidden.
+            exportBtn.innerHTML = busyButtonHtml(`${escHtml(strings.table.export)}<span class="tv-export-caret" aria-hidden="true">▾</span>`,
+                strings.table.export, undefined, { own: true });
+            exportBtn.dataset.busy = 'idle';
             exportBtn.addEventListener('click', () => this.showTableExport());
             bar.querySelector('.tv-slot-export')!.appendChild(exportBtn);
             // ⧉ (spec 079 §1, 1c): the Table with its state in a new window; this window stays on the Table.
@@ -3193,8 +3197,9 @@ export const tableMethods = uiModule({
         const make = (): void => this.saveTableExport(now, format);
         if (!btn?.isConnected) { make(); return; }
         const cells = now.input.rows.length * Math.max(1, now.input.columns.length);
+        // A phone has Export in ⋯ (the toolbar's button hidden): the state goes to a progress toast (§4, §2).
         await runBusy(btn, async () => { await nextPaint(); make(); },
-            { heavy: cells >= TABLE_EXPORT_SHOWN_AT_ONCE ? 'now' : true, label: strings.busy.savingFile });
+            { heavy: cells >= TABLE_EXPORT_SHOWN_AT_ONCE ? 'now' : true, label: strings.busy.savingFile, toastWhenGone: true });
     },
 
     /** The export built and handed to the browser, and its toast. */

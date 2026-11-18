@@ -10256,6 +10256,10 @@ const stringsEN = {
         findingChanges: 'Finding the changes…',
         /** A packet of changes applied to the tree (§8). */
         applyingChanges: 'Applying the changes…',
+        /** A button's own short words where the sentence would widen it (§1.2: the width stays from the start). */
+        accepting: 'Accepting…',
+        analyzing: 'Analyzing…',
+        checking: 'Checking…',
         adoptTitle: 'Handing the tree to the research…',
         adoptBackup: 'Saving a backup',
         adoptGedcom: 'Creating GEDCOM',
@@ -20190,6 +20194,9 @@ const stringsCZ: StringsType = {
         findingFamilies: 'Hledají se rodiny…',
         findingChanges: 'Hledají se změny…',
         applyingChanges: 'Přijímají se změny…',
+        accepting: 'Přijímá se…',
+        analyzing: 'Analyzuje se…',
+        checking: 'Kontroluje se…',
         adoptTitle: 'Předává se strom výzkumu…',
         adoptBackup: 'Ukládá se záloha',
         adoptGedcom: 'Vytváří se GEDCOM',
@@ -25039,7 +25046,7 @@ const stringsDE: StringsType = {
         colDocumented: 'belegt',
         docResearchNote: 'Belegt heißt hier: in der Forschung bewiesen; der eingelesene Stammbaum ist ein Hinweis.',
         colExpected: 'erwartet',
-        colRatio: 'bekannt / erwartet',
+        colRatio: 'bekannt / erw.',
         docShort: 'bel.',
         collapse: (n: number) => n === 1
             ? '1 Vorfahre kommt in der Ahnentafel mehrfach vor. Er wird einmal gezählt.'
@@ -30035,6 +30042,9 @@ const stringsDE: StringsType = {
         findingFamilies: 'Familien werden gesucht…',
         findingChanges: 'Änderungen werden gesucht…',
         applyingChanges: 'Änderungen werden übernommen…',
+        accepting: 'Wird übernommen…',
+        analyzing: 'Wird analysiert…',
+        checking: 'Wird geprüft…',
         adoptTitle: 'Stammbaum wird an die Forschung übergeben…',
         adoptBackup: 'Sicherung wird gespeichert',
         adoptGedcom: 'GEDCOM wird erstellt',
