@@ -29634,8 +29634,10 @@
             .mw-empty-file { width: 48px; height: 58px; }
             .mw-selbar { height: 48px; flex-wrap: nowrap; padding: 0 16px; padding-bottom: env(safe-area-inset-bottom); }
             .mw-selbar { gap: 8px; } .materials-window .mw-selbtn { padding: 7px 10px; } .materials-window .mw-selmore { min-width: 44px; }
-            /* Wider fonts (Verdana, the Linux defaults): the count and Clear selection take two lines instead of an ellipsis. */
-            .mw-selcount, .materials-window .mw-selbar .link-button { white-space: normal; line-height: 1.2; }
+            /* Wider fonts (Verdana, the Linux defaults): the count and Clear selection take two lines instead of an ellipsis
+               (the count at most two, Clear selection is two words); Select the whole batch stays one line. */
+            .mw-selcount { white-space: normal; line-height: 1.2; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+            .materials-window .mw-selbar .mw-selclear { white-space: normal; line-height: 1.2; }
             .mw-pop-sheet { max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); }
         }
         @media (hover: hover) {
