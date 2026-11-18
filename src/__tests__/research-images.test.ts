@@ -4,13 +4,13 @@
  * the bridge client, the state of a source and the bulk queue. Invented data.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { Source, StromData } from '../types.js';
 import {
     setResearchImageBackend, memoryBackend, ResearchImageBackend, primeResearchImages, loadResearchImage,
     storedImagesOf, shownExcerpts, pendingClips, removeResearchImages, researchImagesTotal, pruneDeliveredImages,
-    fetchExcerpt, fetchMissingList, heldImageMode, sourceImageState, ResearchImageQueue, resetKnownImageErrors,
+    fetchExcerpt, fetchMissingList, MISSING_LIST_TIMEOUT_MS, heldImageMode, sourceImageState, ResearchImageQueue, resetKnownImageErrors,
     StoredResearchImage, LoadError, formatImageBytes, hasResearchImages,
 } from '../research-images.js';
 
@@ -217,6 +217,29 @@ describe('the bridge client', () => {
         expect(list?.bytes).toBe(300000);
         expect(list?.sources[0].ready).toBe(true);
         expect(await fetchMissingList(BASE, undefined, bridge(() => ({ status: 404, body: {} })))).toBeNull();
+    });
+
+    it('the list waits 15 s at most, also for a caller without a signal (the export dialog); a caller\'s abort goes back to it', async () => {
+        vi.useFakeTimers();
+        try {
+            const silent = (_u: string, init?: RequestInit) => new Promise<Response>((_res, rej) => {
+                init?.signal?.addEventListener('abort', () => rej(new DOMException('aborted', 'AbortError')));
+            });
+            const list = fetchMissingList(BASE, undefined, silent);
+            let done = false;
+            void list.then(() => { done = true; });
+            await vi.advanceTimersByTimeAsync(MISSING_LIST_TIMEOUT_MS - 1);
+            expect(done).toBe(false);
+            await vi.advanceTimersByTimeAsync(1);
+            expect(await list).toBeNull();
+            expect(MISSING_LIST_TIMEOUT_MS).toBe(15_000);
+            const ctl = new AbortController();
+            const asked = fetchMissingList(BASE, ctl.signal, silent);
+            ctl.abort();
+            await expect(asked).rejects.toThrow();
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });
 

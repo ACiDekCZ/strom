@@ -460,10 +460,18 @@ export interface MissingList {
 }
 
 /** `GET <token>/excerpts?missing=1`: what the research left out and can give (null when it cannot say). */
+/** The list of what is missing waits for the research this long (§10.3): then it is not known (null). */
+export const MISSING_LIST_TIMEOUT_MS = 15_000;
+
 export async function fetchMissingList(base: string, signal?: AbortSignal, fetchImpl?: FetchLike): Promise<MissingList | null> {
     const f: FetchLike = fetchImpl ?? ((u, i) => fetch(u, i));
+    // Its own limit beside the caller's signal: a caller without one (the export dialog) no longer waits for ever.
+    const own = new AbortController();
+    const timer = setTimeout(() => own.abort(), MISSING_LIST_TIMEOUT_MS);
+    const stop = (): void => own.abort();
+    if (signal?.aborted) own.abort(); else signal?.addEventListener('abort', stop, { once: true });
     try {
-        const res = await f(withAppVersion(`${base}/excerpts?missing=1`), { method: 'GET', mode: 'cors', credentials: 'omit', cache: 'no-store', signal });
+        const res = await f(withAppVersion(`${base}/excerpts?missing=1`), { method: 'GET', mode: 'cors', credentials: 'omit', cache: 'no-store', signal: own.signal });
         if (!res.ok) return null;
         const body = await res.json() as Record<string, unknown>;
         const sources: MissingSource[] = (Array.isArray(body.sources) ? body.sources : []).flatMap((raw: unknown) => {
@@ -486,8 +494,12 @@ export async function fetchMissingList(base: string, signal?: AbortSignal, fetch
             sources,
         };
     } catch (err) {
-        if ((err as Error)?.name === 'AbortError') throw err;
+        // The caller's own abort goes back to it; the limit's end is "not known".
+        if (signal?.aborted) throw err;
         return null;
+    } finally {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', stop);
     }
 }
 
