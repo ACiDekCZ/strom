@@ -281,6 +281,45 @@ test.describe('the Research overview without following', () => {
         await expect(toast).toHaveCount(0);
     });
 
+    test('the Research menu\'s "Follow live" waiting for the bridge: the browser\'s question said in its progress toast, no toast of its own over it', async ({ page }) => {
+        const bridge = await researchTree(page);
+        await helloStream(page);
+        let answer!: () => void;
+        bridge.statusGate = new Promise<void>(r => { answer = r; });
+        await page.locator('#research-menu-btn').click();
+        await page.locator('#research-item-live').click();
+        const toast = page.locator('.toast--progress');
+        await expect(toast.locator('.toast-title')).toHaveText('Connecting to the research…');
+        // After a moment (1.5 s) the words about the browser's question: in the same toast, under its title.
+        await expect(toast.locator('.t-sub')).toHaveText(
+            'If the browser asks about “Access other apps and services on this device”, choose Allow.');
+        await expect(page.locator('.toast[data-kind="research-connect"]')).toHaveCount(0);
+        await expect(toast.locator('.toast-title')).toHaveText('Connecting to the research…');
+        // The status answers: the tree's step takes the line's place.
+        answer();
+        await expect.poll(() => following(page), { timeout: 10000 }).toBe(true);
+        await expect(page.locator('.toast[data-kind="research-connect"]')).toHaveCount(0);
+    });
+
+    test('"Follow live" in the strip waiting for the bridge: the browser\'s question under its button, no toast of its own', async ({ page }) => {
+        const bridge = await researchTree(page);
+        await helloStream(page);
+        await openFromMenu(page);
+        let answer!: () => void;
+        bridge.statusGate = new Promise<void>(r => { answer = r; });
+        const btn = strip(page).locator('.research-overview__follow-live');
+        await btn.click();
+        await expect(btn).toHaveAttribute('aria-busy', 'true');
+        const line = page.locator('.busy-msg.busy-step');
+        await expect(line).toHaveText('If the browser asks about “Access other apps and services on this device”, choose Allow.');
+        await expect(page.locator('.toast[data-kind="research-connect"]')).toHaveCount(0);
+        await expect(btn).toContainText('Connecting to the research…');
+        answer();
+        await expect.poll(() => following(page), { timeout: 10000 }).toBe(true);
+        await expect(line).toHaveCount(0);
+        await expect(page.locator('.toast[data-kind="research-connect"]')).toHaveCount(0);
+    });
+
     test('the bridge not answering: not running · Turn on, Awaiting action as of then, the lines from the file, nothing of the agent', async ({ page }) => {
         const bridge = await researchTree(page);
         // What the research said is remembered on this device; then it stops answering.

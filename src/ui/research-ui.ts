@@ -105,7 +105,7 @@ import { endResearchAdoptWait } from './research-adopt-ui.js';
 import { countGedcomPersons, readBodyWithProgress, type TreeDownloadWatch, type TreeLoadRun } from './tree-load-progress.js';
 import type { ProgressToastHandle } from './toast.js';
 import { holdLeave } from './busy-leave.js';
-import { BUSY_SHOW_MS, BUSY_TIMEOUTS, announceBusy, busySpinHtml, runBusy } from './busy.js';
+import { BUSY_SHOW_MS, BUSY_TIMEOUTS, announceBusy, busyShownOn, busySpinHtml, busyStep, runBusy } from './busy.js';
 import { TreeEditLock } from './tree-edit-lock.js';
 import { sourceReadings, researchSendVouches, conflictTakeovers, heldConflicts } from '../research-sync.js';
 import { currentAppBrowser, appBrowserName } from '../research-transfer.js';
@@ -1216,13 +1216,15 @@ export function followStartOf(researchId: string | null | undefined): FollowStar
 /**
  * How following starts (startLiveFollow). `progress`: "Follow live" asked by a person — its step said
  * (connecting, then the tree), and `settle` right before a dialog says why it cannot (the state ends there).
+ * `hint`: the words about the browser's question on the local network, said in that same state (no toast of
+ * their own over it); without it they come in a toast of their own.
  */
 export interface LiveFollowOpts {
     resume?: boolean;
     follow?: boolean;
     auto?: { researchId: string; treeId: TreeId };
     from?: { followed: TreeId | null; open: TreeId | null };
-    progress?: { step(step: FollowStartStep): void; settle(): void };
+    progress?: { step(step: FollowStartStep): void; settle(): void; hint?(text: string): void };
 }
 
 /** The toast "Connected to the research again" (its "Follow live" says its work in it). */
@@ -2291,11 +2293,15 @@ export const researchUiMethods = uiModule({
     /** The browser refused the local address: explain, offer the file picker. */
     /**
      * Wait for a bridge the user just came from; after a moment say what is
-     * waited for (the browser may be asking about the local network).
+     * waited for (the browser may be asking about the local network). `say`:
+     * a state that already says the connecting (an element, a progress toast)
+     * takes these words, instead of a toast of their own over it.
      */
-    async connectResearchBridge<T>(ask: () => Promise<T>): Promise<T> {
-        const hint = setTimeout(() => this.showToast(strings.research.connecting, CONNECT_TIMEOUT_MS,
-            { spinner: true, kind: 'research-connect' }), CONNECT_HINT_MS);
+    async connectResearchBridge<T>(ask: () => Promise<T>, say?: (text: string) => void): Promise<T> {
+        const hint = setTimeout(() => {
+            if (say) say(strings.research.connectingHint);
+            else this.showToast(strings.research.connecting, CONNECT_TIMEOUT_MS, { spinner: true, kind: 'research-connect' });
+        }, CONNECT_HINT_MS);
         try {
             return await ask();
         } finally {
@@ -3243,13 +3249,29 @@ export const researchUiMethods = uiModule({
     async followLiveWithState(base: string, researchId: string, startOpts: LiveFollowOpts, el: HTMLElement | null): Promise<FollowLiveOutcome> {
         const started: { outcome?: Promise<FollowLiveOutcome> } = {};
         const target = el ?? document.createElement('span');
+        // The browser's question on the local network: a quiet line under the element still seen, else the
+        // progress toast's line (its title keeps "Connecting…"); the tree's step takes its place.
+        let hintLine: { clear(): void } | null = null;
+        const clearHint = (): void => { hintLine?.clear(); hintLine = null; };
         await runBusy(target, (ctl) => new Promise<void>((resolve) => {
             started.outcome = this.followLiveGuarded(base, researchId, startOpts, {
-                step: (step) => { if (step === 'tree') ctl.step(strings.busy.loadingTree); },
-                settle: resolve,
+                step: (step) => {
+                    if (step !== 'tree') return;
+                    clearHint();
+                    ctl.step(strings.busy.loadingTree);
+                },
+                settle: () => { clearHint(); resolve(); },
+                hint: (text) => {
+                    clearHint();
+                    // Drawn anew meanwhile (the overview redraws): the element in its place.
+                    const shown = busyShownOn(target);
+                    if (shown) hintLine = busyStep(shown, text);
+                    else ctl.step(text);
+                },
             });
             started.outcome.then(() => resolve(), () => resolve());
         }), { label: strings.busy.connectingResearch, atOnce: true, kind: 'tree', toastWhenGone: true });
+        clearHint();
         return started.outcome ?? 'busy';
     },
 
@@ -3259,7 +3281,7 @@ export const researchUiMethods = uiModule({
      * Resolves once the start ended: following ('on') or not ('off').
      */
     async followLiveGuarded(raw: string, researchId: string, startOpts: LiveFollowOpts,
-        ui?: { step(step: FollowStartStep): void; settle(): void }): Promise<FollowLiveOutcome> {
+        ui?: { step(step: FollowStartStep): void; settle(): void; hint?(text: string): void }): Promise<FollowLiveOutcome> {
         const key = followKey(raw);
         if (!key) return 'none';
         if (followStarts.has(key)) return 'busy';
@@ -3270,7 +3292,8 @@ export const researchUiMethods = uiModule({
         };
         step('connect');
         try {
-            await this.startLiveFollow(raw, { ...startOpts, progress: { step, settle: () => ui?.settle() } });
+            const hint = ui?.hint ? (text: string): void => ui.hint?.(text) : undefined;
+            await this.startLiveFollow(raw, { ...startOpts, progress: { step, settle: () => ui?.settle(), ...(hint ? { hint } : {}) } });
         } finally {
             followStarts.delete(key);
             overviewChanged();
@@ -3630,9 +3653,28 @@ export const researchUiMethods = uiModule({
                 label: strings.research.followLive,
                 run: () => new Promise<void>((resolve) => {
                     const title = (): Element | null => document.querySelector(`.toast[data-kind="${RECONNECTED_TOAST}"] .toast-title`);
+                    // The browser's question on the local network: the toast's quiet line, under its title.
+                    const sub = (text: string | null): void => {
+                        const body = title()?.parentElement;
+                        if (!body) return;
+                        let line = body.querySelector<HTMLElement>('.t-sub');
+                        if (text === null) { line?.remove(); return; }
+                        if (!line) {
+                            line = document.createElement('span');
+                            line.className = 't-sub';
+                            body.appendChild(line);
+                        }
+                        line.textContent = text;
+                    };
                     void this.followLiveGuarded(raw, researchId, { follow: true }, {
-                        step: (step) => { const t = title(); if (t && step === 'tree') t.textContent = strings.busy.loadingTree; },
+                        step: (step) => {
+                            const t = title();
+                            if (!t || step !== 'tree') return;
+                            t.textContent = strings.busy.loadingTree;
+                            sub(null);
+                        },
                         settle: resolve,
+                        hint: (text) => sub(text),
                     }).then(() => resolve(), () => resolve());
                 }),
                 work: { label: strings.busy.connectingResearch, timeoutMs: BUSY_TIMEOUTS.tree },
@@ -3698,7 +3740,7 @@ export const researchUiMethods = uiModule({
             try {
                 status = opts.resume || auto
                     ? await fetchStatus(bridge.status, auto ? AUTO_CONNECT_MS : undefined)
-                    : await this.connectResearchBridge(() => fetchStatus(bridge.status, CONNECT_TIMEOUT_MS));
+                    : await this.connectResearchBridge(() => fetchStatus(bridge.status, CONNECT_TIMEOUT_MS), opts.progress?.hint);
                 if (!status) throw new Error('bad status');
                 if (auto && status.treeId !== auto.researchId) {
                     passive();

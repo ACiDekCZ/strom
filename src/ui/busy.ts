@@ -151,6 +151,16 @@ export function isBusy(el: HTMLElement): boolean {
 }
 
 /**
+ * The element on the screen now that shows the working state started on `el` (it follows a redraw), when it is
+ * seen; null once the state went to a progress toast, ended, or its element is gone.
+ */
+export function busyShownOn(el: HTMLElement): HTMLElement | null {
+    const st = states.get(el);
+    if (!st || st.toast || (st.phase !== 'lock' && st.phase !== 'busy')) return null;
+    return seen(st.el) ? st.el : null;
+}
+
+/**
  * One heavy computation under the working state of `el` (§8): painted before it, and with `atOnce` (a large tree:
  * the computation runs longer than 120 ms and the page cannot paint meanwhile) its words shown at once. Without an
  * element the work runs at once. Resolves with the work's result (undefined when `el` was busy already).

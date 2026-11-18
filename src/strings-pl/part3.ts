@@ -1183,6 +1183,7 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
         readOnly: 'tylko do odczytu',
         showInTree: 'Pokaż w drzewie',
         connecting: 'Łączenie ze Strom Research… Jeśli przeglądarka zapyta o „Dostęp do innych aplikacji i usług na tym urządzeniu”, trzeba wybrać Zezwól.',
+        connectingHint: 'Jeśli przeglądarka zapyta o „Dostęp do innych aplikacji i usług na tym urządzeniu”, trzeba wybrać Zezwól.',
         connectFailedTitle: 'Nie udało się połączyć z badaniem',
         connectRetry: 'Spróbuj ponownie',
         liveNoTree: 'Strom Research nie podał, które badanie wysyła.',
