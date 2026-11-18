@@ -6,6 +6,17 @@ import {
 } from './research-bridge.js';
 
 /**
+ * A result of a send that follows an edit is said once the edit's undo pill has stood its 3 s to be
+ * read (it carries the pill's Undo): run on Playwright's clock (installed by the test).
+ */
+const pillRead = (page: Page) => page.clock.runFor(3000);
+/**
+ * The toast said now: one waiting hidden under it (`.toast-held`, toast-slot.ts — the send's
+ * "Sending to the research…" under its result, when the send took a moment) is not the one read.
+ */
+const shownToast = (page: Page) => page.locator('.toast:not(.toast-held)');
+
+/**
  * A research that tells what it has (Strom Research 1.12+: `accepts` and
  * `inbox` in its status): the state of the tree at the top of ⋯ → Research,
  * the dot on ⋯, sending straight to the bridge without the terminal, a send
@@ -18,6 +29,7 @@ import {
 
 test.describe('the state of the tree and sending straight', () => {
     test('changes the research lacks: the block and the dot; Send posts without a dialog; then sent and waiting, no dot', { tag: '@smoke' }, async ({ page }) => {
+        await page.clock.install();
         await openResearch(page, { edit: true });
         const bridge = await fakeBridge(page);
         await poll(page);
@@ -28,7 +40,8 @@ test.describe('the state of the tree and sending straight', () => {
         await expect(block(page)).toHaveAttribute('data-state', 'unsent');
         await expect(block(page)).toContainText('Not in the research yet');
         await block(page).getByRole('menuitem', { name: 'Send changes' }).click();
-        await expect(page.locator('.toast')).toContainText('Sent to the research, 6 changes. Confirm them in the research.');
+        await pillRead(page);
+        await expect(shownToast(page)).toContainText('Sent to the research, 6 changes. Confirm them in the research.');
         await expect(page.locator('#confirmation-modal')).not.toHaveClass(/active/);
         expect(bridge.posts).toHaveLength(1);
         const ged = bridge.posts[0];
@@ -55,11 +68,12 @@ test.describe('the state of the tree and sending straight', () => {
         await openResearchMenu(page);
         await expect(block(page)).toHaveAttribute('data-state', 'inSync');
         await page.evaluate(() => window.Strom.UI.researchSendNow());
-        await expect(page.locator('.toast')).toContainText('Nothing to send. The research has the same tree.');
+        await expect(shownToast(page)).toContainText('Nothing to send. The research has the same tree.');
         expect(bridge.posts).toHaveLength(0);
     });
 
     test('refused: a dialog in the app\'s words, the technical reason as details; Try again sends again', async ({ page }) => {
+        await page.clock.install();
         await openResearch(page, { edit: true });
         const bridge = await fakeBridge(page, { syncReply: { status: 500, body: { error: 'výzkum úpravy nezapsal', reason: 'P0002 already has birth parents in F0001' } } });
         await poll(page);
@@ -70,7 +84,8 @@ test.describe('the state of the tree and sending straight', () => {
         await expect(dialog).not.toContainText('nezapsal');
         bridge.syncReply = { status: 200, body: { ok: true, changes: 6, inbox: true } };
         await dialog.getByRole('button', { name: 'Try again' }).click();
-        await expect(page.locator('.toast')).toContainText('Sent to the research, 6 changes');
+        await pillRead(page);
+        await expect(shownToast(page)).toContainText('Sent to the research, 6 changes');
         expect(bridge.posts).toHaveLength(2);
     });
 
@@ -90,12 +105,14 @@ test.describe('the state of the tree and sending straight', () => {
     });
 
     test('written with a change skipped (1.12): said so in the app\'s words', async ({ page }) => {
+        await page.clock.install();
         await openResearch(page, { edit: true });
         await fakeBridge(page, { syncReply: { status: 200, body: { ok: true, inbox: false, changes: 3, applied: 2,
             skipped: [{ n: 3, kind: 'family', why: 'P0002 already has birth parents in F0001' }] } } });
         await poll(page);
         await page.evaluate(() => window.Strom.UI.researchSendNow());
-        await expect(page.locator('.toast')).toContainText('The research wrote the rest but skipped 1 change. Those changes stay only in the app.');
+        await pillRead(page);
+        await expect(shownToast(page)).toContainText('The research wrote the rest but skipped 1 change. Those changes stay only in the app.');
     });
 
     test('the bridge not running: the changes wait; Send takes the old way (the research starts it)', async ({ page }) => {
@@ -188,18 +205,32 @@ test.describe('the state of the tree and sending straight', () => {
     });
 
     test('a slow bridge (a big research, its status in 5 s): its state as ever, never "not responding", a send goes; one ask at a time (1104)', async ({ page }) => {
+        // The research's 5 s run on the page's clock: the bridge answers when the test lets it, after them.
+        await page.clock.install();
         await openResearch(page, { edit: true });
         const bridge = await fakeBridge(page);
         await poll(page);
-        bridge.statusDelayMs = 5000;
+        let answer = () => {};
+        const slow = () => { bridge.statusGate = new Promise<void>(r => { answer = r; }); };
+        const answered = () => { answer(); bridge.statusGate = undefined; };
+        slow();
         // The ask in the background waits for the answer (the old 3 s limit said "not responding" here).
-        expect(await poll(page)).toBe(true);
+        const asked = poll(page);
+        await expect.poll(() => bridge.statusOpen ?? 0).toBe(1);
+        await page.clock.runFor(5000);
+        answered();
+        expect(await asked).toBe(true);
         // Asks meanwhile from several places: one on its way; a quick one goes on with the last status known.
-        const quick = await page.evaluate(async (id) => {
+        slow();
+        const quickAsked = page.evaluate(async (id) => {
             const ui = window.Strom.UI as unknown as { askResearchBridge(id: string, ms: number): Promise<{ head?: string } | null>; pollResearchBridge(o?: object): Promise<boolean> };
             const [polled, asked] = await Promise.all([ui.pollResearchBridge({ timeout: 16_000, reschedule: false }), ui.askResearchBridge(id, 1500)]);
             return { polled, head: asked?.head ?? null };
         }, UUID);
+        await expect.poll(() => bridge.statusOpen ?? 0).toBe(1);
+        await page.clock.runFor(5000);
+        answered();
+        const quick = await quickAsked;
         expect(quick).toEqual({ polled: true, head: HEAD });
         expect(bridge.statusOpenMax).toBe(1);
         await expect(page.locator('#research-sync-pill')).not.toContainText("doesn't respond");
@@ -207,11 +238,13 @@ test.describe('the state of the tree and sending straight', () => {
         await expect(block(page)).toHaveAttribute('data-state', 'unsent');
         await expect(block(page)).not.toContainText('strom live stop');
         // Sent by hand: the ask before the send does not wait for the slow answer.
+        slow();
         await block(page).getByRole('menuitem', { name: 'Send changes' }).click();
-        await expect(page.locator('.toast')).toContainText('Sent to the research, 6 changes.');
+        await page.clock.runFor(2000);   // past a quick ask's 1.5 s, long before the slow answer
+        await expect(shownToast(page)).toContainText('Sent to the research, 6 changes.');
         expect(bridge.posts).toHaveLength(1);
         expect(bridge.statusOpenMax).toBe(1);
-        bridge.statusDelayMs = 0;
+        answered();
         await expect.poll(() => bridge.statusOpen ?? 0, { timeout: 10_000 }).toBe(0);
     });
 
@@ -295,16 +328,18 @@ test.describe('the state of the tree and sending straight', () => {
     });
 
     test('discarded in the research: its own state and one notice (not again after a reload); Send again', async ({ page }) => {
+        await page.clock.install();
         await openResearch(page, { edit: true });
         const bridge = await fakeBridge(page, { lastIntake: { id: 'I0041', at: '2026-09-30T09:00:00Z' } });
         await poll(page);
         await page.evaluate(() => window.Strom.UI.researchSendNow());
-        await expect(page.locator('.toast')).toContainText('Sent to the research');
+        await pillRead(page);
+        await expect(shownToast(page)).toContainText('Sent to the research');
         // The user discarded it in the research.
         bridge.inbox = [];
         Object.assign(bridge.sends[0], { state: 'discarded', decidedAt: new Date().toISOString(), reason: 'zkouška' });
         await poll(page);
-        await expect(page.locator('.toast')).toContainText('was discarded in the research (zkouška)');
+        await expect(shownToast(page)).toContainText('was discarded in the research (zkouška)');
         await expect(dot(page)).toBeVisible();
         await openResearchMenu(page);
         await expect(block(page)).toHaveAttribute('data-state', 'rejected');
@@ -313,11 +348,11 @@ test.describe('the state of the tree and sending straight', () => {
         await page.reload();
         await expect(card(page, 'Jan')).toBeVisible();
         await poll(page);
-        await page.waitForTimeout(300);
+        await page.clock.runFor(300);
         await expect(page.locator('.toast', { hasText: 'discarded' })).toHaveCount(0);
         await openResearchMenu(page);
         await block(page).getByRole('menuitem', { name: 'Send again' }).click();
-        await expect(page.locator('.toast')).toContainText('Sent to the research');
+        await expect(shownToast(page)).toContainText('Sent to the research');
         await poll(page);
         await openResearchMenu(page);
         await expect(block(page)).toHaveAttribute('data-state', 'sentPending');
@@ -353,7 +388,8 @@ test.describe('after a send the research wrote', () => {
         const bridge = await fakeBridge(page);
         await poll(page);
         await page.evaluate(() => window.Strom.UI.researchSendNow());
-        await expect(page.locator('.toast')).toContainText('Sent to the research');
+        await pillRead(page);
+        await expect(shownToast(page)).toContainText('Sent to the research');
         // Written in the research; no explicit ask from the test — the window coming back asks.
         bridge.inbox = [];
         Object.assign(bridge.sends[0], { state: 'written', decidedAt: new Date().toISOString() });
@@ -371,6 +407,7 @@ test.describe('after a send the research wrote', () => {
     });
 
     test('the user\'s own images stay with their people and sources when the written version is loaded; images of a person the research dropped are asked about', async ({ page }) => {
+        await page.clock.install();
         await openResearch(page);
         const bridge = await fakeBridge(page);
         await poll(page);
@@ -389,7 +426,8 @@ test.describe('after a send the research wrote', () => {
                 excerpts: (Object.values(d.sources).find((s: any) => s.refn === 'S0001') as any).excerpts?.length ?? 0 };
         });
         await page.evaluate(() => window.Strom.UI.researchSendNow());
-        await expect(page.locator('.toast')).toContainText('Sent to the research');
+        await pillRead(page);
+        await expect(shownToast(page)).toContainText('Sent to the research');
         bridge.inbox = [];
         Object.assign(bridge.sends[0], { state: 'written', decidedAt: new Date().toISOString() });
         bridge.head = 'aa11bb22cc33';
@@ -408,7 +446,7 @@ test.describe('after a send the research wrote', () => {
         bridge.treeGed = researchGed('dd44ee55ff66')
             .replace(/0 @P0003@ INDI[\s\S]*?(?=0 @F0001@)/, '').replace('1 CHIL @P0003@\n', '');
         await poll(page);
-        await page.waitForTimeout(300);
+        await page.clock.runFor(300);
         expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe('aa11bb22cc33');
         await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
         const dialog = page.locator('#confirmation-modal');
@@ -485,6 +523,7 @@ test('a newer version with the very same tree (the research committed only its f
 
 test.describe('updating over changes the research does not have', () => {
     test('the pill; "Send, then load" waits for the research, then the new version loads by itself', async ({ page }) => {
+        await page.clock.install();
         await openResearch(page, { edit: true });
         const bridge = await fakeBridge(page, { head: NEW_HEAD, treeGed: researchGed(NEW_HEAD) });
         await poll(page);
@@ -498,6 +537,7 @@ test.describe('updating over changes the research does not have', () => {
         await expect(dialog).toContainText('the research has a newer version');
         await expect(dialog.locator('.confirm-aside-btn')).toHaveText('Load without changes');
         await dialog.getByRole('button', { name: 'Send, then load' }).click();
+        await pillRead(page);
         // The message (the load's progress toast, gone for the question, may still fade beside it).
         await expect(page.locator('.toast:not(.toast--progress)')).toContainText('Sent to the research');
         await expect(pill).toContainText('Confirm the changes in the research, then the new version loads');
@@ -556,7 +596,7 @@ test.describe('updating over changes the research does not have', () => {
         await expect(dialog).toContainText("There are changes the research doesn't have");
         expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeId())).toBe(researchTreeId);
         await dialog.locator('.confirm-aside-btn').click();
-        await expect(page.locator('.toast')).toContainText('Research version loaded.');
+        await expect(shownToast(page)).toContainText('Research version loaded.');
         const otherAfter = await page.evaluate((id) => window.Strom.TreeManager.getTreeData(id).then(d => JSON.stringify(d)), otherId);
         expect(otherAfter).toBe(otherBefore);
         expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata().research.head)).toBe(NEW_HEAD);
@@ -579,6 +619,7 @@ test.describe('updating over changes the research does not have', () => {
 
 test.describe('Research for this tree and "Transcription verified"', () => {
     test('lead / evidence: saved at once, not retroactive, older sources linked; the send says evidence', async ({ page }) => {
+        await page.clock.install();
         await openResearch(page);
         const bridge = await fakeBridge(page);
         await poll(page);
@@ -590,7 +631,8 @@ test.describe('Research for this tree and "Transcription verified"', () => {
             dm.updatePerson(jan.id, { birthSourceIds: [src.id] });
         });
         await page.evaluate(() => window.Strom.UI.researchSendNow());
-        await expect(page.locator('.toast')).toContainText('Sent to the research');
+        await pillRead(page);
+        await expect(shownToast(page)).toContainText('Sent to the research');
 
         await openResearchMenu(page, { expandMore: true });
         await page.locator('#research-item-tree-settings').click();

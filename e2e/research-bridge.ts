@@ -116,8 +116,11 @@ export interface FakeBridge {
     hypotheses?: { decide?: string; writes: Record<string, unknown>[]; reply?: { status: number; body: unknown }; link?: string };
     /** Stuck (SIGSTOP): `/status` never answers. */
     statusHang?: boolean;
-    /** Slow (a big research): `/status` answers after this many ms of real time. */
-    statusDelayMs?: number;
+    /**
+     * Slow (a big research): `/status` answers once this promise is settled (the test settles it after
+     * running the page's clock on as long as the research takes).
+     */
+    statusGate?: Promise<void>;
     /** How each `/status` was asked: `full`, or `parts` (`parts=1`, the light status). */
     statusAsks?: string[];
     /** Heavy parts read apart (`GET /status/<part>`, a bridge with `status.parts` in its features). */
@@ -2047,10 +2050,10 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
         }
         if (url.pathname.endsWith('/status')) {
             if (b.statusHang) return new Promise<void>(() => { /* never answers */ });
-            if (b.statusDelayMs) {
+            if (b.statusGate) {
                 b.statusOpen = (b.statusOpen ?? 0) + 1;
                 b.statusOpenMax = Math.max(b.statusOpenMax ?? 0, b.statusOpen);
-                await new Promise(r => setTimeout(r, b.statusDelayMs));
+                await b.statusGate;
                 b.statusOpen--;
             }
             if (b.statusCode) return json(b.statusCode, { error: 'not here' });
