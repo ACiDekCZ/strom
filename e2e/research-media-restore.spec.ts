@@ -146,6 +146,12 @@ async function follow(page: Page, imgs: Img[], features: string[], opts: { failI
     return bridge;
 }
 
+/**
+ * The next automatic try for the tree's own files has failed: its warning is said in the page, and the next
+ * try's timer is set in the same task (so a fast-forward after this reaches it, never one before it is set).
+ */
+const mediaTryFailed = (page: Page) => page.waitForEvent('console', m => m.text().startsWith('The images by hash could not all be had'));
+
 const card = (page: Page, name: string) => page.locator(`#tree-canvas .person-card[aria-label^="${name} "]`);
 
 /** The tree's files as it holds them. */
@@ -214,7 +220,9 @@ test.describe('the tree\'s own files restored from a research that keeps them (m
         expect(first).toBeGreaterThan(0);
         const notice = page.locator('.toast[data-kind="research-media-missed"]');
         // Tried again by itself after a while; nothing said yet.
+        const triedOnce = mediaTryFailed(page);
         await page.clock.fastForward(5_000);
+        await triedOnce;
         await expect.poll(withMedia).toBeGreaterThan(first);
         await expect(notice).toHaveCount(0);
         // Tried once more; still not had: said, with Try again.
@@ -237,18 +245,28 @@ test.describe('the tree\'s own files restored from a research that keeps them (m
         const imgs = await makeImages(page);
         const bridge = await follow(page, imgs, ['ged.stale', 'ged.etag', 'ged.imagesByHash', 'media.app'], { failImages: true });
         const notice = page.locator('.toast[data-kind="research-media-missed"]');
+        // The first try by itself has failed before the time of the second one is forwarded.
+        const triedOnce = mediaTryFailed(page);
         await page.clock.fastForward(5_000);
+        await triedOnce;
         await page.clock.fastForward(30_000);
         await expect(notice).toContainText('The photos from the research could not be loaded.');
-        // The images' answer held: the toast works meanwhile.
+        // The images' answer held: the toast works meanwhile. Matched by its path: every bridge request carries
+        // `?app=<version>`, which a glob ending in `/images` never matches (the answer then came at once).
         let release = (): void => undefined;
         const held = new Promise<void>(r => { release = r; });
-        await page.route(`${BRIDGE}/**/images`, async (route) => { await held; await route.fallback(); });
+        let holding = 0;
+        await page.route(url => url.href.startsWith(BRIDGE) && url.pathname.endsWith('/images'), async (route) => {
+            holding++;
+            await held;
+            await route.fallback();
+        });
         const asked = bridge.asked.length;
         await notice.getByRole('button', { name: 'Try again' }).click();
         await expect(notice).toHaveAttribute('aria-busy', 'true');
         await expect(notice.locator('.toast-title')).toHaveText('Loading the tree from the research…');
         await expect(notice.locator('.busy-spin')).toBeVisible();
+        await expect.poll(() => holding).toBeGreaterThan(0);
         release();
         // Still not had: the same toast says it with Try again, no second one.
         await expect(notice).not.toHaveAttribute('aria-busy', 'true');
