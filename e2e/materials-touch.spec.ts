@@ -249,6 +249,24 @@ test.describe('Materials on a tablet and sideways', () => {
         }
     });
 
+    test('the tiles drawn when the window opens stay: the cache read after it does not draw them anew', async ({ page }) => {
+        await page.setViewportSize(SIDEWAYS);
+        await tree(page);
+        await page.evaluate(() => {
+            const w = window as unknown as { __tilesOut: number };
+            w.__tilesOut = 0;
+            new MutationObserver(records => {
+                for (const r of records) {
+                    for (const n of r.removedNodes) if (n instanceof Element && (n.matches('.mw-tile') || n.querySelector('.mw-tile'))) w.__tilesOut++;
+                }
+            }).observe(document.body, { childList: true, subtree: true });
+        });
+        await openWindow(page);
+        // The cache answers within milliseconds of opening (a tile pressed or measured then was replaced under it).
+        await page.evaluate(() => new Promise(r => setTimeout(r, 1000)));
+        expect(await page.evaluate(() => (window as unknown as { __tilesOut: number }).__tilesOut)).toBe(0);
+    });
+
     test('sideways: 88 px tiles without text, the list header hidden', async ({ page }) => {
         await page.setViewportSize(SIDEWAYS);
         await tree(page);

@@ -377,7 +377,12 @@ export const materialsWindowMethods = uiModule({
         this.mwRebuild({ items: true });
         void primeMaterials(ctx.treeId).then(() => {
             if (!alive(w.gen)) return;
-            this.mwRebuild({ items: true });
+            // The cache read: drawn again only when it brought something the window shows. Otherwise the
+            // tiles stay (redrawn, each one was replaced just after the window opened, under a finger or a pointer).
+            const now = this.materialsWindowContext();
+            const rec = w.model === 'archive' ? cachedMaterials(w.treeId) : null;
+            if (now && (capsKey(now.caps, now.base) !== w.drawnCaps || (rec?.list ?? null) !== w.list
+                || treeAttachmentsKey() !== w.drawnAttachments)) this.mwRebuild({ items: true });
             void this.mwLoad();
         });
     },
