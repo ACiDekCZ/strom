@@ -4998,6 +4998,13 @@ const stringsEN = {
         focusToast: (name: string) => `Focused on ${name}`,
         focusToastBack: '↩ Back',
         focusToastAria: 'Return to the previous view',
+        // ⌂ beside "Focused on" (spec 111): its tooltip and accessible name, {name} as the pill shows it.
+        focusHome: (name: string) => `Focus default person: ${name}`,
+        // Added after the name: why this person is the target.
+        focusHomeFirst: ' – first person in the tree',
+        focusHomeOpened: ' – focused when the tree opened',
+        // The default person is in focus already: ⌂ filled and muted, a click does nothing.
+        focusHomeAt: (name: string) => `Default person is in focus: ${name}`,
         // In place, the rest of the set (parents, partners, nested shown).
         childrenGroupUnion: (n: number, partner: string) => `∞ ${n} · ${partner}`,
         childrenWithPartnersHint: 'A click shows them here with the partners; the view stays.',
@@ -15023,6 +15030,10 @@ const stringsCZ: StringsType = {
         focusToast: (name: string) => `Zaměřeno na ${name}`,
         focusToastBack: '↩ Zpět',
         focusToastAria: 'Vrátit předchozí pohled',
+        focusHome: (name: string) => `Zaměřit výchozí osobu: ${name}`,
+        focusHomeFirst: ' – první osoba stromu',
+        focusHomeOpened: ' – zaměřená při otevření',
+        focusHomeAt: (name: string) => `Výchozí osoba je zaměřená: ${name}`,
         childrenGroupUnion: (n: number, partner: string) => `${n}. ∞ · ${partner}`,
         childrenWithPartnersHint: 'Kliknutí je ukáže tady, s partnery, pohled zůstane.',
         parentsShownTooltip: 'Rodiče ukázaní tady',
@@ -24928,6 +24939,10 @@ const stringsDE: StringsType = {
         focusToast: (name: string) => `Fokus auf ${name}`,
         focusToastBack: '↩ Zurück',
         focusToastAria: 'Zur vorherigen Ansicht zurückkehren',
+        focusHome: (name: string) => `Standardperson fokussieren: ${name}`,
+        focusHomeFirst: ' – erste Person im Stammbaum',
+        focusHomeOpened: ' – beim Öffnen fokussiert',
+        focusHomeAt: (name: string) => `Standardperson ist im Fokus: ${name}`,
         childrenGroupUnion: (n: number, partner: string) => `${n}. ∞ · ${partner}`,
         childrenWithPartnersHint: 'Ein Klick zeigt sie hier mit den Partnern, die Ansicht bleibt.',
         parentsShownTooltip: 'Hier gezeigte Eltern',

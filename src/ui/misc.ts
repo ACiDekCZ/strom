@@ -64,6 +64,7 @@ import { HELP_TOPICS, type HelpTopic } from '../help/topics.js';
 import { openHelp } from './help-ui.js';
 import { syncControlBlock } from './minimap.js';
 import { addLender, cancelWaiting, removeLender, watchToasts, whenFree } from '../toast-slot.js';
+import { updateDefaultFocusButtons } from './default-focus.js';
 
 
 
@@ -1714,6 +1715,8 @@ export const miscMethods = uiModule({
         });
 
         this.installFieldHelpMarks();
+        // ⌂'s tooltip and name are composed, not data-i18n (spec 111).
+        updateDefaultFocusButtons();
     },
 
     /**

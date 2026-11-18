@@ -104,6 +104,7 @@ import { eventIsShareable } from './events.js';
 import { buildPersonNameIndex, type ParticipantRef, type PersonNameIndex } from './participant-match.js';
 import { foldName } from './godparents.js';
 import { normalizeSha256 } from './sha256.js';
+import { startupPerson } from './default-person.js';
 
 /** Extended updates for Partnership */
 
@@ -5228,33 +5229,13 @@ class DataManagerClass {
      * Returns { personId, depthUp, depthDown } or null for "use first person with default depths"
      */
     getStartupFocus(): { personId: PersonId; depthUp?: number; depthDown?: number } | null {
-        const setting = this.data.defaultPersonId;
-
-        if (setting === undefined) {
-            // First person
-            return null;
+        // One rule with the target of "Focus default person" (src/default-person.ts).
+        const start = startupPerson(this.data);
+        if (!start || start.reason === 'first' || start.reason === 'fallbackFirst') return null;
+        if (start.reason === 'last') {
+            return { personId: start.id, depthUp: this.data.lastFocusDepthUp, depthDown: this.data.lastFocusDepthDown };
         }
-
-        if (setting === LAST_FOCUSED) {
-            // Last focused, with depths
-            if (this.data.lastFocusPersonId && this.data.persons[this.data.lastFocusPersonId]) {
-                return {
-                    personId: this.data.lastFocusPersonId,
-                    depthUp: this.data.lastFocusDepthUp,
-                    depthDown: this.data.lastFocusDepthDown
-                };
-            }
-            // Fallback to first person
-            return null;
-        }
-
-        // Specific person ID - check if valid
-        if (this.data.persons[setting]) {
-            return { personId: setting };
-        }
-
-        // Fallback to first person
-        return null;
+        return { personId: start.id };
     }
 
     /**

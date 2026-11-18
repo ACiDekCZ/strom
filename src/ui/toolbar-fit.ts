@@ -51,6 +51,8 @@
  *   3. `.toolbar-focus-nobulk`: no "Children & siblings" switch (the person
  *      menu still offers the step);
  *   4. `.toolbar-squeeze-3`: the search field → the magnifier, as step 5 above.
+ *   5. `.toolbar-focus-nohome`: no ⌂ "Focus default person" (spec 111; the
+ *      shortcut H still works), only where even the magnifier leaves no room.
  *
  * Every step is taken too while the search input is narrower than
  * TABLET_SEARCH_MIN_PX, so finding a person keeps its room before the other
@@ -63,7 +65,7 @@ import { isDesktop, isPhoneBar, isTablet } from '../breakpoints.js';
 /** The steps in their order (see above). */
 export const TOOLBAR_FIT_STEPS = ['toolbar-add-compact', 'toolbar-squeeze', 'toolbar-squeeze-2', 'toolbar-squeeze-name', 'toolbar-squeeze-3'] as const;
 /** The tablet steps in their order (see above). */
-export const TOOLBAR_TABLET_FIT_STEPS = ['toolbar-focus-short', 'toolbar-focus-nocount', 'toolbar-focus-nobulk', 'toolbar-squeeze-3'] as const;
+export const TOOLBAR_TABLET_FIT_STEPS = ['toolbar-focus-short', 'toolbar-focus-nocount', 'toolbar-focus-nobulk', 'toolbar-squeeze-3', 'toolbar-focus-nohome'] as const;
 const HYSTERESIS_PX = 16;
 /** The person's name on the tablet toolbar keeps at least this much (or its whole width when shorter). */
 export const TABLET_NAME_MIN_PX = 64;

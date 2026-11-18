@@ -71,7 +71,7 @@ export function twoFiguresSvg(options: TwoFiguresOptions = {}): string {
 export type IconName =
     | 'trash' | 'pencil' | 'book' | 'file' | 'folder' | 'info' | 'check'
     | 'star' | 'pin' | 'timer' | 'play' | 'pause' | 'user' | 'lock' | 'chevron-down'
-    | 'file-unsaved' | 'file-saved' | 'alert-triangle' | 'image';
+    | 'file-unsaved' | 'file-saved' | 'alert-triangle' | 'image' | 'home' | 'home-filled';
 
 /** Stroked 24×24 drawings (same stroke language as the chain/figures glyphs). */
 const ICON_PATHS: Record<IconName, string> = {
@@ -102,6 +102,9 @@ const ICON_PATHS: Record<IconName, string> = {
         + '<path d="M12 9v4"/><path d="M12 17h.01"/>',
     // A picture: frame, sun, hill (source images).
     image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/>',
+    // "Focus default person" (spec 111): a house; filled (the door cut out) when the default person is in focus.
+    home: '<path d="M3 11 12 3.5 21 11"/><path d="M5.5 9.5V20h4.5v-5.5h4V20h4.5V9.5"/>',
+    'home-filled': '<path d="M3 11 12 3.5 21 11"/><path d="M5.5 9.6 12 4.4l6.5 5.2V20h-4.5v-5.5h-4V20H5.5z" fill="currentColor" stroke="none"/>',
 };
 
 interface IconOptions {

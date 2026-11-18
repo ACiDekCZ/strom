@@ -753,8 +753,11 @@
            (only the 500-1024 tablet toolbar query shows it); !important outranks the
            media-query display:flex without duplicating the rule per breakpoint. */
         body.descendants-view .toolbar-focus { display: none !important; }
+        /* ⌂ adjoins the name: its own padding is the gap, the bar's 8 px would be spent twice (spec 111 §2). */
+        .toolbar .toolbar-focus .focus-home { flex: none; margin-right: -8px; }
         .toolbar .toolbar-focus strong {
             font-weight: 600;
+            min-width: 0;
             max-width: 150px;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -13658,6 +13661,42 @@
             text-overflow: ellipsis;
             white-space: nowrap;
         }
+        /* Focus default person ⌂ (spec 111, src/ui/default-focus.ts): the first
+           control of "Focused on" at every width, icon only. "home" = the
+           default person is in focus: filled, muted, inert (aria-disabled, no
+           hover), never hidden, so nothing beside it moves. */
+        .focus-home {
+            flex: none;
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 28px; height: 28px; padding: 0;
+            border: 0; border-radius: var(--r-md);
+            background: transparent; color: var(--text);
+            cursor: pointer;
+        }
+        .focus-home svg { width: 16px; height: 16px; display: block; }
+        @media (hover: hover) { .focus-home[data-state="active"]:hover { background: var(--hover-bg); } }
+        .focus-home:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .focus-home[data-state="home"] { color: var(--text-light); cursor: default; }
+        .focus-home[hidden], .focus-home[hidden] + .focus-home-sep { display: none; }
+        html.window-satellite .focus-home, html.window-satellite .focus-home-sep { display: none !important; }
+        /* The toolbar's own buttons are primary-green: ⌂ stays a quiet icon there too. */
+        .toolbar button.focus-home { padding: 0; background: transparent; color: var(--text); transition: none; }
+        .toolbar button.focus-home[data-state="home"] { color: var(--text-light); }
+        @media (hover: hover) {
+            .toolbar button.focus-home:hover { background: transparent; }
+            .toolbar button.focus-home[data-state="active"]:hover { background: var(--hover-bg); }
+        }
+        /* In the pill: ⌂ near the pill's left edge (the pill keeps its height), a hairline before "Focused on". */
+        .focus-info .focus-home { margin: -1px 0 -1px -10px; }
+        .focus-home-sep { flex: none; width: 1px; height: 20px; background: var(--border); }
+        .focus-controls { max-width: calc(100vw - 24px); }
+        .focus-controls .focus-info { min-width: 0; }
+        .focus-controls .focus-info strong { min-width: 0; }
+        .focus-controls .focus-label, .focus-controls .focus-count, .focus-controls .depth-stepper { flex: none; }
+        @media (pointer: coarse) {
+            .focus-home { width: 44px; height: 44px; }
+            .focus-home svg { width: 18px; height: 18px; }
+        }
         .focus-count {
             padding: 2px 8px;
             background: var(--surface-2);
@@ -26191,6 +26230,9 @@
             .toolbar.toolbar-focus-short .toolbar-focus .focus-depth { gap: 8px; }
             .toolbar.toolbar-focus-nocount .toolbar-focus .focus-count { display: none; }
             .toolbar.toolbar-focus-nobulk .toolbar-focus .bulk-family { display: none !important; }
+            /* Spec 111: the last step, only when even the magnifier leaves no room (de at 641 px):
+               ⌂ leaves the bar, the shortcut H still focuses the default person. */
+            .toolbar.toolbar-focus-nohome .toolbar-focus .focus-home { display: none !important; }
         }
         @media (min-width: 641px) and (max-width: 768px) {
             .toolbar .toolbar-focus .focus-count { display: none; }
@@ -26225,6 +26267,10 @@
             .focus-controls .focus-count,
             .focus-controls .focus-clear { display: none; }
             .focus-controls .focus-info { flex: 1 1 0; min-width: 0; height: 47px; display: flex; align-items: center; }
+            /* ⌂ first in the person panel, 2px from the edge; the panel stays 48px (spec 111 §3). */
+            .focus-controls .focus-info .focus-home { width: 44px; height: 44px; margin: 0 0 0 -14px; }
+            .focus-controls .focus-info .focus-home svg { width: 18px; height: 18px; }
+            .focus-controls .focus-home-sep { display: none; }
             .focus-controls .focus-info strong {
                 display: block; max-width: 100%; min-width: 0;
                 overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -26358,6 +26404,7 @@
                 overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
                 font-size: 15px; font-weight: 600;
             }
+            .toolbar .toolbar-focus .focus-home { margin-right: 0; }   /* the bar has no gap here */
             .toolbar .toolbar-focus .focus-chips { display: flex; flex: none; isolation: isolate; gap: 2px; }
             .toolbar .toolbar-focus .focus-chip {
                 position: relative; display: flex; align-items: center; justify-content: center; gap: 3px;
@@ -31717,6 +31764,7 @@
 
         <!-- Toolbar Focus Info (tablet landscape) -->
         <div class="toolbar-focus tablet-only">
+            <button type="button" class="focus-home" id="toolbar-focus-home-btn" data-state="active" aria-keyshortcuts="H" hidden></button>
             <strong id="toolbar-focus-name" role="button" tabindex="0" onclick="window.Strom.UI.focusNameTap()" style="cursor:pointer;" data-i18n-title="uiTips.centerOnFocus"></strong>
             <span id="toolbar-focus-count" class="focus-count" role="button" tabindex="0" onclick="window.Strom.UI.showActiveTreeOverview()" style="cursor:pointer;" data-i18n-title="treeOverview.showTooltip"></span>
             <!-- A phone sideways: ↑n ↓n chips in the header; the steppers as a popover -->
@@ -32141,6 +32189,9 @@
     <!-- Focus chip (top-left, under the toolbar) -->
     <div id="focus-controls" class="focus-controls hidden">
         <div class="focus-info">
+            <!-- Focus default person (spec 111): src/ui/default-focus.ts fills it; hidden without a target -->
+            <button type="button" class="focus-home" id="focus-home-btn" data-state="active" aria-keyshortcuts="H" hidden></button>
+            <span class="focus-home-sep" aria-hidden="true"></span>
             <span class="focus-label" data-i18n="focus.focusedOn"></span>
             <strong id="focus-name" onclick="window.Strom.UI.focusNameTap()" style="cursor:pointer;" data-i18n-title="uiTips.centerOnFocus"></strong>
             <span id="focus-person-count" class="focus-count" onclick="window.Strom.UI.showActiveTreeOverview()" style="cursor:pointer;" data-i18n-title="treeOverview.showTooltip"></span>

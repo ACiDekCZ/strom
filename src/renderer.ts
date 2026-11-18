@@ -104,6 +104,7 @@ import { pillUnderFinger } from './card-tap.js';
 import { showFocusToast, hideFocusToast } from './focus-toast.js';
 import { openCardMenuFromKeyboard } from './ui/keyboard-access.js';
 import { syncDepthStepper } from './ui/depth-stepper.js';
+import { rememberOpenedFocus, updateDefaultFocusButtons } from './ui/default-focus.js';
 import {
     ViewLink, ViewLinkCandidate, loadViewLinks, isViewLinksMaster, viewLinksToDraw, viewLinksAvailable, viewLinkContext, viewLinkCandidates, familyGroups,
 } from './view-links.js';
@@ -1888,11 +1889,14 @@ class TreeRendererClass {
 
         if (persons.length === 0) {
             this.focusPersonId = null;
+            rememberOpenedFocus(null);
             return;
         }
 
         if (this.applyReloadPoint(reload)) {
             this.recordReload();
+            // "Last focused" leads ⌂ to the person the tree opened on (spec 111 §5).
+            rememberOpenedFocus(this.focusPersonId);
             return;
         }
 
@@ -1925,6 +1929,7 @@ class TreeRendererClass {
         }
         // What a load opens is what a reload keeps until the work moves on.
         this.recordReload();
+        rememberOpenedFocus(this.focusPersonId);
     }
 
     // Public Focus Mode API
@@ -4672,6 +4677,7 @@ class TreeRendererClass {
     private updateFocusUI(): void {
         this.updateNavButtons();
         this.updateChildrenShownUI();
+        updateDefaultFocusButtons();
         const focusControls = document.getElementById('focus-controls');
         const focusName = document.getElementById('focus-name');
         const focusCount = document.getElementById('focus-person-count');

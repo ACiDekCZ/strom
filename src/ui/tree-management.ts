@@ -56,6 +56,7 @@ import { isPhoneToolbar } from './search.js';
 import { iconSvg } from '../icons.js';
 import { shownNameOrEmpty } from '../person-name.js';
 import { forgetTreeMaterials } from './materials-ui.js';
+import { updateDefaultFocusButtons } from './default-focus.js';
 
 /** Room (px) a row menu needs beside ⋯ to show a useful part of its rows. */
 const TREE_MENU_MIN_ROOM = 240;
@@ -1900,6 +1901,8 @@ export const treeManagementMethods = uiModule({
             DataManager.setDefaultPerson(value);
             DataManager.setDefaultView(view);
         }
+        // ⌂ beside "Focused on" leads to the new default person at once (spec 111 §5).
+        updateDefaultFocusButtons();
 
         this.closeDefaultPersonDialog();
         this.updateTreeManagerList();

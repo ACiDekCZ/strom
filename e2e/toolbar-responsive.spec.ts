@@ -770,7 +770,9 @@ test.describe('the tree switcher and the search field are equally high (T54 H4)'
             const r = document.querySelector(sel)!.getBoundingClientRect();
             return { h: Math.round(r.height * 10) / 10, mid: Math.round((r.top + r.height / 2) * 10) / 10 };
         };
-        return { switcher: box('.toolbar .tree-switcher-btn'), search: box('.toolbar .search-row') };
+        // The search already folded to the magnifier (de at 800 px, touch, with ⌂ of spec 111): that is the search.
+        const folded = document.querySelector('.toolbar')!.classList.contains('toolbar-squeeze-3');
+        return { switcher: box('.toolbar .tree-switcher-btn'), search: box(folded ? '.toolbar .search-open-btn' : '.toolbar .search-row') };
     });
 
     for (const [width, height, touch] of [[1440, 900, false], [1280, 800, false], [1024, 768, false], [1024, 768, true], [800, 1100, true]] as const) {

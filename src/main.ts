@@ -19,6 +19,7 @@ import { initModalSkeleton } from './ui/modal-skeleton.js';
 import { setHelpResearchVersion, setHelpTour } from './ui/help-ui.js';
 import { activeResearchId } from './ui/history-ui.js';
 import { initToolbarFit } from './ui/toolbar-fit.js';
+import { initDefaultFocusButtons } from './ui/default-focus.js';
 import { DebugOptions, DebugStep, DebugPhase } from './layout/pipeline/debug-types.js';
 import { CryptoSession } from './crypto.js';
 import { AppMode, APP_VERSION, TreeId } from './types.js';
@@ -829,6 +830,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // The add button folds to ＋ where the desktop toolbar does not fit its labels
     initToolbarFit();
+
+    // ⌂ "Focus default person" beside "Focused on" (spec 111)
+    initDefaultFocusButtons();
 
     // Set debug options before rendering
     if (debugOptions.enabled) {
