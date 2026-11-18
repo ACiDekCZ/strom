@@ -71,6 +71,8 @@ export interface FanViewHost {
     menuExtra?(id: PersonId, isCentre: boolean): Array<{ id: FanMenuItemId; label: string; run: () => void }>;
     /** "Release" on the pinned centre's label. */
     unpinCenter?(): void;
+    /** The centre shown or its pin changed: ⌂ "Focus default person" takes its state again (spec 111 §7). */
+    homeChanged?(): void;
     /** A sector's menu (or its sheet) closed. */
     menuClosed?(): void;
     /** After every redraw of the SVG (the evidence highlight is put back). */
@@ -549,6 +551,7 @@ export class FanViewController {
         if (this.pillTimer) { clearTimeout(this.pillTimer); this.pillTimer = null; }
         const pinned = this.host.pinnedCenter?.() ?? null;
         this.updateCentrePin(!!pinned && pinned === focus && this.host.active() ? pinned : null);
+        if (!show || (pinned && pinned === focus)) this.stage()?.classList.remove('fan-home-below');
         if (show && !(pinned && pinned === focus)) {
             const p = this.host.data().persons[origin!];
             const name = p ? shownNameFull(p) : '';
@@ -573,6 +576,48 @@ export class FanViewController {
 
     /** "Centre: Name · Release" at the top left while the pinned centre is shown (null: none). */
     private updateCentrePin(id: PersonId | null): void {
+        this.updateCentrePinBox(id);
+        this.placeHome();
+        this.host.homeChanged?.();
+        // ⌂ joined to the pin widens it: placed again.
+        if (this.centrePin && !this.centrePin.hidden) this.placePill(this.centrePin);
+    }
+
+    /**
+     * ⌂ "Focus default person" (spec 111 §7): its own small pill at the top
+     * left (the original person's pill stands beside it), joined to the front
+     * of "Centre: Name · Release" while the pinned centre is shown.
+     */
+    private placeHome(): void {
+        const btn = document.getElementById('fan-home-btn');
+        const own = document.getElementById('fan-home-pill');
+        if (!btn || !own) return;
+        const pin = this.centrePin && !this.centrePin.hidden ? this.centrePin : null;
+        const host = pin ?? own;
+        if (btn.parentElement === host) return;
+        const hadFocus = document.activeElement === btn;
+        if (pin) {
+            let sep = pin.querySelector<HTMLElement>(':scope > .focus-home-sep');
+            if (!sep) {
+                sep = document.createElement('span');
+                sep.className = 'focus-home-sep';
+                sep.setAttribute('aria-hidden', 'true');
+            }
+            pin.prepend(btn, sep);
+        } else {
+            this.centrePin?.querySelector(':scope > .focus-home-sep')?.remove();
+            own.appendChild(btn);
+        }
+        if (hadFocus) btn.focus({ preventScroll: true });
+    }
+
+    /** ⌂ stands in its own pill now (not hidden, not joined to the pin). */
+    private homeShown(): boolean {
+        const btn = document.getElementById('fan-home-btn');
+        return !!btn && !btn.hidden && btn.parentElement?.id === 'fan-home-pill';
+    }
+
+    private updateCentrePinBox(id: PersonId | null): void {
         const stage = this.stage();
         if (!id || !stage) {
             if (this.centrePin) this.centrePin.hidden = true;
@@ -630,6 +675,8 @@ export class FanViewController {
         if (!pill || pill.hidden || !stage) return;
         pill.style.top = '';
         pill.style.maxWidth = '';
+        const origin = pill === this.pill;
+        if (origin) stage.classList.remove('fan-home-below');
         const s = stage.getBoundingClientRect();
         if (s.width === 0) return;
         const obstacles = ['#evidence-pill', '#live-follow-pill', '#live-panel', '#fan-legend-chip', '#fan-legend', '#fan-zoom-controls']
@@ -645,6 +692,11 @@ export class FanViewController {
             if (!hit) return;
             if (hit.left - r.left - GAP >= 150) {
                 pill.style.maxWidth = `${Math.floor(hit.left - r.left - GAP)}px`;
+            } else if (origin && !stage.classList.contains('fan-home-below') && this.homeShown()
+                && hit.left - (s.left + 12) - GAP >= 150) {
+                // No room beside ⌂ but at the stage's edge: the pill keeps the row, ⌂ goes under it
+                // (the fan's middle stays free).
+                stage.classList.add('fan-home-below');
             } else {
                 pill.style.top = `${Math.ceil(hit.bottom - s.top + GAP)}px`;
                 pill.style.maxWidth = '';
@@ -659,6 +711,7 @@ export class FanViewController {
         pill.addEventListener('click', () => this.goOrigin());
         const replace = () => {
             this.placeChip();
+            this.placeHome();
             if (!pill.hidden) this.placePill();
             if (this.centrePin && !this.centrePin.hidden) this.placePill(this.centrePin);
         };

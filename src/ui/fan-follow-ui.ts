@@ -395,7 +395,7 @@ export const fanFollowMethods = uiModule({
                 const place = (): void => {
                     const box = overlay.getBoundingClientRect();
                     let clear = 8;
-                    for (const sel of ['#fan-center-pin', '#fan-origin-pill', '#fan-legend-chip', '#live-follow-pill', '#evidence-pill']) {
+                    for (const sel of ['#fan-home-pill', '#fan-center-pin', '#fan-origin-pill', '#fan-legend-chip', '#live-follow-pill', '#evidence-pill']) {
                         const el = document.querySelector<HTMLElement>(sel);
                         const r = el && !el.hidden ? el.getBoundingClientRect() : null;
                         if (r && r.height > 0 && r.top < box.top + box.height / 2) clear = Math.max(clear, r.bottom - box.top + 8);
@@ -502,7 +502,7 @@ export const fanFollowMethods = uiModule({
         // there would be hidden under it.
         const or = overlay.getBoundingClientRect();
         const obstacles = ['#live-panel', '#fan-legend', '#fan-legend-chip', '#fan-zoom-controls', '#evidence-pill',
-            '#live-follow-pill', '#fan-center-pin', '#fan-origin-pill']
+            '#live-follow-pill', '#fan-home-pill', '#fan-center-pin', '#fan-origin-pill']
             .map(sel => document.querySelector<HTMLElement>(sel))
             .filter((el): el is HTMLElement => !!el && !el.hidden && el.getClientRects().length > 0)
             .map(el => el.getBoundingClientRect())

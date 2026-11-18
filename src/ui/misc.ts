@@ -64,7 +64,7 @@ import { HELP_TOPICS, type HelpTopic } from '../help/topics.js';
 import { openHelp } from './help-ui.js';
 import { syncControlBlock } from './minimap.js';
 import { addLender, cancelWaiting, removeLender, watchToasts, whenFree } from '../toast-slot.js';
-import { updateDefaultFocusButtons } from './default-focus.js';
+import { defaultFocusKey, focusDefaultPerson, isDefaultFocusContext, updateDefaultFocusButtons } from './default-focus.js';
 
 
 
@@ -1412,9 +1412,22 @@ export const miscMethods = uiModule({
                 return;
             }
 
-            // Skip shortcuts when focus is in input/textarea/select
-            const activeEl = document.activeElement;
-            if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT')) return;
+            // Focus the tree's default person (spec 111 §6): ⌘1 (Mac) / Ctrl+1 (elsewhere) by the
+            // key's place, also from a text field; H / h outside one. Not while held down, not over a
+            // menu or a sheet; in the map, the timeline, the table and other windows the key goes on
+            // untouched (the browser keeps ⌘1 / Ctrl+1 for its tabs there).
+            const activeEl = document.activeElement as HTMLElement | null;
+            const typing = !!activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT' || activeEl.isContentEditable);
+            if (defaultFocusKey(e, this.isMacPlatform(), typing)) {
+                if (isDefaultFocusContext() && !this.defaultFocusKeyHeld()) {
+                    e.preventDefault();
+                    if (!e.repeat) focusDefaultPerson('shortcut');
+                }
+                return;
+            }
+
+            // Skip shortcuts when focus is in a text field (also an editable element)
+            if (typing) return;
 
             // "/" focuses the toolbar search (only when not typing — the guard
             // above already returned for inputs/textareas/selects).
@@ -1469,6 +1482,18 @@ export const miscMethods = uiModule({
                 return;
             }
         });
+    },
+
+    /**
+     * A menu, a sheet or another floating layer is open over the tree (the
+     * dialogs return earlier): the default person's shortcut waits (spec 111 §6).
+     */
+    defaultFocusKeyHeld(): boolean {
+        if (this.contextMenu || this.bottomSheet || this.crossTreeChooser || this.tourActive) return true;
+        if (TreePreview.isOpen() || TreeCompare.isOpen() || this.isResearchMenuOpen()) return true;
+        if (TreeRenderer.getFanView()?.menuOpen()) return true;
+        if (document.body.classList.contains('focus-steppers-open')) return true;
+        return !!document.querySelector('#actions-menu-dropdown.active, #tree-switcher-dropdown.active, .tree-row-menu.open, #fan-sheet:not([hidden])');
     },
 
     /**

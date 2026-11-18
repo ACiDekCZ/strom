@@ -80,14 +80,37 @@ export function focusDefaultPerson(source: 'button' | 'shortcut'): boolean {
     const t = resolveDefaultTarget();
     if (!t || isAtDefault(t)) return false;
     if (TreeRenderer.getViewMode() === 'fan' && UI.liveFollowPinned?.()) {
-        UI.unpinFanCenter?.();
+        // Released without the rule's own re-centring: the fan goes straight to the default person.
+        UI.unpinFanCenter?.(false);
         if (TreeRenderer.getFocusPersonId() === t.id) {
+            TreeRenderer.getFanView()?.recenterAsOrigin(t.id);
             updateDefaultFocusButtons();
             return true;
         }
     }
     void TreeRenderer.focusFromTab(t.id).then(() => updateDefaultFocusButtons());
     return true;
+}
+
+/** What the shortcut reads of a key press (a KeyboardEvent fits). */
+export interface DefaultFocusKeyEvent {
+    key: string; code: string;
+    ctrlKey: boolean; metaKey: boolean; altKey: boolean; shiftKey: boolean;
+    isComposing?: boolean;
+}
+
+/**
+ * The press is the shortcut of "Focus default person" (§6): 'h' = H or h
+ * (Shift and Caps Lock too) without Ctrl, ⌘ or Alt, not while composing;
+ * 'mod1' = ⌘1 on a Mac, Ctrl+1 elsewhere, read by the key's place (Digit1):
+ * a Czech keyboard types "+" there. The number pad's 1 is not it.
+ * `typing`: the keyboard is in a text field (H is a letter there; ⌘1 / Ctrl+1 still counts).
+ */
+export function defaultFocusKey(e: DefaultFocusKeyEvent, mac: boolean, typing: boolean): 'h' | 'mod1' | null {
+    const mod = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+    if (mod && !e.altKey && !e.shiftKey && e.code === 'Digit1') return 'mod1';
+    if (typing || e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return null;
+    return e.key === 'h' || e.key === 'H' ? 'h' : null;
 }
 
 /** The view a ⌂ button belongs to (its `data-home-view`, family when none). */

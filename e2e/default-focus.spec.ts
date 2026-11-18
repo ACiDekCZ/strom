@@ -223,3 +223,248 @@ for (const [label, viewport] of [
         });
     });
 }
+
+for (const viewport of [{ width: 390, height: 844 }, { width: 360, height: 740 }]) {
+    test.describe(`phone ${viewport.width} × ${viewport.height}`, () => {
+        test.use({ viewport, locale: 'de-DE', hasTouch: true, isMobile: true });
+
+        test('⌂ first in the person panel: 44 px, the panel stays 48 px, a tap focuses without the person sheet, the name keeps its place', async ({ page }) => {
+            await openApp(page);
+            await setupTree(page, DEFAULT);
+            await page.evaluate((id) => {
+                window.Strom.DataManager.updatePerson(id as never, { firstName: 'Maximiliane Konstanze', lastName: 'Zbořilová-Hohenwart' } as never);
+                // The change's own toast would hold the focus toast back (one toast at a time).
+                window.Strom.UI.dismissUndoToast();
+            }, OTHER);
+            await focus(page, OTHER);
+            const home = pillHome(page);
+            await expect(home).toBeVisible();
+            await expect(home).toHaveAttribute('data-state', 'active');
+            const geo = () => page.evaluate(() => {
+                const panel = document.getElementById('focus-controls')!;
+                const info = panel.querySelector<HTMLElement>('.focus-info')!;
+                const first = [...info.children].find(c => (c as HTMLElement).getClientRects().length > 0) as HTMLElement;
+                const h = document.getElementById('focus-home-btn')!.getBoundingClientRect();
+                const name = document.getElementById('focus-name')!;
+                const n = name.getBoundingClientRect();
+                return {
+                    firstId: first.id, panelH: Math.round(panel.getBoundingClientRect().height),
+                    home: [Math.round(h.width), Math.round(h.height)], homeLeft: Math.round(h.left),
+                    nameX: Math.round(n.left), nameEllipsized: name.scrollWidth > name.clientWidth,
+                    overflow: document.documentElement.scrollWidth - innerWidth, panelOverflow: panel.scrollWidth - panel.clientWidth,
+                    overlap: h.right > n.left + 0.5,
+                };
+            });
+            const before = await geo();
+            expect(before.firstId).toBe('focus-home-btn');
+            expect(before.panelH).toBe(48);
+            expect(before.home).toEqual([44, 44]);
+            expect(before.homeLeft).toBeLessThanOrEqual(4);
+            expect(before.nameEllipsized).toBe(true);
+            expect(before.overflow).toBeLessThanOrEqual(0);
+            expect(before.panelOverflow).toBeLessThanOrEqual(0);
+            expect(before.overlap).toBe(false);
+
+            await home.tap();
+            await expect.poll(() => focusOf(page)).toBe(DEFAULT);
+            await expect(home).toHaveAttribute('data-state', 'home');
+            await expect(toast(page)).toBeVisible();
+            await expect(page.locator('.bottom-sheet-overlay')).toHaveCount(0);
+            const after = await geo();
+            expect(after.panelH).toBe(48);
+            expect(after.nameX).toBe(before.nameX);
+
+            // At home a tap does nothing (no sheet either).
+            await page.evaluate(() => document.querySelector('.focus-toast-box')?.remove());
+            await home.tap({ force: true });
+            await page.waitForTimeout(150);
+            expect(await focusOf(page)).toBe(DEFAULT);
+            await expect(toast(page)).toHaveCount(0);
+            await expect(page.locator('.bottom-sheet-overlay')).toHaveCount(0);
+        });
+    });
+}
+
+test.describe('the shortcut H (and ⌘1 / Ctrl+1)', () => {
+    test.use({ viewport: { width: 1440, height: 900 }, locale: 'en-US' });
+
+    /** The canvas has the keyboard: nothing typed into. */
+    const blur = (page: Page) => page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+
+    test('H, h and Shift+H focus the default person as a step with Back; at home nothing; the button tells ⌘1 / Ctrl+1 by platform', async ({ page }) => {
+        await openApp(page);
+        await setupTree(page, DEFAULT);
+        const mac = await page.evaluate(() => window.Strom.UI.isMacPlatform());
+        await expect(pillHome(page)).toHaveAttribute('aria-keyshortcuts', mac ? 'H Meta+1' : 'H Control+1');
+        for (const key of ['h', 'H', 'Shift+H']) {
+            await focus(page, OTHER);
+            await blur(page);
+            await page.keyboard.press(key);
+            await expect.poll(() => focusOf(page)).toBe(DEFAULT);
+            await expect(toast(page)).toBeVisible();
+        }
+        await page.locator('#focus-back-btn').click();
+        await expect.poll(() => focusOf(page)).toBe(OTHER);
+
+        // At home: no step, no toast.
+        await focus(page, DEFAULT);
+        await page.evaluate(() => document.querySelector('.focus-toast-box')?.remove());
+        const canBack = await page.evaluate(() => window.Strom.TreeRenderer.canGoBack());
+        await page.keyboard.press('h');
+        await page.waitForTimeout(150);
+        await expect(toast(page)).toHaveCount(0);
+        expect(await page.evaluate(() => window.Strom.TreeRenderer.canGoBack())).toBe(canBack);
+    });
+
+    test('⌘1 / Ctrl+1 by the key\'s place (Digit1): a Czech keyboard\'s "+" there focuses and does not zoom', async ({ page }) => {
+        await openApp(page);
+        await setupTree(page, DEFAULT);
+        const mac = await page.evaluate(() => window.Strom.UI.isMacPlatform());
+        await focus(page, OTHER);
+        await blur(page);
+        await page.keyboard.press(mac ? 'Meta+1' : 'Control+1');
+        await expect.poll(() => focusOf(page)).toBe(DEFAULT);
+
+        await focus(page, OTHER);
+        const scale = await page.evaluate(() => window.Strom.ZoomPan.getScale());
+        const prevented = await page.evaluate((m) => {
+            const e = new KeyboardEvent('keydown', { key: '+', code: 'Digit1', metaKey: m, ctrlKey: !m, bubbles: true, cancelable: true });
+            document.body.dispatchEvent(e);
+            return e.defaultPrevented;
+        }, mac);
+        expect(prevented).toBe(true);
+        await expect.poll(() => focusOf(page)).toBe(DEFAULT);
+        await page.waitForTimeout(200);
+        expect(await page.evaluate(() => window.Strom.ZoomPan.getScale())).toBe(scale);
+    });
+
+    test('not in a text field, an editable element, a dialog or a menu', async ({ page }) => {
+        await openApp(page);
+        await setupTree(page, DEFAULT);
+        await focus(page, OTHER);
+
+        // The toolbar search: the letter is typed.
+        const search = page.locator('#toolbar-search-picker .person-picker-input');
+        await search.focus();
+        await page.keyboard.press('h');
+        await expect(search).toHaveValue(/h/);
+        await page.keyboard.press('Escape');
+        await blur(page);
+
+        // An editable element.
+        await page.evaluate(() => {
+            const el = document.createElement('div');
+            el.id = 'probe-editable';
+            el.contentEditable = 'true';
+            el.textContent = 'x';
+            document.body.appendChild(el);
+            el.focus();
+        });
+        await page.keyboard.press('h');
+        await expect(page.locator('#probe-editable')).toContainText('h');
+        await page.evaluate(() => document.getElementById('probe-editable')?.remove());
+        await blur(page);
+
+        // A dialog.
+        await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+        await expect(page.locator('#settings-modal')).toHaveClass(/active/);
+        await page.keyboard.press('h');
+        await page.waitForTimeout(150);
+        await page.evaluate(() => window.Strom.UI.closeSettingsDialog());
+
+        // The person menu.
+        await page.locator(`#tree-canvas .person-card[data-id="${OTHER}"]`).click();
+        await expect(page.locator('.context-menu')).toBeVisible();
+        await page.keyboard.press('h');
+        await page.waitForTimeout(150);
+        expect(await focusOf(page)).toBe(OTHER);
+        await expect(toast(page)).toHaveCount(0);
+    });
+
+    test('the map, the timeline and the table: H does nothing and is not taken', async ({ page }) => {
+        await openApp(page);
+        await setupTree(page, DEFAULT);
+        await focus(page, OTHER);
+        for (const mode of ['map', 'timeline', 'table']) {
+            await page.evaluate((m) => window.Strom.TreeRenderer.setViewMode(m as never), mode);
+            await blur(page);
+            const prevented = await page.evaluate(() => {
+                const e = new KeyboardEvent('keydown', { key: 'h', code: 'KeyH', bubbles: true, cancelable: true });
+                document.body.dispatchEvent(e);
+                return e.defaultPrevented;
+            });
+            expect(prevented, mode).toBe(false);
+            await page.waitForTimeout(100);
+            expect(await focusOf(page), mode).toBe(OTHER);
+        }
+    });
+});
+
+test.describe('the descendants and the fan views (§7)', () => {
+    test.use({ viewport: { width: 1440, height: 900 }, locale: 'en-US' });
+
+    const descHome = (page: Page) => page.locator('#descendants-home-btn');
+    const fanHome = (page: Page) => page.locator('#fan-home-btn');
+
+    test('descendants: ⌂ first in the badge; the root becomes the default person, the view stays; H too; Back returns', async ({ page }) => {
+        await openApp(page);
+        await setupTree(page, DEFAULT);
+        await focus(page, OTHER);
+        await page.evaluate(() => window.Strom.TreeRenderer.setViewMode('descendants' as never));
+        const home = descHome(page);
+        await expect(home).toBeVisible();
+        await expect(pillHome(page)).toBeHidden();
+        await expect(home).toHaveAttribute('data-state', 'active');
+        const first = await page.evaluate(() => {
+            const badge = document.getElementById('descendants-badge')!;
+            return ([...badge.children].find(c => (c as HTMLElement).getClientRects().length > 0) as HTMLElement).id;
+        });
+        expect(first).toBe('descendants-home-btn');
+        await home.click();
+        await expect.poll(() => focusOf(page)).toBe(DEFAULT);
+        expect(await page.evaluate(() => window.Strom.TreeRenderer.getViewMode())).toBe('descendants');
+        await expect(toast(page)).toBeVisible();
+        await expect(home).toHaveAttribute('data-state', 'home');
+        await expect(page.locator('#descendants-badge .descendants-badge-name')).not.toHaveText('');
+        await page.locator('#focus-back-btn').click();
+        await expect.poll(() => focusOf(page)).toBe(OTHER);
+        await expect(home).toHaveAttribute('data-state', 'active');
+
+        await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+        await page.keyboard.press('h');
+        await expect.poll(() => focusOf(page)).toBe(DEFAULT);
+        expect(await page.evaluate(() => window.Strom.TreeRenderer.getViewMode())).toBe('descendants');
+    });
+
+    test('fan: a small ⌂ pill at the top left, the original person pill beside it; ⌂ and H centre the default person', async ({ page }) => {
+        await openApp(page);
+        await setupTree(page, DEFAULT);
+        await page.evaluate(() => window.Strom.TreeRenderer.setViewMode('fan' as never));
+        await expect(page.locator('#fan-chart .fan-svg')).toBeVisible();
+        const home = fanHome(page);
+        await expect(home).toBeVisible();
+        await expect(home).toHaveAttribute('data-state', 'home');
+        // Another centre (a sector's tap): the original person pill appears, beside ⌂.
+        await focus(page, OTHER);
+        await expect(home).toHaveAttribute('data-state', 'active');
+        await expect(page.locator('#fan-origin-pill')).toBeVisible();
+        const geo = await page.evaluate(() => {
+            const h = document.getElementById('fan-home-pill')!.getBoundingClientRect();
+            const o = document.getElementById('fan-origin-pill')!.getBoundingClientRect();
+            return { overlap: h.right > o.left && o.right > h.left && h.bottom > o.top && o.bottom > h.top, hTop: h.top, oTop: o.top, gap: o.left - h.right };
+        });
+        expect(geo.overlap).toBe(false);
+        expect(Math.abs(geo.hTop - geo.oTop)).toBeLessThanOrEqual(1);
+        expect(geo.gap).toBeGreaterThanOrEqual(6);
+        await home.click();
+        await expect.poll(() => focusOf(page)).toBe(DEFAULT);
+        await expect.poll(() => page.evaluate(() => document.querySelector('#fan-chart [data-fan-key="f"]')?.getAttribute('data-fan-person') ?? null)).toBe(DEFAULT);
+        await expect(home).toHaveAttribute('data-state', 'home');
+
+        await focus(page, OTHER);
+        await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+        await page.keyboard.press('h');
+        await expect.poll(() => focusOf(page)).toBe(DEFAULT);
+        expect(await page.evaluate(() => window.Strom.TreeRenderer.getViewMode())).toBe('fan');
+    });
+});

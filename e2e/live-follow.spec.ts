@@ -418,6 +418,44 @@ test.describe('follow the agent in the tree', () => {
         await expect(page.locator('#live-follow-pill')).toBeVisible();
     });
 
+    test('⌂ pauses like a focus by hand; the pills stand clear (de, a long name, 1025–1280) (spec 111 §9)', async ({ page }) => {
+        await follow(page, { idle: 60_000, on: true, size: { width: 1100, height: 800 }, ged: LINE_GED });
+        await page.evaluate(() => window.Strom.UI.setLanguage('de'));
+        await expect.poll(() => focusRefn(page)).toBe('P0012');
+        const first = await page.evaluate(() => Object.keys(window.Strom.DataManager.getData().persons)[0]);
+        const home = page.locator('#focus-home-btn');
+        await expect(home).toHaveAttribute('data-state', first === await idOf(page, 'P0012') ? 'home' : 'active');
+        await home.click();
+        await expect.poll(() => page.evaluate(() => window.Strom.TreeRenderer.getFocusPersonId())).toBe(first);
+        await expect(page.locator('#live-follow-pill')).toBeVisible();
+        for (const width of [1100, 1025, 1280]) {
+            await page.setViewportSize({ width, height: 800 });
+            await expect.poll(() => page.evaluate(() => {
+                const a = document.getElementById('focus-controls')!.getBoundingClientRect();
+                const b = document.getElementById('live-follow-pill')!.getBoundingClientRect();
+                return a.width > 0 && b.width > 0 && !(a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom);
+            }), `${width}`).toBe(true);
+        }
+    });
+
+    test('⌂ at home: nothing happens, following is not paused (spec 111 §4, §9)', async ({ page }) => {
+        await follow(page, { idle: 60_000, on: true });
+        await expect.poll(() => focusRefn(page)).toBe('P0012');
+        const jan = await idOf(page, 'P0012');
+        await page.evaluate((id) => {
+            window.Strom.DataManager.setDefaultPerson(id as never);
+            window.Strom.TreeRenderer.render();
+        }, jan);
+        const home = page.locator('#focus-home-btn');
+        await expect(home).toHaveAttribute('data-state', 'home');
+        await home.click({ force: true });
+        await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+        await page.keyboard.press('h');
+        await page.waitForTimeout(300);
+        await expect(page.locator('#live-follow-pill')).toHaveCount(0);
+        expect(await focusRefn(page)).toBe('P0012');
+    });
+
     test('an open dialog holds the jump until it closes', async ({ page }) => {
         // No brake (gap 0): only the dialog can hold the jump.
         const bridge = await follow(page, { on: true, gap: 0, quick: true });
@@ -1180,6 +1218,34 @@ test.describe('follow the agent in the fan (spec 043)', () => {
         await expect(btn(page)).toHaveAttribute('aria-pressed', 'false');
         expect(await page.evaluate(() => window.Strom.UI.liveFollowPinned())).toBeNull();
         await expect(page.locator('#fan-center-pin')).toBeHidden();
+    });
+
+    test('⌂ joins the front of the pinned centre\'s pill; a click releases the pin and centres the default person, following goes on (spec 111 §7)', async ({ page }) => {
+        await follow(page, { idle: 60_000, on: true });
+        await expect.poll(() => focusRefn(page)).toBe('P0012');
+        const first = await page.evaluate(() => Object.keys(window.Strom.DataManager.getData().persons)[0]);
+        const anna = await idOf(page, 'P0002'), josef = await idOf(page, 'P0001');
+        const pinned = first === anna ? josef : anna;
+        await page.evaluate(() => window.Strom.UI.setLiveFollowView('fan'));
+        await expect(page.locator('#fan-chart .fan-svg')).toBeVisible();
+        await page.evaluate((id) => window.Strom.UI.pinFanCenter(id as never), pinned);
+        await expect.poll(() => centre(page)).toBe(pinned);
+        const home = page.locator('#fan-home-btn');
+        const pin = page.locator('#fan-center-pin');
+        await expect(pin).toBeVisible();
+        await expect(pin.locator('#fan-home-btn')).toBeVisible();
+        await expect(page.locator('#fan-home-pill')).toBeHidden();
+        expect(await pin.evaluate(el => el.firstElementChild?.id)).toBe('fan-home-btn');
+        await expect(home).toHaveAttribute('data-state', 'active');
+        await home.click();
+        await expect.poll(() => centre(page)).toBe(first);
+        expect(await page.evaluate(() => window.Strom.UI.liveFollowPinned())).toBeNull();
+        await expect(pin).toBeHidden();
+        await expect(page.locator('#fan-home-pill #fan-home-btn')).toBeVisible();
+        await expect(home).toHaveAttribute('data-state', 'home');
+        // A tap in the fan keeps following; so does ⌂ there.
+        await expect(page.locator('#live-follow-pill')).toHaveCount(0);
+        expect(await page.evaluate(() => window.Strom.TreeRenderer.getViewMode())).toBe('fan');
     });
 
     test('a label of a person beyond the fan stands clear of the research\'s card (1440) (1105)', async ({ page }) => {

@@ -13697,6 +13697,33 @@
             .focus-home { width: 44px; height: 44px; }
             .focus-home svg { width: 18px; height: 18px; }
         }
+        /* The descendants badge (spec 111 §7): ⌂ near its left edge, a hairline before "Descendants". */
+        .descendants-badge > .focus-home { margin: -1px 0 -1px -10px; }
+        /* The fan (spec 111 §7): ⌂ in a small pill of its own at the stage's top left, the original
+           person's pill beside it; fan-view.ts joins ⌂ to the front of the pinned centre's pill. */
+        .fan-home-pill {
+            position: absolute; left: 12px; top: 12px; z-index: 4;
+            display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+            height: 36px; min-width: 36px; padding: 0 3px;
+            border-radius: var(--r-md); border: 1px solid var(--border); background: var(--surface); box-shadow: var(--shadow-sm);
+        }
+        .fan-home-pill:not(:has(> .focus-home:not([hidden]))) { display: none; }
+        .fan-stage:has(> .fan-home-pill > .focus-home:not([hidden])) { --fan-home-room: 44px; }
+        .fan-stage > .fan-origin-pill { left: calc(12px + var(--fan-home-room, 0px)); max-width: calc(100% - 24px - var(--fan-home-room, 0px)); }
+        /* No room beside ⌂ for the original person's pill (fan-view.ts placePill): ⌂ under it. */
+        .fan-stage.fan-home-below > .fan-origin-pill { left: 12px; max-width: calc(100% - 24px); }
+        .fan-stage.fan-home-below > .fan-home-pill { top: 56px; }
+        .fan-center-pin > .focus-home { margin-left: -8px; }
+        .fan-center-pin > .focus-home-sep { margin-right: 4px; }
+        @media (pointer: coarse) {
+            .descendants-badge > .focus-home { margin: -5px 0 -5px -10px; }
+            .descendants-badge { --db-home-w: 44px; }
+            .fan-home-pill { height: 44px; min-width: 44px; padding: 0; }
+            .fan-home-pill > .focus-home { margin: -1px; }
+            .fan-stage.fan-home-below > .fan-home-pill { top: 64px; }
+            .fan-stage:has(> .fan-home-pill > .focus-home:not([hidden])) { --fan-home-room: 52px; }
+            .fan-center-pin > .focus-home { margin: -1px 0 -1px -12px; }
+        }
         .focus-count {
             padding: 2px 8px;
             background: var(--surface-2);
@@ -26480,6 +26507,10 @@
                 padding: 6px 6px 8px 12px;
             }
             .descendants-badge-text { order: 1; flex: 1 0 calc(100% - 34px); }
+            /* ⌂ first in the badge's first row (spec 111 §7): the name keeps the rest of it. */
+            .descendants-badge > .focus-home { order: 0; margin: -4px 0 -4px -8px; }
+            .descendants-badge > .focus-home-sep { display: none; }
+            .descendants-badge:has(> .focus-home:not([hidden])) .descendants-badge-text { flex-basis: calc(100% - 34px - var(--db-home-w, 28px)); }
             .descendants-badge .descendants-close { order: 2; }
             .descendants-badge .descendants-depth { order: 3; }
             .descendants-badge .descendants-seg { order: 4; }
@@ -31985,6 +32016,9 @@
     <button id="collab-badge" class="collab-badge" style="display:none;" onclick="window.Strom.UI.showCollabBarFromBadge()" aria-label="Collaboration in progress" data-i18n-aria-label="share.collabBadgeTitle" data-i18n-title="share.collabBadgeTitle"><svg class="ui-icon collab-badge-icon" width="16" height="12" viewBox="0 0 16 12" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true" focusable="false"><rect x=".7" y=".7" width="14.6" height="10.6" rx="1"/><path d="M1.2 1.5 8 6.6l6.8-5.1"/></svg></button>
 
     <div id="descendants-badge" class="descendants-badge" style="display:none;">
+        <!-- Focus default person (spec 111 §7): the root of the descendants becomes the default person -->
+        <button type="button" class="focus-home" id="descendants-home-btn" data-home-view="descendants" data-state="active" aria-keyshortcuts="H" hidden></button>
+        <span class="focus-home-sep" aria-hidden="true"></span>
         <span id="descendants-badge-text" class="descendants-badge-text"></span>
         <!-- Descendant depth (generations down). The descendants chart forces
              ancestorDepth=0, so only ↓ is meaningful here — ↑ is not carried.
@@ -32058,6 +32092,8 @@
             </div>
             <div class="fan-stage" id="fan-stage">
                 <div id="fan-chart" class="fan-chart" tabindex="0"></div>
+                <!-- Focus default person (spec 111 §7); fan-view.ts joins it to the pinned centre's pill -->
+                <div class="fan-home-pill" id="fan-home-pill"><button type="button" class="focus-home" id="fan-home-btn" data-home-view="fan" data-state="active" aria-keyshortcuts="H" hidden></button></div>
                 <button type="button" class="fan-origin-pill" id="fan-origin-pill" hidden><span class="fan-origin-icon" aria-hidden="true">&#x21BA;</span><span class="fan-origin-label" data-i18n="fan.originPerson"></span><span class="fan-origin-name"></span></button>
                 <div class="fan-zoom-controls" id="fan-zoom-controls">
                     <button type="button" class="fan-zoom-btn fan-zoom-in" data-fan-zoom-act="in" data-i18n-aria-label="fan.zoomIn" data-i18n-title="fan.zoomInKey">&#xFF0B;</button>

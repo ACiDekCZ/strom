@@ -589,11 +589,16 @@ export const liveFollowMethods = uiModule({
         TreeRenderer.getFanView()?.recenterAsOrigin(id);
     },
 
-    /** Release the pinned centre: back to the centre the rule gives. */
-    unpinFanCenter(): void {
+    /**
+     * Release the pinned centre: back to the centre the rule gives
+     * (`recenter` false: the caller centres the fan itself, e.g. on the
+     * tree's default person, spec 111 §7).
+     */
+    unpinFanCenter(recenter = true): void {
         const fs = followSession();
         if (!fs) return;
         fs.fanPinned = null;
+        if (!recenter) return;
         const centre = followFanCenter();
         if (centre) TreeRenderer.getFanView()?.recenterAsOrigin(centre);
     },
