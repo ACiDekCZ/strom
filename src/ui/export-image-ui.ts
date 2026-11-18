@@ -15,6 +15,7 @@ import { buildFanModel, buildFanPosterSvg, fanPosterGeometry } from '../fan-char
 import { computeTimelineModel } from '../timeline.js';
 import { buildTimelinePosterSvg, timelinePosterGeometry } from '../timeline-chart.js';
 import { uiModule } from './module.js';
+import { runBusy, activatedElement, nextPaint } from './busy.js';
 import { LayoutConfig, StromData, TreeSpacing, ViewMode, layoutConfigFor, personCardHeight } from '../types.js';
 import { applyLivingPrivacy, PrivacyMode, presumedDeceasedSet } from '../privacy.js';
 import { classifyBranches } from '../branch-colors.js';
@@ -301,6 +302,21 @@ function posterPaper(): { format: string; orientation: string } {
     };
 }
 
+/** From this many cards the poster's button says its state at once (building it takes longer than 120 ms). */
+export const POSTER_SHOWN_AT_ONCE = 1500;
+
+/**
+ * A poster built under the working state of the button that asked for it (§8), "Saving the file…": painted before
+ * the build, at once for a large view (the page cannot paint while it builds). Without a button: built at once.
+ */
+async function posterBusy(work: () => void | Promise<void>): Promise<void> {
+    const el = activatedElement();
+    if (!el) { await work(); return; }
+    const cards = TreeRenderer.getPosterLayout({ includeView: true }).positions.size;
+    await runBusy(el, async () => { await nextPaint(); await work(); },
+        { heavy: cards >= POSTER_SHOWN_AT_ONCE ? 'now' : true, label: strings.busy.savingFile });
+}
+
 function buildCurrentPoster(): PosterBuild | null {
     const mode = TreeRenderer.getViewMode();
     if (mode === 'map' || mode === 'table') return null; // not printable
@@ -458,69 +474,73 @@ export const exportImageMethods = uiModule({
         this.clearDialogStack();
     },
 
-    /** Download the current view as a self-contained SVG. */
-    exportPosterSvg(): void {
-        const poster = buildCurrentPoster();
-        if (!poster) {
-            this.showAlert(strings.poster.empty, 'warning');
-            return;
-        }
-        downloadBlob(poster.svg, 'image/svg+xml', posterFilename('svg'));
-        this.closePosterDialog();
+    /** Download the current view as a self-contained SVG (built under its button's working state, §8). */
+    exportPosterSvg(): Promise<void> {
+        return posterBusy(() => {
+            const poster = buildCurrentPoster();
+            if (!poster) {
+                this.showAlert(strings.poster.empty, 'warning');
+                return;
+            }
+            downloadBlob(poster.svg, 'image/svg+xml', posterFilename('svg'));
+            this.closePosterDialog();
+        });
     },
 
-    /** Rasterize the current view to a 2x PNG (clamped to the canvas limit). */
-    async exportPosterPng(): Promise<void> {
-        const poster = buildCurrentPoster();
-        if (!poster) {
-            this.showAlert(strings.poster.empty, 'warning');
-            return;
-        }
-        const svg = poster.svg;
-        const baseW = poster.widthPx;
-        const baseH = poster.heightPx;
-
-        let scale = 2;
-        const maxScale = Math.min(MAX_CANVAS_PX / baseW, MAX_CANVAS_PX / baseH);
-        let clamped = false;
-        if (scale > maxScale) {
-            scale = Math.max(1, maxScale);
-            clamped = true;
-        }
-
-        try {
-            const img = new Image();
-            img.width = baseW;
-            img.height = baseH;
-            await new Promise<void>((resolve, reject) => {
-                img.onload = () => resolve();
-                img.onerror = () => reject(new Error('SVG image load failed'));
-                img.src = svgDataUrl(svg);
-            });
-
-            const canvas = document.createElement('canvas');
-            canvas.width = Math.round(baseW * scale);
-            canvas.height = Math.round(baseH * scale);
-            const ctx = canvas.getContext('2d');
-            if (!ctx) throw new Error('Canvas 2D context unavailable');
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-            const dataUrl = canvas.toDataURL('image/png');
-            const a = document.createElement('a');
-            a.href = dataUrl;
-            a.download = posterFilename('png');
-            a.click();
-
-            if (clamped) {
-                this.showToast(strings.poster.pngScaledDown);
+    /** Rasterize the current view to a 2x PNG (clamped to the canvas limit), under its button's working state (§8). */
+    exportPosterPng(): Promise<void> {
+        return posterBusy(async () => {
+            const poster = buildCurrentPoster();
+            if (!poster) {
+                this.showAlert(strings.poster.empty, 'warning');
+                return;
             }
-            this.closePosterDialog();
-        } catch (e) {
-            console.error('PNG export failed:', e);
-            this.showAlert(strings.poster.pngError, 'error');
-        }
+            const svg = poster.svg;
+            const baseW = poster.widthPx;
+            const baseH = poster.heightPx;
+
+            let scale = 2;
+            const maxScale = Math.min(MAX_CANVAS_PX / baseW, MAX_CANVAS_PX / baseH);
+            let clamped = false;
+            if (scale > maxScale) {
+                scale = Math.max(1, maxScale);
+                clamped = true;
+            }
+
+            try {
+                const img = new Image();
+                img.width = baseW;
+                img.height = baseH;
+                await new Promise<void>((resolve, reject) => {
+                    img.onload = () => resolve();
+                    img.onerror = () => reject(new Error('SVG image load failed'));
+                    img.src = svgDataUrl(svg);
+                });
+
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.round(baseW * scale);
+                canvas.height = Math.round(baseH * scale);
+                const ctx = canvas.getContext('2d');
+                if (!ctx) throw new Error('Canvas 2D context unavailable');
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+                const dataUrl = canvas.toDataURL('image/png');
+                const a = document.createElement('a');
+                a.href = dataUrl;
+                a.download = posterFilename('png');
+                a.click();
+
+                if (clamped) {
+                    this.showToast(strings.poster.pngScaledDown);
+                }
+                this.closePosterDialog();
+            } catch (e) {
+                console.error('PNG export failed:', e);
+                this.showAlert(strings.poster.pngError, 'error');
+            }
+        });
     },
 
     /**

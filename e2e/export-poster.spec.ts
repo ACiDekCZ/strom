@@ -407,3 +407,34 @@ test.describe('poster spacing (1110)', () => {
         await expect(page.locator('#poster-modal .poster-spacing')).toBeVisible();
     });
 });
+
+test.describe('the poster built under its button (C36/C37, waiting buttons §8)', () => {
+    for (const kind of ['SVG', 'PNG'] as const) {
+        test(`${kind}: the button is locked and painted so before the poster is built, then the file`, async ({ page }) => {
+            await openApp(page);
+            await createFirstPerson(page, 'Jan', 'Novak');
+            await page.evaluate(() => window.Strom.UI.showExportDialog());
+            await page.locator('#export-modal').locator('.menu-option', { hasText: 'Poster' }).click();
+            const poster = page.locator('#poster-modal');
+            await expect(poster).toBeVisible();
+            const btn = poster.locator('.menu-option', { hasText: kind });
+            // The button's state when the file is handed to the browser, and whether a frame was painted between
+            // the click and the build (watched in the page: the build blocks it).
+            await btn.evaluate((b) => {
+                const w = window as unknown as { __at: string | null; __framed: boolean };
+                w.__at = null;
+                w.__framed = false;
+                b.addEventListener('click', () => { requestAnimationFrame(() => { w.__framed = true; }); }, { capture: true, once: true });
+                const click = HTMLAnchorElement.prototype.click;
+                HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) {
+                    if (this.download && w.__at === null) w.__at = `${b.dataset.busy}|${b.getAttribute('aria-disabled')}|${w.__framed}`;
+                    return click.call(this);
+                };
+            });
+            await Promise.all([page.waitForEvent('download'), btn.click()]);
+            const at = await page.evaluate(() => (window as unknown as { __at: string | null }).__at);
+            expect(at).toMatch(/^(lock|busy)\|true\|true$/);
+            await expect(poster).toBeHidden();
+        });
+    }
+});
