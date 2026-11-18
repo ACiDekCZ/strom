@@ -159,8 +159,14 @@ test.describe('a send the research holds back', () => {
         bridge.syncReply = { status: 200, body: { ok: true, inbox: false, changes: 6, applied: 6, input: 'I0042' } };
         await poll(page);
         await expect(pill(page)).not.toContainText('Sealed on another computer');
-        await page.clock.fastForward(QUIET + 1000);
+        // What waited goes at that answer; the clock moves only once its reply is taken in (a jump past the
+        // send's two-minute limit while the reply was on its way aborted it, and it went a third time).
         await expect.poll(() => bridge.posts.length).toBe(2);
+        await expect.poll(() => page.evaluate(() => {
+            const U = window.Strom.UI;
+            const c = U.researchSyncLink();
+            return !!c && c.link.sent?.fingerprint === U.researchSyncFingerprints(c.treeId, c.link).current;
+        })).toBe(true);
         await page.clock.fastForward(QUIET * 3);
         await poll(page);
         expect(bridge.posts).toHaveLength(2);
