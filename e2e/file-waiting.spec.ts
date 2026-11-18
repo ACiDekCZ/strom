@@ -183,3 +183,45 @@ test.describe('photos of a GEDCOM import', () => {
         await expect(btn).not.toHaveAttribute('aria-busy', 'true');
     });
 });
+
+test.describe('a large GEDCOM read in parts (C52, §8)', () => {
+    test('the row says the people found so far while the file is read, the page takes its frames, then the summary', async ({ page }) => {
+        await openApp(page);
+        await createFirstPerson(page, 'Jan', 'Novak');
+        const modal = await openImport(page);
+        const row = modal.locator('.menu-option', { hasText: 'Import GEDCOM' });
+        await page.evaluate(() => {
+            const w = window as unknown as { __ged: { steps: string[]; frames: number } };
+            w.__ged = { steps: [], frames: 0 };
+            new MutationObserver(() => {
+                for (const el of document.querySelectorAll('#import-modal .option-busy')) {
+                    const t = el.textContent ?? '';
+                    if (t && !w.__ged.steps.includes(t)) w.__ged.steps.push(t);
+                }
+            }).observe(document.getElementById('import-modal')!, { subtree: true, childList: true, characterData: true });
+            const tick = (): void => { w.__ged.frames++; requestAnimationFrame(tick); };
+            requestAnimationFrame(tick);
+        });
+        const lines = ['0 HEAD', '1 CHAR UTF-8', '1 GEDC', '2 VERS 5.5.1'];
+        // Large enough that the reading lasts past the state's 120 ms on a fast computer.
+        const n = 80000;
+        for (let i = 1; i <= n; i++) {
+            lines.push(`0 @I${i}@ INDI`, `1 NAME Ota${i} /Rybízek${i % 89}/`, `1 SEX ${i % 2 ? 'M' : 'F'}`,
+                '1 BIRT', `2 DATE ${1 + i % 28} MAR ${1700 + i % 300}`, `2 PLAC Brno ${i % 30}`, `1 FAMS @F${Math.ceil(i / 2)}@`);
+        }
+        for (let f = 1; f <= n / 2; f++) lines.push(`0 @F${f}@ FAM`, `1 HUSB @I${2 * f - 1}@`, `1 WIFE @I${2 * f}@`);
+        lines.push('0 TRLR', '');
+        const chooser = page.waitForEvent('filechooser');
+        await row.click();
+        const framesBefore = await page.evaluate(() => (window as unknown as { __ged: { frames: number } }).__ged.frames);
+        await (await chooser).setFiles({ name: 'rybizkovi-velky.ged', mimeType: 'text/plain', buffer: Buffer.from(lines.join('\n')) });
+        await expect(page.locator('#gedcom-result-modal')).toBeVisible({ timeout: 30_000 });
+        await expect(page.locator('#gedcom-stat-persons')).toHaveText(String(n));
+        const ged = await page.evaluate(() => (window as unknown as { __ged: { steps: string[]; frames: number } }).__ged);
+        const counts = ged.steps.map(t => /^Loading rybizkovi-velky\.ged… ([\d,]+) people$/.exec(t)?.[1]).filter(Boolean)
+            .map(c => Number(c!.replace(/,/g, '')));
+        // People found so far (fewer than all) said while reading: the page was let go between the parts.
+        expect(counts.some(c => c > 0 && c < n), ged.steps.join(' | ')).toBe(true);
+        expect(ged.frames - framesBefore).toBeGreaterThan(2);
+    });
+});

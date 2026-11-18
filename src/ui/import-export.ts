@@ -4,9 +4,11 @@
  */
 
 import { runTreeSwitch } from './tree-switch-busy.js';
-import { activatedElement, busyLocal, busyToast, isBusy, runBusy } from './busy.js';
+import { activatedElement, busyLocal, busyStep, busyToast, clearBusyMessage, isBusy, runBusy, showBusyMessage } from './busy.js';
+import { runInParts } from './in-parts.js';
+import { canvasBusy } from './canvas-busy.js';
 import { holdLeave } from './busy-leave.js';
-import { openFilePicker, takePickOrigin, readPickedFile, FileUnreadableError, looksLikeGedcom, paintBeforeParse } from './file-pick.js';
+import { openFilePicker, takePickOrigin, readPickedFile, FileUnreadableError, looksLikeGedcom, paintBeforeParse, fileReadStep } from './file-pick.js';
 import type { FollowSwitchFrom } from './research-follow-ui.js';
 import { allMedia } from '../media.js';
 import type { PrivacyMode, ContentOptions } from '../privacy.js';
@@ -39,7 +41,7 @@ import { compressImageAttachment, readFileAsDataUrl, countImages, stripMedia } f
 import { getDemoTree, DEMO_FOCUS } from '../demo-tree.js';
 import { demoImageMaker } from '../demo-images.js';
 import {
-    parseGedcom, convertToStrom, decodeGedcomBytes, GedcomConversionResult, GedcomEncoding, GEDCOM_ENCODING_CHOICES,
+    parseGedcomSteps, convertToStromSteps, decodeGedcomBytes, GedcomConversionResult, GedcomEncoding, GEDCOM_ENCODING_CHOICES,
     gedcomSampleNames, GedcomImportOrigin,
 } from '../ged-parser.js';
 import { createSha256 } from '../sha256.js';
@@ -95,6 +97,16 @@ function exportableLists(): ExportableList[] {
         .map(list => ({ list, count: DataManager.getPersonListIds(list.id).length }))
         .filter(l => l.count > 0)
         .sort((a, b) => listDisplayName(a.list).localeCompare(listDisplayName(b.list)));
+}
+
+/**
+ * §8 C52/C53: a GEDCOM text read and converted in parts, the page let go every 40 ms; `people` hears the people
+ * found so far ("Loading family.ged… 2,400 people").
+ */
+async function readGedcomInParts(text: string, importOrigin: GedcomImportOrigin, people: (n: number) => void): Promise<GedcomConversionResult> {
+    const parsed = await runInParts(parseGedcomSteps(text), { onStep: s => people(s.people) });
+    people(parsed.individuals.size);
+    return runInParts(convertToStromSteps(parsed, { importOrigin }), { onStep: s => people(s.people) });
 }
 
 export const importExportMethods = uiModule({
@@ -544,13 +556,12 @@ export const importExportMethods = uiModule({
                 const decoding = decodeGedcomBytes(buffer);
                 // Not a GEDCOM at all: said at the element, never an empty tree made of it (9a).
                 if (!looksLikeGedcom(decoding.text)) throw new FileUnreadableError();
-                await paintBeforeParse(file.size);
                 const sha = createSha256();
                 sha.update(new Uint8Array(buffer));
                 // The import's record (file, hash, day) is read by gedcomImportOrigin during the conversion.
                 this.gedcomFileInfo = { name: file.name, sha: sha.digestHex(), at: localIsoDay() };
-                const result = convertToStrom(parseGedcom(decoding.text),
-                    { importOrigin: this.gedcomImportOrigin(decoding.encoding) });
+                // §8 C52: read in parts, the page let go between them, the people found so far in the state.
+                const result = await readGedcomInParts(decoding.text, this.gedcomImportOrigin(decoding.encoding), ctl.people);
                 ctl.people(result.stats.totalPersons);
                 return { buffer, decoding, info: this.gedcomFileInfo, result };
             }, () => { this.importFromTreeManager = fromManager; this.importToCurrentTree = toCurrent; openFilePicker(input, origin); });
@@ -891,21 +902,46 @@ export const importExportMethods = uiModule({
     },
 
     /** Re-read the GEDCOM file of the summary in another encoding and show the summary again. */
-    setGedcomEncoding(encoding: string): void {
-        if (!this.gedcomRawBuffer || !(GEDCOM_ENCODING_CHOICES as readonly string[]).includes(encoding)) return;
-        try {
-            const decoding = decodeGedcomBytes(this.gedcomRawBuffer, encoding as GedcomEncoding);
-            // The import record says which encoding the file was read in: this one now.
-            const result = convertToStrom(parseGedcom(decoding.text),
-                { importOrigin: this.gedcomImportOrigin(decoding.encoding) });
-            this.gedcomDecoding = decoding;
-            this.gedcomResult = result;
-        } catch (error) {
-            this.showAlert(strings.gedcom.parseError, 'error');
-            console.error('GEDCOM parse error:', error);
+    async setGedcomEncoding(encoding: string): Promise<void> {
+        const buffer = this.gedcomRawBuffer;
+        if (!buffer || !(GEDCOM_ENCODING_CHOICES as readonly string[]).includes(encoding)) return;
+        const select = document.getElementById('gedcom-encoding-select') as HTMLSelectElement | null;
+        // One reading at a time: a choice made meanwhile goes back to the one being read.
+        if (select?.getAttribute('aria-busy') === 'true') {
+            select.value = this.gedcomEncodingReading ?? select.value;
             return;
         }
-        this.showGedcomResultDialog();
+        // C53, §8: the file read again in parts; the select locked (its focus kept) with the step under it
+        // ("Loading family.ged… 2,400 people", seen after 120 ms).
+        const name = this.gedcomFileInfo?.name ?? '';
+        if (select) clearBusyMessage(select);
+        const step = select ? busyStep(select, fileReadStep(name)) : null;
+        select?.setAttribute('aria-busy', 'true');
+        select?.setAttribute('aria-disabled', 'true');
+        this.gedcomEncodingReading = encoding;
+        let ok = false;
+        try {
+            const decoding = decodeGedcomBytes(buffer, encoding as GedcomEncoding);
+            // The import record says which encoding the file was read in: this one now.
+            const result = await readGedcomInParts(decoding.text, this.gedcomImportOrigin(decoding.encoding),
+                n => step?.set(fileReadStep(name, n)));
+            if (this.gedcomRawBuffer === buffer) {
+                this.gedcomDecoding = decoding;
+                this.gedcomResult = result;
+                ok = true;
+            }
+        } catch (error) {
+            console.error('GEDCOM parse error:', error);
+            step?.clear();
+            if (select) showBusyMessage(select, { ok: false, kind: 'error', text: strings.busy.fileUnreadable });
+            else this.showAlert(strings.gedcom.parseError, 'error');
+        } finally {
+            step?.clear();
+            select?.removeAttribute('aria-busy');
+            select?.removeAttribute('aria-disabled');
+            this.gedcomEncodingReading = null;
+        }
+        if (ok) this.showGedcomResultDialog();
     },
 
     /** The origin of the GEDCOM file in the result dialog, read in `encoding` (its import record). */
@@ -988,7 +1024,8 @@ export const importExportMethods = uiModule({
             void DataManager.snapshotNow('pre-import');
             // Load data directly into current tree
             DataManager.loadStromData(this.gedcomDataForImport());
-            TreeRenderer.render();
+            // §8: the imported tree laid out under the canvas overlay (a large file: "Calculating the layout…").
+            void canvasBusy(() => TreeRenderer.renderAsync());
             this.gedcomResult = null;
             const treeId = DataManager.getCurrentTreeId();
             // A file from another program gets the "What next" card in place of the toast.

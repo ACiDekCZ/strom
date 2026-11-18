@@ -2916,7 +2916,32 @@ function parseGedcomCoord(raw: string): number | null {
     return value;
 }
 
+/** Lines of the file read between two steps of the reading in parts. */
+const GEDCOM_STEP_LINES = 2000;
+/** Persons or families converted between two steps. */
+const GEDCOM_STEP_RECORDS = 300;
+
+/** How far a GEDCOM file is read (waiting buttons §8, C52): the people found so far. */
+export interface GedcomStep { people: number }
+
+/** A computation in parts run to its end at once (the parts' pauses are the caller's, §8). */
+function runToEnd<T>(steps: Generator<GedcomStep, T, void>): T {
+    for (;;) {
+        const r = steps.next();
+        if (r.done) return r.value;
+    }
+}
+
+/** Parse a GEDCOM text at once (see `parseGedcomSteps` for the reading in parts). */
 export function parseGedcom(content: string): ParsedGedcom {
+    return runToEnd(parseGedcomSteps(content));
+}
+
+/**
+ * Parse a GEDCOM text in parts: a step every few hundred records says the people found so far, so a large
+ * file can be read with the page let go between the parts (§8, C52). The result is the one of `parseGedcom`.
+ */
+export function* parseGedcomSteps(content: string): Generator<GedcomStep, ParsedGedcom, void> {
     // Strip BOM (Byte Order Mark) if present
     if (content.charCodeAt(0) === 0xFEFF) {
         content = content.slice(1);
@@ -3482,7 +3507,9 @@ export function parseGedcom(content: string): ParsedGedcom {
 
     const { records: gedLines, noteRecords, inlineSources } = preprocessGedcomLines(lines);
 
+    let readRecords = 0;
     for (const rec of gedLines) {
+        if (++readRecords % GEDCOM_STEP_LINES === 0) yield { people: individuals.size };
         const level = rec.level;
         const tag = rec.tag;
         let value = rec.value;
@@ -5417,7 +5444,13 @@ export function parseGedcom(content: string): ParsedGedcom {
 /**
  * Convert parsed GEDCOM data to Strom data format
  */
+/** Convert a parsed GEDCOM file at once (see `convertToStromSteps` for the conversion in parts). */
 export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptions = {}): GedcomConversionResult {
+    return runToEnd(convertToStromSteps(gedcom, options));
+}
+
+/** `convertToStrom` in parts: a step every few hundred persons and families (§8, C52), the same result. */
+export function* convertToStromSteps(gedcom: ParsedGedcom, options: GedcomConvertOptions = {}): Generator<GedcomStep, GedcomConversionResult, void> {
     const { individuals, families, sources: gedSources, droppedTags } = gedcom;
     /** A file the app or the research wrote keeps the import marks it carries (spec 066). */
     const ownFile = !!(gedcom.stromApp || gedcom.stromResearch);
@@ -5724,7 +5757,9 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
     // Create persons
     const persons: Record<PersonId, Person> = {};
     const externalMedia: ExternalMediaRef[] = [];
+    let convertedRecords = 0;
     for (const [gedId, indi] of validIndividuals) {
+        if (++convertedRecords % GEDCOM_STEP_RECORDS === 0) yield { people: validIndividuals.size };
         const personId = personIdMap.get(gedId)!;
         // SEX U, another value or none: the sex is unknown — the family role
         // (HUSB/WIFE) says who stands on which side, not the person's sex.
@@ -6138,6 +6173,7 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
     const famcRank = (childGedId: string, famGedId: string): number =>
         individuals.get(childGedId)?.famcLinks.findIndex(l => l.famId === famGedId) ?? -1;
     for (const [gedFamId, fam] of families) {
+        if (++convertedRecords % GEDCOM_STEP_RECORDS === 0) yield { people: validIndividuals.size };
         for (const childGedId of fam.children) {
             const chosen = childFamily.get(childGedId);
             if (!chosen) { childFamily.set(childGedId, gedFamId); continue; }

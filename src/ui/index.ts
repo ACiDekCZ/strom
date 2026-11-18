@@ -226,6 +226,8 @@ export class UIClass {
     gedcomRawBuffer: ArrayBuffer | null = null;
     /** How the GEDCOM file in the result dialog was decoded. */
     gedcomDecoding: GedcomDecoding | null = null;
+    /** The encoding being read again (C53), while its select is locked. */
+    gedcomEncodingReading: string | null = null;
     /** The GEDCOM file of the result dialog as picked: its name, sha256 and the day it was loaded (spec 066). */
     gedcomFileInfo: { name: string; sha: string; at: string } | null = null;
     /** A new tree from a GEDCOM file waits for the import dialog's OK: the file's import record. */
