@@ -208,13 +208,19 @@ test.describe('Who decides hypotheses: Research for this tree', () => {
         await expect(choice(page, 'person')).toBeEnabled();
     });
 
-    test('busy: the sentence under the row, the choice as it was', async ({ page }) => {
+    test('busy: the sentence under the row with Try again (an alert), the choice as it was', async ({ page }) => {
         const bridge = await settingsSetup(page, { hypotheses: { decide: 'agent', writes: [], reply: { status: 503, body: { error: 'Busy.', code: 'research.busy', text: 'Busy.' } } } });
         await openTreeSettings(page);
         await option(page, 'person').click();
-        await expect(hyposNote(page)).toHaveText('The research is busy. It will work again shortly.');
+        await expect(hyposNote(page).locator('span').first()).toHaveText('The research is busy. It will work again shortly.');
+        await expect(hyposNote(page)).toHaveAttribute('role', 'alert');
         await expect(choice(page, 'agent')).toBeChecked();
         expect(bridge.hypotheses!.writes).toEqual([{ decide: 'person' }]);
+        // 6.1: Try again writes the same choice once more.
+        await page.locator('#research-hypos-retry').click();
+        await expect.poll(() => bridge.hypotheses!.writes).toEqual([{ decide: 'person' }, { decide: 'person' }]);
+        await expect(choice(page, 'agent')).toBeChecked();
+        await expect(page.locator('#research-hypos-retry')).toBeVisible();
     });
 
     test('without the bridge the choice rests with the sentence', async ({ page }) => {

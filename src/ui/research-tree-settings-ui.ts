@@ -23,6 +23,7 @@ import { postBridgeStories, postBridgeHypotheses, postBridgeReadTask, postBridge
 import { booksSettingHtml, booksMinTasksInput, type BooksSettingNote } from './books-setting-view.js';
 import { READ_SOURCE_TASK_FEATURE, type ReadTaskSetting } from '../research-read-task.js';
 import { readTaskSettingHtml, type ReadTaskSettingNote } from './read-task-setting-view.js';
+import { startPend, endPend, dropPend, pendAttrs, pendStatusHtml } from './switch-pend.js';
 import { researchAutoState, patchResearchAutoState, researchSendPreviewSkipped, noteResearchSendPreviewSkipped, announcedResearchScheme } from '../research-device.js';
 import { sourceReadingHash, unverifiedOlderSources, newTieSendMode } from '../research-sync.js';
 import { uiModule } from './module.js';
@@ -52,13 +53,20 @@ let storiesListening = false;
  * research's answer under the row (`link`: its terminal confirms the agent),
  * the value asked until the status says it (`want`), a write on its way (`busy`).
  */
-const hypos: { rid: string; note?: { text: string; link?: ResearchNoteLink }; want?: ResearchHypothesesDecide; busy?: boolean } = { rid: '' };
+const hypos: {
+    rid: string; note?: { text: string; link?: ResearchNoteLink; retry?: () => void; said?: boolean }; want?: ResearchHypothesesDecide; busy?: boolean;
+    /** The choice on its way (6.1: shown at once, dashed). */
+    sending?: ResearchHypothesesDecide;
+} = { rid: '' };
 
 /**
  * "Task from a new reading" (spec 059 §4): the same parts as `hypos` — the note under the choices (the write on
  * its way, the research's confirmation, a refusal), the value asked until the status says it (`want`), the group open.
  */
-const readTask: { rid: string; note?: ReadTaskSettingNote; want?: ReadTaskSetting; busy?: boolean; open?: boolean } = { rid: '' };
+const readTask: { rid: string; note?: ReadTaskSettingNote; want?: ReadTaskSetting; busy?: boolean; open?: boolean; retry?: ReadTaskSetting; said?: boolean } = { rid: '' };
+/** The write states of the two choices (6.1, switch-pend). */
+const HYPOS_PEND = 'tree:hypos';
+const READ_TASK_PEND = 'tree:readtask';
 /** How long the group stays highlighted when a link opens the dialog at it. */
 const READ_TASK_FLASH_MS = 1500;
 
@@ -601,17 +609,24 @@ export const researchTreeSettingsMethods = uiModule({
         }
         const r = strings.research;
         if (hypos.want !== undefined && said === hypos.want) delete hypos.want;
-        const value = hypos.want ?? said;
+        const value = hypos.sending ?? hypos.want ?? said;
         const note = !up ? { text: strings.history.storiesBridgeDown } : hypos.note;
+        // A refusal is said as an alert once (a redraw does not say it again).
+        const alert = !!note && note === hypos.note && !!hypos.note.retry && !hypos.note.said;
+        if (alert) hypos.note!.said = true;
         const focused = (document.activeElement as HTMLInputElement | null)?.name === 'research-hypos-decide'
             ? (document.activeElement as HTMLInputElement).value : '';
-        const off = up && !hypos.busy ? '' : ' disabled';
-        const option = (v: ResearchHypothesesDecide, label: string, ai: boolean): string => `
-                <label class="settings-checkbox research-hypos-row">
+        // On its way (6.1): the chosen one dashed with its words after 120 ms, the others locked keeping their focus.
+        const off = !up ? ' disabled' : hypos.busy ? ' aria-disabled="true"' : '';
+        const option = (v: ResearchHypothesesDecide, label: string, ai: boolean): string => {
+            const pend = hypos.busy && v === value;
+            return `
+                <label class="settings-checkbox research-hypos-row"${pend ? pendAttrs(HYPOS_PEND).replace(' aria-disabled="true"', '') : ''}>
                     <input type="radio" name="research-hypos-decide" value="${v}"${v === value ? ' checked' : ''}${off}>
                     <span class="settings-text"><span class="settings-name">${esc(label)}${ai
-                        ? ` <span class="research-ai-badge" title="${esc(r.aiCostHint)}" aria-hidden="true">${esc(r.aiBadge)}</span>` : ''}</span></span>
+                        ? ` <span class="research-ai-badge" title="${esc(r.aiCostHint)}" aria-hidden="true">${esc(r.aiBadge)}</span>` : ''}</span>${pend ? pendStatusHtml(HYPOS_PEND) : ''}</span>
                 </label>`;
+        };
         host.innerHTML = `
             <fieldset class="research-transcripts research-hypos" id="research-hypos">
                 <legend>${esc(r.hypoDecideTitle)}</legend>
@@ -619,7 +634,8 @@ export const researchTreeSettingsMethods = uiModule({
                 ${option('agent', r.hypoDecideAgent, true)}
                 <p class="research-hypos-desc">${esc(r.hypoDecideDesc)}</p>
                 <p class="research-not-retroactive"><span class="research-not-retroactive-icon" aria-hidden="true">i</span><span>${esc(r.hypoDecideNotRetro)}</span></p>
-                ${note ? `<p class="research-stories-note research-hypos-note" id="research-hypos-note"><span>${esc(note.text)}</span>${'link' in note && note.link
+                ${note ? `<p class="research-stories-note research-hypos-note${'retry' in note && note.retry ? ' is-err' : ''}" id="research-hypos-note"${alert ? ' role="alert"' : ''}><span>${esc(note.text)}</span>${'retry' in note && note.retry
+                    ? ` <button type="button" class="link-button research-hypos-retry" id="research-hypos-retry">${esc(strings.busy.retry)}</button>` : ''}${'link' in note && note.link
                     ? ` <button type="button" class="link-button" id="research-hypos-note-link">${researchActionLabel(note.link.label, note.link.mark ?? 'none', { size: 12 })}</button>` : ''}</p>` : ''}
             </fieldset>`;
         host.querySelectorAll<HTMLInputElement>('input[name="research-hypos-decide"]').forEach(input => {
@@ -633,6 +649,7 @@ export const researchTreeSettingsMethods = uiModule({
             if (focused && input.value === focused) input.focus({ preventScroll: true });
         });
         host.querySelector<HTMLButtonElement>('#research-hypos-note-link')?.addEventListener('click', () => hypos.note?.link?.run());
+        host.querySelector<HTMLButtonElement>('#research-hypos-retry')?.addEventListener('click', () => hypos.note?.retry?.());
     },
 
     /**
@@ -646,12 +663,17 @@ export const researchTreeSettingsMethods = uiModule({
         if (!base || hypos.busy) { this.renderResearchHypothesesRow(); return; }
         const r = strings.research;
         hypos.busy = true;
+        hypos.sending = decide;
         delete hypos.note;
+        startPend(HYPOS_PEND, { redraw: () => this.renderResearchHypothesesRow() });
         this.renderResearchHypothesesRow();
         const scheme = announcedResearchScheme();
         const res = await postBridgeHypotheses(base, decide, ctx!.features, { tree: rid, ...(scheme ? { scheme } : {}) });
-        if (hypos.rid !== rid) return;
+        if (hypos.rid !== rid) { dropPend(HYPOS_PEND); return; }
+        await endPend(HYPOS_PEND);
         delete hypos.busy;
+        delete hypos.sending;
+        const retry = (): void => void this.setResearchHypothesesDecide(decide);
         if (res.ok) {
             hypos.want = res.decide ?? decide;
         } else if (res.code === 'link') {
@@ -661,9 +683,9 @@ export const researchTreeSettingsMethods = uiModule({
                 ...(url ? { link: { label: r.hypoDecideConfirmLink, run: () => this.launchResearchLink(url, 'terminal'), mark: researchUrlMark(url) ?? 'terminal' } } : {}),
             };
         } else if (res.code === 'busy') {
-            hypos.note = { text: strings.history.errBusy };
+            hypos.note = { text: strings.history.errBusy, retry };
         } else {
-            hypos.note = { text: res.reason || (res.held ? this.researchWriteHeldText(res.held, false).toast : strings.live.waitingWrite.writeFailed) };
+            hypos.note = { text: res.reason || (res.held ? this.researchWriteHeldText(res.held, false).toast : strings.live.waitingWrite.writeFailed), retry };
         }
         this.renderResearchHypothesesRow();
     },
@@ -690,8 +712,13 @@ export const researchTreeSettingsMethods = uiModule({
         const said: ReadTaskSetting = last?.accepts?.read?.sourceTask ?? 'ask';
         if (readTask.want !== undefined && said === readTask.want) delete readTask.want;
         const value = readTask.want ?? said;
-        const note: ReadTaskSettingNote | undefined = readTask.busy ? { kind: 'busy' }
+        let note: ReadTaskSettingNote | undefined = readTask.busy ? { kind: 'busy', words: pendStatusHtml(READ_TASK_PEND) }
             : !up ? { kind: 'text', text: strings.history.storiesBridgeDown } : readTask.note;
+        // A refusal is said as an alert once (a redraw does not say it again).
+        if (note && note === readTask.note && note.kind === 'text' && note.retry && !readTask.said) {
+            readTask.said = true;
+            note = { ...note, alert: true };
+        }
         const focused = (document.activeElement as HTMLInputElement | null)?.name === 'research-read-task'
             ? (document.activeElement as HTMLInputElement).value : '';
         host.innerHTML = readTaskSettingHtml({ value, open: !!readTask.open, up, note });
@@ -701,6 +728,9 @@ export const researchTreeSettingsMethods = uiModule({
         host.querySelectorAll<HTMLInputElement>('input[name="research-read-task"]').forEach(input => {
             input.addEventListener('change', () => { if (input.checked) void this.setResearchReadTask(input.value as ReadTaskSetting); });
             if (focused && input.value === focused) input.focus({ preventScroll: true });
+        });
+        host.querySelector<HTMLButtonElement>('#research-readtask-retry')?.addEventListener('click', () => {
+            if (readTask.retry) void this.setResearchReadTask(readTask.retry);
         });
     },
 
@@ -713,19 +743,25 @@ export const researchTreeSettingsMethods = uiModule({
         readTask.busy = true;
         readTask.want = value;
         delete readTask.note;
+        delete readTask.retry;
+        startPend(READ_TASK_PEND, { redraw: () => this.renderResearchReadTaskRow() });
         this.renderResearchReadTaskRow();
         const res = await postBridgeReadTask(base, value, ctx!.features, { tree: rid });
-        if (readTask.rid !== rid) return;
+        if (readTask.rid !== rid) { dropPend(READ_TASK_PEND); return; }
+        await endPend(READ_TASK_PEND);
         delete readTask.busy;
         if (res.ok) {
             readTask.want = res.value ?? value;
             readTask.note = { kind: 'ok' };
         } else {
             delete readTask.want;
+            readTask.retry = value;
+            readTask.said = false;
             readTask.note = {
                 kind: 'text',
                 text: res.code === 'busy' ? strings.history.errBusy
                     : res.reason || (res.held ? this.researchWriteHeldText(res.held, false).toast : strings.live.waitingWrite.writeFailed),
+                retry: true,
             };
         }
         this.renderResearchReadTaskRow();

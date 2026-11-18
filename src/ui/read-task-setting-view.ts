@@ -14,8 +14,13 @@ function esc(text: string): string {
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-/** What stands under the choices: the write on its way, the research's confirmation, a sentence (bridge down, a refusal). */
-export type ReadTaskSettingNote = { kind: 'busy' } | { kind: 'ok' } | { kind: 'text'; text: string };
+/**
+ * What stands under the choices: the write on its way (6.1: the chosen one dashed, its words — the
+ * `busy-st` once shown, else '' — in it, the others locked with their focus), the research's
+ * confirmation, a sentence (bridge down; a refusal with Try again, an alert when first drawn).
+ */
+export type ReadTaskSettingNote = { kind: 'busy'; words?: string } | { kind: 'ok' }
+    | { kind: 'text'; text: string; retry?: boolean; alert?: boolean };
 
 export interface ReadTaskSettingInput {
     value: ReadTaskSetting;
@@ -33,20 +38,23 @@ export function readTaskSettingLabel(v: ReadTaskSetting): string {
 
 export function readTaskSettingHtml(o: ReadTaskSettingInput): string {
     const t = strings.treeSettings;
-    const busy = o.note?.kind === 'busy';
-    const off = !o.up || busy ? ' disabled' : '';
-    const option = (v: ReadTaskSetting, desc: string): string => `
-            <label class="settings-checkbox research-readtask-row">
+    const n = o.note;
+    const busy = n?.kind === 'busy' ? n : null;
+    const off = !o.up ? ' disabled' : busy ? ' aria-disabled="true"' : '';
+    const option = (v: ReadTaskSetting, desc: string): string => {
+        const pend = busy && v === o.value;
+        return `
+            <label class="settings-checkbox research-readtask-row"${pend ? ' data-pend="1" aria-busy="true"' : ''}>
                 <input type="radio" name="research-read-task" value="${v}"${v === o.value ? ' checked' : ''}${off}>
                 <span class="settings-text"><span class="settings-name">${esc(readTaskSettingLabel(v))}${v === 'ask'
-                    ? ` <span class="research-transcripts-default">${esc(t.default)}</span>` : ''}</span><span class="settings-desc">${esc(desc)}</span></span>
+                    ? ` <span class="research-transcripts-default">${esc(t.default)}</span>` : ''}</span><span class="settings-desc">${esc(desc)}</span>${pend ? busy.words ?? '' : ''}</span>
             </label>`;
-    const n = o.note;
-    const note = !n ? '' : n.kind === 'busy'
-        ? `<p class="research-stories-note research-readtask-note" id="research-readtask-note" role="status"><span class="read-task-spin" aria-hidden="true"></span><span>${esc(t.rtBusy)}</span></p>`
+    };
+    const note = !n || n.kind === 'busy' ? ''
         : n.kind === 'ok'
             ? `<p class="research-stories-note research-readtask-note is-ok" id="research-readtask-note" role="status"><span class="research-readtask-ok" aria-hidden="true">✓</span><span>${esc(t.rtOk)}</span></p>`
-            : `<p class="research-stories-note research-readtask-note" id="research-readtask-note" role="status"><span>${esc(n.text)}</span></p>`;
+            : `<p class="research-stories-note research-readtask-note${n.retry ? ' is-err' : ''}" id="research-readtask-note"${n.alert ? ' role="alert"' : n.retry ? '' : ' role="status"'}><span>${esc(n.text)}</span>${n.retry
+                ? ` <button type="button" class="link-button research-readtask-retry" id="research-readtask-retry">${esc(strings.busy.retry)}</button>` : ''}</p>`;
     const label = readTaskSettingLabel(o.value);
     return `
         <details class="research-group research-readtask-group" id="research-readtask-group"${o.open ? ' open' : ''}>
