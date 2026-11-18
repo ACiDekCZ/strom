@@ -12629,6 +12629,20 @@
         @media (max-width: 640px) {
             .map-tiles-blocked { font-size: 12px; padding: 8px 12px; }
         }
+        /* Tiles of the view did not come (§10.3): one sentence with Try again in the top left corner,
+           under the scope and the kinds; it takes clicks, the map around it does not move. */
+        .map-topleft > .map-tiles-failed {
+            flex: none; width: max-content; max-width: min(360px, 100%); margin: 0;
+            padding: 6px 10px; border-radius: 8px; background: var(--surface); box-shadow: var(--shadow-sm);
+            font-size: 12.5px; line-height: 1.4; gap: 2px 10px;
+        }
+        /* A small map (Find on the map, the check, Place by hand): the same sentence in its bottom left corner. */
+        .place-mini-map > .map-tiles-failed, .place-hand-map > .map-tiles-failed {
+            position: absolute; left: 6px; bottom: 6px; z-index: 2; width: max-content; max-width: calc(100% - 12px);
+            margin: 0; padding: 4px 8px; border-radius: 6px; background: var(--surface); box-shadow: var(--shadow-sm);
+            font-size: 12px; line-height: 1.35; gap: 0 8px;
+        }
+
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .map-tiles-blocked { font-size: 12px; padding: 6px 10px; }
         }

@@ -34,7 +34,7 @@ import {
     fitBounds, panCenter, pointInViewport, tilesForViewport, tileUrl, MAX_ZOOM, MIN_ZOOM, TILE_ATTRIBUTION,
 } from '../map.js';
 import { SettingsManager } from '../settings.js';
-import { loadMapTile, mapTilesBlocked, onMapTilesChange, releaseMapTile } from './map-tiles.js';
+import { loadMapTile, mapTilesBlocked, mapTilesFailedIn, onMapTilesChange, releaseMapTile, retryMapTiles, tilesFailedNote } from './map-tiles.js';
 import { managerKnownStreets, managerPlaceUsage, managerResearchActions } from './places-manager-ui.js';
 import { placesView, PLACES_STEP_MS } from './places-identify-ui.js';
 import { runBusy, serviceFailText } from './busy.js';
@@ -90,13 +90,30 @@ export function drawTiles(layer: HTMLElement, view: SmallMapView, width: number,
         if (!seen.has(key)) { releaseMapTile(img); img.remove(); live.delete(key); }
     }
     renderTilesBlockedNote(layer);
+    renderTilesFailedNote(layer);
     if (!smallMapTilesBound) {
         smallMapTilesBound = true;
-        // The refusal arrives after the tiles were asked for: every small map on the page says so then.
+        // The refusal (or a failed tile) arrives after the tiles were asked for: every small map on the page says so then.
         onMapTilesChange(() => {
-            document.querySelectorAll<HTMLElement>('.place-mini-tiles').forEach(renderTilesBlockedNote);
+            document.querySelectorAll<HTMLElement>('.place-mini-tiles').forEach(l => {
+                renderTilesBlockedNote(l);
+                renderTilesFailedNote(l);
+            });
         });
     }
+}
+
+/**
+ * Tiles of a small map did not come (§10.3): the main map's sentence with Try again in its bottom left corner,
+ * over its points; it goes once none is left failed.
+ */
+function renderTilesFailedNote(layer: HTMLElement): void {
+    const map = layer.parentElement;
+    if (!map) return;
+    const note = map.querySelector(':scope > .map-tiles-failed');
+    if (!mapTilesFailedIn(layer)) { note?.remove(); return; }
+    if (note) return;
+    map.appendChild(tilesFailedNote(() => retryMapTiles(layer)));
 }
 
 /** The small maps listen once for the tile server's refusal (its note). */

@@ -427,6 +427,36 @@ test('the tile server refuses the background: the small map says so once, no emp
     await expect(toast(page, 'Matched to Horní Lhota, okres Lhotov, Česko')).toBeVisible();
 });
 
+test('the small map\'s tiles do not come over the network: its corner says so once, Try again draws them', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await stubGeocoder(page, { 'Horní Lhota': [FAR, NEAR] });
+    await seed(page);
+    const png = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+        'base64',
+    );
+    let down = true;
+    // A route added later is asked first: it takes the tiles over from the seeded one.
+    await page.route('**://tile.openstreetmap.org/**', route =>
+        down ? route.abort('internetdisconnected') : route.fulfill({ status: 200, contentType: 'image/png', body: png }));
+    const r = await search(page, 'H. Lhota');
+    await expect(r.locator('.place-result')).toHaveCount(2, SEARCH);
+
+    const mini = r.locator('.place-mini-map');
+    const note = mini.locator('.map-tiles-failed');
+    await expect(note).toBeVisible();
+    await expect(note).toHaveCount(1);
+    await expect(note).toHaveAttribute('role', 'alert');
+    await expect(note).toContainText('The map tiles did not load.');
+    await expect(r.locator('.place-mini-pin')).toHaveText(['A', 'B']);
+
+    down = false;
+    await note.getByRole('button', { name: 'Try again' }).click();
+    await expect(note).toHaveCount(0);
+    await expect.poll(() => mini.locator('.map-tile').evaluateAll(els =>
+        els.length > 0 && els.every(el => (el as HTMLImageElement).complete && (el as HTMLImageElement).naturalWidth > 0))).toBe(true);
+});
+
 test('in German at 390px with touch: nothing in the search panel overflows', async ({ browser }) => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, locale: 'de-DE' });
     const page = await context.newPage();

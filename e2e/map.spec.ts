@@ -565,6 +565,82 @@ test('tiles refused even with the app id: one note instead of the blocked pictur
     expect(asked.length).toBe(before);
 });
 
+/** §10.3: tiles that do not come (the network down, no answer in 15 s) are said once in the map's corner, with Try again. */
+test('tiles that do not come over the network: one sentence in the map\'s corner, Try again draws them, the points stay', async ({ page }) => {
+    const png = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+        'base64',
+    );
+    let down = true;
+    await page.route('**://tile.openstreetmap.org/**', route =>
+        down ? route.abort('internetdisconnected') : route.fulfill({ status: 200, contentType: 'image/png', body: png }));
+    await page.addInitScript(() => {
+        const raw = localStorage.getItem('strom-settings');
+        const settings = raw ? JSON.parse(raw) : {};
+        settings.mapTiles = true;
+        localStorage.setItem('strom-settings', JSON.stringify(settings));
+    });
+    await stubGeocoder(page, {});
+    await openMapWithTwoPlaces(page);
+
+    const note = page.locator('#map-container .map-tiles-failed');
+    await expect(note).toBeVisible();
+    await expect(note).toHaveCount(1);
+    await expect(note).toHaveAttribute('role', 'alert');
+    await expect(note).toContainText('The map tiles did not load.');
+    // In the top left corner, under the scope (not over the zoom buttons or the bar).
+    await expect(page.locator('#map-container .map-topleft > .map-tiles-failed')).toHaveCount(1);
+    await expect(page.locator('.map-marker')).toHaveCount(2);
+    await expect(page.locator('.map-tiles-blocked')).toHaveCount(0);
+
+    down = false;
+    await note.getByRole('button', { name: 'Try again' }).click();
+    await expect(note).toHaveCount(0);
+    const tiles = page.locator('.map-tiles .map-tile');
+    await expect.poll(() => tiles.evaluateAll(els =>
+        els.length > 0 && els.every(el => (el as HTMLImageElement).complete && (el as HTMLImageElement).naturalWidth > 0))).toBe(true);
+    await expect(page.locator('.map-marker')).toHaveCount(2);
+});
+
+test('a tile without an answer for 15 s is said in the corner; when it comes after all, the sentence goes', async ({ page }) => {
+    const png = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+        'base64',
+    );
+    const held: (() => Promise<void>)[] = [];
+    await page.route('**://tile.openstreetmap.org/**', route => {
+        held.push(() => route.fulfill({ status: 200, contentType: 'image/png', body: png }).catch(() => undefined));
+    });
+    await page.addInitScript(() => {
+        const raw = localStorage.getItem('strom-settings');
+        const settings = raw ? JSON.parse(raw) : {};
+        settings.mapTiles = true;
+        localStorage.setItem('strom-settings', JSON.stringify(settings));
+    });
+    await stubGeocoder(page, {});
+    await openApp(page);
+    await page.clock.install({ time: new Date('2026-11-18T10:00:00Z') });
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(card(page, 'Johan')).toBeVisible();
+    await seedPlaces(page);
+    await seedCoords(page, { greenwich: [51.48, 0.0], pembroke: [51.67, -4.91] });
+    await page.getByRole('button', { name: 'Map', exact: true }).click();
+    await clearToasts(page);
+    await expect(page.locator('.map-marker')).toHaveCount(2);
+    await expect.poll(() => held.length).toBeGreaterThan(0);
+
+    const note = page.locator('#map-container .map-tiles-failed');
+    await page.clock.runFor(14_000);
+    await expect(note).toHaveCount(0);
+    await page.clock.runFor(1_500);
+    await expect(note).toBeVisible();
+    await expect(note).toHaveCount(1);
+
+    // The answers come late: the tiles show and the sentence goes by itself.
+    for (const go of held.splice(0)) await go();
+    await expect(note).toHaveCount(0);
+});
+
 test('the map controls say what they do', async ({ page }) => {
     await stubTiles(page);
     await stubGeocoder(page, { Greenwich: [51.48, 0.0], Pembroke: [51.67, -4.91] });

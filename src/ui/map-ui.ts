@@ -47,7 +47,7 @@ import {
 import { GEOCODER_NAME, GEOCODE_TIMEOUT_MS, geocodePlaces, placesCentroid, type GeocodeFailure } from '../geocode.js';
 import { serviceFailText } from './busy.js';
 import { uiModule } from './module.js';
-import { loadMapTile, mapTilesBlocked, onMapTilesChange, releaseMapTile } from './map-tiles.js';
+import { loadMapTile, mapTilesBlocked, mapTilesFailedIn, onMapTilesChange, releaseMapTile, retryMapTiles, tilesFailedNote } from './map-tiles.js';
 
 import { iconSvg } from '../icons.js';
 import { shownName } from '../person-name.js';
@@ -747,13 +747,29 @@ export const mapMethods = uiModule({
             }
         }
         this.renderMapTilesBlocked(container);
+        this.renderMapTilesFailed(container);
         if (!mapTilesBound) {
             mapTilesBound = true;
             onMapTilesChange(() => {
                 const open = document.getElementById('map-container');
-                if (open?.querySelector('.map-canvas')) this.renderMapTilesBlocked(open);
+                if (!open?.querySelector('.map-canvas')) return;
+                this.renderMapTilesBlocked(open);
+                this.renderMapTilesFailed(open);
             });
         }
+    },
+
+    /**
+     * Tiles of the view did not come (the network, the server's request limit, no answer in 15 s, §10.3): one
+     * sentence in the map's top left corner, under its chips, with Try again; it goes once none is left failed.
+     */
+    renderMapTilesFailed(container: HTMLElement): void {
+        const corner = container.querySelector('.map-topleft');
+        const note = container.querySelector('.map-tiles-failed');
+        const tiles = container.querySelector('.map-tiles');
+        if (!corner || !tiles || !mapTilesFailedIn(tiles)) { note?.remove(); return; }
+        if (note) return;
+        corner.appendChild(tilesFailedNote(() => retryMapTiles(tiles)));
     },
 
     /**

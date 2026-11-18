@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { loadMapTile, mapTilesBlocked, onMapTilesChange, releaseMapTile, resetMapTilesForTests } from '../ui/map-tiles.js';
+import { loadMapTile, mapTilesBlocked, mapTilesFailedIn, onMapTilesChange, releaseMapTile, resetMapTilesForTests, retryMapTiles, TILE_TIMEOUT_MS } from '../ui/map-tiles.js';
 import { TILE_REQUESTED_WITH } from '../map.js';
 
 interface FakeImg {
@@ -15,16 +15,28 @@ interface FakeImg {
     src?: string;
     referrerPolicy?: string;
     removeAttribute(name: string): void;
-    addEventListener(): void;
+    getAttribute(name: string): string | null;
+    addEventListener(type: string, fn: () => void): void;
+    /** The browser's answer to the image: it came, or it did not. */
+    fire(type: 'load' | 'error'): void;
 }
 
 function fakeImg(): FakeImg {
+    const on: Record<string, (() => void)[]> = {};
     return {
         dataset: {},
         removeAttribute(name: string) { if (name === 'src') delete this.src; },
-        addEventListener() { /* load/error: the blob URL is freed, not observed here */ },
+        getAttribute(name: string) { return name === 'src' ? this.src ?? null : null; },
+        addEventListener(type: string, fn: () => void) { (on[type] ??= []).push(fn); },
+        fire(type) { for (const fn of on[type] ?? []) fn(); },
     };
 }
+
+/** The maps' root: finds the drawn tiles still failed (as `img.map-tile[data-tile-state="failed"]`). */
+const root = {
+    querySelector: () => imgs.find(i => i.dataset.tileState === 'failed') ?? null,
+    querySelectorAll: () => imgs.filter(i => i.dataset.tileState === 'failed'),
+} as unknown as ParentNode;
 
 const URL_A = 'https://tile.openstreetmap.org/5/17/10.png';
 const URL_B = 'https://tile.openstreetmap.org/5/18/10.png';
@@ -68,7 +80,7 @@ beforeEach(() => {
     calls = [];
     answer = () => TILE;
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe('map tiles', () => {
     it('over https a tile is a plain image that sends the origin as Referer; one probe, untagged', async () => {
@@ -151,5 +163,86 @@ describe('map tiles', () => {
         expect(a.src).toBe(URL_A);
         expect(a.dataset.tileAccess).toBe('plain');
         expect(mapTilesBlocked()).toBe(false);
+    });
+});
+
+/** §10.3: a tile waits 15 s at most; one that did not come is said once on its map, with Try again. */
+describe('map tiles that did not come', () => {
+    const flush = async () => { for (let i = 0; i < 5; i++) await Promise.resolve(); };
+
+    it('a plain tile without an answer in 15 s is failed and the maps are told; a late tile takes it away', async () => {
+        vi.useFakeTimers();
+        stub('https:');
+        let told = 0;
+        onMapTilesChange(() => { told++; });
+        const a = load(URL_A);
+        const b = load(URL_B);
+        b.fire('load');
+        await vi.advanceTimersByTimeAsync(TILE_TIMEOUT_MS - 1);
+        expect(mapTilesFailedIn(root)).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        await flush();
+        expect(a.dataset.tileState).toBe('failed');
+        expect(b.dataset.tileState).toBe('loaded');
+        expect(mapTilesFailedIn(root)).toBe(true);
+        expect(told).toBe(1);
+        a.fire('load');
+        await flush();
+        expect(mapTilesFailedIn(root)).toBe(false);
+        expect(told).toBe(2);
+    });
+
+    it('offline: every tile fails at once, the maps are told once; Try again asks again and the sentence goes', async () => {
+        stub('file:');
+        vi.stubGlobal('fetch', (_url: string, init: RequestInit) => {
+            calls.push({ url: _url, init });
+            return Promise.reject(new TypeError('Failed to fetch'));
+        });
+        let told = 0;
+        onMapTilesChange(() => { told++; });
+        load(URL_A);
+        load(URL_B);
+        await settle();
+        expect(imgs.every(i => i.dataset.tileState === 'failed')).toBe(true);
+        expect(told).toBe(1);
+        expect(mapTilesBlocked()).toBe(false);
+        stub('file:');  // the network is back
+        retryMapTiles(root);
+        expect(mapTilesFailedIn(root)).toBe(false);
+        await settle();
+        expect(imgs.map(i => i.src)).toEqual(['blob:tile', 'blob:tile']);
+    });
+
+    it('a tagged request without an answer is stopped at 15 s and failed (not refused)', async () => {
+        vi.useFakeTimers();
+        stub('file:');
+        vi.stubGlobal('fetch', (url: string, init: RequestInit) => {
+            calls.push({ url, init });
+            return new Promise(() => undefined);
+        });
+        const a = load(URL_A);
+        await vi.advanceTimersByTimeAsync(TILE_TIMEOUT_MS);
+        await flush();
+        expect(calls[0].init.signal?.aborted).toBe(true);
+        expect(a.dataset.tileState).toBe('failed');
+        expect(mapTilesBlocked()).toBe(false);
+    });
+
+    it('the server\'s request limit (429) fails the tile and does not end tile loading', async () => {
+        stub('file:');
+        answer = () => ({ status: 429, cc: 'no-cache' });
+        const a = load(URL_A);
+        await settle();
+        expect(a.dataset.tileState).toBe('failed');
+        expect(mapTilesBlocked()).toBe(false);
+    });
+
+    it('a plain image that errors is failed; a failed tile panned away is no longer counted', async () => {
+        stub('https:');
+        const a = load(URL_A);
+        a.fire('error');
+        expect(a.dataset.tileState).toBe('failed');
+        releaseMapTile(a as unknown as HTMLImageElement);
+        expect(mapTilesFailedIn(root)).toBe(false);
     });
 });
