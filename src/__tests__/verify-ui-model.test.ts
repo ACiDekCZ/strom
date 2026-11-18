@@ -139,6 +139,31 @@ describe('factOffer: table 10z as the tree knows the fact', () => {
         }
     });
 
+    it('a research tree whose bridge does not run (offline, Milan 16. 11.): the scan and Undo are the app\'s own, by the fact\'s id', () => {
+        const OFFLINE: VerifyResearch = { features: [], offline: true };
+        for (const step of ['proven', 'probable', 'possible', 'lead', 'import'] as const) {
+            expect(factOffer(p, 'birth', input({ step, research: OFFLINE })))
+                .toMatchObject({ verify: false, scan: true, scanViaBridge: false, row: null });
+        }
+        // Waiting: the scan as well, no "Verify first".
+        expect(factOffer(p, 'birth', input({ research: OFFLINE, info: { pending: 'wait' } })))
+            .toMatchObject({ verify: false, scan: true, scanViaBridge: false, row: 'pending' });
+        // The research's confirmation is taken back here (handed over without its `_STROM_CONFIRMED`); the app's own too.
+        expect(factOffer(p, 'birth', input({ step: 'human', research: OFFLINE, info: { confirmed: '2026-10-01', confirmedBy: 'research' } })))
+            .toMatchObject({ undo: true, undoViaBridge: false, row: 'confirmed' });
+        expect(factOffer(p, 'birth', input({ step: 'human', research: OFFLINE, info: { confirmed: '2026-10-01', confirmedBy: 'app' } })))
+            .toMatchObject({ undo: true, undoViaBridge: false });
+        // A fact the research does not name (no id): nothing it would read; a tree that cannot be changed: nothing.
+        expect(factOffer(person(), 'birth', input({ research: OFFLINE }))).toMatchObject({ scan: false });
+        expect(factOffer(person(), 'birth', input({ step: 'human', research: OFFLINE, info: { confirmed: '2026-10-01', confirmedBy: 'research' } })).undo).toBe(false);
+        expect(factOffer(p, 'birth', input({ research: OFFLINE, editable: false })).scan).toBe(false);
+        expect(factOffer(p, 'birth', input({ step: 'human', research: OFFLINE, editable: false, info: { confirmed: '2026-10-01', confirmedBy: 'research' } })).undo).toBe(false);
+        // The name and the sex of a research tree: never.
+        expect(factOffer(p, 'name', input({ research: OFFLINE })).scan).toBe(false);
+        // A bridge that answers without facts.confirm (an older research) still offers none.
+        expect(factOffer(p, 'birth', input({ research: OLD })).scan).toBe(false);
+    });
+
     it('row 9: no research — the app\'s own scan when cited (a tree that can be changed), and the research row', () => {
         const plain = person();
         for (const step of ['proven', 'probable', 'possible', 'lead', 'import'] as const) {
@@ -161,8 +186,8 @@ describe('factOffer: table 10z as the tree knows the fact', () => {
         expect(personVerifyCounts(offers)).toEqual({ verify: 2, pending: 1 });
     });
 
-    it('"Verify facts · N": every fact /verify {person} takes (an occupation too, a proven one too), not one confirmed or waiting, not the name or sex', () => {
-        const fact = (f: string, o: Partial<FactOfferInput> = {}) => ({ fact: f, offer: factOffer(p, f, input(o)), step: o.step ?? 'probable' });
+    it('"Verify facts · N": the five main events the research holds (a proven one too), not one confirmed or waiting, no occupation or residence, not the name or sex (Milan 16. 11.)', () => {
+        const fact = (f: string, o: Partial<FactOfferInput> = {}) => ({ fact: f, kind: verifyFactKind(p, f), offer: factOffer(p, f, input(o)), step: o.step ?? 'probable' });
         const facts = [
             fact('birth'),
             fact('death', { step: 'proven' }),
@@ -172,12 +197,18 @@ describe('factOffer: table 10z as the tree knows the fact', () => {
             fact('name'),
             fact('sex'),
         ];
-        expect(personVerifyAskCount(facts)).toBe(3);
+        // The birth and the proven death; the occupation (the research holds it) only by "Verify" at the fact.
+        expect(personVerifyAskCount(facts)).toBe(2);
+        // A residence the research holds: not counted either.
+        expect(personVerifyAskCount([...facts, { fact: 'event:r1', kind: null, offer: { verify: false, row: null, eid: 'E0009' }, step: 'lead' }])).toBe(2);
+        // A couple's marriage is one of the five.
+        const u = couple({ marriage: { eid: 'E0010' } });
+        expect(personVerifyAskCount([...facts, { fact: 'marriage', kind: verifyFactKind(u, 'marriage'), offer: factOffer(u, 'marriage', input()), step: 'probable' }])).toBe(3);
         // Nothing offers "Verify": no item, whatever the research would take.
         expect(personVerifyAskCount(facts.filter(f => f.fact !== 'birth'))).toBe(0);
         // A fact without the research's id is none of its facts.
         const noIds = person();
-        expect(personVerifyAskCount([{ fact: 'birth', offer: factOffer(noIds, 'birth', input()), step: 'probable' }])).toBe(0);
+        expect(personVerifyAskCount([{ fact: 'birth', kind: 'BIRT', offer: factOffer(noIds, 'birth', input()), step: 'probable' }])).toBe(0);
     });
 });
 

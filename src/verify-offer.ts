@@ -15,6 +15,12 @@ export interface VerifyResearch {
     features: readonly string[];
     /** /status.tree.state; an archive or a waiting tree does not verify. */
     treeState?: ResearchTreeState;
+    /**
+     * Its bridge has not answered in this page (it does not run): no "Verify",
+     * but a person's confirmation and its taking back are the app's own, handed
+     * to the research with the tree (`_STROM_CONFIRMED`) — spec 065, Milan 16. 11.
+     */
+    offline?: boolean;
 }
 
 export interface VerifyOfferInput {
@@ -82,9 +88,12 @@ export function researchVerifies(research: VerifyResearch | null, feature: strin
     return research.treeState !== 'archive' && research.treeState !== 'waiting';
 }
 
-/** The research takes a hand confirmation (`facts.confirm`; also in an archive or a waiting tree). */
+/**
+ * The research takes a hand confirmation (`facts.confirm`; also in an archive or a waiting tree), or, its
+ * bridge not running, takes it with the tree handed over (the app's own confirmation, factOffer).
+ */
 export function researchConfirms(research: VerifyResearch | null): boolean {
-    return !!research && research.features.includes(FACTS_CONFIRM_FEATURE);
+    return !!research && (research.offline === true || research.features.includes(FACTS_CONFIRM_FEATURE));
 }
 
 /**
@@ -99,7 +108,8 @@ export function researchConfirms(research: VerifyResearch | null): boolean {
  * 6. no source: "Verify" (costlier), no scan;
  * 7. waiting: no "Verify", the scan, the waiting row; one the research
  *    queued by itself (`wait`) further than next in line: "Verify first";
- * 8. a research without `verify`: no "Verify"; the scan only with `facts.confirm`;
+ * 8. a research without `verify`: no "Verify"; the scan only with `facts.confirm`,
+ *    or while its bridge does not run (`offline`: the app's own confirmation);
  * 9. no research: the scan when the fact cites a source, and the row that a
  *    research would verify it.
  * A fact with no mark offers the scan alone (with a source) and no row.

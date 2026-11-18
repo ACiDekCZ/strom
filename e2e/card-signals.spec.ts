@@ -1168,7 +1168,7 @@ test.describe('verify facts: the person and the tree (spec 065 §10 h–m)', () 
         await expect(page.locator('#verify-person-modal')).toBeVisible();
     });
 
-    test('a person with residences: the menu counts what /verify takes (the residences too), as the preview does; the toast says what the research queued', async ({ page }) => {
+    test('a person with residences: "Verify facts" takes the five main events only, the residences go by "Verify" at the fact; each fact asked for by its id (Milan 16. 11.)', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
         // Two residences the research holds (their ids): no "Verify" of their own, but a person's /verify takes them.
         const resi = ['1 RESI', '2 DATE 1880', '2 PLAC Čapkov', '2 _STROM_STATUS lead', '2 _STROM_EID E0014',
@@ -1190,20 +1190,24 @@ test.describe('verify facts: the person and the tree (spec 065 §10 h–m)', () 
 
         await card(page, 'Jan').locator('.name').click();
         const menu = page.locator('.context-menu');
-        await expect(menu.locator('[data-action="signal-verify"] .menu-act-text')).toContainText('Verify facts · 4');
+        await expect(menu.locator('[data-action="signal-verify"] .menu-act-text')).toContainText('Verify facts · 2');
         await menu.locator('[data-action="signal-verify"]').click();
         const dialog = page.locator('#verify-person-modal');
-        await expect(dialog.locator('.vfy-check')).toHaveCount(4);
-        await expect(dialog.locator('[data-vfy="start"]')).toContainText('Verify (4)');
+        await expect(dialog.locator('.vfy-check')).toHaveCount(2);
+        await expect(dialog.locator('.vfy-row-title')).toHaveText([/^Birth/, /^Death/]);
+        await expect(dialog.locator('[data-vfy="start"]')).toContainText('Verify (2)');
         await dialog.locator('[data-vfy="start"]').click();
         await expect(dialog).toHaveCount(0);
-        await expect(page.locator('.toast', { hasText: '5 facts queued for verification.' })).toBeVisible();
-        expect(verify.posts.filter(p => !p.body.dry)).toEqual([{ route: 'verify', body: { person: 'P0003' } }]);
+        await expect(page.locator('.toast', { hasText: '2 facts queued for verification.' })).toBeVisible();
+        // The research's /verify {person} would take the residences too: each fact by its id instead.
+        expect(verify.posts.filter(p => !p.body.dry)).toEqual([
+            { route: 'verify', body: { fact: 'E0012' } }, { route: 'verify', body: { fact: 'E0013' } },
+        ]);
 
-        // Each of the four the tree holds waits now (the residences too).
+        // The birth and the death wait now; the residences do not.
         await card(page, 'Jan').locator('.name').click();
         await expect(menu.locator('[data-action="signal-verify"]')).toHaveCount(0);
-        await expect(menu.locator('[data-action="signal-verify-pending"] .menu-act-text')).toHaveText('Verifying · 4');
+        await expect(menu.locator('[data-action="signal-verify-pending"] .menu-act-text')).toHaveText('Verifying · 2');
     });
 
     test('"Verifying · N" with a fact the research queued by itself further down: "Verify first" with the AI badge — the person\'s preview, then /verify {person} (1109)', async ({ page }) => {
@@ -1311,7 +1315,7 @@ test.describe('verify facts: the person and the tree (spec 065 §10 h–m)', () 
         expect(verify.posts.at(-1)).toEqual({ route: 'verify/bulk', body: { scope: 'tree', order: 'ancestors' } });
     });
 
-    test('the preview names every fact the research sends by its name, never by its tag (OCCU → Occupation) (1109)', async ({ page }) => {
+    test('the preview names the facts by their names, never by their tags, and lists only the five main events (1109, Milan 16. 11.)', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
         const ged = verifyGed(undefined, ['1 OCCU kovář', '2 _STROM_STATUS lead', '2 _STROM_EID E0014']);
         const facts = [
@@ -1321,6 +1325,7 @@ test.describe('verify facts: the person and the tree (spec 065 §10 h–m)', () 
             { fact: 'E0016', kind: 'CENS', how: 'search' },
             { fact: 'E0017', kind: 'EDUC', how: 'search' },
             { fact: 'E0018', kind: 'EVEN', how: 'search' },
+            { fact: 'E0019', kind: 'BURI', how: 'search' },
         ];
         const bridge = await fakeBridge(page, { features: VERIFY_FEATURES, treeGed: ged, statusExtra: { researches: [LINE] } });
         await fakeVerify(page, bridge, { facts });
@@ -1329,9 +1334,9 @@ test.describe('verify facts: the person and the tree (spec 065 §10 h–m)', () 
         const jan = await page.evaluate(() => window.Strom.DataManager.getAllPersons().find(p => p.firstName === 'Jan')!.id);
         await page.evaluate((id) => window.Strom.UI.showVerifyPersonDialog(id as never), jan);
         const titles = page.locator('#verify-person-modal .vfy-row-title');
-        await expect(titles).toHaveCount(5);
-        await expect(titles).toHaveText([/^Birth/, 'Occupation', 'Census', 'Education', 'Other fact']);
-        for (const tag of ['BIRT', 'OCCU', 'CENS', 'EDUC', 'EVEN']) await expect(page.locator('#verify-person-modal')).not.toContainText(tag);
+        await expect(titles).toHaveText([/^Birth/, 'Burial']);
+        for (const tag of ['BIRT', 'BURI', 'OCCU', 'CENS', 'EDUC', 'EVEN']) await expect(page.locator('#verify-person-modal')).not.toContainText(tag);
+        await expect(page.locator('#verify-person-modal')).not.toContainText('Occupation');
     });
 
     test('the bulk dialog asks the research one request at a time: no "busy" refusal while it counts and estimates (1109)', async ({ page }) => {

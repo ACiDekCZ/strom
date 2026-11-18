@@ -323,7 +323,10 @@ export const verifyUiMethods = uiModule({
         const rid = this.activeResearchId();
         if (!rid) return null;
         const status = this.researchStatusOf(rid) ?? lastBridgeStatus(rid);
-        return { features: status?.features ?? [], treeState: this.researchTreeSaid(rid)?.state };
+        const treeState = this.researchTreeSaid(rid)?.state;
+        // Its bridge has not answered here: confirmations are the app's own, handed over with the tree.
+        if (!status) return { features: [], treeState, offline: true };
+        return { features: status.features ?? [], treeState };
     },
 
     /** One fact's offer as the tip shows it now. */

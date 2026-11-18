@@ -29,7 +29,7 @@ import {
     VerifyBulkDone, VerifyBulkOrder, VerifyBulkResult, VerifyFact, VerifyTarget, postVerify, postVerifyBulk, postVerifyStop,
 } from '../research-verify.js';
 import {
-    BulkScopeOption, FactOffer, VERIFY_TRY_PEOPLE, bulkScopeOptions, factOffer, personVerifyAskCount, personVerifyCounts, queuedToastDue,
+    BulkScopeOption, FactOffer, PERSON_VERIFY_KINDS, VERIFY_TRY_PEOPLE, bulkScopeOptions, factOffer, personVerifyAskCount, personVerifyCounts, queuedToastDue,
     verifyCostSplit, verifyFactKind, verifyRecordText,
 } from '../verify-ui-model.js';
 import { VerifyResearch, researchVerifies } from '../verify-offer.js';
@@ -139,6 +139,8 @@ interface PersonPreviewState {
     opener: HTMLElement | null;
     /** "Verify first": the facts waiting further down the research's queue, moved to its head. */
     prioritize?: boolean;
+    /** The research's /verify {person} would take facts the dialog leaves out (a residence): a start names each fact. */
+    others?: boolean;
 }
 
 let preview: PersonPreviewState | null = null;
@@ -424,7 +426,10 @@ export const verifyPersonMethods = uiModule({
             const state = this.personVerifyState(st.personId);
             const byEid = new Map<string, PersonFact>();
             for (const f of state?.facts ?? []) if (f.offer.eid) byEid.set(f.offer.eid, f);
-            st.rows = r.facts.map(f => {
+            // Only the five main events (PERSON_VERIFY_KINDS); a residence goes by "Verify" at the fact.
+            const asked = r.facts.filter(f => PERSON_VERIFY_KINDS.has(f.kind));
+            st.others = asked.length < r.facts.length;
+            st.rows = asked.map(f => {
                 const local = byEid.get(f.fact);
                 const title = local ? factTitle(f.kind, local.holder, local.fact) : verifyKindName(f.kind);
                 const record = verifyRecordText(f.record);
@@ -507,7 +512,10 @@ export const verifyPersonMethods = uiModule({
         }
     },
 
-    /** Start: the whole person when every fact is checked, else each checked fact by its id. */
+    /**
+     * Start: the whole person when every fact is checked and the research's /verify {person} takes no
+     * other (a residence), else each checked fact by its id (the research joins them into the person's task).
+     */
     async verifyPersonStart(): Promise<void> {
         const st = preview;
         if (!st || st.busy) return;
@@ -517,7 +525,7 @@ export const verifyPersonMethods = uiModule({
         if (!ref || checked.length === 0) return;
         st.busy = true;
         this.renderVerifyPerson();
-        const all = checked.length === st.rows.length;
+        const all = checked.length === st.rows.length && !st.others;
         const targets: VerifyTarget[] = all ? [{ person: ref }] : checked.map(r => ({ fact: r.eid }));
         const started: StartedFact[] = [];
         /** The facts the research queued, by its answers (each target's checked rows when one names none). */
@@ -549,7 +557,7 @@ export const verifyPersonMethods = uiModule({
             return;
         }
         this.closeVerifyPersonDialog();
-        // What the research says it queued: a residence it verifies too, though the tree holds no such fact to mark.
+        // What the research says it queued: a fact it holds that the tree does not show counts too.
         this.showToast(failure || strings.verify.bulkStarted(queued.size || started.length || checked.length), 5000, failure ? { alert: true } : {});
         this.afterVerifyStarted();
     },

@@ -66,10 +66,11 @@ export interface FactOffer extends VerifyOffer {
  * verifies and named by its id; in a tree of the research no name or sex
  * (it neither verifies nor confirms them); the scan through the bridge when
  * the fact has its id, else the app's own confirmation, only where the tree
- * can be changed. In a tree of the research the scan comes only while its
- * bridge takes confirmations (`researchConfirms`, verifyOffer): without the
- * bridge none is offered; with it, a fact without its id is confirmed as the
- * app's own.
+ * can be changed. In a tree of the research the scan comes while its bridge
+ * takes confirmations (`researchConfirms`, verifyOffer), a fact without its id
+ * confirmed as the app's own; while its bridge does not run (`offline`), the
+ * scan and the taking back of a fact the research names by its id are the
+ * app's own, handed to the research with the tree (`_STROM_CONFIRMED`).
  */
 export function factOffer(holder: FactHolder, fact: string, input: FactOfferInput): FactOffer {
     const eid = factResearchEid(holder, fact);
@@ -89,12 +90,16 @@ export function factOffer(holder: FactHolder, fact: string, input: FactOfferInpu
         out.scan = false;
         delete out.cost;
     }
+    // Its bridge not running: the app's own confirmation (or taking back), handed over with the tree, only of a
+    // fact the research named by its id (a research that writes ids reads `_STROM_CONFIRMED`).
+    const offline = !!input.research?.offline;
+    if (offline && !eid) { out.scan = false; out.undo = out.undo && input.info.confirmedBy === 'app'; }
     if (out.scan) {
-        out.scanViaBridge = !!input.research && !!eid;
+        out.scanViaBridge = !!input.research && !!eid && !offline;
         if (!out.scanViaBridge && !input.editable) out.scan = false;
     }
     if (out.undo) {
-        out.undoViaBridge = input.info.confirmedBy === 'research';
+        out.undoViaBridge = input.info.confirmedBy === 'research' && !offline;
         if (!out.undoViaBridge && !input.editable) out.undo = false;
         if (out.undoViaBridge && !eid) out.undo = false;
     }
@@ -149,24 +154,32 @@ export function queuedToastDue(fix: { at: string } | undefined, waiting: number,
     return !!fix && !!fix.at && waiting > 0 && fix.at !== shownFor;
 }
 
+/**
+ * The kinds "Verify facts" of a person takes (spec 065 P6, Milan 16. 11.): the
+ * birth, a baptism, a marriage, the death, a burial. A residence, an
+ * occupation or another fact the research holds goes by "Verify" at the fact.
+ */
+export const PERSON_VERIFY_KINDS: ReadonlySet<string> = new Set(['BIRT', 'CHR', 'BAPM', 'MARR', 'DEAT', 'BURI']);
+
 /** One of a person's facts as "Verify facts · N" counts it. */
 export interface PersonAskFact {
     fact: string;
+    /** Its GEDCOM kind as the research verifies it (verifyFactKind; null: none of those). */
+    kind: string | null;
     offer: Pick<FactOffer, 'verify' | 'row' | 'eid'>;
     step: ReliabilityStepName | null;
 }
 
 /**
  * "Verify facts · N" (the person menu, the card mark's tip): the facts the
- * research's /verify {person} takes — each of the person's and their
- * couples' facts it holds (its id there: a residence or an occupation as
- * well as a birth), not confirmed by a person, not waiting already; the
- * name and the sex are no facts of its. 0 while none of them offers
- * "Verify" (nothing worth asking for): the item is not shown.
+ * person's "Verify facts" asks for — each of the person's and their couples'
+ * facts of PERSON_VERIFY_KINDS the research holds (its id there; a proven
+ * one too), not confirmed by a person, not waiting already. 0 while none of
+ * them offers "Verify" (nothing worth asking for): the item is not shown.
  */
 export function personVerifyAskCount(facts: readonly PersonAskFact[]): number {
     if (!facts.some(f => f.offer.verify)) return 0;
-    return facts.filter(f => !!f.offer.eid && f.fact !== 'name' && f.fact !== 'sex'
+    return facts.filter(f => !!f.offer.eid && !!f.kind && PERSON_VERIFY_KINDS.has(f.kind)
         && f.step !== 'human' && f.offer.row !== 'pending').length;
 }
 

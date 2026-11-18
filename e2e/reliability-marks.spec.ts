@@ -703,6 +703,54 @@ test.describe('verify facts at one fact (spec 065 round 3)', () => {
         await expect(vAct(page, 'scan')).toBeVisible();
     });
 
+    test('a research tree without its bridge (offline): the scan and Undo are the app\'s own, handed to the research with the tree (065, Milan 16. 11.)', async ({ page }) => {
+        const asks = await verifyRoutes(page);
+        await openResearch(page, { ged: verifyGed(), bridge: false });
+        await cardAction(page, 'Jan', 'edit');
+        await expect(personModal(page)).toBeVisible();
+        const pill = factPill(page, 'Birth');
+        await pill.click();
+        const tip = page.locator('#status-tip');
+        await expect(tip).toBeVisible();
+        await expect(vAct(page, 'verify')).toHaveCount(0);
+        await vAct(page, 'scan').click();
+        await expect(pill).toHaveClass(/fact-status-human/);
+        await expect(tip.locator('.st-sentence')).toContainText('✓ Confirmed against the scan on');
+        expect(asks.confirm).toEqual([]);
+        const birthOf = async () => {
+            const [download] = await Promise.all([
+                page.waitForEvent('download'),
+                page.evaluate(() => window.Strom.UI.downloadResearchGedcom(window.Strom.DataManager.getCurrentTreeId()!)),
+            ]);
+            const ged = readFileSync((await download.path())!, 'utf8');
+            return ged.split(/\r?\n(?=1 )/).find(b => b.startsWith('1 BIRT') && b.includes('E0001'))!;
+        };
+        expect(await birthOf()).toMatch(/^2 _STROM_CONFIRMED \d{4}-\d{2}-\d{2}$/m);
+        await vAct(page, 'undo').click();
+        await expect(pill).toHaveClass(/fact-status-probable/);
+        expect(await birthOf()).not.toMatch(/_STROM_CONFIRMED/);
+        expect(asks.confirm).toEqual([]);
+    });
+
+    test('a research tree without its bridge: the research\'s confirmation taken back here goes without its tag (065)', async ({ page }) => {
+        await verifyRoutes(page);
+        await openResearch(page, { ged: verifyGed(['2 _STROM_CONFIRMED 2026-10-01']), bridge: false });
+        await cardAction(page, 'Jan', 'edit');
+        const pill = factPill(page, 'Birth');
+        await expect(pill).toHaveClass(/fact-status-human/);
+        await pill.click();
+        await expect(vAct(page, 'scan')).toHaveCount(0);
+        await vAct(page, 'undo').click();
+        await expect(pill).toHaveClass(/fact-status-probable/);
+        const [download] = await Promise.all([
+            page.waitForEvent('download'),
+            page.evaluate(() => window.Strom.UI.downloadResearchGedcom(window.Strom.DataManager.getCurrentTreeId()!)),
+        ]);
+        const ged = readFileSync((await download.path())!, 'utf8');
+        const birth = ged.split(/\r?\n(?=1 )/).find(b => b.startsWith('1 BIRT') && b.includes('E0001'))!;
+        expect(birth).not.toMatch(/_STROM_CONFIRMED/);
+    });
+
     test('a research without verify: no action of the AI', async ({ page }) => {
         await openVerifyTree(page, { features: ['facts.confirm'] });
         await factPill(page, 'Birth').click();
