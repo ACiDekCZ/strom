@@ -412,6 +412,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         verdictsLoading: 'Badanie ocenia…',
         verdictsGroup: (n: number) => `Rozróżnione przez badanie: ${n}`,
         verdictsNoBridge: 'Bez oceny badania – badanie nie działa.',
+        verdictsSilent: 'Badanie nie odpowiedziało – ocena się nie wczytała.',
         verdictYearBirth: 'urodzenie',
         verdictYearBaptism: 'chrzest',
         reasonSameParents: (k1: string, y1: number, k2: string, y2: number) => `ci sami rodzice, ${k1} ${y1} i ${k2} ${y2}`,

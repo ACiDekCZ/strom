@@ -373,6 +373,9 @@ export const treeStatsMethods = uiModule({
                     redraw();
                     return;
                 }
+                case 'verdictsRetry':
+                    this.retryDuplicateVerdicts(treeId);
+                    return;
                 case 'aside': {
                     const type = el.dataset.type ?? '';
                     if (view.asideOpen.has(type)) view.asideOpen.delete(type); else view.asideOpen.add(type);
@@ -603,6 +606,11 @@ export const treeStatsMethods = uiModule({
         };
     },
 
+    /** A sentence under a group's head, as trusted HTML (the research's verdicts not come in time, with Try again). */
+    validationGroupMsgHtml(type: string, treeId: string): string {
+        return this.duplicateVerdictMsgHtml(type, treeId);
+    },
+
     /** A line under a group's title (§3: "Assessed by the research"). */
     validationGroupNote(type: string, treeId: string): string {
         return this.duplicateVerdictNote(type, treeId);
@@ -754,7 +762,7 @@ export const treeStatsMethods = uiModule({
                     ${note ? `<span class="vq-group-note">${esc(note)}</span>` : ''}
                 </span>
                 <span class="vq-group-count">${group.issues.length}</span>
-            </button>`;
+            </button>${this.validationGroupMsgHtml(group.type, treeId)}`;
         if (open) {
             const limit = rows.length >= LONG_GROUP ? Math.min(rows.length, v.shown.get(group.type) ?? GROUP_STEP) : rows.length;
             html += '<div class="vq-rows">';

@@ -563,6 +563,24 @@ test.describe('validation: the research\'s verdicts on possible duplicates', () 
         await expect(dup.locator('.vq-aside-head')).toHaveText(/Told apart by the research: 1/);
     });
 
+    test('no answer within 15 s: the sentence under the group\'s head with Try again, which asks again (§10.3)', async ({ page }) => {
+        await page.clock.install({ time: new Date('2026-11-18T10:00:00Z') });
+        const b = await researchWithVerdicts(page, { duplicates: lhotakVerdicts({ hold: new Promise<void>(() => { /* silent */ }) }) });
+        const modal = await openResearchValidation(page);
+        const dup = group(modal, 'possibleDuplicate');
+        await expect(dup.locator('.vq-group-note')).toHaveText('The research is assessing…');
+        await page.clock.runFor(16_000);
+        const msg = dup.locator('.busy-msg.is-err[role="alert"]');
+        await expect(msg.locator('.busy-msg__text')).toHaveText('The research did not answer – the assessment was not loaded.');
+        // Not the "not running" sentence: the research runs, it only did not answer in time.
+        await expect(dup.locator('.vq-group-note')).toHaveCount(0);
+        b.duplicates!.hold = undefined;
+        await msg.getByRole('button', { name: 'Try again' }).click();
+        await expect(dup.locator('.vq-group-note')).toHaveText('Assessed by the research');
+        await expect(msg).toHaveCount(0);
+        expect(b.duplicates!.asks.length).toBe(2);
+    });
+
     test('Merge… opens the person merge with both chosen; Cancel comes back to the check', async ({ page }) => {
         await researchWithVerdicts(page);
         const modal = await openResearchValidation(page);

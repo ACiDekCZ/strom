@@ -37,8 +37,13 @@ interface TreeVerdicts {
     verdicts: Map<string, DuplicateVerdict | null>;
     /** Pairs whose order and setting aside are applied (else only their label shows). */
     settled: Set<string>;
-    /** `loading` — asked, `done` — answered, `off` — not running, refused or no answer (one sentence). */
-    state: 'loading' | 'done' | 'off';
+    /**
+     * `loading` — asked, `done` — answered, `off` — not running or refused (one sentence), `silent` — no answer
+     * within 15 s (a sentence with Try again under the group's head).
+     */
+    state: 'loading' | 'done' | 'off' | 'silent';
+    /** What the last opening asked with (Try again asks it anew). */
+    asked?: { data: StromData; issues: readonly ValidationIssue[] };
     /** Bumped at each opening: a reply of an older one only fills the verdicts in. */
     opening: number;
 }
@@ -97,6 +102,7 @@ export const duplicateVerdictsMethods = uiModule({
             byTree.set(treeId, entry);
         }
         entry.opening = opening;
+        entry.asked = { data, issues };
         // A new opening: what was got so far takes its place in the order.
         for (const key of entry.verdicts.keys()) entry.settled.add(key);
         if (mode === 'off') {
@@ -114,10 +120,11 @@ export const duplicateVerdictsMethods = uiModule({
         this.redrawDuplicateVerdicts(treeId);
         const base = bridgeBase(rid)!;
         const got = new Map<string, DuplicateVerdict | null>();
-        let failed = false;
+        let failed: false | 'off' | 'silent' = false;
         for (const chunk of judgeRequests(missing)) {
             const reply = await postDuplicates(base, chunk);
-            if (!reply) { failed = true; break; }
+            if (reply === 'timeout') { failed = 'silent'; break; }
+            if (!reply) { failed = 'off'; break; }
             for (const pv of reply.verdicts) got.set(pv.key, pv.verdict);
             // A pair the research left out: no verdict (not asked again for this head).
             for (const [a, b] of chunk) {
@@ -126,9 +133,11 @@ export const duplicateVerdictsMethods = uiModule({
             }
         }
         if (byTree.get(treeId) !== entry) return;
+        // What came before the failure stays (those pairs are not asked again).
+        for (const [key, v] of got) entry.verdicts.set(key, v);
         if (failed) {
-            // As not running; not asked again while this dialog is open.
-            if (entry.opening === opening) entry.state = 'off';
+            // Not running: not asked again while this dialog is open; no answer in time: said, with Try again.
+            if (entry.opening === opening) entry.state = failed;
             this.redrawDuplicateVerdicts(treeId);
             return;
         }
@@ -137,6 +146,20 @@ export const duplicateVerdictsMethods = uiModule({
         // The group closed (or not shown): the order follows at once.
         if (!this.duplicateGroupOpenNow(treeId)) for (const key of got.keys()) entry.settled.add(key);
         this.redrawDuplicateVerdicts(treeId);
+    },
+
+    /** Try again after no answer: the same opening's findings asked anew. */
+    retryDuplicateVerdicts(treeId: string): void {
+        const asked = byTree.get(treeId)?.asked;
+        if (asked) void this.startDuplicateVerdicts(treeId, asked.data, asked.issues);
+    },
+
+    /** Under the group's head (validationGroupMsgHtml): no answer in time, said with Try again (§10.3). */
+    duplicateVerdictMsgHtml(type: string, treeId: string): string {
+        if (type !== DUP || byTree.get(treeId)?.state !== 'silent') return '';
+        const esc = (t: string): string => this.escapeHtml(t);
+        return `<div class="busy-msg is-err vq-group-msg" role="alert"><span class="busy-msg__text">${esc(strings.treeManager.verdictsSilent)}</span>`
+            + `<button type="button" class="link busy-msg__retry" data-vq="verdictsRetry" data-focus-key="verdictsRetry">${esc(strings.busy.retry)}</button></div>`;
     },
 
     /** The group of possible duplicates of this tree's open dialog shows its rows now. */
@@ -160,7 +183,7 @@ export const duplicateVerdictsMethods = uiModule({
     duplicateVerdictRowExtra(issue: ValidationIssue, treeId: string, data: StromData): ValidationRowExtra | null {
         if (issue.type !== DUP) return null;
         const entry = byTree.get(treeId);
-        if (!entry || entry.state === 'off') return null;
+        if (!entry || entry.state === 'off' || entry.state === 'silent') return null;
         const found = verdictOf(entry, issue, data);
         if (!found) return null;
         const { v, pair } = found;
@@ -200,6 +223,8 @@ export const duplicateVerdictsMethods = uiModule({
         const entry = byTree.get(treeId);
         if (!entry) return '';
         const s = strings.treeManager;
+        // No answer in time: the sentence under the head says it (duplicateVerdictMsgHtml).
+        if (entry.state === 'silent') return '';
         return entry.state === 'loading' ? s.verdictsLoading : entry.state === 'done' ? s.verdictsAssessed : s.verdictsNoBridge;
     },
 

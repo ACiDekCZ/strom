@@ -28,10 +28,16 @@ function bridgeCode(body: unknown): string {
     return typeof r?.code === 'string' && /^[a-z0-9.-]{1,40}$/.test(r.code) ? r.code : '';
 }
 
-async function request(url: string, init: RequestInit, timeoutMs: number): Promise<{ status: number; text: string } | null> {
+/** What `request` gives when its time ran out (`timed`): no answer within the limit, apart from a bridge not reached. */
+const TIMED_OUT = 'timeout' as const;
+
+async function request(url: string, init: RequestInit, timeoutMs: number): Promise<{ status: number; text: string } | null>;
+async function request(url: string, init: RequestInit, timeoutMs: number, timed: true): Promise<{ status: number; text: string } | null | typeof TIMED_OUT>;
+async function request(url: string, init: RequestInit, timeoutMs: number, timed = false): Promise<{ status: number; text: string } | null | typeof TIMED_OUT> {
     if (typeof fetch !== 'function') return null;
     const ctl = typeof AbortController === 'function' ? new AbortController() : null;
-    const timer = ctl ? setTimeout(() => ctl.abort(), timeoutMs) : null;
+    let late = false;
+    const timer = ctl ? setTimeout(() => { late = true; ctl.abort(); }, timeoutMs) : null;
     try {
         const res = await fetch(withAppVersion(url), {
             mode: 'cors', credentials: 'omit', cache: 'no-store', ...init, signal: ctl?.signal,
@@ -39,7 +45,7 @@ async function request(url: string, init: RequestInit, timeoutMs: number): Promi
         const text = await res.text();
         return { status: res.status, text: text.length > MAX_REPLY ? '' : text };
     } catch {
-        return null;
+        return late && timed ? TIMED_OUT : null;
     } finally {
         if (timer) clearTimeout(timer);
     }
@@ -177,10 +183,12 @@ export const DUPLICATES_TIMEOUT_MS = 15_000;
  * not a reply the app reads.
  */
 export async function postDuplicates(base: string, pairs: ReadonlyArray<readonly [string, string]>,
-    opts: { timeoutMs?: number } = {}): Promise<ReturnType<typeof parseDuplicatesReply>> {
+    opts: { timeoutMs?: number } = {}): Promise<ReturnType<typeof parseDuplicatesReply> | 'timeout'> {
     const res = await request(`${base}/duplicates`, {
         method: 'POST', headers: { 'Content-Type': 'text/plain; charset=utf-8' }, body: JSON.stringify({ pairs }),
-    }, opts.timeoutMs ?? DUPLICATES_TIMEOUT_MS);
+    }, opts.timeoutMs ?? DUPLICATES_TIMEOUT_MS, true);
+    // No answer within the limit (§10.3): told apart, the dialog says so with Try again.
+    if (res === TIMED_OUT) return res;
     if (!res || res.status < 200 || res.status >= 300) return null;
     return parseDuplicatesReply(jsonOf(res.text));
 }

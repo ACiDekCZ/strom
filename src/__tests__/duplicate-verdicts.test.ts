@@ -5,12 +5,12 @@
  * when the dialog asks at all (the feature).
  */
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import {
     duplicatePairKey, issueResearchPair, judgeRequests, parseDuplicatesReply, verdictRank, verdictsMode,
     verdictLabel, verdictReasonText, type DuplicateVerdict,
 } from '../duplicate-verdicts.js';
-import { sanitizeQualityBridgeRecord } from '../quality-bridge.js';
+import { sanitizeQualityBridgeRecord, postDuplicates, DUPLICATES_TIMEOUT_MS } from '../quality-bridge.js';
 import { setLanguage } from '../strings.js';
 import type { Person, PersonId } from '../types.js';
 import type { ValidationIssue } from '../validation.js';
@@ -180,5 +180,29 @@ describe('when the dialog asks (the feature)', () => {
     it('the device remembers whether the research judged (the record of /quality)', () => {
         expect(sanitizeQualityBridgeRecord({ dismiss: true, judge: true, acked: [] })).toEqual({ dismiss: true, judge: true, acked: [] });
         expect(sanitizeQualityBridgeRecord({ dismiss: true, acked: [] }).judge).toBe(false);
+    });
+});
+
+describe('asking the research (§10.3)', () => {
+    it('no answer within 15 s is told apart from a research not reached', async () => {
+        vi.useFakeTimers();
+        vi.stubGlobal('fetch', (_url: string, init: RequestInit) => new Promise((_res, rej) => {
+            init.signal?.addEventListener('abort', () => rej(new DOMException('aborted', 'AbortError')));
+        }));
+        try {
+            const ask = postDuplicates('http://127.0.0.1:1/t', [['P0001', 'P0002']]);
+            await vi.advanceTimersByTimeAsync(DUPLICATES_TIMEOUT_MS);
+            expect(await ask).toBe('timeout');
+            expect(DUPLICATES_TIMEOUT_MS).toBe(15_000);
+        } finally {
+            vi.unstubAllGlobals();
+            vi.useRealTimers();
+        }
+        vi.stubGlobal('fetch', async () => { throw new TypeError('Failed to fetch'); });
+        try {
+            expect(await postDuplicates('http://127.0.0.1:1/t', [['P0001', 'P0002']])).toBeNull();
+        } finally {
+            vi.unstubAllGlobals();
+        }
     });
 });
