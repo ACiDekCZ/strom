@@ -126,9 +126,20 @@ test.describe('History of places: a place\'s region by hand', () => {
         await expect(t).toBeVisible();
         await expect(place(page, 'Čapkov').locator('[data-hm="mapAuto"]')).toHaveCount(0);
         // Undo puts the regions by hand back.
+        let release!: () => void;
+        const held = new Promise<void>(r => { release = r; });
+        const mapping = (u: URL) => /\/history\/map$/.test(u.pathname);
+        await page.route(mapping, async route => { await held; await route.fallback(); });
         await t.getByRole('button', { name: 'Undo' }).click();
+        // Undo works in the toast (§4): "Undoing…" with the place until the research answers.
+        const working = page.locator('.toast[aria-busy="true"]');
+        await expect(working).toContainText('Undoing…');
+        await expect(working).toContainText('Čapkov');
+        release();
         await expect.poll(() => history.writes.map.length).toBe(3);
         expect(history.writes.map[2]).toEqual({ place: 'Čapkov', regions: [{ id: 'cz-bohemia' }] });
+        await expect(toast(page, 'Undone.')).toBeVisible();
+        await page.unroute(mapping);
         await expect(place(page, 'Čapkov').locator('[data-hm="mapAuto"]')).toBeVisible();
     });
 

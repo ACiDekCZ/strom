@@ -34,6 +34,7 @@ import { historyKindSvg } from '../history-symbols.js';
 import { HISTORY_MANAGE_DIALOG_ID } from './history-ui.js';
 import { mapUndoBody } from './history-map-ui.js';
 import { uiModule } from './module.js';
+import { undoInToast } from './toast.js';
 import { historyOriginPendKey } from './history-kinds-ui.js';
 import { endPend, isPend, pendAttrs, pendRefusalHtml, pendStatusHtml, startPend, type PendRefusal } from './switch-pend.js';
 import { busySpinHtml } from './busy.js';
@@ -915,7 +916,8 @@ export const historyManageMethods = uiModule({
         this.renderHistoryManage();
         this.showToast(strings.history.toastAuto(name), 8000, {
             kind: 'history-map',
-            action: { label: strings.history.undo, run: () => { void this.historyMapWrite(undo); } },
+            // Undo works in the toast (§4): "Undoing…", then its end there.
+            action: { label: strings.history.undo, run: () => undoInToast(said => this.historyMapWrite(undo, said)), work: { label: strings.busy.reverting, sub: name } },
         });
     },
 
@@ -1036,9 +1038,13 @@ export const historyManageMethods = uiModule({
     },
 
     /** `POST /history/skip` (or its undo): a toast, Undo for a skip; the history read again. */
-    async historyManageSkip(body: HistorySkipBody, rowKey: string): Promise<void> {
+    /**
+     * `said`: the toast's Undo working in it (§4): the row stays as it is, a refusal's sentence goes there and its
+     * end ("Search again…" said) is the toast's.
+     */
+    async historyManageSkip(body: HistorySkipBody, rowKey: string, said?: (text: string) => void): Promise<boolean> {
         const d = this.historyManageDrawn();
-        if (!d?.base || view.busy.has(rowKey)) return;
+        if (!d?.base || view.busy.has(rowKey)) return false;
         const h = strings.history;
         view.busy.add(rowKey);
         view.notes.delete(rowKey);
@@ -1046,7 +1052,13 @@ export const historyManageMethods = uiModule({
         const before = this.researchHeadNow(d.rid);
         const r = await postBridgeSkip(d.base, body, d.features);
         view.busy.delete(rowKey);
-        if (!r.ok) { this.historyManageRefused(rowKey, r); return; }
+        if (!r.ok) {
+            if (said) {
+                said(this.historyMapRefusedText(r));
+                this.renderHistoryManage();
+            } else this.historyManageRefused(rowKey, r);
+            return false;
+        }
         this.historyManageWritten(d.rid, before, r);
         const undo = body.do === 'undo';
         const name = 'region' in body ? this.historyManageRegionName(body.region) : d.names.place(body.place);
@@ -1054,10 +1066,21 @@ export const historyManageMethods = uiModule({
             : (undo ? h.toastSearchAgainPlace(name) : h.toastSkippedPlace(name));
         const back: HistorySkipBody = 'region' in body ? { region: body.region, ...(undo ? {} : { do: 'undo' as const }) }
             : { place: body.place, ...(undo ? {} : { do: 'undo' as const }) };
+        if (said) {
+            this.renderHistoryManage();
+            return true;
+        }
+        const backName = 'region' in back ? this.historyManageRegionName(back.region) : d.names.place(back.place);
         this.showToast(text, undo ? 4000 : 8000, undo ? {} : {
-            action: { label: h.undo, run: () => { void this.historyManageSkip(back, rowKey); } },
+            // Undo works in the toast (§4): "Undoing…", then "Search again" said there.
+            action: {
+                label: h.undo, work: { label: strings.busy.reverting, sub: backName },
+                run: () => undoInToast(s => this.historyManageSkip(back, rowKey, s),
+                    'region' in back ? h.toastSearchAgain(backName) : h.toastSearchAgainPlace(backName)),
+            },
         });
         this.renderHistoryManage();
+        return true;
     },
 
     /** The Hidden tab's "Restore" / "Show again". */

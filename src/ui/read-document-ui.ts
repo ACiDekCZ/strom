@@ -3921,18 +3921,27 @@ export const readDocumentMethods = uiModule({
         this.renderReadDialog();
     },
 
-    /** "Cancel reading": at once, no question. A reading again cancelled: the previous result stands. */
-    async cancelReadDocument(): Promise<void> {
+    /**
+     * "Cancel reading": at once, no question. A reading again cancelled: the previous result stands. The button
+     * clicked (`el`, by default the element of the click) says "Cancelling…" until the research's answer (B57).
+     */
+    async cancelReadDocument(el: HTMLElement | null = activatedElement()): Promise<void> {
         const s = st;
         const link = this.researchOriginalsLink();
         if (!s?.readId || !link || s.busy) return;
         const base = this.readBridgeBase(link.researchId);
         if (!base) return;
         s.busy = true;
-        this.renderReadDialog();
-        const reply = await cancelRead(base, s.readId);
+        const ask = () => cancelRead(base, s.readId);
+        let reply: Awaited<ReturnType<typeof ask>> | undefined;
+        if (el?.isConnected) reply = await runBusy(el, ask, { label: strings.busy.cancelling, kind: 'local' });
+        else {
+            this.renderReadDialog();
+            reply = await ask();
+        }
         if (st !== s) return;
         s.busy = false;
+        if (!reply) { this.renderReadDialog(); return; }
         if (!reply.ok) { this.readFailed(reply.failure); return; }
         const id = s.readId;
         const reads = new Map(readsByResearch.get(link.researchId) ?? []);

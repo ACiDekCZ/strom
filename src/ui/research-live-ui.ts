@@ -37,7 +37,7 @@ import {
     storedLiveState, type LiveWriteRefusal,
 } from '../research-live.js';
 import { el, onComputer } from './research-ui.js';
-import { startPend, dropPend, pendOf, applyPend, pendStatusEl } from './switch-pend.js';
+import { startPend, endPend, dropPend, pendOf, applyPend, pendStatusEl } from './switch-pend.js';
 import { busySpinHtml } from './busy.js';
 import { onBridgeStatus } from './research-sync-ui.js';
 import { uiModule } from './module.js';
@@ -90,9 +90,12 @@ function clearPending(researchId: string): void {
     pending.delete(key(researchId));
     dropPend(pendKey(researchId));
 }
-/** Settings' choice being written (radios off until the bridge answers). */
+/** Settings' choice being written (6.1: the chosen one dashed, the radios locked until the bridge answers). */
 let idleWriting = false;
+/** The choice on its way (shown chosen meanwhile). */
+let idleSending: number | null = null;
 let idleNote = '';
+const IDLE_PEND = 'live:idle';
 
 const COMMAND_START = 'strom live start';
 const COMMAND_STOP = 'strom live stop';
@@ -504,7 +507,7 @@ export const researchLiveMethods = uiModule({
         }
         const source = this.researchLiveIdleSource();
         const anyUp = this.researchLiveAnyUp();
-        const stateKey = JSON.stringify([source?.rid ?? '', source?.minutes ?? -1, source?.choices ?? [], anyUp, idleWriting, idleNote]);
+        const stateKey = JSON.stringify([source?.rid ?? '', source?.minutes ?? -1, source?.choices ?? [], anyUp, idleWriting, idleSending, pendOf(IDLE_PEND)?.phase ?? '', idleNote]);
         if (!force && body.dataset.liveKey === stateKey) return;
         body.dataset.liveKey = stateKey;
         if (force) this.kickOtherResearch();
@@ -532,11 +535,23 @@ export const researchLiveMethods = uiModule({
                 input.type = 'radio';
                 input.name = 'research-live-idle';
                 input.value = String(o.minutes);
-                input.checked = o.minutes === source.minutes;
-                input.disabled = idleWriting;
-                input.onchange = () => { if (input.checked) void this.writeResearchLiveIdle(o.minutes); };
+                const chosen = o.minutes === (idleSending ?? source.minutes);
+                input.checked = chosen;
+                // On its way: locked (keeping the focus), a click changes nothing.
+                if (idleWriting) input.setAttribute('aria-disabled', 'true');
+                if (idleWriting && chosen) applyPend(label, IDLE_PEND);
+                input.onchange = () => {
+                    if (idleWriting) {
+                        delete body.dataset.liveKey;
+                        this.renderResearchLiveSettings(false);
+                        return;
+                    }
+                    if (input.checked) void this.writeResearchLiveIdle(o.minutes);
+                };
                 label.appendChild(el('span', undefined, o.label));
             }
+            const words = idleWriting ? pendStatusEl(IDLE_PEND) : null;
+            if (words) row.appendChild(words);
             if (idleNote) {
                 const said = body.appendChild(el('p', 'settings-desc research-live-idle-said', idleNote));
                 said.setAttribute('role', 'status');
@@ -557,14 +572,19 @@ export const researchLiveMethods = uiModule({
         const source = this.researchLiveIdleSource();
         if (!source || idleWriting) return;
         idleWriting = true;
+        idleSending = minutes;
         idleNote = '';
+        startPend(IDLE_PEND, { redraw: () => this.renderResearchLiveSettings(false) });
         this.renderResearchLiveSettings(false);
         const res = await postLiveIdle(source.base, minutes);
+        await endPend(IDLE_PEND);
         idleWriting = false;
         if (res.ok) {
             // The choice as the bridge says it now (its next status says it as well).
             await this.askResearchBridge(source.rid, ASK_TIMEOUT_MS);
+            idleSending = null;
         } else {
+            idleSending = null;
             idleNote = res.code === 'busy' ? strings.researchLive.busy : strings.researchLive.idleFailed(refusalText(res));
         }
         this.renderResearchLiveSettings(true);

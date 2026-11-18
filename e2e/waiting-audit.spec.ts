@@ -252,6 +252,8 @@ test.describe('a task\'s finding in Awaiting action', () => {
         await expect(toast.locator('.toast-action')).toHaveText('Undo');
         await toast.locator('.toast-action').click();
         await expect.poll(() => writes.at(-1)).toEqual(['T0377', { do: 'unkeep' }]);
+        // Undo worked in the toast (§4): its end said there.
+        await expect(toast).toContainText('Undone.');
         await expect(titleMark(page, 'T0377')).toHaveCount(1);
         await openItem(page, 'T0377');
         await expect(finding(page, 'T0377')).toHaveCount(1);

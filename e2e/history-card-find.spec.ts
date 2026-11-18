@@ -115,6 +115,28 @@ test.describe('History of places: "Find the history of …" in the card', () => 
         await expect(lastRow(page)).toHaveText('The research is busy. It will work again shortly.');
     });
 
+    test('skipped meanwhile: "Search again" locked at once, its "…" once slow, a second click writes nothing (B188)', async ({ page }) => {
+        const { history } = await setup(page);
+        history.writeReply = { first: refuse(409, 'history.skipped', 'The region is skipped.') };
+        await openCard(page, 'Jan');
+        await findLink(page).click();
+        const again = lastRow(page).locator('button.pm-lifeline-hfind-note');
+        await expect(again).toHaveText('Search again');
+        let release!: () => void;
+        const held = new Promise<void>(r => { release = r; });
+        const skipping = (u: URL) => /\/history\/skip$/.test(u.pathname);
+        await page.route(skipping, async route => { await held; await route.fallback(); });
+        await again.click();
+        await expect(again).toHaveAttribute('aria-disabled', 'true');
+        await expect(again).toHaveText('Search again…');
+        await again.dispatchEvent('click');
+        release();
+        await expect.poll(() => history.writes.skip).toEqual([{ region: 'cz-bohemia', do: 'undo' }]);
+        await page.unroute(skipping);
+        await page.waitForTimeout(300);
+        expect(history.writes.skip).toHaveLength(1);
+    });
+
     test('done meanwhile: the offer goes to the next region; an archive says why', async ({ page }) => {
         const { history } = await setup(page, { history: unsearched({ many: true }) });
         await openCard(page, 'Jan');

@@ -1268,8 +1268,17 @@ test.describe('verify facts: the person and the tree (spec 065 §10 h–m)', () 
         const stop = tree.locator('[data-verify-act="stop"]');
         await expect(stop).toHaveText('Stop');
         await expect(stop.locator('.research-ai-badge')).toHaveCount(0);
+        // Stop says its write on itself until the research answers (§4).
+        let release!: () => void;
+        const held = new Promise<void>(r => { release = r; });
+        const stopping = (u: URL) => /\/verify\/stop$/.test(u.pathname);
+        await page.route(stopping, async route => { await held; await route.fallback(); });
         await stop.click();
+        await expect(stop).toContainText('Stopping…');
+        await expect(stop).toHaveAttribute('aria-busy', 'true');
+        release();
         await expect(page.locator('.toast', { hasText: 'Verification stopped.' })).toBeVisible();
+        await page.unroute(stopping);
         expect(verify.posts.at(-1)).toEqual({ route: 'verify/stop', body: {} });
         await tree.locator('[data-verify-act="bulk"]').click();
         await expect(tree).toHaveCount(0);

@@ -290,8 +290,14 @@ test.describe('Assign to a person', () => {
         await viewTile(page, 'Rodinná fotka');
         await expect(chips(page)).toHaveCount(3);
 
+        // Undo works in the toast (§4): "Undoing…" while the research writes, then "Undone." there.
+        material.writeDelayMs = 1500;
         await toast(page).locator('.toast-action').click();
+        await expect(toast(page)).toHaveAttribute('aria-busy', 'true');
+        await expect(toast(page)).toContainText('Undoing…');
         await expect.poll(() => material.assigns.length).toBe(2);
+        await expect(toast(page)).toContainText('Undone.');
+        material.writeDelayMs = 0;
         expect(material.assigns[1]).toMatchObject({ files: ['I0001'] });
         expect((material.assigns[1].remove as string[]).sort()).toEqual(['P0001', 'P0002', 'P0003']);
         await expect(chips(page)).toHaveCount(0);
@@ -421,9 +427,15 @@ test.describe('Removing a person', () => {
         await page.locator('#materials-item-menu [data-action="removeFromPerson"]').click();
         await expect(toast(page)).toHaveText(/Jan Fíšek stays on 1 file via batch Krabice\./);
         expect(material.assigns[0]).toEqual({ files: ['I0001'], remove: ['P0003'] });
+        // Removing from the whole batch works in the toast (§4): "Removing…", then what was removed, with its Undo.
+        material.writeDelayMs = 1500;
         await toast(page).locator('.toast-action').click();
+        await expect(toast(page)).toHaveAttribute('aria-busy', 'true');
+        await expect(toast(page)).toContainText('Removing…');
         await expect.poll(() => material.assigns.length).toBe(2);
         expect(material.assigns[1]).toEqual({ batch: 'b-box', remove: ['P0003'] });
+        await expect(toast(page)).toContainText('Removed:');
+        await expect(toast(page).locator('.toast-action')).toHaveText('Undo');
     });
 });
 

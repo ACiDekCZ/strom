@@ -23,6 +23,7 @@ import { replacePendingHypotheses, type PendingHypothesis } from '../research-hy
 import { setAcceptBatch, type AcceptBatch } from '../research-hypothesis-waiting.js';
 import { moveQueueItemFirst, noteQueueRev, placeQueueItemInLists, onQueueListsChange, readQueuePage, resetQueueLists, setQueueRemote } from '../research-queue-pages.js';
 import { BRIDGE_ANSWER_MS } from '../bridge-ask.js';
+import { VERIFY_TIMEOUT_MS } from '../research-verify.js';
 import { strings } from '../strings.js';
 import type { UIClass } from './index.js';
 import { el, setOverviewWindowDrawn, type LiveSession, type OverviewViewing } from './research-ui.js';
@@ -199,7 +200,23 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
         },
         // The tree's "Verifying" as the main window's snapshot says it: Stop asked there, the bulk dialog opened there.
         treeVerifyNow() { return extras().verify ?? null; },
-        async verifyStop(): Promise<void> { run('verify-stop'); },
+        /**
+         * Stop written by the main window (its bridge): the button here says the work until its outcome (§11.2);
+         * nothing heard of the main window for 10 s: "The main Strom window does not respond."
+         */
+        async writeVerifyStop(): Promise<{ ok: true } | { ok: false; text: string }> {
+            const got = await askMainWindow({
+                ask: (waitMs) => port.ask('verify-stop', undefined, waitMs),
+                waitMs: VERIFY_TIMEOUT_MS + BRIDGE_ANSWER_MS,
+                working: () => extras().verifyStopping === true,
+                signal: new AbortController().signal,
+            });
+            const a = got.answer;
+            if (a && typeof a === 'object' && 'ok' in a) return a as { ok: true } | { ok: false; text: string };
+            if (got.silent) return { ok: false, text: strings.busy.mainWindowSilent };
+            // The main window offers no Stop now (the verification ended there meanwhile).
+            return { ok: false, text: strings.verify.failed };
+        },
         showVerifyBulkDialog(): void { run('verify-bulk'); },
         // Research for this tree at the work outside the directions: a dialog of the main window.
         openOffLineSettings(): void { run('offline-settings'); },
@@ -260,8 +277,21 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
         },
         async showTreeOverview(): Promise<void> { run('tree-overview'); },
         showWaitingPlaces(focus?: string): void { run('waiting-places', focus ? { focus } : {}); },
-        async showWaitingGroupNote(_s: LiveSession, key: string, name: string): Promise<void> {
-            run('waiting-group-note', { group: key, name });
+        /**
+         * The queries' text read by the main window and shown there (it comes forward): the button here says the
+         * work until its outcome, a failure under it (§11.2); nothing heard of the main window for 10 s: its silence.
+         */
+        async readWaitingGroupNote(_s: LiveSession, key: string, name: string): Promise<string | null> {
+            port.focusMain();
+            const got = await askMainWindow({
+                ask: (waitMs) => port.ask('waiting-group-note', { group: key, name }, waitMs),
+                waitMs: OVERVIEW_ANSWER_WAIT_MS + BRIDGE_ANSWER_MS,
+                working: () => extras().noteReading?.includes(key) ?? false,
+                signal: new AbortController().signal,
+            });
+            const a = got.answer;
+            if (a && typeof a === 'object' && 'failed' in a) return typeof a.failed === 'string' ? a.failed : null;
+            return got.silent ? strings.busy.mainWindowSilent : null;
         },
         openWaitingImages(_s: LiveSession, w: LiveWaiting, files?: readonly File[]): void {
             run('waiting-images', { itemId: w.id, ...(files?.length ? { files: [...files] } : {}) });
@@ -345,10 +375,11 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
             run('waiting-audit', { itemId: w.id, do: 'keep' });
             this.renderResearchOverview();
         },
-        async unkeepWaitingAudit(this: UIClass, s: LiveSession, id: string): Promise<void> {
+        async unkeepWaitingAudit(this: UIClass, s: LiveSession, id: string): Promise<undefined> {
             setWaitingAuditState(itemKey(s, id), null);
             run('waiting-audit', { itemId: id, do: 'unkeep' });
             this.renderResearchOverview();
+            return undefined;
         },
         // The fix (spec 109 §2): its preview read and the fix written by the main window (its toast with Undo there);
         // the preview, its refusals and the focus are this window's.
@@ -367,8 +398,9 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
             }
             return auditRefusalOf(o?.ok === false ? o : { code: 'network' });
         },
-        async undoWaitingAuditFix(this: UIClass, _s: LiveSession, id: string): Promise<void> {
+        async undoWaitingAuditFix(this: UIClass, _s: LiveSession, id: string): Promise<undefined> {
             run('waiting-audit', { itemId: id, do: 'unfix' });
+            return undefined;
         },
         /**
          * The file written by the main window (its write, its version): the button here says the work until its

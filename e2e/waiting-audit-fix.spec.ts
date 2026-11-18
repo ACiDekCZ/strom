@@ -89,7 +89,7 @@ interface FixBridge {
     writes: [string, unknown][];
     reads: string[];
     /** The next fix's answer. */
-    next: { fix: Next; preview: 'ok' | 'gone' | 'busy'; unfix: 'ok' | 'changed'; hold: Promise<void> | null; book: string };
+    next: { fix: Next; preview: 'ok' | 'gone' | 'busy'; unfix: 'ok' | 'changed'; hold: Promise<void> | null; book: string; unfixHold?: Promise<void> | null };
 }
 
 async function researchTree(page: Page, opts: { width?: number; height?: number } = {}): Promise<FixBridge> {
@@ -142,6 +142,7 @@ async function researchTree(page: Page, opts: { width?: number; height?: number 
             return reply(route, 200, { task: id, tasks: [id], woke: next === 'woke' ? [id] : [], head: '', parent: '' });
         }
         if (body.do === 'unfix') {
+            if (out.next.unfixHold) await out.next.unfixHold;
             if (out.next.unfix === 'changed') return reply(route, 409, { error: 'changed since', code: 'audit.changed', changed: [id] });
             const before = fixedAside.get(id);
             if (before) {
@@ -300,9 +301,16 @@ test.describe('Fix at a task\'s finding', () => {
         await expect(item(page, 'T0377').locator('.research-overview__waiting-row')).toBeFocused();
         expect(fixes(b)).toHaveLength(1);
 
+        // Undo works in the toast (§4): it stays saying "Undoing…" until the research's answer, then its end there.
+        let release!: () => void;
+        b.next.unfixHold = new Promise<void>(r => { release = r; });
         await t.locator('.toast-action').click();
         await expect.poll(() => b.writes.at(-1)).toEqual(['T0377', { do: 'unfix' }]);
-        await expect(toast(page, 'waiting-audit-undone')).toContainText('Undone – the task waits as before.');
+        await expect(t).toHaveAttribute('aria-busy', 'true');
+        await expect(t).toContainText('Undoing…');
+        release();
+        await expect(t).toContainText('Undone – the task waits as before.');
+        await expect(t).not.toHaveAttribute('aria-busy', 'true');
         await expect(item(page, 'T0377').locator('.research-overview__waiting-what .waiting-audit-mark')).toHaveCount(1);
     });
 
@@ -333,7 +341,7 @@ test.describe('Fix at a task\'s finding', () => {
         // The Undo moves the rows again: held once more.
         await toast(page, 'waiting-audit-fixed').locator('.toast-action').click();
         await expect.poll(() => b.writes.at(-1)).toEqual(['T0377', { do: 'unfix' }]);
-        await expect(toast(page, 'waiting-audit-undone')).toBeVisible();
+        await expect(toast(page, 'waiting-audit-fixed')).toContainText('Undone – the task waits as before.');
         expect(await strayClick()).toBe(true);
         await page.waitForTimeout(600);
         expect(b.writes.filter(([, body]) => (body as { do: string }).do === 'keep')).toEqual([]);

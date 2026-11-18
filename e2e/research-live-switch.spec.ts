@@ -276,6 +276,34 @@ test.describe('Research on: Settings', () => {
         expect(b.live!.idleMinutes).toBe(120);
     });
 
+    test('the choice on its way (6.1): chosen at once and dashed with "Saving…", the other one takes no click', async ({ page }) => {
+        const b = await setup(page);
+        let release!: () => void;
+        const held = new Promise<void>(r => { release = r; });
+        const liveWrite = (u: URL) => /\/live$/.test(u.pathname);
+        await page.route(liveWrite, async route => {
+            if (route.request().method() === 'POST') await held;
+            await route.fallback();
+        });
+        await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+        const group = page.locator('#settings-group-research-live');
+        const forever = group.getByRole('radio', { name: 'Until the computer shuts down' });
+        const twoHours = group.getByRole('radio', { name: 'After 2 hours without work' });
+        await expect(forever).toBeChecked();
+        await twoHours.check();
+        await expect(twoHours).toBeChecked();
+        await expect(group.locator('label[data-pend="1"]')).toContainText('After 2 hours without work');
+        await expect(group.locator('.pend-st')).toHaveText('Saving…');
+        await forever.dispatchEvent('click');
+        await expect(twoHours).toBeChecked();
+        release();
+        await expect.poll(() => liveWrites(b)).toEqual([{ idleMinutes: 120 }]);
+        await expect(group.locator('[data-pend]')).toHaveCount(0);
+        await expect(twoHours).toBeChecked();
+        await expect(twoHours).toBeEnabled();
+        await page.unroute(liveWrite);
+    });
+
     test('a value set in the terminal shows as its own', async ({ page }) => {
         await setup(page, { live: { idleMinutes: 30, writes: [] } });
         await page.evaluate(() => window.Strom.UI.showSettingsDialog());

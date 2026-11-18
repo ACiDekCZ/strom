@@ -18,6 +18,7 @@ import {
 import { button, materialDialog } from './material-actions-ui.js';
 import type { MaterialsContext } from './materials-ui.js';
 import { uiModule } from './module.js';
+import type { ToastWorkEnd } from './toast.js';
 
 const TOAST_MS = 8000;
 const TITLE_MAX = 300;
@@ -236,7 +237,11 @@ export const materialDetailsMethods = uiModule({
         const shown = after.title || item.name;
         this.showToast(strings.materials.editedToast(shown), TOAST_MS, {
             closable: true, kind: 'materials',
-            ...(was && Object.keys(was).length ? { action: { label: strings.undo.undo, run: () => void this.undoMaterialEdit(mc, { ids: [item.file!.id], ...was }) } } : {}),
+            // Undo works in the toast (§4): "Undoing…", then its end there.
+            ...(was && Object.keys(was).length ? { action: {
+                label: strings.undo.undo, work: { label: strings.busy.reverting },
+                run: () => this.undoMaterialEditInToast(mc, { ids: [item.file!.id], ...was }),
+            } } : {}),
         });
         this.refreshMaterialsWindow();
         return true;
@@ -251,6 +256,14 @@ export const materialDetailsMethods = uiModule({
             await mergeIntoCache(mc.treeId, res.value.files, res.value.people);
         }
         return res;
+    },
+
+    /** The edit's Undo working in its toast: "Undone." there, or the refusal (its own toast when it needs a way on). */
+    async undoMaterialEditInToast(mc: MaterialsContext, req: EditRequest): Promise<ToastWorkEnd | undefined> {
+        const res = await this.writeMaterialEdit(mc, req);
+        if (!res.ok) return this.materialWorkFailed(mc, res.error, () => void this.undoMaterialEdit(mc, req));
+        this.refreshMaterialsWindow();
+        return { ok: true, text: strings.busy.undone };
     },
 
     async undoMaterialEdit(mc: MaterialsContext, req: EditRequest): Promise<void> {

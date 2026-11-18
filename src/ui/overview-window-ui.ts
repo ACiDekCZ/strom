@@ -27,6 +27,10 @@ import {
 
 /** Rows whose file the main window writes for the overview window now (its snapshot says so). */
 const filesSending = new Set<string>();
+/** Places whose queries' text the main window reads for the overview window now. */
+const notesReading = new Set<string>();
+/** Stop of the verification asked by the overview window and written here now. */
+let verifyStopping = false;
 
 /** What the overview window draws: the followed research of the open tree, else its research viewed without following. */
 function windowSession(): { s: LiveSession; source: OverviewSource } | null {
@@ -104,6 +108,8 @@ export const overviewWindowMethods = uiModule({
             extras.queueStart = this.queueStartNow();
             extras.followStart = followStartOf(researchId);
             if (filesSending.size) extras.fileSending = [...filesSending];
+            if (notesReading.size) extras.noteReading = [...notesReading];
+            if (verifyStopping) extras.verifyStopping = true;
         }
         // What the evidence pill lights up in the tree here (the window's rows say it).
         extras.highlight = this.evidenceHighlightNow();
@@ -167,10 +173,18 @@ export const overviewWindowMethods = uiModule({
             case 'waiting-places':
                 this.showWaitingPlaces(a.args.focus);
                 return true;
-            case 'waiting-group-note':
-                if (!s) return false;
-                void this.showWaitingGroupNote(s, a.args.group, a.args.name);
-                return true;
+            case 'waiting-group-note': {
+                if (!s || !this.liveWaitingWrites(s).note) return false;
+                // Read here, its window shown here; the failure's sentence goes back to the window's button, its
+                // snapshot says the read runs meanwhile (it heard the ask, §11.2).
+                const key = a.args.group;
+                notesReading.add(key);
+                overviewChanged();
+                return this.readWaitingGroupNote(s, key, a.args.name).then(failed => ({ failed })).finally(() => {
+                    notesReading.delete(key);
+                    overviewChanged();
+                });
+            }
             case 'waiting-images': {
                 const w = item(a.args.itemId);
                 if (!s || !w) return false;
@@ -203,8 +217,13 @@ export const overviewWindowMethods = uiModule({
                 return true;
             case 'verify-stop':
                 if (!this.treeVerifyNow()?.stop) return false;
-                void this.verifyStop(null);
-                return true;
+                // Written here; its outcome goes back to the window's Stop, the snapshot says the write runs (§11.2).
+                verifyStopping = true;
+                overviewChanged();
+                return this.writeVerifyStop().finally(() => {
+                    verifyStopping = false;
+                    overviewChanged();
+                });
             case 'highlight-end':
                 // Only the highlight the window saw: another one begun here since stays.
                 if (this.evidenceHighlightKind() !== a.args.kind) return false;

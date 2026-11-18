@@ -76,8 +76,17 @@ test.describe('the main window\'s tree in the overview\'s own window', () => {
 
         // Stop: written by the main window to its bridge, which says nothing waits any more; the window follows.
         const before = await focused();
-        await verifyBlock(popup).locator('[data-verify-act="stop"]').click();
+        // Its write said on the window's button until the main window's answer (§11.2: askMainWindow).
+        let release!: () => void;
+        const held = new Promise<void>(r => { release = r; });
+        const stopping = (u: URL) => /\/verify\/stop$/.test(u.pathname);
+        await page.route(stopping, async route => { await held; await route.fallback(); });
+        const stop = verifyBlock(popup).locator('[data-verify-act="stop"]');
+        await stop.click();
+        await expect(stop).toContainText('Stopping…');
+        release();
         await expect.poll(() => b.verifyAsks.filter(a => a === 'verify/stop')).toEqual(['verify/stop']);
+        await page.unroute(stopping);
         await expect(verifyBlock(popup).locator('.vfy-sec-pending')).toHaveCount(0, { timeout: 6000 });
         await expect(verifyBlock(popup).locator('[data-verify-act="bulk"]')).toBeVisible();
         expect(await focused()).toBe(before);

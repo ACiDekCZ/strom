@@ -18,6 +18,7 @@ import { MQ_PHONE_BAR, isPhoneBar } from '../breakpoints.js';
 import { researchOpenSrText, setResearchActionLabel } from './research-open-mark.js';
 import { uiModule } from './module.js';
 import { shiftHeld } from './busy.js';
+import type { ToastWorkEnd } from './toast.js';
 import { WAITING_ROWS_SCOPE } from './waiting-row-notes.js';
 import { el, liveSession, LiveSession, researchSession } from './research-ui.js';
 import { rangesWhole } from './ranges-whole.js';
@@ -984,7 +985,8 @@ export const waitingTaskMethods = uiModule({
             const A = strings.live.waitingAudit;
             this.showToast(result.woke.includes(task) ? A.auditFixedWoke : A.auditFixed, 8000, {
                 kind: 'waiting-audit-fixed',
-                action: { label: strings.live.waitingWrite.undo, run: () => { void this.undoWaitingAuditFix(s, w.id); } },
+                // Undo works in the toast (§4): "Undoing…", then its end there.
+                action: { label: strings.live.waitingWrite.undo, work: { label: strings.busy.reverting }, run: () => this.undoWaitingAuditFix(s, w.id) },
             });
         }
         if (result.ok || auditFixError(result) === 'gone' || auditFixError(result) === 'changed') this.researchStatusAfterWrite(s);
@@ -1050,12 +1052,14 @@ export const waitingTaskMethods = uiModule({
     },
 
     /** Undo in the toast (spec 109 §2.4, 2g): `{do: 'unfix'}`, no preview; changed since: it cannot be undone here. */
-    async undoWaitingAuditFix(s: LiveSession, id: string): Promise<void> {
+    /** Its end is the toast's (§4): "Undone" there, or why not ("Try again" where another try may change it). */
+    async undoWaitingAuditFix(s: LiveSession, id: string): Promise<ToastWorkEnd | undefined> {
         const task = researchTaskRef(id);
-        if (!task) return;
+        if (!task) return undefined;
         const before = await this.waitingHeadBeforeWrite(s);
         const result = await postWaitingAudit(s.bridge.base, task, 'unfix');
         const A = strings.live.waitingAudit;
+        let end: ToastWorkEnd | undefined;
         if (result.ok) {
             this.takeWaitingWriteHead(s, before, result);
             const key = itemKey(s, id);
@@ -1063,13 +1067,14 @@ export const waitingTaskMethods = uiModule({
             if (fixedFocus === key) fixedFocus = null;
             this.waitingRowsMoved(s);
             this.renderLivePanel();
-            this.showToast(A.auditUndone, 5000, { kind: 'waiting-audit-undone' });
+            end = { ok: true, text: A.auditUndone };
         } else if (result.code === 'audit-changed' || result.code === 'changed') {
-            this.showToast(A.auditUndoFailed, 6000, { kind: 'waiting-failed' });
+            end = { ok: false, text: A.auditUndoFailed, whole: true, retry: false };
         } else {
-            this.showWaitingAuditRefused(result);
+            end = this.waitingAuditRefusedEnd(result);
         }
         this.researchStatusAfterWrite(s);
+        return end;
     },
 
     /** The row drawn again, and the phone's sheet with it. */
@@ -1361,7 +1366,8 @@ export const waitingTaskMethods = uiModule({
             const A = strings.live.waitingAudit;
             this.showToast(A.auditKept, 8000, {
                 kind: 'waiting-audit-kept',
-                action: { label: strings.live.waitingWrite.undo, run: () => { void this.unkeepWaitingAudit(s, w.id); } },
+                // Undo works in the toast (§4): "Undoing…", then its end there.
+                action: { label: strings.live.waitingWrite.undo, work: { label: strings.busy.reverting }, run: () => this.unkeepWaitingAudit(s, w.id) },
             });
         } else if (!ok) {
             this.showWaitingAuditRefused(result);
@@ -1369,9 +1375,9 @@ export const waitingTaskMethods = uiModule({
     },
 
     /** Undo of Leave as is: the finding is offered again (the next status brings it back). */
-    async unkeepWaitingAudit(s: LiveSession, id: string): Promise<void> {
+    async unkeepWaitingAudit(s: LiveSession, id: string): Promise<ToastWorkEnd | undefined> {
         const task = researchTaskRef(id);
-        if (!task) return;
+        if (!task) return undefined;
         const before = await this.waitingHeadBeforeWrite(s);
         const result = await postWaitingAudit(s.bridge.base, task, 'unkeep');
         if (result.ok) this.takeWaitingWriteHead(s, before, result);
@@ -1379,7 +1385,23 @@ export const waitingTaskMethods = uiModule({
         this.waitingRowsMoved(s);
         this.renderLivePanel();
         this.researchStatusAfterWrite(s);
-        if (!result.ok && result.code !== 'none' && result.code !== 'audit-none') this.showWaitingAuditRefused(result);
+        if (result.ok) return { ok: true, text: strings.busy.undone };
+        // The finding gone meanwhile: nothing to undo (the toast just goes).
+        if (result.code === 'none' || result.code === 'audit-none') return undefined;
+        return this.waitingAuditRefusedEnd(result);
+    },
+
+    /**
+     * A refused write of a finding as the end of a toast's Undo working in it: the research writing, locked or
+     * its disk full there ("Try again"); a refusal with the research's own way on in a toast of its own.
+     */
+    waitingAuditRefusedEnd(result: Exclude<WaitingAuditResult, { ok: true }>): ToastWorkEnd | undefined {
+        const A = strings.live.waitingAudit;
+        if (result.code === 'busy') return { ok: false, text: A.auditErr503, whole: true };
+        if (result.code === 'locked') return { ok: false, text: A.auditErrLocked, whole: true };
+        if (result.code === 'full' || (result.code === 'held' && result.held?.kind === 'disk')) return { ok: false, text: A.auditErrDisk, whole: true };
+        this.showWaitingAuditRefused(result);
+        return undefined;
     },
 
     /** A refused write of a finding, said (spec 109 §2.6): the research writing, locked, its disk full, or another refusal. */

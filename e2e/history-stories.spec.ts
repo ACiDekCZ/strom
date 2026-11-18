@@ -48,6 +48,27 @@ test.describe('History in stories: Research for this tree', () => {
         await expect(toggle(page)).toBeEnabled();
     });
 
+    test('on its way (6.1): the switch as chosen at once, dashed with "Saving…", a second click writes nothing', async ({ page }) => {
+        const { history } = await setup(page, { history: { stories: true } });
+        let release!: () => void;
+        const held = new Promise<void>(r => { release = r; });
+        const storiesWrite = (u: URL) => /\/stories$/.test(u.pathname);
+        await page.route(storiesWrite, async route => { if (route.request().method() === 'POST') await held; await route.fallback(); });
+        await openTreeSettings(page);
+        await expect(toggle(page)).toBeChecked();
+        await section(page).locator('label').click();
+        await expect(toggle(page)).not.toBeChecked();
+        await expect(section(page).locator('label[data-pend="1"]')).toHaveCount(1);
+        await expect(section(page).locator('.pend-st')).toHaveText('Saving…');
+        await toggle(page).dispatchEvent('click');
+        await expect(toggle(page)).not.toBeChecked();
+        release();
+        await expect.poll(() => history.writes.stories).toEqual([{ history: false }]);
+        await expect(section(page).locator('[data-pend]')).toHaveCount(0);
+        await expect(toggle(page)).not.toBeChecked();
+        await page.unroute(storiesWrite);
+    });
+
     test('on while the research does not look for history: its link opens it, the switch waits for the research', async ({ page }) => {
         const { history } = await setup(page, { history: { stories: false, searching: false } });
         await openTreeSettings(page);

@@ -373,12 +373,14 @@ export const historyCardMethods = uiModule({
         const h = strings.history;
         const name = (id: string) => this.historyCardRegionName(id);
         const note = findNotes.get(top.id);
+        const busy = findBusy.get(top.id);
         if (note) {
+            // "Search again" writing: locked, its "…" once slow (as the find link below).
             return stateRow(note.text, note.link
-                ? ` <button type="button" class="link pm-lifeline-hfind-note" data-hfocus="findNote:${esc(top.id)}" data-find-note="${esc(top.id)}">${researchActionLabel(note.link.label, note.link.mark ?? 'none', { size: 12 })}</button>` : '');
+                ? ` <button type="button" class="link pm-lifeline-hfind-note" data-hfocus="findNote:${esc(top.id)}" data-find-note="${esc(top.id)}"`
+                    + `${busy ? ' aria-disabled="true"' : ''}>${researchActionLabel(note.link.label, note.link.mark ?? 'none', { size: 12 })}${busy?.slow ? '…' : ''}</button>` : '');
         }
         if (top.first) return stateRow(h.firstDone(name(top.id), this.historyCardPace()));
-        const busy = findBusy.get(top.id);
         const link = (label: string) => `<button type="button" class="link pm-lifeline-hfind" data-hfocus="find" data-find="${esc(top.id)}"`
             + `${busy ? ' aria-disabled="true"' : ''}>${esc(label)}${busy?.slow ? '…' : ''}</button>`;
         if (media(MQ_MOBILE)) {
@@ -530,9 +532,14 @@ export const historyCardMethods = uiModule({
     async lifelineHistorySearchAgain(region: string): Promise<void> {
         const ctx = this.historyManageContext();
         if (!ctx?.base || findBusy.has(region)) return;
-        findBusy.set(region, { slow: false });
+        // Its link locked at once, its "…" after 300 ms (as "Find first", B188).
+        const busy = { slow: false };
+        findBusy.set(region, busy);
+        this.historyChanged();
+        const slow = setTimeout(() => { busy.slow = true; this.historyChanged(); }, 300);
         const before = this.researchHeadNow(ctx.researchId);
         const r = await postBridgeSkip(ctx.base, { region, do: 'undo' }, ctx.features);
+        clearTimeout(slow);
         findBusy.delete(region);
         if (r.ok) {
             findNotes.delete(region);

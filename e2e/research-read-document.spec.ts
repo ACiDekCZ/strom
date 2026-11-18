@@ -422,9 +422,19 @@ test.describe('Read a document', () => {
     test('cancel: asked of the bridge at once, the dialog says it was cancelled', async ({ page }) => {
         const b = await setup(page);
         const d = await startReading(page, b);
-        await d.locator('.read-cancel').click();
+        // Cancel says its ask on itself until the bridge answers (§4).
+        let release!: () => void;
+        const held = new Promise<void>(r => { release = r; });
+        const cancelling = (u: URL) => /\/read\/[^/]+\/cancel$/.test(u.pathname);
+        await page.route(cancelling, async route => { await held; await route.fallback(); });
+        const cancel = d.locator('.read-cancel');
+        await cancel.click();
+        await expect(cancel).toContainText('Cancelling…');
+        await expect(cancel).toHaveAttribute('aria-busy', 'true');
+        release();
         await expect.poll(() => b.read!.cancels).toEqual([READ_ID]);
         await expect(d.locator('.read-error[data-error="cancelled"]')).toBeVisible();
+        await page.unroute(cancelling);
         expect(b.read!.reads[0].state).toBe('cancelled');
     });
 

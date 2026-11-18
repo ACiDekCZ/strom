@@ -19,6 +19,7 @@ import { waitingAuditShown } from '../ui/waiting-task-ui.js';
 import {
     OVERVIEW_STATE_VERSION, emptyOverviewExtras, type OverviewActionId, type OverviewResearchState, type OverviewSessionData,
 } from '../windows/overview-window.js';
+import { strings } from '../strings.js';
 import { SECTION_PREFS_EVENT, SECTION_PREFS_KEY } from '../ui/live-section-prefs.js';
 
 const TREE = 'ow-tree' as TreeId;
@@ -288,12 +289,54 @@ describe('the overview\'s controls ask the main window', () => {
         const { o, sent, port } = overrides(stateOf({ extras: { ...emptyOverviewExtras(), verify } }));
         expect(o.treeVerifyNow()).toEqual(verify);
         expect(overrides().o.treeVerifyNow()).toBeNull();
-        await o.verifyStop(null);
-        expect(sent).toEqual([{ action: 'verify-stop', args: undefined }]);
+        // Stop asks the main window and waits for its answer (said under the button here), no fire-and-forget send.
+        port.ask.mockResolvedValueOnce({ ok: true });
+        await expect(o.writeVerifyStop()).resolves.toEqual({ ok: true });
+        expect(port.ask).toHaveBeenCalledWith('verify-stop', undefined, expect.any(Number));
+        expect(sent).toEqual([]);
         expect(port.focusMain).not.toHaveBeenCalled();
         o.showVerifyBulkDialog();
-        expect(sent[1]).toEqual({ action: 'verify-bulk', args: undefined });
+        expect(sent[0]).toEqual({ action: 'verify-bulk', args: undefined });
         expect(port.focusMain).toHaveBeenCalledTimes(1);
+    });
+
+    it('Stop and "All questions": the main window silent for 10 s is said here; a snapshot of the work keeps it waiting', async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-11-18T10:00:00Z'));
+        try {
+            const verify = { waiting: 4, stop: true, bulk: true };
+            const silent = overrides(stateOf({ extras: { ...emptyOverviewExtras(), verify } }));
+            silent.port.ask.mockImplementation(() => new Promise(() => {}));
+            const stop = silent.o.writeVerifyStop() as Promise<unknown>;
+            await vi.advanceTimersByTimeAsync(10_500);
+            await expect(stop).resolves.toEqual({ ok: false, text: strings.busy.mainWindowSilent });
+            const note = silent.o.readWaitingGroupNote(null, 'questions', 'Questions') as Promise<unknown>;
+            expect(silent.port.focusMain).toHaveBeenCalledTimes(1);
+            expect(silent.port.ask).toHaveBeenLastCalledWith('waiting-group-note', { group: 'questions', name: 'Questions' }, expect.any(Number));
+            await vi.advanceTimersByTimeAsync(10_500);
+            await expect(note).resolves.toBe(strings.busy.mainWindowSilent);
+
+            // The main window says the work runs (its snapshot): no silence, its answer awaited.
+            const extras = { ...emptyOverviewExtras(), verify, verifyStopping: true, noteReading: ['questions'] };
+            const heard = overrides(stateOf({ extras }));
+            let answerStop!: (v: unknown) => void;
+            let answerNote!: (v: unknown) => void;
+            heard.port.ask.mockImplementationOnce(() => new Promise(r => { answerStop = r; }));
+            heard.port.ask.mockImplementationOnce(() => new Promise(r => { answerNote = r; }));
+            const stop2 = heard.o.writeVerifyStop() as Promise<unknown>;
+            const note2 = heard.o.readWaitingGroupNote(null, 'questions', 'Questions') as Promise<unknown>;
+            let settled = false;
+            void Promise.all([stop2, note2]).then(() => { settled = true; });
+            await vi.advanceTimersByTimeAsync(15_000);
+            expect(settled).toBe(false);
+            answerStop({ ok: false, text: 'Locked.' });
+            answerNote({ failed: null });
+            await vi.advanceTimersByTimeAsync(300);
+            await expect(stop2).resolves.toEqual({ ok: false, text: 'Locked.' });
+            await expect(note2).resolves.toBeNull();
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('the tree\'s choice beside "Outside the directions": Research for this tree opens in the main window (forward)', () => {

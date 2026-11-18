@@ -28,7 +28,7 @@ import { nameWithoutYears } from '../materials-overview.js';
 import { materialPersonLabel } from '../media-uses.js';
 import { MaterialActionCtx, MaterialRefusal, MaterialsContext, appendBreakable } from './materials-ui.js';
 import { uiModule } from './module.js';
-import { undoInToast } from './toast.js';
+import { undoInToast, type ToastAction, type ToastWorkEnd } from './toast.js';
 
 const TOAST_MS = 8000;
 const PICKER_ID = 'mdlg-assign-picker';
@@ -319,19 +319,41 @@ export const materialActionsMethods = uiModule({
         return res;
     },
 
-    /** Undo of assigns: the requests in order; a refusal stops and says so. */
-    async undoMaterialAssign(mc: MaterialsContext, reqs: AssignRequest[]): Promise<void> {
-        await writeOnce(`undo:${JSON.stringify(reqs)}`, async () => {
-            for (let i = 0; i < reqs.length; i++) {
-                const res = await this.writeAssign(mc, reqs[i]);
-                if (!res.ok) {
-                    const rest = reqs.slice(i);
-                    this.materialErrorToast(mc, res.error, () => void this.undoMaterialAssign(mc, rest));
-                    return;
-                }
-            }
-            this.refreshMaterialsWindow();
-        });
+    /**
+     * A toast's "Undo" of assigns, working in the toast (§4, 4d): "Undoing…", the requests in order, then
+     * "Undone." there; a refusal that another try may change says so there with "Try again" (from the request it
+     * stopped at); any other refusal goes to its own toast with its way on (Reload, the research's own way).
+     */
+    materialAssignUndo(mc: MaterialsContext, reqs: AssignRequest[]): ToastAction {
+        let rest = reqs;
+        return {
+            label: strings.undo.undo, work: { label: strings.busy.reverting },
+            run: async (): Promise<ToastWorkEnd | undefined> => {
+                const failed = await writeOnce(`undo:${JSON.stringify(rest)}`, async () => {
+                    for (let i = 0; i < rest.length; i++) {
+                        const res = await this.writeAssign(mc, rest[i]);
+                        if (!res.ok) {
+                            rest = rest.slice(i);
+                            return res.error;
+                        }
+                    }
+                    rest = [];
+                    this.refreshMaterialsWindow();
+                    return 'done' as const;
+                });
+                // null: the same undo is written already (its own toast says its end).
+                if (failed === 'done') return { ok: true, text: strings.busy.undone };
+                if (!failed) return undefined;
+                return this.materialWorkFailed(mc, failed, () => void this.materialAssignUndo(mc, rest).run());
+            },
+        };
+    },
+
+    /** A refusal of a toast's work: its sentence there when another try may change it, else its own toast (null). */
+    materialWorkFailed(mc: MaterialsContext, err: MaterialError, retry: () => void): ToastWorkEnd | undefined {
+        if (materialErrorAction(err) === 'retry') return { ok: false, text: materialErrorText(err, mc.agent), whole: true };
+        this.materialErrorToast(mc, err, retry);
+        return undefined;
     },
 
     // ==================== ASSIGN (5a) ====================
@@ -411,7 +433,7 @@ export const materialActionsMethods = uiModule({
             }
             this.showToast(m.assignedToast(n, names.length ? names : add.map(p => this.materialPersonName(p))), TOAST_MS, {
                 closable: true, kind: 'materials',
-                ...(undo.length ? { action: { label: strings.undo.undo, run: () => void this.undoMaterialAssign(mc, undo) } } : {}),
+                ...(undo.length ? { action: this.materialAssignUndo(mc, undo) } : {}),
             });
             this.materialActionDone(ctx);
         };
@@ -479,14 +501,18 @@ export const materialActionsMethods = uiModule({
             const batchName = batchOf(mc.treeId, batchId)?.name ?? batchId;
             this.showToast(m.keptToast(kept.length, name, batchName), TOAST_MS, {
                 closable: true, kind: 'materials',
-                action: { label: m.removeFromBatch, run: () => void this.removeFromWholeBatch(mc, batchId, batchName, refn, ctx) },
+                // Works in the toast (§4): "Removing…", then its end there with Undo.
+                action: {
+                    label: m.removeFromBatch, work: { label: strings.busy.removing, failed: strings.busy.errRefused },
+                    run: () => this.removeFromWholeBatchInToast(mc, batchId, batchName, refn, ctx),
+                },
             });
         } else {
             const undo = assignUndoRequests(before, res.value.files);
             const what = files.length === 1 ? files[0].title : m.assignWhat.filesOnly(files.length);
             this.showToast(m.removedToast(name, what), TOAST_MS, {
                 closable: true, kind: 'materials',
-                ...(undo.length ? { action: { label: strings.undo.undo, run: () => void this.undoMaterialAssign(mc, undo) } } : {}),
+                ...(undo.length ? { action: this.materialAssignUndo(mc, undo) } : {}),
             });
         }
         this.materialActionDone(ctx);
@@ -503,11 +529,23 @@ export const materialActionsMethods = uiModule({
         });
     },
 
+    /** "Remove from the whole batch" of a toast, working in it: its end there, Undo with it. */
+    async removeFromWholeBatchInToast(mc: MaterialsContext, batchId: string, batchName: string, refn: string, ctx: MaterialActionCtx): Promise<ToastWorkEnd | undefined> {
+        const res = await writeOnce(`batch-remove:${batchId}:${refn}`, () => this.writeAssign(mc, { batch: batchId, remove: [refn] }));
+        if (!res) return undefined;
+        if (!res.ok) return this.materialWorkFailed(mc, res.error, () => void this.removeFromWholeBatch(mc, batchId, batchName, refn, ctx));
+        this.materialActionDone(ctx);
+        return {
+            ok: true, text: strings.materials.removedToast(this.materialPersonName(refn), batchName),
+            action: this.materialAssignUndo(mc, [{ batch: batchId, add: [refn] }]),
+        };
+    },
+
     materialBatchRemovedToast(mc: MaterialsContext, batchId: string, batchName: string, refn: string, ctx: MaterialActionCtx): void {
         const undo: AssignRequest = { batch: batchId, add: [refn] };
         this.showToast(strings.materials.removedToast(this.materialPersonName(refn), batchName), TOAST_MS, {
             closable: true, kind: 'materials',
-            action: { label: strings.undo.undo, run: () => void this.undoMaterialAssign(mc, [undo]) },
+            action: this.materialAssignUndo(mc, [undo]),
         });
         this.materialActionDone(ctx);
     },

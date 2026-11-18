@@ -489,21 +489,7 @@ export const researchWaitingWriteMethods = uiModule({
      */
     async showWaitingGroupNote(s: LiveSession, key: string, name: string, btn?: HTMLElement): Promise<void> {
         if (!this.liveWaitingWrites(s).note) return;
-        const read = async (): Promise<string | null> => {
-            const result = await getGroupNote(s.bridge.base, key, { timeoutMs: WAITING_NOTE_MS });
-            if (!stillFollowing(s)) return null;
-            const W = strings.live.waitingWrite;
-            if (result.ok) {
-                this.showWaitingNoteDialog(name, result);
-                return null;
-            }
-            if (result.code === 'none' && result.status !== 200) {
-                // The place (or its tasks) is gone meanwhile: nothing to show; the status says what is left.
-                this.researchStatusAfterWrite(s);
-                return null;
-            }
-            return result.code === 'none' ? W.noteNone : W.noteFailed;
-        };
+        const read = (): Promise<string | null> => this.readWaitingGroupNote(s, key, name);
         if (!btn) {
             const failed = await read();
             if (failed) this.showToast(failed, 6000, { kind: 'waiting-failed' });
@@ -513,6 +499,26 @@ export const researchWaitingWriteMethods = uiModule({
             const failed = await read();
             if (failed) ctl.end({ ok: false, kind: 'error', text: failed, retry: () => { void this.showWaitingGroupNote(s, key, name, btn); } });
         }, { label: strings.busy.generic, timeoutMs: WAITING_NOTE_MS, kind: 'bridge' });
+    },
+
+    /**
+     * The queries' text of a place read from the bridge and shown in its small window; the failure's sentence
+     * (null: shown, or nothing left to show). The overview's own window asks its main window, which shows it.
+     */
+    async readWaitingGroupNote(s: LiveSession, key: string, name: string): Promise<string | null> {
+        const result = await getGroupNote(s.bridge.base, key, { timeoutMs: WAITING_NOTE_MS });
+        if (!stillFollowing(s)) return null;
+        const W = strings.live.waitingWrite;
+        if (result.ok) {
+            this.showWaitingNoteDialog(name, result);
+            return null;
+        }
+        if (result.code === 'none' && result.status !== 200) {
+            // The place (or its tasks) is gone meanwhile: nothing to show; the status says what is left.
+            this.researchStatusAfterWrite(s);
+            return null;
+        }
+        return result.code === 'none' ? W.noteNone : W.noteFailed;
     },
 
     /** The queries' text, read-only and selectable, with Copy and ×. */

@@ -45,7 +45,7 @@ const askLater = new Set<TreeId>();
  * (`link`: its way on), the value asked until the research's status says it
  * (`want`), a write on its way (`busy`). Per research; forgotten with the dialog.
  */
-const stories: { rid: string; note?: { text: string; link?: ResearchNoteLink }; want?: boolean; busy?: boolean } = { rid: '' };
+const stories: { rid: string; note?: { text: string; link?: ResearchNoteLink }; want?: boolean; busy?: boolean; sending?: boolean } = { rid: '' };
 let storiesListening = false;
 
 /**
@@ -67,6 +67,7 @@ const readTask: { rid: string; note?: ReadTaskSettingNote; want?: ReadTaskSettin
 /** The write states of the two choices (6.1, switch-pend). */
 const HYPOS_PEND = 'tree:hypos';
 const READ_TASK_PEND = 'tree:readtask';
+const STORIES_PEND = 'tree:stories';
 /** How long the group stays highlighted when a link opens the dialog at it. */
 const READ_TASK_FLASH_MS = 1500;
 
@@ -535,24 +536,30 @@ export const researchTreeSettingsMethods = uiModule({
         const up = this.researchBridgeUp(rid);
         const said = last?.storiesHistory === true;
         if (stories.want !== undefined && last?.storiesHistory === stories.want) delete stories.want;
-        const on = stories.want ?? said;
+        const on = stories.sending ?? stories.want ?? said;
         const note = !up ? { text: h.storiesBridgeDown } : stories.note;
         const focused = document.activeElement?.id === 'research-stories-history';
+        // On its way (6.1): the new state at once, dashed and locked (keeping its focus), its words after 120 ms.
+        const pend = !!stories.busy;
         host.innerHTML = `
             <fieldset class="research-transcripts research-stories">
                 <legend>${esc(h.storiesSection)}</legend>
-                <label class="settings-checkbox research-stories-row">
-                    <input type="checkbox" id="research-stories-history"${on ? ' checked' : ''}${up && !stories.busy ? '' : ' disabled'}>
+                <label class="settings-checkbox research-stories-row"${pend ? pendAttrs(STORIES_PEND).replace(' aria-disabled="true"', '') : ''}>
+                    <input type="checkbox" id="research-stories-history"${on ? ' checked' : ''}${!up ? ' disabled' : pend ? ' aria-disabled="true"' : ''}>
                     <span class="settings-text">
                         <span class="settings-name">${esc(h.storiesTitle)}</span>
-                        <span class="settings-desc">${esc(h.storiesDesc)}</span>
+                        <span class="settings-desc">${esc(h.storiesDesc)}</span>${pend ? pendStatusHtml(STORIES_PEND) : ''}
                     </span>
                 </label>
                 ${note ? `<p class="research-stories-note" id="research-stories-note"><span>${esc(note.text)}</span>${'link' in note && note.link
                     ? ` <button type="button" class="link-button" id="research-stories-note-link">${researchActionLabel(note.link.label, note.link.mark ?? 'none', { size: 12 })}</button>` : ''}</p>` : ''}
             </fieldset>`;
         const input = host.querySelector<HTMLInputElement>('#research-stories-history');
-        input?.addEventListener('change', () => { void this.setResearchStoriesHistory(input.checked); });
+        // Locked while on its way: a click changes nothing (the row drawn again as it stands).
+        input?.addEventListener('change', () => {
+            if (stories.busy) { this.renderResearchStoriesRow(); return; }
+            void this.setResearchStoriesHistory(input.checked);
+        });
         host.querySelector<HTMLButtonElement>('#research-stories-note-link')?.addEventListener('click', () => stories.note?.link?.run());
         if (focused) input?.focus({ preventScroll: true });
     },
@@ -565,12 +572,16 @@ export const researchTreeSettingsMethods = uiModule({
         if (!base || stories.busy) { this.renderResearchStoriesRow(); return; }
         const h = strings.history;
         stories.busy = true;
+        stories.sending = on;
         delete stories.note;
+        startPend(STORIES_PEND, { redraw: () => this.renderResearchStoriesRow() });
         this.renderResearchStoriesRow();
         const scheme = announcedResearchScheme();
         const r = await postBridgeStories(base, on, ctx!.features, { tree: rid, ...(scheme ? { scheme } : {}) });
-        if (stories.rid !== rid) return;
+        if (stories.rid !== rid) { dropPend(STORIES_PEND); return; }
+        await endPend(STORIES_PEND);
         delete stories.busy;
+        delete stories.sending;
         if (r.ok) {
             stories.want = on;
         } else if (r.link && (r.code === 'link' || r.code === 'off')) {

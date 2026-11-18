@@ -453,9 +453,21 @@ test.describe('History of places: the manager', () => {
         await expect(toast(page, 'Moravia is not searched for this tree.')).toBeVisible();
         expect(history.writes.skip).toEqual([{ region: 'cz-moravia' }]);
         await expect(modal(page).locator('.hm-group[data-group="skip"] .hm-r-title')).toHaveText(['Austrian Empire', 'Moravia', 'Prussia']);
-        await toast(page, 'Moravia is not searched for this tree.').getByRole('button', { name: 'Undo' }).click();
+        // Undo works in the toast (§4): "Undoing…" until the research answers, then its end there.
+        let release!: () => void;
+        const held = new Promise<void>(r => { release = r; });
+        const skipping = (u: URL) => /\/history\/skip$/.test(u.pathname);
+        await page.route(skipping, async route => { await held; await route.fallback(); });
+        const skipped = toast(page, 'Moravia is not searched for this tree.');
+        await skipped.getByRole('button', { name: 'Undo' }).click();
+        const working = page.locator('.toast[aria-busy="true"]');
+        await expect(working).toContainText('Undoing…');
+        await expect(working).toContainText('Moravia');
+        release();
         await expect.poll(() => history.writes.skip.length).toBe(2);
         expect(history.writes.skip[1]).toEqual({ region: 'cz-moravia', do: 'undo' });
+        await expect(toast(page, 'Moravia is searched again for this tree.')).toBeVisible();
+        await page.unroute(skipping);
         await expect(region(page, 'cz-moravia').locator('.hm-r-state-line > span:last-child')).toHaveText('First');
 
         // A place: from its "⋯".

@@ -98,6 +98,10 @@ export interface OverviewExtras {
     followStart?: 'connect' | 'tree' | null;
     /** Rows of "Awaiting action" whose file the main window writes for this window now (§11.2); absent: none. */
     fileSending?: string[];
+    /** Places whose queries' text the main window reads for this window now (§11.2); absent: none. */
+    noteReading?: string[];
+    /** Stop of the tree's verification asked for this window and written by the main window now (§11.2); absent: not. */
+    verifyStopping?: boolean;
     /** Rows of "Awaiting action" whose own write is confirmed now ("saving") or was refused (§7); absent: none. */
     waitingWrite?: { saving: string[]; refused: { id: string; text: string; tint: boolean; retry: boolean }[] } | null;
 }

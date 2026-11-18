@@ -237,19 +237,41 @@ describe('the window\'s actions run today\'s functions', () => {
         expect(overviewWindowMethods.overviewWindowState.call(ui as never)?.extras.fileSending).toBeUndefined();
     });
 
-    it('D: the bulk verification opens here, Stop is written here, each only when the research offers it', () => {
+    it('D: the bulk verification opens here, Stop is written here, each only when the research offers it', async () => {
         const showVerifyBulkDialog = vi.fn();
-        const verifyStop = vi.fn(async () => {});
-        const off = fakeUi({ verifyBulkAvailable: () => false, treeVerifyNow: () => null, showVerifyBulkDialog, verifyStop });
+        let finish!: (v: unknown) => void;
+        const writeVerifyStop = vi.fn(() => new Promise((res) => { finish = res; }));
+        const off = fakeUi({ verifyBulkAvailable: () => false, treeVerifyNow: () => null, showVerifyBulkDialog, writeVerifyStop });
         expect(run(off, { action: 'verify-bulk' })).toBe(false);
         expect(run(off, { action: 'verify-stop' })).toBe(false);
         expect(showVerifyBulkDialog).not.toHaveBeenCalled();
-        expect(verifyStop).not.toHaveBeenCalled();
-        const on = fakeUi({ verifyBulkAvailable: () => true, treeVerifyNow: () => ({ waiting: 3, stop: true, bulk: true }), showVerifyBulkDialog, verifyStop });
+        expect(writeVerifyStop).not.toHaveBeenCalled();
+        const on = stateUi({ verifyBulkAvailable: () => true, treeVerifyNow: () => ({ waiting: 3, stop: true, bulk: true }), showVerifyBulkDialog, writeVerifyStop });
         expect(run(on, { action: 'verify-bulk' })).toBe(true);
         expect(showVerifyBulkDialog).toHaveBeenCalledTimes(1);
-        expect(run(on, { action: 'verify-stop' })).toBe(true);
-        expect(verifyStop).toHaveBeenCalledWith(null);
+        // Stop's outcome goes back to the window's button; the snapshot says the write runs meanwhile (§11.2).
+        const asked = run(on, { action: 'verify-stop' }) as Promise<unknown>;
+        expect(writeVerifyStop).toHaveBeenCalledTimes(1);
+        expect(overviewWindowMethods.overviewWindowState.call(on as never)?.extras.verifyStopping).toBe(true);
+        finish({ ok: false, text: 'Locked.' });
+        await expect(asked).resolves.toEqual({ ok: false, text: 'Locked.' });
+        expect(overviewWindowMethods.overviewWindowState.call(on as never)?.extras.verifyStopping).toBeUndefined();
+    });
+
+    it('"All questions" of the window: read here, its failure goes back, the snapshot says the read runs meanwhile (§11.2)', async () => {
+        fake.live = liveOf();
+        let finish!: (v: string | null) => void;
+        const readWaitingGroupNote = vi.fn(() => new Promise<string | null>((res) => { finish = res; }));
+        const off = stateUi({ liveWaitingWrites: () => ({}), readWaitingGroupNote });
+        expect(run(off, { action: 'waiting-group-note', args: { group: 'questions', name: 'Questions' } })).toBe(false);
+        const ui = stateUi({ liveWaitingWrites: () => ({ note: true }), readWaitingGroupNote, showWaitingGroupNote: vi.fn() });
+        const asked = run(ui, { action: 'waiting-group-note', args: { group: 'questions', name: 'Questions' } }) as Promise<unknown>;
+        expect(readWaitingGroupNote).toHaveBeenCalledWith(fake.live, 'questions', 'Questions');
+        expect(ui.showWaitingGroupNote).not.toHaveBeenCalled();
+        expect(overviewWindowMethods.overviewWindowState.call(ui as never)?.extras.noteReading).toEqual(['questions']);
+        finish('No text yet.');
+        await expect(asked).resolves.toEqual({ failed: 'No text yet.' });
+        expect(overviewWindowMethods.overviewWindowState.call(ui as never)?.extras.noteReading).toBeUndefined();
     });
 
     it('D: the light ends here only while it still lights the group the window named', () => {
