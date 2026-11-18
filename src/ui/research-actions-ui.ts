@@ -953,7 +953,8 @@ export const researchActionsMethods = uiModule({
     /** "Follow live": through the research's bridge here when known, else its link (one way for every place). */
     researchActionLive(): void {
         this.closeActionsMenu();
-        this.startFollowLive('menu');
+        // The menu closed: a progress toast carries the state while following starts (§2.1).
+        void this.startFollowLive('menu');
     },
 
     /** "Stop following": the tree is the user's again. */

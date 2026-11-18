@@ -58,7 +58,7 @@ import { keepImports } from '../import-origin.js';
 import { uiModule } from './module.js';
 import { returnFocusAfterViewer } from './sources.js';
 import { withAppVersion, researchGedcomTitles, researchSendsReadings, researchSendsSourceFields, researchMediaOut, NO_MEDIA_FEATURES, type ResearchMediaOut, TitlesInGedcom, changeKind, changeAdds, sanitizeLiveLog, sourceIdsByRef, findSourceTitle, lineNewerThanLoaded, textKind, textPersonRefs, textWithoutRefs, LiveChangeKind, LiveLogEntry, LiveCommitAdds, LiveRecent, waitingAnswerPlace, booksOn } from '../research-link.js';
-import { overviewInWindow } from '../windows/overview-window.js';
+import { overviewChanged, overviewInWindow } from '../windows/overview-window.js';
 import { AGENT_DONE_MS, AGENT_DONE_FADE_MS, ResearchCardInfo, setResearchCardInfoProvider } from '../card-signals.js';
 import {
     activeDirections, directionGlyph, directionsMulti, keepLineFocus, lineGlyphFor, linesMulti, queueDirectionFilter, selectedLine,
@@ -105,7 +105,7 @@ import { endResearchAdoptWait } from './research-adopt-ui.js';
 import { countGedcomPersons, readBodyWithProgress, type TreeDownloadWatch, type TreeLoadRun } from './tree-load-progress.js';
 import type { ProgressToastHandle } from './toast.js';
 import { holdLeave } from './busy-leave.js';
-import { BUSY_SHOW_MS, announceBusy, busySpinHtml } from './busy.js';
+import { BUSY_SHOW_MS, BUSY_TIMEOUTS, announceBusy, busySpinHtml, runBusy } from './busy.js';
 import { TreeEditLock } from './tree-edit-lock.js';
 import { sourceReadings, researchSendVouches, conflictTakeovers, heldConflicts } from '../research-sync.js';
 import { currentAppBrowser, appBrowserName } from '../research-transfer.js';
@@ -1195,6 +1195,43 @@ export interface ResearchWaitingState {
 }
 /** One open at a time: a second file waits for the first dialog. */
 let openChain: Promise<unknown> = Promise.resolve();
+
+/** Where "Follow live" through a bridge stands: connecting (its status), then the tree loading. */
+export type FollowStartStep = 'connect' | 'tree';
+/** How a "Follow live" ended: following, not (a dialog said why, or nothing to follow), already starting, a link handed over, nothing to do. */
+export type FollowLiveOutcome = 'on' | 'off' | 'busy' | 'link' | 'none';
+/**
+ * "Follow live" starting through a bridge (by its address): its research and step. A second ask meanwhile (a
+ * second click, another place, the overview's own window) does nothing — nothing is queued after the first.
+ */
+const followStarts = new Map<string, { researchId: string; step: FollowStartStep }>();
+
+/** The step of "Follow live" starting for `researchId` now (null: none) — the overview's own window shows it. */
+export function followStartOf(researchId: string | null | undefined): FollowStartStep | null {
+    if (!researchId) return null;
+    for (const f of followStarts.values()) if (f.researchId === researchId) return f.step;
+    return null;
+}
+
+/**
+ * How following starts (startLiveFollow). `progress`: "Follow live" asked by a person — its step said
+ * (connecting, then the tree), and `settle` right before a dialog says why it cannot (the state ends there).
+ */
+export interface LiveFollowOpts {
+    resume?: boolean;
+    follow?: boolean;
+    auto?: { researchId: string; treeId: TreeId };
+    from?: { followed: TreeId | null; open: TreeId | null };
+    progress?: { step(step: FollowStartStep): void; settle(): void };
+}
+
+/** The toast "Connected to the research again" (its "Follow live" says its work in it). */
+const RECONNECTED_TOAST = 'research-reconnected';
+
+/** The key of a bridge's address (null: not a bridge here). */
+function followKey(raw: string): string | null {
+    return parseLiveBridge(raw)?.base ?? null;
+}
 
 function enqueueOpen<T>(job: () => Promise<T>): Promise<T | undefined> {
     const next = openChain.then(job, job).catch((err) => {
@@ -3161,8 +3198,8 @@ export const researchUiMethods = uiModule({
     },
 
     /** "Follow live" in the idle panel: the open tree's research, through its bridge here (else its link). */
-    followResearchHere(researchId: string): void {
-        this.startFollowLive('panel', researchId);
+    followResearchHere(researchId: string, el?: HTMLElement | null): void {
+        void this.startFollowLive('panel', researchId, el);
     },
 
     /**
@@ -3171,19 +3208,74 @@ export const researchUiMethods = uiModule({
      * here when this browser knows it (the tree switches to the research's
      * version), else its link (the research starts its bridge and opens
      * ?live= here). One way for all of them.
+     *
+     * Through the bridge, `el` (the button) shows the state at once (network
+     * work, waiting buttons §1) until following is on or a dialog says why
+     * not: connecting, then the tree loading; without it (the menu closed) a
+     * progress toast does (§2.1). `window`: asked by the overview's own
+     * window, which shows the state itself (§11.2) and hears the outcome.
      */
-    startFollowLive(origin: 'menu' | 'panel' | 'overview', forResearch?: string): void {
+    startFollowLive(origin: 'menu' | 'panel' | 'overview' | 'window', forResearch?: string, el?: HTMLElement | null): Promise<FollowLiveOutcome> {
         const researchId = forResearch ?? this.activeResearchId();
-        if (!researchId) return;
+        if (!researchId) return Promise.resolve('none');
         const base = storedResearchBridge(researchId)?.base;
-        if (base && parseLiveBridge(base)) {
+        const key = base ? followKey(base) : null;
+        if (base && key) {
+            // Starting already (a second click, another place): nothing more is queued.
+            if (followStarts.has(key)) return Promise.resolve('busy');
             // From the overview: it stays open, now the followed research's.
-            if (origin === 'overview' && viewing) viewing.follow = true;
-            void this.startLiveFollow(base, { follow: true, from: { followed: null, open: null } });
-            return;
+            if ((origin === 'overview' || origin === 'window') && viewing) viewing.follow = true;
+            const startOpts = { follow: true, from: { followed: null, open: null } };
+            if (origin === 'window') return this.followLiveGuarded(base, researchId, startOpts);
+            return this.followLiveWithState(base, researchId, startOpts, el ?? null);
         }
         const url = this.activeResearchLink('live');
-        if (url) this.launchResearchLink(url);
+        if (!url) return Promise.resolve('none');
+        void this.launchResearchLink(url);
+        return Promise.resolve('link');
+    },
+
+    /**
+     * Following through a bridge with the state on `el` from the click on (shown at once: the work is the
+     * network's): "Connecting to the research…", then "Loading the tree from the research…", until following is
+     * on, or gone before a dialog that says why not. Without `el` (or once it is gone) a progress toast says it.
+     */
+    async followLiveWithState(base: string, researchId: string, startOpts: LiveFollowOpts, el: HTMLElement | null): Promise<FollowLiveOutcome> {
+        const started: { outcome?: Promise<FollowLiveOutcome> } = {};
+        const target = el ?? document.createElement('span');
+        await runBusy(target, (ctl) => new Promise<void>((resolve) => {
+            started.outcome = this.followLiveGuarded(base, researchId, startOpts, {
+                step: (step) => { if (step === 'tree') ctl.step(strings.busy.loadingTree); },
+                settle: resolve,
+            });
+            started.outcome.then(() => resolve(), () => resolve());
+        }), { label: strings.busy.connectingResearch, atOnce: true, kind: 'tree', toastWhenGone: true });
+        return started.outcome ?? 'busy';
+    },
+
+    /**
+     * Start following through `raw`'s bridge unless a start for it runs already ('busy'); its step said to `ui`
+     * and to the overview's own window (its snapshot), `ui.settle` right before a dialog says why it cannot.
+     * Resolves once the start ended: following ('on') or not ('off').
+     */
+    async followLiveGuarded(raw: string, researchId: string, startOpts: LiveFollowOpts,
+        ui?: { step(step: FollowStartStep): void; settle(): void }): Promise<FollowLiveOutcome> {
+        const key = followKey(raw);
+        if (!key) return 'none';
+        if (followStarts.has(key)) return 'busy';
+        const step = (s: FollowStartStep): void => {
+            followStarts.set(key, { researchId, step: s });
+            overviewChanged();
+            ui?.step(s);
+        };
+        step('connect');
+        try {
+            await this.startLiveFollow(raw, { ...startOpts, progress: { step, settle: () => ui?.settle() } });
+        } finally {
+            followStarts.delete(key);
+            overviewChanged();
+        }
+        return live && !live.ended && live.bridge.base === key ? 'on' : 'off';
     },
 
     // ==================== THE OVERVIEW WITHOUT FOLLOWING (spec 057 §7) ====================
@@ -3529,9 +3621,22 @@ export const researchUiMethods = uiModule({
             if (DataManager.getCurrentTreeId() !== existing.id) return false;
         }
         rememberBridgeStatus(status.treeId!, status);
+        const researchId = status.treeId!;
         this.showToast(strings.research.reconnected, 10000, {
             closable: true,
-            action: { label: strings.research.followLive, run: () => { void this.startLiveFollow(raw, { follow: true }); } },
+            kind: RECONNECTED_TOAST,
+            // The toast stays and says the work (§4) until following is on, or goes before a dialog that says why not.
+            action: {
+                label: strings.research.followLive,
+                run: () => new Promise<void>((resolve) => {
+                    const title = (): Element | null => document.querySelector(`.toast[data-kind="${RECONNECTED_TOAST}"] .toast-title`);
+                    void this.followLiveGuarded(raw, researchId, { follow: true }, {
+                        step: (step) => { const t = title(); if (t && step === 'tree') t.textContent = strings.busy.loadingTree; },
+                        settle: resolve,
+                    }).then(() => resolve(), () => resolve());
+                }),
+                work: { label: strings.busy.connectingResearch, timeoutMs: BUSY_TIMEOUTS.tree },
+            },
         });
         this.refreshResearchSyncUi();
         void this.pollResearchBridge();
@@ -3546,7 +3651,7 @@ export const researchUiMethods = uiModule({
      * `from`: the tree followed and the tree open before (the panel's line
      * says which tree is followed now); by default as they are now.
      */
-    async startLiveFollow(raw: string, opts: { resume?: boolean; follow?: boolean; auto?: { researchId: string; treeId: TreeId }; from?: { followed: TreeId | null; open: TreeId | null } } = {}): Promise<void> {
+    async startLiveFollow(raw: string, opts: LiveFollowOpts = {}): Promise<void> {
         const bridge = parseLiveBridge(raw);
         if (!bridge) {
             if (opts.resume) forgetLiveBridge();
@@ -3600,6 +3705,7 @@ export const researchUiMethods = uiModule({
                     return;
                 }
                 if (!status.treeId) {
+                    opts.progress?.settle();
                     await this.showAlert(strings.research.liveNoTree, 'error');
                     return;
                 }
@@ -3609,6 +3715,7 @@ export const researchUiMethods = uiModule({
                 const asked: TreeImagesVariant = byHash ? 'ref' : 'data';
                 // With the tree's own files when the research keeps them and the tree takes images (spec 108 §5).
                 const media = treeAsksAppMedia(status.features, SettingsManager.isImportImages());
+                opts.progress?.step('tree');
                 const ask = tagged ? await this.researchHeldFile(status.treeId, asked, media) : null;
                 let got = await fetchResearchTree(bridge.ged, { stale, etag: ask?.etag, byHash, media });
                 if (got.notModified) {
@@ -3639,6 +3746,7 @@ export const researchUiMethods = uiModule({
                     this.showToast(strings.research.ended, 4000);
                     return;
                 }
+                opts.progress?.settle();
                 // The tree of that research, when this browser knows its address: the question is about it,
                 // never about whichever tree the page started with (rc.27 round).
                 const knownId = researchIdAtBridge(bridge.base);
@@ -3652,6 +3760,7 @@ export const researchUiMethods = uiModule({
                 ? { ...readResearchHeader(''), treeId: status.treeId, head: held.head || null, mode: held.mode }
                 : readResearchHeader(text);
             if (header.treeId && header.treeId !== status.treeId) {
+                opts.progress?.settle();
                 if (auto) passive();
                 else await this.showAlert(strings.research.liveOtherTree, 'error');
                 return;
@@ -3660,6 +3769,7 @@ export const researchUiMethods = uiModule({
             try {
                 data = held ? held.data : convertToStrom(parseGedcom(text), { images }).data;
             } catch {
+                opts.progress?.settle();
                 if (auto) passive();
                 else await this.showAlert(strings.gedcom.parseError, 'error');
                 return;
@@ -3676,6 +3786,7 @@ export const researchUiMethods = uiModule({
             // not a second, empty tree (J7 of the language round).
             if (!opts.resume && !auto && Object.keys(data.persons ?? {}).length === 0 && !TreeManager.findTreeByResearchId(status.treeId)
                 && await this.researchAwaitsHandOver(bridge.base)) {
+                opts.progress?.settle();
                 void this.adoptFromResearch(bridge.base);
                 return;
             }
@@ -5822,7 +5933,8 @@ export const researchUiMethods = uiModule({
                 row.appendChild(el('span', 'live-agent-started-text', o.agentStarted));
                 const go = row.appendChild(el('button', 'link-button live-agent-started-follow', r.followLive));
                 go.type = 'button';
-                go.onclick = () => this.followResearchHere(researchId);
+                go.dataset.action = 'follow-live-agent';
+                go.onclick = () => this.followResearchHere(researchId, go);
             }
             if (connected) {
                 // Back from "only load" with changes meanwhile, the first send goes by hand.
@@ -5850,7 +5962,8 @@ export const researchUiMethods = uiModule({
             if (upHere && researchId) {
                 const follow = el('button', 'live-panel-follow', r.followLive);
                 follow.type = 'button';
-                follow.onclick = () => this.followResearchHere(researchId);
+                follow.dataset.action = 'follow-live';
+                follow.onclick = () => this.followResearchHere(researchId, follow);
                 foot.appendChild(follow);
             }
             if (open) {

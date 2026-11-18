@@ -1,5 +1,5 @@
 import { test, expect, Page, Request } from '@playwright/test';
-import { fakeBridge, openResearch, poll, researchGed } from './research-bridge.js';
+import { BRIDGE as RB, HEAD as RH, UUID as RU, fakeBridge, openResearch, poll, researchGed } from './research-bridge.js';
 import { card } from './helpers.js';
 import { CAPS, followManaged } from './live-directions-bridge.js';
 
@@ -354,6 +354,41 @@ test.describe('the overview window\'s states', () => {
         await turnOn.click();
         await expect.poll(() => page.evaluate(() => (window as unknown as { __turnOn: unknown[] }).__turnOn.length)).toBe(1);
         expect((await posted(popup)).map(m => m.action)).toEqual(['turn-on']);
+        await popup.close();
+    });
+
+    test('"Follow live" in the window: its button says the work at once, with the main window\'s step, till following is on there; a second click starts nothing', async ({ page }) => {
+        await openResearch(page, { ged: researchGed() });
+        const links = ['send', 'open', 'live', 'app', 'setup', 'chat'];
+        const bridge = await fakeBridge(page, { accepts: ACCEPTS, links, waiting: WAITING, treeGed: researchGed() });
+        await page.route(`${RB}/events*`, route => route.fulfill({
+            status: 200, headers: { 'access-control-allow-origin': '*', 'content-type': 'text/event-stream' },
+            body: `event: hello\ndata: ${JSON.stringify({ tree: { id: RU, name: 'Fíškovi' }, head: RH, links, accepts: ACCEPTS, working: [], waiting: WAITING })}\n\n`,
+        }));
+        await poll(page);
+        const popup = await openFromMenu(page);
+        const btn = popup.locator('#research-overview .research-overview__follow-live--head');
+        await expect(btn).toBeVisible();
+        const gets = bridge.treeGets ?? 0;
+        let answer!: () => void;
+        bridge.statusGate = new Promise<void>(r => { answer = r; });
+        bridge.treeDelayMs = 1500;
+        // The state in the very click, in the window where it was clicked.
+        const atClick = await popup.evaluate(() => {
+            const b = document.querySelector<HTMLElement>('#research-overview .research-overview__follow-live--head')!;
+            b.click();
+            return { busy: b.getAttribute('aria-busy'), text: b.textContent };
+        });
+        expect(atClick).toEqual({ busy: 'true', text: expect.stringContaining('Connecting to the research…') });
+        // Held while the main window waits for the research.
+        await expect(btn).toHaveAttribute('aria-busy', 'true');
+        await popup.evaluate(() => document.querySelector<HTMLElement>('#research-overview .research-overview__follow-live--head')!.click());
+        answer();
+        await expect(btn).toContainText('Loading the tree from the research…');
+        await expect.poll(() => page.evaluate(() => window.Strom.UI.isFollowingActiveResearch()), { timeout: 10000 }).toBe(true);
+        expect(bridge.treeGets).toBe(gets + 1);
+        await expect(popup.locator('#research-overview .research-overview__stop')).toBeVisible();
+        await expect(popup.locator('.busy-msg')).toHaveCount(0);
         await popup.close();
     });
 

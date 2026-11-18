@@ -57,6 +57,8 @@ export interface BusyOpts {
     msgIn?: Element;
     /** §8: a heavy computation follows: the state is painted first (`'now'`: shown at once, no 120 ms wait). */
     heavy?: boolean | 'now';
+    /** Network work that surely takes longer than 120 ms (a tree from the research): the state shown at once. */
+    atOnce?: boolean;
     /** The state goes to a toast when the element and its row are gone (default: true for a long action or a terminal). */
     toastWhenGone?: boolean;
     /** A failed end goes to a toast even with the element seen (a toolbar has no room for a sentence, 1e). */
@@ -762,7 +764,7 @@ function lock(el: HTMLElement, opts: BusyOpts): BusyState {
         moving.add(st);
         observePage();
     }
-    if (opts.heavy === 'now') show(el, st);
+    if (opts.heavy === 'now' || opts.atOnce) show(el, st);
     else st.showTimer = setTimeout(() => show(el, st), BUSY_SHOW_MS);
     if (opts.long) st.longTimer = setTimeout(() => toToast(el, st), BUSY_LONG_TOAST_MS);
     return st;

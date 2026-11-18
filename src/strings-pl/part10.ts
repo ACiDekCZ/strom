@@ -43,6 +43,7 @@ export const plPart10: Pick<StringsType, 'busy'> = {
         adoptBackup: 'Zapisywanie kopii zapasowej',
         adoptGedcom: 'Tworzenie GEDCOM',
         adoptTaking: 'Badanie przejmuje drzewo',
+        connectingResearch: 'Łączenie z badaniem…',
         loadingTree: 'Wczytywanie drzewa z badania…',
         processing: (n: number) => `Przetwarzanie ${n} osób`,
         adoptBackground: 'Kontynuować w tle',

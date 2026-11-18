@@ -16,7 +16,7 @@ import { acceptBatch } from '../research-hypothesis-waiting.js';
 import { fetchQueuePage, type QueuePageResult } from '../research-queue-pages.js';
 import { researchHypotheses } from '../view-links.js';
 import { uiModule } from './module.js';
-import { liveSession, overviewViewing, queuePaged, researchSession, type LiveSession } from './research-ui.js';
+import { followStartOf, liveSession, overviewViewing, queuePaged, researchSession, type LiveSession } from './research-ui.js';
 import { directionsWindowState, retryDirectionProblem } from './research-directions-ui.js';
 import { queueNextOffered, taskOrderWindowState } from './research-offline-ui.js';
 import { hoverCard } from './research-overview-ui.js';
@@ -99,6 +99,7 @@ export const overviewWindowMethods = uiModule({
             extras.verify = this.treeVerifyNow();
             extras.offLineSettings = this.offLineSettingsOffered(treeId);
             extras.queueStart = this.queueStartNow();
+            extras.followStart = followStartOf(researchId);
         }
         // What the evidence pill lights up in the tree here (the window's rows say it).
         extras.highlight = this.evidenceHighlightNow();
@@ -206,8 +207,8 @@ export const overviewWindowMethods = uiModule({
                 this.endEvidenceHighlight();
                 return true;
             case 'follow-live':
-                this.startFollowLive('overview');
-                return true;
+                // Its outcome goes back once the start ended: the window shows the state till then (§11.2).
+                return this.startFollowLive('window');
             case 'stop-follow':
                 if (ws?.source !== 'live') return false;
                 this.stopLiveFollow();

@@ -50,6 +50,14 @@ const following = (page: Page) => page.evaluate(() => window.Strom.UI.isFollowin
 const readOnly = (page: Page) => page.evaluate(() => window.Strom.DataManager.isReadOnly() || window.Strom.DataManager.isLiveFollowing());
 const sectionTitles = (page: Page) => ov(page).locator('.research-overview__body .live-section__title').allTextContents();
 
+/** The research's stream: its hello says what the status does. */
+async function helloStream(page: Page): Promise<void> {
+    await page.route(`${BRIDGE}/events*`, route => route.fulfill({
+        status: 200, headers: { 'access-control-allow-origin': '*', 'content-type': 'text/event-stream' },
+        body: `event: hello\ndata: ${JSON.stringify({ tree: { id: UUID, name: 'Fíškovi' }, head: HEAD, links: LINKS, accepts: ACCEPTS, working: [], waiting: WAITING, queue: QUEUE, researches: DIRECTIONS })}\n\n`,
+    }));
+}
+
 /** The overview from the Research menu's first item. */
 async function openFromMenu(page: Page): Promise<void> {
     await page.locator('#research-menu-btn').click();
@@ -187,6 +195,68 @@ test.describe('the Research overview without following', () => {
         await expect(items.nth(0)).toHaveAttribute('id', 'research-item-overview');
         await expect(items.nth(1)).toHaveAttribute('id', 'research-item-stop');
         await expect(page.locator('#research-item-live')).toHaveCount(0);
+    });
+
+    test('"Follow live" says its work at once and holds it till following is on; a second ask meanwhile starts nothing', async ({ page }) => {
+        const bridge = await researchTree(page);
+        await helloStream(page);
+        await openFromMenu(page);
+        const gets = bridge.treeGets ?? 0;
+        // The research is slow to answer: its status held, then its tree.
+        let answer!: () => void;
+        bridge.statusGate = new Promise<void>(r => { answer = r; });
+        bridge.treeDelayMs = 1500;
+        const btn = strip(page).locator('.research-overview__follow-live');
+        // The state is there in the very click (network work: no 120 ms wait).
+        const atClick = await page.evaluate(() => {
+            const b = document.querySelector<HTMLElement>('#research-overview .research-overview__follow-live')!;
+            b.click();
+            return { busy: b.getAttribute('aria-busy'), text: b.textContent };
+        });
+        expect(atClick).toEqual({ busy: 'true', text: expect.stringContaining('Connecting to the research…') });
+        // A second click, and the Research menu's "Follow live": nothing more is started.
+        await page.evaluate(() => document.querySelector<HTMLElement>('#research-overview .research-overview__follow-live')!.click());
+        expect(await page.evaluate(() => (window.Strom.UI as unknown as { startFollowLive(o: string): Promise<string> }).startFollowLive('menu'))).toBe('busy');
+        await expect(btn).toHaveAttribute('aria-busy', 'true');
+        // The status answers; the tree loads: its step.
+        answer();
+        await expect(btn).toContainText('Loading the tree from the research…');
+        await expect(btn).toHaveAttribute('aria-busy', 'true');
+        await expect.poll(() => following(page), { timeout: 10000 }).toBe(true);
+        expect(bridge.treeGets).toBe(gets + 1);
+        await expect(strip(page)).toHaveCount(0);
+    });
+
+    test('"Follow live" that cannot connect: the state ends and the dialog says why', async ({ page }) => {
+        const bridge = await researchTree(page);
+        await openFromMenu(page);
+        bridge.statusCode = 404;
+        const btn = strip(page).locator('.research-overview__follow-live');
+        const busy = await page.evaluate(() => {
+            const b = document.querySelector<HTMLElement>('#research-overview .research-overview__follow-live')!;
+            b.click();
+            return b.getAttribute('aria-busy');
+        });
+        expect(busy).toBe('true');
+        await expect(page.locator('#research-connect-failed')).toBeVisible({ timeout: 15000 });
+        await expect(btn).not.toHaveAttribute('aria-busy', 'true');
+        await expect(btn).toHaveText('Follow live');
+        expect(await following(page)).toBe(false);
+    });
+
+    test('the Research menu\'s "Follow live": the menu closes, a progress toast says the work till following is on', async ({ page }) => {
+        const bridge = await researchTree(page);
+        await helloStream(page);
+        let answer!: () => void;
+        bridge.statusGate = new Promise<void>(r => { answer = r; });
+        await page.locator('#research-menu-btn').click();
+        await page.locator('#research-item-live').click();
+        await expect(page.locator('#research-item-live')).toBeHidden();
+        const toast = page.locator('.toast--progress');
+        await expect(toast).toContainText('Connecting to the research…');
+        answer();
+        await expect.poll(() => following(page), { timeout: 10000 }).toBe(true);
+        await expect(toast).toHaveCount(0);
     });
 
     test('the bridge not answering: not running · Turn on, Awaiting action as of then, the lines from the file, nothing of the agent', async ({ page }) => {

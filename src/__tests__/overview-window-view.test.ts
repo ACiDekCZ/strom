@@ -180,7 +180,6 @@ describe('the overview\'s controls ask the main window', () => {
     it('actions that stay where they are: sent, the main window stays behind', async () => {
         const { o, sent, port } = overrides();
         o.stopLiveFollow();
-        o.startFollowLive();
         o.setLiveFollow(false);
         o.setLiveFollowView('fan');
         await o.toggleResearchLive();
@@ -195,7 +194,6 @@ describe('the overview\'s controls ask the main window', () => {
         o.answerResearchTask(W1);
         expect(sent).toEqual([
             { action: 'stop-follow', args: undefined },
-            { action: 'follow-live', args: undefined },
             { action: 'follow-tree', args: { on: false } },
             { action: 'follow-view', args: { view: 'fan' } },
             { action: 'turn-on', args: undefined },

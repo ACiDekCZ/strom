@@ -185,8 +185,9 @@ describe('the window\'s actions run today\'s functions', () => {
         expect(run(ui, { action: 'direction-found', args: { directionId: 'D1' } })).toBe(true);
         expect(ui.showDirectionFoundInTree).toHaveBeenCalledWith(s.researches[0], 'docked');
         expect(run(ui, { action: 'direction-found', args: { directionId: 'gone' } })).toBe(false);
+        // Its outcome goes back to the window, which shows the state till then (§11.2).
         run(ui, { action: 'follow-live' });
-        expect(ui.startFollowLive).toHaveBeenCalledWith('overview');
+        expect(ui.startFollowLive).toHaveBeenCalledWith('window');
         run(ui, { action: 'stop-follow' });
         expect(ui.stopLiveFollow).toHaveBeenCalled();
         run(ui, { action: 'follow-tree', args: { on: false } });

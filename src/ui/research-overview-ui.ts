@@ -1024,7 +1024,9 @@ export const researchOverviewMethods = uiModule({
         text.appendChild(el('p', 'research-overview__follow-note', L.followNote));
         const btn = el('button', `research-overview__follow-live${v.agentStarted ? ' is-filled' : ''}`, strings.research.followLive);
         btn.type = 'button';
-        btn.onclick = () => this.startFollowLive('overview');
+        // Found again when the overview is drawn anew while following starts: the state stays on it (§1.2).
+        btn.dataset.action = 'follow-live-strip';
+        btn.onclick = () => { void this.startFollowLive('overview', undefined, btn); };
         strip.appendChild(btn);
         return strip;
     },
@@ -3075,7 +3077,8 @@ export const researchOverviewMethods = uiModule({
             const follow = el('button', 'research-overview__follow-live research-overview__follow-live--head', r.followLive);
             follow.type = 'button';
             follow.title = L.followNote;
-            follow.onclick = () => this.startFollowLive('overview');
+            follow.dataset.action = 'follow-live-head';
+            follow.onclick = () => { void this.startFollowLive('overview', undefined, follow); };
             head.appendChild(follow);
         }
         head.appendChild(this.liveSectionMoreButton('research-overview__more', 'overview'));

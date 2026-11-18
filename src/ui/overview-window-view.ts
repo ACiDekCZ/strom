@@ -29,6 +29,8 @@ import { el, setOverviewWindowDrawn, type LiveSession, type OverviewViewing } fr
 import { applyDirectionsWindowState, setQueueDirectionFilter } from './research-directions-ui.js';
 import { setOverviewOwnWindow } from './research-overview-ui.js';
 import { openResearchBusy, type OpenBusyResult } from './research-open-busy.js';
+import { followLiveFromWindow } from './overview-window-follow.js';
+import { activatedElement } from './busy.js';
 import type { ResearchLinkKind } from './research-ui.js';
 import { auditRefusalOf, auditResearchUnavailable, setWaitingAuditState } from './waiting-task-ui.js';
 import { asAuditPreview } from '../research-audit.js';
@@ -226,7 +228,13 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
 
         // ---- the actions: asked of the main window ----
         stopLiveFollow(): void { run('stop-follow'); },
-        startFollowLive(): void { run('follow-live'); },
+        // The state on the element clicked here until the main window says how the start ended (§11.2).
+        startFollowLive(_origin?: unknown, _forResearch?: string, el?: HTMLElement | null) {
+            return followLiveFromWindow(el ?? activatedElement(), {
+                ask: (waitMs) => port.ask('follow-live', undefined, waitMs),
+                followStart: () => extras().followStart ?? null,
+            }) as ReturnType<UIClass['startFollowLive']>;
+        },
         setLiveFollow(on: boolean): void { run('follow-tree', { on }); },
         setLiveFollowView(view: FollowView): void { run('follow-view', { view }); },
         async toggleResearchLive(): Promise<void> { run('turn-on'); },
