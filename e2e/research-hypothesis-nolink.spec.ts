@@ -87,6 +87,8 @@ const row = (page: Page, v: string) => card(page).locator(`.person-research-vari
 const toast = (page: Page) => page.locator('.toast:not(.toast--progress)');
 const opened = async (page: Page): Promise<string[]> => (await links(page)).filter(u => u.startsWith('strom-research://hypothesis'));
 const stub = (page: Page) => page.locator('.person-card .research-edge.edge-named');
+/** A card standing in the tree only by a version shown in the view. */
+const viewOnly = (page: Page) => page.locator('.person-card[aria-label$="Linked in the view only, unproven."]');
 
 /** What the tree holds of the family links, and Jan's parents. */
 const familyState = (page: Page) => page.evaluate(() => {
@@ -124,6 +126,10 @@ test.describe('A hypothesis without a link, decided from the app (K1.6)', () => 
         const bubble = page.locator('#research-edge-bubble.is-pinned');
         await bubble.locator('.reb-variant[data-variant="B"] .reb-show').click();
         await expect.poll(() => viewLinks(page)).toEqual([{ hypo: 'H0051', variant: 'B', on: true }]);
+        // The choice is written at once, the tree is laid out after the canvas overlay is painted (§8): what the
+        // tree draws is read once it stands, Bořivoj drawn as linked in the view only (where Jan's stub would be).
+        await expect(page.locator('#tree-container > .canvas-busy')).toHaveCount(0);
+        await expect(viewOnly(page)).toHaveCount(1);
         await page.keyboard.press('Escape');
         const before = await familyState(page);
         expect(before.parents).toEqual([]);
@@ -149,6 +155,7 @@ test.describe('A hypothesis without a link, decided from the app (K1.6)', () => 
         // The tree as it was: no parents, nobody added, no family; H0051's "?" edge and its shown version stay.
         expect(await familyState(page)).toEqual(before);
         await expect(stub(page)).toHaveCount(stubs);
+        await expect(viewOnly(page)).toHaveCount(1);
         expect(await viewLinks(page)).toEqual([{ hypo: 'H0051', variant: 'B', on: true }]);
         // "Show" opens the hypothesis's card.
         await page.keyboard.press('Escape');

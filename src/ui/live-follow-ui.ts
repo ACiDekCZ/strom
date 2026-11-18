@@ -68,6 +68,11 @@ let followOn = storedOn();
 let pausedByUser = false;
 /** The person the last jump went to (and focused). */
 let lastTarget: PersonId | null = null;
+/**
+ * A jump laid out under the canvas overlay (Follow switched on): its focus comes only after the overlay is painted,
+ * so meanwhile the focus still standing elsewhere is not the user's having moved away (no pause), and no second jump.
+ */
+let jumpPending: PersonId | null = null;
 let lastJumpAt = 0;
 let jumpTimer: ReturnType<typeof setTimeout> | null = null;
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -702,6 +707,7 @@ export const liveFollowMethods = uiModule({
         if (!fs || !lastTarget || TreeRenderer.getViewMode() !== 'family') return false;
         const focus = TreeRenderer.getFocusPersonId();
         if (!focus || focus === lastTarget) return false;
+        if (jumpPending && jumpPending === lastTarget) return false;
         // The user's own focus: the fan centres on it from now on — not a person worked on now
         // (Show in tree from Now while the jump waits for its brake).
         if (!workedNow().has(focus)) {
@@ -726,7 +732,7 @@ export const liveFollowMethods = uiModule({
         const target = followTarget();
         if (!target) return;
         const there = target === lastTarget && TreeRenderer.getFocusPersonId() === target && TreeRenderer.getViewMode() === 'family';
-        if (there) return;
+        if (there || (jumpPending === target && target === lastTarget)) return;
         const t = timing();
         if (somethingOpen(this.isEvidenceHighlightOn())) {
             jumpTimer = setTimeout(() => this.followJump(now), t.retry);
@@ -743,8 +749,16 @@ export const liveFollowMethods = uiModule({
         const glide = (id: PersonId): void => { ZoomPan.glideToPerson(id, scale); };
         if (TreeRenderer.getViewMode() !== 'family') TreeRenderer.presetViewMode('family');
         seenMode = 'family';
-        if (byUser) void canvasBusy(() => TreeRenderer.setFocus(target, false, glide, { agent: true }));
-        else void TreeRenderer.setFocus(target, false, glide, { agent: true });
+        if (byUser) {
+            jumpPending = target;
+            // A later jump (the agent's own) meanwhile takes its place: this one then lays out nothing.
+            void canvasBusy(async () => {
+                if (jumpPending === target) await TreeRenderer.setFocus(target, false, glide, { agent: true });
+            }).finally(() => { if (jumpPending === target) jumpPending = null; });
+        } else {
+            jumpPending = null;
+            void TreeRenderer.setFocus(target, false, glide, { agent: true });
+        }
     },
 
     /**
@@ -758,6 +772,7 @@ export const liveFollowMethods = uiModule({
         pausedByUser = false;
         if (idleTimer) clearTimeout(idleTimer);
         idleTimer = null;
+        jumpPending = null;
         lastTarget = id;
         lastJumpAt = Date.now();
         const scale = ZoomPan.getScale() < ZOOM_FAR ? ZOOM_READABLE : ZoomPan.getScale();
@@ -773,6 +788,8 @@ export const liveFollowMethods = uiModule({
         if (!followActive()) return;
         const first = !pausedByUser;
         pausedByUser = true;
+        // A jump still waiting for the overlay's paint does not land after the user took over.
+        jumpPending = null;
         if (jumpTimer) clearTimeout(jumpTimer);
         jumpTimer = null;
         if (idleTimer) clearTimeout(idleTimer);
