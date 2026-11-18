@@ -446,7 +446,7 @@ describe('openResearchBusy: a link into the research', () => {
         expect(message()).toBeNull();
     });
 
-    it('an older research whose bridge says the same session\'s start a little later each time: no proof, the sentence at the limit', async () => {
+    it('an older research whose bridge says the same session\'s start a little later each time: no proof, a quiet limit', async () => {
         // A stand-in bridge that says `since` relative to its own clock: the same session, not a new one.
         const at = (s: number) => new Date(Date.UTC(2026, 10, 18, 9, 44, s)).toISOString();
         const b = bridge({ before: status({ features: null, sessions: 1, working: [{ who: 'agent', since: at(0) }] }) });
@@ -454,7 +454,8 @@ describe('openResearchBusy: a link into the research', () => {
         const run = openResearchBusy(btn, LINK, {}, b.deps);
         await vi.advanceTimersByTimeAsync(10_500);
         expect(await run).toBe('limit');
-        expect(message()?.textContent).toContain(strings.busy.notOpened);
+        expect(isBusy(btn)).toBe(false);
+        expect(message()).toBeNull();
         // a session started later (another one of the same agent) still proves it
         resetOpenResearchBusy();
         clearBusyMessage(btn);
@@ -463,6 +464,59 @@ describe('openResearchBusy: a link into the research', () => {
         b.answer(status({ features: null, sessions: 1, working: [{ who: 'agent', since: at(3) }, { who: 'agent', since: new Date(Date.UTC(2026, 10, 18, 10, 0, 0)).toISOString() }] }));
         await vi.advanceTimersByTimeAsync(1_000 + BUSY_MIN_MS);
         expect(await again).toBe('opened');
+    });
+
+    it('an older research (no handoffs) without a new session in 10 s: the element at rest, no sentence (the terminal cannot be told), no late watch', async () => {
+        const b = bridge({ before: status({ features: null, sessions: 0 }) });
+        b.answer(status({ features: null, sessions: 0 }));
+        const run = openResearchBusy(btn, LINK, {}, b.deps);
+        await vi.advanceTimersByTimeAsync(9_500);
+        expect(isBusy(btn)).toBe(true);
+        await vi.advanceTimersByTimeAsync(1_000);
+        expect(await run).toBe('limit');
+        expect(isBusy(btn)).toBe(false);
+        expect(message()).toBeNull();
+        expect(btn.querySelector('.b-busy')?.textContent ?? '').not.toContain(strings.busy.openingResearch);
+        expect(toastCalls.map(t => t.message).join(' ')).not.toContain(strings.busy.notOpened);
+        const asked = b.asks.n;
+        await vi.advanceTimersByTimeAsync(OPEN_LATE_WATCH_MS);
+        expect(b.asks.n).toBe(asked);
+        expect(message()).toBeNull();
+    });
+
+    it('an older research known only from the asks while waiting (no status before): the same quiet limit', async () => {
+        const b = bridge();
+        b.answer(status({ features: null, sessions: 0 }));
+        const run = openResearchBusy(btn, LINK, {}, b.deps);
+        await vi.advanceTimersByTimeAsync(10_500);
+        expect(await run).toBe('limit');
+        expect(message()).toBeNull();
+    });
+
+    it('a research with handoffs, no proof: the sentence (only there); a bridge that never answers: the sentence too', async () => {
+        const b = bridge();
+        const run = openResearchBusy(btn, LINK, {}, b.deps);
+        await vi.advanceTimersByTimeAsync(10_500);
+        expect(await run).toBe('limit');
+        expect(message()?.textContent).toContain(strings.busy.notOpened);
+        resetOpenResearchBusy();
+        clearBusyMessage(btn);
+        b.answer(null);
+        const silent = openResearchBusy(btn, LINK, {}, b.deps);
+        await vi.advanceTimersByTimeAsync(10_500);
+        expect(await silent).toBe('limit');
+        expect(message()?.textContent).toContain(strings.busy.notOpened);
+    });
+
+    it('the queue\'s work of an older research (its own proof, 30 s): the sentence at its limit as before', async () => {
+        const b = bridge({ before: status({ features: null, sessions: 0 }) });
+        b.answer(status({ features: null, sessions: 0 }));
+        const run = openResearchBusy(btn, LINK, { timeoutMs: 30_000, proof: () => false }, b.deps);
+        await vi.advanceTimersByTimeAsync(29_500);
+        expect(isBusy(btn)).toBe(true);
+        await vi.advanceTimersByTimeAsync(1_000);
+        expect(await run).toBe('limit');
+        expect(message()?.textContent).toContain(strings.busy.notOpened);
     });
 
     it('no proof in 10 s: the element at rest, a neutral sentence with Try again and the hint under it', async () => {

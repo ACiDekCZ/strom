@@ -2733,8 +2733,8 @@ test.describe('Awaiting action written through the bridge', () => {
 test.describe('Open the research in the overview\'s foot (waiting buttons §3.1)', () => {
     test('the overview drawn anew keeps "Opening the research…" on its button; no proof in 10 s: the sentence under it', async ({ page }) => {
         await page.clock.install();
-        // An older research (no handoffs) whose stand-in says the session's start relative to its own clock.
-        await follow(page);
+        // A research that says the links it took (handoffs): no proof in 10 s, so the terminal did not open.
+        await follow(page, undefined, (b) => { b.features = ['handoffs']; });
         await openOverview(page);
         const open = page.locator('#research-overview [data-action="open-research"]');
         await open.click();
@@ -2761,8 +2761,9 @@ test.describe('Open the research in the overview\'s foot (waiting buttons §3.1)
         await expect(msg).toContainText('Did the terminal not open?');
     });
 
-    test('the bridge\'s answers draw the overview anew again and again: its button never at rest between them, no second start', async ({ page }) => {
+    test('the bridge\'s answers draw the overview anew again and again: its button never at rest between them, no second start; an older research: a quiet limit', async ({ page }) => {
         await page.clock.install();
+        // An older research (no handoffs) whose stand-in says the session's start relative to its own clock.
         await follow(page);
         await openOverview(page);
         const sel = '#research-overview [data-action="open-research"]';
@@ -2804,5 +2805,15 @@ test.describe('Open the research in the overview\'s foot (waiting buttons §3.1)
         await open.click({ force: true });
         expect(await launched(page)).toHaveLength(1);
         await expect(page.locator('.toast--progress')).toHaveCount(0);
+        // Its limit: it cannot say whether the terminal came up (no session for its menu), so the button is at rest
+        // again without a sentence.
+        for (let i = 0; i < 3; i++) {
+            await page.clock.fastForward(1000);
+            await page.waitForTimeout(40);
+        }
+        await expect(open).not.toHaveAttribute('aria-busy', 'true');
+        await expect(open).not.toHaveAttribute('aria-disabled', 'true');
+        await expect(page.locator('#research-overview .busy-msg')).toHaveCount(0);
+        await expect(page.locator('.toast', { hasText: 'Did the terminal not open?' })).toHaveCount(0);
     });
 });

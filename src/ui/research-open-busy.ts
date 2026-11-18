@@ -5,8 +5,9 @@
  * `&handoff=<uuid>` and the research's bridge says it in `/status.handoffs` (feature `handoffs`); an older research
  * shows a new session instead, or nothing (the limit). After the limit the element is at rest again and a neutral
  * sentence under it asks "Did the terminal not open?" with Try again; a proof coming within a minute after (the
- * browser's "Open Strom Research?" answered late) takes the sentence away. A bridge known down (its last ask failed
- * less than 30 s ago) says the sentence at once.
+ * browser's "Open Strom Research?" answered late) takes the sentence away. An older research (no `handoffs`: it
+ * opens its menu without a session, so the terminal cannot be told) ends quietly at its limit, the element at rest
+ * and no sentence. A bridge known down (its last ask failed less than 30 s ago) says the sentence at once.
  *
  * The page cannot see the terminal: the hand-over, the asks and the bridge's state come from the caller (deps).
  */
@@ -177,8 +178,11 @@ export async function openResearchBusy(el: HTMLElement | null, link: string, opt
     const handoff = canProve && !opts.relayed ? newHandoff(deps) : null;
     const limit = opts.timeoutMs ?? BUSY_TIMEOUTS.terminal;
     let base = researchId ? deps.statusNow(researchId) : null;
+    /** The research's last status seen while waiting (its features say whether it can prove the link). */
+    let lastSeen: LiveStatus | null = base;
     const proven = (st: LiveStatus | null): boolean => {
         if (!st) return false;
+        lastSeen = st;
         if (opts.proof?.(st)) return true;
         const ok = handoffProven(st, handoff, base);
         if (!base) base = st;
@@ -193,6 +197,13 @@ export async function openResearchBusy(el: HTMLElement | null, link: string, opt
     const mine = { at: Date.now() };
     inFlight.set(key, mine);
     let result = 'limit' as OpenBusyResult;
+    /**
+     * An older research (its bridge answers without the `handoffs` feature) says no session for its menu opened in
+     * the terminal: whether the terminal came up cannot be told, so its limit ends quietly (the element at rest, no
+     * sentence). The queue's work keeps its own proof and its sentence.
+     */
+    const unprovable = (): boolean => !opts.proof && !!lastSeen && !lastSeen.features?.includes(HANDOFFS_FEATURE);
+    let quietEnd = false;
     try {
         await runBusy(target, async (ctl) => {
             deps.handOver(link, handoff);
@@ -217,12 +228,14 @@ export async function openResearchBusy(el: HTMLElement | null, link: string, opt
             if (!canProve) await sleep(Math.max(0, until - Date.now()), signal);
             // Stopped by the caller, or a quiet limit: no sentence (the caller says what follows).
             if (opts.signal?.aborted || opts.quietLimit && !canProve || opts.quiet) return;
+            if (canProve && unprovable()) { quietEnd = true; return; }
             ctl.end({ ok: false, kind: 'timeout', neutral: true, text: sentence.text, hint: sentence.hint, retry });
         }, { label, kind: 'terminal', timeoutMs: limit + 5000, rowOf: opts.rowOf, toastWhenGone: !opts.quiet });
     } finally {
         if (inFlight.get(key) === mine) inFlight.delete(key);
     }
-    if (result === 'opened' || !canProve || !handoff && !opts.proof) return result;
+    // No sentence to take away (an older research's quiet limit): no late watch either.
+    if (result === 'opened' || !canProve || quietEnd || !handoff && !opts.proof) return result;
 
     // A late proof (the browser's question answered late, a bridge starting): the sentence goes by itself.
     const ac = new AbortController();
