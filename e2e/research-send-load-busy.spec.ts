@@ -179,3 +179,42 @@ test.describe('a progress toast and a message to be read', () => {
         }
     });
 });
+
+test.describe('a toast with two actions', () => {
+    for (const width of [1440, 390]) {
+        test(`its actions stand apart, never glued together (${width} px)`, async ({ page }) => {
+            await page.setViewportSize({ width, height: 860 });
+            await openResearch(page);
+            const gapOf = (sel: string) => page.evaluate((s) => {
+                const acts = [...document.querySelectorAll(`${s} .toast-actions > .toast-action`)]
+                    .filter(b => !(b as HTMLElement).hidden).map(b => b.getBoundingClientRect());
+                return acts.length < 2 ? -1 : acts[1].left - acts[0].right;
+            }, sel);
+            // The progress toast: Cancel the wait + Install…
+            await page.evaluate(() => {
+                (window as any).__p = (window.Strom.UI as any).showProgressToast(
+                    { title: 'Waiting for the research…', cancel: () => undefined, more: { label: 'Install…', run: () => undefined } }, {});
+            });
+            await expect(page.locator('.toast--progress .toast-action')).toHaveCount(2);
+            await expect.poll(() => gapOf('.toast--progress')).toBeGreaterThanOrEqual(10);
+            // Cancel hidden by a step: the one left has no gap before it.
+            await page.evaluate(() => (window as any).__p.update({ step: 'A step', cancel: false }));
+            const lead = await page.evaluate(() => {
+                const t = document.querySelector('.toast--progress .toast-actions')!;
+                const b = [...t.querySelectorAll('.toast-action')].find(x => !(x as HTMLElement).hidden)!;
+                return getComputedStyle(b).marginLeft;
+            });
+            expect(lead).toBe('0px');
+            await page.evaluate(() => (window as any).__p.close());
+            // A message's own two actions.
+            await page.evaluate(() => {
+                (window.Strom.UI as any).showToast('The terminal did not open?', Infinity, {
+                    closable: true,
+                    action: { label: 'Try again', run: () => undefined },
+                    more: { label: 'Install…', run: () => undefined },
+                });
+            });
+            await expect.poll(() => gapOf('body > .toast:not(.toast--progress):not(.toast-held)')).toBeGreaterThanOrEqual(10);
+        });
+    }
+});

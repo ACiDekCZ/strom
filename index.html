@@ -16467,6 +16467,9 @@
         }
         .toast-actions:empty { display: none; }
         .toast-actions > .toast-action { margin-left: 0; }
+        /* Two actions side by side ("Cancel" "Show", "Try again" "Install…") stand 12px apart (screen 2c);
+           a hidden one leaves no gap before the first one shown. */
+        .toast-actions > .toast-action:not([hidden]) ~ .toast-action:not([hidden]) { margin-left: 12px; }
         .toast-actions > .focus-toast-sep:first-child,
         .toast-actions > .undo-toast-sep:first-child { display: none; }
         .toast-actions > .focus-toast-sep,
