@@ -18818,6 +18818,10 @@
         .pend-st { display: flex; width: fit-content; margin-top: 3px; white-space: normal; }
         /* The one dimming allowed (6.3): a list being read for a filter, never an element. */
         .busy-list-dim { opacity: .55; transition: opacity .12s; }
+        /* The queue's heading while a filter's first page is read (6.3): after the title, in the heading's line, wrapping when narrow. */
+        .live-section__head .live-queue-loading {
+            flex: 0 1 auto; min-width: 0; white-space: normal; font-size: 12px; letter-spacing: 0; text-transform: none;
+        }
         @media (prefers-reduced-motion: reduce) { .busy-list-dim { transition: none; } }
         .busy-msg {
             font-size: 12.5px; line-height: 1.45; margin-top: 6px; color: var(--text-light);
@@ -23220,7 +23224,8 @@
         .live-panel-list li.live-queue-row--load,
         .live-panel-list li.live-queue-row--cap { flex-wrap: wrap; gap: 2px 10px; }
         .live-queue-row--load .link-button { min-height: 24px; }
-        .live-queue-load[aria-disabled="true"] { color: var(--text-light); cursor: default; text-decoration: none; }
+        .live-queue-load[aria-disabled="true"] { color: var(--text-light); cursor: progress; text-decoration: none; }
+        .live-queue-load .busy-spin { margin-right: 6px; vertical-align: -2px; }
         .live-queue-shown { min-width: 0; font-size: 12px; color: var(--text-light); font-variant-numeric: tabular-nums; }
         .live-queue-row--cap .live-queue-shown { flex-basis: 100%; font-size: 12.5px; text-wrap: pretty; }
         .live-queue-state {
@@ -23675,7 +23680,7 @@
         .rok-tags > .research-overview__hit { font-size: 12px; line-height: 1.5; }
         /* Typed or being read: the list stands, dimmed, nothing over it. */
         .research-queue--pending > .live-queue,
-        .research-queue--pending > .research-overview__queue-result { opacity: .5; transition: opacity .12s; }
+        .research-queue--pending > .research-overview__queue-result { opacity: .55; transition: opacity .12s; }
         @media (prefers-reduced-motion: reduce) {
             .research-queue--pending > .live-queue,
             .research-queue--pending > .research-overview__queue-result { transition: none; }

@@ -104,6 +104,7 @@ import { endResearchAdoptWait } from './research-adopt-ui.js';
 import { countGedcomPersons, readBodyWithProgress, type TreeDownloadWatch, type TreeLoadRun } from './tree-load-progress.js';
 import type { ProgressToastHandle } from './toast.js';
 import { holdLeave } from './busy-leave.js';
+import { BUSY_SHOW_MS, announceBusy, busySpinHtml } from './busy.js';
 import { TreeEditLock } from './tree-edit-lock.js';
 import { sourceReadings, researchSendVouches, conflictTakeovers, heldConflicts } from '../research-sync.js';
 import { currentAppBrowser, appBrowserName } from '../research-transfer.js';
@@ -189,6 +190,36 @@ const mediaRetrying = new Set<TreeId>();
 const mediaTold = new Set<TreeId>();
 /** The notice's kind (its toast is taken away once the photos come). */
 const MEDIA_MISSED_TOAST = 'research-media-missed';
+
+/** Since when a queue filter's first page has been read (6.3: shown after 120 ms, said once). */
+const queueLoadSince = new Map<string, number>();
+
+/**
+ * Whether a filter's first page on its way shows yet (120 ms after it began; until then
+ * the overview is drawn again at that moment). Said once in the shared busy region.
+ */
+function queueLoadShown(key: string, redraw: () => void): boolean {
+    const now = Date.now();
+    const since = queueLoadSince.get(key);
+    if (since === undefined) {
+        queueLoadSince.set(key, now);
+        setTimeout(() => {
+            if (queueLoadSince.get(key) !== now) return;
+            announceBusy(strings.live.queueLoading);
+            redraw();
+        }, BUSY_SHOW_MS);
+        return false;
+    }
+    return now - since >= BUSY_SHOW_MS;
+}
+
+/** "Loading tasks…" in the queue's heading while a filter's first page is read. */
+function queueLoadingStatus(): HTMLElement {
+    const st = el('span', 'busy-st live-queue-loading');
+    st.innerHTML = busySpinHtml(12);
+    st.append(strings.live.queueLoading);
+    return st;
+}
 
 /** A version with the tree's own files came: no attempt or notice for it is due any more. */
 function mediaRetryDone(treeId: TreeId): void {
@@ -5080,8 +5111,14 @@ export const researchUiMethods = uiModule({
             : branch ? { branch } : dirFilter !== 'all' ? { research: dirFilter } : null;
         const whole: QueueFilter = { state: 'next' };
         // A filter's list is read when shown; the whole queue's only once "Load more" was asked.
-        const list = filter ? requestQueueList(base, filter, 'queue')
+        const read = filter ? requestQueueList(base, filter, 'queue')
             : paged && queueList(base, whole) ? requestQueueList(base, whole, 'queue') : null;
+        // A filter's first page on its way (6.3, read once): its tasks of the status's window stay, the list dimmed and
+        // aria-busy, "Loading tasks…" in the heading (both after 120 ms); a failed read keeps its row with Try again.
+        const loadingFirst = !!read && read.total === null && !read.error;
+        const list = loadingFirst ? null : read;
+        const loadShown = loadingFirst && queueLoadShown(read.key, () => this.renderResearchOverview());
+        if (read && !loadingFirst) queueLoadSince.delete(read.key);
         const next = list ? list.items.filter(q => q.state === 'next') : allNext.filter(inFilter);
         const windowParked = s.queue.filter(q => q.state === 'parked' && inFilter(q));
         const parked = list ? [...list.items.filter(q => q.state === 'parked'),
@@ -5102,6 +5139,7 @@ export const researchUiMethods = uiModule({
         const host = liveSection(body, {
             ...fold, title: counted ? L.queueTitleCount(title, nextCount) : title, headCls: 'live-queue-toggle', help: 'queue',
             ...(action ? { aside: action } : {}),
+            ...(loadShown ? { extra: [queueLoadingStatus()] } : {}),
             ...(counted ? {} : {
                 summary: sel ? strings.otherResearch.lineQueueOf(counts ? lineCount(sel.id) : next.length, nextCount, directionGlyph(sel))
                     : L.queueCount(nextCount),
@@ -5153,6 +5191,10 @@ export const researchUiMethods = uiModule({
         if (search && this.appendQueueSearchResult(host, s, search, { base, branch, dirFilter, multi })) return;
         const ul = el('ul', 'live-panel-list live-queue');
         host.appendChild(ul);
+        if (loadingFirst) {
+            ul.setAttribute('aria-busy', 'true');
+            if (loadShown) ul.classList.add('busy-list-dim');
+        }
         if (search) this.queueRowsKeys(ul, search);
         if (list && list.total === null) {
             // The filter's first page not read yet: being read, or failed (try again).
@@ -5233,7 +5275,7 @@ export const researchUiMethods = uiModule({
             ul.appendChild(li);
         }
         const open = this.activeResearchLink('open');
-        if (paged && counts) {
+        if (paged && counts && !loadingFirst) {
             // How far the list goes: "Load more" (a page) while there is more, the cap said at its end.
             // Only the tasks up next count, as the chips do: a filter's list holds the set-aside ones
             // after them (the research's order), never part of "N of M shown".
@@ -5254,6 +5296,8 @@ export const researchUiMethods = uiModule({
                 btn.type = 'button';
                 btn.dataset.do = 'queue-more';
                 if (busy) {
+                    // The next page on its way (A212): the spinner before its words, the button locked with its focus.
+                    btn.insertAdjacentHTML('afterbegin', busySpinHtml(14));
                     btn.setAttribute('aria-disabled', 'true');
                     li.setAttribute('aria-busy', 'true');
                 } else {
@@ -5401,6 +5445,8 @@ export const researchUiMethods = uiModule({
             btn.type = 'button';
             btn.dataset.do = 'queue-more';
             if (busy) {
+                // The next page on its way (A212): the spinner before its words, the button locked with its focus.
+                btn.insertAdjacentHTML('afterbegin', busySpinHtml(14));
                 btn.setAttribute('aria-disabled', 'true');
                 li.setAttribute('aria-busy', 'true');
             } else if (drawn === list) {
