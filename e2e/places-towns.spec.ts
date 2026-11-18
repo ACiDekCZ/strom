@@ -11,6 +11,8 @@ import { fakeBridge, fakeFixes, openResearch, poll, links } from './research-bri
  * here. Invented places and people.
  */
 
+/** How long the sentence of a location attached by town stands (OFFER_DONE_MS, places-manager-ui.ts). */
+const OFFER_DONE_MS = 4000;
 const TOWN = 'Bělokamen';
 const BIG_TOWN = 'Zálesí u Brodku nad Křemenným potokem';
 /** Bělokamen's house places in natural order; the last two are numbers alone. */
@@ -166,6 +168,8 @@ test.describe('the Places dialog with towns and houses', () => {
     });
 
     test('a hand search lists kind and region; a town for a single house place says so and the card goes by itself', async ({ page }) => {
+        // The sentence's time runs on Playwright's clock (it ticks as ever).
+        await page.clock.install();
         await stubGeocoder(page, {
             'Kopřivná': [
                 { lat: '49.3', lon: '16.2', display_name: 'Kopřivná, Okres Testov, Kraj Testov, Česko', addresstype: 'village' },
@@ -189,7 +193,8 @@ test.describe('the Places dialog with towns and houses', () => {
         const offer = r.locator('.place-offer');
         await expect(offer).toHaveText('✓ Location attached to Kopřivná čp. 7, by town.');
         await expect(offer.locator('button')).toHaveCount(0);
-        await expect(offer).toBeHidden({ timeout: 8000 });
+        await page.clock.runFor(OFFER_DONE_MS);
+        await expect(offer).toBeHidden();
     });
 
     test('a town group: the strip shows closed, ▸ opens the first 8, "Show all", the search and the "No location" chip', async ({ page }) => {
